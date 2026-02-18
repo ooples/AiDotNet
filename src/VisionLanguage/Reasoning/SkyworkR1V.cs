@@ -7,6 +7,7 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tokenization;
 using AiDotNet.Tokenization.Interfaces;
 using AiDotNet.VisionLanguage.Interfaces;
+using AiDotNet.Extensions;
 
 namespace AiDotNet.VisionLanguage.Reasoning;
 
@@ -56,68 +57,20 @@ public class SkyworkR1V<T> : VisionLanguageModelBase<T>, IReasoningVLM<T>
         var visualFeatures = p;
         for (int i = 0; i < _encoderLayerEnd; i++)
             visualFeatures = Layers[i].Forward(visualFeatures);
-        int visDim = visualFeatures.Length;
 
-        // Step 2: Selective visual token enrichment
-        // Score each visual token by reasoning relevance (high-information tokens)
-        int numTokens = Math.Min(visDim, 512);
-        var tokenScores = new double[numTokens];
-        double maxScore = double.MinValue;
-        double minScore = double.MaxValue;
-        for (int t = 0; t < numTokens; t++)
-        {
-            double val = NumOps.ToDouble(visualFeatures[t % visDim]);
-            // Information content: tokens with high gradient (edges, text, objects) are more relevant
-            double prevVal = t > 0 ? NumOps.ToDouble(visualFeatures[(t - 1) % visDim]) : val;
-            double nextVal = t < numTokens - 1 ? NumOps.ToDouble(visualFeatures[(t + 1) % visDim]) : val;
-            double gradient = Math.Abs(val - prevVal) + Math.Abs(val - nextVal);
-            tokenScores[t] = Math.Abs(val) + gradient * 2.0; // boost high-gradient tokens
-            if (tokenScores[t] > maxScore) maxScore = tokenScores[t];
-            if (tokenScores[t] < minScore) minScore = tokenScores[t];
-        }
-
-        // Normalize scores to [0, 1]
-        double scoreRange = maxScore - minScore + 1e-8;
-        for (int t = 0; t < numTokens; t++)
-            tokenScores[t] = (tokenScores[t] - minScore) / scoreRange;
-
-        // Step 3: Progressive visual integration with prompt conditioning
-        Tensor<T>? promptTokens = null;
-        int promptLen = 0;
+        // Fuse visual features with prompt tokens via ConcatenateTensors
+        Tensor<T> fusedInput;
         if (prompt is not null)
         {
-            promptTokens = TokenizeText(prompt);
-            promptLen = promptTokens.Length;
+            var promptTokens = TokenizeText(prompt);
+            fusedInput = visualFeatures.ConcatenateTensors(promptTokens);
         }
-
-        // Build decoder input with reasoning-aware cross-attention
-        var decoderInput = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
+        else
         {
-            // Cross-attention with selective enrichment weighting
-            double crossAttn = 0;
-            double weightSum = 0;
-            for (int t = 0; t < numTokens; t++)
-            {
-                double visVal = NumOps.ToDouble(visualFeatures[t % visDim]);
-                // Weight by enrichment score (reasoning-relevant tokens contribute more)
-                double enrichWeight = 0.3 + 0.7 * tokenScores[t]; // floor at 0.3
-                double attnWeight = Math.Exp(visVal * Math.Sin((d + 1) * (t + 1) * 0.003) * 0.4);
-                attnWeight *= enrichWeight;
-                crossAttn += attnWeight * visVal;
-                weightSum += attnWeight;
-            }
-            crossAttn /= Math.Max(weightSum, 1e-8);
-
-            double textEmb = 0;
-            if (promptTokens is not null && promptLen > 0)
-                textEmb = NumOps.ToDouble(promptTokens[d % promptLen]) / _options.VocabSize * 0.5;
-
-            decoderInput[d] = NumOps.FromDouble(crossAttn + textEmb);
+            fusedInput = visualFeatures;
         }
 
-        // Step 4: LLM decoder with progressive visual injection
-        var output = decoderInput;
+        var output = fusedInput;
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)
             output = Layers[i].Forward(output);
 

@@ -7,6 +7,7 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tokenization;
 using AiDotNet.Tokenization.Interfaces;
 using AiDotNet.VisionLanguage.Interfaces;
+using AiDotNet.Extensions;
 
 namespace AiDotNet.VisionLanguage.RemoteSensing;
 
@@ -47,121 +48,24 @@ public class SkyEyeGPT<T> : VisionLanguageModelBase<T>, IRemoteSensingVLM<T>
         var p = PreprocessImage(image);
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(p);
-
-        int dim = _options.DecoderDim;
-
         // Step 1: CLIP ViT encoding for remote sensing
         var visualFeatures = p;
         for (int i = 0; i < _encoderLayerEnd; i++)
             visualFeatures = Layers[i].Forward(visualFeatures);
-        int visLen = visualFeatures.Length;
 
-        // Step 2: Tokenize instruction for task routing
-        Tensor<T>? promptTokens = null;
-        int promptLen = 0;
+        // Fuse visual features with prompt tokens via ConcatenateTensors
+        Tensor<T> fusedInput;
         if (prompt is not null)
         {
-            promptTokens = TokenizeText(prompt);
-            promptLen = promptTokens.Length;
-        }
-
-        // Step 3: Multi-task alignment - determine task routing scores
-        // 8 task categories: captioning, VQA, grounding, classification,
-        // change detection, object counting, scene description, visual reasoning
-        int numTasks = 8;
-        var taskRouting = new double[numTasks];
-
-        if (promptTokens is not null && promptLen > 0)
-        {
-            // Compute task affinity from instruction tokens
-            for (int task = 0; task < numTasks; task++)
-            {
-                double taskScore = 0;
-                for (int t = 0; t < promptLen; t++)
-                {
-                    double tokenVal = NumOps.ToDouble(promptTokens[t]);
-                    taskScore += Math.Sin((task + 1) * tokenVal * 0.01) * 0.3;
-                }
-                taskRouting[task] = taskScore / promptLen;
-            }
+            var promptTokens = TokenizeText(prompt);
+            fusedInput = visualFeatures.ConcatenateTensors(promptTokens);
         }
         else
         {
-            // Default: captioning task
-            taskRouting[0] = 1.0;
+            fusedInput = visualFeatures;
         }
 
-        // Softmax over task routing
-        double maxRoute = double.MinValue;
-        for (int t = 0; t < numTasks; t++)
-            if (taskRouting[t] > maxRoute) maxRoute = taskRouting[t];
-        double routeSum = 0;
-        for (int t = 0; t < numTasks; t++)
-        {
-            taskRouting[t] = Math.Exp(taskRouting[t] - maxRoute);
-            routeSum += taskRouting[t];
-        }
-        for (int t = 0; t < numTasks; t++)
-            taskRouting[t] /= Math.Max(routeSum, 1e-8);
-
-        // Step 4: Task-specific visual feature processing
-        // Different tasks emphasize different spatial scales
-        var taskFeatures = new double[numTasks][];
-        for (int task = 0; task < numTasks; task++)
-        {
-            taskFeatures[task] = new double[visLen];
-            // Task-specific attention scale: grounding=local, captioning=global
-            double spatialScale = task switch
-            {
-                0 => 0.002, // captioning: broad
-                1 => 0.005, // VQA: medium
-                2 => 0.01,  // grounding: focused
-                3 => 0.003, // classification: broad
-                4 => 0.008, // change detection: medium-focused
-                5 => 0.012, // object counting: local
-                6 => 0.002, // scene description: broad
-                _ => 0.006  // visual reasoning: medium
-            };
-
-            for (int v = 0; v < visLen; v++)
-            {
-                double val = NumOps.ToDouble(visualFeatures[v]);
-                double taskBias = Math.Sin((task + 1) * (v + 1) * spatialScale) * 0.2;
-                taskFeatures[task][v] = val + taskBias;
-            }
-        }
-
-        // Step 5: Unified cross-attention with task-weighted features
-        var decoderInput = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
-        {
-            double unifiedAttn = 0;
-
-            for (int task = 0; task < numTasks; task++)
-            {
-                if (taskRouting[task] < 0.01) continue;
-
-                double taskAttn = 0;
-                double wSum = 0;
-                for (int v = 0; v < visLen; v++)
-                {
-                    double score = Math.Exp(taskFeatures[task][v] * Math.Sin((d + 1) * (v + 1) * 0.004) * 0.35);
-                    taskAttn += score * taskFeatures[task][v];
-                    wSum += score;
-                }
-                taskAttn /= Math.Max(wSum, 1e-8);
-                unifiedAttn += taskAttn * taskRouting[task];
-            }
-
-            double textEmb = 0;
-            if (promptTokens is not null && promptLen > 0)
-                textEmb = NumOps.ToDouble(promptTokens[d % promptLen]) / _options.VocabSize * 0.5;
-
-            decoderInput[d] = NumOps.FromDouble(unifiedAttn + textEmb);
-        }
-
-        // Step 6: LLaMA-2 decoder
-        var output = decoderInput;
+        var output = fusedInput;
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)
             output = Layers[i].Forward(output);
 

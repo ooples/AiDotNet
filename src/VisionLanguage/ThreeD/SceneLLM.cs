@@ -7,6 +7,7 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tokenization;
 using AiDotNet.Tokenization.Interfaces;
 using AiDotNet.VisionLanguage.Interfaces;
+using AiDotNet.Extensions;
 
 namespace AiDotNet.VisionLanguage.ThreeD;
 
@@ -42,30 +43,22 @@ public class SceneLLM<T> : VisionLanguageModelBase<T>, IThreeDVisionLanguageMode
         ThrowIfDisposed();
         var p = PreprocessImage(image);
         if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(p);
-        int dim = _options.DecoderDim;
         var encoderOut = p;
         for (int i = 0; i < _encoderLayerEnd; i++) encoderOut = Layers[i].Forward(encoderOut);
-        int visLen = encoderOut.Length;
-        Tensor<T>? promptTokens = null; int promptLen = 0;
-        if (prompt is not null) { promptTokens = TokenizeText(prompt); promptLen = promptTokens.Length; }
-        // Linear projection to LLM space (2D fallback for 3D-primary model)
-        var decoderInput = new Tensor<T>([dim]);
-        double visScale = 1.0 / Math.Max(visLen, 1);
-        for (int d = 0; d < dim; d++)
+
+        // Fuse visual features with prompt tokens via ConcatenateTensors
+        Tensor<T> fusedInput;
+        if (prompt is not null)
         {
-            double visVal = 0;
-            for (int v = 0; v < visLen; v++)
-                visVal += NumOps.ToDouble(encoderOut[v]) * visScale;
-            double textEmb = 0;
-            if (promptTokens is not null && promptLen > 0)
-            {
-                double tokVal = NumOps.ToDouble(promptTokens[d % promptLen]);
-                double gate = 1.0 / (1.0 + Math.Exp(-tokVal / 100.0));
-                textEmb = visVal * (gate - 0.5) * 0.3;
-            }
-            decoderInput[d] = NumOps.FromDouble(visVal + textEmb);
+            var promptTokens = TokenizeText(prompt);
+            fusedInput = encoderOut.ConcatenateTensors(promptTokens);
         }
-        var output = decoderInput;
+        else
+        {
+            fusedInput = encoderOut;
+        }
+
+        var output = fusedInput;
         for (int i = _encoderLayerEnd; i < Layers.Count; i++) output = Layers[i].Forward(output);
         return output;
     }

@@ -7,6 +7,7 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tokenization;
 using AiDotNet.Tokenization.Interfaces;
 using AiDotNet.VisionLanguage.Interfaces;
+using AiDotNet.Extensions;
 
 namespace AiDotNet.VisionLanguage.Reasoning;
 
@@ -55,88 +56,20 @@ public class SkyworkR1V2<T> : VisionLanguageModelBase<T>, IReasoningVLM<T>
         var visualFeatures = p;
         for (int i = 0; i < _encoderLayerEnd; i++)
             visualFeatures = Layers[i].Forward(visualFeatures);
-        int visDim = visualFeatures.Length;
 
-        // Step 2: Dual-phase visual processing
-        // Phase A (GRPO-inspired): broad exploration with multiple visual interpretations
-        int numGroups = 4; // GRPO group size
-        int numTokens = Math.Min(visDim, 512);
-        var groupOutputs = new double[numGroups][];
-        var groupRewards = new double[numGroups];
-
-        for (int g = 0; g < numGroups; g++)
-        {
-            groupOutputs[g] = new double[dim];
-            for (int d = 0; d < dim; d++)
-            {
-                double crossAttn = 0;
-                double weightSum = 0;
-                for (int t = 0; t < numTokens; t++)
-                {
-                    double visVal = NumOps.ToDouble(visualFeatures[t % visDim]);
-                    // Group-specific attention pattern (diverse exploration)
-                    double groupBias = Math.Sin((g + 1) * (t + 1) * 0.02) * 0.3;
-                    double w = Math.Exp((visVal + groupBias) * Math.Sin((d + 1) * (t + 1) * 0.003) * 0.4);
-                    crossAttn += w * visVal;
-                    weightSum += w;
-                }
-                groupOutputs[g][d] = crossAttn / Math.Max(weightSum, 1e-8);
-            }
-
-            // Compute group reward: visual grounding score (attention consistency)
-            double reward = 0;
-            for (int d = 0; d < Math.Min(dim, 64); d++)
-            {
-                double val = groupOutputs[g][d];
-                // Grounding reward: penalize extreme values (likely hallucination)
-                reward += 1.0 - Math.Min(1.0, Math.Abs(val) * 2.0);
-            }
-            groupRewards[g] = reward / Math.Min(dim, 64);
-        }
-
-        // GRPO: relative ranking within group to select best interpretations
-        double maxReward = double.MinValue;
-        double minReward = double.MaxValue;
-        for (int g = 0; g < numGroups; g++)
-        {
-            if (groupRewards[g] > maxReward) maxReward = groupRewards[g];
-            if (groupRewards[g] < minReward) minReward = groupRewards[g];
-        }
-        double rewardRange = maxReward - minReward + 1e-8;
-        var groupWeights = new double[numGroups];
-        double weightTotal = 0;
-        for (int g = 0; g < numGroups; g++)
-        {
-            groupWeights[g] = Math.Exp((groupRewards[g] - minReward) / rewardRange * 2.0);
-            weightTotal += groupWeights[g];
-        }
-
-        // Phase B (MPO-inspired): precise refinement by weighted combination
-        Tensor<T>? promptTokens = null;
-        int promptLen = 0;
+        // Fuse visual features with prompt tokens via ConcatenateTensors
+        Tensor<T> fusedInput;
         if (prompt is not null)
         {
-            promptTokens = TokenizeText(prompt);
-            promptLen = promptTokens.Length;
+            var promptTokens = TokenizeText(prompt);
+            fusedInput = visualFeatures.ConcatenateTensors(promptTokens);
         }
-
-        var decoderInput = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
+        else
         {
-            // MPO: weighted combination of group outputs (preference-weighted)
-            double refinedVal = 0;
-            for (int g = 0; g < numGroups; g++)
-                refinedVal += groupOutputs[g][d] * (groupWeights[g] / Math.Max(weightTotal, 1e-8));
-
-            double textEmb = 0;
-            if (promptTokens is not null && promptLen > 0)
-                textEmb = NumOps.ToDouble(promptTokens[d % promptLen]) / _options.VocabSize * 0.5;
-
-            decoderInput[d] = NumOps.FromDouble(refinedVal + textEmb);
+            fusedInput = visualFeatures;
         }
 
-        // Step 3: LLM decoder
-        var output = decoderInput;
+        var output = fusedInput;
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)
             output = Layers[i].Forward(output);
 

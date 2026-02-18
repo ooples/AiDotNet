@@ -7,6 +7,7 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tokenization;
 using AiDotNet.Tokenization.Interfaces;
 using AiDotNet.VisionLanguage.Interfaces;
+using AiDotNet.Extensions;
 
 namespace AiDotNet.VisionLanguage.Unified;
 
@@ -52,50 +53,19 @@ public class Janus<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
         for (int i = 0; i < _encoderLayerEnd; i++)
             understandingFeatures = Layers[i].Forward(understandingFeatures);
 
-        int visDim = understandingFeatures.Length;
-
-        // Step 2: Understanding adaptor - project visual features to LLM space
-        // Two-layer MLP projection (SigLIP dim → LLM dim)
-        var projectedFeatures = new double[dim];
-        for (int d = 0; d < dim; d++)
-        {
-            double val = 0;
-            int numPatches = Math.Min(visDim, 576); // SigLIP 24x24 patches
-            for (int v = 0; v < numPatches; v++)
-            {
-                double visVal = NumOps.ToDouble(understandingFeatures[v % visDim]);
-                double weight = Math.Sin((d + 1) * (v + 1) * 0.005) / Math.Sqrt(numPatches);
-                val += visVal * weight;
-            }
-            // GELU activation in MLP
-            double gelu = val * 0.5 * (1.0 + Math.Tanh(Math.Sqrt(2.0 / Math.PI) * (val + 0.044715 * val * val * val)));
-            projectedFeatures[d] = gelu;
-        }
-
-        // Step 3: Concatenate visual tokens with text prompt
-        int promptLen = 0;
-        Tensor<T>? promptTokens = null;
+        // Fuse visual features with prompt tokens via ConcatenateTensors
+        Tensor<T> fusedInput;
         if (prompt is not null)
         {
-            promptTokens = TokenizeText(prompt);
-            promptLen = promptTokens.Length;
+            var promptTokens = TokenizeText(prompt);
+            fusedInput = understandingFeatures.ConcatenateTensors(promptTokens);
         }
-
-        var unifiedInput = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
+        else
         {
-            double visEmb = projectedFeatures[d];
-            double textEmb = 0;
-            if (promptTokens is not null && promptLen > 0)
-            {
-                int tIdx = d % promptLen;
-                textEmb = NumOps.ToDouble(promptTokens[tIdx]) / _options.VocabSize;
-            }
-            unifiedInput[d] = NumOps.FromDouble(visEmb + textEmb * 0.3);
+            fusedInput = understandingFeatures;
         }
 
-        // Step 4: LLM decoder generates text output
-        var output = unifiedInput;
+        var output = fusedInput;
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)
             output = Layers[i].Forward(output);
 

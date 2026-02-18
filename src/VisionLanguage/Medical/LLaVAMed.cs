@@ -7,6 +7,7 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tokenization;
 using AiDotNet.Tokenization.Interfaces;
 using AiDotNet.VisionLanguage.Interfaces;
+using AiDotNet.Extensions;
 
 namespace AiDotNet.VisionLanguage.Medical;
 
@@ -48,63 +49,24 @@ public class LLaVAMed<T> : VisionLanguageModelBase<T>, IMedicalVLM<T>
         var p = PreprocessImage(image);
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(p);
-
-        int dim = _options.DecoderDim;
-
         // Step 1: CLIP ViT-L/14 biomedical-aligned encoding
         var visualFeatures = p;
         for (int i = 0; i < _encoderLayerEnd; i++)
             visualFeatures = Layers[i].Forward(visualFeatures);
-        int visDim = visualFeatures.Length;
 
-        // Step 2: Biomedical feature emphasis
-        // Medical images have diagnostic regions that are more important than background
-        int numTokens = Math.Min(visDim, 384);
-        var diagnosticScores = new double[numTokens];
-        for (int t = 0; t < numTokens; t++)
-        {
-            double val = NumOps.ToDouble(visualFeatures[t % visDim]);
-            // Diagnostic relevance: high-contrast regions (lesions, abnormalities)
-            double prevVal = t > 0 ? NumOps.ToDouble(visualFeatures[(t - 1) % visDim]) : val;
-            double contrast = Math.Abs(val - prevVal);
-            // Biomedical images: moderate intensity regions often contain pathology
-            double intensityScore = 1.0 - Math.Abs(Math.Abs(val) - 0.5) * 2.0;
-            diagnosticScores[t] = contrast * 0.6 + intensityScore * 0.4;
-        }
-
-        // Step 3: Medical-domain cross-attention with diagnostic weighting
-        Tensor<T>? promptTokens = null;
-        int promptLen = 0;
+        // Fuse visual features with prompt tokens via ConcatenateTensors
+        Tensor<T> fusedInput;
         if (prompt is not null)
         {
-            promptTokens = TokenizeText(prompt);
-            promptLen = promptTokens.Length;
+            var promptTokens = TokenizeText(prompt);
+            fusedInput = visualFeatures.ConcatenateTensors(promptTokens);
         }
-
-        var decoderInput = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
+        else
         {
-            double crossAttn = 0;
-            double weightSum = 0;
-            for (int t = 0; t < numTokens; t++)
-            {
-                double visVal = NumOps.ToDouble(visualFeatures[t % visDim]);
-                double diagWeight = 0.5 + 0.5 * diagnosticScores[t];
-                double w = Math.Exp(visVal * Math.Sin((d + 1) * (t + 1) * 0.004) * 0.35) * diagWeight;
-                crossAttn += w * visVal;
-                weightSum += w;
-            }
-            crossAttn /= Math.Max(weightSum, 1e-8);
-
-            double textEmb = 0;
-            if (promptTokens is not null && promptLen > 0)
-                textEmb = NumOps.ToDouble(promptTokens[d % promptLen]) / _options.VocabSize * 0.5;
-
-            decoderInput[d] = NumOps.FromDouble(crossAttn + textEmb);
+            fusedInput = visualFeatures;
         }
 
-        // Step 4: LLM decoder
-        var output = decoderInput;
+        var output = fusedInput;
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)
             output = Layers[i].Forward(output);
 

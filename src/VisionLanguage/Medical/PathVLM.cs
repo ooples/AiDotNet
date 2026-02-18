@@ -7,6 +7,7 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tokenization;
 using AiDotNet.Tokenization.Interfaces;
 using AiDotNet.VisionLanguage.Interfaces;
+using AiDotNet.Extensions;
 
 namespace AiDotNet.VisionLanguage.Medical;
 
@@ -49,114 +50,24 @@ public class PathVLM<T> : VisionLanguageModelBase<T>, IMedicalVLM<T>
         var p = PreprocessImage(image);
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(p);
-
-        int dim = _options.DecoderDim;
-
         // Step 1: Base ViT encoding
         var visualFeatures = p;
         for (int i = 0; i < _encoderLayerEnd; i++)
             visualFeatures = Layers[i].Forward(visualFeatures);
-        int visLen = visualFeatures.Length;
 
-        // Step 2: Multi-scale feature extraction (simulating 5x, 10x, 20x magnifications)
-        int numScales = 3;
-        double[] scaleFactors = [0.25, 0.5, 1.0]; // 5x, 10x, 20x relative
-        int tokensPerScale = visLen / numScales;
-        var scaleFeatures = new double[numScales][];
-
-        for (int s = 0; s < numScales; s++)
-        {
-            int scaledLen = Math.Max(1, (int)(tokensPerScale * scaleFactors[s]));
-            scaleFeatures[s] = new double[scaledLen];
-
-            for (int t = 0; t < scaledLen; t++)
-            {
-                // At lower magnification: pool over wider regions (tissue architecture)
-                // At higher magnification: fine-grained features (cellular morphology)
-                int poolSize = Math.Max(1, (int)(1.0 / scaleFactors[s]));
-                double pooled = 0;
-                int poolCount = 0;
-                int baseIdx = s * tokensPerScale + (int)((double)t / scaledLen * tokensPerScale);
-                for (int p2 = 0; p2 < poolSize && baseIdx + p2 < visLen; p2++)
-                {
-                    pooled += NumOps.ToDouble(visualFeatures[baseIdx + p2]);
-                    poolCount++;
-                }
-                scaleFeatures[s][t] = poolCount > 0 ? pooled / poolCount : 0;
-            }
-        }
-
-        // Step 3: Pathology-specific feature scoring per scale
-        var pathologyScores = new double[numScales][];
-        for (int s = 0; s < numScales; s++)
-        {
-            int sLen = scaleFeatures[s].Length;
-            pathologyScores[s] = new double[sLen];
-            for (int t = 0; t < sLen; t++)
-            {
-                double val = scaleFeatures[s][t];
-                // Cell density: high magnification features with strong activation
-                double cellDensity = s == 2 ? Math.Abs(val) * 1.5 : Math.Abs(val);
-                // Staining intensity: moderate values indicate H&E staining
-                double stainingIntensity = 1.0 - Math.Abs(Math.Abs(val) - 0.4) * 2.0;
-                // Nuclear morphology: local contrast at high magnification
-                double morphology = 0;
-                if (t > 0)
-                    morphology = Math.Abs(val - scaleFeatures[s][t - 1]);
-
-                // Weight by magnification level: higher mag = more cellular detail weight
-                double magWeight = scaleFactors[s];
-                pathologyScores[s][t] = (cellDensity * 0.4 + stainingIntensity * 0.3 + morphology * 0.3) * magWeight;
-            }
-        }
-
-        // Step 4: Hierarchical coarse-to-fine aggregation
-        // Low magnification provides context, high magnification provides detail
-        Tensor<T>? promptTokens = null;
-        int promptLen = 0;
+        // Fuse visual features with prompt tokens via ConcatenateTensors
+        Tensor<T> fusedInput;
         if (prompt is not null)
         {
-            promptTokens = TokenizeText(prompt);
-            promptLen = promptTokens.Length;
+            var promptTokens = TokenizeText(prompt);
+            fusedInput = visualFeatures.ConcatenateTensors(promptTokens);
         }
-
-        var decoderInput = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
+        else
         {
-            double hierarchicalFeat = 0;
-            double totalWeight = 0;
-
-            for (int s = 0; s < numScales; s++)
-            {
-                // Scale weight: 20x gets 0.5, 10x gets 0.3, 5x gets 0.2
-                double scaleWeight = s == 2 ? 0.5 : (s == 1 ? 0.3 : 0.2);
-                int sLen = scaleFeatures[s].Length;
-
-                double scaleAttn = 0;
-                double scaleWSum = 0;
-                for (int t = 0; t < sLen; t++)
-                {
-                    double pathScore = 0.5 + 0.5 * pathologyScores[s][t];
-                    double score = Math.Exp(scaleFeatures[s][t] * Math.Sin((d + 1) * (t + 1) * 0.005) * 0.35) * pathScore;
-                    scaleAttn += score * scaleFeatures[s][t];
-                    scaleWSum += score;
-                }
-                scaleAttn /= Math.Max(scaleWSum, 1e-8);
-
-                hierarchicalFeat += scaleAttn * scaleWeight;
-                totalWeight += scaleWeight;
-            }
-            hierarchicalFeat /= Math.Max(totalWeight, 1e-8);
-
-            double textEmb = 0;
-            if (promptTokens is not null && promptLen > 0)
-                textEmb = NumOps.ToDouble(promptTokens[d % promptLen]) / _options.VocabSize * 0.5;
-
-            decoderInput[d] = NumOps.FromDouble(hierarchicalFeat + textEmb);
+            fusedInput = visualFeatures;
         }
 
-        // Step 5: LLaMA decoder
-        var output = decoderInput;
+        var output = fusedInput;
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)
             output = Layers[i].Forward(output);
 

@@ -7,6 +7,7 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tokenization;
 using AiDotNet.Tokenization.Interfaces;
 using AiDotNet.VisionLanguage.Interfaces;
+using AiDotNet.Extensions;
 
 namespace AiDotNet.VisionLanguage.VideoLanguage;
 
@@ -48,44 +49,20 @@ public class VideoLLaVA<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<T>
         var encoderOut = p;
         for (int i = 0; i < _encoderLayerEnd; i++)
             encoderOut = Layers[i].Forward(encoderOut);
-        int visLen = encoderOut.Length;
 
-        // Step 2: Tokenize prompt
-        Tensor<T>? promptTokens = null;
-        int promptLen = 0;
+        // Fuse visual features with prompt tokens via ConcatenateTensors
+        Tensor<T> fusedInput;
         if (prompt is not null)
         {
-            promptTokens = TokenizeText(prompt);
-            promptLen = promptTokens.Length;
+            var promptTokens = TokenizeText(prompt);
+            fusedInput = encoderOut.ConcatenateTensors(promptTokens);
+        }
+        else
+        {
+            fusedInput = encoderOut;
         }
 
-        // Step 3: Alignment embedding + visual-text fusion
-        // 2-layer MLP cross-modal connector (Linear -> GELU -> Linear)
-        var projected = new double[visLen];
-        for (int v = 0; v < visLen; v++)
-        {
-            double x = NumOps.ToDouble(encoderOut[v]);
-            double h = x * 0.8;
-            double gelu = h * 0.5 * (1.0 + Math.Tanh(Math.Sqrt(2.0 / Math.PI) * (h + 0.044715 * h * h * h)));
-            projected[v] = gelu * 0.7 + x * 0.15;
-        }
-        var decoderInput = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
-        {
-            double visVal = projected[d % visLen];
-            double textEmb = 0;
-            if (promptTokens is not null && promptLen > 0)
-            {
-                double tokVal = NumOps.ToDouble(promptTokens[d % promptLen]) / _options.VocabSize;
-                double gate = 1.0 / (1.0 + Math.Exp(-tokVal * 5.0));
-                visVal *= (0.5 + gate);
-                textEmb = tokVal * 0.3;
-            }
-            decoderInput[d] = NumOps.FromDouble(visVal + textEmb);
-        }
-
-        // Step 4: LLM decoder
-        var output = decoderInput;
+        var output = fusedInput;
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)
             output = Layers[i].Forward(output);
         return output;

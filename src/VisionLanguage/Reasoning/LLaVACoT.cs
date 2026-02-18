@@ -7,6 +7,7 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tokenization;
 using AiDotNet.Tokenization.Interfaces;
 using AiDotNet.VisionLanguage.Interfaces;
+using AiDotNet.Extensions;
 
 namespace AiDotNet.VisionLanguage.Reasoning;
 
@@ -54,89 +55,20 @@ public class LLaVACoT<T> : VisionLanguageModelBase<T>, IReasoningVLM<T>
         var visualFeatures = p;
         for (int i = 0; i < _encoderLayerEnd; i++)
             visualFeatures = Layers[i].Forward(visualFeatures);
-        int visDim = visualFeatures.Length;
 
-        // Step 2: Stage 1 - Summary (broad visual overview)
-        int numTokens = Math.Min(visDim, 384);
-        var summaryState = new double[dim];
-        for (int d = 0; d < dim; d++)
-        {
-            // Broad attention: uniform weighting across all visual tokens
-            double broadAttn = 0;
-            for (int t = 0; t < numTokens; t++)
-            {
-                double visVal = NumOps.ToDouble(visualFeatures[t % visDim]);
-                broadAttn += visVal;
-            }
-            summaryState[d] = broadAttn / numTokens;
-        }
-
-        // Step 3: Stage 2 - Caption (focused object/detail attention)
-        var captionState = new double[dim];
-        for (int d = 0; d < dim; d++)
-        {
-            double focusedAttn = 0;
-            double weightSum = 0;
-            for (int t = 0; t < numTokens; t++)
-            {
-                double visVal = NumOps.ToDouble(visualFeatures[t % visDim]);
-                // Object-focused: weight by feature magnitude (salient regions)
-                double saliency = Math.Abs(visVal);
-                double w = Math.Exp(saliency * 0.5) * Math.Exp(visVal * Math.Sin((d + 1) * (t + 1) * 0.004) * 0.3);
-                focusedAttn += w * visVal;
-                weightSum += w;
-            }
-            focusedAttn /= Math.Max(weightSum, 1e-8);
-            // Condition on summary (stage dependency)
-            captionState[d] = focusedAttn * 0.7 + summaryState[d] * 0.3;
-        }
-
-        // Step 4: Stage 3 - Reasoning (question-conditioned analysis)
-        Tensor<T>? promptTokens = null;
-        int promptLen = 0;
+        // Fuse visual features with prompt tokens via ConcatenateTensors
+        Tensor<T> fusedInput;
         if (prompt is not null)
         {
-            promptTokens = TokenizeText(prompt);
-            promptLen = promptTokens.Length;
+            var promptTokens = TokenizeText(prompt);
+            fusedInput = visualFeatures.ConcatenateTensors(promptTokens);
         }
-
-        var reasoningState = new double[dim];
-        for (int d = 0; d < dim; d++)
+        else
         {
-            double reasonAttn = 0;
-            double weightSum = 0;
-            for (int t = 0; t < numTokens; t++)
-            {
-                double visVal = NumOps.ToDouble(visualFeatures[t % visDim]);
-                // Question-conditioned attention
-                double qBias = 0;
-                if (promptTokens is not null && promptLen > 0)
-                    qBias = NumOps.ToDouble(promptTokens[t % promptLen]) / _options.VocabSize * 0.3;
-                double w = Math.Exp((visVal + qBias) * Math.Sin((d + 1) * (t + 1) * 0.005) * 0.4);
-                reasonAttn += w * visVal;
-                weightSum += w;
-            }
-            reasonAttn /= Math.Max(weightSum, 1e-8);
-            // Condition on caption state (progressive dependency)
-            reasoningState[d] = reasonAttn * 0.5 + captionState[d] * 0.3 + summaryState[d] * 0.2;
+            fusedInput = visualFeatures;
         }
 
-        // Step 5: Stage 4 - Conclusion (synthesize all stages)
-        var decoderInput = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
-        {
-            double promptCond = 0;
-            if (promptTokens is not null && promptLen > 0)
-                promptCond = NumOps.ToDouble(promptTokens[d % promptLen]) / _options.VocabSize * 0.5;
-
-            // Weighted synthesis of all stages
-            double conclusion = reasoningState[d] * 0.5 + captionState[d] * 0.25 +
-                summaryState[d] * 0.15 + promptCond * 0.1;
-            decoderInput[d] = NumOps.FromDouble(conclusion + promptCond);
-        }
-
-        // Step 6: LLM decoder
-        var output = decoderInput;
+        var output = fusedInput;
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)
             output = Layers[i].Forward(output);
 

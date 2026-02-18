@@ -7,6 +7,7 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tokenization;
 using AiDotNet.Tokenization.Interfaces;
 using AiDotNet.VisionLanguage.Interfaces;
+using AiDotNet.Extensions;
 
 namespace AiDotNet.VisionLanguage.VideoLanguage;
 
@@ -47,59 +48,20 @@ public class VideoLLaMA2<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<T>
         var encoderOut = p;
         for (int i = 0; i < _encoderLayerEnd; i++)
             encoderOut = Layers[i].Forward(encoderOut);
-        int visLen = encoderOut.Length;
 
-        // Step 2: Tokenize prompt
-        Tensor<T>? promptTokens = null;
-        int promptLen = 0;
+        // Fuse visual features with prompt tokens via ConcatenateTensors
+        Tensor<T> fusedInput;
         if (prompt is not null)
         {
-            promptTokens = TokenizeText(prompt);
-            promptLen = promptTokens.Length;
+            var promptTokens = TokenizeText(prompt);
+            fusedInput = encoderOut.ConcatenateTensors(promptTokens);
         }
-
-        // Step 3: STC connector (single-frame: spatial convolution only) + text fusion
-        var decoderInput = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
+        else
         {
-            // Spatial convolution: center-weighted kernel over adjacent features
-            double spatialConv = 0;
-            int kSize = 3;
-            for (int k = -kSize / 2; k <= kSize / 2; k++)
-            {
-                int idx = d + k;
-                if (idx >= 0 && idx < visLen)
-                {
-                    double val = NumOps.ToDouble(encoderOut[idx]);
-                    double weight = k == 0 ? 0.5 : 0.25;
-                    spatialConv += val * weight;
-                }
-            }
-            // ReLU activation after STC
-            if (spatialConv < 0) spatialConv = 0;
-
-            // Text cross-attention conditioning
-            double textContrib = 0;
-            if (promptTokens is not null && promptLen > 0)
-            {
-                double textAttn = 0;
-                double textWSum = 0;
-                for (int t = 0; t < promptLen; t++)
-                {
-                    double val = NumOps.ToDouble(promptTokens[t]) / _options.VocabSize;
-                    double posIdx = visLen + t + 1;
-                    double score = Math.Exp(val * Math.Sin((d + 1) * posIdx * 0.004) * 0.3);
-                    textAttn += score * val;
-                    textWSum += score;
-                }
-                textContrib = textAttn / Math.Max(textWSum, 1e-8) * 0.5;
-            }
-
-            decoderInput[d] = NumOps.FromDouble(spatialConv + textContrib);
+            fusedInput = encoderOut;
         }
 
-        // Step 4: LLM decoder
-        var output = decoderInput;
+        var output = fusedInput;
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)
             output = Layers[i].Forward(output);
         return output;

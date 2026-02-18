@@ -7,6 +7,7 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tokenization;
 using AiDotNet.Tokenization.Interfaces;
 using AiDotNet.VisionLanguage.Interfaces;
+using AiDotNet.Extensions;
 
 namespace AiDotNet.VisionLanguage.Proprietary;
 
@@ -47,135 +48,26 @@ public class GeminiVision<T> : VisionLanguageModelBase<T>, IProprietaryVLM<T>
         var p = PreprocessImage(image);
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(p);
-
-        int dim = _options.DecoderDim;
         int numExperts = _options.NumExperts;
 
         // Step 1: Native visual tokenization (direct patch embedding, no separate encoder)
         var visualFeatures = p;
         for (int i = 0; i < _encoderLayerEnd; i++)
             visualFeatures = Layers[i].Forward(visualFeatures);
-        int visLen = visualFeatures.Length;
 
-        // Step 2: Create interleaved multimodal token sequence
-        Tensor<T>? promptTokens = null;
-        int promptLen = 0;
+        // Fuse visual features with prompt tokens via ConcatenateTensors
+        Tensor<T> fusedInput;
         if (prompt is not null)
         {
-            promptTokens = TokenizeText(prompt);
-            promptLen = promptTokens.Length;
+            var promptTokens = TokenizeText(prompt);
+            fusedInput = visualFeatures.ConcatenateTensors(promptTokens);
         }
-
-        int totalTokens = visLen + promptLen;
-        var multimodalSeq = new double[totalTokens];
-
-        // Visual tokens first, then text tokens (interleaved in practice)
-        for (int v = 0; v < visLen; v++)
-            multimodalSeq[v] = NumOps.ToDouble(visualFeatures[v]);
-        if (promptTokens is not null)
+        else
         {
-            for (int t = 0; t < promptLen; t++)
-                multimodalSeq[visLen + t] = NumOps.ToDouble(promptTokens[t]) / _options.VocabSize;
+            fusedInput = visualFeatures;
         }
 
-        // Step 3: MoE routing - top-2 expert selection with load balancing
-        int topK = 2;
-        var expertOutputs = new double[numExperts][];
-        var expertLoads = new int[numExperts];
-
-        for (int e = 0; e < numExperts; e++)
-            expertOutputs[e] = new double[dim];
-
-        // Route each token to its top-2 experts
-        for (int tok = 0; tok < totalTokens; tok++)
-        {
-            // Compute router logits for each expert
-            var routerScores = new double[numExperts];
-            for (int e = 0; e < numExperts; e++)
-            {
-                routerScores[e] = multimodalSeq[tok] * Math.Sin((e + 1) * (tok + 1) * 0.005) * 0.5
-                    + Math.Cos((e + 1) * 0.7) * 0.3;
-            }
-
-            // Softmax + top-K selection
-            double maxScore = double.MinValue;
-            for (int e = 0; e < numExperts; e++)
-                if (routerScores[e] > maxScore) maxScore = routerScores[e];
-            double scoreSum = 0;
-            for (int e = 0; e < numExperts; e++)
-            {
-                routerScores[e] = Math.Exp(routerScores[e] - maxScore);
-                scoreSum += routerScores[e];
-            }
-            for (int e = 0; e < numExperts; e++)
-                routerScores[e] /= Math.Max(scoreSum, 1e-8);
-
-            // Select top-2 experts
-            var topExperts = new int[topK];
-            var topScores = new double[topK];
-            for (int k = 0; k < topK; k++)
-            {
-                int bestE = 0;
-                double bestS = -1;
-                for (int e = 0; e < numExperts; e++)
-                {
-                    bool alreadySelected = false;
-                    for (int prev = 0; prev < k; prev++)
-                        if (topExperts[prev] == e) { alreadySelected = true; break; }
-                    if (!alreadySelected && routerScores[e] > bestS)
-                    {
-                        bestS = routerScores[e];
-                        bestE = e;
-                    }
-                }
-                topExperts[k] = bestE;
-                topScores[k] = bestS;
-            }
-
-            // Normalize top-K scores
-            double topSum = topScores[0] + topScores[1];
-            if (topSum > 1e-8)
-            {
-                topScores[0] /= topSum;
-                topScores[1] /= topSum;
-            }
-
-            // Each selected expert processes the token
-            for (int k = 0; k < topK; k++)
-            {
-                int e = topExperts[k];
-                expertLoads[e]++;
-                for (int d = 0; d < dim; d++)
-                {
-                    double expertTransform = multimodalSeq[tok] *
-                        Math.Cos((e + 1) * (d + 1) * 0.002) * 0.3;
-                    expertOutputs[e][d] += expertTransform * topScores[k];
-                }
-            }
-        }
-
-        // Step 4: Aggregate expert outputs with load balancing
-        var decoderInput = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
-        {
-            double aggregated = 0;
-            double totalLoad = 0;
-            for (int e = 0; e < numExperts; e++)
-            {
-                if (expertLoads[e] > 0)
-                {
-                    aggregated += expertOutputs[e][d] / expertLoads[e];
-                    totalLoad += 1;
-                }
-            }
-            if (totalLoad > 0)
-                aggregated /= totalLoad;
-
-            decoderInput[d] = NumOps.FromDouble(aggregated);
-        }
-
-        // Step 5: Decoder
-        var output = decoderInput;
+        var output = fusedInput;
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)
             output = Layers[i].Forward(output);
 

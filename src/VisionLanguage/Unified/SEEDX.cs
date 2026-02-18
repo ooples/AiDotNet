@@ -7,6 +7,7 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tokenization;
 using AiDotNet.Tokenization.Interfaces;
 using AiDotNet.VisionLanguage.Interfaces;
+using AiDotNet.Extensions;
 
 namespace AiDotNet.VisionLanguage.Unified;
 
@@ -51,81 +52,32 @@ public class SEEDX<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
         var features = p;
         for (int i = 0; i < _encoderLayerEnd; i++)
             features = Layers[i].Forward(features);
-        int visDim = features.Length;
 
-        // Step 2: Multi-granularity SEED tokenization
-        // 2a: High-level semantic tokens (Q-Former style - 32 learnable queries)
-        int numSemanticTokens = 32;
-        var semanticTokens = new double[numSemanticTokens];
-        for (int q = 0; q < numSemanticTokens; q++)
-        {
-            double attnSum = 0;
-            double weightSum = 0;
-            int numPatches = Math.Min(visDim, 256);
-            for (int v = 0; v < numPatches; v++)
-            {
-                double visVal = NumOps.ToDouble(features[v % visDim]);
-                double attnWeight = Math.Exp(visVal * Math.Sin((q + 1) * (v + 1) * 0.02) * 0.5);
-                attnSum += attnWeight * visVal;
-                weightSum += attnWeight;
-            }
-            semanticTokens[q] = attnSum / Math.Max(weightSum, 1e-8);
-        }
 
-        // 2b: Region-level tokens (spatial pooling over 4x4 grid regions)
-        int numRegionTokens = 16;
-        var regionTokens = new double[numRegionTokens];
-        int regionGroupSize = Math.Max(1, visDim / numRegionTokens);
-        for (int r = 0; r < numRegionTokens; r++)
-        {
-            double sum = 0;
-            for (int g = 0; g < regionGroupSize; g++)
-            {
-                int idx = (r * regionGroupSize + g) % visDim;
-                sum += NumOps.ToDouble(features[idx]);
-            }
-            regionTokens[r] = sum / regionGroupSize;
-        }
+        // Fuse visual features with prompt tokens via ConcatenateTensors
 
-        // 2c: Low-level detail tokens (fine-grained feature sampling)
-        int numDetailTokens = 64;
-        var detailTokens = new double[numDetailTokens];
-        for (int d = 0; d < numDetailTokens; d++)
-        {
-            int idx = (d * visDim) / numDetailTokens;
-            detailTokens[d] = NumOps.ToDouble(features[idx % visDim]);
-        }
+        Tensor<T> fusedInput;
 
-        // Step 3: Concatenate multi-granularity tokens with text
-        int totalVisTokens = numSemanticTokens + numRegionTokens + numDetailTokens;
-        Tensor<T>? promptTokens = null;
-        int promptLen = 0;
         if (prompt is not null)
+
         {
-            promptTokens = TokenizeText(prompt);
-            promptLen = promptTokens.Length;
+
+            var promptTokens = TokenizeText(prompt);
+
+            fusedInput = features.ConcatenateTensors(promptTokens);
+
         }
 
-        var unifiedInput = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
+        else
+
         {
-            double visEmb;
-            int visIdx = d % totalVisTokens;
-            if (visIdx < numSemanticTokens)
-                visEmb = semanticTokens[visIdx] * 1.0; // Semantic gets full weight
-            else if (visIdx < numSemanticTokens + numRegionTokens)
-                visEmb = regionTokens[visIdx - numSemanticTokens] * 0.8;
-            else
-                visEmb = detailTokens[visIdx - numSemanticTokens - numRegionTokens] * 0.5;
 
-            double textEmb = 0;
-            if (promptTokens is not null && promptLen > 0)
-                textEmb = NumOps.ToDouble(promptTokens[d % promptLen]) / _options.VocabSize;
+            fusedInput = features;
 
-            unifiedInput[d] = NumOps.FromDouble(visEmb + textEmb * 0.3);
         }
 
-        var output = unifiedInput;
+
+        var output = fusedInput;
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)
             output = Layers[i].Forward(output);
         return output;

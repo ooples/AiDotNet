@@ -7,6 +7,7 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tokenization;
 using AiDotNet.Tokenization.Interfaces;
 using AiDotNet.VisionLanguage.Interfaces;
+using AiDotNet.Extensions;
 
 namespace AiDotNet.VisionLanguage.Unified;
 
@@ -51,47 +52,32 @@ public class OmniGen2<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
         var features = p;
         for (int i = 0; i < _encoderLayerEnd; i++)
             features = Layers[i].Forward(features);
-        int visDim = features.Length;
 
-        // Step 2: MLP adaptor projection (understanding path)
-        var projectedFeatures = new double[dim];
-        for (int d = 0; d < dim; d++)
-        {
-            double val = 0;
-            int numPatches = Math.Min(visDim, 256);
-            for (int v = 0; v < numPatches; v++)
-            {
-                double visVal = NumOps.ToDouble(features[v % visDim]);
-                val += visVal * Math.Sin((d + 1) * (v + 1) * 0.005) / Math.Sqrt(numPatches);
-            }
-            // SiLU activation
-            double silu = val * (1.0 / (1.0 + Math.Exp(-val)));
-            projectedFeatures[d] = silu;
-        }
 
-        // Step 3: Understanding-path LoRA activation
-        // Dual-path: understanding LoRA weights modulate the shared backbone
-        Tensor<T>? promptTokens = null;
-        int promptLen = 0;
+        // Fuse visual features with prompt tokens via ConcatenateTensors
+
+        Tensor<T> fusedInput;
+
         if (prompt is not null)
+
         {
-            promptTokens = TokenizeText(prompt);
-            promptLen = promptTokens.Length;
+
+            var promptTokens = TokenizeText(prompt);
+
+            fusedInput = features.ConcatenateTensors(promptTokens);
+
         }
 
-        var unifiedInput = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
+        else
+
         {
-            double visEmb = projectedFeatures[d];
-            // Understanding LoRA scaling (rank-16 approximation)
-            double loraScale = 0.1 * Math.Cos(d * 0.003);
-            double textEmb = 0;
-            if (promptTokens is not null && promptLen > 0)
-                textEmb = NumOps.ToDouble(promptTokens[d % promptLen]) / _options.VocabSize;
-            unifiedInput[d] = NumOps.FromDouble(visEmb * (1.0 + loraScale) + textEmb * 0.3);
+
+            fusedInput = features;
+
         }
 
-        var output = unifiedInput;
+
+        var output = fusedInput;
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)
             output = Layers[i].Forward(output);
         return output;

@@ -7,6 +7,7 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tokenization;
 using AiDotNet.Tokenization.Interfaces;
 using AiDotNet.VisionLanguage.Interfaces;
+using AiDotNet.Extensions;
 
 namespace AiDotNet.VisionLanguage.Unified;
 
@@ -52,46 +53,20 @@ public class Transfusion<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
         var features = p;
         for (int i = 0; i < _encoderLayerEnd; i++)
             features = Layers[i].Forward(features);
-        int visDim = features.Length;
 
-        // Step 2: Patchify - convert image features to patch-level embeddings
-        int numPatches = _options.NumVisualTokens; // 256 patches for 256x256 image
-        var patchEmb = new double[numPatches];
-        int patchGroup = Math.Max(1, visDim / numPatches);
-        for (int pt = 0; pt < numPatches; pt++)
-        {
-            double sum = 0;
-            for (int g = 0; g < patchGroup; g++)
-            {
-                int idx = (pt * patchGroup + g) % visDim;
-                sum += NumOps.ToDouble(features[idx]);
-            }
-            patchEmb[pt] = sum / patchGroup;
-        }
-
-        // Step 3: Create mixed-modal sequence [BOI, patches, EOI, text_prompt]
-        Tensor<T>? promptTokens = null;
-        int promptLen = 0;
+        // Fuse visual features with prompt tokens via ConcatenateTensors
+        Tensor<T> fusedInput;
         if (prompt is not null)
         {
-            promptTokens = TokenizeText(prompt);
-            promptLen = promptTokens.Length;
+            var promptTokens = TokenizeText(prompt);
+            fusedInput = features.ConcatenateTensors(promptTokens);
         }
-
-        var seqInput = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
+        else
         {
-            // Image patches get U-Net-style position encoding
-            double patchVal = patchEmb[d % numPatches];
-            double posEnc = Math.Sin(d * 0.01) * 0.1;
-            double textVal = 0;
-            if (promptTokens is not null && promptLen > 0)
-                textVal = NumOps.ToDouble(promptTokens[d % promptLen]) / _options.VocabSize;
-            seqInput[d] = NumOps.FromDouble(patchVal + posEnc + textVal * 0.3);
+            fusedInput = features;
         }
 
-        // Step 4: Shared transformer - autoregressive text generation
-        var output = seqInput;
+        var output = fusedInput;
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)
             output = Layers[i].Forward(output);
 

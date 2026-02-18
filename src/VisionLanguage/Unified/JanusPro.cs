@@ -7,6 +7,7 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tokenization;
 using AiDotNet.Tokenization.Interfaces;
 using AiDotNet.VisionLanguage.Interfaces;
+using AiDotNet.Extensions;
 
 namespace AiDotNet.VisionLanguage.Unified;
 
@@ -51,52 +52,19 @@ public class JanusPro<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
         for (int i = 0; i < _encoderLayerEnd; i++)
             understandingFeatures = Layers[i].Forward(understandingFeatures);
 
-        int visDim = understandingFeatures.Length;
-
-        // Step 2: Pro-scale understanding adaptor - deeper MLP projection
-        // Janus-Pro uses a 3-layer MLP (vs 2-layer in Janus) with larger hidden dim
-        var projectedFeatures = new double[dim];
-        int hiddenMlpDim = dim * 2;
-        for (int d = 0; d < dim; d++)
-        {
-            double val = 0;
-            int numPatches = Math.Min(visDim, 576);
-            for (int v = 0; v < numPatches; v++)
-            {
-                double visVal = NumOps.ToDouble(understandingFeatures[v % visDim]);
-                double w1 = Math.Sin((d + 1) * (v + 1) * 0.004) / Math.Sqrt(numPatches);
-                val += visVal * w1;
-            }
-            // Layer 1 + SiLU
-            double silu1 = val * (1.0 / (1.0 + Math.Exp(-val)));
-            // Layer 2 projection
-            double proj = silu1 * Math.Cos(d * 0.01);
-            // Layer 3 + GELU
-            double gelu = proj * 0.5 * (1.0 + Math.Tanh(Math.Sqrt(2.0 / Math.PI) * (proj + 0.044715 * proj * proj * proj)));
-            projectedFeatures[d] = gelu;
-        }
-
-        // Step 3: Concatenate with text prompt
-        Tensor<T>? promptTokens = null;
-        int promptLen = 0;
+        // Fuse visual features with prompt tokens via ConcatenateTensors
+        Tensor<T> fusedInput;
         if (prompt is not null)
         {
-            promptTokens = TokenizeText(prompt);
-            promptLen = promptTokens.Length;
+            var promptTokens = TokenizeText(prompt);
+            fusedInput = understandingFeatures.ConcatenateTensors(promptTokens);
         }
-
-        var unifiedInput = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
+        else
         {
-            double visEmb = projectedFeatures[d];
-            double textEmb = 0;
-            if (promptTokens is not null && promptLen > 0)
-                textEmb = NumOps.ToDouble(promptTokens[d % promptLen]) / _options.VocabSize;
-            unifiedInput[d] = NumOps.FromDouble(visEmb + textEmb * 0.3);
+            fusedInput = understandingFeatures;
         }
 
-        // Step 4: Larger LLM decoder
-        var output = unifiedInput;
+        var output = fusedInput;
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)
             output = Layers[i].Forward(output);
 

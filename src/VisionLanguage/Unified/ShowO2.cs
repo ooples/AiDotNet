@@ -7,6 +7,7 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tokenization;
 using AiDotNet.Tokenization.Interfaces;
 using AiDotNet.VisionLanguage.Interfaces;
+using AiDotNet.Extensions;
 
 namespace AiDotNet.VisionLanguage.Unified;
 
@@ -51,55 +52,32 @@ public class ShowO2<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
         var features = p;
         for (int i = 0; i < _encoderLayerEnd; i++)
             features = Layers[i].Forward(features);
-        int visDim = features.Length;
 
-        // Step 2: Dynamic token compression - merge similar adjacent tokens
-        int numImageTokens = 256;
-        var compressedTokens = new double[numImageTokens];
-        int tokensPerGroup = Math.Max(1, visDim / numImageTokens);
-        for (int t = 0; t < numImageTokens; t++)
-        {
-            double sum = 0;
-            for (int g = 0; g < tokensPerGroup; g++)
-            {
-                int idx = (t * tokensPerGroup + g) % visDim;
-                sum += NumOps.ToDouble(features[idx]);
-            }
-            compressedTokens[t] = sum / tokensPerGroup;
-        }
 
-        // Step 3: Omni-attention with relative position encoding
-        Tensor<T>? promptTokens = null;
-        int promptLen = 0;
+        // Fuse visual features with prompt tokens via ConcatenateTensors
+
+        Tensor<T> fusedInput;
+
         if (prompt is not null)
+
         {
-            promptTokens = TokenizeText(prompt);
-            promptLen = promptTokens.Length;
+
+            var promptTokens = TokenizeText(prompt);
+
+            fusedInput = features.ConcatenateTensors(promptTokens);
+
         }
 
-        var unifiedSeq = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
+        else
+
         {
-            double imgEmb = compressedTokens[d % numImageTokens];
-            // Bidirectional pooling with relative position bias
-            double attnPool = 0;
-            int poolRange = Math.Min(12, numImageTokens);
-            for (int k = 0; k < poolRange; k++)
-            {
-                int kIdx = (d + k) % numImageTokens;
-                double relPos = Math.Exp(-Math.Abs(k) * 0.15); // Position decay
-                attnPool += compressedTokens[kIdx] * relPos;
-            }
-            attnPool /= poolRange;
 
-            double textEmb = 0;
-            if (promptTokens is not null && promptLen > 0)
-                textEmb = NumOps.ToDouble(promptTokens[d % promptLen]) / _options.VocabSize;
+            fusedInput = features;
 
-            unifiedSeq[d] = NumOps.FromDouble(attnPool * 0.7 + textEmb * 0.3);
         }
 
-        var output = unifiedSeq;
+
+        var output = fusedInput;
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)
             output = Layers[i].Forward(output);
         return output;

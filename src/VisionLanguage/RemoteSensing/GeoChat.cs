@@ -7,6 +7,7 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tokenization;
 using AiDotNet.Tokenization.Interfaces;
 using AiDotNet.VisionLanguage.Interfaces;
+using AiDotNet.Extensions;
 
 namespace AiDotNet.VisionLanguage.RemoteSensing;
 
@@ -47,110 +48,24 @@ public class GeoChat<T> : VisionLanguageModelBase<T>, IRemoteSensingVLM<T>
         var p = PreprocessImage(image);
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(p);
-
-        int dim = _options.DecoderDim;
-
         // Step 1: CLIP ViT encoding for satellite imagery
         var visualFeatures = p;
         for (int i = 0; i < _encoderLayerEnd; i++)
             visualFeatures = Layers[i].Forward(visualFeatures);
-        int visLen = visualFeatures.Length;
 
-        // Step 2: Spatial feature grid - divide into grid cells
-        int gridSize = 8;
-        int cellSize = Math.Max(1, visLen / (gridSize * gridSize));
-        var gridFeatures = new double[gridSize * gridSize];
-        var gridCoords = new double[gridSize * gridSize, 2]; // normalized (x, y)
-
-        for (int gy = 0; gy < gridSize; gy++)
-        {
-            for (int gx = 0; gx < gridSize; gx++)
-            {
-                int cellIdx = gy * gridSize + gx;
-                double cellEnergy = 0;
-                int cellStart = cellIdx * cellSize;
-                for (int t = 0; t < cellSize && cellStart + t < visLen; t++)
-                    cellEnergy += NumOps.ToDouble(visualFeatures[cellStart + t]);
-                gridFeatures[cellIdx] = cellEnergy / Math.Max(cellSize, 1);
-
-                // Normalized spatial coordinates for grounding
-                gridCoords[cellIdx, 0] = (gx + 0.5) / gridSize;
-                gridCoords[cellIdx, 1] = (gy + 0.5) / gridSize;
-            }
-        }
-
-        // Step 3: Compute spatial saliency for grounding
-        var spatialSaliency = new double[gridSize * gridSize];
-        double maxSaliency = 0;
-        for (int c = 0; c < gridSize * gridSize; c++)
-        {
-            double localContrast = 0;
-            int cx = c % gridSize;
-            int cy = c / gridSize;
-            int neighborCount = 0;
-
-            // Compare with 4-connected neighbors
-            int[] dx = [-1, 1, 0, 0];
-            int[] dy = [0, 0, -1, 1];
-            for (int n = 0; n < 4; n++)
-            {
-                int nx = cx + dx[n];
-                int ny = cy + dy[n];
-                if (nx >= 0 && nx < gridSize && ny >= 0 && ny < gridSize)
-                {
-                    localContrast += Math.Abs(gridFeatures[c] - gridFeatures[ny * gridSize + nx]);
-                    neighborCount++;
-                }
-            }
-            spatialSaliency[c] = neighborCount > 0 ? localContrast / neighborCount : 0;
-            if (spatialSaliency[c] > maxSaliency) maxSaliency = spatialSaliency[c];
-        }
-
-        // Normalize saliency
-        if (maxSaliency > 1e-8)
-            for (int c = 0; c < gridSize * gridSize; c++)
-                spatialSaliency[c] /= maxSaliency;
-
-        // Step 4: Region-guided cross-attention with grounding coordinates
-        Tensor<T>? promptTokens = null;
-        int promptLen = 0;
+        // Fuse visual features with prompt tokens via ConcatenateTensors
+        Tensor<T> fusedInput;
         if (prompt is not null)
         {
-            promptTokens = TokenizeText(prompt);
-            promptLen = promptTokens.Length;
+            var promptTokens = TokenizeText(prompt);
+            fusedInput = visualFeatures.ConcatenateTensors(promptTokens);
         }
-
-        var decoderInput = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
+        else
         {
-            double groundedAttn = 0;
-            double weightSum = 0;
-
-            for (int c = 0; c < gridSize * gridSize; c++)
-            {
-                // Spatial position encoding for grounding
-                double xEnc = Math.Sin(gridCoords[c, 0] * Math.PI * (d + 1) * 0.01);
-                double yEnc = Math.Cos(gridCoords[c, 1] * Math.PI * (d + 1) * 0.01);
-                double spatialEnc = (xEnc + yEnc) * 0.15;
-
-                // Saliency-weighted attention
-                double saliencyWeight = 0.3 + 0.7 * spatialSaliency[c];
-                double score = Math.Exp((gridFeatures[c] + spatialEnc) * 0.4) * saliencyWeight;
-
-                groundedAttn += score * (gridFeatures[c] + spatialEnc);
-                weightSum += score;
-            }
-            groundedAttn /= Math.Max(weightSum, 1e-8);
-
-            double textEmb = 0;
-            if (promptTokens is not null && promptLen > 0)
-                textEmb = NumOps.ToDouble(promptTokens[d % promptLen]) / _options.VocabSize * 0.5;
-
-            decoderInput[d] = NumOps.FromDouble(groundedAttn + textEmb);
+            fusedInput = visualFeatures;
         }
 
-        // Step 5: Vicuna decoder
-        var output = decoderInput;
+        var output = fusedInput;
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)
             output = Layers[i].Forward(output);
 

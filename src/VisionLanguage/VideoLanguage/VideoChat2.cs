@@ -7,6 +7,7 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tokenization;
 using AiDotNet.Tokenization.Interfaces;
 using AiDotNet.VisionLanguage.Interfaces;
+using AiDotNet.Extensions;
 
 namespace AiDotNet.VisionLanguage.VideoLanguage;
 
@@ -48,67 +49,20 @@ public class VideoChat2<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<T>
         var encoderOut = p;
         for (int i = 0; i < _encoderLayerEnd; i++)
             encoderOut = Layers[i].Forward(encoderOut);
-        int visLen = encoderOut.Length;
 
-        // Step 2: Tokenize prompt
-        Tensor<T>? promptTokens = null;
-        int promptLen = 0;
+        // Fuse visual features with prompt tokens via ConcatenateTensors
+        Tensor<T> fusedInput;
         if (prompt is not null)
         {
-            promptTokens = TokenizeText(prompt);
-            promptLen = promptTokens.Length;
+            var promptTokens = TokenizeText(prompt);
+            fusedInput = encoderOut.ConcatenateTensors(promptTokens);
         }
-
-        // Step 3: Q-Former cross-attention over visual features
-        int numQueries = Math.Min(32, dim);
-        var decoderInput = new Tensor<T>([dim]);
-
-        for (int q = 0; q < numQueries; q++)
+        else
         {
-            int stride = Math.Max(1, dim / numQueries);
-            int startDim = q * stride;
-            int endDim = Math.Min(startDim + stride, dim);
-
-            // Query cross-attends to visual features
-            double queryNorm = 0;
-            for (int v = 0; v < visLen; v++)
-            {
-                double val = NumOps.ToDouble(encoderOut[v]);
-                // Text-conditioned attention: prompt biases which visual features are attended
-                double textBias = 0;
-                if (promptTokens is not null && promptLen > 0)
-                    textBias = NumOps.ToDouble(promptTokens[q % promptLen]) / _options.VocabSize * 0.1;
-
-                double score = Math.Exp((val + textBias) * Math.Sin((q + 1) * (v + 1) * 0.003) * 0.3);
-                for (int d = startDim; d < endDim; d++)
-                {
-                    double fVal = d < visLen ? NumOps.ToDouble(encoderOut[d]) : val;
-                    double current = NumOps.ToDouble(decoderInput[d]);
-                    decoderInput[d] = NumOps.FromDouble(current + fVal * score);
-                }
-                queryNorm += score;
-            }
-
-            // Normalize
-            if (queryNorm > 1e-8)
-            {
-                for (int d = startDim; d < endDim; d++)
-                    decoderInput[d] = NumOps.FromDouble(NumOps.ToDouble(decoderInput[d]) / queryNorm);
-            }
+            fusedInput = encoderOut;
         }
 
-        // Step 4: Add text embedding contribution
-        if (promptTokens is not null && promptLen > 0)
-        {
-            for (int d = 0; d < dim; d++)
-            {
-                double textEmb = NumOps.ToDouble(promptTokens[d % promptLen]) / _options.VocabSize * 0.3;
-                decoderInput[d] = NumOps.FromDouble(NumOps.ToDouble(decoderInput[d]) + textEmb);
-            }
-        }
-
-        // Step 5: LLM decoder
-        var output = decoderInput;
+        var output = fusedInput;
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)
             output = Layers[i].Forward(output);
         return output;

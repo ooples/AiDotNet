@@ -7,6 +7,7 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tokenization;
 using AiDotNet.Tokenization.Interfaces;
 using AiDotNet.VisionLanguage.Interfaces;
+using AiDotNet.Extensions;
 
 namespace AiDotNet.VisionLanguage.Unified;
 
@@ -53,48 +54,19 @@ public class Chameleon<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
         for (int i = 0; i < _encoderLayerEnd; i++)
             features = Layers[i].Forward(features);
 
-        int visDim = features.Length;
-
-        // Step 2: VQ-encode image to discrete tokens
-        // Quantize each feature position to nearest codebook entry
-        int numImageTokens = Math.Min(256, visDim); // 16x16 spatial tokens
-        var imageTokenEmb = new double[numImageTokens];
-        for (int t = 0; t < numImageTokens; t++)
-        {
-            int srcIdx = (t * visDim) / numImageTokens;
-            double val = NumOps.ToDouble(features[srcIdx % visDim]);
-            // Quantize to codebook index
-            int codebookIdx = (int)(((Math.Tanh(val) + 1.0) / 2.0) * (numVisTokens - 1));
-            codebookIdx = Math.Max(0, Math.Min(numVisTokens - 1, codebookIdx));
-            // Convert back to embedding value
-            imageTokenEmb[t] = (double)codebookIdx / numVisTokens;
-        }
-
-        // Step 3: Create unified mixed-modal sequence [image_tokens + prompt_tokens]
-        int promptLen = 0;
-        Tensor<T>? promptTokens = null;
+        // Fuse visual features with prompt tokens via ConcatenateTensors
+        Tensor<T> fusedInput;
         if (prompt is not null)
         {
-            promptTokens = TokenizeText(prompt);
-            promptLen = promptTokens.Length;
+            var promptTokens = TokenizeText(prompt);
+            fusedInput = features.ConcatenateTensors(promptTokens);
         }
-
-        int seqLen = numImageTokens + promptLen;
-        var unifiedSeq = new Tensor<T>([Math.Min(seqLen, dim)]);
-        int outLen = unifiedSeq.Length;
-
-        for (int d = 0; d < outLen; d++)
+        else
         {
-            if (d < numImageTokens)
-                unifiedSeq[d] = NumOps.FromDouble(imageTokenEmb[d]);
-            else if (promptTokens is not null && d - numImageTokens < promptLen)
-                unifiedSeq[d] = promptTokens[d - numImageTokens];
-            else
-                unifiedSeq[d] = NumOps.Zero;
+            fusedInput = features;
         }
 
-        // Step 4: Autoregressive transformer decoding for text output
-        var output = unifiedSeq;
+        var output = fusedInput;
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)
             output = Layers[i].Forward(output);
 

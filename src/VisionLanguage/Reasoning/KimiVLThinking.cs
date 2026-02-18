@@ -7,6 +7,7 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tokenization;
 using AiDotNet.Tokenization.Interfaces;
 using AiDotNet.VisionLanguage.Interfaces;
+using AiDotNet.Extensions;
 
 namespace AiDotNet.VisionLanguage.Reasoning;
 
@@ -48,107 +49,24 @@ public class KimiVLThinking<T> : VisionLanguageModelBase<T>, IReasoningVLM<T>
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(p);
 
-        int dim = _options.DecoderDim;
-        int numExperts = 8;
-        int topK = 2;
-
         // Step 1: MoonViT encoding with thinking-mode preprocessing
         var visualFeatures = p;
         for (int i = 0; i < _encoderLayerEnd; i++)
             visualFeatures = Layers[i].Forward(visualFeatures);
-        int visDim = visualFeatures.Length;
 
-        // Step 2: Token merging (same as Kimi-VL base)
-        int mergedLen = Math.Max(dim, visDim / 4);
-        var mergedTokens = new double[mergedLen];
-        int mergeStride = Math.Max(1, visDim / mergedLen);
-        for (int m = 0; m < mergedLen; m++)
-        {
-            double sum = 0;
-            int count = 0;
-            for (int s = 0; s < mergeStride && m * mergeStride + s < visDim; s++)
-            {
-                sum += NumOps.ToDouble(visualFeatures[(m * mergeStride + s) % visDim]);
-                count++;
-            }
-            mergedTokens[m] = sum / Math.Max(count, 1);
-        }
-
-        // Step 3: MoE routing with thinking-mode bias
-        // In thinking mode, experts that handle reasoning-heavy features get boosted
-        Tensor<T>? promptTokens = null;
-        int promptLen = 0;
+        // Fuse visual features with prompt tokens via ConcatenateTensors
+        Tensor<T> fusedInput;
         if (prompt is not null)
         {
-            promptTokens = TokenizeText(prompt);
-            promptLen = promptTokens.Length;
+            var promptTokens = TokenizeText(prompt);
+            fusedInput = visualFeatures.ConcatenateTensors(promptTokens);
         }
-
-        // Thinking preamble: simulate <think> token injection
-        double thinkingBias = _options.EnableLongThinking ? 0.15 : 0.0;
-
-        var decoderInput = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
+        else
         {
-            // Router with thinking bias
-            var expertScores = new double[numExperts];
-            double routerSum = 0;
-            for (int e = 0; e < numExperts; e++)
-            {
-                double score = 0;
-                int numSamples = Math.Min(32, mergedLen);
-                for (int s = 0; s < numSamples; s++)
-                {
-                    int mIdx = (d * numSamples + s) % mergedLen;
-                    score += mergedTokens[mIdx] * Math.Sin((e + 1) * (s + 1) * 0.05);
-                }
-                score /= numSamples;
-                // Thinking bias: boost reasoning-oriented experts (even-indexed)
-                if (e % 2 == 0) score += thinkingBias;
-                expertScores[e] = score;
-                routerSum += Math.Exp(score);
-            }
-
-            // Top-k expert selection and combination
-            double combinedOut = 0;
-            double weightSum = 0;
-            var usedExperts = new bool[numExperts];
-            for (int k = 0; k < topK; k++)
-            {
-                int bestE = 0;
-                double bestP = -1;
-                for (int e = 0; e < numExperts; e++)
-                {
-                    if (!usedExperts[e])
-                    {
-                        double prob = Math.Exp(expertScores[e]) / Math.Max(routerSum, 1e-8);
-                        if (prob > bestP) { bestP = prob; bestE = e; }
-                    }
-                }
-                usedExperts[bestE] = true;
-
-                double expertVal = 0;
-                int patchCount = Math.Min(64, mergedLen);
-                for (int v = 0; v < patchCount; v++)
-                {
-                    int mIdx = (v + bestE * 7) % mergedLen;
-                    expertVal += mergedTokens[mIdx] * (1.0 + Math.Cos((bestE + 1) * (d + 1) * 0.002) * 0.3);
-                }
-                expertVal /= patchCount;
-                combinedOut += bestP * expertVal;
-                weightSum += bestP;
-            }
-            combinedOut /= Math.Max(weightSum, 1e-8);
-
-            double textEmb = 0;
-            if (promptTokens is not null && promptLen > 0)
-                textEmb = NumOps.ToDouble(promptTokens[d % promptLen]) / _options.VocabSize * 0.5;
-
-            decoderInput[d] = NumOps.FromDouble(combinedOut + textEmb);
+            fusedInput = visualFeatures;
         }
 
-        // Step 4: Decoder
-        var output = decoderInput;
+        var output = fusedInput;
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)
             output = Layers[i].Forward(output);
 

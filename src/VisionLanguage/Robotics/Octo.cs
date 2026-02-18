@@ -7,6 +7,7 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tokenization;
 using AiDotNet.Tokenization.Interfaces;
 using AiDotNet.VisionLanguage.Interfaces;
+using AiDotNet.Extensions;
 
 namespace AiDotNet.VisionLanguage.Robotics;
 
@@ -45,37 +46,32 @@ public class Octo<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
         var encoderOut = p;
         for (int i = 0; i < _encoderLayerEnd; i++)
             encoderOut = Layers[i].Forward(encoderOut);
-        int visLen = encoderOut.Length;
 
-        Tensor<T>? promptTokens = null;
-        int promptLen = 0;
-        if (prompt is not null) { promptTokens = TokenizeText(prompt); promptLen = promptTokens.Length; }
 
-        // MLP projection with instruction-gated visual features for action prediction
-        var projected = new double[visLen];
-        for (int v = 0; v < visLen; v++)
+        // Fuse visual features with prompt tokens via ConcatenateTensors
+
+        Tensor<T> fusedInput;
+
+        if (prompt is not null)
+
         {
-            double x = NumOps.ToDouble(encoderOut[v]);
-            double h = x * 0.8;
-            double gelu = h * 0.5 * (1.0 + Math.Tanh(Math.Sqrt(2.0 / Math.PI) * (h + 0.044715 * h * h * h)));
-            projected[v] = gelu * 0.7 + x * 0.15;
-        }
-        var decoderInput = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
-        {
-            double visVal = projected[d % visLen];
-            double textEmb = 0;
-            if (promptTokens is not null && promptLen > 0)
-            {
-                double tokVal = NumOps.ToDouble(promptTokens[d % promptLen]) / _options.VocabSize;
-                double gate = 1.0 / (1.0 + Math.Exp(-tokVal * 5.0));
-                visVal *= (0.5 + gate);
-                textEmb = tokVal * 0.3;
-            }
-            decoderInput[d] = NumOps.FromDouble(visVal + textEmb);
+
+            var promptTokens = TokenizeText(prompt);
+
+            fusedInput = encoderOut.ConcatenateTensors(promptTokens);
+
         }
 
-        var output = decoderInput;
+        else
+
+        {
+
+            fusedInput = encoderOut;
+
+        }
+
+
+        var output = fusedInput;
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)
             output = Layers[i].Forward(output);
         return output;

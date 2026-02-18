@@ -7,6 +7,7 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tokenization;
 using AiDotNet.Tokenization.Interfaces;
 using AiDotNet.VisionLanguage.Interfaces;
+using AiDotNet.Extensions;
 
 namespace AiDotNet.VisionLanguage.Reasoning;
 
@@ -47,124 +48,24 @@ public class KimiVL<T> : VisionLanguageModelBase<T>, IReasoningVLM<T>
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(p);
 
-        int dim = _options.DecoderDim;
-        int numExperts = 8; // MoE expert count
-        int topK = 2; // top-k expert routing
-
         // Step 1: MoonViT native-resolution encoding
         var visualFeatures = p;
         for (int i = 0; i < _encoderLayerEnd; i++)
             visualFeatures = Layers[i].Forward(visualFeatures);
-        int visDim = visualFeatures.Length;
 
-        // Step 2: Dynamic token merging (reduce visual tokens while preserving information)
-        // MoonViT merges similar adjacent tokens based on cosine similarity
-        int mergedLen = Math.Max(dim, visDim / 4); // compress to 1/4 of original
-        var mergedTokens = new double[mergedLen];
-        int stride = Math.Max(1, visDim / mergedLen);
-        for (int m = 0; m < mergedLen; m++)
-        {
-            double sum = 0;
-            double maxSim = -1;
-            int count = 0;
-            for (int s = 0; s < stride && m * stride + s < visDim; s++)
-            {
-                int idx = m * stride + s;
-                double val = NumOps.ToDouble(visualFeatures[idx % visDim]);
-                sum += val;
-                count++;
-                // Track similarity for merging decision
-                if (s > 0)
-                {
-                    int prevIdx = idx - 1;
-                    double prevVal = NumOps.ToDouble(visualFeatures[prevIdx % visDim]);
-                    double sim = 1.0 - Math.Abs(val - prevVal) / (Math.Abs(val) + Math.Abs(prevVal) + 1e-8);
-                    if (sim > maxSim) maxSim = sim;
-                }
-            }
-            // Weighted merge: high-similarity tokens averaged, low-similarity kept distinct
-            double mergeWeight = maxSim > 0 ? maxSim : 0.5;
-            mergedTokens[m] = sum / Math.Max(count, 1) * (0.8 + 0.2 * mergeWeight);
-        }
-
-        // Step 3: MoE routing - compute expert affinities and select top-k
-        Tensor<T>? promptTokens = null;
-        int promptLen = 0;
+        // Fuse visual features with prompt tokens via ConcatenateTensors
+        Tensor<T> fusedInput;
         if (prompt is not null)
         {
-            promptTokens = TokenizeText(prompt);
-            promptLen = promptTokens.Length;
+            var promptTokens = TokenizeText(prompt);
+            fusedInput = visualFeatures.ConcatenateTensors(promptTokens);
         }
-
-        var decoderInput = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
+        else
         {
-            // Compute router logits for each expert
-            var expertScores = new double[numExperts];
-            double routerSum = 0;
-            for (int e = 0; e < numExperts; e++)
-            {
-                // Router: linear projection of visual features to expert scores
-                double score = 0;
-                int numSamples = Math.Min(32, mergedLen);
-                for (int s = 0; s < numSamples; s++)
-                {
-                    int mIdx = (d * numSamples + s) % mergedLen;
-                    score += mergedTokens[mIdx] * Math.Sin((e + 1) * (s + 1) * 0.05);
-                }
-                expertScores[e] = score / numSamples;
-                routerSum += Math.Exp(expertScores[e]);
-            }
-
-            // Softmax + top-k selection
-            var expertProbs = new double[numExperts];
-            for (int e = 0; e < numExperts; e++)
-                expertProbs[e] = Math.Exp(expertScores[e]) / Math.Max(routerSum, 1e-8);
-
-            // Select top-k experts
-            double combinedOutput = 0;
-            double topKWeightSum = 0;
-            for (int k = 0; k < topK; k++)
-            {
-                int bestExpert = 0;
-                double bestProb = -1;
-                for (int e = 0; e < numExperts; e++)
-                {
-                    if (expertProbs[e] > bestProb)
-                    {
-                        bestProb = expertProbs[e];
-                        bestExpert = e;
-                    }
-                }
-
-                // Expert computation: each expert processes features differently
-                double expertOut = 0;
-                int patchCount = Math.Min(64, mergedLen);
-                for (int v = 0; v < patchCount; v++)
-                {
-                    int mIdx = (v + bestExpert * 7) % mergedLen;
-                    double feat = mergedTokens[mIdx];
-                    // Expert-specific transformation
-                    double expertBias = Math.Cos((bestExpert + 1) * (d + 1) * 0.002) * 0.3;
-                    expertOut += feat * (1.0 + expertBias);
-                }
-                expertOut /= patchCount;
-
-                combinedOutput += bestProb * expertOut;
-                topKWeightSum += bestProb;
-                expertProbs[bestExpert] = -1; // mask selected expert
-            }
-            combinedOutput /= Math.Max(topKWeightSum, 1e-8);
-
-            double textEmb = 0;
-            if (promptTokens is not null && promptLen > 0)
-                textEmb = NumOps.ToDouble(promptTokens[d % promptLen]) / _options.VocabSize * 0.5;
-
-            decoderInput[d] = NumOps.FromDouble(combinedOutput + textEmb);
+            fusedInput = visualFeatures;
         }
 
-        // Step 4: LLM decoder
-        var output = decoderInput;
+        var output = fusedInput;
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)
             output = Layers[i].Forward(output);
 

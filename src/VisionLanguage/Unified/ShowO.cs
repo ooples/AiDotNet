@@ -7,6 +7,7 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tokenization;
 using AiDotNet.Tokenization.Interfaces;
 using AiDotNet.VisionLanguage.Interfaces;
+using AiDotNet.Extensions;
 
 namespace AiDotNet.VisionLanguage.Unified;
 
@@ -53,50 +54,19 @@ public class ShowO<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
         for (int i = 0; i < _encoderLayerEnd; i++)
             features = Layers[i].Forward(features);
 
-        int visDim = features.Length;
-
-        // Step 2: VQ-tokenize image for discrete token representation
-        int numImageTokens = 256;
-        var imageTokenEmb = new double[numImageTokens];
-        for (int t = 0; t < numImageTokens; t++)
-        {
-            int srcIdx = (t * visDim) / numImageTokens;
-            double val = NumOps.ToDouble(features[srcIdx % visDim]);
-            imageTokenEmb[t] = Math.Tanh(val) * 0.5 + 0.5;
-        }
-
-        // Step 3: Build unified sequence with omni-attention mask
-        // Image tokens get full bidirectional attention; text tokens get causal attention
-        Tensor<T>? promptTokens = null;
-        int promptLen = 0;
+        // Fuse visual features with prompt tokens via ConcatenateTensors
+        Tensor<T> fusedInput;
         if (prompt is not null)
         {
-            promptTokens = TokenizeText(prompt);
-            promptLen = promptTokens.Length;
+            var promptTokens = TokenizeText(prompt);
+            fusedInput = features.ConcatenateTensors(promptTokens);
         }
-
-        var unifiedSeq = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
+        else
         {
-            double imgEmb = imageTokenEmb[d % numImageTokens];
-            // Full attention over image tokens (bidirectional pooling)
-            double fullAttnPool = 0;
-            int poolRange = Math.Min(8, numImageTokens);
-            for (int k = 0; k < poolRange; k++)
-            {
-                int kIdx = (d + k) % numImageTokens;
-                fullAttnPool += imageTokenEmb[kIdx] / poolRange;
-            }
-
-            double textEmb = 0;
-            if (promptTokens is not null && promptLen > 0)
-                textEmb = NumOps.ToDouble(promptTokens[d % promptLen]) / _options.VocabSize;
-
-            unifiedSeq[d] = NumOps.FromDouble(fullAttnPool * 0.7 + textEmb * 0.3);
+            fusedInput = features;
         }
 
-        // Step 4: Transformer decoding
-        var output = unifiedSeq;
+        var output = fusedInput;
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)
             output = Layers[i].Forward(output);
 

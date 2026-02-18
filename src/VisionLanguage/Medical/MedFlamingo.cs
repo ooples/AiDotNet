@@ -7,6 +7,7 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tokenization;
 using AiDotNet.Tokenization.Interfaces;
 using AiDotNet.VisionLanguage.Interfaces;
+using AiDotNet.Extensions;
 
 namespace AiDotNet.VisionLanguage.Medical;
 
@@ -48,90 +49,24 @@ public class MedFlamingo<T> : VisionLanguageModelBase<T>, IMedicalVLM<T>
         var p = PreprocessImage(image);
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(p);
-
-        int dim = _options.DecoderDim;
-
         // Step 1: CLIP ViT visual encoding
         var visualFeatures = p;
         for (int i = 0; i < _encoderLayerEnd; i++)
             visualFeatures = Layers[i].Forward(visualFeatures);
-        int visLen = visualFeatures.Length;
 
-        // Step 2: Perceiver resampler - compress to fixed number of visual tokens
-        int numPerceiverTokens = 64;
-        var resampledTokens = new double[numPerceiverTokens];
-        for (int q = 0; q < numPerceiverTokens; q++)
-        {
-            // Learned latent queries cross-attend to all visual features
-            double attnSum = 0;
-            double weightSum = 0;
-            for (int v = 0; v < visLen; v++)
-            {
-                double visVal = NumOps.ToDouble(visualFeatures[v % visLen]);
-                double score = Math.Exp(Math.Sin((q + 1) * (v + 1) * 0.008) * visVal * 0.4);
-                attnSum += score * visVal;
-                weightSum += score;
-            }
-            resampledTokens[q] = attnSum / Math.Max(weightSum, 1e-8);
-        }
-
-        // Step 3: Tokenize prompt for cross-attention
-        Tensor<T>? promptTokens = null;
-        int promptLen = 0;
+        // Fuse visual features with prompt tokens via ConcatenateTensors
+        Tensor<T> fusedInput;
         if (prompt is not null)
         {
-            promptTokens = TokenizeText(prompt);
-            promptLen = promptTokens.Length;
+            var promptTokens = TokenizeText(prompt);
+            fusedInput = visualFeatures.ConcatenateTensors(promptTokens);
         }
-
-        // Step 4: Gated cross-attention - visual features gate into language model
-        // Flamingo uses tanh-gated cross-attention initialized near zero
-        int numGatedLayers = 4;
-        var lmState = new double[dim];
-
-        // Initialize LM state from prompt embeddings
-        for (int d = 0; d < dim; d++)
+        else
         {
-            if (promptTokens is not null && promptLen > 0)
-                lmState[d] = NumOps.ToDouble(promptTokens[d % promptLen]) / _options.VocabSize;
-            else
-                lmState[d] = 0;
+            fusedInput = visualFeatures;
         }
 
-        for (int layer = 0; layer < numGatedLayers; layer++)
-        {
-            // tanh gating factor - initialized small, grows during training
-            // In practice this starts near 0 to preserve pre-trained LM weights
-            double gateInit = 0.1 * (layer + 1) / numGatedLayers;
-
-            for (int d = 0; d < dim; d++)
-            {
-                // Cross-attention: LM hidden state queries visual tokens
-                double crossAttn = 0;
-                double weightSum = 0;
-                for (int q = 0; q < numPerceiverTokens; q++)
-                {
-                    double qk = lmState[d] * resampledTokens[q];
-                    double layerBias = Math.Sin((layer + 1) * (d + 1) * (q + 1) * 0.001) * 0.3;
-                    double score = Math.Exp((qk + layerBias) * 0.3);
-                    crossAttn += score * resampledTokens[q];
-                    weightSum += score;
-                }
-                crossAttn /= Math.Max(weightSum, 1e-8);
-
-                // tanh gate: controls how much visual info flows into LM
-                double gate = Math.Tanh(crossAttn * gateInit);
-                lmState[d] = lmState[d] + gate * crossAttn;
-            }
-        }
-
-        // Step 5: Compose decoder input
-        var decoderInput = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
-            decoderInput[d] = NumOps.FromDouble(lmState[d]);
-
-        // Step 6: MPT decoder
-        var output = decoderInput;
+        var output = fusedInput;
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)
             output = Layers[i].Forward(output);
 
