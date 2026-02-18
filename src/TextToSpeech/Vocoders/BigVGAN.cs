@@ -24,7 +24,7 @@ public class BigVGAN<T> : TtsModelBase<T>, IVocoder<T>
         double[] signal = new double[melLen];
         for (int i = 0; i < melLen; i++) signal[i] = NumOps.ToDouble(melSpectrogram[i]);
         // Multi-stage upsampling (each stage doubles resolution)
-        int numStages = (int)Math.Ceiling(Math.Log2((double)_options.HopSize));
+        int numStages = (int)Math.Ceiling(Math.Log((double)_options.HopSize) / Math.Log(2.0));
         for (int stage = 0; stage < numStages; stage++)
         {
             int nextLen = Math.Min(currentLen * 2, waveLen);
