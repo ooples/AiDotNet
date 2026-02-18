@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -53,42 +54,21 @@ public class Emu3<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageMode
         var p = PreprocessImage(image);
         if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(p);
 
-        int dim = _options.DecoderDim;
-
         // Step 1: VQVAE encoder tokenizes image into discrete visual tokens
         var visionOut = p;
         for (int i = 0; i < _visionLayerEnd; i++)
             visionOut = Layers[i].Forward(visionOut);
-        int visLen = visionOut.Length;
 
         // Step 2: Tokenize prompt (shares unified vocabulary with visual tokens)
         Tensor<T>? promptTokens = null;
-        int promptLen = 0;
         if (prompt is not null)
-        {
             promptTokens = TokenizeText(prompt);
-            promptLen = promptTokens.Length;
-        }
 
         // Step 3: Build unified token sequence [visual_tokens | text_tokens]
-        // Visual tokenizer: continuous visual tokens for next-token prediction
-        var decoderInput = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
-        {
-            double visVal = 0;
-            if (visLen > 0)
-            {
-                int vIdx = d % visLen;
-                double x = NumOps.ToDouble(visionOut[vIdx]);
-                double h = x * 0.9;
-                double gelu = h * 0.5 * (1.0 + Math.Tanh(Math.Sqrt(2.0 / Math.PI) * (h + 0.044715 * h * h * h)));
-                visVal = gelu * 0.6 + x * 0.2;
-            }
-            double textEmb = 0;
-            if (promptTokens is not null && promptLen > 0)
-                textEmb = NumOps.ToDouble(promptTokens[d % promptLen]) / _options.VocabSize * 0.5;
-            decoderInput[d] = NumOps.FromDouble(visVal + textEmb);
-        }
+        // Emu3 shares a unified vocabulary for visual and text tokens
+        var decoderInput = visionOut;
+        if (promptTokens is not null)
+            decoderInput = visionOut.ConcatenateTensors(promptTokens);
 
         // Step 4: Unified autoregressive transformer (next-token prediction)
         var decoderOut = decoderInput;

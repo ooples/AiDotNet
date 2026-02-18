@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -53,9 +54,6 @@ public class IDEFICS3<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguage
         var p = PreprocessImage(image);
         if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(p);
 
-        int dim = _options.DecoderDim;
-        int numLatents = _options.NumLatents;
-
         // Step 1: SigLIP vision encoder with sub-image splitting
         var visionOut = p;
         for (int i = 0; i < _visionLayerEnd; i++)
@@ -65,55 +63,19 @@ public class IDEFICS3<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguage
         var perceiverOut = visionOut;
         for (int i = _visionLayerEnd; i < _perceiverLayerEnd; i++)
             perceiverOut = Layers[i].Forward(perceiverOut);
-        int pLen = perceiverOut.Length;
 
-        // Step 3: Pooling queries with document-aware attention
-        var pooledTokens = new double[numLatents];
-        for (int q = 0; q < numLatents; q++)
-        {
-            double attn = 0;
-            double wSum = 0;
-            for (int v = 0; v < pLen; v++)
-            {
-                double val = NumOps.ToDouble(perceiverOut[v]);
-                double sigScore = 1.0 / (1.0 + Math.Exp(-val * Math.Sin((q + 1) * (v + 1) * 0.004) * 0.5));
-                attn += sigScore * val;
-                wSum += sigScore;
-            }
-            pooledTokens[q] = attn / Math.Max(wSum, 1e-8);
-        }
-
-        // Step 4: Tokenize prompt
+        // Step 3: Tokenize prompt
         Tensor<T>? promptTokens = null;
-        int promptLen = 0;
         if (prompt is not null)
-        {
             promptTokens = TokenizeText(prompt);
-            promptLen = promptTokens.Length;
-        }
 
-        // Step 5: Cross-attention fusion for Llama 3.1 decoder
-        var decoderInput = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
-        {
-            double crossAttn = 0;
-            double crossWSum = 0;
-            for (int q = 0; q < numLatents; q++)
-            {
-                double score = Math.Exp(pooledTokens[q] * Math.Sin((d + 1) * (q + 1) * 0.01) * 0.35);
-                crossAttn += score * pooledTokens[q];
-                crossWSum += score;
-            }
-            crossAttn /= Math.Max(crossWSum, 1e-8);
+        // Step 4: Concatenate perceiver output with prompt tokens
+        // IDEFICS3 uses cross-attention in Llama 3.1 decoder layers
+        var decoderInput = perceiverOut;
+        if (promptTokens is not null)
+            decoderInput = perceiverOut.ConcatenateTensors(promptTokens);
 
-            double textEmb = 0;
-            if (promptTokens is not null && promptLen > 0)
-                textEmb = NumOps.ToDouble(promptTokens[d % promptLen]) / _options.VocabSize * 0.5;
-
-            decoderInput[d] = NumOps.FromDouble(crossAttn + textEmb);
-        }
-
-        // Step 6: Llama 3.1 decoder
+        // Step 5: Llama 3.1 decoder
         var output = decoderInput;
         for (int i = _perceiverLayerEnd; i < Layers.Count; i++)
             output = Layers[i].Forward(output);

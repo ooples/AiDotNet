@@ -6,6 +6,4 @@ namespace AiDotNet.VisionLanguage.Generative;
 public class PaLIOptions : GenerativeVLMOptions
 {
     public PaLIOptions() { ArchitectureType = GenerativeArchitectureType.EncoderDecoder; VisionDim = 1408; DecoderDim = 1024; NumVisionLayers = 48; NumDecoderLayers = 24; NumHeads = 16; ImageSize = 224; }
-    /// <summary>Gets or sets the number of decoder attention heads.</summary>
-    public int NumDecoderHeads { get; set; } = 16;
 }

@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -53,39 +54,20 @@ public class GIT<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageModel
         var p = PreprocessImage(image);
         if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(p);
 
-        int dim = _options.DecoderDim;
-
         // Step 1: Contrastive pre-trained ViT encoder
         var encoderOut = p;
         for (int i = 0; i < _encoderLayerEnd; i++)
             encoderOut = Layers[i].Forward(encoderOut);
-        int visLen = encoderOut.Length;
 
         // Step 2: Tokenize prompt for concatenation
         Tensor<T>? promptTokens = null;
-        int promptLen = 0;
         if (prompt is not null)
-        {
             promptTokens = TokenizeText(prompt);
-            promptLen = promptTokens.Length;
-        }
 
         // Step 3: Concatenate visual + text tokens into unified sequence
-        // Simple linear projection: visual tokens mapped to decoder space then concatenated with text
-        var decoderInput = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
-        {
-            double visVal = 0;
-            if (visLen > 0)
-            {
-                int vIdx = d % visLen;
-                visVal = NumOps.ToDouble(encoderOut[vIdx]) * 0.85;
-            }
-            double textEmb = 0;
-            if (promptTokens is not null && promptLen > 0)
-                textEmb = NumOps.ToDouble(promptTokens[d % promptLen]) / _options.VocabSize * 0.5;
-            decoderInput[d] = NumOps.FromDouble(visVal + textEmb);
-        }
+        var decoderInput = encoderOut;
+        if (promptTokens is not null)
+            decoderInput = encoderOut.ConcatenateTensors(promptTokens);
 
         // Step 4: Autoregressive decoder with causal self-attention
         var output = decoderInput;

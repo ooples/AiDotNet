@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -55,71 +56,23 @@ public class PaLIX<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageMod
         var p = PreprocessImage(image);
         if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(p);
 
-        int dim = _options.DecoderDim;
-
         // Step 1: ViT-22B vision encoder
         var encoderOut = p;
         for (int i = 0; i < _encoderLayerEnd; i++)
             encoderOut = Layers[i].Forward(encoderOut);
-        int visLen = encoderOut.Length;
 
         // Step 2: Tokenize task-prefixed prompt for UL2 conditioning
         Tensor<T>? promptTokens = null;
-        int promptLen = 0;
         if (prompt is not null)
-        {
             promptTokens = TokenizeText(prompt);
-            promptLen = promptTokens.Length;
-        }
 
-        // Step 3: Mixture-of-denoisers conditioning
-        // UL2 uses denoiser mode tokens: [R], [S], [X] to select generation strategy
-        // Default to S-denoiser (sequential/prefix LM) for standard generation
-        double denoiserBias = 0.0;
-        if (prompt is not null)
-        {
-            if (prompt.StartsWith("[R]")) denoiserBias = -0.05;  // R-denoiser: span corruption
-            else if (prompt.StartsWith("[S]")) denoiserBias = 0.0;  // S-denoiser: prefix LM (default)
-            else if (prompt.StartsWith("[X]")) denoiserBias = 0.05; // X-denoiser: extreme corruption
-        }
+        // Step 3: Build prepended visual+text sequence [visual_tokens | text_tokens]
+        // PaLI-X prepends ViT-22B visual tokens to text and feeds through UL2 encoder-decoder
+        var decoderInput = encoderOut;
+        if (promptTokens is not null)
+            decoderInput = encoderOut.ConcatenateTensors(promptTokens);
 
-        // Step 4: Build prepended visual+text sequence for UL2 encoder
-        var decoderInput = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
-        {
-            // ViT-22B visual features (prepended)
-            double visContrib = 0;
-            double visWSum = 0;
-            for (int v = 0; v < visLen; v++)
-            {
-                double val = NumOps.ToDouble(encoderOut[v]);
-                double score = Math.Exp((val + denoiserBias) * Math.Sin((d + 1) * (v + 1) * 0.004) * 0.3);
-                visContrib += score * val;
-                visWSum += score;
-            }
-            visContrib /= Math.Max(visWSum, 1e-8);
-
-            // Text tokens (appended after visual tokens)
-            double textContrib = 0;
-            if (promptTokens is not null && promptLen > 0)
-            {
-                double textAttn = 0;
-                double textWSum = 0;
-                for (int t = 0; t < promptLen; t++)
-                {
-                    double val = NumOps.ToDouble(promptTokens[t]) / _options.VocabSize;
-                    double posIdx = visLen + t + 1;
-                    double score = Math.Exp((val + denoiserBias) * Math.Cos((d + 1) * posIdx * 0.003) * 0.3);
-                    textAttn += score * val;
-                    textWSum += score;
-                }
-                textContrib = textAttn / Math.Max(textWSum, 1e-8) * 0.5;
-            }
-
-            decoderInput[d] = NumOps.FromDouble(visContrib + textContrib);
-        }
-
-        // Step 5: UL2 decoder generates output
+        // Step 4: UL2 decoder generates output
         var output = decoderInput;
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)
             output = Layers[i].Forward(output);

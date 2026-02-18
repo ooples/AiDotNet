@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -55,63 +56,22 @@ public class PaLI<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageMode
         var p = PreprocessImage(image);
         if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(p);
 
-        int dim = _options.DecoderDim;
-
         // Step 1: ViT-e vision encoder (4B params)
         var encoderOut = p;
         for (int i = 0; i < _encoderLayerEnd; i++)
             encoderOut = Layers[i].Forward(encoderOut);
-        int visLen = encoderOut.Length;
 
         // Step 2: Tokenize task-prefixed prompt
         // PaLI uses task prefixes: "caption en", "answer en", "ocr", etc.
         Tensor<T>? promptTokens = null;
-        int promptLen = 0;
         if (prompt is not null)
-        {
             promptTokens = TokenizeText(prompt);
-            promptLen = promptTokens.Length;
-        }
 
         // Step 3: Build prepended sequence [visual_tokens | task_prefix | text_tokens]
-        // The mT5 encoder sees the full mixed sequence
-        var decoderInput = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
-        {
-            // Visual tokens (prepended portion of the sequence)
-            double visContrib = 0;
-            double visWSum = 0;
-            for (int v = 0; v < visLen; v++)
-            {
-                double val = NumOps.ToDouble(encoderOut[v]);
-                // mT5 encoder self-attention over prepended visual tokens
-                double score = Math.Exp(val * Math.Sin((d + 1) * (v + 1) * 0.004) * 0.3);
-                visContrib += score * val;
-                visWSum += score;
-            }
-            visContrib /= Math.Max(visWSum, 1e-8);
-
-            // Text tokens (appended after visual tokens)
-            double textContrib = 0;
-            if (promptTokens is not null && promptLen > 0)
-            {
-                double textAttn = 0;
-                double textWSum = 0;
-                for (int t = 0; t < promptLen; t++)
-                {
-                    double val = NumOps.ToDouble(promptTokens[t]) / _options.VocabSize;
-                    // Self-attention covers both visual prefix and text tokens
-                    double posIdx = visLen + t + 1;
-                    double score = Math.Exp(val * Math.Cos((d + 1) * posIdx * 0.003) * 0.3);
-                    textAttn += score * val;
-                    textWSum += score;
-                }
-                textContrib = textAttn / Math.Max(textWSum, 1e-8) * 0.5;
-            }
-
-            // Mixed sequence: visual prefix + text suffix fed to mT5 encoder
-            decoderInput[d] = NumOps.FromDouble(visContrib + textContrib);
-        }
+        // PaLI prepends visual tokens to text and feeds through mT5 encoder-decoder
+        var decoderInput = encoderOut;
+        if (promptTokens is not null)
+            decoderInput = encoderOut.ConcatenateTensors(promptTokens);
 
         // Step 4: mT5 encoder-decoder generates output
         var output = decoderInput;

@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -54,48 +55,22 @@ public class Emu<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageModel
         var p = PreprocessImage(image);
         if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(p);
 
-        int dim = _options.DecoderDim;
-
         // Step 1: EVA-CLIP vision encoder + projection
         var visionOut = p;
         for (int i = 0; i < _visionLayerEnd; i++)
             visionOut = Layers[i].Forward(visionOut);
-        int visLen = visionOut.Length;
 
         // Step 2: Tokenize prompt for interleaved multimodal sequence
         Tensor<T>? promptTokens = null;
-        int promptLen = 0;
         if (prompt is not null)
-        {
             promptTokens = TokenizeText(prompt);
-            promptLen = promptTokens.Length;
-        }
 
-        // EVA-CLIP visual features through causal transformer bridge
-        var projected = new double[visLen];
-        for (int v = 0; v < visLen; v++)
-        {
-            double x = NumOps.ToDouble(visionOut[v]);
-            double h = x * 0.8;
-            double gelu = h * 0.5 * (1.0 + Math.Tanh(Math.Sqrt(2.0 / Math.PI) * (h + 0.044715 * h * h * h)));
-            projected[v] = gelu * 0.7 + x * 0.15;
-        }
-        var decoderInput = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
-        {
-            double visVal = projected[d % visLen];
-            double textEmb = 0;
-            if (promptTokens is not null && promptLen > 0)
-            {
-                double tokVal = NumOps.ToDouble(promptTokens[d % promptLen]) / _options.VocabSize;
-                double gate = 1.0 / (1.0 + Math.Exp(-tokVal * 5.0));
-                visVal *= (0.5 + gate);
-                textEmb = tokVal * 0.3;
-            }
-            decoderInput[d] = NumOps.FromDouble(visVal + textEmb);
-        }
+        // Step 3: Concatenate visual features with prompt tokens for multimodal sequence
+        var decoderInput = visionOut;
+        if (promptTokens is not null)
+            decoderInput = visionOut.ConcatenateTensors(promptTokens);
 
-        // Step 4: Causal Transformer (LLaMA-based) decoder
+        // Step 4: Causal Transformer decoder
         var decoderOut = decoderInput;
         for (int i = _visionLayerEnd; i < _decoderLayerEnd; i++)
             decoderOut = Layers[i].Forward(decoderOut);

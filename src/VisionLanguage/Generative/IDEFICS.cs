@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -54,69 +55,28 @@ public class IDEFICS<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageM
         var p = PreprocessImage(image);
         if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(p);
 
-        int dim = _options.DecoderDim;
-        int numLatents = _options.NumLatents;
-
         // Step 1: OpenCLIP ViT-H vision encoder
         var visionOut = p;
         for (int i = 0; i < _visionLayerEnd; i++)
             visionOut = Layers[i].Forward(visionOut);
 
-        // Step 2: Perceiver resampler
+        // Step 2: Perceiver resampler compresses visual features into fixed latent tokens
         var perceiverOut = visionOut;
         for (int i = _visionLayerEnd; i < _perceiverLayerEnd; i++)
             perceiverOut = Layers[i].Forward(perceiverOut);
-        int pLen = perceiverOut.Length;
 
-        // Step 3: Latent query cross-attention
-        var latentTokens = new double[numLatents];
-        for (int q = 0; q < numLatents; q++)
-        {
-            double attn = 0;
-            double wSum = 0;
-            for (int v = 0; v < pLen; v++)
-            {
-                double val = NumOps.ToDouble(perceiverOut[v]);
-                double score = Math.Exp(val * Math.Sin((q + 1) * (v + 1) * 0.004) * 0.3);
-                attn += score * val;
-                wSum += score;
-            }
-            latentTokens[q] = attn / Math.Max(wSum, 1e-8);
-        }
-
-        // Step 4: Tokenize prompt
+        // Step 3: Tokenize prompt
         Tensor<T>? promptTokens = null;
-        int promptLen = 0;
         if (prompt is not null)
-        {
             promptTokens = TokenizeText(prompt);
-            promptLen = promptTokens.Length;
-        }
 
-        // Step 5: Gated cross-attention fusion (Flamingo-style)
-        var decoderInput = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
-        {
-            double crossAttn = 0;
-            double crossWSum = 0;
-            for (int q = 0; q < numLatents; q++)
-            {
-                double score = Math.Exp(latentTokens[q] * Math.Sin((d + 1) * (q + 1) * 0.01) * 0.35);
-                crossAttn += score * latentTokens[q];
-                crossWSum += score;
-            }
-            crossAttn /= Math.Max(crossWSum, 1e-8);
+        // Step 4: Concatenate perceiver output with prompt tokens
+        // IDEFICS uses gated cross-attention in decoder layers (handled by layer forward)
+        var decoderInput = perceiverOut;
+        if (promptTokens is not null)
+            decoderInput = perceiverOut.ConcatenateTensors(promptTokens);
 
-            double gate = Math.Tanh(crossAttn * 0.1);
-
-            double textEmb = 0;
-            if (promptTokens is not null && promptLen > 0)
-                textEmb = NumOps.ToDouble(promptTokens[d % promptLen]) / _options.VocabSize * 0.5;
-
-            decoderInput[d] = NumOps.FromDouble(textEmb + gate * crossAttn);
-        }
-
-        // Step 6: LLaMA decoder
+        // Step 5: LLaMA decoder
         var output = decoderInput;
         for (int i = _perceiverLayerEnd; i < Layers.Count; i++)
             output = Layers[i].Forward(output);

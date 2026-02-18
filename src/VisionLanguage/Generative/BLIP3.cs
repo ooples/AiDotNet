@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -51,10 +52,6 @@ public class BLIP3<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageMod
         var p = PreprocessImage(image);
         if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(p);
 
-        int dim = _options.DecoderDim;
-        int qFormerDim = _options.QFormerDim;
-        int numQueries = _options.NumQueryTokens;
-
         // Step 1: Vision encoder
         var visionOut = p;
         for (int i = 0; i < _visionLayerEnd; i++)
@@ -64,60 +61,18 @@ public class BLIP3<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageMod
         var qFormerOut = visionOut;
         for (int i = _visionLayerEnd; i < _qFormerLayerEnd; i++)
             qFormerOut = Layers[i].Forward(qFormerOut);
-        int qfLen = qFormerOut.Length;
 
-        // Step 3: Learnable query tokens cross-attend to visual features
-        var queryOutputs = new double[numQueries];
-        for (int q = 0; q < numQueries; q++)
-        {
-            double attn = 0;
-            double wSum = 0;
-            for (int v = 0; v < qfLen; v++)
-            {
-                double val = NumOps.ToDouble(qFormerOut[v]);
-                double score = Math.Exp(val * Math.Sin((q + 1) * (v + 1) * 0.003) * 0.3);
-                attn += score * val;
-                wSum += score;
-            }
-            queryOutputs[q] = attn / Math.Max(wSum, 1e-8);
-        }
-
-        // Step 4: Linear projection to decoder dimension
-        var projected = new double[numQueries];
-        for (int q = 0; q < numQueries; q++)
-            projected[q] = queryOutputs[q] * ((double)dim / qFormerDim) * 0.5;
-
-        // Step 5: Tokenize prompt for interleaved sequence
+        // Step 3: Tokenize prompt for interleaved sequence
         Tensor<T>? promptTokens = null;
-        int promptLen = 0;
         if (prompt is not null)
-        {
             promptTokens = TokenizeText(prompt);
-            promptLen = promptTokens.Length;
-        }
 
-        // Step 6: Interleaved visual+text fusion for any-to-any generation
-        var decoderInput = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
-        {
-            double attn = 0;
-            double wSum = 0;
-            for (int q = 0; q < numQueries; q++)
-            {
-                double score = Math.Exp(projected[q] * Math.Sin((d + 1) * (q + 1) * 0.01) * 0.35);
-                attn += score * projected[q];
-                wSum += score;
-            }
-            attn /= Math.Max(wSum, 1e-8);
+        // Step 4: Concatenate Q-Former output with prompt tokens for LLM decoder
+        var decoderInput = qFormerOut;
+        if (promptTokens is not null)
+            decoderInput = qFormerOut.ConcatenateTensors(promptTokens);
 
-            double textEmb = 0;
-            if (promptTokens is not null && promptLen > 0)
-                textEmb = NumOps.ToDouble(promptTokens[d % promptLen]) / _options.VocabSize * 0.5;
-
-            decoderInput[d] = NumOps.FromDouble(attn + textEmb);
-        }
-
-        // Step 7: LLM decoder generates output
+        // Step 5: LLM decoder generates output
         var output = decoderInput;
         for (int i = _qFormerLayerEnd; i < Layers.Count; i++)
             output = Layers[i].Forward(output);

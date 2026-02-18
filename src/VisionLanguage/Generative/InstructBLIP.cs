@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -62,10 +63,6 @@ public class InstructBLIP<T> : VisionLanguageModelBase<T>, IGenerativeVisionLang
         var p = PreprocessImage(image);
         if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(p);
 
-        int dim = _options.DecoderDim;
-        int qFormerDim = _options.QFormerDim;
-        int numQueries = _options.NumQueryTokens;
-
         // Step 1: Frozen ViT vision encoder
         var visionOut = p;
         for (int i = 0; i < _visionLayerEnd; i++)
@@ -75,68 +72,19 @@ public class InstructBLIP<T> : VisionLanguageModelBase<T>, IGenerativeVisionLang
         var qFormerOut = visionOut;
         for (int i = _visionLayerEnd; i < _qFormerLayerEnd; i++)
             qFormerOut = Layers[i].Forward(qFormerOut);
-        int qfLen = qFormerOut.Length;
 
         // Step 3: Tokenize instruction for dual routing
         Tensor<T>? promptTokens = null;
-        int promptLen = 0;
         if (prompt is not null)
-        {
             promptTokens = TokenizeText(prompt);
-            promptLen = promptTokens.Length;
-        }
 
-        // Step 4: Instruction-conditioned query cross-attention
-        // Instruction text biases which visual features the queries extract
-        var queryOutputs = new double[numQueries];
-        for (int q = 0; q < numQueries; q++)
-        {
-            double attn = 0;
-            double wSum = 0;
-            // Compute instruction bias for this query
-            double instrBias = 0;
-            if (promptTokens is not null && promptLen > 0)
-                instrBias = NumOps.ToDouble(promptTokens[q % promptLen]) / _options.VocabSize * 0.1;
+        // Step 4: Concatenate Q-Former output with instruction tokens for LLM input
+        // InstructBLIP routes instruction to both Q-Former and LLM decoder
+        var decoderInput = qFormerOut;
+        if (promptTokens is not null)
+            decoderInput = qFormerOut.ConcatenateTensors(promptTokens);
 
-            for (int v = 0; v < qfLen; v++)
-            {
-                double val = NumOps.ToDouble(qFormerOut[v]);
-                // Instruction-biased cross-attention scoring
-                double score = Math.Exp((val + instrBias) * Math.Sin((q + 1) * (v + 1) * 0.003) * 0.3);
-                attn += score * val;
-                wSum += score;
-            }
-            queryOutputs[q] = attn / Math.Max(wSum, 1e-8);
-        }
-
-        // Step 5: Linear projection to LLM dimension
-        var projected = new double[numQueries];
-        for (int q = 0; q < numQueries; q++)
-            projected[q] = queryOutputs[q] * ((double)dim / qFormerDim) * 0.5;
-
-        // Step 6: Cross-attention fusion with instruction for LLM input
-        var decoderInput = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
-        {
-            double attn = 0;
-            double wSum = 0;
-            for (int q = 0; q < numQueries; q++)
-            {
-                double score = Math.Exp(projected[q] * Math.Sin((d + 1) * (q + 1) * 0.01) * 0.35);
-                attn += score * projected[q];
-                wSum += score;
-            }
-            attn /= Math.Max(wSum, 1e-8);
-
-            // Instruction also routed to LLM decoder
-            double textEmb = 0;
-            if (promptTokens is not null && promptLen > 0)
-                textEmb = NumOps.ToDouble(promptTokens[d % promptLen]) / _options.VocabSize * 0.5;
-
-            decoderInput[d] = NumOps.FromDouble(attn + textEmb);
-        }
-
-        // Step 7: LLM decoder generates text
+        // Step 5: LLM decoder generates text conditioned on visual + instruction
         var output = decoderInput;
         for (int i = _qFormerLayerEnd; i < Layers.Count; i++)
             output = Layers[i].Forward(output);

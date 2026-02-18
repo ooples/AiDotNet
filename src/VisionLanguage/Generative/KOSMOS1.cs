@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -55,39 +56,20 @@ public class KOSMOS1<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageM
         var p = PreprocessImage(image);
         if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(p);
 
-        int dim = _options.DecoderDim;
-
         // Step 1: CLIP ViT vision encoder + linear projection
         var visionOut = p;
         for (int i = 0; i < _visionLayerEnd; i++)
             visionOut = Layers[i].Forward(visionOut);
-        int visLen = visionOut.Length;
 
         // Step 2: Tokenize prompt
         Tensor<T>? promptTokens = null;
-        int promptLen = 0;
         if (prompt is not null)
-        {
             promptTokens = TokenizeText(prompt);
-            promptLen = promptTokens.Length;
-        }
 
-        // Step 3: Build unified multimodal sequence
-        // Linear projection into shared embedding space: <image> vis_tokens </image> text_tokens
-        var decoderInput = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
-        {
-            double visVal = 0;
-            if (visLen > 0)
-            {
-                int vIdx = d % visLen;
-                visVal = NumOps.ToDouble(visionOut[vIdx]) * 0.85;
-            }
-            double textEmb = 0;
-            if (promptTokens is not null && promptLen > 0)
-                textEmb = NumOps.ToDouble(promptTokens[d % promptLen]) / _options.VocabSize * 0.5;
-            decoderInput[d] = NumOps.FromDouble(visVal + textEmb);
-        }
+        // Step 3: Build unified multimodal sequence [visual_tokens | text_tokens]
+        var decoderInput = visionOut;
+        if (promptTokens is not null)
+            decoderInput = visionOut.ConcatenateTensors(promptTokens);
 
         // Step 4: Causal transformer decoder
         var output = decoderInput;
