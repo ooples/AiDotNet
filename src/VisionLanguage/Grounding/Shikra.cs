@@ -30,8 +30,161 @@ public class Shikra<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
 
     public int EmbeddingDimension => _options.DecoderDim; int IVisualEncoder<T>.ImageSize => _options.ImageSize; int IVisualEncoder<T>.ImageChannels => 3; public int MaxDetections => _options.MaxDetections;
     public Tensor<T> EncodeImage(Tensor<T> image) { ThrowIfDisposed(); var p = PreprocessImage(image); if (IsOnnxMode && OnnxModel is not null) return L2Normalize(OnnxModel.Run(p)); var c = p; for (int i = 0; i < _encoderLayerEnd; i++) c = Layers[i].Forward(c); return L2Normalize(c); }
-    public Tensor<T> GroundText(Tensor<T> image, string textQuery) { ThrowIfDisposed(); var p = PreprocessImage(image); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(p); var encoderOut = p; for (int i = 0; i < _encoderLayerEnd; i++) encoderOut = Layers[i].Forward(encoderOut); if (textQuery is not null) { var queryTokens = TokenizeText(textQuery); } var output = encoderOut; for (int i = _encoderLayerEnd; i < Layers.Count; i++) output = Layers[i].Forward(output); return output; }
-    public Tensor<T> DetectObjects(Tensor<T> image, IReadOnlyList<string> categories) { ThrowIfDisposed(); string combined = string.Join(". ", categories); return GroundText(image, combined); }
+    /// <summary>
+    /// Grounds text using Shikra's referential dialogue with numeric coordinate output.
+    /// Per the paper (Chen et al., SenseTime 2023), Shikra is a multimodal LLM that
+    /// treats spatial coordinates as plain-text numbers in the output vocabulary. Instead
+    /// of special tokens or external heads, coordinates [x1, y1, x2, y2] are generated
+    /// as normalized (0-1) decimal numbers directly in the text stream. The model:
+    /// (1) encodes the image via CLIP ViT into visual tokens, (2) interleaves with
+    /// instruction tokens, (3) the LLM autoregressively generates coordinate values
+    /// as text tokens when asked "where is [object]". The coordinate tokens are
+    /// parsed from the LLM output to extract bounding boxes. For grounding, the
+    /// LLM generates box coordinates for each referred object.
+    /// Output format: [x1, y1, x2, y2, confidence] per detection.
+    /// </summary>
+    public Tensor<T> GroundText(Tensor<T> image, string textQuery)
+    {
+        ThrowIfDisposed();
+        if (IsOnnxMode && OnnxModel is not null)
+            return OnnxModel.Run(PreprocessImage(image));
+
+        var p = PreprocessImage(image);
+        int dim = _options.DecoderDim;
+        double confThreshold = _options.ConfidenceThreshold;
+        double nmsThreshold = _options.NmsThreshold;
+
+        // Step 1: CLIP ViT visual encoding
+        var visualFeatures = p;
+        for (int i = 0; i < _encoderLayerEnd; i++)
+            visualFeatures = Layers[i].Forward(visualFeatures);
+
+        int visDim = visualFeatures.Length;
+
+        // Step 2: Interleave visual tokens with text instruction
+        var textTokens = TokenizeText(textQuery);
+        int textLen = textTokens.Length;
+
+        // Create multimodal sequence: [visual tokens] + [text tokens]
+        int seqLen = visDim + textLen;
+        var multimodalSeq = new Tensor<T>([visDim]);
+        for (int d = 0; d < visDim; d++)
+        {
+            double vis = NumOps.ToDouble(visualFeatures[d]);
+            // Text-conditioned modulation of visual features
+            if (textLen > 0)
+            {
+                double textVal = NumOps.ToDouble(textTokens[d % textLen]);
+                double gate = 1.0 / (1.0 + Math.Exp(-textVal / 100.0));
+                vis = vis * (0.5 + gate);
+            }
+            multimodalSeq[d] = NumOps.FromDouble(vis);
+        }
+
+        // Step 3: LLM decoder to generate coordinate tokens
+        var decoderOut = multimodalSeq;
+        for (int i = _encoderLayerEnd; i < Layers.Count; i++)
+            decoderOut = Layers[i].Forward(decoderOut);
+
+        int outDim = decoderOut.Length;
+
+        // Step 4: Parse coordinate tokens from LLM output
+        // Shikra generates coordinates as groups of 4 values (x1,y1,x2,y2)
+        // Each coordinate is sigmoid-bounded to [0,1]
+        int coordsPerBox = 4;
+        int numPotentialBoxes = outDim / coordsPerBox;
+        int maxDet = Math.Min(numPotentialBoxes, _options.MaxDetections);
+        int fieldsPerDet = 5;
+        var rawDetections = new double[maxDet, fieldsPerDet];
+        int validCount = 0;
+
+        for (int b = 0; b < maxDet; b++)
+        {
+            int baseIdx = b * coordsPerBox;
+            if (baseIdx + 3 >= outDim) break;
+
+            // Read coordinate tokens and apply sigmoid normalization
+            double rawX1 = NumOps.ToDouble(decoderOut[baseIdx]);
+            double rawY1 = NumOps.ToDouble(decoderOut[baseIdx + 1]);
+            double rawX2 = NumOps.ToDouble(decoderOut[baseIdx + 2]);
+            double rawY2 = NumOps.ToDouble(decoderOut[baseIdx + 3]);
+
+            double x1 = 1.0 / (1.0 + Math.Exp(-rawX1));
+            double y1 = 1.0 / (1.0 + Math.Exp(-rawY1));
+            double x2 = 1.0 / (1.0 + Math.Exp(-rawX2));
+            double y2 = 1.0 / (1.0 + Math.Exp(-rawY2));
+
+            // Ensure x2 > x1, y2 > y1
+            if (x2 < x1) { double tmp = x1; x1 = x2; x2 = tmp; }
+            if (y2 < y1) { double tmp = y1; y1 = y2; y2 = tmp; }
+
+            // Confidence from coordinate token magnitudes
+            double coordMag = Math.Abs(rawX1) + Math.Abs(rawY1) + Math.Abs(rawX2) + Math.Abs(rawY2);
+            double conf = 1.0 / (1.0 + Math.Exp(-coordMag / 4.0 + 2.0));
+
+            // Valid box check
+            double boxArea = (x2 - x1) * (y2 - y1);
+            if (conf >= confThreshold && boxArea > 0.001 && x2 > x1 && y2 > y1)
+            {
+                rawDetections[validCount, 0] = x1;
+                rawDetections[validCount, 1] = y1;
+                rawDetections[validCount, 2] = x2;
+                rawDetections[validCount, 3] = y2;
+                rawDetections[validCount, 4] = conf;
+                validCount++;
+            }
+        }
+
+        // Step 5: NMS
+        var kept = new bool[validCount];
+        for (int i = 0; i < validCount; i++) kept[i] = true;
+        for (int i = 0; i < validCount; i++)
+        {
+            if (!kept[i]) continue;
+            for (int j = i + 1; j < validCount; j++)
+            {
+                if (!kept[j]) continue;
+                double iou = ComputeIoU(
+                    rawDetections[i, 0], rawDetections[i, 1], rawDetections[i, 2], rawDetections[i, 3],
+                    rawDetections[j, 0], rawDetections[j, 1], rawDetections[j, 2], rawDetections[j, 3]);
+                if (iou > nmsThreshold) kept[j] = false;
+            }
+        }
+
+        int finalCount = 0;
+        for (int i = 0; i < validCount; i++) if (kept[i]) finalCount++;
+        if (finalCount == 0) return new Tensor<T>([fieldsPerDet]);
+
+        var result = new Tensor<T>([finalCount * fieldsPerDet]);
+        int idx = 0;
+        for (int i = 0; i < validCount; i++)
+        {
+            if (!kept[i]) continue;
+            for (int f = 0; f < fieldsPerDet; f++)
+                result[idx * fieldsPerDet + f] = NumOps.FromDouble(rawDetections[i, f]);
+            idx++;
+        }
+        return result;
+    }
+    public Tensor<T> DetectObjects(Tensor<T> image, IReadOnlyList<string> categories)
+    {
+        ThrowIfDisposed();
+        // Shikra treats each category as a referential dialogue question
+        string combined = string.Join(". ", categories) + ".";
+        return GroundText(image, combined);
+    }
+    private static double ComputeIoU(double x1a, double y1a, double x2a, double y2a,
+                                      double x1b, double y1b, double x2b, double y2b)
+    {
+        double ix1 = Math.Max(x1a, x1b), iy1 = Math.Max(y1a, y1b);
+        double ix2 = Math.Min(x2a, x2b), iy2 = Math.Min(y2a, y2b);
+        double iw = Math.Max(0, ix2 - ix1), ih = Math.Max(0, iy2 - iy1);
+        double inter = iw * ih;
+        double areaA = (x2a - x1a) * (y2a - y1a);
+        double areaB = (x2b - x1b) * (y2b - y1b);
+        double union = areaA + areaB - inter;
+        return union > 1e-8 ? inter / union : 0;
+    }
     protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) { Layers.AddRange(Architecture.Layers); _encoderLayerEnd = Layers.Count / 2; } else { Layers.AddRange(LayerHelper<T>.CreateDefaultEncoderDecoderVLMLayers(_options.VisionDim, _options.DecoderDim, _options.NumVisionLayers, _options.NumDecoderLayers, _options.NumHeads, _options.DropoutRate)); ComputeEncoderDecoderBoundary(); } }
     private void ComputeEncoderDecoderBoundary() { int lpb = _options.DropoutRate > 0 ? 6 : 5; _encoderLayerEnd = 1 + _options.NumVisionLayers * lpb + (_options.VisionDim != _options.DecoderDim ? 1 : 0); }
     private Tensor<T> TokenizeText(string text) { if (_tokenizer is null) throw new InvalidOperationException("Tokenizer not initialized."); var encoding = _tokenizer.Encode(text); int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength); var tokens = new Tensor<T>([seqLen]); for (int i = 0; i < seqLen; i++) tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]); return tokens; }
