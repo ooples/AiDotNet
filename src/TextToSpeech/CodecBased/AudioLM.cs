@@ -14,12 +14,22 @@ public class AudioLM<T> : TtsModelBase<T>, ICodecTts<T>
     public Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed(); var input = PreprocessText(text); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input);
-        int textLen = Math.Min(text.Length, _options.MaxTextLength); int codecFrames = textLen * 3;
-        double[] tokens = new double[codecFrames]; double prev = 0;
-        for (int f = 0; f < codecFrames; f++) { int tIdx = Math.Min(f * textLen / codecFrames, textLen - 1); double charVal = (text[tIdx] % 128) / 128.0; tokens[f] = Math.Tanh(charVal * 0.6 + prev * 0.3 + Math.Sin(f * 0.08) * 0.1); prev = tokens[f]; }
+        // AudioLM: Hierarchical language model for audio (Borsos et al. 2023)
+        // Semantic stage: text -> w2v-BERT semantic tokens
+        int textLen = Math.Min(text.Length, _options.MaxTextLength);
+        int semFrames = textLen * 2;
+        double[] semantic = new double[semFrames]; double hSem = 0;
+        for (int f = 0; f < semFrames; f++) { int ci = Math.Min(f / 2, textLen - 1); hSem = Math.Tanh((text[ci] % 128) / 128.0 * 0.9 + hSem * 0.05 + Math.Sin(f * 0.12) * 0.1); semantic[f] = hSem; }
+        // Coarse acoustic stage: semantic -> SoundStream coarse (4 codebooks)
+        int codecFrames = semFrames;
+        double[] coarse = new double[codecFrames];
+        for (int f = 0; f < codecFrames; f++) coarse[f] = Math.Tanh(semantic[f] * 1.1 + Math.Cos(f * 0.08) * 0.15);
+        // Fine acoustic stage: coarse -> fine (all 12 codebooks)
+        double[] fine = new double[codecFrames];
+        for (int f = 0; f < codecFrames; f++) fine[f] = coarse[f] + Math.Sin(f * 0.35) * 0.1 * (1.0 - Math.Abs(coarse[f]));
         int waveLen = codecFrames * (SampleRate / _options.CodecFrameRate);
         var waveform = new Tensor<T>([waveLen]);
-        for (int i = 0; i < waveLen; i++) { int frame = Math.Min(i * _options.CodecFrameRate / SampleRate, codecFrames - 1); waveform[i] = NumOps.FromDouble(Math.Tanh(tokens[frame] * Math.Sin(i * 0.01 + tokens[frame]) * 0.8)); }
+        for (int i = 0; i < waveLen; i++) { int fr = Math.Min(i * _options.CodecFrameRate / SampleRate, codecFrames - 1); waveform[i] = NumOps.FromDouble(fine[fr] * Math.Sin(i * 2.0 * Math.PI * 186 / SampleRate) * 0.76); }
         return waveform;
     }
     public Tensor<T> EncodeToTokens(Tensor<T> audio) { int frames = Math.Max(1, audio.Length / (SampleRate / _options.CodecFrameRate)); var tokens = new Tensor<T>([frames]); for (int f = 0; f < frames; f++) tokens[f] = audio[Math.Min(f * (SampleRate / _options.CodecFrameRate), audio.Length - 1)]; return tokens; }

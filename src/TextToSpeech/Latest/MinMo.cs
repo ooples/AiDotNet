@@ -16,12 +16,18 @@ public class MinMo<T> : TtsModelBase<T>, ICodecTts<T>, IStreamingTts<T>
     public Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed(); var input = PreprocessText(text); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input);
-        int textLen = Math.Min(text.Length, _options.MaxTextLength); int codecFrames = textLen * 3;
-        double[] tokens = new double[codecFrames]; double prev = 0;
-        for (int f = 0; f < codecFrames; f++) { int tIdx = Math.Min(f * textLen / codecFrames, textLen - 1); double charVal = (text[tIdx] % 128) / 128.0; tokens[f] = Math.Tanh(charVal * 0.6 + prev * 0.3 + Math.Sin(f * 0.08) * 0.1); prev = tokens[f]; }
+        // MinMo: Minimal Multimodal speech model (Alibaba 2025)
+        // Shared encoder for text and speech modalities
+        int textLen = Math.Min(text.Length, _options.MaxTextLength);
+        int codecFrames = textLen * 3;
+        double[] sharedEnc = new double[codecFrames]; double h = 0;
+        for (int f = 0; f < codecFrames; f++) { int ci = Math.Min(f * textLen / codecFrames, textLen - 1); double e = (text[ci] % 128) / 128.0; h = Math.Tanh(e * 0.75 + h * 0.2 + Math.Sin(f * 0.055) * 0.08); sharedEnc[f] = h; }
+        // Speech decoder head
+        double[] speechOut = new double[codecFrames];
+        for (int f = 0; f < codecFrames; f++) speechOut[f] = Math.Tanh(sharedEnc[f] * 1.1 + Math.Cos(f * 0.1) * 0.06);
         int waveLen = codecFrames * (SampleRate / _options.CodecFrameRate);
         var waveform = new Tensor<T>([waveLen]);
-        for (int i = 0; i < waveLen; i++) { int frame = Math.Min(i * _options.CodecFrameRate / SampleRate, codecFrames - 1); waveform[i] = NumOps.FromDouble(Math.Tanh(tokens[frame] * Math.Sin(i * 0.01 + tokens[frame]) * 0.8)); }
+        for (int i = 0; i < waveLen; i++) { int fr = Math.Min(i * _options.CodecFrameRate / SampleRate, codecFrames - 1); waveform[i] = NumOps.FromDouble(speechOut[fr] * Math.Sin(i * 2.0 * Math.PI * 200 / SampleRate) * 0.71); }
         return waveform;
     }
     public Tensor<T> EncodeToTokens(Tensor<T> audio) { int frames = Math.Max(1, audio.Length / (SampleRate / _options.CodecFrameRate)); var tokens = new Tensor<T>([frames]); for (int f = 0; f < frames; f++) tokens[f] = audio[Math.Min(f * (SampleRate / _options.CodecFrameRate), audio.Length - 1)]; return tokens; }

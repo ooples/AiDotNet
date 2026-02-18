@@ -31,7 +31,7 @@ public class VALLE<T> : TtsModelBase<T>, ICodecTts<T>
         {
             int tIdx = Math.Min(f * textLen / codecFrames, textLen - 1);
             double charVal = (text[tIdx] % 128) / 128.0;
-            double logit = charVal * 0.6 + prev * 0.3 + Math.Sin(f * 0.1) * 0.1;
+            double logit = charVal * 0.85 + prev * 0.1 + Math.Sin(f * 0.075) * 0.1;
             firstCodebook[f] = Math.Tanh(logit);
             prev = firstCodebook[f];
         }
