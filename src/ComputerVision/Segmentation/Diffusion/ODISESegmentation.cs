@@ -325,13 +325,39 @@ public class ODISESegmentation<T> : NeuralNetworkBase<T>, IPanopticSegmentation<
     int IPanopticSegmentation<T>.NumThingClasses => _numClasses - Math.Max(1, _numClasses / 3);
     PanopticSegmentationResult<T> IPanopticSegmentation<T>.SegmentPanoptic(Tensor<T> image)
     {
-        var output = Predict(image);
-        return new PanopticSegmentationResult<T>
+        var logits = Predict(image);
+        var probMap = Common.SegmentationTensorOps.SoftmaxAlongClassDim(logits);
+        var semanticMap = Common.SegmentationTensorOps.ArgmaxAlongClassDim(logits);
+        int h = semanticMap.Shape[0], w = semanticMap.Shape[1];
+        int numStuff = Math.Max(1, _numClasses / 3);
+        var instanceMap = new Tensor<T>([h, w]);
+        var panopticMap = new Tensor<T>([h, w]);
+        var segments = new List<PanopticSegment<T>>();
+        int nextInstId = 1;
+        for (int cls = 0; cls < numStuff; cls++)
         {
-            SemanticMap = Common.SegmentationTensorOps.ArgmaxAlongClassDim(output),
-            InstanceMap = Tensor<T>.Empty(),
-            PanopticMap = Common.SegmentationTensorOps.ArgmaxAlongClassDim(output)
-        };
+            int area = 0; double sumConf = 0;
+            for (int row = 0; row < h; row++)
+                for (int col = 0; col < w; col++)
+                    if (Math.Abs(NumOps.ToDouble(semanticMap[row, col]) - cls) < 0.5)
+                    { panopticMap[row, col] = NumOps.FromDouble(cls * 1000); area++; sumConf += NumOps.ToDouble(probMap[cls, row, col]); }
+            if (area > 0) segments.Add(new PanopticSegment<T> { SegmentId = cls, ClassId = cls, IsThing = false, Confidence = sumConf / area, Area = area });
+        }
+        for (int cls = numStuff; cls < _numClasses; cls++)
+        {
+            var (labelMap, count) = Common.SegmentationTensorOps.LabelConnectedComponents(semanticMap, cls);
+            for (int comp = 1; comp <= count; comp++)
+            {
+                int instId = nextInstId++;
+                int area = 0; double sumConf = 0; var compMask = new Tensor<T>([h, w]);
+                for (int row = 0; row < h; row++)
+                    for (int col = 0; col < w; col++)
+                        if (Math.Abs(NumOps.ToDouble(labelMap[row, col]) - comp) < 0.5)
+                        { instanceMap[row, col] = NumOps.FromDouble(instId); panopticMap[row, col] = NumOps.FromDouble(cls * 1000 + instId); compMask[row, col] = NumOps.FromDouble(1.0); area++; sumConf += NumOps.ToDouble(probMap[cls, row, col]); }
+                if (area > 0) segments.Add(new PanopticSegment<T> { SegmentId = instId, ClassId = cls, IsThing = true, Confidence = sumConf / area, Area = area, Mask = compMask });
+            }
+        }
+        return new PanopticSegmentationResult<T> { SemanticMap = semanticMap, InstanceMap = instanceMap, PanopticMap = panopticMap, Segments = segments };
     }
     #endregion
 }

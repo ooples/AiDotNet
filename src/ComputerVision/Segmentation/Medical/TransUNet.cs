@@ -170,8 +170,9 @@ public class TransUNet<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
     {
         if (!_useNativeMode) throw new InvalidOperationException("Training is not supported in ONNX mode. Use the native mode constructor for training.");
         var predicted = Forward(input);
-        var lossGradient = predicted.Transform((v, idx) => NumOps.Subtract(v, expectedOutput.Data.Span[idx]));
-        BackwardPass(lossGradient); _optimizer?.UpdateParameters(Layers);
+        var lossGradient = LossFunction.ComputeGradient(predicted, expectedOutput);
+        BackwardPass(lossGradient);
+        _optimizer?.UpdateParameters(Layers);
     }
     #endregion
 
@@ -254,7 +255,23 @@ public class TransUNet<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
     /// </para>
     /// </remarks>
     public override void UpdateParameters(Vector<T> parameters)
-    { int o = 0; foreach (var l in Layers) { var p = l.GetParameters(); int c = p.Length; if (o + c <= parameters.Length) { var n = new Vector<T>(c); for (int i = 0; i < c; i++) n[i] = parameters[o + i]; l.UpdateParameters(n); o += c; } } }
+    {
+        int totalRequired = 0;
+        foreach (var l in Layers) totalRequired += l.GetParameters().Length;
+        if (parameters.Length < totalRequired)
+            throw new ArgumentException($"Parameter vector length {parameters.Length} is less than required {totalRequired}.", nameof(parameters));
+
+        int o = 0;
+        foreach (var l in Layers)
+        {
+            var p = l.GetParameters();
+            int c = p.Length;
+            var n = new Vector<T>(c);
+            for (int i = 0; i < c; i++) n[i] = parameters[o + i];
+            l.UpdateParameters(n);
+            o += c;
+        }
+    }
 
     /// <summary>
     /// Collects metadata describing this model's configuration.
@@ -335,15 +352,25 @@ public class TransUNet<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
     MedicalSegmentationResult<T> IMedicalSegmentation<T>.SegmentSlice(Tensor<T> slice)
     {
         var output = Predict(slice);
-        return new MedicalSegmentationResult<T>
+        var labels = Common.SegmentationTensorOps.ArgmaxAlongClassDim(output);
+        var probs = Common.SegmentationTensorOps.SoftmaxAlongClassDim(output);
+        int h = labels.Shape[0], w = labels.Shape[1];
+        int numC = probs.Shape[0];
+        var structures = new List<SegmentedStructure>();
+        for (int c = 0; c < numC; c++)
         {
-            Labels = Common.SegmentationTensorOps.ArgmaxAlongClassDim(output),
-            Probabilities = Common.SegmentationTensorOps.SoftmaxAlongClassDim(output)
-        };
+            int area = 0; double confSum = 0;
+            for (int y = 0; y < h; y++)
+                for (int x = 0; x < w; x++)
+                    if ((int)NumOps.ToDouble(labels[y, x]) == c) { area++; confSum += NumOps.ToDouble(probs[c, y, x]); }
+            if (area > 0)
+                structures.Add(new SegmentedStructure { ClassId = c, Name = $"Class_{c}", VolumeOrArea = area, MeanConfidence = confSum / area });
+        }
+        return new MedicalSegmentationResult<T> { Labels = labels, Probabilities = probs, Structures = structures };
     }
     MedicalSegmentationResult<T> IMedicalSegmentation<T>.SegmentVolume(Tensor<T> volume)
-        => ((IMedicalSegmentation<T>)this).SegmentSlice(volume);
+        => throw new NotSupportedException("TransUNet does not support 3D volumetric segmentation. Use SegmentSlice for 2D slices.");
     MedicalSegmentationResult<T> IMedicalSegmentation<T>.SegmentFewShot(Tensor<T> queryImage, Tensor<T> supportImages, Tensor<T> supportMasks)
-        => ((IMedicalSegmentation<T>)this).SegmentSlice(queryImage);
+        => throw new NotSupportedException("TransUNet does not support few-shot segmentation. Use SegmentSlice for standard inference.");
     #endregion
 }

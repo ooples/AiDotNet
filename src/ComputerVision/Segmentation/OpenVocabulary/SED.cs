@@ -323,17 +323,42 @@ public class SED<T> : NeuralNetworkBase<T>, IOpenVocabSegmentation<T>
     Tensor<T> ISegmentationModel<T>.Segment(Tensor<T> image) => Predict(image);
     int IOpenVocabSegmentation<T>.MaxCategories => 256;
     int IOpenVocabSegmentation<T>.MaxPromptLength => 77;
+
     OpenVocabSegmentationResult<T> IOpenVocabSegmentation<T>.SegmentWithText(Tensor<T> image, IReadOnlyList<string> classNames)
     {
-        var output = Predict(image);
-        return new OpenVocabSegmentationResult<T>
+        var logits = Predict(image);
+        int numC = logits.Shape[0], h = logits.Shape[1], w = logits.Shape[2];
+        int numText = classNames.Count;
+        var masks = new Tensor<T>([numText, h, w]);
+        var scores = new double[numText];
+        var semanticMap = new Tensor<T>([h, w]);
+        var textProbs = new double[numText][];
+        for (int t = 0; t < numText; t++)
         {
-            Masks = output,
-            ClassNames = classNames.ToArray(),
-            Scores = classNames.Select(_ => 1.0).ToArray(),
-            SemanticMap = Common.SegmentationTensorOps.ArgmaxAlongClassDim(output)
-        };
+            var weights = Common.SegmentationTensorOps.TextToWeights(classNames[t], numC);
+            var scoreMap = Common.SegmentationTensorOps.WeightedChannelSum(logits, weights);
+            var probMap = Common.SegmentationTensorOps.Sigmoid(scoreMap);
+            double area = 0, confSum = 0;
+            textProbs[t] = new double[h * w];
+            for (int y = 0; y < h; y++)
+                for (int x = 0; x < w; x++)
+                {
+                    double v = NumOps.ToDouble(probMap[y, x]);
+                    textProbs[t][y * w + x] = v;
+                    if (v >= 0.5) { masks[t, y, x] = NumOps.FromDouble(1.0); area++; confSum += v; }
+                }
+            scores[t] = area > 0 ? confSum / area : 0;
+        }
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++)
+            {
+                int best = 0; double bestV = -1;
+                for (int t = 0; t < numText; t++) { double v = textProbs[t][y * w + x]; if (v > bestV) { bestV = v; best = t; } }
+                semanticMap[y, x] = NumOps.FromDouble(best);
+            }
+        return new OpenVocabSegmentationResult<T> { Masks = masks, ClassNames = classNames.ToArray(), Scores = scores, SemanticMap = semanticMap };
     }
+
     OpenVocabSegmentationResult<T> IOpenVocabSegmentation<T>.SegmentWithPrompt(Tensor<T> image, string prompt)
         => ((IOpenVocabSegmentation<T>)this).SegmentWithText(image, new[] { prompt });
     #endregion

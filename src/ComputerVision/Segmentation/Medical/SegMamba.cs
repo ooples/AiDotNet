@@ -328,15 +328,59 @@ public class SegMamba<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
     MedicalSegmentationResult<T> IMedicalSegmentation<T>.SegmentSlice(Tensor<T> slice)
     {
         var output = Predict(slice);
-        return new MedicalSegmentationResult<T>
+        var labels = Common.SegmentationTensorOps.ArgmaxAlongClassDim(output);
+        var probs = Common.SegmentationTensorOps.SoftmaxAlongClassDim(output);
+        int h = labels.Shape[0], w = labels.Shape[1];
+        int numC = probs.Shape[0];
+        var structures = new List<SegmentedStructure>();
+        for (int c = 0; c < numC; c++)
         {
-            Labels = Common.SegmentationTensorOps.ArgmaxAlongClassDim(output),
-            Probabilities = Common.SegmentationTensorOps.SoftmaxAlongClassDim(output)
-        };
+            int area = 0; double confSum = 0;
+            for (int y = 0; y < h; y++)
+                for (int x = 0; x < w; x++)
+                    if ((int)NumOps.ToDouble(labels[y, x]) == c) { area++; confSum += NumOps.ToDouble(probs[c, y, x]); }
+            if (area > 0)
+                structures.Add(new SegmentedStructure { ClassId = c, Name = $"Class_{c}", VolumeOrArea = area, MeanConfidence = confSum / area });
+        }
+        return new MedicalSegmentationResult<T> { Labels = labels, Probabilities = probs, Structures = structures };
     }
     MedicalSegmentationResult<T> IMedicalSegmentation<T>.SegmentVolume(Tensor<T> volume)
-        => ((IMedicalSegmentation<T>)this).SegmentSlice(volume);
+    {
+        if (volume.Rank <= 3)
+            return ((IMedicalSegmentation<T>)this).SegmentSlice(volume);
+        int numC = volume.Shape[0], depth = volume.Shape[1], h = volume.Shape[2], w = volume.Shape[3];
+        var volLabels = new Tensor<T>([depth, h, w]);
+        var volProbs = new Tensor<T>([numC, depth, h, w]);
+        var structAccum = new Dictionary<int, (double area, double confSum)>();
+        for (int d = 0; d < depth; d++)
+        {
+            var slice = new Tensor<T>([numC, h, w]);
+            for (int c = 0; c < numC; c++)
+                for (int y = 0; y < h; y++)
+                    for (int x = 0; x < w; x++)
+                        slice[c, y, x] = volume[c, d, y, x];
+            var result = ((IMedicalSegmentation<T>)this).SegmentSlice(slice);
+            for (int y = 0; y < h; y++)
+                for (int x = 0; x < w; x++)
+                    volLabels[d, y, x] = result.Labels[y, x];
+            for (int c = 0; c < numC; c++)
+                for (int y = 0; y < h; y++)
+                    for (int x = 0; x < w; x++)
+                        volProbs[c, d, y, x] = result.Probabilities[c, y, x];
+            foreach (var s in result.Structures)
+            {
+                if (structAccum.TryGetValue(s.ClassId, out var existing))
+                    structAccum[s.ClassId] = (existing.area + s.VolumeOrArea, existing.confSum + s.MeanConfidence * s.VolumeOrArea);
+                else
+                    structAccum[s.ClassId] = (s.VolumeOrArea, s.MeanConfidence * s.VolumeOrArea);
+            }
+        }
+        var structures = new List<SegmentedStructure>();
+        foreach (var kvp in structAccum)
+            structures.Add(new SegmentedStructure { ClassId = kvp.Key, Name = $"Class_{kvp.Key}", VolumeOrArea = kvp.Value.area, MeanConfidence = kvp.Value.confSum / kvp.Value.area });
+        return new MedicalSegmentationResult<T> { Labels = volLabels, Probabilities = volProbs, Structures = structures };
+    }
     MedicalSegmentationResult<T> IMedicalSegmentation<T>.SegmentFewShot(Tensor<T> queryImage, Tensor<T> supportImages, Tensor<T> supportMasks)
-        => ((IMedicalSegmentation<T>)this).SegmentSlice(queryImage);
+        => throw new NotSupportedException("SegMamba does not support few-shot segmentation. Use SegmentVolume for 3D or SegmentSlice for 2D.");
     #endregion
 }

@@ -14,4 +14,9 @@ namespace AiDotNet.ComputerVision.Segmentation.Foundation;
 /// </remarks>
 public class XDecoderOptions : NeuralNetworkOptions
 {
+    /// <summary>
+    /// Number of stuff (non-countable background) classes for panoptic segmentation.
+    /// When null, defaults to numClasses / 3.
+    /// </summary>
+    public int? NumStuffClasses { get; set; }
 }

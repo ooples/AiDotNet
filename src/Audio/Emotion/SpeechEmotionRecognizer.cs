@@ -351,34 +351,35 @@ public class SpeechEmotionRecognizer<T> : AudioClassifierBase<T>, IEmotionRecogn
             return;
         }
 
-        if (Architecture.Layers != null && Architecture.Layers.Count > 0)
-        {
-            Layers.AddRange(Architecture.Layers);
-            return;
-        }
-
         int numFrames = (int)((_inputDurationSeconds * SampleRate - _nFft) / _hopLength) + 1;
 
-        var layers = LayerHelper<T>.CreateSpeechEmotionRecognizerLayers(
-            numMels: NumMels, numFrames: numFrames, baseFilters: _baseFilters,
-            numConvBlocks: _numConvBlocks, hiddenDim: _hiddenDim,
-            dropoutRate: _dropoutRate, numEmotions: _emotionLabels.Length).ToList();
+        var layers = (Architecture.Layers != null && Architecture.Layers.Count > 0)
+            ? Architecture.Layers.ToList()
+            : LayerHelper<T>.CreateSpeechEmotionRecognizerLayers(
+                numMels: NumMels, numFrames: numFrames, baseFilters: _baseFilters,
+                numConvBlocks: _numConvBlocks, hiddenDim: _hiddenDim,
+                dropoutRate: _dropoutRate, numEmotions: _emotionLabels.Length).ToList();
+
+        Layers.Clear();
+        _convLayers.Clear();
+        _denseLayers.Clear();
         Layers.AddRange(layers);
 
         // Assign internal references for forward pass
         // Conv section: numConvBlocks * 2 (conv+bn) + (numConvBlocks-1) pool + 1 flatten
         int convLayerCount = _numConvBlocks * 2 + (_numConvBlocks - 1) + 1;
-        for (int i = 0; i < convLayerCount; i++)
+        for (int i = 0; i < convLayerCount && i < layers.Count; i++)
             _convLayers.Add(layers[i]);
 
         // Dense section: dense + optional dropout + dense + optional dropout
         int denseStart = convLayerCount;
         int denseCount = _dropoutRate > 0 ? 4 : 2;
-        for (int i = 0; i < denseCount; i++)
+        for (int i = 0; i < denseCount && denseStart + i < layers.Count; i++)
             _denseLayers.Add(layers[denseStart + i]);
 
         // Output layer is the last layer
-        _outputLayer = layers[^1];
+        if (layers.Count > 0)
+            _outputLayer = layers[^1];
     }
 
     #endregion

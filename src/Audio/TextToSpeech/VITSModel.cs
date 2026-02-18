@@ -448,8 +448,9 @@ public class VITSModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         _speakerEmbeddingDim = speakerEmbeddingDim;
         _numSpeakers = numSpeakers;
         _maxPhonemeLength = maxPhonemeLength;
+        Guard.Positive(phonemeVocabSize);
         _phonemeVocabSize = phonemeVocabSize;
-        _upsampleRates = upsampleRates ?? [8, 8, 2, 2];
+        _upsampleRates = (upsampleRates ?? [8, 8, 2, 2]).ToArray();
         _fftSize = fftSize;
         _hopLength = hopLength;
 
@@ -492,27 +493,29 @@ public class VITSModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
     /// </summary>
     private void InitializeNativeLayers()
     {
-        if (Architecture.Layers != null && Architecture.Layers.Count > 0)
-        {
-            Layers.AddRange(Architecture.Layers);
-            return;
-        }
+        var layers = (Architecture.Layers != null && Architecture.Layers.Count > 0)
+            ? Architecture.Layers.ToList()
+            : LayerHelper<T>.CreateVITSLayers(
+                hiddenDim: _hiddenDim, numEncoderLayers: _numEncoderLayers,
+                numHeads: _numHeads, maxPhonemeLength: _maxPhonemeLength,
+                numFlowLayers: _numFlowLayers, phonemeVocabSize: _phonemeVocabSize,
+                upsampleRates: _upsampleRates).ToList();
 
-        var layers = LayerHelper<T>.CreateVITSLayers(
-            hiddenDim: _hiddenDim, numEncoderLayers: _numEncoderLayers,
-            numHeads: _numHeads, maxPhonemeLength: _maxPhonemeLength,
-            numFlowLayers: _numFlowLayers, phonemeVocabSize: _phonemeVocabSize,
-            upsampleRates: _upsampleRates).ToList();
+        Layers.Clear();
+        _textEncoderLayers.Clear();
+        _durationPredictorLayers.Clear();
+        _flowLayers.Clear();
+        _decoderLayers.Clear();
         Layers.AddRange(layers);
 
         // Distribute to internal sub-lists for forward pass
         int idx = 0;
         int textEncoderCount = 1 + _numEncoderLayers * 3;
-        for (int i = 0; i < textEncoderCount; i++)
+        for (int i = 0; i < textEncoderCount && idx < layers.Count; i++)
             _textEncoderLayers.Add(layers[idx++]);
-        for (int i = 0; i < 3; i++)
+        for (int i = 0; i < 3 && idx < layers.Count; i++)
             _durationPredictorLayers.Add(layers[idx++]);
-        for (int i = 0; i < _numFlowLayers; i++)
+        for (int i = 0; i < _numFlowLayers && idx < layers.Count; i++)
             _flowLayers.Add(layers[idx++]);
         while (idx < layers.Count)
             _decoderLayers.Add(layers[idx++]);

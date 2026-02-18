@@ -1,4 +1,5 @@
 using System.IO;
+using AiDotNet.Augmentation.Image;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
@@ -351,12 +352,71 @@ public class YOLO11Seg<T> : NeuralNetworkBase<T>, IInstanceSegmentation<T>
 
     InstanceSegmentationResult<T> IInstanceSegmentation<T>.DetectInstances(Tensor<T> image)
     {
-        var output = Predict(image);
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var logits = Predict(image);
+        var probMap = Common.SegmentationTensorOps.SoftmaxAlongClassDim(logits);
+        var classMap = Common.SegmentationTensorOps.ArgmaxAlongClassDim(logits);
+        int h = classMap.Shape[0], w = classMap.Shape[1];
+        var instances = new List<InstanceMask<T>>();
+
+        // Extract instances as connected components of each non-background class
+        for (int cls = 1; cls < _numClasses && instances.Count < 100; cls++)
+        {
+            var (labelMap, count) = Common.SegmentationTensorOps.LabelConnectedComponents(classMap, cls);
+            for (int comp = 1; comp <= count && instances.Count < 100; comp++)
+            {
+                var mask = new Tensor<T>([h, w]);
+                int area = 0;
+                double sumConf = 0;
+                int minX = w, minY = h, maxX = 0, maxY = 0;
+
+                for (int row = 0; row < h; row++)
+                {
+                    for (int col = 0; col < w; col++)
+                    {
+                        if (Math.Abs(NumOps.ToDouble(labelMap[row, col]) - comp) < 0.5)
+                        {
+                            mask[row, col] = NumOps.FromDouble(1.0);
+                            area++;
+                            sumConf += NumOps.ToDouble(probMap[cls, row, col]);
+                            if (col < minX) minX = col;
+                            if (col > maxX) maxX = col;
+                            if (row < minY) minY = row;
+                            if (row > maxY) maxY = row;
+                        }
+                    }
+                }
+
+                if (area < 4) continue; // skip noise components
+                double confidence = sumConf / area;
+                if (confidence < _confidenceThreshold) continue;
+
+                var box = new BoundingBox<T>(
+                    NumOps.FromDouble(minX), NumOps.FromDouble(minY),
+                    NumOps.FromDouble(maxX + 1), NumOps.FromDouble(maxY + 1),
+                    BoundingBoxFormat.XYXY, cls);
+                instances.Add(new InstanceMask<T>(box, mask, cls, NumOps.FromDouble(confidence)));
+            }
+        }
+
+        // Apply mask-based NMS to remove overlapping detections
+        instances = instances.OrderByDescending(i => NumOps.ToDouble(i.Confidence)).ToList();
+        var kept = new List<InstanceMask<T>>();
+        while (instances.Count > 0)
+        {
+            var best = instances[0];
+            kept.Add(best);
+            instances.RemoveAt(0);
+            instances = instances.Where(inst => best.ComputeMaskIoU(inst, NumOps) < _nmsThreshold).ToList();
+        }
+
+        sw.Stop();
         return new InstanceSegmentationResult<T>
         {
-            ImageHeight = _height,
-            ImageWidth = _width,
-            InferenceTime = TimeSpan.Zero
+            Instances = kept,
+            ImageHeight = h,
+            ImageWidth = w,
+            InferenceTime = sw.Elapsed
         };
     }
 

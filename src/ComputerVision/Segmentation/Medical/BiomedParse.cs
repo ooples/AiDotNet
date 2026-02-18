@@ -40,14 +40,19 @@ public class BiomedParse<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
     private readonly BiomedParseOptions _options;
     public override ModelOptions GetOptions() => _options;
 
+    // BiomedParse paper defaults: Swin-B backbone (Zhao et al., Nature Methods 2024)
+    private static readonly int[] DefaultChannelDims = [96, 192, 384, 768];
+    private static readonly int[] DefaultDepths = [2, 2, 6, 2];
+    private const int DefaultDecoderDim = 256;
+
     #region Fields
-    private readonly int _height, _width, _channels, _numClasses;
-    private readonly int[] _channelDims;
-    private readonly int _decoderDim;
-    private readonly int[] _depths;
-    private readonly double _dropRate;
-    private readonly bool _useNativeMode;
-    private readonly string? _onnxModelPath;
+    private int _height, _width, _channels, _numClasses;
+    private int[] _channelDims;
+    private int _decoderDim;
+    private int[] _depths;
+    private double _dropRate;
+    private bool _useNativeMode;
+    private string? _onnxModelPath;
     private InferenceSession? _onnxSession;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _disposed;
@@ -97,9 +102,9 @@ public class BiomedParse<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
         _numClasses = numClasses; _dropRate = dropRate;
         _useNativeMode = true; _onnxModelPath = null;
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        _channelDims = [96, 192, 384, 768];
-        _depths = [2, 2, 6, 2];
-        _decoderDim = 256;
+        _channelDims = DefaultChannelDims;
+        _depths = DefaultDepths;
+        _decoderDim = DefaultDecoderDim;
         InitializeLayers();
     }
 
@@ -133,9 +138,9 @@ public class BiomedParse<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
         _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
         _numClasses = numClasses; _dropRate = 0.1;
         _useNativeMode = false; _onnxModelPath = onnxModelPath; _optimizer = null;
-        _channelDims = [96, 192, 384, 768];
-        _depths = [2, 2, 6, 2];
-        _decoderDim = 256;
+        _channelDims = DefaultChannelDims;
+        _depths = DefaultDepths;
+        _decoderDim = DefaultDecoderDim;
         try { _onnxSession = new InferenceSession(onnxModelPath); }
         catch (Exception ex) { throw new InvalidOperationException($"Failed to load BiomedParse ONNX model: {ex.Message}", ex); }
         InitializeLayers();
@@ -168,48 +173,80 @@ public class BiomedParse<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
     /// <exception cref="InvalidOperationException">Thrown when called on an ONNX-mode model.</exception>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        if (!_useNativeMode) throw new InvalidOperationException("Training is not supported in ONNX mode. Use the native mode constructor for training.");
+        if (!_useNativeMode)
+            throw new InvalidOperationException("Training is not supported in ONNX mode. Use the native mode constructor for training.");
+
         var predicted = Forward(input);
-        var lossGradient = predicted.Transform((v, idx) => NumOps.Subtract(v, expectedOutput.Data.Span[idx]));
-        BackwardPass(lossGradient); _optimizer?.UpdateParameters(Layers);
+        var lossGradient = LossFunction.ComputeGradient(predicted, expectedOutput);
+        BackwardPass(lossGradient);
+        _optimizer?.UpdateParameters(Layers);
     }
     #endregion
 
     #region Private Methods
     private Tensor<T> Forward(Tensor<T> input)
     {
-        bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
+        bool hasBatch = input.Rank == 4;
+        if (!hasBatch) input = AddBatchDimension(input);
+
         var features = input;
-        for (int i = 0; i < _encoderLayerEnd; i++) features = Layers[i].Forward(features);
-        for (int i = _encoderLayerEnd; i < Layers.Count; i++) features = Layers[i].Forward(features);
-        if (!hasBatch) features = RemoveBatchDimension(features); return features;
+        for (int i = 0; i < Layers.Count; i++)
+            features = Layers[i].Forward(features);
+
+        if (!hasBatch) features = RemoveBatchDimension(features);
+        return features;
     }
 
     private Tensor<T> PredictOnnx(Tensor<T> input)
     {
-        if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");
-        bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
+        if (_onnxSession is null)
+            throw new InvalidOperationException("ONNX session is not initialized.");
+
+        bool hasBatch = input.Rank == 4;
+        if (!hasBatch) input = AddBatchDimension(input);
+
         var inputData = new float[input.Length];
-        for (int i = 0; i < input.Length; i++) inputData[i] = Convert.ToSingle(input.Data.Span[i]);
+        for (int i = 0; i < input.Length; i++)
+            inputData[i] = Convert.ToSingle(input.Data.Span[i]);
+
         var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape);
         string inputName = _onnxSession.InputMetadata.Keys.FirstOrDefault() ?? "images";
         var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(inputName, onnxInput) };
         using var results = _onnxSession.Run(inputs);
         var outputTensor = results.First().AsTensor<float>();
+
         var outputData = new T[outputTensor.Length];
-        for (int i = 0; i < outputTensor.Length; i++) outputData[i] = NumOps.FromDouble(outputTensor.GetValue(i));
+        for (int i = 0; i < outputTensor.Length; i++)
+            outputData[i] = NumOps.FromDouble(outputTensor.GetValue(i));
+
         var result = new Tensor<T>(outputTensor.Dimensions.ToArray(), new Vector<T>(outputData));
-        if (!hasBatch) result = RemoveBatchDimension(result); return result;
+        if (!hasBatch) result = RemoveBatchDimension(result);
+        return result;
     }
 
     private void BackwardPass(Tensor<T> gradient)
-    { if (!_useNativeMode || Layers.Count == 0) return; for (int i = Layers.Count - 1; i >= 0; i--) gradient = Layers[i].Backward(gradient); }
+    {
+        if (!_useNativeMode || Layers.Count == 0) return;
+        for (int i = Layers.Count - 1; i >= 0; i--)
+            gradient = Layers[i].Backward(gradient);
+    }
 
     private Tensor<T> AddBatchDimension(Tensor<T> tensor)
-    { var result = new Tensor<T>([1, tensor.Shape[0], tensor.Shape[1], tensor.Shape[2]]); tensor.Data.Span.CopyTo(result.Data.Span); return result; }
+    {
+        var result = new Tensor<T>([1, tensor.Shape[0], tensor.Shape[1], tensor.Shape[2]]);
+        tensor.Data.Span.CopyTo(result.Data.Span);
+        return result;
+    }
 
     private Tensor<T> RemoveBatchDimension(Tensor<T> tensor)
-    { int[] s = new int[tensor.Shape.Length - 1]; for (int i = 0; i < s.Length; i++) s[i] = tensor.Shape[i + 1]; var r = new Tensor<T>(s); tensor.Data.Span.CopyTo(r.Data.Span); return r; }
+    {
+        int[] shape = new int[tensor.Shape.Length - 1];
+        for (int i = 0; i < shape.Length; i++)
+            shape[i] = tensor.Shape[i + 1];
+        var result = new Tensor<T>(shape);
+        tensor.Data.Span.CopyTo(result.Data.Span);
+        return result;
+    }
     #endregion
 
     #region Abstract Implementation
@@ -226,7 +263,10 @@ public class BiomedParse<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
     {
         if (!_useNativeMode) { ClearLayers(); return; }
         if (Architecture.Layers != null && Architecture.Layers.Count > 0)
-        { Layers.AddRange(Architecture.Layers); _encoderLayerEnd = Architecture.Layers.Count / 2; }
+        {
+            Layers.AddRange(Architecture.Layers);
+            _encoderLayerEnd = _options.EncoderLayerCount ?? Architecture.Layers.Count / 2;
+        }
         else
         {
             var encoderLayers = LayerHelper<T>.CreateBiomedParseEncoderLayers(_channels, _height, _width, _channelDims, _depths, _dropRate).ToList();
@@ -247,7 +287,27 @@ public class BiomedParse<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
     /// </para>
     /// </remarks>
     public override void UpdateParameters(Vector<T> parameters)
-    { int o = 0; foreach (var l in Layers) { var p = l.GetParameters(); int c = p.Length; if (o + c <= parameters.Length) { var n = new Vector<T>(c); for (int i = 0; i < c; i++) n[i] = parameters[o + i]; l.UpdateParameters(n); o += c; } } }
+    {
+        int totalRequired = 0;
+        foreach (var l in Layers)
+            totalRequired += l.GetParameters().Length;
+
+        if (parameters.Length < totalRequired)
+            throw new ArgumentException(
+                $"Parameter vector length {parameters.Length} is less than required {totalRequired}.",
+                nameof(parameters));
+
+        int offset = 0;
+        foreach (var layer in Layers)
+        {
+            int count = layer.GetParameters().Length;
+            var newParams = new Vector<T>(count);
+            for (int i = 0; i < count; i++)
+                newParams[i] = parameters[offset + i];
+            layer.UpdateParameters(newParams);
+            offset += count;
+        }
+    }
 
     /// <summary>
     /// Collects metadata describing this model's configuration.
@@ -287,7 +347,23 @@ public class BiomedParse<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
     /// </para>
     /// </remarks>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    { _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadDouble(); _ = reader.ReadBoolean(); _ = reader.ReadString(); _ = reader.ReadInt32(); int dc = reader.ReadInt32(); for (int i = 0; i < dc; i++) _ = reader.ReadInt32(); int dd = reader.ReadInt32(); for (int i = 0; i < dd; i++) _ = reader.ReadInt32(); }
+    {
+        _height = reader.ReadInt32();
+        _width = reader.ReadInt32();
+        _channels = reader.ReadInt32();
+        _numClasses = reader.ReadInt32();
+        _decoderDim = reader.ReadInt32();
+        _dropRate = reader.ReadDouble();
+        _useNativeMode = reader.ReadBoolean();
+        _onnxModelPath = reader.ReadString();
+        _encoderLayerEnd = reader.ReadInt32();
+        int dc = reader.ReadInt32();
+        _channelDims = new int[dc];
+        for (int i = 0; i < dc; i++) _channelDims[i] = reader.ReadInt32();
+        int dd = reader.ReadInt32();
+        _depths = new int[dd];
+        for (int i = 0; i < dd; i++) _depths[i] = reader.ReadInt32();
+    }
 
     /// <summary>
     /// Creates a new instance with the same configuration but fresh weights.
@@ -328,15 +404,25 @@ public class BiomedParse<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
     MedicalSegmentationResult<T> IMedicalSegmentation<T>.SegmentSlice(Tensor<T> slice)
     {
         var output = Predict(slice);
-        return new MedicalSegmentationResult<T>
+        var labels = Common.SegmentationTensorOps.ArgmaxAlongClassDim(output);
+        var probs = Common.SegmentationTensorOps.SoftmaxAlongClassDim(output);
+        int h = labels.Shape[0], w = labels.Shape[1];
+        int numC = probs.Shape[0];
+        var structures = new List<SegmentedStructure>();
+        for (int c = 0; c < numC; c++)
         {
-            Labels = Common.SegmentationTensorOps.ArgmaxAlongClassDim(output),
-            Probabilities = Common.SegmentationTensorOps.SoftmaxAlongClassDim(output)
-        };
+            int area = 0; double confSum = 0;
+            for (int y = 0; y < h; y++)
+                for (int x = 0; x < w; x++)
+                    if ((int)NumOps.ToDouble(labels[y, x]) == c) { area++; confSum += NumOps.ToDouble(probs[c, y, x]); }
+            if (area > 0)
+                structures.Add(new SegmentedStructure { ClassId = c, Name = $"Class_{c}", VolumeOrArea = area, MeanConfidence = confSum / area });
+        }
+        return new MedicalSegmentationResult<T> { Labels = labels, Probabilities = probs, Structures = structures };
     }
     MedicalSegmentationResult<T> IMedicalSegmentation<T>.SegmentVolume(Tensor<T> volume)
-        => ((IMedicalSegmentation<T>)this).SegmentSlice(volume);
+        => throw new NotSupportedException("BiomedParse does not support 3D volumetric segmentation. Use SegmentSlice for 2D slices.");
     MedicalSegmentationResult<T> IMedicalSegmentation<T>.SegmentFewShot(Tensor<T> queryImage, Tensor<T> supportImages, Tensor<T> supportMasks)
-        => ((IMedicalSegmentation<T>)this).SegmentSlice(queryImage);
+        => throw new NotSupportedException("BiomedParse does not support few-shot segmentation. Use SegmentSlice for standard inference.");
     #endregion
 }

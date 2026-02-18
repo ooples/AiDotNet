@@ -333,18 +333,26 @@ public class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
     {
         if (!_useNativeMode) return;
 
-        if (Architecture.Layers != null && Architecture.Layers.Count > 0)
-        {
-            Layers.AddRange(Architecture.Layers);
-            return;
-        }
+        var layers = (Architecture.Layers != null && Architecture.Layers.Count > 0)
+            ? Architecture.Layers.ToList()
+            : LayerHelper<T>.CreateNeuralNoiseReducerLayers(
+                fftSize: _fftSize, baseFilters: _baseFilters, numStages: _numStages,
+                bottleneckDim: _bottleneckDim).ToList();
 
-        var layers = LayerHelper<T>.CreateNeuralNoiseReducerLayers(
-            fftSize: _fftSize, baseFilters: _baseFilters, numStages: _numStages,
-            bottleneckDim: _bottleneckDim).ToList();
+        Layers.Clear();
+        _encoderLayers.Clear();
         Layers.AddRange(layers);
 
         // Assign internal references for forward pass
+        int expectedCount = _numStages + 2; // encoder stages + bottleneck + output
+        if (layers.Count < expectedCount)
+        {
+            throw new ArgumentException(
+                $"Custom architecture must have at least {expectedCount} layers " +
+                $"({_numStages} encoder stages + bottleneck + output).",
+                nameof(Architecture));
+        }
+
         for (int i = 0; i < _numStages; i++)
             _encoderLayers.Add(layers[i]);
         _bottleneckLayer = layers[_numStages];

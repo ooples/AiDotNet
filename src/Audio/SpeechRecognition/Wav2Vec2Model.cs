@@ -381,32 +381,33 @@ public class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     /// </summary>
     private void InitializeNativeLayers()
     {
-        if (Architecture.Layers != null && Architecture.Layers.Count > 0)
-        {
-            Layers.AddRange(Architecture.Layers);
-            return;
-        }
+        var layers = (Architecture.Layers != null && Architecture.Layers.Count > 0)
+            ? Architecture.Layers.ToList()
+            : LayerHelper<T>.CreateWav2Vec2Layers(
+                hiddenDim: _hiddenDim, numTransformerLayers: _numTransformerLayers,
+                numHeads: _numHeads, ffDim: _ffDim, vocabSize: _vocabSize,
+                sampleRate: SampleRate, maxAudioLengthSeconds: _maxAudioLengthSeconds).ToList();
 
-        var layers = LayerHelper<T>.CreateWav2Vec2Layers(
-            hiddenDim: _hiddenDim, numTransformerLayers: _numTransformerLayers,
-            numHeads: _numHeads, ffDim: _ffDim, vocabSize: _vocabSize,
-            sampleRate: SampleRate, maxAudioLengthSeconds: _maxAudioLengthSeconds).ToList();
+        Layers.Clear();
+        _featureEncoderLayers.Clear();
+        _transformerLayers.Clear();
         Layers.AddRange(layers);
 
         // Distribute to internal sub-lists for forward pass
         // Feature encoder: 7 conv layers + 1 projection = 8
         int featureEncoderCount = 8;
-        for (int i = 0; i < featureEncoderCount; i++)
+        for (int i = 0; i < featureEncoderCount && i < layers.Count; i++)
             _featureEncoderLayers.Add(layers[i]);
 
         // Transformer layers: numTransformerLayers * 3 (selfAttn + ff + ffOut)
         int transformerStart = featureEncoderCount;
         int transformerCount = _numTransformerLayers * 3;
-        for (int i = 0; i < transformerCount; i++)
+        for (int i = 0; i < transformerCount && transformerStart + i < layers.Count; i++)
             _transformerLayers.Add(layers[transformerStart + i]);
 
         // CTC projection: last layer
-        _ctcProjection = layers[^1];
+        if (layers.Count > 0)
+            _ctcProjection = layers[^1];
     }
 
     private static string[] GetDefaultVocabulary()

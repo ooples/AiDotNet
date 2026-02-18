@@ -348,26 +348,29 @@ public class DeepFilterNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     /// </summary>
     private void InitializeNativeLayers()
     {
-        if (Architecture.Layers != null && Architecture.Layers.Count > 0)
-        {
-            Layers.AddRange(Architecture.Layers);
-            return;
-        }
+        var layers = (Architecture.Layers != null && Architecture.Layers.Count > 0)
+            ? Architecture.Layers.ToList()
+            : LayerHelper<T>.CreateDeepFilterNetLayers(
+                numErbBands: _numErbBands, hiddenDim: _hiddenDim,
+                numGruLayers: _numGruLayers, dfBins: _dfBins, dfOrder: _dfOrder).ToList();
 
-        var layers = LayerHelper<T>.CreateDeepFilterNetLayers(
-            numErbBands: _numErbBands, hiddenDim: _hiddenDim,
-            numGruLayers: _numGruLayers, dfBins: _dfBins, dfOrder: _dfOrder).ToList();
+        Layers.Clear();
+        _erbEncoder.Clear();
+        _gruLayers.Clear();
+        _dfLayers.Clear();
+        _decoder.Clear();
         Layers.AddRange(layers);
 
         // Distribute to internal sub-lists for forward pass
         int idx = 0;
-        for (int i = 0; i < 6; i++) // ERB encoder: 2x (Dense + BN + Activation)
+        for (int i = 0; i < 6 && idx < layers.Count; i++) // ERB encoder: 2x (Dense + BN + Activation)
             _erbEncoder.Add(layers[idx++]);
-        for (int i = 0; i < _numGruLayers; i++)
+        for (int i = 0; i < _numGruLayers && idx < layers.Count; i++)
             _gruLayers.Add(layers[idx++]);
-        for (int i = 0; i < 2; i++) // DF layers: Dense + Activation
+        for (int i = 0; i < 2 && idx < layers.Count; i++) // DF layers: Dense + Activation
             _dfLayers.Add(layers[idx++]);
-        _gainLayer = layers[idx++]; // Gain estimation
+        if (idx < layers.Count)
+            _gainLayer = layers[idx++]; // Gain estimation
         while (idx < layers.Count) // Decoder: Dense + BN + Activation
             _decoder.Add(layers[idx++]);
     }

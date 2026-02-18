@@ -178,11 +178,15 @@ public class ViMUNet<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
     #region Private Methods
     private Tensor<T> Forward(Tensor<T> input)
     {
-        bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
+        bool hasBatch = input.Rank == 4;
+        if (!hasBatch) input = AddBatchDimension(input);
+
         var features = input;
-        for (int i = 0; i < _encoderLayerEnd; i++) features = Layers[i].Forward(features);
-        for (int i = _encoderLayerEnd; i < Layers.Count; i++) features = Layers[i].Forward(features);
-        if (!hasBatch) features = RemoveBatchDimension(features); return features;
+        for (int i = 0; i < Layers.Count; i++)
+            features = Layers[i].Forward(features);
+
+        if (!hasBatch) features = RemoveBatchDimension(features);
+        return features;
     }
 
     private Tensor<T> PredictOnnx(Tensor<T> input)
@@ -226,7 +230,10 @@ public class ViMUNet<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
     {
         if (!_useNativeMode) { ClearLayers(); return; }
         if (Architecture.Layers != null && Architecture.Layers.Count > 0)
-        { Layers.AddRange(Architecture.Layers); _encoderLayerEnd = Architecture.Layers.Count / 2; }
+        {
+            Layers.AddRange(Architecture.Layers);
+            _encoderLayerEnd = _options.EncoderLayerCount ?? Architecture.Layers.Count / 2;
+        }
         else
         {
             var encoderLayers = LayerHelper<T>.CreateViMUNetEncoderLayers(_channels, _height, _width, _channelDims, _depths, _dropRate).ToList();
@@ -247,7 +254,27 @@ public class ViMUNet<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
     /// </para>
     /// </remarks>
     public override void UpdateParameters(Vector<T> parameters)
-    { int o = 0; foreach (var l in Layers) { var p = l.GetParameters(); int c = p.Length; if (o + c <= parameters.Length) { var n = new Vector<T>(c); for (int i = 0; i < c; i++) n[i] = parameters[o + i]; l.UpdateParameters(n); o += c; } } }
+    {
+        int totalRequired = 0;
+        foreach (var l in Layers)
+            totalRequired += l.GetParameters().Length;
+
+        if (parameters.Length < totalRequired)
+            throw new ArgumentException(
+                $"Parameter vector length {parameters.Length} is less than required {totalRequired}.",
+                nameof(parameters));
+
+        int offset = 0;
+        foreach (var layer in Layers)
+        {
+            int count = layer.GetParameters().Length;
+            var newParams = new Vector<T>(count);
+            for (int i = 0; i < count; i++)
+                newParams[i] = parameters[offset + i];
+            layer.UpdateParameters(newParams);
+            offset += count;
+        }
+    }
 
     /// <summary>
     /// Collects metadata describing this model's configuration.

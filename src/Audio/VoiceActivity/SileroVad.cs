@@ -308,18 +308,27 @@ public class SileroVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDetector<T>
         if (!_useNativeMode)
             return;
 
-        if (Architecture.Layers != null && Architecture.Layers.Count > 0)
-        {
-            Layers.AddRange(Architecture.Layers);
-            return;
-        }
+        var layers = (Architecture.Layers != null && Architecture.Layers.Count > 0)
+            ? Architecture.Layers.ToList()
+            : LayerHelper<T>.CreateSileroVadLayers(
+                frameSize: _frameSize, convFilters: _convFilters,
+                numLstmLayers: _numLstmLayers, lstmHiddenDim: _lstmHiddenDim).ToList();
 
-        var layers = LayerHelper<T>.CreateSileroVadLayers(
-            frameSize: _frameSize, convFilters: _convFilters,
-            numLstmLayers: _numLstmLayers, lstmHiddenDim: _lstmHiddenDim).ToList();
+        Layers.Clear();
+        _convLayers.Clear();
+        _lstmLayers.Clear();
         Layers.AddRange(layers);
 
         // Assign internal references for forward pass (3 conv + numLstm LSTM + 1 output)
+        int expectedCount = 3 + _numLstmLayers + 1;
+        if (layers.Count < expectedCount)
+        {
+            throw new ArgumentException(
+                $"Layer list must have at least {expectedCount} layers " +
+                $"(3 conv + {_numLstmLayers} LSTM + 1 output), but got {layers.Count}.",
+                nameof(Architecture));
+        }
+
         for (int i = 0; i < 3; i++)
             _convLayers.Add(layers[i]);
         for (int i = 0; i < _numLstmLayers; i++)

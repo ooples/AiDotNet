@@ -323,8 +323,11 @@ public class UniVS<T> : NeuralNetworkBase<T>, IVideoSegmentation<T>
     #endregion
 
     #region IVideoSegmentation Implementation
-    private Tensor<T>? _trackingState;
+    private Tensor<T>? _trackingFeatures;
+    private Tensor<T>? _trackingMasks;
     private int[]? _trackedObjectIds;
+    private int _frameIndex;
+    private readonly Dictionary<int, Tensor<T>> _corrections = [];
     int ISegmentationModel<T>.NumClasses => _numClasses;
     int ISegmentationModel<T>.InputHeight => _height;
     int ISegmentationModel<T>.InputWidth => _width;
@@ -334,21 +337,72 @@ public class UniVS<T> : NeuralNetworkBase<T>, IVideoSegmentation<T>
     bool IVideoSegmentation<T>.SupportsStreaming => true;
     void IVideoSegmentation<T>.InitializeTracking(Tensor<T> frame, Tensor<T> masks, int[]? objectIds)
     {
-        _trackingState = Predict(frame);
-        _trackedObjectIds = objectIds ?? Enumerable.Range(1, masks.Shape.Length > 0 ? masks.Shape[0] : 1).ToArray();
+        _trackingFeatures = Predict(frame);
+        _trackingMasks = masks;
+        int numObj = masks.Rank >= 3 ? masks.Shape[0] : 1;
+        _trackedObjectIds = objectIds ?? Enumerable.Range(1, numObj).ToArray();
+        _frameIndex = 0;
+        _corrections.Clear();
     }
     VideoSegmentationResult<T> IVideoSegmentation<T>.PropagateToFrame(Tensor<T> frame)
     {
-        _trackingState = Predict(frame);
+        _frameIndex++;
+        var currentFeatures = Predict(frame);
+        int h = currentFeatures.Shape[1], w = currentFeatures.Shape[2];
+        var ids = _trackedObjectIds ?? [1];
+        int numObj = ids.Length;
+        Tensor<T> masks;
+        if (_trackingFeatures != null && _trackingMasks != null && _trackingMasks.Rank == 3)
+        {
+            var affinity = Common.SegmentationTensorOps.PixelAffinity(_trackingFeatures, currentFeatures);
+            masks = Common.SegmentationTensorOps.WarpMasksByAffinity(_trackingMasks, affinity);
+        }
+        else
+        {
+            masks = new Tensor<T>([numObj, h, w]);
+        }
+        foreach (var kvp in _corrections)
+        {
+            int idx = Array.IndexOf(ids, kvp.Key);
+            if (idx >= 0)
+            {
+                int mH = Math.Min(kvp.Value.Shape[0], h), mW = Math.Min(kvp.Value.Shape[1], w);
+                for (int y = 0; y < mH; y++)
+                    for (int x = 0; x < mW; x++)
+                        masks[idx, y, x] = kvp.Value[y, x];
+            }
+        }
+        _corrections.Clear();
+        var confidences = new double[numObj];
+        var isVisible = new bool[numObj];
+        for (int obj = 0; obj < numObj; obj++)
+        {
+            int area = 0; double confSum = 0;
+            for (int y = 0; y < h; y++)
+                for (int x = 0; x < w; x++)
+                {
+                    double v = NumOps.ToDouble(masks[obj, y, x]);
+                    if (v >= 0.5) { area++; confSum += v; }
+                }
+            confidences[obj] = area > 0 ? confSum / area : 0.0;
+            isVisible[obj] = area >= 4;
+        }
+        _trackingFeatures = currentFeatures;
+        _trackingMasks = masks;
         return new VideoSegmentationResult<T>
         {
-            Masks = _trackingState,
-            ObjectIds = _trackedObjectIds ?? [1],
-            Confidences = (_trackedObjectIds ?? [1]).Select(_ => 1.0).ToArray(),
-            IsVisible = (_trackedObjectIds ?? [1]).Select(_ => true).ToArray()
+            Masks = masks, ObjectIds = ids, Confidences = confidences,
+            FrameIndex = _frameIndex, IsVisible = isVisible
         };
     }
-    void IVideoSegmentation<T>.AddCorrection(int objectId, Tensor<T> correctionMask) { }
-    void IVideoSegmentation<T>.ResetTracking() { _trackingState = null; _trackedObjectIds = null; }
+    void IVideoSegmentation<T>.AddCorrection(int objectId, Tensor<T> correctionMask)
+    {
+        _corrections[objectId] = correctionMask;
+    }
+    void IVideoSegmentation<T>.ResetTracking()
+    {
+        _trackingFeatures = null; _trackingMasks = null; _trackedObjectIds = null;
+        _frameIndex = 0; _corrections.Clear();
+    }
     #endregion
 }

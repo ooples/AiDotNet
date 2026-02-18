@@ -56,22 +56,23 @@ public class XDecoder<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
 
     #region Fields
 
-    private readonly int _height;
-    private readonly int _width;
-    private readonly int _channels;
-    private readonly int _numClasses;
-    private readonly int _numQueries;
-    private readonly XDecoderModelSize _modelSize;
-    private readonly int[] _channelDims;
-    private readonly int _decoderDim;
-    private readonly int[] _depths;
-    private readonly double _dropRate;
-    private readonly bool _useNativeMode;
-    private readonly string? _onnxModelPath;
+    private int _height;
+    private int _width;
+    private int _channels;
+    private int _numClasses;
+    private int _numQueries;
+    private XDecoderModelSize _modelSize;
+    private int[] _channelDims;
+    private int _decoderDim;
+    private int[] _depths;
+    private double _dropRate;
+    private bool _useNativeMode;
+    private string? _onnxModelPath;
     private InferenceSession? _onnxSession;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _disposed;
     private int _encoderLayerEnd;
+    private int _numStuffClasses;
 
     #endregion
 
@@ -132,6 +133,7 @@ public class XDecoder<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
         _numQueries = numQueries;
         _modelSize = modelSize;
         _dropRate = dropRate;
+        _numStuffClasses = _options.NumStuffClasses ?? Math.Max(1, _numClasses / 3);
         _useNativeMode = true;
         _onnxModelPath = null;
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
@@ -322,7 +324,7 @@ public class XDecoder<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
         if (Architecture.Layers != null && Architecture.Layers.Count > 0)
         {
             Layers.AddRange(Architecture.Layers);
-            _encoderLayerEnd = Architecture.Layers.Count / 2;
+            _encoderLayerEnd = _options.EncoderLayerCount ?? Architecture.Layers.Count / 2;
         }
         else
         {
@@ -423,14 +425,23 @@ public class XDecoder<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
     /// </remarks>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32();
-        _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32();
-        _ = reader.ReadInt32(); _ = reader.ReadDouble();
-        _ = reader.ReadBoolean(); _ = reader.ReadString(); _ = reader.ReadInt32();
+        _height = reader.ReadInt32();
+        _width = reader.ReadInt32();
+        _channels = reader.ReadInt32();
+        _numClasses = reader.ReadInt32();
+        _numQueries = reader.ReadInt32();
+        _modelSize = (XDecoderModelSize)reader.ReadInt32();
+        _decoderDim = reader.ReadInt32();
+        _dropRate = reader.ReadDouble();
+        _useNativeMode = reader.ReadBoolean();
+        _onnxModelPath = reader.ReadString();
+        _encoderLayerEnd = reader.ReadInt32();
         int dimCount = reader.ReadInt32();
-        for (int i = 0; i < dimCount; i++) _ = reader.ReadInt32();
+        _channelDims = new int[dimCount];
+        for (int i = 0; i < dimCount; i++) _channelDims[i] = reader.ReadInt32();
         int depthCount = reader.ReadInt32();
-        for (int i = 0; i < depthCount; i++) _ = reader.ReadInt32();
+        _depths = new int[depthCount];
+        for (int i = 0; i < depthCount; i++) _depths[i] = reader.ReadInt32();
     }
 
     /// <summary>
@@ -477,17 +488,100 @@ public class XDecoder<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
     int ISegmentationModel<T>.InputWidth => _width;
     bool ISegmentationModel<T>.IsOnnxMode => !_useNativeMode;
     Tensor<T> ISegmentationModel<T>.Segment(Tensor<T> image) => Predict(image);
-    int IPanopticSegmentation<T>.NumStuffClasses => Math.Max(1, _numClasses / 3);
-    int IPanopticSegmentation<T>.NumThingClasses => _numClasses - Math.Max(1, _numClasses / 3);
+    int IPanopticSegmentation<T>.NumStuffClasses => _numStuffClasses;
+    int IPanopticSegmentation<T>.NumThingClasses => _numClasses - _numStuffClasses;
 
     PanopticSegmentationResult<T> IPanopticSegmentation<T>.SegmentPanoptic(Tensor<T> image)
     {
-        var output = Predict(image);
+        var logits = Predict(image);
+        var probMap = Common.SegmentationTensorOps.SoftmaxAlongClassDim(logits);
+        var semanticMap = Common.SegmentationTensorOps.ArgmaxAlongClassDim(logits);
+        int h = semanticMap.Shape[0];
+        int w = semanticMap.Shape[1];
+        int numStuff = _numStuffClasses;
+        var instanceMap = new Tensor<T>([h, w]);
+        var panopticMap = new Tensor<T>([h, w]);
+        var segments = new List<PanopticSegment<T>>();
+        int nextInstId = 1;
+
+        // Stuff classes: non-countable background regions (sky, road, etc.)
+        for (int cls = 0; cls < numStuff; cls++)
+        {
+            int area = 0;
+            double sumConf = 0;
+            for (int row = 0; row < h; row++)
+            {
+                for (int col = 0; col < w; col++)
+                {
+                    if (Math.Abs(NumOps.ToDouble(semanticMap[row, col]) - cls) < 0.5)
+                    {
+                        panopticMap[row, col] = NumOps.FromDouble(cls * 1000);
+                        area++;
+                        sumConf += NumOps.ToDouble(probMap[cls, row, col]);
+                    }
+                }
+            }
+
+            if (area > 0)
+            {
+                segments.Add(new PanopticSegment<T>
+                {
+                    SegmentId = cls,
+                    ClassId = cls,
+                    IsThing = false,
+                    Confidence = sumConf / area,
+                    Area = area
+                });
+            }
+        }
+
+        // Thing classes: countable object instances (person, car, etc.)
+        for (int cls = numStuff; cls < _numClasses; cls++)
+        {
+            var (labelMap, count) = Common.SegmentationTensorOps.LabelConnectedComponents(semanticMap, cls);
+            for (int comp = 1; comp <= count; comp++)
+            {
+                int instId = nextInstId++;
+                int area = 0;
+                double sumConf = 0;
+                var compMask = new Tensor<T>([h, w]);
+
+                for (int row = 0; row < h; row++)
+                {
+                    for (int col = 0; col < w; col++)
+                    {
+                        if (Math.Abs(NumOps.ToDouble(labelMap[row, col]) - comp) < 0.5)
+                        {
+                            instanceMap[row, col] = NumOps.FromDouble(instId);
+                            panopticMap[row, col] = NumOps.FromDouble(cls * 1000 + instId);
+                            compMask[row, col] = NumOps.FromDouble(1.0);
+                            area++;
+                            sumConf += NumOps.ToDouble(probMap[cls, row, col]);
+                        }
+                    }
+                }
+
+                if (area > 0)
+                {
+                    segments.Add(new PanopticSegment<T>
+                    {
+                        SegmentId = instId,
+                        ClassId = cls,
+                        IsThing = true,
+                        Confidence = sumConf / area,
+                        Area = area,
+                        Mask = compMask
+                    });
+                }
+            }
+        }
+
         return new PanopticSegmentationResult<T>
         {
-            SemanticMap = Common.SegmentationTensorOps.ArgmaxAlongClassDim(output),
-            InstanceMap = Tensor<T>.Empty(),
-            PanopticMap = Common.SegmentationTensorOps.ArgmaxAlongClassDim(output)
+            SemanticMap = semanticMap,
+            InstanceMap = instanceMap,
+            PanopticMap = panopticMap,
+            Segments = segments
         };
     }
 

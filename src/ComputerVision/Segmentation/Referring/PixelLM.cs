@@ -324,20 +324,57 @@ public class PixelLM<T> : NeuralNetworkBase<T>, IReferringSegmentation<T>
     int IReferringSegmentation<T>.MaxTextLength => 512;
     bool IReferringSegmentation<T>.SupportsConversation => false;
     bool IReferringSegmentation<T>.SupportsVideoInput => false;
+
     ReferringSegmentationResult<T> IReferringSegmentation<T>.SegmentFromExpression(Tensor<T> image, string expression)
     {
-        var output = Predict(image);
-        return new ReferringSegmentationResult<T>
-        {
-            Masks = output,
-            TextResponse = expression,
-            Confidence = 1.0
-        };
+        var logits = Predict(image);
+        int numC = logits.Shape[0], h = logits.Shape[1], w = logits.Shape[2];
+        var weights = Common.SegmentationTensorOps.TextToWeights(expression, numC);
+        var scoreMap = Common.SegmentationTensorOps.WeightedChannelSum(logits, weights);
+        var probs = Common.SegmentationTensorOps.Sigmoid(scoreMap);
+        var binaryMask = Common.SegmentationTensorOps.ThresholdMask(probs, 0.5);
+        int minY = h, maxY = 0, minX = w, maxX = 0;
+        double area = 0, confSum = 0;
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++)
+                if (NumOps.ToDouble(binaryMask[y, x]) > 0.5)
+                {
+                    area++; confSum += NumOps.ToDouble(probs[y, x]);
+                    if (y < minY) minY = y; if (y > maxY) maxY = y;
+                    if (x < minX) minX = x; if (x > maxX) maxX = x;
+                }
+        double confidence = area > 0 ? confSum / area : 0;
+        var masks = new Tensor<T>([1, h, w]);
+        binaryMask.Data.Span.CopyTo(masks.Data.Span);
+        var boxes = new Tensor<T>([1, 4]);
+        if (area > 0) { boxes[0, 0] = NumOps.FromDouble(minX); boxes[0, 1] = NumOps.FromDouble(minY); boxes[0, 2] = NumOps.FromDouble(maxX); boxes[0, 3] = NumOps.FromDouble(maxY); }
+        string response = area > 0
+            ? $"Segmented region matching '{expression}' with {(int)area} pixels ({confidence:F2} confidence)"
+            : $"No region found matching '{expression}'";
+        return new ReferringSegmentationResult<T> { Masks = masks, TextResponse = response, Confidence = confidence, BoundingBoxes = boxes };
     }
+
     ReferringSegmentationResult<T> IReferringSegmentation<T>.SegmentFromConversation(
         Tensor<T> image, IReadOnlyList<(string Role, string Message)> conversationHistory, string currentQuery)
-        => ((IReferringSegmentation<T>)this).SegmentFromExpression(image, currentQuery);
+    {
+        var context = string.Join(" ", conversationHistory.Select(c => c.Message));
+        var fullQuery = string.IsNullOrEmpty(context) ? currentQuery : $"{context} {currentQuery}";
+        return ((IReferringSegmentation<T>)this).SegmentFromExpression(image, fullQuery);
+    }
+
     List<ReferringSegmentationResult<T>> IReferringSegmentation<T>.SegmentVideoFromExpression(Tensor<T> frames, string expression)
-        => [((IReferringSegmentation<T>)this).SegmentFromExpression(frames, expression)];
+    {
+        var results = new List<ReferringSegmentationResult<T>>();
+        if (frames.Rank == 3) { var r = ((IReferringSegmentation<T>)this).SegmentFromExpression(frames, expression); r.FrameIndex = 0; results.Add(r); return results; }
+        int nf = frames.Shape[0], c = frames.Shape[1], fh = frames.Shape[2], fw = frames.Shape[3];
+        for (int f = 0; f < nf; f++)
+        {
+            var frame = new Tensor<T>([c, fh, fw]);
+            for (int ch = 0; ch < c; ch++) for (int y = 0; y < fh; y++) for (int x = 0; x < fw; x++) frame[ch, y, x] = frames[f, ch, y, x];
+            var r = ((IReferringSegmentation<T>)this).SegmentFromExpression(frame, expression);
+            r.FrameIndex = f; results.Add(r);
+        }
+        return results;
+    }
     #endregion
 }

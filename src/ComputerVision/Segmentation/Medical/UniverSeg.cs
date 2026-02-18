@@ -328,15 +328,80 @@ public class UniverSeg<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
     MedicalSegmentationResult<T> IMedicalSegmentation<T>.SegmentSlice(Tensor<T> slice)
     {
         var output = Predict(slice);
-        return new MedicalSegmentationResult<T>
+        var labels = Common.SegmentationTensorOps.ArgmaxAlongClassDim(output);
+        var probs = Common.SegmentationTensorOps.SoftmaxAlongClassDim(output);
+        int h = labels.Shape[0], w = labels.Shape[1];
+        int numC = probs.Shape[0];
+        var structures = new List<SegmentedStructure>();
+        for (int c = 0; c < numC; c++)
         {
-            Labels = Common.SegmentationTensorOps.ArgmaxAlongClassDim(output),
-            Probabilities = Common.SegmentationTensorOps.SoftmaxAlongClassDim(output)
-        };
+            int area = 0; double confSum = 0;
+            for (int y = 0; y < h; y++)
+                for (int x = 0; x < w; x++)
+                    if ((int)NumOps.ToDouble(labels[y, x]) == c) { area++; confSum += NumOps.ToDouble(probs[c, y, x]); }
+            if (area > 0)
+                structures.Add(new SegmentedStructure { ClassId = c, Name = $"Class_{c}", VolumeOrArea = area, MeanConfidence = confSum / area });
+        }
+        return new MedicalSegmentationResult<T> { Labels = labels, Probabilities = probs, Structures = structures };
     }
     MedicalSegmentationResult<T> IMedicalSegmentation<T>.SegmentVolume(Tensor<T> volume)
         => ((IMedicalSegmentation<T>)this).SegmentSlice(volume);
     MedicalSegmentationResult<T> IMedicalSegmentation<T>.SegmentFewShot(Tensor<T> queryImage, Tensor<T> supportImages, Tensor<T> supportMasks)
-        => ((IMedicalSegmentation<T>)this).SegmentSlice(queryImage);
+    {
+        var queryFeatures = Predict(queryImage);
+        int numC = queryFeatures.Shape[0], h = queryFeatures.Shape[1], w = queryFeatures.Shape[2];
+        int numSupport = supportImages.Rank == 4 ? supportImages.Shape[0] : 1;
+        int sC = supportImages.Shape[supportImages.Rank - 3];
+        int sH = supportImages.Shape[supportImages.Rank - 2];
+        int sW = supportImages.Shape[supportImages.Rank - 1];
+        var prototype = new double[numC];
+        for (int s = 0; s < numSupport; s++)
+        {
+            var sSlice = supportImages.Rank == 4 ? new Tensor<T>([sC, sH, sW]) : supportImages;
+            if (supportImages.Rank == 4)
+                for (int c = 0; c < sC; c++)
+                    for (int y = 0; y < sH; y++)
+                        for (int x = 0; x < sW; x++)
+                            sSlice[c, y, x] = supportImages[s, c, y, x];
+            var sFeatures = Predict(sSlice);
+            int fC = sFeatures.Shape[0], fH = sFeatures.Shape[1], fW = sFeatures.Shape[2];
+            var sMean = new double[numC];
+            int maskCount = 0;
+            for (int y = 0; y < fH; y++)
+                for (int x = 0; x < fW; x++)
+                {
+                    double m = supportMasks.Rank >= 3 ? NumOps.ToDouble(supportMasks[s, y, x]) : NumOps.ToDouble(supportMasks[y, x]);
+                    if (m >= 0.5)
+                    {
+                        maskCount++;
+                        for (int c = 0; c < fC && c < numC; c++)
+                            sMean[c] += NumOps.ToDouble(sFeatures[c, y, x]);
+                    }
+                }
+            if (maskCount > 0)
+                for (int c = 0; c < numC; c++)
+                    prototype[c] += sMean[c] / maskCount;
+        }
+        if (numSupport > 1)
+            for (int c = 0; c < numC; c++)
+                prototype[c] /= numSupport;
+        var scoreMap = Common.SegmentationTensorOps.WeightedChannelSum(queryFeatures, prototype);
+        var probMap = Common.SegmentationTensorOps.Sigmoid(scoreMap);
+        var labels = new Tensor<T>([h, w]);
+        var probs = new Tensor<T>([2, h, w]);
+        var structures = new List<SegmentedStructure>();
+        int fgArea = 0; double confTotal = 0;
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++)
+            {
+                double p = NumOps.ToDouble(probMap[y, x]);
+                if (p >= 0.5) { labels[y, x] = NumOps.FromDouble(1); fgArea++; confTotal += p; }
+                probs[0, y, x] = NumOps.FromDouble(1.0 - p);
+                probs[1, y, x] = NumOps.FromDouble(p);
+            }
+        if (fgArea > 0)
+            structures.Add(new SegmentedStructure { ClassId = 1, Name = "FewShot_Target", VolumeOrArea = fgArea, MeanConfidence = confTotal / fgArea });
+        return new MedicalSegmentationResult<T> { Labels = labels, Probabilities = probs, Structures = structures };
+    }
     #endregion
 }

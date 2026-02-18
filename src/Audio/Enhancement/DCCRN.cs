@@ -349,57 +349,66 @@ public class DCCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     /// </summary>
     private void InitializeNativeLayers()
     {
-        if (Architecture.Layers != null && Architecture.Layers.Count > 0)
-        {
-            Layers.AddRange(Architecture.Layers);
-            return;
-        }
-
         int freqBins = _fftSize / 2 + 1;
-        int timeDim = 100; // Approximate time dimension for initialization
 
-        var layers = LayerHelper<T>.CreateDCCRNLayers(
-            fftSize: _fftSize, baseChannels: _baseChannels, numStages: _numStages,
-            numLstmLayers: _numLstmLayers, lstmHiddenDim: _lstmHiddenDim,
-            kernelSize: _kernelSize, stride: _stride).ToList();
+        var layers = (Architecture.Layers != null && Architecture.Layers.Count > 0)
+            ? Architecture.Layers.ToList()
+            : LayerHelper<T>.CreateDCCRNLayers(
+                fftSize: _fftSize, baseChannels: _baseChannels, numStages: _numStages,
+                numLstmLayers: _numLstmLayers, lstmHiddenDim: _lstmHiddenDim,
+                kernelSize: _kernelSize, stride: _stride).ToList();
+
+        Layers.Clear();
+        _encoder.Clear();
+        _skipLayers.Clear();
+        _lstmLayers.Clear();
+        _decoder.Clear();
         Layers.AddRange(layers);
 
         // Distribute to internal sub-lists for forward pass
         int idx = 0;
 
         // Encoder: per stage = Conv + BN + SkipConv = 3 layers
-        for (int i = 0; i < _numStages; i++)
+        for (int i = 0; i < _numStages && idx + 2 < layers.Count; i++)
         {
             _encoder.Add(layers[idx++]); // Conv
             _encoder.Add(layers[idx++]); // BatchNorm
             _skipLayers.Add(layers[idx++]); // Skip connection
         }
 
-        // Store encoder output dim for projection
+        // Store encoder output dim for projection using freqBins (not _fftSize)
         int inChannels = _baseChannels * (int)Math.Pow(2, Math.Min(_numStages - 1, 4));
-        _encoderOutputDim = inChannels * (_fftSize / (int)Math.Pow(_stride, _numStages));
+        _encoderOutputDim = inChannels * (freqBins / (int)Math.Pow(_stride, _numStages));
 
         // LSTM layers
-        for (int i = 0; i < _numLstmLayers; i++)
+        for (int i = 0; i < _numLstmLayers && idx < layers.Count; i++)
             _lstmLayers.Add(layers[idx++]);
 
         // LSTM projection
-        _lstmProjection = layers[idx++];
+        if (idx < layers.Count)
+            _lstmProjection = layers[idx++];
 
         // Decoder: per stage = Deconv + optional BN (last stage has no BN)
-        for (int i = 0; i < _numStages; i++)
+        for (int i = 0; i < _numStages && idx < layers.Count; i++)
         {
             _decoder.Add(layers[idx++]); // Deconv
-            if (i < _numStages - 1)
+            if (i < _numStages - 1 && idx < layers.Count)
                 _decoder.Add(layers[idx++]); // BatchNorm
         }
 
-        // Mask layer (not from LayerHelper - specific to complex/real mask mode)
-        int[] maskShape = [1, 2, freqBins, timeDim];
-        _maskLayer = _useComplexMask
-            ? new ActivationLayer<T>(maskShape, (IActivationFunction<T>)new TanhActivation<T>())
-            : new ActivationLayer<T>(maskShape, (IActivationFunction<T>)new SigmoidActivation<T>());
-        Layers.Add(_maskLayer);
+        // Mask layer: use from layer list if remaining, otherwise create
+        if (idx < layers.Count)
+        {
+            _maskLayer = layers[idx];
+        }
+        else
+        {
+            int[] maskShape = [1, 2, freqBins, 1];
+            _maskLayer = _useComplexMask
+                ? new ActivationLayer<T>(maskShape, (IActivationFunction<T>)new TanhActivation<T>())
+                : new ActivationLayer<T>(maskShape, (IActivationFunction<T>)new SigmoidActivation<T>());
+            Layers.Add(_maskLayer);
+        }
     }
 
     #endregion

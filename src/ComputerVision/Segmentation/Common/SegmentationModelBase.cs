@@ -36,32 +36,32 @@ public abstract class SegmentationModelBase<T> : NeuralNetworkBase<T>, ISegmenta
     /// <summary>
     /// Input image height in pixels.
     /// </summary>
-    protected readonly int _height;
+    protected int _height;
 
     /// <summary>
     /// Input image width in pixels.
     /// </summary>
-    protected readonly int _width;
+    protected int _width;
 
     /// <summary>
     /// Number of input channels (typically 3 for RGB).
     /// </summary>
-    protected readonly int _channels;
+    protected int _channels;
 
     /// <summary>
     /// Number of segmentation output classes.
     /// </summary>
-    protected readonly int _numClasses;
+    protected int _numClasses;
 
     /// <summary>
     /// Whether the model is running in native (trainable) mode or ONNX (inference-only) mode.
     /// </summary>
-    protected readonly bool _useNativeMode;
+    protected bool _useNativeMode;
 
     /// <summary>
     /// Path to the ONNX model file (null in native mode).
     /// </summary>
-    protected readonly string? _onnxModelPath;
+    protected string? _onnxModelPath;
 
     /// <summary>
     /// ONNX runtime inference session (null in native mode).
@@ -388,13 +388,13 @@ public abstract class SegmentationModelBase<T> : NeuralNetworkBase<T>, ISegmenta
     /// </summary>
     protected void DeserializeSegmentationBaseData(BinaryReader reader)
     {
-        _ = reader.ReadInt32(); // height
-        _ = reader.ReadInt32(); // width
-        _ = reader.ReadInt32(); // channels
-        _ = reader.ReadInt32(); // numClasses
-        _ = reader.ReadBoolean(); // useNativeMode
-        _ = reader.ReadString(); // onnxModelPath
-        _ = reader.ReadInt32(); // encoderLayerEnd
+        _height = reader.ReadInt32();
+        _width = reader.ReadInt32();
+        _channels = reader.ReadInt32();
+        _numClasses = reader.ReadInt32();
+        _useNativeMode = reader.ReadBoolean();
+        _onnxModelPath = reader.ReadString();
+        _encoderLayerEnd = reader.ReadInt32();
     }
 
     #endregion

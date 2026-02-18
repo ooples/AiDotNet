@@ -72,7 +72,7 @@ public class SegmentationOutput<T>
     #region Panoptic Output
 
     /// <summary>
-    /// Combined panoptic ID map [H, W] encoded as classId * OFFSET + instanceId.
+    /// Combined panoptic ID map [H, W] encoded as classId * 1000 + instanceId.
     /// Populated for panoptic segmentation.
     /// </summary>
     public Tensor<T>? PanopticMap { get; set; }

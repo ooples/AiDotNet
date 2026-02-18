@@ -541,36 +541,50 @@ public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
     /// </summary>
     private void InitializeNativeLayers()
     {
+        List<ILayer<T>> layers;
         if (Architecture.Layers != null && Architecture.Layers.Count > 0)
         {
-            Layers.AddRange(Architecture.Layers);
-            return;
+            layers = Architecture.Layers.ToList();
+            // First layer should be embedding if present
+            if (layers.Count > 0 && layers[0] is EmbeddingLayer<T> emb)
+            {
+                _embedding = emb;
+                layers = layers.Skip(1).ToList();
+            }
+        }
+        else
+        {
+            _embedding = new EmbeddingLayer<T>(_vocabSize, _embeddingDim);
+            Layers.Add(_embedding);
+
+            layers = LayerHelper<T>.CreateTacotron2Layers(
+                vocabSize: _vocabSize, embeddingDim: _embeddingDim, encoderDim: _encoderDim,
+                decoderDim: _decoderDim, attentionDim: _attentionDim,
+                attentionFilters: _attentionFilters, prenetDim: _prenetDim,
+                numMels: NumMels, numMelsPerFrame: _numMelsPerFrame,
+                numEncoderConvLayers: _numEncoderConvLayers,
+                numPostnetConvLayers: _numPostnetConvLayers,
+                postnetEmbeddingDim: _postnetEmbeddingDim).ToList();
         }
 
-        // Embedding layer (separate from LayerHelper)
-        _embedding = new EmbeddingLayer<T>(_vocabSize, _embeddingDim);
-        Layers.Add(_embedding);
-
-        var layers = LayerHelper<T>.CreateTacotron2Layers(
-            vocabSize: _vocabSize, embeddingDim: _embeddingDim, encoderDim: _encoderDim,
-            decoderDim: _decoderDim, attentionDim: _attentionDim,
-            attentionFilters: _attentionFilters, prenetDim: _prenetDim,
-            numMels: NumMels, numMelsPerFrame: _numMelsPerFrame,
-            numEncoderConvLayers: _numEncoderConvLayers,
-            numPostnetConvLayers: _numPostnetConvLayers,
-            postnetEmbeddingDim: _postnetEmbeddingDim).ToList();
+        _encoderConvLayers.Clear();
+        _attentionLayers.Clear();
+        _decoderLstmLayers.Clear();
+        _postNetLayers.Clear();
         Layers.AddRange(layers);
 
         // Distribute to internal sub-lists for forward pass
         int idx = 0;
-        for (int i = 0; i < _numEncoderConvLayers; i++)
+        for (int i = 0; i < _numEncoderConvLayers && idx < layers.Count; i++)
             _encoderConvLayers.Add(layers[idx++]);
-        _encoderLstm = layers[idx++];
-        for (int i = 0; i < 4; i++)
+        if (idx < layers.Count)
+            _encoderLstm = layers[idx++];
+        for (int i = 0; i < 4 && idx < layers.Count; i++)
             _attentionLayers.Add(layers[idx++]);
-        for (int i = 0; i < 5; i++) // prenet(2) + lstm(2) + mel(1)
+        for (int i = 0; i < 5 && idx < layers.Count; i++) // prenet(2) + lstm(2) + mel(1)
             _decoderLstmLayers.Add(layers[idx++]);
-        _stopTokenLayer = layers[idx++];
+        if (idx < layers.Count)
+            _stopTokenLayer = layers[idx++];
         while (idx < layers.Count)
             _postNetLayers.Add(layers[idx++]);
     }
