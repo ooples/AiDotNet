@@ -128,7 +128,7 @@ public class Fuyu<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
     {
         if (!_useNativeMode) return;
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0) { Layers.AddRange(Architecture.Layers); _encoderLayerEnd = 1; }
-        else { Layers.AddRange(LayerHelper<T>.CreateDefaultEncoderDecoderVLMLayers(_options.VisionDim, _options.DecoderDim, _options.NumVisionLayers, _options.NumDecoderLayers, _options.NumHeads, _options.DropoutRate)); ComputeEncoderDecoderBoundary(); }
+        else { Layers.AddRange(LayerHelper<T>.CreateDefaultDecoderOnlyVisionLayers(3072, _options.DecoderDim, _options.NumDecoderLayers, _options.NumHeads, _options.DropoutRate)); ComputeEncoderDecoderBoundary(); }
     }
 
     private void ComputeEncoderDecoderBoundary() { _encoderLayerEnd = 1; }
