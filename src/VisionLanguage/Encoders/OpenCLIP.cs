@@ -67,6 +67,7 @@ public class OpenCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguag
     private readonly ITokenizer? _tokenizer;
     private bool _useNativeMode;
     private bool _disposed;
+    private int _visionLayerEnd;
 
     #endregion
 
@@ -227,8 +228,12 @@ public class OpenCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguag
     {
         if (!_useNativeMode) return;
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+        {
             Layers.AddRange(Architecture.Layers);
+            _visionLayerEnd = Layers.Count / 2;
+        }
         else
+        {
             Layers.AddRange(LayerHelper<T>.CreateDefaultOpenCLIPLayers(
                 visionEmbeddingDim: _options.VisionEmbeddingDim,
                 textEmbeddingDim: _options.TextEmbeddingDim,
@@ -238,6 +243,9 @@ public class OpenCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguag
                 numVisionHeads: _options.NumVisionHeads,
                 numTextHeads: _options.NumTextHeads,
                 dropoutRate: _options.DropoutRate));
+            int lpb = _options.DropoutRate > 0 ? 6 : 5;
+            _visionLayerEnd = 2 + _options.NumVisionLayers * lpb;
+        }
     }
 
     /// <inheritdoc />
@@ -381,21 +389,16 @@ public class OpenCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguag
 
     private Tensor<T> ForwardTextEncoder(Tensor<T> tokens)
     {
-        // In native mode, text encoder uses the second half of layers
-        // (vision layers are first, text layers are second)
-        int textLayerStart = _options.NumVisionLayers > 0 ? Layers.Count / 2 : 0;
         var current = tokens;
-        for (int i = textLayerStart; i < Layers.Count; i++)
+        for (int i = _visionLayerEnd; i < Layers.Count; i++)
             current = Layers[i].Forward(current);
         return current;
     }
 
     private Tensor<T> Forward(Tensor<T> input)
     {
-        // In native mode, vision encoder uses the first half of layers
-        int visionLayerEnd = Layers.Count / 2;
         var current = input;
-        for (int i = 0; i < visionLayerEnd; i++)
+        for (int i = 0; i < _visionLayerEnd; i++)
             current = Layers[i].Forward(current);
         return current;
     }
@@ -414,6 +417,7 @@ public class OpenCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguag
     {
         if (_disposed) return;
         _disposed = true;
+        if (disposing) { OnnxImageEncoder?.Dispose(); OnnxTextEncoder?.Dispose(); }
         base.Dispose(disposing);
     }
 

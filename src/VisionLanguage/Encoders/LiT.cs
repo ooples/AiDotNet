@@ -36,7 +36,7 @@ public class LiT<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMode
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly ITokenizer? _tokenizer;
     private bool _useNativeMode;
-    private bool _disposed;
+    private bool _disposed; private int _visionLayerEnd;
 
     public LiT(NeuralNetworkArchitecture<T> architecture, string imageEncoderModelPath, LiTOptions? options = null)
         : base(architecture)
@@ -110,8 +110,9 @@ public class LiT<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMode
     {
         if (!_useNativeMode) return;
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
-            Layers.AddRange(Architecture.Layers);
+        { Layers.AddRange(Architecture.Layers); _visionLayerEnd = Layers.Count / 2; }
         else
+        {
             Layers.AddRange(LayerHelper<T>.CreateDefaultOpenCLIPLayers(
                 visionEmbeddingDim: _options.VisionEmbeddingDim,
                 textEmbeddingDim: _options.TextEmbeddingDim,
@@ -121,6 +122,8 @@ public class LiT<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMode
                 numVisionHeads: _options.NumVisionHeads,
                 numTextHeads: _options.NumTextHeads,
                 dropoutRate: _options.DropoutRate));
+            int lpb = _options.DropoutRate > 0 ? 6 : 5; _visionLayerEnd = 2 + _options.NumVisionLayers * lpb;
+        }
     }
 
     public override Tensor<T> Predict(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxImageEncoder is not null) return OnnxImageEncoder.Run(input); var current = input; foreach (var layer in Layers) current = layer.Forward(current); return current; }
@@ -143,8 +146,8 @@ public class LiT<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMode
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ImageEncoderModelPath is { } mp && !string.IsNullOrEmpty(mp)) return new LiT<T>(Architecture, mp, _options); return new LiT<T>(Architecture, _options); }
 
     private Tensor<T> TokenizeText(string text) { if (_tokenizer is null) throw new InvalidOperationException("Tokenizer not initialized."); var encoding = _tokenizer.Encode(text); int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength); var tokens = new Tensor<T>([seqLen]); for (int i = 0; i < seqLen; i++) tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]); return tokens; }
-    private Tensor<T> ForwardVisionEncoder(Tensor<T> input) { int end = Layers.Count / 2; var current = input; for (int i = 0; i < end; i++) current = Layers[i].Forward(current); return current; }
-    private Tensor<T> ForwardTextEncoder(Tensor<T> tokens) { int start = Layers.Count / 2; var current = tokens; for (int i = start; i < Layers.Count; i++) current = Layers[i].Forward(current); return current; }
+    private Tensor<T> ForwardVisionEncoder(Tensor<T> input) { var current = input; for (int i = 0; i < _visionLayerEnd; i++) current = Layers[i].Forward(current); return current; }
+    private Tensor<T> ForwardTextEncoder(Tensor<T> tokens) { var current = tokens; for (int i = _visionLayerEnd; i < Layers.Count; i++) current = Layers[i].Forward(current); return current; }
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(LiT<T>)); }
-    protected override void Dispose(bool disposing) { if (_disposed) return; _disposed = true; base.Dispose(disposing); }
+    protected override void Dispose(bool disposing) { if (_disposed) return; _disposed = true; if (disposing) { OnnxImageEncoder?.Dispose(); OnnxTextEncoder?.Dispose(); } base.Dispose(disposing); }
 }

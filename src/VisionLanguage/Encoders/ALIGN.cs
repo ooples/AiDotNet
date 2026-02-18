@@ -47,6 +47,7 @@ public class ALIGN<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMo
     private readonly ITokenizer? _tokenizer;
     private bool _useNativeMode;
     private bool _disposed;
+    private int _visionLayerEnd;
 
     /// <summary>
     /// Creates an ALIGN model in ONNX inference mode.
@@ -159,8 +160,12 @@ public class ALIGN<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMo
     {
         if (!_useNativeMode) return;
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+        {
             Layers.AddRange(Architecture.Layers);
+            _visionLayerEnd = Layers.Count / 2;
+        }
         else
+        {
             Layers.AddRange(LayerHelper<T>.CreateDefaultALIGNLayers(
                 visionEmbeddingDim: _options.VisionEmbeddingDim,
                 textEmbeddingDim: _options.TextEmbeddingDim,
@@ -169,6 +174,10 @@ public class ALIGN<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMo
                 numTextLayers: _options.NumTextLayers,
                 numTextHeads: _options.NumTextHeads,
                 dropoutRate: _options.DropoutRate));
+            // ALIGN vision uses MBConv blocks: Dense+LN+Dense+LN+[Dropout] per layer (no MHA)
+            int visionLpb = _options.DropoutRate > 0 ? 5 : 4;
+            _visionLayerEnd = 2 + _options.NumVisionLayers * visionLpb;
+        }
     }
 
     public override Tensor<T> Predict(Tensor<T> input)
@@ -280,18 +289,16 @@ public class ALIGN<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMo
 
     private Tensor<T> ForwardVisionEncoder(Tensor<T> input)
     {
-        int visionLayerEnd = Layers.Count / 2;
         var current = input;
-        for (int i = 0; i < visionLayerEnd; i++)
+        for (int i = 0; i < _visionLayerEnd; i++)
             current = Layers[i].Forward(current);
         return current;
     }
 
     private Tensor<T> ForwardTextEncoder(Tensor<T> tokens)
     {
-        int textLayerStart = Layers.Count / 2;
         var current = tokens;
-        for (int i = textLayerStart; i < Layers.Count; i++)
+        for (int i = _visionLayerEnd; i < Layers.Count; i++)
             current = Layers[i].Forward(current);
         return current;
     }
@@ -305,6 +312,7 @@ public class ALIGN<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMo
     {
         if (_disposed) return;
         _disposed = true;
+        if (disposing) { OnnxImageEncoder?.Dispose(); OnnxTextEncoder?.Dispose(); }
         base.Dispose(disposing);
     }
 }

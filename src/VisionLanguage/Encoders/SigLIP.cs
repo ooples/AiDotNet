@@ -68,6 +68,7 @@ public class SigLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageM
     private readonly ITokenizer? _tokenizer;
     private bool _useNativeMode;
     private bool _disposed;
+    private int _visionLayerEnd;
 
     #endregion
 
@@ -231,8 +232,12 @@ public class SigLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageM
     {
         if (!_useNativeMode) return;
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+        {
             Layers.AddRange(Architecture.Layers);
+            _visionLayerEnd = Layers.Count / 2;
+        }
         else
+        {
             Layers.AddRange(LayerHelper<T>.CreateDefaultSigLIPLayers(
                 visionEmbeddingDim: _options.VisionEmbeddingDim,
                 textEmbeddingDim: _options.TextEmbeddingDim,
@@ -242,6 +247,9 @@ public class SigLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageM
                 numVisionHeads: _options.NumVisionHeads,
                 numTextHeads: _options.NumTextHeads,
                 dropoutRate: _options.DropoutRate));
+            int lpb = _options.DropoutRate > 0 ? 6 : 5;
+            _visionLayerEnd = 2 + _options.NumVisionLayers * lpb;
+        }
     }
 
     /// <inheritdoc />
@@ -390,18 +398,16 @@ public class SigLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageM
 
     private Tensor<T> ForwardVisionEncoder(Tensor<T> input)
     {
-        int visionLayerEnd = Layers.Count / 2;
         var current = input;
-        for (int i = 0; i < visionLayerEnd; i++)
+        for (int i = 0; i < _visionLayerEnd; i++)
             current = Layers[i].Forward(current);
         return current;
     }
 
     private Tensor<T> ForwardTextEncoder(Tensor<T> tokens)
     {
-        int textLayerStart = Layers.Count / 2;
         var current = tokens;
-        for (int i = textLayerStart; i < Layers.Count; i++)
+        for (int i = _visionLayerEnd; i < Layers.Count; i++)
             current = Layers[i].Forward(current);
         return current;
     }
@@ -420,6 +426,7 @@ public class SigLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageM
     {
         if (_disposed) return;
         _disposed = true;
+        if (disposing) { OnnxImageEncoder?.Dispose(); OnnxTextEncoder?.Dispose(); }
         base.Dispose(disposing);
     }
 
