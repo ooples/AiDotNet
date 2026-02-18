@@ -141,10 +141,32 @@ public class DualTextConditioner<T> : IConditioningModule<T>
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// <para>In a dual-encoder architecture, pooled embeddings always come from CLIP.
+    /// The <paramref name="sequenceEmbeddings"/> parameter is ignored because this method
+    /// cannot determine whether the input originated from CLIP or T5, and passing T5
+    /// embeddings (4096-dim) to CLIP pooling (768-dim) would produce incorrect results.</para>
+    ///
+    /// <para>For prompt-specific pooled embeddings, use <see cref="EncodeDual"/> which
+    /// correctly routes each encoder's output to the appropriate pooling.</para>
+    /// </remarks>
     public Tensor<T> GetPooledEmbedding(Tensor<T> sequenceEmbeddings)
     {
-        // Pooled embedding comes from CLIP
-        return _clipEncoder.GetPooledEmbedding(sequenceEmbeddings);
+        // If the input has CLIP-compatible dimensions, use it directly for pooling
+        if (sequenceEmbeddings.Rank >= 2 &&
+            sequenceEmbeddings.Shape[sequenceEmbeddings.Rank - 1] == _clipEncoder.EmbeddingDimension)
+        {
+            return _clipEncoder.GetPooledEmbedding(sequenceEmbeddings);
+        }
+
+        // Input is T5-encoded (4096-dim) or otherwise incompatible with CLIP pooling (768-dim).
+        // Rather than silently returning an unconditional embedding (losing all semantic info),
+        // throw to surface the misconfiguration early.
+        throw new ArgumentException(
+            $"Cannot pool embeddings with dimension {sequenceEmbeddings.Shape[sequenceEmbeddings.Rank - 1]} " +
+            $"using CLIP encoder (expected {_clipEncoder.EmbeddingDimension}). " +
+            "Use EncodeDual() to get correctly-routed pooled embeddings from the CLIP encoder.",
+            nameof(sequenceEmbeddings));
     }
 
     /// <inheritdoc />

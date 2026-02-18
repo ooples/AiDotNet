@@ -147,6 +147,11 @@ public class Conv3DLayer<T> : LayerBase<T>
     private Tensor<T>? _lastOutput;
 
     /// <summary>
+    /// Original input shape for restoring higher-rank tensors after processing.
+    /// </summary>
+    private int[]? _originalInputShape;
+
+    /// <summary>
     /// Depth of input volume (cached for shape calculations).
     /// </summary>
     private int _inputDepth;
@@ -446,11 +451,11 @@ public class Conv3DLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         _lastInput = input;
+        _originalInputShape = input.Shape;
 
-        bool hasBatch = input.Rank == 5;
         Tensor<T> batchedInput;
 
-        if (hasBatch)
+        if (input.Rank == 5)
         {
             batchedInput = input;
         }
@@ -458,10 +463,18 @@ public class Conv3DLayer<T> : LayerBase<T>
         {
             batchedInput = input.Reshape(1, input.Shape[0], input.Shape[1], input.Shape[2], input.Shape[3]);
         }
+        else if (input.Rank >= 6)
+        {
+            // Higher rank: flatten leading dimensions into batch
+            int flatBatch = 1;
+            for (int d = 0; d < input.Rank - 4; d++)
+                flatBatch *= input.Shape[d];
+            batchedInput = input.Reshape(flatBatch, input.Shape[input.Rank - 4], input.Shape[input.Rank - 3], input.Shape[input.Rank - 2], input.Shape[input.Rank - 1]);
+        }
         else
         {
             throw new ArgumentException(
-                $"Conv3DLayer expects 4D [C,D,H,W] or 5D [N,C,D,H,W] input, got {input.Rank}D.", nameof(input));
+                $"Conv3D layer requires at least 4D tensor [C,D,H,W]. Got rank {input.Rank}.", nameof(input));
         }
 
         // Get the fused activation type for optimal GPU/CPU performance
@@ -499,8 +512,22 @@ public class Conv3DLayer<T> : LayerBase<T>
             _lastOutput = activated;
         }
 
-        if (!hasBatch && activated.Rank == 5 && activated.Shape[0] == 1)
+        // Restore original tensor rank
+        if (_originalInputShape != null && _originalInputShape.Length > 5)
         {
+            // Higher rank: restore original leading dimensions
+            var outputShape = new int[_originalInputShape.Length];
+            for (int d = 0; d < _originalInputShape.Length - 4; d++)
+                outputShape[d] = _originalInputShape[d];
+            outputShape[_originalInputShape.Length - 4] = activated.Shape[1]; // OutC
+            outputShape[_originalInputShape.Length - 3] = activated.Shape[2]; // OutD
+            outputShape[_originalInputShape.Length - 2] = activated.Shape[3]; // OutH
+            outputShape[_originalInputShape.Length - 1] = activated.Shape[4]; // OutW
+            return activated.Reshape(outputShape);
+        }
+        if (_originalInputShape != null && _originalInputShape.Length == 4)
+        {
+            // Input was 4D [C,D,H,W], remove batch dim
             return activated.Reshape(activated.Shape[1], activated.Shape[2], activated.Shape[3], activated.Shape[4]);
         }
 

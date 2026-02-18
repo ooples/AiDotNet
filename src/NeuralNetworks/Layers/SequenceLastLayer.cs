@@ -112,7 +112,26 @@ public class SequenceLastLayer<T> : LayerBase<T>
         }
         else
         {
-            throw new ArgumentException($"SequenceLastLayer expects 1D, 2D, or 3D input, got {rank}D.");
+            // Higher rank (>= 4): treat dim[0] as seqLen, extract last slice with remaining dims
+            int seqLen = input.Shape[0];
+            _lastSequenceLength = seqLen;
+
+            // Output shape is input shape minus the first dimension
+            var outputShape = new int[rank - 1];
+            int sliceSize = 1;
+            for (int d = 1; d < rank; d++)
+            {
+                outputShape[d - 1] = input.Shape[d];
+                sliceSize *= input.Shape[d];
+            }
+
+            var result = new Tensor<T>(outputShape);
+            int lastOffset = (seqLen - 1) * sliceSize;
+            for (int i = 0; i < sliceSize; i++)
+            {
+                result.Data.Span[i] = input.Data.Span[lastOffset + i];
+            }
+            return result;
         }
     }
 
@@ -141,36 +160,31 @@ public class SequenceLastLayer<T> : LayerBase<T>
 
         if (rank == 1)
         {
-            // Already a 1D vector, just pass through
             _lastSequenceLength = 1;
             return input;
         }
-        else if (rank == 2)
+        else if (rank >= 2)
         {
-            // Shape: [seqLen, features] -> [features]
+            // Shape: [seqLen, ...rest] -> [...rest]
             int seqLen = shape[0];
-            int features = shape[1];
             _lastSequenceLength = seqLen;
 
-            // Zero-copy view of the last row
-            int offset = (seqLen - 1) * features;
-            return input.CreateView(offset, [features]);
-        }
-        else if (rank == 3)
-        {
-            // Shape: [seqLen, batch, features] -> [batch, features]
-            int seqLen = shape[0];
-            int batch = shape[1];
-            int features = shape[2];
-            _lastSequenceLength = seqLen;
+            // Output shape is input shape minus the first dimension
+            var outputShape = new int[rank - 1];
+            int sliceSize = 1;
+            for (int d = 1; d < rank; d++)
+            {
+                outputShape[d - 1] = shape[d];
+                sliceSize *= shape[d];
+            }
 
             // Zero-copy view of the last slice
-            int offset = (seqLen - 1) * batch * features;
-            return input.CreateView(offset, [batch, features]);
+            int offset = (seqLen - 1) * sliceSize;
+            return input.CreateView(offset, outputShape);
         }
         else
         {
-            throw new ArgumentException($"SequenceLastLayer expects 1D, 2D, or 3D input, got {rank}D.");
+            throw new ArgumentException($"SequenceLastLayer expects at least 1D input, got {rank}D.");
         }
     }
 

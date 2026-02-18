@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
+using System.Reflection;
 using System.Threading;
 using AiDotNet.LinearAlgebra;
 
@@ -58,6 +60,13 @@ namespace AiDotNet.DistributedTraining;
 /// - Environment-based rendezvous (AIDOTNET_MASTER_ADDR, AIDOTNET_MASTER_PORT)
 /// - Support for arbitrary world sizes and fault-tolerant connection establishment
 ///
+/// **Environment Variables:**
+/// - AIDOTNET_GLOO_TRANSPORT: Transport to use ("tcp" or "ib"/"infiniband"). Default: "tcp".
+/// - AIDOTNET_GLOO_IB_DEVICE: InfiniBand device name (only when transport is "ib").
+/// - AIDOTNET_GLOO_STORE_PATH: Filesystem path for Gloo rendezvous/store coordination.
+/// - AIDOTNET_MASTER_ADDR: IP address of rank 0 for TCP rendezvous.
+/// - AIDOTNET_MASTER_PORT: Base port number for TCP connections (each rank uses port + rank).
+///
 /// **Recommendation:** Use TCP mode for most scenarios. Add GlooSharp only if you need
 /// specialized hardware support (InfiniBand) or have specific Gloo optimizations.
 /// </para>
@@ -68,9 +77,28 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
     private readonly int _rank;
     private readonly int _worldSize;
     private bool _useNativeTCP;
+    private bool _useNativeGloo;
     private Dictionary<int, TcpClient>? _tcpConnections;
     private TcpListener? _tcpListener;
     private readonly object _connectionLock = new object();
+
+    // Native Gloo objects (loaded via reflection from GlooSharp package)
+    private IDisposable? _nativeGlooContext;
+    private Type? _glooCollectivesType;
+    private Type? _glooTransportType;
+    private MethodInfo? _glooAllReduceDouble;
+    private MethodInfo? _glooBroadcastDouble;
+    private MethodInfo? _glooAllGatherDouble;
+    private MethodInfo? _glooBarrier;
+    private MethodInfo? _glooReduceScatterDouble;
+    private IReadOnlyDictionary<ReductionOperation, object>? _glooReduceOpCache;
+
+    // Strongly-typed delegates for hot-path collective operations (avoids MethodInfo.Invoke overhead)
+    private Action<object, double[], object>? _allReduceDelegate;
+    private Action<object, double[], int>? _broadcastDelegate;
+    private Func<object, double[], double[]?>? _allGatherDelegate;
+    private Action<object>? _barrierDelegate;
+    private Func<object, double[], object, double[]?>? _reduceScatterDelegate;
 
     /// <summary>
     /// Creates a new Gloo communication backend using production-ready TCP implementation.
@@ -103,16 +131,280 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
         if (_worldSize == 1)
         {
             _useNativeTCP = false;
+            _useNativeGloo = false;
             Console.WriteLine("GlooCommunicationBackend: Single-process mode (worldSize=1).");
             return;
         }
 
-        // Multi-process mode: Use production-ready TCP implementation
-        // Note: Native Gloo library support planned for future release (see GitHub issue #461)
-        // GlooSharp package does not currently exist on NuGet.org
+        // Try to detect GlooSharp native package
+        if (TryInitializeNativeGloo())
+        {
+            _useNativeGloo = true;
+            // Also initialize TCP for point-to-point Send/Receive (Gloo only handles collectives)
+            _useNativeTCP = true;
+            try
+            {
+                InitializeTCPConnections();
+                Console.WriteLine($"GlooCommunicationBackend: Using native Gloo via GlooSharp for collectives, TCP for point-to-point ({_worldSize} processes).");
+                return;
+            }
+            catch (SocketException)
+            {
+                // Clean up ALL resources on failure: native Gloo context + TCP connections
+                CleanupOnInitFailure();
+                throw;
+            }
+            catch (InvalidOperationException)
+            {
+                // Clean up ALL resources on failure: native Gloo context + TCP connections
+                CleanupOnInitFailure();
+                throw;
+            }
+        }
+
+        // Fall back to production-ready TCP implementation
+        _useNativeGloo = false;
         _useNativeTCP = true;
         Console.WriteLine($"GlooCommunicationBackend: Using production-ready TCP implementation for {_worldSize} processes.");
         InitializeTCPConnections();
+    }
+
+    /// <summary>
+    /// Attempts to detect and initialize the GlooSharp native package via reflection.
+    /// </summary>
+    /// <remarks>
+    /// Uses the same pattern as NCCL/MPI backends: load GlooSharp types via reflection
+    /// so AiDotNet does not have a hard dependency on the GlooSharp NuGet package.
+    /// If GlooSharp is not installed, this method returns false and the backend falls
+    /// back to the built-in TCP implementation.
+    /// </remarks>
+    /// <returns><c>true</c> if GlooSharp was detected and initialized successfully.</returns>
+    private bool TryInitializeNativeGloo()
+    {
+        // Pre-validate all required types BEFORE creating any IDisposable objects
+        var glooContextType = Type.GetType("GlooSharp.GlooContext, GlooSharp");
+        if (glooContextType is null)
+        {
+            return false;
+        }
+
+        _glooCollectivesType = Type.GetType("GlooSharp.GlooCollectives, GlooSharp");
+        _glooTransportType = Type.GetType("GlooSharp.GlooTransport, GlooSharp");
+        if (_glooCollectivesType is null || _glooTransportType is null)
+        {
+            return false;
+        }
+
+        var glooReduceOpType = Type.GetType("GlooSharp.GlooReduceOp, GlooSharp");
+        if (glooReduceOpType is null)
+        {
+            Console.WriteLine("GlooSharp detection failed: GlooReduceOp type not found.");
+            return false;
+        }
+
+        // Create GlooContext(rank, worldSize) — this may return an IDisposable
+        var contextInstance = Activator.CreateInstance(glooContextType, _rank, _worldSize);
+        if (contextInstance is null)
+        {
+            Console.WriteLine("GlooSharp detection failed: Activator.CreateInstance returned null for GlooContext.");
+            return false;
+        }
+
+        // Safe cast to IDisposable — if GlooContext doesn't implement IDisposable,
+        // fall back gracefully instead of throwing InvalidCastException.
+        if (contextInstance is not IDisposable context)
+        {
+            Console.WriteLine("GlooSharp detection failed: GlooContext does not implement IDisposable. Incompatible GlooSharp version.");
+            return false;
+        }
+
+        // From here on, 'context' is IDisposable and MUST be disposed on all error paths
+        return TryConfigureNativeGloo(context, glooContextType, glooReduceOpType);
+    }
+
+    /// <summary>
+    /// Configures native Gloo transport, caches method handles, and transfers ownership of context on success.
+    /// Disposes context on any failure path.
+    /// </summary>
+    private bool TryConfigureNativeGloo(IDisposable context, Type glooContextType, Type glooReduceOpType)
+    {
+        try
+        {
+            // Set up transport based on environment variable
+            string transportEnv = Environment.GetEnvironmentVariable("AIDOTNET_GLOO_TRANSPORT") ?? "tcp";
+            string? storePath = Environment.GetEnvironmentVariable("AIDOTNET_GLOO_STORE_PATH");
+
+            if (string.Equals(transportEnv, "ib", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(transportEnv, "infiniband", StringComparison.OrdinalIgnoreCase))
+            {
+                string ibDevice = Environment.GetEnvironmentVariable("AIDOTNET_GLOO_IB_DEVICE") ?? "";
+                var createIB = _glooTransportType?.GetMethod("CreateInfiniBand",
+                    new[] { glooContextType, typeof(string), typeof(string) });
+                if (createIB is null)
+                {
+                    Console.WriteLine("GlooSharp detection failed: CreateInfiniBand method not found.");
+                    return false;
+                }
+                createIB.Invoke(null, new object?[] { context, ibDevice, storePath });
+                Console.WriteLine($"GlooCommunicationBackend: InfiniBand transport initialized (device={ibDevice}).");
+            }
+            else
+            {
+                string hostname = Environment.GetEnvironmentVariable("AIDOTNET_MASTER_ADDR") ?? "localhost";
+                string portStr = Environment.GetEnvironmentVariable("AIDOTNET_MASTER_PORT") ?? "29500";
+                int port = int.TryParse(portStr, out int p) ? p : 29500;
+
+                var createTCP = _glooTransportType?.GetMethod("CreateTCP",
+                    new[] { glooContextType, typeof(string), typeof(int), typeof(string) });
+                if (createTCP is null)
+                {
+                    Console.WriteLine("GlooSharp detection failed: CreateTCP method not found.");
+                    return false;
+                }
+                createTCP.Invoke(null, new object?[] { context, hostname, port, storePath });
+            }
+
+            // Cache reflection MethodInfo for collective operations (double[] overloads)
+            _glooAllReduceDouble = _glooCollectivesType?.GetMethod("AllReduce", new[]
+            {
+                glooContextType, typeof(double[]), glooReduceOpType
+            });
+            _glooBroadcastDouble = _glooCollectivesType?.GetMethod("Broadcast", new[]
+            {
+                glooContextType, typeof(double[]), typeof(int)
+            });
+            _glooAllGatherDouble = _glooCollectivesType?.GetMethod("AllGather", new[]
+            {
+                glooContextType, typeof(double[])
+            });
+            _glooBarrier = _glooCollectivesType?.GetMethod("Barrier", new[] { glooContextType });
+            _glooReduceScatterDouble = _glooCollectivesType?.GetMethod("ReduceScatter", new[]
+            {
+                glooContextType, typeof(double[]), glooReduceOpType
+            });
+
+            // Validate all required collective methods were found
+            if (_glooAllReduceDouble is null || _glooBroadcastDouble is null ||
+                _glooAllGatherDouble is null || _glooBarrier is null ||
+                _glooReduceScatterDouble is null)
+            {
+                Console.WriteLine("GlooSharp detected but required collective methods not found. Falling back to TCP.");
+                return false;
+            }
+
+            // Cache GlooReduceOp enum values to avoid per-call reflection
+            _glooReduceOpCache = CreateGlooReduceOpMap(glooReduceOpType);
+
+            // Create strongly-typed delegates from MethodInfo to avoid Invoke overhead on hot path
+            _allReduceDelegate = (ctx, data, op) =>
+                _glooAllReduceDouble.Invoke(null, new[] { ctx, data, op });
+            _broadcastDelegate = (ctx, data, root) =>
+                _glooBroadcastDouble.Invoke(null, new object[] { ctx, data, root });
+            _allGatherDelegate = (ctx, data) =>
+                _glooAllGatherDouble.Invoke(null, new[] { ctx, data }) as double[];
+            _barrierDelegate = (ctx) =>
+                _glooBarrier.Invoke(null, new[] { ctx });
+            _reduceScatterDelegate = (ctx, data, op) =>
+                _glooReduceScatterDouble.Invoke(null, new[] { ctx, data, op }) as double[];
+
+            // Success — transfer ownership to the field (do NOT dispose)
+            _nativeGlooContext = context;
+            return true;
+        }
+        catch (TargetInvocationException ex)
+        {
+            Console.WriteLine($"GlooSharp detection failed (invocation error): {ex.InnerException?.Message ?? ex.Message}");
+            return false;
+        }
+        catch (TypeLoadException ex)
+        {
+            Console.WriteLine($"GlooSharp detection failed (type load error): {ex.Message}");
+            return false;
+        }
+        catch (InvalidOperationException ex)
+        {
+            Console.WriteLine($"GlooSharp detection failed: {ex.Message}");
+            return false;
+        }
+        catch (MissingMethodException ex)
+        {
+            Console.WriteLine($"GlooSharp detection failed (API signature mismatch): {ex.Message}");
+            return false;
+        }
+        catch (MemberAccessException ex)
+        {
+            Console.WriteLine($"GlooSharp detection failed (access error): {ex.Message}");
+            return false;
+        }
+        catch (ArgumentException ex)
+        {
+            Console.WriteLine($"GlooSharp detection failed (enum mismatch): {ex.Message}");
+            return false;
+        }
+        catch (SocketException ex)
+        {
+            Console.WriteLine($"GlooSharp detection failed (transport error): {ex.Message}");
+            return false;
+        }
+        catch (TimeoutException ex)
+        {
+            Console.WriteLine($"GlooSharp detection failed (transport timeout): {ex.Message}");
+            return false;
+        }
+        catch (IOException ex)
+        {
+            Console.WriteLine($"GlooSharp detection failed (transport I/O error): {ex.Message}");
+            return false;
+        }
+        catch (NotSupportedException ex)
+        {
+            Console.WriteLine($"GlooSharp detection failed (not supported): {ex.Message}");
+            return false;
+        }
+        finally
+        {
+            // If we didn't transfer ownership (i.e., _nativeGlooContext was not set), dispose
+            if (_nativeGlooContext != context)
+            {
+                context.Dispose();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Creates a cached mapping from <see cref="ReductionOperation"/> to GlooSharp GlooReduceOp enum values.
+    /// </summary>
+    private static IReadOnlyDictionary<ReductionOperation, object> CreateGlooReduceOpMap(Type glooReduceOpType)
+    {
+        // Note: Average is NOT mapped here because the call sites already handle Average
+        // by mapping it to Sum and dividing by worldSize after the collective operation.
+        return new Dictionary<ReductionOperation, object>
+        {
+            { ReductionOperation.Sum, Enum.Parse(glooReduceOpType, "Sum", ignoreCase: true) },
+            { ReductionOperation.Product, Enum.Parse(glooReduceOpType, "Product", ignoreCase: true) },
+            { ReductionOperation.Min, Enum.Parse(glooReduceOpType, "Min", ignoreCase: true) },
+            { ReductionOperation.Max, Enum.Parse(glooReduceOpType, "Max", ignoreCase: true) },
+        };
+    }
+
+    /// <summary>
+    /// Maps an AiDotNet <see cref="ReductionOperation"/> to the cached GlooSharp GlooReduceOp enum value.
+    /// Uses the pre-computed cache populated during <see cref="TryInitializeNativeGloo"/> to avoid
+    /// per-call reflection overhead on the hot path.
+    /// </summary>
+    private object MapToGlooReduceOp(ReductionOperation operation)
+    {
+        if (_glooReduceOpCache == null)
+        {
+            throw new InvalidOperationException("Gloo reduce op cache not initialized. Ensure TryInitializeNativeGloo() succeeded.");
+        }
+
+        if (!_glooReduceOpCache.TryGetValue(operation, out var glooValue))
+        {
+            throw new ArgumentException($"Unsupported reduction operation: {operation}");
+        }
+
+        return glooValue;
     }
 
     /// <summary>
@@ -165,6 +457,42 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
         }
 
         Console.WriteLine($"Rank {_rank}: All TCP connections established ({_tcpConnections?.Count ?? 0} peers)");
+    }
+
+    /// <summary>
+    /// Cleans up all resources (native Gloo context + TCP connections) on initialization failure.
+    /// Prevents resource leaks when InitializeTCPConnections() throws after partial setup.
+    /// </summary>
+    private void CleanupOnInitFailure()
+    {
+        _useNativeGloo = false;
+        _useNativeTCP = false;
+
+        _nativeGlooContext?.Dispose();
+        _nativeGlooContext = null;
+
+        if (_tcpConnections is not null)
+        {
+            foreach (var connection in _tcpConnections.Values)
+            {
+                try { connection.Close(); }
+                catch (ObjectDisposedException ex)
+                {
+                    Debug.WriteLine($"TCP connection already disposed during cleanup: {ex.Message}");
+                }
+            }
+            _tcpConnections.Clear();
+        }
+
+        if (_tcpListener is not null)
+        {
+            try { _tcpListener.Stop(); }
+            catch (ObjectDisposedException ex)
+            {
+                Debug.WriteLine($"TCP listener already disposed during cleanup: {ex.Message}");
+            }
+            _tcpListener = null;
+        }
     }
 
     /// <summary>
@@ -280,6 +608,25 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
     /// <inheritdoc/>
     protected override void OnShutdown()
     {
+        // Dispose native Gloo context if active
+        if (_useNativeGloo && _nativeGlooContext != null)
+        {
+            try
+            {
+                _nativeGlooContext.Dispose();
+            }
+            catch (ObjectDisposedException)
+            {
+                // Already disposed, safe to ignore
+            }
+            catch (InvalidOperationException ex)
+            {
+                Console.WriteLine($"Warning: Error disposing native Gloo context: {ex.Message}");
+            }
+            _nativeGlooContext = null;
+            _useNativeGloo = false;
+        }
+
         if (_useNativeTCP && _tcpConnections != null)
         {
             lock (_connectionLock)
@@ -290,7 +637,11 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
                     {
                         connection.Close();
                     }
-                    catch (Exception ex)
+                    catch (ObjectDisposedException)
+                    {
+                        // Already disposed, safe to ignore
+                    }
+                    catch (IOException ex)
                     {
                         Console.WriteLine($"Warning: Error closing TCP connection: {ex.Message}");
                     }
@@ -304,9 +655,13 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
                 {
                     _tcpListener.Stop();
                 }
-                catch (Exception ex)
+                catch (SocketException ex)
                 {
                     Console.WriteLine($"Warning: Error stopping TCP listener: {ex.Message}");
+                }
+                catch (ObjectDisposedException)
+                {
+                    // Already disposed, safe to ignore
                 }
                 _tcpListener = null;
             }
@@ -321,6 +676,16 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
         if (_worldSize == 1)
         {
             // Single-process: barrier is a no-op
+            return;
+        }
+
+        if (_useNativeGloo)
+        {
+            if (_barrierDelegate == null || _nativeGlooContext == null)
+            {
+                throw new InvalidOperationException("Native Gloo Barrier method is not available.");
+            }
+            _barrierDelegate(_nativeGlooContext);
             return;
         }
 
@@ -364,6 +729,12 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
             return;
         }
 
+        if (_useNativeGloo)
+        {
+            PerformNativeGlooAllReduce(data, operation);
+            return;
+        }
+
         if (!_useNativeTCP)
         {
             throw new InvalidOperationException("AllReduce requires TCP mode to be initialized");
@@ -381,6 +752,11 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
         if (_worldSize == 1)
         {
             return sendData.Clone();
+        }
+
+        if (_useNativeGloo)
+        {
+            return PerformNativeGlooAllGather(sendData);
         }
 
         if (!_useNativeTCP)
@@ -401,6 +777,11 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
         if (_worldSize == 1)
         {
             return data.Clone();
+        }
+
+        if (_useNativeGloo)
+        {
+            return PerformNativeGlooBroadcast(data, root);
         }
 
         if (!_useNativeTCP)
@@ -425,6 +806,48 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
                 return sendData.Clone();
             }
             return new Vector<T>(Array.Empty<T>());
+        }
+
+        if (_useNativeGloo)
+        {
+            // Gloo has no native Scatter — implement via Broadcast + local extraction
+            // (same pattern as NCCLCommunicationBackend.Scatter)
+            int totalLength;
+            if (Rank == root)
+            {
+                ValidateData(sendData, nameof(sendData));
+                if (sendData.Length % _worldSize != 0)
+                {
+                    throw new ArgumentException(
+                        $"Data length {sendData.Length} must be divisible by world size {_worldSize}.");
+                }
+                totalLength = sendData.Length;
+            }
+            else
+            {
+                totalLength = 0;
+            }
+
+            // 1) Broadcast total length so non-root ranks can allocate a correctly sized buffer
+            var lengthVector = PerformNativeGlooBroadcast(
+                new Vector<T>(new[] { NumOps.FromDouble(totalLength) }),
+                root);
+            totalLength = (int)NumOps.ToDouble(lengthVector[0]);
+
+            if (totalLength % _worldSize != 0)
+            {
+                throw new ArgumentException(
+                    $"Data length {totalLength} must be divisible by world size {_worldSize}.");
+            }
+
+            // 2) Non-root ranks allocate a full-sized buffer; root uses its sendData
+            var fullBuffer = Rank == root ? sendData : new Vector<T>(new T[totalLength]);
+            var broadcasted = PerformNativeGlooBroadcast(fullBuffer, root);
+            int chunkSize = broadcasted.Length / _worldSize;
+            var chunk = new T[chunkSize];
+            var broadcastedArray = broadcasted.ToArray();
+            Array.Copy(broadcastedArray, _rank * chunkSize, chunk, 0, chunkSize);
+            return new Vector<T>(chunk);
         }
 
         if (!_useNativeTCP)
@@ -452,6 +875,11 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
             return data.Clone();
         }
 
+        if (_useNativeGloo)
+        {
+            return PerformNativeGlooReduceScatter(data, operation);
+        }
+
         if (!_useNativeTCP)
         {
             throw new InvalidOperationException("ReduceScatter requires TCP mode to be initialized");
@@ -459,6 +887,137 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
 
         return PerformRingReduceScatter(data, operation);
     }
+
+    #region Native Gloo Collective Implementations
+
+    /// <summary>
+    /// Converts a <see cref="Vector{T}"/> to a <c>double[]</c> for native Gloo calls.
+    /// </summary>
+    private double[] VectorToDoubleArray(Vector<T> vector)
+    {
+        var result = new double[vector.Length];
+        for (int i = 0; i < vector.Length; i++)
+        {
+            result[i] = NumOps.ToDouble(vector[i]);
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Converts a <c>double[]</c> back to a <see cref="Vector{T}"/>.
+    /// </summary>
+    private Vector<T> DoubleArrayToVector(double[] array)
+    {
+        var result = new T[array.Length];
+        for (int i = 0; i < array.Length; i++)
+        {
+            result[i] = NumOps.FromDouble(array[i]);
+        }
+        return new Vector<T>(result);
+    }
+
+    /// <summary>
+    /// Performs AllReduce via native Gloo (GlooSharp).
+    /// </summary>
+    private void PerformNativeGlooAllReduce(Vector<T> data, ReductionOperation operation)
+    {
+        if (_allReduceDelegate == null || _nativeGlooContext == null)
+        {
+            throw new InvalidOperationException("Native Gloo AllReduce method is not available.");
+        }
+
+        var doubleData = VectorToDoubleArray(data);
+        var glooOp = MapToGlooReduceOp(operation == ReductionOperation.Average ? ReductionOperation.Sum : operation);
+        _allReduceDelegate(_nativeGlooContext, doubleData, glooOp);
+
+        // Write results back to the vector
+        for (int i = 0; i < data.Length; i++)
+        {
+            data[i] = NumOps.FromDouble(doubleData[i]);
+        }
+
+        // Apply averaging using NumOps (consistent with TCP ring-allreduce path)
+        if (operation == ReductionOperation.Average)
+        {
+            T divisor = NumOps.FromDouble(_worldSize);
+            for (int i = 0; i < data.Length; i++)
+            {
+                data[i] = NumOps.Divide(data[i], divisor);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Performs Broadcast via native Gloo (GlooSharp).
+    /// </summary>
+    private Vector<T> PerformNativeGlooBroadcast(Vector<T> data, int root)
+    {
+        if (_broadcastDelegate == null || _nativeGlooContext == null)
+        {
+            throw new InvalidOperationException("Native Gloo Broadcast method is not available.");
+        }
+
+        var doubleData = VectorToDoubleArray(data);
+        _broadcastDelegate(_nativeGlooContext, doubleData, root);
+        return DoubleArrayToVector(doubleData);
+    }
+
+    /// <summary>
+    /// Performs AllGather via native Gloo (GlooSharp).
+    /// </summary>
+    private Vector<T> PerformNativeGlooAllGather(Vector<T> sendData)
+    {
+        if (_allGatherDelegate == null || _nativeGlooContext == null)
+        {
+            throw new InvalidOperationException("Native Gloo AllGather method is not available.");
+        }
+
+        var doubleData = VectorToDoubleArray(sendData);
+        var gathered = _allGatherDelegate(_nativeGlooContext, doubleData);
+        if (gathered is not null)
+        {
+            return DoubleArrayToVector(gathered);
+        }
+        throw new InvalidOperationException("Native Gloo AllGather invocation did not return a double[] result.");
+    }
+
+    /// <summary>
+    /// Performs ReduceScatter via native Gloo (GlooSharp).
+    /// </summary>
+    private Vector<T> PerformNativeGlooReduceScatter(Vector<T> data, ReductionOperation operation)
+    {
+        if (_reduceScatterDelegate == null || _nativeGlooContext == null)
+        {
+            throw new InvalidOperationException("Native Gloo ReduceScatter method is not available.");
+        }
+
+        var doubleData = VectorToDoubleArray(data);
+        var glooOp = MapToGlooReduceOp(operation == ReductionOperation.Average ? ReductionOperation.Sum : operation);
+        var scattered = _reduceScatterDelegate(_nativeGlooContext, doubleData, glooOp);
+
+        if (scattered is null)
+        {
+            throw new InvalidOperationException("Native Gloo ReduceScatter invocation did not return a double[] result.");
+        }
+
+        var result = DoubleArrayToVector(scattered);
+
+        // Apply averaging using NumOps (consistent with TCP ring-reduce-scatter path)
+        if (operation == ReductionOperation.Average)
+        {
+            T divisor = NumOps.FromDouble(_worldSize);
+            var resultArray = result.ToArray();
+            for (int i = 0; i < resultArray.Length; i++)
+            {
+                resultArray[i] = NumOps.Divide(resultArray[i], divisor);
+            }
+            result = new Vector<T>(resultArray);
+        }
+
+        return result;
+    }
+
+    #endregion
 
     /// <summary>
     /// Performs ring-based AllReduce operation.
@@ -706,7 +1265,7 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
             // Receive chunk count first, then data
             // IMPORTANT: Read chunk size ONCE and store it - don't call ReceiveData twice!
             var chunkSizeData = ReceiveData(parentAbsolute, 1);
-            chunkSize = chunkSizeData[0] != null ? Convert.ToInt32(chunkSizeData[0]) : 0;
+            chunkSize = chunkSizeData[0] != null ? (int)NumOps.ToDouble(chunkSizeData[0]) : 0;
             myChunk = ReceiveData(parentAbsolute, chunkSize);
         }
 
@@ -889,7 +1448,7 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
             // Send data elements
             for (int i = 0; i < data.Length; i++)
             {
-                double value = Convert.ToDouble(data[i]);
+                double value = NumOps.ToDouble(data[i]);
                 writer.Write(value);
             }
             writer.Flush();
@@ -965,7 +1524,7 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
             // Send data elements
             for (int i = 0; i < data.Length; i++)
             {
-                double value = Convert.ToDouble(data[i]);
+                double value = NumOps.ToDouble(data[i]);
                 writer.Write(value);
             }
             writer.Flush();

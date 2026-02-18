@@ -130,43 +130,52 @@ public class GroupNormalizationLayer<T> : LayerBase<T>
     /// </summary>
     private bool _addedBatchDimension;
 
+    /// <summary>
+    /// Original input shape for restoring higher-rank tensors after processing.
+    /// </summary>
+    private int[]? _originalInputShape;
+
     public override Tensor<T> Forward(Tensor<T> input)
     {
         _lastInput = input;
+        _originalInputShape = input.Shape;
 
         var shape = input.Shape;
 
-        // Determine channel count based on input rank:
-        // 4D [N, C, H, W]: channels = shape[1]
-        // 3D [C, H, W]: channels = shape[0]
-        // 2D [N, C]: channels = shape[1]
+        // Support any rank >= 2. Last 3 dims are [C, H, W] for 3D+, or [N, C] for 2D.
+        if (shape.Length < 2)
+            throw new ArgumentException($"GroupNormalization requires at least 2D input. Got rank {shape.Length}.");
+
         int channels;
         Tensor<T> input4D;
 
         if (shape.Length == 4)
         {
-            // Standard NCHW format
             channels = shape[1];
             input4D = input;
             _addedBatchDimension = false;
         }
         else if (shape.Length == 3)
         {
-            // CHW format without batch - add batch dimension
             channels = shape[0];
             input4D = input.Reshape(1, shape[0], shape[1], shape[2]);
             _addedBatchDimension = true;
         }
         else if (shape.Length == 2)
         {
-            // [N, C] format
             channels = shape[1];
             input4D = input;
             _addedBatchDimension = false;
         }
         else
         {
-            throw new ArgumentException($"GroupNormalization expects 2D, 3D, or 4D input, got {shape.Length}D.");
+            // Higher rank (>= 5): flatten leading dimensions into batch, keep last 3 as [C, H, W]
+            _addedBatchDimension = false;
+            int flatBatch = 1;
+            for (int d = 0; d < shape.Length - 3; d++)
+                flatBatch *= shape[d];
+            channels = shape[shape.Length - 3];
+            input4D = input.Reshape(flatBatch, shape[shape.Length - 3], shape[shape.Length - 2], shape[shape.Length - 1]);
         }
 
         if (channels != _numChannels)
@@ -185,7 +194,17 @@ public class GroupNormalizationLayer<T> : LayerBase<T>
         _lastMean = mean;
         _lastVariance = variance;
 
-        // Remove batch dimension if we added it
+        // Restore original tensor rank
+        if (_originalInputShape.Length > 4)
+        {
+            var outputShape = new int[_originalInputShape.Length];
+            for (int d = 0; d < _originalInputShape.Length - 3; d++)
+                outputShape[d] = _originalInputShape[d];
+            outputShape[_originalInputShape.Length - 3] = output.Shape[1];
+            outputShape[_originalInputShape.Length - 2] = output.Shape[2];
+            outputShape[_originalInputShape.Length - 1] = output.Shape[3];
+            return output.Reshape(outputShape);
+        }
         return _addedBatchDimension
             ? output.Reshape(output.Shape[1], output.Shape[2], output.Shape[3])
             : output;
@@ -217,14 +236,17 @@ public class GroupNormalizationLayer<T> : LayerBase<T>
         var input = inputs[0];
         var shape = input.Shape;
 
-        // Determine dimensions based on input rank
+        // Support any rank >= 2
+        if (shape.Length < 2)
+            throw new ArgumentException($"GroupNormalization requires at least 2D input. Got rank {shape.Length}.");
+
         int batch, channels, spatialSize;
         int[] outputShape;
         bool addedBatch = false;
+        _originalInputShape = shape;
 
         if (shape.Length == 4)
         {
-            // Standard NCHW format
             batch = shape[0];
             channels = shape[1];
             spatialSize = shape[2] * shape[3];
@@ -232,7 +254,6 @@ public class GroupNormalizationLayer<T> : LayerBase<T>
         }
         else if (shape.Length == 3)
         {
-            // CHW format without batch - add batch dimension
             batch = 1;
             channels = shape[0];
             spatialSize = shape[1] * shape[2];
@@ -241,7 +262,6 @@ public class GroupNormalizationLayer<T> : LayerBase<T>
         }
         else if (shape.Length == 2)
         {
-            // [N, C] format - no spatial dimensions
             batch = shape[0];
             channels = shape[1];
             spatialSize = 1;
@@ -249,7 +269,13 @@ public class GroupNormalizationLayer<T> : LayerBase<T>
         }
         else
         {
-            throw new ArgumentException($"GroupNormalization expects 2D, 3D, or 4D input, got {shape.Length}D.");
+            // Higher rank (>= 5): flatten leading dimensions into batch, keep last 3 as [C, H, W]
+            batch = 1;
+            for (int d = 0; d < shape.Length - 3; d++)
+                batch *= shape[d];
+            channels = shape[shape.Length - 3];
+            spatialSize = shape[shape.Length - 2] * shape[shape.Length - 1];
+            outputShape = new[] { batch, channels, shape[shape.Length - 2], shape[shape.Length - 1] };
         }
 
         if (channels != _numChannels)
@@ -306,7 +332,11 @@ public class GroupNormalizationLayer<T> : LayerBase<T>
         // Create output tensor with correct shape
         var result = new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
 
-        // Remove batch dimension if we added it
+        // Restore original tensor rank
+        if (_originalInputShape != null && _originalInputShape.Length > 4)
+        {
+            return gpuEngine.ReshapeGpu(result, _originalInputShape);
+        }
         if (addedBatch)
         {
             return gpuEngine.ReshapeGpu(result, new[] { shape[0], shape[1], shape[2] });
@@ -320,15 +350,43 @@ public class GroupNormalizationLayer<T> : LayerBase<T>
         if (_lastInput == null || _lastMean == null || _lastVariance == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        // Handle 3D gradients by adding batch dimension if needed
-        Tensor<T> grad4D = (_addedBatchDimension && outputGradient.Shape.Length == 3)
-            ? outputGradient.Reshape(1, outputGradient.Shape[0], outputGradient.Shape[1], outputGradient.Shape[2])
-            : outputGradient;
+        // Flatten gradient to 4D the same way forward flattened input
+        int rank = outputGradient.Shape.Length;
+        Tensor<T> grad4D;
+
+        if (rank == 3)
+        {
+            grad4D = outputGradient.Reshape(1, outputGradient.Shape[0], outputGradient.Shape[1], outputGradient.Shape[2]);
+        }
+        else if (rank <= 4)
+        {
+            grad4D = outputGradient;
+        }
+        else
+        {
+            int flatBatch = 1;
+            for (int d = 0; d < rank - 3; d++)
+                flatBatch *= outputGradient.Shape[d];
+            grad4D = outputGradient.Reshape(flatBatch, outputGradient.Shape[rank - 3], outputGradient.Shape[rank - 2], outputGradient.Shape[rank - 1]);
+        }
 
         // Get input with batch dimension for backward pass
-        Tensor<T> input4D = (_addedBatchDimension && _lastInput.Shape.Length == 3)
-            ? _lastInput.Reshape(1, _lastInput.Shape[0], _lastInput.Shape[1], _lastInput.Shape[2])
-            : _lastInput;
+        Tensor<T> input4D;
+        if (_lastInput.Shape.Length == 3)
+        {
+            input4D = _lastInput.Reshape(1, _lastInput.Shape[0], _lastInput.Shape[1], _lastInput.Shape[2]);
+        }
+        else if (_lastInput.Shape.Length <= 4)
+        {
+            input4D = _lastInput;
+        }
+        else
+        {
+            int flatBatch = 1;
+            for (int d = 0; d < _lastInput.Shape.Length - 3; d++)
+                flatBatch *= _lastInput.Shape[d];
+            input4D = _lastInput.Reshape(flatBatch, _lastInput.Shape[_lastInput.Shape.Length - 3], _lastInput.Shape[_lastInput.Shape.Length - 2], _lastInput.Shape[_lastInput.Shape.Length - 1]);
+        }
 
         // Use Engine for GPU/CPU accelerated backward pass
         var inputGradient = Engine.GroupNormBackward(
@@ -345,7 +403,11 @@ public class GroupNormalizationLayer<T> : LayerBase<T>
         _gammaGradient = gradGamma;
         _betaGradient = gradBeta;
 
-        // Remove batch dimension if we added it
+        // Restore to original input shape
+        if (_originalInputShape != null && _originalInputShape.Length != inputGradient.Shape.Length)
+        {
+            return inputGradient.Reshape(_originalInputShape);
+        }
         return _addedBatchDimension
             ? inputGradient.Reshape(inputGradient.Shape[1], inputGradient.Shape[2], inputGradient.Shape[3])
             : inputGradient;

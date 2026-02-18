@@ -68,8 +68,8 @@ public class AudioLDMModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
     public override ModelOptions GetOptions() => _options;
 
     private readonly ITokenizer _tokenizer;
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
-    private readonly ILossFunction<T> _lossFunction;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    private ILossFunction<T> _lossFunction;
     private readonly Random _random;
 
     // Model dimensions based on size
@@ -216,7 +216,7 @@ public class AudioLDMModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
             throw;
         }
 
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer;
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         _random = _options.Seed.HasValue
             ? RandomHelper.CreateSeededRandom(_options.Seed.Value)
@@ -1329,7 +1329,7 @@ public class AudioLDMModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
 
         Backpropagate(Tensor<T>.FromVector(lossGradient));
 
-        _optimizer.UpdateParameters(Layers);
+        _optimizer?.UpdateParameters(Layers);
 
         SetTrainingMode(false);
     }

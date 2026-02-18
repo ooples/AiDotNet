@@ -49,5 +49,17 @@ public class FederatedCompressionOptions : ModelOptions
     /// adds it into the next update, which often improves convergence.
     /// </remarks>
     public bool UseErrorFeedback { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets advanced compression options (PowerSGD, sketching, adaptive, 1-bit SGD).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> When set, these advanced methods provide 100-1000x compression
+    /// beyond what basic TopK/Quantization can achieve. Set <see cref="Strategy"/> to "Advanced"
+    /// and configure this property for fine-grained control.</para>
+    ///
+    /// <para>Set to null (default) to use only the basic compression strategies.</para>
+    /// </remarks>
+    public AdvancedCompressionOptions? Advanced { get; set; } = null;
 }
 

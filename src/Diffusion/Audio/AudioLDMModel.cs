@@ -1,4 +1,3 @@
-using System.Diagnostics.CodeAnalysis;
 using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Diffusion.VAE;
 using AiDotNet.Enums;
@@ -112,12 +111,12 @@ public class AudioLDMModel<T> : AudioDiffusionModelBase<T>
     /// <summary>
     /// The U-Net noise predictor.
     /// </summary>
-    private UNetNoisePredictor<T> _unet;
+    private readonly UNetNoisePredictor<T> _unet;
 
     /// <summary>
     /// The AudioVAE for mel spectrogram encoding/decoding.
     /// </summary>
-    private AudioVAE<T> _audioVAE;
+    private readonly AudioVAE<T> _audioVAE;
 
     /// <summary>
     /// The conditioning module (CLAP encoder).
@@ -213,24 +212,6 @@ public class AudioLDMModel<T> : AudioDiffusionModelBase<T>
         _isVersion2 = isVersion2;
         _conditioner = conditioner;
 
-        InitializeLayers(unet, audioVAE, melChannels, isVersion2, seed);
-    }
-
-    #endregion
-
-    #region Layer Initialization
-
-    /// <summary>
-    /// Initializes the U-Net noise predictor and AudioVAE layers.
-    /// </summary>
-    [MemberNotNull(nameof(_unet), nameof(_audioVAE))]
-    private void InitializeLayers(
-        UNetNoisePredictor<T>? unet,
-        AudioVAE<T>? audioVAE,
-        int melChannels,
-        bool isVersion2,
-        int? seed)
-    {
         _audioVAE = audioVAE ?? new AudioVAE<T>(
             melChannels: melChannels,
             latentChannels: AUDIOLDM_LATENT_CHANNELS,
@@ -239,13 +220,13 @@ public class AudioLDMModel<T> : AudioDiffusionModelBase<T>
             numResBlocks: 2,
             seed: seed);
 
-        var baseChannels = isVersion2 ? 384 : 256;
+        var unetBaseChannels = isVersion2 ? 384 : 256;
         var contextDim = isVersion2 ? 1024 : 768;
 
         _unet = unet ?? new UNetNoisePredictor<T>(
             inputChannels: AUDIOLDM_LATENT_CHANNELS,
             outputChannels: AUDIOLDM_LATENT_CHANNELS,
-            baseChannels: baseChannels,
+            baseChannels: unetBaseChannels,
             channelMultipliers: new[] { 1, 2, 4, 4 },
             numResBlocks: 2,
             attentionResolutions: new[] { 4, 2, 1 },

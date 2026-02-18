@@ -91,7 +91,8 @@ public sealed class LCMScheduler<T> : NoiseSchedulerBase<T>
 
         // LCM uses evenly spaced timesteps from the original schedule
         // The spacing is based on the original inference steps, not training timesteps
-        int originalStride = Config.TrainTimesteps / _originalInferenceSteps;
+        // Guard: prevents stride=0 when _originalInferenceSteps > TrainTimesteps
+        int originalStride = Math.Max(1, Config.TrainTimesteps / _originalInferenceSteps);
         int lcmStride = Math.Max(1, _originalInferenceSteps / inferenceSteps);
 
         var timestepList = new List<int>();

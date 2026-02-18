@@ -436,20 +436,40 @@ public class CroppingLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        // Validate input is 4D tensor [batch, height, width, channels] as required for cropping indices
-        if (input.Rank != 4)
+        // Support any rank >= 3: NHWC format where last 3 dims are [H, W, C]
+        if (input.Rank < 3)
         {
             throw new ArgumentException(
-                $"CroppingLayer requires a 4D tensor with format [batch, height, width, channels]. " +
-                $"Got tensor with rank {input.Rank}.",
+                $"CroppingLayer requires at least 3D tensor [H, W, C]. Got rank {input.Rank}.",
                 nameof(input));
         }
 
-        _lastInput = input; // Store for autodiff backward pass
+        _originalInputShape = input.Shape;
+        int rank = input.Rank;
+
+        Tensor<T> input4D;
+        if (rank == 3)
+        {
+            // [H, W, C] -> [1, H, W, C]
+            input4D = input.Reshape(1, input.Shape[0], input.Shape[1], input.Shape[2]);
+        }
+        else if (rank == 4)
+        {
+            input4D = input;
+        }
+        else
+        {
+            // Higher rank: flatten leading dimensions into batch
+            int flatBatch = 1;
+            for (int d = 0; d < rank - 3; d++)
+                flatBatch *= input.Shape[d];
+            input4D = input.Reshape(flatBatch, input.Shape[rank - 3], input.Shape[rank - 2], input.Shape[rank - 1]);
+        }
+
+        _lastInput = input4D;
 
         // Convert from NHWC [batch, height, width, channels] to NCHW [batch, channels, height, width]
-        // Required because Engine.Crop expects NCHW format
-        var inputNCHW = input.Transpose([0, 3, 1, 2]);
+        var inputNCHW = input4D.Transpose([0, 3, 1, 2]);
 
         // Perform crop on NCHW format
         var croppedNCHW = Engine.Crop(inputNCHW, _cropTop[1], _cropLeft[2], GetOutputShape()[1], GetOutputShape()[2]);
@@ -457,7 +477,25 @@ public class CroppingLayer<T> : LayerBase<T>
         // Convert back from NCHW to NHWC [batch, height, width, channels]
         var cropped = croppedNCHW.Transpose([0, 2, 3, 1]);
 
-        return ApplyActivation(cropped);
+        var result = ApplyActivation(cropped);
+
+        // Restore original tensor rank
+        if (_originalInputShape.Length > 4)
+        {
+            var outputShape = new int[_originalInputShape.Length];
+            for (int d = 0; d < _originalInputShape.Length - 3; d++)
+                outputShape[d] = _originalInputShape[d];
+            outputShape[_originalInputShape.Length - 3] = result.Shape[1]; // H
+            outputShape[_originalInputShape.Length - 2] = result.Shape[2]; // W
+            outputShape[_originalInputShape.Length - 1] = result.Shape[3]; // C
+            return result.Reshape(outputShape);
+        }
+        if (_originalInputShape.Length == 3)
+        {
+            return result.Reshape(result.Shape[1], result.Shape[2], result.Shape[3]);
+        }
+
+        return result;
     }
 
     /// <summary>
@@ -501,25 +539,58 @@ public class CroppingLayer<T> : LayerBase<T>
         if (_lastInput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
+        // Flatten gradient to 4D the same way forward flattened input
+        int rank = outputGradient.Shape.Length;
+        Tensor<T> gradient4D;
+
+        if (rank == 3)
+        {
+            gradient4D = outputGradient.Reshape(1, outputGradient.Shape[0], outputGradient.Shape[1], outputGradient.Shape[2]);
+        }
+        else if (rank == 4)
+        {
+            gradient4D = outputGradient;
+        }
+        else
+        {
+            int flatBatch = 1;
+            for (int d = 0; d < rank - 3; d++)
+                flatBatch *= outputGradient.Shape[d];
+            gradient4D = outputGradient.Reshape(flatBatch, outputGradient.Shape[rank - 3], outputGradient.Shape[rank - 2], outputGradient.Shape[rank - 1]);
+        }
+
         // Convert outputGradient from NHWC to NCHW (same as forward pass)
-        var outputGradientNCHW = outputGradient.Transpose([0, 3, 1, 2]);
+        var outputGradientNCHW = gradient4D.Transpose([0, 3, 1, 2]);
 
         // Convert input shape from NHWC to NCHW for CropBackward
-        var inputShapeNHWC = GetInputShape();
-        var inputShapeNCHW = new int[] { inputShapeNHWC[0], inputShapeNHWC[3], inputShapeNHWC[1], inputShapeNHWC[2] };
+        var inputShape4D = _lastInput.Shape;
+        var inputShapeNCHW = new int[] { inputShape4D[0], inputShape4D[3], inputShape4D[1], inputShape4D[2] };
 
         var inputGradientNCHW = Engine.CropBackward(outputGradientNCHW, inputShapeNCHW, _cropTop[1], _cropLeft[2]);
 
         // Convert back from NCHW to NHWC
         var inputGradient = inputGradientNCHW.Transpose([0, 2, 3, 1]);
 
-        return ApplyActivationDerivative(_lastInput, inputGradient);
+        var result = ApplyActivationDerivative(_lastInput, inputGradient);
+
+        // Restore to original input shape
+        if (_originalInputShape != null && _originalInputShape.Length != 4)
+        {
+            return result.Reshape(_originalInputShape);
+        }
+
+        return result;
     }
 
     /// <summary>
     /// Stores the last input for use in autodiff backward pass.
     /// </summary>
     private Tensor<T>? _lastInput;
+
+    /// <summary>
+    /// Original input shape for restoring higher-rank tensors after processing.
+    /// </summary>
+    private int[]? _originalInputShape;
 
     /// <summary>
     /// Cached input shape for GPU backward pass.

@@ -133,12 +133,12 @@ public class VITSModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
     /// <summary>
     /// Optimizer for training.
     /// </summary>
-    private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private IOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
 
     /// <summary>
     /// Loss function for training.
     /// </summary>
-    private readonly ILossFunction<T> _lossFunction;
+    private ILossFunction<T> _lossFunction;
 
     /// <summary>
     /// Whether the model has been disposed.
@@ -344,9 +344,8 @@ public class VITSModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         // Initialize available voices
         AvailableVoices = GetDefaultVoices();
 
-        // Initialize optimizer and loss (not used in ONNX mode)
+        // Default loss function (MSE is standard for TTS mel-spectrogram prediction)
         _lossFunction = new MeanSquaredErrorLoss<T>();
-        _optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         InitializeLayers();
     }

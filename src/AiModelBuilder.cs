@@ -144,6 +144,12 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     private IFitnessCalculator<T, TInput, TOutput>? _fitnessCalculator;
     private IFitDetector<T, TInput, TOutput>? _fitDetector;
     private IFullModel<T, TInput, TOutput>? _model;
+
+    /// <summary>
+    /// Gets the configured model instance for use by domain-specific partial class methods.
+    /// </summary>
+    internal IFullModel<T, TInput, TOutput>? ConfiguredModel => _model;
+
     private IOptimizer<T, TInput, TOutput>? _optimizer;
     private IDataLoader<T>? _dataLoader;
     private DataPreparationPipeline<T>? _dataPreparationPipeline;
@@ -167,6 +173,10 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     private ICommunicationBackend<T>? _distributedBackend;
     private DistributedStrategy _distributedStrategy = DistributedStrategy.DDP;
     private IShardingConfiguration<T>? _distributedConfiguration;
+    private IPipelinePartitionStrategy<T>? _pipelinePartitionStrategy;
+    private IPipelineSchedule<T>? _pipelineSchedule;
+    private ActivationCheckpointConfig? _pipelineCheckpointConfig;
+    private int _pipelineMicroBatchCount = 1;
     private ICrossValidator<T, TInput, TOutput>? _crossValidator;
     private AgentConfiguration<T>? _agentConfig;
     private AgentAssistanceOptions _agentOptions = AgentAssistanceOptions.Default;
@@ -194,6 +204,14 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     private IFederatedServerOptimizer<T>? _federatedServerOptimizer;
     private IFederatedHeterogeneityCorrection<T>? _federatedHeterogeneityCorrection;
     private IHomomorphicEncryptionProvider<T>? _federatedHomomorphicEncryptionProvider;
+    private FederatedLearning.PSI.IPrivateSetIntersection? _federatedPrivateSetIntersection;
+    private FederatedLearning.MPC.ISecureComputationProtocol<T>? _federatedSecureComputationProtocol;
+    private FederatedLearning.TEE.ITeeProvider<T>? _federatedTeeProvider;
+    private FederatedLearning.Verification.IZkProofSystem? _federatedZkProofSystem;
+    private FederatedLearning.Unlearning.IFederatedUnlearner<T>? _federatedUnlearner;
+    private FederatedLearning.DriftDetection.IFederatedDriftDetector<T>? _federatedDriftDetector;
+    private FederatedLearning.Fairness.IClientContributionEvaluator<T>? _federatedContributionEvaluator;
+    private FederatedLearning.Fairness.IFairnessConstraint<T>? _federatedFairnessConstraint;
 
     // Deployment configuration fields
     private QuantizationConfig? _quantizationConfig;
@@ -656,10 +674,29 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// <summary>
     /// Enables federated learning training using the provided options.
     /// </summary>
-    /// <param name="options">Federated learning configuration options.</param>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This is the single entry point for all federated learning configurations.
+    /// Set <see cref="FederatedLearningOptions.Mode"/> to choose horizontal (default) or vertical FL.
+    /// All v2 subsystems (PSI, MPC, TEE, ZK verification, graph FL, unlearning, fairness, advanced
+    /// compression, drift detection) are configured via properties on the options object.</para>
+    ///
+    /// <para>Optional injectable interface parameters allow advanced users to provide custom
+    /// implementations that override the defaults derived from options.</para>
+    /// </remarks>
+    /// <param name="options">Federated learning configuration options (horizontal or vertical mode, privacy, compression, etc.).</param>
     /// <param name="aggregationStrategy">Optional aggregation strategy override (null uses defaults based on options).</param>
     /// <param name="clientSelectionStrategy">Optional client selection strategy override (null uses defaults based on options).</param>
     /// <param name="serverOptimizer">Optional server-side optimizer override (null uses defaults based on options).</param>
+    /// <param name="heterogeneityCorrection">Optional heterogeneity correction strategy override.</param>
+    /// <param name="homomorphicEncryptionProvider">Optional homomorphic encryption provider for encrypted aggregation.</param>
+    /// <param name="privateSetIntersection">Optional custom PSI protocol for entity alignment in vertical FL or graph FL.</param>
+    /// <param name="secureComputationProtocol">Optional custom MPC protocol for secure gradient operations.</param>
+    /// <param name="teeProvider">Optional custom TEE provider for hardware-backed secure aggregation.</param>
+    /// <param name="zkProofSystem">Optional custom zero-knowledge proof system for verifiable FL.</param>
+    /// <param name="federatedUnlearner">Optional custom unlearning implementation for GDPR compliance.</param>
+    /// <param name="driftDetector">Optional custom drift detector for concept drift adaptation.</param>
+    /// <param name="contributionEvaluator">Optional custom contribution evaluator for client value assessment.</param>
+    /// <param name="fairnessConstraint">Optional custom fairness constraint for equitable model performance.</param>
     /// <returns>This builder instance for method chaining.</returns>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureFederatedLearning(
         FederatedLearningOptions options,
@@ -667,7 +704,15 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         IClientSelectionStrategy? clientSelectionStrategy = null,
         IFederatedServerOptimizer<T>? serverOptimizer = null,
         IFederatedHeterogeneityCorrection<T>? heterogeneityCorrection = null,
-        IHomomorphicEncryptionProvider<T>? homomorphicEncryptionProvider = null)
+        IHomomorphicEncryptionProvider<T>? homomorphicEncryptionProvider = null,
+        FederatedLearning.PSI.IPrivateSetIntersection? privateSetIntersection = null,
+        FederatedLearning.MPC.ISecureComputationProtocol<T>? secureComputationProtocol = null,
+        FederatedLearning.TEE.ITeeProvider<T>? teeProvider = null,
+        FederatedLearning.Verification.IZkProofSystem? zkProofSystem = null,
+        FederatedLearning.Unlearning.IFederatedUnlearner<T>? federatedUnlearner = null,
+        FederatedLearning.DriftDetection.IFederatedDriftDetector<T>? driftDetector = null,
+        FederatedLearning.Fairness.IClientContributionEvaluator<T>? contributionEvaluator = null,
+        FederatedLearning.Fairness.IFairnessConstraint<T>? fairnessConstraint = null)
     {
         Guard.NotNull(options);
         _federatedLearningOptions = options;
@@ -676,6 +721,14 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         _federatedServerOptimizer = serverOptimizer;
         _federatedHeterogeneityCorrection = heterogeneityCorrection;
         _federatedHomomorphicEncryptionProvider = homomorphicEncryptionProvider;
+        _federatedPrivateSetIntersection = privateSetIntersection;
+        _federatedSecureComputationProtocol = secureComputationProtocol;
+        _federatedTeeProvider = teeProvider;
+        _federatedZkProofSystem = zkProofSystem;
+        _federatedUnlearner = federatedUnlearner;
+        _federatedDriftDetector = driftDetector;
+        _federatedContributionEvaluator = contributionEvaluator;
+        _federatedFairnessConstraint = fairnessConstraint;
         return this;
     }
 
@@ -1920,7 +1973,12 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                         new DistributedTraining.ZeRO3Model<T, TInput, TOutput>(_model, shardingConfig),
                         new DistributedTraining.ZeRO3Optimizer<T, TInput, TOutput>(optimizer, shardingConfig)),
                     DistributedStrategy.PipelineParallel => CreateDistributedPair(
-                        new DistributedTraining.PipelineParallelModel<T, TInput, TOutput>(_model, shardingConfig),
+                        new DistributedTraining.PipelineParallelModel<T, TInput, TOutput>(
+                            _model, shardingConfig,
+                            microBatchCount: _pipelineMicroBatchCount,
+                            partitionStrategy: _pipelinePartitionStrategy,
+                            schedule: _pipelineSchedule,
+                            checkpointConfig: _pipelineCheckpointConfig),
                         new DistributedTraining.PipelineParallelOptimizer<T, TInput, TOutput>(optimizer, shardingConfig)),
                     DistributedStrategy.TensorParallel => CreateDistributedPair(
                         new DistributedTraining.TensorParallelModel<T, TInput, TOutput>(_model, shardingConfig),
@@ -4043,6 +4101,10 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     ///
     /// You just train as normal - the distributed magic happens behind the scenes!
     /// </para>
+    /// <para>
+    /// For pipeline parallelism, call <see cref="ConfigurePipelineParallelism"/> after this method
+    /// to customize scheduling, partitioning, and activation checkpointing.
+    /// </para>
     /// </remarks>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureDistributedTraining(
         ICommunicationBackend<T>? backend = null,
@@ -4052,6 +4114,72 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         _distributedBackend = backend;
         _distributedStrategy = strategy;
         _distributedConfiguration = configuration;
+        return this;
+    }
+
+    /// <summary>
+    /// Configures pipeline-specific options for pipeline parallel training.
+    /// </summary>
+    /// <param name="schedule">
+    /// Pipeline execution schedule. If null, uses GPipeSchedule.
+    /// Use <see cref="DistributedTraining.OneForwardOneBackwardSchedule{T}"/> for reduced pipeline bubble (~12-15% vs ~50%).
+    /// </param>
+    /// <param name="partitionStrategy">
+    /// Strategy for partitioning layers across pipeline stages.
+    /// If null, uses uniform partitioning. Use <see cref="DistributedTraining.LoadBalancedPartitionStrategy{T}"/>
+    /// to balance computational cost across stages.
+    /// </param>
+    /// <param name="checkpointConfig">
+    /// Activation checkpointing configuration.
+    /// If null, checkpointing is disabled. Enable to reduce memory from O(L) to O(sqrt(L)).
+    /// </param>
+    /// <param name="microBatchCount">
+    /// Number of micro-batches to split the full batch into for pipeline execution.
+    /// Higher values reduce pipeline bubble but increase memory. Default: 1.
+    /// </param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// Call this after <see cref="ConfigureDistributedTraining"/> with
+    /// <c>DistributedStrategy.PipelineParallel</c> to customize pipeline scheduling,
+    /// partitioning, activation checkpointing, and micro-batch count.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This method fine-tunes how pipeline parallelism works.
+    /// You only need to call it if you want to change the defaults (GPipe schedule,
+    /// uniform partitioning, no checkpointing, 1 micro-batch).
+    /// </para>
+    /// <para>
+    /// <b>Example:</b>
+    /// <code>
+    /// var result = builder
+    ///     .ConfigureModel(myModel)
+    ///     .ConfigureDistributedTraining(strategy: DistributedStrategy.PipelineParallel)
+    ///     .ConfigurePipelineParallelism(
+    ///         schedule: new OneForwardOneBackwardSchedule(),
+    ///         partitionStrategy: new LoadBalancedPartitionStrategy&lt;double&gt;(estimatedLayerSize: 1024),
+    ///         checkpointConfig: new ActivationCheckpointConfig { Enabled = true },
+    ///         microBatchCount: 8)
+    ///     .Build(xTrain, yTrain);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public IAiModelBuilder<T, TInput, TOutput> ConfigurePipelineParallelism(
+        IPipelineSchedule<T>? schedule = null,
+        IPipelinePartitionStrategy<T>? partitionStrategy = null,
+        ActivationCheckpointConfig? checkpointConfig = null,
+        int microBatchCount = 1)
+    {
+        if (microBatchCount <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(microBatchCount),
+                $"Micro-batch count must be at least 1, but was {microBatchCount}.");
+        }
+
+        _pipelineSchedule = schedule;
+        _pipelinePartitionStrategy = partitionStrategy;
+        _pipelineCheckpointConfig = checkpointConfig;
+        _pipelineMicroBatchCount = microBatchCount;
         return this;
     }
 

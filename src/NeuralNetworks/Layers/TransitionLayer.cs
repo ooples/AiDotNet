@@ -217,7 +217,10 @@ public class TransitionLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         var input = inputs[0];
         var shape = input.Shape;
 
-        // Ensure 4D shape [B, C, H, W]
+        // Support any rank >= 3: last 3 dims are [C, H, W], earlier dims are batch-like
+        if (shape.Length < 3)
+            throw new ArgumentException($"TransitionLayer requires at least 3D tensor [C, H, W]. Got rank {shape.Length}.");
+
         IGpuTensor<T> processInput;
         bool added3DBatch = false;
 
@@ -232,7 +235,11 @@ public class TransitionLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         }
         else
         {
-            throw new ArgumentException($"TransitionLayer requires 3D or 4D input, got {shape.Length}D");
+            // Higher rank: flatten leading dimensions into batch
+            int flatBatch = 1;
+            for (int d = 0; d < shape.Length - 3; d++)
+                flatBatch *= shape[d];
+            processInput = gpuEngine.ReshapeGpu(input, new[] { flatBatch, shape[shape.Length - 3], shape[shape.Length - 2], shape[shape.Length - 1] });
         }
 
         // Cache for backward pass
@@ -259,7 +266,18 @@ public class TransitionLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
             _convOut = convOutput.ToTensor();
         }
 
-        // Remove batch dimension if we added it
+        // Restore original tensor rank
+        if (shape.Length > 4)
+        {
+            var outShape = poolOutput.Shape;
+            var restoreShape = new int[shape.Length];
+            for (int d = 0; d < shape.Length - 3; d++)
+                restoreShape[d] = shape[d];
+            restoreShape[shape.Length - 3] = outShape[1];
+            restoreShape[shape.Length - 2] = outShape[2];
+            restoreShape[shape.Length - 1] = outShape[3];
+            return gpuEngine.ReshapeGpu(poolOutput, restoreShape);
+        }
         if (added3DBatch)
         {
             var outShape = poolOutput.Shape;

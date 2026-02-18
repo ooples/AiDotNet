@@ -2,7 +2,6 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 
-
 namespace AiDotNet.DistributedTraining;
 
 /// <summary>
@@ -10,7 +9,7 @@ namespace AiDotNet.DistributedTraining;
 /// </summary>
 /// <remarks>
 /// <para><b>Strategy Overview:</b>
-/// Pipeline Parallelism (GPipe-style) divides the model vertically into stages, with each process
+/// Pipeline Parallelism divides the model vertically into stages, with each process
 /// owning specific layers. Input mini-batches are divided into micro-batches that flow through
 /// the pipeline stages sequentially. This enables training models too large to fit on a single device
 /// while maintaining good hardware utilization through micro-batch pipelining.
@@ -24,47 +23,32 @@ namespace AiDotNet.DistributedTraining;
 /// flow through the pipeline like cars on an assembly line. While Process 1 is working on micro-batch 1,
 /// Process 0 can start on micro-batch 2.
 /// </para>
-/// <para><b>Use Cases:</b>
-/// - Very deep models that don't fit on a single GPU
-/// - When model depth (layers) >> width (parameters per layer)
-/// - Transformer models with many layers
-/// - Complementary to data parallelism (can combine them)
-/// </para>
-/// <para><b>Trade-offs:</b>
-/// - Memory: Excellent for deep models - each rank stores only its layers
-/// - Communication: Low - only activations passed between adjacent stages
-/// - Complexity: High - requires micro-batching, careful scheduling, pipeline bubble overhead
-/// - Best for: Very deep models, limited per-device memory
-/// - Limitation: Pipeline "bubble" (idle time) reduces efficiency, typically ~12-25% for GPipe
-/// </para>
-/// <para><b>Implementation Note:</b>
-/// This implementation provides GPipe-style pipeline parallelism with gradient-based backward pass.
-/// The forward pass sends activations between adjacent stages, and the backward pass communicates
-/// gradients in the reverse direction. Gradients are accumulated across stages and applied to
-/// parameters after the backward pass completes.
-///
-/// Gradient Approximation: Since IFullModel.Train() combines gradient computation and parameter
-/// updates into a single operation, gradients are approximated as parameter differences
-/// (params_before - params_after). This captures the complete parameter update including learning
-/// rate and optimizer state. For access to raw gradients before optimizer application, extend
-/// this class or use an optimizer that exposes gradients via IGradientBasedOptimizer.
-///
-/// For production use with specific models, consider:
-/// 1. Model-specific layer partitioning strategies (e.g., balance compute load across stages)
-/// 2. Micro-batch scheduling to reduce pipeline bubbles
-/// 3. Activation checkpointing to reduce memory usage
-/// </para>
-/// <para>
-/// Example:
-/// <code>
-/// var model = new DeepNeuralNetwork&lt;double&gt;(...); // 100 layers
-/// var backend = new InMemoryCommunicationBackend&lt;double&gt;(rank: 0, worldSize: 4);
-/// var config = new ShardingConfiguration&lt;double&gt;(backend);
-///
-/// // Rank 0: layers 0-24, Rank 1: layers 25-49, Rank 2: layers 50-74, Rank 3: layers 75-99
-/// var pipelineModel = new PipelineParallelModel&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(
-///     model, config, microBatchSize: 4);
-/// </code>
+/// <para><b>Supported Features (Issue #463):</b>
+/// <list type="number">
+/// <item><description>
+/// <b>7 Pipeline Schedules</b>: GPipe, 1F1B, ZB-H1, ZB-H2, ZB-V, Interleaved 1F1B, Looped BFS.
+/// Zero Bubble schedules decompose backward into BackwardInput + BackwardWeight for optimal throughput.
+/// </description></item>
+/// <item><description>
+/// <b>Virtual Stages</b>: Multi-stage schedules (Interleaved 1F1B, Looped BFS, ZB-V) assign
+/// multiple non-contiguous model chunks per rank, reducing pipeline bubble by factor V.
+/// </description></item>
+/// <item><description>
+/// <b>Micro-Batch Slicing</b>: Input is automatically sliced into micro-batches that flow
+/// through the pipeline independently.
+/// </description></item>
+/// <item><description>
+/// <b>Backward Decomposition</b>: If the wrapped model implements <see cref="IPipelineDecomposableModel{T, TInput, TOutput}"/>,
+/// BackwardInput and BackwardWeight are truly decomposed. Otherwise, a compatible emulation is used.
+/// </description></item>
+/// <item><description>
+/// <b>Activation Checkpointing</b>: Trade compute for memory by recomputing activations from
+/// checkpoints during the backward pass.
+/// </description></item>
+/// <item><description>
+/// <b>Load-Balanced Partitioning</b>: Balance compute across stages via dynamic programming.
+/// </description></item>
+/// </list>
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type</typeparam>
@@ -72,30 +56,130 @@ namespace AiDotNet.DistributedTraining;
 /// <typeparam name="TOutput">The output type for the model</typeparam>
 public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput>
 {
-    private readonly int _microBatchSize;
+    private readonly int _microBatchCount;
+    private readonly IPipelinePartitionStrategy<T>? _partitionStrategy;
+    private readonly IPipelineSchedule<T> _schedule;
+    private readonly ActivationCheckpointConfig _checkpointConfig;
     private int _stageId;
     private int _numStages;
+    private int _virtualStagesPerRank;
+
+    // Total virtual stages across all ranks
+    private int _totalVirtualStages;
+
+    // Parameter ranges for each virtual stage this rank owns.
+    // For single-stage schedules (V=1): one entry mapping to the full shard.
+    // For multi-stage schedules (V>1): V entries for non-contiguous model chunks.
+    // Key = local virtual stage index (0..V-1), Value = (StartIndex, Size) in full param vector.
+    private readonly Dictionary<int, (int StartIndex, int Size)> _virtualStagePartitions = new();
+
+    // Activation storage for checkpointing.
+    // Key format: (microBatchIndex * _virtualStagesPerRank + virtualStageIndex) for uniqueness.
+    private readonly Dictionary<int, Vector<T>> _checkpointedActivations = new();
+
+    // Cached state from BackwardInput for later use by BackwardWeight (Zero Bubble B/W decomposition).
+    // Key format: (microBatchIndex * _virtualStagesPerRank + virtualStageIndex).
+    private readonly Dictionary<int, object?> _cachedBackwardState = new();
+
+    // Cached weight gradients from BackwardInput for fallback accumulation when model
+    // does not support IPipelineDecomposableModel (emulated B/W split).
+    private readonly Dictionary<int, Vector<T>> _cachedWeightGradients = new();
+
+    // Whether the wrapped model supports true B/W decomposition
+    private bool _supportsDecomposedBackward;
+
+    // Communication tag ranges to prevent collisions between forward activations,
+    // backward gradients, and predict-time messages.
+    private const int ActivationTagBase = 0;
+    private const int GradientTagBase = 1_000_000;
+    private const int PredictTagBase = 2_000_000;
+
+    /// <summary>
+    /// Gets the pipeline schedule used by this model.
+    /// </summary>
+    /// <remarks>
+    /// This property is internal. Configure the schedule via <c>AiModelBuilder</c> methods
+    /// (e.g., <c>ConfigurePipelineParallelism</c>) rather than accessing this directly.
+    /// </remarks>
+    internal IPipelineSchedule<T> Schedule => _schedule;
+
+    /// <summary>
+    /// Gets the activation checkpoint configuration.
+    /// </summary>
+    /// <remarks>
+    /// This property is internal. Configure checkpointing via <c>AiModelBuilder</c> methods
+    /// rather than accessing this directly.
+    /// </remarks>
+    internal ActivationCheckpointConfig CheckpointConfig => _checkpointConfig;
+
+    /// <summary>
+    /// Gets the partition strategy, or null if using uniform partitioning.
+    /// </summary>
+    /// <remarks>
+    /// This property is internal. Configure the partition strategy via <c>AiModelBuilder</c> methods
+    /// rather than accessing this directly.
+    /// </remarks>
+    internal IPipelinePartitionStrategy<T>? PartitionStrategy => _partitionStrategy;
+
+    /// <summary>
+    /// Gets the estimated pipeline bubble fraction for the current configuration.
+    /// </summary>
+    public T EstimatedBubbleFraction
+    {
+        get
+        {
+            EnsureShardingInitialized();
+
+            return _schedule.EstimateBubbleFraction(_numStages, _microBatchCount);
+        }
+    }
 
     /// <summary>
     /// Creates a new Pipeline Parallel model.
     /// </summary>
-    /// <param name="wrappedModel">The model to split into pipeline stages</param>
-    /// <param name="config">Configuration for sharding and communication</param>
-    /// <param name="microBatchSize">Size of micro-batches for pipeline execution (default: 1)</param>
+    /// <param name="wrappedModel">The model to split into pipeline stages.</param>
+    /// <param name="config">Configuration for sharding and communication.</param>
+    /// <param name="microBatchCount">Number of micro-batches to split the input into (default: 1).</param>
+    /// <param name="partitionStrategy">
+    /// Strategy for partitioning parameters across stages. If null, uses uniform partitioning.
+    /// </param>
+    /// <param name="schedule">
+    /// Pipeline execution schedule. If null, uses <see cref="GPipeSchedule{T}"/>.
+    /// </param>
+    /// <param name="checkpointConfig">
+    /// Activation checkpointing configuration. If null, checkpointing is disabled.
+    /// </param>
     public PipelineParallelModel(
         IFullModel<T, TInput, TOutput> wrappedModel,
         IShardingConfiguration<T> config,
-        int microBatchSize = 1)
+        int microBatchCount = 1,
+        IPipelinePartitionStrategy<T>? partitionStrategy = null,
+        IPipelineSchedule<T>? schedule = null,
+        ActivationCheckpointConfig? checkpointConfig = null)
         : base(wrappedModel, config)
     {
-        if (microBatchSize < 1)
+        if (microBatchCount < 1)
         {
-            throw new ArgumentOutOfRangeException(nameof(microBatchSize),
-                "Micro batch size must be at least 1.");
+            throw new ArgumentOutOfRangeException(nameof(microBatchCount),
+                "Micro-batch count must be at least 1.");
         }
 
-        _microBatchSize = microBatchSize;
-        // Note: _stageId and _numStages are set in OnBeforeInitializeSharding which is called by lazy initialization
+        _microBatchCount = microBatchCount;
+        _partitionStrategy = partitionStrategy;
+        _schedule = schedule ?? new GPipeSchedule<T>();
+        _checkpointConfig = checkpointConfig ?? new ActivationCheckpointConfig();
+
+        // Activation checkpointing recomputation strategies (Selective, Full) require
+        // layer-level forward pass decomposition that is not yet implemented.
+        // Only interval-based checkpoint storage is currently functional.
+        if (_checkpointConfig.Enabled &&
+            _checkpointConfig.RecomputeStrategy != RecomputeStrategy.None)
+        {
+            throw new NotImplementedException(
+                $"Activation checkpointing with RecomputeStrategy.{_checkpointConfig.RecomputeStrategy} " +
+                "is not yet implemented. Use RecomputeStrategy.None to enable checkpoint storage " +
+                "without recomputation, or disable checkpointing entirely.");
+        }
     }
 
     /// <summary>
@@ -105,10 +189,14 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
     {
         _stageId = Config.CommunicationBackend.Rank;
         _numStages = Config.CommunicationBackend.WorldSize;
+        _virtualStagesPerRank = _schedule.VirtualStagesPerRank;
+        _totalVirtualStages = checked(_numStages * _virtualStagesPerRank);
+        _supportsDecomposedBackward = WrappedModel is IPipelineDecomposableModel<T, TInput, TOutput>;
     }
 
     /// <summary>
-    /// Initializes pipeline parallelism by partitioning parameters into stages.
+    /// Initializes pipeline parallelism by partitioning parameters into stages,
+    /// including virtual stage partitions for multi-stage schedules.
     /// </summary>
     /// <remarks>
     /// <para>When the wrapped model implements <see cref="ILayeredModel{T}"/>, this method
@@ -124,27 +212,196 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
         var fullParameters = WrappedModel.GetParameters();
         int totalParams = fullParameters.Length;
 
-        // Try layer-aware partitioning first
-        if (WrappedModel is ILayeredModel<T> layeredModel && layeredModel.LayerCount > 0)
+        _virtualStagePartitions.Clear();
+
+        if (_virtualStagesPerRank > 1)
         {
+            // Multi-stage schedule: partition into totalVirtualStages chunks,
+            // then assign V non-contiguous chunks to this rank.
+            // Rank i gets virtual stages: i, i+P, i+2P, ...
+            (int StartIndex, int Size)[] vsPartitions;
+
+            if (_partitionStrategy is not null)
+            {
+                // Use the configured partition strategy for load-balanced partitioning
+                // across all virtual stages (not just physical stages)
+                vsPartitions = _partitionStrategy.ComputePartition(totalParams, _totalVirtualStages);
+
+                if (vsPartitions is null || vsPartitions.Length != _totalVirtualStages)
+                {
+                    throw new InvalidOperationException(
+                        $"Partition strategy returned {(vsPartitions is null ? "null" : $"{vsPartitions.Length} partitions")} " +
+                        $"but expected exactly {_totalVirtualStages} partitions for {_virtualStagesPerRank} virtual stages per rank.");
+                }
+
+                // Validate bounds for all virtual stage partitions
+                for (int vs = 0; vs < _totalVirtualStages; vs++)
+                {
+                    var (start, size) = vsPartitions[vs];
+                    if (start < 0 || size < 0 || start + size > totalParams)
+                    {
+                        throw new InvalidOperationException(
+                            $"Partition strategy returned invalid partition for virtual stage {vs}: " +
+                            $"StartIndex={start}, Size={size}, but total parameters is {totalParams}.");
+                    }
+                }
+            }
+            else
+            {
+                // Uniform partitioning
+                vsPartitions = new (int StartIndex, int Size)[_totalVirtualStages];
+                int baseChunkSize = totalParams / _totalVirtualStages;
+                int remainder = totalParams % _totalVirtualStages;
+                int offset = 0;
+                for (int vs = 0; vs < _totalVirtualStages; vs++)
+                {
+                    int size = baseChunkSize + (vs < remainder ? 1 : 0);
+                    vsPartitions[vs] = (offset, size);
+                    offset += size;
+                }
+            }
+
+            // Assign this rank's virtual stages
+            int totalShardSize = 0;
+            for (int v = 0; v < _virtualStagesPerRank; v++)
+            {
+                int globalVirtualStageId = _stageId + v * _numStages;
+                if (globalVirtualStageId < _totalVirtualStages)
+                {
+                    var partition = vsPartitions[globalVirtualStageId];
+                    _virtualStagePartitions[v] = partition;
+                    totalShardSize += partition.Size;
+                }
+            }
+
+            // The shard for base class is the union of all virtual stage parameters.
+            // Use the first virtual stage's start as the shard start.
+            if (_virtualStagePartitions.Count > 0)
+            {
+                ShardStartIndex = _virtualStagePartitions[0].StartIndex;
+                ShardSize = totalShardSize;
+            }
+            else
+            {
+                ShardStartIndex = 0;
+                ShardSize = 0;
+            }
+        }
+        else if (WrappedModel is ILayeredModel<T> layeredModel && layeredModel.LayerCount > 0
+                 && _partitionStrategy is null)
+        {
+            // Layer-aware partitioning: respects layer boundaries to avoid splitting
+            // a layer's parameters across stages
             InitializeLayerAwareSharding(layeredModel, fullParameters);
+            _virtualStagePartitions[0] = (ShardStartIndex, ShardSize);
         }
         else
         {
-            // Fallback: divide parameters into pipeline stages by count
-            int baseShardSize = totalParams / _numStages;
-            int remainder = totalParams % _numStages;
+            // Single-stage schedule: standard partitioning
+            if (_partitionStrategy is not null)
+            {
+                var partitions = _partitionStrategy.ComputePartition(totalParams, _numStages);
 
-            ShardSize = baseShardSize + (_stageId < remainder ? 1 : 0);
-            ShardStartIndex = _stageId * baseShardSize + Math.Min(_stageId, remainder);
+                if (partitions is null || partitions.Length != _numStages)
+                {
+                    throw new InvalidOperationException(
+                        $"Partition strategy returned {(partitions is null ? "null" : $"{partitions.Length} partitions")} " +
+                        $"but expected exactly {_numStages} partitions.");
+                }
 
+                var stagePartition = partitions[_stageId];
+                if (stagePartition.StartIndex < 0 || stagePartition.Size < 0 ||
+                    stagePartition.StartIndex + stagePartition.Size > totalParams)
+                {
+                    throw new InvalidOperationException(
+                        $"Partition strategy returned invalid partition for stage {_stageId}: " +
+                        $"StartIndex={stagePartition.StartIndex}, Size={stagePartition.Size}, " +
+                        $"but total parameters is {totalParams}.");
+                }
+
+                ShardStartIndex = stagePartition.StartIndex;
+                ShardSize = stagePartition.Size;
+            }
+            else
+            {
+                int baseShardSize = totalParams / _numStages;
+                int leftover = totalParams % _numStages;
+
+                ShardSize = baseShardSize + (_stageId < leftover ? 1 : 0);
+                ShardStartIndex = _stageId * baseShardSize + Math.Min(_stageId, leftover);
+            }
+
+            _virtualStagePartitions[0] = (ShardStartIndex, ShardSize);
+        }
+
+        // Extract this stage's parameters (union of all virtual stage params)
+        if (ShardSize > 0)
+        {
             var shardData = new T[ShardSize];
-            var paramArray = fullParameters.ToArray();
-            Array.Copy(paramArray, ShardStartIndex, shardData, 0, ShardSize);
+            if (_virtualStagesPerRank > 1)
+            {
+                // For multi-stage: gather non-contiguous chunks
+                int destOffset = 0;
+                var paramArray = fullParameters.ToArray();
+                for (int v = 0; v < _virtualStagesPerRank; v++)
+                {
+                    if (_virtualStagePartitions.TryGetValue(v, out var partition))
+                    {
+                        Array.Copy(paramArray, partition.StartIndex, shardData, destOffset, partition.Size);
+                        destOffset += partition.Size;
+                    }
+                }
+            }
+            else
+            {
+                Array.Copy(fullParameters.ToArray(), ShardStartIndex, shardData, 0, ShardSize);
+            }
             LocalShard = new Vector<T>(shardData);
+        }
+        else
+        {
+            LocalShard = new Vector<T>(0);
         }
 
         CachedFullParameters = null;
+    }
+
+    /// <summary>
+    /// Updates the local parameter shard from a full parameter vector, correctly handling
+    /// non-contiguous virtual stage partitions for V&gt;1 schedules.
+    /// </summary>
+    /// <remarks>
+    /// For single-stage schedules (V=1), parameters are contiguous and the base class
+    /// <see cref="ShardedModelBase{T, TInput, TOutput}.UpdateLocalShardFromFull"/> works fine.
+    /// For multi-stage schedules (V&gt;1), the local shard is a concatenation of non-contiguous
+    /// chunks from different parts of the full parameter vector. This method mirrors the
+    /// extraction logic in <see cref="InitializeSharding"/> to rebuild the shard correctly.
+    /// </remarks>
+    private void UpdateLocalShardFromFullParameters(Vector<T> fullParameters)
+    {
+        if (_virtualStagesPerRank <= 1)
+        {
+            // Single virtual stage: shard is contiguous, use base class
+            UpdateLocalShardFromFull(fullParameters);
+            return;
+        }
+
+        // Multi-stage: gather non-contiguous chunks in virtual-stage order
+        var shardData = new T[ShardSize];
+        int destOffset = 0;
+        var paramArray = fullParameters.ToArray();
+
+        for (int v = 0; v < _virtualStagesPerRank; v++)
+        {
+            if (_virtualStagePartitions.TryGetValue(v, out var partition))
+            {
+                Array.Copy(paramArray, partition.StartIndex, shardData, destOffset, partition.Size);
+                destOffset += partition.Size;
+            }
+        }
+
+        LocalShard = new Vector<T>(shardData);
+        InvalidateCache();
     }
 
     /// <summary>
@@ -324,8 +581,29 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
     /// <inheritdoc/>
     public override void Train(TInput input, TOutput expectedOutput)
     {
-        // GPipe-style pipeline parallel training with gradient-based backward pass
-        // Strategy: Forward pass sends activations, backward pass sends gradients
+        // Ensure sharding (and _numStages / _stageId) is initialized before using them
+        EnsureShardingInitialized();
+
+        // Pipeline parallel training using the configured schedule
+        var scheduleOps = _schedule.GetSchedule(_stageId, _numStages, _microBatchCount);
+
+        // Validate schedule output: externally injectable schedules may emit invalid indices
+        foreach (var op in scheduleOps)
+        {
+            if (op.MicroBatchIndex < 0 || op.MicroBatchIndex >= _microBatchCount)
+            {
+                throw new InvalidOperationException(
+                    $"Schedule '{_schedule.Name}' emitted MicroBatchIndex={op.MicroBatchIndex} " +
+                    $"but valid range is [0, {_microBatchCount - 1}].");
+            }
+
+            if (op.VirtualStageIndex < 0 || op.VirtualStageIndex >= _virtualStagesPerRank)
+            {
+                throw new InvalidOperationException(
+                    $"Schedule '{_schedule.Name}' emitted VirtualStageIndex={op.VirtualStageIndex} " +
+                    $"but valid range is [0, {_virtualStagesPerRank - 1}].");
+            }
+        }
 
         // Gather full parameters before training
         var fullParams = GatherFullParameters();
@@ -334,74 +612,140 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
         // Save parameters BEFORE training to compute gradients
         var parametersBefore = new Vector<T>(fullParams.ToArray());
 
-        // Determine actual input for this stage
-        TInput stageInput = input;
+        // Accumulated weight gradients across all micro-batches
+        Vector<T>? accumulatedGradients = null;
 
-        // FORWARD PASS: Receive activations from previous stage
-        if (_stageId > 0)
+        // Slice input and targets into micro-batches
+        var microBatches = SliceInputIntoMicroBatches(input);
+        var microBatchTargets = SliceTargetIntoMicroBatches(expectedOutput);
+
+        // Track activations per (microBatch, virtualStage) for backward pass
+        var forwardInputs = new Dictionary<int, TInput>();
+        var forwardOutputs = new Dictionary<int, TOutput>();
+
+        // Clear state from previous iteration
+        _checkpointedActivations.Clear();
+        _cachedBackwardState.Clear();
+        _cachedWeightGradients.Clear();
+
+        foreach (var op in scheduleOps)
         {
-            // Protocol: First receive 1-element size header, then receive activations
-            // This prevents size mismatches when stage output size differs from input size
-            Vector<T> sizeHeader = Config.CommunicationBackend.Receive(_stageId - 1, count: 1, tag: 0);
-            int activationSize = NumOps.ToInt32(sizeHeader[0]);
+            int opKey = GetOperationKey(op.MicroBatchIndex, op.VirtualStageIndex);
 
-            Vector<T> receivedActivations = Config.CommunicationBackend.Receive(_stageId - 1, activationSize, tag: 0);
-
-            // For intermediate stages, convert received activations to TInput type WITHOUT using
-            // the original input as reference (which would have the wrong shape for non-first stages).
-            // Use ConversionsHelper to centralize conversion logic and avoid code duplication.
-            stageInput = ConversionsHelper.ConvertVectorToInputWithoutReference<T, TInput>(receivedActivations);
-        }
-
-        // Compute true gradients using the model's gradient computation
-        // This provides accurate gradients before optimizer updates are applied
-        var gradientVector = WrappedModel.ComputeGradients(stageInput, expectedOutput);
-
-        // Predict stage output for forward pass communication
-        var stageOutput = WrappedModel.Predict(stageInput);
-
-        // FORWARD PASS: Send activations to next stage
-        if (_stageId < _numStages - 1)
-        {
-            Vector<T> activationsToSend = ConversionsHelper.ConvertToVector<T, TOutput>(stageOutput);
-
-            // Protocol: First send 1-element size header, then send activations
-            // This allows receiver to know the exact size of incoming activations
-            var sizeHeader = new Vector<T>(new[] { NumOps.FromDouble(activationsToSend.Length) });
-            Config.CommunicationBackend.Send(sizeHeader, _stageId + 1, tag: 0);
-            Config.CommunicationBackend.Send(activationsToSend, _stageId + 1, tag: 0);
-        }
-
-        // BACKWARD PASS: Gradient communication
-        // Gradients flow backward through the pipeline (opposite direction of activations)
-        if (_stageId < _numStages - 1)
-        {
-            // Non-last stages receive gradient contributions from next stage
-            Vector<T> nextStageGradients = Config.CommunicationBackend.Receive(_stageId + 1, gradientVector.Length, tag: 1);
-
-            // Accumulate gradients: local gradients + gradients from downstream stages
-            for (int i = 0; i < gradientVector.Length; i++)
+            if (op.Type == PipelineOperationType.Forward)
             {
-                gradientVector[i] = NumOps.Add(gradientVector[i], nextStageGradients[i]);
+                ExecuteForward(op, microBatches, forwardInputs, forwardOutputs, opKey);
+            }
+            else if (op.Type == PipelineOperationType.Backward)
+            {
+                // Combined backward: compute all gradients and communicate in one step.
+                // Used by traditional schedules (GPipe, 1F1B).
+                var microBatchInput = RetrieveMicroBatchInput(opKey, forwardInputs, microBatches, op);
+                var microBatchTarget = GetMicroBatchTarget(op.MicroBatchIndex, microBatchTargets, expectedOutput);
+
+                var gradientVector = WrappedModel.ComputeGradients(microBatchInput, microBatchTarget);
+
+                ReceiveAndAccumulateDownstreamGradients(gradientVector, op.MicroBatchIndex, op.VirtualStageIndex);
+                SendGradientsUpstream(gradientVector, op.MicroBatchIndex, op.VirtualStageIndex);
+                accumulatedGradients = AccumulateGradients(accumulatedGradients, gradientVector);
+
+                FreeConsumedActivations(opKey, forwardInputs, forwardOutputs);
+            }
+            else if (op.Type == PipelineOperationType.BackwardInput)
+            {
+                // Zero Bubble B step: compute activation gradients (critical path).
+                // Upstream stage is waiting for these gradients.
+                var microBatchInput = RetrieveMicroBatchInput(opKey, forwardInputs, microBatches, op);
+                var microBatchTarget = GetMicroBatchTarget(op.MicroBatchIndex, microBatchTargets, expectedOutput);
+
+                if (_supportsDecomposedBackward)
+                {
+                    // True decomposition: compute only activation gradients
+                    var decomposable = (IPipelineDecomposableModel<T, TInput, TOutput>)WrappedModel;
+                    var (activationGrads, cachedState) = decomposable.ComputeActivationGradients(
+                        microBatchInput, microBatchTarget);
+
+                    ReceiveAndAccumulateDownstreamGradients(activationGrads, op.MicroBatchIndex, op.VirtualStageIndex);
+                    SendGradientsUpstream(activationGrads, op.MicroBatchIndex, op.VirtualStageIndex);
+
+                    // Cache state for BackwardWeight to avoid redundant computation
+                    _cachedBackwardState[opKey] = cachedState;
+                }
+                else
+                {
+                    // Emulated decomposition: compute full gradients now, send activation grads upstream,
+                    // cache weight gradients for BackwardWeight step to accumulate later.
+                    var fullGradients = WrappedModel.ComputeGradients(microBatchInput, microBatchTarget);
+
+                    ReceiveAndAccumulateDownstreamGradients(fullGradients, op.MicroBatchIndex, op.VirtualStageIndex);
+                    SendGradientsUpstream(fullGradients, op.MicroBatchIndex, op.VirtualStageIndex);
+
+                    // Cache the weight gradients for the W step
+                    _cachedWeightGradients[opKey] = fullGradients;
+                }
+            }
+            else if (op.Type == PipelineOperationType.BackwardWeight)
+            {
+                // Zero Bubble W step: compute weight gradients (fills bubbles).
+                // No other stage depends on this - can be deferred.
+                Vector<T> weightGradients;
+
+                if (_supportsDecomposedBackward)
+                {
+                    // True decomposition: compute only weight gradients
+                    var decomposable = (IPipelineDecomposableModel<T, TInput, TOutput>)WrappedModel;
+                    var microBatchInput = RetrieveMicroBatchInput(opKey, forwardInputs, microBatches, op);
+                    var microBatchTarget = GetMicroBatchTarget(op.MicroBatchIndex, microBatchTargets, expectedOutput);
+
+                    _cachedBackwardState.TryGetValue(opKey, out var cachedState);
+                    weightGradients = decomposable.ComputeWeightGradients(
+                        microBatchInput, microBatchTarget, cachedState);
+                    _cachedBackwardState.Remove(opKey);
+                }
+                else
+                {
+                    // Emulated: use cached gradients from BackwardInput step
+                    if (_cachedWeightGradients.TryGetValue(opKey, out var cached))
+                    {
+                        weightGradients = cached;
+                        _cachedWeightGradients.Remove(opKey);
+                    }
+                    else
+                    {
+                        // Fallback: recompute full gradients
+                        var microBatchInput = RetrieveMicroBatchInput(opKey, forwardInputs, microBatches, op);
+                        var microBatchTarget = GetMicroBatchTarget(op.MicroBatchIndex, microBatchTargets, expectedOutput);
+                        weightGradients = WrappedModel.ComputeGradients(microBatchInput, microBatchTarget);
+                    }
+                }
+
+                accumulatedGradients = AccumulateGradients(accumulatedGradients, weightGradients);
+                FreeConsumedActivations(opKey, forwardInputs, forwardOutputs);
             }
         }
 
-        if (_stageId > 0)
+        // Apply accumulated gradients averaged across micro-batches
+        if (accumulatedGradients is not null)
         {
-            // Non-first stages send accumulated gradients to previous stage
-            Config.CommunicationBackend.Send(gradientVector, _stageId - 1, tag: 1);
-        }
+            T microBatchCount = NumOps.FromDouble(_microBatchCount);
+            for (int i = 0; i < accumulatedGradients.Length; i++)
+            {
+                accumulatedGradients[i] = NumOps.Divide(accumulatedGradients[i], microBatchCount);
+            }
 
-        // Apply accumulated gradients to parameters using the configured learning rate
-        // In pipeline parallelism, we use a simple SGD-style update: θ = θ - lr * gradients
-        // For more sophisticated optimization, wrap this model with a gradient-based optimizer
-        WrappedModel.SetParameters(parametersBefore);
-        WrappedModel.ApplyGradients(gradientVector, Config.LearningRate);
+            WrappedModel.SetParameters(parametersBefore);
+            WrappedModel.ApplyGradients(accumulatedGradients, Config.LearningRate);
+        }
 
         // Extract this stage's parameter shard
         var updatedParams = WrappedModel.GetParameters();
-        UpdateLocalShardFromFull(updatedParams);
+        UpdateLocalShardFromFullParameters(updatedParams);
         InvalidateCache();
+
+        // Clean up all activation/gradient storage
+        _checkpointedActivations.Clear();
+        _cachedBackwardState.Clear();
+        _cachedWeightGradients.Clear();
 
         // Synchronize parameters across stages for consistency
         if (Config.AutoSyncGradients)
@@ -410,61 +754,549 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
         }
     }
 
+    /// <summary>
+    /// Executes a forward operation, handling virtual stage routing and activation checkpointing.
+    /// </summary>
+    private void ExecuteForward(
+        PipelineOperation op,
+        Dictionary<int, TInput> microBatches,
+        Dictionary<int, TInput> forwardInputs,
+        Dictionary<int, TOutput> forwardOutputs,
+        int opKey)
+    {
+        var stageInput = GetStageInput(microBatches, op.MicroBatchIndex, op.VirtualStageIndex, forwardOutputs);
+
+        // After consuming the previous virtual stage's output, free it to reclaim memory.
+        // This handles the case where FreeNonCheckpointedActivations retained the output
+        // for cross-virtual-stage dependencies (e.g., Looped BFS).
+        if (op.VirtualStageIndex > 0
+            && !_checkpointedActivations.ContainsKey(
+                GetOperationKey(op.MicroBatchIndex, op.VirtualStageIndex - 1)))
+        {
+            forwardOutputs.Remove(GetOperationKey(op.MicroBatchIndex, op.VirtualStageIndex - 1));
+        }
+
+        // Checkpoint activation if configured
+        if (ShouldCheckpointActivation(opKey))
+        {
+            var inputVector = ConversionsHelper.ConvertToVector<T, TInput>(stageInput);
+            _checkpointedActivations[opKey] = inputVector;
+        }
+
+        forwardInputs[opKey] = stageInput;
+
+        // Forward pass through the model
+        var stageOutput = WrappedModel.Predict(stageInput);
+        forwardOutputs[opKey] = stageOutput;
+
+        // Send activations to the next stage in the pipeline
+        SendActivationsForward(stageOutput, op.MicroBatchIndex, op.VirtualStageIndex);
+    }
+
+    /// <summary>
+    /// Slices input into micro-batches by converting to a vector and dividing evenly.
+    /// If the input cannot be sliced (e.g., single sample), all micro-batches use the same input.
+    /// </summary>
+    private Dictionary<int, TInput> SliceInputIntoMicroBatches(TInput fullData)
+    {
+        var slices = new Dictionary<int, TInput>();
+
+        if (_microBatchCount <= 1)
+        {
+            slices[0] = fullData;
+            return slices;
+        }
+
+        // Convert to vector for slicing
+        Vector<T> fullVector;
+        try
+        {
+            fullVector = ConversionsHelper.ConvertToVector<T, TInput>(fullData);
+        }
+        catch (InvalidOperationException ex)
+        {
+            throw new InvalidOperationException(
+                $"Cannot slice input of type {typeof(TInput).Name} into micro-batches. " +
+                "The input must be convertible to a vector for pipeline parallel training with micro-batches > 1.",
+                ex);
+        }
+
+        int totalElements = fullVector.Length;
+        int microBatchElements = totalElements / _microBatchCount;
+
+        if (microBatchElements <= 0)
+        {
+            throw new InvalidOperationException(
+                $"Cannot slice {totalElements} elements into {_microBatchCount} micro-batches. " +
+                $"Reduce pipelineMicroBatchCount to at most {totalElements}.");
+        }
+
+        var fullArray = fullVector.ToArray();
+        for (int i = 0; i < _microBatchCount; i++)
+        {
+            int startIdx = i * microBatchElements;
+            int size = (i == _microBatchCount - 1)
+                ? totalElements - startIdx  // Last slice gets remainder
+                : microBatchElements;
+
+            var sliceData = new T[size];
+            Array.Copy(fullArray, startIdx, sliceData, 0, size);
+            var sliceVector = new Vector<T>(sliceData);
+
+            slices[i] = ConversionsHelper.ConvertVectorToInputWithoutReference<T, TInput>(sliceVector);
+        }
+
+        return slices;
+    }
+
+    /// <summary>
+    /// Slices target output into micro-batches by converting to a vector and dividing evenly.
+    /// If the target cannot be sliced, all micro-batches use the same target.
+    /// </summary>
+    private Dictionary<int, TOutput> SliceTargetIntoMicroBatches(TOutput fullTarget)
+    {
+        var slices = new Dictionary<int, TOutput>();
+
+        if (_microBatchCount <= 1)
+        {
+            slices[0] = fullTarget;
+            return slices;
+        }
+
+        Vector<T> fullVector;
+        try
+        {
+            fullVector = ConversionsHelper.ConvertToVector<T, TOutput>(fullTarget);
+        }
+        catch (InvalidOperationException ex)
+        {
+            throw new InvalidOperationException(
+                $"Cannot slice target of type {typeof(TOutput).Name} into micro-batches. " +
+                "The target must be convertible to a vector for pipeline parallel training with micro-batches > 1.",
+                ex);
+        }
+
+        int totalElements = fullVector.Length;
+        int microBatchElements = totalElements / _microBatchCount;
+
+        if (microBatchElements <= 0)
+        {
+            throw new InvalidOperationException(
+                $"Cannot slice {totalElements} target elements into {_microBatchCount} micro-batches. " +
+                $"Reduce pipelineMicroBatchCount to at most {totalElements}.");
+        }
+
+        var fullArray = fullVector.ToArray();
+        for (int i = 0; i < _microBatchCount; i++)
+        {
+            int startIdx = i * microBatchElements;
+            int size = (i == _microBatchCount - 1)
+                ? totalElements - startIdx
+                : microBatchElements;
+
+            var sliceData = new T[size];
+            Array.Copy(fullArray, startIdx, sliceData, 0, size);
+            var sliceVector = new Vector<T>(sliceData);
+
+            // Convert back via input conversion (TOutput and TInput use the same underlying mechanism)
+            slices[i] = ConversionsHelper.ConvertVectorToInputWithoutReference<T, TOutput>(sliceVector);
+        }
+
+        return slices;
+    }
+
+    /// <summary>
+    /// Gets a unique key for a (microBatchIndex, virtualStageIndex) combination.
+    /// </summary>
+    private int GetOperationKey(int microBatchIndex, int virtualStageIndex)
+    {
+        return checked(microBatchIndex * _virtualStagesPerRank + virtualStageIndex);
+    }
+
+    /// <summary>
+    /// Gets the input for this stage, receiving from the previous global virtual stage.
+    /// </summary>
+    /// <remarks>
+    /// <para>For V&gt;1 schedules (Interleaved 1F1B, Looped BFS, ZB-V), each rank holds non-contiguous
+    /// model chunks. The global pipeline is: chunk 0 -> 1 -> 2 -> ... -> (V*P-1). Rank i holds chunks
+    /// {i, i+P, i+2P, ...}. Each virtual stage on this rank receives input from the previous physical
+    /// rank (which processed the previous global virtual stage), not from a local virtual stage.</para>
+    /// <para>Special cases: global stage 0 uses original micro-batch input; single-rank with V&gt;1
+    /// uses local forwarding (no inter-rank communication).</para>
+    /// </remarks>
+    private TInput GetStageInput(
+        Dictionary<int, TInput> microBatches, int microBatchIndex, int virtualStageIndex,
+        Dictionary<int, TOutput>? forwardOutputs = null)
+    {
+        int globalVStage = _stageId + virtualStageIndex * _numStages;
+
+        if (globalVStage == 0)
+        {
+            // First global stage: use the micro-batch input directly
+            if (microBatches.TryGetValue(microBatchIndex, out var microBatch))
+            {
+                return microBatch;
+            }
+
+            throw new InvalidOperationException(
+                $"No micro-batch input found for micro-batch {microBatchIndex} at global virtual stage 0.");
+        }
+
+        if (_numStages == 1)
+        {
+            // Single rank with V>1: use the forward output from the previous local virtual stage
+            if (forwardOutputs is not null
+                && forwardOutputs.TryGetValue(GetOperationKey(microBatchIndex, virtualStageIndex - 1), out var prevOutput))
+            {
+                var outputVector = ConversionsHelper.ConvertToVector<T, TOutput>(prevOutput);
+                return ConversionsHelper.ConvertVectorToInputWithoutReference<T, TInput>(outputVector);
+            }
+
+            throw new InvalidOperationException(
+                $"No input available for micro-batch {microBatchIndex}, virtual stage {virtualStageIndex}. " +
+                $"Forward output from virtual stage {virtualStageIndex - 1} was not found.");
+        }
+
+        // Multi-rank: receive from the rank that processed the previous global virtual stage
+        int prevGlobalVStage = globalVStage - 1;
+        int sourceRank = prevGlobalVStage % _numStages;
+        int tag = ComputeForwardTag(microBatchIndex, prevGlobalVStage);
+
+        Vector<T> sizeHeader = Config.CommunicationBackend.Receive(sourceRank, count: 1, tag: tag);
+        int activationSize = NumOps.ToInt32(sizeHeader[0]);
+
+        Vector<T> receivedActivations = Config.CommunicationBackend.Receive(
+            sourceRank, activationSize, tag: tag);
+
+        return ConversionsHelper.ConvertVectorToInputWithoutReference<T, TInput>(receivedActivations);
+    }
+
+    /// <summary>
+    /// Gets the target for a specific micro-batch.
+    /// </summary>
+    private TOutput GetMicroBatchTarget(int microBatchIndex, Dictionary<int, TOutput> microBatchTargets, TOutput fullTarget)
+    {
+        if (microBatchTargets.TryGetValue(microBatchIndex, out var target))
+        {
+            return target;
+        }
+        return fullTarget;
+    }
+
+    /// <summary>
+    /// Sends activations to the next stage in the global virtual pipeline.
+    /// </summary>
+    /// <remarks>
+    /// For V&gt;1, every virtual stage (not just the last on this rank) sends to the next
+    /// physical rank, because the next global virtual stage is always on rank (_stageId+1)%P.
+    /// </remarks>
+    private void SendActivationsForward(TOutput stageOutput, int microBatchIndex, int virtualStageIndex)
+    {
+        int globalVStage = _stageId + virtualStageIndex * _numStages;
+
+        // Last global stage: nothing to send
+        if (globalVStage >= _totalVirtualStages - 1)
+        {
+            return;
+        }
+
+        // Single rank with V>1: outputs stored locally in forwardOutputs, no communication
+        if (_numStages == 1)
+        {
+            return;
+        }
+
+        // Send to rank responsible for next global virtual stage
+        int destRank = (_stageId + 1) % _numStages;
+        Vector<T> activationsToSend = ConversionsHelper.ConvertToVector<T, TOutput>(stageOutput);
+        int tag = ComputeForwardTag(microBatchIndex, globalVStage);
+
+        var sizeHeader = new Vector<T>(new[] { NumOps.FromDouble(activationsToSend.Length) });
+        Config.CommunicationBackend.Send(sizeHeader, destRank, tag: tag);
+        Config.CommunicationBackend.Send(activationsToSend, destRank, tag: tag);
+    }
+
+    /// <summary>
+    /// Computes a unique communication tag for forward pass activations.
+    /// Tags are in the range [ActivationTagBase, GradientTagBase).
+    /// </summary>
+    /// <param name="microBatchIndex">The micro-batch index.</param>
+    /// <param name="senderGlobalVStage">The sender's global virtual stage index.</param>
+    private int ComputeForwardTag(int microBatchIndex, int senderGlobalVStage)
+    {
+        return checked(ActivationTagBase + microBatchIndex * _totalVirtualStages + senderGlobalVStage);
+    }
+
+    /// <summary>
+    /// Computes a unique communication tag for backward pass gradients.
+    /// Tags are in the range [GradientTagBase, PredictTagBase).
+    /// </summary>
+    /// <param name="microBatchIndex">The micro-batch index.</param>
+    /// <param name="receiverGlobalVStage">The receiver's (upstream) global virtual stage index.</param>
+    private int ComputeBackwardTag(int microBatchIndex, int receiverGlobalVStage)
+    {
+        return checked(GradientTagBase + microBatchIndex * _totalVirtualStages + receiverGlobalVStage);
+    }
+
+    /// <summary>
+    /// Determines whether an activation should be checkpointed based on configuration.
+    /// </summary>
+    private bool ShouldCheckpointActivation(int opKey)
+    {
+        if (!_checkpointConfig.Enabled)
+        {
+            return false;
+        }
+
+        // MaxActivationsInMemory > 0 overrides interval-based checkpointing
+        if (_checkpointConfig.MaxActivationsInMemory > 0)
+        {
+            return _checkpointedActivations.Count < _checkpointConfig.MaxActivationsInMemory;
+        }
+
+        // CheckpointFirstLayer: always checkpoint opKey 0 if enabled
+        if (_checkpointConfig.CheckpointFirstLayer && opKey == 0)
+        {
+            return true;
+        }
+
+        // Interval-based checkpointing (CheckpointEveryNLayers validated >= 1 in setter)
+        return _checkpointConfig.CheckpointEveryNLayers > 0
+            && opKey % _checkpointConfig.CheckpointEveryNLayers == 0;
+    }
+
+    /// <summary>
+    /// Retrieves the input for a micro-batch from cache, checkpoint, or recomputes it.
+    /// Implements activation checkpointing recomputation when enabled.
+    /// </summary>
+    private TInput RetrieveMicroBatchInput(
+        int opKey,
+        Dictionary<int, TInput> forwardInputs,
+        Dictionary<int, TInput> microBatches,
+        PipelineOperation op)
+    {
+        // Check if input is still cached from forward pass
+        if (forwardInputs.TryGetValue(opKey, out var cachedInput))
+        {
+            return cachedInput;
+        }
+
+        // Check activation checkpoints
+        if (_checkpointConfig.Enabled && _checkpointedActivations.TryGetValue(opKey, out var checkpointedVector))
+        {
+            // Found a checkpoint - recompute from it if needed
+            var recomputedInput = ConversionsHelper.ConvertVectorToInputWithoutReference<T, TInput>(checkpointedVector);
+
+            // If the checkpoint is for this exact operation, return directly
+            return recomputedInput;
+        }
+
+        // Check if there's a nearby checkpoint to recompute from
+        // NOTE: Currently unreachable because the constructor rejects RecomputeStrategy != None.
+        // This is infrastructure for future recompute support (Selective/Full strategies).
+        if (_checkpointConfig.Enabled && _checkpointConfig.RecomputeStrategy != RecomputeStrategy.None)
+        {
+            // Find the nearest earlier checkpoint within the SAME micro-batch.
+            // opKey = microBatchIndex * _virtualStagesPerRank + virtualStageIndex,
+            // so the current micro-batch's first key is microBatchIndex * _virtualStagesPerRank.
+            int microBatchStartKey = op.MicroBatchIndex * _virtualStagesPerRank;
+            int nearestCheckpointKey = -1;
+            for (int searchKey = opKey - 1; searchKey >= microBatchStartKey; searchKey--)
+            {
+                if (_checkpointedActivations.ContainsKey(searchKey))
+                {
+                    nearestCheckpointKey = searchKey;
+                    break;
+                }
+            }
+
+            if (nearestCheckpointKey >= 0)
+            {
+                // Recompute forward from the nearest checkpoint to reconstruct the needed activation
+                var checkpointVector = _checkpointedActivations[nearestCheckpointKey];
+                var recomputeInput = ConversionsHelper.ConvertVectorToInputWithoutReference<T, TInput>(checkpointVector);
+
+                // Run forward passes from checkpoint to target, recomputing activations
+                TInput currentInput = recomputeInput;
+                for (int step = nearestCheckpointKey; step < opKey; step++)
+                {
+                    var stepOutput = WrappedModel.Predict(currentInput);
+                    currentInput = ConversionsHelper.ConvertVectorToInputWithoutReference<T, TInput>(
+                        ConversionsHelper.ConvertToVector<T, TOutput>(stepOutput));
+                }
+
+                return currentInput;
+            }
+        }
+
+        // Fallback: use the original micro-batch input
+        return GetStageInput(microBatches, op.MicroBatchIndex, op.VirtualStageIndex);
+    }
+
+    /// <summary>
+    /// Receives gradients from the downstream (next) stage and accumulates them.
+    /// For multi-stage schedules, handles virtual stage routing.
+    /// </summary>
+    private void ReceiveAndAccumulateDownstreamGradients(
+        Vector<T> gradientVector, int microBatchIndex, int virtualStageIndex)
+    {
+        int globalVStage = _stageId + virtualStageIndex * _numStages;
+
+        // Last global stage has no downstream
+        if (globalVStage >= _totalVirtualStages - 1)
+        {
+            return;
+        }
+
+        // Single rank: no communication
+        if (_numStages == 1)
+        {
+            return;
+        }
+
+        // Receive from the rank that processed the next global virtual stage
+        int sourceRank = (_stageId + 1) % _numStages;
+        int tag = ComputeBackwardTag(microBatchIndex, globalVStage);
+        Vector<T> nextStageGradients = Config.CommunicationBackend.Receive(
+            sourceRank, gradientVector.Length, tag: tag);
+
+        for (int i = 0; i < gradientVector.Length; i++)
+        {
+            gradientVector[i] = NumOps.Add(gradientVector[i], nextStageGradients[i]);
+        }
+    }
+
+    /// <summary>
+    /// Sends gradients to the upstream (previous) stage in the global virtual pipeline.
+    /// </summary>
+    private void SendGradientsUpstream(Vector<T> gradientVector, int microBatchIndex, int virtualStageIndex)
+    {
+        int globalVStage = _stageId + virtualStageIndex * _numStages;
+
+        // First global stage has no upstream
+        if (globalVStage == 0)
+        {
+            return;
+        }
+
+        // Single rank: no communication
+        if (_numStages == 1)
+        {
+            return;
+        }
+
+        // Send to the rank that processed the previous global virtual stage
+        int prevGlobalVStage = globalVStage - 1;
+        int destRank = prevGlobalVStage % _numStages;
+        int tag = ComputeBackwardTag(microBatchIndex, prevGlobalVStage);
+        Config.CommunicationBackend.Send(gradientVector, destRank, tag: tag);
+    }
+
+    /// <summary>
+    /// Accumulates gradients across micro-batches.
+    /// </summary>
+    private Vector<T> AccumulateGradients(Vector<T>? accumulated, Vector<T> newGradients)
+    {
+        if (accumulated is null)
+        {
+            // Clone to avoid mutating the original
+            var copy = new T[newGradients.Length];
+            for (int i = 0; i < newGradients.Length; i++)
+            {
+                copy[i] = newGradients[i];
+            }
+            return new Vector<T>(copy);
+        }
+
+        if (accumulated.Length != newGradients.Length)
+        {
+            throw new InvalidOperationException(
+                $"Gradient length mismatch: accumulated has {accumulated.Length} elements " +
+                $"but new gradients have {newGradients.Length} elements.");
+        }
+
+        for (int i = 0; i < accumulated.Length; i++)
+        {
+            accumulated[i] = NumOps.Add(accumulated[i], newGradients[i]);
+        }
+
+        return accumulated;
+    }
+
+    /// <summary>
+    /// Frees activations after backward has consumed them to reduce memory usage.
+    /// </summary>
+    /// <remarks>
+    /// <para>After backward completes for an operation, both the forward input and any checkpoint
+    /// copy are no longer needed (with <see cref="RecomputeStrategy.None"/>). This method eagerly
+    /// evicts both to minimize peak memory.</para>
+    /// <para>For multi-stage schedules (V &gt; 1), forward outputs from non-last virtual stages are
+    /// retained because the next virtual stage's forward pass needs them as input.
+    /// These outputs are freed later when the next virtual stage's forward pass consumes them
+    /// (via <see cref="ExecuteForward"/>).</para>
+    /// </remarks>
+    private void FreeConsumedActivations(
+        int opKey, Dictionary<int, TInput> forwardInputs, Dictionary<int, TOutput> forwardOutputs)
+    {
+        // Backward has already consumed the input - free it unconditionally
+        forwardInputs.Remove(opKey);
+
+        // Only free forward outputs if this is the last virtual stage on this rank.
+        // Non-last virtual stages' outputs are needed by the next virtual stage's
+        // forward pass (e.g., Looped BFS completes vStage 0's 1F1B before starting
+        // vStage 1, which needs vStage 0's forward outputs as input).
+        int virtualStageIndex = opKey % _virtualStagesPerRank;
+        if (virtualStageIndex >= _virtualStagesPerRank - 1)
+        {
+            forwardOutputs.Remove(opKey);
+        }
+
+        // With RecomputeStrategy.None, checkpointed activations are not needed after
+        // backward since we cannot recompute from them. Evict to save memory.
+        // Future recompute strategies (Selective/Full) would keep these as recovery points.
+        if (_checkpointConfig.RecomputeStrategy == RecomputeStrategy.None)
+        {
+            _checkpointedActivations.Remove(opKey);
+        }
+    }
+
     /// <inheritdoc/>
     public override TOutput Predict(TInput input)
     {
-        // Pipeline forward pass for inference
-        // Activations flow through stages sequentially
-
         var fullParams = GatherFullParameters();
         WrappedModel.SetParameters(fullParams);
 
-        // Determine actual input for this stage
         TInput stageInput = input;
 
-        // FORWARD PASS: Receive activations from previous stage
         if (_stageId > 0)
         {
-            // Protocol: First receive 1-element size header, then receive activations
-            // This prevents size mismatches when stage output size differs from input size
-            Vector<T> sizeHeader = Config.CommunicationBackend.Receive(_stageId - 1, count: 1, tag: 10);
+            int tag = PredictTagBase;
+            Vector<T> sizeHeader = Config.CommunicationBackend.Receive(_stageId - 1, count: 1, tag: tag);
             int activationSize = NumOps.ToInt32(sizeHeader[0]);
 
-            Vector<T> receivedActivations = Config.CommunicationBackend.Receive(_stageId - 1, activationSize, tag: 10);
-
-            // For intermediate stages, convert received activations to TInput type WITHOUT using
-            // the original input as reference (which would have the wrong shape for non-first stages).
-            // Use ConversionsHelper to centralize conversion logic and avoid code duplication.
+            Vector<T> receivedActivations = Config.CommunicationBackend.Receive(_stageId - 1, activationSize, tag: tag);
             stageInput = ConversionsHelper.ConvertVectorToInputWithoutReference<T, TInput>(receivedActivations);
         }
 
-        // Process through this stage's layers
         TOutput stageOutput = WrappedModel.Predict(stageInput);
 
-        // FORWARD PASS: Send activations to next stage
         if (_stageId < _numStages - 1)
         {
-            // Non-last stages send their output to next stage
+            int tag = PredictTagBase;
             Vector<T> activationsToSend = ConversionsHelper.ConvertToVector<T, TOutput>(stageOutput);
 
-            // Protocol: First send 1-element size header, then send activations
-            // This allows receiver to know the exact size of incoming activations
             var sizeHeader = new Vector<T>(new[] { NumOps.FromDouble(activationsToSend.Length) });
-            Config.CommunicationBackend.Send(sizeHeader, _stageId + 1, tag: 10);
-            Config.CommunicationBackend.Send(activationsToSend, _stageId + 1, tag: 10);
-
-            // Intermediate stages must still return a value
-            // Return the stage output (caller should only use output from last stage)
-            return stageOutput;
+            Config.CommunicationBackend.Send(sizeHeader, _stageId + 1, tag: tag);
+            Config.CommunicationBackend.Send(activationsToSend, _stageId + 1, tag: tag);
         }
 
-        // Last stage returns the final prediction
         return stageOutput;
     }
 
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {
+        EnsureShardingInitialized();
         var metadata = WrappedModel.GetModelMetadata();
         metadata.SetProperty("IsDistributed", true);
         metadata.SetProperty("Strategy", "PipelineParallel");
@@ -472,7 +1304,14 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
         metadata.SetProperty("Rank", Rank);
         metadata.SetProperty("StageId", _stageId);
         metadata.SetProperty("NumStages", _numStages);
-        metadata.SetProperty("MicroBatchSize", _microBatchSize);
+        metadata.SetProperty("MicroBatchCount", _microBatchCount);
+        metadata.SetProperty("Schedule", _schedule.Name);
+        metadata.SetProperty("VirtualStagesPerRank", _virtualStagesPerRank);
+        T bubbleFraction = EstimatedBubbleFraction;
+        metadata.SetProperty("EstimatedBubbleFraction", NumOps.ToDouble(bubbleFraction));
+        metadata.SetProperty("ActivationCheckpointing", _checkpointConfig.Enabled);
+        metadata.SetProperty("PartitionStrategy", _partitionStrategy?.GetType().Name ?? "Uniform");
+        metadata.SetProperty("SupportsDecomposedBackward", _supportsDecomposedBackward);
         return metadata;
     }
 
@@ -480,20 +1319,26 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
     public override IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
     {
         return new PipelineParallelModel<T, TInput, TOutput>(
-            WrappedModel.WithParameters(parameters), Config, _microBatchSize);
+            WrappedModel.WithParameters(parameters), Config, _microBatchCount,
+            _partitionStrategy, _schedule, _checkpointConfig);
     }
 
     /// <inheritdoc/>
     public override byte[] Serialize()
     {
+        EnsureShardingInitialized();
         using var ms = new MemoryStream();
         using var writer = new BinaryWriter(ms);
         writer.Write(WorldSize);
         writer.Write(Rank);
-        writer.Write(_microBatchSize);
+        writer.Write(_microBatchCount);
         writer.Write(Config.AutoSyncGradients);
         writer.Write(Config.MinimumParameterGroupSize);
         writer.Write(Config.EnableGradientCompression);
+        writer.Write(_schedule.Name);
+        writer.Write(_checkpointConfig.Enabled);
+        writer.Write(_checkpointConfig.CheckpointEveryNLayers);
+        writer.Write(_virtualStagesPerRank);
         var modelData = WrappedModel.Serialize();
         writer.Write(modelData.Length);
         writer.Write(modelData);
@@ -507,22 +1352,30 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
         using var reader = new BinaryReader(ms);
         int savedWorldSize = reader.ReadInt32();
         int savedRank = reader.ReadInt32();
-        int savedMicroBatchSize = reader.ReadInt32();
-        reader.ReadBoolean();
-        reader.ReadInt32();
-        reader.ReadBoolean();
+        int savedMicroBatchCount = reader.ReadInt32();
+        reader.ReadBoolean(); // AutoSyncGradients
+        reader.ReadInt32(); // MinimumParameterGroupSize
+        reader.ReadBoolean(); // EnableGradientCompression
+        reader.ReadString(); // Schedule name (informational)
+        reader.ReadBoolean(); // Checkpointing enabled
+        reader.ReadInt32(); // CheckpointEveryNLayers
+        reader.ReadInt32(); // VirtualStagesPerRank (informational)
 
         if (savedWorldSize != WorldSize)
             throw new InvalidOperationException($"World size mismatch: {savedWorldSize} vs {WorldSize}");
         if (savedRank != Rank)
             throw new InvalidOperationException($"Rank mismatch: {savedRank} vs {Rank}");
-        if (savedMicroBatchSize != _microBatchSize)
-            throw new InvalidOperationException($"Micro batch size mismatch: saved model was trained with {savedMicroBatchSize}, but current instance configured with {_microBatchSize}");
+        if (savedMicroBatchCount != _microBatchCount)
+            throw new InvalidOperationException($"Micro-batch count mismatch: saved model was trained with {savedMicroBatchCount}, but current instance configured with {_microBatchCount}");
 
         int modelDataLength = reader.ReadInt32();
         byte[] modelData = reader.ReadBytes(modelDataLength);
         WrappedModel.Deserialize(modelData);
-        InitializeSharding();
+
+        // EnsureShardingInitialized calls OnBeforeInitializeSharding (which sets _numStages
+        // and other derived state) before InitializeSharding. Calling InitializeSharding
+        // directly would skip that setup and cause divide-by-zero.
+        EnsureShardingInitialized();
     }
 
     /// <inheritdoc/>
@@ -558,6 +1411,8 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
     /// <inheritdoc/>
     public override IFullModel<T, TInput, TOutput> Clone()
     {
-        return new PipelineParallelModel<T, TInput, TOutput>(WrappedModel.Clone(), Config, _microBatchSize);
+        return new PipelineParallelModel<T, TInput, TOutput>(
+            WrappedModel.Clone(), Config, _microBatchCount,
+            _partitionStrategy, _schedule, _checkpointConfig);
     }
 }

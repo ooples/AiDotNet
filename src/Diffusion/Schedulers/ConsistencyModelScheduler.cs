@@ -1,4 +1,5 @@
 using AiDotNet.Enums;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Diffusion.Schedulers;
 
@@ -49,7 +50,8 @@ public sealed class ConsistencyModelScheduler<T> : NoiseSchedulerBase<T>
     /// </summary>
     /// <param name="config">Configuration for the scheduler.</param>
     /// <param name="sigmaMin">Minimum sigma (noise level). Default: 0.002.</param>
-    /// <param name="sigmaMax">Maximum sigma (noise level). Default: 80.0.</param>
+    /// <param name="sigmaMax">Maximum sigma (noise level). Default: 80.0, per Song et al. 2023
+    /// "Consistency Models" (used for CIFAR-10, ImageNet 64x64, and LSUN benchmarks).</param>
     /// <param name="seed">Optional random seed for multi-step noise injection.</param>
     public ConsistencyModelScheduler(
         SchedulerConfig<T> config,
@@ -59,7 +61,9 @@ public sealed class ConsistencyModelScheduler<T> : NoiseSchedulerBase<T>
     {
         _sigmaMin = sigmaMin;
         _sigmaMax = sigmaMax;
-        _random = seed.HasValue ? new Random(seed.Value) : new Random();
+        _random = seed.HasValue
+            ? RandomHelper.CreateSeededRandom(seed.Value)
+            : RandomHelper.CreateSecureRandom();
     }
 
     /// <inheritdoc />

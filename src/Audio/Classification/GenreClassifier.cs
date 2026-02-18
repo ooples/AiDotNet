@@ -54,7 +54,7 @@ public class GenreClassifier<T> : AudioClassifierBase<T>, IGenreClassifier<T>
 
     private readonly MfccExtractor<T> _mfccExtractor;
     private readonly SpectralFeatureExtractor<T> _spectralExtractor;
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly bool _useNativeMode;
     private bool _disposed;
 
@@ -138,8 +138,7 @@ public class GenreClassifier<T> : AudioClassifierBase<T>, IGenreClassifier<T>
         _mfccExtractor = CreateMfccExtractor();
         _spectralExtractor = CreateSpectralExtractor();
 
-        // Optimizer not used in ONNX mode but required by interface
-        _optimizer = new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _options.ModelPath = modelPath;
 
         InitializeLayers();
     }
@@ -192,7 +191,7 @@ public class GenreClassifier<T> : AudioClassifierBase<T>, IGenreClassifier<T>
     /// <summary>
     /// Creates a GenreClassifier asynchronously with model download.
     /// </summary>
-    public static async Task<GenreClassifier<T>> CreateAsync(
+    internal static async Task<GenreClassifier<T>> CreateAsync(
         GenreClassifierOptions? options = null,
         IProgress<double>? progress = null,
         CancellationToken cancellationToken = default)
@@ -564,7 +563,7 @@ public class GenreClassifier<T> : AudioClassifierBase<T>, IGenreClassifier<T>
         }
 
         // Update parameters using optimizer
-        _optimizer.UpdateParameters(Layers);
+        _optimizer?.UpdateParameters(Layers);
 
         // Set inference mode
         SetTrainingMode(false);

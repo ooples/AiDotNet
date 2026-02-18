@@ -107,7 +107,7 @@ public class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     /// <summary>
     /// Optimizer for training (unused in ONNX mode).
     /// </summary>
-    private IOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private IOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
 
     /// <summary>
     /// Loss function for training.
@@ -271,8 +271,7 @@ public class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         // Initialize supported languages
         SupportedLanguages = new[] { language ?? "en" };
 
-        // Create placeholder optimizer and loss (unused in ONNX mode)
-        _optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Default loss function (cross-entropy is standard for ASR)
         _lossFunction = new CrossEntropyLoss<T>();
 
         InitializeLayers();
