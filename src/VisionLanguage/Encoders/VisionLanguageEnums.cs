@@ -224,5 +224,9 @@ public enum InstructionTunedArchitectureType
     /// <summary>Cross-attention resampler: vision encoder -> cross-attention resampler -> LLM (Qwen-VL series).</summary>
     CrossAttentionResampler,
     /// <summary>Visual expert: vision encoder -> visual expert modules interleaved in every LLM layer (CogVLM).</summary>
-    VisualExpert
+    VisualExpert,
+    /// <summary>Visual abstractor: vision encoder -> learnable visual abstractor module -> LLM (mPLUG-Owl series).</summary>
+    VisualAbstractor,
+    /// <summary>Direct patch embedding: raw image patches go directly into the language model without a separate vision encoder (Fuyu).</summary>
+    DirectPatch
 }
