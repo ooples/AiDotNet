@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -80,29 +81,25 @@ public class GLaMM<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
             }
         }
 
-        // Step 3: Text encoding and [SEG] token extraction
+        // Step 3: Text-conditioned mask queries via ConcatenateTensors
         var textTokens = TokenizeText(textQuery);
-        int textLen = textTokens.Length;
+        var fusedFeatures = visualFeatures.ConcatenateTensors(textTokens);
 
-        // Compute text-conditioned mask queries (one per potential grounded phrase)
-        // Each query will produce a mask via dot product with pixel embeddings
+        // Run through decoder layers for text-conditioned features
+        var decoderOut = fusedFeatures;
+        for (int i = _encoderLayerEnd; i < Layers.Count; i++)
+            decoderOut = Layers[i].Forward(decoderOut);
+        int outDim = decoderOut.Length;
+
+        // Derive mask queries from text-conditioned decoder output
         int numMaskQueries = Math.Min(8, _options.MaxDetections);
         var maskQueries = new double[numMaskQueries][];
         for (int q = 0; q < numMaskQueries; q++)
         {
             maskQueries[q] = new double[maskDim];
+            int qStart = (q * outDim / numMaskQueries) % outDim;
             for (int d = 0; d < maskDim; d++)
-            {
-                double qVal = 0;
-                // Query-specific text attention
-                for (int t = 0; t < textLen; t++)
-                {
-                    double tv = NumOps.ToDouble(textTokens[t]);
-                    double weight = Math.Exp(-Math.Abs(q - t * numMaskQueries / Math.Max(1, textLen)));
-                    qVal += tv * weight * Math.Sin((d + 1) * (t + 1) * 0.05);
-                }
-                maskQueries[q][d] = qVal / Math.Max(1, textLen);
-            }
+                maskQueries[q][d] = NumOps.ToDouble(decoderOut[(qStart + d) % outDim]);
         }
 
         // Step 4: Generate masks via query-pixel dot product

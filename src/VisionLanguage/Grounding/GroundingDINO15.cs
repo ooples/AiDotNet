@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -46,7 +47,6 @@ public class GroundingDINO15<T> : VisionLanguageModelBase<T>, IVisualGroundingMo
             return OnnxModel.Run(PreprocessImage(image));
 
         var p = PreprocessImage(image);
-        int dim = _options.DecoderDim;
         int numQueries = _options.NumQueryPositions;
         double confThreshold = _options.ConfidenceThreshold;
         double nmsThreshold = _options.NmsThreshold;
@@ -56,42 +56,12 @@ public class GroundingDINO15<T> : VisionLanguageModelBase<T>, IVisualGroundingMo
         for (int i = 0; i < _encoderLayerEnd; i++)
             visualFeatures = Layers[i].Forward(visualFeatures);
 
-        int visDim = visualFeatures.Length;
-
-        // Step 2: Text encoding with BERT-like tokenizer
+        // Step 2: Cross-modal feature enhancement via ConcatenateTensors
         var textTokens = TokenizeText(textQuery);
-        int textLen = textTokens.Length;
+        var fusedInput = visualFeatures.ConcatenateTensors(textTokens);
 
-        // Step 3: Multi-scale deformable cross-attention feature enhancement
-        // 1.5 uses deformable attention across multiple feature scales
-        int numScales = 4;
-        var enhancedVisual = new Tensor<T>([visDim]);
-        for (int d = 0; d < visDim; d++)
-        {
-            double vis = NumOps.ToDouble(visualFeatures[d]);
-            // Multi-scale deformable attention: sample from multiple spatial offsets
-            double deformSum = vis;
-            for (int s = 0; s < numScales; s++)
-            {
-                int offset = (d + s * 7 + 3) % visDim;
-                double neighborVal = NumOps.ToDouble(visualFeatures[offset]);
-                double scaleWeight = 1.0 / (1.0 + s); // Finer scales get more weight
-                deformSum += neighborVal * scaleWeight;
-            }
-            deformSum /= (1 + numScales * 0.5);
-
-            // Text-guided contrastive alignment
-            if (textLen > 0)
-            {
-                double textVal = NumOps.ToDouble(textTokens[d % textLen]);
-                double contrastiveScore = 1.0 / (1.0 + Math.Exp(-textVal / 80.0));
-                deformSum = deformSum * (0.5 + contrastiveScore);
-            }
-            enhancedVisual[d] = NumOps.FromDouble(deformSum);
-        }
-
-        // Step 4: Decoder with cross-modal queries
-        var decoderOut = enhancedVisual;
+        // Step 3: Decoder with cross-modal queries
+        var decoderOut = fusedInput;
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)
             decoderOut = Layers[i].Forward(decoderOut);
 

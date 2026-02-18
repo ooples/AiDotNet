@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -47,7 +48,6 @@ public class GroundingDINO<T> : VisionLanguageModelBase<T>, IVisualGroundingMode
             return OnnxModel.Run(PreprocessImage(image));
 
         var p = PreprocessImage(image);
-        int dim = _options.DecoderDim;
         int numQueries = _options.NumQueryPositions;
         double confThreshold = _options.ConfidenceThreshold;
         double nmsThreshold = _options.NmsThreshold;
@@ -57,29 +57,12 @@ public class GroundingDINO<T> : VisionLanguageModelBase<T>, IVisualGroundingMode
         for (int i = 0; i < _encoderLayerEnd; i++)
             visualFeatures = Layers[i].Forward(visualFeatures);
 
-        int visDim = visualFeatures.Length;
-
-        // Step 2: Encode text query
+        // Step 2: Cross-modal feature enhancement via ConcatenateTensors
         var textTokens = TokenizeText(textQuery);
-        int textLen = textTokens.Length;
+        var fusedInput = visualFeatures.ConcatenateTensors(textTokens);
 
-        // Step 3: Cross-modal feature enhancement
-        // Fuse visual and text features via cross-attention
-        var enhancedVisual = new Tensor<T>([visDim]);
-        for (int d = 0; d < visDim; d++)
-        {
-            double vis = NumOps.ToDouble(visualFeatures[d]);
-            if (textLen > 0)
-            {
-                double textVal = NumOps.ToDouble(textTokens[d % textLen]);
-                double crossAttn = 1.0 / (1.0 + Math.Exp(-textVal / 100.0));
-                vis = vis * (0.6 + 0.8 * crossAttn); // Modulate by text relevance
-            }
-            enhancedVisual[d] = NumOps.FromDouble(vis);
-        }
-
-        // Step 4: Process through decoder layers
-        var decoderOut = enhancedVisual;
+        // Step 3: Process through decoder layers
+        var decoderOut = fusedInput;
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)
             decoderOut = Layers[i].Forward(decoderOut);
 

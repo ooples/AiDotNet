@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -47,7 +48,6 @@ public class DINOX<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
             return OnnxModel.Run(PreprocessImage(image));
 
         var p = PreprocessImage(image);
-        int dim = _options.DecoderDim;
         int numQueries = _options.NumQueryPositions;
         double confThreshold = _options.ConfidenceThreshold;
         double nmsThreshold = _options.NmsThreshold;
@@ -57,55 +57,12 @@ public class DINOX<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
         for (int i = 0; i < _encoderLayerEnd; i++)
             visualFeatures = Layers[i].Forward(visualFeatures);
 
-        int visDim = visualFeatures.Length;
-
-        // Step 2: Universal prompt encoding - multi-head text prompt embeddings
+        // Step 2: Universal prompt encoding via ConcatenateTensors
         var textTokens = TokenizeText(textQuery);
-        int textLen = textTokens.Length;
-        int numPromptHeads = 4; // Multiple prompt interpretations
+        var fusedInput = visualFeatures.ConcatenateTensors(textTokens);
 
-        var promptEmbeddings = new double[numPromptHeads][];
-        for (int h = 0; h < numPromptHeads; h++)
-        {
-            promptEmbeddings[h] = new double[visDim];
-            for (int d = 0; d < visDim; d++)
-            {
-                double sum = 0;
-                for (int t = 0; t < textLen; t++)
-                {
-                    double tokenVal = NumOps.ToDouble(textTokens[t]);
-                    // Head-specific attention weight
-                    double weight = Math.Exp(-Math.Abs(d - (t * visDim / Math.Max(1, textLen)) - h * visDim / numPromptHeads) / (visDim * 0.3));
-                    sum += tokenVal * weight;
-                }
-                promptEmbeddings[h][d] = sum / Math.Max(1, textLen);
-            }
-        }
-
-        // Step 3: Prompt-guided deformable cross-attention
-        var enhancedVisual = new Tensor<T>([visDim]);
-        for (int d = 0; d < visDim; d++)
-        {
-            double vis = NumOps.ToDouble(visualFeatures[d]);
-            // Aggregate from all prompt heads with attention gating
-            double promptInfluence = 0;
-            double headWeightSum = 0;
-            for (int h = 0; h < numPromptHeads; h++)
-            {
-                double headScore = promptEmbeddings[h][d];
-                double gate = 1.0 / (1.0 + Math.Exp(-headScore / 50.0));
-                promptInfluence += gate * headScore;
-                headWeightSum += gate;
-            }
-            if (headWeightSum > 1e-8)
-                promptInfluence /= headWeightSum;
-
-            double alignment = 1.0 / (1.0 + Math.Exp(-promptInfluence / 100.0));
-            enhancedVisual[d] = NumOps.FromDouble(vis * (0.4 + 1.2 * alignment));
-        }
-
-        // Step 4: Decoder
-        var decoderOut = enhancedVisual;
+        // Step 3: Decoder with prompt-guided cross-modal features
+        var decoderOut = fusedInput;
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)
             decoderOut = Layers[i].Forward(decoderOut);
 

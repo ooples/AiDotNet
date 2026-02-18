@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -48,8 +49,6 @@ public class OWLv2<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
             return OnnxModel.Run(PreprocessImage(image));
 
         var p = PreprocessImage(image);
-        int dim = _options.DecoderDim;
-        int classEmbDim = _options.NumClassEmbeddings;
         double confThreshold = _options.ConfidenceThreshold;
         double nmsThreshold = _options.NmsThreshold;
 
@@ -58,28 +57,21 @@ public class OWLv2<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
         for (int i = 0; i < _encoderLayerEnd; i++)
             visualFeatures = Layers[i].Forward(visualFeatures);
 
-        int visDim = visualFeatures.Length;
-
-        // Step 2: Text embedding with larger class embedding space
+        // Step 2: Text-conditioned feature fusion via ConcatenateTensors
         var textTokens = TokenizeText(textQuery);
-        int textLen = textTokens.Length;
-        var textEmbedding = new double[classEmbDim];
-        for (int t = 0; t < textLen; t++)
-        {
-            double tokenVal = NumOps.ToDouble(textTokens[t]);
-            for (int d = 0; d < classEmbDim; d++)
-                textEmbedding[d] += tokenVal * Math.Sin((t + 1) * (d + 1) * 0.01) / Math.Max(1, textLen);
-        }
-        double textNorm = 0;
-        for (int d = 0; d < classEmbDim; d++) textNorm += textEmbedding[d] * textEmbedding[d];
-        textNorm = Math.Sqrt(textNorm) + 1e-8;
-        for (int d = 0; d < classEmbDim; d++) textEmbedding[d] /= textNorm;
+        var fusedInput = visualFeatures.ConcatenateTensors(textTokens);
+
+        // Run through decoder layers for text-conditioned detection features
+        var decoderOut = fusedInput;
+        for (int i = _encoderLayerEnd; i < Layers.Count; i++)
+            decoderOut = Layers[i].Forward(decoderOut);
+        int outDim = decoderOut.Length;
 
         // Step 3: Per-patch detection with calibrated objectness
         int patchSize = 14;
         int gridSize = _options.ImageSize / patchSize;
         int numPatches = gridSize * gridSize;
-        int actualPatches = Math.Min(numPatches, visDim);
+        int actualPatches = Math.Min(numPatches, outDim);
 
         int fieldsPerDet = 5;
         int maxDet = Math.Min(actualPatches, _options.MaxDetections);
@@ -93,45 +85,33 @@ public class OWLv2<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
             double patchCenterX = (gridCol + 0.5) / gridSize;
             double patchCenterY = (gridRow + 0.5) / gridSize;
 
-            // Extract and project patch features to class embedding space
-            var patchFeat = new double[classEmbDim];
-            for (int d = 0; d < classEmbDim; d++)
+            // Extract text-conditioned patch features from decoder output
+            int dim = Math.Max(1, outDim / actualPatches);
+            var patchFeat = new double[dim];
+            for (int d = 0; d < dim; d++)
             {
-                int srcIdx = (pIdx * classEmbDim + d) % visDim;
-                patchFeat[d] = NumOps.ToDouble(visualFeatures[srcIdx]);
+                int srcIdx = (pIdx * dim + d) % outDim;
+                patchFeat[d] = NumOps.ToDouble(decoderOut[srcIdx]);
             }
-            double patchNorm = 0;
-            for (int d = 0; d < classEmbDim; d++) patchNorm += patchFeat[d] * patchFeat[d];
-            patchNorm = Math.Sqrt(patchNorm) + 1e-8;
-            for (int d = 0; d < classEmbDim; d++) patchFeat[d] /= patchNorm;
 
-            // Cosine similarity for class prediction
-            double cosineSim = 0;
-            for (int d = 0; d < classEmbDim; d++)
-                cosineSim += patchFeat[d] * textEmbedding[d];
-
-            // Calibrated objectness (OWLv2 improvement: better background separation)
-            double objectnessRaw = 0;
-            for (int d = 0; d < Math.Min(8, classEmbDim); d++)
-                objectnessRaw += patchFeat[d] * patchFeat[d];
-            // Self-training calibration: sharper sigmoid with temperature
-            double objectness = 1.0 / (1.0 + Math.Exp(-objectnessRaw * 3.0 + 2.0));
-
-            double textScore = 1.0 / (1.0 + Math.Exp(-cosineSim * 6.0));
-            double conf = objectness * textScore;
+            // Objectness score from text-conditioned features
+            double objectness = 0;
+            for (int d = 0; d < dim; d++)
+                objectness += patchFeat[d];
+            double conf = 1.0 / (1.0 + Math.Exp(-objectness / Math.Max(1, dim)));
 
             // Box regression
             double boxDx = 0, boxDy = 0, boxW = 0, boxH = 0;
-            int q = Math.Max(1, classEmbDim / 4);
-            for (int d = 0; d < q && d < classEmbDim; d++) boxDx += patchFeat[d];
-            for (int d = q; d < 2 * q && d < classEmbDim; d++) boxDy += patchFeat[d];
-            for (int d = 2 * q; d < 3 * q && d < classEmbDim; d++) boxW += patchFeat[d];
-            for (int d = 3 * q; d < classEmbDim; d++) boxH += patchFeat[d];
+            int quarter = Math.Max(1, dim / 4);
+            for (int d = 0; d < quarter && d < dim; d++) boxDx += patchFeat[d];
+            for (int d = quarter; d < 2 * quarter && d < dim; d++) boxDy += patchFeat[d];
+            for (int d = 2 * quarter; d < 3 * quarter && d < dim; d++) boxW += patchFeat[d];
+            for (int d = 3 * quarter; d < dim; d++) boxH += patchFeat[d];
 
-            boxDx = Math.Tanh(boxDx / q) * 0.5 / gridSize;
-            boxDy = Math.Tanh(boxDy / q) * 0.5 / gridSize;
-            boxW = 1.0 / (1.0 + Math.Exp(-boxW / q)) * 3.0 / gridSize;
-            boxH = 1.0 / (1.0 + Math.Exp(-boxH / q)) * 3.0 / gridSize;
+            boxDx = Math.Tanh(boxDx / quarter) * 0.5 / gridSize;
+            boxDy = Math.Tanh(boxDy / quarter) * 0.5 / gridSize;
+            boxW = 1.0 / (1.0 + Math.Exp(-boxW / quarter)) * 3.0 / gridSize;
+            boxH = 1.0 / (1.0 + Math.Exp(-boxH / quarter)) * 3.0 / gridSize;
 
             double cx = patchCenterX + boxDx;
             double cy = patchCenterY + boxDy;
