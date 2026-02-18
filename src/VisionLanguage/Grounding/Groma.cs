@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -126,19 +127,18 @@ public class Groma<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
             regionScores[q] = attnSum / stride;
         }
 
-        // Step 3: RoI-Align and text-region matching
+        // Step 3: Text-conditioned region scoring via ConcatenateTensors
         var textTokens = TokenizeText(textQuery);
-        int textLen = textTokens.Length;
-        var textEmb = new double[Math.Min(dim, 128)];
-        int embDim = textEmb.Length;
-        for (int t = 0; t < textLen; t++)
-        {
-            double tv = NumOps.ToDouble(textTokens[t]);
-            for (int d = 0; d < embDim; d++)
-                textEmb[d] += tv * Math.Sin((t + 1) * (d + 1) * 0.02) / Math.Max(1, textLen);
-        }
+        var fusedFeatures = visualFeatures.ConcatenateTensors(textTokens);
 
-        // Score each region against text query
+        // Run through decoder layers for text-conditioned scoring
+        var decoderOut = fusedFeatures;
+        for (int i = _encoderLayerEnd; i < Layers.Count; i++)
+            decoderOut = Layers[i].Forward(decoderOut);
+
+        int outDim = decoderOut.Length;
+
+        // Score each region against text-conditioned features
         int fieldsPerDet = 5;
         int maxDet = _options.MaxDetections;
         var rawDetections = new double[maxDet, fieldsPerDet];
@@ -151,18 +151,15 @@ public class Groma<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
             double rw = regionProposals[q][2];
             double rh = regionProposals[q][3];
 
-            // RoI-Align: extract features from proposed region
+            // Score region using text-conditioned decoder features
+            int roiStart = (int)(cx * outDim) % outDim;
+            int roiSpan = Math.Max(1, (int)(rw * outDim * 0.5));
             double roiFeatSum = 0;
-            int roiStart = (int)(cx * visDim) % visDim;
-            int roiSpan = Math.Max(1, (int)(rw * visDim * 0.5));
-            for (int d = 0; d < roiSpan && d < embDim; d++)
-            {
-                double featVal = NumOps.ToDouble(visualFeatures[(roiStart + d) % visDim]);
-                roiFeatSum += featVal * textEmb[d % embDim];
-            }
+            for (int d = 0; d < roiSpan; d++)
+                roiFeatSum += NumOps.ToDouble(decoderOut[(roiStart + d) % outDim]);
 
-            double textMatch = 1.0 / (1.0 + Math.Exp(-roiFeatSum / Math.Max(1, roiSpan)));
-            double conf = textMatch * regionScores[q];
+            double conf = 1.0 / (1.0 + Math.Exp(-roiFeatSum / Math.Max(1, roiSpan)));
+            conf = conf * regionScores[q];
             conf = 1.0 / (1.0 + Math.Exp(-conf * 5.0 + 2.0));
 
             double x1 = Math.Max(0, cx - rw / 2);

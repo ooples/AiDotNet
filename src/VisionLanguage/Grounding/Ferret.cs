@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -49,7 +50,6 @@ public class Ferret<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
             return OnnxModel.Run(PreprocessImage(image));
 
         var p = PreprocessImage(image);
-        int dim = _options.DecoderDim;
         double confThreshold = _options.ConfidenceThreshold;
         double nmsThreshold = _options.NmsThreshold;
 
@@ -58,39 +58,32 @@ public class Ferret<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
         for (int i = 0; i < _encoderLayerEnd; i++)
             visualFeatures = Layers[i].Forward(visualFeatures);
 
-        int visDim = visualFeatures.Length;
-
-        // Step 2: Spatial-aware visual sampling
-        // Create a dense spatial feature grid from encoder output
-        int gridSize = (int)Math.Sqrt(visDim / Math.Max(1, dim));
-        if (gridSize < 2) gridSize = (int)Math.Sqrt(visDim);
-        if (gridSize < 2) gridSize = 2;
-        int featsPerCell = Math.Max(1, visDim / (gridSize * gridSize));
-
-        // Step 3: Text encoding - parse for potential region references
+        // Step 2: Text-conditioned feature fusion via ConcatenateTensors
         var textTokens = TokenizeText(textQuery);
-        int textLen = textTokens.Length;
+        var fusedInput = visualFeatures.ConcatenateTensors(textTokens);
 
-        // Compute text-conditioned spatial attention over the grid
+        // Run through decoder layers for text-conditioned spatial features
+        var decoderOut = fusedInput;
+        for (int i = _encoderLayerEnd; i < Layers.Count; i++)
+            decoderOut = Layers[i].Forward(decoderOut);
+
+        int outDim = decoderOut.Length;
+
+        // Step 3: Spatial attention from text-conditioned features
+        int gridSize = (int)Math.Sqrt(outDim);
+        if (gridSize < 2) gridSize = 2;
+        int featsPerCell = Math.Max(1, outDim / (gridSize * gridSize));
+
         var spatialAttention = new double[gridSize * gridSize];
         double attnSum = 0;
         for (int cell = 0; cell < gridSize * gridSize; cell++)
         {
-            int cellStart = (cell * featsPerCell) % visDim;
+            int cellStart = (cell * featsPerCell) % outDim;
             double cellFeat = 0;
             for (int d = 0; d < Math.Min(featsPerCell, 4); d++)
-                cellFeat += NumOps.ToDouble(visualFeatures[(cellStart + d) % visDim]);
+                cellFeat += NumOps.ToDouble(decoderOut[(cellStart + d) % outDim]);
 
-            // Text-visual alignment score
-            double textAlign = 0;
-            for (int t = 0; t < textLen; t++)
-            {
-                double tv = NumOps.ToDouble(textTokens[t]);
-                textAlign += tv * Math.Cos(cell * (t + 1) * 0.1);
-            }
-            textAlign /= Math.Max(1, textLen);
-
-            spatialAttention[cell] = Math.Exp(cellFeat * 0.1 + textAlign * 0.01);
+            spatialAttention[cell] = Math.Exp(cellFeat * 0.1);
             attnSum += spatialAttention[cell];
         }
 

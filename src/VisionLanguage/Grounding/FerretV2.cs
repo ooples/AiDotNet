@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -48,61 +49,42 @@ public class FerretV2<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
             return OnnxModel.Run(PreprocessImage(image));
 
         var p = PreprocessImage(image);
-        int dim = _options.DecoderDim;
         double confThreshold = _options.ConfidenceThreshold;
         double nmsThreshold = _options.NmsThreshold;
 
         // Step 1: Any-resolution multi-scale encoding
-        // Process global view through encoder
-        var globalFeatures = p;
+        var visualFeatures = p;
         for (int i = 0; i < _encoderLayerEnd; i++)
-            globalFeatures = Layers[i].Forward(globalFeatures);
+            visualFeatures = Layers[i].Forward(visualFeatures);
 
-        int visDim = globalFeatures.Length;
+        int visDim = visualFeatures.Length;
 
-        // Step 2: Simulate high-resolution sub-image crops
-        // Split feature map into 2x2 quadrants for multi-granularity
-        int quadrantSize = visDim / 4;
-        var multiScaleFeatures = new Tensor<T>([visDim]);
-        for (int d = 0; d < visDim; d++)
-        {
-            double globalVal = NumOps.ToDouble(globalFeatures[d]);
-            // High-res quadrant feature: sharpen local detail
-            int quadrant = (d * 4) / visDim;
-            int localIdx = d % Math.Max(1, quadrantSize);
-            double localSharp = globalVal * (1.0 + 0.3 * Math.Cos(localIdx * Math.PI / Math.Max(1, quadrantSize)));
-            // Combine global context (0.3) with sharpened local detail (0.7)
-            multiScaleFeatures[d] = NumOps.FromDouble(globalVal * 0.3 + localSharp * 0.7);
-        }
-
-        // Step 3: Text-conditioned spatial attention with DINOv2-style features
+        // Step 2: Text-conditioned feature fusion via ConcatenateTensors
         var textTokens = TokenizeText(textQuery);
-        int textLen = textTokens.Length;
+        var fusedInput = visualFeatures.ConcatenateTensors(textTokens);
 
-        int gridSize = (int)Math.Sqrt(visDim / Math.Max(1, dim));
-        if (gridSize < 2) gridSize = (int)Math.Sqrt(visDim);
+        // Run through decoder layers for text-conditioned detection features
+        var decoderOut = fusedInput;
+        for (int i = _encoderLayerEnd; i < Layers.Count; i++)
+            decoderOut = Layers[i].Forward(decoderOut);
+
+        int outDim = decoderOut.Length;
+
+        // Step 3: Spatial attention from text-conditioned features
+        int gridSize = (int)Math.Sqrt(outDim);
         if (gridSize < 2) gridSize = 2;
-        int featsPerCell = Math.Max(1, visDim / (gridSize * gridSize));
+        int featsPerCell = Math.Max(1, outDim / (gridSize * gridSize));
 
         var spatialAttention = new double[gridSize * gridSize];
         double attnSum = 0;
         for (int cell = 0; cell < gridSize * gridSize; cell++)
         {
-            int cellStart = (cell * featsPerCell) % visDim;
+            int cellStart = (cell * featsPerCell) % outDim;
             double cellFeat = 0;
             for (int d = 0; d < Math.Min(featsPerCell, 8); d++)
-                cellFeat += NumOps.ToDouble(multiScaleFeatures[(cellStart + d) % visDim]);
+                cellFeat += NumOps.ToDouble(decoderOut[(cellStart + d) % outDim]);
 
-            // DINOv2-enhanced text alignment: stronger spatial discrimination
-            double textAlign = 0;
-            for (int t = 0; t < textLen; t++)
-            {
-                double tv = NumOps.ToDouble(textTokens[t]);
-                textAlign += tv * Math.Cos(cell * (t + 1) * 0.08);
-            }
-            textAlign /= Math.Max(1, textLen);
-
-            spatialAttention[cell] = Math.Exp(cellFeat * 0.08 + textAlign * 0.015);
+            spatialAttention[cell] = Math.Exp(cellFeat * 0.08);
             attnSum += spatialAttention[cell];
         }
 

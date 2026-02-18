@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -50,7 +51,6 @@ public class Shikra<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
             return OnnxModel.Run(PreprocessImage(image));
 
         var p = PreprocessImage(image);
-        int dim = _options.DecoderDim;
         double confThreshold = _options.ConfidenceThreshold;
         double nmsThreshold = _options.NmsThreshold;
 
@@ -59,27 +59,9 @@ public class Shikra<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
         for (int i = 0; i < _encoderLayerEnd; i++)
             visualFeatures = Layers[i].Forward(visualFeatures);
 
-        int visDim = visualFeatures.Length;
-
-        // Step 2: Interleave visual tokens with text instruction
+        // Step 2: Interleave visual tokens with text instruction via ConcatenateTensors
         var textTokens = TokenizeText(textQuery);
-        int textLen = textTokens.Length;
-
-        // Create multimodal sequence: [visual tokens] + [text tokens]
-        int seqLen = visDim + textLen;
-        var multimodalSeq = new Tensor<T>([visDim]);
-        for (int d = 0; d < visDim; d++)
-        {
-            double vis = NumOps.ToDouble(visualFeatures[d]);
-            // Text-conditioned modulation of visual features
-            if (textLen > 0)
-            {
-                double textVal = NumOps.ToDouble(textTokens[d % textLen]);
-                double gate = 1.0 / (1.0 + Math.Exp(-textVal / 100.0));
-                vis = vis * (0.5 + gate);
-            }
-            multimodalSeq[d] = NumOps.FromDouble(vis);
-        }
+        var multimodalSeq = visualFeatures.ConcatenateTensors(textTokens);
 
         // Step 3: LLM decoder to generate coordinate tokens
         var decoderOut = multimodalSeq;

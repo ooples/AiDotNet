@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -60,29 +61,23 @@ public class OWLViT<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
 
         int visDim = visualFeatures.Length;
 
-        // Step 2: Text embedding via CLIP text encoder
+        // Step 2: Text-conditioned feature fusion via ConcatenateTensors
         var textTokens = TokenizeText(textQuery);
-        int textLen = textTokens.Length;
-        // Compute text embedding (average pooled token features)
-        var textEmbedding = new double[dim];
-        for (int t = 0; t < textLen; t++)
-        {
-            double tokenVal = NumOps.ToDouble(textTokens[t]);
-            for (int d = 0; d < dim; d++)
-                textEmbedding[d] += tokenVal * Math.Sin((t + 1) * (d + 1) * 0.01) / Math.Max(1, textLen);
-        }
-        // L2 normalize text embedding
-        double textNorm = 0;
-        for (int d = 0; d < dim; d++) textNorm += textEmbedding[d] * textEmbedding[d];
-        textNorm = Math.Sqrt(textNorm) + 1e-8;
-        for (int d = 0; d < dim; d++) textEmbedding[d] /= textNorm;
+        var fusedInput = visualFeatures.ConcatenateTensors(textTokens);
+
+        // Run through decoder layers for text-conditioned detection features
+        var decoderOut = fusedInput;
+        for (int i = _encoderLayerEnd; i < Layers.Count; i++)
+            decoderOut = Layers[i].Forward(decoderOut);
+
+        int outDim = decoderOut.Length;
 
         // Step 3: Per-patch detection - each patch produces box + objectness
         int patchSize = 16;
         int gridSize = _options.ImageSize / patchSize;
         int numPatches = gridSize * gridSize;
-        int actualPatches = Math.Min(numPatches, visDim / Math.Max(1, dim));
-        if (actualPatches < 1) actualPatches = Math.Min(numPatches, visDim);
+        int actualPatches = Math.Min(numPatches, outDim / Math.Max(1, dim));
+        if (actualPatches < 1) actualPatches = Math.Min(numPatches, outDim);
 
         int fieldsPerDet = 5;
         int maxDet = Math.Min(actualPatches, _options.MaxDetections);
@@ -97,11 +92,11 @@ public class OWLViT<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
             double patchCenterX = (gridCol + 0.5) / gridSize;
             double patchCenterY = (gridRow + 0.5) / gridSize;
 
-            // Extract patch feature vector
-            int featStart = (pIdx * dim) % visDim;
+            // Extract patch feature vector from text-conditioned decoder output
+            int featStart = (pIdx * dim) % outDim;
             var patchFeat = new double[dim];
-            for (int d = 0; d < dim && featStart + d < visDim; d++)
-                patchFeat[d] = NumOps.ToDouble(visualFeatures[(featStart + d) % visDim]);
+            for (int d = 0; d < dim && featStart + d < outDim; d++)
+                patchFeat[d] = NumOps.ToDouble(decoderOut[(featStart + d) % outDim]);
 
             // L2 normalize patch features
             double patchNorm = 0;
@@ -109,20 +104,11 @@ public class OWLViT<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
             patchNorm = Math.Sqrt(patchNorm) + 1e-8;
             for (int d = 0; d < dim; d++) patchFeat[d] /= patchNorm;
 
-            // Class prediction via cosine similarity with text embedding
-            double cosineSim = 0;
-            for (int d = 0; d < dim; d++)
-                cosineSim += patchFeat[d] * textEmbedding[d];
-
-            // Objectness score from patch features
+            // Objectness score from text-conditioned patch features
             double objectness = 0;
-            for (int d = 0; d < Math.Min(4, dim); d++)
+            for (int d = 0; d < dim; d++)
                 objectness += patchFeat[d];
-            objectness = 1.0 / (1.0 + Math.Exp(-objectness));
-
-            // Combined confidence = objectness * text-alignment
-            double textScore = 1.0 / (1.0 + Math.Exp(-cosineSim * 5.0));
-            double conf = objectness * textScore;
+            double conf = 1.0 / (1.0 + Math.Exp(-objectness / Math.Max(1, dim)));
 
             // Box prediction MLP: predict offsets from patch center
             double boxDx = 0, boxDy = 0, boxW = 0, boxH = 0;

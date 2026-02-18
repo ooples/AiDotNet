@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -58,24 +59,12 @@ public class GroundedSAM2<T> : VisionLanguageModelBase<T>, IVisualGroundingModel
 
         int visDim = visualFeatures.Length;
 
-        // Text-conditioned cross-modal feature enhancement
+        // Text-conditioned feature fusion via ConcatenateTensors
         var textTokens = TokenizeText(textQuery);
-        int textLen = textTokens.Length;
-        var enhancedVis = new Tensor<T>([visDim]);
-        for (int d = 0; d < visDim; d++)
-        {
-            double vis = NumOps.ToDouble(visualFeatures[d]);
-            if (textLen > 0)
-            {
-                double tv = NumOps.ToDouble(textTokens[d % textLen]);
-                double gate = 1.0 / (1.0 + Math.Exp(-tv / 100.0));
-                vis = vis * (0.6 + 0.8 * gate);
-            }
-            enhancedVis[d] = NumOps.FromDouble(vis);
-        }
+        var fusedInput = visualFeatures.ConcatenateTensors(textTokens);
 
         // Decoder for box proposals
-        var decoderOut = enhancedVis;
+        var decoderOut = fusedInput;
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)
             decoderOut = Layers[i].Forward(decoderOut);
 
