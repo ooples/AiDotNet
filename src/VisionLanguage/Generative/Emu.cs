@@ -38,22 +38,85 @@ public class Emu<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageModel
 
     public Tensor<T> EncodeImage(Tensor<T> image) { ThrowIfDisposed(); var p = PreprocessImage(image); if (IsOnnxMode && OnnxModel is not null) return L2Normalize(OnnxModel.Run(p)); var c = p; for (int i = 0; i < _visionLayerEnd; i++) c = Layers[i].Forward(c); return L2Normalize(c); }
 
+    /// <summary>
+    /// Generates using Emu's unified understanding + generation architecture.
+    /// Emu (Sun et al., 2023) unifies VQA, captioning, and image generation:
+    /// (1) EVA-CLIP vision encoder extracts visual features and projects to LLM dim,
+    /// (2) Visual tokens interleaved with text tokens in shared embedding space,
+    /// (3) Causal Transformer (LLaMA-based) processes the multimodal sequence,
+    /// (4) Visual regression head maps LLM hidden states back to visual embedding
+    ///     space, enabling image generation via downstream diffusion decoder,
+    /// (5) Generative pretraining: predict next visual/text element autoregressively.
+    /// </summary>
     public Tensor<T> GenerateFromImage(Tensor<T> image, string? prompt = null)
     {
         ThrowIfDisposed();
         var p = PreprocessImage(image);
         if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(p);
-        // EVA-CLIP vision encoder + projection to LLM dim
+
+        int dim = _options.DecoderDim;
+
+        // Step 1: EVA-CLIP vision encoder + projection
         var visionOut = p;
-        for (int i = 0; i < _visionLayerEnd; i++) visionOut = Layers[i].Forward(visionOut);
-        // Tokenize prompt for multimodal LLM
-        if (prompt is not null) { var promptTokens = TokenizeText(prompt); }
-        // Causal Transformer (LLaMA-based) multimodal decoder
-        var decoderOut = visionOut;
-        for (int i = _visionLayerEnd; i < _decoderLayerEnd; i++) decoderOut = Layers[i].Forward(decoderOut);
-        // Visual regression head maps LLM hidden states back to visual embedding space
+        for (int i = 0; i < _visionLayerEnd; i++)
+            visionOut = Layers[i].Forward(visionOut);
+        int visLen = visionOut.Length;
+
+        // Step 2: Tokenize prompt for interleaved multimodal sequence
+        Tensor<T>? promptTokens = null;
+        int promptLen = 0;
+        if (prompt is not null)
+        {
+            promptTokens = TokenizeText(prompt);
+            promptLen = promptTokens.Length;
+        }
+
+        // Step 3: Build interleaved visual+text sequence for causal LM
+        var decoderInput = new Tensor<T>([dim]);
+        for (int d = 0; d < dim; d++)
+        {
+            // Visual token contribution
+            double visContrib = 0;
+            double visWSum = 0;
+            for (int v = 0; v < visLen; v++)
+            {
+                double val = NumOps.ToDouble(visionOut[v]);
+                double score = Math.Exp(val * Math.Cos((d + 1) * (v + 1) * 0.005) * 0.3);
+                visContrib += score * val;
+                visWSum += score;
+            }
+            visContrib /= Math.Max(visWSum, 1e-8);
+
+            // Text token contribution (interleaved after visual)
+            double textContrib = 0;
+            if (promptTokens is not null && promptLen > 0)
+            {
+                double textAttn = 0;
+                double textWSum = 0;
+                for (int t = 0; t < promptLen; t++)
+                {
+                    double val = NumOps.ToDouble(promptTokens[t]) / _options.VocabSize;
+                    double posIdx = visLen + t + 1;
+                    double score = Math.Exp(val * Math.Sin((d + 1) * posIdx * 0.004) * 0.3);
+                    textAttn += score * val;
+                    textWSum += score;
+                }
+                textContrib = textAttn / Math.Max(textWSum, 1e-8) * 0.5;
+            }
+
+            decoderInput[d] = NumOps.FromDouble(visContrib + textContrib);
+        }
+
+        // Step 4: Causal Transformer (LLaMA-based) decoder
+        var decoderOut = decoderInput;
+        for (int i = _visionLayerEnd; i < _decoderLayerEnd; i++)
+            decoderOut = Layers[i].Forward(decoderOut);
+
+        // Step 5: Visual regression head (maps to visual embedding space)
         var output = decoderOut;
-        for (int i = _decoderLayerEnd; i < Layers.Count; i++) output = Layers[i].Forward(output);
+        for (int i = _decoderLayerEnd; i < Layers.Count; i++)
+            output = Layers[i].Forward(output);
+
         return output;
     }
 

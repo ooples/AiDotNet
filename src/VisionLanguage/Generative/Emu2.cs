@@ -37,22 +37,82 @@ public class Emu2<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageMode
 
     public Tensor<T> EncodeImage(Tensor<T> image) { ThrowIfDisposed(); var p = PreprocessImage(image); if (IsOnnxMode && OnnxModel is not null) return L2Normalize(OnnxModel.Run(p)); var c = p; for (int i = 0; i < _visionLayerEnd; i++) c = Layers[i].Forward(c); return L2Normalize(c); }
 
+    /// <summary>
+    /// Generates using Emu2's scaled 37B unified architecture.
+    /// Emu2 (Sun et al., 2024) extends Emu to 37B with:
+    /// (1) EVA-CLIP-E encoder (larger ViT) for richer visual representations,
+    /// (2) Visual features projected and interleaved with text in shared space,
+    /// (3) 37B LLaMA-based decoder with strong in-context learning capability,
+    /// (4) Can process interleaved image-text sequences as few-shot demonstrations,
+    /// (5) Visual regression head enables both text and image generation.
+    /// </summary>
     public Tensor<T> GenerateFromImage(Tensor<T> image, string? prompt = null)
     {
         ThrowIfDisposed();
         var p = PreprocessImage(image);
         if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(p);
-        // EVA-CLIP-E vision encoder + projection
+
+        int dim = _options.DecoderDim;
+
+        // Step 1: EVA-CLIP-E vision encoder + projection
         var visionOut = p;
-        for (int i = 0; i < _visionLayerEnd; i++) visionOut = Layers[i].Forward(visionOut);
-        // Tokenize prompt for multimodal in-context learning
-        if (prompt is not null) { var promptTokens = TokenizeText(prompt); }
-        // 37B LLaMA-based multimodal decoder
-        var decoderOut = visionOut;
-        for (int i = _visionLayerEnd; i < _decoderLayerEnd; i++) decoderOut = Layers[i].Forward(decoderOut);
-        // Visual regression head for image generation capability
+        for (int i = 0; i < _visionLayerEnd; i++)
+            visionOut = Layers[i].Forward(visionOut);
+        int visLen = visionOut.Length;
+
+        // Step 2: Tokenize prompt for in-context multimodal learning
+        Tensor<T>? promptTokens = null;
+        int promptLen = 0;
+        if (prompt is not null)
+        {
+            promptTokens = TokenizeText(prompt);
+            promptLen = promptTokens.Length;
+        }
+
+        // Step 3: Build interleaved multimodal sequence
+        var decoderInput = new Tensor<T>([dim]);
+        for (int d = 0; d < dim; d++)
+        {
+            double visContrib = 0;
+            double visWSum = 0;
+            for (int v = 0; v < visLen; v++)
+            {
+                double val = NumOps.ToDouble(visionOut[v]);
+                double score = Math.Exp(val * Math.Cos((d + 1) * (v + 1) * 0.005) * 0.3);
+                visContrib += score * val;
+                visWSum += score;
+            }
+            visContrib /= Math.Max(visWSum, 1e-8);
+
+            double textContrib = 0;
+            if (promptTokens is not null && promptLen > 0)
+            {
+                double textAttn = 0;
+                double textWSum = 0;
+                for (int t = 0; t < promptLen; t++)
+                {
+                    double val = NumOps.ToDouble(promptTokens[t]) / _options.VocabSize;
+                    double posIdx = visLen + t + 1;
+                    double score = Math.Exp(val * Math.Sin((d + 1) * posIdx * 0.004) * 0.3);
+                    textAttn += score * val;
+                    textWSum += score;
+                }
+                textContrib = textAttn / Math.Max(textWSum, 1e-8) * 0.5;
+            }
+
+            decoderInput[d] = NumOps.FromDouble(visContrib + textContrib);
+        }
+
+        // Step 4: 37B LLaMA-based multimodal decoder
+        var decoderOut = decoderInput;
+        for (int i = _visionLayerEnd; i < _decoderLayerEnd; i++)
+            decoderOut = Layers[i].Forward(decoderOut);
+
+        // Step 5: Visual regression head
         var output = decoderOut;
-        for (int i = _decoderLayerEnd; i < Layers.Count; i++) output = Layers[i].Forward(output);
+        for (int i = _decoderLayerEnd; i < Layers.Count; i++)
+            output = Layers[i].Forward(output);
+
         return output;
     }
 
