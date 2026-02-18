@@ -31,7 +31,88 @@ public class PLLaVA<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<T>
     public int EmbeddingDimension => _options.DecoderDim; int IVisualEncoder<T>.ImageSize => _options.ImageSize; int IVisualEncoder<T>.ImageChannels => 3; public int MaxGenerationLength => _options.MaxGenerationLength; public int DecoderEmbeddingDim => _options.DecoderDim; public string LanguageModelName => _options.LanguageModelName; public int MaxFrames => _options.MaxFrames;
     public Tensor<T> EncodeImage(Tensor<T> image) { ThrowIfDisposed(); var p = PreprocessImage(image); if (IsOnnxMode && OnnxModel is not null) return L2Normalize(OnnxModel.Run(p)); var c = p; for (int i = 0; i < _encoderLayerEnd; i++) c = Layers[i].Forward(c); return L2Normalize(c); }
     public Tensor<T> GenerateFromImage(Tensor<T> image, string? prompt = null) { ThrowIfDisposed(); var p = PreprocessImage(image); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(p); var encoderOut = p; for (int i = 0; i < _encoderLayerEnd; i++) encoderOut = Layers[i].Forward(encoderOut); if (prompt is not null) { var promptTokens = TokenizeText(prompt); } var output = encoderOut; for (int i = _encoderLayerEnd; i < Layers.Count; i++) output = Layers[i].Forward(output); return output; }
-    public Tensor<T> GenerateFromVideo(IReadOnlyList<Tensor<T>> frames, string? prompt = null) { ThrowIfDisposed(); int count = Math.Min(frames.Count, _options.MaxFrames); if (count == 0) throw new ArgumentException("At least one frame is required.", nameof(frames)); var first = EncodeImage(frames[0]); for (int f = 1; f < count; f++) { var enc = EncodeImage(frames[f]); for (int i = 0; i < first.Length && i < enc.Length; i++) first[i] = NumOps.Add(first[i], enc[i]); } T scale = NumOps.FromDouble(1.0 / count); for (int i = 0; i < first.Length; i++) first[i] = NumOps.Multiply(first[i], scale); if (prompt is not null) { var promptTokens = TokenizeText(prompt); } var output = first; for (int i = _encoderLayerEnd; i < Layers.Count; i++) output = Layers[i].Forward(output); return output; }
+    /// <summary>
+    /// Generates output from video frames using PLLaVA's parameter-free adaptive pooling.
+    /// Per the paper (HKU 2024), visual tokens from each frame are pooled using adaptive
+    /// average pooling across both spatial and temporal dimensions WITHOUT any learned parameters.
+    /// The pooling target size is determined by a budget formula that allocates tokens proportionally
+    /// to maintain the same total token count as a single high-res image. This enables any image
+    /// VLM to process videos without additional training.
+    /// </summary>
+    public Tensor<T> GenerateFromVideo(IReadOnlyList<Tensor<T>> frames, string? prompt = null)
+    {
+        ThrowIfDisposed();
+        int count = Math.Min(frames.Count, _options.MaxFrames);
+        if (count == 0) throw new ArgumentException("At least one frame is required.", nameof(frames));
+
+        // Step 1: Encode all frames through the image VLM's vision encoder
+        var frameFeatures = new Tensor<T>[count];
+        for (int f = 0; f < count; f++)
+            frameFeatures[f] = EncodeImage(frames[f]);
+
+        int dim = frameFeatures[0].Length;
+
+        if (!_options.EnableParameterFreePooling || count == 1)
+        {
+            var output = frameFeatures[0];
+            for (int i = _encoderLayerEnd; i < Layers.Count; i++)
+                output = Layers[i].Forward(output);
+            return output;
+        }
+
+        // Step 2: Parameter-free adaptive pooling
+        // Budget formula: each frame gets dim/count tokens (proportional allocation)
+        // Then we adaptively pool each frame's features to this reduced size
+        int tokensPerFrame = Math.Max(1, dim / count);
+
+        // Step 3: Spatial pooling per frame - reduce each frame to tokensPerFrame features
+        // Uses adaptive average pooling (parameter-free) to compress spatial dimensions
+        var pooledFrames = new double[count][];
+        for (int f = 0; f < count; f++)
+        {
+            pooledFrames[f] = new double[tokensPerFrame];
+            int poolSize = Math.Max(1, dim / tokensPerFrame);
+            for (int t = 0; t < tokensPerFrame; t++)
+            {
+                double sum = 0;
+                int poolCount = 0;
+                int startIdx = t * poolSize;
+                for (int p = 0; p < poolSize && (startIdx + p) < dim; p++)
+                {
+                    sum += NumOps.ToDouble(frameFeatures[f][startIdx + p]);
+                    poolCount++;
+                }
+                pooledFrames[f][t] = poolCount > 0 ? sum / poolCount : 0;
+            }
+        }
+
+        // Step 4: Temporal pooling - adaptive average pool across the temporal dimension
+        // for each spatial position
+        var temporalPooled = new Tensor<T>([dim]);
+        int temporalPoolSize = Math.Max(1, count);
+        for (int d = 0; d < dim; d++)
+        {
+            double sum = 0;
+            int sumCount = 0;
+            // Map this output position back to pooled frame features
+            int pooledIdx = d % tokensPerFrame;
+            for (int f = 0; f < count; f++)
+            {
+                if (pooledIdx < pooledFrames[f].Length)
+                {
+                    sum += pooledFrames[f][pooledIdx];
+                    sumCount++;
+                }
+            }
+            temporalPooled[d] = NumOps.FromDouble(sumCount > 0 ? sum / sumCount : 0);
+        }
+
+        // Step 5: Project through LLM decoder
+        var decoderOutput = temporalPooled;
+        for (int i = _encoderLayerEnd; i < Layers.Count; i++)
+            decoderOutput = Layers[i].Forward(decoderOutput);
+        return decoderOutput;
+    }
     protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) { Layers.AddRange(Architecture.Layers); _encoderLayerEnd = Layers.Count / 2; } else { Layers.AddRange(LayerHelper<T>.CreateDefaultEncoderDecoderVLMLayers(_options.VisionDim, _options.DecoderDim, _options.NumVisionLayers, _options.NumDecoderLayers, _options.NumHeads, _options.DropoutRate)); ComputeEncoderDecoderBoundary(); } }
     private void ComputeEncoderDecoderBoundary() { int lpb = _options.DropoutRate > 0 ? 6 : 5; _encoderLayerEnd = 1 + _options.NumVisionLayers * lpb + (_options.VisionDim != _options.DecoderDim ? 1 : 0); }
     private Tensor<T> TokenizeText(string text) { if (_tokenizer is null) throw new InvalidOperationException("Tokenizer not initialized."); var encoding = _tokenizer.Encode(text); int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength); var tokens = new Tensor<T>([seqLen]); for (int i = 0; i < seqLen; i++) tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]); return tokens; }

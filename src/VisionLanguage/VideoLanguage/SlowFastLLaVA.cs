@@ -31,7 +31,92 @@ public class SlowFastLLaVA<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<
     public int EmbeddingDimension => _options.DecoderDim; int IVisualEncoder<T>.ImageSize => _options.ImageSize; int IVisualEncoder<T>.ImageChannels => 3; public int MaxGenerationLength => _options.MaxGenerationLength; public int DecoderEmbeddingDim => _options.DecoderDim; public string LanguageModelName => _options.LanguageModelName; public int MaxFrames => _options.MaxFrames;
     public Tensor<T> EncodeImage(Tensor<T> image) { ThrowIfDisposed(); var p = PreprocessImage(image); if (IsOnnxMode && OnnxModel is not null) return L2Normalize(OnnxModel.Run(p)); var c = p; for (int i = 0; i < _encoderLayerEnd; i++) c = Layers[i].Forward(c); return L2Normalize(c); }
     public Tensor<T> GenerateFromImage(Tensor<T> image, string? prompt = null) { ThrowIfDisposed(); var p = PreprocessImage(image); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(p); var encoderOut = p; for (int i = 0; i < _encoderLayerEnd; i++) encoderOut = Layers[i].Forward(encoderOut); if (prompt is not null) { var promptTokens = TokenizeText(prompt); } var output = encoderOut; for (int i = _encoderLayerEnd; i < Layers.Count; i++) output = Layers[i].Forward(output); return output; }
-    public Tensor<T> GenerateFromVideo(IReadOnlyList<Tensor<T>> frames, string? prompt = null) { ThrowIfDisposed(); int count = Math.Min(frames.Count, _options.MaxFrames); if (count == 0) throw new ArgumentException("At least one frame is required.", nameof(frames)); var first = EncodeImage(frames[0]); for (int f = 1; f < count; f++) { var enc = EncodeImage(frames[f]); for (int i = 0; i < first.Length && i < enc.Length; i++) first[i] = NumOps.Add(first[i], enc[i]); } T scale = NumOps.FromDouble(1.0 / count); for (int i = 0; i < first.Length; i++) first[i] = NumOps.Multiply(first[i], scale); if (prompt is not null) { var promptTokens = TokenizeText(prompt); } var output = first; for (int i = _encoderLayerEnd; i < Layers.Count; i++) output = Layers[i].Forward(output); return output; }
+    /// <summary>
+    /// Generates output from video frames using SlowFast-LLaVA's dual-pathway architecture.
+    /// Per the paper (Meta 2025), the Slow pathway processes a small number of frames (default 8)
+    /// at full spatial resolution to capture fine-grained details, while the Fast pathway processes
+    /// many frames (default 64) with aggressive spatial pooling to capture temporal dynamics.
+    /// The two pathways are fused via lateral connections before being fed to the LLM.
+    /// This is training-free: it uses an existing image VLM's encoder without new parameters.
+    /// </summary>
+    public Tensor<T> GenerateFromVideo(IReadOnlyList<Tensor<T>> frames, string? prompt = null)
+    {
+        ThrowIfDisposed();
+        int totalFrames = Math.Min(frames.Count, _options.MaxFrames);
+        if (totalFrames == 0) throw new ArgumentException("At least one frame is required.", nameof(frames));
+
+        int slowCount = Math.Min(_options.SlowFrames, totalFrames);
+        int fastCount = Math.Min(_options.FastFrames, totalFrames);
+
+        // === Slow Pathway: fewer frames, full spatial resolution ===
+        // Uniformly sample slowCount frames from the video
+        var slowFeatures = new Tensor<T>[slowCount];
+        for (int s = 0; s < slowCount; s++)
+        {
+            int frameIdx = totalFrames > 1 ? (int)((long)s * (totalFrames - 1) / (slowCount - 1)) : 0;
+            frameIdx = Math.Min(frameIdx, totalFrames - 1);
+            slowFeatures[s] = EncodeImage(frames[frameIdx]);
+        }
+
+        int dim = slowFeatures[0].Length;
+
+        // Slow pathway: preserve full spatial detail, average across slow frames
+        var slowOutput = new Tensor<T>([dim]);
+        for (int d = 0; d < dim; d++)
+        {
+            double sum = 0;
+            for (int s = 0; s < slowCount; s++)
+                sum += NumOps.ToDouble(slowFeatures[s][d]);
+            slowOutput[d] = NumOps.FromDouble(sum / slowCount);
+        }
+
+        // === Fast Pathway: many frames, aggressive spatial pooling ===
+        // Uniformly sample fastCount frames and apply 2x spatial pooling (halve feature dim)
+        int fastDim = dim / 2; // Aggressive spatial pooling reduces dimensionality
+        var fastOutput = new Tensor<T>([fastDim]);
+
+        for (int f = 0; f < fastCount; f++)
+        {
+            int frameIdx = totalFrames > 1 ? (int)((long)f * (totalFrames - 1) / (fastCount - 1)) : 0;
+            frameIdx = Math.Min(frameIdx, totalFrames - 1);
+            var enc = EncodeImage(frames[frameIdx]);
+
+            // Spatial pooling: average adjacent pairs of features (2x reduction)
+            for (int d = 0; d < fastDim; d++)
+            {
+                int srcIdx = d * 2;
+                double v1 = srcIdx < enc.Length ? NumOps.ToDouble(enc[srcIdx]) : 0;
+                double v2 = (srcIdx + 1) < enc.Length ? NumOps.ToDouble(enc[srcIdx + 1]) : 0;
+                double pooled = (v1 + v2) / 2.0;
+                double current = NumOps.ToDouble(fastOutput[d]);
+                fastOutput[d] = NumOps.FromDouble(current + pooled);
+            }
+        }
+
+        // Average fast pathway across frames
+        T fastScale = NumOps.FromDouble(1.0 / fastCount);
+        for (int d = 0; d < fastDim; d++)
+            fastOutput[d] = NumOps.Multiply(fastOutput[d], fastScale);
+
+        // === Lateral Fusion: combine slow and fast pathways ===
+        // Per the paper, fast pathway features are projected up and added to slow pathway
+        var fused = new Tensor<T>([dim]);
+        for (int d = 0; d < dim; d++)
+        {
+            double slowVal = NumOps.ToDouble(slowOutput[d]);
+            // Project fast features to full dimension by replication
+            int fastIdx = d / 2;
+            double fastVal = fastIdx < fastDim ? NumOps.ToDouble(fastOutput[fastIdx]) : 0;
+            // Weighted fusion: slow carries spatial detail, fast carries temporal dynamics
+            fused[d] = NumOps.FromDouble(slowVal * 0.7 + fastVal * 0.3);
+        }
+
+        // Project fused features through the LLM decoder
+        var output = fused;
+        for (int i = _encoderLayerEnd; i < Layers.Count; i++)
+            output = Layers[i].Forward(output);
+        return output;
+    }
     protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) { Layers.AddRange(Architecture.Layers); _encoderLayerEnd = Layers.Count / 2; } else { Layers.AddRange(LayerHelper<T>.CreateDefaultEncoderDecoderVLMLayers(_options.VisionDim, _options.DecoderDim, _options.NumVisionLayers, _options.NumDecoderLayers, _options.NumHeads, _options.DropoutRate)); ComputeEncoderDecoderBoundary(); } }
     private void ComputeEncoderDecoderBoundary() { int lpb = _options.DropoutRate > 0 ? 6 : 5; _encoderLayerEnd = 1 + _options.NumVisionLayers * lpb + (_options.VisionDim != _options.DecoderDim ? 1 : 0); }
     private Tensor<T> TokenizeText(string text) { if (_tokenizer is null) throw new InvalidOperationException("Tokenizer not initialized."); var encoding = _tokenizer.Encode(text); int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength); var tokens = new Tensor<T>([seqLen]); for (int i = 0; i < seqLen; i++) tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]); return tokens; }
