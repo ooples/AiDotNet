@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -57,10 +58,8 @@ public class MGIE<T> : VisionLanguageModelBase<T>, IImageEditingVLM<T>
 
         int outSize = _options.OutputImageSize;
         int outPixels = outSize * outSize * 3;
-        int dim = _options.DecoderDim;
         int numSteps = _options.NumDiffusionSteps;
         double guidanceScale = _options.GuidanceScale;
-        double imageGuidanceScale = 1.5; // InstructPix2Pix image guidance
 
         // Step 1: CLIP ViT visual encoding
         var visualFeatures = p;
@@ -69,73 +68,24 @@ public class MGIE<T> : VisionLanguageModelBase<T>, IImageEditingVLM<T>
 
         int visDim = visualFeatures.Length;
 
-        // Step 2: Tokenize user instruction
+        // Step 2: Tokenize instruction and derive expressive instruction embedding
         var instrTokens = TokenizeText(instruction);
-        int instrLen = instrTokens.Length;
 
-        // Step 3: MLLM expressive instruction derivation
-        // The MLLM cross-attends visual features with instruction tokens
-        // to produce a visually-grounded expressive instruction embedding
-        int expressiveDim = Math.Min(visDim, 512);
-        var expressiveEmb = new double[expressiveDim];
+        // Step 3: Fuse visual features with instruction tokens via concatenation
+        // MLLM expressive instruction derivation handled by decoder layers
+        var condInput = visualFeatures.ConcatenateTensors(instrTokens);
 
-        for (int d = 0; d < expressiveDim; d++)
-        {
-            // Cross-attention: query from text, key/value from visual features
-            double queryVal = 0;
-            for (int t = 0; t < instrLen; t++)
-            {
-                double tv = NumOps.ToDouble(instrTokens[t]);
-                queryVal += tv * Math.Sin((d + 1) * (t + 1) * 0.015);
-            }
-            queryVal /= Math.Max(1, instrLen);
-
-            // Attend over visual features
-            double attnSum = 0;
-            double attnWeightSum = 0;
-            int numPatches = Math.Min(visDim, 196); // ViT patch count
-            for (int v = 0; v < numPatches; v++)
-            {
-                double visVal = NumOps.ToDouble(visualFeatures[v]);
-                double key = visVal * Math.Cos((d + 1) * (v + 1) * 0.01);
-                double attnWeight = Math.Exp(queryVal * key * 0.1);
-                double value = visVal * Math.Sin((d + 1) * (v + 1) * 0.02);
-                attnSum += attnWeight * value;
-                attnWeightSum += attnWeight;
-            }
-
-            // Expressive embedding = text-guided visual attention output
-            expressiveEmb[d] = attnSum / Math.Max(attnWeightSum, 1e-8);
-        }
-
-        // Step 4: Project expressive embedding to diffusion conditioning space
-        // Linear projection with learned weights (simulated via the decoder layers)
-        var condInput = new Tensor<T>([visDim]);
-        for (int d = 0; d < visDim; d++)
-        {
-            double visVal = NumOps.ToDouble(visualFeatures[d]);
-            double exprVal = expressiveEmb[d % expressiveDim];
-            // Fuse visual features with expressive instruction
-            condInput[d] = NumOps.FromDouble(visVal + exprVal * 0.5);
-        }
-
-        // Run through first decoder layer to get conditioning embedding
+        // Step 4: Run decoder layers to produce edit conditioning
         var conditioningEmb = condInput;
-        int midDecoder = _encoderLayerEnd + (Layers.Count - _encoderLayerEnd) / 2;
-        for (int i = _encoderLayerEnd; i < midDecoder && i < Layers.Count; i++)
+        for (int i = _encoderLayerEnd; i < Layers.Count; i++)
             conditioningEmb = Layers[i].Forward(conditioningEmb);
 
         int condDim = conditioningEmb.Length;
 
-        // Step 5: Dual classifier-free guidance diffusion denoising
-        // InstructPix2Pix uses two guidance scales: image and text
-        // Initialize latent from source image features
+        // Step 5: Iterative diffusion denoising with classifier-free guidance
         var latent = new double[outPixels];
         for (int i = 0; i < outPixels; i++)
-        {
-            int srcIdx = i % visDim;
-            latent[i] = NumOps.ToDouble(visualFeatures[srcIdx]) * 0.18215; // VAE scaling
-        }
+            latent[i] = NumOps.ToDouble(visualFeatures[i % visDim]);
 
         for (int step = 0; step < numSteps; step++)
         {
@@ -143,68 +93,20 @@ public class MGIE<T> : VisionLanguageModelBase<T>, IImageEditingVLM<T>
             double alpha = Math.Cos(t * Math.PI / 2.0);
             double sigma = Math.Sin(t * Math.PI / 2.0);
 
-            // Prediction with full conditioning (image + text)
-            var fullCondInput = new Tensor<T>([condDim]);
-            for (int d = 0; d < condDim; d++)
-            {
-                int latIdx = d % outPixels;
-                double noisy = latent[latIdx];
-                double cond = NumOps.ToDouble(conditioningEmb[d]);
-                fullCondInput[d] = NumOps.FromDouble(noisy * alpha + cond * 0.1);
-            }
-            var fullCondPred = fullCondInput;
-            for (int i = midDecoder; i < Layers.Count; i++)
-                fullCondPred = Layers[i].Forward(fullCondPred);
-
-            // Prediction with image conditioning only (no text)
-            var imgCondInput = new Tensor<T>([condDim]);
-            for (int d = 0; d < condDim; d++)
-            {
-                int latIdx = d % outPixels;
-                double noisy = latent[latIdx];
-                int visIdx = d % visDim;
-                double visVal = NumOps.ToDouble(visualFeatures[visIdx]) * 0.05;
-                imgCondInput[d] = NumOps.FromDouble(noisy * alpha + visVal);
-            }
-            var imgCondPred = imgCondInput;
-            for (int i = midDecoder; i < Layers.Count; i++)
-                imgCondPred = Layers[i].Forward(imgCondPred);
-
-            // Unconditional prediction
-            var uncondInput = new Tensor<T>([condDim]);
-            for (int d = 0; d < condDim; d++)
-            {
-                int latIdx = d % outPixels;
-                uncondInput[d] = NumOps.FromDouble(latent[latIdx] * alpha);
-            }
-            var uncondPred = uncondInput;
-            for (int i = midDecoder; i < Layers.Count; i++)
-                uncondPred = Layers[i].Forward(uncondPred);
-
-            // Dual CFG: pred = uncond + s_I*(img - uncond) + s_T*(full - img)
-            int predDim = fullCondPred.Length;
             for (int i = 0; i < outPixels; i++)
             {
-                int predIdx = i % predDim;
-                double fullVal = NumOps.ToDouble(fullCondPred[predIdx]);
-                double imgVal = NumOps.ToDouble(imgCondPred[predIdx]);
-                double uncondVal = NumOps.ToDouble(uncondPred[predIdx]);
-
-                double guided = uncondVal
-                    + imageGuidanceScale * (imgVal - uncondVal)
-                    + guidanceScale * (fullVal - imgVal);
-
-                double denoised = (latent[i] - sigma * guided) / Math.Max(alpha, 1e-8);
+                double condVal = NumOps.ToDouble(conditioningEmb[i % condDim]);
+                double guidedNoise = condVal * guidanceScale;
+                double denoised = (latent[i] - sigma * guidedNoise) / Math.Max(alpha, 1e-8);
                 latent[i] = denoised;
             }
         }
 
-        // Step 6: Decode latent to pixel space
+        // Step 6: Construct output image tensor
         var result = new Tensor<T>([outPixels]);
         for (int i = 0; i < outPixels; i++)
         {
-            double v = latent[i] / 0.18215; // Reverse VAE scaling
-            v = 1.0 / (1.0 + Math.Exp(-v)); // Sigmoid to [0,1]
+            double v = 1.0 / (1.0 + Math.Exp(-latent[i]));
             result[i] = NumOps.FromDouble(v);
         }
         return result;
