@@ -92,17 +92,16 @@ public class VideoLLaMA3<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<T>
         var decoderInput = new Tensor<T>([dim]);
         for (int d = 0; d < dim; d++)
         {
-            double attn = 0, wSum = 0;
-            for (int v = 0; v < visLen; v++)
-            {
-                double score = Math.Exp(projected[v] * Math.Sin((d + 1) * (v + 1) * 0.004) * 0.35);
-                attn += score * projected[v]; wSum += score;
-            }
-            attn /= Math.Max(wSum, 1e-8);
+            double visVal = projected[d % visLen];
             double textEmb = 0;
             if (promptTokens is not null && promptLen > 0)
-                textEmb = NumOps.ToDouble(promptTokens[d % promptLen]) / _options.VocabSize * 0.5;
-            decoderInput[d] = NumOps.FromDouble(attn + textEmb);
+            {
+                double tokVal = NumOps.ToDouble(promptTokens[d % promptLen]) / _options.VocabSize;
+                double gate = 1.0 / (1.0 + Math.Exp(-tokVal * 5.0));
+                visVal *= (0.5 + gate);
+                textEmb = tokVal * 0.3;
+            }
+            decoderInput[d] = NumOps.FromDouble(visVal + textEmb);
         }
 
         // Step 5: LLM decoder
