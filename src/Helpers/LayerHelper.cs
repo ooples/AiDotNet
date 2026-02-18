@@ -22348,4 +22348,484 @@ public static class LayerHelper<T>
     }
 
     #endregion
+
+    #region Text-to-Speech Layers
+
+    /// <summary>
+    /// Creates default layers for acoustic TTS models (Tacotron 2, FastSpeech 2, Grad-TTS, etc.).
+    /// Architecture: Text encoder (FFT blocks) -> projection -> Mel decoder (FFT blocks).
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultAcousticModelLayers(
+        int encoderDim = 256,
+        int decoderDim = 80,
+        int hiddenDim = 256,
+        int numEncoderLayers = 4,
+        int numDecoderLayers = 4,
+        int numHeads = 2,
+        double dropoutRate = 0.1)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+        int encoderFfnDim = encoderDim * 4;
+        int decoderFfnDim = hiddenDim * 4;
+
+        // === Text Encoder (FFT blocks) ===
+        yield return new LayerNormalizationLayer<T>(encoderDim);
+
+        for (int i = 0; i < numEncoderLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(encoderDim, encoderDim, numHeads);
+            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new DenseLayer<T>(encoderDim, encoderFfnDim, geluActivation);
+            yield return new DenseLayer<T>(encoderFfnDim, encoderDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(encoderDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // === Projection (encoder dim -> hidden dim) ===
+        if (encoderDim != hiddenDim)
+            yield return new DenseLayer<T>(encoderDim, hiddenDim, identityActivation);
+
+        // === Mel Decoder (FFT blocks) ===
+        for (int i = 0; i < numDecoderLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(hiddenDim, hiddenDim, numHeads);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new DenseLayer<T>(hiddenDim, decoderFfnDim, geluActivation);
+            yield return new DenseLayer<T>(decoderFfnDim, hiddenDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // === Output projection to mel channels ===
+        yield return new DenseLayer<T>(hiddenDim, decoderDim, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates default layers for GAN-based neural vocoders (HiFi-GAN, MelGAN, BigVGAN, etc.).
+    /// Architecture: Mel input -> upsampling blocks -> residual blocks -> waveform output.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultVocoderLayers(
+        int melChannels = 80,
+        int hiddenDim = 512,
+        int outputDim = 1,
+        int numUpsampleBlocks = 4,
+        int numResBlocks = 3,
+        double dropoutRate = 0.0)
+    {
+        IActivationFunction<T> leakyRelu = new LeakyReLUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+        IActivationFunction<T> tanhActivation = new TanhActivation<T>();
+
+        // === Input projection from mel to hidden ===
+        yield return new DenseLayer<T>(melChannels, hiddenDim, leakyRelu);
+        yield return new LayerNormalizationLayer<T>(hiddenDim);
+
+        // === Upsampling blocks ===
+        int currentDim = hiddenDim;
+        for (int i = 0; i < numUpsampleBlocks; i++)
+        {
+            int nextDim = currentDim / 2;
+            if (nextDim < 32) nextDim = 32;
+
+            // Transposed convolution equivalent (upsampling via dense)
+            yield return new DenseLayer<T>(currentDim, nextDim, leakyRelu);
+            yield return new LayerNormalizationLayer<T>(nextDim);
+
+            // Multi-receptive-field residual blocks
+            for (int r = 0; r < numResBlocks; r++)
+            {
+                yield return new DenseLayer<T>(nextDim, nextDim, leakyRelu);
+                yield return new LayerNormalizationLayer<T>(nextDim);
+            }
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+
+            currentDim = nextDim;
+        }
+
+        // === Output projection to waveform ===
+        yield return new DenseLayer<T>(currentDim, outputDim, tanhActivation);
+    }
+
+    /// <summary>
+    /// Creates default layers for diffusion-based vocoders (DiffWave, WaveGrad, PriorGrad, FreGrad).
+    /// Architecture: Mel-conditioned noise input -> dilated residual blocks -> denoised waveform.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultDiffusionVocoderLayers(
+        int melChannels = 80,
+        int hiddenDim = 256,
+        int numResidualLayers = 30,
+        int numHeads = 4,
+        double dropoutRate = 0.0)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+        int ffnDim = hiddenDim * 2;
+
+        // === Mel conditioning encoder ===
+        yield return new DenseLayer<T>(melChannels, hiddenDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>(hiddenDim);
+
+        // === Dilated residual blocks ===
+        for (int i = 0; i < numResidualLayers; i++)
+        {
+            yield return new DenseLayer<T>(hiddenDim, ffnDim, geluActivation);
+            yield return new DenseLayer<T>(ffnDim, hiddenDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // === Output projection ===
+        yield return new DenseLayer<T>(hiddenDim, 1, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates default layers for VITS-family end-to-end TTS (VITS, VITS2, YourTTS, Piper, MeloTTS).
+    /// Architecture: Text encoder -> posterior encoder (VAE) -> flow -> HiFi-GAN decoder.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultVITSLayers(
+        int encoderDim = 192,
+        int hiddenDim = 192,
+        int decoderDim = 512,
+        int numEncoderLayers = 6,
+        int numFlowLayers = 4,
+        int numDecoderLayers = 4,
+        int numHeads = 2,
+        double dropoutRate = 0.1)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+        IActivationFunction<T> tanhActivation = new TanhActivation<T>();
+        int encoderFfnDim = encoderDim * 4;
+
+        // === Text Encoder (relative positional transformer) ===
+        yield return new LayerNormalizationLayer<T>(encoderDim);
+
+        for (int i = 0; i < numEncoderLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(encoderDim, encoderDim, numHeads);
+            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new DenseLayer<T>(encoderDim, encoderFfnDim, geluActivation);
+            yield return new DenseLayer<T>(encoderFfnDim, encoderDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(encoderDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // === Normalizing Flow (invertible coupling layers) ===
+        for (int i = 0; i < numFlowLayers; i++)
+        {
+            yield return new DenseLayer<T>(hiddenDim, hiddenDim, geluActivation);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new DenseLayer<T>(hiddenDim, hiddenDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+        }
+
+        // === HiFi-GAN Decoder ===
+        yield return new DenseLayer<T>(hiddenDim, decoderDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>(decoderDim);
+
+        for (int i = 0; i < numDecoderLayers; i++)
+        {
+            int nextDim = decoderDim / (1 << (i + 1));
+            if (nextDim < 32) nextDim = 32;
+            yield return new DenseLayer<T>(i == 0 ? decoderDim : decoderDim / (1 << i), nextDim, geluActivation);
+            yield return new LayerNormalizationLayer<T>(nextDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // === Waveform output ===
+        int finalDim = decoderDim / (1 << numDecoderLayers);
+        if (finalDim < 32) finalDim = 32;
+        yield return new DenseLayer<T>(finalDim, 1, tanhActivation);
+    }
+
+    /// <summary>
+    /// Creates default layers for codec-based LM TTS (VALL-E, CosyVoice, Fish Speech, Bark, etc.).
+    /// Architecture: Text encoder -> AR codec token predictor -> NAR refinement -> codec decoder.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultCodecLMLayers(
+        int textEncoderDim = 512,
+        int llmDim = 1024,
+        int codecDim = 256,
+        int numTextEncoderLayers = 6,
+        int numLLMLayers = 12,
+        int numHeads = 8,
+        double dropoutRate = 0.1)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+        int textFfnDim = textEncoderDim * 4;
+        int llmFfnDim = llmDim * 4;
+
+        // === Text Encoder ===
+        yield return new LayerNormalizationLayer<T>(textEncoderDim);
+
+        for (int i = 0; i < numTextEncoderLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(textEncoderDim, textEncoderDim, numHeads);
+            yield return new LayerNormalizationLayer<T>(textEncoderDim);
+            yield return new DenseLayer<T>(textEncoderDim, textFfnDim, geluActivation);
+            yield return new DenseLayer<T>(textFfnDim, textEncoderDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(textEncoderDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // === Projection to LLM dim ===
+        if (textEncoderDim != llmDim)
+            yield return new DenseLayer<T>(textEncoderDim, llmDim, identityActivation);
+
+        // === Autoregressive LLM Decoder (codec token prediction) ===
+        for (int i = 0; i < numLLMLayers; i++)
+        {
+            var selfAttn = new MultiHeadAttentionLayer<T>(llmDim, llmDim, numHeads);
+            selfAttn.UseCausalMask = true;
+            yield return selfAttn;
+            yield return new LayerNormalizationLayer<T>(llmDim);
+            yield return new DenseLayer<T>(llmDim, llmFfnDim, geluActivation);
+            yield return new DenseLayer<T>(llmFfnDim, llmDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(llmDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // === Codec token output projection ===
+        yield return new DenseLayer<T>(llmDim, codecDim, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates default layers for flow-matching TTS (F5-TTS, Matcha-TTS, E2-TTS, MaskGCT).
+    /// Architecture: Text encoder -> OT-CFM (optimal transport conditional flow matching) -> mel/codec decoder.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultFlowMatchingTTSLayers(
+        int encoderDim = 256,
+        int flowDim = 256,
+        int decoderDim = 80,
+        int numEncoderLayers = 4,
+        int numFlowLayers = 6,
+        int numHeads = 4,
+        double dropoutRate = 0.1)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+        int encoderFfnDim = encoderDim * 4;
+        int flowFfnDim = flowDim * 4;
+
+        // === Text Encoder ===
+        yield return new LayerNormalizationLayer<T>(encoderDim);
+
+        for (int i = 0; i < numEncoderLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(encoderDim, encoderDim, numHeads);
+            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new DenseLayer<T>(encoderDim, encoderFfnDim, geluActivation);
+            yield return new DenseLayer<T>(encoderFfnDim, encoderDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(encoderDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // === Projection ===
+        if (encoderDim != flowDim)
+            yield return new DenseLayer<T>(encoderDim, flowDim, identityActivation);
+
+        // === Flow Matching Blocks (conditional vector field estimator) ===
+        for (int i = 0; i < numFlowLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(flowDim, flowDim, numHeads);
+            yield return new LayerNormalizationLayer<T>(flowDim);
+            yield return new DenseLayer<T>(flowDim, flowFfnDim, geluActivation);
+            yield return new DenseLayer<T>(flowFfnDim, flowDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(flowDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // === Output projection to mel/codec ===
+        yield return new DenseLayer<T>(flowDim, decoderDim, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates default layers for style/emotion TTS (StyleTTS, StyleTTS 2, EmotiVoice).
+    /// Architecture: Style encoder -> style diffusion -> acoustic decoder.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultStyleTTSLayers(
+        int encoderDim = 256,
+        int styleDim = 128,
+        int decoderDim = 80,
+        int numEncoderLayers = 4,
+        int numStyleLayers = 3,
+        int numDecoderLayers = 4,
+        int numHeads = 4,
+        double dropoutRate = 0.1)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+        int encoderFfnDim = encoderDim * 4;
+
+        // === Text Encoder ===
+        yield return new LayerNormalizationLayer<T>(encoderDim);
+
+        for (int i = 0; i < numEncoderLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(encoderDim, encoderDim, numHeads);
+            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new DenseLayer<T>(encoderDim, encoderFfnDim, geluActivation);
+            yield return new DenseLayer<T>(encoderFfnDim, encoderDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(encoderDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // === Style Encoder (extracts style from reference audio or diffusion) ===
+        yield return new DenseLayer<T>(encoderDim, styleDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>(styleDim);
+
+        for (int i = 0; i < numStyleLayers; i++)
+        {
+            yield return new DenseLayer<T>(styleDim, styleDim * 2, geluActivation);
+            yield return new DenseLayer<T>(styleDim * 2, styleDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(styleDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // === Style-conditioned Decoder ===
+        int combinedDim = encoderDim + styleDim;
+        yield return new DenseLayer<T>(combinedDim, encoderDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>(encoderDim);
+
+        for (int i = 0; i < numDecoderLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(encoderDim, encoderDim, numHeads);
+            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new DenseLayer<T>(encoderDim, encoderFfnDim, geluActivation);
+            yield return new DenseLayer<T>(encoderFfnDim, encoderDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(encoderDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // === Mel output ===
+        yield return new DenseLayer<T>(encoderDim, decoderDim, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates default layers for voice cloning TTS (OpenVoice, MetaVoice, XTTS, Chatterbox).
+    /// Architecture: Reference encoder -> speaker embedding -> conditioned synthesis.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultVoiceCloningLayers(
+        int encoderDim = 256,
+        int speakerDim = 256,
+        int decoderDim = 256,
+        int numEncoderLayers = 4,
+        int numDecoderLayers = 6,
+        int numHeads = 4,
+        double dropoutRate = 0.1)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+        int encoderFfnDim = encoderDim * 4;
+        int decoderFfnDim = decoderDim * 4;
+
+        // === Text Encoder ===
+        yield return new LayerNormalizationLayer<T>(encoderDim);
+
+        for (int i = 0; i < numEncoderLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(encoderDim, encoderDim, numHeads);
+            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new DenseLayer<T>(encoderDim, encoderFfnDim, geluActivation);
+            yield return new DenseLayer<T>(encoderFfnDim, encoderDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(encoderDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // === Speaker Embedding Projection ===
+        yield return new DenseLayer<T>(speakerDim, decoderDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>(decoderDim);
+
+        // === Projection (encoder -> decoder dim) ===
+        if (encoderDim != decoderDim)
+            yield return new DenseLayer<T>(encoderDim, decoderDim, identityActivation);
+
+        // === Speaker-conditioned Decoder ===
+        for (int i = 0; i < numDecoderLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(decoderDim, decoderDim, numHeads);
+            yield return new LayerNormalizationLayer<T>(decoderDim);
+            yield return new DenseLayer<T>(decoderDim, decoderFfnDim, geluActivation);
+            yield return new DenseLayer<T>(decoderFfnDim, decoderDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(decoderDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+    }
+
+    /// <summary>
+    /// Creates default layers for proprietary API TTS wrappers (ElevenLabs, Azure, Google, etc.).
+    /// Architecture: Lightweight text encoder + projection (actual synthesis via API).
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultProprietaryTTSLayers(
+        int encoderDim = 256,
+        int decoderDim = 256,
+        int numEncoderLayers = 2,
+        int numDecoderLayers = 2,
+        int numHeads = 4,
+        double dropoutRate = 0.0)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        // === Lightweight Text Encoder ===
+        yield return new LayerNormalizationLayer<T>(encoderDim);
+
+        for (int i = 0; i < numEncoderLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(encoderDim, encoderDim, numHeads);
+            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new DenseLayer<T>(encoderDim, encoderDim * 2, geluActivation);
+            yield return new DenseLayer<T>(encoderDim * 2, encoderDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(encoderDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // === Projection ===
+        if (encoderDim != decoderDim)
+            yield return new DenseLayer<T>(encoderDim, decoderDim, identityActivation);
+
+        // === Lightweight Decoder ===
+        for (int i = 0; i < numDecoderLayers; i++)
+        {
+            yield return new DenseLayer<T>(decoderDim, decoderDim * 2, geluActivation);
+            yield return new DenseLayer<T>(decoderDim * 2, decoderDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(decoderDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+    }
+
+    /// <summary>
+    /// Creates default layers for autoregressive vocoders (WaveNet, WaveRNN).
+    /// Architecture: Causal dilated convolution / recurrent blocks for sample-by-sample generation.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultAutoRegressiveVocoderLayers(
+        int melChannels = 80,
+        int hiddenDim = 256,
+        int numResidualLayers = 20,
+        double dropoutRate = 0.0)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+        IActivationFunction<T> tanhActivation = new TanhActivation<T>();
+
+        // === Mel conditioning ===
+        yield return new DenseLayer<T>(melChannels, hiddenDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>(hiddenDim);
+
+        // === Causal residual blocks (simulating dilated causal convolutions) ===
+        for (int i = 0; i < numResidualLayers; i++)
+        {
+            yield return new DenseLayer<T>(hiddenDim, hiddenDim, tanhActivation);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // === Output: dual softmax (WaveRNN) or mu-law (WaveNet) ===
+        yield return new DenseLayer<T>(hiddenDim, hiddenDim, geluActivation);
+        yield return new DenseLayer<T>(hiddenDim, 1, identityActivation);
+    }
+
+    #endregion
 }
