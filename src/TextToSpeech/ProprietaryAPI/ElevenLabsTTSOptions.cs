@@ -1,7 +1,7 @@
 using AiDotNet.TextToSpeech.EndToEnd;
 namespace AiDotNet.TextToSpeech.ProprietaryAPI;
-/// <summary>Options for ElevenLabs TTS API wrapper.</summary>
-public class ElevenLabsOptions : EndToEndTtsOptions
+/// <summary>Options for ElevenLabsTTS API wrapper.</summary>
+public class ElevenLabsTTSOptions : EndToEndTtsOptions
 {
     public string ApiKey { get; set; } = string.Empty;
     public string ApiEndpoint { get; set; } = string.Empty;

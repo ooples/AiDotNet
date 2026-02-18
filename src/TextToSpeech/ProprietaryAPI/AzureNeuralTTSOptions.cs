@@ -1,7 +1,7 @@
 using AiDotNet.TextToSpeech.EndToEnd;
 namespace AiDotNet.TextToSpeech.ProprietaryAPI;
-/// <summary>Options for AzureTTS TTS API wrapper.</summary>
-public class AzureTTSOptions : EndToEndTtsOptions
+/// <summary>Options for Azure Neural TTS API wrapper.</summary>
+public class AzureNeuralTTSOptions : EndToEndTtsOptions
 {
     public string ApiKey { get; set; } = string.Empty;
     public string ApiEndpoint { get; set; } = string.Empty;
