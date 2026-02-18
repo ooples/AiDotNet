@@ -1,0 +1,11 @@
+using AiDotNet.VisionLanguage.Encoders;
+
+namespace AiDotNet.VisionLanguage.InstructionTuned;
+
+/// <summary>Options for Dragonfly (efficient multi-resolution visual encoding from Together.ai).</summary>
+public class DragonflyOptions : InstructionTunedVLMOptions
+{
+    public DragonflyOptions() { InstructionArchitectureType = InstructionTunedArchitectureType.MLPProjection; VisionDim = 1024; DecoderDim = 4096; ProjectionDim = 4096; NumVisionLayers = 24; NumDecoderLayers = 32; NumHeads = 32; ImageSize = 448; LanguageModelName = "LLaMA-3"; MaxVisualTokens = 576; }
+    /// <summary>Gets or sets whether multi-resolution visual encoding is enabled.</summary>
+    public bool EnableMultiResolution { get; set; } = true;
+}
