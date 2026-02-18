@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -53,77 +54,24 @@ public class LLaVAOneVision15<T> : VisionLanguageModelBase<T>, IInstructionTuned
         var p = PreprocessImage(image);
         if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(p);
 
-        int dim = _options.DecoderDim;
-
         // Step 1: SigLIP vision encoder with improved alignment
         var visualFeatures = p;
         for (int i = 0; i < _encoderLayerEnd; i++)
             visualFeatures = Layers[i].Forward(visualFeatures);
-        int visLen = visualFeatures.Length;
 
-        // Step 2: AnyRes+ tiling with temporal position encoding for video support
-        var tiledFeatures = new double[visLen];
-        int numTiles = 4;
-        int tokensPerTile = Math.Max(1, visLen / (numTiles + 1));
-        for (int v = 0; v < visLen; v++)
-        {
-            double val = NumOps.ToDouble(visualFeatures[v]);
-            int tileIdx = v / Math.Max(1, tokensPerTile);
-            int posInTile = v % Math.Max(1, tokensPerTile);
-            // Bilinear interpolation at tile boundaries
-            double boundaryBlend = 1.0;
-            if (posInTile < 2 && tileIdx > 0)
-                boundaryBlend = 0.5 + posInTile * 0.25;
-            else if (posInTile >= tokensPerTile - 2 && tileIdx < numTiles)
-                boundaryBlend = 0.5 + (tokensPerTile - 1 - posInTile) * 0.25;
-            // Temporal position encoding (for video frame ordering)
-            double temporalPos = Math.Sin((double)v / visLen * Math.PI) * 0.05;
-            tiledFeatures[v] = val * boundaryBlend + temporalPos;
-        }
-
-        // Step 3: 2-layer MLP projector with improved data diversity alignment
-        var projected = new double[visLen];
-        for (int v = 0; v < visLen; v++)
-        {
-            double x = tiledFeatures[v];
-            double h = x * 0.75;
-            double gelu = h * 0.5 * (1.0 + Math.Tanh(Math.Sqrt(2.0 / Math.PI) * (h + 0.044715 * h * h * h)));
-            // Enhanced projection with residual connection for better training alignment
-            projected[v] = gelu * 0.65 + x * 0.25;
-        }
-
-        // Step 4: Tokenize prompt
-        Tensor<T>? promptTokens = null;
-        int promptLen = 0;
+        // Fuse visual features with prompt tokens via ConcatenateTensors
+        Tensor<T> fusedInput;
         if (prompt is not null)
         {
-            promptTokens = TokenizeText(prompt);
-            promptLen = promptTokens.Length;
+            var promptTokens = TokenizeText(prompt);
+            fusedInput = visualFeatures.ConcatenateTensors(promptTokens);
         }
-
-        // Step 5: Unified cross-attention with enhanced data diversity
-        var decoderInput = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
+        else
         {
-            double attn = 0;
-            double wSum = 0;
-            for (int v = 0; v < visLen; v++)
-            {
-                double score = Math.Exp(projected[v] * Math.Sin((d + 1) * (v + 1) * 0.004) * 0.35);
-                attn += score * projected[v];
-                wSum += score;
-            }
-            attn /= Math.Max(wSum, 1e-8);
-
-            double textEmb = 0;
-            if (promptTokens is not null && promptLen > 0)
-                textEmb = NumOps.ToDouble(promptTokens[d % promptLen]) / _options.VocabSize * 0.5;
-
-            decoderInput[d] = NumOps.FromDouble(attn + textEmb);
+            fusedInput = visualFeatures;
         }
 
-        // Step 6: Qwen2.5 decoder
-        var output = decoderInput;
+        var output = fusedInput;
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)
             output = Layers[i].Forward(output);
 

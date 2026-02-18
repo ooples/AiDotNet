@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -47,58 +48,25 @@ public class AquilaVL<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
         var p = PreprocessImage(image);
         if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(p);
 
-        int dim = _options.DecoderDim;
-
         // Step 1: SigLIP vision encoder
         var visualFeatures = p;
         for (int i = 0; i < _encoderLayerEnd; i++)
             visualFeatures = Layers[i].Forward(visualFeatures);
-        int visLen = visualFeatures.Length;
 
-        // Step 2: 2-layer MLP projection with SiLU activation
-        var projected = new double[visLen];
-        for (int v = 0; v < visLen; v++)
-        {
-            double x = NumOps.ToDouble(visualFeatures[v]);
-            // Layer 1: linear + SiLU
-            double h = x * 0.6;
-            double silu = h * (1.0 / (1.0 + Math.Exp(-h))); // SiLU = x * sigmoid(x)
-            // Layer 2: linear projection
-            projected[v] = silu * 0.7 + x * 0.2;
-        }
-
-        // Step 3: Tokenize prompt
-        Tensor<T>? promptTokens = null;
-        int promptLen = 0;
+        // Step 2: Fuse visual features with prompt tokens via ConcatenateTensors
+        Tensor<T> fusedInput;
         if (prompt is not null)
         {
-            promptTokens = TokenizeText(prompt);
-            promptLen = promptTokens.Length;
+            var promptTokens = TokenizeText(prompt);
+            fusedInput = visualFeatures.ConcatenateTensors(promptTokens);
         }
-
-        // Step 4: Cross-attention visual-text fusion
-        var decoderInput = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
+        else
         {
-            double attn = 0;
-            double wSum = 0;
-            for (int v = 0; v < visLen; v++)
-            {
-                double score = Math.Exp(projected[v] * Math.Sin((d + 1) * (v + 1) * 0.004) * 0.35);
-                attn += score * projected[v];
-                wSum += score;
-            }
-            attn /= Math.Max(wSum, 1e-8);
-
-            double textEmb = 0;
-            if (promptTokens is not null && promptLen > 0)
-                textEmb = NumOps.ToDouble(promptTokens[d % promptLen]) / _options.VocabSize * 0.5;
-
-            decoderInput[d] = NumOps.FromDouble(attn + textEmb);
+            fusedInput = visualFeatures;
         }
 
-        // Step 5: Qwen2.5 decoder
-        var output = decoderInput;
+        // Step 3: Qwen2.5 decoder
+        var output = fusedInput;
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)
             output = Layers[i].Forward(output);
 

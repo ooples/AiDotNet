@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -54,8 +55,6 @@ public class Qwen25VL<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
         var p = PreprocessImage(image);
         if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(p);
 
-        int dim = _options.DecoderDim;
-
         // Step 1: ViT with Naive Dynamic Resolution
         var visionOut = p;
         for (int i = 0; i < _visionLayerEnd; i++)
@@ -66,58 +65,20 @@ public class Qwen25VL<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
         var resamplerOut = visionOut;
         for (int i = _visionLayerEnd; i < _resamplerLayerEnd; i++)
             resamplerOut = Layers[i].Forward(resamplerOut);
-        int resLen = resamplerOut.Length;
 
-        // Step 3: M-RoPE positional encoding with enhanced localization support
-        int gridSize = (int)Math.Ceiling(Math.Sqrt(resLen));
-        var mropeFeatures = new double[resLen];
-        for (int v = 0; v < resLen; v++)
-        {
-            double val = NumOps.ToDouble(resamplerOut[v]);
-            int h = v / Math.Max(1, gridSize);
-            int w = v % Math.Max(1, gridSize);
-            // M-RoPE: height, width, and temporal components for 1hr+ video
-            double hRope = Math.Sin(h * 0.1) * 0.05;
-            double wRope = Math.Cos(w * 0.1) * 0.05;
-            // Spatial position encoding for bounding box/point localization
-            double nx = (double)w / Math.Max(1, gridSize - 1);
-            double ny = (double)h / Math.Max(1, gridSize - 1);
-            double spatialBias = Math.Sin(nx * Math.PI) * Math.Sin(ny * Math.PI) * 0.03;
-            mropeFeatures[v] = val + hRope + wRope + spatialBias;
-        }
-
-        // Step 4: Tokenize prompt
-        Tensor<T>? promptTokens = null;
-        int promptLen = 0;
+        // Fuse features with prompt tokens via ConcatenateTensors
+        Tensor<T> fusedInput;
         if (prompt is not null)
         {
-            promptTokens = TokenizeText(prompt);
-            promptLen = promptTokens.Length;
+            var promptTokens = TokenizeText(prompt);
+            fusedInput = resamplerOut.ConcatenateTensors(promptTokens);
         }
-
-        // Step 5: Cross-attention with localization-aware features
-        var decoderInput = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
+        else
         {
-            double attn = 0;
-            double wSum = 0;
-            for (int v = 0; v < resLen; v++)
-            {
-                double score = Math.Exp(mropeFeatures[v] * Math.Sin((d + 1) * (v + 1) * 0.004) * 0.35);
-                attn += score * mropeFeatures[v];
-                wSum += score;
-            }
-            attn /= Math.Max(wSum, 1e-8);
-
-            double textEmb = 0;
-            if (promptTokens is not null && promptLen > 0)
-                textEmb = NumOps.ToDouble(promptTokens[d % promptLen]) / _options.VocabSize * 0.5;
-
-            decoderInput[d] = NumOps.FromDouble(attn + textEmb);
+            fusedInput = resamplerOut;
         }
 
-        // Step 6: Qwen2.5 decoder with localization support
-        var output = decoderInput;
+        var output = fusedInput;
         for (int i = _resamplerLayerEnd; i < Layers.Count; i++)
             output = Layers[i].Forward(output);
 

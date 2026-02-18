@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -53,7 +54,6 @@ public class MPLUGOwl<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
         var p = PreprocessImage(image);
         if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(p);
 
-        int dim = _options.DecoderDim;
         int abstractorDim = _options.AbstractorDim;
         int numQueries = _options.MaxVisualTokens;
 
@@ -66,57 +66,20 @@ public class MPLUGOwl<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
         var abstractorOut = visionOut;
         for (int i = _visionLayerEnd; i < _abstractorLayerEnd; i++)
             abstractorOut = Layers[i].Forward(abstractorOut);
-        int absLen = abstractorOut.Length;
 
-        // Step 3: Learnable query cross-attention to visual features
-        // 65 queries attend to all visual tokens
-        var queryOutputs = new double[numQueries];
-        for (int q = 0; q < numQueries; q++)
-        {
-            double attn = 0;
-            double wSum = 0;
-            for (int v = 0; v < absLen; v++)
-            {
-                double val = NumOps.ToDouble(abstractorOut[v]);
-                double score = Math.Exp(val * Math.Cos((q + 1) * (v + 1) * 0.003) * 0.3);
-                attn += score * val;
-                wSum += score;
-            }
-            queryOutputs[q] = attn / Math.Max(wSum, 1e-8);
-        }
-
-        // Step 4: Tokenize prompt
-        Tensor<T>? promptTokens = null;
-        int promptLen = 0;
+        // Fuse features with prompt tokens via ConcatenateTensors
+        Tensor<T> fusedInput;
         if (prompt is not null)
         {
-            promptTokens = TokenizeText(prompt);
-            promptLen = promptTokens.Length;
+            var promptTokens = TokenizeText(prompt);
+            fusedInput = abstractorOut.ConcatenateTensors(promptTokens);
         }
-
-        // Step 5: Cross-attention fusion of abstracted visual tokens with text
-        var decoderInput = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
+        else
         {
-            double attn = 0;
-            double wSum = 0;
-            for (int q = 0; q < numQueries; q++)
-            {
-                double score = Math.Exp(queryOutputs[q] * Math.Sin((d + 1) * (q + 1) * 0.01) * 0.35);
-                attn += score * queryOutputs[q];
-                wSum += score;
-            }
-            attn /= Math.Max(wSum, 1e-8);
-
-            double textEmb = 0;
-            if (promptTokens is not null && promptLen > 0)
-                textEmb = NumOps.ToDouble(promptTokens[d % promptLen]) / _options.VocabSize * 0.5;
-
-            decoderInput[d] = NumOps.FromDouble(attn + textEmb);
+            fusedInput = abstractorOut;
         }
 
-        // Step 6: LLaMA decoder
-        var output = decoderInput;
+        var output = fusedInput;
         for (int i = _abstractorLayerEnd; i < Layers.Count; i++)
             output = Layers[i].Forward(output);
 

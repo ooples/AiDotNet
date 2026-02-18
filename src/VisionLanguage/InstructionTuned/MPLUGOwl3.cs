@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -54,7 +55,6 @@ public class MPLUGOwl3<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
         var p = PreprocessImage(image);
         if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(p);
 
-        int dim = _options.DecoderDim;
         int numQueries = _options.MaxVisualTokens;
 
         // Step 1: ViT vision encoder
@@ -66,78 +66,20 @@ public class MPLUGOwl3<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
         var abstractorOut = visionOut;
         for (int i = _visionLayerEnd; i < _abstractorLayerEnd; i++)
             abstractorOut = Layers[i].Forward(abstractorOut);
-        int absLen = abstractorOut.Length;
 
-        // Step 3: Hyper-attention grouping
-        // Group visual tokens into clusters for efficient processing
-        int numGroups = Math.Max(1, Math.Min(numQueries, absLen / 4));
-        int tokensPerGroup = Math.Max(1, absLen / numGroups);
-        var groupRepresentatives = new double[numGroups];
-        for (int g = 0; g < numGroups; g++)
-        {
-            double sum = 0;
-            double maxVal = double.MinValue;
-            int start = g * tokensPerGroup;
-            int end = Math.Min(start + tokensPerGroup, absLen);
-            for (int v = start; v < end; v++)
-            {
-                double val = NumOps.ToDouble(abstractorOut[v]);
-                sum += val;
-                if (val > maxVal) maxVal = val;
-            }
-            // Group representative: weighted average + max for salience
-            double avg = sum / Math.Max(end - start, 1);
-            groupRepresentatives[g] = avg * 0.6 + maxVal * 0.4;
-        }
-
-        // Step 4: Hierarchical cross-attention (group-level then token-level)
-        var hyperAttnOutputs = new double[numQueries];
-        for (int q = 0; q < numQueries; q++)
-        {
-            // Group-level attention
-            double groupAttn = 0;
-            double groupWSum = 0;
-            for (int g = 0; g < numGroups; g++)
-            {
-                double score = Math.Exp(groupRepresentatives[g] * Math.Cos((q + 1) * (g + 1) * 0.005) * 0.35);
-                groupAttn += score * groupRepresentatives[g];
-                groupWSum += score;
-            }
-            hyperAttnOutputs[q] = groupAttn / Math.Max(groupWSum, 1e-8);
-        }
-
-        // Step 5: Tokenize prompt
-        Tensor<T>? promptTokens = null;
-        int promptLen = 0;
+        // Fuse features with prompt tokens via ConcatenateTensors
+        Tensor<T> fusedInput;
         if (prompt is not null)
         {
-            promptTokens = TokenizeText(prompt);
-            promptLen = promptTokens.Length;
+            var promptTokens = TokenizeText(prompt);
+            fusedInput = abstractorOut.ConcatenateTensors(promptTokens);
         }
-
-        // Step 6: Cross-attention fusion
-        var decoderInput = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
+        else
         {
-            double attn = 0;
-            double wSum = 0;
-            for (int q = 0; q < numQueries; q++)
-            {
-                double score = Math.Exp(hyperAttnOutputs[q] * Math.Sin((d + 1) * (q + 1) * 0.01) * 0.35);
-                attn += score * hyperAttnOutputs[q];
-                wSum += score;
-            }
-            attn /= Math.Max(wSum, 1e-8);
-
-            double textEmb = 0;
-            if (promptTokens is not null && promptLen > 0)
-                textEmb = NumOps.ToDouble(promptTokens[d % promptLen]) / _options.VocabSize * 0.5;
-
-            decoderInput[d] = NumOps.FromDouble(attn + textEmb);
+            fusedInput = abstractorOut;
         }
 
-        // Step 7: Qwen2 decoder
-        var output = decoderInput;
+        var output = fusedInput;
         for (int i = _abstractorLayerEnd; i < Layers.Count; i++)
             output = Layers[i].Forward(output);
 

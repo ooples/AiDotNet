@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -47,79 +48,24 @@ public class Monkey<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
         var p = PreprocessImage(image);
         if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(p);
 
-        int dim = _options.DecoderDim;
-
         // Step 1: Vision encoder
         var visualFeatures = p;
         for (int i = 0; i < _encoderLayerEnd; i++)
             visualFeatures = Layers[i].Forward(visualFeatures);
-        int visLen = visualFeatures.Length;
 
-        // Step 2: Sliding window decomposition with overlap
-        int numWindows = 6;
-        int stride = Math.Max(1, visLen / numWindows);
-        int windowSize = stride + stride / 2; // 50% overlap
-        var windowFeatures = new double[numWindows][];
-
-        for (int w = 0; w < numWindows; w++)
-        {
-            int start = w * stride;
-            int end = Math.Min(start + windowSize, visLen);
-            int actualSize = end - start;
-            windowFeatures[w] = new double[actualSize];
-            for (int v = 0; v < actualSize; v++)
-                windowFeatures[w][v] = NumOps.ToDouble(visualFeatures[start + v]);
-        }
-
-        // Step 3: Multi-level description - coarse global + fine local features
-        var globalFeature = new double[dim];
-        for (int d = 0; d < dim; d++)
-        {
-            double sum = 0;
-            for (int v = 0; v < visLen; v++)
-                sum += NumOps.ToDouble(visualFeatures[v]) * Math.Sin((d + 1) * (v + 1) * 0.003) * 0.2;
-            globalFeature[d] = sum / visLen;
-        }
-
-        // Step 4: Tokenize prompt
-        Tensor<T>? promptTokens = null;
-        int promptLen = 0;
+        // Fuse visual features with prompt tokens via ConcatenateTensors
+        Tensor<T> fusedInput;
         if (prompt is not null)
         {
-            promptTokens = TokenizeText(prompt);
-            promptLen = promptTokens.Length;
+            var promptTokens = TokenizeText(prompt);
+            fusedInput = visualFeatures.ConcatenateTensors(promptTokens);
         }
-
-        // Step 5: Local-global aggregation with attention weighting
-        var decoderInput = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
+        else
         {
-            // Local attention over window features
-            double localAttn = 0;
-            double localWSum = 0;
-            for (int w = 0; w < numWindows; w++)
-            {
-                for (int v = 0; v < windowFeatures[w].Length; v++)
-                {
-                    double score = Math.Exp(windowFeatures[w][v] * Math.Sin((d + 1) * (v + 1) * 0.005) * 0.3);
-                    localAttn += score * windowFeatures[w][v];
-                    localWSum += score;
-                }
-            }
-            localAttn /= Math.Max(localWSum, 1e-8);
-
-            // Fuse local + global (0.6 local, 0.4 global)
-            double fused = localAttn * 0.6 + globalFeature[d] * 0.4;
-
-            double textEmb = 0;
-            if (promptTokens is not null && promptLen > 0)
-                textEmb = NumOps.ToDouble(promptTokens[d % promptLen]) / _options.VocabSize * 0.5;
-
-            decoderInput[d] = NumOps.FromDouble(fused + textEmb);
+            fusedInput = visualFeatures;
         }
 
-        // Step 6: Qwen decoder
-        var output = decoderInput;
+        var output = fusedInput;
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)
             output = Layers[i].Forward(output);
 

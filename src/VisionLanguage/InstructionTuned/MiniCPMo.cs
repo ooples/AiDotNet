@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -47,68 +48,24 @@ public class MiniCPMo<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
         var p = PreprocessImage(image);
         if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(p);
 
-        int dim = _options.DecoderDim;
-
         // Step 1: Vision encoder
         var visualFeatures = p;
         for (int i = 0; i < _encoderLayerEnd; i++)
             visualFeatures = Layers[i].Forward(visualFeatures);
-        int visLen = visualFeatures.Length;
 
-        // Step 2: Modality-aware token tagging (visual modality)
-        var taggedTokens = new double[visLen];
-        double modalityBias = 0.1; // Visual modality tag
-        for (int v = 0; v < visLen; v++)
-            taggedTokens[v] = NumOps.ToDouble(visualFeatures[v]) + modalityBias;
-
-        // Step 3: Adaptive temporal compression (streaming-aware)
-        int compressedLen = Math.Max(dim, visLen / 2);
-        var compressed = new double[compressedLen];
-        int window = Math.Max(1, visLen / compressedLen);
-        for (int c = 0; c < compressedLen; c++)
-        {
-            double sum = 0;
-            int count = 0;
-            for (int v = c * window; v < Math.Min((c + 1) * window, visLen); v++)
-            {
-                sum += taggedTokens[v];
-                count++;
-            }
-            compressed[c] = count > 0 ? sum / count : 0;
-        }
-
-        // Step 4: Tokenize prompt (text modality)
-        Tensor<T>? promptTokens = null;
-        int promptLen = 0;
+        // Fuse visual features with prompt tokens via ConcatenateTensors
+        Tensor<T> fusedInput;
         if (prompt is not null)
         {
-            promptTokens = TokenizeText(prompt);
-            promptLen = promptTokens.Length;
+            var promptTokens = TokenizeText(prompt);
+            fusedInput = visualFeatures.ConcatenateTensors(promptTokens);
         }
-
-        // Step 5: Omni-modal fusion cross-attention
-        var decoderInput = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
+        else
         {
-            double attn = 0;
-            double wSum = 0;
-            for (int c = 0; c < compressedLen; c++)
-            {
-                double score = Math.Exp(compressed[c] * Math.Sin((d + 1) * (c + 1) * 0.004) * 0.35);
-                attn += score * compressed[c];
-                wSum += score;
-            }
-            attn /= Math.Max(wSum, 1e-8);
-
-            double textEmb = 0;
-            if (promptTokens is not null && promptLen > 0)
-                textEmb = NumOps.ToDouble(promptTokens[d % promptLen]) / _options.VocabSize * 0.5;
-
-            decoderInput[d] = NumOps.FromDouble(attn + textEmb);
+            fusedInput = visualFeatures;
         }
 
-        // Step 6: MiniCPM decoder
-        var output = decoderInput;
+        var output = fusedInput;
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)
             output = Layers[i].Forward(output);
 

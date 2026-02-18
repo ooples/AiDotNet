@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -54,71 +55,24 @@ public class Phi4Multimodal<T> : VisionLanguageModelBase<T>, IInstructionTunedVL
         var p = PreprocessImage(image);
         if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(p);
 
-        int dim = _options.DecoderDim;
-
         // Step 1: SigLIP vision encoder with dynamic crops
         var visualFeatures = p;
         for (int i = 0; i < _encoderLayerEnd; i++)
             visualFeatures = Layers[i].Forward(visualFeatures);
-        int visLen = visualFeatures.Length;
 
-        // Step 2: Vision-specific MLP projection with GELU + layer norm
-        var projected = new double[visLen];
-        double mean = 0, variance = 0;
-        for (int v = 0; v < visLen; v++)
-        {
-            double val = NumOps.ToDouble(visualFeatures[v]);
-            double h = val * 0.8;
-            double gelu = h * 0.5 * (1.0 + Math.Tanh(Math.Sqrt(2.0 / Math.PI) * (h + 0.044715 * h * h * h)));
-            projected[v] = gelu * 0.7 + val * 0.15;
-            mean += projected[v];
-        }
-        mean /= visLen;
-        for (int v = 0; v < visLen; v++)
-            variance += (projected[v] - mean) * (projected[v] - mean);
-        variance /= visLen;
-        double std = Math.Sqrt(variance + 1e-6);
-        for (int v = 0; v < visLen; v++)
-            projected[v] = (projected[v] - mean) / std; // Layer norm
-
-        // Step 3: Modality gating (vision gate for unified decoder)
-        double visionGate = _options.EnableAudio ? 0.6 : 0.8; // Allocate capacity
-        var gatedVision = new double[visLen];
-        for (int v = 0; v < visLen; v++)
-            gatedVision[v] = projected[v] * visionGate;
-
-        // Step 4: Tokenize prompt
-        Tensor<T>? promptTokens = null;
-        int promptLen = 0;
+        // Fuse visual features with prompt tokens via ConcatenateTensors
+        Tensor<T> fusedInput;
         if (prompt is not null)
         {
-            promptTokens = TokenizeText(prompt);
-            promptLen = promptTokens.Length;
+            var promptTokens = TokenizeText(prompt);
+            fusedInput = visualFeatures.ConcatenateTensors(promptTokens);
         }
-
-        // Step 5: Cross-attention fusion with modality-aware attention
-        var decoderInput = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
+        else
         {
-            double attn = 0;
-            double wSum = 0;
-            for (int v = 0; v < visLen; v++)
-            {
-                double score = Math.Exp(gatedVision[v] * Math.Sin((d + 1) * (v + 1) * 0.004) * 0.35);
-                attn += score * gatedVision[v];
-                wSum += score;
-            }
-            attn /= Math.Max(wSum, 1e-8);
-
-            double textEmb = 0;
-            if (promptTokens is not null && promptLen > 0)
-                textEmb = NumOps.ToDouble(promptTokens[d % promptLen]) / _options.VocabSize * 0.5;
-
-            decoderInput[d] = NumOps.FromDouble(attn + textEmb);
+            fusedInput = visualFeatures;
         }
 
-        // Step 6: Phi-4 unified multi-modal decoder
-        var output = decoderInput;
+        var output = fusedInput;
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)
             output = Layers[i].Forward(output);
 

@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -54,8 +55,6 @@ public class Qwen2VL<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
         var p = PreprocessImage(image);
         if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(p);
 
-        int dim = _options.DecoderDim;
-
         // Step 1: ViT with Naive Dynamic Resolution (variable grid)
         var visionOut = p;
         for (int i = 0; i < _visionLayerEnd; i++)
@@ -66,55 +65,20 @@ public class Qwen2VL<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
         var resamplerOut = visionOut;
         for (int i = _visionLayerEnd; i < _resamplerLayerEnd; i++)
             resamplerOut = Layers[i].Forward(resamplerOut);
-        int resLen = resamplerOut.Length;
 
-        // Step 3: Apply M-RoPE positional encoding to visual tokens
-        // M-RoPE decomposes position into temporal (t), height (h), width (w) components
-        int gridSize = (int)Math.Ceiling(Math.Sqrt(resLen));
-        var mropeFeatures = new double[resLen];
-        for (int v = 0; v < resLen; v++)
-        {
-            double val = NumOps.ToDouble(resamplerOut[v]);
-            int h = v / Math.Max(1, gridSize);
-            int w = v % Math.Max(1, gridSize);
-            // M-RoPE: separate sinusoidal components for height and width
-            double hRope = Math.Sin(h * 0.1) * 0.05;
-            double wRope = Math.Cos(w * 0.1) * 0.05;
-            mropeFeatures[v] = val + hRope + wRope;
-        }
-
-        // Step 4: Tokenize prompt
-        Tensor<T>? promptTokens = null;
-        int promptLen = 0;
+        // Fuse features with prompt tokens via ConcatenateTensors
+        Tensor<T> fusedInput;
         if (prompt is not null)
         {
-            promptTokens = TokenizeText(prompt);
-            promptLen = promptTokens.Length;
+            var promptTokens = TokenizeText(prompt);
+            fusedInput = resamplerOut.ConcatenateTensors(promptTokens);
         }
-
-        // Step 5: Cross-attention fusion with M-RoPE-encoded features
-        var decoderInput = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
+        else
         {
-            double attn = 0;
-            double wSum = 0;
-            for (int v = 0; v < resLen; v++)
-            {
-                double score = Math.Exp(mropeFeatures[v] * Math.Sin((d + 1) * (v + 1) * 0.004) * 0.35);
-                attn += score * mropeFeatures[v];
-                wSum += score;
-            }
-            attn /= Math.Max(wSum, 1e-8);
-
-            double textEmb = 0;
-            if (promptTokens is not null && promptLen > 0)
-                textEmb = NumOps.ToDouble(promptTokens[d % promptLen]) / _options.VocabSize * 0.5;
-
-            decoderInput[d] = NumOps.FromDouble(attn + textEmb);
+            fusedInput = resamplerOut;
         }
 
-        // Step 6: Qwen2 decoder
-        var output = decoderInput;
+        var output = fusedInput;
         for (int i = _resamplerLayerEnd; i < Layers.Count; i++)
             output = Layers[i].Forward(output);
 

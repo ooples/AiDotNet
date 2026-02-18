@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -54,71 +55,26 @@ public class CogVLM2<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
         var p = PreprocessImage(image);
         if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(p);
 
-        int dim = _options.DecoderDim;
         int expertDim = _options.VisualExpertDim;
 
         // Step 1: EVA2-CLIP-E vision encoder
         var visualFeatures = p;
         for (int i = 0; i < _encoderLayerEnd; i++)
             visualFeatures = Layers[i].Forward(visualFeatures);
-        int visLen = visualFeatures.Length;
 
-        // Step 2: Visual expert processing with temporal attention
-        var expertProcessed = new double[visLen];
-        for (int v = 0; v < visLen; v++)
-        {
-            double val = NumOps.ToDouble(visualFeatures[v]);
-            // Spatial visual expert QKV
-            double q = val * 0.6 + Math.Sin(v * 0.02) * 0.1;
-            double k = val * 0.5 + Math.Cos(v * 0.02) * 0.1;
-            double vVal = val * 0.7;
-            double spatialAttn = q * k / Math.Sqrt(expertDim);
-            double spatial = vVal * Math.Tanh(spatialAttn) * 0.7;
-
-            // Temporal attention: captures inter-frame motion patterns
-            double temporal = 0;
-            if (v > 0 && v < visLen - 1)
-            {
-                double prev = NumOps.ToDouble(visualFeatures[v - 1]);
-                double next = NumOps.ToDouble(visualFeatures[Math.Min(v + 1, visLen - 1)]);
-                temporal = (next - prev) * 0.15; // Temporal gradient
-            }
-
-            expertProcessed[v] = spatial + temporal + val * 0.15;
-        }
-
-        // Step 3: Tokenize prompt
-        Tensor<T>? promptTokens = null;
-        int promptLen = 0;
+        // Fuse visual features with prompt tokens via ConcatenateTensors
+        Tensor<T> fusedInput;
         if (prompt is not null)
         {
-            promptTokens = TokenizeText(prompt);
-            promptLen = promptTokens.Length;
+            var promptTokens = TokenizeText(prompt);
+            fusedInput = visualFeatures.ConcatenateTensors(promptTokens);
         }
-
-        // Step 4: Deep fusion cross-attention
-        var decoderInput = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
+        else
         {
-            double attn = 0;
-            double wSum = 0;
-            for (int v = 0; v < visLen; v++)
-            {
-                double score = Math.Exp(expertProcessed[v] * Math.Sin((d + 1) * (v + 1) * 0.004) * 0.35);
-                attn += score * expertProcessed[v];
-                wSum += score;
-            }
-            attn /= Math.Max(wSum, 1e-8);
-
-            double textEmb = 0;
-            if (promptTokens is not null && promptLen > 0)
-                textEmb = NumOps.ToDouble(promptTokens[d % promptLen]) / _options.VocabSize * 0.5;
-
-            decoderInput[d] = NumOps.FromDouble(attn + textEmb);
+            fusedInput = visualFeatures;
         }
 
-        // Step 5: GLM-4 decoder with visual expert augmentation
-        var output = decoderInput;
+        var output = fusedInput;
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)
             output = Layers[i].Forward(output);
 

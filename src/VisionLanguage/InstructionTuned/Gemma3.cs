@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -53,76 +54,24 @@ public class Gemma3<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
         var p = PreprocessImage(image);
         if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(p);
 
-        int dim = _options.DecoderDim;
-
         // Step 1: SigLIP vision encoder with NDR
         var visualFeatures = p;
         for (int i = 0; i < _encoderLayerEnd; i++)
             visualFeatures = Layers[i].Forward(visualFeatures);
-        int visLen = visualFeatures.Length;
 
-        // Step 2: Pan-and-scan + global thumbnail fusion
-        // NDR: process at native aspect ratio; global thumbnail captures full context
-        int thumbnailSize = Math.Max(1, visLen / 4);
-        var globalThumbnail = new double[thumbnailSize];
-        for (int t = 0; t < thumbnailSize; t++)
-        {
-            double sum = 0;
-            for (int v = t * 4; v < Math.Min((t + 1) * 4, visLen); v++)
-                sum += NumOps.ToDouble(visualFeatures[v]);
-            globalThumbnail[t] = sum * 0.25;
-        }
-
-        // Fuse local crops with global context
-        var fusedFeatures = new double[visLen];
-        for (int v = 0; v < visLen; v++)
-        {
-            double local = NumOps.ToDouble(visualFeatures[v]);
-            int tIdx = Math.Min(v / 4, thumbnailSize - 1);
-            double global = globalThumbnail[tIdx];
-            fusedFeatures[v] = local * 0.7 + global * 0.3;
-        }
-
-        // Step 3: Soft-capped attention logits (cap at 50.0)
-        var softCapped = new double[visLen];
-        for (int v = 0; v < visLen; v++)
-        {
-            double logit = fusedFeatures[v];
-            softCapped[v] = 50.0 * Math.Tanh(logit / 50.0); // Soft cap
-        }
-
-        // Step 4: Tokenize prompt
-        Tensor<T>? promptTokens = null;
-        int promptLen = 0;
+        // Fuse visual features with prompt tokens via ConcatenateTensors
+        Tensor<T> fusedInput;
         if (prompt is not null)
         {
-            promptTokens = TokenizeText(prompt);
-            promptLen = promptTokens.Length;
+            var promptTokens = TokenizeText(prompt);
+            fusedInput = visualFeatures.ConcatenateTensors(promptTokens);
         }
-
-        // Step 5: Cross-attention fusion
-        var decoderInput = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
+        else
         {
-            double attn = 0;
-            double wSum = 0;
-            for (int v = 0; v < visLen; v++)
-            {
-                double score = Math.Exp(softCapped[v] * Math.Sin((d + 1) * (v + 1) * 0.004) * 0.35);
-                attn += score * softCapped[v];
-                wSum += score;
-            }
-            attn /= Math.Max(wSum, 1e-8);
-
-            double textEmb = 0;
-            if (promptTokens is not null && promptLen > 0)
-                textEmb = NumOps.ToDouble(promptTokens[d % promptLen]) / _options.VocabSize * 0.5;
-
-            decoderInput[d] = NumOps.FromDouble(attn + textEmb);
+            fusedInput = visualFeatures;
         }
 
-        // Step 6: Gemma-3 decoder
-        var output = decoderInput;
+        var output = fusedInput;
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)
             output = Layers[i].Forward(output);
 

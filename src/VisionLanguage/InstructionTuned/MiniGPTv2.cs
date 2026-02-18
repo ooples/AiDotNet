@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -55,7 +56,6 @@ public class MiniGPTv2<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
         var p = PreprocessImage(image);
         if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(p);
 
-        int dim = _options.DecoderDim;
         int qFormerDim = _options.QFormerDim;
         int numQueries = _options.NumQueryTokens;
 
@@ -68,73 +68,20 @@ public class MiniGPTv2<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
         var qFormerOut = visionOut;
         for (int i = _visionLayerEnd; i < _qFormerLayerEnd; i++)
             qFormerOut = Layers[i].Forward(qFormerOut);
-        int qfLen = qFormerOut.Length;
 
-        // Step 3: Task-aware query cross-attention
-        // Parse task identifier from prompt to adjust query behavior
-        double taskBias = 0;
+        // Fuse features with prompt tokens via ConcatenateTensors
+        Tensor<T> fusedInput;
         if (prompt is not null)
         {
-            if (prompt.Contains("[vqa]")) taskBias = 0.1;
-            else if (prompt.Contains("[caption]")) taskBias = 0.05;
-            else if (prompt.Contains("[grounding]")) taskBias = 0.15;
-            else if (prompt.Contains("[identify]")) taskBias = 0.12;
-            else if (prompt.Contains("[refer]")) taskBias = 0.08;
+            var promptTokens = TokenizeText(prompt);
+            fusedInput = qFormerOut.ConcatenateTensors(promptTokens);
         }
-
-        // Concatenated visual tokens (spatial-preserving)
-        var queryOutputs = new double[numQueries];
-        for (int q = 0; q < numQueries; q++)
+        else
         {
-            double attn = 0;
-            double wSum = 0;
-            for (int v = 0; v < qfLen; v++)
-            {
-                double val = NumOps.ToDouble(qFormerOut[v]);
-                double score = Math.Exp((val + taskBias) * Math.Sin((q + 1) * (v + 1) * 0.003) * 0.3);
-                attn += score * val;
-                wSum += score;
-            }
-            queryOutputs[q] = attn / Math.Max(wSum, 1e-8);
+            fusedInput = qFormerOut;
         }
 
-        // Step 4: Linear projection with spatial preservation
-        var projected = new double[numQueries];
-        for (int q = 0; q < numQueries; q++)
-            projected[q] = queryOutputs[q] * ((double)dim / qFormerDim) * 0.5;
-
-        // Step 5: Tokenize task-prefixed prompt
-        Tensor<T>? promptTokens = null;
-        int promptLen = 0;
-        if (prompt is not null)
-        {
-            promptTokens = TokenizeText(prompt);
-            promptLen = promptTokens.Length;
-        }
-
-        // Step 6: Cross-attention fusion with task conditioning
-        var decoderInput = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
-        {
-            double attn = 0;
-            double wSum = 0;
-            for (int q = 0; q < numQueries; q++)
-            {
-                double score = Math.Exp(projected[q] * Math.Sin((d + 1) * (q + 1) * 0.01) * 0.35);
-                attn += score * projected[q];
-                wSum += score;
-            }
-            attn /= Math.Max(wSum, 1e-8);
-
-            double textEmb = 0;
-            if (promptTokens is not null && promptLen > 0)
-                textEmb = NumOps.ToDouble(promptTokens[d % promptLen]) / _options.VocabSize * 0.5;
-
-            decoderInput[d] = NumOps.FromDouble(attn + textEmb);
-        }
-
-        // Step 7: LLaMA-2 decoder with multi-task support
-        var output = decoderInput;
+        var output = fusedInput;
         for (int i = _qFormerLayerEnd; i < Layers.Count; i++)
             output = Layers[i].Forward(output);
 

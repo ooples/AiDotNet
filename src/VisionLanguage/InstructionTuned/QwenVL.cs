@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -55,7 +56,6 @@ public class QwenVL<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
         var p = PreprocessImage(image);
         if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(p);
 
-        int dim = _options.DecoderDim;
         int numQueries = _options.MaxVisualTokens; // 256 learned queries
 
         // Step 1: ViT with visual window attention
@@ -68,50 +68,20 @@ public class QwenVL<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
         var resamplerOut = visionOut;
         for (int i = _visionLayerEnd; i < _resamplerLayerEnd; i++)
             resamplerOut = Layers[i].Forward(resamplerOut);
-        int resLen = resamplerOut.Length;
 
-        // Step 3: Simulate resampler cross-attention compression
-        // 256 learned queries cross-attend to all visual tokens in 6 layers
-        var compressed = new double[numQueries];
-        for (int q = 0; q < numQueries; q++)
-        {
-            double attnSum = 0;
-            double wSum = 0;
-            for (int v = 0; v < resLen; v++)
-            {
-                double val = NumOps.ToDouble(resamplerOut[v]);
-                // Cross-attention: query-key similarity
-                double score = Math.Exp(Math.Sin((q + 1) * (v + 1) * 0.006) * val * 0.4);
-                attnSum += score * val;
-                wSum += score;
-            }
-            compressed[q] = wSum > 1e-8 ? attnSum / wSum : 0;
-        }
-
-        // Step 4: Tokenize prompt
-        Tensor<T>? promptTokens = null;
-        int promptLen = 0;
+        // Fuse features with prompt tokens via ConcatenateTensors
+        Tensor<T> fusedInput;
         if (prompt is not null)
         {
-            promptTokens = TokenizeText(prompt);
-            promptLen = promptTokens.Length;
+            var promptTokens = TokenizeText(prompt);
+            fusedInput = resamplerOut.ConcatenateTensors(promptTokens);
         }
-
-        // Step 5: Visual-text fusion for decoder input
-        var decoderInput = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
+        else
         {
-            double visEmb = compressed[d % numQueries];
-
-            double textEmb = 0;
-            if (promptTokens is not null && promptLen > 0)
-                textEmb = NumOps.ToDouble(promptTokens[d % promptLen]) / _options.VocabSize * 0.5;
-
-            decoderInput[d] = NumOps.FromDouble(visEmb * 0.7 + textEmb);
+            fusedInput = resamplerOut;
         }
 
-        // Step 6: Qwen decoder
-        var output = decoderInput;
+        var output = fusedInput;
         for (int i = _resamplerLayerEnd; i < Layers.Count; i++)
             output = Layers[i].Forward(output);
 

@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -53,70 +54,24 @@ public class Pixtral<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
         var p = PreprocessImage(image);
         if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(p);
 
-        int dim = _options.DecoderDim;
-
         // Step 1: Custom 400M vision encoder with 2D RoPE
         var visualFeatures = p;
         for (int i = 0; i < _encoderLayerEnd; i++)
             visualFeatures = Layers[i].Forward(visualFeatures);
-        int visLen = visualFeatures.Length;
 
-        // Step 2: 2D RoPE positional encoding for spatial awareness
-        int gridSize = (int)Math.Ceiling(Math.Sqrt(visLen));
-        var ropeFeatures = new double[visLen];
-        for (int v = 0; v < visLen; v++)
-        {
-            double val = NumOps.ToDouble(visualFeatures[v]);
-            int h = v / Math.Max(1, gridSize);
-            int w = v % Math.Max(1, gridSize);
-            // 2D RoPE: encode both height and width position
-            double hRope = Math.Sin(h * 0.1) * 0.05 + Math.Sin(h * 0.01) * 0.02;
-            double wRope = Math.Cos(w * 0.1) * 0.05 + Math.Cos(w * 0.01) * 0.02;
-            ropeFeatures[v] = val + hRope + wRope;
-        }
-
-        // Step 3: 2-layer MLP projection with SiLU activation
-        var projected = new double[visLen];
-        for (int v = 0; v < visLen; v++)
-        {
-            double x = ropeFeatures[v];
-            double h1 = x * 0.8;
-            double silu = h1 * (1.0 / (1.0 + Math.Exp(-h1))); // SiLU activation
-            projected[v] = silu * 0.7 + x * 0.15;
-        }
-
-        // Step 4: Tokenize prompt
-        Tensor<T>? promptTokens = null;
-        int promptLen = 0;
+        // Fuse visual features with prompt tokens via ConcatenateTensors
+        Tensor<T> fusedInput;
         if (prompt is not null)
         {
-            promptTokens = TokenizeText(prompt);
-            promptLen = promptTokens.Length;
+            var promptTokens = TokenizeText(prompt);
+            fusedInput = visualFeatures.ConcatenateTensors(promptTokens);
         }
-
-        // Step 5: Cross-attention fusion with sliding window pattern
-        var decoderInput = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
+        else
         {
-            double attn = 0;
-            double wSum = 0;
-            for (int v = 0; v < visLen; v++)
-            {
-                double score = Math.Exp(projected[v] * Math.Sin((d + 1) * (v + 1) * 0.004) * 0.35);
-                attn += score * projected[v];
-                wSum += score;
-            }
-            attn /= Math.Max(wSum, 1e-8);
-
-            double textEmb = 0;
-            if (promptTokens is not null && promptLen > 0)
-                textEmb = NumOps.ToDouble(promptTokens[d % promptLen]) / _options.VocabSize * 0.5;
-
-            decoderInput[d] = NumOps.FromDouble(attn + textEmb);
+            fusedInput = visualFeatures;
         }
 
-        // Step 6: Mistral 12B decoder with sliding window attention
-        var output = decoderInput;
+        var output = fusedInput;
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)
             output = Layers[i].Forward(output);
 

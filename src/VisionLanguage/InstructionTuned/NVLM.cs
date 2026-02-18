@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -52,91 +53,26 @@ public class NVLM<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
         var p = PreprocessImage(image);
         if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(p);
 
-        int dim = _options.DecoderDim;
         int crossDim = _options.CrossAttentionDim;
 
         // Step 1: Vision encoder
         var visualFeatures = p;
         for (int i = 0; i < _encoderLayerEnd; i++)
             visualFeatures = Layers[i].Forward(visualFeatures);
-        int visLen = visualFeatures.Length;
 
-        // Step 2: Tile-and-thumbnail decomposition
-        int numTiles = 4;
-        int tileSize = Math.Max(1, visLen / numTiles);
-        var tilePooled = new double[numTiles + 1][]; // +1 for thumbnail
-
-        // Process each tile with 1D average pooling for token compression
-        int pooledDim = Math.Min(dim, crossDim);
-        for (int tile = 0; tile <= numTiles; tile++)
-        {
-            tilePooled[tile] = new double[pooledDim];
-            int start, end;
-            if (tile < numTiles)
-            {
-                start = tile * tileSize;
-                end = Math.Min(start + tileSize, visLen);
-            }
-            else
-            {
-                // Thumbnail: subsample entire image
-                start = 0;
-                end = visLen;
-            }
-
-            int poolWindow = Math.Max(1, (end - start) / pooledDim);
-            for (int d = 0; d < pooledDim; d++)
-            {
-                double sum = 0;
-                int count = 0;
-                int poolStart = start + d * poolWindow;
-                for (int v = poolStart; v < Math.Min(poolStart + poolWindow, end); v++)
-                {
-                    sum += NumOps.ToDouble(visualFeatures[v]);
-                    count++;
-                }
-                tilePooled[tile][d] = count > 0 ? sum / count : 0;
-            }
-        }
-
-        // Step 3: Tokenize prompt
-        Tensor<T>? promptTokens = null;
-        int promptLen = 0;
+        // Fuse visual features with prompt tokens via ConcatenateTensors
+        Tensor<T> fusedInput;
         if (prompt is not null)
         {
-            promptTokens = TokenizeText(prompt);
-            promptLen = promptTokens.Length;
+            var promptTokens = TokenizeText(prompt);
+            fusedInput = visualFeatures.ConcatenateTensors(promptTokens);
         }
-
-        // Step 4: Cross-attention hybrid - visual tokens attend to text context
-        var decoderInput = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
+        else
         {
-            // Cross-attention: text queries attend to visual keys/values
-            double crossAttn = 0;
-            double wSum = 0;
-            for (int tile = 0; tile <= numTiles; tile++)
-            {
-                double tileWeight = tile < numTiles ? 1.0 : 0.5; // thumbnail gets less weight
-                for (int pd = 0; pd < pooledDim; pd++)
-                {
-                    double score = Math.Exp(tilePooled[tile][pd] *
-                        Math.Sin((d + 1) * (pd + 1) * 0.003) * 0.35) * tileWeight;
-                    crossAttn += score * tilePooled[tile][pd];
-                    wSum += score;
-                }
-            }
-            crossAttn /= Math.Max(wSum, 1e-8);
-
-            double textEmb = 0;
-            if (promptTokens is not null && promptLen > 0)
-                textEmb = NumOps.ToDouble(promptTokens[d % promptLen]) / _options.VocabSize * 0.5;
-
-            decoderInput[d] = NumOps.FromDouble(crossAttn + textEmb);
+            fusedInput = visualFeatures;
         }
 
-        // Step 5: Qwen2 decoder
-        var output = decoderInput;
+        var output = fusedInput;
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)
             output = Layers[i].Forward(output);
 

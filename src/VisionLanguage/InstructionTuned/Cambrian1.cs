@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -51,88 +52,26 @@ public class Cambrian1<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
         var p = PreprocessImage(image);
         if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(p);
 
-        int dim = _options.DecoderDim;
         int numEncoders = _options.NumVisionEncoders;
 
         // Step 1: Vision encoder backbone
         var visualFeatures = p;
         for (int i = 0; i < _encoderLayerEnd; i++)
             visualFeatures = Layers[i].Forward(visualFeatures);
-        int visLen = visualFeatures.Length;
 
-        // Step 2: Simulate multiple encoder outputs with different feature characteristics
-        var encoderOutputs = new double[numEncoders][];
-        for (int enc = 0; enc < numEncoders; enc++)
-        {
-            encoderOutputs[enc] = new double[visLen];
-            for (int v = 0; v < visLen; v++)
-            {
-                double val = NumOps.ToDouble(visualFeatures[v]);
-                encoderOutputs[enc][v] = enc switch
-                {
-                    0 => val, // CLIP: semantic features
-                    1 => val * Math.Cos(v * 0.05) + Math.Sin(v * 0.1) * 0.2, // DINOv2: spatial
-                    2 => val * (1.0 + 0.3 * Math.Sin(v * 0.2)), // SigLIP: fine-grained
-                    _ => val * Math.Exp(-0.001 * (v % 16)) // ConvNeXt: local
-                };
-            }
-        }
-
-        // Step 3: Tokenize prompt
-        Tensor<T>? promptTokens = null;
-        int promptLen = 0;
+        // Fuse visual features with prompt tokens via ConcatenateTensors
+        Tensor<T> fusedInput;
         if (prompt is not null)
         {
-            promptTokens = TokenizeText(prompt);
-            promptLen = promptTokens.Length;
+            var promptTokens = TokenizeText(prompt);
+            fusedInput = visualFeatures.ConcatenateTensors(promptTokens);
         }
-
-        // Step 4: Spatial Vision Aggregator - learned queries cross-attend to all encoders
-        int numQueries = Math.Min(64, dim);
-        var queryEmbeddings = new double[numQueries];
-        for (int q = 0; q < numQueries; q++)
-            queryEmbeddings[q] = Math.Sin((q + 1) * 0.15) * 0.1;
-
-        for (int layer = 0; layer < 2; layer++)
+        else
         {
-            var newQueries = new double[numQueries];
-            for (int q = 0; q < numQueries; q++)
-            {
-                double crossAttn = 0;
-                double wSum = 0;
-                for (int enc = 0; enc < numEncoders; enc++)
-                {
-                    for (int v = 0; v < visLen; v++)
-                    {
-                        double score = Math.Exp(queryEmbeddings[q] * encoderOutputs[enc][v] *
-                            Math.Sin((layer + 1) * (q + 1) * (v + 1) * 0.0005) * 0.3);
-                        crossAttn += score * encoderOutputs[enc][v];
-                        wSum += score;
-                    }
-                }
-                newQueries[q] = crossAttn / Math.Max(wSum, 1e-8);
-            }
-            queryEmbeddings = newQueries;
+            fusedInput = visualFeatures;
         }
 
-        // Step 5: Project SVA output to decoder dimension with instruction conditioning
-        var decoderInput = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
-        {
-            double projected = 0;
-            for (int q = 0; q < numQueries; q++)
-                projected += queryEmbeddings[q] * Math.Sin((d + 1) * (q + 1) * 0.003) * 0.25;
-            projected /= numQueries;
-
-            double textEmb = 0;
-            if (promptTokens is not null && promptLen > 0)
-                textEmb = NumOps.ToDouble(promptTokens[d % promptLen]) / _options.VocabSize * 0.5;
-
-            decoderInput[d] = NumOps.FromDouble(projected + textEmb);
-        }
-
-        // Step 6: LLaMA-3 decoder
-        var output = decoderInput;
+        var output = fusedInput;
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)
             output = Layers[i].Forward(output);
 

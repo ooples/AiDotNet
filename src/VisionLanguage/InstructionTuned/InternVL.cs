@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -59,55 +60,20 @@ public class InternVL<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
         var visualFeatures = p;
         for (int i = 0; i < _encoderLayerEnd; i++)
             visualFeatures = Layers[i].Forward(visualFeatures);
-        int visLen = visualFeatures.Length;
 
-        // Step 2: Progressive alignment projection (contrastive + generative aligned)
-        // The projection reflects two-stage alignment: contrastive scaling + generative fine-tuning
-        var projected = new double[visLen];
-        for (int v = 0; v < visLen; v++)
-        {
-            double x = NumOps.ToDouble(visualFeatures[v]);
-            // Contrastive alignment: L2-normalize then scale
-            double norm = Math.Max(Math.Abs(x), 1e-6);
-            double aligned = (x / norm) * 0.6;
-            // Generative fine-tuning: MLP with GELU
-            double h = aligned * 0.8;
-            double gelu = h * 0.5 * (1.0 + Math.Tanh(Math.Sqrt(2.0 / Math.PI) * (h + 0.044715 * h * h * h)));
-            projected[v] = gelu * 0.7 + aligned * 0.2;
-        }
-
-        // Step 3: Tokenize prompt
-        Tensor<T>? promptTokens = null;
-        int promptLen = 0;
+        // Fuse visual features with prompt tokens via ConcatenateTensors
+        Tensor<T> fusedInput;
         if (prompt is not null)
         {
-            promptTokens = TokenizeText(prompt);
-            promptLen = promptTokens.Length;
+            var promptTokens = TokenizeText(prompt);
+            fusedInput = visualFeatures.ConcatenateTensors(promptTokens);
         }
-
-        // Step 4: Cross-attention fusion
-        var decoderInput = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
+        else
         {
-            double attn = 0;
-            double wSum = 0;
-            for (int v = 0; v < visLen; v++)
-            {
-                double score = Math.Exp(projected[v] * Math.Sin((d + 1) * (v + 1) * 0.004) * 0.35);
-                attn += score * projected[v];
-                wSum += score;
-            }
-            attn /= Math.Max(wSum, 1e-8);
-
-            double textEmb = 0;
-            if (promptTokens is not null && promptLen > 0)
-                textEmb = NumOps.ToDouble(promptTokens[d % promptLen]) / _options.VocabSize * 0.5;
-
-            decoderInput[d] = NumOps.FromDouble(attn + textEmb);
+            fusedInput = visualFeatures;
         }
 
-        // Step 5: LLaMA decoder
-        var output = decoderInput;
+        var output = fusedInput;
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)
             output = Layers[i].Forward(output);
 

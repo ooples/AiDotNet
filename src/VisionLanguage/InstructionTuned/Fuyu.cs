@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -55,67 +56,25 @@ public class Fuyu<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
         var p = PreprocessImage(image);
         if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(p);
 
-        int dim = _options.DecoderDim;
-        int patchSize = _options.PatchSize;
-
         // Step 1: Direct patch linear projection (no vision encoder)
-        // Single projection layer converts raw patches to decoder dim
         var patchOut = p;
         for (int i = 0; i < _encoderLayerEnd; i++)
             patchOut = Layers[i].Forward(patchOut);
-        int patchLen = patchOut.Length;
 
-        // Step 2: Simulate patch linearization with newline tokens
-        // At 1080px with 30px patches: 36x36 = 1296 patches
-        int patchesPerRow = Math.Max(1, _options.ImageSize / patchSize);
-        var linearized = new double[patchLen];
-        for (int idx = 0; idx < patchLen; idx++)
-        {
-            double val = NumOps.ToDouble(patchOut[idx]);
-            int row = idx / Math.Max(1, patchesPerRow);
-            int col = idx % Math.Max(1, patchesPerRow);
-            // Add implicit newline token signal at row boundaries
-            double newlineSignal = (col == 0 && row > 0) ? 0.1 : 0.0;
-            // Positional encoding preserving 2D layout
-            double posEncoding = Math.Sin(row * 0.1) * 0.03 + Math.Cos(col * 0.1) * 0.03;
-            linearized[idx] = val + newlineSignal + posEncoding;
-        }
-
-        // Step 3: Tokenize prompt
-        Tensor<T>? promptTokens = null;
-        int promptLen = 0;
+        // Step 2: Fuse patch features with prompt tokens via ConcatenateTensors
+        Tensor<T> fusedInput;
         if (prompt is not null)
         {
-            promptTokens = TokenizeText(prompt);
-            promptLen = promptTokens.Length;
+            var promptTokens = TokenizeText(prompt);
+            fusedInput = patchOut.ConcatenateTensors(promptTokens);
         }
-
-        // Step 4: Build interleaved sequence representation
-        // [patch_tokens] [text_tokens] -> decoder input
-        var decoderInput = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
+        else
         {
-            // Aggregate patch features via attention
-            double patchAttn = 0;
-            double wSum = 0;
-            for (int idx = 0; idx < patchLen; idx++)
-            {
-                double score = Math.Exp(linearized[idx] * Math.Sin((d + 1) * (idx + 1) * 0.004) * 0.35);
-                patchAttn += score * linearized[idx];
-                wSum += score;
-            }
-            patchAttn /= Math.Max(wSum, 1e-8);
-
-            double textEmb = 0;
-            if (promptTokens is not null && promptLen > 0)
-                textEmb = NumOps.ToDouble(promptTokens[d % promptLen]) / _options.VocabSize * 0.5;
-
-            // Interleaved: patches and text contribute equally
-            decoderInput[d] = NumOps.FromDouble(patchAttn + textEmb);
+            fusedInput = patchOut;
         }
 
-        // Step 5: Persimmon 36-layer decoder
-        var output = decoderInput;
+        // Step 3: Persimmon 36-layer decoder
+        var output = fusedInput;
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)
             output = Layers[i].Forward(output);
 

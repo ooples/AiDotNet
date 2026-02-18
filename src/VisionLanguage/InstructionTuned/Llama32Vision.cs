@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -54,59 +55,24 @@ public class Llama32Vision<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM
         var p = PreprocessImage(image);
         if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(p);
 
-        int dim = _options.DecoderDim;
-
         // Step 1: ViT-H/14 vision encoder
         var visualFeatures = p;
         for (int i = 0; i < _encoderLayerEnd; i++)
             visualFeatures = Layers[i].Forward(visualFeatures);
-        int visLen = visualFeatures.Length;
 
-        // Step 2: Vision adapter projection with gating
-        var gatedFeatures = new double[visLen];
-        for (int v = 0; v < visLen; v++)
-        {
-            double val = NumOps.ToDouble(visualFeatures[v]);
-            // Adapter: project + gate to control visual influence
-            double projected = val * 0.7;
-            double gate = 1.0 / (1.0 + Math.Exp(-val * 0.5)); // Sigmoid gate
-            gatedFeatures[v] = projected * gate;
-        }
-
-        // Step 3: Tokenize prompt
-        Tensor<T>? promptTokens = null;
-        int promptLen = 0;
+        // Fuse visual features with prompt tokens via ConcatenateTensors
+        Tensor<T> fusedInput;
         if (prompt is not null)
         {
-            promptTokens = TokenizeText(prompt);
-            promptLen = promptTokens.Length;
+            var promptTokens = TokenizeText(prompt);
+            fusedInput = visualFeatures.ConcatenateTensors(promptTokens);
         }
-
-        // Step 4: Interleaved cross-attention (every 4th layer pattern)
-        var decoderInput = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
+        else
         {
-            double attn = 0;
-            double wSum = 0;
-            // Cross-attention: text queries attend to visual keys/values
-            for (int v = 0; v < visLen; v++)
-            {
-                double score = Math.Exp(gatedFeatures[v] * Math.Sin((d + 1) * (v + 1) * 0.004) * 0.35);
-                attn += score * gatedFeatures[v];
-                wSum += score;
-            }
-            attn /= Math.Max(wSum, 1e-8);
-
-            double textEmb = 0;
-            if (promptTokens is not null && promptLen > 0)
-                textEmb = NumOps.ToDouble(promptTokens[d % promptLen]) / _options.VocabSize * 0.5;
-
-            // Gated residual: prevent catastrophic forgetting
-            decoderInput[d] = NumOps.FromDouble(attn * 0.6 + textEmb * 0.4);
+            fusedInput = visualFeatures;
         }
 
-        // Step 5: LLaMA-3.2 decoder
-        var output = decoderInput;
+        var output = fusedInput;
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)
             output = Layers[i].Forward(output);
 

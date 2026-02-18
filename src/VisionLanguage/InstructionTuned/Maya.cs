@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -47,62 +48,26 @@ public class Maya<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
         var p = PreprocessImage(image);
         if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(p);
 
-        int dim = _options.DecoderDim;
         int numLangs = _options.NumLanguages;
 
         // Step 1: Vision encoder
         var visualFeatures = p;
         for (int i = 0; i < _encoderLayerEnd; i++)
             visualFeatures = Layers[i].Forward(visualFeatures);
-        int visLen = visualFeatures.Length;
 
-        // Step 2: Tokenize prompt + detect language signal
-        Tensor<T>? promptTokens = null;
-        int promptLen = 0;
-        double langSignal = 0; // Language-derived modulation
+        // Fuse visual features with prompt tokens via ConcatenateTensors
+        Tensor<T> fusedInput;
         if (prompt is not null)
         {
-            promptTokens = TokenizeText(prompt);
-            promptLen = promptTokens.Length;
-            // Derive language signal from token distribution
-            for (int t = 0; t < promptLen; t++)
-                langSignal += NumOps.ToDouble(promptTokens[t]);
-            langSignal = Math.Tanh(langSignal / Math.Max(promptLen, 1) / _options.VocabSize * 4.0);
+            var promptTokens = TokenizeText(prompt);
+            fusedInput = visualFeatures.ConcatenateTensors(promptTokens);
         }
-
-        // Step 3: Language-aware feature modulation
-        var modulatedFeatures = new double[visLen];
-        for (int v = 0; v < visLen; v++)
+        else
         {
-            double val = NumOps.ToDouble(visualFeatures[v]);
-            // Modulate based on language: different languages emphasize different visual aspects
-            double langMod = 1.0 + langSignal * Math.Sin((v + 1) * 0.02) * 0.2;
-            modulatedFeatures[v] = val * langMod;
+            fusedInput = visualFeatures;
         }
 
-        // Step 4: Cross-attention with cross-lingual alignment
-        var decoderInput = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
-        {
-            double attn = 0;
-            double wSum = 0;
-            for (int v = 0; v < visLen; v++)
-            {
-                double score = Math.Exp(modulatedFeatures[v] * Math.Sin((d + 1) * (v + 1) * 0.004) * 0.35);
-                attn += score * modulatedFeatures[v];
-                wSum += score;
-            }
-            attn /= Math.Max(wSum, 1e-8);
-
-            double textEmb = 0;
-            if (promptTokens is not null && promptLen > 0)
-                textEmb = NumOps.ToDouble(promptTokens[d % promptLen]) / _options.VocabSize * 0.5;
-
-            decoderInput[d] = NumOps.FromDouble(attn + textEmb);
-        }
-
-        // Step 5: LLaMA-2 decoder
-        var output = decoderInput;
+        var output = fusedInput;
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)
             output = Layers[i].Forward(output);
 

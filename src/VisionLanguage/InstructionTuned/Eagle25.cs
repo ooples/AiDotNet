@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -47,76 +48,24 @@ public class Eagle25<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
         var p = PreprocessImage(image);
         if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(p);
 
-        int dim = _options.DecoderDim;
-
         // Step 1: Vision encoder
         var visualFeatures = p;
         for (int i = 0; i < _encoderLayerEnd; i++)
             visualFeatures = Layers[i].Forward(visualFeatures);
-        int visLen = visualFeatures.Length;
 
-        // Step 2: Adaptive tiling based on content complexity
-        double complexity = 0;
-        for (int v = 1; v < visLen; v++)
-            complexity += Math.Abs(NumOps.ToDouble(visualFeatures[v]) - NumOps.ToDouble(visualFeatures[v - 1]));
-        complexity /= Math.Max(visLen - 1, 1);
-        int numTiles = complexity > 0.3 ? 6 : complexity > 0.15 ? 4 : 2;
-
-        // Step 3: Progressive token merging (hierarchical fine-to-coarse)
-        int mergeSteps = 3;
-        var mergedTokens = new double[visLen];
-        for (int v = 0; v < visLen; v++)
-            mergedTokens[v] = NumOps.ToDouble(visualFeatures[v]);
-
-        int currentLen = visLen;
-        for (int step = 0; step < mergeSteps; step++)
-        {
-            int newLen = Math.Max(dim, currentLen / 2);
-            var merged = new double[newLen];
-            for (int j = 0; j < newLen; j++)
-            {
-                int src1 = j * 2 % currentLen;
-                int src2 = (j * 2 + 1) % currentLen;
-                double sim = Math.Exp(-Math.Abs(mergedTokens[src1] - mergedTokens[src2]) * 2.0);
-                merged[j] = mergedTokens[src1] * (0.5 + 0.5 * sim) + mergedTokens[src2] * (0.5 - 0.5 * sim + sim * 0.5);
-            }
-            mergedTokens = merged;
-            currentLen = newLen;
-        }
-
-        // Step 4: Tokenize prompt
-        Tensor<T>? promptTokens = null;
-        int promptLen = 0;
+        // Fuse visual features with prompt tokens via ConcatenateTensors
+        Tensor<T> fusedInput;
         if (prompt is not null)
         {
-            promptTokens = TokenizeText(prompt);
-            promptLen = promptTokens.Length;
+            var promptTokens = TokenizeText(prompt);
+            fusedInput = visualFeatures.ConcatenateTensors(promptTokens);
         }
-
-        // Step 5: Resolution-aware cross-attention
-        var decoderInput = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
+        else
         {
-            double attn = 0;
-            double wSum = 0;
-            for (int v = 0; v < currentLen; v++)
-            {
-                double resScale = 1.0 / Math.Sqrt(numTiles);
-                double score = Math.Exp(mergedTokens[v] * Math.Sin((d + 1) * (v + 1) * 0.004 * resScale) * 0.35);
-                attn += score * mergedTokens[v];
-                wSum += score;
-            }
-            attn /= Math.Max(wSum, 1e-8);
-
-            double textEmb = 0;
-            if (promptTokens is not null && promptLen > 0)
-                textEmb = NumOps.ToDouble(promptTokens[d % promptLen]) / _options.VocabSize * 0.5;
-
-            decoderInput[d] = NumOps.FromDouble(attn + textEmb);
+            fusedInput = visualFeatures;
         }
 
-        // Step 6: Qwen2 decoder
-        var output = decoderInput;
+        var output = fusedInput;
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)
             output = Layers[i].Forward(output);
 

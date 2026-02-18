@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -47,62 +48,24 @@ public class Molmo<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
         var p = PreprocessImage(image);
         if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(p);
 
-        int dim = _options.DecoderDim;
-
         // Step 1: Vision encoder
         var visualFeatures = p;
         for (int i = 0; i < _encoderLayerEnd; i++)
             visualFeatures = Layers[i].Forward(visualFeatures);
-        int visLen = visualFeatures.Length;
 
-        // Step 2: Multi-crop encoding with coordinate-aware spatial position
-        int gridSize = (int)Math.Max(1, Math.Sqrt(visLen));
-        var spatialFeatures = new double[visLen];
-        for (int v = 0; v < visLen; v++)
-        {
-            double val = NumOps.ToDouble(visualFeatures[v]);
-            // Add normalized (x,y) coordinate encoding
-            double nx = (v % gridSize) / (double)Math.Max(1, gridSize - 1);
-            double ny = (v / gridSize) / (double)Math.Max(1, gridSize - 1);
-            double coordEnc = Math.Sin(nx * Math.PI) * 0.1 + Math.Cos(ny * Math.PI) * 0.1;
-            spatialFeatures[v] = val + coordEnc;
-        }
-
-        // Step 3: Tokenize prompt
-        Tensor<T>? promptTokens = null;
-        int promptLen = 0;
+        // Fuse visual features with prompt tokens via ConcatenateTensors
+        Tensor<T> fusedInput;
         if (prompt is not null)
         {
-            promptTokens = TokenizeText(prompt);
-            promptLen = promptTokens.Length;
+            var promptTokens = TokenizeText(prompt);
+            fusedInput = visualFeatures.ConcatenateTensors(promptTokens);
         }
-
-        // Step 4: Coordinate-aware cross-attention for pointing capability
-        var decoderInput = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
+        else
         {
-            double attn = 0;
-            double wSum = 0;
-            for (int v = 0; v < visLen; v++)
-            {
-                double nx = (v % gridSize) / (double)Math.Max(1, gridSize - 1);
-                double ny = (v / gridSize) / (double)Math.Max(1, gridSize - 1);
-                double spatialBias = Math.Sin(d * nx * 0.1) * Math.Cos(d * ny * 0.1) * 0.15;
-                double score = Math.Exp((spatialFeatures[v] + spatialBias) * Math.Sin((d + 1) * (v + 1) * 0.004) * 0.3);
-                attn += score * spatialFeatures[v];
-                wSum += score;
-            }
-            attn /= Math.Max(wSum, 1e-8);
-
-            double textEmb = 0;
-            if (promptTokens is not null && promptLen > 0)
-                textEmb = NumOps.ToDouble(promptTokens[d % promptLen]) / _options.VocabSize * 0.5;
-
-            decoderInput[d] = NumOps.FromDouble(attn + textEmb);
+            fusedInput = visualFeatures;
         }
 
-        // Step 5: OLMo decoder
-        var output = decoderInput;
+        var output = fusedInput;
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)
             output = Layers[i].Forward(output);
 

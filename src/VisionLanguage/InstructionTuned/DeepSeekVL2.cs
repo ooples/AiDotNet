@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -54,7 +55,6 @@ public class DeepSeekVL2<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T
         var p = PreprocessImage(image);
         if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(p);
 
-        int dim = _options.DecoderDim;
         int numExperts = _options.NumExperts;
         int numActive = _options.NumActiveExperts;
 
@@ -62,85 +62,20 @@ public class DeepSeekVL2<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T
         var visualFeatures = p;
         for (int i = 0; i < _encoderLayerEnd; i++)
             visualFeatures = Layers[i].Forward(visualFeatures);
-        int visLen = visualFeatures.Length;
 
-        // Step 2: Multi-head latent attention (MLA) compression
-        // Compress visual tokens into latent vectors for efficient processing
-        int latentDim = Math.Max(1, visLen / 4); // 4x compression via MLA
-        var latentFeatures = new double[latentDim];
-        for (int l = 0; l < latentDim; l++)
-        {
-            double sum = 0;
-            for (int v = l * 4; v < Math.Min((l + 1) * 4, visLen); v++)
-            {
-                double val = NumOps.ToDouble(visualFeatures[v]);
-                double weight = Math.Exp(-Math.Abs(v - (l * 4 + 1.5)) * 0.5);
-                sum += val * weight;
-            }
-            latentFeatures[l] = sum * 0.5;
-        }
-
-        // Step 3: MoE routing - select top-6 from 64 experts per visual token
-        var expertOutputs = new double[numActive][];
-        for (int a = 0; a < numActive; a++)
-            expertOutputs[a] = new double[dim];
-        var expertWeights = new double[numActive];
-        for (int l = 0; l < latentDim; l++)
-        {
-            double val = latentFeatures[l];
-            var scores = new double[numExperts];
-            for (int e = 0; e < numExperts; e++)
-                scores[e] = val * Math.Sin((e + 1) * (l + 1) * 0.002) * 0.4 + Math.Cos((e + 1) * 0.5) * 0.2;
-
-            for (int k = 0; k < numActive; k++)
-            {
-                int bestE = 0;
-                double bestS = double.MinValue;
-                for (int e = 0; e < numExperts; e++)
-                {
-                    bool used = false;
-                    for (int prev = 0; prev < k; prev++)
-                        if ((int)(expertWeights[prev] * 1000) % numExperts == e) { used = true; break; }
-                    if (!used && scores[e] > bestS) { bestS = scores[e]; bestE = e; }
-                }
-                for (int d = 0; d < dim; d++)
-                    expertOutputs[k][d] += val * Math.Cos((bestE + 1) * (d + 1) * 0.001) * 0.2;
-                expertWeights[k] += bestS;
-            }
-        }
-
-        // Step 4: Tokenize prompt
-        Tensor<T>? promptTokens = null;
-        int promptLen = 0;
+        // Fuse visual features with prompt tokens via ConcatenateTensors
+        Tensor<T> fusedInput;
         if (prompt is not null)
         {
-            promptTokens = TokenizeText(prompt);
-            promptLen = promptTokens.Length;
+            var promptTokens = TokenizeText(prompt);
+            fusedInput = visualFeatures.ConcatenateTensors(promptTokens);
         }
-
-        // Step 5: Aggregate MoE expert outputs
-        var decoderInput = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
+        else
         {
-            double aggregated = 0;
-            double wTotal = 0;
-            for (int a = 0; a < numActive; a++)
-            {
-                double w = Math.Max(expertWeights[a], 0.01);
-                aggregated += expertOutputs[a][d] * w;
-                wTotal += w;
-            }
-            if (wTotal > 1e-8) aggregated /= wTotal;
-
-            double textEmb = 0;
-            if (promptTokens is not null && promptLen > 0)
-                textEmb = NumOps.ToDouble(promptTokens[d % promptLen]) / _options.VocabSize * 0.5;
-
-            decoderInput[d] = NumOps.FromDouble(aggregated + textEmb);
+            fusedInput = visualFeatures;
         }
 
-        // Step 6: DeepSeek-MoE decoder (60 layers)
-        var output = decoderInput;
+        var output = fusedInput;
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)
             output = Layers[i].Forward(output);
 

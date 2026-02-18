@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -49,69 +50,24 @@ public class Ovis<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
         var p = PreprocessImage(image);
         if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(p);
 
-        int dim = _options.DecoderDim;
-
         // Step 1: Vision encoder
         var visualFeatures = p;
         for (int i = 0; i < _encoderLayerEnd; i++)
             visualFeatures = Layers[i].Forward(visualFeatures);
-        int visLen = visualFeatures.Length;
 
-        // Step 2: Visual embedding table - discretize via learned codebook
-        int codebookSize = 256;
-        var codebook = new double[codebookSize];
-        for (int c = 0; c < codebookSize; c++)
-            codebook[c] = Math.Sin((c + 1) * 0.025) * 0.5;
-
-        // Probabilistic mapping: soft assignment to codebook entries
-        var softTokens = new double[visLen];
-        for (int v = 0; v < visLen; v++)
-        {
-            double val = NumOps.ToDouble(visualFeatures[v]);
-            double weightedSum = 0;
-            double probSum = 0;
-            for (int c = 0; c < codebookSize; c++)
-            {
-                double dist = -(val - codebook[c]) * (val - codebook[c]);
-                double prob = Math.Exp(dist * 5.0); // Temperature-scaled softmax
-                weightedSum += prob * codebook[c];
-                probSum += prob;
-            }
-            softTokens[v] = weightedSum / Math.Max(probSum, 1e-8);
-        }
-
-        // Step 3: Tokenize prompt
-        Tensor<T>? promptTokens = null;
-        int promptLen = 0;
+        // Fuse visual features with prompt tokens via ConcatenateTensors
+        Tensor<T> fusedInput;
         if (prompt is not null)
         {
-            promptTokens = TokenizeText(prompt);
-            promptLen = promptTokens.Length;
+            var promptTokens = TokenizeText(prompt);
+            fusedInput = visualFeatures.ConcatenateTensors(promptTokens);
         }
-
-        // Step 4: Structural embedding alignment - cross-attention with aligned tokens
-        var decoderInput = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
+        else
         {
-            double attn = 0;
-            double wSum = 0;
-            for (int v = 0; v < visLen; v++)
-            {
-                double score = Math.Exp(softTokens[v] * Math.Sin((d + 1) * (v + 1) * 0.004) * 0.35);
-                attn += score * softTokens[v];
-                wSum += score;
-            }
-            attn /= Math.Max(wSum, 1e-8);
-
-            double textEmb = 0;
-            if (promptTokens is not null && promptLen > 0)
-                textEmb = NumOps.ToDouble(promptTokens[d % promptLen]) / _options.VocabSize * 0.5;
-
-            decoderInput[d] = NumOps.FromDouble(attn + textEmb);
+            fusedInput = visualFeatures;
         }
 
-        // Step 5: Qwen2.5 decoder
-        var output = decoderInput;
+        var output = fusedInput;
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)
             output = Layers[i].Forward(output);
 

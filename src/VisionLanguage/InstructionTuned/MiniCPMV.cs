@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -48,83 +49,24 @@ public class MiniCPMV<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
         var p = PreprocessImage(image);
         if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(p);
 
-        int dim = _options.DecoderDim;
-
         // Step 1: Vision encoder (SigLIP)
         var visualFeatures = p;
         for (int i = 0; i < _encoderLayerEnd; i++)
             visualFeatures = Layers[i].Forward(visualFeatures);
-        int visLen = visualFeatures.Length;
 
-        // Step 2: Adaptive slicing at optimal aspect ratio
-        int numSlices = 4;
-        int sliceSize = Math.Max(1, visLen / numSlices);
-
-        // Step 3: Per-slice token compression via cross-attention perceiver
-        int numQueries = 32;
-        var compressedTokens = new double[numSlices + 1][]; // +1 for global thumbnail
-
-        for (int slice = 0; slice <= numSlices; slice++)
-        {
-            compressedTokens[slice] = new double[numQueries];
-            int start, end;
-            if (slice < numSlices) { start = slice * sliceSize; end = Math.Min(start + sliceSize, visLen); }
-            else { start = 0; end = visLen; } // Global thumbnail
-
-            // Perceiver: queries cross-attend to slice features
-            var queries = new double[numQueries];
-            for (int q = 0; q < numQueries; q++)
-                queries[q] = Math.Sin((q + 1) * 0.2) * 0.1;
-
-            for (int layer = 0; layer < 2; layer++)
-            {
-                for (int q = 0; q < numQueries; q++)
-                {
-                    double crossAttn = 0;
-                    double wSum = 0;
-                    for (int v = start; v < end; v++)
-                    {
-                        double visVal = NumOps.ToDouble(visualFeatures[v]);
-                        double score = Math.Exp(queries[q] * visVal * Math.Sin((layer + 1) * (q + 1) * 0.01) * 0.3);
-                        crossAttn += score * visVal;
-                        wSum += score;
-                    }
-                    queries[q] = crossAttn / Math.Max(wSum, 1e-8);
-                }
-            }
-            compressedTokens[slice] = queries;
-        }
-
-        // Step 4: Tokenize prompt
-        Tensor<T>? promptTokens = null;
-        int promptLen = 0;
+        // Fuse visual features with prompt tokens via ConcatenateTensors
+        Tensor<T> fusedInput;
         if (prompt is not null)
         {
-            promptTokens = TokenizeText(prompt);
-            promptLen = promptTokens.Length;
+            var promptTokens = TokenizeText(prompt);
+            fusedInput = visualFeatures.ConcatenateTensors(promptTokens);
         }
-
-        // Step 5: Fuse compressed slice tokens + global thumbnail
-        var decoderInput = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
+        else
         {
-            double fused = 0;
-            for (int slice = 0; slice <= numSlices; slice++)
-            {
-                double sliceWeight = slice < numSlices ? 1.0 / numSlices : 0.3;
-                int qIdx = d % numQueries;
-                fused += compressedTokens[slice][qIdx] * sliceWeight;
-            }
-
-            double textEmb = 0;
-            if (promptTokens is not null && promptLen > 0)
-                textEmb = NumOps.ToDouble(promptTokens[d % promptLen]) / _options.VocabSize * 0.5;
-
-            decoderInput[d] = NumOps.FromDouble(fused + textEmb);
+            fusedInput = visualFeatures;
         }
 
-        // Step 6: MiniCPM decoder
-        var output = decoderInput;
+        var output = fusedInput;
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)
             output = Layers[i].Forward(output);
 

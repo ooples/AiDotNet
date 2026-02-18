@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -52,7 +53,6 @@ public class MPLUGOwl2<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
         var p = PreprocessImage(image);
         if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(p);
 
-        int dim = _options.DecoderDim;
         int numQueries = _options.MaxVisualTokens;
 
         // Step 1: ViT vision encoder at 448px
@@ -64,66 +64,20 @@ public class MPLUGOwl2<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
         var abstractorOut = visionOut;
         for (int i = _visionLayerEnd; i < _abstractorLayerEnd; i++)
             abstractorOut = Layers[i].Forward(abstractorOut);
-        int absLen = abstractorOut.Length;
 
-        // Step 3: Modality-adaptive query cross-attention
-        // Adaptive module adjusts attention sharpness based on visual complexity
-        double complexity = 0;
-        for (int v = 0; v < absLen; v++)
-        {
-            double val = NumOps.ToDouble(abstractorOut[v]);
-            complexity += Math.Abs(val);
-        }
-        complexity /= Math.Max(absLen, 1);
-        double adaptiveScale = 0.3 + complexity * 0.2; // Adaptive sharpness
-
-        var queryOutputs = new double[numQueries];
-        for (int q = 0; q < numQueries; q++)
-        {
-            double attn = 0;
-            double wSum = 0;
-            for (int v = 0; v < absLen; v++)
-            {
-                double val = NumOps.ToDouble(abstractorOut[v]);
-                double score = Math.Exp(val * Math.Cos((q + 1) * (v + 1) * 0.003) * adaptiveScale);
-                attn += score * val;
-                wSum += score;
-            }
-            queryOutputs[q] = attn / Math.Max(wSum, 1e-8);
-        }
-
-        // Step 4: Tokenize prompt
-        Tensor<T>? promptTokens = null;
-        int promptLen = 0;
+        // Fuse features with prompt tokens via ConcatenateTensors
+        Tensor<T> fusedInput;
         if (prompt is not null)
         {
-            promptTokens = TokenizeText(prompt);
-            promptLen = promptTokens.Length;
+            var promptTokens = TokenizeText(prompt);
+            fusedInput = abstractorOut.ConcatenateTensors(promptTokens);
         }
-
-        // Step 5: Shared self-attention fusion
-        var decoderInput = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
+        else
         {
-            double attn = 0;
-            double wSum = 0;
-            for (int q = 0; q < numQueries; q++)
-            {
-                double score = Math.Exp(queryOutputs[q] * Math.Sin((d + 1) * (q + 1) * 0.01) * 0.35);
-                attn += score * queryOutputs[q];
-                wSum += score;
-            }
-            attn /= Math.Max(wSum, 1e-8);
-
-            double textEmb = 0;
-            if (promptTokens is not null && promptLen > 0)
-                textEmb = NumOps.ToDouble(promptTokens[d % promptLen]) / _options.VocabSize * 0.5;
-
-            decoderInput[d] = NumOps.FromDouble(attn + textEmb);
+            fusedInput = abstractorOut;
         }
 
-        // Step 6: LLaMA-2 decoder
-        var output = decoderInput;
+        var output = fusedInput;
         for (int i = _abstractorLayerEnd; i < Layers.Count; i++)
             output = Layers[i].Forward(output);
 

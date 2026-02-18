@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -53,86 +54,24 @@ public class PixtralLarge<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<
         var p = PreprocessImage(image);
         if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(p);
 
-        int dim = _options.DecoderDim;
-
         // Step 1: Vision encoder (variable-resolution ViT with 2D RoPE)
         var visualFeatures = p;
         for (int i = 0; i < _encoderLayerEnd; i++)
             visualFeatures = Layers[i].Forward(visualFeatures);
-        int visLen = visualFeatures.Length;
 
-        // Step 2: Multi-scale tile decomposition at native aspect ratio
-        // Pixtral processes tiles independently, each with 2D RoPE encoding
-        int numTiles = 4;
-        int tileSize = Math.Max(1, visLen / numTiles);
-        var tileFeatures = new double[numTiles][];
-
-        for (int tile = 0; tile < numTiles; tile++)
-        {
-            tileFeatures[tile] = new double[dim];
-            int tileStart = tile * tileSize;
-            int tileEnd = Math.Min(tileStart + tileSize, visLen);
-
-            for (int d = 0; d < dim; d++)
-            {
-                // 2D RoPE: encode spatial position within tile
-                int row = d / (int)Math.Max(1, Math.Sqrt(dim));
-                int col = d % (int)Math.Max(1, Math.Sqrt(dim));
-                double ropeRow = Math.Cos(row * 0.01 * (tile + 1));
-                double ropeCol = Math.Sin(col * 0.01 * (tile + 1));
-
-                double tileAttn = 0;
-                double wSum = 0;
-                for (int v = tileStart; v < tileEnd; v++)
-                {
-                    double visVal = NumOps.ToDouble(visualFeatures[v]);
-                    double posScore = visVal * ropeRow * ropeCol;
-                    double score = Math.Exp(posScore * 0.3);
-                    tileAttn += score * visVal;
-                    wSum += score;
-                }
-                tileFeatures[tile][d] = tileAttn / Math.Max(wSum, 1e-8);
-            }
-        }
-
-        // Step 3: Tokenize instruction for gated fusion
-        Tensor<T>? promptTokens = null;
-        int promptLen = 0;
+        // Fuse visual features with prompt tokens via ConcatenateTensors
+        Tensor<T> fusedInput;
         if (prompt is not null)
         {
-            promptTokens = TokenizeText(prompt);
-            promptLen = promptTokens.Length;
+            var promptTokens = TokenizeText(prompt);
+            fusedInput = visualFeatures.ConcatenateTensors(promptTokens);
         }
-
-        // Step 4: Gated MLP projection - instruction-modulated visual feature fusion
-        var decoderInput = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
+        else
         {
-            // Aggregate tiles with learned position-based weighting
-            double aggregated = 0;
-            for (int tile = 0; tile < numTiles; tile++)
-            {
-                double tileWeight = 1.0 / numTiles;
-                aggregated += tileFeatures[tile][d] * tileWeight;
-            }
-
-            // Gated fusion: gate modulated by instruction context
-            double gate = 0.5;
-            if (promptTokens is not null && promptLen > 0)
-            {
-                double tokenVal = NumOps.ToDouble(promptTokens[d % promptLen]);
-                gate = 1.0 / (1.0 + Math.Exp(-(tokenVal / _options.VocabSize * 2.0 - 1.0)));
-            }
-
-            double textEmb = 0;
-            if (promptTokens is not null && promptLen > 0)
-                textEmb = NumOps.ToDouble(promptTokens[d % promptLen]) / _options.VocabSize * 0.5;
-
-            decoderInput[d] = NumOps.FromDouble(aggregated * gate + textEmb * (1.0 - gate));
+            fusedInput = visualFeatures;
         }
 
-        // Step 5: Mistral-Large decoder
-        var output = decoderInput;
+        var output = fusedInput;
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)
             output = Layers[i].Forward(output);
 
