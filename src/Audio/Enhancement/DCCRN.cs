@@ -1,4 +1,5 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
@@ -264,6 +265,8 @@ public class DCCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     /// <param name="fftSize">FFT size. Default is 512.</param>
     /// <param name="hopSize">Hop size. Default is 256.</param>
     /// <param name="useComplexMask">Use complex mask estimation. Default is true.</param>
+    /// <param name="kernelSize">Convolution kernel size. Default is 5.</param>
+    /// <param name="stride">Convolution stride. Default is 2.</param>
     /// <param name="optimizer">Optimizer for training.</param>
     /// <param name="lossFunction">Loss function for training.</param>
     /// <remarks>
@@ -296,6 +299,8 @@ public class DCCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         int fftSize = 512,
         int hopSize = 256,
         bool useComplexMask = true,
+        int kernelSize = 5,
+        int stride = 2,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         DCCRNOptions? options = null)
@@ -327,8 +332,8 @@ public class DCCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         _fftSize = fftSize;
         _hopSize = hopSize;
         _useComplexMask = useComplexMask;
-        _kernelSize = 5;
-        _stride = 2;
+        _kernelSize = kernelSize;
+        _stride = stride;
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
@@ -344,79 +349,57 @@ public class DCCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     /// </summary>
     private void InitializeNativeLayers()
     {
-        int inChannels = 2; // Real + Imaginary
+        if (Architecture.Layers != null && Architecture.Layers.Count > 0)
+        {
+            Layers.AddRange(Architecture.Layers);
+            return;
+        }
+
         int freqBins = _fftSize / 2 + 1;
         int timeDim = 100; // Approximate time dimension for initialization
 
-        // Encoder (complex convolutions with increasing channels)
+        var layers = LayerHelper<T>.CreateDCCRNLayers(
+            fftSize: _fftSize, baseChannels: _baseChannels, numStages: _numStages,
+            numLstmLayers: _numLstmLayers, lstmHiddenDim: _lstmHiddenDim,
+            kernelSize: _kernelSize, stride: _stride).ToList();
+        Layers.AddRange(layers);
+
+        // Distribute to internal sub-lists for forward pass
+        int idx = 0;
+
+        // Encoder: per stage = Conv + BN + SkipConv = 3 layers
         for (int i = 0; i < _numStages; i++)
         {
-            int outChannels = _baseChannels * (int)Math.Pow(2, Math.Min(i, 4));
-
-            // Complex convolution (implemented as 2-channel real convolution)
-            // ConvolutionalLayer: inputDepth, inputHeight, inputWidth, outputDepth, kernelSize, stride, padding, activation
-            int currentFreqBins = freqBins / (int)Math.Pow(_stride, i);
-            _encoder.Add(new ConvolutionalLayer<T>(
-                inChannels, currentFreqBins, timeDim, outChannels, _kernelSize, _stride, _kernelSize / 2,
-                (IActivationFunction<T>)new LeakyReLUActivation<T>()));
-            _encoder.Add(new BatchNormalizationLayer<T>(outChannels));
-
-            // Skip connection layer (1x1 convolution)
-            _skipLayers.Add(new ConvolutionalLayer<T>(
-                outChannels, currentFreqBins / _stride, timeDim, outChannels, 1, 1, 0));
-
-            inChannels = outChannels;
+            _encoder.Add(layers[idx++]); // Conv
+            _encoder.Add(layers[idx++]); // BatchNorm
+            _skipLayers.Add(layers[idx++]); // Skip connection
         }
+
+        // Store encoder output dim for projection
+        int inChannels = _baseChannels * (int)Math.Pow(2, Math.Min(_numStages - 1, 4));
+        _encoderOutputDim = inChannels * (_fftSize / (int)Math.Pow(_stride, _numStages));
 
         // LSTM layers
-        int lstmInputDim = inChannels * (_fftSize / (int)Math.Pow(_stride, _numStages));
-        _encoderOutputDim = lstmInputDim; // Store for projection
-        int[] lstmInputShape = [1, lstmInputDim];
         for (int i = 0; i < _numLstmLayers; i++)
-        {
-            _lstmLayers.Add(new LSTMLayer<T>(lstmInputDim, _lstmHiddenDim, lstmInputShape,
-                (IActivationFunction<T>)new TanhActivation<T>(), (IActivationFunction<T>)new SigmoidActivation<T>()));
-            lstmInputDim = _lstmHiddenDim;
-            lstmInputShape = [1, lstmInputDim];
-        }
+            _lstmLayers.Add(layers[idx++]);
 
-        // Projection layer to map LSTM hidden dim back to encoder spatial dimensions
-        _lstmProjection = new DenseLayer<T>(_lstmHiddenDim, _encoderOutputDim);
+        // LSTM projection
+        _lstmProjection = layers[idx++];
 
-        // Decoder (transposed convolutions with decreasing channels)
-        int decoderChannels = _baseChannels * (int)Math.Pow(2, Math.Min(_numStages - 1, 4));
+        // Decoder: per stage = Deconv + optional BN (last stage has no BN)
         for (int i = 0; i < _numStages; i++)
         {
-            int outChannels = i < _numStages - 1
-                ? _baseChannels * (int)Math.Pow(2, Math.Min(_numStages - 2 - i, 4))
-                : 2; // Final output is 2 channels (real + imag)
-
-            // Skip connection input doubles the channels
-            int skipChannels = decoderChannels * 2;
-            int currentFreqBins = freqBins / (int)Math.Pow(_stride, _numStages - i);
-            int[] decoderInputShape = [1, skipChannels, currentFreqBins, timeDim];
-
-            // DeconvolutionalLayer: inputShape, outputDepth, kernelSize, stride, padding, activation
+            _decoder.Add(layers[idx++]); // Deconv
             if (i < _numStages - 1)
-            {
-                _decoder.Add(new DeconvolutionalLayer<T>(decoderInputShape, outChannels, _kernelSize, _stride, _kernelSize / 2,
-                    (IActivationFunction<T>)new LeakyReLUActivation<T>()));
-                _decoder.Add(new BatchNormalizationLayer<T>(outChannels));
-            }
-            else
-            {
-                _decoder.Add(new DeconvolutionalLayer<T>(decoderInputShape, outChannels, _kernelSize, _stride, _kernelSize / 2,
-                    (IActivationFunction<T>?)null));
-            }
-
-            decoderChannels = outChannels;
+                _decoder.Add(layers[idx++]); // BatchNorm
         }
 
-        // Complex mask estimation activation layer
+        // Mask layer (not from LayerHelper - specific to complex/real mask mode)
         int[] maskShape = [1, 2, freqBins, timeDim];
         _maskLayer = _useComplexMask
             ? new ActivationLayer<T>(maskShape, (IActivationFunction<T>)new TanhActivation<T>())
             : new ActivationLayer<T>(maskShape, (IActivationFunction<T>)new SigmoidActivation<T>());
+        Layers.Add(_maskLayer);
     }
 
     #endregion

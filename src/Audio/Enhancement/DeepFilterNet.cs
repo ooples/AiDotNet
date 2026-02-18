@@ -1,5 +1,6 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Diffusion.Audio;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
@@ -347,40 +348,28 @@ public class DeepFilterNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     /// </summary>
     private void InitializeNativeLayers()
     {
-        // ERB Encoder: Extract perceptually-motivated features
-        // Using DenseLayer for feature transformation (temporal modeling handled by GRU)
-        int[] hiddenShape = [_hiddenDim];
-        IActivationFunction<T> eluActivation = new ELUActivation<T>();
-        IActivationFunction<T> tanhActivation = new TanhActivation<T>();
-
-        _erbEncoder.Add(new DenseLayer<T>(_numErbBands, _hiddenDim, eluActivation));
-        _erbEncoder.Add(new BatchNormalizationLayer<T>(_hiddenDim));
-        _erbEncoder.Add(new ActivationLayer<T>(hiddenShape, eluActivation));
-
-        _erbEncoder.Add(new DenseLayer<T>(_hiddenDim, _hiddenDim, eluActivation));
-        _erbEncoder.Add(new BatchNormalizationLayer<T>(_hiddenDim));
-        _erbEncoder.Add(new ActivationLayer<T>(hiddenShape, eluActivation));
-
-        // GRU layers for temporal modeling
-        for (int i = 0; i < _numGruLayers; i++)
+        if (Architecture.Layers != null && Architecture.Layers.Count > 0)
         {
-            _gruLayers.Add(new GRULayer<T>(_hiddenDim, _hiddenDim, returnSequences: false,
-                (IActivationFunction<T>?)null, (IActivationFunction<T>?)null));
+            Layers.AddRange(Architecture.Layers);
+            return;
         }
 
-        // Deep filtering layers
-        int dfOutputDim = _dfBins * _dfOrder * 2; // Real + Imag
-        int[] dfOutputShape = [dfOutputDim];
-        _dfLayers.Add(new DenseLayer<T>(_hiddenDim, dfOutputDim));
-        _dfLayers.Add(new ActivationLayer<T>(dfOutputShape, tanhActivation));
+        var layers = LayerHelper<T>.CreateDeepFilterNetLayers(
+            numErbBands: _numErbBands, hiddenDim: _hiddenDim,
+            numGruLayers: _numGruLayers, dfBins: _dfBins, dfOrder: _dfOrder).ToList();
+        Layers.AddRange(layers);
 
-        // Gain estimation layer (for ERB-band gains)
-        _gainLayer = new DenseLayer<T>(_hiddenDim, _numErbBands);
-
-        // Decoder
-        _decoder.Add(new DenseLayer<T>(_hiddenDim, _hiddenDim, eluActivation));
-        _decoder.Add(new BatchNormalizationLayer<T>(_hiddenDim));
-        _decoder.Add(new ActivationLayer<T>(hiddenShape, eluActivation));
+        // Distribute to internal sub-lists for forward pass
+        int idx = 0;
+        for (int i = 0; i < 6; i++) // ERB encoder: 2x (Dense + BN + Activation)
+            _erbEncoder.Add(layers[idx++]);
+        for (int i = 0; i < _numGruLayers; i++)
+            _gruLayers.Add(layers[idx++]);
+        for (int i = 0; i < 2; i++) // DF layers: Dense + Activation
+            _dfLayers.Add(layers[idx++]);
+        _gainLayer = layers[idx++]; // Gain estimation
+        while (idx < layers.Count) // Decoder: Dense + BN + Activation
+            _decoder.Add(layers[idx++]);
     }
 
     #endregion

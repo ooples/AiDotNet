@@ -1,6 +1,7 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Diffusion.Audio;
 using AiDotNet.Enums;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
@@ -185,6 +186,16 @@ public class VITSModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
     private int _maxPhonemeLength;
 
     /// <summary>
+    /// Phoneme vocabulary size.
+    /// </summary>
+    private int _phonemeVocabSize;
+
+    /// <summary>
+    /// HiFi-GAN upsampling rates for the decoder.
+    /// </summary>
+    private int[] _upsampleRates;
+
+    /// <summary>
     /// FFT size for audio generation.
     /// </summary>
     private int _fftSize;
@@ -319,6 +330,8 @@ public class VITSModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         _speakerEmbeddingDim = 256;
         _numSpeakers = 1;
         _maxPhonemeLength = 256;
+        _phonemeVocabSize = 128;
+        _upsampleRates = [8, 8, 2, 2];
 
         // Initialize preprocessor
         _preprocessor = new TtsPreprocessor();
@@ -366,6 +379,8 @@ public class VITSModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
     /// <param name="speakerEmbeddingDim">Speaker embedding dimension. Default is 256.</param>
     /// <param name="numSpeakers">Number of speakers for multi-speaker model. Default is 1.</param>
     /// <param name="maxPhonemeLength">Maximum phoneme sequence length. Default is 256.</param>
+    /// <param name="phonemeVocabSize">Phoneme vocabulary size. Default is 128.</param>
+    /// <param name="upsampleRates">HiFi-GAN upsampling rates. Default is [8, 8, 2, 2].</param>
     /// <param name="fftSize">FFT size for audio generation. Default is 1024.</param>
     /// <param name="hopLength">Hop length for audio generation. Default is 256.</param>
     /// <param name="optimizer">Optimizer for training. If null, uses Adam.</param>
@@ -404,6 +419,8 @@ public class VITSModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         int speakerEmbeddingDim = 256,
         int numSpeakers = 1,
         int maxPhonemeLength = 256,
+        int phonemeVocabSize = 128,
+        int[]? upsampleRates = null,
         int fftSize = 1024,
         int hopLength = 256,
         IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
@@ -431,6 +448,8 @@ public class VITSModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         _speakerEmbeddingDim = speakerEmbeddingDim;
         _numSpeakers = numSpeakers;
         _maxPhonemeLength = maxPhonemeLength;
+        _phonemeVocabSize = phonemeVocabSize;
+        _upsampleRates = upsampleRates ?? [8, 8, 2, 2];
         _fftSize = fftSize;
         _hopLength = hopLength;
 
@@ -473,73 +492,37 @@ public class VITSModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
     /// </summary>
     private void InitializeNativeLayers()
     {
-        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
-        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
-
-        int phonemeVocabSize = 128;
-
-        // Text Encoder (Transformer-based)
-        var phonemeEmbed = new DenseLayer<T>(phonemeVocabSize, _hiddenDim, reluActivation);
-        _textEncoderLayers.Add(phonemeEmbed);
-
-        for (int i = 0; i < _numEncoderLayers; i++)
+        if (Architecture.Layers != null && Architecture.Layers.Count > 0)
         {
-            var selfAttn = new MultiHeadAttentionLayer<T>(_maxPhonemeLength, _hiddenDim, _numHeads, identityActivation);
-            var ff = new DenseLayer<T>(_hiddenDim, _hiddenDim * 4, reluActivation);
-            var ffOut = new DenseLayer<T>(_hiddenDim * 4, _hiddenDim, identityActivation);
-            _textEncoderLayers.Add(selfAttn);
-            _textEncoderLayers.Add(ff);
-            _textEncoderLayers.Add(ffOut);
+            Layers.AddRange(Architecture.Layers);
+            return;
         }
 
-        // Duration Predictor
-        var durConv1 = new DenseLayer<T>(_hiddenDim, _hiddenDim, reluActivation);
-        var durConv2 = new DenseLayer<T>(_hiddenDim, _hiddenDim, reluActivation);
-        var durOut = new DenseLayer<T>(_hiddenDim, 1, identityActivation);
-        _durationPredictorLayers.Add(durConv1);
-        _durationPredictorLayers.Add(durConv2);
-        _durationPredictorLayers.Add(durOut);
+        var layers = LayerHelper<T>.CreateVITSLayers(
+            hiddenDim: _hiddenDim, numEncoderLayers: _numEncoderLayers,
+            numHeads: _numHeads, maxPhonemeLength: _maxPhonemeLength,
+            numFlowLayers: _numFlowLayers, phonemeVocabSize: _phonemeVocabSize,
+            upsampleRates: _upsampleRates).ToList();
+        Layers.AddRange(layers);
 
-        // Flow layers (simplified affine coupling)
+        // Distribute to internal sub-lists for forward pass
+        int idx = 0;
+        int textEncoderCount = 1 + _numEncoderLayers * 3;
+        for (int i = 0; i < textEncoderCount; i++)
+            _textEncoderLayers.Add(layers[idx++]);
+        for (int i = 0; i < 3; i++)
+            _durationPredictorLayers.Add(layers[idx++]);
         for (int i = 0; i < _numFlowLayers; i++)
-        {
-            var flowTransform = new DenseLayer<T>(_hiddenDim, _hiddenDim * 2, reluActivation);
-            _flowLayers.Add(flowTransform);
-        }
+            _flowLayers.Add(layers[idx++]);
+        while (idx < layers.Count)
+            _decoderLayers.Add(layers[idx++]);
 
-        // Decoder (HiFi-GAN style generator)
-        int[] upsampleRates = [8, 8, 2, 2];
-        int currentDim = _hiddenDim;
-
-        foreach (int rate in upsampleRates)
-        {
-            var upsample = new DenseLayer<T>(currentDim, currentDim * rate, reluActivation);
-            var conv = new DenseLayer<T>(currentDim * rate, currentDim, reluActivation);
-            _decoderLayers.Add(upsample);
-            _decoderLayers.Add(conv);
-        }
-
-        // Output projection
-        var outputProj = new DenseLayer<T>(currentDim, 1, identityActivation);
-        _decoderLayers.Add(outputProj);
-
-        // Speaker embedding (if multi-speaker)
+        // Speaker embedding (if multi-speaker) - separate from LayerHelper
         if (_numSpeakers > 1)
         {
             _speakerEmbedding = new EmbeddingLayer<T>(_numSpeakers, _speakerEmbeddingDim);
-        }
-
-        // Register all layers
-        foreach (var layer in _textEncoderLayers)
-            Layers.Add(layer);
-        foreach (var layer in _durationPredictorLayers)
-            Layers.Add(layer);
-        foreach (var layer in _flowLayers)
-            Layers.Add(layer);
-        foreach (var layer in _decoderLayers)
-            Layers.Add(layer);
-        if (_speakerEmbedding is not null)
             Layers.Add(_speakerEmbedding);
+        }
     }
 
     private IReadOnlyList<VoiceInfo<T>> GetDefaultVoices()
@@ -916,6 +899,8 @@ public class VITSModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
                 _speakerEmbeddingDim,
                 _numSpeakers,
                 _maxPhonemeLength,
+                _phonemeVocabSize,
+                _upsampleRates,
                 _fftSize,
                 _hopLength,
                 lossFunction: _lossFunction);

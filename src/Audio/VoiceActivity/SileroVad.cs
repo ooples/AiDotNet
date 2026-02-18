@@ -308,78 +308,23 @@ public class SileroVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDetector<T>
         if (!_useNativeMode)
             return;
 
-        // Silero VAD architecture:
-        // 1. Conv feature extraction (2D conv with 1x1 height to simulate 1D)
-        // 2. LSTM layers for temporal modeling
-        // 3. Dense output layer with sigmoid for probability
-
-        // Calculate expected sequence length after convolutions
-        // Using stride 4, 2, 2 on frameSize samples
-        int seqLen1 = (_frameSize + 2 * 2 - 8) / 4 + 1;  // After first conv
-        int seqLen2 = (seqLen1 + 2 * 1 - 4) / 2 + 1;     // After second conv
-        int seqLen3 = (seqLen2 + 2 * 1 - 4) / 2 + 1;     // After third conv
-
-        // Convolutional feature extraction using 2D conv (height=1 simulates 1D)
-        // First conv layer: raw audio -> features
-        // ConvolutionalLayer(inputDepth, inputHeight, inputWidth, outputDepth, kernelSize, stride, padding, activation)
-        _convLayers.Add(new ConvolutionalLayer<T>(
-            inputDepth: 1,
-            inputHeight: 1,
-            inputWidth: _frameSize,
-            outputDepth: _convFilters,
-            kernelSize: 8,
-            stride: 4,
-            padding: 2,
-            activationFunction: new LeakyReLUActivation<T>()));
-
-        // Second conv layer
-        _convLayers.Add(new ConvolutionalLayer<T>(
-            inputDepth: _convFilters,
-            inputHeight: 1,
-            inputWidth: seqLen1,
-            outputDepth: _convFilters,
-            kernelSize: 4,
-            stride: 2,
-            padding: 1,
-            activationFunction: new LeakyReLUActivation<T>()));
-
-        // Third conv layer
-        _convLayers.Add(new ConvolutionalLayer<T>(
-            inputDepth: _convFilters,
-            inputHeight: 1,
-            inputWidth: seqLen2,
-            outputDepth: _convFilters,
-            kernelSize: 4,
-            stride: 2,
-            padding: 1,
-            activationFunction: new LeakyReLUActivation<T>()));
-
-        // LSTM layers for temporal modeling
-        for (int i = 0; i < _numLstmLayers; i++)
+        if (Architecture.Layers != null && Architecture.Layers.Count > 0)
         {
-            int inputSize = i == 0 ? _convFilters : _lstmHiddenDim;
-            // Explicitly specify IActivationFunction<T> to disambiguate constructor
-            _lstmLayers.Add(new LSTMLayer<T>(
-                inputSize: inputSize,
-                hiddenSize: _lstmHiddenDim,
-                inputShape: [1, seqLen3, inputSize],
-                activation: (IActivationFunction<T>?)null,
-                recurrentActivation: (IActivationFunction<T>?)null));
+            Layers.AddRange(Architecture.Layers);
+            return;
         }
 
-        // Output layer: probability of speech
-        _outputLayer = new DenseLayer<T>(
-            inputSize: _lstmHiddenDim,
-            outputSize: 1,
-            activationFunction: new SigmoidActivation<T>());
+        var layers = LayerHelper<T>.CreateSileroVadLayers(
+            frameSize: _frameSize, convFilters: _convFilters,
+            numLstmLayers: _numLstmLayers, lstmHiddenDim: _lstmHiddenDim).ToList();
+        Layers.AddRange(layers);
 
-        // Add all layers to base class Layers collection
-        foreach (var layer in _convLayers)
-            Layers.Add(layer);
-        foreach (var layer in _lstmLayers)
-            Layers.Add(layer);
-        if (_outputLayer is not null)
-            Layers.Add(_outputLayer);
+        // Assign internal references for forward pass (3 conv + numLstm LSTM + 1 output)
+        for (int i = 0; i < 3; i++)
+            _convLayers.Add(layers[i]);
+        for (int i = 0; i < _numLstmLayers; i++)
+            _lstmLayers.Add(layers[3 + i]);
+        _outputLayer = layers[3 + _numLstmLayers];
     }
 
     #endregion

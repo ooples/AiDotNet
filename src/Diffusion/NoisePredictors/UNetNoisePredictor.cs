@@ -127,6 +127,11 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     private readonly int _numHeads;
 
     /// <summary>
+    /// Latent spatial height for the noise predictor (default: 64).
+    /// </summary>
+    private readonly int _inputHeight;
+
+    /// <summary>
     /// The neural network architecture configuration, if provided.
     /// </summary>
     private readonly NeuralNetworkArchitecture<T>? _architecture;
@@ -171,6 +176,7 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     /// <param name="attentionResolutions">Resolution indices for attention (default: [1, 2, 3]).</param>
     /// <param name="contextDim">Context dimension for cross-attention (default: 768 for CLIP).</param>
     /// <param name="numHeads">Number of attention heads (default: 8).</param>
+    /// <param name="inputHeight">Latent spatial height (default: 64 for SD 512/8).</param>
     /// <param name="encoderBlocks">
     /// Optional custom encoder blocks. If provided, these blocks are used instead of creating
     /// default blocks. This allows full customization of the encoder path.
@@ -215,6 +221,7 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
         int[]? attentionResolutions = null,
         int contextDim = 768,
         int numHeads = 8,
+        int inputHeight = 64,
         List<UNetBlock>? encoderBlocks = null,
         List<UNetBlock>? middleBlocks = null,
         List<UNetBlock>? decoderBlocks = null,
@@ -232,6 +239,7 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
         _contextDim = contextDim;
         _numHeads = numHeads;
         _timeEmbeddingDim = baseChannels * 4;
+        _inputHeight = inputHeight;
 
         _encoderBlocks = new List<UNetBlock>();
         _middleBlocks = new List<UNetBlock>();
@@ -263,36 +271,20 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
         List<UNetBlock>? customMiddleBlocks,
         List<UNetBlock>? customDecoderBlocks)
     {
-        // Always create input/output convolutions and time embedding MLP
-        _inputConv = new ConvolutionalLayer<T>(
-            inputDepth: _inputChannels,
-            outputDepth: _baseChannels,
-            kernelSize: 3,
-            inputHeight: 64,  // Will be resized dynamically
-            inputWidth: 64,
-            stride: 1,
-            padding: 1,
-            activationFunction: new IdentityActivation<T>());
+        // Create input/output convolutions and time embedding MLP via LayerHelper
+        var baseLayers = LayerHelper<T>.CreateUNetNoisePredictorEncoderLayers(
+            _inputChannels, _baseChannels, _channelMultipliers, _numResBlocks,
+            _contextDim, _numHeads).ToList();
 
-        _timeEmbedMlp1 = new DenseLayer<T>(
-            _timeEmbeddingDim / 4,
-            _timeEmbeddingDim,
-            (IActivationFunction<T>)new SiLUActivation<T>());
+        // First layer is input conv, next two are time embedding MLP
+        _inputConv = (ConvolutionalLayer<T>)baseLayers[0];
+        _timeEmbedMlp1 = (DenseLayer<T>)baseLayers[1];
+        _timeEmbedMlp2 = (DenseLayer<T>)baseLayers[2];
 
-        _timeEmbedMlp2 = new DenseLayer<T>(
-            _timeEmbeddingDim,
-            _timeEmbeddingDim,
-            (IActivationFunction<T>)new SiLUActivation<T>());
-
-        _outputConv = new ConvolutionalLayer<T>(
-            inputDepth: _baseChannels,
-            outputDepth: _outputChannels,
-            kernelSize: 3,
-            inputHeight: 64,
-            inputWidth: 64,
-            stride: 1,
-            padding: 1,
-            activationFunction: new IdentityActivation<T>());
+        // Output conv from decoder layers
+        var decoderBaseLayers = LayerHelper<T>.CreateUNetNoisePredictorDecoderLayers(
+            _outputChannels, _baseChannels, _channelMultipliers, _numResBlocks).ToList();
+        _outputConv = (ConvolutionalLayer<T>)decoderBaseLayers[^1];
 
         // Priority 1: Use custom blocks passed directly
         if (customEncoderBlocks != null && customEncoderBlocks.Count > 0 &&
@@ -646,34 +638,34 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     private ILayer<T> CreateAttentionBlock(int channels)
     {
         // Self-attention layer using Flash Attention for memory efficiency
-        // Flash Attention is used for sequences >= 256 tokens (16x16 spatial)
+        int latentSpatialSize = _inputHeight;
         return new DiffusionAttention<T>(
             channels: channels,
             numHeads: _numHeads,
-            spatialSize: 64,  // Will be adjusted based on actual size
-            flashAttentionThreshold: 256);
+            spatialSize: latentSpatialSize,
+            flashAttentionThreshold: latentSpatialSize * latentSpatialSize / 16);
     }
 
     private ILayer<T> CreateCrossAttentionBlock(int channels)
     {
         // Cross-attention layer for conditioning with proper Q/K/V projections
-        // Query dimension = spatial channels, Context dimension = text embedding dimension
+        int latentSpatialSize = _inputHeight;
         return new DiffusionCrossAttention<T>(
             queryDim: channels,
             contextDim: _contextDim,
             numHeads: _numHeads,
-            spatialSize: 64);
+            spatialSize: latentSpatialSize);
     }
 
     private ILayer<T> CreateDownsample(int channels)
     {
-        // Strided convolution for downsampling
+        int latentSpatialSize = _inputHeight;
         return new ConvolutionalLayer<T>(
             inputDepth: channels,
             outputDepth: channels,
             kernelSize: 3,
-            inputHeight: 64,
-            inputWidth: 64,
+            inputHeight: latentSpatialSize,
+            inputWidth: latentSpatialSize,
             stride: 2,
             padding: 1,
             activationFunction: new IdentityActivation<T>());
@@ -681,11 +673,9 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
 
     private ILayer<T> CreateUpsample(int channels)
     {
-        // Transposed convolution (deconvolution) for upsampling
-        // With stride=2, kernel=4, padding=1: output = (input - 1) * 2 + 4 - 2*1 = 2*input
-        // This doubles the spatial dimensions
+        int halfSpatialSize = _inputHeight / 2;
         return new DeconvolutionalLayer<T>(
-            inputShape: new[] { 1, channels, 32, 32 },  // [batch, channels, height, width]
+            inputShape: new[] { 1, channels, halfSpatialSize, halfSpatialSize },
             outputDepth: channels,
             kernelSize: 4,
             stride: 2,

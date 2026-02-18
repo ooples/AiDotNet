@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.NeuralNetworks.Options;
 
 namespace AiDotNet.NeuralNetworks;
@@ -98,7 +99,7 @@ public class VisionTransformer<T> : NeuralNetworkBase<T>
     /// <summary>
     /// The final classification head (MLP).
     /// </summary>
-    private DenseLayer<T> _classificationHead;
+    private DenseLayer<T> _classificationHead = default!;
 
     /// <summary>
     /// Indicates whether this network supports training.
@@ -198,7 +199,6 @@ public class VisionTransformer<T> : NeuralNetworkBase<T>
 
         _clsToken = new Vector<T>(hiddenDim);
         _positionalEmbeddings = new Matrix<T>(_numPatches + 1, hiddenDim);
-        _classificationHead = new DenseLayer<T>(hiddenDim, numClasses, (IVectorActivationFunction<T>)new SoftmaxActivation<T>());
 
         InitializeLayers();
     }
@@ -210,22 +210,19 @@ public class VisionTransformer<T> : NeuralNetworkBase<T>
     {
         ClearLayers();
 
-        AddLayerToCollection(new PatchEmbeddingLayer<T>(
-            _imageHeight,
-            _imageWidth,
-            _channels,
-            _patchSize,
-            _hiddenDim));
-
-        for (int i = 0; i < _numLayers; i++)
+        if (Architecture.Layers != null && Architecture.Layers.Count > 0)
         {
-            AddLayerToCollection(new TransformerEncoderLayer<T>(
-                _hiddenDim,
-                _numHeads,
-                _mlpDim));
+            Layers.AddRange(Architecture.Layers);
+        }
+        else
+        {
+            Layers.AddRange(LayerHelper<T>.CreateVisionTransformerLayers(
+                _imageHeight, _imageWidth, _channels, _patchSize,
+                _hiddenDim, _numLayers, _numHeads, _mlpDim, _numClasses));
         }
 
-        AddLayerToCollection(_classificationHead);
+        // Last layer is the classification head
+        _classificationHead = (DenseLayer<T>)Layers[^1];
 
         InitializeClassificationToken();
         InitializePositionalEmbeddings();

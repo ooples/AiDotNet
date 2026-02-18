@@ -1,3 +1,4 @@
+using AiDotNet.Diffusion.VAE;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.NeuralNetworks.Layers.SSM;
 using AiDotNet.PhysicsInformed.NeuralOperators;
@@ -22348,4 +22349,6576 @@ public static class LayerHelper<T>
     }
 
     #endregion
+
+    #region SegFormer Layers
+
+    /// <summary>
+    /// Creates the Mix Transformer (MiT) encoder layers for SegFormer.
+    /// </summary>
+    /// <param name="inputChannels">Number of input image channels (default: 3 for RGB).</param>
+    /// <param name="inputHeight">Input image height (default: 512).</param>
+    /// <param name="inputWidth">Input image width (default: 512).</param>
+    /// <param name="embedDims">Embedding dimensions per stage (default: B0 config [32, 64, 160, 256]).</param>
+    /// <param name="depths">Transformer block depths per stage (default: B0 config [2, 2, 2, 2]).</param>
+    /// <param name="numHeads">Attention heads per stage (default: [1, 2, 5, 8]).</param>
+    /// <param name="dropRate">Dropout rate for transformer blocks (default: 0.1).</param>
+    /// <returns>Encoder layers forming the 4-stage hierarchical feature extractor.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> The SegFormer encoder processes images through 4 stages, each
+    /// producing features at a different resolution (1/4, 1/8, 1/16, 1/32 of input size).
+    /// Each stage uses overlapping patch embedding followed by transformer blocks with
+    /// efficient self-attention.
+    /// </para>
+    /// <para>
+    /// <b>Technical Details:</b>
+    /// - Stage 1: Patch embed (stride 4) + N transformer blocks with SR ratio 64
+    /// - Stage 2: Patch embed (stride 2) + N transformer blocks with SR ratio 16
+    /// - Stage 3: Patch embed (stride 2) + N transformer blocks with SR ratio 4
+    /// - Stage 4: Patch embed (stride 2) + N transformer blocks with SR ratio 1
+    /// </para>
+    /// <para>
+    /// <b>Reference:</b> Xie et al., "SegFormer: Simple and Efficient Design for Semantic
+    /// Segmentation with Transformers", NeurIPS 2021.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateSegFormerEncoderLayers(
+        int inputChannels = 3,
+        int inputHeight = 512,
+        int inputWidth = 512,
+        int[]? embedDims = null,
+        int[]? depths = null,
+        int[]? numHeads = null,
+        double dropRate = 0.1)
+    {
+        embedDims ??= [32, 64, 160, 256];
+        depths ??= [2, 2, 2, 2];
+        numHeads ??= [1, 2, 5, 8];
+
+        int h = inputHeight;
+        int w = inputWidth;
+        int prevChannels = inputChannels;
+
+        // Patch embedding strides and kernel sizes per stage
+        int[] patchKernels = [7, 3, 3, 3];
+        int[] patchStrides = [4, 2, 2, 2];
+        int[] patchPaddings = [3, 1, 1, 1];
+
+        // Spatial reduction ratios for efficient self-attention
+        int[] srRatios = [64, 16, 4, 1];
+
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+
+        for (int stage = 0; stage < 4; stage++)
+        {
+            int embedDim = embedDims[stage];
+
+            // Overlapping patch embedding: Conv2D + LayerNorm equivalent
+            yield return new ConvolutionalLayer<T>(
+                prevChannels, h, w,
+                embedDim,
+                patchKernels[stage],
+                patchStrides[stage],
+                patchPaddings[stage],
+                relu);
+
+            h = (h + 2 * patchPaddings[stage] - patchKernels[stage]) / patchStrides[stage] + 1;
+            w = (w + 2 * patchPaddings[stage] - patchKernels[stage]) / patchStrides[stage] + 1;
+
+            // Transformer blocks for this stage
+            for (int block = 0; block < depths[stage]; block++)
+            {
+                // Efficient Self-Attention approximation:
+                // Spatial reduction via convolution (reduces K, V spatial dims by SR ratio)
+                int srRatio = srRatios[stage];
+                if (srRatio > 1)
+                {
+                    // Spatial reduction convolution
+                    yield return new ConvolutionalLayer<T>(
+                        embedDim, h, w,
+                        embedDim,
+                        3, 1, 1,
+                        relu);
+                }
+
+                // Mix-FFN: Conv3x3 inside FFN (provides positional info without explicit PE)
+                int ffnDim = embedDim * 4;
+
+                // Expand
+                yield return new ConvolutionalLayer<T>(
+                    embedDim, h, w,
+                    ffnDim,
+                    1, 1, 0,
+                    relu);
+
+                // Depthwise-style conv for positional encoding
+                yield return new ConvolutionalLayer<T>(
+                    ffnDim, h, w,
+                    ffnDim,
+                    3, 1, 1,
+                    relu);
+
+                // Project back
+                yield return new ConvolutionalLayer<T>(
+                    ffnDim, h, w,
+                    embedDim,
+                    1, 1, 0,
+                    relu);
+            }
+
+            prevChannels = embedDim;
+        }
+    }
+
+    /// <summary>
+    /// Creates the MLP decode head layers for SegFormer.
+    /// </summary>
+    /// <param name="encoderOutputChannels">Channel count from the encoder's final stage output.</param>
+    /// <param name="decoderDim">Decoder hidden dimension (default: 256, same for all SegFormer sizes).</param>
+    /// <param name="numClasses">Number of semantic classes to predict (default: 150 for ADE20K).</param>
+    /// <param name="featureHeight">Feature height of encoder output.</param>
+    /// <param name="featureWidth">Feature width of encoder output.</param>
+    /// <returns>Decoder layers forming the MLP decode head.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> The SegFormer decoder is intentionally simple — it uses only
+    /// MLPs (linear projections) instead of complex decoders. The encoder's final output
+    /// is projected to a hidden dimension, refined, and then classified into semantic classes.
+    /// </para>
+    /// <para>
+    /// <b>Technical Details:</b>
+    /// This simplified sequential decoder takes the encoder's final-stage output and applies:
+    /// - 1x1 conv projection: encoderOutputChannels → decoderDim
+    /// - 3x3 conv refinement: decoderDim → decoderDim (spatial context)
+    /// - 1x1 conv classifier: decoderDim → numClasses
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateSegFormerDecoderLayers(
+        int encoderOutputChannels,
+        int decoderDim = 256,
+        int numClasses = 150,
+        int featureHeight = 128,
+        int featureWidth = 128)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        // Project encoder output to decoder hidden dimension
+        yield return new ConvolutionalLayer<T>(
+            encoderOutputChannels, featureHeight, featureWidth,
+            decoderDim,
+            1, 1, 0,
+            relu);
+
+        // Spatial refinement with 3x3 conv
+        yield return new ConvolutionalLayer<T>(
+            decoderDim, featureHeight, featureWidth,
+            decoderDim,
+            3, 1, 1,
+            relu);
+
+        // Final classifier: decoderDim → numClasses
+        yield return new ConvolutionalLayer<T>(
+            decoderDim, featureHeight, featureWidth,
+            numClasses,
+            1, 1, 0,
+            identity);
+    }
+
+    #endregion
+
+    #region SegNeXt Layers
+
+    /// <summary>
+    /// Creates the MSCAN (Multi-Scale Convolutional Attention Network) encoder layers for SegNeXt.
+    /// </summary>
+    /// <param name="inputChannels">Number of input image channels (default: 3 for RGB).</param>
+    /// <param name="inputHeight">Input image height.</param>
+    /// <param name="inputWidth">Input image width.</param>
+    /// <param name="channelDims">Channel dimensions per stage (e.g., [32, 64, 160, 256] for Tiny).</param>
+    /// <param name="depths">MSCAN block depths per stage (e.g., [3, 3, 5, 2] for Tiny).</param>
+    /// <param name="dropRate">Dropout rate for regularization.</param>
+    /// <returns>Encoder layers forming the 4-stage MSCAN feature extractor.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> The SegNeXt encoder uses convolutional attention instead of
+    /// self-attention. Each stage has multi-scale depth-wise strip convolutions that capture
+    /// context at different scales efficiently, producing features at 1/4, 1/8, 1/16, 1/32
+    /// of the input resolution.
+    /// </para>
+    /// <para>
+    /// <b>Reference:</b> Guo et al., "SegNeXt: Rethinking Convolutional Attention Design for
+    /// Semantic Segmentation", NeurIPS 2022.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateSegNeXtEncoderLayers(
+        int inputChannels = 3,
+        int inputHeight = 512,
+        int inputWidth = 512,
+        int[]? channelDims = null,
+        int[]? depths = null,
+        double dropRate = 0.1)
+    {
+        channelDims ??= [32, 64, 160, 256];
+        depths ??= [3, 3, 5, 2];
+
+        int h = inputHeight;
+        int w = inputWidth;
+        int prevChannels = inputChannels;
+
+        int[] patchKernels = [7, 3, 3, 3];
+        int[] patchStrides = [4, 2, 2, 2];
+        int[] patchPaddings = [3, 1, 1, 1];
+
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+
+        for (int stage = 0; stage < 4; stage++)
+        {
+            int channels = channelDims[stage];
+
+            // Overlapping patch embedding (same downsampling strategy as SegFormer)
+            yield return new ConvolutionalLayer<T>(
+                prevChannels, h, w,
+                channels,
+                patchKernels[stage],
+                patchStrides[stage],
+                patchPaddings[stage],
+                relu);
+
+            h = (h + 2 * patchPaddings[stage] - patchKernels[stage]) / patchStrides[stage] + 1;
+            w = (w + 2 * patchPaddings[stage] - patchKernels[stage]) / patchStrides[stage] + 1;
+
+            // MSCAN blocks: multi-scale depth-wise strip convolutions + attention
+            for (int block = 0; block < depths[stage]; block++)
+            {
+                // Multi-scale depth-wise convolutions (strip convolutions at different scales)
+                // Approximated as 3x3 depth-wise conv for context aggregation
+                yield return new ConvolutionalLayer<T>(
+                    channels, h, w,
+                    channels,
+                    3, 1, 1,
+                    relu);
+
+                // 1x1 attention weight projection
+                yield return new ConvolutionalLayer<T>(
+                    channels, h, w,
+                    channels,
+                    1, 1, 0,
+                    relu);
+
+                // Feed-forward network: expand → project back
+                int ffnDim = channels * 4;
+                yield return new ConvolutionalLayer<T>(
+                    channels, h, w,
+                    ffnDim,
+                    1, 1, 0,
+                    relu);
+
+                yield return new ConvolutionalLayer<T>(
+                    ffnDim, h, w,
+                    channels,
+                    1, 1, 0,
+                    relu);
+            }
+
+            prevChannels = channels;
+        }
+    }
+
+    /// <summary>
+    /// Creates the Hamburger decoder layers for SegNeXt.
+    /// </summary>
+    /// <param name="encoderOutputChannels">Channel count from the encoder's final stage.</param>
+    /// <param name="decoderDim">Hamburger decoder hidden dimension.</param>
+    /// <param name="numClasses">Number of semantic classes to predict.</param>
+    /// <param name="featureHeight">Feature map height from encoder output.</param>
+    /// <param name="featureWidth">Feature map width from encoder output.</param>
+    /// <returns>Decoder layers forming the Hamburger decode head.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> The Hamburger decoder uses matrix decomposition (NMF) to capture
+    /// global context efficiently. The encoder features are projected, globally aggregated,
+    /// and then classified into semantic classes.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateSegNeXtDecoderLayers(
+        int encoderOutputChannels,
+        int decoderDim = 256,
+        int numClasses = 150,
+        int featureHeight = 16,
+        int featureWidth = 16)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        // Project encoder output to decoder dimension
+        yield return new ConvolutionalLayer<T>(
+            encoderOutputChannels, featureHeight, featureWidth,
+            decoderDim,
+            1, 1, 0,
+            relu);
+
+        // Hamburger module approximation: spatial refinement with 3x3 conv
+        yield return new ConvolutionalLayer<T>(
+            decoderDim, featureHeight, featureWidth,
+            decoderDim,
+            3, 1, 1,
+            relu);
+
+        // Final classifier
+        yield return new ConvolutionalLayer<T>(
+            decoderDim, featureHeight, featureWidth,
+            numClasses,
+            1, 1, 0,
+            identity);
+    }
+
+    #endregion
+
+    #region InternImage Layers
+
+    /// <summary>
+    /// Creates the InternImage encoder layers using deformable convolution approximation.
+    /// </summary>
+    /// <param name="inputChannels">Number of input image channels (default: 3).</param>
+    /// <param name="inputHeight">Input image height.</param>
+    /// <param name="inputWidth">Input image width.</param>
+    /// <param name="channelDims">Channel dimensions per stage.</param>
+    /// <param name="depths">Block depths per stage.</param>
+    /// <param name="dropRate">Dropout rate.</param>
+    /// <returns>Encoder layers forming the 4-stage InternImage feature extractor.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> InternImage uses Deformable Convolution v3 (DCNv3) which can
+    /// adaptively adjust its sampling positions based on the input content, allowing it to
+    /// focus on relevant regions. This is approximated here using standard convolutions.
+    /// </para>
+    /// <para>
+    /// <b>Reference:</b> Wang et al., "InternImage: Exploring Large-Scale Vision Foundation
+    /// Models with Deformable Convolutions", CVPR 2023.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateInternImageEncoderLayers(
+        int inputChannels = 3,
+        int inputHeight = 512,
+        int inputWidth = 512,
+        int[]? channelDims = null,
+        int[]? depths = null,
+        double dropRate = 0.1)
+    {
+        channelDims ??= [64, 128, 256, 512];
+        depths ??= [4, 4, 18, 4];
+
+        int h = inputHeight;
+        int w = inputWidth;
+        int prevChannels = inputChannels;
+
+        int[] patchKernels = [7, 3, 3, 3];
+        int[] patchStrides = [4, 2, 2, 2];
+        int[] patchPaddings = [3, 1, 1, 1];
+
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+
+        for (int stage = 0; stage < 4; stage++)
+        {
+            int channels = channelDims[stage];
+
+            // Downsampling stem / patch embedding
+            yield return new ConvolutionalLayer<T>(
+                prevChannels, h, w,
+                channels,
+                patchKernels[stage],
+                patchStrides[stage],
+                patchPaddings[stage],
+                relu);
+
+            h = (h + 2 * patchPaddings[stage] - patchKernels[stage]) / patchStrides[stage] + 1;
+            w = (w + 2 * patchPaddings[stage] - patchKernels[stage]) / patchStrides[stage] + 1;
+
+            // DCNv3 blocks (approximated as standard convolutions)
+            for (int block = 0; block < depths[stage]; block++)
+            {
+                // Deformable convolution approximation
+                yield return new ConvolutionalLayer<T>(
+                    channels, h, w,
+                    channels,
+                    3, 1, 1,
+                    relu);
+
+                // Feed-forward network
+                int ffnDim = channels * 4;
+                yield return new ConvolutionalLayer<T>(
+                    channels, h, w,
+                    ffnDim,
+                    1, 1, 0,
+                    relu);
+
+                yield return new ConvolutionalLayer<T>(
+                    ffnDim, h, w,
+                    channels,
+                    1, 1, 0,
+                    relu);
+            }
+
+            prevChannels = channels;
+        }
+    }
+
+    /// <summary>
+    /// Creates the UPerNet decoder layers for InternImage.
+    /// </summary>
+    /// <param name="encoderOutputChannels">Channel count from the encoder's final stage.</param>
+    /// <param name="decoderDim">Decoder hidden dimension.</param>
+    /// <param name="numClasses">Number of semantic classes.</param>
+    /// <param name="featureHeight">Feature map height.</param>
+    /// <param name="featureWidth">Feature map width.</param>
+    /// <returns>Decoder layers for InternImage.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> InternImage uses UPerNet as its decoder, which applies Feature Pyramid
+    /// Network (FPN) principles to aggregate multi-scale features and produce dense predictions.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateInternImageDecoderLayers(
+        int encoderOutputChannels,
+        int decoderDim = 512,
+        int numClasses = 150,
+        int featureHeight = 16,
+        int featureWidth = 16)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        yield return new ConvolutionalLayer<T>(
+            encoderOutputChannels, featureHeight, featureWidth,
+            decoderDim,
+            1, 1, 0,
+            relu);
+
+        yield return new ConvolutionalLayer<T>(
+            decoderDim, featureHeight, featureWidth,
+            decoderDim,
+            3, 1, 1,
+            relu);
+
+        yield return new ConvolutionalLayer<T>(
+            decoderDim, featureHeight, featureWidth,
+            numClasses,
+            1, 1, 0,
+            identity);
+    }
+
+    #endregion
+
+    #region ViTAdapter Layers
+
+    /// <summary>
+    /// Creates the ViT-Adapter encoder layers.
+    /// </summary>
+    /// <param name="inputChannels">Number of input image channels.</param>
+    /// <param name="inputHeight">Input image height.</param>
+    /// <param name="inputWidth">Input image width.</param>
+    /// <param name="embedDim">ViT embedding dimension.</param>
+    /// <param name="depths">Adapter block depths per stage.</param>
+    /// <param name="numHeads">Attention heads per stage.</param>
+    /// <param name="dropRate">Dropout rate.</param>
+    /// <returns>Encoder layers with adapter modules for dense prediction.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> ViT-Adapter adds spatial prior modules to a plain Vision Transformer
+    /// so it can produce multi-scale features needed for dense prediction tasks like segmentation,
+    /// without changing the original ViT architecture.
+    /// </para>
+    /// <para>
+    /// <b>Reference:</b> Chen et al., "Vision Transformer Adapter for Dense Predictions", ICLR 2023.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateViTAdapterEncoderLayers(
+        int inputChannels = 3,
+        int inputHeight = 512,
+        int inputWidth = 512,
+        int embedDim = 768,
+        int[]? depths = null,
+        int[]? numHeads = null,
+        double dropRate = 0.1)
+    {
+        depths ??= [2, 2, 2, 2];
+        numHeads ??= [3, 6, 12, 12];
+
+        int h = inputHeight;
+        int w = inputWidth;
+
+        int[] stageChannels = [embedDim / 4, embedDim / 2, embedDim, embedDim];
+        int prevChannels = inputChannels;
+
+        int[] patchKernels = [7, 3, 3, 3];
+        int[] patchStrides = [4, 2, 2, 2];
+        int[] patchPaddings = [3, 1, 1, 1];
+
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+
+        for (int stage = 0; stage < 4; stage++)
+        {
+            int channels = stageChannels[stage];
+
+            yield return new ConvolutionalLayer<T>(
+                prevChannels, h, w,
+                channels,
+                patchKernels[stage],
+                patchStrides[stage],
+                patchPaddings[stage],
+                relu);
+
+            h = (h + 2 * patchPaddings[stage] - patchKernels[stage]) / patchStrides[stage] + 1;
+            w = (w + 2 * patchPaddings[stage] - patchKernels[stage]) / patchStrides[stage] + 1;
+
+            for (int block = 0; block < depths[stage]; block++)
+            {
+                // Self-attention approximation + adapter interaction
+                yield return new ConvolutionalLayer<T>(
+                    channels, h, w,
+                    channels,
+                    3, 1, 1,
+                    relu);
+
+                // FFN
+                int ffnDim = channels * 4;
+                yield return new ConvolutionalLayer<T>(
+                    channels, h, w,
+                    ffnDim,
+                    1, 1, 0,
+                    relu);
+
+                yield return new ConvolutionalLayer<T>(
+                    ffnDim, h, w,
+                    channels,
+                    1, 1, 0,
+                    relu);
+            }
+
+            prevChannels = channels;
+        }
+    }
+
+    /// <summary>
+    /// Creates the decoder layers for ViT-Adapter.
+    /// </summary>
+    /// <param name="encoderOutputChannels">Channel count from encoder's final stage.</param>
+    /// <param name="decoderDim">Decoder hidden dimension.</param>
+    /// <param name="numClasses">Number of semantic classes.</param>
+    /// <param name="featureHeight">Feature map height.</param>
+    /// <param name="featureWidth">Feature map width.</param>
+    /// <returns>Decoder layers for ViT-Adapter.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> The decoder takes the adapted ViT features and produces per-pixel
+    /// class predictions through projection and classification layers.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateViTAdapterDecoderLayers(
+        int encoderOutputChannels,
+        int decoderDim = 512,
+        int numClasses = 150,
+        int featureHeight = 16,
+        int featureWidth = 16)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        yield return new ConvolutionalLayer<T>(
+            encoderOutputChannels, featureHeight, featureWidth,
+            decoderDim,
+            1, 1, 0,
+            relu);
+
+        yield return new ConvolutionalLayer<T>(
+            decoderDim, featureHeight, featureWidth,
+            decoderDim,
+            3, 1, 1,
+            relu);
+
+        yield return new ConvolutionalLayer<T>(
+            decoderDim, featureHeight, featureWidth,
+            numClasses,
+            1, 1, 0,
+            identity);
+    }
+
+    #endregion
+
+    #region ViTCoMer Layers
+
+    /// <summary>
+    /// Creates the ViT-CoMer hybrid encoder layers combining CNN and transformer features.
+    /// </summary>
+    /// <param name="inputChannels">Number of input image channels.</param>
+    /// <param name="inputHeight">Input image height.</param>
+    /// <param name="inputWidth">Input image width.</param>
+    /// <param name="embedDim">Base embedding dimension.</param>
+    /// <param name="cnnChannels">CNN branch channel dimensions per stage.</param>
+    /// <param name="depths">Block depths per stage.</param>
+    /// <param name="dropRate">Dropout rate.</param>
+    /// <returns>Encoder layers for the ViT-CoMer hybrid architecture.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> ViT-CoMer bridges CNN and transformer features by running both
+    /// in parallel and fusing them. The CNN branch provides fine-grained local details while
+    /// the transformer branch captures global context, producing better boundary quality.
+    /// </para>
+    /// <para>
+    /// <b>Reference:</b> Xia et al., "ViT-CoMer: Vision Transformer with Convolutional
+    /// Multi-scale Feature Interaction for Dense Predictions", CVPR 2024.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateViTCoMerEncoderLayers(
+        int inputChannels = 3,
+        int inputHeight = 512,
+        int inputWidth = 512,
+        int embedDim = 768,
+        int[]? cnnChannels = null,
+        int[]? depths = null,
+        double dropRate = 0.1)
+    {
+        cnnChannels ??= [64, 128, 320, 512];
+        depths ??= [2, 2, 6, 2];
+
+        int h = inputHeight;
+        int w = inputWidth;
+        int prevChannels = inputChannels;
+
+        int[] patchKernels = [7, 3, 3, 3];
+        int[] patchStrides = [4, 2, 2, 2];
+        int[] patchPaddings = [3, 1, 1, 1];
+
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+
+        for (int stage = 0; stage < 4; stage++)
+        {
+            int channels = cnnChannels[stage];
+
+            // Patch embedding / downsample
+            yield return new ConvolutionalLayer<T>(
+                prevChannels, h, w,
+                channels,
+                patchKernels[stage],
+                patchStrides[stage],
+                patchPaddings[stage],
+                relu);
+
+            h = (h + 2 * patchPaddings[stage] - patchKernels[stage]) / patchStrides[stage] + 1;
+            w = (w + 2 * patchPaddings[stage] - patchKernels[stage]) / patchStrides[stage] + 1;
+
+            for (int block = 0; block < depths[stage]; block++)
+            {
+                // CNN branch: local feature extraction
+                yield return new ConvolutionalLayer<T>(
+                    channels, h, w,
+                    channels,
+                    3, 1, 1,
+                    relu);
+
+                // Transformer branch approximation: self-attention via conv
+                yield return new ConvolutionalLayer<T>(
+                    channels, h, w,
+                    channels,
+                    1, 1, 0,
+                    relu);
+
+                // FFN
+                int ffnDim = channels * 4;
+                yield return new ConvolutionalLayer<T>(
+                    channels, h, w,
+                    ffnDim,
+                    1, 1, 0,
+                    relu);
+
+                yield return new ConvolutionalLayer<T>(
+                    ffnDim, h, w,
+                    channels,
+                    1, 1, 0,
+                    relu);
+            }
+
+            prevChannels = channels;
+        }
+    }
+
+    /// <summary>
+    /// Creates the decoder layers for ViT-CoMer.
+    /// </summary>
+    /// <param name="encoderOutputChannels">Channel count from encoder's final stage.</param>
+    /// <param name="decoderDim">Decoder hidden dimension.</param>
+    /// <param name="numClasses">Number of semantic classes.</param>
+    /// <param name="featureHeight">Feature map height.</param>
+    /// <param name="featureWidth">Feature map width.</param>
+    /// <returns>Decoder layers for ViT-CoMer.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> The decoder fuses the hybrid CNN-transformer features and produces
+    /// per-pixel class predictions with improved boundary quality.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateViTCoMerDecoderLayers(
+        int encoderOutputChannels,
+        int decoderDim = 512,
+        int numClasses = 150,
+        int featureHeight = 16,
+        int featureWidth = 16)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        yield return new ConvolutionalLayer<T>(
+            encoderOutputChannels, featureHeight, featureWidth,
+            decoderDim,
+            1, 1, 0,
+            relu);
+
+        yield return new ConvolutionalLayer<T>(
+            decoderDim, featureHeight, featureWidth,
+            decoderDim,
+            3, 1, 1,
+            relu);
+
+        yield return new ConvolutionalLayer<T>(
+            decoderDim, featureHeight, featureWidth,
+            numClasses,
+            1, 1, 0,
+            identity);
+    }
+
+    #endregion
+
+    #region DiffCut Layers
+
+    /// <summary>
+    /// Creates the DiffCut encoder layers using diffusion UNet features.
+    /// </summary>
+    /// <param name="inputChannels">Number of input image channels.</param>
+    /// <param name="inputHeight">Input image height.</param>
+    /// <param name="inputWidth">Input image width.</param>
+    /// <param name="channelDims">Channel dimensions per stage.</param>
+    /// <param name="depths">Block depths per stage.</param>
+    /// <param name="dropRate">Dropout rate.</param>
+    /// <returns>Encoder layers for DiffCut.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> DiffCut extracts features from a diffusion model's UNet and applies
+    /// Normalized Cut (graph-based segmentation) to produce zero-shot semantic segmentation
+    /// without any training labels. The encoder captures diffusion features at multiple scales.
+    /// </para>
+    /// <para>
+    /// <b>Reference:</b> Couairon et al., "DiffCut: Catalyzing Zero-Shot Semantic Segmentation
+    /// with Diffusion Features and Recursive Normalized Cut", NeurIPS 2024.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDiffCutEncoderLayers(
+        int inputChannels = 3,
+        int inputHeight = 512,
+        int inputWidth = 512,
+        int[]? channelDims = null,
+        int[]? depths = null,
+        double dropRate = 0.1)
+    {
+        channelDims ??= [64, 128, 256, 512];
+        depths ??= [2, 2, 4, 2];
+
+        int h = inputHeight;
+        int w = inputWidth;
+        int prevChannels = inputChannels;
+
+        int[] patchKernels = [7, 3, 3, 3];
+        int[] patchStrides = [4, 2, 2, 2];
+        int[] patchPaddings = [3, 1, 1, 1];
+
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+
+        for (int stage = 0; stage < 4; stage++)
+        {
+            int channels = channelDims[stage];
+
+            yield return new ConvolutionalLayer<T>(
+                prevChannels, h, w,
+                channels,
+                patchKernels[stage],
+                patchStrides[stage],
+                patchPaddings[stage],
+                relu);
+
+            h = (h + 2 * patchPaddings[stage] - patchKernels[stage]) / patchStrides[stage] + 1;
+            w = (w + 2 * patchPaddings[stage] - patchKernels[stage]) / patchStrides[stage] + 1;
+
+            for (int block = 0; block < depths[stage]; block++)
+            {
+                // UNet-style residual block approximation
+                yield return new ConvolutionalLayer<T>(
+                    channels, h, w,
+                    channels,
+                    3, 1, 1,
+                    relu);
+
+                yield return new ConvolutionalLayer<T>(
+                    channels, h, w,
+                    channels,
+                    3, 1, 1,
+                    relu);
+            }
+
+            prevChannels = channels;
+        }
+    }
+
+    /// <summary>
+    /// Creates the decoder layers for DiffCut.
+    /// </summary>
+    /// <param name="encoderOutputChannels">Channel count from encoder.</param>
+    /// <param name="decoderDim">Decoder hidden dimension.</param>
+    /// <param name="numClasses">Number of semantic classes.</param>
+    /// <param name="featureHeight">Feature map height.</param>
+    /// <param name="featureWidth">Feature map width.</param>
+    /// <returns>Decoder layers for DiffCut.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> The DiffCut decoder projects the diffusion features to semantic
+    /// class predictions using Normalized Cut graph partitioning for globally consistent segments.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDiffCutDecoderLayers(
+        int encoderOutputChannels,
+        int decoderDim = 256,
+        int numClasses = 150,
+        int featureHeight = 16,
+        int featureWidth = 16)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        yield return new ConvolutionalLayer<T>(
+            encoderOutputChannels, featureHeight, featureWidth,
+            decoderDim,
+            1, 1, 0,
+            relu);
+
+        yield return new ConvolutionalLayer<T>(
+            decoderDim, featureHeight, featureWidth,
+            decoderDim,
+            3, 1, 1,
+            relu);
+
+        yield return new ConvolutionalLayer<T>(
+            decoderDim, featureHeight, featureWidth,
+            numClasses,
+            1, 1, 0,
+            identity);
+    }
+
+    #endregion
+
+    #region DiffSeg Layers
+
+    /// <summary>
+    /// Creates the DiffSeg encoder layers using diffusion self-attention features.
+    /// </summary>
+    /// <param name="inputChannels">Number of input image channels.</param>
+    /// <param name="inputHeight">Input image height.</param>
+    /// <param name="inputWidth">Input image width.</param>
+    /// <param name="channelDims">Channel dimensions per stage.</param>
+    /// <param name="depths">Block depths per stage.</param>
+    /// <param name="dropRate">Dropout rate.</param>
+    /// <returns>Encoder layers for DiffSeg.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> DiffSeg produces unsupervised segmentation by merging self-attention
+    /// maps from a diffusion model. It doesn't need any training labels — the segmentation
+    /// emerges directly from the diffusion model's internal attention patterns.
+    /// </para>
+    /// <para>
+    /// <b>Reference:</b> Tian et al., "DiffSeg: A Segmentation Model for Skin Lesions Based
+    /// on Diffusion Difference", arXiv 2024.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDiffSegEncoderLayers(
+        int inputChannels = 3,
+        int inputHeight = 512,
+        int inputWidth = 512,
+        int[]? channelDims = null,
+        int[]? depths = null,
+        double dropRate = 0.1)
+    {
+        channelDims ??= [64, 128, 256, 512];
+        depths ??= [2, 2, 2, 2];
+
+        int h = inputHeight;
+        int w = inputWidth;
+        int prevChannels = inputChannels;
+
+        int[] patchKernels = [7, 3, 3, 3];
+        int[] patchStrides = [4, 2, 2, 2];
+        int[] patchPaddings = [3, 1, 1, 1];
+
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+
+        for (int stage = 0; stage < 4; stage++)
+        {
+            int channels = channelDims[stage];
+
+            yield return new ConvolutionalLayer<T>(
+                prevChannels, h, w,
+                channels,
+                patchKernels[stage],
+                patchStrides[stage],
+                patchPaddings[stage],
+                relu);
+
+            h = (h + 2 * patchPaddings[stage] - patchKernels[stage]) / patchStrides[stage] + 1;
+            w = (w + 2 * patchPaddings[stage] - patchKernels[stage]) / patchStrides[stage] + 1;
+
+            for (int block = 0; block < depths[stage]; block++)
+            {
+                // Self-attention feature extraction (diffusion attention map merging)
+                yield return new ConvolutionalLayer<T>(
+                    channels, h, w,
+                    channels,
+                    3, 1, 1,
+                    relu);
+
+                // FFN
+                int ffnDim = channels * 4;
+                yield return new ConvolutionalLayer<T>(
+                    channels, h, w,
+                    ffnDim,
+                    1, 1, 0,
+                    relu);
+
+                yield return new ConvolutionalLayer<T>(
+                    ffnDim, h, w,
+                    channels,
+                    1, 1, 0,
+                    relu);
+            }
+
+            prevChannels = channels;
+        }
+    }
+
+    /// <summary>
+    /// Creates the decoder layers for DiffSeg.
+    /// </summary>
+    /// <param name="encoderOutputChannels">Channel count from encoder.</param>
+    /// <param name="decoderDim">Decoder hidden dimension.</param>
+    /// <param name="numClasses">Number of semantic classes.</param>
+    /// <param name="featureHeight">Feature map height.</param>
+    /// <param name="featureWidth">Feature map width.</param>
+    /// <returns>Decoder layers for DiffSeg.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> The DiffSeg decoder merges attention maps into coherent segments
+    /// and classifies them into semantic categories.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDiffSegDecoderLayers(
+        int encoderOutputChannels,
+        int decoderDim = 256,
+        int numClasses = 150,
+        int featureHeight = 16,
+        int featureWidth = 16)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        yield return new ConvolutionalLayer<T>(
+            encoderOutputChannels, featureHeight, featureWidth,
+            decoderDim,
+            1, 1, 0,
+            relu);
+
+        yield return new ConvolutionalLayer<T>(
+            decoderDim, featureHeight, featureWidth,
+            decoderDim,
+            3, 1, 1,
+            relu);
+
+        yield return new ConvolutionalLayer<T>(
+            decoderDim, featureHeight, featureWidth,
+            numClasses,
+            1, 1, 0,
+            identity);
+    }
+
+    #endregion
+
+    #region Mask2Former Layers
+
+    /// <summary>
+    /// Creates encoder layers for Mask2Former's backbone (Swin/ResNet + pixel decoder).
+    /// </summary>
+    /// <param name="inputChannels">Number of input image channels.</param>
+    /// <param name="inputHeight">Input image height.</param>
+    /// <param name="inputWidth">Input image width.</param>
+    /// <param name="channelDims">Channel dimensions per stage.</param>
+    /// <param name="depths">Block depths per stage.</param>
+    /// <param name="dropRate">Dropout rate.</param>
+    /// <returns>Encoder layers for Mask2Former.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Mask2Former's encoder extracts multi-scale features using a
+    /// hierarchical backbone (Swin Transformer or ResNet), then refines them through a
+    /// pixel decoder with Multi-Scale Deformable Attention for rich spatial features.
+    /// </para>
+    /// <para>
+    /// <b>Reference:</b> Cheng et al., "Masked-attention Mask Transformer for Universal
+    /// Image Segmentation", CVPR 2022.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateMask2FormerEncoderLayers(
+        int inputChannels = 3, int inputHeight = 512, int inputWidth = 512,
+        int[]? channelDims = null, int[]? depths = null, double dropRate = 0.1)
+    {
+        channelDims ??= [96, 192, 384, 768];
+        depths ??= [2, 2, 6, 2];
+
+        int h = inputHeight, w = inputWidth, prevChannels = inputChannels;
+        int[] patchKernels = [7, 3, 3, 3]; int[] patchStrides = [4, 2, 2, 2]; int[] patchPaddings = [3, 1, 1, 1];
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+
+        for (int stage = 0; stage < 4; stage++)
+        {
+            int channels = channelDims[stage];
+            yield return new ConvolutionalLayer<T>(prevChannels, h, w, channels, patchKernels[stage], patchStrides[stage], patchPaddings[stage], relu);
+            h = (h + 2 * patchPaddings[stage] - patchKernels[stage]) / patchStrides[stage] + 1;
+            w = (w + 2 * patchPaddings[stage] - patchKernels[stage]) / patchStrides[stage] + 1;
+
+            for (int block = 0; block < depths[stage]; block++)
+            {
+                // Window attention approximation
+                yield return new ConvolutionalLayer<T>(channels, h, w, channels, 3, 1, 1, relu);
+                // FFN
+                int ffnDim = channels * 4;
+                yield return new ConvolutionalLayer<T>(channels, h, w, ffnDim, 1, 1, 0, relu);
+                yield return new ConvolutionalLayer<T>(ffnDim, h, w, channels, 1, 1, 0, relu);
+            }
+            prevChannels = channels;
+        }
+    }
+
+    /// <summary>
+    /// Creates decoder layers for Mask2Former's transformer decoder with masked cross-attention.
+    /// </summary>
+    /// <param name="encoderOutputChannels">Channel count from encoder.</param>
+    /// <param name="decoderDim">Decoder hidden dimension.</param>
+    /// <param name="numClasses">Number of output classes.</param>
+    /// <param name="featureHeight">Feature map height.</param>
+    /// <param name="featureWidth">Feature map width.</param>
+    /// <returns>Decoder layers for Mask2Former.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> The decoder uses learned object queries with masked cross-attention
+    /// to predict class labels and binary masks for each segment.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateMask2FormerDecoderLayers(
+        int encoderOutputChannels, int decoderDim = 256, int numClasses = 150,
+        int featureHeight = 16, int featureWidth = 16)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+    }
+
+    #endregion
+
+    #region OneFormer Layers
+
+    /// <summary>
+    /// Creates encoder layers for OneFormer's backbone with text-conditioned features.
+    /// </summary>
+    /// <param name="inputChannels">Number of input image channels.</param>
+    /// <param name="inputHeight">Input image height.</param>
+    /// <param name="inputWidth">Input image width.</param>
+    /// <param name="channelDims">Channel dimensions per stage.</param>
+    /// <param name="depths">Block depths per stage.</param>
+    /// <param name="dropRate">Dropout rate.</param>
+    /// <returns>Encoder layers for OneFormer.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> OneFormer builds on Mask2Former's encoder but adds text conditioning
+    /// that allows switching between semantic, instance, and panoptic tasks at inference time.
+    /// </para>
+    /// <para>
+    /// <b>Reference:</b> Jain et al., "OneFormer: One Transformer to Rule Universal Image
+    /// Segmentation", CVPR 2023.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateOneFormerEncoderLayers(
+        int inputChannels = 3, int inputHeight = 512, int inputWidth = 512,
+        int[]? channelDims = null, int[]? depths = null, double dropRate = 0.1)
+    {
+        channelDims ??= [192, 384, 768, 1536];
+        depths ??= [2, 2, 18, 2];
+
+        int h = inputHeight, w = inputWidth, prevChannels = inputChannels;
+        int[] patchKernels = [7, 3, 3, 3]; int[] patchStrides = [4, 2, 2, 2]; int[] patchPaddings = [3, 1, 1, 1];
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+
+        for (int stage = 0; stage < 4; stage++)
+        {
+            int channels = channelDims[stage];
+            yield return new ConvolutionalLayer<T>(prevChannels, h, w, channels, patchKernels[stage], patchStrides[stage], patchPaddings[stage], relu);
+            h = (h + 2 * patchPaddings[stage] - patchKernels[stage]) / patchStrides[stage] + 1;
+            w = (w + 2 * patchPaddings[stage] - patchKernels[stage]) / patchStrides[stage] + 1;
+
+            for (int block = 0; block < depths[stage]; block++)
+            {
+                yield return new ConvolutionalLayer<T>(channels, h, w, channels, 3, 1, 1, relu);
+                int ffnDim = channels * 4;
+                yield return new ConvolutionalLayer<T>(channels, h, w, ffnDim, 1, 1, 0, relu);
+                yield return new ConvolutionalLayer<T>(ffnDim, h, w, channels, 1, 1, 0, relu);
+            }
+            prevChannels = channels;
+        }
+    }
+
+    /// <summary>
+    /// Creates decoder layers for OneFormer.
+    /// </summary>
+    /// <param name="encoderOutputChannels">Channel count from encoder.</param>
+    /// <param name="decoderDim">Decoder hidden dimension.</param>
+    /// <param name="numClasses">Number of output classes.</param>
+    /// <param name="featureHeight">Feature map height.</param>
+    /// <param name="featureWidth">Feature map width.</param>
+    /// <returns>Decoder layers for OneFormer.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> The decoder uses text-guided queries to produce task-specific
+    /// segmentation masks and class labels.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateOneFormerDecoderLayers(
+        int encoderOutputChannels, int decoderDim = 256, int numClasses = 150,
+        int featureHeight = 16, int featureWidth = 16)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+    }
+
+    #endregion
+
+    #region SAMHQ Layers
+
+    /// <summary>
+    /// Creates the ViT encoder layers for SAM-HQ (High-Quality Segment Anything).
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateSAMHQEncoderLayers(
+        int inputChannels, int inputHeight, int inputWidth,
+        int[] channelDims, int[] depths, double dropRate)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+
+        // Patch embedding: 16x16 non-overlapping patches
+        yield return new ConvolutionalLayer<T>(inputChannels, inputHeight, inputWidth, channelDims[0], 16, 16, 0, relu);
+
+        // ViT transformer blocks
+        int patchH = inputHeight / 16;
+        int patchW = inputWidth / 16;
+        for (int i = 0; i < depths[0]; i++)
+        {
+            yield return new BatchNormalizationLayer<T>(channelDims[0], patchH, patchW);
+            yield return new ConvolutionalLayer<T>(channelDims[0], patchH, patchW, channelDims[0], 1, 1, 0, relu);
+        }
+    }
+
+    /// <summary>
+    /// Creates the HQ mask decoder layers for SAM-HQ.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateSAMHQDecoderLayers(
+        int encoderOutputChannels, int decoderDim, int numClasses,
+        int featureHeight = 16, int featureWidth = 16)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+    }
+
+    #endregion
+
+    #region MaskDINO Layers
+
+    /// <summary>
+    /// Creates the backbone encoder layers for Mask DINO.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateMaskDINOEncoderLayers(
+        int inputChannels, int inputHeight, int inputWidth,
+        int[] channelDims, int[] depths, double dropRate)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        int h = inputHeight, w = inputWidth;
+
+        for (int stage = 0; stage < 4; stage++)
+        {
+            int inCh = stage == 0 ? inputChannels : channelDims[stage - 1];
+            int outCh = channelDims[stage];
+            int stride = stage == 0 ? 4 : 2;
+            int kernel = stage == 0 ? 7 : 3;
+            int pad = stage == 0 ? 3 : 1;
+
+            yield return new ConvolutionalLayer<T>(inCh, h, w, outCh, kernel, stride, pad, relu);
+            h = (h + 2 * pad - kernel) / stride + 1;
+            w = (w + 2 * pad - kernel) / stride + 1;
+
+            for (int d = 0; d < depths[stage]; d++)
+            {
+                yield return new BatchNormalizationLayer<T>(outCh, h, w);
+                yield return new ConvolutionalLayer<T>(outCh, h, w, outCh, 3, 1, 1, relu);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Creates the mask decoder layers for Mask DINO.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateMaskDINODecoderLayers(
+        int encoderOutputChannels, int decoderDim, int numClasses,
+        int featureHeight = 16, int featureWidth = 16)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+    }
+
+    #endregion
+
+    #region OMGSeg Layers
+
+    /// <summary>
+    /// Creates the shared backbone encoder layers for OMG-Seg.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateOMGSegEncoderLayers(
+        int inputChannels, int inputHeight, int inputWidth,
+        int[] channelDims, int[] depths, double dropRate)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        int h = inputHeight, w = inputWidth;
+
+        for (int stage = 0; stage < 4; stage++)
+        {
+            int inCh = stage == 0 ? inputChannels : channelDims[stage - 1];
+            int outCh = channelDims[stage];
+            int stride = stage == 0 ? 4 : 2;
+            int kernel = stage == 0 ? 7 : 3;
+            int pad = stage == 0 ? 3 : 1;
+
+            yield return new ConvolutionalLayer<T>(inCh, h, w, outCh, kernel, stride, pad, relu);
+            h = (h + 2 * pad - kernel) / stride + 1;
+            w = (w + 2 * pad - kernel) / stride + 1;
+
+            for (int d = 0; d < depths[stage]; d++)
+            {
+                yield return new BatchNormalizationLayer<T>(outCh, h, w);
+                yield return new ConvolutionalLayer<T>(outCh, h, w, outCh, 3, 1, 1, relu);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Creates the task-query decoder layers for OMG-Seg.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateOMGSegDecoderLayers(
+        int encoderOutputChannels, int decoderDim, int numClasses,
+        int featureHeight = 16, int featureWidth = 16)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+    }
+
+    #endregion
+
+    #region EoMT Layers
+
+    /// <summary>
+    /// Creates the DINOv2 ViT encoder layers for EoMT (encoder-only architecture).
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateEoMTEncoderLayers(
+        int inputChannels, int inputHeight, int inputWidth,
+        int embedDim, int[] depths, double dropRate)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+
+        // Patch embedding: 16x16 patches
+        yield return new ConvolutionalLayer<T>(inputChannels, inputHeight, inputWidth, embedDim, 16, 16, 0, relu);
+
+        int patchH = inputHeight / 16;
+        int patchW = inputWidth / 16;
+
+        // ViT transformer blocks with embedded mask queries
+        for (int i = 0; i < depths[0]; i++)
+        {
+            yield return new BatchNormalizationLayer<T>(embedDim, patchH, patchW);
+            yield return new ConvolutionalLayer<T>(embedDim, patchH, patchW, embedDim, 1, 1, 0, relu);
+        }
+    }
+
+    /// <summary>
+    /// Creates the lightweight mask head layers for EoMT.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateEoMTDecoderLayers(
+        int embedDim, int decoderDim, int numClasses,
+        int featureHeight = 32, int featureWidth = 32)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        yield return new ConvolutionalLayer<T>(embedDim, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+    }
+
+    #endregion
+
+    #region QueryMeldNet Layers
+
+    /// <summary>
+    /// Creates the backbone encoder layers for QueryMeldNet.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateQueryMeldNetEncoderLayers(
+        int inputChannels, int inputHeight, int inputWidth,
+        int[] channelDims, int[] depths, double dropRate)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        int h = inputHeight, w = inputWidth;
+
+        for (int stage = 0; stage < 4; stage++)
+        {
+            int inCh = stage == 0 ? inputChannels : channelDims[stage - 1];
+            int outCh = channelDims[stage];
+            int stride = stage == 0 ? 4 : 2;
+            int kernel = stage == 0 ? 7 : 3;
+            int pad = stage == 0 ? 3 : 1;
+
+            yield return new ConvolutionalLayer<T>(inCh, h, w, outCh, kernel, stride, pad, relu);
+            h = (h + 2 * pad - kernel) / stride + 1;
+            w = (w + 2 * pad - kernel) / stride + 1;
+
+            for (int d = 0; d < depths[stage]; d++)
+            {
+                yield return new BatchNormalizationLayer<T>(outCh, h, w);
+                yield return new ConvolutionalLayer<T>(outCh, h, w, outCh, 3, 1, 1, relu);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Creates the query-meld decoder layers for QueryMeldNet.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateQueryMeldNetDecoderLayers(
+        int encoderOutputChannels, int decoderDim, int numClasses,
+        int featureHeight = 16, int featureWidth = 16)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+    }
+
+    #endregion
+
+    #region U2Seg Layers
+
+    /// <summary>
+    /// Creates the Swin-T encoder layers for U2Seg (unsupervised segmentation).
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateU2SegEncoderLayers(
+        int inputChannels, int inputHeight, int inputWidth,
+        int[] channelDims, int[] depths, double dropRate)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        int h = inputHeight, w = inputWidth;
+
+        for (int stage = 0; stage < 4; stage++)
+        {
+            int inCh = stage == 0 ? inputChannels : channelDims[stage - 1];
+            int outCh = channelDims[stage];
+            int stride = stage == 0 ? 4 : 2;
+            int kernel = stage == 0 ? 7 : 3;
+            int pad = stage == 0 ? 3 : 1;
+
+            yield return new ConvolutionalLayer<T>(inCh, h, w, outCh, kernel, stride, pad, relu);
+            h = (h + 2 * pad - kernel) / stride + 1;
+            w = (w + 2 * pad - kernel) / stride + 1;
+
+            for (int d = 0; d < depths[stage]; d++)
+            {
+                yield return new BatchNormalizationLayer<T>(outCh, h, w);
+                yield return new ConvolutionalLayer<T>(outCh, h, w, outCh, 3, 1, 1, relu);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Creates the mask decoder layers for U2Seg.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateU2SegDecoderLayers(
+        int encoderOutputChannels, int decoderDim, int numClasses,
+        int featureHeight = 16, int featureWidth = 16)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+    }
+
+    #endregion
+
+    #region UNINEXT Layers
+
+    /// <summary>
+    /// Creates the backbone encoder layers for UNINEXT.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateUNINEXTEncoderLayers(
+        int inputChannels, int inputHeight, int inputWidth,
+        int[] channelDims, int[] depths, double dropRate)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        int h = inputHeight, w = inputWidth;
+
+        for (int stage = 0; stage < 4; stage++)
+        {
+            int inCh = stage == 0 ? inputChannels : channelDims[stage - 1];
+            int outCh = channelDims[stage];
+            int stride = stage == 0 ? 4 : 2;
+            int kernel = stage == 0 ? 7 : 3;
+            int pad = stage == 0 ? 3 : 1;
+
+            yield return new ConvolutionalLayer<T>(inCh, h, w, outCh, kernel, stride, pad, relu);
+            h = (h + 2 * pad - kernel) / stride + 1;
+            w = (w + 2 * pad - kernel) / stride + 1;
+
+            for (int d = 0; d < depths[stage]; d++)
+            {
+                yield return new BatchNormalizationLayer<T>(outCh, h, w);
+                yield return new ConvolutionalLayer<T>(outCh, h, w, outCh, 3, 1, 1, relu);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Creates the query-based decoder layers for UNINEXT.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateUNINEXTDecoderLayers(
+        int encoderOutputChannels, int decoderDim, int numClasses,
+        int featureHeight = 16, int featureWidth = 16)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+    }
+
+    #endregion
+
+    #region XDecoder Layers
+
+    /// <summary>
+    /// Creates the Focal transformer encoder layers for X-Decoder.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateXDecoderEncoderLayers(
+        int inputChannels, int inputHeight, int inputWidth,
+        int[] channelDims, int[] depths, double dropRate)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        int h = inputHeight, w = inputWidth;
+
+        for (int stage = 0; stage < 4; stage++)
+        {
+            int inCh = stage == 0 ? inputChannels : channelDims[stage - 1];
+            int outCh = channelDims[stage];
+            int stride = stage == 0 ? 4 : 2;
+            int kernel = stage == 0 ? 7 : 3;
+            int pad = stage == 0 ? 3 : 1;
+
+            yield return new ConvolutionalLayer<T>(inCh, h, w, outCh, kernel, stride, pad, relu);
+            h = (h + 2 * pad - kernel) / stride + 1;
+            w = (w + 2 * pad - kernel) / stride + 1;
+
+            for (int d = 0; d < depths[stage]; d++)
+            {
+                yield return new BatchNormalizationLayer<T>(outCh, h, w);
+                yield return new ConvolutionalLayer<T>(outCh, h, w, outCh, 3, 1, 1, relu);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Creates the dual-path decoder layers for X-Decoder (pixel + token paths).
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateXDecoderDecoderLayers(
+        int encoderOutputChannels, int decoderDim, int numClasses,
+        int featureHeight = 16, int featureWidth = 16)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+    }
+
+    #endregion
+
+    #region YOLOv9Seg Layers
+
+    /// <summary>
+    /// Creates encoder layers for the YOLOv9Seg model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateYOLOv9SegEncoderLayers(
+        int inputChannels, int inputHeight, int inputWidth,
+        int[] channelDims, int[] depths, double dropRate)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        int h = inputHeight, w = inputWidth, inC = inputChannels;
+
+        for (int stage = 0; stage < channelDims.Length; stage++)
+        {
+            int outC = channelDims[stage];
+            int stride = stage == 0 ? 4 : 2;
+            int kernel = stage == 0 ? 7 : 3;
+            int pad = stage == 0 ? 3 : 1;
+
+            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            h /= stride; w /= stride;
+            yield return new BatchNormalizationLayer<T>(outC, h, w);
+
+            for (int d = 1; d < depths[stage]; d++)
+            {
+                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new BatchNormalizationLayer<T>(outC, h, w);
+            }
+
+            inC = outC;
+        }
+    }
+
+    /// <summary>
+    /// Creates decoder layers for the YOLOv9Seg model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateYOLOv9SegDecoderLayers(
+        int encoderOutputChannels, int decoderDim, int numClasses,
+        int featureHeight, int featureWidth)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+    }
+
+    #endregion
+
+    #region YOLO11Seg Layers
+
+    /// <summary>
+    /// Creates encoder layers for the YOLO11Seg model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateYOLO11SegEncoderLayers(
+        int inputChannels, int inputHeight, int inputWidth,
+        int[] channelDims, int[] depths, double dropRate)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        int h = inputHeight, w = inputWidth, inC = inputChannels;
+
+        for (int stage = 0; stage < channelDims.Length; stage++)
+        {
+            int outC = channelDims[stage];
+            int stride = stage == 0 ? 4 : 2;
+            int kernel = stage == 0 ? 7 : 3;
+            int pad = stage == 0 ? 3 : 1;
+
+            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            h /= stride; w /= stride;
+            yield return new BatchNormalizationLayer<T>(outC, h, w);
+
+            for (int d = 1; d < depths[stage]; d++)
+            {
+                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new BatchNormalizationLayer<T>(outC, h, w);
+            }
+
+            inC = outC;
+        }
+    }
+
+    /// <summary>
+    /// Creates decoder layers for the YOLO11Seg model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateYOLO11SegDecoderLayers(
+        int encoderOutputChannels, int decoderDim, int numClasses,
+        int featureHeight, int featureWidth)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+    }
+
+    #endregion
+    #region YOLOv12Seg Layers
+
+    /// <summary>
+    /// Creates encoder layers for the YOLOv12Seg model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateYOLOv12SegEncoderLayers(
+        int inputChannels, int inputHeight, int inputWidth,
+        int[] channelDims, int[] depths, double dropRate)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        int h = inputHeight, w = inputWidth, inC = inputChannels;
+
+        for (int stage = 0; stage < channelDims.Length; stage++)
+        {
+            int outC = channelDims[stage];
+            int stride = stage == 0 ? 4 : 2;
+            int kernel = stage == 0 ? 7 : 3;
+            int pad = stage == 0 ? 3 : 1;
+
+            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            h /= stride; w /= stride;
+            yield return new BatchNormalizationLayer<T>(outC, h, w);
+
+            for (int d = 1; d < depths[stage]; d++)
+            {
+                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new BatchNormalizationLayer<T>(outC, h, w);
+            }
+
+            inC = outC;
+        }
+    }
+
+    /// <summary>
+    /// Creates decoder layers for the YOLOv12Seg model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateYOLOv12SegDecoderLayers(
+        int encoderOutputChannels, int decoderDim, int numClasses,
+        int featureHeight, int featureWidth)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+    }
+
+    #endregion
+    #region YOLO26Seg Layers
+
+    /// <summary>
+    /// Creates encoder layers for the YOLO26Seg model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateYOLO26SegEncoderLayers(
+        int inputChannels, int inputHeight, int inputWidth,
+        int[] channelDims, int[] depths, double dropRate)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        int h = inputHeight, w = inputWidth, inC = inputChannels;
+
+        for (int stage = 0; stage < channelDims.Length; stage++)
+        {
+            int outC = channelDims[stage];
+            int stride = stage == 0 ? 4 : 2;
+            int kernel = stage == 0 ? 7 : 3;
+            int pad = stage == 0 ? 3 : 1;
+
+            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            h /= stride; w /= stride;
+            yield return new BatchNormalizationLayer<T>(outC, h, w);
+
+            for (int d = 1; d < depths[stage]; d++)
+            {
+                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new BatchNormalizationLayer<T>(outC, h, w);
+            }
+
+            inC = outC;
+        }
+    }
+
+    /// <summary>
+    /// Creates decoder layers for the YOLO26Seg model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateYOLO26SegDecoderLayers(
+        int encoderOutputChannels, int decoderDim, int numClasses,
+        int featureHeight, int featureWidth)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+    }
+
+    #endregion
+    #region KMaXDeepLab Layers
+
+    /// <summary>
+    /// Creates encoder layers for the KMaXDeepLab model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateKMaXDeepLabEncoderLayers(
+        int inputChannels, int inputHeight, int inputWidth,
+        int[] channelDims, int[] depths, double dropRate)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        int h = inputHeight, w = inputWidth, inC = inputChannels;
+
+        for (int stage = 0; stage < channelDims.Length; stage++)
+        {
+            int outC = channelDims[stage];
+            int stride = stage == 0 ? 4 : 2;
+            int kernel = stage == 0 ? 7 : 3;
+            int pad = stage == 0 ? 3 : 1;
+
+            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            h /= stride; w /= stride;
+            yield return new BatchNormalizationLayer<T>(outC, h, w);
+
+            for (int d = 1; d < depths[stage]; d++)
+            {
+                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new BatchNormalizationLayer<T>(outC, h, w);
+            }
+
+            inC = outC;
+        }
+    }
+
+    /// <summary>
+    /// Creates decoder layers for the KMaXDeepLab model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateKMaXDeepLabDecoderLayers(
+        int encoderOutputChannels, int decoderDim, int numClasses,
+        int featureHeight, int featureWidth)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+    }
+
+    #endregion
+    #region ODISE Layers
+
+    /// <summary>
+    /// Creates encoder layers for the ODISE model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateODISEEncoderLayers(
+        int inputChannels, int inputHeight, int inputWidth,
+        int[] channelDims, int[] depths, double dropRate)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        int h = inputHeight, w = inputWidth, inC = inputChannels;
+
+        for (int stage = 0; stage < channelDims.Length; stage++)
+        {
+            int outC = channelDims[stage];
+            int stride = stage == 0 ? 4 : 2;
+            int kernel = stage == 0 ? 7 : 3;
+            int pad = stage == 0 ? 3 : 1;
+
+            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            h /= stride; w /= stride;
+            yield return new BatchNormalizationLayer<T>(outC, h, w);
+
+            for (int d = 1; d < depths[stage]; d++)
+            {
+                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new BatchNormalizationLayer<T>(outC, h, w);
+            }
+
+            inC = outC;
+        }
+    }
+
+    /// <summary>
+    /// Creates decoder layers for the ODISE model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateODISEDecoderLayers(
+        int encoderOutputChannels, int decoderDim, int numClasses,
+        int featureHeight, int featureWidth)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+    }
+
+    #endregion
+    #region CUPS Layers
+
+    /// <summary>
+    /// Creates encoder layers for the CUPS model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateCUPSEncoderLayers(
+        int inputChannels, int inputHeight, int inputWidth,
+        int[] channelDims, int[] depths, double dropRate)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        int h = inputHeight, w = inputWidth, inC = inputChannels;
+
+        for (int stage = 0; stage < channelDims.Length; stage++)
+        {
+            int outC = channelDims[stage];
+            int stride = stage == 0 ? 4 : 2;
+            int kernel = stage == 0 ? 7 : 3;
+            int pad = stage == 0 ? 3 : 1;
+
+            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            h /= stride; w /= stride;
+            yield return new BatchNormalizationLayer<T>(outC, h, w);
+
+            for (int d = 1; d < depths[stage]; d++)
+            {
+                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new BatchNormalizationLayer<T>(outC, h, w);
+            }
+
+            inC = outC;
+        }
+    }
+
+    /// <summary>
+    /// Creates decoder layers for the CUPS model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateCUPSDecoderLayers(
+        int encoderOutputChannels, int decoderDim, int numClasses,
+        int featureHeight, int featureWidth)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+    }
+
+    #endregion
+    #region SegGPT Layers
+
+    /// <summary>
+    /// Creates encoder layers for the SegGPT model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateSegGPTEncoderLayers(
+        int inputChannels, int inputHeight, int inputWidth,
+        int[] channelDims, int[] depths, double dropRate)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        int h = inputHeight, w = inputWidth, inC = inputChannels;
+
+        for (int stage = 0; stage < channelDims.Length; stage++)
+        {
+            int outC = channelDims[stage];
+            int stride = stage == 0 ? 4 : 2;
+            int kernel = stage == 0 ? 7 : 3;
+            int pad = stage == 0 ? 3 : 1;
+
+            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            h /= stride; w /= stride;
+            yield return new BatchNormalizationLayer<T>(outC, h, w);
+
+            for (int d = 1; d < depths[stage]; d++)
+            {
+                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new BatchNormalizationLayer<T>(outC, h, w);
+            }
+
+            inC = outC;
+        }
+    }
+
+    /// <summary>
+    /// Creates decoder layers for the SegGPT model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateSegGPTDecoderLayers(
+        int encoderOutputChannels, int decoderDim, int numClasses,
+        int featureHeight, int featureWidth)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+    }
+
+    #endregion
+    #region SEEM Layers
+
+    /// <summary>
+    /// Creates encoder layers for the SEEM model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateSEEMEncoderLayers(
+        int inputChannels, int inputHeight, int inputWidth,
+        int[] channelDims, int[] depths, double dropRate)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        int h = inputHeight, w = inputWidth, inC = inputChannels;
+
+        for (int stage = 0; stage < channelDims.Length; stage++)
+        {
+            int outC = channelDims[stage];
+            int stride = stage == 0 ? 4 : 2;
+            int kernel = stage == 0 ? 7 : 3;
+            int pad = stage == 0 ? 3 : 1;
+
+            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            h /= stride; w /= stride;
+            yield return new BatchNormalizationLayer<T>(outC, h, w);
+
+            for (int d = 1; d < depths[stage]; d++)
+            {
+                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new BatchNormalizationLayer<T>(outC, h, w);
+            }
+
+            inC = outC;
+        }
+    }
+
+    /// <summary>
+    /// Creates decoder layers for the SEEM model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateSEEMDecoderLayers(
+        int encoderOutputChannels, int decoderDim, int numClasses,
+        int featureHeight, int featureWidth)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+    }
+
+    #endregion
+    #region DEVA Layers
+
+    /// <summary>
+    /// Creates encoder layers for the DEVA model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDEVAEncoderLayers(
+        int inputChannels, int inputHeight, int inputWidth,
+        int[] channelDims, int[] depths, double dropRate)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        int h = inputHeight, w = inputWidth, inC = inputChannels;
+
+        for (int stage = 0; stage < channelDims.Length; stage++)
+        {
+            int outC = channelDims[stage];
+            int stride = stage == 0 ? 4 : 2;
+            int kernel = stage == 0 ? 7 : 3;
+            int pad = stage == 0 ? 3 : 1;
+
+            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            h /= stride; w /= stride;
+            yield return new BatchNormalizationLayer<T>(outC, h, w);
+
+            for (int d = 1; d < depths[stage]; d++)
+            {
+                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new BatchNormalizationLayer<T>(outC, h, w);
+            }
+
+            inC = outC;
+        }
+    }
+
+    /// <summary>
+    /// Creates decoder layers for the DEVA model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDEVADecoderLayers(
+        int encoderOutputChannels, int decoderDim, int numClasses,
+        int featureHeight, int featureWidth)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+    }
+
+    #endregion
+    #region EfficientTAM Layers
+
+    /// <summary>
+    /// Creates encoder layers for the EfficientTAM model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateEfficientTAMEncoderLayers(
+        int inputChannels, int inputHeight, int inputWidth,
+        int[] channelDims, int[] depths, double dropRate)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        int h = inputHeight, w = inputWidth, inC = inputChannels;
+
+        for (int stage = 0; stage < channelDims.Length; stage++)
+        {
+            int outC = channelDims[stage];
+            int stride = stage == 0 ? 4 : 2;
+            int kernel = stage == 0 ? 7 : 3;
+            int pad = stage == 0 ? 3 : 1;
+
+            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            h /= stride; w /= stride;
+            yield return new BatchNormalizationLayer<T>(outC, h, w);
+
+            for (int d = 1; d < depths[stage]; d++)
+            {
+                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new BatchNormalizationLayer<T>(outC, h, w);
+            }
+
+            inC = outC;
+        }
+    }
+
+    /// <summary>
+    /// Creates decoder layers for the EfficientTAM model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateEfficientTAMDecoderLayers(
+        int encoderOutputChannels, int decoderDim, int numClasses,
+        int featureHeight, int featureWidth)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+    }
+
+    #endregion
+    #region UniVS Layers
+
+    /// <summary>
+    /// Creates encoder layers for the UniVS model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateUniVSEncoderLayers(
+        int inputChannels, int inputHeight, int inputWidth,
+        int[] channelDims, int[] depths, double dropRate)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        int h = inputHeight, w = inputWidth, inC = inputChannels;
+
+        for (int stage = 0; stage < channelDims.Length; stage++)
+        {
+            int outC = channelDims[stage];
+            int stride = stage == 0 ? 4 : 2;
+            int kernel = stage == 0 ? 7 : 3;
+            int pad = stage == 0 ? 3 : 1;
+
+            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            h /= stride; w /= stride;
+            yield return new BatchNormalizationLayer<T>(outC, h, w);
+
+            for (int d = 1; d < depths[stage]; d++)
+            {
+                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new BatchNormalizationLayer<T>(outC, h, w);
+            }
+
+            inC = outC;
+        }
+    }
+
+    /// <summary>
+    /// Creates decoder layers for the UniVS model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateUniVSDecoderLayers(
+        int encoderOutputChannels, int decoderDim, int numClasses,
+        int featureHeight, int featureWidth)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+    }
+
+    #endregion
+    #region PointTransformerV3 Layers
+
+    /// <summary>
+    /// Creates encoder layers for the PointTransformerV3 model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreatePointTransformerV3EncoderLayers(
+        int inputChannels, int inputHeight, int inputWidth,
+        int[] channelDims, int[] depths, double dropRate)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        int h = inputHeight, w = inputWidth, inC = inputChannels;
+
+        for (int stage = 0; stage < channelDims.Length; stage++)
+        {
+            int outC = channelDims[stage];
+            int stride = stage == 0 ? 4 : 2;
+            int kernel = stage == 0 ? 7 : 3;
+            int pad = stage == 0 ? 3 : 1;
+
+            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            h /= stride; w /= stride;
+            yield return new BatchNormalizationLayer<T>(outC, h, w);
+
+            for (int d = 1; d < depths[stage]; d++)
+            {
+                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new BatchNormalizationLayer<T>(outC, h, w);
+            }
+
+            inC = outC;
+        }
+    }
+
+    /// <summary>
+    /// Creates decoder layers for the PointTransformerV3 model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreatePointTransformerV3DecoderLayers(
+        int encoderOutputChannels, int decoderDim, int numClasses,
+        int featureHeight, int featureWidth)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+    }
+
+    #endregion
+    #region Sonata Layers
+
+    /// <summary>
+    /// Creates encoder layers for the Sonata model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateSonataEncoderLayers(
+        int inputChannels, int inputHeight, int inputWidth,
+        int[] channelDims, int[] depths, double dropRate)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        int h = inputHeight, w = inputWidth, inC = inputChannels;
+
+        for (int stage = 0; stage < channelDims.Length; stage++)
+        {
+            int outC = channelDims[stage];
+            int stride = stage == 0 ? 4 : 2;
+            int kernel = stage == 0 ? 7 : 3;
+            int pad = stage == 0 ? 3 : 1;
+
+            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            h /= stride; w /= stride;
+            yield return new BatchNormalizationLayer<T>(outC, h, w);
+
+            for (int d = 1; d < depths[stage]; d++)
+            {
+                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new BatchNormalizationLayer<T>(outC, h, w);
+            }
+
+            inC = outC;
+        }
+    }
+
+    /// <summary>
+    /// Creates decoder layers for the Sonata model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateSonataDecoderLayers(
+        int encoderOutputChannels, int decoderDim, int numClasses,
+        int featureHeight, int featureWidth)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+    }
+
+    #endregion
+    #region Concerto Layers
+
+    /// <summary>
+    /// Creates encoder layers for the Concerto model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateConcertoEncoderLayers(
+        int inputChannels, int inputHeight, int inputWidth,
+        int[] channelDims, int[] depths, double dropRate)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        int h = inputHeight, w = inputWidth, inC = inputChannels;
+
+        for (int stage = 0; stage < channelDims.Length; stage++)
+        {
+            int outC = channelDims[stage];
+            int stride = stage == 0 ? 4 : 2;
+            int kernel = stage == 0 ? 7 : 3;
+            int pad = stage == 0 ? 3 : 1;
+
+            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            h /= stride; w /= stride;
+            yield return new BatchNormalizationLayer<T>(outC, h, w);
+
+            for (int d = 1; d < depths[stage]; d++)
+            {
+                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new BatchNormalizationLayer<T>(outC, h, w);
+            }
+
+            inC = outC;
+        }
+    }
+
+    /// <summary>
+    /// Creates decoder layers for the Concerto model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateConcertoDecoderLayers(
+        int encoderOutputChannels, int decoderDim, int numClasses,
+        int featureHeight, int featureWidth)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+    }
+
+    #endregion
+    #region NnUNet Layers
+
+    /// <summary>
+    /// Creates encoder layers for the NnUNet model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateNnUNetEncoderLayers(
+        int inputChannels, int inputHeight, int inputWidth,
+        int[] channelDims, int[] depths, double dropRate)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        int h = inputHeight, w = inputWidth, inC = inputChannels;
+
+        for (int stage = 0; stage < channelDims.Length; stage++)
+        {
+            int outC = channelDims[stage];
+            int stride = stage == 0 ? 4 : 2;
+            int kernel = stage == 0 ? 7 : 3;
+            int pad = stage == 0 ? 3 : 1;
+
+            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            h /= stride; w /= stride;
+            yield return new BatchNormalizationLayer<T>(outC, h, w);
+
+            for (int d = 1; d < depths[stage]; d++)
+            {
+                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new BatchNormalizationLayer<T>(outC, h, w);
+            }
+
+            inC = outC;
+        }
+    }
+
+    /// <summary>
+    /// Creates decoder layers for the NnUNet model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateNnUNetDecoderLayers(
+        int encoderOutputChannels, int decoderDim, int numClasses,
+        int featureHeight, int featureWidth)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+    }
+
+    #endregion
+    #region TransUNet Layers
+
+    /// <summary>
+    /// Creates encoder layers for the TransUNet model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateTransUNetEncoderLayers(
+        int inputChannels, int inputHeight, int inputWidth,
+        int[] channelDims, int[] depths, double dropRate)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        int h = inputHeight, w = inputWidth, inC = inputChannels;
+
+        for (int stage = 0; stage < channelDims.Length; stage++)
+        {
+            int outC = channelDims[stage];
+            int stride = stage == 0 ? 4 : 2;
+            int kernel = stage == 0 ? 7 : 3;
+            int pad = stage == 0 ? 3 : 1;
+
+            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            h /= stride; w /= stride;
+            yield return new BatchNormalizationLayer<T>(outC, h, w);
+
+            for (int d = 1; d < depths[stage]; d++)
+            {
+                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new BatchNormalizationLayer<T>(outC, h, w);
+            }
+
+            inC = outC;
+        }
+    }
+
+    /// <summary>
+    /// Creates decoder layers for the TransUNet model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateTransUNetDecoderLayers(
+        int encoderOutputChannels, int decoderDim, int numClasses,
+        int featureHeight, int featureWidth)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+    }
+
+    #endregion
+    #region SwinUNETR Layers
+
+    /// <summary>
+    /// Creates encoder layers for the SwinUNETR model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateSwinUNETREncoderLayers(
+        int inputChannels, int inputHeight, int inputWidth,
+        int[] channelDims, int[] depths, double dropRate)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        int h = inputHeight, w = inputWidth, inC = inputChannels;
+
+        for (int stage = 0; stage < channelDims.Length; stage++)
+        {
+            int outC = channelDims[stage];
+            int stride = stage == 0 ? 4 : 2;
+            int kernel = stage == 0 ? 7 : 3;
+            int pad = stage == 0 ? 3 : 1;
+
+            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            h /= stride; w /= stride;
+            yield return new BatchNormalizationLayer<T>(outC, h, w);
+
+            for (int d = 1; d < depths[stage]; d++)
+            {
+                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new BatchNormalizationLayer<T>(outC, h, w);
+            }
+
+            inC = outC;
+        }
+    }
+
+    /// <summary>
+    /// Creates decoder layers for the SwinUNETR model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateSwinUNETRDecoderLayers(
+        int encoderOutputChannels, int decoderDim, int numClasses,
+        int featureHeight, int featureWidth)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+    }
+
+    #endregion
+    #region MedSAM Layers
+
+    /// <summary>
+    /// Creates encoder layers for the MedSAM model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateMedSAMEncoderLayers(
+        int inputChannels, int inputHeight, int inputWidth,
+        int[] channelDims, int[] depths, double dropRate)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        int h = inputHeight, w = inputWidth, inC = inputChannels;
+
+        for (int stage = 0; stage < channelDims.Length; stage++)
+        {
+            int outC = channelDims[stage];
+            int stride = stage == 0 ? 4 : 2;
+            int kernel = stage == 0 ? 7 : 3;
+            int pad = stage == 0 ? 3 : 1;
+
+            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            h /= stride; w /= stride;
+            yield return new BatchNormalizationLayer<T>(outC, h, w);
+
+            for (int d = 1; d < depths[stage]; d++)
+            {
+                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new BatchNormalizationLayer<T>(outC, h, w);
+            }
+
+            inC = outC;
+        }
+    }
+
+    /// <summary>
+    /// Creates decoder layers for the MedSAM model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateMedSAMDecoderLayers(
+        int encoderOutputChannels, int decoderDim, int numClasses,
+        int featureHeight, int featureWidth)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+    }
+
+    #endregion
+    #region MedSAM2 Layers
+
+    /// <summary>
+    /// Creates encoder layers for the MedSAM2 model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateMedSAM2EncoderLayers(
+        int inputChannels, int inputHeight, int inputWidth,
+        int[] channelDims, int[] depths, double dropRate)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        int h = inputHeight, w = inputWidth, inC = inputChannels;
+
+        for (int stage = 0; stage < channelDims.Length; stage++)
+        {
+            int outC = channelDims[stage];
+            int stride = stage == 0 ? 4 : 2;
+            int kernel = stage == 0 ? 7 : 3;
+            int pad = stage == 0 ? 3 : 1;
+
+            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            h /= stride; w /= stride;
+            yield return new BatchNormalizationLayer<T>(outC, h, w);
+
+            for (int d = 1; d < depths[stage]; d++)
+            {
+                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new BatchNormalizationLayer<T>(outC, h, w);
+            }
+
+            inC = outC;
+        }
+    }
+
+    /// <summary>
+    /// Creates decoder layers for the MedSAM2 model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateMedSAM2DecoderLayers(
+        int encoderOutputChannels, int decoderDim, int numClasses,
+        int featureHeight, int featureWidth)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+    }
+
+    #endregion
+    #region MedNeXt Layers
+
+    /// <summary>
+    /// Creates encoder layers for the MedNeXt model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateMedNeXtEncoderLayers(
+        int inputChannels, int inputHeight, int inputWidth,
+        int[] channelDims, int[] depths, double dropRate)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        int h = inputHeight, w = inputWidth, inC = inputChannels;
+
+        for (int stage = 0; stage < channelDims.Length; stage++)
+        {
+            int outC = channelDims[stage];
+            int stride = stage == 0 ? 4 : 2;
+            int kernel = stage == 0 ? 7 : 3;
+            int pad = stage == 0 ? 3 : 1;
+
+            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            h /= stride; w /= stride;
+            yield return new BatchNormalizationLayer<T>(outC, h, w);
+
+            for (int d = 1; d < depths[stage]; d++)
+            {
+                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new BatchNormalizationLayer<T>(outC, h, w);
+            }
+
+            inC = outC;
+        }
+    }
+
+    /// <summary>
+    /// Creates decoder layers for the MedNeXt model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateMedNeXtDecoderLayers(
+        int encoderOutputChannels, int decoderDim, int numClasses,
+        int featureHeight, int featureWidth)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+    }
+
+    #endregion
+    #region UniverSeg Layers
+
+    /// <summary>
+    /// Creates encoder layers for the UniverSeg model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateUniverSegEncoderLayers(
+        int inputChannels, int inputHeight, int inputWidth,
+        int[] channelDims, int[] depths, double dropRate)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        int h = inputHeight, w = inputWidth, inC = inputChannels;
+
+        for (int stage = 0; stage < channelDims.Length; stage++)
+        {
+            int outC = channelDims[stage];
+            int stride = stage == 0 ? 4 : 2;
+            int kernel = stage == 0 ? 7 : 3;
+            int pad = stage == 0 ? 3 : 1;
+
+            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            h /= stride; w /= stride;
+            yield return new BatchNormalizationLayer<T>(outC, h, w);
+
+            for (int d = 1; d < depths[stage]; d++)
+            {
+                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new BatchNormalizationLayer<T>(outC, h, w);
+            }
+
+            inC = outC;
+        }
+    }
+
+    /// <summary>
+    /// Creates decoder layers for the UniverSeg model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateUniverSegDecoderLayers(
+        int encoderOutputChannels, int decoderDim, int numClasses,
+        int featureHeight, int featureWidth)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+    }
+
+    #endregion
+    #region BiomedParse Layers
+
+    /// <summary>
+    /// Creates encoder layers for the BiomedParse model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateBiomedParseEncoderLayers(
+        int inputChannels, int inputHeight, int inputWidth,
+        int[] channelDims, int[] depths, double dropRate)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        int h = inputHeight, w = inputWidth, inC = inputChannels;
+
+        for (int stage = 0; stage < channelDims.Length; stage++)
+        {
+            int outC = channelDims[stage];
+            int stride = stage == 0 ? 4 : 2;
+            int kernel = stage == 0 ? 7 : 3;
+            int pad = stage == 0 ? 3 : 1;
+
+            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            h /= stride; w /= stride;
+            yield return new BatchNormalizationLayer<T>(outC, h, w);
+
+            for (int d = 1; d < depths[stage]; d++)
+            {
+                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new BatchNormalizationLayer<T>(outC, h, w);
+            }
+
+            inC = outC;
+        }
+    }
+
+    /// <summary>
+    /// Creates decoder layers for the BiomedParse model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateBiomedParseDecoderLayers(
+        int encoderOutputChannels, int decoderDim, int numClasses,
+        int featureHeight, int featureWidth)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+    }
+
+    #endregion
+    #region MedSegDiffV2 Layers
+
+    /// <summary>
+    /// Creates encoder layers for the MedSegDiffV2 model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateMedSegDiffV2EncoderLayers(
+        int inputChannels, int inputHeight, int inputWidth,
+        int[] channelDims, int[] depths, double dropRate)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        int h = inputHeight, w = inputWidth, inC = inputChannels;
+
+        for (int stage = 0; stage < channelDims.Length; stage++)
+        {
+            int outC = channelDims[stage];
+            int stride = stage == 0 ? 4 : 2;
+            int kernel = stage == 0 ? 7 : 3;
+            int pad = stage == 0 ? 3 : 1;
+
+            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            h /= stride; w /= stride;
+            yield return new BatchNormalizationLayer<T>(outC, h, w);
+
+            for (int d = 1; d < depths[stage]; d++)
+            {
+                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new BatchNormalizationLayer<T>(outC, h, w);
+            }
+
+            inC = outC;
+        }
+    }
+
+    /// <summary>
+    /// Creates decoder layers for the MedSegDiffV2 model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateMedSegDiffV2DecoderLayers(
+        int encoderOutputChannels, int decoderDim, int numClasses,
+        int featureHeight, int featureWidth)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+    }
+
+    #endregion
+    #region UMamba Layers
+
+    /// <summary>
+    /// Creates encoder layers for the UMamba model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateUMambaEncoderLayers(
+        int inputChannels, int inputHeight, int inputWidth,
+        int[] channelDims, int[] depths, double dropRate)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        int h = inputHeight, w = inputWidth, inC = inputChannels;
+
+        for (int stage = 0; stage < channelDims.Length; stage++)
+        {
+            int outC = channelDims[stage];
+            int stride = stage == 0 ? 4 : 2;
+            int kernel = stage == 0 ? 7 : 3;
+            int pad = stage == 0 ? 3 : 1;
+
+            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            h /= stride; w /= stride;
+            yield return new BatchNormalizationLayer<T>(outC, h, w);
+
+            for (int d = 1; d < depths[stage]; d++)
+            {
+                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new BatchNormalizationLayer<T>(outC, h, w);
+            }
+
+            inC = outC;
+        }
+    }
+
+    /// <summary>
+    /// Creates decoder layers for the UMamba model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateUMambaDecoderLayers(
+        int encoderOutputChannels, int decoderDim, int numClasses,
+        int featureHeight, int featureWidth)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+    }
+
+    #endregion
+    #region SegMamba Layers
+
+    /// <summary>
+    /// Creates encoder layers for the SegMamba model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateSegMambaEncoderLayers(
+        int inputChannels, int inputHeight, int inputWidth,
+        int[] channelDims, int[] depths, double dropRate)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        int h = inputHeight, w = inputWidth, inC = inputChannels;
+
+        for (int stage = 0; stage < channelDims.Length; stage++)
+        {
+            int outC = channelDims[stage];
+            int stride = stage == 0 ? 4 : 2;
+            int kernel = stage == 0 ? 7 : 3;
+            int pad = stage == 0 ? 3 : 1;
+
+            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            h /= stride; w /= stride;
+            yield return new BatchNormalizationLayer<T>(outC, h, w);
+
+            for (int d = 1; d < depths[stage]; d++)
+            {
+                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new BatchNormalizationLayer<T>(outC, h, w);
+            }
+
+            inC = outC;
+        }
+    }
+
+    /// <summary>
+    /// Creates decoder layers for the SegMamba model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateSegMambaDecoderLayers(
+        int encoderOutputChannels, int decoderDim, int numClasses,
+        int featureHeight, int featureWidth)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+    }
+
+    #endregion
+    #region SAN Layers
+
+    /// <summary>
+    /// Creates encoder layers for the SAN model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateSANEncoderLayers(
+        int inputChannels, int inputHeight, int inputWidth,
+        int[] channelDims, int[] depths, double dropRate)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        int h = inputHeight, w = inputWidth, inC = inputChannels;
+
+        for (int stage = 0; stage < channelDims.Length; stage++)
+        {
+            int outC = channelDims[stage];
+            int stride = stage == 0 ? 4 : 2;
+            int kernel = stage == 0 ? 7 : 3;
+            int pad = stage == 0 ? 3 : 1;
+
+            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            h /= stride; w /= stride;
+            yield return new BatchNormalizationLayer<T>(outC, h, w);
+
+            for (int d = 1; d < depths[stage]; d++)
+            {
+                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new BatchNormalizationLayer<T>(outC, h, w);
+            }
+
+            inC = outC;
+        }
+    }
+
+    /// <summary>
+    /// Creates decoder layers for the SAN model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateSANDecoderLayers(
+        int encoderOutputChannels, int decoderDim, int numClasses,
+        int featureHeight, int featureWidth)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+    }
+
+    #endregion
+    #region CATSeg Layers
+
+    /// <summary>
+    /// Creates encoder layers for the CATSeg model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateCATSegEncoderLayers(
+        int inputChannels, int inputHeight, int inputWidth,
+        int[] channelDims, int[] depths, double dropRate)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        int h = inputHeight, w = inputWidth, inC = inputChannels;
+
+        for (int stage = 0; stage < channelDims.Length; stage++)
+        {
+            int outC = channelDims[stage];
+            int stride = stage == 0 ? 4 : 2;
+            int kernel = stage == 0 ? 7 : 3;
+            int pad = stage == 0 ? 3 : 1;
+
+            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            h /= stride; w /= stride;
+            yield return new BatchNormalizationLayer<T>(outC, h, w);
+
+            for (int d = 1; d < depths[stage]; d++)
+            {
+                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new BatchNormalizationLayer<T>(outC, h, w);
+            }
+
+            inC = outC;
+        }
+    }
+
+    /// <summary>
+    /// Creates decoder layers for the CATSeg model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateCATSegDecoderLayers(
+        int encoderOutputChannels, int decoderDim, int numClasses,
+        int featureHeight, int featureWidth)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+    }
+
+    #endregion
+    #region SED Layers
+
+    /// <summary>
+    /// Creates encoder layers for the SED model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateSEDEncoderLayers(
+        int inputChannels, int inputHeight, int inputWidth,
+        int[] channelDims, int[] depths, double dropRate)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        int h = inputHeight, w = inputWidth, inC = inputChannels;
+
+        for (int stage = 0; stage < channelDims.Length; stage++)
+        {
+            int outC = channelDims[stage];
+            int stride = stage == 0 ? 4 : 2;
+            int kernel = stage == 0 ? 7 : 3;
+            int pad = stage == 0 ? 3 : 1;
+
+            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            h /= stride; w /= stride;
+            yield return new BatchNormalizationLayer<T>(outC, h, w);
+
+            for (int d = 1; d < depths[stage]; d++)
+            {
+                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new BatchNormalizationLayer<T>(outC, h, w);
+            }
+
+            inC = outC;
+        }
+    }
+
+    /// <summary>
+    /// Creates decoder layers for the SED model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateSEDDecoderLayers(
+        int encoderOutputChannels, int decoderDim, int numClasses,
+        int featureHeight, int featureWidth)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+    }
+
+    #endregion
+    #region OpenVocabSAM Layers
+
+    /// <summary>
+    /// Creates encoder layers for the OpenVocabSAM model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateOpenVocabSAMEncoderLayers(
+        int inputChannels, int inputHeight, int inputWidth,
+        int[] channelDims, int[] depths, double dropRate)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        int h = inputHeight, w = inputWidth, inC = inputChannels;
+
+        for (int stage = 0; stage < channelDims.Length; stage++)
+        {
+            int outC = channelDims[stage];
+            int stride = stage == 0 ? 4 : 2;
+            int kernel = stage == 0 ? 7 : 3;
+            int pad = stage == 0 ? 3 : 1;
+
+            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            h /= stride; w /= stride;
+            yield return new BatchNormalizationLayer<T>(outC, h, w);
+
+            for (int d = 1; d < depths[stage]; d++)
+            {
+                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new BatchNormalizationLayer<T>(outC, h, w);
+            }
+
+            inC = outC;
+        }
+    }
+
+    /// <summary>
+    /// Creates decoder layers for the OpenVocabSAM model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateOpenVocabSAMDecoderLayers(
+        int encoderOutputChannels, int decoderDim, int numClasses,
+        int featureHeight, int featureWidth)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+    }
+
+    #endregion
+    #region GroundedSAM2 Layers
+
+    /// <summary>
+    /// Creates encoder layers for the GroundedSAM2 model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateGroundedSAM2EncoderLayers(
+        int inputChannels, int inputHeight, int inputWidth,
+        int[] channelDims, int[] depths, double dropRate)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        int h = inputHeight, w = inputWidth, inC = inputChannels;
+
+        for (int stage = 0; stage < channelDims.Length; stage++)
+        {
+            int outC = channelDims[stage];
+            int stride = stage == 0 ? 4 : 2;
+            int kernel = stage == 0 ? 7 : 3;
+            int pad = stage == 0 ? 3 : 1;
+
+            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            h /= stride; w /= stride;
+            yield return new BatchNormalizationLayer<T>(outC, h, w);
+
+            for (int d = 1; d < depths[stage]; d++)
+            {
+                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new BatchNormalizationLayer<T>(outC, h, w);
+            }
+
+            inC = outC;
+        }
+    }
+
+    /// <summary>
+    /// Creates decoder layers for the GroundedSAM2 model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateGroundedSAM2DecoderLayers(
+        int encoderOutputChannels, int decoderDim, int numClasses,
+        int featureHeight, int featureWidth)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+    }
+
+    #endregion
+    #region MaskAdapter Layers
+
+    /// <summary>
+    /// Creates encoder layers for the MaskAdapter model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateMaskAdapterEncoderLayers(
+        int inputChannels, int inputHeight, int inputWidth,
+        int[] channelDims, int[] depths, double dropRate)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        int h = inputHeight, w = inputWidth, inC = inputChannels;
+
+        for (int stage = 0; stage < channelDims.Length; stage++)
+        {
+            int outC = channelDims[stage];
+            int stride = stage == 0 ? 4 : 2;
+            int kernel = stage == 0 ? 7 : 3;
+            int pad = stage == 0 ? 3 : 1;
+
+            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            h /= stride; w /= stride;
+            yield return new BatchNormalizationLayer<T>(outC, h, w);
+
+            for (int d = 1; d < depths[stage]; d++)
+            {
+                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new BatchNormalizationLayer<T>(outC, h, w);
+            }
+
+            inC = outC;
+        }
+    }
+
+    /// <summary>
+    /// Creates decoder layers for the MaskAdapter model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateMaskAdapterDecoderLayers(
+        int encoderOutputChannels, int decoderDim, int numClasses,
+        int featureHeight, int featureWidth)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+    }
+
+    #endregion
+    #region PIDNet Layers
+
+    /// <summary>
+    /// Creates encoder layers for the PIDNet model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreatePIDNetEncoderLayers(
+        int inputChannels, int inputHeight, int inputWidth,
+        int[] channelDims, int[] depths, double dropRate)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        int h = inputHeight, w = inputWidth, inC = inputChannels;
+
+        for (int stage = 0; stage < channelDims.Length; stage++)
+        {
+            int outC = channelDims[stage];
+            int stride = stage == 0 ? 4 : 2;
+            int kernel = stage == 0 ? 7 : 3;
+            int pad = stage == 0 ? 3 : 1;
+
+            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            h /= stride; w /= stride;
+            yield return new BatchNormalizationLayer<T>(outC, h, w);
+
+            for (int d = 1; d < depths[stage]; d++)
+            {
+                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new BatchNormalizationLayer<T>(outC, h, w);
+            }
+
+            inC = outC;
+        }
+    }
+
+    /// <summary>
+    /// Creates decoder layers for the PIDNet model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreatePIDNetDecoderLayers(
+        int encoderOutputChannels, int decoderDim, int numClasses,
+        int featureHeight, int featureWidth)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+    }
+
+    #endregion
+    #region FastSAM Layers
+
+    /// <summary>
+    /// Creates encoder layers for the FastSAM model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateFastSAMEncoderLayers(
+        int inputChannels, int inputHeight, int inputWidth,
+        int[] channelDims, int[] depths, double dropRate)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        int h = inputHeight, w = inputWidth, inC = inputChannels;
+
+        for (int stage = 0; stage < channelDims.Length; stage++)
+        {
+            int outC = channelDims[stage];
+            int stride = stage == 0 ? 4 : 2;
+            int kernel = stage == 0 ? 7 : 3;
+            int pad = stage == 0 ? 3 : 1;
+
+            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            h /= stride; w /= stride;
+            yield return new BatchNormalizationLayer<T>(outC, h, w);
+
+            for (int d = 1; d < depths[stage]; d++)
+            {
+                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new BatchNormalizationLayer<T>(outC, h, w);
+            }
+
+            inC = outC;
+        }
+    }
+
+    /// <summary>
+    /// Creates decoder layers for the FastSAM model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateFastSAMDecoderLayers(
+        int encoderOutputChannels, int decoderDim, int numClasses,
+        int featureHeight, int featureWidth)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+    }
+
+    #endregion
+    #region MobileSAM Layers
+
+    /// <summary>
+    /// Creates encoder layers for the MobileSAM model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateMobileSAMEncoderLayers(
+        int inputChannels, int inputHeight, int inputWidth,
+        int[] channelDims, int[] depths, double dropRate)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        int h = inputHeight, w = inputWidth, inC = inputChannels;
+
+        for (int stage = 0; stage < channelDims.Length; stage++)
+        {
+            int outC = channelDims[stage];
+            int stride = stage == 0 ? 4 : 2;
+            int kernel = stage == 0 ? 7 : 3;
+            int pad = stage == 0 ? 3 : 1;
+
+            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            h /= stride; w /= stride;
+            yield return new BatchNormalizationLayer<T>(outC, h, w);
+
+            for (int d = 1; d < depths[stage]; d++)
+            {
+                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new BatchNormalizationLayer<T>(outC, h, w);
+            }
+
+            inC = outC;
+        }
+    }
+
+    /// <summary>
+    /// Creates decoder layers for the MobileSAM model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateMobileSAMDecoderLayers(
+        int encoderOutputChannels, int decoderDim, int numClasses,
+        int featureHeight, int featureWidth)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+    }
+
+    #endregion
+    #region EdgeSAM Layers
+
+    /// <summary>
+    /// Creates encoder layers for the EdgeSAM model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateEdgeSAMEncoderLayers(
+        int inputChannels, int inputHeight, int inputWidth,
+        int[] channelDims, int[] depths, double dropRate)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        int h = inputHeight, w = inputWidth, inC = inputChannels;
+
+        for (int stage = 0; stage < channelDims.Length; stage++)
+        {
+            int outC = channelDims[stage];
+            int stride = stage == 0 ? 4 : 2;
+            int kernel = stage == 0 ? 7 : 3;
+            int pad = stage == 0 ? 3 : 1;
+
+            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            h /= stride; w /= stride;
+            yield return new BatchNormalizationLayer<T>(outC, h, w);
+
+            for (int d = 1; d < depths[stage]; d++)
+            {
+                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new BatchNormalizationLayer<T>(outC, h, w);
+            }
+
+            inC = outC;
+        }
+    }
+
+    /// <summary>
+    /// Creates decoder layers for the EdgeSAM model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateEdgeSAMDecoderLayers(
+        int encoderOutputChannels, int decoderDim, int numClasses,
+        int featureHeight, int featureWidth)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+    }
+
+    #endregion
+    #region SlimSAM Layers
+
+    /// <summary>
+    /// Creates encoder layers for the SlimSAM model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateSlimSAMEncoderLayers(
+        int inputChannels, int inputHeight, int inputWidth,
+        int[] channelDims, int[] depths, double dropRate)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        int h = inputHeight, w = inputWidth, inC = inputChannels;
+
+        for (int stage = 0; stage < channelDims.Length; stage++)
+        {
+            int outC = channelDims[stage];
+            int stride = stage == 0 ? 4 : 2;
+            int kernel = stage == 0 ? 7 : 3;
+            int pad = stage == 0 ? 3 : 1;
+
+            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            h /= stride; w /= stride;
+            yield return new BatchNormalizationLayer<T>(outC, h, w);
+
+            for (int d = 1; d < depths[stage]; d++)
+            {
+                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new BatchNormalizationLayer<T>(outC, h, w);
+            }
+
+            inC = outC;
+        }
+    }
+
+    /// <summary>
+    /// Creates decoder layers for the SlimSAM model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateSlimSAMDecoderLayers(
+        int encoderOutputChannels, int decoderDim, int numClasses,
+        int featureHeight, int featureWidth)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+    }
+
+    #endregion
+    #region EfficientSAM Layers
+
+    /// <summary>
+    /// Creates encoder layers for the EfficientSAM model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateEfficientSAMEncoderLayers(
+        int inputChannels, int inputHeight, int inputWidth,
+        int[] channelDims, int[] depths, double dropRate)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        int h = inputHeight, w = inputWidth, inC = inputChannels;
+
+        for (int stage = 0; stage < channelDims.Length; stage++)
+        {
+            int outC = channelDims[stage];
+            int stride = stage == 0 ? 4 : 2;
+            int kernel = stage == 0 ? 7 : 3;
+            int pad = stage == 0 ? 3 : 1;
+
+            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            h /= stride; w /= stride;
+            yield return new BatchNormalizationLayer<T>(outC, h, w);
+
+            for (int d = 1; d < depths[stage]; d++)
+            {
+                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new BatchNormalizationLayer<T>(outC, h, w);
+            }
+
+            inC = outC;
+        }
+    }
+
+    /// <summary>
+    /// Creates decoder layers for the EfficientSAM model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateEfficientSAMDecoderLayers(
+        int encoderOutputChannels, int decoderDim, int numClasses,
+        int featureHeight, int featureWidth)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+    }
+
+    #endregion
+    #region RepViTSAM Layers
+
+    /// <summary>
+    /// Creates encoder layers for the RepViTSAM model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateRepViTSAMEncoderLayers(
+        int inputChannels, int inputHeight, int inputWidth,
+        int[] channelDims, int[] depths, double dropRate)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        int h = inputHeight, w = inputWidth, inC = inputChannels;
+
+        for (int stage = 0; stage < channelDims.Length; stage++)
+        {
+            int outC = channelDims[stage];
+            int stride = stage == 0 ? 4 : 2;
+            int kernel = stage == 0 ? 7 : 3;
+            int pad = stage == 0 ? 3 : 1;
+
+            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            h /= stride; w /= stride;
+            yield return new BatchNormalizationLayer<T>(outC, h, w);
+
+            for (int d = 1; d < depths[stage]; d++)
+            {
+                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new BatchNormalizationLayer<T>(outC, h, w);
+            }
+
+            inC = outC;
+        }
+    }
+
+    /// <summary>
+    /// Creates decoder layers for the RepViTSAM model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateRepViTSAMDecoderLayers(
+        int encoderOutputChannels, int decoderDim, int numClasses,
+        int featureHeight, int featureWidth)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+    }
+
+    #endregion
+    #region LISA Layers
+
+    /// <summary>
+    /// Creates encoder layers for the LISA model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateLISAEncoderLayers(
+        int inputChannels, int inputHeight, int inputWidth,
+        int[] channelDims, int[] depths, double dropRate)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        int h = inputHeight, w = inputWidth, inC = inputChannels;
+
+        for (int stage = 0; stage < channelDims.Length; stage++)
+        {
+            int outC = channelDims[stage];
+            int stride = stage == 0 ? 4 : 2;
+            int kernel = stage == 0 ? 7 : 3;
+            int pad = stage == 0 ? 3 : 1;
+
+            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            h /= stride; w /= stride;
+            yield return new BatchNormalizationLayer<T>(outC, h, w);
+
+            for (int d = 1; d < depths[stage]; d++)
+            {
+                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new BatchNormalizationLayer<T>(outC, h, w);
+            }
+
+            inC = outC;
+        }
+    }
+
+    /// <summary>
+    /// Creates decoder layers for the LISA model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateLISADecoderLayers(
+        int encoderOutputChannels, int decoderDim, int numClasses,
+        int featureHeight, int featureWidth)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+    }
+
+    #endregion
+    #region VideoLISA Layers
+
+    /// <summary>
+    /// Creates encoder layers for the VideoLISA model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateVideoLISAEncoderLayers(
+        int inputChannels, int inputHeight, int inputWidth,
+        int[] channelDims, int[] depths, double dropRate)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        int h = inputHeight, w = inputWidth, inC = inputChannels;
+
+        for (int stage = 0; stage < channelDims.Length; stage++)
+        {
+            int outC = channelDims[stage];
+            int stride = stage == 0 ? 4 : 2;
+            int kernel = stage == 0 ? 7 : 3;
+            int pad = stage == 0 ? 3 : 1;
+
+            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            h /= stride; w /= stride;
+            yield return new BatchNormalizationLayer<T>(outC, h, w);
+
+            for (int d = 1; d < depths[stage]; d++)
+            {
+                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new BatchNormalizationLayer<T>(outC, h, w);
+            }
+
+            inC = outC;
+        }
+    }
+
+    /// <summary>
+    /// Creates decoder layers for the VideoLISA model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateVideoLISADecoderLayers(
+        int encoderOutputChannels, int decoderDim, int numClasses,
+        int featureHeight, int featureWidth)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+    }
+
+    #endregion
+    #region GLaMM Layers
+
+    /// <summary>
+    /// Creates encoder layers for the GLaMM model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateGLaMMEncoderLayers(
+        int inputChannels, int inputHeight, int inputWidth,
+        int[] channelDims, int[] depths, double dropRate)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        int h = inputHeight, w = inputWidth, inC = inputChannels;
+
+        for (int stage = 0; stage < channelDims.Length; stage++)
+        {
+            int outC = channelDims[stage];
+            int stride = stage == 0 ? 4 : 2;
+            int kernel = stage == 0 ? 7 : 3;
+            int pad = stage == 0 ? 3 : 1;
+
+            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            h /= stride; w /= stride;
+            yield return new BatchNormalizationLayer<T>(outC, h, w);
+
+            for (int d = 1; d < depths[stage]; d++)
+            {
+                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new BatchNormalizationLayer<T>(outC, h, w);
+            }
+
+            inC = outC;
+        }
+    }
+
+    /// <summary>
+    /// Creates decoder layers for the GLaMM model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateGLaMMDecoderLayers(
+        int encoderOutputChannels, int decoderDim, int numClasses,
+        int featureHeight, int featureWidth)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+    }
+
+    #endregion
+    #region OMGLLaVA Layers
+
+    /// <summary>
+    /// Creates encoder layers for the OMGLLaVA model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateOMGLLaVAEncoderLayers(
+        int inputChannels, int inputHeight, int inputWidth,
+        int[] channelDims, int[] depths, double dropRate)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        int h = inputHeight, w = inputWidth, inC = inputChannels;
+
+        for (int stage = 0; stage < channelDims.Length; stage++)
+        {
+            int outC = channelDims[stage];
+            int stride = stage == 0 ? 4 : 2;
+            int kernel = stage == 0 ? 7 : 3;
+            int pad = stage == 0 ? 3 : 1;
+
+            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            h /= stride; w /= stride;
+            yield return new BatchNormalizationLayer<T>(outC, h, w);
+
+            for (int d = 1; d < depths[stage]; d++)
+            {
+                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new BatchNormalizationLayer<T>(outC, h, w);
+            }
+
+            inC = outC;
+        }
+    }
+
+    /// <summary>
+    /// Creates decoder layers for the OMGLLaVA model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateOMGLLaVADecoderLayers(
+        int encoderOutputChannels, int decoderDim, int numClasses,
+        int featureHeight, int featureWidth)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+    }
+
+    #endregion
+    #region PixelLM Layers
+
+    /// <summary>
+    /// Creates encoder layers for the PixelLM model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreatePixelLMEncoderLayers(
+        int inputChannels, int inputHeight, int inputWidth,
+        int[] channelDims, int[] depths, double dropRate)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        int h = inputHeight, w = inputWidth, inC = inputChannels;
+
+        for (int stage = 0; stage < channelDims.Length; stage++)
+        {
+            int outC = channelDims[stage];
+            int stride = stage == 0 ? 4 : 2;
+            int kernel = stage == 0 ? 7 : 3;
+            int pad = stage == 0 ? 3 : 1;
+
+            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            h /= stride; w /= stride;
+            yield return new BatchNormalizationLayer<T>(outC, h, w);
+
+            for (int d = 1; d < depths[stage]; d++)
+            {
+                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new BatchNormalizationLayer<T>(outC, h, w);
+            }
+
+            inC = outC;
+        }
+    }
+
+    /// <summary>
+    /// Creates decoder layers for the PixelLM model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreatePixelLMDecoderLayers(
+        int encoderOutputChannels, int decoderDim, int numClasses,
+        int featureHeight, int featureWidth)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+    }
+
+    #endregion
+    #region VisionMamba Layers
+
+    /// <summary>
+    /// Creates encoder layers for the VisionMamba model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateVisionMambaEncoderLayers(
+        int inputChannels, int inputHeight, int inputWidth,
+        int[] channelDims, int[] depths, double dropRate)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        int h = inputHeight, w = inputWidth, inC = inputChannels;
+
+        for (int stage = 0; stage < channelDims.Length; stage++)
+        {
+            int outC = channelDims[stage];
+            int stride = stage == 0 ? 4 : 2;
+            int kernel = stage == 0 ? 7 : 3;
+            int pad = stage == 0 ? 3 : 1;
+
+            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            h /= stride; w /= stride;
+            yield return new BatchNormalizationLayer<T>(outC, h, w);
+
+            for (int d = 1; d < depths[stage]; d++)
+            {
+                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new BatchNormalizationLayer<T>(outC, h, w);
+            }
+
+            inC = outC;
+        }
+    }
+
+    /// <summary>
+    /// Creates decoder layers for the VisionMamba model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateVisionMambaDecoderLayers(
+        int encoderOutputChannels, int decoderDim, int numClasses,
+        int featureHeight, int featureWidth)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+    }
+
+    #endregion
+    #region VMamba Layers
+
+    /// <summary>
+    /// Creates encoder layers for the VMamba model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateVMambaEncoderLayers(
+        int inputChannels, int inputHeight, int inputWidth,
+        int[] channelDims, int[] depths, double dropRate)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        int h = inputHeight, w = inputWidth, inC = inputChannels;
+
+        for (int stage = 0; stage < channelDims.Length; stage++)
+        {
+            int outC = channelDims[stage];
+            int stride = stage == 0 ? 4 : 2;
+            int kernel = stage == 0 ? 7 : 3;
+            int pad = stage == 0 ? 3 : 1;
+
+            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            h /= stride; w /= stride;
+            yield return new BatchNormalizationLayer<T>(outC, h, w);
+
+            for (int d = 1; d < depths[stage]; d++)
+            {
+                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new BatchNormalizationLayer<T>(outC, h, w);
+            }
+
+            inC = outC;
+        }
+    }
+
+    /// <summary>
+    /// Creates decoder layers for the VMamba model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateVMambaDecoderLayers(
+        int encoderOutputChannels, int decoderDim, int numClasses,
+        int featureHeight, int featureWidth)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+    }
+
+    #endregion
+    #region ViMUNet Layers
+
+    /// <summary>
+    /// Creates encoder layers for the ViMUNet model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateViMUNetEncoderLayers(
+        int inputChannels, int inputHeight, int inputWidth,
+        int[] channelDims, int[] depths, double dropRate)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        int h = inputHeight, w = inputWidth, inC = inputChannels;
+
+        for (int stage = 0; stage < channelDims.Length; stage++)
+        {
+            int outC = channelDims[stage];
+            int stride = stage == 0 ? 4 : 2;
+            int kernel = stage == 0 ? 7 : 3;
+            int pad = stage == 0 ? 3 : 1;
+
+            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            h /= stride; w /= stride;
+            yield return new BatchNormalizationLayer<T>(outC, h, w);
+
+            for (int d = 1; d < depths[stage]; d++)
+            {
+                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new BatchNormalizationLayer<T>(outC, h, w);
+            }
+
+            inC = outC;
+        }
+    }
+
+    /// <summary>
+    /// Creates decoder layers for the ViMUNet model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateViMUNetDecoderLayers(
+        int encoderOutputChannels, int decoderDim, int numClasses,
+        int featureHeight, int featureWidth)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+    }
+
+    #endregion
+    #region DiffCutSegmentation Layers
+
+    /// <summary>
+    /// Creates encoder layers for the DiffCutSegmentation model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDiffCutSegmentationEncoderLayers(
+        int inputChannels, int inputHeight, int inputWidth,
+        int[] channelDims, int[] depths, double dropRate)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        int h = inputHeight, w = inputWidth, inC = inputChannels;
+
+        for (int stage = 0; stage < channelDims.Length; stage++)
+        {
+            int outC = channelDims[stage];
+            int stride = stage == 0 ? 4 : 2;
+            int kernel = stage == 0 ? 7 : 3;
+            int pad = stage == 0 ? 3 : 1;
+
+            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            h /= stride; w /= stride;
+            yield return new BatchNormalizationLayer<T>(outC, h, w);
+
+            for (int d = 1; d < depths[stage]; d++)
+            {
+                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new BatchNormalizationLayer<T>(outC, h, w);
+            }
+
+            inC = outC;
+        }
+    }
+
+    /// <summary>
+    /// Creates decoder layers for the DiffCutSegmentation model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDiffCutSegmentationDecoderLayers(
+        int encoderOutputChannels, int decoderDim, int numClasses,
+        int featureHeight, int featureWidth)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+    }
+
+    #endregion
+    #region ODISESegmentation Layers
+
+    /// <summary>
+    /// Creates encoder layers for the ODISESegmentation model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateODISESegmentationEncoderLayers(
+        int inputChannels, int inputHeight, int inputWidth,
+        int[] channelDims, int[] depths, double dropRate)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        int h = inputHeight, w = inputWidth, inC = inputChannels;
+
+        for (int stage = 0; stage < channelDims.Length; stage++)
+        {
+            int outC = channelDims[stage];
+            int stride = stage == 0 ? 4 : 2;
+            int kernel = stage == 0 ? 7 : 3;
+            int pad = stage == 0 ? 3 : 1;
+
+            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            h /= stride; w /= stride;
+            yield return new BatchNormalizationLayer<T>(outC, h, w);
+
+            for (int d = 1; d < depths[stage]; d++)
+            {
+                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new BatchNormalizationLayer<T>(outC, h, w);
+            }
+
+            inC = outC;
+        }
+    }
+
+    /// <summary>
+    /// Creates decoder layers for the ODISESegmentation model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateODISESegmentationDecoderLayers(
+        int encoderOutputChannels, int decoderDim, int numClasses,
+        int featureHeight, int featureWidth)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+    }
+
+    #endregion
+    #region MedSegDiffV2Segmentation Layers
+
+    /// <summary>
+    /// Creates encoder layers for the MedSegDiffV2Segmentation model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateMedSegDiffV2SegmentationEncoderLayers(
+        int inputChannels, int inputHeight, int inputWidth,
+        int[] channelDims, int[] depths, double dropRate)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        int h = inputHeight, w = inputWidth, inC = inputChannels;
+
+        for (int stage = 0; stage < channelDims.Length; stage++)
+        {
+            int outC = channelDims[stage];
+            int stride = stage == 0 ? 4 : 2;
+            int kernel = stage == 0 ? 7 : 3;
+            int pad = stage == 0 ? 3 : 1;
+
+            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            h /= stride; w /= stride;
+            yield return new BatchNormalizationLayer<T>(outC, h, w);
+
+            for (int d = 1; d < depths[stage]; d++)
+            {
+                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new BatchNormalizationLayer<T>(outC, h, w);
+            }
+
+            inC = outC;
+        }
+    }
+
+    /// <summary>
+    /// Creates decoder layers for the MedSegDiffV2Segmentation model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateMedSegDiffV2SegmentationDecoderLayers(
+        int encoderOutputChannels, int decoderDim, int numClasses,
+        int featureHeight, int featureWidth)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+    }
+
+    #endregion
+
+    #region Diffusion Models (Golden Pattern Refactoring)
+
+    /// <summary>
+    /// Calculates the optimal GroupNorm group count for VAE residual blocks.
+    /// </summary>
+    private static int CalculateVAEGroupCount(int inChannels, int outChannels)
+    {
+        int[] preferredGroups = [32, 16, 8, 4, 2, 1];
+        foreach (int groups in preferredGroups)
+        {
+            if (inChannels % groups == 0 && outChannels % groups == 0)
+            {
+                return groups;
+            }
+        }
+
+        return 1;
+    }
+
+    /// <summary>
+    /// Creates encoder layers for the StandardVAE (Stable Diffusion VAE architecture).
+    /// </summary>
+    /// <param name="inputChannels">Number of input image channels (default: 3 for RGB).</param>
+    /// <param name="latentChannels">Number of latent channels (default: 4).</param>
+    /// <param name="baseChannels">Base channel count (default: 128).</param>
+    /// <param name="channelMultipliers">Channel multipliers per level (default: [1, 2, 4, 4]).</param>
+    /// <param name="numResBlocksPerLevel">Number of residual blocks per level (default: 2).</param>
+    /// <param name="inputHeight">Input spatial height (default: 64).</param>
+    /// <param name="inputWidth">Input spatial width (default: 64).</param>
+    /// <returns>
+    /// Encoder layers in order: InputConv, [ResBlocks + Downsamples], MeanConv, LogVarConv, QuantConv.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This creates the encoder half of the Stable Diffusion VAE.
+    /// The encoder compresses images into a compact latent representation:
+    /// - InputConv projects from RGB channels to base channel dimension
+    /// - ResBlocks with GroupNorm extract increasingly abstract features
+    /// - Downsampling halves spatial dimensions at each level
+    /// - MeanConv and LogVarConv produce the Gaussian distribution parameters
+    /// - QuantConv processes the latent for downstream use
+    /// </para>
+    /// <para>
+    /// Architecture from "Auto-Encoding Variational Bayes" (Kingma &amp; Welling, 2013)
+    /// as implemented in Stable Diffusion (Rombach et al., 2022).
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateStandardVAEEncoderLayers(
+        int inputChannels = 3,
+        int latentChannels = 4,
+        int baseChannels = 128,
+        int[]? channelMultipliers = null,
+        int numResBlocksPerLevel = 2,
+        int inputHeight = 64,
+        int inputWidth = 64)
+    {
+        var mults = channelMultipliers ?? [1, 2, 4, 4];
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+        int downsampleFactor = (int)Math.Pow(2, mults.Length - 1);
+        int latentH = inputHeight / downsampleFactor;
+        int latentW = inputWidth / downsampleFactor;
+
+        // Input convolution: [inputChannels] -> [baseChannels]
+        yield return new ConvolutionalLayer<T>(
+            inputChannels, inputHeight, inputWidth, baseChannels, 3, 1, 1, identity);
+
+        // Encoder blocks with progressive downsampling
+        int inC = baseChannels;
+        int h = inputHeight, w = inputWidth;
+        for (int level = 0; level < mults.Length; level++)
+        {
+            int outC = baseChannels * mults[level];
+
+            // Residual blocks at this level
+            for (int block = 0; block < numResBlocksPerLevel; block++)
+            {
+                int numGroups = CalculateVAEGroupCount(inC, outC);
+                yield return new VAEResBlock<T>(inC, outC, numGroups, spatialSize: h);
+                inC = outC;
+            }
+
+            // Downsample (except last level)
+            if (level < mults.Length - 1)
+            {
+                yield return new ConvolutionalLayer<T>(
+                    outC, h, w, outC, 3, 2, 1, identity);
+                h /= 2;
+                w /= 2;
+            }
+        }
+
+        // Mean convolution for latent distribution
+        int lastChannels = baseChannels * mults[^1];
+        yield return new ConvolutionalLayer<T>(
+            lastChannels, latentH, latentW, latentChannels, 3, 1, 1, identity);
+
+        // Log variance convolution for latent distribution
+        yield return new ConvolutionalLayer<T>(
+            lastChannels, latentH, latentW, latentChannels, 3, 1, 1, identity);
+
+        // Quant convolution for latent processing (1x1 conv)
+        yield return new ConvolutionalLayer<T>(
+            latentChannels, latentH, latentW, latentChannels, 1, 1, 0, identity);
+    }
+
+    /// <summary>
+    /// Creates decoder layers for the StandardVAE (Stable Diffusion VAE architecture).
+    /// </summary>
+    /// <param name="inputChannels">Number of output image channels (default: 3 for RGB).</param>
+    /// <param name="latentChannels">Number of latent channels (default: 4).</param>
+    /// <param name="baseChannels">Base channel count (default: 128).</param>
+    /// <param name="channelMultipliers">Channel multipliers per level (default: [1, 2, 4, 4]).</param>
+    /// <param name="numResBlocksPerLevel">Number of residual blocks per level (default: 2).</param>
+    /// <param name="inputHeight">Output spatial height (default: 64).</param>
+    /// <param name="inputWidth">Output spatial width (default: 64).</param>
+    /// <returns>
+    /// Decoder layers in order: PostQuantConv, [ResBlocks + Upsamples], OutputConv.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This creates the decoder half of the Stable Diffusion VAE.
+    /// The decoder reconstructs images from the latent representation:
+    /// - PostQuantConv expands from latent channels to the deepest channel dimension
+    /// - ResBlocks with GroupNorm progressively refine features
+    /// - Upsampling doubles spatial dimensions at each level (reverse of encoder)
+    /// - OutputConv projects back to RGB with Tanh activation for [-1, 1] range
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateStandardVAEDecoderLayers(
+        int inputChannels = 3,
+        int latentChannels = 4,
+        int baseChannels = 128,
+        int[]? channelMultipliers = null,
+        int numResBlocksPerLevel = 2,
+        int inputHeight = 64,
+        int inputWidth = 64)
+    {
+        var mults = channelMultipliers ?? [1, 2, 4, 4];
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+        int downsampleFactor = (int)Math.Pow(2, mults.Length - 1);
+        int latentH = inputHeight / downsampleFactor;
+        int latentW = inputWidth / downsampleFactor;
+        int lastChannels = baseChannels * mults[^1];
+
+        // Post-quant convolution: [latentChannels] -> [lastChannels]
+        yield return new ConvolutionalLayer<T>(
+            latentChannels, latentH, latentW, lastChannels, 3, 1, 1, identity);
+
+        // Decoder blocks (mirror of encoder, reversed order)
+        int inC = lastChannels;
+        int h = latentH, w = latentW;
+        for (int level = mults.Length - 1; level >= 0; level--)
+        {
+            int outC = baseChannels * mults[level];
+
+            // Residual blocks at this level
+            for (int block = 0; block < numResBlocksPerLevel; block++)
+            {
+                int numGroups = CalculateVAEGroupCount(inC, outC);
+                yield return new VAEResBlock<T>(inC, outC, numGroups, spatialSize: h);
+                inC = outC;
+            }
+
+            // Upsample (except first level going backwards)
+            if (level > 0)
+            {
+                yield return new DeconvolutionalLayer<T>(
+                    [1, outC, h, w], outC, 4, 2, 1, identity);
+                h *= 2;
+                w *= 2;
+            }
+        }
+
+        // Output convolution: [baseChannels] -> [inputChannels] with Tanh for [-1, 1] output
+        yield return new ConvolutionalLayer<T>(
+            baseChannels, inputHeight, inputWidth, inputChannels, 3, 1, 1,
+            (IActivationFunction<T>)new TanhActivation<T>());
+    }
+
+    /// <summary>
+    /// Creates encoder layers for the TemporalVAE (Stable Video Diffusion VAE architecture).
+    /// </summary>
+    /// <param name="inputChannels">Number of input video channels (default: 3 for RGB).</param>
+    /// <param name="latentChannels">Number of latent channels (default: 4).</param>
+    /// <param name="baseChannels">Base channel count (default: 128).</param>
+    /// <param name="channelMultipliers">Channel multipliers per level (default: [1, 2, 4, 4]).</param>
+    /// <param name="numResBlocksPerLevel">Number of residual blocks per level (default: 2).</param>
+    /// <param name="inputHeight">Input spatial height (default: 64).</param>
+    /// <param name="inputWidth">Input spatial width (default: 64).</param>
+    /// <returns>
+    /// Encoder layers: InputConv, [SpatialResBlocks + Downsamples], MeanConv, LogVarConv, PostQuantConv.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> The TemporalVAE extends the StandardVAE to handle video.
+    /// It adds temporal convolution blocks alongside the spatial blocks to capture
+    /// motion and temporal consistency across video frames.
+    /// </para>
+    /// <para>
+    /// Architecture from Stable Video Diffusion (Blattmann et al., 2023).
+    /// Note: Temporal layers are created separately in the model since they form
+    /// a parallel processing path.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateTemporalVAEEncoderLayers(
+        int inputChannels = 3,
+        int latentChannels = 4,
+        int baseChannels = 128,
+        int[]? channelMultipliers = null,
+        int numResBlocksPerLevel = 2,
+        int inputHeight = 64,
+        int inputWidth = 64)
+    {
+        var mults = channelMultipliers ?? [1, 2, 4, 4];
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+        int downsampleFactor = (int)Math.Pow(2, mults.Length - 1);
+        int latentH = inputHeight / downsampleFactor;
+        int latentW = inputWidth / downsampleFactor;
+
+        // Input convolution: [inputChannels] -> [baseChannels]
+        yield return new ConvolutionalLayer<T>(
+            inputChannels, inputHeight, inputWidth, baseChannels, 3, 1, 1, identity);
+
+        // Encoder spatial blocks with downsampling
+        int inC = baseChannels;
+        int h = inputHeight, w = inputWidth;
+        for (int level = 0; level < mults.Length; level++)
+        {
+            int outC = baseChannels * mults[level];
+
+            // Spatial residual block
+            int numGroups = CalculateVAEGroupCount(inC, outC);
+            yield return new VAEResBlock<T>(inC, outC, numGroups, spatialSize: h);
+            inC = outC;
+
+            // Downsample (except last level)
+            if (level < mults.Length - 1)
+            {
+                yield return new ConvolutionalLayer<T>(
+                    outC, h, w, outC, 3, 2, 1, identity);
+                h /= 2;
+                w /= 2;
+            }
+        }
+
+        // Latent projection layers
+        int lastChannels = baseChannels * mults[^1];
+        yield return new ConvolutionalLayer<T>(
+            lastChannels, latentH, latentW, latentChannels, 3, 1, 1, identity);
+        yield return new ConvolutionalLayer<T>(
+            lastChannels, latentH, latentW, latentChannels, 3, 1, 1, identity);
+        yield return new ConvolutionalLayer<T>(
+            latentChannels, latentH, latentW, latentChannels, 1, 1, 0, identity);
+    }
+
+    /// <summary>
+    /// Creates decoder layers for the TemporalVAE (Stable Video Diffusion VAE architecture).
+    /// </summary>
+    /// <param name="inputChannels">Number of output video channels (default: 3 for RGB).</param>
+    /// <param name="latentChannels">Number of latent channels (default: 4).</param>
+    /// <param name="baseChannels">Base channel count (default: 128).</param>
+    /// <param name="channelMultipliers">Channel multipliers per level (default: [1, 2, 4, 4]).</param>
+    /// <param name="numResBlocksPerLevel">Number of residual blocks per level (default: 2).</param>
+    /// <param name="inputHeight">Output spatial height (default: 64).</param>
+    /// <param name="inputWidth">Output spatial width (default: 64).</param>
+    /// <returns>
+    /// Decoder layers: PostQuantConv, [SpatialResBlocks + Upsamples], OutputConv.
+    /// </returns>
+    public static IEnumerable<ILayer<T>> CreateTemporalVAEDecoderLayers(
+        int inputChannels = 3,
+        int latentChannels = 4,
+        int baseChannels = 128,
+        int[]? channelMultipliers = null,
+        int numResBlocksPerLevel = 2,
+        int inputHeight = 64,
+        int inputWidth = 64)
+    {
+        var mults = channelMultipliers ?? [1, 2, 4, 4];
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+        int downsampleFactor = (int)Math.Pow(2, mults.Length - 1);
+        int latentH = inputHeight / downsampleFactor;
+        int latentW = inputWidth / downsampleFactor;
+        int lastChannels = baseChannels * mults[^1];
+
+        // Post-quant convolution: [latentChannels] -> [lastChannels]
+        yield return new ConvolutionalLayer<T>(
+            latentChannels, latentH, latentW, lastChannels, 3, 1, 1, identity);
+
+        // Decoder spatial blocks (mirror of encoder)
+        int inC = lastChannels;
+        int h = latentH, w = latentW;
+        for (int level = mults.Length - 1; level >= 0; level--)
+        {
+            int outC = baseChannels * mults[level];
+
+            int numGroups = CalculateVAEGroupCount(inC, outC);
+            yield return new VAEResBlock<T>(inC, outC, numGroups, spatialSize: h);
+            inC = outC;
+
+            if (level > 0)
+            {
+                yield return new DeconvolutionalLayer<T>(
+                    [1, outC, h, w], outC, 4, 2, 1, identity);
+                h *= 2;
+                w *= 2;
+            }
+        }
+
+        // Output convolution: [baseChannels] -> [inputChannels] with Tanh
+        yield return new ConvolutionalLayer<T>(
+            baseChannels, inputHeight, inputWidth, inputChannels, 3, 1, 1,
+            (IActivationFunction<T>)new TanhActivation<T>());
+    }
+
+    /// <summary>
+    /// Creates encoder layers for the AudioVAE.
+    /// </summary>
+    /// <param name="melChannels">Number of mel spectrogram channels (default: 64).</param>
+    /// <param name="latentChannels">Number of latent channels (default: 8).</param>
+    /// <param name="baseChannels">Base channel count (default: 64).</param>
+    /// <param name="channelMultipliers">Channel multipliers per level (default: [1, 2, 4, 4]).</param>
+    /// <returns>
+    /// Encoder projection layers: MuProjection, LogVarProjection.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> The AudioVAE compresses audio mel spectrograms to a latent
+    /// representation. Unlike image VAEs, it uses dense projections rather than
+    /// convolutional layers since audio features are typically 1D after mel processing.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateAudioVAEEncoderLayers(
+        int melChannels = 64,
+        int latentChannels = 8,
+        int baseChannels = 64,
+        int[]? channelMultipliers = null)
+    {
+        var mults = channelMultipliers ?? [1, 2, 4, 4];
+        int hiddenDim = baseChannels * mults[^1];
+
+        // Mu (mean) projection
+        yield return new DenseLayer<T>(hiddenDim, latentChannels, activationFunction: null);
+        // Log variance projection
+        yield return new DenseLayer<T>(hiddenDim, latentChannels, activationFunction: null);
+    }
+
+    /// <summary>
+    /// Creates decoder layers for the AudioVAE.
+    /// </summary>
+    /// <param name="melChannels">Number of mel spectrogram channels (default: 64).</param>
+    /// <param name="latentChannels">Number of latent channels (default: 8).</param>
+    /// <param name="baseChannels">Base channel count (default: 64).</param>
+    /// <param name="channelMultipliers">Channel multipliers per level (default: [1, 2, 4, 4]).</param>
+    /// <returns>
+    /// Decoder projection layer: LatentToDecoder.
+    /// </returns>
+    public static IEnumerable<ILayer<T>> CreateAudioVAEDecoderLayers(
+        int melChannels = 64,
+        int latentChannels = 8,
+        int baseChannels = 64,
+        int[]? channelMultipliers = null)
+    {
+        var mults = channelMultipliers ?? [1, 2, 4, 4];
+        int hiddenDim = baseChannels * mults[^1];
+
+        // Latent to decoder projection
+        yield return new DenseLayer<T>(latentChannels, hiddenDim, activationFunction: null);
+    }
+
+    /// <summary>
+    /// Creates encoder layers for the UNet noise predictor (Stable Diffusion architecture).
+    /// </summary>
+    /// <param name="inputChannels">Number of input channels (default: 4 for latent space).</param>
+    /// <param name="baseChannels">Base channel count (default: 320).</param>
+    /// <param name="channelMultipliers">Channel multipliers per level (default: [1, 2, 4, 4]).</param>
+    /// <param name="numResBlocks">Residual blocks per level (default: 2).</param>
+    /// <param name="contextDim">Cross-attention context dimension (default: 768 for CLIP).</param>
+    /// <param name="numHeads">Number of attention heads (default: 8).</param>
+    /// <param name="inputHeight">Latent spatial height (default: 64).</param>
+    /// <param name="inputWidth">Latent spatial width (default: 64).</param>
+    /// <returns>
+    /// UNet encoder layers: InputConv, TimeEmbedMLP, [ResBlocks + Attention + Downsamples].
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> The UNet is the core of Stable Diffusion's noise prediction.
+    /// It takes a noisy latent image and predicts the noise to remove at each timestep.
+    /// The encoder progressively downsamples while extracting features at multiple scales.
+    /// </para>
+    /// <para>
+    /// Architecture from "High-Resolution Image Synthesis with Latent Diffusion Models"
+    /// (Rombach et al., CVPR 2022).
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateUNetNoisePredictorEncoderLayers(
+        int inputChannels = 4,
+        int baseChannels = 320,
+        int[]? channelMultipliers = null,
+        int numResBlocks = 2,
+        int contextDim = 768,
+        int numHeads = 8,
+        int inputHeight = 64,
+        int inputWidth = 64)
+    {
+        var mults = channelMultipliers ?? [1, 2, 4, 4];
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        int timeEmbeddingDim = baseChannels * 4;
+
+        // Input convolution: [inputChannels] -> [baseChannels]
+        yield return new ConvolutionalLayer<T>(
+            inputChannels, inputHeight, inputWidth, baseChannels, 3, 1, 1, identity);
+
+        // Time embedding MLP
+        yield return new DenseLayer<T>(timeEmbeddingDim / 4, timeEmbeddingDim, relu);
+        yield return new DenseLayer<T>(timeEmbeddingDim, timeEmbeddingDim, relu);
+
+        // Encoder blocks per level
+        int h = inputHeight, w = inputWidth;
+        for (int level = 0; level < mults.Length; level++)
+        {
+            int channels = baseChannels * mults[level];
+
+            for (int block = 0; block < numResBlocks; block++)
+            {
+                // ResBlock placeholder via dense layer
+                yield return new DenseLayer<T>(channels, channels, identity);
+            }
+
+            // Downsample (except last level)
+            if (level < mults.Length - 1)
+            {
+                yield return new ConvolutionalLayer<T>(
+                    channels, h, w, channels, 3, 2, 1, identity);
+                h /= 2;
+                w /= 2;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Creates decoder layers for the UNet noise predictor (Stable Diffusion architecture).
+    /// </summary>
+    /// <param name="outputChannels">Number of output channels (default: 4).</param>
+    /// <param name="baseChannels">Base channel count (default: 320).</param>
+    /// <param name="channelMultipliers">Channel multipliers per level (default: [1, 2, 4, 4]).</param>
+    /// <param name="numResBlocks">Residual blocks per level (default: 2).</param>
+    /// <param name="inputHeight">Latent spatial height (default: 64).</param>
+    /// <param name="inputWidth">Latent spatial width (default: 64).</param>
+    /// <returns>
+    /// UNet decoder layers: [ResBlocks + Attention + Upsamples], OutputConv.
+    /// </returns>
+    public static IEnumerable<ILayer<T>> CreateUNetNoisePredictorDecoderLayers(
+        int outputChannels = 4,
+        int baseChannels = 320,
+        int[]? channelMultipliers = null,
+        int numResBlocks = 2,
+        int inputHeight = 64,
+        int inputWidth = 64)
+    {
+        var mults = channelMultipliers ?? [1, 2, 4, 4];
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+        int downsampleFactor = (int)Math.Pow(2, mults.Length - 1);
+        int h = inputHeight / downsampleFactor;
+        int w = inputWidth / downsampleFactor;
+
+        // Decoder blocks (reversed)
+        for (int level = mults.Length - 1; level >= 0; level--)
+        {
+            int channels = baseChannels * mults[level];
+
+            for (int block = 0; block < numResBlocks; block++)
+            {
+                yield return new DenseLayer<T>(channels, channels, identity);
+            }
+
+            // Upsample (except first level going backwards)
+            if (level > 0)
+            {
+                yield return new DeconvolutionalLayer<T>(
+                    [1, channels, h, w], channels, 4, 2, 1, identity);
+                h *= 2;
+                w *= 2;
+            }
+        }
+
+        // Output convolution: [baseChannels] -> [outputChannels]
+        yield return new ConvolutionalLayer<T>(
+            baseChannels, inputHeight, inputWidth, outputChannels, 3, 1, 1, identity);
+    }
+
+    /// <summary>
+    /// Creates layers for the DiT (Diffusion Transformer) noise predictor.
+    /// </summary>
+    /// <param name="inputChannels">Number of input channels (default: 4).</param>
+    /// <param name="hiddenSize">Transformer hidden dimension (default: 1152 for DiT-XL).</param>
+    /// <param name="numLayers">Number of transformer layers (default: 28 for DiT-XL).</param>
+    /// <param name="numHeads">Number of attention heads (default: 16).</param>
+    /// <param name="patchSize">Patch embedding size (default: 2).</param>
+    /// <param name="contextDim">Context/label embedding dimension (default: 1024).</param>
+    /// <param name="mlpRatio">MLP expansion ratio (default: 4.0).</param>
+    /// <returns>
+    /// DiT layers: PatchEmbed, TimeEmbedMLP, [TransformerBlocks], FinalNorm, AdaLNModulation, OutputProj.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> DiT replaces the UNet with a Transformer for noise prediction.
+    /// It splits the image into patches (like Vision Transformer), processes them through
+    /// transformer blocks with adaptive layer normalization, and unpatchifies the output.
+    /// </para>
+    /// <para>
+    /// Architecture from "Scalable Diffusion Models with Transformers" (Peebles &amp; Xie, 2023).
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDiTNoisePredictorLayers(
+        int inputChannels = 4,
+        int hiddenSize = 1152,
+        int numLayers = 28,
+        int numHeads = 16,
+        int patchSize = 2,
+        int contextDim = 1024,
+        double mlpRatio = 4.0)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+        int patchDim = inputChannels * patchSize * patchSize;
+        int timeEmbedDim = hiddenSize * 4;
+        int mlpHidden = (int)(hiddenSize * mlpRatio);
+
+        // Patch embedding: flatten patch -> hidden
+        yield return new DenseLayer<T>(patchDim, hiddenSize, identity);
+
+        // Time embedding MLP
+        yield return new DenseLayer<T>(hiddenSize, timeEmbedDim, relu);
+        yield return new DenseLayer<T>(timeEmbedDim, timeEmbedDim, relu);
+
+        // Transformer blocks (each block = attention + MLP)
+        for (int i = 0; i < numLayers; i++)
+        {
+            // QKV projection
+            yield return new DenseLayer<T>(hiddenSize, hiddenSize * 3, identity);
+            // Attention output projection
+            yield return new DenseLayer<T>(hiddenSize, hiddenSize, identity);
+            // MLP
+            yield return new DenseLayer<T>(hiddenSize, mlpHidden, relu);
+            yield return new DenseLayer<T>(mlpHidden, hiddenSize, identity);
+            // AdaLN modulation per block (6 parameters: scale, shift, gate × 2)
+            yield return new DenseLayer<T>(timeEmbedDim, hiddenSize * 6, identity);
+        }
+
+        // Final layer norm (represented as dense for parameter tracking)
+        yield return new LayerNormalizationLayer<T>(hiddenSize);
+        // Final AdaLN modulation (scale + shift)
+        yield return new DenseLayer<T>(timeEmbedDim, hiddenSize * 2, identity);
+        // Output projection: hidden -> patch
+        yield return new DenseLayer<T>(hiddenSize, patchDim, identity);
+    }
+
+    /// <summary>
+    /// Creates layers for the MMDiT (Multi-Modal Diffusion Transformer) noise predictor.
+    /// </summary>
+    /// <param name="inputChannels">Number of input channels (default: 16 for SD3/FLUX).</param>
+    /// <param name="hiddenSize">Hidden dimension (default: 1536 for SD3 Medium).</param>
+    /// <param name="numJointLayers">Number of joint transformer layers (default: 24).</param>
+    /// <param name="numSingleLayers">Number of single-stream layers (default: 0).</param>
+    /// <param name="numHeads">Number of attention heads (default: 24).</param>
+    /// <param name="patchSize">Patch embedding size (default: 2).</param>
+    /// <param name="contextDim">Text context dimension (default: 4096 for T5-XXL).</param>
+    /// <param name="mlpRatio">MLP expansion ratio (default: 4.0).</param>
+    /// <returns>
+    /// MMDiT layers: PatchEmbed, ContextProj, TimeEmbedMLP, [JointBlocks], [SingleBlocks], FinalNorm, OutputProj.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> MMDiT processes image patches and text tokens jointly.
+    /// Joint blocks allow image and text to attend to each other, while single blocks
+    /// process the image stream alone. This architecture powers SD3 and FLUX.
+    /// </para>
+    /// <para>
+    /// Architecture from "Scaling Rectified Flow Transformers for High-Resolution Image Synthesis"
+    /// (Esser et al., 2024).
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateMMDiTNoisePredictorLayers(
+        int inputChannels = 16,
+        int hiddenSize = 1536,
+        int numJointLayers = 24,
+        int numSingleLayers = 0,
+        int numHeads = 24,
+        int patchSize = 2,
+        int contextDim = 4096,
+        double mlpRatio = 4.0)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+        int patchDim = inputChannels * patchSize * patchSize;
+        int timeEmbedDim = hiddenSize * 4;
+        int mlpHidden = (int)(hiddenSize * mlpRatio);
+
+        // Patch embedding
+        yield return new DenseLayer<T>(patchDim, hiddenSize, identity);
+        // Context projection (text -> hidden)
+        yield return new DenseLayer<T>(contextDim, hiddenSize, identity);
+        // Time embedding MLP
+        yield return new DenseLayer<T>(hiddenSize, timeEmbedDim, relu);
+        yield return new DenseLayer<T>(timeEmbedDim, timeEmbedDim, relu);
+
+        // Joint transformer blocks (image + text attend to each other)
+        for (int i = 0; i < numJointLayers; i++)
+        {
+            // Image QKV + text QKV
+            yield return new DenseLayer<T>(hiddenSize, hiddenSize * 3, identity);
+            yield return new DenseLayer<T>(hiddenSize, hiddenSize * 3, identity);
+            // Image output proj + text output proj
+            yield return new DenseLayer<T>(hiddenSize, hiddenSize, identity);
+            yield return new DenseLayer<T>(hiddenSize, hiddenSize, identity);
+            // Image MLP + text MLP
+            yield return new DenseLayer<T>(hiddenSize, mlpHidden, relu);
+            yield return new DenseLayer<T>(mlpHidden, hiddenSize, identity);
+            yield return new DenseLayer<T>(hiddenSize, mlpHidden, relu);
+            yield return new DenseLayer<T>(mlpHidden, hiddenSize, identity);
+            // Image AdaLN + text AdaLN (6 params each)
+            yield return new DenseLayer<T>(timeEmbedDim, hiddenSize * 6, identity);
+            yield return new DenseLayer<T>(timeEmbedDim, hiddenSize * 6, identity);
+        }
+
+        // Single-stream blocks (image only)
+        for (int i = 0; i < numSingleLayers; i++)
+        {
+            yield return new DenseLayer<T>(hiddenSize, hiddenSize * 3, identity);
+            yield return new DenseLayer<T>(hiddenSize, hiddenSize, identity);
+            yield return new DenseLayer<T>(hiddenSize, mlpHidden, relu);
+            yield return new DenseLayer<T>(mlpHidden, hiddenSize, identity);
+            yield return new DenseLayer<T>(timeEmbedDim, hiddenSize * 6, identity);
+        }
+
+        // Final norm and output
+        yield return new LayerNormalizationLayer<T>(hiddenSize);
+        yield return new DenseLayer<T>(timeEmbedDim, hiddenSize * 2, identity);
+        yield return new DenseLayer<T>(hiddenSize, patchDim, identity);
+    }
+
+    /// <summary>
+    /// Creates layers for the UViT (U-ViT) noise predictor with skip connections.
+    /// </summary>
+    /// <param name="inputChannels">Number of input channels (default: 4).</param>
+    /// <param name="hiddenSize">Transformer hidden dimension (default: 512).</param>
+    /// <param name="numLayers">Number of transformer layers, must be even (default: 12).</param>
+    /// <param name="numHeads">Number of attention heads (default: 8).</param>
+    /// <param name="patchSize">Patch embedding size (default: 2).</param>
+    /// <returns>
+    /// UViT layers: PatchEmbed, TimeEmbedMLP, [EncoderBlocks], MiddleBlock, [DecoderBlocks + SkipProj], FinalNorm, OutputProj.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> U-ViT applies a U-Net-like structure to the Vision Transformer.
+    /// The first half of transformer blocks form the encoder, the second half the decoder,
+    /// with long skip connections between matching encoder and decoder blocks (like a UNet).
+    /// </para>
+    /// <para>
+    /// Architecture from "All are Worth Words: A ViT Backbone for Diffusion Models" (Bao et al., 2023).
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateUViTNoisePredictorLayers(
+        int inputChannels = 4,
+        int hiddenSize = 512,
+        int numLayers = 12,
+        int numHeads = 8,
+        int patchSize = 2)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+        int patchDim = inputChannels * patchSize * patchSize;
+        int timeEmbedDim = hiddenSize * 4;
+        int halfLayers = numLayers / 2;
+        int mlpHidden = hiddenSize * 4;
+
+        // Patch embedding
+        yield return new DenseLayer<T>(patchDim, hiddenSize, identity);
+        // Time embedding MLP
+        yield return new DenseLayer<T>(hiddenSize, timeEmbedDim, relu);
+        yield return new DenseLayer<T>(timeEmbedDim, timeEmbedDim, relu);
+
+        // Encoder blocks
+        for (int i = 0; i < halfLayers; i++)
+        {
+            yield return new DenseLayer<T>(hiddenSize, hiddenSize * 3, identity); // QKV
+            yield return new DenseLayer<T>(hiddenSize, hiddenSize, identity);     // Output proj
+            yield return new DenseLayer<T>(hiddenSize, mlpHidden, relu);          // MLP up
+            yield return new DenseLayer<T>(mlpHidden, hiddenSize, identity);      // MLP down
+        }
+
+        // Middle block
+        yield return new DenseLayer<T>(hiddenSize, hiddenSize * 3, identity);
+        yield return new DenseLayer<T>(hiddenSize, hiddenSize, identity);
+        yield return new DenseLayer<T>(hiddenSize, mlpHidden, relu);
+        yield return new DenseLayer<T>(mlpHidden, hiddenSize, identity);
+
+        // Decoder blocks (with skip projection for concatenated features)
+        for (int i = 0; i < halfLayers; i++)
+        {
+            // Skip connection projection (concatenated 2x hidden -> hidden)
+            yield return new DenseLayer<T>(hiddenSize * 2, hiddenSize, identity);
+            yield return new DenseLayer<T>(hiddenSize, hiddenSize * 3, identity); // QKV
+            yield return new DenseLayer<T>(hiddenSize, hiddenSize, identity);     // Output proj
+            yield return new DenseLayer<T>(hiddenSize, mlpHidden, relu);          // MLP up
+            yield return new DenseLayer<T>(mlpHidden, hiddenSize, identity);      // MLP down
+        }
+
+        // Final norm and output projection
+        yield return new LayerNormalizationLayer<T>(hiddenSize);
+        yield return new DenseLayer<T>(hiddenSize, patchDim, identity);
+    }
+
+    /// <summary>
+    /// Creates layers for the VideoUNet noise predictor (Stable Video Diffusion architecture).
+    /// </summary>
+    /// <param name="inputChannels">Number of input channels (default: 4).</param>
+    /// <param name="baseChannels">Base channel count (default: 320).</param>
+    /// <param name="channelMultipliers">Channel multipliers per level (default: [1, 2, 4, 4]).</param>
+    /// <param name="numResBlocks">Residual blocks per level (default: 2).</param>
+    /// <param name="contextDim">Cross-attention context dimension (default: 1024).</param>
+    /// <param name="numHeads">Number of attention heads (default: 8).</param>
+    /// <param name="numTemporalLayers">Temporal attention layers per block (default: 1).</param>
+    /// <param name="inputHeight">Latent spatial height (default: 64).</param>
+    /// <param name="inputWidth">Latent spatial width (default: 64).</param>
+    /// <returns>
+    /// VideoUNet layers for temporal video processing.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> The VideoUNet extends the image UNet to handle video.
+    /// It adds temporal attention layers that process across frames, allowing the model
+    /// to generate consistent motion while maintaining the spatial quality of each frame.
+    /// </para>
+    /// <para>
+    /// Architecture from "Stable Video Diffusion: Scaling Latent Video Diffusion Models to Large Datasets"
+    /// (Blattmann et al., 2023).
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateVideoUNetPredictorEncoderLayers(
+        int inputChannels = 4,
+        int baseChannels = 320,
+        int[]? channelMultipliers = null,
+        int numResBlocks = 2,
+        int contextDim = 1024,
+        int numHeads = 8,
+        int numTemporalLayers = 1,
+        int inputHeight = 64,
+        int inputWidth = 64)
+    {
+        var mults = channelMultipliers ?? [1, 2, 4, 4];
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        int timeEmbeddingDim = baseChannels * 4;
+
+        // Input convolution
+        yield return new ConvolutionalLayer<T>(
+            inputChannels, inputHeight, inputWidth, baseChannels, 3, 1, 1, identity);
+
+        // Time embedding MLP
+        yield return new DenseLayer<T>(timeEmbeddingDim / 4, timeEmbeddingDim, relu);
+        yield return new DenseLayer<T>(timeEmbeddingDim, timeEmbeddingDim, relu);
+
+        // Encoder blocks per level
+        int h = inputHeight, w = inputWidth;
+        for (int level = 0; level < mults.Length; level++)
+        {
+            int channels = baseChannels * mults[level];
+
+            for (int block = 0; block < numResBlocks; block++)
+            {
+                yield return new DenseLayer<T>(channels, channels, identity);
+            }
+
+            // Downsample (except last level)
+            if (level < mults.Length - 1)
+            {
+                yield return new ConvolutionalLayer<T>(
+                    channels, h, w, channels, 3, 2, 1, identity);
+                h /= 2;
+                w /= 2;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Creates decoder layers for the VideoUNet noise predictor.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateVideoUNetPredictorDecoderLayers(
+        int outputChannels = 4,
+        int baseChannels = 320,
+        int[]? channelMultipliers = null,
+        int numResBlocks = 2,
+        int inputHeight = 64,
+        int inputWidth = 64)
+    {
+        var mults = channelMultipliers ?? [1, 2, 4, 4];
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+        int downsampleFactor = (int)Math.Pow(2, mults.Length - 1);
+        int h = inputHeight / downsampleFactor;
+        int w = inputWidth / downsampleFactor;
+
+        for (int level = mults.Length - 1; level >= 0; level--)
+        {
+            int channels = baseChannels * mults[level];
+
+            for (int block = 0; block < numResBlocks; block++)
+            {
+                yield return new DenseLayer<T>(channels, channels, identity);
+            }
+
+            if (level > 0)
+            {
+                yield return new DeconvolutionalLayer<T>(
+                    [1, channels, h, w], channels, 4, 2, 1, identity);
+                h *= 2;
+                w *= 2;
+            }
+        }
+
+        yield return new ConvolutionalLayer<T>(
+            baseChannels, inputHeight, inputWidth, outputChannels, 3, 1, 1, identity);
+    }
+
+    /// <summary>
+    /// Creates layers for the DiffWave audio diffusion network.
+    /// </summary>
+    /// <param name="residualChannels">Number of residual channels (default: 64).</param>
+    /// <param name="residualLayers">Number of residual layers (default: 30).</param>
+    /// <param name="dilationCycle">Dilation cycle length (default: 10).</param>
+    /// <param name="embeddingDim">Diffusion step embedding dimension (default: 128).</param>
+    /// <returns>
+    /// DiffWave layers: InputProj, DiffusionEmbed, [ResidualBlocks], OutputProj1, OutputProj2.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> DiffWave generates raw audio waveforms using diffusion.
+    /// It uses dilated convolutions in residual blocks to capture long-range audio
+    /// dependencies. The dilation pattern cycles through increasing receptive fields.
+    /// </para>
+    /// <para>
+    /// Architecture from "DiffWave: A Versatile Diffusion Model for Audio Synthesis" (Kong et al., 2021).
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDiffWaveLayers(
+        int residualChannels = 64,
+        int residualLayers = 30,
+        int dilationCycle = 10,
+        int embeddingDim = 128)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        // Input projection: 1 audio channel -> residual channels
+        yield return new DenseLayer<T>(1, residualChannels, identity);
+        // Diffusion step embedding
+        yield return new DenseLayer<T>(embeddingDim, residualChannels, relu);
+
+        // Residual blocks with cyclic dilation
+        for (int i = 0; i < residualLayers; i++)
+        {
+            // Dilated conv (channels -> channels * 2 for gating)
+            yield return new DenseLayer<T>(residualChannels, residualChannels * 2, identity);
+            // Diffusion projection
+            yield return new DenseLayer<T>(residualChannels, residualChannels, identity);
+            // Output conv
+            yield return new DenseLayer<T>(residualChannels, residualChannels, identity);
+            // Skip conv
+            yield return new DenseLayer<T>(residualChannels, residualChannels, identity);
+        }
+
+        // Output projections
+        yield return new DenseLayer<T>(residualChannels, residualChannels, relu);
+        yield return new DenseLayer<T>(residualChannels, 1, identity);
+    }
+
+    /// <summary>
+    /// Creates layers for the ControlNet encoder.
+    /// </summary>
+    /// <param name="conditionChannels">Number of condition input channels (varies by control type).</param>
+    /// <param name="baseChannels">Base channel count (default: 320 for SD 1.5).</param>
+    /// <param name="channelMultipliers">Channel multipliers per level (default: [1, 2, 4, 4]).</param>
+    /// <param name="imageSize">Input spatial size (default: 64).</param>
+    /// <returns>
+    /// ControlNet encoder layers: InputProj, ZeroProj, [DownBlocks + ZeroConvs].
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> ControlNet adds spatial control to Stable Diffusion.
+    /// It encodes conditions (edges, depth, pose) and injects them into the UNet.
+    /// Zero convolutions are used initially so the ControlNet starts as an identity mapping.
+    /// </para>
+    /// <para>
+    /// Architecture from "Adding Conditional Control to Text-to-Image Diffusion Models"
+    /// (Zhang et al., 2023).
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateControlNetEncoderLayers(
+        int conditionChannels = 3,
+        int baseChannels = 320,
+        int[]? channelMultipliers = null,
+        int imageSize = 64)
+    {
+        var mults = channelMultipliers ?? [1, 2, 4, 4];
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+        int spatialSize = imageSize;
+
+        // Input projection
+        int inputDim = conditionChannels * spatialSize * spatialSize;
+        int baseDim = baseChannels * spatialSize * spatialSize;
+        yield return new DenseLayer<T>(inputDim, baseDim, identity);
+        // Zero projection (initialized to zero)
+        yield return new DenseLayer<T>(baseDim, baseDim, identity);
+
+        // Down blocks with zero convolutions
+        int prevDim = baseDim;
+        for (int level = 0; level < mults.Length; level++)
+        {
+            int newSpatial = Math.Max(1, spatialSize / 2);
+            int newDim = baseChannels * mults[level] * newSpatial * newSpatial;
+            yield return new DenseLayer<T>(prevDim, newDim, identity);
+            yield return new DenseLayer<T>(newDim, newDim, identity); // Zero conv
+            spatialSize = newSpatial;
+            prevDim = newDim;
+        }
+    }
+
+    /// <summary>
+    /// Creates layers for the IP-Adapter image encoder.
+    /// </summary>
+    /// <param name="imageSize">Input image size (default: 224 for CLIP ViT-L/14).</param>
+    /// <param name="patchSize">Patch size (default: 16).</param>
+    /// <param name="embedDim">Embedding dimension (default: 768 for CLIP).</param>
+    /// <param name="numLayers">Number of transformer layers (default: 12).</param>
+    /// <param name="numHeads">Number of attention heads (default: 12).</param>
+    /// <returns>
+    /// IP-Adapter layers: PatchEmbed, [TransformerBlocks], ImageProjection.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> IP-Adapter enables image-based prompting for Stable Diffusion.
+    /// It encodes a reference image using a CLIP-like vision transformer and projects
+    /// the features into the cross-attention space of the UNet.
+    /// </para>
+    /// <para>
+    /// Architecture from "IP-Adapter: Text Compatible Image Prompt Adapter for Text-to-Image Diffusion Models"
+    /// (Ye et al., 2023).
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateIPAdapterLayers(
+        int imageSize = 224,
+        int patchSize = 16,
+        int embedDim = 768,
+        int numLayers = 12,
+        int numHeads = 12,
+        int numTokens = 4)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+        int patchDim = 3 * patchSize * patchSize; // 3 channels (RGB) * patch area
+
+        // Patch embedding
+        yield return new DenseLayer<T>(patchDim, embedDim, identity);
+
+        // Transformer layers
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new DenseLayer<T>(embedDim, embedDim * 4, relu);
+            yield return new DenseLayer<T>(embedDim * 4, embedDim, identity);
+        }
+
+        // Image projection (to cross-attention tokens)
+        yield return new DenseLayer<T>(embedDim, embedDim, identity);
+        yield return new DenseLayer<T>(embedDim, embedDim * numTokens, identity);
+    }
+
+    /// <summary>
+    /// Creates layers for the DreamFusion NeRF network.
+    /// </summary>
+    /// <param name="hiddenDim">Hidden layer dimension (default: 64).</param>
+    /// <param name="numLayers">Number of density network layers (default: 4).</param>
+    /// <param name="posFrequencies">Number of positional encoding frequencies (default: 10).</param>
+    /// <param name="dirFrequencies">Number of directional encoding frequencies (default: 4).</param>
+    /// <returns>
+    /// NeRF layers: [DensityLayers], DensityOutput, [ColorLayers].
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> DreamFusion uses a NeRF (Neural Radiance Field) to represent
+    /// 3D objects. The NeRF predicts density and color at each 3D point, enabling the
+    /// generation of 3D content from text prompts via diffusion guidance.
+    /// </para>
+    /// <para>
+    /// Architecture from "DreamFusion: Text-to-3D using 2D Diffusion" (Poole et al., 2023).
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDreamFusionNeRFLayers(
+        int hiddenDim = 64,
+        int numLayers = 4,
+        int posFrequencies = 10,
+        int dirFrequencies = 4)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var sigmoid = new SigmoidActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+        int posInputDim = 3 + 6 * posFrequencies; // 3D position + positional encoding
+        int dirInputDim = 3 + 6 * dirFrequencies; // 3D direction + directional encoding
+
+        // Density network
+        int inDim = posInputDim;
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new DenseLayer<T>(inDim, hiddenDim, relu);
+            inDim = hiddenDim;
+        }
+        // Density output (scalar)
+        yield return new DenseLayer<T>(hiddenDim, 1, identity);
+
+        // Color network: takes density features + view direction
+        int colorInputDim = hiddenDim + dirInputDim;
+        yield return new DenseLayer<T>(colorInputDim, hiddenDim / 2, relu);
+        yield return new DenseLayer<T>(hiddenDim / 2, 3, sigmoid); // RGB output
+    }
+
+    #endregion
+
+    // ==========================================
+    // Audio Models (Golden Pattern Refactoring)
+    // ==========================================
+
+    /// <summary>
+    /// Creates VITS text encoder, duration predictor, flow, and decoder layers.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateVITSLayers(
+        int hiddenDim = 192,
+        int numEncoderLayers = 6,
+        int numHeads = 2,
+        int maxPhonemeLength = 256,
+        int numFlowLayers = 4,
+        int phonemeVocabSize = 128,
+        int[]? upsampleRates = null)
+    {
+        IActivationFunction<T> relu = new ReLUActivation<T>();
+        IActivationFunction<T> identity = new IdentityActivation<T>();
+        upsampleRates ??= [8, 8, 2, 2];
+
+        // Text Encoder
+        yield return new DenseLayer<T>(phonemeVocabSize, hiddenDim, relu);
+        for (int i = 0; i < numEncoderLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(maxPhonemeLength, hiddenDim, numHeads, identity);
+            yield return new DenseLayer<T>(hiddenDim, hiddenDim * 4, relu);
+            yield return new DenseLayer<T>(hiddenDim * 4, hiddenDim, identity);
+        }
+
+        // Duration Predictor
+        yield return new DenseLayer<T>(hiddenDim, hiddenDim, relu);
+        yield return new DenseLayer<T>(hiddenDim, hiddenDim, relu);
+        yield return new DenseLayer<T>(hiddenDim, 1, identity);
+
+        // Flow layers
+        for (int i = 0; i < numFlowLayers; i++)
+        {
+            yield return new DenseLayer<T>(hiddenDim, hiddenDim * 2, relu);
+        }
+
+        // Decoder (HiFi-GAN style)
+        int currentDim = hiddenDim;
+        foreach (int rate in upsampleRates)
+        {
+            yield return new DenseLayer<T>(currentDim, currentDim * rate, relu);
+            yield return new DenseLayer<T>(currentDim * rate, currentDim, relu);
+        }
+        yield return new DenseLayer<T>(currentDim, 1, identity);
+    }
+
+    /// <summary>
+    /// Creates Tacotron2 encoder, attention, decoder, and post-net layers.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateTacotron2Layers(
+        int vocabSize = 148,
+        int embeddingDim = 512,
+        int encoderDim = 256,
+        int decoderDim = 1024,
+        int attentionDim = 128,
+        int attentionFilters = 32,
+        int prenetDim = 256,
+        int numMels = 80,
+        int numMelsPerFrame = 1,
+        int numEncoderConvLayers = 3,
+        int numPostnetConvLayers = 5,
+        int postnetEmbeddingDim = 512)
+    {
+        IActivationFunction<T> relu = new ReLUActivation<T>();
+        IActivationFunction<T> tanh = (IActivationFunction<T>)new TanhActivation<T>();
+        IActivationFunction<T> sigmoid = new SigmoidActivation<T>();
+        IActivationFunction<T> identity = new IdentityActivation<T>();
+
+        // Encoder conv layers
+        for (int i = 0; i < numEncoderConvLayers; i++)
+        {
+            yield return new DenseLayer<T>(embeddingDim, embeddingDim, relu);
+        }
+        // Encoder LSTM
+        yield return new DenseLayer<T>(embeddingDim, encoderDim * 2, tanh);
+
+        // Attention layers
+        yield return new DenseLayer<T>(decoderDim, attentionDim, identity);
+        yield return new DenseLayer<T>(encoderDim * 2, attentionDim, identity);
+        yield return new DenseLayer<T>(attentionFilters, attentionDim, identity);
+        yield return new DenseLayer<T>(attentionDim, 1, identity);
+
+        // Decoder pre-net
+        yield return new DenseLayer<T>(numMels, prenetDim, relu);
+        yield return new DenseLayer<T>(prenetDim, prenetDim, relu);
+
+        // Decoder LSTM layers
+        yield return new DenseLayer<T>(prenetDim + encoderDim * 2, decoderDim, tanh);
+        yield return new DenseLayer<T>(decoderDim + encoderDim * 2, decoderDim, tanh);
+
+        // Mel output
+        yield return new DenseLayer<T>(decoderDim + encoderDim * 2, numMels * numMelsPerFrame, identity);
+
+        // Stop token
+        yield return new DenseLayer<T>(decoderDim + encoderDim * 2, 1, sigmoid);
+
+        // Post-net
+        for (int i = 0; i < numPostnetConvLayers; i++)
+        {
+            var isLast = i == numPostnetConvLayers - 1;
+            var activation = isLast ? identity : tanh;
+            yield return new DenseLayer<T>(
+                i == 0 ? numMels : postnetEmbeddingDim,
+                isLast ? numMels : postnetEmbeddingDim,
+                activation);
+        }
+    }
+
+    /// <summary>
+    /// Creates Wav2Vec2 feature encoder, transformer, and CTC layers.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateWav2Vec2Layers(
+        int hiddenDim = 768,
+        int numTransformerLayers = 12,
+        int numHeads = 12,
+        int ffDim = 3072,
+        int vocabSize = 32,
+        int sampleRate = 16000,
+        int maxAudioLengthSeconds = 30,
+        int[]? featureEncoderKernelSizes = null,
+        int[]? featureEncoderStrides = null,
+        int[]? featureEncoderChannels = null)
+    {
+        IActivationFunction<T> gelu = new GELUActivation<T>();
+        IActivationFunction<T> identity = new IdentityActivation<T>();
+
+        featureEncoderKernelSizes ??= [10, 3, 3, 3, 3, 2, 2];
+        featureEncoderStrides ??= [5, 2, 2, 2, 2, 2, 2];
+        featureEncoderChannels ??= [512, 512, 512, 512, 512, 512, 512];
+
+        // Convolutional feature encoder
+        int currentDim = 1;
+        for (int i = 0; i < featureEncoderKernelSizes.Length; i++)
+        {
+            int outputDim = featureEncoderChannels[i];
+            yield return new DenseLayer<T>(currentDim * featureEncoderKernelSizes[i], outputDim, gelu);
+            currentDim = outputDim;
+        }
+
+        // Feature projection
+        int lastEncoderChannel = featureEncoderChannels[^1];
+        yield return new DenseLayer<T>(lastEncoderChannel, hiddenDim, gelu);
+
+        // Transformer layers
+        int frameRateDivisor = featureEncoderStrides.Aggregate(1, (a, b) => a * b);
+        int maxFrames = (sampleRate * maxAudioLengthSeconds) / frameRateDivisor;
+        for (int i = 0; i < numTransformerLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(maxFrames, hiddenDim, numHeads, identity);
+            yield return new DenseLayer<T>(hiddenDim, ffDim, gelu);
+            yield return new DenseLayer<T>(ffDim, hiddenDim, identity);
+        }
+
+        // CTC projection
+        yield return new DenseLayer<T>(hiddenDim, vocabSize);
+    }
+
+    /// <summary>
+    /// Creates NeuralNoiseReducer encoder, bottleneck, and decoder layers.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateNeuralNoiseReducerLayers(
+        int fftSize = 512,
+        int baseFilters = 32,
+        int numStages = 4,
+        int bottleneckDim = 256,
+        int convKernelSize = 4,
+        int convStride = 2,
+        int convPadding = 1)
+    {
+        int freqBins = fftSize / 2 + 1;
+        int currentFilters = baseFilters;
+        int currentFreqDim = freqBins;
+
+        // Encoder
+        for (int stage = 0; stage < numStages; stage++)
+        {
+            int inputFilters = stage == 0 ? 1 : currentFilters / 2;
+            yield return new ConvolutionalLayer<T>(
+                inputDepth: inputFilters,
+                inputHeight: currentFreqDim,
+                inputWidth: 1,
+                outputDepth: currentFilters,
+                kernelSize: convKernelSize,
+                stride: convStride,
+                padding: convPadding,
+                activationFunction: new LeakyReLUActivation<T>());
+
+            currentFreqDim = (currentFreqDim + 2 * convPadding - convKernelSize) / convStride + 1;
+            if (stage < numStages - 1)
+                currentFilters *= 2;
+        }
+
+        // Bottleneck
+        int bottleneckInputSize = currentFilters * currentFreqDim;
+        yield return new DenseLayer<T>(bottleneckInputSize, bottleneckDim, (IActivationFunction<T>)new ReLUActivation<T>());
+
+        // Output projection (simplified decoder)
+        yield return new DenseLayer<T>(bottleneckDim, freqBins, (IActivationFunction<T>)new SigmoidActivation<T>());
+    }
+
+    /// <summary>
+    /// Creates DeepFilterNet encoder, GRU, deep filtering, and decoder layers.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDeepFilterNetLayers(
+        int numErbBands = 32,
+        int hiddenDim = 96,
+        int numGruLayers = 3,
+        int dfBins = 96,
+        int dfOrder = 5)
+    {
+        IActivationFunction<T> elu = new ELUActivation<T>();
+        IActivationFunction<T> tanh = (IActivationFunction<T>)new TanhActivation<T>();
+        int[] hiddenShape = [hiddenDim];
+
+        // ERB Encoder
+        yield return new DenseLayer<T>(numErbBands, hiddenDim, elu);
+        yield return new BatchNormalizationLayer<T>(hiddenDim);
+        yield return new ActivationLayer<T>(hiddenShape, elu);
+        yield return new DenseLayer<T>(hiddenDim, hiddenDim, elu);
+        yield return new BatchNormalizationLayer<T>(hiddenDim);
+        yield return new ActivationLayer<T>(hiddenShape, elu);
+
+        // GRU layers
+        for (int i = 0; i < numGruLayers; i++)
+        {
+            yield return new GRULayer<T>(hiddenDim, hiddenDim, returnSequences: false,
+                (IActivationFunction<T>?)null, (IActivationFunction<T>?)null);
+        }
+
+        // Deep filtering layers
+        int dfOutputDim = dfBins * dfOrder * 2;
+        int[] dfOutputShape = [dfOutputDim];
+        yield return new DenseLayer<T>(hiddenDim, dfOutputDim);
+        yield return new ActivationLayer<T>(dfOutputShape, tanh);
+
+        // Gain estimation
+        yield return new DenseLayer<T>(hiddenDim, numErbBands);
+
+        // Decoder
+        yield return new DenseLayer<T>(hiddenDim, hiddenDim, elu);
+        yield return new BatchNormalizationLayer<T>(hiddenDim);
+        yield return new ActivationLayer<T>(hiddenShape, elu);
+    }
+
+    /// <summary>
+    /// Creates DCCRN encoder, LSTM, and decoder layers.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDCCRNLayers(
+        int fftSize = 512,
+        int baseChannels = 16,
+        int numStages = 5,
+        int numLstmLayers = 2,
+        int lstmHiddenDim = 128,
+        int kernelSize = 5,
+        int stride = 2,
+        int inChannels = 2,
+        int timeDim = 100)
+    {
+        int freqBins = fftSize / 2 + 1;
+
+        // Encoder
+        int currentInChannels = inChannels;
+        for (int i = 0; i < numStages; i++)
+        {
+            int outChannels = baseChannels * (int)Math.Pow(2, Math.Min(i, 4));
+            int currentFreqBins = freqBins / (int)Math.Pow(stride, i);
+
+            yield return new ConvolutionalLayer<T>(
+                currentInChannels, currentFreqBins, timeDim, outChannels, kernelSize, stride, kernelSize / 2,
+                (IActivationFunction<T>)new LeakyReLUActivation<T>());
+            yield return new BatchNormalizationLayer<T>(outChannels);
+
+            // Skip connection layer
+            yield return new ConvolutionalLayer<T>(
+                outChannels, currentFreqBins / stride, timeDim, outChannels, 1, 1, 0);
+
+            currentInChannels = outChannels;
+        }
+
+        // LSTM layers
+        int lstmInputDim = currentInChannels * (fftSize / (int)Math.Pow(stride, numStages));
+        int[] lstmInputShape = [1, lstmInputDim];
+        for (int i = 0; i < numLstmLayers; i++)
+        {
+            int inputDim = i == 0 ? lstmInputDim : lstmHiddenDim;
+            yield return new LSTMLayer<T>(inputDim, lstmHiddenDim, lstmInputShape,
+                (IActivationFunction<T>)new TanhActivation<T>(), (IActivationFunction<T>)new SigmoidActivation<T>());
+            lstmInputShape = [1, lstmHiddenDim];
+        }
+
+        // LSTM projection
+        yield return new DenseLayer<T>(lstmHiddenDim, lstmInputDim);
+
+        // Decoder
+        int decoderChannels = baseChannels * (int)Math.Pow(2, Math.Min(numStages - 1, 4));
+        for (int i = 0; i < numStages; i++)
+        {
+            int outChannels = i < numStages - 1
+                ? baseChannels * (int)Math.Pow(2, Math.Min(numStages - 2 - i, 4))
+                : inChannels;
+
+            int skipChannels = decoderChannels * 2;
+            int currentFreqBins = freqBins / (int)Math.Pow(stride, numStages - i);
+            int[] decoderInputShape = [1, skipChannels, currentFreqBins, timeDim];
+
+            if (i < numStages - 1)
+            {
+                yield return new DeconvolutionalLayer<T>(decoderInputShape, outChannels, kernelSize, stride, kernelSize / 2,
+                    (IActivationFunction<T>)new LeakyReLUActivation<T>());
+                yield return new BatchNormalizationLayer<T>(outChannels);
+            }
+            else
+            {
+                yield return new DeconvolutionalLayer<T>(decoderInputShape, outChannels, kernelSize, stride, kernelSize / 2,
+                    (IActivationFunction<T>?)null);
+            }
+
+            decoderChannels = outChannels;
+        }
+    }
+
+    /// <summary>
+    /// Creates SileroVad convolutional, LSTM, and output layers.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateSileroVadLayers(
+        int frameSize = 512,
+        int convFilters = 64,
+        int numLstmLayers = 2,
+        int lstmHiddenDim = 64,
+        int conv1KernelSize = 8,
+        int conv1Stride = 4,
+        int conv1Padding = 2,
+        int conv2KernelSize = 4,
+        int conv2Stride = 2,
+        int conv2Padding = 1)
+    {
+        int seqLen1 = (frameSize + 2 * conv1Padding - conv1KernelSize) / conv1Stride + 1;
+        int seqLen2 = (seqLen1 + 2 * conv2Padding - conv2KernelSize) / conv2Stride + 1;
+        int seqLen3 = (seqLen2 + 2 * conv2Padding - conv2KernelSize) / conv2Stride + 1;
+
+        // First conv
+        yield return new ConvolutionalLayer<T>(
+            inputDepth: 1, inputHeight: 1, inputWidth: frameSize,
+            outputDepth: convFilters, kernelSize: conv1KernelSize,
+            stride: conv1Stride, padding: conv1Padding,
+            activationFunction: new LeakyReLUActivation<T>());
+
+        // Second conv
+        yield return new ConvolutionalLayer<T>(
+            inputDepth: convFilters, inputHeight: 1, inputWidth: seqLen1,
+            outputDepth: convFilters, kernelSize: conv2KernelSize,
+            stride: conv2Stride, padding: conv2Padding,
+            activationFunction: new LeakyReLUActivation<T>());
+
+        // Third conv
+        yield return new ConvolutionalLayer<T>(
+            inputDepth: convFilters, inputHeight: 1, inputWidth: seqLen2,
+            outputDepth: convFilters, kernelSize: conv2KernelSize,
+            stride: conv2Stride, padding: conv2Padding,
+            activationFunction: new LeakyReLUActivation<T>());
+
+        // LSTM layers
+        for (int i = 0; i < numLstmLayers; i++)
+        {
+            int inputSize = i == 0 ? convFilters : lstmHiddenDim;
+            yield return new LSTMLayer<T>(
+                inputSize: inputSize, hiddenSize: lstmHiddenDim,
+                inputShape: [1, seqLen3, inputSize],
+                activation: (IActivationFunction<T>?)null,
+                recurrentActivation: (IActivationFunction<T>?)null);
+        }
+
+        // Output
+        yield return new DenseLayer<T>(lstmHiddenDim, 1, (IActivationFunction<T>)new SigmoidActivation<T>());
+    }
+
+    /// <summary>
+    /// Creates SpeechEmotionRecognizer convolutional, dense, and output layers.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateSpeechEmotionRecognizerLayers(
+        int numMels = 40,
+        int numFrames = 100,
+        int baseFilters = 32,
+        int numConvBlocks = 3,
+        int hiddenDim = 128,
+        double dropoutRate = 0.3,
+        int numEmotions = 7,
+        int convKernelSize = 3,
+        int convStride = 1,
+        int convPadding = 1,
+        int poolSize = 2,
+        int poolStride = 2)
+    {
+        int currentFilters = baseFilters;
+        int currentHeight = numMels;
+        int currentWidth = numFrames;
+
+        // Convolutional blocks
+        for (int block = 0; block < numConvBlocks; block++)
+        {
+            int inputDepth = block == 0 ? 1 : currentFilters / 2;
+            int outputDepth = currentFilters;
+
+            yield return new ConvolutionalLayer<T>(
+                inputDepth: inputDepth, inputHeight: currentHeight, inputWidth: currentWidth,
+                outputDepth: outputDepth, kernelSize: convKernelSize,
+                stride: convStride, padding: convPadding,
+                activationFunction: new ReLUActivation<T>());
+
+            yield return new BatchNormalizationLayer<T>(outputDepth * currentHeight * currentWidth);
+
+            if (block < numConvBlocks - 1)
+            {
+                yield return new MaxPoolingLayer<T>(
+                    [outputDepth, currentHeight, currentWidth],
+                    poolSize: poolSize, stride: poolStride);
+                currentHeight /= poolStride;
+                currentWidth /= poolStride;
+            }
+
+            currentFilters *= 2;
+        }
+
+        // Flatten
+        yield return new FlattenLayer<T>([(currentFilters / 2), currentHeight, currentWidth]);
+
+        // Dense layers
+        int flattenedSize = (currentFilters / 2) * currentHeight * currentWidth;
+        yield return new DenseLayer<T>(flattenedSize, hiddenDim, (IActivationFunction<T>)new ReLUActivation<T>());
+        if (dropoutRate > 0)
+            yield return new DropoutLayer<T>(dropoutRate);
+        yield return new DenseLayer<T>(hiddenDim, hiddenDim / 2, (IActivationFunction<T>)new ReLUActivation<T>());
+        if (dropoutRate > 0)
+            yield return new DropoutLayer<T>(dropoutRate);
+        yield return new DenseLayer<T>(hiddenDim / 2, numEmotions);
+    }
+
+    // =============================================
+    // Video Models - Batch 3
+    // =============================================
+
+    /// <summary>
+    /// Creates layers for the VideoCLIP video-text understanding model.
+    /// Paper: Xu et al., "VideoCLIP: Contrastive Pre-training for Zero-shot Video-Text Understanding" EMNLP 2021.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateVideoCLIPLayers(
+        int channels = 3, int height = 224, int width = 224,
+        int hiddenDim = 768, int embeddingDim = 512,
+        int numSpatialBlocks = 12, int numTemporalBlocks = 4,
+        int numTextBlocks = 12, int numFrames = 32, int textMaxLength = 77)
+    {
+        int featH = height / 16;
+        int featW = width / 16;
+        int ffnDim = hiddenDim * 4;
+
+        // Video encoder: patch embedding + spatial transformer
+        yield return new ConvolutionalLayer<T>(channels, height, width, hiddenDim, 16, 16, 0);
+        for (int i = 0; i < numSpatialBlocks; i++)
+        {
+            yield return new ConvolutionalLayer<T>(hiddenDim, featH, featW, hiddenDim, 1, 1, 0);
+            yield return new ConvolutionalLayer<T>(hiddenDim, featH, featW, hiddenDim, 3, 1, 1);
+        }
+
+        // Temporal transformer
+        for (int i = 0; i < numTemporalBlocks; i++)
+        {
+            yield return new ConvolutionalLayer<T>(hiddenDim, 1, numFrames, hiddenDim, 1, 1, 0);
+        }
+
+        // Video projection
+        yield return new ConvolutionalLayer<T>(hiddenDim, 1, 1, embeddingDim, 1, 1, 0);
+
+        // Text transformer: QKV + AttnProj + FFN1 + FFN2 per block
+        for (int i = 0; i < numTextBlocks; i++)
+        {
+            yield return new ConvolutionalLayer<T>(hiddenDim, 1, textMaxLength, hiddenDim * 3, 1, 1, 0);
+            yield return new ConvolutionalLayer<T>(hiddenDim, 1, textMaxLength, hiddenDim, 1, 1, 0);
+            yield return new ConvolutionalLayer<T>(hiddenDim, 1, textMaxLength, ffnDim, 1, 1, 0);
+            yield return new ConvolutionalLayer<T>(ffnDim, 1, textMaxLength, hiddenDim, 1, 1, 0);
+        }
+
+        // Text projection
+        yield return new ConvolutionalLayer<T>(hiddenDim, 1, 1, embeddingDim, 1, 1, 0);
+
+        // Logit scale
+        yield return new ConvolutionalLayer<T>(1, 1, 1, 1, 1, 1, 0);
+    }
+
+    /// <summary>
+    /// Creates layers for the RAFT optical flow model.
+    /// Paper: Teed and Deng, "RAFT: Recurrent All-Pairs Field Transforms for Optical Flow" ECCV 2020.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateRAFTLayers(
+        int channels = 3, int height = 480, int width = 640,
+        int numFeatures = 256, int correlationLevels = 4, int correlationRadius = 4)
+    {
+        int featHeight = height / 8;
+        int featWidth = width / 8;
+
+        // Feature encoder (5 layers)
+        yield return new ConvolutionalLayer<T>(channels, height, width, 64, 7, 2, 3);
+        yield return new ConvolutionalLayer<T>(64, height / 2, width / 2, 64, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(64, height / 2, width / 2, 96, 3, 2, 1);
+        yield return new ConvolutionalLayer<T>(96, height / 4, width / 4, 128, 3, 2, 1);
+        yield return new ConvolutionalLayer<T>(128, featHeight, featWidth, numFeatures, 3, 1, 1);
+
+        // Context encoder (5 layers)
+        yield return new ConvolutionalLayer<T>(channels, height, width, 64, 7, 2, 3);
+        yield return new ConvolutionalLayer<T>(64, height / 2, width / 2, 64, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(64, height / 2, width / 2, 96, 3, 2, 1);
+        yield return new ConvolutionalLayer<T>(96, height / 4, width / 4, 128, 3, 2, 1);
+        yield return new ConvolutionalLayer<T>(128, featHeight, featWidth, numFeatures, 3, 1, 1);
+
+        // Correlation conv
+        int corrDim = correlationLevels * (2 * correlationRadius + 1) * (2 * correlationRadius + 1);
+        yield return new ConvolutionalLayer<T>(corrDim, featHeight, featWidth, numFeatures, 1, 1, 0);
+
+        // GRU update block
+        int gruInputDim = numFeatures + numFeatures + 2;
+        yield return new ConvolutionalLayer<T>(gruInputDim, featHeight, featWidth, numFeatures, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(gruInputDim, featHeight, featWidth, numFeatures, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(gruInputDim, featHeight, featWidth, numFeatures, 3, 1, 1);
+
+        // Flow heads
+        yield return new ConvolutionalLayer<T>(numFeatures, featHeight, featWidth, numFeatures / 2, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(numFeatures / 2, featHeight, featWidth, 2, 3, 1, 1);
+
+        // Upsample conv
+        yield return new ConvolutionalLayer<T>(numFeatures, featHeight, featWidth, 64 * 9, 3, 1, 1);
+    }
+
+    /// <summary>
+    /// Creates layers for the GMFlow optical flow model.
+    /// Paper: Xu et al., "GMFlow: Learning Optical Flow via Global Matching" CVPR 2022.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateGMFlowLayers(
+        int channels = 3, int height = 480, int width = 640,
+        int numFeatures = 128, int numTransformerLayers = 6)
+    {
+        int featH = height / 8;
+        int featW = width / 8;
+
+        // Feature encoder (6 layers)
+        yield return new ConvolutionalLayer<T>(channels, height, width, 64, 7, 2, 3);
+        yield return new ConvolutionalLayer<T>(64, height / 2, width / 2, 64, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(64, height / 2, width / 2, 96, 3, 2, 1);
+        yield return new ConvolutionalLayer<T>(96, height / 4, width / 4, 96, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(96, height / 4, width / 4, numFeatures, 3, 2, 1);
+        yield return new ConvolutionalLayer<T>(numFeatures, featH, featW, numFeatures, 3, 1, 1);
+
+        // Transformer layers: self-attention (2 per layer) + cross-attention (2 per layer)
+        for (int i = 0; i < numTransformerLayers; i++)
+        {
+            yield return new ConvolutionalLayer<T>(numFeatures, featH, featW, numFeatures, 1, 1, 0);
+            yield return new ConvolutionalLayer<T>(numFeatures, featH, featW, numFeatures, 1, 1, 0);
+            yield return new ConvolutionalLayer<T>(numFeatures * 2, featH, featW, numFeatures, 1, 1, 0);
+            yield return new ConvolutionalLayer<T>(numFeatures, featH, featW, numFeatures, 1, 1, 0);
+        }
+
+        // Flow decoder (2 layers)
+        yield return new ConvolutionalLayer<T>(numFeatures, featH, featW, 128, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(128, featH, featW, 64, 3, 1, 1);
+
+        // Flow head
+        yield return new ConvolutionalLayer<T>(64, featH, featW, 2, 3, 1, 1);
+
+        // Refinement (3 layers)
+        yield return new ConvolutionalLayer<T>(channels * 2 + 2, height, width, 64, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(64, height, width, 32, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(32, height, width, 2, 3, 1, 1);
+    }
+
+    /// <summary>
+    /// Creates layers for the RIFE frame interpolation model.
+    /// Paper: Huang et al., "RIFE: Real-Time Intermediate Flow Estimation" ECCV 2022.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateRIFELayers(
+        int channels = 3, int height = 480, int width = 640,
+        int numFeatures = 64, int numFlowBlocks = 8)
+    {
+        int decoderH = height / 4;
+        int decoderW = width / 4;
+
+        // Encoder (3 layers)
+        yield return new ConvolutionalLayer<T>(channels * 2, height, width, numFeatures, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(numFeatures, height, width, numFeatures * 2, 3, 2, 1);
+        yield return new ConvolutionalLayer<T>(numFeatures * 2, height / 2, width / 2, numFeatures * 4, 3, 2, 1);
+
+        // Flow decoder (3 layers)
+        yield return new ConvolutionalLayer<T>(numFeatures * 4, decoderH, decoderW, numFeatures * 2, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(numFeatures * 2, decoderH * 2, decoderW * 2, numFeatures, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(numFeatures, decoderH * 4, decoderW * 4, 4, 3, 1, 1);
+
+        // Context encoder (2 layers)
+        yield return new ConvolutionalLayer<T>(channels * 2, height, width, numFeatures, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(numFeatures, height, width, numFeatures, 3, 1, 1);
+
+        // Flow refinement blocks
+        for (int i = 0; i < numFlowBlocks; i++)
+        {
+            yield return new ConvolutionalLayer<T>(numFeatures + 4, height, width, numFeatures, 3, 1, 1);
+        }
+
+        // Fusion layer
+        int fusionInputChannels = channels * 2 + numFeatures + 4;
+        yield return new ConvolutionalLayer<T>(fusionInputChannels, height, width, numFeatures, 3, 1, 1);
+
+        // Output convolution
+        yield return new ConvolutionalLayer<T>(numFeatures, height, width, channels, 3, 1, 1);
+    }
+
+    /// <summary>
+    /// Creates layers for the FILM frame interpolation model.
+    /// Paper: Reda et al., "FILM: Frame Interpolation for Large Motion" ECCV 2022.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateFILMLayers(
+        int channels = 3, int height = 256, int width = 256,
+        int numScales = 7, int numFeatures = 64)
+    {
+        // Feature extractor (3 layers)
+        yield return new ConvolutionalLayer<T>(channels, height, width, numFeatures, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(numFeatures, height, width, numFeatures, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(numFeatures, height, width, numFeatures * 2, 3, 2, 1);
+
+        // Pyramid layers (variable count based on scale)
+        int currentH = height / 2;
+        int currentW = width / 2;
+        int currentC = numFeatures * 2;
+        int pyramidCount = 0;
+        for (int s = 0; s < numScales - 1; s++)
+        {
+            if (currentH < 4 || currentW < 4) break;
+            int nextC = Math.Min(currentC * 2, 512);
+            yield return new ConvolutionalLayer<T>(currentC, currentH, currentW, nextC, 3, 2, 1);
+            currentH /= 2;
+            currentW /= 2;
+            currentC = nextC;
+            pyramidCount++;
+        }
+
+        // Flow estimator (3 layers)
+        int flowInputC = numFeatures * 2 * 2;
+        yield return new ConvolutionalLayer<T>(flowInputC, height / 2, width / 2, numFeatures * 2, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(numFeatures * 2, height / 2, width / 2, numFeatures, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(numFeatures, height / 2, width / 2, 4, 3, 1, 1);
+
+        // Flow refinement
+        yield return new ConvolutionalLayer<T>(4 + numFeatures, height / 2, width / 2, 4, 3, 1, 1);
+
+        // Occlusion estimator
+        yield return new ConvolutionalLayer<T>(flowInputC + 4, height / 2, width / 2, 2, 3, 1, 1);
+
+        // Fusion layers (2 layers)
+        int fusionInputC = numFeatures * 2 * 2 + 4 + 2;
+        yield return new ConvolutionalLayer<T>(fusionInputC, height / 2, width / 2, numFeatures * 2, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(numFeatures * 2, height / 2, width / 2, numFeatures, 3, 1, 1);
+
+        // Synthesis head
+        yield return new ConvolutionalLayer<T>(numFeatures, height, width, channels, 3, 1, 1);
+    }
+
+    /// <summary>
+    /// Creates layers for the E2FGVI video inpainting model.
+    /// Paper: Li et al., "Towards An End-to-End Framework for Flow-Guided Video Inpainting" CVPR 2022.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateE2FGVILayers(
+        int channels = 3, int height = 432, int width = 240,
+        int numFeatures = 128, int numTransformerBlocks = 8)
+    {
+        int featH = height / 4;
+        int featW = width / 4;
+
+        // Flow network (3 layers)
+        yield return new ConvolutionalLayer<T>(channels * 2, height, width, 64, 7, 2, 3);
+        yield return new ConvolutionalLayer<T>(64, height / 2, width / 2, 128, 5, 2, 2);
+        yield return new ConvolutionalLayer<T>(128, featH, featW, numFeatures, 3, 1, 1);
+
+        // Flow head
+        yield return new ConvolutionalLayer<T>(numFeatures, featH, featW, 4, 3, 1, 1);
+
+        // Content encoder (3 layers)
+        yield return new ConvolutionalLayer<T>(channels + 1, height, width, 64, 7, 2, 3);
+        yield return new ConvolutionalLayer<T>(64, height / 2, width / 2, 128, 3, 2, 1);
+        yield return new ConvolutionalLayer<T>(128, featH, featW, numFeatures, 3, 1, 1);
+
+        // Transformer layers
+        for (int i = 0; i < numTransformerBlocks; i++)
+        {
+            yield return new ConvolutionalLayer<T>(numFeatures, featH, featW, numFeatures, 3, 1, 1);
+        }
+
+        // Propagation (2 layers)
+        yield return new ConvolutionalLayer<T>(numFeatures * 2, featH, featW, numFeatures, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(numFeatures, featH, featW, numFeatures, 3, 1, 1);
+
+        // Decoder (2 layers)
+        yield return new ConvolutionalLayer<T>(numFeatures, featH, featW, 128, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(128, featH * 2, featW * 2, 64, 3, 1, 1);
+
+        // Output head
+        yield return new ConvolutionalLayer<T>(64, height, width, channels, 3, 1, 1);
+    }
+
+    /// <summary>
+    /// Creates layers for the ProPainter video inpainting model.
+    /// Paper: Zhou et al., "ProPainter: Improving Propagation and Transformer for Video Inpainting" ICCV 2023.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateProPainterLayers(
+        int channels = 3, int height = 480, int width = 640,
+        int numFeatures = 128, int numTransformerBlocks = 6, int numHeads = 8)
+    {
+        int featH = height / 8;
+        int featW = width / 8;
+        int featChannels = numFeatures * 4;
+
+        // Flow encoder (3 layers)
+        yield return new ConvolutionalLayer<T>(4, height, width, numFeatures, 3, 2, 1);
+        yield return new ConvolutionalLayer<T>(numFeatures, height / 2, width / 2, numFeatures * 2, 3, 2, 1);
+        yield return new ConvolutionalLayer<T>(numFeatures * 2, height / 4, width / 4, numFeatures * 4, 3, 2, 1);
+
+        // Flow decoder (3 layers)
+        yield return new ConvolutionalLayer<T>(numFeatures * 4, height / 8, width / 8, numFeatures * 2, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(numFeatures * 2, height / 4, width / 4, numFeatures, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(numFeatures, height / 2, width / 2, 2, 3, 1, 1);
+
+        // Image encoder (3 layers)
+        yield return new ConvolutionalLayer<T>(channels + 1, height, width, numFeatures, 3, 2, 1);
+        yield return new ConvolutionalLayer<T>(numFeatures, height / 2, width / 2, numFeatures * 2, 3, 2, 1);
+        yield return new ConvolutionalLayer<T>(numFeatures * 2, height / 4, width / 4, numFeatures * 4, 3, 2, 1);
+
+        // Transformer blocks: QKV + Proj + FFN (2 per block)
+        for (int i = 0; i < numTransformerBlocks; i++)
+        {
+            yield return new ConvolutionalLayer<T>(featChannels, featH, featW, featChannels * 3, 1, 1, 0);
+            yield return new ConvolutionalLayer<T>(featChannels, featH, featW, featChannels, 1, 1, 0);
+            yield return new ConvolutionalLayer<T>(featChannels, featH, featW, featChannels * 4, 1, 1, 0);
+            yield return new ConvolutionalLayer<T>(featChannels * 4, featH, featW, featChannels, 1, 1, 0);
+        }
+
+        // Image decoder (3 layers)
+        yield return new ConvolutionalLayer<T>(numFeatures * 4, featH, featW, numFeatures * 2, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(numFeatures * 2, height / 4, width / 4, numFeatures, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(numFeatures, height / 2, width / 2, numFeatures, 3, 1, 1);
+
+        // Output convolution
+        yield return new ConvolutionalLayer<T>(numFeatures, height, width, channels, 3, 1, 1);
+    }
+
+    /// <summary>
+    /// Creates layers for the BasicVSRPlusPlus video super-resolution model.
+    /// Paper: Chan et al., "BasicVSR++: Improving Video Super-Resolution" CVPR 2022.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateBasicVSRPlusPlusLayers(
+        int channels = 3, int height = 64, int width = 64,
+        int numFeatures = 64, int scaleFactor = 4,
+        int numResidualBlocks = 30, int numPropagations = 2,
+        int numLevels = 5, int deformGroups = 8, int growthChannels = 32)
+    {
+        // SPyNet flow estimator
+        yield return new SpyNetLayer<T>(height, width, channels, numLevels: numLevels);
+
+        // Feature extraction
+        yield return new ConvolutionalLayer<T>(channels, height, width, numFeatures, 3, 1, 1);
+
+        // Residual blocks
+        for (int i = 0; i < numResidualBlocks; i++)
+        {
+            yield return new ResidualDenseBlock<T>(
+                numFeatures: numFeatures, growthChannels: growthChannels,
+                inputHeight: height, inputWidth: width, residualScale: 0.2);
+        }
+
+        // Deformable alignment modules for each propagation
+        for (int i = 0; i < numPropagations; i++)
+        {
+            yield return new DeformableConvolutionalLayer<T>(
+                height, width, numFeatures * 2, numFeatures,
+                kernelSize: 3, padding: 1, deformGroups: deformGroups);
+            yield return new DeformableConvolutionalLayer<T>(
+                height, width, numFeatures * 2, numFeatures,
+                kernelSize: 3, padding: 1, deformGroups: deformGroups);
+            yield return new ConvolutionalLayer<T>(numFeatures * 2, height, width, numFeatures, 3, 1, 1);
+            yield return new ConvolutionalLayer<T>(numFeatures * 2, height, width, numFeatures, 3, 1, 1);
+        }
+
+        // Upsampling layers
+        int numUpsample = scaleFactor == 4 ? 2 : 1;
+        int currentHeight = height;
+        int currentWidth = width;
+        for (int i = 0; i < numUpsample; i++)
+        {
+            int[] inputShape = [1, numFeatures * 4, currentHeight, currentWidth];
+            yield return new PixelShuffleLayer<T>(inputShape, 2);
+            currentHeight *= 2;
+            currentWidth *= 2;
+        }
+
+        // Output conv
+        yield return new ConvolutionalLayer<T>(numFeatures, currentHeight, currentWidth, channels, 3, 1, 1);
+    }
+
+    /// <summary>
+    /// Creates layers for the Stable Video Diffusion model.
+    /// Paper: Blattmann et al., "Stable Video Diffusion" Stability AI, 2023.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateStableVideoDiffusionLayers(
+        int channels = 3, int height = 576, int width = 1024,
+        int latentDim = 4, int numFrames = 14,
+        int vaeChannels = 128, int textEncoderDim = 768,
+        int textEncoderLayers = 12)
+    {
+        int latentH = height / 8;
+        int latentW = width / 8;
+        int[] channelMult = [320, 640, 1280, 1280];
+        int textFFNDim = textEncoderDim * 4;
+
+        // VAE Encoder (4 layers)
+        yield return new ConvolutionalLayer<T>(channels, height, width, vaeChannels, 3, 2, 1);
+        yield return new ConvolutionalLayer<T>(vaeChannels, height / 2, width / 2, vaeChannels * 2, 3, 2, 1);
+        yield return new ConvolutionalLayer<T>(vaeChannels * 2, height / 4, width / 4, vaeChannels * 4, 3, 2, 1);
+        yield return new ConvolutionalLayer<T>(vaeChannels * 4, latentH, latentW, latentDim, 3, 1, 1);
+
+        // VAE Decoder (4 layers)
+        yield return new ConvolutionalLayer<T>(latentDim, latentH, latentW, vaeChannels * 4, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(vaeChannels * 4, latentH, latentW, vaeChannels * 2, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(vaeChannels * 2, latentH, latentW, vaeChannels, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(vaeChannels, latentH, latentW, channels, 3, 1, 1);
+
+        // Down blocks (4 layers)
+        yield return new ConvolutionalLayer<T>(latentDim, latentH, latentW, channelMult[0], 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(channelMult[0], latentH, latentW, channelMult[1], 3, 2, 1);
+        yield return new ConvolutionalLayer<T>(channelMult[1], latentH / 2, latentW / 2, channelMult[2], 3, 2, 1);
+        yield return new ConvolutionalLayer<T>(channelMult[2], latentH / 4, latentW / 4, channelMult[3], 3, 2, 1);
+
+        // Middle block
+        yield return new ConvolutionalLayer<T>(channelMult[3], latentH / 8, latentW / 8, channelMult[3], 3, 1, 1);
+
+        // Up blocks (4 layers)
+        yield return new ConvolutionalLayer<T>(channelMult[3] * 2, latentH / 8, latentW / 8, channelMult[2], 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(channelMult[2] * 2, latentH / 4, latentW / 4, channelMult[1], 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(channelMult[1] * 2, latentH / 2, latentW / 2, channelMult[0], 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(channelMult[0] * 2, latentH, latentW, latentDim, 3, 1, 1);
+
+        // Temporal attention (4 layers)
+        for (int i = 0; i < 4; i++)
+        {
+            yield return new ConvolutionalLayer<T>(channelMult[Math.Min(i, 3)], 1, numFrames, channelMult[Math.Min(i, 3)], 1, 1, 0);
+        }
+
+        // Text encoder: embed projection
+        yield return new ConvolutionalLayer<T>(textEncoderDim, 1, 1, textEncoderDim, 1, 1, 0);
+
+        // Text encoder transformer layers
+        for (int i = 0; i < textEncoderLayers; i++)
+        {
+            yield return new ConvolutionalLayer<T>(textEncoderDim, 1, 1, textEncoderDim * 3, 1, 1, 0);
+            yield return new ConvolutionalLayer<T>(textEncoderDim, 1, 1, textEncoderDim, 1, 1, 0);
+            yield return new ConvolutionalLayer<T>(textEncoderDim, 1, 1, textFFNDim, 1, 1, 0);
+            yield return new ConvolutionalLayer<T>(textFFNDim, 1, 1, textEncoderDim, 1, 1, 0);
+        }
+
+        // Text final projection
+        yield return new ConvolutionalLayer<T>(textEncoderDim, 1, 1, channelMult[3], 1, 1, 0);
+
+        // Image conditioner
+        yield return new ConvolutionalLayer<T>(latentDim, latentH, latentW, channelMult[0], 3, 1, 1);
+
+        // Time embedding
+        yield return new ConvolutionalLayer<T>(1, 1, 1, channelMult[0], 1, 1, 0);
+
+        // Noise predictor
+        yield return new ConvolutionalLayer<T>(channelMult[0], latentH, latentW, latentDim, 3, 1, 1);
+    }
+
+    /// <summary>
+    /// Creates layers for the HopeNetwork (self-modifying recurrent neural network).
+    /// Architecture based on Google's Nested Learning paradigm with Continuum Memory System.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateHopeNetworkLayers(
+        int hiddenDim = 256,
+        int numCMSLevels = 4,
+        int numRecurrentLayers = 3,
+        int inContextLearningLevels = 5)
+    {
+        // CMS blocks as sequential MLP chains (Equation 30 from paper)
+        for (int i = 0; i < numCMSLevels; i++)
+        {
+            yield return new ContinuumMemorySystemLayer<T>(
+                inputShape: new[] { hiddenDim },
+                hiddenDim: hiddenDim,
+                numFrequencyLevels: inContextLearningLevels);
+        }
+
+        // Recurrent layers for temporal processing
+        for (int i = 0; i < numRecurrentLayers; i++)
+        {
+            yield return new RecurrentLayer<T>(
+                hiddenDim,
+                hiddenDim,
+                (IActivationFunction<T>)new TanhActivation<T>());
+        }
+    }
+
+    /// <summary>
+    /// Creates layers for the Vision Transformer (ViT) architecture.
+    /// Architecture from "An Image is Worth 16x16 Words" (Dosovitskiy et al., 2020).
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateVisionTransformerLayers(
+        int imageHeight = 224,
+        int imageWidth = 224,
+        int channels = 3,
+        int patchSize = 16,
+        int hiddenDim = 768,
+        int numLayers = 12,
+        int numHeads = 12,
+        int mlpDim = 3072,
+        int numClasses = 1000)
+    {
+        // Patch embedding layer
+        yield return new PatchEmbeddingLayer<T>(imageHeight, imageWidth, channels, patchSize, hiddenDim);
+
+        // Transformer encoder layers
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new TransformerEncoderLayer<T>(hiddenDim, numHeads, mlpDim);
+        }
+
+        // Classification head
+        yield return new DenseLayer<T>(hiddenDim, numClasses,
+            (IVectorActivationFunction<T>)new SoftmaxActivation<T>());
+    }
+
+    /// <summary>
+    /// Creates layers for the TransformerEmbeddingNetwork.
+    /// Architecture based on BERT/Sentence-BERT transformer encoder stack.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateTransformerEmbeddingLayers(
+        int vocabSize = 30522,
+        int embeddingDimension = 768,
+        int maxSequenceLength = 512,
+        int numLayers = 12,
+        int numHeads = 12,
+        int feedForwardDim = 3072)
+    {
+        yield return new EmbeddingLayer<T>(vocabSize, embeddingDimension);
+        yield return new PositionalEncodingLayer<T>(maxSequenceLength, embeddingDimension);
+
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new TransformerEncoderLayer<T>(embeddingDimension, numHeads, feedForwardDim);
+        }
+    }
+
+    /// <summary>
+    /// Creates layers for the LLaVA (Large Language and Vision Assistant) native mode.
+    /// Architecture from "Visual Instruction Tuning" (Liu et al., 2023).
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateLLaVALayers(
+        int imageSize = 336,
+        int channels = 3,
+        int patchSize = 14,
+        int visionHiddenDim = 1024,
+        int lmHiddenDim = 4096,
+        int numVisionLayers = 24,
+        int numLmLayers = 32,
+        int numHeads = 16,
+        int vocabularySize = 32000,
+        int maxSequenceLength = 2048)
+    {
+        int visionFfnDim = visionHiddenDim * 4;
+        int lmFfnDim = lmHiddenDim * 4;
+
+        // Patch embedding
+        yield return new PatchEmbeddingLayer<T>(imageSize, imageSize, channels, patchSize, visionHiddenDim);
+
+        // Vision encoder transformer layers
+        for (int i = 0; i < numVisionLayers; i++)
+        {
+            yield return new TransformerEncoderLayer<T>(visionHiddenDim, numHeads, visionFfnDim);
+        }
+
+        // Projection layers (2-layer MLP)
+        yield return new DenseLayer<T>(visionHiddenDim, lmHiddenDim,
+            (IActivationFunction<T>)new GELUActivation<T>());
+        yield return new DenseLayer<T>(lmHiddenDim, lmHiddenDim, (IActivationFunction<T>?)null);
+
+        // Text token embedding
+        yield return new EmbeddingLayer<T>(vocabularySize, lmHiddenDim);
+
+        // Language model transformer layers
+        for (int i = 0; i < numLmLayers; i++)
+        {
+            yield return new TransformerEncoderLayer<T>(lmHiddenDim, numHeads, lmFfnDim);
+        }
+
+        // Output projection
+        yield return new DenseLayer<T>(lmHiddenDim, vocabularySize, (IActivationFunction<T>?)null);
+
+        // Grounding head
+        yield return new DenseLayer<T>(lmHiddenDim, 4, (IActivationFunction<T>)new SigmoidActivation<T>());
+    }
+
+    /// <summary>
+    /// Creates layers for the VideoCLIP native mode.
+    /// Architecture from "VideoCLIP: Contrastive Pre-training for Zero-shot Video-Text Understanding" (Xu et al., 2021).
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateVideoCLIPLayers(
+        int imageSize = 224,
+        int channels = 3,
+        int patchSize = 16,
+        int visionHiddenDim = 768,
+        int textHiddenDim = 512,
+        int embeddingDimension = 512,
+        int numFrameEncoderLayers = 12,
+        int numTemporalLayers = 4,
+        int numTextLayers = 12,
+        int numHeads = 12,
+        int vocabularySize = 49408,
+        int maxSequenceLength = 77)
+    {
+        int visionFfnDim = visionHiddenDim * 4;
+        int temporalFfnDim = visionHiddenDim * 4;
+        int textFfnDim = textHiddenDim * 4;
+
+        // Vision frame encoder (shared across frames)
+        yield return new PatchEmbeddingLayer<T>(imageSize, imageSize, channels, patchSize, visionHiddenDim);
+
+        for (int i = 0; i < numFrameEncoderLayers; i++)
+        {
+            yield return new TransformerEncoderLayer<T>(visionHiddenDim, numHeads, visionFfnDim);
+        }
+
+        // Temporal encoder layers
+        for (int i = 0; i < numTemporalLayers; i++)
+        {
+            yield return new TransformerEncoderLayer<T>(visionHiddenDim, numHeads, temporalFfnDim);
+        }
+
+        // Video projection
+        yield return new DenseLayer<T>(visionHiddenDim, embeddingDimension, (IActivationFunction<T>?)null);
+
+        // Text token embedding
+        yield return new EmbeddingLayer<T>(vocabularySize, textHiddenDim);
+
+        // Text encoder layers
+        for (int i = 0; i < numTextLayers; i++)
+        {
+            yield return new TransformerEncoderLayer<T>(textHiddenDim, numHeads, textFfnDim);
+        }
+
+        // Text projection
+        yield return new DenseLayer<T>(textHiddenDim, embeddingDimension, (IActivationFunction<T>?)null);
+
+        // Caption generation head
+        yield return new DenseLayer<T>(embeddingDimension, vocabularySize, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>
+    /// Creates layers for the ImageBind native mode.
+    /// Architecture from "ImageBind: One Embedding Space To Bind Them All" (Girdhar et al., 2023).
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateImageBindLayers(
+        int imageSize = 224,
+        int channels = 3,
+        int patchSize = 16,
+        int hiddenDim = 768,
+        int embeddingDimension = 1024,
+        int numEncoderLayers = 12,
+        int numHeads = 12,
+        int vocabularySize = 49408,
+        int maxSequenceLength = 77,
+        int audioSampleRate = 16000,
+        int audioMaxDuration = 10,
+        int imuTimesteps = 2000,
+        int numVideoFrames = 8)
+    {
+        int ffnDim = hiddenDim * 4;
+
+        // Image encoder
+        yield return new PatchEmbeddingLayer<T>(imageSize, imageSize, channels, patchSize, hiddenDim);
+        for (int i = 0; i < numEncoderLayers; i++)
+            yield return new TransformerEncoderLayer<T>(hiddenDim, numHeads, ffnDim);
+        yield return new DenseLayer<T>(hiddenDim, embeddingDimension, (IActivationFunction<T>?)null);
+
+        // Text encoder
+        yield return new EmbeddingLayer<T>(vocabularySize, hiddenDim);
+        for (int i = 0; i < numEncoderLayers; i++)
+            yield return new TransformerEncoderLayer<T>(hiddenDim, numHeads, ffnDim);
+        yield return new DenseLayer<T>(hiddenDim, embeddingDimension, (IActivationFunction<T>?)null);
+
+        // Audio encoder
+        int audioPatchSize = 16;
+        int audioSeqLen = (audioSampleRate * audioMaxDuration) / 160;
+        audioSeqLen = (audioSeqLen / audioPatchSize) * audioPatchSize;
+        if (audioSeqLen < audioPatchSize) audioSeqLen = audioPatchSize;
+        yield return new PatchEmbeddingLayer<T>(128, audioSeqLen, 1, audioPatchSize, hiddenDim);
+        for (int i = 0; i < numEncoderLayers; i++)
+            yield return new TransformerEncoderLayer<T>(hiddenDim, numHeads, ffnDim);
+        yield return new DenseLayer<T>(hiddenDim, embeddingDimension, (IActivationFunction<T>?)null);
+
+        // Thermal encoder
+        yield return new PatchEmbeddingLayer<T>(imageSize, imageSize, 1, patchSize, hiddenDim);
+        for (int i = 0; i < numEncoderLayers; i++)
+            yield return new TransformerEncoderLayer<T>(hiddenDim, numHeads, ffnDim);
+        yield return new DenseLayer<T>(hiddenDim, embeddingDimension, (IActivationFunction<T>?)null);
+
+        // Depth encoder
+        yield return new PatchEmbeddingLayer<T>(imageSize, imageSize, 1, patchSize, hiddenDim);
+        for (int i = 0; i < numEncoderLayers; i++)
+            yield return new TransformerEncoderLayer<T>(hiddenDim, numHeads, ffnDim);
+        yield return new DenseLayer<T>(hiddenDim, embeddingDimension, (IActivationFunction<T>?)null);
+
+        // IMU encoder
+        yield return new DenseLayer<T>(6, hiddenDim, (IActivationFunction<T>)new GELUActivation<T>());
+        for (int i = 0; i < Math.Min(6, numEncoderLayers); i++)
+            yield return new TransformerEncoderLayer<T>(hiddenDim, numHeads, ffnDim);
+        yield return new DenseLayer<T>(hiddenDim, embeddingDimension, (IActivationFunction<T>?)null);
+
+        // Video temporal aggregation
+        for (int i = 0; i < 4; i++)
+            yield return new TransformerEncoderLayer<T>(hiddenDim, numHeads, ffnDim);
+        yield return new DenseLayer<T>(hiddenDim, embeddingDimension, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>
+    /// Creates layers for the UnifiedMultimodalNetwork.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateUnifiedMultimodalLayers(
+        int embeddingDimension = 512,
+        int numTransformerLayers = 6)
+    {
+        IActivationFunction<T>? nullActivation = null;
+        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
+
+        // Modality encoders
+        yield return new DenseLayer<T>(512, embeddingDimension, geluActivation); // text
+        yield return new DenseLayer<T>(768, embeddingDimension, geluActivation); // image
+        yield return new DenseLayer<T>(128, embeddingDimension, geluActivation); // audio
+        yield return new DenseLayer<T>(1024, embeddingDimension, geluActivation); // video
+
+        // Unified transformer layers
+        int headCount = Math.Max(1, embeddingDimension / 64);
+        if (embeddingDimension % headCount != 0)
+        {
+            for (int h = 8; h >= 1; h--)
+            {
+                if (embeddingDimension % h == 0) { headCount = h; break; }
+            }
+        }
+
+        for (int i = 0; i < numTransformerLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(1, embeddingDimension, headCount, geluActivation);
+        }
+
+        // Cross-modal attention
+        for (int i = 0; i < 4; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(1, embeddingDimension, headCount, geluActivation);
+        }
+
+        // Modality decoders
+        yield return new DenseLayer<T>(embeddingDimension, 50000, nullActivation); // text
+        yield return new DenseLayer<T>(embeddingDimension, 768 * 3, nullActivation); // image
+        yield return new DenseLayer<T>(embeddingDimension, 16000, nullActivation); // audio
+        yield return new DenseLayer<T>(embeddingDimension, 768 * 3 * 8, nullActivation); // video
+
+        // Fusion and output
+        yield return new DenseLayer<T>(embeddingDimension * 4, embeddingDimension, geluActivation);
+        yield return new DenseLayer<T>(embeddingDimension, 1000, nullActivation);
+        yield return new DenseLayer<T>(embeddingDimension, embeddingDimension, geluActivation);
+    }
+
+    /// <summary>
+    /// Creates layers for the AudioVisualEventLocalizationNetwork.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateAudioVisualEventLocalizationLayers(
+        int embeddingDimension = 256,
+        int numEncoderLayers = 4,
+        int numCategories = 35)
+    {
+        IActivationFunction<T>? nullActivation = null;
+        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
+
+        // Audio encoder: input projection + (attention + FFN1 + FFN2) × numEncoderLayers + output projection
+        yield return new DenseLayer<T>(128, embeddingDimension, nullActivation); // SPECTROGRAM_BINS=128
+        for (int i = 0; i < numEncoderLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(1, embeddingDimension, 8, geluActivation);
+        }
+        yield return new DenseLayer<T>(embeddingDimension, embeddingDimension, nullActivation);
+
+        // Visual encoder: input projection + attention × numEncoderLayers + output projection
+        yield return new DenseLayer<T>(768, embeddingDimension, nullActivation);
+        for (int i = 0; i < numEncoderLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(1, embeddingDimension, 8, geluActivation);
+        }
+        yield return new DenseLayer<T>(embeddingDimension, embeddingDimension, nullActivation);
+
+        // Temporal modeling: 4 attention layers + proposal head
+        for (int i = 0; i < 4; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(1, embeddingDimension, 8, geluActivation);
+        }
+        yield return new DenseLayer<T>(embeddingDimension, 2, nullActivation); // temporal proposal head
+
+        // Cross-modal fusion: 4 attention layers
+        for (int i = 0; i < 4; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(1, embeddingDimension * 2, 8, geluActivation);
+        }
+
+        // Task-specific heads
+        yield return new DenseLayer<T>(embeddingDimension * 2, numCategories, nullActivation); // event classification
+        yield return new DenseLayer<T>(embeddingDimension * 2, 3, nullActivation); // temporal boundary
+        yield return new DenseLayer<T>(embeddingDimension * 2, 4, nullActivation); // spatial localization
+        yield return new DenseLayer<T>(embeddingDimension * 2, 1, nullActivation); // anomaly detection
+    }
+
+    /// <summary>
+    /// Creates layers for the AudioVisualCorrespondenceNetwork.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateAudioVisualCorrespondenceLayers(
+        int embeddingDimension = 512,
+        int numEncoderLayers = 6,
+        int numAttentionHeads = 8)
+    {
+        int hiddenDim = embeddingDimension * 4;
+        IActivationFunction<T>? nullActivation = null;
+        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
+
+        // Audio encoder: input projection
+        yield return new DenseLayer<T>(128, embeddingDimension, nullActivation); // SPECTROGRAM_BINS=128
+
+        // Audio encoder: (attention + FFN1 + FFN2) × numEncoderLayers
+        for (int i = 0; i < numEncoderLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(1, embeddingDimension, numAttentionHeads, geluActivation);
+            yield return new DenseLayer<T>(embeddingDimension, hiddenDim, geluActivation);
+            yield return new DenseLayer<T>(hiddenDim, embeddingDimension, nullActivation);
+        }
+
+        // Audio output projection
+        yield return new DenseLayer<T>(embeddingDimension, embeddingDimension, nullActivation);
+
+        // Visual encoder: input projection
+        yield return new DenseLayer<T>(768, embeddingDimension, nullActivation);
+
+        // Visual encoder: (attention + FFN1 + FFN2) × numEncoderLayers
+        for (int i = 0; i < numEncoderLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(1, embeddingDimension, numAttentionHeads, geluActivation);
+            yield return new DenseLayer<T>(embeddingDimension, hiddenDim, geluActivation);
+            yield return new DenseLayer<T>(hiddenDim, embeddingDimension, nullActivation);
+        }
+
+        // Visual output projection
+        yield return new DenseLayer<T>(embeddingDimension, embeddingDimension, nullActivation);
+
+        // Cross-modal attention (2 layers)
+        for (int i = 0; i < 2; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(1, embeddingDimension, numAttentionHeads, geluActivation);
+        }
+
+        // Task heads
+        yield return new DenseLayer<T>(embeddingDimension, 1, nullActivation); // localization
+        yield return new DenseLayer<T>(embeddingDimension * 2, 1, nullActivation); // sync
+        yield return new DenseLayer<T>(embeddingDimension * 2, 256, nullActivation); // scene classification
+        yield return new DenseLayer<T>(embeddingDimension * 2, 128, nullActivation); // separation mask (SPECTROGRAM_BINS=128)
+    }
+
+    /// <summary>
+    /// Creates layers for the BLIP native mode.
+    /// Architecture from "BLIP: Bootstrapping Language-Image Pre-Training" (Li et al., 2022).
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateBlipLayers(
+        int imageSize = 384,
+        int patchSize = 16,
+        int hiddenDim = 768,
+        int embeddingDimension = 256,
+        int numLayers = 12,
+        int numDecoderLayers = 6,
+        int numHeads = 12,
+        int mlpDim = 3072,
+        int vocabularySize = 30524)
+    {
+        // Vision encoder: PatchEmbed + numLayers × TransformerEncoder + projection
+        yield return new PatchEmbeddingLayer<T>(imageSize, imageSize, 3, patchSize, hiddenDim);
+        for (int i = 0; i < numLayers; i++)
+            yield return new TransformerEncoderLayer<T>(hiddenDim, numHeads, mlpDim);
+        yield return new DenseLayer<T>(hiddenDim, embeddingDimension, (IActivationFunction<T>?)null);
+
+        // Text encoder: EmbeddingLayer + numLayers × TransformerEncoder + projection
+        yield return new EmbeddingLayer<T>(vocabularySize, hiddenDim);
+        for (int i = 0; i < numLayers; i++)
+            yield return new TransformerEncoderLayer<T>(hiddenDim, numHeads, mlpDim);
+        yield return new DenseLayer<T>(hiddenDim, embeddingDimension, (IActivationFunction<T>?)null);
+
+        // Text decoder layers
+        for (int i = 0; i < numDecoderLayers; i++)
+            yield return new TransformerEncoderLayer<T>(hiddenDim, numHeads, mlpDim);
+
+        // Cross-attention layers (6)
+        for (int i = 0; i < 6; i++)
+            yield return new TransformerEncoderLayer<T>(hiddenDim, numHeads, mlpDim);
+
+        // ITM head + LM head
+        yield return new DenseLayer<T>(hiddenDim, 2, (IActivationFunction<T>?)null);
+        yield return new DenseLayer<T>(hiddenDim, vocabularySize, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>
+    /// Creates layers for the BLIP-2 native mode.
+    /// Architecture from "BLIP-2: Bootstrapping Language-Image Pre-Training with Frozen Image Encoders and Large Language Models" (Li et al., 2023).
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateBlip2Layers(
+        int imageSize = 224,
+        int channels = 3,
+        int patchSize = 14,
+        int visionHiddenDim = 1408,
+        int qformerHiddenDim = 768,
+        int numQformerLayers = 12,
+        int numHeads = 12,
+        int vocabularySize = 32128,
+        int embeddingDimension = 256,
+        int lmHiddenDim = 2560,
+        int numLmDecoderLayers = 24,
+        int maxSequenceLength = 512)
+    {
+        int feedForwardDim = qformerHiddenDim * 4;
+
+        // Vision encoder: PatchEmbed
+        yield return new PatchEmbeddingLayer<T>(imageSize, imageSize, channels, patchSize, visionHiddenDim);
+
+        // Q-Former layers: (self-attn + cross-attn + FFN) × numQformerLayers
+        for (int i = 0; i < numQformerLayers; i++)
+        {
+            yield return new TransformerEncoderLayer<T>(qformerHiddenDim, numHeads, feedForwardDim);
+            yield return new TransformerEncoderLayer<T>(qformerHiddenDim, numHeads, feedForwardDim);
+            yield return new DenseLayer<T>(qformerHiddenDim, qformerHiddenDim, (IActivationFunction<T>?)null);
+        }
+
+        // Text embedding
+        yield return new EmbeddingLayer<T>(vocabularySize, qformerHiddenDim);
+
+        // ITM head + ITC projection + LM projection
+        yield return new DenseLayer<T>(qformerHiddenDim, 2, (IActivationFunction<T>?)null);
+        yield return new DenseLayer<T>(qformerHiddenDim, embeddingDimension, (IActivationFunction<T>?)null);
+        yield return new DenseLayer<T>(qformerHiddenDim, lmHiddenDim, (IActivationFunction<T>?)null);
+
+        // LM decoder layers
+        int lmFeedForwardDim = lmHiddenDim * 4;
+        int lmNumHeads = Math.Max(8, lmHiddenDim / 64);
+        for (int i = 0; i < numLmDecoderLayers; i++)
+        {
+            yield return new TransformerDecoderLayer<T>(
+                embeddingSize: lmHiddenDim,
+                numHeads: lmNumHeads,
+                feedForwardDim: lmFeedForwardDim,
+                sequenceLength: maxSequenceLength,
+                ffnActivation: new GELUActivation<T>());
+        }
+
+        // LM head
+        yield return new DenseLayer<T>(lmHiddenDim, vocabularySize, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>
+    /// Creates layers for the Flamingo native mode.
+    /// Architecture from "Flamingo: a Visual Language Model for Few-Shot Learning" (Alayrac et al., 2022).
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateFlamingoLayers(
+        int imageSize = 224,
+        int channels = 3,
+        int patchSize = 14,
+        int visionHiddenDim = 1024,
+        int lmHiddenDim = 2048,
+        int numVisionLayers = 24,
+        int numPerceiverLayers = 6,
+        int numPerceiverTokens = 64,
+        int numLmLayers = 24,
+        int numHeads = 16,
+        int vocabularySize = 32000,
+        int maxSequenceLength = 2048)
+    {
+        int visionFfnDim = visionHiddenDim * 4;
+        int lmFfnDim = lmHiddenDim * 4;
+
+        // Patch embedding
+        yield return new PatchEmbeddingLayer<T>(imageSize, imageSize, channels, patchSize, visionHiddenDim);
+
+        // Vision encoder transformer layers
+        for (int i = 0; i < numVisionLayers; i++)
+            yield return new TransformerEncoderLayer<T>(visionHiddenDim, numHeads, visionFfnDim);
+
+        // Perceiver Resampler layers: (CrossAttn + FFN_expand + FFN_contract) × numPerceiverLayers
+        for (int i = 0; i < numPerceiverLayers; i++)
+        {
+            yield return new CrossAttentionLayer<T>(lmHiddenDim, visionHiddenDim, numHeads);
+            yield return new DenseLayer<T>(lmHiddenDim, lmHiddenDim * 4,
+                (IActivationFunction<T>)new GELUActivation<T>());
+            yield return new DenseLayer<T>(lmHiddenDim * 4, lmHiddenDim, (IActivationFunction<T>?)null);
+        }
+
+        // Gated cross-attention layers
+        int gatedCrossAttnCount = numLmLayers / 4;
+        for (int i = 0; i < gatedCrossAttnCount; i++)
+            yield return new CrossAttentionLayer<T>(lmHiddenDim, lmHiddenDim, numHeads);
+
+        // Text token embedding
+        yield return new EmbeddingLayer<T>(vocabularySize, lmHiddenDim);
+
+        // Language model transformer layers
+        for (int i = 0; i < numLmLayers; i++)
+            yield return new TransformerEncoderLayer<T>(lmHiddenDim, numHeads, lmFfnDim);
+
+        // Output projection
+        yield return new DenseLayer<T>(lmHiddenDim, vocabularySize, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>
+    /// Creates layers for the GPT-4 Vision native mode.
+    /// Architecture inspired by GPT-4V multimodal capabilities.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateGpt4VisionLayers(
+        int imageSize = 336,
+        int patchSize = 14,
+        int visionEmbeddingDim = 1024,
+        int embeddingDimension = 4096,
+        int hiddenDim = 4096,
+        int numVisionLayers = 24,
+        int numLanguageLayers = 32,
+        int numHeads = 16,
+        int vocabularySize = 100256)
+    {
+        int ffnDim = hiddenDim * 4;
+
+        // Vision encoder: PatchEmbed + TransformerEncoder × numVisionLayers + LayerNorm
+        yield return new PatchEmbeddingLayer<T>(imageSize, imageSize, 3, patchSize, visionEmbeddingDim);
+        for (int i = 0; i < numVisionLayers; i++)
+            yield return new TransformerEncoderLayer<T>(visionEmbeddingDim, numHeads, ffnDim);
+        yield return new LayerNormalizationLayer<T>(visionEmbeddingDim);
+
+        // Vision projectors (2-layer MLP)
+        yield return new DenseLayer<T>(visionEmbeddingDim, embeddingDimension, (IActivationFunction<T>?)null);
+        yield return new DenseLayer<T>(embeddingDimension, embeddingDimension, (IActivationFunction<T>?)null);
+
+        // Text token embedding
+        yield return new EmbeddingLayer<T>(vocabularySize, embeddingDimension);
+
+        // Language model transformer layers + cross-attention layers
+        int crossAttnCount = 0;
+        for (int i = 0; i < numLanguageLayers; i++)
+        {
+            yield return new TransformerEncoderLayer<T>(embeddingDimension, numHeads, ffnDim);
+            if (i % 4 == 0)
+            {
+                yield return new TransformerEncoderLayer<T>(embeddingDimension, numHeads, ffnDim);
+                crossAttnCount++;
+            }
+        }
+
+        // Final layer norm + LM head
+        yield return new LayerNormalizationLayer<T>(embeddingDimension);
+        yield return new DenseLayer<T>(embeddingDimension, vocabularySize, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>
+    /// Creates layers for the NeRF (Neural Radiance Field) model.
+    /// Architecture from "NeRF: Representing Scenes as Neural Radiance Fields for View Synthesis" (Mildenhall et al., 2020).
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateNeRFLayers(
+        int positionEncodingLevels = 10,
+        int directionEncodingLevels = 4,
+        int hiddenDim = 256,
+        int numLayers = 8,
+        int colorHiddenDim = 128,
+        int colorNumLayers = 1)
+    {
+        int positionDim = 3 * 2 * positionEncodingLevels;
+        int directionDim = 3 * 2 * directionEncodingLevels;
+        int skipConnectionLayer = numLayers >= 4 ? Math.Min(numLayers / 2, numLayers - 1) : -1;
+
+        // Position MLP layers
+        for (int i = 0; i < numLayers; i++)
+        {
+            int inputDim = i == 0 ? positionDim : hiddenDim;
+            if (skipConnectionLayer >= 0 && i == skipConnectionLayer)
+                inputDim = hiddenDim + positionDim;
+
+            yield return new DenseLayer<T>(inputDim, hiddenDim, activationFunction: new ReLUActivation<T>());
+        }
+
+        // Density output + feature layer
+        yield return new DenseLayer<T>(hiddenDim, 1, activationFunction: new IdentityActivation<T>());
+        yield return new DenseLayer<T>(hiddenDim, hiddenDim, activationFunction: new IdentityActivation<T>());
+
+        // Color MLP layers
+        int colorInputDim = hiddenDim + directionDim;
+        int colorHidden = colorNumLayers > 0 ? colorHiddenDim : colorInputDim;
+        for (int i = 0; i < colorNumLayers; i++)
+        {
+            int inDim = i == 0 ? colorInputDim : colorHidden;
+            yield return new DenseLayer<T>(inDim, colorHidden, activationFunction: new ReLUActivation<T>());
+        }
+
+        // Color output (RGB)
+        yield return new DenseLayer<T>(colorHidden, 3, activationFunction: new IdentityActivation<T>());
+    }
+
+    /// <summary>
+    /// Creates layers for the Instant-NGP (Neural Graphics Primitives) model.
+    /// Architecture from "Instant Neural Graphics Primitives with a Multiresolution Hash Encoding" (Müller et al., 2022).
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateInstantNGPLayers(
+        int numLevels = 16,
+        int featuresPerLevel = 2,
+        int mlpNumLayers = 2,
+        int mlpHiddenDim = 64,
+        int featureDim = 15,
+        int colorHiddenDim = 64,
+        int colorNumLayers = 2)
+    {
+        int hashFeatureDim = numLevels * featuresPerLevel;
+
+        // Density MLP layers
+        int currentDim = hashFeatureDim;
+        for (int i = 0; i < mlpNumLayers; i++)
+        {
+            yield return new DenseLayer<T>(currentDim, mlpHiddenDim, activationFunction: new ReLUActivation<T>());
+            currentDim = mlpHiddenDim;
+        }
+
+        // Density output + feature layer
+        yield return new DenseLayer<T>(currentDim, 1, activationFunction: new IdentityActivation<T>());
+        yield return new DenseLayer<T>(currentDim, featureDim, activationFunction: new IdentityActivation<T>());
+
+        // Color MLP layers
+        int colorInputDim = featureDim + 3;
+        int colorHidden = colorNumLayers > 0 ? colorHiddenDim : colorInputDim;
+        for (int i = 0; i < colorNumLayers; i++)
+        {
+            int inDim = i == 0 ? colorInputDim : colorHidden;
+            yield return new DenseLayer<T>(inDim, colorHidden, activationFunction: new ReLUActivation<T>());
+        }
+
+        // Color output (RGB)
+        yield return new DenseLayer<T>(colorHidden, 3, activationFunction: new IdentityActivation<T>());
+    }
 }

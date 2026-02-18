@@ -1,6 +1,7 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Audio.Classification;
 using AiDotNet.Diffusion.Audio;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
@@ -350,75 +351,34 @@ public class SpeechEmotionRecognizer<T> : AudioClassifierBase<T>, IEmotionRecogn
             return;
         }
 
-        // Calculate input dimensions
+        if (Architecture.Layers != null && Architecture.Layers.Count > 0)
+        {
+            Layers.AddRange(Architecture.Layers);
+            return;
+        }
+
         int numFrames = (int)((_inputDurationSeconds * SampleRate - _nFft) / _hopLength) + 1;
-        int currentFilters = _baseFilters;
-        int currentHeight = NumMels;
-        int currentWidth = numFrames;
 
-        // Convolutional feature extraction blocks
-        for (int block = 0; block < _numConvBlocks; block++)
-        {
-            int inputDepth = block == 0 ? 1 : currentFilters / 2;
-            int outputDepth = currentFilters;
+        var layers = LayerHelper<T>.CreateSpeechEmotionRecognizerLayers(
+            numMels: NumMels, numFrames: numFrames, baseFilters: _baseFilters,
+            numConvBlocks: _numConvBlocks, hiddenDim: _hiddenDim,
+            dropoutRate: _dropoutRate, numEmotions: _emotionLabels.Length).ToList();
+        Layers.AddRange(layers);
 
-            // Conv + ReLU
-            _convLayers.Add(new ConvolutionalLayer<T>(
-                inputDepth: inputDepth,
-                inputHeight: currentHeight,
-                inputWidth: currentWidth,
-                outputDepth: outputDepth,
-                kernelSize: 3,
-                stride: 1,
-                padding: 1,
-                activationFunction: new ReLUActivation<T>()));
+        // Assign internal references for forward pass
+        // Conv section: numConvBlocks * 2 (conv+bn) + (numConvBlocks-1) pool + 1 flatten
+        int convLayerCount = _numConvBlocks * 2 + (_numConvBlocks - 1) + 1;
+        for (int i = 0; i < convLayerCount; i++)
+            _convLayers.Add(layers[i]);
 
-            // BatchNorm
-            _convLayers.Add(new BatchNormalizationLayer<T>(outputDepth * currentHeight * currentWidth));
+        // Dense section: dense + optional dropout + dense + optional dropout
+        int denseStart = convLayerCount;
+        int denseCount = _dropoutRate > 0 ? 4 : 2;
+        for (int i = 0; i < denseCount; i++)
+            _denseLayers.Add(layers[denseStart + i]);
 
-            // Max pooling (reduce by 2 in frequency dimension)
-            if (block < _numConvBlocks - 1)
-            {
-                _convLayers.Add(new MaxPoolingLayer<T>(
-                    [outputDepth, currentHeight, currentWidth],
-                    poolSize: 2,
-                    stride: 2));
-                currentHeight /= 2;
-                currentWidth /= 2;
-            }
-
-            currentFilters *= 2;
-        }
-
-        // Flatten layer
-        int flattenedSize = (currentFilters / 2) * currentHeight * currentWidth;
-        _convLayers.Add(new FlattenLayer<T>([(currentFilters / 2), currentHeight, currentWidth]));
-
-        // Dense layers
-        _denseLayers.Add(new DenseLayer<T>(
-            inputSize: flattenedSize,
-            outputSize: _hiddenDim,
-            activationFunction: new ReLUActivation<T>()));
-
-        if (_dropoutRate > 0)
-        {
-            _denseLayers.Add(new DropoutLayer<T>(_dropoutRate));
-        }
-
-        _denseLayers.Add(new DenseLayer<T>(
-            inputSize: _hiddenDim,
-            outputSize: _hiddenDim / 2,
-            activationFunction: new ReLUActivation<T>()));
-
-        if (_dropoutRate > 0)
-        {
-            _denseLayers.Add(new DropoutLayer<T>(_dropoutRate));
-        }
-
-        // Output layer - outputs logits (softmax is applied in GetEmotionProbabilities)
-        _outputLayer = new DenseLayer<T>(
-            inputSize: _hiddenDim / 2,
-            outputSize: _emotionLabels.Length);
+        // Output layer is the last layer
+        _outputLayer = layers[^1];
     }
 
     #endregion

@@ -1,5 +1,6 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Enums;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
@@ -380,54 +381,32 @@ public class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     /// </summary>
     private void InitializeNativeLayers()
     {
-        IActivationFunction<T> geluActivation = new GELUActivation<T>();
-        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
-
-        // Convolutional feature encoder (7 conv layers like Wav2Vec2)
-        // Input: raw audio samples
-        // Output: feature vectors at 20ms resolution
-
-        int[] kernelSizes = [10, 3, 3, 3, 3, 2, 2];
-        int[] strides = [5, 2, 2, 2, 2, 2, 2];
-        int[] channels = [512, 512, 512, 512, 512, 512, 512];
-
-        int currentDim = 1; // Raw audio is 1D
-        for (int i = 0; i < 7; i++)
+        if (Architecture.Layers != null && Architecture.Layers.Count > 0)
         {
-            // Use Dense layers to approximate 1D convolutions
-            int outputDim = channels[i];
-            var conv = new DenseLayer<T>(currentDim * kernelSizes[i], outputDim, geluActivation);
-            _featureEncoderLayers.Add(conv);
-            currentDim = outputDim;
+            Layers.AddRange(Architecture.Layers);
+            return;
         }
 
-        // Feature projection to transformer hidden dim
-        var featureProjection = new DenseLayer<T>(512, _hiddenDim, geluActivation);
-        _featureEncoderLayers.Add(featureProjection);
+        var layers = LayerHelper<T>.CreateWav2Vec2Layers(
+            hiddenDim: _hiddenDim, numTransformerLayers: _numTransformerLayers,
+            numHeads: _numHeads, ffDim: _ffDim, vocabSize: _vocabSize,
+            sampleRate: SampleRate, maxAudioLengthSeconds: _maxAudioLengthSeconds).ToList();
+        Layers.AddRange(layers);
 
-        // Transformer encoder layers
-        int maxFrames = (SampleRate * _maxAudioLengthSeconds) / 320; // Approximate frame rate
+        // Distribute to internal sub-lists for forward pass
+        // Feature encoder: 7 conv layers + 1 projection = 8
+        int featureEncoderCount = 8;
+        for (int i = 0; i < featureEncoderCount; i++)
+            _featureEncoderLayers.Add(layers[i]);
 
-        for (int i = 0; i < _numTransformerLayers; i++)
-        {
-            var selfAttn = new MultiHeadAttentionLayer<T>(maxFrames, _hiddenDim, _numHeads, identityActivation);
-            var ff = new DenseLayer<T>(_hiddenDim, _ffDim, geluActivation);
-            var ffOut = new DenseLayer<T>(_ffDim, _hiddenDim, identityActivation);
-            _transformerLayers.Add(selfAttn);
-            _transformerLayers.Add(ff);
-            _transformerLayers.Add(ffOut);
-        }
+        // Transformer layers: numTransformerLayers * 3 (selfAttn + ff + ffOut)
+        int transformerStart = featureEncoderCount;
+        int transformerCount = _numTransformerLayers * 3;
+        for (int i = 0; i < transformerCount; i++)
+            _transformerLayers.Add(layers[transformerStart + i]);
 
-        // CTC projection layer
-        _ctcProjection = new DenseLayer<T>(_hiddenDim, _vocabSize);
-
-        // Register all layers
-        foreach (var layer in _featureEncoderLayers)
-            Layers.Add(layer);
-        foreach (var layer in _transformerLayers)
-            Layers.Add(layer);
-        if (_ctcProjection is not null)
-            Layers.Add(_ctcProjection);
+        // CTC projection: last layer
+        _ctcProjection = layers[^1];
     }
 
     private static string[] GetDefaultVocabulary()

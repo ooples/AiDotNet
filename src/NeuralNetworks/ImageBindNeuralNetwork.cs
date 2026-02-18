@@ -1,4 +1,5 @@
 using System.IO;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
@@ -290,85 +291,80 @@ public class ImageBindNeuralNetwork<T> : NeuralNetworkBase<T>, IImageBindModel<T
     private void InitializeNativeLayers(int channels)
     {
         int numPatches = (_imageSize / _patchSize) * (_imageSize / _patchSize);
-        int ffnDim = _hiddenDim * 4;
+        int imuLayerCount = Math.Min(6, _numEncoderLayers);
 
-        // Image encoder
-        _imagePatchEmbedding = new PatchEmbeddingLayer<T>(
-            _imageSize, _imageSize, channels, _patchSize, _hiddenDim);
+        if (Architecture.Layers != null && Architecture.Layers.Count > 0)
+        {
+            Layers.AddRange(Architecture.Layers);
+        }
+        else
+        {
+            Layers.AddRange(LayerHelper<T>.CreateImageBindLayers(
+                _imageSize, channels, _patchSize, _hiddenDim, _embeddingDimension,
+                _numEncoderLayers, _numHeads, _vocabularySize, _maxSequenceLength,
+                _audioSampleRate, _audioMaxDuration, _imuTimesteps, _numVideoFrames));
+        }
+
+        // Distribute layers to internal sub-lists
+        int idx = 0;
+
+        // Image encoder: PatchEmbed + numEncoderLayers + projection
+        _imagePatchEmbedding = Layers[idx++];
+        for (int i = 0; i < _numEncoderLayers; i++)
+            _imageEncoderLayers.Add(Layers[idx++]);
+        _imageProjection = Layers[idx++];
+
+        // Text encoder: EmbeddingLayer + numEncoderLayers + projection
+        _textTokenEmbedding = Layers[idx++];
+        for (int i = 0; i < _numEncoderLayers; i++)
+            _textEncoderLayers.Add(Layers[idx++]);
+        _textProjection = Layers[idx++];
+
+        // Audio encoder: PatchEmbed + numEncoderLayers + projection
+        _audioConv = Layers[idx++];
+        for (int i = 0; i < _numEncoderLayers; i++)
+            _audioEncoderLayers.Add(Layers[idx++]);
+        _audioProjection = Layers[idx++];
+
+        // Thermal encoder: PatchEmbed + numEncoderLayers + projection
+        _thermalPatchEmbedding = Layers[idx++];
+        for (int i = 0; i < _numEncoderLayers; i++)
+            _thermalEncoderLayers.Add(Layers[idx++]);
+        _thermalProjection = Layers[idx++];
+
+        // Depth encoder: PatchEmbed + numEncoderLayers + projection
+        _depthPatchEmbedding = Layers[idx++];
+        for (int i = 0; i < _numEncoderLayers; i++)
+            _depthEncoderLayers.Add(Layers[idx++]);
+        _depthProjection = Layers[idx++];
+
+        // IMU encoder: DenseLayer + imuLayerCount + projection
+        _imuEmbedding = Layers[idx++];
+        for (int i = 0; i < imuLayerCount; i++)
+            _imuEncoderLayers.Add(Layers[idx++]);
+        _imuProjection = Layers[idx++];
+
+        // Video temporal: 4 layers + projection
+        for (int i = 0; i < 4; i++)
+            _videoTemporalLayers.Add(Layers[idx++]);
+        _videoProjection = Layers[idx++];
+
+        // Initialize positional embeddings
+        int audioPatchSize = 16;
+        int audioSeqLen = (_audioSampleRate * _audioMaxDuration) / 160;
+        audioSeqLen = (audioSeqLen / audioPatchSize) * audioPatchSize;
+        if (audioSeqLen < audioPatchSize) audioSeqLen = audioPatchSize;
+
         _imageClsToken = Matrix<T>.CreateDefault(1, _hiddenDim, NumOps.Zero);
         _imagePositionalEmbeddings = Matrix<T>.CreateDefault(numPatches + 1, _hiddenDim, NumOps.Zero);
-
-        for (int i = 0; i < _numEncoderLayers; i++)
-        {
-            _imageEncoderLayers.Add(new TransformerEncoderLayer<T>(_hiddenDim, _numHeads, ffnDim));
-        }
-        _imageProjection = new DenseLayer<T>(_hiddenDim, _embeddingDimension, (IActivationFunction<T>?)null);
-
-        // Text encoder
-        _textTokenEmbedding = new EmbeddingLayer<T>(_vocabularySize, _hiddenDim);
         _textPositionalEmbeddings = Matrix<T>.CreateDefault(_maxSequenceLength, _hiddenDim, NumOps.Zero);
-
-        for (int i = 0; i < _numEncoderLayers; i++)
-        {
-            _textEncoderLayers.Add(new TransformerEncoderLayer<T>(_hiddenDim, _numHeads, ffnDim));
-        }
-        _textProjection = new DenseLayer<T>(_hiddenDim, _embeddingDimension, (IActivationFunction<T>?)null);
-
-        // Audio encoder (processes mel spectrogram)
-        int audioPatchSize = 16;
-        int audioSeqLen = (_audioSampleRate * _audioMaxDuration) / 160; // hop length 160
-        // Ensure audioSeqLen is divisible by patch size
-        audioSeqLen = (audioSeqLen / audioPatchSize) * audioPatchSize;
-        if (audioSeqLen < audioPatchSize) audioSeqLen = audioPatchSize; // minimum one patch
-        _audioConv = new PatchEmbeddingLayer<T>(128, audioSeqLen, 1, audioPatchSize, _hiddenDim); // mel bins as "height"
         _audioPositionalEmbeddings = Matrix<T>.CreateDefault(audioSeqLen / audioPatchSize + 1, _hiddenDim, NumOps.Zero);
-
-        for (int i = 0; i < _numEncoderLayers; i++)
-        {
-            _audioEncoderLayers.Add(new TransformerEncoderLayer<T>(_hiddenDim, _numHeads, ffnDim));
-        }
-        _audioProjection = new DenseLayer<T>(_hiddenDim, _embeddingDimension, (IActivationFunction<T>?)null);
-
-        // Thermal encoder (same architecture as image)
-        _thermalPatchEmbedding = new PatchEmbeddingLayer<T>(_imageSize, _imageSize, 1, _patchSize, _hiddenDim);
         _thermalClsToken = Matrix<T>.CreateDefault(1, _hiddenDim, NumOps.Zero);
         _thermalPositionalEmbeddings = Matrix<T>.CreateDefault(numPatches + 1, _hiddenDim, NumOps.Zero);
-
-        for (int i = 0; i < _numEncoderLayers; i++)
-        {
-            _thermalEncoderLayers.Add(new TransformerEncoderLayer<T>(_hiddenDim, _numHeads, ffnDim));
-        }
-        _thermalProjection = new DenseLayer<T>(_hiddenDim, _embeddingDimension, (IActivationFunction<T>?)null);
-
-        // Depth encoder
-        _depthPatchEmbedding = new PatchEmbeddingLayer<T>(_imageSize, _imageSize, 1, _patchSize, _hiddenDim);
         _depthClsToken = Matrix<T>.CreateDefault(1, _hiddenDim, NumOps.Zero);
         _depthPositionalEmbeddings = Matrix<T>.CreateDefault(numPatches + 1, _hiddenDim, NumOps.Zero);
-
-        for (int i = 0; i < _numEncoderLayers; i++)
-        {
-            _depthEncoderLayers.Add(new TransformerEncoderLayer<T>(_hiddenDim, _numHeads, ffnDim));
-        }
-        _depthProjection = new DenseLayer<T>(_hiddenDim, _embeddingDimension, (IActivationFunction<T>?)null);
-
-        // IMU encoder
-        _imuEmbedding = new DenseLayer<T>(6, _hiddenDim, (IActivationFunction<T>)new GELUActivation<T>());
         _imuPositionalEmbeddings = Matrix<T>.CreateDefault(_imuTimesteps, _hiddenDim, NumOps.Zero);
-
-        for (int i = 0; i < Math.Min(6, _numEncoderLayers); i++) // fewer layers for IMU
-        {
-            _imuEncoderLayers.Add(new TransformerEncoderLayer<T>(_hiddenDim, _numHeads, ffnDim));
-        }
-        _imuProjection = new DenseLayer<T>(_hiddenDim, _embeddingDimension, (IActivationFunction<T>?)null);
-
-        // Video temporal aggregation
         _videoTemporalPositionalEmbeddings = Matrix<T>.CreateDefault(_numVideoFrames, _hiddenDim, NumOps.Zero);
-
-        for (int i = 0; i < 4; i++) // 4 temporal transformer layers
-        {
-            _videoTemporalLayers.Add(new TransformerEncoderLayer<T>(_hiddenDim, _numHeads, ffnDim));
-        }
-        _videoProjection = new DenseLayer<T>(_hiddenDim, _embeddingDimension, (IActivationFunction<T>?)null);
 
         InitializeWeights();
     }

@@ -1,4 +1,5 @@
 
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.NestedLearning;
@@ -74,29 +75,28 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
     {
         Layers.Clear();
 
-        // Initialize CMS blocks as sequential MLP chains (Equation 30)
-        // Each CMS block is a chain of MLPs: yt = MLP^(fk)(MLP^(fk-1)(...MLP^(f1)(xt)))
+        if (Architecture.Layers != null && Architecture.Layers.Count > 0)
+        {
+            Layers.AddRange(Architecture.Layers);
+        }
+        else
+        {
+            Layers.AddRange(LayerHelper<T>.CreateHopeNetworkLayers(
+                _hiddenDim, _numCMSLevels, _numRecurrentLayers, _inContextLearningLevels));
+        }
+
+        // Distribute layers to internal arrays
+        int idx = 0;
         _cmsBlocks = new ContinuumMemorySystemLayer<T>[_numCMSLevels];
         for (int i = 0; i < _numCMSLevels; i++)
         {
-            _cmsBlocks[i] = new ContinuumMemorySystemLayer<T>(
-                inputShape: new[] { _hiddenDim },
-                hiddenDim: _hiddenDim,
-                numFrequencyLevels: _inContextLearningLevels);
-
-            Layers.Add(_cmsBlocks[i]);
+            _cmsBlocks[i] = (ContinuumMemorySystemLayer<T>)Layers[idx++];
         }
 
-        // Initialize recurrent layers for temporal processing
         _recurrentLayers = new RecurrentLayer<T>[_numRecurrentLayers];
         for (int i = 0; i < _numRecurrentLayers; i++)
         {
-            _recurrentLayers[i] = new RecurrentLayer<T>(
-                _hiddenDim,
-                _hiddenDim,
-                (IActivationFunction<T>)new TanhActivation<T>());
-
-            Layers.Add(_recurrentLayers[i]);
+            _recurrentLayers[i] = (RecurrentLayer<T>)Layers[idx++];
         }
 
         // Initialize meta-state for self-referential optimization

@@ -50,29 +50,29 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
     private readonly int _hiddenDim;
 
     // Audio encoder components
-    private readonly List<ILayer<T>> _audioEncoderLayers;
-    private readonly ILayer<T> _audioInputProjection;
-    private readonly ILayer<T> _audioOutputProjection;
+    private List<ILayer<T>> _audioEncoderLayers = default!;
+    private ILayer<T> _audioInputProjection = default!;
+    private ILayer<T> _audioOutputProjection = default!;
     private Matrix<T>? _audioPositionalEmbedding;
 
     // Visual encoder components
-    private readonly List<ILayer<T>> _visualEncoderLayers;
-    private readonly ILayer<T> _visualInputProjection;
-    private readonly ILayer<T> _visualOutputProjection;
+    private List<ILayer<T>> _visualEncoderLayers = default!;
+    private ILayer<T> _visualInputProjection = default!;
+    private ILayer<T> _visualOutputProjection = default!;
     private Matrix<T>? _visualPositionalEmbedding;
 
     // Cross-modal attention for localization
-    private readonly List<ILayer<T>> _crossModalAttentionLayers;
-    private readonly ILayer<T> _localizationHead;
+    private List<ILayer<T>> _crossModalAttentionLayers = default!;
+    private ILayer<T> _localizationHead = default!;
 
     // Synchronization head
-    private readonly ILayer<T> _syncHead;
+    private ILayer<T> _syncHead = default!;
 
     // Scene classification head
-    private readonly ILayer<T> _sceneClassificationHead;
+    private ILayer<T> _sceneClassificationHead = default!;
 
     // Separation network components
-    private readonly ILayer<T> _separationMaskPredictor;
+    private ILayer<T> _separationMaskPredictor = default!;
 
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ILossFunction<T> _lossFunction;
@@ -132,68 +132,8 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
 
         _sceneLabels = new List<string>();
 
-        IActivationFunction<T>? nullActivation = null;
-        var geluActivation = new GELUActivation<T>() as IActivationFunction<T>;
-
-        // Initialize audio encoder
-        _audioEncoderLayers = new List<ILayer<T>>();
-        _audioInputProjection = new DenseLayer<T>(SPECTROGRAM_BINS, _embeddingDimension, nullActivation);
-
-        for (int i = 0; i < numEncoderLayers; i++)
-        {
-            _audioEncoderLayers.Add(new MultiHeadAttentionLayer<T>(
-                1,
-                _embeddingDimension,
-                NUM_ATTENTION_HEADS,
-                geluActivation));
-            _audioEncoderLayers.Add(new DenseLayer<T>(_embeddingDimension, _hiddenDim, geluActivation));
-            _audioEncoderLayers.Add(new DenseLayer<T>(_hiddenDim, _embeddingDimension, nullActivation));
-        }
-
-        _audioOutputProjection = new DenseLayer<T>(_embeddingDimension, _embeddingDimension, nullActivation);
-
-        // Initialize visual encoder
-        _visualEncoderLayers = new List<ILayer<T>>();
-        _visualInputProjection = new DenseLayer<T>(768, _embeddingDimension, nullActivation);
-
-        for (int i = 0; i < numEncoderLayers; i++)
-        {
-            _visualEncoderLayers.Add(new MultiHeadAttentionLayer<T>(
-                1,
-                _embeddingDimension,
-                NUM_ATTENTION_HEADS,
-                geluActivation));
-            _visualEncoderLayers.Add(new DenseLayer<T>(_embeddingDimension, _hiddenDim, geluActivation));
-            _visualEncoderLayers.Add(new DenseLayer<T>(_hiddenDim, _embeddingDimension, nullActivation));
-        }
-
-        _visualOutputProjection = new DenseLayer<T>(_embeddingDimension, _embeddingDimension, nullActivation);
-
-        // Initialize cross-modal attention
-        _crossModalAttentionLayers = new List<ILayer<T>>();
-        for (int i = 0; i < 2; i++)
-        {
-            _crossModalAttentionLayers.Add(new MultiHeadAttentionLayer<T>(
-                1,
-                _embeddingDimension,
-                NUM_ATTENTION_HEADS,
-                geluActivation));
-        }
-
-        // Localization head outputs spatial attention map
-        _localizationHead = new DenseLayer<T>(_embeddingDimension, 1, nullActivation);
-
-        // Sync head predicts time offset
-        _syncHead = new DenseLayer<T>(_embeddingDimension * 2, 1, nullActivation);
-
-        // Scene classification head
-        _sceneClassificationHead = new DenseLayer<T>(_embeddingDimension * 2, 256, nullActivation);
-
-        // Separation mask predictor
-        _separationMaskPredictor = new DenseLayer<T>(_embeddingDimension * 2, SPECTROGRAM_BINS, nullActivation);
-
-        InitializePositionalEmbeddings();
         InitializeLayers();
+        InitializePositionalEmbeddings();
     }
 
     #endregion
@@ -1009,20 +949,53 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
     /// <inheritdoc/>
     protected override void InitializeLayers()
     {
-        // Layers are already initialized in constructor
-        // Add all layers to base Layers collection
         Layers.Clear();
-        Layers.Add(_audioInputProjection);
-        foreach (var layer in _audioEncoderLayers) Layers.Add(layer);
-        Layers.Add(_audioOutputProjection);
-        Layers.Add(_visualInputProjection);
-        foreach (var layer in _visualEncoderLayers) Layers.Add(layer);
-        Layers.Add(_visualOutputProjection);
-        foreach (var layer in _crossModalAttentionLayers) Layers.Add(layer);
-        Layers.Add(_localizationHead);
-        Layers.Add(_syncHead);
-        Layers.Add(_sceneClassificationHead);
-        Layers.Add(_separationMaskPredictor);
+
+        if (Architecture.Layers != null && Architecture.Layers.Count > 0)
+        {
+            Layers.AddRange(Architecture.Layers);
+        }
+        else
+        {
+            Layers.AddRange(LayerHelper<T>.CreateAudioVisualCorrespondenceLayers(
+                _embeddingDimension, _numEncoderLayers, NUM_ATTENTION_HEADS));
+        }
+
+        // Distribute layers to internal fields
+        int idx = 0;
+
+        // Audio encoder: input projection
+        _audioInputProjection = Layers[idx++];
+
+        // Audio encoder: (attention + FFN1 + FFN2) × numEncoderLayers
+        _audioEncoderLayers = new List<ILayer<T>>();
+        for (int i = 0; i < _numEncoderLayers * 3; i++)
+            _audioEncoderLayers.Add(Layers[idx++]);
+
+        // Audio output projection
+        _audioOutputProjection = Layers[idx++];
+
+        // Visual encoder: input projection
+        _visualInputProjection = Layers[idx++];
+
+        // Visual encoder: (attention + FFN1 + FFN2) × numEncoderLayers
+        _visualEncoderLayers = new List<ILayer<T>>();
+        for (int i = 0; i < _numEncoderLayers * 3; i++)
+            _visualEncoderLayers.Add(Layers[idx++]);
+
+        // Visual output projection
+        _visualOutputProjection = Layers[idx++];
+
+        // Cross-modal attention (2 layers)
+        _crossModalAttentionLayers = new List<ILayer<T>>();
+        for (int i = 0; i < 2; i++)
+            _crossModalAttentionLayers.Add(Layers[idx++]);
+
+        // Task heads
+        _localizationHead = Layers[idx++];
+        _syncHead = Layers[idx++];
+        _sceneClassificationHead = Layers[idx++];
+        _separationMaskPredictor = Layers[idx++];
     }
 
     /// <inheritdoc/>

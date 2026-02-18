@@ -7,6 +7,7 @@ using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
+using AiDotNet.Helpers;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Tensors.Helpers;
@@ -136,53 +137,51 @@ public class AudioVisualEventLocalizationNetwork<T> : NeuralNetworkBase<T>, IAud
     /// <inheritdoc/>
     protected override void InitializeLayers()
     {
-        IActivationFunction<T>? nullActivation = null;
-        var geluActivation = new GELUActivation<T>() as IActivationFunction<T>;
+        Layers.Clear();
 
-        // Audio encoder
-        _audioInputProjection = new DenseLayer<T>(SPECTROGRAM_BINS, _embeddingDimension, nullActivation);
+        if (Architecture.Layers != null && Architecture.Layers.Count > 0)
+        {
+            Layers.AddRange(Architecture.Layers);
+        }
+        else
+        {
+            Layers.AddRange(LayerHelper<T>.CreateAudioVisualEventLocalizationLayers(
+                _embeddingDimension, _numEncoderLayers, _supportedCategories.Count));
+        }
+
+        // Distribute layers to internal fields
+        int idx = 0;
+
+        // Audio encoder: input projection + attention × numEncoderLayers + output projection
+        _audioInputProjection = (DenseLayer<T>)Layers[idx++];
         _audioEncoderLayers = new MultiHeadAttentionLayer<T>[_numEncoderLayers];
         for (int i = 0; i < _numEncoderLayers; i++)
-        {
-            // Constructor: (sequenceLength, embeddingDimension, headCount, activation)
-            // Use sequenceLength=1 as placeholder since attention works with variable-length sequences
-            _audioEncoderLayers[i] = new MultiHeadAttentionLayer<T>(
-                1, _embeddingDimension, 8, geluActivation);
-        }
-        _audioOutputProjection = new DenseLayer<T>(_embeddingDimension, _embeddingDimension, nullActivation);
+            _audioEncoderLayers[i] = (MultiHeadAttentionLayer<T>)Layers[idx++];
+        _audioOutputProjection = (DenseLayer<T>)Layers[idx++];
 
-        // Visual encoder
-        _visualInputProjection = new DenseLayer<T>(768, _embeddingDimension, nullActivation); // ViT-style input
+        // Visual encoder: input projection + attention × numEncoderLayers + output projection
+        _visualInputProjection = (DenseLayer<T>)Layers[idx++];
         _visualEncoderLayers = new MultiHeadAttentionLayer<T>[_numEncoderLayers];
         for (int i = 0; i < _numEncoderLayers; i++)
-        {
-            _visualEncoderLayers[i] = new MultiHeadAttentionLayer<T>(
-                1, _embeddingDimension, 8, geluActivation);
-        }
-        _visualOutputProjection = new DenseLayer<T>(_embeddingDimension, _embeddingDimension, nullActivation);
+            _visualEncoderLayers[i] = (MultiHeadAttentionLayer<T>)Layers[idx++];
+        _visualOutputProjection = (DenseLayer<T>)Layers[idx++];
 
-        // Temporal modeling
+        // Temporal modeling: 4 attention layers + proposal head
         _temporalAttentionLayers = new MultiHeadAttentionLayer<T>[4];
         for (int i = 0; i < 4; i++)
-        {
-            _temporalAttentionLayers[i] = new MultiHeadAttentionLayer<T>(
-                1, _embeddingDimension, 8, geluActivation);
-        }
-        _temporalProposalHead = new DenseLayer<T>(_embeddingDimension, 2, nullActivation); // start, end offsets
+            _temporalAttentionLayers[i] = (MultiHeadAttentionLayer<T>)Layers[idx++];
+        _temporalProposalHead = (DenseLayer<T>)Layers[idx++];
 
-        // Cross-modal fusion
+        // Cross-modal fusion: 4 attention layers
         _crossModalAttentionLayers = new MultiHeadAttentionLayer<T>[4];
         for (int i = 0; i < 4; i++)
-        {
-            _crossModalAttentionLayers[i] = new MultiHeadAttentionLayer<T>(
-                1, _embeddingDimension * 2, 8, geluActivation);
-        }
+            _crossModalAttentionLayers[i] = (MultiHeadAttentionLayer<T>)Layers[idx++];
 
         // Task-specific heads
-        _eventClassificationHead = new DenseLayer<T>(_embeddingDimension * 2, _supportedCategories.Count, nullActivation);
-        _temporalBoundaryHead = new DenseLayer<T>(_embeddingDimension * 2, 3, nullActivation); // start, end, confidence
-        _spatialLocalizationHead = new DenseLayer<T>(_embeddingDimension * 2, 4, nullActivation); // x, y, w, h
-        _anomalyDetectionHead = new DenseLayer<T>(_embeddingDimension * 2, 1, nullActivation); // anomaly score
+        _eventClassificationHead = (DenseLayer<T>)Layers[idx++];
+        _temporalBoundaryHead = (DenseLayer<T>)Layers[idx++];
+        _spatialLocalizationHead = (DenseLayer<T>)Layers[idx++];
+        _anomalyDetectionHead = (DenseLayer<T>)Layers[idx++];
     }
 
     private static List<string> GetDefaultEventCategories()

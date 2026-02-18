@@ -188,81 +188,61 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
         _textTransformerFFN1 = [];
         _textTransformerFFN2 = [];
 
-        int featH = _height / 16;
-        int featW = _width / 16;
-
-        // Video encoder (ViT-like spatial encoder)
-        int patchDim = _channels * 16 * 16; // 16x16 patches
         int hiddenDim = 768;
         _textHiddenDim = hiddenDim;
-
-        // Patch embedding for video frames
-        _videoEncoder.Add(new ConvolutionalLayer<T>(_channels, _height, _width, hiddenDim, 16, 16, 0));
-
-        // Spatial transformer blocks
         int numSpatialBlocks = 12;
-        for (int i = 0; i < numSpatialBlocks; i++)
-        {
-            _videoEncoder.Add(new ConvolutionalLayer<T>(hiddenDim, featH, featW, hiddenDim, 1, 1, 0));
-            _videoEncoder.Add(new ConvolutionalLayer<T>(hiddenDim, featH, featW, hiddenDim, 3, 1, 1));
-        }
-
-        // Temporal transformer for video understanding
         int numTemporalBlocks = 4;
-        for (int i = 0; i < numTemporalBlocks; i++)
+        int numTextBlocks = 12;
+
+        // Check for user-provided custom layers
+        if (Architecture.Layers != null && Architecture.Layers.Count > 0)
         {
-            _temporalTransformer.Add(new ConvolutionalLayer<T>(hiddenDim, 1, _numFrames, hiddenDim, 1, 1, 0));
+            Layers.AddRange(Architecture.Layers);
+        }
+        else
+        {
+            var layers = LayerHelper<T>.CreateVideoCLIPLayers(
+                channels: _channels, height: _height, width: _width,
+                hiddenDim: hiddenDim, embeddingDim: _embeddingDim,
+                numSpatialBlocks: numSpatialBlocks, numTemporalBlocks: numTemporalBlocks,
+                numTextBlocks: numTextBlocks, numFrames: _numFrames, textMaxLength: _textMaxLength).ToList();
+            Layers.AddRange(layers);
         }
 
-        // Video projection to shared embedding space
-        _videoProjection = new ConvolutionalLayer<T>(hiddenDim, 1, 1, _embeddingDim, 1, 1, 0);
+        // Distribute layers to sub-lists for forward pass
+        int idx = 0;
+        // Video encoder: 1 patch embed + numSpatialBlocks * 2
+        int videoEncoderCount = 1 + numSpatialBlocks * 2;
+        for (int i = 0; i < videoEncoderCount; i++)
+            _videoEncoder.Add((ConvolutionalLayer<T>)Layers[idx++]);
 
-        // Text encoder with proper CLIP-style embeddings
-        // Token embedding lookup table: [vocab_size, hidden_dim]
-        // Initialized with Xavier/Glorot uniform initialization
-        _tokenEmbeddingTable = new Tensor<T>([_vocabSize, hiddenDim]);
-        InitializeEmbeddingTable(_tokenEmbeddingTable, _vocabSize, hiddenDim);
+        // Temporal transformer
+        for (int i = 0; i < numTemporalBlocks; i++)
+            _temporalTransformer.Add((ConvolutionalLayer<T>)Layers[idx++]);
 
-        // Positional embedding table: [max_length, hidden_dim]
-        // CLIP uses learned positional embeddings, not sinusoidal
-        _positionalEmbeddingTable = new Tensor<T>([_textMaxLength, hiddenDim]);
-        InitializeEmbeddingTable(_positionalEmbeddingTable, _textMaxLength, hiddenDim);
+        // Video projection
+        _videoProjection = (ConvolutionalLayer<T>)Layers[idx++];
 
-        // Text transformer blocks with proper multi-head attention (12 layers, 12 heads)
-        int numTextBlocks = 12;
-        // Note: numHeads = 12 is used in TextMultiHeadAttention method
-        int ffnDim = hiddenDim * 4; // MLP expansion ratio of 4
-
+        // Text transformer: 4 layers per block (QKV, AttnProj, FFN1, FFN2)
         for (int i = 0; i < numTextBlocks; i++)
         {
-            // QKV projection for multi-head attention
-            _textTransformerQKV.Add(new ConvolutionalLayer<T>(hiddenDim, 1, _textMaxLength, hiddenDim * 3, 1, 1, 0));
-            // Attention output projection
-            _textTransformerAttnProj.Add(new ConvolutionalLayer<T>(hiddenDim, 1, _textMaxLength, hiddenDim, 1, 1, 0));
-            // FFN expand (hidden -> 4*hidden)
-            _textTransformerFFN1.Add(new ConvolutionalLayer<T>(hiddenDim, 1, _textMaxLength, ffnDim, 1, 1, 0));
-            // FFN contract (4*hidden -> hidden)
-            _textTransformerFFN2.Add(new ConvolutionalLayer<T>(ffnDim, 1, _textMaxLength, hiddenDim, 1, 1, 0));
+            _textTransformerQKV.Add((ConvolutionalLayer<T>)Layers[idx++]);
+            _textTransformerAttnProj.Add((ConvolutionalLayer<T>)Layers[idx++]);
+            _textTransformerFFN1.Add((ConvolutionalLayer<T>)Layers[idx++]);
+            _textTransformerFFN2.Add((ConvolutionalLayer<T>)Layers[idx++]);
         }
 
-        // Text projection to shared embedding space
-        _textProjection = new ConvolutionalLayer<T>(hiddenDim, 1, 1, _embeddingDim, 1, 1, 0);
+        // Text projection
+        _textProjection = (ConvolutionalLayer<T>)Layers[idx++];
 
-        // Learnable temperature (logit scale)
-        _logitScale = new ConvolutionalLayer<T>(1, 1, 1, 1, 1, 1, 0);
+        // Logit scale
+        _logitScale = (ConvolutionalLayer<T>)Layers[idx++];
 
-        // Register layers
-        foreach (var layer in _videoEncoder) Layers.Add(layer);
-        foreach (var layer in _temporalTransformer) Layers.Add(layer);
-        Layers.Add(_videoProjection);
-
-        // Text transformer layers (embedding tables are tensors, not layers)
-        foreach (var layer in _textTransformerQKV) Layers.Add(layer);
-        foreach (var layer in _textTransformerAttnProj) Layers.Add(layer);
-        foreach (var layer in _textTransformerFFN1) Layers.Add(layer);
-        foreach (var layer in _textTransformerFFN2) Layers.Add(layer);
-        Layers.Add(_textProjection);
-        Layers.Add(_logitScale);
+        // Initialize embedding tables (not part of layer list)
+        _tokenEmbeddingTable = new Tensor<T>([_vocabSize, hiddenDim]);
+        InitializeEmbeddingTable(_tokenEmbeddingTable, _vocabSize, hiddenDim);
+        _positionalEmbeddingTable = new Tensor<T>([_textMaxLength, hiddenDim]);
+        InitializeEmbeddingTable(_positionalEmbeddingTable, _textMaxLength, hiddenDim);
     }
 
     #endregion
