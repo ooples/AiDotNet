@@ -22969,5 +22969,293 @@ public static class LayerHelper<T>
         yield return new LayerNormalizationLayer<T>(fusionDim);
     }
 
+    /// <summary>
+    /// Creates default layers for Q-Former-based generative VLMs (InstructBLIP, BLIP-3).
+    /// Architecture: ViT vision encoder -> Q-Former (cross-attention queries) -> text decoder.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultQFormerGenerativeLayers(
+        int visionDim = 1408,
+        int qFormerDim = 768,
+        int decoderDim = 4096,
+        int numVisionLayers = 12,
+        int numQFormerLayers = 12,
+        int numDecoderLayers = 6,
+        int numQueryTokens = 32,
+        int numHeads = 16,
+        int numQFormerHeads = 12,
+        double dropoutRate = 0.1)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+        int visionFfnDim = visionDim * 4;
+        int qfFfnDim = qFormerDim * 4;
+        int decoderFfnDim = decoderDim * 4;
+
+        // === Vision Encoder (ViT) ===
+        yield return new LayerNormalizationLayer<T>(visionDim);
+
+        for (int i = 0; i < numVisionLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(visionDim, visionDim, numHeads);
+            yield return new LayerNormalizationLayer<T>(visionDim);
+            yield return new DenseLayer<T>(visionDim, visionFfnDim, geluActivation);
+            yield return new DenseLayer<T>(visionFfnDim, visionDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(visionDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // === Q-Former (learnable queries cross-attend to vision features) ===
+        if (visionDim != qFormerDim)
+            yield return new DenseLayer<T>(visionDim, qFormerDim, identityActivation);
+
+        for (int i = 0; i < numQFormerLayers; i++)
+        {
+            // Cross-attention: queries attend to visual features
+            yield return new MultiHeadAttentionLayer<T>(qFormerDim, qFormerDim, numQFormerHeads);
+            yield return new LayerNormalizationLayer<T>(qFormerDim);
+            // Self-attention among query tokens
+            yield return new MultiHeadAttentionLayer<T>(qFormerDim, qFormerDim, numQFormerHeads);
+            yield return new LayerNormalizationLayer<T>(qFormerDim);
+            // Feed-forward
+            yield return new DenseLayer<T>(qFormerDim, qfFfnDim, geluActivation);
+            yield return new DenseLayer<T>(qfFfnDim, qFormerDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(qFormerDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // === Text Decoder (autoregressive) ===
+        if (qFormerDim != decoderDim)
+            yield return new DenseLayer<T>(qFormerDim, decoderDim, identityActivation);
+
+        for (int i = 0; i < numDecoderLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(decoderDim, decoderDim, numHeads);
+            yield return new LayerNormalizationLayer<T>(decoderDim);
+            yield return new DenseLayer<T>(decoderDim, decoderFfnDim, geluActivation);
+            yield return new DenseLayer<T>(decoderFfnDim, decoderDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(decoderDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+    }
+
+    /// <summary>
+    /// Creates default layers for encoder-decoder generative VLMs (GIT, CoCa, PaLI, PaLI-X, PaLI-3).
+    /// Architecture: ViT vision encoder + linear projection -> text decoder with cross-attention.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultEncoderDecoderVLMLayers(
+        int visionDim = 768,
+        int decoderDim = 768,
+        int numVisionLayers = 12,
+        int numDecoderLayers = 6,
+        int numHeads = 12,
+        double dropoutRate = 0.1)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+        int visionFfnDim = visionDim * 4;
+        int decoderFfnDim = decoderDim * 4;
+
+        // === Vision Encoder (ViT) ===
+        yield return new LayerNormalizationLayer<T>(visionDim);
+
+        for (int i = 0; i < numVisionLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(visionDim, visionDim, numHeads);
+            yield return new LayerNormalizationLayer<T>(visionDim);
+            yield return new DenseLayer<T>(visionDim, visionFfnDim, geluActivation);
+            yield return new DenseLayer<T>(visionFfnDim, visionDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(visionDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // === Linear Projection (vision dim -> decoder dim) ===
+        if (visionDim != decoderDim)
+            yield return new DenseLayer<T>(visionDim, decoderDim, identityActivation);
+
+        // === Text Decoder (autoregressive with cross-attention to visual features) ===
+        for (int i = 0; i < numDecoderLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(decoderDim, decoderDim, numHeads);
+            yield return new LayerNormalizationLayer<T>(decoderDim);
+            yield return new DenseLayer<T>(decoderDim, decoderFfnDim, geluActivation);
+            yield return new DenseLayer<T>(decoderFfnDim, decoderDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(decoderDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+    }
+
+    /// <summary>
+    /// Creates default layers for perceiver-resampler VLMs (OpenFlamingo, IDEFICS, IDEFICS2, IDEFICS3).
+    /// Architecture: ViT encoder -> perceiver resampler (latent cross-attention) -> gated cross-attention LLM decoder.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultPerceiverResamplerLayers(
+        int visionDim = 1024,
+        int perceiverDim = 1024,
+        int decoderDim = 4096,
+        int numVisionLayers = 24,
+        int numPerceiverLayers = 6,
+        int numDecoderLayers = 32,
+        int numLatents = 64,
+        int numHeads = 16,
+        int numPerceiverHeads = 16,
+        double dropoutRate = 0.1)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+        int visionFfnDim = visionDim * 4;
+        int perceiverFfnDim = perceiverDim * 4;
+        int decoderFfnDim = decoderDim * 4;
+
+        // === Vision Encoder (CLIP ViT) ===
+        yield return new LayerNormalizationLayer<T>(visionDim);
+
+        for (int i = 0; i < numVisionLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(visionDim, visionDim, numHeads);
+            yield return new LayerNormalizationLayer<T>(visionDim);
+            yield return new DenseLayer<T>(visionDim, visionFfnDim, geluActivation);
+            yield return new DenseLayer<T>(visionFfnDim, visionDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(visionDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // === Perceiver Resampler (latent queries cross-attend to vision features) ===
+        if (visionDim != perceiverDim)
+            yield return new DenseLayer<T>(visionDim, perceiverDim, identityActivation);
+
+        for (int i = 0; i < numPerceiverLayers; i++)
+        {
+            // Cross-attention: latent queries attend to vision tokens
+            yield return new MultiHeadAttentionLayer<T>(perceiverDim, perceiverDim, numPerceiverHeads);
+            yield return new LayerNormalizationLayer<T>(perceiverDim);
+            // Self-attention among latent tokens
+            yield return new MultiHeadAttentionLayer<T>(perceiverDim, perceiverDim, numPerceiverHeads);
+            yield return new LayerNormalizationLayer<T>(perceiverDim);
+            // Feed-forward
+            yield return new DenseLayer<T>(perceiverDim, perceiverFfnDim, geluActivation);
+            yield return new DenseLayer<T>(perceiverFfnDim, perceiverDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(perceiverDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // === LLM Decoder with Gated Cross-Attention ===
+        if (perceiverDim != decoderDim)
+            yield return new DenseLayer<T>(perceiverDim, decoderDim, identityActivation);
+
+        for (int i = 0; i < numDecoderLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(decoderDim, decoderDim, numHeads);
+            yield return new LayerNormalizationLayer<T>(decoderDim);
+            yield return new DenseLayer<T>(decoderDim, decoderFfnDim, geluActivation);
+            yield return new DenseLayer<T>(decoderFfnDim, decoderDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(decoderDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+    }
+
+    /// <summary>
+    /// Creates default layers for causal multimodal LLMs (KOSMOS-1, KOSMOS-2).
+    /// Architecture: ViT encoder + projection -> causal transformer decoder with interleaved visual tokens.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultCausalMultimodalLayers(
+        int visionDim = 1024,
+        int decoderDim = 2048,
+        int numVisionLayers = 24,
+        int numDecoderLayers = 24,
+        int numHeads = 32,
+        double dropoutRate = 0.1)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+        int visionFfnDim = visionDim * 4;
+        int decoderFfnDim = decoderDim * 4;
+
+        // === Vision Encoder (CLIP ViT) ===
+        yield return new LayerNormalizationLayer<T>(visionDim);
+
+        for (int i = 0; i < numVisionLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(visionDim, visionDim, numHeads > 16 ? 16 : numHeads);
+            yield return new LayerNormalizationLayer<T>(visionDim);
+            yield return new DenseLayer<T>(visionDim, visionFfnDim, geluActivation);
+            yield return new DenseLayer<T>(visionFfnDim, visionDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(visionDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // === Projection to decoder dim ===
+        if (visionDim != decoderDim)
+            yield return new DenseLayer<T>(visionDim, decoderDim, identityActivation);
+
+        // === Causal Transformer Decoder (processes interleaved visual + text tokens) ===
+        for (int i = 0; i < numDecoderLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(decoderDim, decoderDim, numHeads);
+            yield return new LayerNormalizationLayer<T>(decoderDim);
+            yield return new DenseLayer<T>(decoderDim, decoderFfnDim, geluActivation);
+            yield return new DenseLayer<T>(decoderFfnDim, decoderDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(decoderDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+    }
+
+    /// <summary>
+    /// Creates default layers for unified generation VLMs (Emu, Emu2, Emu3).
+    /// Architecture: EVA-CLIP encoder -> LLM decoder -> visual regression head.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultUnifiedGenerationLayers(
+        int visionDim = 1408,
+        int decoderDim = 4096,
+        int regressionDim = 1408,
+        int numVisionLayers = 39,
+        int numDecoderLayers = 32,
+        int numRegressionLayers = 2,
+        int numHeads = 32,
+        double dropoutRate = 0.1)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+        int visionFfnDim = visionDim * 4;
+        int decoderFfnDim = decoderDim * 4;
+
+        // === EVA-CLIP Vision Encoder ===
+        yield return new LayerNormalizationLayer<T>(visionDim);
+
+        for (int i = 0; i < numVisionLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(visionDim, visionDim, numHeads > 16 ? 16 : numHeads);
+            yield return new LayerNormalizationLayer<T>(visionDim);
+            yield return new DenseLayer<T>(visionDim, visionFfnDim, geluActivation);
+            yield return new DenseLayer<T>(visionFfnDim, visionDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(visionDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // === Projection to decoder dim ===
+        if (visionDim != decoderDim)
+            yield return new DenseLayer<T>(visionDim, decoderDim, identityActivation);
+
+        // === Multimodal LLM Decoder (LLaMA-based) ===
+        for (int i = 0; i < numDecoderLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(decoderDim, decoderDim, numHeads);
+            yield return new LayerNormalizationLayer<T>(decoderDim);
+            yield return new DenseLayer<T>(decoderDim, decoderFfnDim, geluActivation);
+            yield return new DenseLayer<T>(decoderFfnDim, decoderDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(decoderDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // === Visual Regression Head (maps LLM output back to visual embedding space) ===
+        if (decoderDim != regressionDim)
+            yield return new DenseLayer<T>(decoderDim, regressionDim, geluActivation);
+
+        for (int i = 0; i < numRegressionLayers; i++)
+        {
+            yield return new DenseLayer<T>(regressionDim, regressionDim, geluActivation);
+            yield return new LayerNormalizationLayer<T>(regressionDim);
+        }
+    }
+
     #endregion
 }

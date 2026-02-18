@@ -194,3 +194,20 @@ public enum VisualFeatureType
     /// <summary>Grid features from a CNN backbone.</summary>
     GridFeatures
 }
+
+/// <summary>
+/// Specifies the architecture type for generative vision-language models.
+/// </summary>
+public enum GenerativeArchitectureType
+{
+    /// <summary>Q-Former bridge: learnable queries cross-attend to vision, then feed decoder (InstructBLIP, BLIP-3).</summary>
+    QFormerBridge,
+    /// <summary>Encoder-decoder: ViT encoder + autoregressive text decoder with cross-attention (GIT, CoCa, PaLI).</summary>
+    EncoderDecoder,
+    /// <summary>Perceiver resampler: latent queries cross-attend to vision, gated cross-attention into LLM (Flamingo, IDEFICS).</summary>
+    PerceiverResampler,
+    /// <summary>Causal multimodal: visual tokens embedded directly in causal language model (KOSMOS).</summary>
+    CausalMultimodal,
+    /// <summary>Unified generation: single model for both understanding and image/text generation (Emu).</summary>
+    UnifiedGeneration
+}
