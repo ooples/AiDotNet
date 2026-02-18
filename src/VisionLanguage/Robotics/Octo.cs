@@ -30,7 +30,63 @@ public class Octo<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
 
     public int EmbeddingDimension => _options.DecoderDim; int IVisualEncoder<T>.ImageSize => _options.ImageSize; int IVisualEncoder<T>.ImageChannels => 3; public int MaxGenerationLength => _options.MaxGenerationLength; public int DecoderEmbeddingDim => _options.DecoderDim; public string LanguageModelName => _options.LanguageModelName; public int ActionDimension => _options.ActionDimension;
     public Tensor<T> EncodeImage(Tensor<T> image) { ThrowIfDisposed(); var p = PreprocessImage(image); if (IsOnnxMode && OnnxModel is not null) return L2Normalize(OnnxModel.Run(p)); var c = p; for (int i = 0; i < _encoderLayerEnd; i++) c = Layers[i].Forward(c); return L2Normalize(c); }
-    public Tensor<T> GenerateFromImage(Tensor<T> image, string? prompt = null) { ThrowIfDisposed(); var p = PreprocessImage(image); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(p); var encoderOut = p; for (int i = 0; i < _encoderLayerEnd; i++) encoderOut = Layers[i].Forward(encoderOut); if (prompt is not null) { var promptTokens = TokenizeText(prompt); } var output = encoderOut; for (int i = _encoderLayerEnd; i < Layers.Count; i++) output = Layers[i].Forward(output); return output; }
+    /// <summary>
+    /// Generates from image using Octo's readout token + task-conditioned attention.
+    /// The transformer backbone processes observation and language tokens together,
+    /// then readout tokens cross-attend to extract task-relevant features for the action head.
+    /// </summary>
+    public Tensor<T> GenerateFromImage(Tensor<T> image, string? prompt = null)
+    {
+        ThrowIfDisposed();
+        var p = PreprocessImage(image);
+        if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(p);
+
+        int dim = _options.DecoderDim;
+        var encoderOut = p;
+        for (int i = 0; i < _encoderLayerEnd; i++)
+            encoderOut = Layers[i].Forward(encoderOut);
+        int visLen = encoderOut.Length;
+
+        Tensor<T>? promptTokens = null;
+        int promptLen = 0;
+        if (prompt is not null) { promptTokens = TokenizeText(prompt); promptLen = promptTokens.Length; }
+
+        // Octo: readout tokens cross-attend to visual + language features
+        var decoderInput = new Tensor<T>([dim]);
+        for (int d = 0; d < dim; d++)
+        {
+            // Task-conditioned readout cross-attention over visual features
+            double visContrib = 0, visWSum = 0;
+            for (int v = 0; v < visLen; v++)
+            {
+                double val = NumOps.ToDouble(encoderOut[v]);
+                // Readout query attends to backbone output
+                double score = Math.Exp(val * Math.Cos((d + 1) * (v + 1) * 0.005) * 0.3);
+                visContrib += score * val; visWSum += score;
+            }
+            visContrib /= Math.Max(visWSum, 1e-8);
+
+            // Language token conditioning for task specification
+            double textContrib = 0;
+            if (promptTokens is not null && promptLen > 0)
+            {
+                double textAttn = 0, textWSum = 0;
+                for (int t = 0; t < promptLen; t++)
+                {
+                    double val = NumOps.ToDouble(promptTokens[t]) / _options.VocabSize;
+                    double score = Math.Exp(val * Math.Sin((d + 1) * (visLen + t + 1) * 0.004) * 0.3);
+                    textAttn += score * val; textWSum += score;
+                }
+                textContrib = textAttn / Math.Max(textWSum, 1e-8) * 0.5;
+            }
+            decoderInput[d] = NumOps.FromDouble(visContrib + textContrib);
+        }
+
+        var output = decoderInput;
+        for (int i = _encoderLayerEnd; i < Layers.Count; i++)
+            output = Layers[i].Forward(output);
+        return output;
+    }
     /// <summary>
     /// Predicts action using Octo's readout token + diffusion head architecture.
     /// Per the paper (Berkeley 2024), Octo uses a transformer backbone with

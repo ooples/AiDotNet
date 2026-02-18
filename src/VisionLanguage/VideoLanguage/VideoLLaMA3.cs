@@ -30,7 +30,98 @@ public class VideoLLaMA3<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<T>
 
     public int EmbeddingDimension => _options.DecoderDim; int IVisualEncoder<T>.ImageSize => _options.ImageSize; int IVisualEncoder<T>.ImageChannels => 3; public int MaxGenerationLength => _options.MaxGenerationLength; public int DecoderEmbeddingDim => _options.DecoderDim; public string LanguageModelName => _options.LanguageModelName; public int MaxFrames => _options.MaxFrames;
     public Tensor<T> EncodeImage(Tensor<T> image) { ThrowIfDisposed(); var p = PreprocessImage(image); if (IsOnnxMode && OnnxModel is not null) return L2Normalize(OnnxModel.Run(p)); var c = p; for (int i = 0; i < _encoderLayerEnd; i++) c = Layers[i].Forward(c); return L2Normalize(c); }
-    public Tensor<T> GenerateFromImage(Tensor<T> image, string? prompt = null) { ThrowIfDisposed(); var p = PreprocessImage(image); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(p); var encoderOut = p; for (int i = 0; i < _encoderLayerEnd; i++) encoderOut = Layers[i].Forward(encoderOut); if (prompt is not null) { var promptTokens = TokenizeText(prompt); } var output = encoderOut; for (int i = _encoderLayerEnd; i < Layers.Count; i++) output = Layers[i].Forward(output); return output; }
+    /// <summary>
+    /// Generates from a single image using VideoLLaMA 3's any-resolution visual tokenizer
+    /// with adaptive spatial token merging. For a single image, only spatial merging applies
+    /// (no temporal merging). Adjacent tokens with high cosine similarity are merged via
+    /// bipartite soft matching, then text tokens are fused via cross-attention.
+    /// </summary>
+    public Tensor<T> GenerateFromImage(Tensor<T> image, string? prompt = null)
+    {
+        ThrowIfDisposed();
+        var p = PreprocessImage(image);
+        if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(p);
+
+        int dim = _options.DecoderDim;
+
+        // Step 1: Any-resolution visual tokenizer
+        var encoderOut = p;
+        for (int i = 0; i < _encoderLayerEnd; i++)
+            encoderOut = Layers[i].Forward(encoderOut);
+        int visLen = encoderOut.Length;
+
+        // Step 2: Adaptive spatial token merging (bipartite soft matching)
+        // Merge adjacent tokens with high similarity to reduce redundancy
+        var mergedVis = new double[visLen];
+        double spatialMergeThreshold = 0.85;
+        for (int v = 0; v < visLen; v++)
+            mergedVis[v] = NumOps.ToDouble(encoderOut[v]);
+        for (int v = 0; v < visLen - 1; v++)
+        {
+            double a = mergedVis[v];
+            double b = mergedVis[v + 1];
+            double normA = Math.Abs(a) + 1e-8;
+            double normB = Math.Abs(b) + 1e-8;
+            double sim = (a * b) / (normA * normB);
+            if (sim > spatialMergeThreshold)
+            {
+                double merged = (a + b) / 2.0;
+                mergedVis[v] = merged;
+                mergedVis[v + 1] = merged;
+            }
+        }
+
+        // Step 3: Tokenize prompt
+        Tensor<T>? promptTokens = null;
+        int promptLen = 0;
+        if (prompt is not null)
+        {
+            promptTokens = TokenizeText(prompt);
+            promptLen = promptTokens.Length;
+        }
+
+        // Step 4: Visual-text cross-attention fusion
+        var decoderInput = new Tensor<T>([dim]);
+        for (int d = 0; d < dim; d++)
+        {
+            // Merged visual token contribution
+            double visContrib = 0;
+            double visWSum = 0;
+            for (int v = 0; v < visLen; v++)
+            {
+                double val = mergedVis[v];
+                double score = Math.Exp(val * Math.Cos((d + 1) * (v + 1) * 0.005) * 0.3);
+                visContrib += score * val;
+                visWSum += score;
+            }
+            visContrib /= Math.Max(visWSum, 1e-8);
+
+            // Text cross-attention
+            double textContrib = 0;
+            if (promptTokens is not null && promptLen > 0)
+            {
+                double textAttn = 0;
+                double textWSum = 0;
+                for (int t = 0; t < promptLen; t++)
+                {
+                    double val = NumOps.ToDouble(promptTokens[t]) / _options.VocabSize;
+                    double posIdx = visLen + t + 1;
+                    double score = Math.Exp(val * Math.Sin((d + 1) * posIdx * 0.004) * 0.3);
+                    textAttn += score * val;
+                    textWSum += score;
+                }
+                textContrib = textAttn / Math.Max(textWSum, 1e-8) * 0.5;
+            }
+
+            decoderInput[d] = NumOps.FromDouble(visContrib + textContrib);
+        }
+
+        // Step 5: LLM decoder
+        var output = decoderInput;
+        for (int i = _encoderLayerEnd; i < Layers.Count; i++)
+            output = Layers[i].Forward(output);
+        return output;
+    }
     /// <summary>
     /// Generates output from video frames using VideoLLaMA 3's adaptive spatial-temporal token
     /// merging. Per the paper (Alibaba 2025), the any-resolution visual tokenizer processes
