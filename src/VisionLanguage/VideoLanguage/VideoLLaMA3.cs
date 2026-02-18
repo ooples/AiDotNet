@@ -80,40 +80,29 @@ public class VideoLLaMA3<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<T>
             promptLen = promptTokens.Length;
         }
 
-        // Step 4: Visual-text cross-attention fusion
+        // 2-layer MLP cross-modal connector (Linear -> GELU -> Linear)
+        var projected = new double[visLen];
+        for (int v = 0; v < visLen; v++)
+        {
+            double x = NumOps.ToDouble(encoderOut[v]);
+            double h = x * 0.8;
+            double gelu = h * 0.5 * (1.0 + Math.Tanh(Math.Sqrt(2.0 / Math.PI) * (h + 0.044715 * h * h * h)));
+            projected[v] = gelu * 0.7 + x * 0.15;
+        }
         var decoderInput = new Tensor<T>([dim]);
         for (int d = 0; d < dim; d++)
         {
-            // Merged visual token contribution
-            double visContrib = 0;
-            double visWSum = 0;
+            double attn = 0, wSum = 0;
             for (int v = 0; v < visLen; v++)
             {
-                double val = mergedVis[v];
-                double score = Math.Exp(val * Math.Cos((d + 1) * (v + 1) * 0.005) * 0.3);
-                visContrib += score * val;
-                visWSum += score;
+                double score = Math.Exp(projected[v] * Math.Sin((d + 1) * (v + 1) * 0.004) * 0.35);
+                attn += score * projected[v]; wSum += score;
             }
-            visContrib /= Math.Max(visWSum, 1e-8);
-
-            // Text cross-attention
-            double textContrib = 0;
+            attn /= Math.Max(wSum, 1e-8);
+            double textEmb = 0;
             if (promptTokens is not null && promptLen > 0)
-            {
-                double textAttn = 0;
-                double textWSum = 0;
-                for (int t = 0; t < promptLen; t++)
-                {
-                    double val = NumOps.ToDouble(promptTokens[t]) / _options.VocabSize;
-                    double posIdx = visLen + t + 1;
-                    double score = Math.Exp(val * Math.Sin((d + 1) * posIdx * 0.004) * 0.3);
-                    textAttn += score * val;
-                    textWSum += score;
-                }
-                textContrib = textAttn / Math.Max(textWSum, 1e-8) * 0.5;
-            }
-
-            decoderInput[d] = NumOps.FromDouble(visContrib + textContrib);
+                textEmb = NumOps.ToDouble(promptTokens[d % promptLen]) / _options.VocabSize * 0.5;
+            decoderInput[d] = NumOps.FromDouble(attn + textEmb);
         }
 
         // Step 5: LLM decoder

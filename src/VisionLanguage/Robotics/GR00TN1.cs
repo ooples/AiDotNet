@@ -51,32 +51,28 @@ public class GR00TN1<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
         int promptLen = 0;
         if (prompt is not null) { promptTokens = TokenizeText(prompt); promptLen = promptTokens.Length; }
 
-        // GR00T N1 System 2: VLM reasoning over visual + language for action plan
+        // MLP projection with instruction-gated visual features for action prediction
+        var projected = new double[visLen];
+        for (int v = 0; v < visLen; v++)
+        {
+            double x = NumOps.ToDouble(encoderOut[v]);
+            double h = x * 0.8;
+            double gelu = h * 0.5 * (1.0 + Math.Tanh(Math.Sqrt(2.0 / Math.PI) * (h + 0.044715 * h * h * h)));
+            projected[v] = gelu * 0.7 + x * 0.15;
+        }
         var decoderInput = new Tensor<T>([dim]);
         for (int d = 0; d < dim; d++)
         {
-            double visContrib = 0, visWSum = 0;
-            for (int v = 0; v < visLen; v++)
-            {
-                double val = NumOps.ToDouble(encoderOut[v]);
-                double score = Math.Exp(val * Math.Cos((d + 1) * (v + 1) * 0.005) * 0.3);
-                visContrib += score * val; visWSum += score;
-            }
-            visContrib /= Math.Max(visWSum, 1e-8);
-
-            double textContrib = 0;
+            double visVal = projected[d % visLen];
+            double textEmb = 0;
             if (promptTokens is not null && promptLen > 0)
             {
-                double textAttn = 0, textWSum = 0;
-                for (int t = 0; t < promptLen; t++)
-                {
-                    double val = NumOps.ToDouble(promptTokens[t]) / _options.VocabSize;
-                    double score = Math.Exp(val * Math.Sin((d + 1) * (visLen + t + 1) * 0.004) * 0.3);
-                    textAttn += score * val; textWSum += score;
-                }
-                textContrib = textAttn / Math.Max(textWSum, 1e-8) * 0.5;
+                double tokVal = NumOps.ToDouble(promptTokens[d % promptLen]) / _options.VocabSize;
+                double gate = 1.0 / (1.0 + Math.Exp(-tokVal * 5.0));
+                visVal *= (0.5 + gate);
+                textEmb = tokVal * 0.3;
             }
-            decoderInput[d] = NumOps.FromDouble(visContrib + textContrib);
+            decoderInput[d] = NumOps.FromDouble(visVal + textEmb);
         }
 
         var output = decoderInput;

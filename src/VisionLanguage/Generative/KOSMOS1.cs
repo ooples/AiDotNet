@@ -73,42 +73,20 @@ public class KOSMOS1<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageM
         }
 
         // Step 3: Build unified multimodal sequence
-        // [<image> vis_tokens </image> text_tokens] in shared embedding space
+        // Linear projection into shared embedding space: <image> vis_tokens </image> text_tokens
         var decoderInput = new Tensor<T>([dim]);
         for (int d = 0; d < dim; d++)
         {
-            // Visual tokens (image region of the unified sequence)
-            double visContrib = 0;
-            double visWSum = 0;
-            for (int v = 0; v < visLen; v++)
+            double visVal = 0;
+            if (visLen > 0)
             {
-                double val = NumOps.ToDouble(visionOut[v]);
-                // Causal self-attention over visual tokens
-                double score = Math.Exp(val * Math.Cos((d + 1) * (v + 1) * 0.005) * 0.3);
-                visContrib += score * val;
-                visWSum += score;
+                int vIdx = d % visLen;
+                visVal = NumOps.ToDouble(visionOut[vIdx]) * 0.85;
             }
-            visContrib /= Math.Max(visWSum, 1e-8);
-
-            // Text tokens (following image tokens in the unified sequence)
-            double textContrib = 0;
+            double textEmb = 0;
             if (promptTokens is not null && promptLen > 0)
-            {
-                double textAttn = 0;
-                double textWSum = 0;
-                for (int t = 0; t < promptLen; t++)
-                {
-                    double val = NumOps.ToDouble(promptTokens[t]) / _options.VocabSize;
-                    // Causal: text attends to all visual tokens + prior text
-                    double posIdx = visLen + t + 1;
-                    double score = Math.Exp(val * Math.Sin((d + 1) * posIdx * 0.004) * 0.3);
-                    textAttn += score * val;
-                    textWSum += score;
-                }
-                textContrib = textAttn / Math.Max(textWSum, 1e-8) * 0.5;
-            }
-
-            decoderInput[d] = NumOps.FromDouble(visContrib + textContrib);
+                textEmb = NumOps.ToDouble(promptTokens[d % promptLen]) / _options.VocabSize * 0.5;
+            decoderInput[d] = NumOps.FromDouble(visVal + textEmb);
         }
 
         // Step 4: Causal transformer decoder

@@ -71,41 +71,23 @@ public class Emu3<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageMode
         }
 
         // Step 3: Build unified token sequence [visual_tokens | text_tokens]
-        // Both token types are in the same embedding space
+        // Visual tokenizer: continuous visual tokens for next-token prediction
         var decoderInput = new Tensor<T>([dim]);
         for (int d = 0; d < dim; d++)
         {
-            // Discrete visual token contribution (from VQVAE codebook)
-            double visContrib = 0;
-            double visWSum = 0;
-            for (int v = 0; v < visLen; v++)
+            double visVal = 0;
+            if (visLen > 0)
             {
-                double val = NumOps.ToDouble(visionOut[v]);
-                // Quantized token embedding lookup approximation
-                double score = Math.Exp(val * Math.Cos((d + 1) * (v + 1) * 0.005) * 0.3);
-                visContrib += score * val;
-                visWSum += score;
+                int vIdx = d % visLen;
+                double x = NumOps.ToDouble(visionOut[vIdx]);
+                double h = x * 0.9;
+                double gelu = h * 0.5 * (1.0 + Math.Tanh(Math.Sqrt(2.0 / Math.PI) * (h + 0.044715 * h * h * h)));
+                visVal = gelu * 0.6 + x * 0.2;
             }
-            visContrib /= Math.Max(visWSum, 1e-8);
-
-            // Text token contribution (unified vocabulary)
-            double textContrib = 0;
+            double textEmb = 0;
             if (promptTokens is not null && promptLen > 0)
-            {
-                double textAttn = 0;
-                double textWSum = 0;
-                for (int t = 0; t < promptLen; t++)
-                {
-                    double val = NumOps.ToDouble(promptTokens[t]) / _options.VocabSize;
-                    double posIdx = visLen + t + 1;
-                    double score = Math.Exp(val * Math.Sin((d + 1) * posIdx * 0.004) * 0.3);
-                    textAttn += score * val;
-                    textWSum += score;
-                }
-                textContrib = textAttn / Math.Max(textWSum, 1e-8) * 0.5;
-            }
-
-            decoderInput[d] = NumOps.FromDouble(visContrib + textContrib);
+                textEmb = NumOps.ToDouble(promptTokens[d % promptLen]) / _options.VocabSize * 0.5;
+            decoderInput[d] = NumOps.FromDouble(visVal + textEmb);
         }
 
         // Step 4: Unified autoregressive transformer (next-token prediction)

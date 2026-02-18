@@ -48,15 +48,22 @@ public class LEOVL<T> : VisionLanguageModelBase<T>, IThreeDVisionLanguageModel<T
         int visLen = encoderOut.Length;
         Tensor<T>? promptTokens = null; int promptLen = 0;
         if (prompt is not null) { promptTokens = TokenizeText(prompt); promptLen = promptTokens.Length; }
+        // Linear projection to LLM space (2D fallback for 3D-primary model)
         var decoderInput = new Tensor<T>([dim]);
+        double visScale = 1.0 / Math.Max(visLen, 1);
         for (int d = 0; d < dim; d++)
         {
-            double visContrib = 0, visWSum = 0;
-            for (int v = 0; v < visLen; v++) { double val = NumOps.ToDouble(encoderOut[v]); double score = Math.Exp(val * Math.Cos((d + 1) * (v + 1) * 0.005) * 0.3); visContrib += score * val; visWSum += score; }
-            visContrib /= Math.Max(visWSum, 1e-8);
-            double textContrib = 0;
-            if (promptTokens is not null && promptLen > 0) { double textAttn = 0, textWSum = 0; for (int t = 0; t < promptLen; t++) { double val = NumOps.ToDouble(promptTokens[t]) / _options.VocabSize; double score = Math.Exp(val * Math.Sin((d + 1) * (visLen + t + 1) * 0.004) * 0.3); textAttn += score * val; textWSum += score; } textContrib = textAttn / Math.Max(textWSum, 1e-8) * 0.5; }
-            decoderInput[d] = NumOps.FromDouble(visContrib + textContrib);
+            double visVal = 0;
+            for (int v = 0; v < visLen; v++)
+                visVal += NumOps.ToDouble(encoderOut[v]) * visScale;
+            double textEmb = 0;
+            if (promptTokens is not null && promptLen > 0)
+            {
+                double tokVal = NumOps.ToDouble(promptTokens[d % promptLen]);
+                double gate = 1.0 / (1.0 + Math.Exp(-tokVal / 100.0));
+                textEmb = visVal * (gate - 0.5) * 0.3;
+            }
+            decoderInput[d] = NumOps.FromDouble(visVal + textEmb);
         }
         var output = decoderInput;
         for (int i = _encoderLayerEnd; i < Layers.Count; i++) output = Layers[i].Forward(output);
