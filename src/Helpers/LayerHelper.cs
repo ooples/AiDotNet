@@ -22495,6 +22495,117 @@ public static class LayerHelper<T>
     }
 
     /// <summary>
+    /// Creates default layers for SigLIP 2 (Multilingual Vision-Language Encoders with Improved
+    /// Semantic Understanding). Includes vision encoder, text encoder, captioning decoder with
+    /// cross-attention, and MIM decoder for multi-objective training.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// SigLIP 2 extends SigLIP with three training objectives:
+    /// (1) Sigmoid contrastive loss for image-text alignment,
+    /// (2) Autoregressive captioning loss via a lightweight cross-attention decoder,
+    /// (3) Self-supervised masked image modeling (MIM) loss.
+    /// </para>
+    /// <para>
+    /// Layer layout:
+    /// [Vision Encoder] -> [Text Encoder] -> [Captioning Decoder (optional)] -> [MIM Decoder]
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultSigLIP2Layers(
+        int visionEmbeddingDim = 768,
+        int textEmbeddingDim = 768,
+        int projectionDim = 768,
+        int numVisionLayers = 12,
+        int numTextLayers = 12,
+        int numVisionHeads = 12,
+        int numTextHeads = 12,
+        int captioningDecoderDim = 768,
+        int numCaptioningDecoderLayers = 4,
+        int numCaptioningDecoderHeads = 12,
+        int mimDecoderDim = 512,
+        int numMimDecoderLayers = 2,
+        int vocabSize = 250000,
+        bool includeCaptioningDecoder = true,
+        double dropoutRate = 0.0)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+        int visionFfnDim = visionEmbeddingDim * 4;
+        int textFfnDim = textEmbeddingDim * 4;
+
+        // === Vision Encoder (same architecture as SigLIP) ===
+        yield return new LayerNormalizationLayer<T>(visionEmbeddingDim);
+
+        for (int i = 0; i < numVisionLayers; i++)
+        {
+            // Multi-head self-attention
+            yield return new MultiHeadAttentionLayer<T>(visionEmbeddingDim, visionEmbeddingDim, numVisionHeads);
+            yield return new LayerNormalizationLayer<T>(visionEmbeddingDim);
+            // Feed-forward network
+            yield return new DenseLayer<T>(visionEmbeddingDim, visionFfnDim, geluActivation);
+            yield return new DenseLayer<T>(visionFfnDim, visionEmbeddingDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(visionEmbeddingDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Vision projection to shared contrastive space
+        yield return new DenseLayer<T>(visionEmbeddingDim, projectionDim, identityActivation);
+
+        // === Text Encoder (multilingual, same transformer architecture) ===
+        yield return new LayerNormalizationLayer<T>(textEmbeddingDim);
+
+        for (int i = 0; i < numTextLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(textEmbeddingDim, textEmbeddingDim, numTextHeads);
+            yield return new LayerNormalizationLayer<T>(textEmbeddingDim);
+            yield return new DenseLayer<T>(textEmbeddingDim, textFfnDim, geluActivation);
+            yield return new DenseLayer<T>(textFfnDim, textEmbeddingDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(textEmbeddingDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Text projection to shared contrastive space
+        yield return new DenseLayer<T>(textEmbeddingDim, projectionDim, identityActivation);
+
+        // === Captioning Decoder (CoCa-style autoregressive with cross-attention to vision) ===
+        if (includeCaptioningDecoder)
+        {
+            int captFfnDim = captioningDecoderDim * 4;
+
+            for (int i = 0; i < numCaptioningDecoderLayers; i++)
+            {
+                // Cross-attention to vision encoder features
+                yield return new MultiHeadAttentionLayer<T>(captioningDecoderDim, captioningDecoderDim, numCaptioningDecoderHeads);
+                yield return new LayerNormalizationLayer<T>(captioningDecoderDim);
+                // Causal self-attention for autoregressive decoding
+                yield return new MultiHeadAttentionLayer<T>(captioningDecoderDim, captioningDecoderDim, numCaptioningDecoderHeads);
+                yield return new LayerNormalizationLayer<T>(captioningDecoderDim);
+                // Feed-forward network
+                yield return new DenseLayer<T>(captioningDecoderDim, captFfnDim, geluActivation);
+                yield return new DenseLayer<T>(captFfnDim, captioningDecoderDim, identityActivation);
+                yield return new LayerNormalizationLayer<T>(captioningDecoderDim);
+            }
+
+            // Vocabulary projection for next-token prediction
+            yield return new DenseLayer<T>(captioningDecoderDim, vocabSize, identityActivation);
+        }
+
+        // === MIM Decoder (lightweight decoder for masked patch prediction) ===
+        int mimInputDim = visionEmbeddingDim;
+        for (int i = 0; i < numMimDecoderLayers; i++)
+        {
+            int outDim = (i == numMimDecoderLayers - 1) ? mimDecoderDim : visionEmbeddingDim;
+            yield return new DenseLayer<T>(mimInputDim, outDim, geluActivation);
+            yield return new LayerNormalizationLayer<T>(outDim);
+            mimInputDim = outDim;
+        }
+
+        // MIM prediction head: project to patch feature dimension
+        int patchFeatureDim = visionEmbeddingDim; // Predict features at encoder dimension
+        yield return new DenseLayer<T>(mimDecoderDim, patchFeatureDim, identityActivation);
+    }
+
+    /// <summary>
     /// Creates default layers for the ALIGN model (EfficientNet CNN vision encoder + text transformer).
     /// ALIGN uses a CNN-based vision encoder (EfficientNet-B7) instead of a ViT, so the vision side
     /// uses stacked dense layers to approximate the CNN feature extraction pipeline.
