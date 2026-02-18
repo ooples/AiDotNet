@@ -22412,10 +22412,12 @@ public static class LayerHelper<T>
         // Pre-norm before text transformer stack
         yield return new LayerNormalizationLayer<T>(textEmbeddingDim);
 
-        // Text transformer layers
+        // Text transformer layers (causal attention for autoregressive text encoding)
         for (int i = 0; i < numTextLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(textEmbeddingDim, textEmbeddingDim, numTextHeads);
+            var textAttention = new MultiHeadAttentionLayer<T>(textEmbeddingDim, textEmbeddingDim, numTextHeads);
+            textAttention.UseCausalMask = true;
+            yield return textAttention;
             yield return new LayerNormalizationLayer<T>(textEmbeddingDim);
             yield return new DenseLayer<T>(textEmbeddingDim, textFfnDim, geluActivation);
             yield return new DenseLayer<T>(textFfnDim, textEmbeddingDim, identityActivation);
@@ -22482,7 +22484,9 @@ public static class LayerHelper<T>
 
         for (int i = 0; i < numTextLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(textEmbeddingDim, textEmbeddingDim, numTextHeads);
+            var textAttention = new MultiHeadAttentionLayer<T>(textEmbeddingDim, textEmbeddingDim, numTextHeads);
+            textAttention.UseCausalMask = true;
+            yield return textAttention;
             yield return new LayerNormalizationLayer<T>(textEmbeddingDim);
             yield return new DenseLayer<T>(textEmbeddingDim, textFfnDim, geluActivation);
             yield return new DenseLayer<T>(textFfnDim, textEmbeddingDim, identityActivation);
@@ -22624,12 +22628,14 @@ public static class LayerHelper<T>
         int visionFfnDim = visionEmbeddingDim * 4;
         int textFfnDim = textEmbeddingDim * 4;
 
-        // === Vision Encoder (EfficientNet-style CNN blocks approximated with Dense layers) ===
+        // === Vision Encoder (Dense approximation of EfficientNet-B7 MBConv blocks) ===
+        // Note: Real EfficientNet uses depthwise separable convolutions + squeeze-and-excitation.
+        // This approximation uses Dense expand-project blocks for the forward/backward pipeline.
         yield return new LayerNormalizationLayer<T>(visionEmbeddingDim);
 
         for (int i = 0; i < numVisionLayers; i++)
         {
-            // MBConv-style block: expand -> depthwise -> project
+            // Dense expand-project block (approximates MBConv inverted bottleneck)
             yield return new DenseLayer<T>(visionEmbeddingDim, visionFfnDim, geluActivation);
             yield return new LayerNormalizationLayer<T>(visionFfnDim);
             yield return new DenseLayer<T>(visionFfnDim, visionEmbeddingDim, identityActivation);
@@ -22676,10 +22682,12 @@ public static class LayerHelper<T>
         int visionFfnDim = visionEmbeddingDim * 4;
         int textFfnDim = textEmbeddingDim * 4;
 
-        // === Vision Encoder (CoAtNet: CNN stages followed by Transformer stages) ===
+        // === Vision Encoder (CoAtNet: Dense approximation of CNN stages, then Transformer stages) ===
+        // Note: Real CoAtNet uses depthwise convolutions + relative attention in early stages.
+        // CNN stages here use Dense expand-project blocks as a simplified approximation.
         yield return new LayerNormalizationLayer<T>(visionEmbeddingDim);
 
-        // First half: MBConv-style CNN stages
+        // First half: Dense expand-project blocks (approximates MBConv CNN stages)
         int cnnStages = numVisionLayers / 2;
         for (int i = 0; i < cnnStages; i++)
         {
@@ -22769,12 +22777,14 @@ public static class LayerHelper<T>
         int encoderFfnDim = encoderEmbeddingDim * 4;
         int decoderFfnDim = decoderEmbeddingDim * 4;
 
-        // === DaViT Vision Encoder ===
+        // === DaViT Vision Encoder (simplified: standard MHA approximation) ===
+        // Note: Real DaViT alternates spatial window attention (odd layers) and channel group
+        // attention (even layers). This uses standard MHA as a simplified approximation.
         yield return new LayerNormalizationLayer<T>(encoderEmbeddingDim);
 
         for (int i = 0; i < numEncoderLayers; i++)
         {
-            // Spatial window attention (odd layers) / channel group attention (even layers)
+            // Standard multi-head attention (approximates DaViT dual attention)
             yield return new MultiHeadAttentionLayer<T>(encoderEmbeddingDim, encoderEmbeddingDim, numEncoderHeads);
             yield return new LayerNormalizationLayer<T>(encoderEmbeddingDim);
             yield return new DenseLayer<T>(encoderEmbeddingDim, encoderFfnDim, geluActivation);
@@ -22790,11 +22800,13 @@ public static class LayerHelper<T>
         // === Multi-task Decoder ===
         for (int i = 0; i < numDecoderLayers; i++)
         {
-            // Self-attention
-            yield return new MultiHeadAttentionLayer<T>(decoderEmbeddingDim, decoderEmbeddingDim, numDecoderHeads);
+            // Causal self-attention
+            var decoderSelfAttn = new MultiHeadAttentionLayer<T>(decoderEmbeddingDim, decoderEmbeddingDim, numDecoderHeads);
+            decoderSelfAttn.UseCausalMask = true;
+            yield return decoderSelfAttn;
             yield return new LayerNormalizationLayer<T>(decoderEmbeddingDim);
-            // Cross-attention to encoder features
-            yield return new MultiHeadAttentionLayer<T>(decoderEmbeddingDim, decoderEmbeddingDim, numDecoderHeads);
+            // Cross-attention to encoder features (query from decoder, key/value from encoder)
+            yield return new CrossAttentionLayer<T>(decoderEmbeddingDim, encoderEmbeddingDim, numDecoderHeads);
             yield return new LayerNormalizationLayer<T>(decoderEmbeddingDim);
             // Feed-forward
             yield return new DenseLayer<T>(decoderEmbeddingDim, decoderFfnDim, geluActivation);
@@ -22861,11 +22873,11 @@ public static class LayerHelper<T>
         // === Co-Attention Fusion Layers ===
         for (int i = 0; i < numFusionLayers; i++)
         {
-            // Vision-to-text cross-attention
-            yield return new MultiHeadAttentionLayer<T>(fusionDim, fusionDim, numHeads);
+            // Vision-to-text cross-attention (vision queries attend to text keys/values)
+            yield return new CrossAttentionLayer<T>(fusionDim, fusionDim, numHeads);
             yield return new LayerNormalizationLayer<T>(fusionDim);
-            // Text-to-vision cross-attention
-            yield return new MultiHeadAttentionLayer<T>(fusionDim, fusionDim, numHeads);
+            // Text-to-vision cross-attention (text queries attend to vision keys/values)
+            yield return new CrossAttentionLayer<T>(fusionDim, fusionDim, numHeads);
             yield return new LayerNormalizationLayer<T>(fusionDim);
             // Feed-forward
             yield return new DenseLayer<T>(fusionDim, fusionFfnDim, geluActivation);
@@ -22981,11 +22993,11 @@ public static class LayerHelper<T>
         // === Cross-Modality Encoder (bidirectional cross-attention) ===
         for (int i = 0; i < numCrossModalLayers; i++)
         {
-            // Language-to-vision cross-attention
-            yield return new MultiHeadAttentionLayer<T>(fusionDim, fusionDim, numHeads);
+            // Language-to-vision cross-attention (language queries attend to vision keys/values)
+            yield return new CrossAttentionLayer<T>(fusionDim, fusionDim, numHeads);
             yield return new LayerNormalizationLayer<T>(fusionDim);
-            // Vision-to-language cross-attention
-            yield return new MultiHeadAttentionLayer<T>(fusionDim, fusionDim, numHeads);
+            // Vision-to-language cross-attention (vision queries attend to language keys/values)
+            yield return new CrossAttentionLayer<T>(fusionDim, fusionDim, numHeads);
             yield return new LayerNormalizationLayer<T>(fusionDim);
             // Feed-forward for fused representation
             yield return new DenseLayer<T>(fusionDim, fusionFfnDim, geluActivation);
@@ -23019,7 +23031,7 @@ public static class LayerHelper<T>
         yield return new LayerNormalizationLayer<T>(visionDim);
 
         // Determine at which vision layers bridges connect (evenly spaced)
-        int bridgeInterval = numVisionLayers > numBridgeLayers ? numVisionLayers / numBridgeLayers : 1;
+        int bridgeInterval = numBridgeLayers > 0 && numVisionLayers > numBridgeLayers ? numVisionLayers / numBridgeLayers : 1;
 
         for (int i = 0; i < numVisionLayers; i++)
         {
@@ -23032,10 +23044,10 @@ public static class LayerHelper<T>
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
 
             // Bridge cross-attention at designated layers
-            if (bridgeInterval > 0 && (i + 1) % bridgeInterval == 0 && i < numVisionLayers - 1)
+            if (numBridgeLayers > 0 && bridgeInterval > 0 && (i + 1) % bridgeInterval == 0 && i < numVisionLayers - 1)
             {
-                // Cross-attention bridge: vision attends to text
-                yield return new MultiHeadAttentionLayer<T>(visionDim, visionDim, numHeads);
+                // Cross-attention bridge: vision queries attend to text keys/values
+                yield return new CrossAttentionLayer<T>(visionDim, textDim, numHeads);
                 yield return new LayerNormalizationLayer<T>(visionDim);
             }
         }
@@ -23047,7 +23059,7 @@ public static class LayerHelper<T>
         // === Text Encoder with Bridge Points ===
         yield return new LayerNormalizationLayer<T>(textDim);
 
-        int textBridgeInterval = numTextLayers > numBridgeLayers ? numTextLayers / numBridgeLayers : 1;
+        int textBridgeInterval = numBridgeLayers > 0 && numTextLayers > numBridgeLayers ? numTextLayers / numBridgeLayers : 1;
 
         for (int i = 0; i < numTextLayers; i++)
         {
@@ -23060,10 +23072,10 @@ public static class LayerHelper<T>
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
 
             // Bridge cross-attention at designated layers
-            if (textBridgeInterval > 0 && (i + 1) % textBridgeInterval == 0 && i < numTextLayers - 1)
+            if (numBridgeLayers > 0 && textBridgeInterval > 0 && (i + 1) % textBridgeInterval == 0 && i < numTextLayers - 1)
             {
-                // Cross-attention bridge: text attends to vision
-                yield return new MultiHeadAttentionLayer<T>(textDim, textDim, numHeads);
+                // Cross-attention bridge: text queries attend to vision keys/values
+                yield return new CrossAttentionLayer<T>(textDim, visionDim, numHeads);
                 yield return new LayerNormalizationLayer<T>(textDim);
             }
         }
@@ -23084,6 +23096,7 @@ public static class LayerHelper<T>
     /// Creates default layers for Q-Former-based generative VLMs (InstructBLIP, BLIP-3).
     /// Architecture: ViT vision encoder -> Q-Former (cross-attention queries) -> text decoder.
     /// </summary>
+    /// <param name="numQueryTokens">Number of learnable query tokens (managed externally as learnable tensors in the model class, not as a layer).</param>
     public static IEnumerable<ILayer<T>> CreateDefaultQFormerGenerativeLayers(
         int visionDim = 1408,
         int qFormerDim = 768,
@@ -23121,8 +23134,8 @@ public static class LayerHelper<T>
 
         for (int i = 0; i < numQFormerLayers; i++)
         {
-            // Cross-attention: queries attend to visual features
-            yield return new MultiHeadAttentionLayer<T>(qFormerDim, qFormerDim, numQFormerHeads);
+            // Cross-attention: learned queries attend to visual features (query from Q-Former, key/value from vision)
+            yield return new CrossAttentionLayer<T>(qFormerDim, visionDim, numQFormerHeads);
             yield return new LayerNormalizationLayer<T>(qFormerDim);
             // Self-attention among query tokens
             yield return new MultiHeadAttentionLayer<T>(qFormerDim, qFormerDim, numQFormerHeads);
@@ -23134,14 +23147,21 @@ public static class LayerHelper<T>
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
-        // === Text Decoder (autoregressive) ===
+        // === Text Decoder (autoregressive with cross-attention to Q-Former output) ===
         if (qFormerDim != decoderDim)
             yield return new DenseLayer<T>(qFormerDim, decoderDim, identityActivation);
 
         for (int i = 0; i < numDecoderLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(decoderDim, decoderDim, numHeads);
+            // Causal self-attention
+            var decoderSelfAttn = new MultiHeadAttentionLayer<T>(decoderDim, decoderDim, numHeads);
+            decoderSelfAttn.UseCausalMask = true;
+            yield return decoderSelfAttn;
             yield return new LayerNormalizationLayer<T>(decoderDim);
+            // Cross-attention to Q-Former output
+            yield return new CrossAttentionLayer<T>(decoderDim, qFormerDim, numHeads);
+            yield return new LayerNormalizationLayer<T>(decoderDim);
+            // Feed-forward
             yield return new DenseLayer<T>(decoderDim, decoderFfnDim, geluActivation);
             yield return new DenseLayer<T>(decoderFfnDim, decoderDim, identityActivation);
             yield return new LayerNormalizationLayer<T>(decoderDim);
@@ -23186,8 +23206,15 @@ public static class LayerHelper<T>
         // === Text Decoder (autoregressive with cross-attention to visual features) ===
         for (int i = 0; i < numDecoderLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(decoderDim, decoderDim, numHeads);
+            // Causal self-attention on decoder tokens
+            var decoderSelfAttn = new MultiHeadAttentionLayer<T>(decoderDim, decoderDim, numHeads);
+            decoderSelfAttn.UseCausalMask = true;
+            yield return decoderSelfAttn;
             yield return new LayerNormalizationLayer<T>(decoderDim);
+            // Cross-attention to vision features (query from decoder, key/value from vision encoder)
+            yield return new CrossAttentionLayer<T>(decoderDim, visionDim, numHeads);
+            yield return new LayerNormalizationLayer<T>(decoderDim);
+            // Feed-forward
             yield return new DenseLayer<T>(decoderDim, decoderFfnDim, geluActivation);
             yield return new DenseLayer<T>(decoderFfnDim, decoderDim, identityActivation);
             yield return new LayerNormalizationLayer<T>(decoderDim);
@@ -23236,8 +23263,8 @@ public static class LayerHelper<T>
 
         for (int i = 0; i < numPerceiverLayers; i++)
         {
-            // Cross-attention: latent queries attend to vision tokens
-            yield return new MultiHeadAttentionLayer<T>(perceiverDim, perceiverDim, numPerceiverHeads);
+            // Cross-attention: latent queries attend to vision tokens (query from perceiver, key/value from vision)
+            yield return new CrossAttentionLayer<T>(perceiverDim, visionDim, numPerceiverHeads);
             yield return new LayerNormalizationLayer<T>(perceiverDim);
             // Self-attention among latent tokens
             yield return new MultiHeadAttentionLayer<T>(perceiverDim, perceiverDim, numPerceiverHeads);
@@ -23255,8 +23282,17 @@ public static class LayerHelper<T>
 
         for (int i = 0; i < numDecoderLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(decoderDim, decoderDim, numHeads);
+            // Causal self-attention
+            var decoderSelfAttn = new MultiHeadAttentionLayer<T>(decoderDim, decoderDim, numHeads);
+            decoderSelfAttn.UseCausalMask = true;
+            yield return decoderSelfAttn;
             yield return new LayerNormalizationLayer<T>(decoderDim);
+            // Gated cross-attention: decoder queries attend to perceiver output
+            yield return new CrossAttentionLayer<T>(decoderDim, perceiverDim, numHeads);
+            // Gate projection (tanh gate controls visual information flow)
+            yield return new DenseLayer<T>(decoderDim, decoderDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(decoderDim);
+            // Feed-forward
             yield return new DenseLayer<T>(decoderDim, decoderFfnDim, geluActivation);
             yield return new DenseLayer<T>(decoderFfnDim, decoderDim, identityActivation);
             yield return new LayerNormalizationLayer<T>(decoderDim);
@@ -23286,7 +23322,7 @@ public static class LayerHelper<T>
 
         for (int i = 0; i < numVisionLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(visionDim, visionDim, numHeads > 16 ? 16 : numHeads);
+            yield return new MultiHeadAttentionLayer<T>(visionDim, visionDim, numHeads);
             yield return new LayerNormalizationLayer<T>(visionDim);
             yield return new DenseLayer<T>(visionDim, visionFfnDim, geluActivation);
             yield return new DenseLayer<T>(visionFfnDim, visionDim, identityActivation);
@@ -23301,8 +23337,15 @@ public static class LayerHelper<T>
         // === Causal Transformer Decoder (processes interleaved visual + text tokens) ===
         for (int i = 0; i < numDecoderLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(decoderDim, decoderDim, numHeads);
+            // Causal self-attention
+            var decoderAttn = new MultiHeadAttentionLayer<T>(decoderDim, decoderDim, numHeads);
+            decoderAttn.UseCausalMask = true;
+            yield return decoderAttn;
             yield return new LayerNormalizationLayer<T>(decoderDim);
+            // Cross-attention to vision features
+            yield return new CrossAttentionLayer<T>(decoderDim, visionDim, numHeads);
+            yield return new LayerNormalizationLayer<T>(decoderDim);
+            // Feed-forward
             yield return new DenseLayer<T>(decoderDim, decoderFfnDim, geluActivation);
             yield return new DenseLayer<T>(decoderFfnDim, decoderDim, identityActivation);
             yield return new LayerNormalizationLayer<T>(decoderDim);
@@ -23334,7 +23377,7 @@ public static class LayerHelper<T>
 
         for (int i = 0; i < numVisionLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(visionDim, visionDim, numHeads > 16 ? 16 : numHeads);
+            yield return new MultiHeadAttentionLayer<T>(visionDim, visionDim, numHeads);
             yield return new LayerNormalizationLayer<T>(visionDim);
             yield return new DenseLayer<T>(visionDim, visionFfnDim, geluActivation);
             yield return new DenseLayer<T>(visionFfnDim, visionDim, identityActivation);
@@ -23346,11 +23389,18 @@ public static class LayerHelper<T>
         if (visionDim != decoderDim)
             yield return new DenseLayer<T>(visionDim, decoderDim, identityActivation);
 
-        // === Multimodal LLM Decoder (LLaMA-based) ===
+        // === Multimodal Decoder (causal self-attention + cross-attention to vision features) ===
         for (int i = 0; i < numDecoderLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(decoderDim, decoderDim, numHeads);
+            // Causal self-attention
+            var decoderAttn = new MultiHeadAttentionLayer<T>(decoderDim, decoderDim, numHeads);
+            decoderAttn.UseCausalMask = true;
+            yield return decoderAttn;
             yield return new LayerNormalizationLayer<T>(decoderDim);
+            // Cross-attention to vision features
+            yield return new CrossAttentionLayer<T>(decoderDim, visionDim, numHeads);
+            yield return new LayerNormalizationLayer<T>(decoderDim);
+            // Feed-forward
             yield return new DenseLayer<T>(decoderDim, decoderFfnDim, geluActivation);
             yield return new DenseLayer<T>(decoderFfnDim, decoderDim, identityActivation);
             yield return new LayerNormalizationLayer<T>(decoderDim);
@@ -23382,7 +23432,7 @@ public static class LayerHelper<T>
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
 
         // Patch embedding
-        yield return new FullyConnectedLayer<T>(visionDim, visionDim, geluActivation);
+        yield return new DenseLayer<T>(visionDim, visionDim, geluActivation);
 
         // ViT encoder transformer blocks
         for (int i = 0; i < numVisionLayers; i++)
@@ -23407,7 +23457,10 @@ public static class LayerHelper<T>
             yield return new LayerNormalizationLayer<T>(decoderDim);
             // Visual expert attention (separate QKV weights for visual tokens)
             yield return new MultiHeadAttentionLayer<T>(visualExpertDim, visualExpertDim, numVisualExpertHeads);
-            yield return new LayerNormalizationLayer<T>(visualExpertDim != decoderDim ? visualExpertDim : decoderDim);
+            yield return new LayerNormalizationLayer<T>(visualExpertDim);
+            // Projection from visual expert dim to decoder dim if they differ
+            if (visualExpertDim != decoderDim)
+                yield return new DenseLayer<T>(visualExpertDim, decoderDim, identityActivation);
             // Standard FFN
             yield return new DenseLayer<T>(decoderDim, decoderDim * 4, geluActivation);
             yield return new DenseLayer<T>(decoderDim * 4, decoderDim, identityActivation);
