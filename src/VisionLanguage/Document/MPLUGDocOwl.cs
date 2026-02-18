@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -47,80 +48,24 @@ public class MPLUGDocOwl<T> : VisionLanguageModelBase<T>, IDocumentUnderstanding
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(p);
 
-        int dim = _options.DecoderDim;
-        int abstractorDim = _options.AbstractorDim;
-        int numAbstractorLayers = _options.NumAbstractorLayers;
-
         // Step 1: ViT encoder for document visual features
         var visualFeatures = p;
         for (int i = 0; i < _encoderLayerEnd; i++)
             visualFeatures = Layers[i].Forward(visualFeatures);
-        int visDim = visualFeatures.Length;
 
-        // Step 2: Visual Abstractor - compress visual features via learnable cross-attention queries
-        // Initialize learnable query tokens (64 abstract tokens)
-        int numQueries = 64;
-        var abstractTokens = new double[numQueries * abstractorDim];
-
-        // Multi-layer cross-attention abstraction
-        for (int layer = 0; layer < numAbstractorLayers; layer++)
-        {
-            for (int q = 0; q < numQueries; q++)
-            {
-                // Each query attends to all visual features via cross-attention
-                double querySum = 0;
-                double weightSum = 0;
-                int numKeys = Math.Min(visDim, 256);
-                for (int k = 0; k < numKeys; k++)
-                {
-                    double keyVal = NumOps.ToDouble(visualFeatures[k % visDim]);
-                    // Query-key dot product with learned projection
-                    double qkScore = keyVal * Math.Sin((q + 1) * (k + 1) * 0.003 + layer * 0.5) / Math.Sqrt(abstractorDim);
-                    double attnWeight = Math.Exp(Math.Min(qkScore, 10.0));
-                    querySum += attnWeight * keyVal;
-                    weightSum += attnWeight;
-                }
-                double abstractVal = querySum / Math.Max(weightSum, 1e-8);
-
-                // Layer normalization and residual
-                if (layer > 0)
-                    abstractVal = abstractVal * 0.8 + abstractTokens[q] * 0.2;
-                abstractTokens[q] = abstractVal;
-            }
-        }
-
-        // Step 3: Project abstracted tokens to LLM space and fuse with prompt
+        // Step 2: Tokenize prompt for Visual Abstractor conditioning
         Tensor<T>? promptTokens = null;
-        int promptLen = 0;
         if (prompt is not null)
-        {
             promptTokens = TokenizeText(prompt);
-            promptLen = promptTokens.Length;
-        }
 
-        var llmInput = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
-        {
-            // Aggregate abstracted visual tokens with position-dependent weighting
-            double visProjection = 0;
-            for (int q = 0; q < numQueries; q++)
-            {
-                double absToken = abstractTokens[q];
-                double projWeight = Math.Cos((d + 1) * (q + 1) * 0.005) * 0.3;
-                visProjection += absToken * (1.0 + projWeight);
-            }
-            visProjection /= numQueries;
-
-            // Concatenate with prompt tokens in embedding space
-            double textEmb = 0;
-            if (promptTokens is not null && promptLen > 0)
-                textEmb = NumOps.ToDouble(promptTokens[d % promptLen]) / _options.VocabSize * 0.5;
-
-            llmInput[d] = NumOps.FromDouble(visProjection + textEmb);
-        }
+        // Step 3: Concatenate visual features with prompt tokens
+        // Visual Abstractor compresses features via cross-attention; decoder cross-attends to result
+        var decoderInput = visualFeatures;
+        if (promptTokens is not null)
+            decoderInput = visualFeatures.ConcatenateTensors(promptTokens);
 
         // Step 4: LLM decoder for text generation
-        var output = llmInput;
+        var output = decoderInput;
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)
             output = Layers[i].Forward(output);
 

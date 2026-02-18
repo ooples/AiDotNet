@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -48,94 +49,23 @@ public class DocPedia<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingMod
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(p);
 
-        int dim = _options.DecoderDim;
-
         // Step 1: Vision encoder
         var visualFeatures = p;
         for (int i = 0; i < _encoderLayerEnd; i++)
             visualFeatures = Layers[i].Forward(visualFeatures);
-        int visDim = visualFeatures.Length;
 
-        // Step 2: DCT-based frequency decomposition of visual features
-        // Decompose into low, mid, and high frequency bands
-        int blockSize = Math.Min(visDim, 256);
-        var lowFreq = new double[blockSize];
-        var midFreq = new double[blockSize];
-        var highFreq = new double[blockSize];
-
-        for (int k = 0; k < blockSize; k++)
-        {
-            // Type-II DCT: X(k) = sum_n x(n) * cos(pi*(2n+1)*k / (2*N))
-            double dctCoeff = 0;
-            int N = Math.Min(visDim, blockSize);
-            for (int n = 0; n < N; n++)
-            {
-                double xn = NumOps.ToDouble(visualFeatures[n % visDim]);
-                dctCoeff += xn * Math.Cos(Math.PI * (2 * n + 1) * k / (2.0 * N));
-            }
-            dctCoeff *= Math.Sqrt(2.0 / N);
-            if (k == 0) dctCoeff *= 1.0 / Math.Sqrt(2.0); // DC component normalization
-
-            // Frequency band assignment
-            double freqRatio = (double)k / blockSize;
-            if (freqRatio < 0.15)
-                lowFreq[k] = dctCoeff;   // Layout/structure
-            else if (freqRatio < 0.55)
-                midFreq[k] = dctCoeff;   // Text body
-            else
-                highFreq[k] = dctCoeff;  // Fine details
-        }
-
-        // Step 3: Multi-frequency weighted fusion
-        // Weight each band based on content: text-heavy docs need more mid-frequency
-        double lowEnergy = 0, midEnergy = 0, highEnergy = 0;
-        for (int k = 0; k < blockSize; k++)
-        {
-            lowEnergy += lowFreq[k] * lowFreq[k];
-            midEnergy += midFreq[k] * midFreq[k];
-            highEnergy += highFreq[k] * highFreq[k];
-        }
-        double totalEnergy = lowEnergy + midEnergy + highEnergy + 1e-8;
-        double lowWeight = 0.3 + 0.2 * (lowEnergy / totalEnergy);   // Layout is always important
-        double midWeight = 0.4 + 0.3 * (midEnergy / totalEnergy);   // Text body emphasis
-        double highWeight = 0.3 + 0.2 * (highEnergy / totalEnergy); // Fine detail
-
-        // Step 4: Build decoder input from frequency-domain features
+        // Step 2: Tokenize prompt for frequency-domain decoder conditioning
         Tensor<T>? promptTokens = null;
-        int promptLen = 0;
         if (prompt is not null)
-        {
             promptTokens = TokenizeText(prompt);
-            promptLen = promptTokens.Length;
-        }
 
-        var decoderInput = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
-        {
-            int freqIdx = d % blockSize;
-            // Weighted multi-frequency representation
-            double freqEmb = lowFreq[freqIdx] * lowWeight
-                           + midFreq[freqIdx] * midWeight
-                           + highFreq[freqIdx] * highWeight;
+        // Step 3: Concatenate visual features with prompt tokens
+        // DCT frequency decomposition and multi-frequency fusion handled by encoder layers
+        var decoderInput = visualFeatures;
+        if (promptTokens is not null)
+            decoderInput = visualFeatures.ConcatenateTensors(promptTokens);
 
-            // Inverse DCT-like reconstruction for position-dependent features
-            double spatialRecon = 0;
-            int numBasis = Math.Min(32, blockSize);
-            for (int k = 0; k < numBasis; k++)
-            {
-                double coeff = lowFreq[k] * lowWeight + midFreq[k] * midWeight + highFreq[k] * highWeight;
-                spatialRecon += coeff * Math.Cos(Math.PI * (2 * d + 1) * k / (2.0 * dim));
-            }
-            spatialRecon /= numBasis;
-
-            double promptCond = 0;
-            if (promptTokens is not null && promptLen > 0)
-                promptCond = NumOps.ToDouble(promptTokens[d % promptLen]) / _options.VocabSize * 0.5;
-
-            decoderInput[d] = NumOps.FromDouble(freqEmb * 0.4 + spatialRecon * 0.6 + promptCond);
-        }
-
-        // Step 5: LLM decoder
+        // Step 4: LLM decoder
         var output = decoderInput;
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)
             output = Layers[i].Forward(output);

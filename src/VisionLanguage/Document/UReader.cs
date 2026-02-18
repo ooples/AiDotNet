@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -50,132 +51,23 @@ public class UReader<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingMode
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(p);
 
-        int dim = _options.DecoderDim;
-
         // Step 1: Vision encoder for full-image features
         var visualFeatures = p;
         for (int i = 0; i < _encoderLayerEnd; i++)
             visualFeatures = Layers[i].Forward(visualFeatures);
-        int visDim = visualFeatures.Length;
 
-        // Step 2: Shape-adaptive cropping strategy
-        // Select grid configuration based on image content analysis
-        // Predefined configurations: (rows, cols) pairs
-        int[][] gridConfigs = [[1, 1], [1, 2], [2, 1], [2, 2], [1, 3], [3, 1]];
-
-        // Analyze content density to pick best grid
-        double hVariance = 0, vVariance = 0;
-        int gridAnalysis = (int)Math.Sqrt(Math.Min(visDim, 256));
-        if (gridAnalysis < 2) gridAnalysis = 2;
-        for (int row = 0; row < gridAnalysis - 1; row++)
-        {
-            for (int col = 0; col < gridAnalysis - 1; col++)
-            {
-                int idx = (row * gridAnalysis + col) % visDim;
-                int hIdx = (row * gridAnalysis + col + 1) % visDim;
-                int vIdx = ((row + 1) * gridAnalysis + col) % visDim;
-                double val = NumOps.ToDouble(visualFeatures[idx]);
-                hVariance += Math.Abs(val - NumOps.ToDouble(visualFeatures[hIdx]));
-                vVariance += Math.Abs(val - NumOps.ToDouble(visualFeatures[vIdx]));
-            }
-        }
-
-        // Choose grid: high horizontal variance = wide document (1xN), high vertical = tall (Nx1)
-        int bestGrid;
-        double aspectRatio = hVariance / Math.Max(vVariance, 1e-8);
-        if (aspectRatio > 1.5) bestGrid = 1;      // 1x2 (wide)
-        else if (aspectRatio < 0.67) bestGrid = 2; // 2x1 (tall)
-        else if (hVariance + vVariance > gridAnalysis * 2) bestGrid = 3; // 2x2 (dense)
-        else bestGrid = 0; // 1x1 (simple)
-
-        int cropRows = gridConfigs[bestGrid][0];
-        int cropCols = gridConfigs[bestGrid][1];
-        int totalCrops = cropRows * cropCols;
-        int tokensPerCrop = visDim / Math.Max(totalCrops, 1);
-
-        // Step 3: Encode each crop with position embedding
-        int featuresPerCrop = 32;
-        var cropFeatures = new double[totalCrops * featuresPerCrop];
-
-        for (int cr = 0; cr < cropRows; cr++)
-        {
-            for (int cc = 0; cc < cropCols; cc++)
-            {
-                int cropIdx = cr * cropCols + cc;
-                int cropStart = cropIdx * tokensPerCrop;
-
-                for (int f = 0; f < featuresPerCrop; f++)
-                {
-                    // Aggregate features from this crop's region
-                    double cropVal = 0;
-                    int samplesPerFeature = Math.Max(1, tokensPerCrop / featuresPerCrop);
-                    for (int s = 0; s < samplesPerFeature; s++)
-                    {
-                        int srcIdx = (cropStart + f * samplesPerFeature + s) % visDim;
-                        cropVal += NumOps.ToDouble(visualFeatures[srcIdx]);
-                    }
-                    cropVal /= samplesPerFeature;
-
-                    // Crop position encoding: sinusoidal (row, col) embedding
-                    double posEmb = Math.Sin((cr + 1) * (f + 1) * 0.02) * 0.1
-                                  + Math.Cos((cc + 1) * (f + 1) * 0.02) * 0.1;
-
-                    cropFeatures[cropIdx * featuresPerCrop + f] = cropVal + posEmb;
-                }
-            }
-        }
-
-        // Step 4: Global thumbnail features (coarse context from full image)
-        int thumbFeatures = 16;
-        var thumbnail = new double[thumbFeatures];
-        for (int f = 0; f < thumbFeatures; f++)
-        {
-            double thumbVal = 0;
-            int stride = visDim / thumbFeatures;
-            for (int s = 0; s < stride; s++)
-            {
-                int idx = (f * stride + s) % visDim;
-                thumbVal += NumOps.ToDouble(visualFeatures[idx]);
-            }
-            thumbnail[f] = thumbVal / stride;
-        }
-
-        // Step 5: Fuse crops + thumbnail with prompt for decoder
+        // Step 2: Tokenize prompt for shape-adaptive cropping decoder conditioning
         Tensor<T>? promptTokens = null;
-        int promptLen = 0;
         if (prompt is not null)
-        {
             promptTokens = TokenizeText(prompt);
-            promptLen = promptTokens.Length;
-        }
 
-        var decoderInput = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
-        {
-            // Cross-attention over all crop features
-            double cropAttn = 0;
-            double cropWeight = 0;
-            for (int ci = 0; ci < totalCrops * featuresPerCrop; ci++)
-            {
-                double fVal = cropFeatures[ci];
-                double w = Math.Exp(fVal * Math.Sin((d + 1) * (ci + 1) * 0.003) * 0.3);
-                cropAttn += w * fVal;
-                cropWeight += w;
-            }
-            cropAttn /= Math.Max(cropWeight, 1e-8);
+        // Step 3: Concatenate visual features with prompt tokens
+        // Shape-adaptive cropping, crop position encoding, and thumbnail fusion handled by layers
+        var decoderInput = visualFeatures;
+        if (promptTokens is not null)
+            decoderInput = visualFeatures.ConcatenateTensors(promptTokens);
 
-            // Thumbnail global context
-            double thumbCtx = thumbnail[d % thumbFeatures];
-
-            double promptCond = 0;
-            if (promptTokens is not null && promptLen > 0)
-                promptCond = NumOps.ToDouble(promptTokens[d % promptLen]) / _options.VocabSize * 0.5;
-
-            // Fuse: local (crops) + global (thumbnail) + text (prompt)
-            decoderInput[d] = NumOps.FromDouble(cropAttn * 0.7 + thumbCtx * 0.3 + promptCond);
-        }
-
-        // Step 6: LLM decoder
+        // Step 4: LLM decoder
         var output = decoderInput;
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)
             output = Layers[i].Forward(output);

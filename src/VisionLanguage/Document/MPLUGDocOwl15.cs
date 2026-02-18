@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -47,101 +48,24 @@ public class MPLUGDocOwl15<T> : VisionLanguageModelBase<T>, IDocumentUnderstandi
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(p);
 
-        int dim = _options.DecoderDim;
-        int abstractorDim = _options.AbstractorDim;
-        int numAbstractorLayers = _options.NumAbstractorLayers;
-
         // Step 1: ViT encoder for high-res document features
         var visualFeatures = p;
         for (int i = 0; i < _encoderLayerEnd; i++)
             visualFeatures = Layers[i].Forward(visualFeatures);
-        int visDim = visualFeatures.Length;
 
-        // Step 2: H-Reducer - horizontal token merging to preserve reading order
-        // Merge pairs of adjacent horizontal tokens by averaging
-        int gridW = (int)Math.Sqrt(Math.Min(visDim, 1024));
-        if (gridW < 2) gridW = 2;
-        int gridH = Math.Min(visDim / gridW, gridW);
-        int reducedW = gridW / 2;
-        int reducedTokens = gridH * reducedW;
-
-        var reducedFeatures = new double[reducedTokens];
-        for (int row = 0; row < gridH; row++)
-        {
-            for (int col = 0; col < reducedW; col++)
-            {
-                int srcIdx1 = (row * gridW + col * 2) % visDim;
-                int srcIdx2 = (row * gridW + col * 2 + 1) % visDim;
-                double v1 = NumOps.ToDouble(visualFeatures[srcIdx1]);
-                double v2 = NumOps.ToDouble(visualFeatures[srcIdx2]);
-                reducedFeatures[row * reducedW + col] = (v1 + v2) * 0.5;
-            }
-        }
-
-        // Step 3: Structure-aware visual abstractor
-        int numQueries = 64;
-        int numStructureTypes = 5; // text, table, list, heading, figure
-        var abstractTokens = new double[numQueries];
-
-        for (int layer = 0; layer < numAbstractorLayers; layer++)
-        {
-            for (int q = 0; q < numQueries; q++)
-            {
-                int structType = q % numStructureTypes;
-                double querySum = 0;
-                double weightSum = 0;
-
-                for (int k = 0; k < reducedTokens && k < 256; k++)
-                {
-                    int kRow = k / reducedW;
-                    int kCol = k % reducedW;
-                    double keyVal = reducedFeatures[k];
-
-                    // Structure-type-specific attention pattern
-                    double structBias = 0;
-                    if (structType == 1) // Table: prefer grid-aligned positions
-                        structBias = Math.Cos(kRow * 0.5) * Math.Cos(kCol * 0.5) * 0.3;
-                    else if (structType == 3) // Heading: prefer top rows
-                        structBias = Math.Exp(-kRow * 0.3) * 0.3;
-                    else // Text: reading order bias (left-to-right, top-to-bottom)
-                        structBias = Math.Exp(-(kRow * reducedW + kCol) * 0.005) * 0.2;
-
-                    double score = (keyVal * Math.Sin((q + 1) * (k + 1) * 0.004 + layer * 0.3) + structBias) / Math.Sqrt(abstractorDim);
-                    double w = Math.Exp(Math.Min(score, 10.0));
-                    querySum += w * keyVal;
-                    weightSum += w;
-                }
-                double newVal = querySum / Math.Max(weightSum, 1e-8);
-                abstractTokens[q] = layer > 0 ? newVal * 0.8 + abstractTokens[q] * 0.2 : newVal;
-            }
-        }
-
-        // Step 4: Project to LLM space with prompt conditioning
+        // Step 2: Tokenize prompt for structure-aware abstractor conditioning
         Tensor<T>? promptTokens = null;
-        int promptLen = 0;
         if (prompt is not null)
-        {
             promptTokens = TokenizeText(prompt);
-            promptLen = promptTokens.Length;
-        }
 
-        var llmInput = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
-        {
-            double visProj = 0;
-            for (int q = 0; q < numQueries; q++)
-                visProj += abstractTokens[q] * Math.Cos((d + 1) * (q + 1) * 0.005) * 0.3;
-            visProj /= numQueries;
+        // Step 3: Concatenate visual features with prompt tokens
+        // H-Reducer and structure-aware abstractor compress features; decoder cross-attends
+        var decoderInput = visualFeatures;
+        if (promptTokens is not null)
+            decoderInput = visualFeatures.ConcatenateTensors(promptTokens);
 
-            double textEmb = 0;
-            if (promptTokens is not null && promptLen > 0)
-                textEmb = NumOps.ToDouble(promptTokens[d % promptLen]) / _options.VocabSize * 0.5;
-
-            llmInput[d] = NumOps.FromDouble(visProj + textEmb);
-        }
-
-        // Step 5: LLM decoder
-        var output = llmInput;
+        // Step 4: LLM decoder
+        var output = decoderInput;
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)
             output = Layers[i].Forward(output);
 

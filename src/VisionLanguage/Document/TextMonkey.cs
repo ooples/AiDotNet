@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -48,151 +49,23 @@ public class TextMonkey<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingM
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(p);
 
-        int dim = _options.DecoderDim;
-
         // Step 1: Vision encoder for document features
         var visualFeatures = p;
         for (int i = 0; i < _encoderLayerEnd; i++)
             visualFeatures = Layers[i].Forward(visualFeatures);
-        int visDim = visualFeatures.Length;
 
-        // Step 2: Shifted Window Attention
-        // Partition tokens into windows, then shift and re-attend
-        int windowSize = 7;
-        int gridSize = (int)Math.Sqrt(Math.Min(visDim, 784));
-        if (gridSize < windowSize) gridSize = windowSize;
-        int numWindowsPerDim = Math.Max(1, gridSize / windowSize);
-        int totalTokens = gridSize * gridSize;
-
-        var windowAttended = new double[Math.Min(totalTokens, visDim)];
-
-        // Regular window attention pass
-        for (int wy = 0; wy < numWindowsPerDim; wy++)
-        {
-            for (int wx = 0; wx < numWindowsPerDim; wx++)
-            {
-                // Compute local attention within this window
-                double windowSum = 0;
-                int windowTokenCount = 0;
-                for (int ly = 0; ly < windowSize; ly++)
-                {
-                    for (int lx = 0; lx < windowSize; lx++)
-                    {
-                        int gy = wy * windowSize + ly;
-                        int gx = wx * windowSize + lx;
-                        if (gy < gridSize && gx < gridSize)
-                        {
-                            int idx = (gy * gridSize + gx) % visDim;
-                            windowSum += NumOps.ToDouble(visualFeatures[idx]);
-                            windowTokenCount++;
-                        }
-                    }
-                }
-                double windowMean = windowTokenCount > 0 ? windowSum / windowTokenCount : 0;
-
-                // Store attended values back with local context
-                for (int ly = 0; ly < windowSize; ly++)
-                {
-                    for (int lx = 0; lx < windowSize; lx++)
-                    {
-                        int gy = wy * windowSize + ly;
-                        int gx = wx * windowSize + lx;
-                        if (gy < gridSize && gx < gridSize)
-                        {
-                            int idx = (gy * gridSize + gx) % visDim;
-                            if (idx < windowAttended.Length)
-                            {
-                                double orig = NumOps.ToDouble(visualFeatures[idx]);
-                                windowAttended[idx] = orig * 0.7 + windowMean * 0.3;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Shifted window pass (shift by windowSize/2)
-        int shift = windowSize / 2;
-        for (int wy = 0; wy < numWindowsPerDim; wy++)
-        {
-            for (int wx = 0; wx < numWindowsPerDim; wx++)
-            {
-                double shiftSum = 0;
-                int shiftCount = 0;
-                for (int ly = 0; ly < windowSize; ly++)
-                {
-                    for (int lx = 0; lx < windowSize; lx++)
-                    {
-                        int gy = (wy * windowSize + ly + shift) % gridSize;
-                        int gx = (wx * windowSize + lx + shift) % gridSize;
-                        int idx = (gy * gridSize + gx) % Math.Max(windowAttended.Length, 1);
-                        if (idx < windowAttended.Length)
-                        {
-                            shiftSum += windowAttended[idx];
-                            shiftCount++;
-                        }
-                    }
-                }
-                double shiftMean = shiftCount > 0 ? shiftSum / shiftCount : 0;
-
-                for (int ly = 0; ly < windowSize; ly++)
-                {
-                    for (int lx = 0; lx < windowSize; lx++)
-                    {
-                        int gy = (wy * windowSize + ly + shift) % gridSize;
-                        int gx = (wx * windowSize + lx + shift) % gridSize;
-                        int idx = (gy * gridSize + gx) % Math.Max(windowAttended.Length, 1);
-                        if (idx < windowAttended.Length)
-                            windowAttended[idx] = windowAttended[idx] * 0.6 + shiftMean * 0.4;
-                    }
-                }
-            }
-        }
-
-        // Step 3: Token Resampling - score tokens by text-relevance and keep top-K
-        int topK = Math.Min(256, windowAttended.Length);
-        var tokenScores = new double[windowAttended.Length];
-        for (int t = 0; t < windowAttended.Length; t++)
-        {
-            // Text-relevance: high-frequency variation indicates text presence
-            double current = windowAttended[t];
-            double next = t + 1 < windowAttended.Length ? windowAttended[t + 1] : current;
-            tokenScores[t] = Math.Abs(current - next) + Math.Abs(current) * 0.5;
-        }
-
-        // Step 4: Build decoder input from resampled tokens
+        // Step 2: Tokenize prompt for shifted window attention conditioning
         Tensor<T>? promptTokens = null;
-        int promptLen = 0;
         if (prompt is not null)
-        {
             promptTokens = TokenizeText(prompt);
-            promptLen = promptTokens.Length;
-        }
 
-        var decoderInput = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
-        {
-            // Score-weighted aggregation of window-attended features
-            double crossAttn = 0;
-            double weightSum = 0;
-            for (int t = 0; t < Math.Min(topK, windowAttended.Length); t++)
-            {
-                double score = tokenScores[t % tokenScores.Length];
-                double val = windowAttended[t];
-                double w = score * Math.Exp(val * Math.Sin((d + 1) * (t + 1) * 0.004) * 0.3);
-                crossAttn += w * val;
-                weightSum += Math.Abs(w);
-            }
-            crossAttn /= Math.Max(weightSum, 1e-8);
+        // Step 3: Concatenate visual features with prompt tokens
+        // Shifted window attention and token resampling handled by encoder layers
+        var decoderInput = visualFeatures;
+        if (promptTokens is not null)
+            decoderInput = visualFeatures.ConcatenateTensors(promptTokens);
 
-            double promptCond = 0;
-            if (promptTokens is not null && promptLen > 0)
-                promptCond = NumOps.ToDouble(promptTokens[d % promptLen]) / _options.VocabSize * 0.5;
-
-            decoderInput[d] = NumOps.FromDouble(crossAttn + promptCond);
-        }
-
-        // Step 5: LLM decoder
+        // Step 4: LLM decoder
         var output = decoderInput;
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)
             output = Layers[i].Forward(output);

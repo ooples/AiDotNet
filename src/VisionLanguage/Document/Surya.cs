@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -49,123 +50,23 @@ public class Surya<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(p);
 
-        int dim = _options.DecoderDim;
-        int numLanguages = _options.NumLanguages;
-
         // Step 1: Vision encoder
         var visualFeatures = p;
         for (int i = 0; i < _encoderLayerEnd; i++)
             visualFeatures = Layers[i].Forward(visualFeatures);
-        int visDim = visualFeatures.Length;
 
-        // Step 2: Line detection via horizontal projection profile
-        // Detect text line regions by analyzing horizontal gradient patterns
-        int gridH = (int)Math.Sqrt(Math.Min(visDim, 784));
-        if (gridH < 2) gridH = 2;
-        int gridW = Math.Min(visDim / gridH, gridH * 2);
-        if (gridW < 2) gridW = 2;
-
-        int maxLines = 50;
-        var lineScores = new double[gridH];
-        for (int row = 0; row < gridH; row++)
-        {
-            double rowEnergy = 0;
-            for (int col = 0; col < gridW; col++)
-            {
-                int idx = (row * gridW + col) % visDim;
-                double val = NumOps.ToDouble(visualFeatures[idx]);
-                // Text lines have high horizontal continuity
-                if (col > 0)
-                {
-                    int prevIdx = (row * gridW + col - 1) % visDim;
-                    double prevVal = NumOps.ToDouble(visualFeatures[prevIdx]);
-                    rowEnergy += Math.Abs(val) + (1.0 - Math.Abs(val - prevVal)) * 0.5;
-                }
-                else
-                {
-                    rowEnergy += Math.Abs(val);
-                }
-            }
-            lineScores[row] = rowEnergy / gridW;
-        }
-
-        // Identify line boundaries (local maxima in row energy)
-        int numLines = 0;
-        var lineRows = new int[maxLines];
-        for (int row = 1; row < gridH - 1 && numLines < maxLines; row++)
-        {
-            if (lineScores[row] > lineScores[row - 1] && lineScores[row] > lineScores[row + 1]
-                && lineScores[row] > 0.1)
-            {
-                lineRows[numLines++] = row;
-            }
-        }
-        if (numLines == 0) { lineRows[0] = gridH / 2; numLines = 1; }
-
-        // Step 3: Script detection per line
-        // Analyze feature patterns to detect script type
-        var lineScriptIds = new int[numLines];
-        for (int li = 0; li < numLines; li++)
-        {
-            int row = lineRows[li];
-            double scriptHash = 0;
-            for (int col = 0; col < gridW; col++)
-            {
-                int idx = (row * gridW + col) % visDim;
-                scriptHash += NumOps.ToDouble(visualFeatures[idx]) * Math.Sin(col * 0.7);
-            }
-            // Map to script ID (0-based, within numLanguages range)
-            lineScriptIds[li] = Math.Abs((int)(scriptHash * 100)) % numLanguages;
-        }
-
-        // Step 4: Language-aware cross-attention decoder input
+        // Step 2: Tokenize prompt for language-aware decoder conditioning
         Tensor<T>? promptTokens = null;
-        int promptLen = 0;
         if (prompt is not null)
-        {
             promptTokens = TokenizeText(prompt);
-            promptLen = promptTokens.Length;
-        }
 
-        var decoderInput = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
-        {
-            double lineAttn = 0;
-            double totalWeight = 0;
+        // Step 3: Concatenate visual features with prompt tokens
+        // Line detection, script detection, and language-aware recognition handled by layers
+        var decoderInput = visualFeatures;
+        if (promptTokens is not null)
+            decoderInput = visualFeatures.ConcatenateTensors(promptTokens);
 
-            for (int li = 0; li < numLines; li++)
-            {
-                int row = lineRows[li];
-                int scriptId = lineScriptIds[li];
-
-                // Aggregate features along this line
-                double lineVal = 0;
-                for (int col = 0; col < gridW; col++)
-                {
-                    int idx = (row * gridW + col) % visDim;
-                    lineVal += NumOps.ToDouble(visualFeatures[idx]);
-                }
-                lineVal /= gridW;
-
-                // Language embedding conditions the attention
-                double langEmb = Math.Sin((scriptId + 1) * (d + 1) * 0.01) * 0.2;
-                // Reading order weight (top lines first)
-                double orderWeight = Math.Exp(-li * 0.1);
-
-                double w = orderWeight * Math.Exp((lineVal + langEmb) * 0.3);
-                lineAttn += w * (lineVal + langEmb);
-                totalWeight += w;
-            }
-            lineAttn /= Math.Max(totalWeight, 1e-8);
-
-            double promptCond = 0;
-            if (promptTokens is not null && promptLen > 0)
-                promptCond = NumOps.ToDouble(promptTokens[d % promptLen]) / _options.VocabSize * 0.5;
-
-            decoderInput[d] = NumOps.FromDouble(lineAttn + promptCond);
-        }
-
-        // Step 5: Decoder
+        // Step 4: Decoder
         var output = decoderInput;
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)
             output = Layers[i].Forward(output);

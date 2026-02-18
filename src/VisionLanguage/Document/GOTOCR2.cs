@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -48,89 +49,21 @@ public class GOTOCR2<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingMode
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(p);
 
-        int dim = _options.DecoderDim;
-
         // Step 1: Vision encoder
         var visualFeatures = p;
         for (int i = 0; i < _encoderLayerEnd; i++)
             visualFeatures = Layers[i].Forward(visualFeatures);
-        int visDim = visualFeatures.Length;
 
-        // Step 2: Content-type detection via visual feature analysis
-        // Detect: text (0), table (1), math (2), music (3), chart (4)
-        double textScore = 0, tableScore = 0, mathScore = 0, musicScore = 0, chartScore = 0;
-        int analysisLen = Math.Min(visDim, 512);
-        for (int v = 0; v < analysisLen; v++)
-        {
-            double val = NumOps.ToDouble(visualFeatures[v % visDim]);
-            double absVal = Math.Abs(val);
-            double nextVal = v + 1 < visDim ? NumOps.ToDouble(visualFeatures[v + 1]) : val;
-            double gradient = Math.Abs(val - nextVal);
-
-            // Text: high-frequency horizontal patterns
-            textScore += gradient * (1.0 + Math.Abs(Math.Sin(v * 0.3)));
-            // Table: regular grid patterns (periodic high gradients)
-            tableScore += gradient * Math.Abs(Math.Cos(v * Math.PI / 8.0));
-            // Math: diverse symbol patterns (high variance)
-            mathScore += absVal * absVal;
-            // Music: horizontal line patterns with regular spacing
-            musicScore += gradient * Math.Abs(Math.Sin(v * Math.PI / 5.0));
-            // Chart: large uniform regions with sharp boundaries
-            chartScore += (gradient < 0.1 ? absVal : gradient * 0.5);
-        }
-
-        // Softmax over content type scores
-        double maxScore = Math.Max(Math.Max(Math.Max(textScore, tableScore), Math.Max(mathScore, musicScore)), chartScore);
-        double expText = Math.Exp((textScore - maxScore) * 0.01);
-        double expTable = Math.Exp((tableScore - maxScore) * 0.01);
-        double expMath = Math.Exp((mathScore - maxScore) * 0.01);
-        double expMusic = Math.Exp((musicScore - maxScore) * 0.01);
-        double expChart = Math.Exp((chartScore - maxScore) * 0.01);
-        double expSum = expText + expTable + expMath + expMusic + expChart;
-        double[] typeProbs = [expText / expSum, expTable / expSum, expMath / expSum, expMusic / expSum, expChart / expSum];
-
-        // Step 3: Type-conditioned cross-attention decoder input
+        // Step 2: Tokenize prompt for content-type conditioned decoder
         Tensor<T>? promptTokens = null;
-        int promptLen = 0;
         if (prompt is not null)
-        {
             promptTokens = TokenizeText(prompt);
-            promptLen = promptTokens.Length;
-        }
 
-        var decoderInput = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
-        {
-            // Cross-attention with type-specific bias
-            double crossAttn = 0;
-            double weightSum = 0;
-            int numPatches = Math.Min(visDim, 256);
-            for (int v = 0; v < numPatches; v++)
-            {
-                double visVal = NumOps.ToDouble(visualFeatures[v % visDim]);
-
-                // Type-conditioned attention weight
-                double typeBias = 0;
-                for (int t = 0; t < 5; t++)
-                    typeBias += typeProbs[t] * Math.Sin((d + 1) * (v + 1) * (0.003 + t * 0.001));
-
-                double weight = Math.Exp((visVal * 0.3 + typeBias) * 0.5);
-                crossAttn += weight * visVal;
-                weightSum += weight;
-            }
-            crossAttn /= Math.Max(weightSum, 1e-8);
-
-            // Type-specific token embedding (tells decoder what format to generate)
-            double typeEmb = 0;
-            for (int t = 0; t < 5; t++)
-                typeEmb += typeProbs[t] * Math.Sin((d + 1) * (t + 1) * 0.1) * 0.1;
-
-            double promptCond = 0;
-            if (promptTokens is not null && promptLen > 0)
-                promptCond = NumOps.ToDouble(promptTokens[d % promptLen]) / _options.VocabSize * 0.5;
-
-            decoderInput[d] = NumOps.FromDouble(crossAttn + typeEmb + promptCond);
-        }
+        // Step 3: Concatenate visual features with prompt tokens
+        // Content-type detection and format-aware generation handled by decoder layers
+        var decoderInput = visualFeatures;
+        if (promptTokens is not null)
+            decoderInput = visualFeatures.ConcatenateTensors(promptTokens);
 
         // Step 4: Decoder generates format-aware output
         var output = decoderInput;
