@@ -28,7 +28,7 @@ public class VinVLOptions : FoundationalVLMOptions
     {
         FusionType = FusionType.SingleStream;
         VisualFeatureType = VisualFeatureType.RegionFeatures;
-        VisionDim = 2054;
+        VisionDim = 2048;
         TextDim = 768;
         FusionDim = 768;
         NumFusionLayers = 12;
