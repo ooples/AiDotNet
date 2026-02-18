@@ -1,0 +1,13 @@
+namespace AiDotNet.TextToSpeech.Classic;
+
+/// <summary>Options for PortaSpeech (portable TTS with word-level prosody modeling and normalizing flow post-net).</summary>
+public class PortaSpeechOptions : AcousticModelOptions
+{
+    public PortaSpeechOptions() { EncoderDim = 256; DecoderDim = 80; HiddenDim = 256; NumEncoderLayers = 4; NumDecoderLayers = 4; NumHeads = 2; }
+
+    /// <summary>Gets or sets the number of normalizing flow layers for the post-net.</summary>
+    public int NumFlowLayers { get; set; } = 16;
+
+    /// <summary>Gets or sets the word-level prosody embedding dimension.</summary>
+    public int ProsodyDim { get; set; } = 64;
+}
