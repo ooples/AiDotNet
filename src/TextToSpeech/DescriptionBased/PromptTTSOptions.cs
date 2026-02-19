@@ -3,6 +3,7 @@ namespace AiDotNet.TextToSpeech.DescriptionBased;
 /// <summary>Options for PromptTTS description-based TTS model.</summary>
 public class PromptTTSOptions : EndToEndTtsOptions
 {
+    public PromptTTSOptions() { NumFlowSteps = 0; }
     public int PromptEncoderDim { get; set; } = 128;
     public int NumPromptLayers { get; set; } = 3;
     public new int NumEncoderLayers { get; set; } = 6;

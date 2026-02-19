@@ -3,6 +3,7 @@ namespace AiDotNet.TextToSpeech.ProprietaryAPI;
 /// <summary>Options for Azure Neural TTS API wrapper.</summary>
 public class AzureNeuralTTSOptions : EndToEndTtsOptions
 {
+    public AzureNeuralTTSOptions() { NumFlowSteps = 0; }
     public string ApiKey { get; set; } = string.Empty;
     public string ApiEndpoint { get; set; } = string.Empty;
     public string VoiceId { get; set; } = "default";
