@@ -1,10 +1,15 @@
 using AiDotNet.TextToSpeech.EndToEnd;
+
 namespace AiDotNet.TextToSpeech.Latest;
+
 /// <summary>Options for MegaTTS2 TTS model.</summary>
 public class MegaTTS2Options : EndToEndTtsOptions
 {
-    public new int NumEncoderLayers { get; set; } = 6;
-    public new int NumDecoderLayers { get; set; } = 6;
-    public new int NumHeads { get; set; } = 8;
-    public new double DropoutRate { get; set; } = 0.1;
+    public MegaTTS2Options()
+    {
+        NumEncoderLayers = 6;
+        NumDecoderLayers = 6;
+        NumHeads = 8;
+        DropoutRate = 0.1;
+    }
 }

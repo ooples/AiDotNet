@@ -1,11 +1,14 @@
-using AiDotNet.TextToSpeech.CodecBased;
 namespace AiDotNet.TextToSpeech.CodecBased;
+
 /// <summary>Options for SPEARTTS TTS model.</summary>
 public class SPEARTTSOptions : CodecTtsOptions
 {
-    public new int TextEncoderDim { get; set; } = 256;
-    public new int LLMDim { get; set; } = 1024;
-    public new int NumLLMLayers { get; set; } = 12;
-    public new int NumHeads { get; set; } = 8;
-    public new double DropoutRate { get; set; } = 0.1;
+    public SPEARTTSOptions()
+    {
+        TextEncoderDim = 256;
+        LLMDim = 1024;
+        NumLLMLayers = 12;
+        NumHeads = 8;
+        DropoutRate = 0.1;
+    }
 }

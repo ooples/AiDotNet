@@ -1,10 +1,15 @@
 using AiDotNet.TextToSpeech.EndToEnd;
+
 namespace AiDotNet.TextToSpeech.MultiModal;
+
 /// <summary>Options for SpeechT5 TTS model.</summary>
 public class SpeechT5Options : EndToEndTtsOptions
 {
-    public new int NumEncoderLayers { get; set; } = 6;
-    public new int NumDecoderLayers { get; set; } = 6;
-    public new int NumHeads { get; set; } = 8;
-    public new double DropoutRate { get; set; } = 0.1;
+    public SpeechT5Options()
+    {
+        NumEncoderLayers = 6;
+        NumDecoderLayers = 6;
+        NumHeads = 8;
+        DropoutRate = 0.1;
+    }
 }
