@@ -1,6 +1,6 @@
 using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options; using AiDotNet.NeuralNetworks; using AiDotNet.Onnx; using AiDotNet.Optimizers; using AiDotNet.TextToSpeech.Interfaces;
 namespace AiDotNet.TextToSpeech.ProprietaryAPI;
-/// <summary>Azure Cognitive Services TTS: Microsoft's cloud-based neural TTS with 400+ voices in 140+ languages.</summary>
+/// <summary>Azure Neural TTS: local neural synthesis model inspired by Microsoft's architecture.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 public class AzureNeuralTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
@@ -9,10 +9,11 @@ public class AzureNeuralTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
     public AzureNeuralTTS(NeuralNetworkArchitecture<T> architecture, string modelPath, AzureNeuralTTSOptions? options = null) : base(architecture) { _options = options ?? new AzureNeuralTTSOptions(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.MelChannels = _options.MelChannels; base.HopSize = _options.HopSize; base.HiddenDim = _options.HiddenDim; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions); InitializeLayers(); }
     public AzureNeuralTTS(NeuralNetworkArchitecture<T> architecture, AzureNeuralTTSOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new AzureNeuralTTSOptions(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.MelChannels = _options.MelChannels; base.HopSize = _options.HopSize; base.HiddenDim = _options.HiddenDim; InitializeLayers(); }
     int ITtsModel<T>.SampleRate => _options.SampleRate; public int MaxTextLength => _options.MaxTextLength; public new int HiddenDim => _options.HiddenDim; public int NumFlowSteps => _options.NumFlowSteps;
-    /// <summary>Synthesizes speech using Azure Neural TTS's API-compatible local inference pipeline.</summary>
+    /// <summary>Synthesizes speech using a local neural synthesis pipeline.</summary>
     public Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed(); var input = PreprocessText(text); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input);
+        var features = input; foreach (var l in Layers) features = l.Forward(features);
         int textLen = Math.Min(text.Length, _options.MaxTextLength);
         double[] textHidden = new double[textLen];
         for (int t = 0; t < textLen; t++) textHidden[t] = (text[t] % 128) / 128.0 - 0.5;

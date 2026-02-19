@@ -10,7 +10,7 @@ public class GLM4Voice<T> : TtsModelBase<T>, ICodecTts<T>, IStreamingTts<T>
     public GLM4Voice(NeuralNetworkArchitecture<T> architecture, string modelPath, GLM4VoiceOptions? options = null) : base(architecture) { _options = options ?? new GLM4VoiceOptions(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.MelChannels = _options.MelChannels; base.HopSize = _options.HopSize; base.HiddenDim = _options.LLMDim; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions); InitializeLayers(); }
     public GLM4Voice(NeuralNetworkArchitecture<T> architecture, GLM4VoiceOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new GLM4VoiceOptions(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.MelChannels = _options.MelChannels; base.HopSize = _options.HopSize; base.HiddenDim = _options.LLMDim; InitializeLayers(); }
     int ITtsModel<T>.SampleRate => _options.SampleRate; public int MaxTextLength => _options.MaxTextLength; public int NumCodebooks => _options.NumCodebooks; public int CodebookSize => _options.CodebookSize; public int CodecFrameRate => _options.CodecFrameRate;
-    private int _streamPosition; private string _streamText = string.Empty; private int _chunkSamples;
+    private readonly object _streamLock = new object(); private int _streamPosition; private string _streamText = string.Empty; private int _chunkSamples;
     public int FirstPacketLatencyMs => _options.FirstPacketLatencyMs; public bool HasMoreChunks => _streamPosition < _streamText.Length;
     /// Synthesizes speech using GLM4Voice's neural codec language model pipeline.
     public Tensor<T> Synthesize(string text)
@@ -33,15 +33,20 @@ public class GLM4Voice<T> : TtsModelBase<T>, ICodecTts<T>, IStreamingTts<T>
     }
     public Tensor<T> EncodeToTokens(Tensor<T> audio) { int samplesPerFrame = Math.Max(1, SampleRate / _options.CodecFrameRate); int frames = Math.Max(1, audio.Length / samplesPerFrame); var tokens = new Tensor<T>([frames]); for (int f = 0; f < frames; f++) { double sum = 0; int start = f * samplesPerFrame; int count = Math.Min(samplesPerFrame, audio.Length - start); for (int s = 0; s < count; s++) sum += NumOps.ToDouble(audio[start + s]); double avg = sum / Math.Max(1, count); int bin = (int)Math.Round((Math.Tanh(avg) + 1.0) * 0.5 * (_options.CodebookSize - 1)); bin = Math.Max(0, Math.Min(_options.CodebookSize - 1, bin)); tokens[f] = NumOps.FromDouble(bin); } return tokens; }
     public Tensor<T> DecodeFromTokens(Tensor<T> tokens) { int samplesPerFrame = Math.Max(1, SampleRate / _options.CodecFrameRate); int waveLen = tokens.Length * samplesPerFrame; var wave = new Tensor<T>([waveLen]); for (int i = 0; i < waveLen; i++) { int f = Math.Min(i / samplesPerFrame, tokens.Length - 1); double tokenVal = NumOps.ToDouble(tokens[f]); double normalized = tokenVal / Math.Max(1, _options.CodebookSize - 1) * 2.0 - 1.0; double phase = i * 2.0 * Math.PI * 200.0 / SampleRate; wave[i] = NumOps.FromDouble(normalized * Math.Sin(phase) * 0.8); } return wave; }
-    public Tensor<T> SynthesizeFirstChunk(string text, int chunkSize) { if (string.IsNullOrEmpty(text)) throw new ArgumentException("Text cannot be null or empty.", nameof(text)); if (chunkSize <= 0) throw new ArgumentOutOfRangeException(nameof(chunkSize), "Chunk size must be positive."); _streamText = text; _streamPosition = 0; _chunkSamples = chunkSize; return SynthesizeNextChunk(); }
+    public Tensor<T> SynthesizeFirstChunk(string text, int chunkSize) { if (string.IsNullOrEmpty(text)) throw new ArgumentException("Text cannot be null or empty.", nameof(text)); if (chunkSize <= 0) throw new ArgumentOutOfRangeException(nameof(chunkSize), "Chunk size must be positive."); lock (_streamLock) { _streamText = text; _streamPosition = 0; _chunkSamples = chunkSize; } return SynthesizeNextChunk(); }
     public Tensor<T> SynthesizeNextChunk()
     {
-        if (_streamPosition >= _streamText.Length) return new Tensor<T>([0]);
-        int chunkTextLen = Math.Min(Math.Max(1, _chunkSamples * _options.CodecFrameRate / SampleRate), _streamText.Length - _streamPosition);
-        string chunk = _streamText.Substring(_streamPosition, chunkTextLen);
-        _streamPosition += chunkTextLen;
+        string chunk; int chunkSamples;
+        lock (_streamLock)
+        {
+            if (_streamPosition >= _streamText.Length) return new Tensor<T>([0]);
+            int chunkTextLen = Math.Min(Math.Max(1, _chunkSamples * _options.CodecFrameRate / SampleRate), _streamText.Length - _streamPosition);
+            chunk = _streamText.Substring(_streamPosition, chunkTextLen);
+            _streamPosition += chunkTextLen;
+            chunkSamples = _chunkSamples;
+        }
         var audio = Synthesize(chunk);
-        if (audio.Length > _chunkSamples) { var trimmed = new Tensor<T>([_chunkSamples]); for (int i = 0; i < _chunkSamples; i++) trimmed[i] = audio[i]; return trimmed; }
+        if (audio.Length > chunkSamples) { var trimmed = new Tensor<T>([chunkSamples]); for (int i = 0; i < chunkSamples; i++) trimmed[i] = audio[i]; return trimmed; }
         return audio;
     }
     protected override Tensor<T> PreprocessText(string text) { int len = Math.Min(text.Length, _options.MaxTextLength); var t = new Tensor<T>([len]); for (int i = 0; i < len; i++) t[i] = NumOps.FromDouble(text[i] / 128.0); return t; } protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;

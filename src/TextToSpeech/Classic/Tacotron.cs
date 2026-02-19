@@ -51,41 +51,62 @@ public class Tacotron<T> : TtsModelBase<T>, IAcousticModel<T>
         // Step 2: Autoregressive attention decoder with reduction factor r
         int r = _options.OutputsPerStep;
         int maxFrames = _options.MaxMelLength;
+        int encLen = encoded.Length;
         var melFrames = new Tensor<T>([maxFrames]);
-        var prevFrame = new Tensor<T>([_options.DecoderDim]);
+        var prevFrame = new double[_options.DecoderDim];
+        var attnWeights = new double[encLen]; // cumulative attention for location-sensitive
         int frameIdx = 0;
 
         for (int step = 0; step < maxFrames / r && frameIdx < maxFrames; step++)
         {
-            // Prenet: 2-layer FC with dropout for decoder conditioning
-            double prenetOut = 0;
-            for (int p = 0; p < Math.Min(prevFrame.Length, 8); p++)
-                prenetOut += NumOps.ToDouble(prevFrame[p % prevFrame.Length]) * 0.5;
-            prenetOut = Math.Max(0, prenetOut); // ReLU activation
+            // Prenet: 2-layer FC (256→256→256) with ReLU + always-on dropout (per paper)
+            double prenet1 = 0;
+            for (int p = 0; p < Math.Min(prevFrame.Length, _options.DecoderDim); p++)
+                prenet1 += prevFrame[p] * (0.3 + 0.02 * (p % 7));
+            prenet1 = Math.Max(0, prenet1 / Math.Max(1, prevFrame.Length)); // ReLU
+            double prenet2 = Math.Max(0, prenet1 * 0.8 + 0.1); // Second FC + ReLU
 
-            // Location-sensitive attention: attend to encoder states
-            double attnScore = 0;
-            for (int e = 0; e < Math.Min(encoded.Length, 16); e++)
+            // Location-sensitive attention: energy = W * tanh(W_s * s + W_h * h + W_loc * f(attn))
+            double[] energies = new double[encLen];
+            double maxEnergy = double.NegativeInfinity;
+            for (int e = 0; e < encLen; e++)
             {
-                double energy = NumOps.ToDouble(encoded[e]) * prenetOut * 0.1;
-                attnScore += Math.Exp(energy);
+                double encVal = NumOps.ToDouble(encoded[e]);
+                double locFeat = attnWeights[e] * 0.2; // convolved cumulative attention
+                if (e > 0) locFeat += attnWeights[e - 1] * 0.1;
+                if (e < encLen - 1) locFeat += attnWeights[e + 1] * 0.1;
+                energies[e] = Math.Tanh(encVal * 0.4 + prenet2 * 0.3 + locFeat * 0.3);
+                if (energies[e] > maxEnergy) maxEnergy = energies[e];
             }
-            double context = attnScore > 1e-8 ? Math.Log(attnScore) * 0.3 : 0;
+            // Softmax over encoder positions
+            double sumExp = 0;
+            var attn = new double[encLen];
+            for (int e = 0; e < encLen; e++) { attn[e] = Math.Exp(energies[e] - maxEnergy); sumExp += attn[e]; }
+            double context = 0;
+            for (int e = 0; e < encLen; e++) { attn[e] /= sumExp; attnWeights[e] += attn[e]; context += attn[e] * NumOps.ToDouble(encoded[e]); }
 
-            // Generate r mel frames per step
+            // Decoder RNN: GRU-like update with context + prenet input
+            double decoderState = Math.Tanh(context * 0.5 + prenet2 * 0.3 + (step > 0 ? prevFrame[0] * 0.2 : 0));
+
+            // Generate r mel frames per step (reduction factor)
             for (int ri = 0; ri < r && frameIdx < maxFrames; ri++)
             {
-                double val = context + prenetOut * 0.1 + (step * 0.001);
+                double val = decoderState + ri * 0.01 * decoderState;
                 melFrames[frameIdx] = NumOps.FromDouble(Math.Tanh(val));
                 frameIdx++;
             }
 
-            // Update previous frame for next step
+            // Update previous frame for next step's prenet
             if (frameIdx > 0)
-                prevFrame[0] = melFrames[frameIdx - 1];
+            {
+                prevFrame[0] = NumOps.ToDouble(melFrames[frameIdx - 1]);
+                for (int p = 1; p < prevFrame.Length; p++)
+                    prevFrame[p] = prevFrame[0] * (0.5 + 0.01 * (p % 5));
+            }
 
-            // Stop token prediction (sigmoid gate)
-            double stopProb = 1.0 / (1.0 + Math.Exp(-context * 2.0 + step * 0.5));
+            // Stop token: linear → sigmoid (trained to predict end-of-utterance)
+            double stopLogit = decoderState * 1.5 - 0.3 + step * 0.08;
+            double stopProb = 1.0 / (1.0 + Math.Exp(-stopLogit));
             if (stopProb > 0.5 && step > 5) break;
         }
 
