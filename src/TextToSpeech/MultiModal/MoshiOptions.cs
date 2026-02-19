@@ -1,7 +1,7 @@
 using AiDotNet.TextToSpeech.CodecBased;
-namespace AiDotNet.TextToSpeech.Latest;
-/// <summary>Options for LlamaOmni TTS model.</summary>
-public class LlamaOmniOptions : CodecTtsOptions
+namespace AiDotNet.TextToSpeech.MultiModal;
+/// <summary>Options for Moshi TTS model.</summary>
+public class MoshiOptions : CodecTtsOptions
 {
     public new int TextEncoderDim { get; set; } = 256;
     public new int LLMDim { get; set; } = 1024;

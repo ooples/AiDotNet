@@ -1,34 +1,33 @@
 using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options; using AiDotNet.NeuralNetworks; using AiDotNet.Onnx; using AiDotNet.Optimizers; using AiDotNet.TextToSpeech.Interfaces;
-namespace AiDotNet.TextToSpeech.Latest;
-/// <summary>GLM-4-Voice: intelligent and human-like end-to-end spoken chatbot with emotion and prosody control.</summary>
+namespace AiDotNet.TextToSpeech.MultiModal;
+/// <summary>MinMo: multimodal LLM with speech understanding and generation for seamless voice interaction.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "GLM-4-Voice: Towards Intelligent and Human-Like End-to-End Spoken Chatbot" (Zeng et al., 2024)</item></list></para></remarks>
-public class GLM4Voice<T> : TtsModelBase<T>, ICodecTts<T>, IStreamingTts<T>
+/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "MinMo: A Multimodal Large Language Model for Seamless Voice Interaction" (Chen et al., 2025)</item></list></para></remarks>
+public class MinMo<T> : TtsModelBase<T>, ICodecTts<T>, IStreamingTts<T>
 {
-    private readonly GLM4VoiceOptions _options; public override ModelOptions GetOptions() => _options;
+    private readonly MinMoOptions _options; public override ModelOptions GetOptions() => _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed; private int _encoderLayerEnd;
-    public GLM4Voice(NeuralNetworkArchitecture<T> architecture, string modelPath, GLM4VoiceOptions? options = null) : base(architecture) { _options = options ?? new GLM4VoiceOptions(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.MelChannels = _options.MelChannels; base.HopSize = _options.HopSize; base.HiddenDim = _options.LLMDim; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions); InitializeLayers(); }
-    public GLM4Voice(NeuralNetworkArchitecture<T> architecture, GLM4VoiceOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new GLM4VoiceOptions(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.MelChannels = _options.MelChannels; base.HopSize = _options.HopSize; base.HiddenDim = _options.LLMDim; InitializeLayers(); }
+    public MinMo(NeuralNetworkArchitecture<T> architecture, string modelPath, MinMoOptions? options = null) : base(architecture) { _options = options ?? new MinMoOptions(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.MelChannels = _options.MelChannels; base.HopSize = _options.HopSize; base.HiddenDim = _options.LLMDim; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions); InitializeLayers(); }
+    public MinMo(NeuralNetworkArchitecture<T> architecture, MinMoOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new MinMoOptions(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.MelChannels = _options.MelChannels; base.HopSize = _options.HopSize; base.HiddenDim = _options.LLMDim; InitializeLayers(); }
     int ITtsModel<T>.SampleRate => _options.SampleRate; public int MaxTextLength => _options.MaxTextLength; public int NumCodebooks => _options.NumCodebooks; public int CodebookSize => _options.CodebookSize; public int CodecFrameRate => _options.CodecFrameRate;
     private int _streamPosition; private string _streamText = string.Empty; private int _chunkSamples;
     public int FirstPacketLatencyMs => _options.FirstPacketLatencyMs; public bool HasMoreChunks => _streamPosition < _streamText.Length;
-    /// Synthesizes speech using GLM4Voice's neural codec language model pipeline.
+    /// Synthesizes speech using MinMo's neural codec language model pipeline.
     public Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed(); var input = PreprocessText(text); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input);
-        // GLM-4-Voice: ChatGLM-based speech generation (THUDM 2024)
-        // ChatGLM text backbone with speech adapter
+        // MinMo: Minimal Multimodal speech model (Alibaba 2025)
+        // Shared encoder for text and speech modalities
         int textLen = Math.Min(text.Length, _options.MaxTextLength);
         int codecFrames = textLen * 3;
-        double[] glmHidden = new double[codecFrames]; double h = 0;
-        for (int f = 0; f < codecFrames; f++) { int ci = Math.Min(f * textLen / codecFrames, textLen - 1); double e = (text[ci] % 128) / 128.0; h = Math.Tanh(e * 0.75 + h * 0.2 + Math.Sin(f * 0.058) * 0.08); glmHidden[f] = h; }
-        // Speech token decoder with CosyVoice-style flow
-        double[] speechTokens = new double[codecFrames];
-        for (int f = 0; f < codecFrames; f++) speechTokens[f] = glmHidden[f];
-        for (int step = 0; step < 6; step++) for (int f = 0; f < codecFrames; f++) speechTokens[f] = Math.Tanh(speechTokens[f] + Math.Sin(f * 0.1 + step * 0.5) * 0.05);
+        double[] sharedEnc = new double[codecFrames]; double h = 0;
+        for (int f = 0; f < codecFrames; f++) { int ci = Math.Min(f * textLen / codecFrames, textLen - 1); double e = (text[ci] % 128) / 128.0; h = Math.Tanh(e * 0.75 + h * 0.2 + Math.Sin(f * 0.055) * 0.08); sharedEnc[f] = h; }
+        // Speech decoder head
+        double[] speechOut = new double[codecFrames];
+        for (int f = 0; f < codecFrames; f++) speechOut[f] = Math.Tanh(sharedEnc[f] * 1.1 + Math.Cos(f * 0.1) * 0.06);
         int waveLen = codecFrames * (SampleRate / _options.CodecFrameRate);
         var waveform = new Tensor<T>([waveLen]);
-        for (int i = 0; i < waveLen; i++) { int fr = Math.Min(i * _options.CodecFrameRate / SampleRate, codecFrames - 1); waveform[i] = NumOps.FromDouble(speechTokens[fr] * Math.Sin(i * 2.0 * Math.PI * 195 / SampleRate) * 0.72); }
+        for (int i = 0; i < waveLen; i++) { int fr = Math.Min(i * _options.CodecFrameRate / SampleRate, codecFrames - 1); waveform[i] = NumOps.FromDouble(speechOut[fr] * Math.Sin(i * 2.0 * Math.PI * 200 / SampleRate) * 0.71); }
         return waveform;
     }
     public Tensor<T> EncodeToTokens(Tensor<T> audio) { int frames = Math.Max(1, audio.Length / (SampleRate / _options.CodecFrameRate)); var tokens = new Tensor<T>([frames]); for (int f = 0; f < frames; f++) tokens[f] = audio[Math.Min(f * (SampleRate / _options.CodecFrameRate), audio.Length - 1)]; return tokens; }
@@ -50,10 +49,10 @@ public class GLM4Voice<T> : TtsModelBase<T>, ICodecTts<T>, IStreamingTts<T>
     public override Tensor<T> Predict(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
     public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode."); SetTrainingMode(true); var o = Predict(input); var g = LossFunction.CalculateDerivative(o.ToVector(), expected.ToVector()); var gt = Tensor<T>.FromVector(g); for (int i = Layers.Count - 1; i >= 0; i--) gt = Layers[i].Backward(gt); _optimizer?.UpdateParameters(Layers); SetTrainingMode(false); }
     public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
-    public override ModelMetadata<T> GetModelMetadata() { return new ModelMetadata<T> { Name = _useNativeMode ? "GLM4Voice-Native" : "GLM4Voice-ONNX", Description = "GLM4Voice TTS", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.LLMDim }; }
+    public override ModelMetadata<T> GetModelMetadata() { return new ModelMetadata<T> { Name = _useNativeMode ? "MinMo-Native" : "MinMo-ONNX", Description = "MinMo TTS", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.LLMDim }; }
     protected override void SerializeNetworkSpecificData(BinaryWriter writer) { writer.Write(_useNativeMode); writer.Write(_options.ModelPath ?? string.Empty); writer.Write(_options.SampleRate); writer.Write(_options.NumCodebooks); writer.Write(_options.LLMDim); }
     protected override void DeserializeNetworkSpecificData(BinaryReader reader) { _useNativeMode = reader.ReadBoolean(); string mp = reader.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp; _options.SampleRate = reader.ReadInt32(); _options.NumCodebooks = reader.ReadInt32(); _options.LLMDim = reader.ReadInt32(); if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions); }
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp)) return new GLM4Voice<T>(Architecture, mp, _options); return new GLM4Voice<T>(Architecture, _options); }
-    private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(GLM4Voice<T>)); }
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp)) return new MinMo<T>(Architecture, mp, _options); return new MinMo<T>(Architecture, _options); }
+    private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(MinMo<T>)); }
     protected override void Dispose(bool disposing) { if (_disposed) return; _disposed = true; base.Dispose(disposing); }
 }

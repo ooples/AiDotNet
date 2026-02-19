@@ -1,5 +1,5 @@
 using AiDotNet.TextToSpeech.CodecBased;
-namespace AiDotNet.TextToSpeech.Latest;
+namespace AiDotNet.TextToSpeech.MultiModal;
 /// <summary>Options for GLM4Voice TTS model.</summary>
 public class GLM4VoiceOptions : CodecTtsOptions
 {

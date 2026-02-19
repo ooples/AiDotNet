@@ -1,7 +1,7 @@
 using AiDotNet.TextToSpeech.CodecBased;
-namespace AiDotNet.TextToSpeech.Latest;
-/// <summary>Options for MinMo TTS model.</summary>
-public class MinMoOptions : CodecTtsOptions
+namespace AiDotNet.TextToSpeech.MultiModal;
+/// <summary>Options for LlamaOmni TTS model.</summary>
+public class LlamaOmniOptions : CodecTtsOptions
 {
     public new int TextEncoderDim { get; set; } = 256;
     public new int LLMDim { get; set; } = 1024;

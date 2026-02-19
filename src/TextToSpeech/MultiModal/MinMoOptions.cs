@@ -1,7 +1,7 @@
 using AiDotNet.TextToSpeech.CodecBased;
-namespace AiDotNet.TextToSpeech.Latest;
-/// <summary>Options for StepAudio TTS model.</summary>
-public class StepAudioOptions : CodecTtsOptions
+namespace AiDotNet.TextToSpeech.MultiModal;
+/// <summary>Options for MinMo TTS model.</summary>
+public class MinMoOptions : CodecTtsOptions
 {
     public new int TextEncoderDim { get; set; } = 256;
     public new int LLMDim { get; set; } = 1024;
