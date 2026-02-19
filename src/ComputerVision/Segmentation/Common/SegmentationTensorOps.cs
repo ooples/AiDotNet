@@ -9,6 +9,27 @@ namespace AiDotNet.ComputerVision.Segmentation.Common;
 public static class SegmentationTensorOps
 {
     /// <summary>
+    /// Removes the batch dimension from a tensor if present, keeping only batch index 0.
+    /// Converts [B, ...] to [...]. If already unbatched, returns as-is.
+    /// </summary>
+    public static Tensor<T> EnsureUnbatched<T>(Tensor<T> tensor)
+    {
+        if (tensor.Rank == 4)
+        {
+            // [B, C, H, W] -> [C, H, W]
+            var numOps = MathHelper.GetNumericOperations<T>();
+            int c = tensor.Shape[1], h = tensor.Shape[2], w = tensor.Shape[3];
+            var result = new Tensor<T>([c, h, w]);
+            for (int ch = 0; ch < c; ch++)
+                for (int row = 0; row < h; row++)
+                    for (int col = 0; col < w; col++)
+                        result[ch, row, col] = tensor[0, ch, row, col];
+            return result;
+        }
+        return tensor;
+    }
+
+    /// <summary>
     /// Computes argmax along the class dimension, producing a per-pixel class index map.
     /// </summary>
     /// <typeparam name="T">The numeric type.</typeparam>
@@ -272,23 +293,43 @@ public static class SegmentationTensorOps
 
     /// <summary>
     /// Computes weighted sum across the channel dimension.
-    /// Features shape: [C, H, W], weights length: C. Output: [H, W].
+    /// Features shape: [C, H, W] or [B, C, H, W], weights length: C. Output: [H, W].
+    /// For 4D input, uses batch index 0.
     /// </summary>
     public static Tensor<T> WeightedChannelSum<T>(Tensor<T> features, double[] weights)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        int c = features.Shape[0], h = features.Shape[1], w = features.Shape[2];
-        int numWeights = Math.Min(c, weights.Length);
-        var result = new Tensor<T>([h, w]);
-        for (int ch = 0; ch < numWeights; ch++)
+
+        if (features.Rank == 4)
         {
-            double wt = weights[ch];
-            for (int row = 0; row < h; row++)
-                for (int col = 0; col < w; col++)
-                    result[row, col] = numOps.Add(result[row, col],
-                        numOps.FromDouble(numOps.ToDouble(features[ch, row, col]) * wt));
+            int c = features.Shape[1], h = features.Shape[2], w = features.Shape[3];
+            int numWeights = Math.Min(c, weights.Length);
+            var result = new Tensor<T>([h, w]);
+            for (int ch = 0; ch < numWeights; ch++)
+            {
+                double wt = weights[ch];
+                for (int row = 0; row < h; row++)
+                    for (int col = 0; col < w; col++)
+                        result[row, col] = numOps.Add(result[row, col],
+                            numOps.FromDouble(numOps.ToDouble(features[0, ch, row, col]) * wt));
+            }
+            return result;
         }
-        return result;
+        else
+        {
+            int c = features.Shape[0], h = features.Shape[1], w = features.Shape[2];
+            int numWeights = Math.Min(c, weights.Length);
+            var result = new Tensor<T>([h, w]);
+            for (int ch = 0; ch < numWeights; ch++)
+            {
+                double wt = weights[ch];
+                for (int row = 0; row < h; row++)
+                    for (int col = 0; col < w; col++)
+                        result[row, col] = numOps.Add(result[row, col],
+                            numOps.FromDouble(numOps.ToDouble(features[ch, row, col]) * wt));
+            }
+            return result;
+        }
     }
 
     /// <summary>
@@ -323,53 +364,90 @@ public static class SegmentationTensorOps
     }
 
     /// <summary>
-    /// Computes per-pixel cosine similarity between two feature maps [C, H, W].
-    /// Output: [H, W] with values in [-1, 1].
+    /// Computes per-pixel cosine similarity between two feature maps [C, H, W] or [B, C, H, W].
+    /// Output: [H, W] with values in [-1, 1]. For 4D input, uses batch index 0.
     /// </summary>
     public static Tensor<T> PixelAffinity<T>(Tensor<T> features1, Tensor<T> features2)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        int c = features1.Shape[0], h = features1.Shape[1], w = features1.Shape[2];
-        var result = new Tensor<T>([h, w]);
 
-        for (int row = 0; row < h; row++)
+        if (features1.Rank == 4)
         {
-            for (int col = 0; col < w; col++)
-            {
-                double dot = 0, norm1 = 0, norm2 = 0;
-                for (int ch = 0; ch < c; ch++)
-                {
-                    double v1 = numOps.ToDouble(features1[ch, row, col]);
-                    double v2 = numOps.ToDouble(features2[ch, row, col]);
-                    dot += v1 * v2;
-                    norm1 += v1 * v1;
-                    norm2 += v2 * v2;
-                }
-                double denom = Math.Sqrt(norm1) * Math.Sqrt(norm2);
-                result[row, col] = numOps.FromDouble(denom > 1e-8 ? dot / denom : 0.0);
-            }
-        }
+            int c = features1.Shape[1], h = features1.Shape[2], w = features1.Shape[3];
+            var result = new Tensor<T>([h, w]);
 
-        return result;
+            for (int row = 0; row < h; row++)
+            {
+                for (int col = 0; col < w; col++)
+                {
+                    double dot = 0, norm1 = 0, norm2 = 0;
+                    for (int ch = 0; ch < c; ch++)
+                    {
+                        double v1 = numOps.ToDouble(features1[0, ch, row, col]);
+                        double v2 = numOps.ToDouble(features2[0, ch, row, col]);
+                        dot += v1 * v2;
+                        norm1 += v1 * v1;
+                        norm2 += v2 * v2;
+                    }
+                    double denom = Math.Sqrt(norm1) * Math.Sqrt(norm2);
+                    result[row, col] = numOps.FromDouble(denom > 1e-8 ? dot / denom : 0.0);
+                }
+            }
+
+            return result;
+        }
+        else
+        {
+            int c = features1.Shape[0], h = features1.Shape[1], w = features1.Shape[2];
+            var result = new Tensor<T>([h, w]);
+
+            for (int row = 0; row < h; row++)
+            {
+                for (int col = 0; col < w; col++)
+                {
+                    double dot = 0, norm1 = 0, norm2 = 0;
+                    for (int ch = 0; ch < c; ch++)
+                    {
+                        double v1 = numOps.ToDouble(features1[ch, row, col]);
+                        double v2 = numOps.ToDouble(features2[ch, row, col]);
+                        dot += v1 * v2;
+                        norm1 += v1 * v1;
+                        norm2 += v2 * v2;
+                    }
+                    double denom = Math.Sqrt(norm1) * Math.Sqrt(norm2);
+                    result[row, col] = numOps.FromDouble(denom > 1e-8 ? dot / denom : 0.0);
+                }
+            }
+
+            return result;
+        }
     }
 
     /// <summary>
     /// Warps masks from a reference frame to a target frame using pixel-wise affinity scores.
-    /// Reference masks: [N, H, W], affinity: [H, W] with values in [0, 1].
+    /// Reference masks: [N, H, W], affinity: [H_a, W_a] with values in [0, 1].
     /// Output: [N, H, W] warped masks weighted by affinity.
+    /// When affinity spatial dims differ from mask dims, uses nearest-neighbor sampling.
     /// </summary>
     public static Tensor<T> WarpMasksByAffinity<T>(Tensor<T> refMasks, Tensor<T> affinity)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
         int n = refMasks.Shape[0], h = refMasks.Shape[1], w = refMasks.Shape[2];
+        int aH = affinity.Shape[0], aW = affinity.Shape[1];
         var result = new Tensor<T>([n, h, w]);
 
         for (int obj = 0; obj < n; obj++)
             for (int row = 0; row < h; row++)
+            {
+                int aRow = aH == h ? row : (int)((long)row * aH / h);
                 for (int col = 0; col < w; col++)
+                {
+                    int aCol = aW == w ? col : (int)((long)col * aW / w);
                     result[obj, row, col] = numOps.FromDouble(
                         numOps.ToDouble(refMasks[obj, row, col]) *
-                        numOps.ToDouble(affinity[row, col]));
+                        numOps.ToDouble(affinity[aRow, aCol]));
+                }
+            }
 
         return result;
     }
