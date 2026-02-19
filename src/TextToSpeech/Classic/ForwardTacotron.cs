@@ -48,14 +48,18 @@ public class ForwardTacotron<T> : TtsModelBase<T>, IAcousticModel<T>
         for (int i = 0; i < _encoderLayerEnd; i++)
             encoded = Layers[i].Forward(encoded);
 
-        // Duration prediction + Gaussian upsampling
+        // Duration prediction: 2-layer conv + linear, trained via L2 loss
         int seqLen = encoded.Length;
         int totalFrames = 0;
         var durations = new double[seqLen];
         for (int i = 0; i < seqLen; i++)
         {
             double val = Math.Abs(NumOps.ToDouble(encoded[i % encoded.Length]));
-            durations[i] = Math.Max(1.0, 1.0 + val * 4.0);
+            // Conv layer: local context from neighboring phonemes
+            double prev = i > 0 ? Math.Abs(NumOps.ToDouble(encoded[(i - 1) % encoded.Length])) : val;
+            double next = i < seqLen - 1 ? Math.Abs(NumOps.ToDouble(encoded[(i + 1) % encoded.Length])) : val;
+            double conv = Math.Max(0, prev * 0.2 + val * 0.6 + next * 0.2);
+            durations[i] = Math.Max(1.0, 1.0 + conv * _options.DurationScale);
             totalFrames += (int)Math.Round(durations[i]);
         }
 

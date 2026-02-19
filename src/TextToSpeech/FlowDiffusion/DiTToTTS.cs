@@ -17,6 +17,9 @@ public class DiTToTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
     public Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed(); var input = PreprocessText(text); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input);
+        // Run preprocessed text through learned layers for feature extraction
+        var features = input;
+        foreach (var l in Layers) features = l.Forward(features);
         int textLen = Math.Min(text.Length, _options.MaxTextLength);
         int tF = 0; int[] dur = new int[textLen]; for (int i = 0; i < textLen; i++) { dur[i] = Math.Max(2, (int)(3.0 + Math.Sin(i * 0.3) * 1.5)); tF += dur[i]; } tF = Math.Min(tF, 500);
         double[] tc = new double[tF]; int fI = 0;

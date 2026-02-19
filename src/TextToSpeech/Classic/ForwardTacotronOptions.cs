@@ -10,4 +10,7 @@ public class ForwardTacotronOptions : AcousticModelOptions
 
     /// <summary>Gets or sets the highway network dimension.</summary>
     public int HighwayDim { get; set; } = 128;
+
+    /// <summary>Gets or sets the duration scale factor for phoneme duration prediction.</summary>
+    public double DurationScale { get; set; } = 4.0;
 }

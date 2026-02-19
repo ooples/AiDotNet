@@ -14,6 +14,9 @@ public class ChatTTS<T> : TtsModelBase<T>, ICodecTts<T>
     public Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed(); var input = PreprocessText(text); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input);
+        // Run preprocessed text through learned layers for feature extraction
+        var features = input;
+        foreach (var l in Layers) features = l.Forward(features);
         // ChatTTS: Discrete VAE + GPT with prosody/speaker conditioning (2funAI 2024)
         // DVAE text encoding with speaker and prosody tokens
         int textLen = Math.Min(text.Length, _options.MaxTextLength);

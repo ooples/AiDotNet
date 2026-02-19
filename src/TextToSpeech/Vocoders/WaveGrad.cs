@@ -23,7 +23,10 @@ public class WaveGrad<T> : TtsModelBase<T>, IVocoder<T>
     {
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(melSpectrogram);
-        int melLen = melSpectrogram.Length; int waveLen = melLen * _options.HopSize;
+        // Run mel through learned vocoder layers for feature extraction
+        var features = melSpectrogram;
+        foreach (var l in Layers) features = l.Forward(features);
+        int melLen = features.Length; int waveLen = melLen * _options.HopSize;
         double[] x = new double[waveLen];
         for (int i = 0; i < waveLen; i++) x[i] = Math.Cos(i * 0.21 + 0.3) * 0.7;
         int steps = _options.NumDiffusionSteps;
@@ -33,7 +36,7 @@ public class WaveGrad<T> : TtsModelBase<T>, IVocoder<T>
             for (int s = 0; s < waveLen; s++)
             {
                 int melIdx = Math.Min(s / _options.HopSize, melLen - 1);
-                double melCond = NumOps.ToDouble(melSpectrogram[melIdx]);
+                double melCond = NumOps.ToDouble(features[melIdx]);
                 double grad = -(x[s] - melCond * 0.8) * noiseLevel;
                 x[s] = x[s] + grad * (1.0 / steps) + noiseLevel * Math.Sin(s * 0.001 + t) * 0.01;
             }

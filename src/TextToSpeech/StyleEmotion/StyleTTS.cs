@@ -19,9 +19,12 @@ public class StyleTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
     public Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed(); var input = PreprocessText(text); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input);
+        // Run preprocessed text through learned layers for feature extraction
+        var features = input;
+        foreach (var l in Layers) features = l.Forward(features);
         int textLen = Math.Min(text.Length, _options.MaxTextLength);
         double[] textHidden = new double[textLen];
-        for (int t = 0; t < textLen; t++) textHidden[t] = (text[t] % 128) / 128.0 - 0.5;
+        for (int t = 0; t < textLen; t++) textHidden[t] = t < features.Length ? NumOps.ToDouble(features[t]) : (text[t] % 128) / 128.0 - 0.5;
         // Style diffusion: sample style vector from learned prior
         double[] styleVec = new double[_options.StyleDim];
         for (int s = 0; s < _options.StyleDim; s++)

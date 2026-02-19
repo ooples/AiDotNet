@@ -23,7 +23,10 @@ public class ParallelWaveGAN<T> : TtsModelBase<T>, IVocoder<T>
     {
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(melSpectrogram);
-        int melLen = melSpectrogram.Length; int waveLen = melLen * _options.HopSize;
+        // Run mel through learned vocoder layers for feature extraction
+        var features = melSpectrogram;
+        foreach (var l in Layers) features = l.Forward(features);
+        int melLen = features.Length; int waveLen = melLen * _options.HopSize;
         double[] x = new double[waveLen];
         for (int i = 0; i < waveLen; i++) x[i] = Math.Sin(i * 0.19 + 0.3) * 0.5; // noise input
         // Non-causal dilated residual conv blocks
@@ -33,7 +36,7 @@ public class ParallelWaveGAN<T> : TtsModelBase<T>, IVocoder<T>
             for (int s = 0; s < waveLen; s++)
             {
                 int melIdx = Math.Min(s / _options.HopSize, melLen - 1);
-                double melCond = NumOps.ToDouble(melSpectrogram[melIdx]);
+                double melCond = NumOps.ToDouble(features[melIdx]);
                 double filter = Math.Tanh(x[s] * 0.4 + melCond * 0.5);
                 double gate = 1.0 / (1.0 + Math.Exp(-(x[s] * 0.3 + melCond * 0.4)));
                 x[s] = x[s] + filter * gate * 0.1;

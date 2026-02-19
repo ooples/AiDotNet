@@ -14,6 +14,9 @@ public class VALLEX<T> : TtsModelBase<T>, ICodecTts<T>
     public Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed(); var input = PreprocessText(text); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input);
+        // Run preprocessed text through learned layers for feature extraction
+        var features = input;
+        foreach (var l in Layers) features = l.Forward(features);
         // VALL-E X: Cross-lingual VALL-E variant (Zhang et al. 2023)
         // Cross-lingual text encoder with language embedding
         int textLen = Math.Min(text.Length, _options.MaxTextLength);

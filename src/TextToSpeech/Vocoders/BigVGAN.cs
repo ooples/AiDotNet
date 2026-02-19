@@ -17,12 +17,15 @@ public class BigVGAN<T> : TtsModelBase<T>, IVocoder<T>
     public Tensor<T> MelToWaveform(Tensor<T> melSpectrogram)
     {
         ThrowIfDisposed(); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(melSpectrogram);
-        int melLen = melSpectrogram.Length; int waveLen = melLen * _options.HopSize;
+        // Run mel through learned vocoder layers for feature extraction
+        var features = melSpectrogram;
+        foreach (var l in Layers) features = l.Forward(features);
+        int melLen = features.Length; int waveLen = melLen * _options.HopSize;
         var waveform = new Tensor<T>([waveLen]);
         // Progressive upsampling through AMP blocks with Snake activation
         int currentLen = melLen;
         double[] signal = new double[melLen];
-        for (int i = 0; i < melLen; i++) signal[i] = NumOps.ToDouble(melSpectrogram[i]);
+        for (int i = 0; i < melLen; i++) signal[i] = NumOps.ToDouble(features[i]);
         // Multi-stage upsampling (each stage doubles resolution)
         int numStages = (int)Math.Ceiling(Math.Log((double)_options.HopSize) / Math.Log(2.0));
         for (int stage = 0; stage < numStages; stage++)

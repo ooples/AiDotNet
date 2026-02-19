@@ -24,7 +24,10 @@ public class MultiBandMelGAN<T> : TtsModelBase<T>, IVocoder<T>
     {
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(melSpectrogram);
-        int melLen = melSpectrogram.Length; int waveLen = melLen * _options.HopSize;
+        // Run mel through learned vocoder layers for feature extraction
+        var features = melSpectrogram;
+        foreach (var l in Layers) features = l.Forward(features);
+        int melLen = features.Length; int waveLen = melLen * _options.HopSize;
         int subBandLen = waveLen / _options.NumBands;
         // Generate sub-band signals in parallel
         double[][] subBands = new double[_options.NumBands][];
@@ -34,7 +37,7 @@ public class MultiBandMelGAN<T> : TtsModelBase<T>, IVocoder<T>
             for (int s = 0; s < subBandLen; s++)
             {
                 int melIdx = Math.Min(s * _options.NumBands / _options.HopSize, melLen - 1);
-                double melVal = NumOps.ToDouble(melSpectrogram[melIdx]);
+                double melVal = NumOps.ToDouble(features[melIdx]);
                 double freq = (b + 1.0) / _options.NumBands; // sub-band frequency range
                 subBands[b][s] = Math.Tanh(melVal * 0.7 + Math.Sin(s * freq * 0.05) * 0.3);
             }

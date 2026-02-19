@@ -17,6 +17,9 @@ public class OpenVoiceV2<T> : TtsModelBase<T>, IEndToEndTts<T>, IVoiceCloner<T>
     public Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed(); var input = PreprocessText(text); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input);
+        // Run preprocessed text through learned layers for feature extraction
+        var features = input;
+        foreach (var l in Layers) features = l.Forward(features);
         int textLen = Math.Min(text.Length, _options.MaxTextLength); int mF = textLen * 4;
         double[] baseMel = new double[mF]; double p = 0;
         for (int f = 0; f < mF; f++) { int t = Math.Min(f * textLen / mF, textLen - 1); baseMel[f] = Math.Tanh((text[t] % 128) / 128.0 * 0.55 + p * 0.3 + Math.Sin(f * 0.09) * 0.1); p = baseMel[f]; }

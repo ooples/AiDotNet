@@ -21,12 +21,15 @@ public class UnivNet<T> : TtsModelBase<T>, IVocoder<T>
     public Tensor<T> MelToWaveform(Tensor<T> melSpectrogram)
     {
         ThrowIfDisposed(); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(melSpectrogram);
-        int melLen = melSpectrogram.Length; int waveLen = melLen * _options.HopSize;
+        // Run mel through learned vocoder layers for feature extraction
+        var features = melSpectrogram;
+        foreach (var l in Layers) features = l.Forward(features);
+        int melLen = features.Length; int waveLen = melLen * _options.HopSize;
         var waveform = new Tensor<T>([waveLen]);
         for (int f = 0; f < waveLen; f++)
         {
             int melIdx = Math.Min(f / _options.HopSize, melLen - 1);
-            double melVal = NumOps.ToDouble(melSpectrogram[melIdx]);
+            double melVal = NumOps.ToDouble(features[melIdx]);
             // LVC: location-variable convolution - kernel adapted from mel
             double lvc = 0;
             for (int k = 0; k < _options.NumKernels; k++) { double kernelWeight = melVal * 0.3 + Math.Sin(f * (k + 1) * 0.005) * 0.2; lvc += Math.Tanh(kernelWeight); }

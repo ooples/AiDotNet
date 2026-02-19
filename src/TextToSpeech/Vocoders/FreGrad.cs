@@ -17,7 +17,10 @@ public class FreGrad<T> : TtsModelBase<T>, IVocoder<T>
     public Tensor<T> MelToWaveform(Tensor<T> melSpectrogram)
     {
         ThrowIfDisposed(); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(melSpectrogram);
-        int melLen = melSpectrogram.Length; int waveLen = melLen * _options.HopSize;
+        // Run mel through learned vocoder layers for feature extraction
+        var features = melSpectrogram;
+        foreach (var l in Layers) features = l.Forward(features);
+        int melLen = features.Length; int waveLen = melLen * _options.HopSize;
         // DWT decomposition: split into low-freq and high-freq sub-bands
         int numBands = _options.NumWaveletLevels;
         int bandLen = waveLen / (1 << numBands);
@@ -30,7 +33,7 @@ public class FreGrad<T> : TtsModelBase<T>, IVocoder<T>
             for (int i = 0; i < bandLen; i++)
             {
                 int melIdx = Math.Min(i * melLen / bandLen, melLen - 1);
-                double melVal = NumOps.ToDouble(melSpectrogram[melIdx]);
+                double melVal = NumOps.ToDouble(features[melIdx]);
                 subBands[b][i] = Math.Sin(i * freqScale * 0.5 + melVal) * 0.3;
             }
         }
@@ -44,7 +47,7 @@ public class FreGrad<T> : TtsModelBase<T>, IVocoder<T>
                 for (int s = 0; s < bandLen; s++)
                 {
                     int melIdx = Math.Min(s * melLen / bandLen, melLen - 1);
-                    double melCond = NumOps.ToDouble(melSpectrogram[melIdx]);
+                    double melCond = NumOps.ToDouble(features[melIdx]);
                     double score = -(subBands[b][s] - melCond * 0.6) * (1 - alpha);
                     subBands[b][s] += score * (1.0 / steps);
                 }

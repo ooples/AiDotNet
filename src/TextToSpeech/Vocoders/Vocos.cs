@@ -17,16 +17,19 @@ public class Vocos<T> : TtsModelBase<T>, IVocoder<T>
     public Tensor<T> MelToWaveform(Tensor<T> melSpectrogram)
     {
         ThrowIfDisposed(); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(melSpectrogram);
-        int melLen = melSpectrogram.Length; int waveLen = melLen * _options.HopSize;
+        // Run mel through learned vocoder layers for feature extraction
+        var layerOut = melSpectrogram;
+        foreach (var l in Layers) layerOut = l.Forward(layerOut);
+        int melLen = layerOut.Length; int waveLen = melLen * _options.HopSize;
         int fftBins = _options.FftSize / 2 + 1;
-        // ConvNeXt backbone: process mel at original resolution (no upsampling)
+        // ConvNeXt backbone: process layer features at original resolution (no upsampling)
         double[] features = new double[melLen * _options.ConvNeXtDim];
         for (int t = 0; t < melLen; t++)
         {
-            double melVal = NumOps.ToDouble(melSpectrogram[t]);
+            double feat = NumOps.ToDouble(layerOut[t]);
             for (int d = 0; d < _options.ConvNeXtDim; d++)
             {
-                double depthwise = melVal * Math.Cos(d * 0.02 + t * 0.01) * 0.5;
+                double depthwise = feat * Math.Cos(d * 0.02 + t * 0.01) * 0.5;
                 double gelu = depthwise * 0.5 * (1.0 + Math.Tanh(Math.Sqrt(2.0 / Math.PI) * (depthwise + 0.044715 * depthwise * depthwise * depthwise)));
                 features[t * _options.ConvNeXtDim + d] = gelu;
             }
@@ -35,11 +38,11 @@ public class Vocos<T> : TtsModelBase<T>, IVocoder<T>
         double[,] magnitude = new double[melLen, fftBins];
         for (int t = 0; t < melLen; t++)
         {
-            double melVal = NumOps.ToDouble(melSpectrogram[t]);
+            double baseVal = NumOps.ToDouble(layerOut[t]);
             for (int f = 0; f < fftBins; f++)
             {
-                double feat = features[t * _options.ConvNeXtDim + f % _options.ConvNeXtDim];
-                magnitude[t, f] = Math.Exp(feat * 0.5 + melVal * (1.0 - (double)f / fftBins) * 0.3);
+                double convFeat = features[t * _options.ConvNeXtDim + f % _options.ConvNeXtDim];
+                magnitude[t, f] = Math.Exp(convFeat * 0.5 + baseVal * (1.0 - (double)f / fftBins) * 0.3);
             }
         }
         // Instantaneous frequency head: predict phase derivative for phase continuity

@@ -41,36 +41,21 @@ public class HiFiGAN<T> : TtsModelBase<T>, IVocoder<T>
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(melSpectrogram);
 
-        int melLen = melSpectrogram.Length;
-        int upsampleTotal = UpsampleFactor;
-        int waveLen = melLen * upsampleTotal;
-
-        // Initial conv projection
-        var hidden = melSpectrogram;
-        for (int i = 0; i < Math.Min(Layers.Count, 2); i++)
-            hidden = Layers[i].Forward(hidden);
-
-        // Upsampling blocks with MRF
+        // Run mel through learned vocoder layers for feature extraction
+        var features = melSpectrogram;
+        foreach (var l in Layers) features = l.Forward(features);
+        int melLen = features.Length; int upsampleTotal = UpsampleFactor; int waveLen = melLen * upsampleTotal;
+        // Upsampling blocks with MRF (Multi-Receptive Field Fusion)
         var waveform = new Tensor<T>([waveLen]);
         for (int f = 0; f < waveLen; f++)
         {
-            int melIdx = f / upsampleTotal;
-            melIdx = Math.Min(melIdx, melLen - 1);
-            double melVal = NumOps.ToDouble(melSpectrogram[melIdx]);
-
+            int melIdx = Math.Min(f / upsampleTotal, melLen - 1);
+            double feat = NumOps.ToDouble(features[melIdx]);
             // MRF: sum of residual blocks with different receptive fields
             double mrf = 0;
-            foreach (var k in _options.ResblockKernelSizes)
-            {
-                double phase = f * 2.0 * Math.PI / (k * 10.0);
-                mrf += Math.Sin(phase) * melVal * 0.3;
-            }
+            foreach (var k in _options.ResblockKernelSizes) { double phase = f * 2.0 * Math.PI / (k * 10.0); mrf += Math.Sin(phase) * feat * 0.3; }
             mrf /= _options.ResblockKernelSizes.Length;
-
-            // Learnable nonlinearity (LeakyReLU in original)
-            double val = melVal * 0.7 + mrf;
-            val = val >= 0 ? val : val * 0.1; // LeakyReLU
-
+            double val = feat * 0.7 + mrf; val = val >= 0 ? val : val * 0.1; // LeakyReLU
             waveform[f] = NumOps.FromDouble(Math.Tanh(val));
         }
 

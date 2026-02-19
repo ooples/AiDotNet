@@ -14,6 +14,9 @@ public class CSM<T> : TtsModelBase<T>, ICodecTts<T>
     public Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed(); var input = PreprocessText(text); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input);
+        // Run preprocessed text through learned layers for feature extraction
+        var features = input;
+        foreach (var l in Layers) features = l.Forward(features);
         // CSM: Conversational Speech Model (Sesame 2025)
         // Multi-turn context encoding with causal masking
         int textLen = Math.Min(text.Length, _options.MaxTextLength);

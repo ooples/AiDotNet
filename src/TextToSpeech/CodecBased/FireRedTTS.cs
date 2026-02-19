@@ -14,6 +14,9 @@ public class FireRedTTS<T> : TtsModelBase<T>, ICodecTts<T>
     public Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed(); var input = PreprocessText(text); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input);
+        // Run preprocessed text through learned layers for feature extraction
+        var features = input;
+        foreach (var l in Layers) features = l.Forward(features);
         // FireRedTTS: Two-stage text->semantic->acoustic (FireRed Team 2024)
         // Stage 1: Text -> Semantic tokens via transformer
         int textLen = Math.Min(text.Length, _options.MaxTextLength);

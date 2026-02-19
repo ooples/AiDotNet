@@ -17,14 +17,16 @@ public class APNet2<T> : TtsModelBase<T>, IVocoder<T>
     public Tensor<T> MelToWaveform(Tensor<T> melSpectrogram)
     {
         ThrowIfDisposed(); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(melSpectrogram);
-        int melLen = melSpectrogram.Length; int waveLen = melLen * _options.HopSize;
+        // Run mel through learned vocoder layers for feature extraction
+        var layerFeatures = melSpectrogram;
+        foreach (var l in Layers) layerFeatures = l.Forward(layerFeatures);
+        int melLen = layerFeatures.Length; int waveLen = melLen * _options.HopSize;
         int fftBins = _options.FftSize / 2 + 1;
-        // ResNet backbone: deeper feature extraction from mel
+        // ResNet backbone: deeper feature extraction using layer-processed features
         double[] resFeatures = new double[melLen];
         for (int t = 0; t < melLen; t++)
         {
-            double x = NumOps.ToDouble(melSpectrogram[t]);
-            // Residual block: conv → ReLU → conv + skip
+            double x = NumOps.ToDouble(layerFeatures[t]);
             double h = Math.Max(0, x * 0.8 + 0.1); // ReLU
             double residual = h * 0.6 + x * 0.4; // skip connection
             resFeatures[t] = residual;
@@ -33,10 +35,10 @@ public class APNet2<T> : TtsModelBase<T>, IVocoder<T>
         double[,] amplitude = new double[melLen, fftBins];
         for (int t = 0; t < melLen; t++)
         {
+            double feat = resFeatures[t];
             for (int f = 0; f < fftBins; f++)
             {
                 double freqRatio = (double)f / fftBins;
-                double feat = resFeatures[t];
                 amplitude[t, f] = Math.Exp(feat * (1.0 - freqRatio * 0.4) + 0.3) * 0.15;
             }
         }

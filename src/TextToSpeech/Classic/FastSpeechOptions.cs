@@ -10,4 +10,10 @@ public class FastSpeechOptions : AcousticModelOptions
 
     /// <summary>Gets or sets the duration predictor kernel size.</summary>
     public int DurationPredictorKernelSize { get; set; } = 3;
+
+    /// <summary>Gets or sets the duration scale factor for phoneme duration prediction.</summary>
+    public double DurationScale { get; set; } = 2.5;
+
+    /// <summary>Gets or sets the maximum frames per phoneme.</summary>
+    public int MaxDuration { get; set; } = 15;
 }

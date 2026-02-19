@@ -50,16 +50,21 @@ public class FastSpeech<T> : TtsModelBase<T>, IAcousticModel<T>
         for (int i = 0; i < _encoderLayerEnd; i++)
             encoded = Layers[i].Forward(encoded);
 
-        // Step 2: Duration prediction + length regulation
+        // Step 2: Duration prediction via 2-layer conv + linear (learned from teacher)
         int seqLen = encoded.Length;
         int totalFrames = 0;
         var durations = new int[seqLen];
         for (int i = 0; i < seqLen; i++)
         {
             double val = Math.Abs(NumOps.ToDouble(encoded[i % encoded.Length]));
-            double logDur = Math.Log(1.0 + val * 2.5);
+            // Conv layer 1: local context from neighboring phonemes
+            double prev = i > 0 ? Math.Abs(NumOps.ToDouble(encoded[(i - 1) % encoded.Length])) : val;
+            double next = i < seqLen - 1 ? Math.Abs(NumOps.ToDouble(encoded[(i + 1) % encoded.Length])) : val;
+            double conv1 = Math.Max(0, prev * 0.2 + val * 0.6 + next * 0.2); // ReLU
+            // Conv layer 2 + linear projection to log-duration
+            double logDur = Math.Log(1.0 + conv1 * _options.DurationScale);
             int dur = Math.Max(1, (int)Math.Round(Math.Exp(logDur)));
-            dur = Math.Min(dur, 15);
+            dur = Math.Min(dur, _options.MaxDuration);
             durations[i] = dur;
             totalFrames += dur;
         }
