@@ -107,6 +107,11 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
     private bool _inputWas1D;
 
     /// <summary>
+    /// Stores the original input shape from forward pass so backward can restore it.
+    /// </summary>
+    private int[]? _originalInputShape;
+
+    /// <summary>
     /// The batch mean from the last forward pass.
     /// </summary>
     /// <remarks>
@@ -337,6 +342,9 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        // Store original shape for backward pass restoration
+        _originalInputShape = input.Shape;
+
         // Auto-reshape 1D input to [1, N] for batch normalization compatibility
         _inputWas1D = input.Shape.Length == 1;
         if (_inputWas1D)
@@ -651,12 +659,27 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
         int numFeatures = _gamma.Length;
 
         // The Engine.BatchNormBackward expects 2D tensors [batch, features]
-        // Preserve the actual batch size from input
-        int batchSize = _lastInput.Shape.Length > 1 ? _lastInput.Shape[0] : 1;
+        // For CNN tensors [B, C, H, W], the effective batch = B*H*W, features = C
+        // This correctly computes per-channel normalization across all spatial positions
+        int batchSize;
+        if (_lastInput.Rank == 4 && _lastInput.Shape[1] == numFeatures)
+        {
+            // 4D CNN input: [B, C, H, W] -> effective batch = B * H * W
+            batchSize = _lastInput.Shape[0] * _lastInput.Shape[2] * _lastInput.Shape[3];
+        }
+        else if (_lastInput.Rank == 3 && _lastInput.Shape[0] == numFeatures)
+        {
+            // 3D input: [C, H, W] -> effective batch = H * W
+            batchSize = _lastInput.Shape[1] * _lastInput.Shape[2];
+        }
+        else
+        {
+            batchSize = _lastInput.Shape.Length > 1 ? _lastInput.Shape[0] : 1;
+        }
         int[] targetShape2D = new[] { batchSize, numFeatures };
-
-        // Adjust gradient to 2D [batch, features] shape
         int totalElements = batchSize * numFeatures;
+
+        // Adjust gradient to 2D [effectiveBatch, features] shape
         if (adjustedGradient.Length != totalElements)
         {
             var gradData = new T[totalElements];
@@ -665,7 +688,6 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
             {
                 gradData[i] = adjustedGradient.Data.Span[i];
             }
-            // Fill remaining with zeros if gradient is smaller
             for (int i = copyLen; i < totalElements; i++)
             {
                 gradData[i] = NumOps.Zero;
@@ -674,11 +696,10 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
         }
         else if (adjustedGradient.Rank != 2 || adjustedGradient.Shape[0] != batchSize || adjustedGradient.Shape[1] != numFeatures)
         {
-            // Same length but different shape - reshape to 2D [batch, features]
             adjustedGradient = adjustedGradient.Reshape(targetShape2D);
         }
 
-        // Adjust input to 2D [batch, features] shape
+        // Adjust input to 2D [effectiveBatch, features] shape
         if (adjustedInput.Length != totalElements)
         {
             var inputData = new T[totalElements];
@@ -687,7 +708,6 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
             {
                 inputData[i] = adjustedInput.Data.Span[i];
             }
-            // Fill remaining with mean value if input is smaller
             T fillValue = copyLen > 0 ? inputData[0] : NumOps.Zero;
             for (int i = copyLen; i < totalElements; i++)
             {
@@ -697,7 +717,6 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
         }
         else if (adjustedInput.Rank != 2 || adjustedInput.Shape[0] != batchSize || adjustedInput.Shape[1] != numFeatures)
         {
-            // Same length but different shape - reshape to 2D [batch, features]
             adjustedInput = adjustedInput.Reshape(targetShape2D);
         }
 
@@ -741,13 +760,24 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
         _gammaGradient = gradGamma;
         _betaGradient = gradBeta;
 
-        // Preserve original rank: if forward input was 1D, return 1D gradient
-        if (_inputWas1D && inputGradient.Shape.Length > 1)
+        // Restore original input shape so gradient rank matches the forward input rank
+        if (_originalInputShape != null && inputGradient.Length == ComputeTotalElements(_originalInputShape))
+        {
+            inputGradient = inputGradient.Reshape(_originalInputShape);
+        }
+        else if (_inputWas1D && inputGradient.Shape.Length > 1)
         {
             inputGradient = inputGradient.Reshape(inputGradient.Length);
         }
 
         return inputGradient;
+    }
+
+    private static int ComputeTotalElements(int[] shape)
+    {
+        int total = 1;
+        for (int i = 0; i < shape.Length; i++) total *= shape[i];
+        return total;
     }
 
     /// <summary>
@@ -839,8 +869,12 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
 
         var inputGrad = inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
 
-        // Preserve original rank: if forward input was 1D, return 1D gradient
-        if (_inputWas1D && inputGrad.Shape.Length > 1)
+        // Restore original input shape so gradient rank matches the forward input rank
+        if (_originalInputShape != null && inputGrad.Length == ComputeTotalElements(_originalInputShape))
+        {
+            inputGrad = inputGrad.Reshape(_originalInputShape);
+        }
+        else if (_inputWas1D && inputGrad.Shape.Length > 1)
         {
             inputGrad = inputGrad.Reshape(inputGrad.Length);
         }

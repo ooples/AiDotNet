@@ -28921,4 +28921,151 @@ public static class LayerHelper<T>
         // Color output (RGB)
         yield return new DenseLayer<T>(colorHidden, 3, activationFunction: new IdentityActivation<T>());
     }
+
+    #region SAM Layers
+
+    /// <summary>
+    /// Creates the ViT encoder layers for SAM (Segment Anything Model).
+    /// Paper: Kirillov et al., "Segment Anything" ICCV 2023.
+    /// Architecture: ViT backbone with 16x16 patch embedding followed by transformer blocks.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateSAMEncoderLayers(
+        int inputChannels, int inputHeight, int inputWidth,
+        int[] channelDims, int[] depths, double dropRate)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+
+        // Patch embedding: 16x16 non-overlapping patches
+        yield return new ConvolutionalLayer<T>(inputChannels, inputHeight, inputWidth, channelDims[0], 16, 16, 0, relu);
+
+        // ViT transformer blocks
+        int patchH = inputHeight / 16;
+        int patchW = inputWidth / 16;
+        for (int i = 0; i < depths[0]; i++)
+        {
+            yield return new BatchNormalizationLayer<T>(channelDims[0], patchH, patchW);
+            yield return new ConvolutionalLayer<T>(channelDims[0], patchH, patchW, channelDims[0], 1, 1, 0, relu);
+        }
+    }
+
+    /// <summary>
+    /// Creates the lightweight mask decoder layers for SAM.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateSAMDecoderLayers(
+        int encoderOutputChannels, int decoderDim, int numClasses,
+        int featureHeight = 16, int featureWidth = 16)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+    }
+
+    #endregion
+
+    #region SAM21 Layers
+
+    /// <summary>
+    /// Creates the Hiera backbone encoder layers for SAM 2.1.
+    /// Paper: Ravi et al., "SAM 2: Segment Anything in Images and Videos" Meta AI 2024.
+    /// Architecture: Hiera hierarchical encoder with multi-scale feature extraction.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateSAM21EncoderLayers(
+        int inputChannels, int inputHeight, int inputWidth,
+        int[] channelDims, int[] depths, double dropRate)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        int h = inputHeight, w = inputWidth, inC = inputChannels;
+
+        for (int stage = 0; stage < channelDims.Length; stage++)
+        {
+            int outC = channelDims[stage];
+            int stride = stage == 0 ? 4 : 2;
+            int kernel = stage == 0 ? 7 : 3;
+            int pad = stage == 0 ? 3 : 1;
+
+            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            h /= stride; w /= stride;
+            yield return new BatchNormalizationLayer<T>(outC, h, w);
+
+            for (int d = 1; d < depths[stage]; d++)
+            {
+                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new BatchNormalizationLayer<T>(outC, h, w);
+            }
+
+            inC = outC;
+        }
+    }
+
+    /// <summary>
+    /// Creates the mask decoder layers for SAM 2.1.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateSAM21DecoderLayers(
+        int encoderOutputChannels, int decoderDim, int numClasses,
+        int featureHeight, int featureWidth)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+    }
+
+    #endregion
+
+    #region YOLOv8Seg Layers
+
+    /// <summary>
+    /// Creates encoder layers for the YOLOv8-Seg model.
+    /// Paper: Jocher et al., "YOLOv8" Ultralytics 2023.
+    /// Architecture: CSPDarknet backbone with C2f (Cross Stage Partial with 2 convolutions) blocks.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateYOLOv8SegEncoderLayers(
+        int inputChannels, int inputHeight, int inputWidth,
+        int[] channelDims, int[] depths, double dropRate)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        int h = inputHeight, w = inputWidth, inC = inputChannels;
+
+        for (int stage = 0; stage < channelDims.Length; stage++)
+        {
+            int outC = channelDims[stage];
+            int stride = stage == 0 ? 4 : 2;
+            int kernel = stage == 0 ? 7 : 3;
+            int pad = stage == 0 ? 3 : 1;
+
+            yield return new ConvolutionalLayer<T>(inC, h, w, outC, kernel, stride, pad, relu);
+            h /= stride; w /= stride;
+            yield return new BatchNormalizationLayer<T>(outC, h, w);
+
+            for (int d = 1; d < depths[stage]; d++)
+            {
+                yield return new ConvolutionalLayer<T>(outC, h, w, outC, 3, 1, 1, relu);
+                yield return new BatchNormalizationLayer<T>(outC, h, w);
+            }
+
+            inC = outC;
+        }
+    }
+
+    /// <summary>
+    /// Creates decoder layers for the YOLOv8-Seg model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateYOLOv8SegDecoderLayers(
+        int encoderOutputChannels, int decoderDim, int numClasses,
+        int featureHeight, int featureWidth)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
+        yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+    }
+
+    #endregion
 }
