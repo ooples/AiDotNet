@@ -27,32 +27,8 @@ public class OpenVoiceV2<T> : TtsModelBase<T>, IEndToEndTts<T>, IVoiceCloner<T>
     }
     public double MinReferenceDuration => 3.0;
     public int SpeakerEmbeddingDim => 256;
-    public Tensor<T> SynthesizeWithVoice(string text, Tensor<T> referenceAudio)
-    {
-        var embedding = ExtractSpeakerEmbedding(referenceAudio);
-        var baseAudio = Synthesize(text);
-        for (int i = 0; i < baseAudio.Length; i++)
-        {
-            int embIdx = i % embedding.Length;
-            double mod = NumOps.ToDouble(embedding[embIdx]) * 0.1;
-            baseAudio[i] = NumOps.FromDouble(NumOps.ToDouble(baseAudio[i]) * (1.0 + mod));
-        }
-        return baseAudio;
-    }
-    public Tensor<T> ExtractSpeakerEmbedding(Tensor<T> referenceAudio)
-    {
-        int embDim = 256;
-        var embedding = new Tensor<T>([embDim]);
-        int chunkSize = Math.Max(1, referenceAudio.Length / embDim);
-        for (int i = 0; i < embDim; i++)
-        {
-            double sum = 0;
-            for (int j = 0; j < chunkSize && i * chunkSize + j < referenceAudio.Length; j++)
-                sum += NumOps.ToDouble(referenceAudio[i * chunkSize + j]);
-            embedding[i] = NumOps.FromDouble(Math.Tanh(sum / chunkSize));
-        }
-        return L2Normalize(embedding);
-    }
+    public Tensor<T> SynthesizeWithVoice(string text, Tensor<T> referenceAudio) { var embedding = ExtractSpeakerEmbedding(referenceAudio); var baseAudio = Synthesize(text); int embDim = embedding.Length; for (int i = 0; i < baseAudio.Length; i++) { double s = NumOps.ToDouble(baseAudio[i]); int d = i % embDim; double spk = NumOps.ToDouble(embedding[d]); double gain = 1.0 + spk * 0.3; double pitch = spk * 0.1; baseAudio[i] = NumOps.FromDouble(Math.Tanh(s * gain + Math.Sin(i * 0.001 + pitch) * 0.05)); } return baseAudio; }
+    public Tensor<T> ExtractSpeakerEmbedding(Tensor<T> referenceAudio) { int embDim = SpeakerEmbeddingDim; var emb = new Tensor<T>([embDim]); int hopLen = Math.Max(1, _options.HopSize); int numFrames = Math.Max(1, referenceAudio.Length / hopLen); for (int d = 0; d < embDim; d++) { double acc = 0; for (int f = 0; f < numFrames; f++) { int idx = Math.Min(f * hopLen + d % hopLen, referenceAudio.Length - 1); double val = NumOps.ToDouble(referenceAudio[idx]); acc += Math.Tanh(val * Math.Sin((d + 1.0) * (f + 1.0) * 0.001) * 0.5); } emb[d] = NumOps.FromDouble(acc / numFrames); } double norm = 0; for (int d = 0; d < embDim; d++) { double v = NumOps.ToDouble(emb[d]); norm += v * v; } norm = Math.Sqrt(norm); if (norm > 1e-8) for (int d = 0; d < embDim; d++) emb[d] = NumOps.FromDouble(NumOps.ToDouble(emb[d]) / norm); return emb; }
     protected override Tensor<T> PreprocessText(string text) { int len = Math.Min(text.Length, _options.MaxTextLength); var t = new Tensor<T>([len]); for (int i = 0; i < len; i++) t[i] = NumOps.FromDouble(text[i] / 128.0); return t; } protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
     protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers); else Layers.AddRange(LayerHelper<T>.CreateDefaultVoiceCloningLayers(_options.SpeakerEmbeddingDim, _options.EncoderDim, _options.DecoderDim, _options.NumEncoderLayers, _options.NumDecoderLayers, _options.NumHeads, _options.DropoutRate)); }
     public override Tensor<T> Predict(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
