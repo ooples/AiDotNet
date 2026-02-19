@@ -299,6 +299,8 @@ public abstract class SegmentationModelBase<T> : NeuralNetworkBase<T>, ISegmenta
     {
         if (!_useNativeMode || Layers.Count == 0) return;
 
+        if (gradient.Rank == 3) gradient = AddBatchDimension(gradient);
+
         for (int i = Layers.Count - 1; i >= 0; i--)
         {
             gradient = Layers[i].Backward(gradient);

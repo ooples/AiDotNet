@@ -210,7 +210,7 @@ public class KMaXDeepLab<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
     }
 
     private void BackwardPass(Tensor<T> gradient)
-    { if (!_useNativeMode || Layers.Count == 0) return; for (int i = Layers.Count - 1; i >= 0; i--) gradient = Layers[i].Backward(gradient); }
+    { if (!_useNativeMode || Layers.Count == 0) return; if (gradient.Rank == 3) gradient = AddBatchDimension(gradient); for (int i = Layers.Count - 1; i >= 0; i--) gradient = Layers[i].Backward(gradient); }
 
     private Tensor<T> AddBatchDimension(Tensor<T> tensor)
     { var result = new Tensor<T>([1, tensor.Shape[0], tensor.Shape[1], tensor.Shape[2]]); tensor.Data.Span.CopyTo(result.Data.Span); return result; }
@@ -332,7 +332,7 @@ public class KMaXDeepLab<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
     int IPanopticSegmentation<T>.NumThingClasses => _numClasses - Math.Max(1, _numClasses / 3);
     PanopticSegmentationResult<T> IPanopticSegmentation<T>.SegmentPanoptic(Tensor<T> image)
     {
-        var logits = Predict(image);
+        var logits = Common.SegmentationTensorOps.EnsureUnbatched(Predict(image));
         var probMap = Common.SegmentationTensorOps.SoftmaxAlongClassDim(logits);
         var semanticMap = Common.SegmentationTensorOps.ArgmaxAlongClassDim(logits);
         int h = semanticMap.Shape[0], w = semanticMap.Shape[1];

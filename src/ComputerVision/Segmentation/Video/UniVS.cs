@@ -210,7 +210,7 @@ public class UniVS<T> : NeuralNetworkBase<T>, IVideoSegmentation<T>
     }
 
     private void BackwardPass(Tensor<T> gradient)
-    { if (!_useNativeMode || Layers.Count == 0) return; for (int i = Layers.Count - 1; i >= 0; i--) gradient = Layers[i].Backward(gradient); }
+    { if (!_useNativeMode || Layers.Count == 0) return; if (gradient.Rank == 3) gradient = AddBatchDimension(gradient); for (int i = Layers.Count - 1; i >= 0; i--) gradient = Layers[i].Backward(gradient); }
 
     private Tensor<T> AddBatchDimension(Tensor<T> tensor)
     { var result = new Tensor<T>([1, tensor.Shape[0], tensor.Shape[1], tensor.Shape[2]]); tensor.Data.Span.CopyTo(result.Data.Span); return result; }
@@ -337,7 +337,7 @@ public class UniVS<T> : NeuralNetworkBase<T>, IVideoSegmentation<T>
     bool IVideoSegmentation<T>.SupportsStreaming => true;
     void IVideoSegmentation<T>.InitializeTracking(Tensor<T> frame, Tensor<T> masks, int[]? objectIds)
     {
-        _trackingFeatures = Predict(frame);
+        _trackingFeatures = Common.SegmentationTensorOps.EnsureUnbatched(Predict(frame));
         _trackingMasks = masks;
         int numObj = masks.Rank >= 3 ? masks.Shape[0] : 1;
         _trackedObjectIds = objectIds ?? Enumerable.Range(1, numObj).ToArray();
@@ -347,7 +347,7 @@ public class UniVS<T> : NeuralNetworkBase<T>, IVideoSegmentation<T>
     VideoSegmentationResult<T> IVideoSegmentation<T>.PropagateToFrame(Tensor<T> frame)
     {
         _frameIndex++;
-        var currentFeatures = Predict(frame);
+        var currentFeatures = Common.SegmentationTensorOps.EnsureUnbatched(Predict(frame));
         int h = currentFeatures.Shape[1], w = currentFeatures.Shape[2];
         var ids = _trackedObjectIds ?? [1];
         int numObj = ids.Length;

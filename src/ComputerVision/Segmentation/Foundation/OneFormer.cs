@@ -293,6 +293,7 @@ public class OneFormer<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
     private void BackwardPass(Tensor<T> gradient)
     {
         if (!_useNativeMode || Layers.Count == 0) return;
+        if (gradient.Rank == 3) gradient = AddBatchDimension(gradient);
         for (int i = Layers.Count - 1; i >= 0; i--) gradient = Layers[i].Backward(gradient);
     }
 
@@ -483,7 +484,7 @@ public class OneFormer<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
 
     PanopticSegmentationResult<T> IPanopticSegmentation<T>.SegmentPanoptic(Tensor<T> image)
     {
-        var logits = Predict(image);
+        var logits = Common.SegmentationTensorOps.EnsureUnbatched(Predict(image));
         var probMap = Common.SegmentationTensorOps.SoftmaxAlongClassDim(logits);
         var semanticMap = Common.SegmentationTensorOps.ArgmaxAlongClassDim(logits);
         int h = semanticMap.Shape[0], w = semanticMap.Shape[1];
