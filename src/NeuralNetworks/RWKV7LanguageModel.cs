@@ -1,59 +1,72 @@
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
+using AiDotNet.NeuralNetworks.Layers.SSM;
 
-namespace AiDotNet.NeuralNetworks.Layers.SSM;
+namespace AiDotNet.NeuralNetworks;
 
 /// <summary>
-/// Implements a full Mamba language model: token embedding + N MambaBlocks + RMS normalization + LM head.
+/// Implements a full RWKV-7 "Goose" language model: token embedding + N RWKV7Blocks + RMS normalization + LM head.
 /// </summary>
 /// <remarks>
 /// <para>
-/// This assembles the complete Mamba architecture as described in the original paper:
+/// This assembles the complete RWKV-7 architecture as described in the paper:
 /// <code>
-///   1. Token Embedding: token indices → dense vectors [batch, seqLen, modelDim]
-///   2. N × MambaBlock: selective scan processing with residual connections
+///   1. Token Embedding: token indices -> dense vectors [batch, seqLen, modelDim]
+///   2. N x RWKV7Block: WKV-7 time mixing + SiLU channel mixing with residual connections
 ///   3. RMS Normalization: final layer normalization
 ///   4. LM Head: dense projection to vocabulary logits [batch, seqLen, vocabSize]
 /// </code>
 /// </para>
 /// <para>
-/// The model supports autoregressive generation via <see cref="SSMStateCache{T}"/>. During inference,
-/// previously computed hidden states are cached so only the new token needs to be processed per step,
-/// giving O(1) per-token generation cost (compared to O(n) for Transformers without KV-cache).
+/// The model supports two execution modes:
+/// <list type="bullet">
+///   <item><b>Parallel mode</b>: process full sequences for training (Forward/Backward)</item>
+///   <item><b>Sequential mode</b>: process one token at a time for inference (GenerateStep),
+///     using cached recurrent states for O(1) per-token cost</item>
+/// </list>
 /// </para>
-/// <para><b>For Beginners:</b> This is a complete text generation model built entirely from Mamba blocks.
+/// <para>
+/// RWKV-7 key innovations over previous versions:
+/// <list type="bullet">
+///   <item>Dynamic state evolution with learnable transition matrices a_t, b_t</item>
+///   <item>State: S_t = diag(sigmoid(a_t)) * S_{t-1} + sigmoid(b_t) * outer(k_t, v_t)</item>
+///   <item>Group normalization on WKV output for training stability</item>
+///   <item>SiLU channel mixing replacing squared ReLU</item>
+/// </list>
+/// </para>
+/// <para><b>For Beginners:</b> This is a complete text generation model built from RWKV-7 blocks.
 ///
 /// How it works:
 /// 1. Each word/token is converted to a vector of numbers (embedding)
-/// 2. These vectors pass through several Mamba layers, which understand context
+/// 2. These vectors pass through several RWKV-7 layers that understand context
 /// 3. The final output is a probability distribution over all possible next words
 ///
 /// What makes it special:
-/// - Linear time complexity: processes 10x longer text in the same time as Transformers
-/// - Constant memory per token during generation (via state caching)
+/// - Linear time complexity: processes longer text without quadratic slowdown
+/// - Constant memory per token during generation (via recurrent state caching)
+/// - Dynamic memory management: the model learns when to remember and forget
 /// - Competitive quality with Transformer models of similar size
 ///
-/// Real-world examples: Falcon Mamba 7B, Mamba-2 models, and various research models.
+/// Real-world usage: RWKV-7 "Goose" models range from 0.1B to 7B+ parameters.
 /// </para>
 /// <para>
-/// <b>Reference:</b> Gu and Dao, "Mamba: Linear-Time Sequence Modeling with Selective State Spaces", 2024.
-/// https://arxiv.org/abs/2312.00752
+/// <b>Reference:</b> Peng et al., "RWKV-7 Goose with Expressive Dynamic State Evolution", 2025.
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class MambaLanguageModel<T> : LayerBase<T>
+public class RWKV7LanguageModel<T> : LayerBase<T>
 {
     private readonly int _vocabSize;
     private readonly int _modelDimension;
     private readonly int _numLayers;
-    private readonly int _stateDimension;
-    private readonly int _expandFactor;
+    private readonly int _numHeads;
+    private readonly double _ffnMultiplier;
 
     // Token embedding: [vocabSize, modelDim]
     private Tensor<T> _embeddingWeights;
 
-    // Stack of Mamba blocks
-    private readonly MambaBlock<T>[] _blocks;
+    // Stack of RWKV-7 blocks
+    private readonly RWKV7Block<T>[] _blocks;
 
     // Final RMS normalization
     private Tensor<T> _finalNormGamma;
@@ -61,9 +74,6 @@ public class MambaLanguageModel<T> : LayerBase<T>
     // LM head (output projection): [modelDim, vocabSize]
     private Tensor<T> _lmHeadWeights;
     private Tensor<T> _lmHeadBias;
-
-    // State cache for autoregressive generation
-    private SSMStateCache<T>? _stateCache;
 
     // Cached values for backward pass
     private Tensor<T>? _lastInput;
@@ -79,52 +89,31 @@ public class MambaLanguageModel<T> : LayerBase<T>
     private Tensor<T>? _lmHeadWeightsGradient;
     private Tensor<T>? _lmHeadBiasGradient;
 
+    // Whether state cache is active for sequential generation
+    private bool _isGenerating;
+
     /// <inheritdoc />
     public override bool SupportsTraining => true;
 
-    /// <summary>
-    /// Gets the vocabulary size.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This is the total number of different words/tokens the model can recognize.
-    /// Common values are 32000 (LLaMA), 50257 (GPT-2), or 100000+ for multilingual models.</para>
-    /// </remarks>
+    /// <summary>Gets the vocabulary size.</summary>
     public int VocabSize => _vocabSize;
 
-    /// <summary>
-    /// Gets the model dimension (d_model).
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> The width of the model's hidden representation. Larger values allow the model
-    /// to capture more complex patterns but require more memory and computation.</para>
-    /// </remarks>
+    /// <summary>Gets the model dimension (d_model).</summary>
     public int ModelDimension => _modelDimension;
 
-    /// <summary>
-    /// Gets the number of Mamba layers.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> The depth of the model. More layers allow the model to learn more
-    /// abstract patterns, but add to both parameter count and inference time.</para>
-    /// </remarks>
+    /// <summary>Gets the number of RWKV-7 blocks.</summary>
     public int NumLayers => _numLayers;
 
-    /// <summary>
-    /// Gets the SSM state dimension.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> The memory capacity per position in each Mamba layer. Larger values
-    /// let the model remember more context at each step. 16 is the standard default.</para>
-    /// </remarks>
-    public int StateDimension => _stateDimension;
+    /// <summary>Gets the number of attention heads per block.</summary>
+    public int NumHeads => _numHeads;
 
-    /// <summary>
-    /// Gets the total number of trainable parameters.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> The total count of numbers the model can adjust during training.
-    /// More parameters generally means more capacity but also more memory and compute required.</para>
-    /// </remarks>
+    /// <summary>Gets the FFN expansion multiplier.</summary>
+    public double FFNMultiplier => _ffnMultiplier;
+
+    /// <summary>Gets whether the model is in sequential generation mode.</summary>
+    public bool IsGenerating => _isGenerating;
+
+    /// <inheritdoc />
     public override int ParameterCount
     {
         get
@@ -139,40 +128,40 @@ public class MambaLanguageModel<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Creates a new Mamba language model.
+    /// Creates a new RWKV-7 "Goose" language model.
     /// </summary>
     /// <param name="vocabSize">
-    /// Size of the token vocabulary. Typical: 32000 (LLaMA), 50257 (GPT-2).
-    /// <para><b>For Beginners:</b> How many different words/tokens the model knows.
-    /// Common tokenizers use 32K-50K tokens.</para>
+    /// Size of the token vocabulary. Typical: 65536 for RWKV-7 models.
+    /// <para><b>For Beginners:</b> How many different words/tokens the model knows.</para>
     /// </param>
     /// <param name="modelDimension">
     /// Model dimension (d_model). Default: 256.
-    /// <para><b>For Beginners:</b> Width of the hidden representation. Larger = more capacity.
-    /// Mamba-130M uses 768, Mamba-1.4B uses 2048.</para>
+    /// <para><b>For Beginners:</b> Width of the hidden representation. RWKV-7 0.1B uses 768,
+    /// 1.5B uses 2048, 7B uses 4096.</para>
     /// </param>
     /// <param name="numLayers">
-    /// Number of Mamba blocks. Default: 4.
-    /// <para><b>For Beginners:</b> Depth of the network. More layers = deeper understanding.
-    /// Mamba-130M uses 24 layers, Mamba-1.4B uses 48 layers.</para>
+    /// Number of RWKV-7 blocks. Default: 4.
+    /// <para><b>For Beginners:</b> Depth of the network. RWKV-7 0.1B uses 12 layers,
+    /// 1.5B uses 24, 7B uses 32.</para>
     /// </param>
-    /// <param name="stateDimension">
-    /// SSM state dimension (N). Default: 16.
-    /// <para><b>For Beginners:</b> Memory capacity per position. 16 is the standard default.</para>
+    /// <param name="numHeads">
+    /// Number of heads per block. Default: 4. Must divide modelDimension.
+    /// <para><b>For Beginners:</b> Splits the hidden representation into multiple "perspectives"
+    /// for the recurrent state. Head size is typically 64.</para>
     /// </param>
-    /// <param name="expandFactor">
-    /// Expansion factor for inner dimension. Default: 2.
-    /// <para><b>For Beginners:</b> How much the dimension expands inside each Mamba block. 2 is standard.</para>
+    /// <param name="ffnMultiplier">
+    /// FFN expansion multiplier. Default: 3.5 (RWKV-7 standard).
+    /// <para><b>For Beginners:</b> How much wider the feed-forward network is compared to the
+    /// model dimension. 3.5x is the RWKV-7 default.</para>
     /// </param>
     /// <param name="maxSeqLength">Maximum sequence length. Default: 512.</param>
     /// <param name="activationFunction">Optional activation function on final output.</param>
-    /// <exception cref="ArgumentException">When parameters are invalid.</exception>
-    public MambaLanguageModel(
+    public RWKV7LanguageModel(
         int vocabSize,
         int modelDimension = 256,
         int numLayers = 4,
-        int stateDimension = 16,
-        int expandFactor = 2,
+        int numHeads = 4,
+        double ffnMultiplier = 3.5,
         int maxSeqLength = 512,
         IActivationFunction<T>? activationFunction = null)
         : base(
@@ -186,29 +175,31 @@ public class MambaLanguageModel<T> : LayerBase<T>
             throw new ArgumentException($"Model dimension ({modelDimension}) must be positive.", nameof(modelDimension));
         if (numLayers <= 0)
             throw new ArgumentException($"Number of layers ({numLayers}) must be positive.", nameof(numLayers));
-        if (stateDimension <= 0)
-            throw new ArgumentException($"State dimension ({stateDimension}) must be positive.", nameof(stateDimension));
-        if (expandFactor <= 0)
-            throw new ArgumentException($"Expand factor ({expandFactor}) must be positive.", nameof(expandFactor));
+        if (numHeads <= 0)
+            throw new ArgumentException($"Number of heads ({numHeads}) must be positive.", nameof(numHeads));
+        if (modelDimension % numHeads != 0)
+            throw new ArgumentException($"Model dimension ({modelDimension}) must be divisible by numHeads ({numHeads}).", nameof(numHeads));
+        if (ffnMultiplier <= 0)
+            throw new ArgumentException($"FFN multiplier ({ffnMultiplier}) must be positive.", nameof(ffnMultiplier));
         if (maxSeqLength <= 0)
             throw new ArgumentException($"Max sequence length ({maxSeqLength}) must be positive.", nameof(maxSeqLength));
 
         _vocabSize = vocabSize;
         _modelDimension = modelDimension;
         _numLayers = numLayers;
-        _stateDimension = stateDimension;
-        _expandFactor = expandFactor;
+        _numHeads = numHeads;
+        _ffnMultiplier = ffnMultiplier;
 
         // Token embedding
         _embeddingWeights = new Tensor<T>(new[] { vocabSize, modelDimension });
         InitializeTensor(_embeddingWeights);
 
-        // Mamba blocks
-        _blocks = new MambaBlock<T>[numLayers];
+        // RWKV-7 blocks
+        _blocks = new RWKV7Block<T>[numLayers];
         for (int i = 0; i < numLayers; i++)
         {
-            _blocks[i] = new MambaBlock<T>(
-                maxSeqLength, modelDimension, stateDimension, expandFactor);
+            _blocks[i] = new RWKV7Block<T>(
+                maxSeqLength, modelDimension, numHeads, ffnMultiplier);
         }
 
         // Final RMS normalization
@@ -227,12 +218,8 @@ public class MambaLanguageModel<T> : LayerBase<T>
         int fanIn = tensor.Shape[0];
         int fanOut = tensor.Shape[1];
         T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (fanIn + fanOut)));
-
         for (int i = 0; i < tensor.Length; i++)
-        {
-            tensor[i] = NumOps.Multiply(
-                NumOps.FromDouble(Random.NextDouble() - 0.5), scale);
-        }
+            tensor[i] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), scale);
     }
 
     /// <inheritdoc />
@@ -255,20 +242,18 @@ public class MambaLanguageModel<T> : LayerBase<T>
 
         _lastInput = input3D;
 
-        // Validate input vocab dimension matches embedding
         if (inputDim != _vocabSize)
             throw new ArgumentException(
                 $"Input last dimension ({inputDim}) must match vocab size ({_vocabSize}).",
                 nameof(input));
 
-        // Step 1: Token embedding (input is one-hot or soft indices -> dense projection)
-        // input: [batch, seqLen, vocabSize], embedding: [vocabSize, modelDim]
+        // Step 1: Token embedding
         var inputFlat = input3D.Reshape(batchSize * seqLen, inputDim);
         var embedded = Engine.TensorMatMul(inputFlat, _embeddingWeights);
         var embedded3D = embedded.Reshape(batchSize, seqLen, _modelDimension);
         _lastEmbedded = embedded3D;
 
-        // Step 2: Pass through Mamba blocks with residual connections
+        // Step 2: Pass through RWKV-7 blocks with residual connections
         _lastBlockInputs = new Tensor<T>[_numLayers];
         var current = embedded3D;
 
@@ -276,14 +261,16 @@ public class MambaLanguageModel<T> : LayerBase<T>
         {
             _lastBlockInputs[i] = current;
             var blockOut = _blocks[i].Forward(current);
-            current = Engine.TensorAdd(current, blockOut); // Residual connection
+            // RWKV blocks have internal residual connections, but we also keep
+            // the option for an outer residual if the block output has same shape
+            current = blockOut;
         }
 
         // Step 3: Final RMS normalization
         var normed = ApplyRMSNorm(current, _finalNormGamma, batchSize, seqLen);
         _lastNormedOutput = normed;
 
-        // Step 4: LM head projection to vocab logits
+        // Step 4: LM head projection
         var normedFlat = normed.Reshape(batchSize * seqLen, _modelDimension);
         var logitsFlat = Engine.TensorMatMul(normedFlat, _lmHeadWeights);
         var bias2D = _lmHeadBias.Reshape(1, _vocabSize);
@@ -313,7 +300,6 @@ public class MambaLanguageModel<T> : LayerBase<T>
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
         }
 
-        int rank = outputGradient.Shape.Length;
         int batchSize = _lastInput.Shape[0];
         int seqLen = _lastInput.Shape[1];
 
@@ -339,13 +325,11 @@ public class MambaLanguageModel<T> : LayerBase<T>
             _finalNormGamma, batchSize, seqLen, out var dFinalGamma);
         _finalNormGammaGradient = dFinalGamma;
 
-        // Step 2 backward: Mamba blocks in reverse
+        // Step 2 backward: RWKV-7 blocks in reverse
         var current = dPostBlocks;
         for (int i = _numLayers - 1; i >= 0; i--)
         {
-            // Residual: gradient flows directly + through block
-            var blockGrad = _blocks[i].Backward(current);
-            current = Engine.TensorAdd(current, blockGrad);
+            current = _blocks[i].Backward(current);
         }
 
         // Step 1 backward: Embedding
@@ -384,9 +368,7 @@ public class MambaLanguageModel<T> : LayerBase<T>
             {
                 T rms = NumOps.Sqrt(NumOps.Add(NumOps.Divide(meanSquared[new[] { b }], divisor), eps));
                 for (int d = 0; d < _modelDimension; d++)
-                {
                     normed[new[] { b, d }] = NumOps.Divide(slice[new[] { b, d }], rms);
-                }
             }
 
             var scaled = Engine.TensorBroadcastMultiply(normed, gamma2D);
@@ -450,6 +432,109 @@ public class MambaLanguageModel<T> : LayerBase<T>
         return dInput;
     }
 
+    /// <summary>
+    /// Initializes the model for sequential token-by-token generation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Call this before starting generation with <see cref="GenerateStep"/>.
+    /// Resets all block recurrent states so generation starts fresh.
+    /// </para>
+    /// <para><b>For Beginners:</b> Before generating text one word at a time, call this
+    /// to prepare the model's memory. Each block will start with a blank slate.</para>
+    /// </remarks>
+    public void InitializeGeneration()
+    {
+        _isGenerating = true;
+        foreach (var block in _blocks)
+        {
+            block.SetRecurrentState(null);
+            block.SetPreviousToken(null);
+        }
+    }
+
+    /// <summary>
+    /// Performs a single autoregressive generation step.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Processes a single token through the full model stack, using each block's cached recurrent
+    /// state from the previous step. This gives O(1) per-token cost.
+    /// </para>
+    /// <para><b>For Beginners:</b> Generates one word at a time. For each word:
+    /// 1. Convert the current word to a vector
+    /// 2. Pass through all RWKV-7 blocks (using saved memory from previous words)
+    /// 3. Output probabilities for what the next word should be
+    /// </para>
+    /// </remarks>
+    /// <param name="tokenOneHot">
+    /// One-hot encoded token [vocabSize] or [1, vocabSize].
+    /// </param>
+    /// <returns>Logits over the vocabulary [vocabSize].</returns>
+    public Tensor<T> GenerateStep(Tensor<T> tokenOneHot)
+    {
+        if (!_isGenerating)
+            throw new InvalidOperationException(
+                "Generation mode must be initialized. Call InitializeGeneration() first.");
+
+        int tokenDim = tokenOneHot.Shape[tokenOneHot.Rank - 1];
+        if (tokenDim != _vocabSize)
+            throw new ArgumentException(
+                $"Token one-hot last dimension ({tokenDim}) must match vocab size ({_vocabSize}).",
+                nameof(tokenOneHot));
+
+        var input2D = tokenOneHot.Rank == 1
+            ? tokenOneHot.Reshape(1, _vocabSize)
+            : tokenOneHot;
+
+        // Step 1: Embed
+        var embedded = Engine.TensorMatMul(input2D, _embeddingWeights);  // [1, modelDim]
+
+        // Step 2: Process through RWKV-7 blocks (each maintains its own recurrent state)
+        var current = embedded.Reshape(1, 1, _modelDimension);  // [1, 1, modelDim]
+        for (int i = 0; i < _numLayers; i++)
+        {
+            current = _blocks[i].Forward(current);
+        }
+
+        // Step 3: Final RMS norm
+        var normed = ApplyRMSNorm(current, _finalNormGamma, 1, 1);
+        var normed2D = normed.Reshape(1, _modelDimension);
+
+        // Step 4: LM head
+        var logits = Engine.TensorMatMul(normed2D, _lmHeadWeights);
+        var bias2D = _lmHeadBias.Reshape(1, _vocabSize);
+        logits = Engine.TensorBroadcastAdd(logits, bias2D);
+
+        var result = ApplyActivation(logits);
+        return result.Reshape(_vocabSize);
+    }
+
+    /// <inheritdoc />
+    public override void UpdateParameters(T learningRate)
+    {
+        if (_embeddingWeightsGradient == null)
+            throw new InvalidOperationException("Backward pass must be called before updating parameters.");
+
+        T negLR = NumOps.Negate(learningRate);
+
+        _embeddingWeights = Engine.TensorAdd(_embeddingWeights,
+            Engine.TensorMultiplyScalar(_embeddingWeightsGradient, negLR));
+
+        foreach (var block in _blocks)
+            block.UpdateParameters(learningRate);
+
+        if (_finalNormGammaGradient != null)
+            _finalNormGamma = Engine.TensorAdd(_finalNormGamma,
+                Engine.TensorMultiplyScalar(_finalNormGammaGradient, negLR));
+        if (_lmHeadWeightsGradient != null)
+            _lmHeadWeights = Engine.TensorAdd(_lmHeadWeights,
+                Engine.TensorMultiplyScalar(_lmHeadWeightsGradient, negLR));
+        if (_lmHeadBiasGradient != null)
+            _lmHeadBias = Engine.TensorAdd(_lmHeadBias,
+                Engine.TensorMultiplyScalar(_lmHeadBiasGradient, negLR));
+    }
+
     /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
@@ -509,28 +594,6 @@ public class MambaLanguageModel<T> : LayerBase<T>
     }
 
     /// <inheritdoc />
-    public override void UpdateParameters(T learningRate)
-    {
-        if (_embeddingWeightsGradient == null)
-            throw new InvalidOperationException("Backward pass must be called before updating parameters.");
-
-        T negLR = NumOps.Negate(learningRate);
-
-        _embeddingWeights = Engine.TensorAdd(_embeddingWeights,
-            Engine.TensorMultiplyScalar(_embeddingWeightsGradient, negLR));
-
-        foreach (var block in _blocks)
-            block.UpdateParameters(learningRate);
-
-        _finalNormGamma = Engine.TensorAdd(_finalNormGamma,
-            Engine.TensorMultiplyScalar(_finalNormGammaGradient!, negLR));
-        _lmHeadWeights = Engine.TensorAdd(_lmHeadWeights,
-            Engine.TensorMultiplyScalar(_lmHeadWeightsGradient!, negLR));
-        _lmHeadBias = Engine.TensorAdd(_lmHeadBias,
-            Engine.TensorMultiplyScalar(_lmHeadBiasGradient!, negLR));
-    }
-
-    /// <inheritdoc />
     public override void ResetState()
     {
         _lastInput = null;
@@ -543,149 +606,10 @@ public class MambaLanguageModel<T> : LayerBase<T>
         _finalNormGammaGradient = null;
         _lmHeadWeightsGradient = null;
         _lmHeadBiasGradient = null;
-
-        _stateCache?.Reset();
+        _isGenerating = false;
 
         foreach (var block in _blocks)
             block.ResetState();
-    }
-
-    /// <summary>
-    /// Initializes the state cache for autoregressive generation.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Call this before starting token-by-token generation with <see cref="GenerateStep"/>.
-    /// The cache stores SSM hidden states so each new token only requires O(1) computation,
-    /// rather than re-processing the entire sequence.
-    /// </para>
-    /// <para><b>For Beginners:</b> Before generating text one word at a time, call this method
-    /// to set up the "memory" that will store the model's state between words. Without this,
-    /// the model would have to re-read everything from the start for each new word.</para>
-    /// </remarks>
-    /// <param name="enableCompression">
-    /// Whether to compress cached states to save memory. Default: false.
-    /// <para><b>For Beginners:</b> Enable this when generating very long sequences to reduce
-    /// memory usage at a small cost to precision.</para>
-    /// </param>
-    /// <param name="compressionBitWidth">Bit width for compressed states. Default: 8.</param>
-    /// <returns>The initialized state cache, which is also stored internally.</returns>
-    public SSMStateCache<T> InitializeStateCache(bool enableCompression = false, int compressionBitWidth = 8)
-    {
-        _stateCache = new SSMStateCache<T>(enableCompression, compressionBitWidth);
-        for (int i = 0; i < _numLayers; i++)
-        {
-            _blocks[i].ResetState();
-        }
-        return _stateCache;
-    }
-
-    /// <summary>
-    /// Gets the current state cache, or null if not initialized.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Returns the model's current memory cache used during
-    /// token-by-token generation. Null if <see cref="InitializeStateCache"/> hasn't been called.</para>
-    /// </remarks>
-    public SSMStateCache<T>? StateCache => _stateCache;
-
-    /// <summary>
-    /// Performs a single autoregressive generation step, processing one token and returning logits.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method processes a single token through the full model stack, using cached hidden states
-    /// from previous steps. The SSM hidden state is updated in-place in the cache after each layer.
-    /// This gives O(1) per-token cost compared to O(n) for full sequence reprocessing.
-    /// </para>
-    /// <para>
-    /// The flow for each step:
-    /// 1. Embed the token: one-hot → dense vector
-    /// 2. For each Mamba layer: retrieve cached state → process token → update cache
-    /// 3. Apply final normalization
-    /// 4. Project to vocabulary logits
-    /// </para>
-    /// <para><b>For Beginners:</b> This generates one word at a time. For each word:
-    /// 1. Convert the current word to a vector
-    /// 2. Pass it through all Mamba layers (using saved memory from previous words)
-    /// 3. Output probabilities for what the next word should be
-    ///
-    /// The key advantage: each new word only takes a fixed amount of time to process,
-    /// no matter how many words have been generated before.
-    /// </para>
-    /// </remarks>
-    /// <param name="tokenOneHot">
-    /// One-hot encoded token [vocabSize] or [1, vocabSize].
-    /// <para><b>For Beginners:</b> The current word represented as a vector where only one position
-    /// is 1 (the word's index) and all others are 0.</para>
-    /// </param>
-    /// <returns>Logits over the vocabulary [vocabSize] representing next-token probabilities.</returns>
-    /// <exception cref="InvalidOperationException">If state cache has not been initialized.</exception>
-    public Tensor<T> GenerateStep(Tensor<T> tokenOneHot)
-    {
-        if (_stateCache == null)
-            throw new InvalidOperationException(
-                "State cache must be initialized before generation. Call InitializeStateCache() first.");
-
-        // Validate input shape
-        int tokenDim = tokenOneHot.Shape[tokenOneHot.Rank - 1];
-        if (tokenDim != _vocabSize)
-            throw new ArgumentException(
-                $"Token one-hot last dimension ({tokenDim}) must match vocab size ({_vocabSize}).",
-                nameof(tokenOneHot));
-
-        // Normalize input to [1, vocabSize]
-        var input2D = tokenOneHot.Rank == 1
-            ? tokenOneHot.Reshape(1, _vocabSize)
-            : tokenOneHot;
-
-        // Step 1: Embed the token
-        var embedded = Engine.TensorMatMul(input2D, _embeddingWeights); // [1, modelDim]
-
-        // Step 2: Process through Mamba blocks with cached state
-        var current = embedded;
-        for (int i = 0; i < _numLayers; i++)
-        {
-            var residual = current;
-
-            // Restore cached hidden state into the block before forward
-            var cachedState = _stateCache.GetSSMState(i);
-            if (cachedState != null)
-            {
-                _blocks[i].SetHiddenState(cachedState);
-            }
-
-            // Reshape for MambaBlock: [1, 1, modelDim] (batch=1, seqLen=1, dim=modelDim)
-            var block3D = current.Reshape(1, 1, _modelDimension);
-            var blockOut = _blocks[i].Forward(block3D); // [1, 1, modelDim]
-            var blockOut2D = blockOut.Reshape(1, _modelDimension);
-
-            // Cache the SSM hidden state from this block for next step
-            var blockState = _blocks[i].GetHiddenState();
-            if (blockState != null)
-            {
-                // Extract the final timestep state: [batch, innerDim, stateDim]
-                // Hidden states shape is [batch, seqLen+1, innerDim, stateDim], take last timestep
-                var finalState = blockState.GetSliceAlongDimension(blockState.Shape[1] - 1, 1);
-                _stateCache.CacheSSMState(i, finalState);
-            }
-
-            // Residual connection
-            current = Engine.TensorAdd(residual, blockOut2D);
-        }
-
-        // Step 3: Final RMS normalization on [1, modelDim]
-        var normed = ApplyRMSNorm(current.Reshape(1, 1, _modelDimension),
-            _finalNormGamma, 1, 1);
-        var normed2D = normed.Reshape(1, _modelDimension);
-
-        // Step 4: LM head projection
-        var logits = Engine.TensorMatMul(normed2D, _lmHeadWeights); // [1, vocabSize]
-        var bias2D = _lmHeadBias.Reshape(1, _vocabSize);
-        logits = Engine.TensorBroadcastAdd(logits, bias2D);
-
-        var result = ApplyActivation(logits);
-        return result.Reshape(_vocabSize);
     }
 
     /// <inheritdoc />
@@ -697,38 +621,30 @@ public class MambaLanguageModel<T> : LayerBase<T>
         if (inputNodes == null)
             throw new ArgumentNullException(nameof(inputNodes));
 
-        // Input: [1, vocabSize] one-hot token
         var inputPlaceholder = new Tensor<T>(new int[] { 1, _vocabSize });
-        var inputNode = TensorOperations<T>.Variable(inputPlaceholder, "token_input");
+        var inputNode = TensorOperations<T>.Variable(inputPlaceholder, "rwkv7_token_input");
         inputNodes.Add(inputNode);
 
-        // Embedding lookup (matmul with embedding matrix)
-        var embWeightsNode = TensorOperations<T>.Variable(_embeddingWeights, "W_emb");
+        var embWeightsNode = TensorOperations<T>.Variable(_embeddingWeights, "rwkv7_W_emb");
         inputNodes.Add(embWeightsNode);
         var embedded = TensorOperations<T>.MatrixMultiply(inputNode, embWeightsNode);
 
-        // Chain Mamba block computation graphs
         var current = embedded;
         for (int i = 0; i < _numLayers; i++)
         {
             var blockInputs = new List<ComputationNode<T>> { current };
             var blockOutput = _blocks[i].ExportComputationGraph(blockInputs);
             inputNodes.AddRange(blockInputs.GetRange(1, blockInputs.Count - 1));
-
-            // Residual connection
             current = TensorOperations<T>.Add(current, blockOutput);
         }
 
-        // LM head projection
-        var lmWeightsNode = TensorOperations<T>.Variable(_lmHeadWeights, "W_lm");
-        var lmBiasNode = TensorOperations<T>.Variable(_lmHeadBias, "b_lm");
+        var lmWeightsNode = TensorOperations<T>.Variable(_lmHeadWeights, "rwkv7_W_lm");
+        var lmBiasNode = TensorOperations<T>.Variable(_lmHeadBias, "rwkv7_b_lm");
         inputNodes.Add(lmWeightsNode);
         inputNodes.Add(lmBiasNode);
 
         var logits = TensorOperations<T>.MatrixMultiply(current, lmWeightsNode);
-        var output = TensorOperations<T>.Add(logits, lmBiasNode);
-
-        return output;
+        return TensorOperations<T>.Add(logits, lmBiasNode);
     }
 
     internal override Dictionary<string, string> GetMetadata()
@@ -737,8 +653,9 @@ public class MambaLanguageModel<T> : LayerBase<T>
         metadata["VocabSize"] = _vocabSize.ToString();
         metadata["ModelDimension"] = _modelDimension.ToString();
         metadata["NumLayers"] = _numLayers.ToString();
-        metadata["StateDimension"] = _stateDimension.ToString();
-        metadata["ExpandFactor"] = _expandFactor.ToString();
+        metadata["NumHeads"] = _numHeads.ToString();
+        metadata["FFNMultiplier"] = _ffnMultiplier.ToString("F1");
+        metadata["Architecture"] = "RWKV-7-Goose";
         return metadata;
     }
 }
