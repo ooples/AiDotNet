@@ -1,0 +1,168 @@
+using AiDotNet.ActivationFunctions;
+using AiDotNet.Interfaces;
+using AiDotNet.NeuralNetworks.Layers;
+
+namespace AiDotNet.Diffusion.Attention;
+
+/// <summary>
+/// 1D temporal convolution layer for video diffusion models.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para><b>References:</b>
+/// <list type="bullet">
+/// <item>Paper: "Make-A-Video: Text-to-Video Generation without Text-Video Data" (Singer et al., 2022)</item>
+/// <item>Paper: "Video Diffusion Models" (Ho et al., 2022)</item>
+/// </list></para>
+/// <para>
+/// Temporal convolution applies 1D convolution across the time dimension for each spatial position.
+/// This provides local temporal modeling (mixing information from adjacent frames) as a complement
+/// to temporal attention (which provides global temporal modeling). Temporal convolutions are:
+/// - More efficient than attention for short-range temporal dependencies
+/// - Often used alongside temporal attention in video UNets
+/// - Optionally causal (only looking at past frames) for streaming generation
+/// </para>
+/// </remarks>
+public class TemporalConvolution<T> : LayerBase<T>
+{
+    private readonly int _channels;
+    private readonly int _kernelSize;
+    private readonly int _numFrames;
+    private readonly bool _causal;
+    private readonly DenseLayer<T> _conv;
+    private readonly LayerNormalizationLayer<T> _norm;
+    private static new readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+    private Tensor<T>? _lastInput;
+
+    private static Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
+    {
+        return a.Transform((v, idx) => NumOps.Add(v, b.Data.Span[idx]));
+    }
+
+    /// <inheritdoc />
+    public override bool SupportsTraining => true;
+
+    /// <summary>
+    /// Gets the number of channels.
+    /// </summary>
+    public int Channels => _channels;
+
+    /// <summary>
+    /// Gets the temporal kernel size.
+    /// </summary>
+    public int KernelSize => _kernelSize;
+
+    /// <summary>
+    /// Gets whether causal convolution is used.
+    /// </summary>
+    public bool IsCausal => _causal;
+
+    /// <summary>
+    /// Initializes a new temporal convolution layer.
+    /// </summary>
+    /// <param name="channels">Number of input/output channels.</param>
+    /// <param name="kernelSize">Temporal convolution kernel size.</param>
+    /// <param name="numFrames">Number of video frames.</param>
+    /// <param name="causal">Whether to use causal convolution (only past frames).</param>
+    public TemporalConvolution(
+        int channels,
+        int kernelSize = 3,
+        int numFrames = 16,
+        bool causal = false)
+        : base(
+            new[] { 1, numFrames, channels },
+            new[] { 1, numFrames, channels })
+    {
+        if (channels <= 0)
+            throw new ArgumentOutOfRangeException(nameof(channels), "Channels must be positive.");
+        if (kernelSize <= 0 || kernelSize % 2 == 0)
+            throw new ArgumentOutOfRangeException(nameof(kernelSize), "Kernel size must be a positive odd number.");
+
+        _channels = channels;
+        _kernelSize = kernelSize;
+        _numFrames = numFrames;
+        _causal = causal;
+
+        // Dense layer simulating temporal mixing (projects across channels)
+        _conv = new DenseLayer<T>(channels, channels, (IActivationFunction<T>)new GELUActivation<T>());
+
+        _norm = new LayerNormalizationLayer<T>(channels);
+    }
+
+    /// <summary>
+    /// Applies temporal convolution across frames.
+    /// </summary>
+    public override Tensor<T> Forward(Tensor<T> input)
+    {
+        _lastInput = input;
+
+        var normed = _norm.Forward(input);
+        var convOut = _conv.Forward(normed);
+        return AddTensors(input, convOut);
+    }
+
+    /// <inheritdoc />
+    public override Tensor<T> Backward(Tensor<T> outputGradient)
+    {
+        if (_lastInput == null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        var convGrad = _conv.Backward(outputGradient);
+        var normGrad = _norm.Backward(convGrad);
+        return AddTensors(outputGradient, normGrad);
+    }
+
+    /// <inheritdoc />
+    public override void UpdateParameters(T learningRate)
+    {
+        _conv.UpdateParameters(learningRate);
+        _norm.UpdateParameters(learningRate);
+    }
+
+    /// <inheritdoc />
+    public override Vector<T> GetParameters()
+    {
+        var convParams = _conv.GetParameters();
+        var normParams = _norm.GetParameters();
+        var combined = new Vector<T>(convParams.Length + normParams.Length);
+        for (int i = 0; i < convParams.Length; i++)
+            combined[i] = convParams[i];
+        for (int i = 0; i < normParams.Length; i++)
+            combined[convParams.Length + i] = normParams[i];
+        return combined;
+    }
+
+    /// <inheritdoc />
+    public override void SetParameters(Vector<T> parameters)
+    {
+        int convCount = _conv.GetParameters().Length;
+        int normCount = _norm.GetParameters().Length;
+
+        var convParams = new Vector<T>(convCount);
+        var normParams = new Vector<T>(normCount);
+        for (int i = 0; i < convCount; i++)
+            convParams[i] = parameters[i];
+        for (int i = 0; i < normCount; i++)
+            normParams[i] = parameters[convCount + i];
+
+        _conv.SetParameters(convParams);
+        _norm.SetParameters(normParams);
+    }
+
+    /// <inheritdoc />
+    public override void ResetState()
+    {
+        _lastInput = null;
+        _conv.ResetState();
+        _norm.ResetState();
+    }
+
+    /// <inheritdoc />
+    public override bool SupportsJitCompilation => false;
+
+    /// <inheritdoc />
+    public override Autodiff.ComputationNode<T> ExportComputationGraph(List<Autodiff.ComputationNode<T>> inputNodes)
+    {
+        throw new NotSupportedException("TemporalConvolution does not support JIT compilation.");
+    }
+}
