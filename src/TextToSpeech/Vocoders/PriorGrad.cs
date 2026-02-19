@@ -27,7 +27,7 @@ public class PriorGrad<T> : TtsModelBase<T>, IVocoder<T>
         for (int i = 0; i < waveLen; i++) waveform[i] = NumOps.FromDouble(Math.Tanh(x[i]));
         return waveform;
     }
-    protected override Tensor<T> PreprocessText(string text) => new Tensor<T>([1]); protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
+    protected override Tensor<T> PreprocessText(string text) { var t = new Tensor<T>([1]); t[0] = NumOps.FromDouble(0.0); return t; } protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
     protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers); else Layers.AddRange(LayerHelper<T>.CreateDefaultDiffusionVocoderLayers(_options.MelChannels, 64, _options.NumResBlocks, 2, _options.DropoutRate)); }
     public override Tensor<T> Predict(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
     public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode."); SetTrainingMode(true); var o = Predict(input); var g = LossFunction.CalculateDerivative(o.ToVector(), expected.ToVector()); var gt = Tensor<T>.FromVector(g); for (int i = Layers.Count - 1; i >= 0; i--) gt = Layers[i].Backward(gt); _optimizer?.UpdateParameters(Layers); SetTrainingMode(false); }

@@ -46,7 +46,7 @@ public class WaveGlow<T> : TtsModelBase<T>, IVocoder<T>
         return waveform;
     }
 
-    protected override Tensor<T> PreprocessText(string text) => new Tensor<T>([1]);
+    protected override Tensor<T> PreprocessText(string text) { var t = new Tensor<T>([1]); t[0] = NumOps.FromDouble(0.0); return t; }
     protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
     protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers); else Layers.AddRange(LayerHelper<T>.CreateDefaultVocoderLayers(_options.MelChannels, _options.UpsampleInitialChannels, 1, _options.NumFlows, _options.NumWaveNetLayers, _options.DropoutRate)); }
     public override Tensor<T> Predict(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
