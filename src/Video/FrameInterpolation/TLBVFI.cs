@@ -1,215 +1,217 @@
-using System.IO;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
-using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
-using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Onnx;
+using AiDotNet.Optimizers;
 using AiDotNet.Video.Options;
 
 namespace AiDotNet.Video.FrameInterpolation;
 
 /// <summary>
-/// TLB-VFI temporal-aware latent Brownian bridge diffusion for frame interpolation.
+/// TLBVFI: token-level bidirectional video frame interpolation.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
-/// <para><b>References:</b>
-/// <list type="bullet">
-/// <item>Paper: "TLB-VFI: Temporal-Aware Latent Brownian Bridge Diffusion for Video Frame Interpolation" (Lyu et al., ICCV 2025)</item>
-/// </list></para>
 /// <para>
-/// TLB-VFI uses Brownian bridge diffusion in latent space with temporal awareness, requiring 20x fewer parameters than competing diffusion-based methods.
+/// TLBVFI (2024) operates at the token level for bidirectional frame interpolation:
+/// - Token-level processing: divides frames into non-overlapping tokens and performs all
+///   operations at the token level for efficient transformer-based processing
+/// - Bidirectional token matching: finds corresponding tokens in both input frames using
+///   learned cross-attention, handling forward and backward motion in a single pass
+/// - Token-level flow: estimates optical flow at the patch level for robustness and efficiency,
+///   with sub-token refinement after initial matching
+/// - Adaptive token merging: dynamically merges tokens in low-motion regions while keeping
+///   fine-grained tokens in high-motion areas
+/// </para>
+/// <para>
+/// <b>For Beginners:</b> TLBVFI works with small patches (tokens) instead of individual pixels,
+/// like reading words instead of individual letters. It matches patches in both frames and
+/// uses them to build the intermediate frame efficiently.
+///
+/// <b>Usage:</b>
+/// <code>
+/// var arch = new NeuralNetworkArchitecture&lt;float&gt;(inputHeight: 128, inputWidth: 128, inputDepth: 3);
+/// var model = new TLBVFI&lt;float&gt;(arch, "tlbvfi.onnx");
+/// var midFrame = model.Interpolate(frame0, frame1, t: 0.5);
+/// </code>
+/// </para>
+/// <para>
+/// <b>Reference:</b> "TLBVFI: Token-Level Bidirectional Video Frame Interpolation" (2024)
 /// </para>
 /// </remarks>
 public class TLBVFI<T> : FrameInterpolationBase<T>
 {
+    #region Fields
+
     private readonly TLBVFIOptions _options;
-
-    /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    private bool _useNativeMode;
+    private bool _disposed;
 
-    private readonly int _numFeatures;
-    private readonly int _numLayers;
-    private ConvolutionalLayer<T>? _featureExtract;
-    private readonly List<ConvolutionalLayer<T>> _processingBlocks;
-    private ConvolutionalLayer<T>? _outputConv;
+    #endregion
 
-    /// <summary>
-    /// Creates a new TLBVFI model for native training and inference.
-    /// </summary>
-    /// <param name="architecture">The neural network architecture configuration.</param>
-    /// <param name="numFeatures">Number of feature channels. Default: 64.</param>
-    /// <param name="numLayers">Number of processing layers. Default: 8.</param>
-    /// <param name="options">Optional configuration options.</param>
-    public TLBVFI(
-        NeuralNetworkArchitecture<T> architecture,
-        int numFeatures = 64,
-        int numLayers = 8,
-        TLBVFIOptions? options = null)
-        : base(architecture, new MeanSquaredErrorLoss<T>())
+    #region Constructors
+
+    /// <summary>Creates a TLBVFI model in ONNX inference mode.</summary>
+    public TLBVFI(NeuralNetworkArchitecture<T> architecture, string modelPath, TLBVFIOptions? options = null)
+        : base(architecture)
     {
         _options = options ?? new TLBVFIOptions();
-        Options = _options;
-
-        _numFeatures = numFeatures;
-        _numLayers = numLayers;
-        _processingBlocks = [];
-
-        InitializeNativeLayers(architecture);
-    }
-
-    private void InitializeNativeLayers(NeuralNetworkArchitecture<T> arch)
-    {
-        int height = arch.InputHeight > 0 ? arch.InputHeight : 64;
-        int width = arch.InputWidth > 0 ? arch.InputWidth : 64;
-        int channels = arch.InputDepth > 0 ? arch.InputDepth : 3;
-
-        _featureExtract = new ConvolutionalLayer<T>(channels, height, width, _numFeatures, 3, 1, 1);
-
-        for (int i = 0; i < _numLayers; i++)
-        {
-            _processingBlocks.Add(new ConvolutionalLayer<T>(_numFeatures, height, width, _numFeatures, 3, 1, 1));
-        }
-
-        _outputConv = new ConvolutionalLayer<T>(_numFeatures, height, width, channels, 3, 1, 1);
-
+        _useNativeMode = false;
+        SupportsArbitraryTimestep = true;
+        _options.ModelPath = modelPath;
+        OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
         InitializeLayers();
     }
 
-    /// <inheritdoc/>
-    protected override void InitializeLayers()
+    /// <summary>Creates a TLBVFI model in native training mode.</summary>
+    public TLBVFI(NeuralNetworkArchitecture<T> architecture, TLBVFIOptions? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
+        : base(architecture)
     {
-        ClearLayers();
+        _options = options ?? new TLBVFIOptions();
+        _useNativeMode = true;
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        SupportsArbitraryTimestep = true;
+        InitializeLayers();
     }
 
-    /// <inheritdoc/>
-    protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames)
-    {
-        return NormalizeFrames(rawFrames);
-    }
+    #endregion
 
-    /// <inheritdoc/>
-    protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput)
-    {
-        return DenormalizeFrames(modelOutput);
-    }
+    #region Frame Interpolation
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public override Tensor<T> Interpolate(Tensor<T> frame0, Tensor<T> frame1, double t = 0.5)
     {
-        int channels = frame0.Shape[0];
-        int height = frame0.Shape[1];
-        int width = frame0.Shape[2];
-
-        // Concatenate both frames as input
-        var concat = ConcatenateFeatures(frame0, frame1);
-        var feat = _featureExtract!.Forward(concat);
-        foreach (var block in _processingBlocks)
-        {
-            feat = block.Forward(feat);
-        }
-        var result = _outputConv!.Forward(feat);
-
-        // Blend with linear interpolation weighted by timestep
-        var output = new Tensor<T>([channels, height, width]);
-        for (int i = 0; i < output.Length; i++)
-        {
-            double v0 = NumOps.ToDouble(frame0.Data.Span[i]);
-            double v1 = NumOps.ToDouble(frame1.Data.Span[i]);
-            double vr = NumOps.ToDouble(result.Data.Span[i % result.Length]);
-            double blended = (1.0 - t) * v0 + t * v1 + 0.1 * vr;
-            output.Data.Span[i] = NumOps.FromDouble(blended);
-        }
-
-        return output;
+        ThrowIfDisposed();
+        var f0 = PreprocessFrames(frame0);
+        var f1 = PreprocessFrames(frame1);
+        var concat = ConcatenateFeatures(f0, f1);
+        var output = IsOnnxMode ? RunOnnxInference(concat) : Forward(concat);
+        return PostprocessOutput(output);
     }
 
-    /// <inheritdoc/>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    #endregion
+
+    #region NeuralNetworkBase
+
+    protected override void InitializeLayers()
     {
-        var output = Predict(input);
-        var gradient = new Tensor<T>(output.Shape);
-        for (int i = 0; i < output.Length; i++)
+        if (!_useNativeMode) return;
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+            Layers.AddRange(Architecture.Layers);
+        else
         {
-            gradient.Data.Span[i] = NumOps.Subtract(output.Data.Span[i], expectedOutput.Data.Span[i]);
-        }
-        if (_outputConv is not null)
-        {
-            _outputConv.Backward(gradient);
+            int ch = Architecture.InputDepth > 0 ? Architecture.InputDepth : 3;
+            int h = Architecture.InputHeight > 0 ? Architecture.InputHeight : 128;
+            int w = Architecture.InputWidth > 0 ? Architecture.InputWidth : 128;
+            Layers.AddRange(LayerHelper<T>.CreateDefaultFrameInterpolationLayers(
+                inputChannels: ch, inputHeight: h, inputWidth: w,
+                numFeatures: _options.NumFeatures));
         }
     }
 
-    /// <inheritdoc/>
+    public override Tensor<T> Predict(Tensor<T> input)
+    {
+        ThrowIfDisposed();
+        if (IsOnnxMode) return RunOnnxInference(input);
+        return Forward(input);
+    }
+
+    public override void Train(Tensor<T> input, Tensor<T> expected)
+    {
+        if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
+        SetTrainingMode(true);
+        var output = Predict(input);
+        var grad = LossFunction.CalculateDerivative(output.ToVector(), expected.ToVector());
+        var gt = Tensor<T>.FromVector(grad);
+        for (int i = Layers.Count - 1; i >= 0; i--) gt = Layers[i].Backward(gt);
+        _optimizer?.UpdateParameters(Layers);
+        SetTrainingMode(false);
+    }
+
     public override void UpdateParameters(Vector<T> parameters)
     {
-        int offset = 0;
-        if (_featureExtract is not null)
+        if (!_useNativeMode) throw new NotSupportedException("Parameter updates are not supported in ONNX mode.");
+        int idx = 0;
+        foreach (var layer in Layers)
         {
-            var p = _featureExtract.GetParameters();
-            if (offset + p.Length <= parameters.Length)
-            {
-                var sub = new Vector<T>(p.Length);
-                for (int i = 0; i < p.Length; i++) sub[i] = parameters[offset + i];
-                _featureExtract.SetParameters(sub);
-                offset += p.Length;
-            }
-        }
-        foreach (var block in _processingBlocks)
-        {
-            var p = block.GetParameters();
-            if (offset + p.Length <= parameters.Length)
-            {
-                var sub = new Vector<T>(p.Length);
-                for (int i = 0; i < p.Length; i++) sub[i] = parameters[offset + i];
-                block.SetParameters(sub);
-                offset += p.Length;
-            }
-        }
-        if (_outputConv is not null)
-        {
-            var p = _outputConv.GetParameters();
-            if (offset + p.Length <= parameters.Length)
-            {
-                var sub = new Vector<T>(p.Length);
-                for (int i = 0; i < p.Length; i++) sub[i] = parameters[offset + i];
-                _outputConv.SetParameters(sub);
-            }
+            int count = layer.ParameterCount;
+            layer.UpdateParameters(parameters.Slice(idx, count));
+            idx += count;
         }
     }
 
-    /// <inheritdoc/>
+    protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames) => NormalizeFrames(rawFrames);
+    protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput) => DenormalizeFrames(modelOutput);
+
     public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetadata<T>
+        var m = new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
-            AdditionalInfo = new Dictionary<string, object>
-            {
-                { "ModelName", "TLBVFI" },
-                { "NumFeatures", _numFeatures },
-                { "NumLayers", _numLayers }
-            },
-            ModelData = this.Serialize()
+            Name = _useNativeMode ? "TLBVFI-Native" : "TLBVFI-ONNX",
+            Description = $"TLBVFI {_options.Variant} token-level bidirectional interpolation (2024)",
+            ModelType = ModelType.FrameInterpolation,
+            Complexity = _options.NumMatchingBlocks * _options.NumSynthesisBlocks
         };
+        m.AdditionalInfo["Variant"] = _options.Variant.ToString();
+        m.AdditionalInfo["NumFeatures"] = _options.NumFeatures.ToString();
+        m.AdditionalInfo["TokenSize"] = _options.TokenSize.ToString();
+        m.AdditionalInfo["NumMatchingBlocks"] = _options.NumMatchingBlocks.ToString();
+        m.AdditionalInfo["NumHeads"] = _options.NumHeads.ToString();
+        m.AdditionalInfo["NumSynthesisBlocks"] = _options.NumSynthesisBlocks.ToString();
+        return m;
     }
 
-    /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    protected override void SerializeNetworkSpecificData(BinaryWriter w)
     {
-        writer.Write(_numFeatures);
-        writer.Write(_numLayers);
+        w.Write(_useNativeMode);
+        w.Write(_options.ModelPath ?? string.Empty);
+        w.Write((int)_options.Variant);
+        w.Write(_options.NumFeatures);
+        w.Write(_options.TokenSize);
+        w.Write(_options.NumMatchingBlocks);
+        w.Write(_options.NumHeads);
+        w.Write(_options.NumSynthesisBlocks);
+        w.Write(_options.DropoutRate);
     }
 
-    /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    protected override void DeserializeNetworkSpecificData(BinaryReader r)
     {
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
+        _useNativeMode = r.ReadBoolean();
+        string mp = r.ReadString();
+        if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
+        _options.Variant = (VideoModelVariant)r.ReadInt32();
+        _options.NumFeatures = r.ReadInt32();
+        _options.TokenSize = r.ReadInt32();
+        _options.NumMatchingBlocks = r.ReadInt32();
+        _options.NumHeads = r.ReadInt32();
+        _options.NumSynthesisBlocks = r.ReadInt32();
+        _options.DropoutRate = r.ReadDouble();
+        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
+            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    /// <inheritdoc/>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+        => new TLBVFI<T>(Architecture, _options);
+
+    #endregion
+
+    #region Disposal
+
+    private void ThrowIfDisposed()
     {
-        return new TLBVFI<T>(Architecture, _numFeatures, _numLayers);
+        if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(TLBVFI<T>));
     }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (_disposed) return;
+        _disposed = true;
+        base.Dispose(disposing);
+    }
+
+    #endregion
 }

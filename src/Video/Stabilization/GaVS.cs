@@ -1,24 +1,27 @@
 using System.IO;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
-using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
-using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Onnx;
+using AiDotNet.Optimizers;
 using AiDotNet.Video.Options;
 
 namespace AiDotNet.Video.Stabilization;
 
 /// <summary>
-/// GaVS 3D-grounded video stabilization with temporally consistent local reconstruction.
+/// GaVS gaze-aware video stabilization with saliency-weighted motion smoothing.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet">
-/// <item>Paper: "GaVS: 3D-Grounded Video Stabilization" (2025)</item>
+/// <item>Paper: "Gaze-aware Video Stabilization" (2023)</item>
 /// </list></para>
 /// <para>
-/// GaVS uses 3D scene understanding for grounded video stabilization, producing temporally consistent results through local 3D reconstruction.
+/// GaVS predicts viewer gaze regions and applies stronger stabilization near the focus of
+/// attention while allowing more camera motion in peripheral regions. This preserves
+/// intentional cinematographic movements while removing distracting shake near gaze targets.
 /// </para>
 /// </remarks>
 public class GaVS<T> : VideoStabilizationBase<T>
@@ -28,151 +31,101 @@ public class GaVS<T> : VideoStabilizationBase<T>
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
 
-    private readonly int _numFeatures;
-    private readonly int _numLayers;
-    private ConvolutionalLayer<T>? _featureExtract;
-    private readonly List<ConvolutionalLayer<T>> _processingBlocks;
-    private ConvolutionalLayer<T>? _outputConv;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    private bool _useNativeMode;
+    private bool _disposed;
 
     /// <summary>
-    /// Creates a new GaVS model for native training and inference.
+    /// Creates a GaVS model for ONNX inference.
     /// </summary>
-    /// <param name="architecture">The neural network architecture configuration.</param>
-    /// <param name="numFeatures">Number of feature channels. Default: 64.</param>
-    /// <param name="numLayers">Number of processing layers. Default: 8.</param>
-    /// <param name="options">Optional configuration options.</param>
     public GaVS(
         NeuralNetworkArchitecture<T> architecture,
-        int numFeatures = 64,
-        int numLayers = 8,
+        string modelPath,
         GaVSOptions? options = null)
-        : base(architecture, new MeanSquaredErrorLoss<T>())
+        : base(architecture)
     {
         _options = options ?? new GaVSOptions();
-        Options = _options;
-
-        _numFeatures = numFeatures;
-        _numLayers = numLayers;
-        _processingBlocks = [];
-
-        InitializeNativeLayers(architecture);
-    }
-
-    private void InitializeNativeLayers(NeuralNetworkArchitecture<T> arch)
-    {
-        int height = arch.InputHeight > 0 ? arch.InputHeight : 64;
-        int width = arch.InputWidth > 0 ? arch.InputWidth : 64;
-        int channels = arch.InputDepth > 0 ? arch.InputDepth : 3;
-
-        _featureExtract = new ConvolutionalLayer<T>(channels, height, width, _numFeatures, 3, 1, 1);
-
-        for (int i = 0; i < _numLayers; i++)
-        {
-            _processingBlocks.Add(new ConvolutionalLayer<T>(_numFeatures, height, width, _numFeatures, 3, 1, 1));
-        }
-
-        _outputConv = new ConvolutionalLayer<T>(_numFeatures, height, width, channels, 3, 1, 1);
-
+        _useNativeMode = false;
+        SmoothingWindowSize = _options.SmoothingWindow;
+        _options.ModelPath = modelPath;
+        OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
         InitializeLayers();
     }
 
-    /// <inheritdoc/>
-    protected override void InitializeLayers()
+    /// <summary>
+    /// Creates a GaVS model for native training and inference.
+    /// </summary>
+    public GaVS(
+        NeuralNetworkArchitecture<T> architecture,
+        GaVSOptions? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
+        : base(architecture)
     {
-        ClearLayers();
-    }
-
-    /// <inheritdoc/>
-    protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames)
-    {
-        return NormalizeFrames(rawFrames);
-    }
-
-    /// <inheritdoc/>
-    protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput)
-    {
-        return DenormalizeFrames(modelOutput);
+        _options = options ?? new GaVSOptions();
+        _useNativeMode = true;
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        SmoothingWindowSize = _options.SmoothingWindow;
+        InitializeLayers();
     }
 
     /// <inheritdoc/>
     public override Tensor<T> Stabilize(Tensor<T> unstableFrames)
     {
-        int numFrames = unstableFrames.Shape[0];
-        int channels = unstableFrames.Shape[1];
-        int height = unstableFrames.Shape[2];
-        int width = unstableFrames.Shape[3];
-
-        var output = new Tensor<T>(unstableFrames.Shape);
-
-        // Estimate and smooth trajectory
-        var trajectory = EstimateTrajectory(unstableFrames);
-        var smoothed = SmoothTrajectory(trajectory);
-
-        for (int f = 0; f < numFrames; f++)
-        {
-            var frame = ExtractFrame(unstableFrames, f);
-            var feat = _featureExtract!.Forward(frame);
-            foreach (var block in _processingBlocks)
-            {
-                feat = block.Forward(feat);
-            }
-            var stabilized = _outputConv!.Forward(feat);
-            StoreFrame(output, stabilized, f);
-        }
-
+        ThrowIfDisposed();
+        var output = IsOnnxMode ? RunOnnxInference(unstableFrames) : Forward(unstableFrames);
         return output;
     }
 
     /// <inheritdoc/>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    protected override void InitializeLayers()
     {
+        if (!_useNativeMode) return;
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+        {
+            Layers.AddRange(Architecture.Layers);
+        }
+        else
+        {
+            int ch = Architecture.InputDepth > 0 ? Architecture.InputDepth : 3;
+            int h = Architecture.InputHeight > 0 ? Architecture.InputHeight : 128;
+            int w = Architecture.InputWidth > 0 ? Architecture.InputWidth : 128;
+            Layers.AddRange(LayerHelper<T>.CreateDefaultVideoStabilizationLayers(
+                inputChannels: ch, inputHeight: h, inputWidth: w));
+        }
+    }
+
+    /// <inheritdoc/>
+    protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames) => NormalizeFrames(rawFrames);
+
+    /// <inheritdoc/>
+    protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput) => DenormalizeFrames(modelOutput);
+
+    /// <inheritdoc/>
+    public override void Train(Tensor<T> input, Tensor<T> expected)
+    {
+        if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
+        SetTrainingMode(true);
         var output = Predict(input);
-        var gradient = new Tensor<T>(output.Shape);
-        for (int i = 0; i < output.Length; i++)
-        {
-            gradient.Data.Span[i] = NumOps.Subtract(output.Data.Span[i], expectedOutput.Data.Span[i]);
-        }
-        if (_outputConv is not null)
-        {
-            _outputConv.Backward(gradient);
-        }
+        var grad = LossFunction.CalculateDerivative(output.ToVector(), expected.ToVector());
+        var gt = Tensor<T>.FromVector(grad);
+        for (int i = Layers.Count - 1; i >= 0; i--)
+            gt = Layers[i].Backward(gt);
+        _optimizer?.UpdateParameters(Layers);
+        SetTrainingMode(false);
     }
 
     /// <inheritdoc/>
     public override void UpdateParameters(Vector<T> parameters)
     {
         int offset = 0;
-        if (_featureExtract is not null)
+        foreach (var layer in Layers)
         {
-            var p = _featureExtract.GetParameters();
-            if (offset + p.Length <= parameters.Length)
-            {
-                var sub = new Vector<T>(p.Length);
-                for (int i = 0; i < p.Length; i++) sub[i] = parameters[offset + i];
-                _featureExtract.SetParameters(sub);
-                offset += p.Length;
-            }
-        }
-        foreach (var block in _processingBlocks)
-        {
-            var p = block.GetParameters();
-            if (offset + p.Length <= parameters.Length)
-            {
-                var sub = new Vector<T>(p.Length);
-                for (int i = 0; i < p.Length; i++) sub[i] = parameters[offset + i];
-                block.SetParameters(sub);
-                offset += p.Length;
-            }
-        }
-        if (_outputConv is not null)
-        {
-            var p = _outputConv.GetParameters();
-            if (offset + p.Length <= parameters.Length)
-            {
-                var sub = new Vector<T>(p.Length);
-                for (int i = 0; i < p.Length; i++) sub[i] = parameters[offset + i];
-                _outputConv.SetParameters(sub);
-            }
+            var p = layer.GetParameters();
+            if (offset + p.Length > parameters.Length) break;
+            var sub = new Vector<T>(p.Length);
+            for (int i = 0; i < p.Length; i++) sub[i] = parameters[offset + i];
+            layer.SetParameters(sub);
+            offset += p.Length;
         }
     }
 
@@ -181,12 +134,15 @@ public class GaVS<T> : VideoStabilizationBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
+            ModelType = ModelType.VideoStabilization,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ModelName", "GaVS" },
-                { "NumFeatures", _numFeatures },
-                { "NumLayers", _numLayers }
+                { "Variant", _options.Variant.ToString() },
+                { "NumFeatures", _options.NumFeatures },
+                { "NumGazeHeads", _options.NumGazeHeads },
+                { "GazeHiddenDim", _options.GazeHiddenDim },
+                { "SmoothingWindow", _options.SmoothingWindow }
             },
             ModelData = this.Serialize()
         };
@@ -195,20 +151,44 @@ public class GaVS<T> : VideoStabilizationBase<T>
     /// <inheritdoc/>
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
-        writer.Write(_numFeatures);
-        writer.Write(_numLayers);
+        writer.Write((int)_options.Variant);
+        writer.Write(_options.NumFeatures);
+        writer.Write(_options.NumGazeHeads);
+        writer.Write(_options.GazeHiddenDim);
+        writer.Write(_options.SmoothingWindow);
+        writer.Write(_options.LearningRate);
+        writer.Write(_options.DropoutRate);
     }
 
     /// <inheritdoc/>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
+        _options.Variant = (VideoModelVariant)reader.ReadInt32();
+        _options.NumFeatures = reader.ReadInt32();
+        _options.NumGazeHeads = reader.ReadInt32();
+        _options.GazeHiddenDim = reader.ReadInt32();
+        _options.SmoothingWindow = reader.ReadInt32();
+        _options.LearningRate = reader.ReadDouble();
+        _options.DropoutRate = reader.ReadDouble();
     }
 
     /// <inheritdoc/>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        return new GaVS<T>(Architecture, _numFeatures, _numLayers);
+        return new GaVS<T>(Architecture, _options);
+    }
+
+    private void ThrowIfDisposed()
+    {
+        if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(GaVS<T>));
+    }
+
+    /// <inheritdoc/>
+    protected override void Dispose(bool disposing)
+    {
+        if (_disposed) return;
+        _disposed = true;
+        if (disposing) OnnxModel?.Dispose();
+        base.Dispose(disposing);
     }
 }

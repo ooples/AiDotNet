@@ -1,24 +1,27 @@
 using System.IO;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
-using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
-using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Onnx;
+using AiDotNet.Optimizers;
 using AiDotNet.Video.Options;
 
 namespace AiDotNet.Video.Inpainting;
 
 /// <summary>
-/// AVID any-length video inpainting with diffusion model for temporal coherence.
+/// AVID diffusion-based video inpainting supporting arbitrary-length videos.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet">
-/// <item>Paper: "AVID: Any-Length Video Inpainting with Diffusion Model" (Zhang et al., 2024)</item>
+/// <item>Paper: "AVID: Any-Length Video Inpainting with Diffusion Model" (Zhang et al., CVPR 2024)</item>
 /// </list></para>
 /// <para>
-/// AVID uses diffusion models for video inpainting of any length, maintaining temporal coherence through cross-frame attention mechanisms.
+/// AVID uses a diffusion U-Net with temporal attention to iteratively denoise masked video regions,
+/// processing long videos through an autoregressive temporal pipeline with overlapping windows
+/// that maintains temporal consistency across the full sequence.
 /// </para>
 /// </remarks>
 public class AVID<T> : VideoInpaintingBase<T>
@@ -28,169 +31,104 @@ public class AVID<T> : VideoInpaintingBase<T>
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
 
-    private readonly int _numFeatures;
-    private readonly int _numLayers;
-    private ConvolutionalLayer<T>? _featureExtract;
-    private readonly List<ConvolutionalLayer<T>> _processingBlocks;
-    private ConvolutionalLayer<T>? _outputConv;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    private bool _useNativeMode;
+    private bool _disposed;
 
     /// <summary>
-    /// Creates a new AVID model for native training and inference.
+    /// Creates an AVID model for ONNX inference.
     /// </summary>
-    /// <param name="architecture">The neural network architecture configuration.</param>
-    /// <param name="numFeatures">Number of feature channels. Default: 64.</param>
-    /// <param name="numLayers">Number of processing layers. Default: 8.</param>
-    /// <param name="options">Optional configuration options.</param>
     public AVID(
         NeuralNetworkArchitecture<T> architecture,
-        int numFeatures = 64,
-        int numLayers = 8,
+        string modelPath,
         AVIDOptions? options = null)
-        : base(architecture, new MeanSquaredErrorLoss<T>())
+        : base(architecture)
     {
         _options = options ?? new AVIDOptions();
-        Options = _options;
-
-        _numFeatures = numFeatures;
-        _numLayers = numLayers;
-        _processingBlocks = [];
-
-        InitializeNativeLayers(architecture);
-    }
-
-    private void InitializeNativeLayers(NeuralNetworkArchitecture<T> arch)
-    {
-        int height = arch.InputHeight > 0 ? arch.InputHeight : 64;
-        int width = arch.InputWidth > 0 ? arch.InputWidth : 64;
-        int channels = arch.InputDepth > 0 ? arch.InputDepth : 3;
-
-        _featureExtract = new ConvolutionalLayer<T>(channels, height, width, _numFeatures, 3, 1, 1);
-
-        for (int i = 0; i < _numLayers; i++)
-        {
-            _processingBlocks.Add(new ConvolutionalLayer<T>(_numFeatures, height, width, _numFeatures, 3, 1, 1));
-        }
-
-        _outputConv = new ConvolutionalLayer<T>(_numFeatures, height, width, channels, 3, 1, 1);
-
+        _useNativeMode = false;
+        SupportsTemporalPropagation = true;
+        _options.ModelPath = modelPath;
+        OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
         InitializeLayers();
     }
 
-    /// <inheritdoc/>
-    protected override void InitializeLayers()
+    /// <summary>
+    /// Creates an AVID model for native training and inference.
+    /// </summary>
+    public AVID(
+        NeuralNetworkArchitecture<T> architecture,
+        AVIDOptions? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
+        : base(architecture)
     {
-        ClearLayers();
-    }
-
-    /// <inheritdoc/>
-    protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames)
-    {
-        return NormalizeFrames(rawFrames);
-    }
-
-    /// <inheritdoc/>
-    protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput)
-    {
-        return DenormalizeFrames(modelOutput);
+        _options = options ?? new AVIDOptions();
+        _useNativeMode = true;
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        SupportsTemporalPropagation = true;
+        InitializeLayers();
     }
 
     /// <inheritdoc/>
     public override Tensor<T> Inpaint(Tensor<T> frames, Tensor<T> masks)
     {
-        int numFrames = frames.Shape[0];
-        int channels = frames.Shape[1];
-        int height = frames.Shape[2];
-        int width = frames.Shape[3];
-
-        var output = new Tensor<T>(frames.Shape);
-
-        for (int f = 0; f < numFrames; f++)
-        {
-            var frame = ExtractFrame(frames, f);
-            var feat = _featureExtract!.Forward(frame);
-            foreach (var block in _processingBlocks)
-            {
-                feat = block.Forward(feat);
-            }
-            var filled = _outputConv!.Forward(feat);
-
-            // Blend: use original in non-masked regions, generated in masked regions
-            int maskOffset = f * height * width;
-            int frameOffset = f * channels * height * width;
-            for (int c = 0; c < channels; c++)
-            {
-                for (int h = 0; h < height; h++)
-                {
-                    for (int w = 0; w < width; w++)
-                    {
-                        int pixIdx = frameOffset + c * height * width + h * width + w;
-                        double maskVal = NumOps.ToDouble(masks.Data.Span[maskOffset + h * width + w]);
-                        if (maskVal > 0.5)
-                        {
-                            output.Data.Span[pixIdx] = filled.Data.Span[c * height * width + h * width + w];
-                        }
-                        else
-                        {
-                            output.Data.Span[pixIdx] = frames.Data.Span[pixIdx];
-                        }
-                    }
-                }
-            }
-        }
-
+        ThrowIfDisposed();
+        // Concatenate frames and masks along channel dimension for model input
+        var combined = ConcatFramesAndMasks(frames, masks);
+        var output = IsOnnxMode ? RunOnnxInference(combined) : Forward(combined);
         return output;
     }
 
     /// <inheritdoc/>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    protected override void InitializeLayers()
     {
+        if (!_useNativeMode) return;
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+        {
+            Layers.AddRange(Architecture.Layers);
+        }
+        else
+        {
+            int ch = Architecture.InputDepth > 0 ? Architecture.InputDepth : 3;
+            int h = Architecture.InputHeight > 0 ? Architecture.InputHeight : 128;
+            int w = Architecture.InputWidth > 0 ? Architecture.InputWidth : 128;
+            Layers.AddRange(LayerHelper<T>.CreateDefaultVideoInpaintingLayers(
+                inputChannels: ch, inputHeight: h, inputWidth: w,
+                numFeatures: _options.NumFeatures));
+        }
+    }
+
+    /// <inheritdoc/>
+    protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames) => NormalizeFrames(rawFrames);
+
+    /// <inheritdoc/>
+    protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput) => DenormalizeFrames(modelOutput);
+
+    /// <inheritdoc/>
+    public override void Train(Tensor<T> input, Tensor<T> expected)
+    {
+        if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
+        SetTrainingMode(true);
         var output = Predict(input);
-        var gradient = new Tensor<T>(output.Shape);
-        for (int i = 0; i < output.Length; i++)
-        {
-            gradient.Data.Span[i] = NumOps.Subtract(output.Data.Span[i], expectedOutput.Data.Span[i]);
-        }
-        if (_outputConv is not null)
-        {
-            _outputConv.Backward(gradient);
-        }
+        var grad = LossFunction.CalculateDerivative(output.ToVector(), expected.ToVector());
+        var gt = Tensor<T>.FromVector(grad);
+        for (int i = Layers.Count - 1; i >= 0; i--)
+            gt = Layers[i].Backward(gt);
+        _optimizer?.UpdateParameters(Layers);
+        SetTrainingMode(false);
     }
 
     /// <inheritdoc/>
     public override void UpdateParameters(Vector<T> parameters)
     {
         int offset = 0;
-        if (_featureExtract is not null)
+        foreach (var layer in Layers)
         {
-            var p = _featureExtract.GetParameters();
-            if (offset + p.Length <= parameters.Length)
-            {
-                var sub = new Vector<T>(p.Length);
-                for (int i = 0; i < p.Length; i++) sub[i] = parameters[offset + i];
-                _featureExtract.SetParameters(sub);
-                offset += p.Length;
-            }
-        }
-        foreach (var block in _processingBlocks)
-        {
-            var p = block.GetParameters();
-            if (offset + p.Length <= parameters.Length)
-            {
-                var sub = new Vector<T>(p.Length);
-                for (int i = 0; i < p.Length; i++) sub[i] = parameters[offset + i];
-                block.SetParameters(sub);
-                offset += p.Length;
-            }
-        }
-        if (_outputConv is not null)
-        {
-            var p = _outputConv.GetParameters();
-            if (offset + p.Length <= parameters.Length)
-            {
-                var sub = new Vector<T>(p.Length);
-                for (int i = 0; i < p.Length; i++) sub[i] = parameters[offset + i];
-                _outputConv.SetParameters(sub);
-            }
+            var p = layer.GetParameters();
+            if (offset + p.Length > parameters.Length) break;
+            var sub = new Vector<T>(p.Length);
+            for (int i = 0; i < p.Length; i++) sub[i] = parameters[offset + i];
+            layer.SetParameters(sub);
+            offset += p.Length;
         }
     }
 
@@ -199,12 +137,15 @@ public class AVID<T> : VideoInpaintingBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
+            ModelType = ModelType.VideoInpainting,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ModelName", "AVID" },
-                { "NumFeatures", _numFeatures },
-                { "NumLayers", _numLayers }
+                { "Variant", _options.Variant.ToString() },
+                { "NumFeatures", _options.NumFeatures },
+                { "NumDiffusionSteps", _options.NumDiffusionSteps },
+                { "NumResBlocks", _options.NumResBlocks },
+                { "NumHeads", _options.NumHeads }
             },
             ModelData = this.Serialize()
         };
@@ -213,20 +154,68 @@ public class AVID<T> : VideoInpaintingBase<T>
     /// <inheritdoc/>
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
-        writer.Write(_numFeatures);
-        writer.Write(_numLayers);
+        writer.Write((int)_options.Variant);
+        writer.Write(_options.NumFeatures);
+        writer.Write(_options.NumDiffusionSteps);
+        writer.Write(_options.NumResBlocks);
+        writer.Write(_options.NumHeads);
+        writer.Write(_options.TemporalOverlap);
+        writer.Write(_options.LearningRate);
+        writer.Write(_options.DropoutRate);
     }
 
     /// <inheritdoc/>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
+        _options.Variant = (VideoModelVariant)reader.ReadInt32();
+        _options.NumFeatures = reader.ReadInt32();
+        _options.NumDiffusionSteps = reader.ReadInt32();
+        _options.NumResBlocks = reader.ReadInt32();
+        _options.NumHeads = reader.ReadInt32();
+        _options.TemporalOverlap = reader.ReadInt32();
+        _options.LearningRate = reader.ReadDouble();
+        _options.DropoutRate = reader.ReadDouble();
     }
 
     /// <inheritdoc/>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        return new AVID<T>(Architecture, _numFeatures, _numLayers);
+        return new AVID<T>(Architecture, _options);
+    }
+
+    private static Tensor<T> ConcatFramesAndMasks(Tensor<T> frames, Tensor<T> masks)
+    {
+        int n = frames.Shape[0];
+        int c = frames.Shape[1];
+        int h = frames.Shape[2];
+        int w = frames.Shape[3];
+        var combined = new Tensor<T>([n, c + 1, h, w]);
+        int frameSize = c * h * w;
+        int maskSize = h * w;
+        int combinedSize = (c + 1) * h * w;
+        for (int f = 0; f < n; f++)
+        {
+            // Copy frame channels
+            for (int i = 0; i < frameSize; i++)
+                combined.Data.Span[f * combinedSize + i] = frames.Data.Span[f * frameSize + i];
+            // Copy mask channel
+            for (int i = 0; i < maskSize; i++)
+                combined.Data.Span[f * combinedSize + frameSize + i] = masks.Data.Span[f * maskSize + i];
+        }
+        return combined;
+    }
+
+    private void ThrowIfDisposed()
+    {
+        if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(AVID<T>));
+    }
+
+    /// <inheritdoc/>
+    protected override void Dispose(bool disposing)
+    {
+        if (_disposed) return;
+        _disposed = true;
+        if (disposing) OnnxModel?.Dispose();
+        base.Dispose(disposing);
     }
 }
