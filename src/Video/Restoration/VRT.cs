@@ -49,7 +49,7 @@ namespace AiDotNet.Video.Restoration;
 /// https://arxiv.org/abs/2201.12288
 /// </para>
 /// </remarks>
-public class VRT<T> : NeuralNetworkBase<T>
+public class VRT<T> : VideoSuperResolutionBase<T>
 {
     private readonly VRTOptions _options;
 
@@ -138,12 +138,12 @@ public class VRT<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Gets the scale factor for super-resolution.
     /// </summary>
-    internal int ScaleFactor => _scaleFactor;
+    internal new int ScaleFactor => _scaleFactor;
 
     /// <summary>
     /// Gets the number of frames processed.
     /// </summary>
-    internal int NumFrames => _numFrames;
+    internal new int NumFrames => _numFrames;
 
     #endregion
 
@@ -329,7 +329,7 @@ public class VRT<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Performs a forward pass through the network.
     /// </summary>
-    private Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> Forward(Tensor<T> input)
     {
         var result = input;
         foreach (var layer in Layers)
@@ -530,4 +530,27 @@ public class VRT<T> : NeuralNetworkBase<T>
     }
 
     #endregion
+
+    #region Base Class Abstract Methods
+
+    /// <inheritdoc/>
+    public override Tensor<T> Upscale(Tensor<T> lowResFrames)
+    {
+        return Forward(lowResFrames);
+    }
+
+    /// <inheritdoc/>
+    protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames)
+    {
+        return NormalizeFrames(rawFrames);
+    }
+
+    /// <inheritdoc/>
+    protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput)
+    {
+        return DenormalizeFrames(modelOutput);
+    }
+
+    #endregion
+
 }

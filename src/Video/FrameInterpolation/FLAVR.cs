@@ -42,7 +42,7 @@ namespace AiDotNet.Video.FrameInterpolation;
 /// https://arxiv.org/abs/2012.08512
 /// </para>
 /// </remarks>
-public class FLAVR<T> : NeuralNetworkBase<T>
+public class FLAVR<T> : FrameInterpolationBase<T>
 {
     private readonly FLAVROptions _options;
 
@@ -326,7 +326,7 @@ public class FLAVR<T> : NeuralNetworkBase<T>
 
     #region Inference
 
-    private Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> Forward(Tensor<T> input)
     {
         var result = input;
         foreach (var layer in Layers) result = layer.Forward(result);
@@ -445,4 +445,28 @@ public class FLAVR<T> : NeuralNetworkBase<T>
         new FLAVR<T>(Architecture, _optimizer, _lossFunction, _numFeatures, _numInputFrames, _numOutputFrames);
 
     #endregion
+
+    #region Base Class Abstract Methods
+
+    /// <inheritdoc/>
+    public override Tensor<T> Interpolate(Tensor<T> frame0, Tensor<T> frame1, double t = 0.5)
+    {
+        var stacked = ConcatenateFeatures(frame0, frame1);
+        return Forward(stacked);
+    }
+
+    /// <inheritdoc/>
+    protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames)
+    {
+        return NormalizeFrames(rawFrames);
+    }
+
+    /// <inheritdoc/>
+    protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput)
+    {
+        return DenormalizeFrames(modelOutput);
+    }
+
+    #endregion
+
 }

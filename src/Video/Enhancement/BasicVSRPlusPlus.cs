@@ -52,7 +52,7 @@ namespace AiDotNet.Video.Enhancement;
 /// Enhanced Propagation and Alignment", CVPR 2022. https://arxiv.org/abs/2104.13371
 /// </para>
 /// </remarks>
-public class BasicVSRPlusPlus<T> : NeuralNetworkBase<T>
+public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
 {
     private readonly BasicVSRPlusPlusOptions _options;
 
@@ -191,7 +191,7 @@ public class BasicVSRPlusPlus<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Gets the upscaling factor for this model.
     /// </summary>
-    internal int ScaleFactor => _scaleFactor;
+    internal new int ScaleFactor => _scaleFactor;
 
     /// <summary>
     /// Gets the number of feature channels.
@@ -763,7 +763,7 @@ public class BasicVSRPlusPlus<T> : NeuralNetworkBase<T>
         return propagatedFeatures;
     }
 
-    private Tensor<T> WarpFeature(Tensor<T> feature, Tensor<T> flow)
+    private new Tensor<T> WarpFeature(Tensor<T> feature, Tensor<T> flow)
     {
         // Warp feature using optical flow (bilinear sampling)
         bool hasBatch = feature.Rank == 4;
@@ -810,7 +810,7 @@ public class BasicVSRPlusPlus<T> : NeuralNetworkBase<T>
         return warped;
     }
 
-    private T BilinearSample(Tensor<T> tensor, int b, int c, double h, double w, bool hasBatch, int height, int width, int channels)
+    private new T BilinearSample(Tensor<T> tensor, int b, int c, double h, double w, bool hasBatch, int height, int width, int channels)
     {
         int h0 = (int)Math.Floor(h);
         int w0 = (int)Math.Floor(w);
@@ -851,7 +851,7 @@ public class BasicVSRPlusPlus<T> : NeuralNetworkBase<T>
         return tensor.Data.Span[idx];
     }
 
-    private Tensor<T> ConcatenateFeatures(Tensor<T> feat1, Tensor<T> feat2)
+    private new Tensor<T> ConcatenateFeatures(Tensor<T> feat1, Tensor<T> feat2)
     {
         bool hasBatch = feat1.Rank == 4;
         int batch = hasBatch ? feat1.Shape[0] : 1;
@@ -897,7 +897,7 @@ public class BasicVSRPlusPlus<T> : NeuralNetworkBase<T>
         return output;
     }
 
-    private Tensor<T> ExtractFrame(Tensor<T> frames, int frameIndex)
+    private new Tensor<T> ExtractFrame(Tensor<T> frames, int frameIndex)
     {
         int channels = frames.Shape[1];
         int height = frames.Shape[2];
@@ -915,7 +915,7 @@ public class BasicVSRPlusPlus<T> : NeuralNetworkBase<T>
         return frame;
     }
 
-    private void StoreFrame(Tensor<T> output, Tensor<T> frame, int frameIndex)
+    private new void StoreFrame(Tensor<T> output, Tensor<T> frame, int frameIndex)
     {
         int channels = output.Shape[1];
         int height = output.Shape[2];
@@ -1633,4 +1633,27 @@ public class BasicVSRPlusPlus<T> : NeuralNetworkBase<T>
     }
 
     #endregion
+
+    #region Base Class Abstract Methods
+
+    /// <inheritdoc/>
+    public override Tensor<T> Upscale(Tensor<T> lowResFrames)
+    {
+        return Forward(lowResFrames);
+    }
+
+    /// <inheritdoc/>
+    protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames)
+    {
+        return NormalizeFrames(rawFrames);
+    }
+
+    /// <inheritdoc/>
+    protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput)
+    {
+        return DenormalizeFrames(modelOutput);
+    }
+
+    #endregion
+
 }

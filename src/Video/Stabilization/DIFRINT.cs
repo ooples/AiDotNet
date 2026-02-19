@@ -43,7 +43,7 @@ namespace AiDotNet.Video.Stabilization;
 /// https://arxiv.org/abs/2005.07055
 /// </para>
 /// </remarks>
-public class DIFRINT<T> : NeuralNetworkBase<T>
+public class DIFRINT<T> : VideoStabilizationBase<T>
 {
     private readonly DIFRINTOptions _options;
 
@@ -183,7 +183,7 @@ public class DIFRINT<T> : NeuralNetworkBase<T>
 
     #region Private Methods
 
-    private Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> Forward(Tensor<T> input)
     {
         var result = input;
         foreach (var layer in Layers) result = layer.Forward(result);
@@ -502,4 +502,27 @@ public class DIFRINT<T> : NeuralNetworkBase<T>
         new DIFRINT<T>(Architecture, _optimizer, _lossFunction, _numFeatures, _numIterations);
 
     #endregion
+
+    #region Base Class Abstract Methods
+
+    /// <inheritdoc/>
+    public override Tensor<T> Stabilize(Tensor<T> unstableFrames)
+    {
+        return Forward(unstableFrames);
+    }
+
+    /// <inheritdoc/>
+    protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames)
+    {
+        return NormalizeFrames(rawFrames);
+    }
+
+    /// <inheritdoc/>
+    protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput)
+    {
+        return DenormalizeFrames(modelOutput);
+    }
+
+    #endregion
+
 }

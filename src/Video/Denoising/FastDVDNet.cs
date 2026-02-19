@@ -45,7 +45,7 @@ namespace AiDotNet.Video.Denoising;
 /// https://arxiv.org/abs/1907.01361
 /// </para>
 /// </remarks>
-public class FastDVDNet<T> : NeuralNetworkBase<T>
+public class FastDVDNet<T> : VideoDenoisingBase<T>
 {
     private readonly FastDVDNetOptions _options;
 
@@ -173,7 +173,7 @@ public class FastDVDNet<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Estimates the noise level in a frame.
     /// </summary>
-    public double EstimateNoiseLevel(Tensor<T> frame)
+    public new double EstimateNoiseLevel(Tensor<T> frame)
     {
         // Median Absolute Deviation (MAD) estimator
         var data = new List<double>();
@@ -253,7 +253,7 @@ public class FastDVDNet<T> : NeuralNetworkBase<T>
 
     #region Private Methods
 
-    private Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> Forward(Tensor<T> input)
     {
         var result = input;
         foreach (var layer in Layers) result = layer.Forward(result);
@@ -454,4 +454,27 @@ public class FastDVDNet<T> : NeuralNetworkBase<T>
         new FastDVDNet<T>(Architecture, _optimizer, _lossFunction, _numFeatures, _numInputFrames);
 
     #endregion
+
+    #region Base Class Abstract Methods
+
+    /// <inheritdoc/>
+    public override Tensor<T> Denoise(Tensor<T> noisyFrames)
+    {
+        return Forward(noisyFrames);
+    }
+
+    /// <inheritdoc/>
+    protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames)
+    {
+        return NormalizeFrames(rawFrames);
+    }
+
+    /// <inheritdoc/>
+    protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput)
+    {
+        return DenormalizeFrames(modelOutput);
+    }
+
+    #endregion
+
 }
