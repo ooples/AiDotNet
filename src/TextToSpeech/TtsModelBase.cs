@@ -114,6 +114,7 @@ public abstract class TtsModelBase<T> : NeuralNetworkBase<T>
     {
         var result = new Tensor<T>(mel.Shape);
         double range = refLevel - minLevel;
+        if (Math.Abs(range) < 1e-10) range = 1.0;
 
         for (int i = 0; i < mel.Length; i++)
         {

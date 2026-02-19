@@ -10,4 +10,10 @@ public class PortaSpeechOptions : AcousticModelOptions
 
     /// <summary>Gets or sets the word-level prosody embedding dimension.</summary>
     public int ProsodyDim { get; set; } = 64;
+
+    /// <summary>Gets or sets the duration scale factor for phoneme duration prediction.</summary>
+    public double DurationScale { get; set; } = 2.5;
+
+    /// <summary>Gets or sets the maximum frames per phoneme.</summary>
+    public int MaxDuration { get; set; } = 15;
 }
