@@ -111,7 +111,7 @@ public class WhisperX<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     private IReadOnlyList<TranscriptionSegment<T>> ExtractAlignedSegments(string text, double duration)
     {
         if (string.IsNullOrWhiteSpace(text)) return Array.Empty<TranscriptionSegment<T>>();
-        var words = text.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var words = text.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
         if (words.Length == 0) return Array.Empty<TranscriptionSegment<T>>();
 
         var segments = new List<TranscriptionSegment<T>>();

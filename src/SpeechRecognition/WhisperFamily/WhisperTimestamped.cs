@@ -116,7 +116,7 @@ public class WhisperTimestamped<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
     {
         if (string.IsNullOrWhiteSpace(text) || tokens.Count == 0) return Array.Empty<TranscriptionSegment<T>>();
 
-        var words = text.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var words = text.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
         if (words.Length == 0) return Array.Empty<TranscriptionSegment<T>>();
 
         var segments = new List<TranscriptionSegment<T>>();
