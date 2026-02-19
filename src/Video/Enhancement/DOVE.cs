@@ -1,213 +1,225 @@
-using System.IO;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
-using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
-using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Onnx;
+using AiDotNet.Optimizers;
 using AiDotNet.Video.Options;
 
 namespace AiDotNet.Video.Enhancement;
 
 /// <summary>
-/// DOVE large-scale video diffusion priors for general video restoration.
+/// DOVE: harnessing large-scale video diffusion priors for general video restoration.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
-/// <para><b>References:</b>
-/// <list type="bullet">
-/// <item>Paper: "DOVE: Harnessing Large-Scale Video Diffusion Priors for General Video Restoration" (Chen et al., 2025)</item>
-/// </list></para>
 /// <para>
-/// DOVE harnesses the knowledge embedded in large-scale pretrained video diffusion models as powerful priors for general-purpose video restoration tasks.
+/// DOVE (Chen et al., 2025) uses pretrained video diffusion models as powerful restoration priors:
+/// - Degradation estimation: analyzes input video to determine the type and severity of degradation
+/// - Guided generation: conditions a pretrained Stable Video Diffusion backbone on the
+///   degradation estimate, generating clean video through controlled denoising
+/// - Video diffusion prior: the SVD backbone's knowledge of natural video dynamics provides
+///   inherent temporal consistency without explicit flow or alignment modules
+///
+/// Unlike discriminative approaches (BasicVSR, EDVR), DOVE is generative: it synthesizes
+/// plausible clean video conditioned on the degraded input.
+/// </para>
+/// <para>
+/// <b>For Beginners:</b> DOVE repurposes a video generation AI to restore degraded video.
+/// Think of it like asking an artist who knows what clean video looks like to paint a
+/// restored version of your noisy/blurry footage, rather than trying to mathematically
+/// reverse the damage.
+///
+/// <b>Usage:</b>
+/// <code>
+/// var arch = new NeuralNetworkArchitecture&lt;float&gt;(inputHeight: 128, inputWidth: 128, inputDepth: 3);
+/// var model = new DOVE&lt;float&gt;(arch, "dove_base.onnx");
+/// var restored = model.Upscale(degradedFrames);
+/// </code>
+/// </para>
+/// <para>
+/// <b>Reference:</b> "DOVE: Harnessing Large-Scale Video Diffusion Priors for General Video
+/// Restoration" (Chen et al., 2025)
 /// </para>
 /// </remarks>
 public class DOVE<T> : VideoSuperResolutionBase<T>
 {
+    #region Fields
+
     private readonly DOVEOptions _options;
-
-    /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    private bool _useNativeMode;
+    private bool _disposed;
 
-    private readonly int _numFeatures;
-    private readonly int _numLayers;
-    private ConvolutionalLayer<T>? _featureExtract;
-    private readonly List<ConvolutionalLayer<T>> _processingBlocks;
-    private ConvolutionalLayer<T>? _outputConv;
+    #endregion
 
-    /// <summary>
-    /// Creates a new DOVE model for native training and inference.
-    /// </summary>
-    /// <param name="architecture">The neural network architecture configuration.</param>
-    /// <param name="numFeatures">Number of feature channels. Default: 64.</param>
-    /// <param name="numLayers">Number of processing layers. Default: 8.</param>
-    /// <param name="options">Optional configuration options.</param>
-    public DOVE(
-        NeuralNetworkArchitecture<T> architecture,
-        int numFeatures = 64,
-        int numLayers = 8,
-        DOVEOptions? options = null)
-        : base(architecture, new MeanSquaredErrorLoss<T>())
+    #region Constructors
+
+    /// <summary>Creates a DOVE model in ONNX inference mode.</summary>
+    public DOVE(NeuralNetworkArchitecture<T> architecture, string modelPath, DOVEOptions? options = null)
+        : base(architecture)
     {
         _options = options ?? new DOVEOptions();
-        Options = _options;
-
-        _numFeatures = numFeatures;
-        _numLayers = numLayers;
-        _processingBlocks = [];
-
-        InitializeNativeLayers(architecture);
-    }
-
-    private void InitializeNativeLayers(NeuralNetworkArchitecture<T> arch)
-    {
-        int height = arch.InputHeight > 0 ? arch.InputHeight : 64;
-        int width = arch.InputWidth > 0 ? arch.InputWidth : 64;
-        int channels = arch.InputDepth > 0 ? arch.InputDepth : 3;
-
-        _featureExtract = new ConvolutionalLayer<T>(channels, height, width, _numFeatures, 3, 1, 1);
-
-        for (int i = 0; i < _numLayers; i++)
-        {
-            _processingBlocks.Add(new ConvolutionalLayer<T>(_numFeatures, height, width, _numFeatures, 3, 1, 1));
-        }
-
-        _outputConv = new ConvolutionalLayer<T>(_numFeatures, height, width, channels, 3, 1, 1);
-
+        _useNativeMode = false;
+        ScaleFactor = _options.ScaleFactor;
+        _options.ModelPath = modelPath;
+        OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
         InitializeLayers();
     }
 
-    /// <inheritdoc/>
-    protected override void InitializeLayers()
+    /// <summary>Creates a DOVE model in native training mode.</summary>
+    public DOVE(NeuralNetworkArchitecture<T> architecture, DOVEOptions? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
+        : base(architecture)
     {
-        ClearLayers();
+        _options = options ?? new DOVEOptions();
+        _useNativeMode = true;
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        ScaleFactor = _options.ScaleFactor;
+        InitializeLayers();
     }
 
-    /// <inheritdoc/>
-    protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames)
-    {
-        return NormalizeFrames(rawFrames);
-    }
+    #endregion
 
-    /// <inheritdoc/>
-    protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput)
-    {
-        return DenormalizeFrames(modelOutput);
-    }
+    #region Video Super-Resolution
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public override Tensor<T> Upscale(Tensor<T> lowResFrames)
     {
-        int numFrames = lowResFrames.Shape[0];
-        int channels = lowResFrames.Shape[1];
-        int height = lowResFrames.Shape[2];
-        int width = lowResFrames.Shape[3];
-        int outHeight = height * ScaleFactor;
-        int outWidth = width * ScaleFactor;
-
-        var output = new Tensor<T>([numFrames, channels, outHeight, outWidth]);
-
-        for (int f = 0; f < numFrames; f++)
-        {
-            var frame = ExtractFrame(lowResFrames, f);
-            var feat = _featureExtract!.Forward(frame);
-            foreach (var block in _processingBlocks)
-            {
-                feat = block.Forward(feat);
-            }
-            var recon = _outputConv!.Forward(feat);
-            var upsampled = BicubicUpsample(recon, ScaleFactor);
-            StoreFrame(output, upsampled, f);
-        }
-
-        return output;
+        ThrowIfDisposed();
+        var preprocessed = PreprocessFrames(lowResFrames);
+        var output = IsOnnxMode ? RunOnnxInference(preprocessed) : Forward(preprocessed);
+        return PostprocessOutput(output);
     }
 
-    /// <inheritdoc/>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    #endregion
+
+    #region NeuralNetworkBase
+
+    protected override void InitializeLayers()
     {
-        var output = Predict(input);
-        var gradient = new Tensor<T>(output.Shape);
-        for (int i = 0; i < output.Length; i++)
+        if (!_useNativeMode) return;
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
         {
-            gradient.Data.Span[i] = NumOps.Subtract(output.Data.Span[i], expectedOutput.Data.Span[i]);
+            Layers.AddRange(Architecture.Layers);
         }
-        if (_outputConv is not null)
+        else
         {
-            _outputConv.Backward(gradient);
+            int ch = Architecture.InputDepth > 0 ? Architecture.InputDepth : 3;
+            int h = Architecture.InputHeight > 0 ? Architecture.InputHeight : 128;
+            int w = Architecture.InputWidth > 0 ? Architecture.InputWidth : 128;
+            Layers.AddRange(LayerHelper<T>.CreateDefaultVideoSuperResolutionLayers(
+                inputChannels: ch, inputHeight: h, inputWidth: w,
+                numFeatures: _options.NumFeatures,
+                numResBlocks: _options.NumResBlocks,
+                scaleFactor: _options.ScaleFactor));
         }
     }
 
-    /// <inheritdoc/>
+    public override Tensor<T> Predict(Tensor<T> input)
+    {
+        ThrowIfDisposed();
+        if (IsOnnxMode) return RunOnnxInference(input);
+        return Forward(input);
+    }
+
+    public override void Train(Tensor<T> input, Tensor<T> expected)
+    {
+        if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
+        SetTrainingMode(true);
+        var output = Predict(input);
+        var grad = LossFunction.CalculateDerivative(output.ToVector(), expected.ToVector());
+        var gt = Tensor<T>.FromVector(grad);
+        for (int i = Layers.Count - 1; i >= 0; i--) gt = Layers[i].Backward(gt);
+        _optimizer?.UpdateParameters(Layers);
+        SetTrainingMode(false);
+    }
+
     public override void UpdateParameters(Vector<T> parameters)
     {
-        int offset = 0;
-        if (_featureExtract is not null)
+        if (!_useNativeMode) throw new NotSupportedException("Parameter updates are not supported in ONNX mode.");
+        int idx = 0;
+        foreach (var layer in Layers)
         {
-            var p = _featureExtract.GetParameters();
-            if (offset + p.Length <= parameters.Length)
-            {
-                var sub = new Vector<T>(p.Length);
-                for (int i = 0; i < p.Length; i++) sub[i] = parameters[offset + i];
-                _featureExtract.SetParameters(sub);
-                offset += p.Length;
-            }
-        }
-        foreach (var block in _processingBlocks)
-        {
-            var p = block.GetParameters();
-            if (offset + p.Length <= parameters.Length)
-            {
-                var sub = new Vector<T>(p.Length);
-                for (int i = 0; i < p.Length; i++) sub[i] = parameters[offset + i];
-                block.SetParameters(sub);
-                offset += p.Length;
-            }
-        }
-        if (_outputConv is not null)
-        {
-            var p = _outputConv.GetParameters();
-            if (offset + p.Length <= parameters.Length)
-            {
-                var sub = new Vector<T>(p.Length);
-                for (int i = 0; i < p.Length; i++) sub[i] = parameters[offset + i];
-                _outputConv.SetParameters(sub);
-            }
+            int count = layer.ParameterCount;
+            layer.UpdateParameters(parameters.Slice(idx, count));
+            idx += count;
         }
     }
 
-    /// <inheritdoc/>
+    protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames) => NormalizeFrames(rawFrames);
+
+    protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput) => DenormalizeFrames(modelOutput);
+
     public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetadata<T>
+        var m = new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
-            AdditionalInfo = new Dictionary<string, object>
-            {
-                { "ModelName", "DOVE" },
-                { "NumFeatures", _numFeatures },
-                { "NumLayers", _numLayers }
-            },
-            ModelData = this.Serialize()
+            Name = _useNativeMode ? "DOVE-Native" : "DOVE-ONNX",
+            Description = $"DOVE {_options.Variant} video diffusion prior restoration (Chen et al., 2025)",
+            ModelType = ModelType.VideoSuperResolution,
+            Complexity = _options.NumResBlocks
         };
+        m.AdditionalInfo["Variant"] = _options.Variant.ToString();
+        m.AdditionalInfo["NumFeatures"] = _options.NumFeatures.ToString();
+        m.AdditionalInfo["NumDenoisingSteps"] = _options.NumDenoisingSteps.ToString();
+        m.AdditionalInfo["GuidanceScale"] = _options.GuidanceScale.ToString();
+        m.AdditionalInfo["ScaleFactor"] = _options.ScaleFactor.ToString();
+        return m;
     }
 
-    /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    protected override void SerializeNetworkSpecificData(BinaryWriter w)
     {
-        writer.Write(_numFeatures);
-        writer.Write(_numLayers);
+        w.Write(_useNativeMode);
+        w.Write(_options.ModelPath ?? string.Empty);
+        w.Write((int)_options.Variant);
+        w.Write(_options.NumFeatures);
+        w.Write(_options.NumDenoisingSteps);
+        w.Write(_options.NumResBlocks);
+        w.Write(_options.NumAttentionHeads);
+        w.Write(_options.ScaleFactor);
+        w.Write(_options.LatentDim);
+        w.Write(_options.GuidanceScale);
+        w.Write(_options.DropoutRate);
     }
 
-    /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    protected override void DeserializeNetworkSpecificData(BinaryReader r)
     {
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
+        _useNativeMode = r.ReadBoolean();
+        string mp = r.ReadString();
+        if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
+        _options.Variant = (VideoModelVariant)r.ReadInt32();
+        _options.NumFeatures = r.ReadInt32();
+        _options.NumDenoisingSteps = r.ReadInt32();
+        _options.NumResBlocks = r.ReadInt32();
+        _options.NumAttentionHeads = r.ReadInt32();
+        _options.ScaleFactor = r.ReadInt32();
+        _options.LatentDim = r.ReadInt32();
+        _options.GuidanceScale = r.ReadDouble();
+        _options.DropoutRate = r.ReadDouble();
+        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
+            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    /// <inheritdoc/>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+        => new DOVE<T>(Architecture, _options);
+
+    #endregion
+
+    #region Disposal
+
+    private void ThrowIfDisposed()
     {
-        return new DOVE<T>(Architecture, _numFeatures, _numLayers);
+        if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(DOVE<T>));
     }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (_disposed) return;
+        _disposed = true;
+        base.Dispose(disposing);
+    }
+
+    #endregion
 }
