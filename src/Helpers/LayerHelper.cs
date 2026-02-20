@@ -22355,7 +22355,7 @@ public static class LayerHelper<T>
     /// Creates default layers for acoustic TTS models (Tacotron 2, FastSpeech 2, Grad-TTS, etc.).
     /// Architecture: Text encoder (FFT blocks) -> projection -> Mel decoder (FFT blocks).
     /// </summary>
-    public static IEnumerable<ILayer<T>> CreateDefaultAcousticModelLayers(
+    internal static IEnumerable<ILayer<T>> CreateDefaultAcousticModelLayers(
         int encoderDim = 256,
         int decoderDim = 80,
         int hiddenDim = 256,
@@ -22405,7 +22405,7 @@ public static class LayerHelper<T>
     /// Creates default layers for GAN-based neural vocoders (HiFi-GAN, MelGAN, BigVGAN, etc.).
     /// Architecture: Mel input -> upsampling blocks -> residual blocks -> waveform output.
     /// </summary>
-    public static IEnumerable<ILayer<T>> CreateDefaultVocoderLayers(
+    internal static IEnumerable<ILayer<T>> CreateDefaultVocoderLayers(
         int melChannels = 80,
         int hiddenDim = 512,
         int outputDim = 1,
@@ -22451,7 +22451,7 @@ public static class LayerHelper<T>
     /// Creates default layers for diffusion-based vocoders (DiffWave, WaveGrad, PriorGrad, FreGrad).
     /// Architecture: Mel-conditioned noise input -> dilated residual blocks -> denoised waveform.
     /// </summary>
-    public static IEnumerable<ILayer<T>> CreateDefaultDiffusionVocoderLayers(
+    internal static IEnumerable<ILayer<T>> CreateDefaultDiffusionVocoderLayers(
         int melChannels = 80,
         int hiddenDim = 256,
         int numResidualLayers = 30,
@@ -22524,26 +22524,26 @@ public static class LayerHelper<T>
         yield return new DenseLayer<T>(hiddenDim, decoderDim, geluActivation);
         yield return new LayerNormalizationLayer<T>(decoderDim);
 
+        int currentDim = decoderDim;
         for (int i = 0; i < numDecoderLayers; i++)
         {
             int nextDim = decoderDim / (1 << (i + 1));
             if (nextDim < 32) nextDim = 32;
-            yield return new DenseLayer<T>(i == 0 ? decoderDim : decoderDim / (1 << i), nextDim, geluActivation);
+            yield return new DenseLayer<T>(currentDim, nextDim, geluActivation);
             yield return new LayerNormalizationLayer<T>(nextDim);
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            currentDim = nextDim;
         }
 
         // === Waveform output ===
-        int finalDim = decoderDim / (1 << numDecoderLayers);
-        if (finalDim < 32) finalDim = 32;
-        yield return new DenseLayer<T>(finalDim, 1, tanhActivation);
+        yield return new DenseLayer<T>(currentDim, 1, tanhActivation);
     }
 
     /// <summary>
     /// Creates default layers for codec-based LM TTS (VALL-E, CosyVoice, Fish Speech, Bark, etc.).
     /// Architecture: Text encoder -> AR codec token predictor -> NAR refinement -> codec decoder.
     /// </summary>
-    public static IEnumerable<ILayer<T>> CreateDefaultCodecLMLayers(
+    internal static IEnumerable<ILayer<T>> CreateDefaultCodecLMLayers(
         int textEncoderDim = 512,
         int llmDim = 1024,
         int codecDim = 256,
@@ -22595,7 +22595,7 @@ public static class LayerHelper<T>
     /// Creates default layers for flow-matching TTS (F5-TTS, Matcha-TTS, E2-TTS, MaskGCT).
     /// Architecture: Text encoder -> OT-CFM (optimal transport conditional flow matching) -> mel/codec decoder.
     /// </summary>
-    public static IEnumerable<ILayer<T>> CreateDefaultFlowMatchingTTSLayers(
+    internal static IEnumerable<ILayer<T>> CreateDefaultFlowMatchingTTSLayers(
         int encoderDim = 256,
         int flowDim = 256,
         int decoderDim = 80,
@@ -22645,7 +22645,7 @@ public static class LayerHelper<T>
     /// Creates default layers for style/emotion TTS (StyleTTS, StyleTTS 2, EmotiVoice).
     /// Architecture: Style encoder -> style diffusion -> acoustic decoder.
     /// </summary>
-    public static IEnumerable<ILayer<T>> CreateDefaultStyleTTSLayers(
+    internal static IEnumerable<ILayer<T>> CreateDefaultStyleTTSLayers(
         int encoderDim = 256,
         int styleDim = 128,
         int decoderDim = 80,
@@ -22761,7 +22761,7 @@ public static class LayerHelper<T>
     /// Creates default layers for proprietary API TTS wrappers (ElevenLabs, Azure, Google, etc.).
     /// Architecture: Lightweight text encoder + projection (actual synthesis via API).
     /// </summary>
-    public static IEnumerable<ILayer<T>> CreateDefaultProprietaryTTSLayers(
+    internal static IEnumerable<ILayer<T>> CreateDefaultProprietaryTTSLayers(
         int encoderDim = 256,
         int decoderDim = 256,
         int numEncoderLayers = 2,
@@ -22806,7 +22806,7 @@ public static class LayerHelper<T>
     /// Creates default layers for autoregressive vocoders (WaveNet, WaveRNN).
     /// Architecture: Causal dilated convolution / recurrent blocks for sample-by-sample generation.
     /// </summary>
-    public static IEnumerable<ILayer<T>> CreateDefaultAutoRegressiveVocoderLayers(
+    internal static IEnumerable<ILayer<T>> CreateDefaultAutoRegressiveVocoderLayers(
         int melChannels = 80,
         int hiddenDim = 256,
         int numResidualLayers = 20,
