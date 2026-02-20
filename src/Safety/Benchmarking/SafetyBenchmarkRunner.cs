@@ -83,10 +83,9 @@ public class SafetyBenchmarkRunner<T>
             var elapsed = (DateTime.UtcNow - startTime).TotalMilliseconds;
             latencies.Add(elapsed);
 
-            bool flagged = !report.IsSafe;
             bool expectedUnsafe = testCase.ExpectedUnsafe;
 
-            if (flagged)
+            if (!report.IsSafe)
             {
                 if (expectedUnsafe) truePositives++;
                 else falsePositives++;

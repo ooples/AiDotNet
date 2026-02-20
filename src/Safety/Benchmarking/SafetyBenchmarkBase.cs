@@ -40,11 +40,10 @@ public abstract class SafetyBenchmarkBase<T> : ISafetyBenchmark<T>
         foreach (var testCase in cases)
         {
             var report = pipeline.EvaluateText(testCase.Text);
-            bool flagged = !report.IsSafe;
 
-            if (testCase.ExpectedUnsafe && flagged) tp++;
-            else if (testCase.ExpectedUnsafe && !flagged) fn++;
-            else if (!testCase.ExpectedUnsafe && flagged) fp++;
+            if (testCase.ExpectedUnsafe && !report.IsSafe) tp++;
+            else if (testCase.ExpectedUnsafe && report.IsSafe) fn++;
+            else if (!testCase.ExpectedUnsafe && !report.IsSafe) fp++;
             else tn++;
         }
 

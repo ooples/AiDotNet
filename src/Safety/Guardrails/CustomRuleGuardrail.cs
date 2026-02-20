@@ -96,7 +96,19 @@ public class CustomRuleGuardrail<T> : ITextSafetyModule<T>
                     findings.Add(finding);
                 }
             }
-            catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or FormatException or TimeoutException)
+            catch (InvalidOperationException)
+            {
+                findings.Add(CreateRuleErrorFinding(rule.Name));
+            }
+            catch (ArgumentException)
+            {
+                findings.Add(CreateRuleErrorFinding(rule.Name));
+            }
+            catch (FormatException)
+            {
+                findings.Add(CreateRuleErrorFinding(rule.Name));
+            }
+            catch (TimeoutException)
             {
                 findings.Add(CreateRuleErrorFinding(rule.Name));
             }
