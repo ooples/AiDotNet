@@ -225,6 +225,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     private ReasoningConfig? _reasoningConfig;
     private ProfilingConfig? _profilingConfig;
     private BenchmarkingOptions? _benchmarkingOptions;
+    private AiDotNet.Safety.SafetyConfig? _safetyPipelineConfig;
 
     // Tokenization configuration
     private ITokenizer? _tokenizer;
@@ -1310,7 +1311,16 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
 
         var programSynthesisResult = new AiModelResult<T, TInput, TOutput>(options);
         ProcessKnowledgeGraphOptions(programSynthesisResult);
+        AttachSafetyPipeline(programSynthesisResult);
         return programSynthesisResult;
+    }
+
+    private void AttachSafetyPipeline(AiModelResult<T, TInput, TOutput> result)
+    {
+        if (_safetyPipelineConfig != null)
+        {
+            result.SafetyPipeline = AiDotNet.Safety.SafetyPipelineFactory<T>.Create(_safetyPipelineConfig);
+        }
     }
 
     private void ProcessKnowledgeGraphOptions(AiModelResult<T, TInput, TOutput> result)
@@ -1648,6 +1658,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
 
         var nnResult = new AiModelResult<T, TInput, TOutput>(options);
         ProcessKnowledgeGraphOptions(nnResult);
+        AttachSafetyPipeline(nnResult);
         return nnResult;
     }
 
@@ -2754,6 +2765,9 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
 
         ProcessKnowledgeGraphOptions(finalResult);
 
+        // Build and attach the composable safety pipeline if configured
+        AttachSafetyPipeline(finalResult);
+
         return finalResult;
     }
 
@@ -2885,6 +2899,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
 
         var result = new AiModelResult<T, TInput, TOutput>(metaOptions);
         ProcessKnowledgeGraphOptions(result);
+        AttachSafetyPipeline(result);
 
         return result;
     }
@@ -3206,6 +3221,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
 
         var result = new AiModelResult<T, TInput, TOutput>(rlOptions);
         ProcessKnowledgeGraphOptions(result);
+        AttachSafetyPipeline(result);
 
         return result;
     }
@@ -4458,6 +4474,41 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     public IAiModelBuilder<T, TInput, TOutput> ConfigureProfiling(ProfilingConfig? config = null)
     {
         _profilingConfig = config ?? new ProfilingConfig { Enabled = true };
+        return this;
+    }
+
+    /// <summary>
+    /// Configures the comprehensive safety pipeline for input validation and output filtering.
+    /// </summary>
+    /// <param name="configure">
+    /// Action to configure safety settings. If null, safety is enabled with default settings
+    /// (text toxicity, PII detection, and jailbreak detection are all enabled).
+    /// </param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// The safety pipeline provides modular, composable content safety checks across text,
+    /// image, audio, and video modalities. All settings use nullable types with industry-standard
+    /// defaults — if you don't configure something, a sensible default is used automatically.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This is your one-stop safety control panel. Enable the checks
+    /// you need and the pipeline handles the rest:
+    /// <code>
+    /// builder.ConfigureSafety(safety =&gt;
+    /// {
+    ///     safety.Text.ToxicityDetection = true;
+    ///     safety.Text.PIIDetection = true;
+    ///     safety.Image.NSFWDetection = true;
+    ///     safety.Guardrails.InputGuardrails = true;
+    /// });
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureSafety(Action<AiDotNet.Safety.SafetyConfig>? configure = null)
+    {
+        _safetyPipelineConfig = new AiDotNet.Safety.SafetyConfig();
+        configure?.Invoke(_safetyPipelineConfig);
         return this;
     }
 

@@ -1186,6 +1186,13 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     IAiModelBuilder<T, TInput, TOutput> ConfigureTelemetry(TelemetryConfig? config = null);
 
     /// <summary>
+    /// Configures the comprehensive safety pipeline for input validation and output filtering.
+    /// </summary>
+    /// <param name="configure">Action to configure safety settings. If null, safety is enabled with defaults.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureSafety(Action<AiDotNet.Safety.SafetyConfig>? configure = null);
+
+    /// <summary>
     /// Configures benchmarking to run standardized benchmark suites and attach a structured report to the built model.
     /// </summary>
     /// <remarks>
