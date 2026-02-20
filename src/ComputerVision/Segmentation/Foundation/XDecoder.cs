@@ -182,6 +182,7 @@ public class XDecoder<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
         _numClasses = numClasses;
         _numQueries = numQueries;
         _modelSize = modelSize;
+        _numStuffClasses = _options.NumStuffClasses ?? Math.Max(1, _numClasses / 3);
         _dropRate = 0.0;
         _useNativeMode = false;
         _onnxModelPath = onnxModelPath;
@@ -408,7 +409,7 @@ public class XDecoder<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
         writer.Write(_numClasses); writer.Write(_numQueries); writer.Write((int)_modelSize);
         writer.Write(_decoderDim); writer.Write(_dropRate);
         writer.Write(_useNativeMode); writer.Write(_onnxModelPath ?? string.Empty);
-        writer.Write(_encoderLayerEnd);
+        writer.Write(_encoderLayerEnd); writer.Write(_numStuffClasses);
         writer.Write(_channelDims.Length);
         foreach (int dim in _channelDims) writer.Write(dim);
         writer.Write(_depths.Length);
@@ -437,6 +438,7 @@ public class XDecoder<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
         _useNativeMode = reader.ReadBoolean();
         _onnxModelPath = reader.ReadString();
         _encoderLayerEnd = reader.ReadInt32();
+        _numStuffClasses = reader.ReadInt32();
         int dimCount = reader.ReadInt32();
         _channelDims = new int[dimCount];
         for (int i = 0; i < dimCount; i++) _channelDims[i] = reader.ReadInt32();

@@ -81,6 +81,10 @@ public class SegmentationMask<T>
     /// <param name="score">Confidence score in [0, 1].</param>
     public SegmentationMask(Tensor<T> mask, int classId, double score)
     {
+        if (mask is null) throw new ArgumentNullException(nameof(mask));
+        if (classId < 0) throw new ArgumentOutOfRangeException(nameof(classId), "Class ID must be non-negative.");
+        if (score < 0 || score > 1) throw new ArgumentOutOfRangeException(nameof(score), "Score must be in [0, 1].");
+
         Mask = mask;
         ClassId = classId;
         Score = score;

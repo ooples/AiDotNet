@@ -40,6 +40,9 @@ public abstract class PanopticSegmentationBase<T> : SegmentationModelBase<T>, IP
         int numThingClasses)
         : base(architecture, optimizer, lossFunction, numClasses)
     {
+        if (numStuffClasses + numThingClasses != numClasses)
+            throw new ArgumentException(
+                $"numStuffClasses ({numStuffClasses}) + numThingClasses ({numThingClasses}) must equal numClasses ({numClasses}).");
         _numStuffClasses = numStuffClasses;
         _numThingClasses = numThingClasses;
     }
@@ -55,6 +58,9 @@ public abstract class PanopticSegmentationBase<T> : SegmentationModelBase<T>, IP
         int numThingClasses)
         : base(architecture, onnxModelPath, numClasses)
     {
+        if (numStuffClasses + numThingClasses != numClasses)
+            throw new ArgumentException(
+                $"numStuffClasses ({numStuffClasses}) + numThingClasses ({numThingClasses}) must equal numClasses ({numClasses}).");
         _numStuffClasses = numStuffClasses;
         _numThingClasses = numThingClasses;
     }

@@ -29,7 +29,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Efficient;
 /// - YOLOv8-Seg backbone trained on SA-1B dataset
 /// - 50x faster than original SAM
 /// - CNN-based architecture (no vision transformer)
-/// - Supports point, box, and text prompts
+/// - Supports point and box prompts
 /// </para>
 /// <para>
 /// <b>Reference:</b> Zhao et al., "Fast Segment Anything", arXiv 2023.

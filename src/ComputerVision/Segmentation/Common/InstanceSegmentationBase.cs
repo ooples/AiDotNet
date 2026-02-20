@@ -2,6 +2,7 @@ using AiDotNet.ComputerVision.Segmentation.InstanceSegmentation;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Optimizers;
+using AiDotNet.Validation;
 
 namespace AiDotNet.ComputerVision.Segmentation.Common;
 
@@ -54,6 +55,9 @@ public abstract class InstanceSegmentationBase<T> : SegmentationModelBase<T>, II
         double nmsThreshold = 0.5)
         : base(architecture, optimizer, lossFunction, numClasses)
     {
+        Guard.Positive(maxInstances);
+        Guard.InRange(confidenceThreshold, 0.0, 1.0);
+        Guard.InRange(nmsThreshold, 0.0, 1.0);
         _maxInstances = maxInstances;
         _confidenceThreshold = confidenceThreshold;
         _nmsThreshold = nmsThreshold;
@@ -71,6 +75,9 @@ public abstract class InstanceSegmentationBase<T> : SegmentationModelBase<T>, II
         double nmsThreshold = 0.5)
         : base(architecture, onnxModelPath, numClasses)
     {
+        Guard.Positive(maxInstances);
+        Guard.InRange(confidenceThreshold, 0.0, 1.0);
+        Guard.InRange(nmsThreshold, 0.0, 1.0);
         _maxInstances = maxInstances;
         _confidenceThreshold = confidenceThreshold;
         _nmsThreshold = nmsThreshold;

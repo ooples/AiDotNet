@@ -72,6 +72,24 @@ public abstract class VideoSegmentationBase<T> : SegmentationModelBase<T>, IVide
     /// <inheritdoc/>
     public virtual void InitializeTracking(Tensor<T> frame, Tensor<T> masks, int[]? objectIds = null)
     {
+        if (frame is null) throw new ArgumentNullException(nameof(frame));
+        if (masks is null) throw new ArgumentNullException(nameof(masks));
+
+        int numObjects = masks.Shape[0];
+        if (numObjects > _maxTrackedObjects)
+        {
+            throw new ArgumentException(
+                $"Number of objects ({numObjects}) exceeds maximum tracked objects ({_maxTrackedObjects}).",
+                nameof(masks));
+        }
+
+        if (objectIds != null && objectIds.Length != numObjects)
+        {
+            throw new ArgumentException(
+                $"Object IDs count ({objectIds.Length}) must match number of masks ({numObjects}).",
+                nameof(objectIds));
+        }
+
         _currentFrameIndex = 0;
         _trackingInitialized = true;
 
@@ -82,7 +100,6 @@ public abstract class VideoSegmentationBase<T> : SegmentationModelBase<T>, IVide
         else
         {
             // Assign sequential IDs
-            int numObjects = masks.Shape[0];
             _trackedObjectIds = Enumerable.Range(1, numObjects).ToList();
         }
 
@@ -103,8 +120,10 @@ public abstract class VideoSegmentationBase<T> : SegmentationModelBase<T>, IVide
                 "Tracking has not been initialized. Call InitializeTracking() with a first-frame mask before propagating.");
         }
 
-        _currentFrameIndex++;
-        return PropagateToFrameInternal(frame, _currentFrameIndex);
+        int nextFrameIndex = _currentFrameIndex + 1;
+        var result = PropagateToFrameInternal(frame, nextFrameIndex);
+        _currentFrameIndex = nextFrameIndex;
+        return result;
     }
 
     /// <summary>
