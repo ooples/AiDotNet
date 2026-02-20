@@ -44,6 +44,8 @@ public class FuseFormer<T> : VideoInpaintingBase<T>
         FuseFormerOptions? options = null)
         : base(architecture)
     {
+        if (string.IsNullOrEmpty(modelPath))
+            throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
         _options = options ?? new FuseFormerOptions();
         _useNativeMode = false;
         SupportsTemporalPropagation = true;
@@ -107,23 +109,33 @@ public class FuseFormer<T> : VideoInpaintingBase<T>
     {
         if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
         SetTrainingMode(true);
-        var output = Predict(input);
-        var grad = LossFunction.CalculateDerivative(output.ToVector(), expected.ToVector());
-        var gt = Tensor<T>.FromVector(grad);
-        for (int i = Layers.Count - 1; i >= 0; i--)
-            gt = Layers[i].Backward(gt);
-        _optimizer?.UpdateParameters(Layers);
-        SetTrainingMode(false);
+        try
+        {
+            var output = Predict(input);
+            var grad = LossFunction.CalculateDerivative(output.ToVector(), expected.ToVector());
+            var gt = Tensor<T>.FromVector(grad);
+            for (int i = Layers.Count - 1; i >= 0; i--)
+                gt = Layers[i].Backward(gt);
+            _optimizer?.UpdateParameters(Layers);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     /// <inheritdoc/>
     public override void UpdateParameters(Vector<T> parameters)
     {
+        if (!_useNativeMode) throw new NotSupportedException("Parameter updates are not supported in ONNX mode.");
+        int required = 0;
+        foreach (var layer in Layers) required += layer.GetParameters().Length;
+        if (parameters.Length < required)
+            throw new ArgumentException($"Parameter vector length {parameters.Length} is less than required {required}.", nameof(parameters));
         int offset = 0;
         foreach (var layer in Layers)
         {
             var p = layer.GetParameters();
-            if (offset + p.Length > parameters.Length) break;
             var sub = new Vector<T>(p.Length);
             for (int i = 0; i < p.Length; i++) sub[i] = parameters[offset + i];
             layer.SetParameters(sub);
@@ -177,15 +189,23 @@ public class FuseFormer<T> : VideoInpaintingBase<T>
     /// <inheritdoc/>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
+        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
+            return new FuseFormer<T>(Architecture, p, _options);
         return new FuseFormer<T>(Architecture, _options);
     }
 
     private static Tensor<T> ConcatFramesAndMasks(Tensor<T> frames, Tensor<T> masks)
     {
+        if (frames.Rank != 4)
+            throw new ArgumentException($"Frames must be rank 4 [N, C, H, W], got rank {frames.Rank}.", nameof(frames));
+        if (masks.Rank != 4)
+            throw new ArgumentException($"Masks must be rank 4 [N, 1, H, W], got rank {masks.Rank}.", nameof(masks));
         int n = frames.Shape[0];
         int c = frames.Shape[1];
         int h = frames.Shape[2];
         int w = frames.Shape[3];
+        if (masks.Shape[0] != n || masks.Shape[2] != h || masks.Shape[3] != w)
+            throw new ArgumentException($"Masks spatial dimensions must match frames. Frames: [{n},{c},{h},{w}], Masks: [{masks.Shape[0]},{masks.Shape[1]},{masks.Shape[2]},{masks.Shape[3]}].", nameof(masks));
         var combined = new Tensor<T>([n, c + 1, h, w]);
         int frameSize = c * h * w;
         int maskSize = h * w;

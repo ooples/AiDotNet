@@ -131,12 +131,18 @@ public class RealBasicVSR<T> : VideoSuperResolutionBase<T>
     {
         if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
         SetTrainingMode(true);
-        var output = Predict(input);
-        var grad = LossFunction.CalculateDerivative(output.ToVector(), expected.ToVector());
-        var gt = Tensor<T>.FromVector(grad);
-        for (int i = Layers.Count - 1; i >= 0; i--) gt = Layers[i].Backward(gt);
-        _optimizer?.UpdateParameters(Layers);
-        SetTrainingMode(false);
+        try
+        {
+            var output = Predict(input);
+            var grad = LossFunction.CalculateDerivative(output.ToVector(), expected.ToVector());
+            var gt = Tensor<T>.FromVector(grad);
+            for (int i = Layers.Count - 1; i >= 0; i--) gt = Layers[i].Backward(gt);
+            _optimizer?.UpdateParameters(Layers);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     public override void UpdateParameters(Vector<T> parameters)
@@ -197,12 +203,26 @@ public class RealBasicVSR<T> : VideoSuperResolutionBase<T>
         _options.ScaleFactor = r.ReadInt32();
         _options.NumFrames = r.ReadInt32();
         _options.DropoutRate = r.ReadDouble();
+        ScaleFactor = _options.ScaleFactor;
+        NumFrames = _options.NumFrames;
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
+        {
+            OnnxModel?.Dispose();
             OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
+        }
+        else if (_useNativeMode)
+        {
+            Layers.Clear();
+            InitializeLayers();
+        }
     }
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        => new RealBasicVSR<T>(Architecture, _options);
+    {
+        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
+            return new RealBasicVSR<T>(Architecture, p, _options);
+        return new RealBasicVSR<T>(Architecture, _options);
+    }
 
     #endregion
 

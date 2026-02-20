@@ -58,6 +58,8 @@ public class STMFNet<T> : FrameInterpolationBase<T>
     public STMFNet(NeuralNetworkArchitecture<T> architecture, string modelPath, STMFNetOptions? options = null)
         : base(architecture)
     {
+        if (string.IsNullOrEmpty(modelPath))
+            throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
         _options = options ?? new STMFNetOptions();
         _useNativeMode = false;
         SupportsArbitraryTimestep = false;
@@ -128,12 +130,18 @@ public class STMFNet<T> : FrameInterpolationBase<T>
     {
         if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
         SetTrainingMode(true);
-        var output = Predict(input);
-        var grad = LossFunction.CalculateDerivative(output.ToVector(), expected.ToVector());
-        var gt = Tensor<T>.FromVector(grad);
-        for (int i = Layers.Count - 1; i >= 0; i--) gt = Layers[i].Backward(gt);
-        _optimizer?.UpdateParameters(Layers);
-        SetTrainingMode(false);
+        try
+        {
+            var output = Predict(input);
+            var grad = LossFunction.CalculateDerivative(output.ToVector(), expected.ToVector());
+            var gt = Tensor<T>.FromVector(grad);
+            for (int i = Layers.Count - 1; i >= 0; i--) gt = Layers[i].Backward(gt);
+            _optimizer?.UpdateParameters(Layers);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     public override void UpdateParameters(Vector<T> parameters)
@@ -196,8 +204,11 @@ public class STMFNet<T> : FrameInterpolationBase<T>
         _options.DropoutRate = r.ReadDouble();
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
             OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
-        if (_useNativeMode)
+        else if (_useNativeMode)
+        {
+            Layers.Clear();
             InitializeLayers();
+        }
     }
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
@@ -220,6 +231,7 @@ public class STMFNet<T> : FrameInterpolationBase<T>
     {
         if (_disposed) return;
         _disposed = true;
+        if (disposing) OnnxModel?.Dispose();
         base.Dispose(disposing);
     }
 

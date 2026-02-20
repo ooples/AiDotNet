@@ -118,7 +118,9 @@ public class NeuFlowV2<T> : OpticalFlowBase<T>
 
         // Extract 2-channel flow field
         var flow = new Tensor<T>([2, height, width]);
-        for (int i = 0; i < Math.Min(rawFlow.Length, flow.Length); i++)
+        if (rawFlow.Length < flow.Length)
+            throw new InvalidOperationException($"Raw flow output ({rawFlow.Length} elements) is smaller than expected flow field ({flow.Length} elements).");
+        for (int i = 0; i < flow.Length; i++)
         {
             flow.Data.Span[i] = rawFlow.Data.Span[i];
         }

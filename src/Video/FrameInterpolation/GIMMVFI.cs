@@ -202,6 +202,11 @@ public class GIMMVFI<T> : FrameInterpolationBase<T>
         _options.DropoutRate = r.ReadDouble();
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
             OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
+        else if (_useNativeMode)
+        {
+            Layers.Clear();
+            InitializeLayers();
+        }
     }
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()

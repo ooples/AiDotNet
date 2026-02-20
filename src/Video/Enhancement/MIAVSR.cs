@@ -205,6 +205,11 @@ public class MIAVSR<T> : VideoSuperResolutionBase<T>
         ScaleFactor = _options.ScaleFactor;
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
             OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
+        else if (_useNativeMode)
+        {
+            Layers.Clear();
+            InitializeLayers();
+        }
     }
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
@@ -227,6 +232,7 @@ public class MIAVSR<T> : VideoSuperResolutionBase<T>
     {
         if (_disposed) return;
         _disposed = true;
+        if (disposing) OnnxModel?.Dispose();
         base.Dispose(disposing);
     }
 

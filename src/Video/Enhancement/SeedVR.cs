@@ -59,6 +59,8 @@ public class SeedVR<T> : VideoSuperResolutionBase<T>
     public SeedVR(NeuralNetworkArchitecture<T> architecture, string modelPath, SeedVROptions? options = null)
         : base(architecture)
     {
+        if (string.IsNullOrEmpty(modelPath))
+            throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
         _options = options ?? new SeedVROptions();
         _useNativeMode = false;
         ScaleFactor = _options.ScaleFactor;
@@ -204,8 +206,17 @@ public class SeedVR<T> : VideoSuperResolutionBase<T>
         _options.NumDenoisingSteps = r.ReadInt32();
         _options.ScaleFactor = r.ReadInt32();
         _options.DropoutRate = r.ReadDouble();
+        ScaleFactor = _options.ScaleFactor;
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
+        {
+            OnnxModel?.Dispose();
             OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
+        }
+        else if (_useNativeMode)
+        {
+            Layers.Clear();
+            InitializeLayers();
+        }
     }
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
@@ -228,6 +239,7 @@ public class SeedVR<T> : VideoSuperResolutionBase<T>
     {
         if (_disposed) return;
         _disposed = true;
+        if (disposing) OnnxModel?.Dispose();
         base.Dispose(disposing);
     }
 

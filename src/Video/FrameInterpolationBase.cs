@@ -37,7 +37,18 @@ public abstract class FrameInterpolationBase<T> : VideoNeuralNetworkBase<T>
     /// A value of 4 means three intermediate frames are generated (30fps to 120fps).
     /// </para>
     /// </remarks>
-    public int TemporalScaleFactor { get; protected set; } = 2;
+    private int _temporalScaleFactor = 2;
+
+    public int TemporalScaleFactor
+    {
+        get => _temporalScaleFactor;
+        protected set
+        {
+            if (value < 2)
+                throw new ArgumentOutOfRangeException(nameof(value), value, "TemporalScaleFactor must be at least 2.");
+            _temporalScaleFactor = value;
+        }
+    }
 
     /// <summary>
     /// Gets whether this model supports arbitrary timestep interpolation.

@@ -113,6 +113,10 @@ public abstract class OpticalFlowBase<T> : VideoNeuralNetworkBase<T>
     /// </remarks>
     public virtual Tensor<T> ComputeForwardBackwardConsistency(Tensor<T> forwardFlow, Tensor<T> backwardFlow)
     {
+        if (forwardFlow.Rank < 3 || forwardFlow.Shape[0] < 2)
+            throw new ArgumentException("Forward flow must have shape [2, height, width].", nameof(forwardFlow));
+        if (backwardFlow.Rank < 3 || backwardFlow.Shape[0] < 2)
+            throw new ArgumentException("Backward flow must have shape [2, height, width].", nameof(backwardFlow));
         int height = forwardFlow.Shape[1];
         int width = forwardFlow.Shape[2];
 
@@ -153,6 +157,12 @@ public abstract class OpticalFlowBase<T> : VideoNeuralNetworkBase<T>
     /// <returns>Mean endpoint error (scalar).</returns>
     public T ComputeEndpointError(Tensor<T> estimatedFlow, Tensor<T> groundTruthFlow)
     {
+        if (estimatedFlow.Rank < 3 || estimatedFlow.Shape[0] < 2)
+            throw new ArgumentException("Estimated flow must have shape [2, height, width].", nameof(estimatedFlow));
+        if (groundTruthFlow.Rank < 3 || groundTruthFlow.Shape[0] < 2)
+            throw new ArgumentException("Ground truth flow must have shape [2, height, width].", nameof(groundTruthFlow));
+        if (estimatedFlow.Shape[1] != groundTruthFlow.Shape[1] || estimatedFlow.Shape[2] != groundTruthFlow.Shape[2])
+            throw new ArgumentException("Estimated and ground truth flows must have the same spatial dimensions.");
         int height = estimatedFlow.Shape[1];
         int width = estimatedFlow.Shape[2];
         double totalError = 0;

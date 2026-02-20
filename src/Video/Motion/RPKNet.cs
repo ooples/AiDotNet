@@ -48,6 +48,10 @@ public class RPKNet<T> : OpticalFlowBase<T>
         RPKNetOptions? options = null)
         : base(architecture, new MeanSquaredErrorLoss<T>())
     {
+        if (numFeatures <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numFeatures), numFeatures, "Number of features must be positive.");
+        if (numLayers <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numLayers), numLayers, "Number of layers must be positive.");
         _options = options ?? new RPKNetOptions();
         Options = _options;
 
@@ -114,7 +118,9 @@ public class RPKNet<T> : OpticalFlowBase<T>
 
         // Extract 2-channel flow field
         var flow = new Tensor<T>([2, height, width]);
-        for (int i = 0; i < Math.Min(rawFlow.Length, flow.Length); i++)
+        if (rawFlow.Length < flow.Length)
+            throw new InvalidOperationException($"Raw flow output ({rawFlow.Length} elements) is smaller than expected flow field ({flow.Length} elements).");
+        for (int i = 0; i < flow.Length; i++)
         {
             flow.Data.Span[i] = rawFlow.Data.Span[i];
         }

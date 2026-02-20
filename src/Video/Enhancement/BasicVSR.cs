@@ -195,8 +195,15 @@ public class BasicVSR<T> : VideoSuperResolutionBase<T>
         _options.NumFrames = r.ReadInt32();
         _options.MidChannels = r.ReadInt32();
         _options.DropoutRate = r.ReadDouble();
+        ScaleFactor = _options.ScaleFactor;
+        NumFrames = _options.NumFrames;
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
             OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
+        else if (_useNativeMode)
+        {
+            Layers.Clear();
+            InitializeLayers();
+        }
     }
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()

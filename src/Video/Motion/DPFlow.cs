@@ -48,6 +48,10 @@ public class DPFlow<T> : OpticalFlowBase<T>
         DPFlowOptions? options = null)
         : base(architecture, new MeanSquaredErrorLoss<T>())
     {
+        if (numFeatures <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numFeatures), numFeatures, "Number of features must be positive.");
+        if (numLayers <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numLayers), numLayers, "Number of layers must be positive.");
         _options = options ?? new DPFlowOptions();
         Options = _options;
 

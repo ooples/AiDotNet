@@ -207,8 +207,14 @@ public class VideoGigaGAN<T> : VideoSuperResolutionBase<T>
         _options.GANWeight = r.ReadDouble();
         _options.HFShuttleWeight = r.ReadDouble();
         _options.DropoutRate = r.ReadDouble();
+        ScaleFactor = _options.ScaleFactor;
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
             OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
+        else if (_useNativeMode)
+        {
+            Layers.Clear();
+            InitializeLayers();
+        }
     }
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()

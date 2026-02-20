@@ -199,12 +199,22 @@ public class FlashVSR<T> : VideoSuperResolutionBase<T>
         _options.NumInputFrames = r.ReadInt32();
         _options.NumDecoderBlocks = r.ReadInt32();
         _options.DropoutRate = r.ReadDouble();
+        ScaleFactor = _options.ScaleFactor;
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
             OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
+        else if (_useNativeMode)
+        {
+            Layers.Clear();
+            InitializeLayers();
+        }
     }
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        => new FlashVSR<T>(Architecture, _options);
+    {
+        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
+            return new FlashVSR<T>(Architecture, p, _options);
+        return new FlashVSR<T>(Architecture, _options);
+    }
 
     #endregion
 

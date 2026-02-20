@@ -227,6 +227,7 @@ public class EMAVFI<T> : FrameInterpolationBase<T>
     {
         if (_disposed) return;
         _disposed = true;
+        if (disposing) OnnxModel?.Dispose();
         base.Dispose(disposing);
     }
 
