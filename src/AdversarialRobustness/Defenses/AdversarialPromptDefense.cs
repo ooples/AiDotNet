@@ -67,6 +67,13 @@ public class AdversarialPromptDefense<T, TInput, TOutput> : IAdversarialDefense<
         int promptOptimizationSteps = 100)
     {
         Guard.NotNull(options);
+        if (promptLength <= 0)
+            throw new ArgumentOutOfRangeException(nameof(promptLength), "promptLength must be positive.");
+        if (promptLearningRate <= 0)
+            throw new ArgumentOutOfRangeException(nameof(promptLearningRate), "promptLearningRate must be positive.");
+        if (promptOptimizationSteps <= 0)
+            throw new ArgumentOutOfRangeException(nameof(promptOptimizationSteps), "promptOptimizationSteps must be positive.");
+
         _options = options;
         _promptLength = promptLength;
         _promptLearningRate = promptLearningRate;
@@ -81,6 +88,8 @@ public class AdversarialPromptDefense<T, TInput, TOutput> : IAdversarialDefense<
         if (trainingData == null) throw new ArgumentNullException(nameof(trainingData));
         if (labels == null) throw new ArgumentNullException(nameof(labels));
         if (model == null) throw new ArgumentNullException(nameof(model));
+        if (trainingData.Length == 0)
+            throw new ArgumentException("Training data must not be empty.", nameof(trainingData));
         if (trainingData.Length != labels.Length)
             throw new ArgumentException("Number of labels must match number of training samples.", nameof(labels));
 
@@ -174,6 +183,10 @@ public class AdversarialPromptDefense<T, TInput, TOutput> : IAdversarialDefense<
         if (testData == null) throw new ArgumentNullException(nameof(testData));
         if (labels == null) throw new ArgumentNullException(nameof(labels));
         if (attack == null) throw new ArgumentNullException(nameof(attack));
+        if (testData.Length != labels.Length)
+            throw new ArgumentException("Number of labels must match number of test samples.", nameof(labels));
+        if (testData.Length == 0)
+            throw new ArgumentException("Test data must not be empty.", nameof(testData));
 
         int cleanCorrect = 0, adversarialCorrect = 0;
 
@@ -217,7 +230,12 @@ public class AdversarialPromptDefense<T, TInput, TOutput> : IAdversarialDefense<
     /// <inheritdoc/>
     public byte[] Serialize()
     {
-        var json = JsonConvert.SerializeObject(_options, Formatting.None);
+        var state = new PromptDefenseState
+        {
+            Options = _options,
+            PromptData = _defensePrompt != null ? PromptToDoubleArray(_defensePrompt) : null
+        };
+        var json = JsonConvert.SerializeObject(state, Formatting.None);
         return Encoding.UTF8.GetBytes(json);
     }
 
@@ -226,7 +244,33 @@ public class AdversarialPromptDefense<T, TInput, TOutput> : IAdversarialDefense<
     {
         if (data == null) throw new ArgumentNullException(nameof(data));
         var json = Encoding.UTF8.GetString(data);
-        _options = JsonConvert.DeserializeObject<AdversarialDefenseOptions<T>>(json) ?? new AdversarialDefenseOptions<T>();
+        var state = JsonConvert.DeserializeObject<PromptDefenseState>(json);
+        _options = state?.Options ?? new AdversarialDefenseOptions<T>();
+        if (state?.PromptData != null)
+        {
+            var promptData = new T[state.PromptData.Length];
+            for (int i = 0; i < state.PromptData.Length; i++)
+                promptData[i] = NumOps.FromDouble(state.PromptData[i]);
+            _defensePrompt = new Vector<T>(promptData);
+        }
+        else
+        {
+            _defensePrompt = null;
+        }
+    }
+
+    private static double[] PromptToDoubleArray(Vector<T> prompt)
+    {
+        var result = new double[prompt.Length];
+        for (int i = 0; i < prompt.Length; i++)
+            result[i] = NumOps.ToDouble(prompt[i]);
+        return result;
+    }
+
+    private sealed class PromptDefenseState
+    {
+        public AdversarialDefenseOptions<T>? Options { get; set; }
+        public double[]? PromptData { get; set; }
     }
 
     /// <inheritdoc/>

@@ -32,6 +32,8 @@ public abstract class ImageSafetyClassifierBase<T> : ImageSafetyModuleBase<T>, I
     /// <param name="threshold">The detection threshold (0.0 to 1.0). Default: 0.5.</param>
     protected ImageSafetyClassifierBase(double threshold = 0.5)
     {
+        if (threshold < 0 || threshold > 1)
+            throw new ArgumentOutOfRangeException(nameof(threshold), "Threshold must be in [0, 1].");
         Threshold = threshold;
     }
 

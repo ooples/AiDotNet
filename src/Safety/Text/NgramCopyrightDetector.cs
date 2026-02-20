@@ -40,7 +40,7 @@ public class NgramCopyrightDetector<T> : TextSafetyModuleBase<T>
     private readonly double _threshold;
     private readonly int _minNgramLength;
     private readonly HashSet<string>[] _copyrightedNgrams; // Indexed by n-gram length
-    private readonly string[] _sourceNames;
+    private const int NgramOverlapAdjustment = 3; // N consecutive 4-gram matches span N+3 words (3-word overlap)
 
     /// <inheritdoc />
     public override string ModuleName => "NgramCopyrightDetector";
@@ -66,8 +66,6 @@ public class NgramCopyrightDetector<T> : TextSafetyModuleBase<T>
     {
         _threshold = threshold;
         _minNgramLength = minNgramLength;
-        _sourceNames = sourceNames ?? Array.Empty<string>();
-
         // Build n-gram indices from copyrighted texts
         var texts = copyrightedTexts ?? Array.Empty<string>();
         _copyrightedNgrams = new HashSet<string>[3]; // For n=4,5,6
@@ -201,7 +199,7 @@ public class NgramCopyrightDetector<T> : TextSafetyModuleBase<T>
         // Convert from count of consecutive 4-gram matches to total word count.
         // Each 4-gram spans 4 words and consecutive 4-grams overlap by 3 words,
         // so N consecutive matches represent N + 3 total words.
-        return maxConsecutive > 0 ? maxConsecutive + 3 : 0;
+        return maxConsecutive > 0 ? maxConsecutive + NgramOverlapAdjustment : 0;
     }
 
     private static string[] TokenizeWords(string text)

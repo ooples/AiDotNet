@@ -25,7 +25,7 @@ public class SafetyReport
     /// Gets whether the content passed all safety checks.
     /// </summary>
     /// <remarks>
-    /// True only if no findings have severity Medium or above and no Block/Quarantine actions.
+    /// True only if no findings have severity Medium or above and no action beyond Allow is needed.
     /// </remarks>
     public bool IsSafe { get; init; }
 

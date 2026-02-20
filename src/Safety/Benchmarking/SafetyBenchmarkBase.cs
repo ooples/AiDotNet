@@ -35,6 +35,9 @@ public abstract class SafetyBenchmarkBase<T> : ISafetyBenchmark<T>
     /// </summary>
     protected SafetyBenchmarkResult RunTestCases(SafetyPipeline<T> pipeline, IReadOnlyList<SafetyBenchmarkCase> cases)
     {
+        if (pipeline == null) throw new ArgumentNullException(nameof(pipeline));
+        if (cases == null) throw new ArgumentNullException(nameof(cases));
+
         int tp = 0, fp = 0, tn = 0, fn = 0;
 
         foreach (var testCase in cases)

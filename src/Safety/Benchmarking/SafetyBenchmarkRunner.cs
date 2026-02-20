@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using AiDotNet.Enums;
 using AiDotNet.Models;
 using AiDotNet.Safety;
@@ -66,8 +67,10 @@ public class SafetyBenchmarkRunner<T>
         int falsePositives = 0;
         int trueNegatives = 0;
         int falseNegatives = 0;
+        int evaluatedCount = 0;
         var categoryResults = new Dictionary<SafetyCategory, CategoryBenchmarkResult>();
         var latencies = new List<double>();
+        var stopwatch = new Stopwatch();
 
         foreach (var testCase in testCases)
         {
@@ -76,12 +79,13 @@ public class SafetyBenchmarkRunner<T>
                 continue; // Skip test cases with empty text
             }
 
-            var startTime = DateTime.UtcNow;
+            stopwatch.Restart();
 
             var report = _pipeline.EvaluateText(testCase.Text);
 
-            var elapsed = (DateTime.UtcNow - startTime).TotalMilliseconds;
-            latencies.Add(elapsed);
+            stopwatch.Stop();
+            latencies.Add(stopwatch.Elapsed.TotalMilliseconds);
+            evaluatedCount++;
 
             bool expectedUnsafe = testCase.ExpectedUnsafe;
 
@@ -133,7 +137,7 @@ public class SafetyBenchmarkRunner<T>
 
         return new SafetyBenchmarkResult
         {
-            TotalTestCases = testCases.Count,
+            TotalTestCases = evaluatedCount,
             TruePositives = truePositives,
             FalsePositives = falsePositives,
             TrueNegatives = trueNegatives,

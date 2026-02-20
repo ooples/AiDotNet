@@ -126,12 +126,14 @@ public class GuardrailRule
     private bool EvaluateContainsAll(string text)
     {
         var comparison = CaseInsensitive ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        bool anyEffective = false;
         foreach (string pattern in Patterns)
         {
             if (string.IsNullOrEmpty(pattern)) continue;
+            anyEffective = true;
             if (!text.Contains(pattern, comparison)) return false;
         }
-        return Patterns.Length > 0;
+        return anyEffective;
     }
 
     private bool EvaluateRegex(string text)

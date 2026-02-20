@@ -70,6 +70,10 @@ public class AdaptiveRandomizedSmoothing<T, TInput, TOutput> : ICertifiedDefense
         int sensitivitySamples = 50)
     {
         Guard.NotNull(options);
+        if (minSigma <= 0) throw new ArgumentOutOfRangeException(nameof(minSigma), "minSigma must be positive.");
+        if (maxSigma < minSigma) throw new ArgumentOutOfRangeException(nameof(maxSigma), "maxSigma must be >= minSigma.");
+        if (sensitivitySamples <= 0) throw new ArgumentOutOfRangeException(nameof(sensitivitySamples), "sensitivitySamples must be positive.");
+
         _options = options;
         _minSigma = minSigma;
         _maxSigma = maxSigma;
@@ -172,6 +176,8 @@ public class AdaptiveRandomizedSmoothing<T, TInput, TOutput> : ICertifiedDefense
         if (testData == null) throw new ArgumentNullException(nameof(testData));
         if (labels == null) throw new ArgumentNullException(nameof(labels));
         if (model == null) throw new ArgumentNullException(nameof(model));
+        if (testData.Length == 0)
+            throw new ArgumentException("Test data must not be empty.", nameof(testData));
         if (testData.Length != labels.Length)
             throw new ArgumentException("Number of labels must match number of test samples.", nameof(labels));
 
@@ -221,6 +227,10 @@ public class AdaptiveRandomizedSmoothing<T, TInput, TOutput> : ICertifiedDefense
     public CertifiedDefenseOptions<T> GetOptions() => _options;
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// No-op: this defense is stateless — the adaptive sigma is recomputed per-input
+    /// during CertifyPrediction, so there is no trained state to reset.
+    /// </remarks>
     public void Reset() { }
 
     /// <inheritdoc/>

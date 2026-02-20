@@ -66,6 +66,13 @@ public class AdversarialPreferenceAlignment<T> : IAlignmentMethod<T>
         int adversarialSteps = 5)
     {
         Guard.NotNull(options);
+        if (adversarialRatio < 0 || adversarialRatio > 1)
+            throw new ArgumentOutOfRangeException(nameof(adversarialRatio), "adversarialRatio must be in [0, 1].");
+        if (perturbationBudget <= 0)
+            throw new ArgumentOutOfRangeException(nameof(perturbationBudget), "perturbationBudget must be positive.");
+        if (adversarialSteps <= 0)
+            throw new ArgumentOutOfRangeException(nameof(adversarialSteps), "adversarialSteps must be positive.");
+
         _options = options;
         _adversarialRatio = adversarialRatio;
         _perturbationBudget = perturbationBudget;
@@ -96,6 +103,8 @@ public class AdversarialPreferenceAlignment<T> : IAlignmentMethod<T>
     {
         if (model == null) throw new ArgumentNullException(nameof(model));
         if (evaluationData == null) throw new ArgumentNullException(nameof(evaluationData));
+        if (evaluationData.TestInputs.Rows != evaluationData.ExpectedOutputs.Rows)
+            throw new ArgumentException("TestInputs and ExpectedOutputs must have the same number of rows.", nameof(evaluationData));
 
         var metrics = new AlignmentMetrics<T>();
         int helpfulCount = 0, harmlessCount = 0, honestCount = 0;
@@ -141,9 +150,9 @@ public class AdversarialPreferenceAlignment<T> : IAlignmentMethod<T>
         if (principles == null) throw new ArgumentNullException(nameof(principles));
 
         // If the model supports gradient computation, use Constitutional AI self-critique training
-        if (model is IGradientComputable<T, Vector<T>, Vector<T>> trainableModel)
+        if (model is IGradientComputable<T, Vector<T>, Vector<T>> trainableModel
+            && trainableModel is IParameterizable<T, Vector<T>, Vector<T>> parameterizable)
         {
-            var parameterizable = (IParameterizable<T, Vector<T>, Vector<T>>)trainableModel;
             var random = new Random(42);
             var learningRate = NumOps.FromDouble(_options.LearningRate);
             double complianceThreshold = 0.5;
@@ -185,6 +194,7 @@ public class AdversarialPreferenceAlignment<T> : IAlignmentMethod<T>
         int totalAttempts = adversarialPrompts.Rows;
         int successfulAttacks = 0;
         var random = new Random(42);
+        var successArray = new bool[totalAttempts];
 
         for (int i = 0; i < totalAttempts; i++)
         {
@@ -197,6 +207,7 @@ public class AdversarialPreferenceAlignment<T> : IAlignmentMethod<T>
             // Low reward = successful attack (model gave unaligned response)
             if (rewardScore < 0.3)
             {
+                successArray[i] = true;
                 successfulAttacks++;
             }
 
@@ -207,19 +218,16 @@ public class AdversarialPreferenceAlignment<T> : IAlignmentMethod<T>
 
             if (perturbedReward < 0.3)
             {
-                successfulAttacks++;
+                if (!successArray[i]) successfulAttacks++;
+                successArray[i] = true;
             }
         }
-
-        var successArray = new bool[totalAttempts];
-        for (int i = 0; i < Math.Min(successfulAttacks, totalAttempts); i++)
-            successArray[i] = true;
 
         return new RedTeamingResults<T>
         {
             AdversarialPrompts = adversarialPrompts,
             SuccessfulAttacks = successArray,
-            SuccessRate = totalAttempts > 0 ? (double)successfulAttacks / (totalAttempts * 2) : 0,
+            SuccessRate = totalAttempts > 0 ? (double)successfulAttacks / totalAttempts : 0,
             AverageSeverity = totalAttempts > 0 ? (double)successfulAttacks / totalAttempts : 0
         };
     }
@@ -355,7 +363,9 @@ public class AdversarialPreferenceAlignment<T> : IAlignmentMethod<T>
 
     private Vector<T> AdversariallyPerturb(Vector<T> input, Random random)
     {
-        // PGD-like perturbation within epsilon ball
+        // Gradient-free PGD approximation: uses random sign perturbation since this
+        // defense operates on opaque IPredictiveModel without gradient access.
+        // Each step applies a random direction perturbation projected to the epsilon ball.
         var result = new T[input.Length];
         for (int i = 0; i < input.Length; i++)
         {

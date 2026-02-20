@@ -46,8 +46,8 @@ public class EqualizedOddsChecker<T> : ITextSafetyModule<T>
     // Hedging/uncertainty language (indicates lower confidence in statements)
     private static readonly HashSet<string> HedgingWords = new(StringComparer.OrdinalIgnoreCase)
     {
-        "might", "could", "perhaps", "possibly", "maybe", "somewhat", "sort of",
-        "kind of", "arguably", "apparently", "seemingly", "tends to", "may",
+        "might", "could", "perhaps", "possibly", "maybe", "somewhat",
+        "arguably", "apparently", "seemingly", "may",
         "likely", "probable", "potential", "generally", "typically"
     };
 

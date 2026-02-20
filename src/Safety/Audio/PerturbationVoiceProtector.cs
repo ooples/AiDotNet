@@ -100,7 +100,7 @@ public class PerturbationVoiceProtector<T> : AudioSafetyModuleBase<T>
 
                 // Perturbation proportional to local magnitude (masking-aware)
                 int hash = HashInt(start * 1000 + k);
-                double pertPhase = (hash % 628) / 100.0; // Random phase [0, 2*pi)
+                double pertPhase = (hash % 1000) / 1000.0 * (2.0 * Math.PI); // Random phase [0, 2*pi)
                 double pertMag = magD * strength * ((hash % 100) / 100.0);
 
                 T newReal = NumOps.Add(spectrum[k].Real,

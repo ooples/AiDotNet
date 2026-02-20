@@ -157,6 +157,10 @@ public class ViTAdversarialAttack<T, TInput, TOutput> : AdversarialAttackBase<T,
         for (int i = 0; i < length; i++)
             result[i] = input[i];
 
+        // Use model prediction to guide perturbation direction
+        var currentPred = targetModel.Predict((TInput)(object)new Vector<T>(result));
+        bool predMatchesTrue = currentPred?.Equals(trueLabel) ?? false;
+
         // Iterative patch-targeted perturbation
         for (int step = 0; step < _numSteps; step++)
         {
@@ -187,6 +191,13 @@ public class ViTAdversarialAttack<T, TInput, TOutput> : AdversarialAttackBase<T,
 
                     result[i] = NumOps.FromDouble(perturbed);
                 }
+            }
+
+            // Early termination: stop if the attack changes the model's prediction
+            if (predMatchesTrue)
+            {
+                var stepPred = targetModel.Predict((TInput)(object)new Vector<T>(result));
+                if (stepPred != null && !stepPred.Equals(trueLabel)) break;
             }
         }
 
