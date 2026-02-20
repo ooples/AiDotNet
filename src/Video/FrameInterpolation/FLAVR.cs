@@ -1,448 +1,228 @@
-using System.IO;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
-using AiDotNet.LossFunctions;
+using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
-using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Onnx;
+using AiDotNet.Optimizers;
 using AiDotNet.Video.Options;
-using Microsoft.ML.OnnxRuntime;
-using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
 
 namespace AiDotNet.Video.FrameInterpolation;
 
 /// <summary>
-/// FLAVR: Flow-Agnostic Video Representations for Fast Frame Interpolation.
+/// FLAVR: flow-agnostic video representations for fast frame interpolation.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
 /// <para>
-/// <b>For Beginners:</b> FLAVR interpolates frames between existing video frames to create
-/// smoother slow-motion effects or increase video frame rate. Unlike other methods that
-/// explicitly estimate optical flow, FLAVR directly synthesizes intermediate frames.
+/// FLAVR (Kalluri et al., CVPR 2023) uses 3D convolutions for flow-free interpolation:
+/// - 3D spatio-temporal convolutions: processes multiple input frames simultaneously using
+///   3D (space + time) convolutions that capture temporal relationships without explicit
+///   optical flow estimation, avoiding flow-related artifacts entirely
+/// - 3D encoder-decoder: a U-Net style architecture where the encoder uses strided 3D
+///   convolutions to downsample in both space and time, and the decoder uses transposed
+///   3D convolutions to upsample back to full resolution
+/// - Multi-frame input: takes 4 input frames (2 before and 2 after the target) for richer
+///   temporal context, unlike 2-frame methods that miss longer-range motion patterns
+/// - Direct synthesis: directly outputs the target frame pixels without intermediate flow
+///   or warping operations, avoiding flow estimation errors entirely
+/// </para>
+/// <para>
+/// <b>For Beginners:</b> Most frame interpolation methods first figure out how objects move
+/// (optical flow), then use that to warp frames. FLAVR skips the flow step entirely by using
+/// 3D convolutions that "see" multiple frames at once and directly paint the intermediate
+/// frame. This makes it faster and avoids ghosting artifacts from bad flow estimates.
 ///
-/// Key advantages:
-/// - No explicit optical flow computation (faster)
-/// - Can generate multiple intermediate frames at once
-/// - Uses 3D convolutions for spatiotemporal understanding
-/// - Handles large motions better than flow-based methods
-///
-/// Example usage:
+/// <b>Usage:</b>
 /// <code>
-/// var model = new FLAVR&lt;double&gt;(arch);
-/// var interpolatedFrames = model.Interpolate(frame1, frame2, numInterpolations: 3);
+/// var arch = new NeuralNetworkArchitecture&lt;float&gt;(inputHeight: 128, inputWidth: 128, inputDepth: 3);
+/// var model = new FLAVR&lt;float&gt;(arch, "flavr.onnx");
+/// var midFrame = model.Interpolate(frame0, frame1, t: 0.5);
 /// </code>
 /// </para>
 /// <para>
-/// <b>Technical Details:</b>
-/// - 3D encoder-decoder architecture with skip connections
-/// - Multi-scale feature extraction
-/// - Direct frame synthesis without flow estimation
-/// </para>
-/// <para>
 /// <b>Reference:</b> "FLAVR: Flow-Agnostic Video Representations for Fast Frame Interpolation"
-/// https://arxiv.org/abs/2012.08512
+/// (Kalluri et al., CVPR 2023)
 /// </para>
 /// </remarks>
-public class FLAVR<T> : NeuralNetworkBase<T>
+public class FLAVR<T> : FrameInterpolationBase<T>
 {
-    private readonly FLAVROptions _options;
-
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
     #region Fields
 
-    private readonly bool _useNativeMode;
-    private readonly InferenceSession? _onnxSession;
-    private readonly string? _onnxModelPath;
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private readonly ILossFunction<T> _lossFunction;
-    private int _numFeatures;
-    private int _numInputFrames;
-    private int _numOutputFrames;
-    private readonly int _imageSize;
-
-    #endregion
-
-    #region Properties
-
-    internal bool UseNativeMode => _useNativeMode;
-    public override bool SupportsTraining => _useNativeMode;
-    internal int NumFeatures => _numFeatures;
-    internal int NumInputFrames => _numInputFrames;
-    internal int NumOutputFrames => _numOutputFrames;
+    private readonly FLAVROptions _options;
+    public override ModelOptions GetOptions() => _options;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    private bool _useNativeMode;
+    private bool _disposed;
 
     #endregion
 
     #region Constructors
 
-    public FLAVR(
-        NeuralNetworkArchitecture<T> architecture,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        int numFeatures = 64,
-        int numInputFrames = 4,
-        int numOutputFrames = 1,
-        FLAVROptions? options = null)
-        : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>())
+    /// <summary>Creates a FLAVR model in ONNX inference mode.</summary>
+    public FLAVR(NeuralNetworkArchitecture<T> architecture, string modelPath, FLAVROptions? options = null)
+        : base(architecture)
     {
         _options = options ?? new FLAVROptions();
-        Options = _options;
-
-        _useNativeMode = true;
-        _numFeatures = numFeatures;
-        _numInputFrames = numInputFrames;
-        _numOutputFrames = numOutputFrames;
-        _imageSize = architecture.InputHeight > 0 ? architecture.InputHeight : 256;
-
-        _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-
-        InitializeLayers();
-    }
-
-    public FLAVR(
-        NeuralNetworkArchitecture<T> architecture,
-        string onnxModelPath,
-        int numOutputFrames = 1,
-        FLAVROptions? options = null)
-        : base(architecture, new MeanSquaredErrorLoss<T>())
-    {
-        _options = options ?? new FLAVROptions();
-        Options = _options;
-
-        if (string.IsNullOrWhiteSpace(onnxModelPath))
-            throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
-        if (!File.Exists(onnxModelPath))
-            throw new FileNotFoundException($"FLAVR ONNX model not found: {onnxModelPath}");
-
         _useNativeMode = false;
-        _onnxModelPath = onnxModelPath;
-        _numFeatures = 64;
-        _numInputFrames = 4;
-        _numOutputFrames = numOutputFrames;
-        _imageSize = architecture.InputHeight > 0 ? architecture.InputHeight : 256;
-        _lossFunction = new MeanSquaredErrorLoss<T>();
+        SupportsArbitraryTimestep = false;
+        _options.ModelPath = modelPath;
+        OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
+        InitializeLayers();
+    }
 
-        try { _onnxSession = new InferenceSession(onnxModelPath); }
-        catch (Exception ex) { throw new InvalidOperationException($"Failed to load ONNX model: {ex.Message}", ex); }
-
+    /// <summary>Creates a FLAVR model in native training mode.</summary>
+    public FLAVR(NeuralNetworkArchitecture<T> architecture, FLAVROptions? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
+        : base(architecture)
+    {
+        _options = options ?? new FLAVROptions();
+        _useNativeMode = true;
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        SupportsArbitraryTimestep = false;
         InitializeLayers();
     }
 
     #endregion
 
-    #region Public Methods
+    #region Frame Interpolation
 
-    /// <summary>
-    /// Interpolates frames between two input frames using recursive neural network synthesis.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Uses recursive binary interpolation where each intermediate frame is synthesized by the
-    /// neural network, not just linearly blended. This produces higher quality results for
-    /// multi-frame interpolation compared to simple blending.
-    /// </para>
-    /// <para>
-    /// Algorithm for numInterpolations=N:
-    /// 1. Compute the midpoint frame using the neural network
-    /// 2. Recursively interpolate the left half (frame1 to midpoint)
-    /// 3. Recursively interpolate the right half (midpoint to frame2)
-    /// 4. Combine results in temporal order
-    /// </para>
-    /// </remarks>
-    public List<Tensor<T>> Interpolate(Tensor<T> frame1, Tensor<T> frame2, int numInterpolations = 1)
+    /// <inheritdoc />
+    public override Tensor<T> Interpolate(Tensor<T> frame0, Tensor<T> frame1, double t = 0.5)
     {
-        if (numInterpolations <= 0)
-            return [];
-
-        // Use recursive binary interpolation for high-quality multi-frame synthesis
-        var results = new List<Tensor<T>>(numInterpolations);
-        RecursiveInterpolate(frame1, frame2, 0.0, 1.0, numInterpolations, results);
-
-        // Results are collected in temporal order due to recursive structure
-        return results;
-    }
-
-    /// <summary>
-    /// Recursively interpolates frames using binary subdivision with neural network synthesis.
-    /// </summary>
-    /// <param name="frameStart">The starting frame at time tStart.</param>
-    /// <param name="frameEnd">The ending frame at time tEnd.</param>
-    /// <param name="tStart">Temporal position of frameStart (0 to 1).</param>
-    /// <param name="tEnd">Temporal position of frameEnd (0 to 1).</param>
-    /// <param name="numFrames">Number of frames to interpolate in this segment.</param>
-    /// <param name="results">List to collect results in temporal order.</param>
-    private void RecursiveInterpolate(
-        Tensor<T> frameStart,
-        Tensor<T> frameEnd,
-        double tStart,
-        double tEnd,
-        int numFrames,
-        List<Tensor<T>> results)
-    {
-        if (numFrames <= 0) return;
-
-        if (numFrames == 1)
-        {
-            // Base case: synthesize single midpoint frame using neural network
-            var stacked = StackFrames([frameStart, frameEnd]);
-            var midFrame = _useNativeMode ? Forward(stacked) : PredictOnnx(stacked);
-            results.Add(midFrame);
-            return;
-        }
-
-        // Recursive case: divide and conquer
-        // First, synthesize the midpoint frame using neural network
-        var stackedMid = StackFrames([frameStart, frameEnd]);
-        var midpointFrame = _useNativeMode ? Forward(stackedMid) : PredictOnnx(stackedMid);
-        double tMid = (tStart + tEnd) / 2.0;
-
-        // Calculate how many frames go in each half
-        // For N frames, we need to distribute them around the midpoint
-        // Left half gets frames at t < tMid, right half gets frames at t > tMid
-        int leftCount = (numFrames - 1) / 2;   // Frames before midpoint
-        int rightCount = numFrames - 1 - leftCount; // Frames after midpoint
-
-        // Recursively interpolate left segment (frameStart to midpoint)
-        RecursiveInterpolate(frameStart, midpointFrame, tStart, tMid, leftCount, results);
-
-        // Add the midpoint frame (synthesized by neural network)
-        results.Add(midpointFrame);
-
-        // Recursively interpolate right segment (midpoint to frameEnd)
-        RecursiveInterpolate(midpointFrame, frameEnd, tMid, tEnd, rightCount, results);
-    }
-
-    /// <summary>
-    /// Interpolates at a specific temporal position using adaptive refinement.
-    /// </summary>
-    /// <remarks>
-    /// Uses hierarchical interpolation to synthesize a frame at an arbitrary timestep t.
-    /// For t close to 0.5, uses direct network output. For other values, recursively
-    /// refines by interpolating between synthesized frames.
-    /// </remarks>
-    /// <param name="frame1">First frame (at t=0).</param>
-    /// <param name="frame2">Second frame (at t=1).</param>
-    /// <param name="t">Target timestep in range (0, 1).</param>
-    /// <param name="maxRecursionDepth">Maximum recursion depth for refinement.</param>
-    /// <returns>Synthesized frame at temporal position t.</returns>
-    public Tensor<T> InterpolateAtTimestep(
-        Tensor<T> frame1,
-        Tensor<T> frame2,
-        double t,
-        int maxRecursionDepth = 4)
-    {
-        if (t <= 0.0) return frame1.Clone();
-        if (t >= 1.0) return frame2.Clone();
-
-        return InterpolateAtTimestepRecursive(frame1, frame2, 0.0, 1.0, t, maxRecursionDepth);
-    }
-
-    /// <summary>
-    /// Recursive helper for arbitrary timestep interpolation.
-    /// </summary>
-    private Tensor<T> InterpolateAtTimestepRecursive(
-        Tensor<T> frameStart,
-        Tensor<T> frameEnd,
-        double tStart,
-        double tEnd,
-        double targetT,
-        int depthRemaining)
-    {
-        double tMid = (tStart + tEnd) / 2.0;
-
-        // If target is close enough to midpoint or max depth reached, use network output
-        double tolerance = (tEnd - tStart) * 0.01; // 1% of current interval
-        if (Math.Abs(targetT - tMid) < tolerance || depthRemaining <= 0)
-        {
-            var stacked = StackFrames([frameStart, frameEnd]);
-            return _useNativeMode ? Forward(stacked) : PredictOnnx(stacked);
-        }
-
-        // Synthesize midpoint frame
-        var stackedMid = StackFrames([frameStart, frameEnd]);
-        var midpointFrame = _useNativeMode ? Forward(stackedMid) : PredictOnnx(stackedMid);
-
-        // Recurse into appropriate half
-        if (targetT < tMid)
-        {
-            return InterpolateAtTimestepRecursive(
-                frameStart, midpointFrame, tStart, tMid, targetT, depthRemaining - 1);
-        }
-        else
-        {
-            return InterpolateAtTimestepRecursive(
-                midpointFrame, frameEnd, tMid, tEnd, targetT, depthRemaining - 1);
-        }
-    }
-
-    /// <summary>
-    /// Blends two frames together with a given factor.
-    /// Used only for edge cases where network synthesis is not appropriate.
-    /// </summary>
-    private Tensor<T> BlendFrames(Tensor<T> frameA, Tensor<T> frameB, double blendFactor)
-    {
-        var result = new Tensor<T>(frameA.Shape);
-        T factorA = NumOps.FromDouble(1.0 - blendFactor);
-        T factorB = NumOps.FromDouble(blendFactor);
-
-        for (int i = 0; i < frameA.Length; i++)
-        {
-            result.Data.Span[i] = NumOps.Add(
-                NumOps.Multiply(frameA.Data.Span[i], factorA),
-                NumOps.Multiply(frameB.Data.Span[i], factorB));
-        }
-        return result;
-    }
-
-    /// <summary>
-    /// Interpolates frames using 4 input frames for better quality.
-    /// </summary>
-    public Tensor<T> InterpolateWith4Frames(Tensor<T> f0, Tensor<T> f1, Tensor<T> f2, Tensor<T> f3)
-    {
-        var stacked = StackFrames([f0, f1, f2, f3]);
-        return _useNativeMode ? Forward(stacked) : PredictOnnx(stacked);
-    }
-
-    /// <summary>
-    /// Doubles the frame rate of a video.
-    /// </summary>
-    public List<Tensor<T>> DoubleFrameRate(List<Tensor<T>> frames)
-    {
-        var results = new List<Tensor<T>>();
-
-        for (int i = 0; i < frames.Count - 1; i++)
-        {
-            results.Add(frames[i]);
-            var interpolated = Interpolate(frames[i], frames[i + 1], 1);
-            results.AddRange(interpolated);
-        }
-        results.Add(frames[^1]);
-
-        return results;
+        ThrowIfDisposed();
+        var f0 = PreprocessFrames(frame0);
+        var f1 = PreprocessFrames(frame1);
+        var concat = ConcatenateFeatures(f0, f1);
+        var output = IsOnnxMode ? RunOnnxInference(concat) : Forward(concat);
+        return PostprocessOutput(output);
     }
 
     #endregion
 
-    #region Inference
-
-    private Tensor<T> Forward(Tensor<T> input)
-    {
-        var result = input;
-        foreach (var layer in Layers) result = layer.Forward(result);
-        return result;
-    }
-
-    private Tensor<T> PredictOnnx(Tensor<T> input)
-    {
-        if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");
-
-        var inputData = new float[input.Length];
-        for (int i = 0; i < input.Length; i++) inputData[i] = Convert.ToSingle(input.Data.Span[i]);
-
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape);
-        var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(_onnxSession.InputMetadata.Keys.First(), onnxInput) };
-
-        using var results = _onnxSession.Run(inputs);
-        var outputTensor = results.First().AsTensor<float>();
-
-        var outputData = new T[outputTensor.Length];
-        for (int i = 0; i < outputTensor.Length; i++) outputData[i] = NumOps.FromDouble(outputTensor.GetValue(i));
-
-        return new Tensor<T>(outputTensor.Dimensions.ToArray(), new Vector<T>(outputData));
-    }
-
-    private Tensor<T> StackFrames(List<Tensor<T>> frames)
-    {
-        var first = frames[0];
-        int c = first.Rank == 4 ? first.Shape[1] : first.Shape[0];
-        int h = first.Rank == 4 ? first.Shape[2] : first.Shape[1];
-        int w = first.Rank == 4 ? first.Shape[3] : first.Shape[2];
-
-        var stacked = new Tensor<T>([1, c * frames.Count, h, w]);
-        for (int f = 0; f < frames.Count; f++)
-            frames[f].Data.Span.Slice(0, c * h * w).CopyTo(stacked.Data.Span.Slice(f * c * h * w, c * h * w));
-        return stacked;
-    }
-
-    public override Tensor<T> Predict(Tensor<T> input) =>
-        _useNativeMode ? Forward(input) : PredictOnnx(input);
-
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        if (!_useNativeMode) throw new InvalidOperationException("Training is not supported in ONNX mode.");
-
-        var prediction = Predict(input);
-        LastLoss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
-
-        var gradient = _lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-        var gradTensor = new Tensor<T>(prediction.Shape, gradient);
-
-        for (int i = Layers.Count - 1; i >= 0; i--) gradTensor = Layers[i].Backward(gradTensor);
-        _optimizer?.UpdateParameters(Layers);
-    }
-
-    #endregion
-
-    #region Serialization
+    #region NeuralNetworkBase
 
     protected override void InitializeLayers()
     {
-        if (!_useNativeMode) { ClearLayers(); return; }
-
-        if (Architecture.Layers != null && Architecture.Layers.Count > 0)
+        if (!_useNativeMode) return;
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+        {
             Layers.AddRange(Architecture.Layers);
+        }
         else
         {
             int ch = Architecture.InputDepth > 0 ? Architecture.InputDepth : 3;
-            int h = Architecture.InputHeight > 0 ? Architecture.InputHeight : 256;
-            int w = Architecture.InputWidth > 0 ? Architecture.InputWidth : 256;
-            Layers.AddRange(LayerHelper<T>.CreateDefaultFLAVRLayers(ch, h, w, _numFeatures, _numInputFrames));
+            int h = Architecture.InputHeight > 0 ? Architecture.InputHeight : 128;
+            int w = Architecture.InputWidth > 0 ? Architecture.InputWidth : 128;
+            Layers.AddRange(LayerHelper<T>.CreateDefaultFrameInterpolationLayers(
+                inputChannels: ch, inputHeight: h, inputWidth: w,
+                numFeatures: _options.NumFeatures));
         }
+    }
+
+    public override Tensor<T> Predict(Tensor<T> input)
+    {
+        ThrowIfDisposed();
+        if (IsOnnxMode) return RunOnnxInference(input);
+        return Forward(input);
+    }
+
+    public override void Train(Tensor<T> input, Tensor<T> expected)
+    {
+        if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
+        SetTrainingMode(true);
+        var output = Predict(input);
+        var grad = LossFunction.CalculateDerivative(output.ToVector(), expected.ToVector());
+        var gt = Tensor<T>.FromVector(grad);
+        for (int i = Layers.Count - 1; i >= 0; i--) gt = Layers[i].Backward(gt);
+        _optimizer?.UpdateParameters(Layers);
+        SetTrainingMode(false);
     }
 
     public override void UpdateParameters(Vector<T> parameters)
     {
-        if (!_useNativeMode) throw new InvalidOperationException("Parameter updates are not supported in ONNX mode.");
-        int offset = 0;
+        if (!_useNativeMode) throw new NotSupportedException("Parameter updates are not supported in ONNX mode.");
+        int idx = 0;
         foreach (var layer in Layers)
         {
-            var p = layer.GetParameters();
-            if (p.Length > 0 && offset + p.Length <= parameters.Length)
-            {
-                var slice = new Vector<T>(p.Length);
-                for (int i = 0; i < p.Length; i++) slice[i] = parameters[offset + i];
-                layer.SetParameters(slice);
-                offset += p.Length;
-            }
+            int count = layer.ParameterCount;
+            layer.UpdateParameters(parameters.Slice(idx, count));
+            idx += count;
         }
     }
 
-    public override ModelMetadata<T> GetModelMetadata() => new()
+    protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames) => NormalizeFrames(rawFrames);
+
+    protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput) => DenormalizeFrames(modelOutput);
+
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        ModelType = ModelType.FrameInterpolation,
-        AdditionalInfo = new Dictionary<string, object>
+        var m = new ModelMetadata<T>
         {
-            { "ModelName", "FLAVR" }, { "NumFeatures", _numFeatures },
-            { "NumInputFrames", _numInputFrames }, { "NumOutputFrames", _numOutputFrames }
-        },
-        ModelData = _useNativeMode ? this.Serialize() : []
-    };
-
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_numFeatures); writer.Write(_numInputFrames); writer.Write(_numOutputFrames);
+            Name = _useNativeMode ? "FLAVR-Native" : "FLAVR-ONNX",
+            Description = $"FLAVR {_options.Variant} flow-agnostic 3D conv interpolation (Kalluri et al., CVPR 2023)",
+            ModelType = ModelType.FrameInterpolation,
+            Complexity = _options.NumResBlocks * _options.NumLevels
+        };
+        m.AdditionalInfo["Variant"] = _options.Variant.ToString();
+        m.AdditionalInfo["NumFeatures"] = _options.NumFeatures.ToString();
+        m.AdditionalInfo["NumResBlocks"] = _options.NumResBlocks.ToString();
+        m.AdditionalInfo["NumLevels"] = _options.NumLevels.ToString();
+        m.AdditionalInfo["NumInputFrames"] = _options.NumInputFrames.ToString();
+        m.AdditionalInfo["TemporalKernelSize"] = _options.TemporalKernelSize.ToString();
+        return m;
     }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    protected override void SerializeNetworkSpecificData(BinaryWriter w)
     {
-        _numFeatures = reader.ReadInt32();
-        _numInputFrames = reader.ReadInt32();
-        _numOutputFrames = reader.ReadInt32();
+        w.Write(_useNativeMode);
+        w.Write(_options.ModelPath ?? string.Empty);
+        w.Write((int)_options.Variant);
+        w.Write(_options.NumFeatures);
+        w.Write(_options.NumResBlocks);
+        w.Write(_options.NumLevels);
+        w.Write(_options.NumInputFrames);
+        w.Write(_options.TemporalKernelSize);
+        w.Write(_options.DropoutRate);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() =>
-        new FLAVR<T>(Architecture, _optimizer, _lossFunction, _numFeatures, _numInputFrames, _numOutputFrames);
+    protected override void DeserializeNetworkSpecificData(BinaryReader r)
+    {
+        _useNativeMode = r.ReadBoolean();
+        string mp = r.ReadString();
+        if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
+        _options.Variant = (VideoModelVariant)r.ReadInt32();
+        _options.NumFeatures = r.ReadInt32();
+        _options.NumResBlocks = r.ReadInt32();
+        _options.NumLevels = r.ReadInt32();
+        _options.NumInputFrames = r.ReadInt32();
+        _options.TemporalKernelSize = r.ReadInt32();
+        _options.DropoutRate = r.ReadDouble();
+        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
+            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
+    }
+
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
+            return new FLAVR<T>(Architecture, p, _options);
+        return new FLAVR<T>(Architecture, _options);
+    }
+
+    #endregion
+
+    #region Disposal
+
+    private void ThrowIfDisposed()
+    {
+        if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(FLAVR<T>));
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (_disposed) return;
+        _disposed = true;
+        base.Dispose(disposing);
+    }
 
     #endregion
 }

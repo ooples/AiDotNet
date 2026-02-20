@@ -44,7 +44,7 @@ namespace AiDotNet.Video.Motion;
 /// https://arxiv.org/abs/2203.16194
 /// </para>
 /// </remarks>
-public class FlowFormer<T> : NeuralNetworkBase<T>
+public class FlowFormer<T> : OpticalFlowBase<T>
 {
     private readonly FlowFormerOptions _options;
 
@@ -72,7 +72,7 @@ public class FlowFormer<T> : NeuralNetworkBase<T>
     public override bool SupportsTraining => _useNativeMode;
     internal int EmbedDim => _embedDim;
     internal int NumLayers => _numLayers;
-    internal int NumIterations => _numIterations;
+    internal new int NumIterations => _numIterations;
 
     #endregion
 
@@ -143,7 +143,7 @@ public class FlowFormer<T> : NeuralNetworkBase<T>
     /// <param name="frame1">First frame [B, C, H, W] or [C, H, W].</param>
     /// <param name="frame2">Second frame with same shape.</param>
     /// <returns>Flow tensor [B, 2, H, W] where channel 0 is horizontal and channel 1 is vertical flow.</returns>
-    public Tensor<T> EstimateFlow(Tensor<T> frame1, Tensor<T> frame2)
+    public override Tensor<T> EstimateFlow(Tensor<T> frame1, Tensor<T> frame2)
     {
         if (frame1 is null) throw new ArgumentNullException(nameof(frame1));
         if (frame2 is null) throw new ArgumentNullException(nameof(frame2));
@@ -214,7 +214,7 @@ public class FlowFormer<T> : NeuralNetworkBase<T>
 
     #region Inference
 
-    private Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> Forward(Tensor<T> input)
     {
         var result = input;
         foreach (var layer in Layers) result = layer.Forward(result);
@@ -347,4 +347,21 @@ public class FlowFormer<T> : NeuralNetworkBase<T>
         new FlowFormer<T>(Architecture, _optimizer, _lossFunction, _embedDim, _numLayers, _numIterations);
 
     #endregion
+
+    #region Base Class Abstract Methods
+
+    /// <inheritdoc/>
+    protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames)
+    {
+        return NormalizeFrames(rawFrames);
+    }
+
+    /// <inheritdoc/>
+    protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput)
+    {
+        return modelOutput;
+    }
+
+    #endregion
+
 }
