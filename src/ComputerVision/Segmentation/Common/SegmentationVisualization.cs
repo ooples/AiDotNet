@@ -61,11 +61,6 @@ public class SegmentationVisualizationConfig
     public double MinDisplayConfidence { get; set; } = 0.3;
 
     /// <summary>
-    /// Font scale for labels.
-    /// </summary>
-    public double FontScale { get; set; } = 1.0;
-
-    /// <summary>
     /// Background color for areas with no segmentation (R, G, B).
     /// </summary>
     public (byte R, byte G, byte B) BackgroundColor { get; set; } = (0, 0, 0);
