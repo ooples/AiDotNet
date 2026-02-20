@@ -176,16 +176,22 @@ public abstract class MedicalSegmentationBase<T> : SegmentationModelBase<T>, IMe
             }
         }
 
+        // Precompute reciprocals to avoid repeated division per class
+        int totalVoxels = volD * volH * volW;
+        var reciprocals = new double[totalVoxels];
+        for (int i = 0; i < totalVoxels; i++)
+            reciprocals[i] = accumCount[i] > 1.0 ? 1.0 / accumCount[i] : 0.0;
+
         // Average overlapping regions
         for (int cls = 0; cls < _numClasses; cls++)
             for (int dd = 0; dd < volD; dd++)
                 for (int hh = 0; hh < volH; hh++)
                     for (int ww = 0; ww < volW; ww++)
                     {
-                        double count = accumCount[dd * volH * volW + hh * volW + ww];
-                        if (count > 1.0)
+                        int idx = dd * volH * volW + hh * volW + ww;
+                        if (reciprocals[idx] > 0.0)
                             accumOutput[cls, dd, hh, ww] = NumOps.FromDouble(
-                                NumOps.ToDouble(accumOutput[cls, dd, hh, ww]) / count);
+                                NumOps.ToDouble(accumOutput[cls, dd, hh, ww]) * reciprocals[idx]);
                     }
 
         return new MedicalSegmentationResult<T> { Probabilities = accumOutput };

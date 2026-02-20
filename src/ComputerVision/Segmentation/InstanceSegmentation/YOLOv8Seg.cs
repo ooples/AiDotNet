@@ -273,6 +273,7 @@ public class YOLOv8Seg<T> : NeuralNetworkBase<T>, IInstanceSegmentation<T>
         if (Architecture.Layers != null && Architecture.Layers.Count > 0)
         {
             Layers.AddRange(Architecture.Layers);
+            // Prefer explicit encoder layer count from options; fall back to midpoint heuristic for custom layers
             _encoderLayerEnd = _options.EncoderLayerCount ?? Architecture.Layers.Count / 2;
         }
         else
