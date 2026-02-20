@@ -14,8 +14,10 @@ public class E2TTS<T> : TtsModelBase<T>, ICodecTts<T>
     public Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
+        if (string.IsNullOrEmpty(text))
+            throw new ArgumentException("Text cannot be null or empty.", nameof(text));
         var input = PreprocessText(text);
-        if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input);
+        if (IsOnnxMode && OnnxModel is not null) return PostprocessAudio(OnnxModel.Run(input));
         var output = Predict(input);
         return PostprocessAudio(output);
     }

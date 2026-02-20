@@ -12,7 +12,7 @@ public class IndexTTS2<T> : TtsModelBase<T>, ICodecTts<T>
     int ITtsModel<T>.SampleRate => _options.SampleRate; public int MaxTextLength => _options.MaxTextLength; public int NumCodebooks => _options.NumCodebooks; public int CodebookSize => _options.CodebookSize; public int CodecFrameRate => _options.CodecFrameRate;
     /// <summary>
     /// Synthesizes speech from text.
-    /// Per Bilibili (2026): RVQGAN codec with GPT backbone + explicit duration/emotion tokens.
+    /// Per Bilibili (2026): RVQGAN codec with GPT backbone. Duration/emotion control is handled by the ONNX model weights when loaded.
     /// </summary>
     public Tensor<T> Synthesize(string text)
     {
@@ -34,7 +34,7 @@ public class IndexTTS2<T> : TtsModelBase<T>, ICodecTts<T>
     public override ModelMetadata<T> GetModelMetadata() { return new ModelMetadata<T> { Name = _useNativeMode ? "IndexTTS2-Native" : "IndexTTS2-ONNX", Description = "IndexTTS2 TTS", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.LLMDim }; }
     protected override void SerializeNetworkSpecificData(BinaryWriter writer) { writer.Write(_useNativeMode); writer.Write(_options.ModelPath ?? string.Empty); writer.Write(_options.SampleRate); writer.Write(_options.CodebookSize); writer.Write(_options.DropoutRate); writer.Write(_options.LLMDim); writer.Write(_options.NumCodebooks); writer.Write(_options.NumEncoderLayers); writer.Write(_options.NumHeads); writer.Write(_options.NumLLMLayers); writer.Write(_options.TextEncoderDim); writer.Write(_options.MelChannels); writer.Write(_options.HopSize); writer.Write(_options.CodecFrameRate); writer.Write(_options.MaxTextLength); }
     protected override void DeserializeNetworkSpecificData(BinaryReader reader) { _useNativeMode = reader.ReadBoolean(); string mp = reader.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp; _options.SampleRate = reader.ReadInt32(); _options.CodebookSize = reader.ReadInt32(); _options.DropoutRate = reader.ReadDouble(); _options.LLMDim = reader.ReadInt32(); _options.NumCodebooks = reader.ReadInt32(); _options.NumEncoderLayers = reader.ReadInt32(); _options.NumHeads = reader.ReadInt32(); _options.NumLLMLayers = reader.ReadInt32(); _options.TextEncoderDim = reader.ReadInt32(); _options.MelChannels = reader.ReadInt32(); _options.HopSize = reader.ReadInt32(); _options.CodecFrameRate = reader.ReadInt32(); _options.MaxTextLength = reader.ReadInt32(); base.SampleRate = _options.SampleRate; base.MelChannels = _options.MelChannels; base.HopSize = _options.HopSize; base.HiddenDim = _options.LLMDim; if (!_useNativeMode && _options.ModelPath is {} p && !string.IsNullOrEmpty(p)) OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions); }
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ModelPath is {} mp && !string.IsNullOrEmpty(mp)) return new IndexTTS2<T>(Architecture, mp, _options); return new IndexTTS2<T>(Architecture, _options); }
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ModelPath is {} mp && !string.IsNullOrEmpty(mp)) return new IndexTTS2<T>(Architecture, mp, _options); return new IndexTTS2<T>(Architecture, _options, _optimizer); }
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(IndexTTS2<T>)); }
     protected override void Dispose(bool disposing) { if (_disposed) return; _disposed = true; base.Dispose(disposing); }
 }
