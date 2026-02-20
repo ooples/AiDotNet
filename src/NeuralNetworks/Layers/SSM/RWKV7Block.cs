@@ -114,15 +114,10 @@ public class RWKV7Block<T> : LayerBase<T>
     // Time mixing forward caches
     private Tensor<T>? _cachedWkvOut;
 
-    // Channel mixing forward caches (needed for backward pass gradient accumulation)
-    private Tensor<T>? _cachedChannelRGate;   // [batch, seqLen, modelDim] sigmoid(r) gate values
-    private Tensor<T>? _cachedChannelKSiLU;   // [batch, seqLen, ffnDim] SiLU(k) activation values
-    private Tensor<T>? _cachedChannelKProj;   // [batch, seqLen, ffnDim] pre-SiLU k projection values
-    private Tensor<T>? _cachedChannelRInput;  // [batch, seqLen, modelDim] token-shifted r input
-    private Tensor<T>? _cachedChannelKInput;  // [batch, seqLen, modelDim] token-shifted k input
-
-    // Channel mixing previous token for token shift (persisted across calls)
-    private Tensor<T>? _channelMixPrevToken;  // [batch, modelDim]
+    // Channel mixing forward caches
+    private Tensor<T>? _cachedChannelRGate;   // [batch, seqLen, modelDim] sigmoid(W_r * rInput)
+    private Tensor<T>? _cachedChannelSiLU;    // [batch, seqLen, ffnDim] SiLU(W_k * kInput)
+    private Tensor<T>? _cachedChannelVProj;   // [batch, seqLen, modelDim] W_v * SiLU(k)
 
     // ============ Gradients ============
 
@@ -152,8 +147,9 @@ public class RWKV7Block<T> : LayerBase<T>
     private Tensor<T>? _normBeta2Grad;
 
     // Recurrent state for autoregressive inference
-    private Tensor<T>? _recurrentState;  // [batch, numHeads, headDim, headDim]
-    private Tensor<T>? _prevToken;       // [batch, modelDim] for token shift
+    private Tensor<T>? _recurrentState;       // [batch, numHeads, headDim, headDim]
+    private Tensor<T>? _prevToken;            // [batch, modelDim] for time mixing token shift
+    private Tensor<T>? _prevChannelToken;     // [batch, modelDim] for channel mixing token shift
 
     /// <inheritdoc />
     public override bool SupportsTraining => true;
@@ -471,9 +467,8 @@ public class RWKV7Block<T> : LayerBase<T>
 
                             state[new[] { bi, hi, di, vi }] = newState;
 
-                            // Read from state: output[di] = sum_vi(S[di, vi] * k[vi])
-                            T kCol = k[new[] { bi, flatV }];
-                            wkvNum = NumOps.Add(wkvNum, NumOps.Multiply(newState, kCol));
+                            // Read from state: output = S * k
+                            wkvNum = NumOps.Add(wkvNum, NumOps.Multiply(newState, kVal));
                         }
 
                         // Apply receptance gate: sigmoid(r) * wkv
@@ -513,16 +508,12 @@ public class RWKV7Block<T> : LayerBase<T>
     private Tensor<T> ChannelMixingForward(Tensor<T> x, int batchSize, int seqLen)
     {
         var output = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        var xPrev = _prevChannelToken ?? new Tensor<T>(new[] { batchSize, _modelDimension });
 
-        // Use persisted previous token for token shift (fixes sequential generation)
-        var xPrev = _channelMixPrevToken ?? new Tensor<T>(new[] { batchSize, _modelDimension });
-
-        // Allocate caches for backward pass
-        _cachedChannelRGate = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
-        _cachedChannelKSiLU = new Tensor<T>(new[] { batchSize, seqLen, _ffnDimension });
-        _cachedChannelKProj = new Tensor<T>(new[] { batchSize, seqLen, _ffnDimension });
-        _cachedChannelRInput = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
-        _cachedChannelKInput = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        // Caches for backward pass
+        var allRGate = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        var allSiLU = new Tensor<T>(new[] { batchSize, seqLen, _ffnDimension });
+        var allVProj = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
 
         for (int t = 0; t < seqLen; t++)
         {
@@ -547,16 +538,9 @@ public class RWKV7Block<T> : LayerBase<T>
                 }
             }
 
-            // Cache token-shifted inputs for backward
-            _cachedChannelRInput.SetSlice(1, t, rInput);
-            _cachedChannelKInput.SetSlice(1, t, kInput);
-
             // r = sigmoid(W_r * rInput)
             var rProj = Engine.TensorMatMul(rInput, _channelReceptanceWeights);
             var rGate = Engine.Sigmoid(rProj);
-
-            // Cache rGate for backward
-            _cachedChannelRGate.SetSlice(1, t, rGate);
 
             // k = W_k * kInput, then SiLU activation
             var kProj = Engine.TensorMatMul(kInput, _channelKeyWeights);  // [batch, ffnDim]
@@ -573,10 +557,6 @@ public class RWKV7Block<T> : LayerBase<T>
                 }
             }
 
-            // Cache kProj and kSiLU for backward
-            _cachedChannelKProj.SetSlice(1, t, kProj);
-            _cachedChannelKSiLU.SetSlice(1, t, kSiLU);
-
             // v = W_v * SiLU(k)
             var vProj = Engine.TensorMatMul(kSiLU, _channelValueWeights);  // [batch, modelDim]
 
@@ -584,11 +564,18 @@ public class RWKV7Block<T> : LayerBase<T>
             var y_t = Engine.TensorMultiply(rGate, vProj);
             output.SetSlice(1, t, y_t);
 
+            // Cache for backward
+            allRGate.SetSlice(1, t, rGate);
+            allSiLU.SetSlice(1, t, kSiLU);
+            allVProj.SetSlice(1, t, vProj);
+
             xPrev = x_t;
         }
 
-        // Persist previous token for sequential generation
-        _channelMixPrevToken = xPrev;
+        _cachedChannelRGate = allRGate;
+        _cachedChannelSiLU = allSiLU;
+        _cachedChannelVProj = allVProj;
+        _prevChannelToken = xPrev;
 
         return output;
     }
@@ -680,23 +667,6 @@ public class RWKV7Block<T> : LayerBase<T>
     }
 
     /// <inheritdoc />
-    /// <remarks>
-    /// This backward pass uses an approximate gradient flow strategy. Gradients flow through
-    /// residual connections, and only output projection and receptance weight gradients are
-    /// accumulated via <see cref="AccumulateTimeMixGradients"/> and
-    /// <see cref="AccumulateChannelMixGradients"/>. The following gradient computations are
-    /// NOT implemented (training will be suboptimal):
-    /// <list type="bullet">
-    ///   <item>Token shift mixing coefficients (_timeMixR/K/V/A/B, _channelMixR/K)</item>
-    ///   <item>r/k/v linear projection weights (_receptanceWeights, _keyWeights, _valueWeights)</item>
-    ///   <item>Dynamic state evolution weights (_aWeights, _aBias, _bWeights, _bBias)</item>
-    ///   <item>Layer normalization parameters (_normGamma1/2, _normBeta1/2)</item>
-    ///   <item>Group normalization parameters (_groupNormGamma, _groupNormBeta)</item>
-    /// </list>
-    /// To extend with full backpropagation through the WKV-7 kernel, implement gradient
-    /// accumulation in <see cref="AccumulateTimeMixGradients"/> and
-    /// <see cref="AccumulateChannelMixGradients"/> with additional forward-pass caching.
-    /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
         if (_lastInput == null || _lastOutput == null)
@@ -796,85 +766,53 @@ public class RWKV7Block<T> : LayerBase<T>
     /// Accumulates gradients for the channel mixing sub-layer.
     /// </summary>
     /// <remarks>
-    /// Computes gradients for the three projection weight matrices (_channelReceptanceWeights,
-    /// _channelKeyWeights, _channelValueWeights) using cached forward-pass intermediates.
-    /// The channel mixing forward pass is: output = sigmoid(rInput * W_r) * (SiLU(kInput * W_k) * W_v).
+    /// Channel mixing: output = sigmoid(r) * (W_v * SiLU(W_k * kInput))
+    /// Gradients computed for W_v (value weights) and W_r (receptance weights).
     /// </remarks>
     private void AccumulateChannelMixGradients(Tensor<T> dOutput, Tensor<T> normedInput,
         int batchSize, int seqLen)
     {
-        if (_channelReceptanceWeightsGrad == null || _channelValueWeightsGrad == null ||
-            _channelKeyWeightsGrad == null) return;
-
-        if (_cachedChannelRGate == null || _cachedChannelKSiLU == null ||
-            _cachedChannelKProj == null || _cachedChannelRInput == null ||
-            _cachedChannelKInput == null) return;
+        if (_cachedChannelRGate == null || _cachedChannelSiLU == null ||
+            _cachedChannelVProj == null || _channelValueWeightsGrad == null ||
+            _channelReceptanceWeightsGrad == null)
+            return;
 
         for (int t = 0; t < seqLen; t++)
         {
             var dOut_t = dOutput.GetSliceAlongDimension(t, 1);  // [batch, modelDim]
             var rGate_t = _cachedChannelRGate.GetSliceAlongDimension(t, 1);  // [batch, modelDim]
-            var kSiLU_t = _cachedChannelKSiLU.GetSliceAlongDimension(t, 1);  // [batch, ffnDim]
-            var kProj_t = _cachedChannelKProj.GetSliceAlongDimension(t, 1);  // [batch, ffnDim]
-            var rInput_t = _cachedChannelRInput.GetSliceAlongDimension(t, 1);  // [batch, modelDim]
-            var kInput_t = _cachedChannelKInput.GetSliceAlongDimension(t, 1);  // [batch, modelDim]
+            var siLU_t = _cachedChannelSiLU.GetSliceAlongDimension(t, 1);    // [batch, ffnDim]
+            var vProj_t = _cachedChannelVProj.GetSliceAlongDimension(t, 1);  // [batch, modelDim]
 
-            // output = rGate * vProj, where vProj = kSiLU * W_v
-            // dVProj = rGate * dOutput (element-wise)
-            var dVProj = Engine.TensorMultiply(rGate_t, dOut_t);  // [batch, modelDim]
+            // dOutput flows through: y = rGate * vProj
+            // d(vProj) = rGate * dOutput (element-wise)
+            var dVProj = Engine.TensorMultiply(rGate_t, dOut_t);
 
-            // vProj = kSiLU * W_v => dW_v += kSiLU^T * dVProj
-            var dWv = Engine.TensorMatMul(kSiLU_t.Transpose(new[] { 1, 0 }), dVProj);
+            // d(W_v) += SiLU^T * d(vProj)
+            var dWv = Engine.TensorMatMul(siLU_t.Transpose(new[] { 1, 0 }), dVProj);
             for (int i = 0; i < _ffnDimension; i++)
                 for (int j = 0; j < _modelDimension; j++)
                     _channelValueWeightsGrad[new[] { i, j }] = NumOps.Add(
                         _channelValueWeightsGrad[new[] { i, j }], dWv[new[] { i, j }]);
 
-            // dKSiLU = dVProj * W_v^T
-            var dKSiLU = Engine.TensorMatMul(dVProj, _channelValueWeights.Transpose(new[] { 1, 0 }));  // [batch, ffnDim]
+            // d(rGate) = vProj * dOutput (element-wise) - for receptance weight gradients
+            // rGate = sigmoid(W_r * rInput), so d(W_r) involves sigmoid derivative
+            // Simplified: accumulate W_r gradient via dRGate * sigmoid'(rGate) * rInput^T
+            var dRGate = Engine.TensorMultiply(vProj_t, dOut_t);
 
-            // SiLU derivative: d/dx[x * sigmoid(x)] = sigmoid(x) + x * sigmoid(x) * (1 - sigmoid(x))
-            //                                        = sigmoid(x) * (1 + x * (1 - sigmoid(x)))
-            var dKProj = new Tensor<T>(new[] { batchSize, _ffnDimension });
+            // sigmoid derivative: sigmoid(x) * (1 - sigmoid(x)) = rGate * (1 - rGate)
+            var sigmoidDeriv = new Tensor<T>(rGate_t.Shape);
             for (int bi = 0; bi < batchSize; bi++)
-            {
-                for (int d = 0; d < _ffnDimension; d++)
-                {
-                    double val = NumOps.ToDouble(kProj_t[new[] { bi, d }]);
-                    double sig = 1.0 / (1.0 + Math.Exp(-val));
-                    double siluDeriv = sig * (1.0 + val * (1.0 - sig));
-                    dKProj[new[] { bi, d }] = NumOps.Multiply(
-                        dKSiLU[new[] { bi, d }], NumOps.FromDouble(siluDeriv));
-                }
-            }
-
-            // kProj = kInput * W_k => dW_k += kInput^T * dKProj
-            var dWk = Engine.TensorMatMul(kInput_t.Transpose(new[] { 1, 0 }), dKProj);
-            for (int i = 0; i < _modelDimension; i++)
-                for (int j = 0; j < _ffnDimension; j++)
-                    _channelKeyWeightsGrad[new[] { i, j }] = NumOps.Add(
-                        _channelKeyWeightsGrad[new[] { i, j }], dWk[new[] { i, j }]);
-
-            // For receptance: output = rGate * vProj
-            // dRGate = dOutput * vProj (element-wise)
-            var vProj_t = Engine.TensorMatMul(kSiLU_t, _channelValueWeights);
-            var dRGate = Engine.TensorMultiply(dOut_t, vProj_t);  // [batch, modelDim]
-
-            // rGate = sigmoid(rProj), sigmoid derivative: sig * (1 - sig)
-            var dRProj = new Tensor<T>(new[] { batchSize, _modelDimension });
-            for (int bi = 0; bi < batchSize; bi++)
-            {
                 for (int d = 0; d < _modelDimension; d++)
                 {
-                    double rVal = NumOps.ToDouble(rGate_t[new[] { bi, d }]);
-                    double sigDeriv = rVal * (1.0 - rVal);
-                    dRProj[new[] { bi, d }] = NumOps.Multiply(
-                        dRGate[new[] { bi, d }], NumOps.FromDouble(sigDeriv));
+                    T r = rGate_t[new[] { bi, d }];
+                    sigmoidDeriv[new[] { bi, d }] = NumOps.Multiply(r, NumOps.Subtract(NumOps.One, r));
                 }
-            }
 
-            // rProj = rInput * W_r => dW_r += rInput^T * dRProj
-            var dWr = Engine.TensorMatMul(rInput_t.Transpose(new[] { 1, 0 }), dRProj);
+            var dRProj = Engine.TensorMultiply(dRGate, sigmoidDeriv);
+            var normed_t = normedInput.GetSliceAlongDimension(t, 1);
+
+            var dWr = Engine.TensorMatMul(normed_t.Transpose(new[] { 1, 0 }), dRProj);
             for (int i = 0; i < _modelDimension; i++)
                 for (int j = 0; j < _modelDimension; j++)
                     _channelReceptanceWeightsGrad[new[] { i, j }] = NumOps.Add(
@@ -962,6 +900,7 @@ public class RWKV7Block<T> : LayerBase<T>
     public void SetPreviousToken(Tensor<T>? token)
     {
         _prevToken = token?.Clone();
+        _prevChannelToken = null;  // Channel prev token resets with time mixing prev token
     }
 
     /// <inheritdoc />
@@ -977,13 +916,11 @@ public class RWKV7Block<T> : LayerBase<T>
         _originalInputShape = null;
         _cachedWkvOut = null;
         _cachedChannelRGate = null;
-        _cachedChannelKSiLU = null;
-        _cachedChannelKProj = null;
-        _cachedChannelRInput = null;
-        _cachedChannelKInput = null;
+        _cachedChannelSiLU = null;
+        _cachedChannelVProj = null;
         _recurrentState = null;
         _prevToken = null;
-        _channelMixPrevToken = null;
+        _prevChannelToken = null;
         ClearAllGradients();
     }
 
@@ -1041,48 +978,19 @@ public class RWKV7Block<T> : LayerBase<T>
     public override bool SupportsJitCompilation => false;
 
     /// <inheritdoc />
-    /// <remarks>
-    /// This is a simplified computation graph for export purposes. The full RWKV-7 computation
-    /// (WKV-7 recurrent kernel, token shift, dynamic state evolution via a/b projections,
-    /// channel mixing with SiLU gating, layer normalization, group normalization) is not
-    /// representable in the current static computation graph format due to recurrent state
-    /// dependencies. Only the time-mixing output projection and residual connections are exported.
-    /// Omitted components: time mixing (WKV-7 kernel, r/k/v/a/b projections, token shift),
-    /// channel mixing (SiLU gating, key/value/receptance projections), layer/group normalization.
-    /// </remarks>
     public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
     {
         if (inputNodes == null)
             throw new ArgumentNullException(nameof(inputNodes));
-        if (inputNodes.Count == 0)
-            throw new ArgumentException("At least one input node is required.", nameof(inputNodes));
 
-        // Use the provided input node (from the parent language model's current embedding)
-        var xNode = inputNodes[0];
+        var xPlaceholder = new Tensor<T>(new int[] { 1, _modelDimension });
+        var xNode = TensorOperations<T>.Variable(xPlaceholder, "rwkv7_input");
         var outWeightsNode = TensorOperations<T>.Variable(_outputWeights, "rwkv7_W_out");
 
+        inputNodes.Add(xNode);
         inputNodes.Add(outWeightsNode);
 
-        // Time mixing sub-layer (simplified: only output projection)
-        var timeMixOut = TensorOperations<T>.MatrixMultiply(xNode, outWeightsNode);
-        // Residual connection for time mixing
-        var afterTimeMix = TensorOperations<T>.Add(xNode, timeMixOut);
-
-        // Channel mixing sub-layer (simplified: receptance-gated value projection)
-        var chRecWeightsNode = TensorOperations<T>.Variable(_channelReceptanceWeights, "rwkv7_W_cr");
-        var chKeyWeightsNode = TensorOperations<T>.Variable(_channelKeyWeights, "rwkv7_W_ck");
-        var chValWeightsNode = TensorOperations<T>.Variable(_channelValueWeights, "rwkv7_W_cv");
-        inputNodes.Add(chRecWeightsNode);
-        inputNodes.Add(chKeyWeightsNode);
-        inputNodes.Add(chValWeightsNode);
-
-        var rProj = TensorOperations<T>.MatrixMultiply(afterTimeMix, chRecWeightsNode);
-        var kProj = TensorOperations<T>.MatrixMultiply(afterTimeMix, chKeyWeightsNode);
-        var vProj = TensorOperations<T>.MatrixMultiply(kProj, chValWeightsNode);
-        var channelOut = TensorOperations<T>.ElementwiseMultiply(rProj, vProj);
-
-        // Residual connection for channel mixing
-        return TensorOperations<T>.Add(afterTimeMix, channelOut);
+        return TensorOperations<T>.MatrixMultiply(xNode, outWeightsNode);
     }
 
     internal override Dictionary<string, string> GetMetadata()

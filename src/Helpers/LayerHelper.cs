@@ -14740,6 +14740,73 @@ public static class LayerHelper<T>
     }
 
     /// <summary>
+    /// Creates default layers for the RWKV-7 "Goose" language model.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="vocabSize">Size of the token vocabulary (default: 65536).</param>
+    /// <param name="modelDim">The model dimension d_model (default: 768).</param>
+    /// <param name="numHeads">Number of heads per block (default: 12). Must divide modelDim.</param>
+    /// <param name="numLayers">Number of RWKV-7 blocks (default: 12).</param>
+    /// <param name="ffnMultiplier">FFN expansion multiplier (default: 3.5).</param>
+    /// <param name="maxSeqLength">Maximum sequence length for parallel mode (default: 4096).</param>
+    /// <returns>An enumerable collection of layers for the RWKV-7 language model.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> RWKV-7 "Goose" is a linear-time language model that replaces
+    /// the fixed exponential decay of earlier RWKV versions with learnable, data-dependent
+    /// transition matrices for dynamic state evolution.
+    ///
+    /// <b>Layer Structure:</b>
+    /// 1. Token embedding: DenseLayer(vocabSize → modelDim) with GELU
+    /// 2. N x RWKV7Block: WKV-7 time mixing + SiLU channel mixing
+    /// 3. LM head: DenseLayer(modelDim → vocabSize)
+    ///
+    /// <b>Key Innovation (WKV-7):</b>
+    /// S_t = diag(sigmoid(a_t)) * S_{t-1} + sigmoid(b_t) * outer(k_t, v_t)
+    /// where a_t and b_t are learned data-dependent transition vectors.
+    /// </para>
+    /// <para>
+    /// <b>Reference:</b> Peng et al., "RWKV-7 Goose with Expressive Dynamic State Evolution", 2025.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultRWKV7LanguageModelLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int vocabSize = 65536,
+        int modelDim = 768,
+        int numHeads = 12,
+        int numLayers = 12,
+        double ffnMultiplier = 3.5,
+        int maxSeqLength = 4096)
+    {
+        // === Token Embedding ===
+        // Projects one-hot token indices from vocabSize to modelDim.
+        yield return new DenseLayer<T>(
+            inputSize: vocabSize,
+            outputSize: modelDim,
+            activationFunction: new GELUActivation<T>());
+
+        // === RWKV-7 Blocks ===
+        // Each block contains:
+        //   - Time mixing: token shift → project r,k,v,a,b → WKV-7 state update → group norm → output projection
+        //   - Channel mixing: token shift → SiLU gating → receptance gate → output
+        // With layer normalization and residual connections.
+        for (int layer = 0; layer < numLayers; layer++)
+        {
+            yield return new RWKV7Block<T>(
+                sequenceLength: maxSeqLength,
+                modelDimension: modelDim,
+                numHeads: numHeads,
+                ffnMultiplier: ffnMultiplier);
+        }
+
+        // === LM Head ===
+        // Projects from modelDim back to vocabSize for next-token prediction logits.
+        yield return new DenseLayer<T>(
+            inputSize: modelDim,
+            outputSize: vocabSize,
+            activationFunction: null);
+    }
+
+    /// <summary>
     /// Creates default layers for the S4 (Structured State Space Sequence) model.
     /// </summary>
     /// <param name="architecture">The neural network architecture configuration.</param>

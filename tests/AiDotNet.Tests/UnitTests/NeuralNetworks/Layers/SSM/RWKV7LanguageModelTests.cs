@@ -560,6 +560,117 @@ public class RWKV7LanguageModelTests
 
     #endregion
 
+    #region RWKV7LanguageModel Parallel vs Sequential Equivalence
+
+    [Fact]
+    public void Model_ParallelVsSequential_OutputEquivalence()
+    {
+        // Critical test: processing a full sequence in parallel mode (Forward)
+        // must produce the same output as processing tokens one-at-a-time in
+        // sequential mode (GenerateStep), since both should apply the same
+        // WKV-7 state evolution.
+        int vocabSize = 20;
+        int modelDim = 16;
+        int numLayers = 2;
+        int numHeads = 2;
+        int seqLen = 4;
+
+        var model = new RWKV7LanguageModel<float>(
+            vocabSize, modelDim, numLayers, numHeads, maxSeqLength: seqLen);
+
+        // Create a fixed input sequence (one-hot per position)
+        var tokens = new int[] { 3, 7, 12, 1 };
+        var input3D = new Tensor<float>(new[] { 1, seqLen, vocabSize });
+        for (int t = 0; t < seqLen; t++)
+            input3D[new[] { 0, t, tokens[t] }] = 1.0f;
+
+        // Mode 1: Parallel forward (full sequence at once)
+        var parallelOutput = model.Forward(input3D);
+        // Extract logits at last position
+        var parallelLastLogits = new float[vocabSize];
+        for (int v = 0; v < vocabSize; v++)
+            parallelLastLogits[v] = parallelOutput[new[] { 0, seqLen - 1, v }];
+
+        // Mode 2: Sequential generation (token by token)
+        // Must use same parameters
+        model.ResetState();
+        model.InitializeGeneration();
+
+        Tensor<float> seqLogits = new Tensor<float>(new[] { vocabSize });
+        for (int t = 0; t < seqLen; t++)
+        {
+            var tokenOneHot = new Tensor<float>(new[] { vocabSize });
+            tokenOneHot[tokens[t]] = 1.0f;
+            seqLogits = model.GenerateStep(tokenOneHot);
+        }
+
+        // Compare: the last-position logits from parallel should match
+        // the final step logits from sequential
+        var seqArr = seqLogits.ToArray();
+        float maxDiff = 0;
+        for (int v = 0; v < vocabSize; v++)
+        {
+            float diff = MathF.Abs(parallelLastLogits[v] - seqArr[v]);
+            if (diff > maxDiff) maxDiff = diff;
+        }
+
+        // Allow small floating-point tolerance since operations are mathematically identical
+        // but may differ due to operation ordering
+        Assert.True(maxDiff < 1e-4f,
+            $"Parallel vs sequential max diff = {maxDiff:G6}. Outputs should be equivalent.");
+    }
+
+    [Fact]
+    public void Model_ParallelVsSequential_AllPositionsMatch()
+    {
+        // Verify equivalence at every position, not just the last one.
+        int vocabSize = 15;
+        int modelDim = 16;
+        int seqLen = 3;
+
+        var model = new RWKV7LanguageModel<float>(
+            vocabSize, modelDim, numLayers: 1, numHeads: 2, maxSeqLength: seqLen);
+
+        var tokens = new int[] { 2, 8, 11 };
+        var input3D = new Tensor<float>(new[] { 1, seqLen, vocabSize });
+        for (int t = 0; t < seqLen; t++)
+            input3D[new[] { 0, t, tokens[t] }] = 1.0f;
+
+        // Parallel
+        var parallelOutput = model.Forward(input3D);
+
+        // Sequential
+        model.ResetState();
+        model.InitializeGeneration();
+        var seqOutputs = new float[seqLen][];
+
+        for (int t = 0; t < seqLen; t++)
+        {
+            var tokenOneHot = new Tensor<float>(new[] { vocabSize });
+            tokenOneHot[tokens[t]] = 1.0f;
+            var logits = model.GenerateStep(tokenOneHot);
+            seqOutputs[t] = logits.ToArray();
+        }
+
+        // Compare each position
+        for (int t = 0; t < seqLen; t++)
+        {
+            float maxDiff = 0;
+            for (int v = 0; v < vocabSize; v++)
+            {
+                float parallelVal = parallelOutput[new[] { 0, t, v }];
+                float seqVal = seqOutputs[t][v];
+                float diff = MathF.Abs(parallelVal - seqVal);
+                if (diff > maxDiff) maxDiff = diff;
+            }
+
+            Assert.True(maxDiff < 1e-4f,
+                $"Position {t}: max diff = {maxDiff:G6}. Parallel and sequential should match.");
+        }
+    }
+
+    #endregion
+
     #region RWKV7LanguageModel Metadata
 
     [Fact]
@@ -642,6 +753,86 @@ public class RWKV7LanguageModelTests
             }
         }
         Assert.True(hasVariation, "Multi-layer output should have variation");
+    }
+
+    #endregion
+
+    #region RWKV7LanguageModelOptions
+
+    [Fact]
+    public void Options_DefaultValues_AreCorrect()
+    {
+        var options = new AiDotNet.Models.Options.RWKV7LanguageModelOptions<float>();
+
+        Assert.Equal(65536, options.VocabSize);
+        Assert.Equal(768, options.ModelDimension);
+        Assert.Equal(12, options.NumLayers);
+        Assert.Equal(12, options.NumHeads);
+        Assert.Equal(3.5, options.FFNMultiplier);
+        Assert.Equal(4096, options.MaxSequenceLength);
+        Assert.Equal(0.0, options.DropoutRate);
+        Assert.Null(options.Seed);
+    }
+
+    [Fact]
+    public void Options_CopyConstructor_CopiesAllValues()
+    {
+        var original = new AiDotNet.Models.Options.RWKV7LanguageModelOptions<float>
+        {
+            VocabSize = 32000,
+            ModelDimension = 2048,
+            NumLayers = 24,
+            NumHeads = 32,
+            FFNMultiplier = 4.0,
+            MaxSequenceLength = 8192,
+            DropoutRate = 0.05,
+            Seed = 42
+        };
+
+        var copy = new AiDotNet.Models.Options.RWKV7LanguageModelOptions<float>(original);
+
+        Assert.Equal(original.VocabSize, copy.VocabSize);
+        Assert.Equal(original.ModelDimension, copy.ModelDimension);
+        Assert.Equal(original.NumLayers, copy.NumLayers);
+        Assert.Equal(original.NumHeads, copy.NumHeads);
+        Assert.Equal(original.FFNMultiplier, copy.FFNMultiplier);
+        Assert.Equal(original.MaxSequenceLength, copy.MaxSequenceLength);
+        Assert.Equal(original.DropoutRate, copy.DropoutRate);
+        Assert.Equal(original.Seed, copy.Seed);
+    }
+
+    [Fact]
+    public void Options_CopyConstructor_ThrowsOnNull()
+    {
+        Assert.Throws<ArgumentNullException>(() =>
+            new AiDotNet.Models.Options.RWKV7LanguageModelOptions<float>(null));
+    }
+
+    [Fact]
+    public void Options_CanConstructModelFromOptions()
+    {
+        var options = new AiDotNet.Models.Options.RWKV7LanguageModelOptions<float>
+        {
+            VocabSize = 30,
+            ModelDimension = 16,
+            NumLayers = 2,
+            NumHeads = 2,
+            FFNMultiplier = 3.5,
+            MaxSequenceLength = 8
+        };
+
+        var model = new RWKV7LanguageModel<float>(
+            options.VocabSize,
+            options.ModelDimension,
+            options.NumLayers,
+            options.NumHeads,
+            options.FFNMultiplier,
+            options.MaxSequenceLength);
+
+        Assert.Equal(options.VocabSize, model.VocabSize);
+        Assert.Equal(options.ModelDimension, model.ModelDimension);
+        Assert.Equal(options.NumLayers, model.NumLayers);
+        Assert.Equal(options.NumHeads, model.NumHeads);
     }
 
     #endregion
