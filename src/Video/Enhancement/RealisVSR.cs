@@ -203,7 +203,10 @@ public class RealisVSR<T> : VideoSuperResolutionBase<T>
         _options.DropoutRate = r.ReadDouble();
         ScaleFactor = _options.ScaleFactor;
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
+        {
+            OnnxModel?.Dispose();
             OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
+        }
         else if (_useNativeMode)
         {
             Layers.Clear();

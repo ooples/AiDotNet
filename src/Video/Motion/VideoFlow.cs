@@ -133,6 +133,10 @@ public class VideoFlow<T> : OpticalFlowBase<T>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         var output = Predict(input);
+        if (output.Length != expectedOutput.Length)
+            throw new ArgumentException(
+                $"Expected output length {expectedOutput.Length} does not match model output length {output.Length}.",
+                nameof(expectedOutput));
         var gradient = new Tensor<T>(output.Shape);
         for (int i = 0; i < output.Length; i++)
         {
@@ -155,38 +159,35 @@ public class VideoFlow<T> : OpticalFlowBase<T>
     /// <inheritdoc/>
     public override void UpdateParameters(Vector<T> parameters)
     {
+        int required = 0;
+        if (_featureExtract is not null) required += _featureExtract.GetParameters().Length;
+        foreach (var block in _processingBlocks) required += block.GetParameters().Length;
+        if (_outputConv is not null) required += _outputConv.GetParameters().Length;
+        if (parameters.Length < required)
+            throw new ArgumentException($"Parameter vector length {parameters.Length} is less than required {required}.", nameof(parameters));
         int offset = 0;
         if (_featureExtract is not null)
         {
             var p = _featureExtract.GetParameters();
-            if (offset + p.Length <= parameters.Length)
-            {
-                var sub = new Vector<T>(p.Length);
-                for (int i = 0; i < p.Length; i++) sub[i] = parameters[offset + i];
-                _featureExtract.SetParameters(sub);
-                offset += p.Length;
-            }
+            var sub = new Vector<T>(p.Length);
+            for (int i = 0; i < p.Length; i++) sub[i] = parameters[offset + i];
+            _featureExtract.SetParameters(sub);
+            offset += p.Length;
         }
         foreach (var block in _processingBlocks)
         {
             var p = block.GetParameters();
-            if (offset + p.Length <= parameters.Length)
-            {
-                var sub = new Vector<T>(p.Length);
-                for (int i = 0; i < p.Length; i++) sub[i] = parameters[offset + i];
-                block.SetParameters(sub);
-                offset += p.Length;
-            }
+            var sub = new Vector<T>(p.Length);
+            for (int i = 0; i < p.Length; i++) sub[i] = parameters[offset + i];
+            block.SetParameters(sub);
+            offset += p.Length;
         }
         if (_outputConv is not null)
         {
             var p = _outputConv.GetParameters();
-            if (offset + p.Length <= parameters.Length)
-            {
-                var sub = new Vector<T>(p.Length);
-                for (int i = 0; i < p.Length; i++) sub[i] = parameters[offset + i];
-                _outputConv.SetParameters(sub);
-            }
+            var sub = new Vector<T>(p.Length);
+            for (int i = 0; i < p.Length; i++) sub[i] = parameters[offset + i];
+            _outputConv.SetParameters(sub);
         }
     }
 

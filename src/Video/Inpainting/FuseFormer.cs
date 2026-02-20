@@ -74,9 +74,10 @@ public class FuseFormer<T> : VideoInpaintingBase<T>
     public override Tensor<T> Inpaint(Tensor<T> frames, Tensor<T> masks)
     {
         ThrowIfDisposed();
-        var combined = ConcatFramesAndMasks(frames, masks);
+        var preprocessed = PreprocessFrames(frames);
+        var combined = ConcatFramesAndMasks(preprocessed, masks);
         var output = IsOnnxMode ? RunOnnxInference(combined) : Forward(combined);
-        return output;
+        return PostprocessOutput(output);
     }
 
     /// <inheritdoc/>
@@ -200,6 +201,8 @@ public class FuseFormer<T> : VideoInpaintingBase<T>
             throw new ArgumentException($"Frames must be rank 4 [N, C, H, W], got rank {frames.Rank}.", nameof(frames));
         if (masks.Rank != 4)
             throw new ArgumentException($"Masks must be rank 4 [N, 1, H, W], got rank {masks.Rank}.", nameof(masks));
+        if (masks.Shape[1] != 1)
+            throw new ArgumentException($"Masks must be single-channel [N, 1, H, W], got {masks.Shape[1]} channels.", nameof(masks));
         int n = frames.Shape[0];
         int c = frames.Shape[1];
         int h = frames.Shape[2];

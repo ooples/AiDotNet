@@ -185,6 +185,8 @@ public class ToonCrafter<T> : FrameInterpolationBase<T>
     /// <inheritdoc/>
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
+        writer.Write(_useNativeMode);
+        writer.Write(_options.ModelPath ?? string.Empty);
         writer.Write((int)_options.Variant);
         writer.Write(_options.NumFeatures);
         writer.Write(_options.NumDiffusionSteps);
@@ -198,6 +200,9 @@ public class ToonCrafter<T> : FrameInterpolationBase<T>
     /// <inheritdoc/>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
+        _useNativeMode = reader.ReadBoolean();
+        string mp = reader.ReadString();
+        if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
         _options.Variant = (VideoModelVariant)reader.ReadInt32();
         _options.NumFeatures = reader.ReadInt32();
         _options.NumDiffusionSteps = reader.ReadInt32();
@@ -206,11 +211,23 @@ public class ToonCrafter<T> : FrameInterpolationBase<T>
         _options.GuidanceScale = reader.ReadDouble();
         _options.LearningRate = reader.ReadDouble();
         _options.DropoutRate = reader.ReadDouble();
+        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
+        {
+            OnnxModel?.Dispose();
+            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
+        }
+        else if (_useNativeMode)
+        {
+            Layers.Clear();
+            InitializeLayers();
+        }
     }
 
     /// <inheritdoc/>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
+        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
+            return new ToonCrafter<T>(Architecture, p, _options);
         return new ToonCrafter<T>(Architecture, _options);
     }
 

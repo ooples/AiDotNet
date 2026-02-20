@@ -126,12 +126,18 @@ public class Upscale4KAgent<T> : VideoSuperResolutionBase<T>
     {
         if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
         SetTrainingMode(true);
-        var output = Predict(input);
-        var grad = LossFunction.CalculateDerivative(output.ToVector(), expected.ToVector());
-        var gt = Tensor<T>.FromVector(grad);
-        for (int i = Layers.Count - 1; i >= 0; i--) gt = Layers[i].Backward(gt);
-        _optimizer?.UpdateParameters(Layers);
-        SetTrainingMode(false);
+        try
+        {
+            var output = Predict(input);
+            var grad = LossFunction.CalculateDerivative(output.ToVector(), expected.ToVector());
+            var gt = Tensor<T>.FromVector(grad);
+            for (int i = Layers.Count - 1; i >= 0; i--) gt = Layers[i].Backward(gt);
+            _optimizer?.UpdateParameters(Layers);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     public override void UpdateParameters(Vector<T> parameters)
@@ -209,7 +215,7 @@ public class Upscale4KAgent<T> : VideoSuperResolutionBase<T>
     {
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
             return new Upscale4KAgent<T>(Architecture, p, _options);
-        return new Upscale4KAgent<T>(Architecture, _options);
+        return new Upscale4KAgent<T>(Architecture, _options, _optimizer);
     }
 
     #endregion

@@ -62,6 +62,8 @@ public class BiMVFI<T> : FrameInterpolationBase<T>
     public BiMVFI(NeuralNetworkArchitecture<T> architecture, string modelPath, BiMVFIOptions? options = null)
         : base(architecture)
     {
+        if (string.IsNullOrWhiteSpace(modelPath))
+            throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
         _options = options ?? new BiMVFIOptions();
         _useNativeMode = false;
         SupportsArbitraryTimestep = true;
@@ -87,6 +89,11 @@ public class BiMVFI<T> : FrameInterpolationBase<T>
     #region Frame Interpolation
 
     /// <inheritdoc />
+    /// <remarks>
+    /// In ONNX mode, the timestep <paramref name="t"/> is passed to the model which natively
+    /// supports arbitrary timestep interpolation. In native mode, the baseline encoder-decoder
+    /// does not yet incorporate <paramref name="t"/> and always produces mid-frame output.
+    /// </remarks>
     public override Tensor<T> Interpolate(Tensor<T> frame0, Tensor<T> frame1, double t = 0.5)
     {
         ThrowIfDisposed();
@@ -132,12 +139,18 @@ public class BiMVFI<T> : FrameInterpolationBase<T>
     {
         if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
         SetTrainingMode(true);
-        var output = Predict(input);
-        var grad = LossFunction.CalculateDerivative(output.ToVector(), expected.ToVector());
-        var gt = Tensor<T>.FromVector(grad);
-        for (int i = Layers.Count - 1; i >= 0; i--) gt = Layers[i].Backward(gt);
-        _optimizer?.UpdateParameters(Layers);
-        SetTrainingMode(false);
+        try
+        {
+            var output = Predict(input);
+            var grad = LossFunction.CalculateDerivative(output.ToVector(), expected.ToVector());
+            var gt = Tensor<T>.FromVector(grad);
+            for (int i = Layers.Count - 1; i >= 0; i--) gt = Layers[i].Backward(gt);
+            _optimizer?.UpdateParameters(Layers);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     public override void UpdateParameters(Vector<T> parameters)

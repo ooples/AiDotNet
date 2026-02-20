@@ -131,12 +131,18 @@ public class DualXVSR<T> : VideoSuperResolutionBase<T>
     {
         if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
         SetTrainingMode(true);
-        var output = Predict(input);
-        var grad = LossFunction.CalculateDerivative(output.ToVector(), expected.ToVector());
-        var gt = Tensor<T>.FromVector(grad);
-        for (int i = Layers.Count - 1; i >= 0; i--) gt = Layers[i].Backward(gt);
-        _optimizer?.UpdateParameters(Layers);
-        SetTrainingMode(false);
+        try
+        {
+            var output = Predict(input);
+            var grad = LossFunction.CalculateDerivative(output.ToVector(), expected.ToVector());
+            var gt = Tensor<T>.FromVector(grad);
+            for (int i = Layers.Count - 1; i >= 0; i--) gt = Layers[i].Backward(gt);
+            _optimizer?.UpdateParameters(Layers);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     public override void UpdateParameters(Vector<T> parameters)
@@ -198,17 +204,24 @@ public class DualXVSR<T> : VideoSuperResolutionBase<T>
         _options.NumHeads = r.ReadInt32();
         _options.TemporalWindow = r.ReadInt32();
         _options.DropoutRate = r.ReadDouble();
+        ScaleFactor = _options.ScaleFactor;
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
+        {
+            OnnxModel?.Dispose();
             OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
-        if (_useNativeMode)
+        }
+        else if (_useNativeMode)
+        {
+            Layers.Clear();
             InitializeLayers();
+        }
     }
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
         if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
             return new DualXVSR<T>(Architecture, mp, _options);
-        return new DualXVSR<T>(Architecture, _options);
+        return new DualXVSR<T>(Architecture, _options, _optimizer);
     }
 
     #endregion

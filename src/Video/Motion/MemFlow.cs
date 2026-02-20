@@ -132,6 +132,10 @@ public class MemFlow<T> : OpticalFlowBase<T>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         var output = Predict(input);
+        if (output.Length != expectedOutput.Length)
+            throw new ArgumentException(
+                $"Expected output length {expectedOutput.Length} does not match model output length {output.Length}.",
+                nameof(expectedOutput));
         var gradient = new Tensor<T>(output.Shape);
         for (int i = 0; i < output.Length; i++)
         {

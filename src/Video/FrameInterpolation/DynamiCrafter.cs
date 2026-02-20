@@ -60,6 +60,8 @@ public class DynamiCrafter<T> : FrameInterpolationBase<T>
     public DynamiCrafter(NeuralNetworkArchitecture<T> architecture, string modelPath, DynamiCrafterOptions? options = null)
         : base(architecture)
     {
+        if (string.IsNullOrWhiteSpace(modelPath))
+            throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
         _options = options ?? new DynamiCrafterOptions();
         _useNativeMode = false;
         SupportsArbitraryTimestep = true;
@@ -85,6 +87,11 @@ public class DynamiCrafter<T> : FrameInterpolationBase<T>
     #region Frame Interpolation
 
     /// <inheritdoc />
+    /// <remarks>
+    /// In ONNX mode, the timestep <paramref name="t"/> is passed to the model which natively
+    /// supports arbitrary timestep interpolation. In native mode, the baseline encoder-decoder
+    /// does not yet incorporate <paramref name="t"/> and always produces mid-frame output.
+    /// </remarks>
     public override Tensor<T> Interpolate(Tensor<T> frame0, Tensor<T> frame1, double t = 0.5)
     {
         ThrowIfDisposed();

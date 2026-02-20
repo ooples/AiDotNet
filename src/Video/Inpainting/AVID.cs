@@ -74,10 +74,10 @@ public class AVID<T> : VideoInpaintingBase<T>
     public override Tensor<T> Inpaint(Tensor<T> frames, Tensor<T> masks)
     {
         ThrowIfDisposed();
-        // Concatenate frames and masks along channel dimension for model input
-        var combined = ConcatFramesAndMasks(frames, masks);
+        var preprocessed = PreprocessFrames(frames);
+        var combined = ConcatFramesAndMasks(preprocessed, masks);
         var output = IsOnnxMode ? RunOnnxInference(combined) : Forward(combined);
-        return output;
+        return PostprocessOutput(output);
     }
 
     /// <inheritdoc/>

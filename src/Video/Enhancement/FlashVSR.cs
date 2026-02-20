@@ -39,7 +39,7 @@ namespace AiDotNet.Video.Enhancement;
 /// </para>
 /// <para>
 /// <b>Reference:</b> "FlashVSR: Efficient Real-Time Video Super-Resolution via One-Step Diffusion"
-/// https://arxiv.org/abs/2501.xxxxx (Zhuang et al., 2025)
+/// (Zhuang et al., 2025)
 /// </para>
 /// </remarks>
 public class FlashVSR<T> : VideoSuperResolutionBase<T>
@@ -130,12 +130,18 @@ public class FlashVSR<T> : VideoSuperResolutionBase<T>
     {
         if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
         SetTrainingMode(true);
-        var output = Predict(input);
-        var grad = LossFunction.CalculateDerivative(output.ToVector(), expected.ToVector());
-        var gt = Tensor<T>.FromVector(grad);
-        for (int i = Layers.Count - 1; i >= 0; i--) gt = Layers[i].Backward(gt);
-        _optimizer?.UpdateParameters(Layers);
-        SetTrainingMode(false);
+        try
+        {
+            var output = Predict(input);
+            var grad = LossFunction.CalculateDerivative(output.ToVector(), expected.ToVector());
+            var gt = Tensor<T>.FromVector(grad);
+            for (int i = Layers.Count - 1; i >= 0; i--) gt = Layers[i].Backward(gt);
+            _optimizer?.UpdateParameters(Layers);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     public override void UpdateParameters(Vector<T> parameters)
