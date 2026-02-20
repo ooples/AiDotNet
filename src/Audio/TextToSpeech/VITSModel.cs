@@ -882,6 +882,8 @@ public class VITSModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         if (reader.BaseStream.Position < reader.BaseStream.Length)
         {
             _phonemeVocabSize = reader.ReadInt32();
+            if (_phonemeVocabSize <= 0)
+                throw new InvalidDataException($"Invalid phonemeVocabSize: {_phonemeVocabSize}. Must be positive.");
             int ratesLen = reader.ReadInt32();
             if (ratesLen <= 0 || ratesLen > 64)
                 throw new InvalidDataException($"Invalid upsample rates length: {ratesLen}. Expected 1-64.");
