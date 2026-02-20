@@ -1,7 +1,8 @@
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
+using AiDotNet.NeuralNetworks.Layers.SSM;
 
-namespace AiDotNet.NeuralNetworks.Layers.SSM;
+namespace AiDotNet.NeuralNetworks;
 
 /// <summary>
 /// Defines the scan pattern used by the Vision Mamba model to convert 2D patch grids into 1D sequences.
