@@ -70,6 +70,12 @@ public class InputGuardrail<T> : ITextSafetyModule<T>
     {
         var findings = new List<SafetyFinding>();
 
+        // Null input: always return empty (no findings to report on null)
+        if (text is null)
+        {
+            return findings;
+        }
+
         // Empty input check
         if (_blockEmptyInput && string.IsNullOrWhiteSpace(text))
         {
@@ -82,11 +88,6 @@ public class InputGuardrail<T> : ITextSafetyModule<T>
                 RecommendedAction = SafetyAction.Block,
                 SourceModule = ModuleName
             });
-            return findings;
-        }
-
-        if (text == null)
-        {
             return findings;
         }
 

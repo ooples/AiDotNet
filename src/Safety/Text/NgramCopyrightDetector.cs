@@ -1,7 +1,5 @@
 using AiDotNet.Enums;
 using AiDotNet.Models;
-using AiDotNet.Safety;
-using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Safety.Text;
 

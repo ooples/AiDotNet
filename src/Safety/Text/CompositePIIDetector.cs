@@ -53,7 +53,7 @@ public class CompositePIIDetector<T> : TextSafetyModuleBase<T>
     /// <param name="detectors">The PII detectors to combine.</param>
     public CompositePIIDetector(ITextSafetyModule<T>[] detectors)
     {
-        _detectors = detectors;
+        _detectors = detectors ?? throw new ArgumentNullException(nameof(detectors));
     }
 
     /// <inheritdoc />

@@ -54,6 +54,7 @@ public class SafetyPipelineBuilder<T>
     /// <returns>This builder for fluent chaining.</returns>
     public SafetyPipelineBuilder<T> Configure(Action<SafetyConfig> configure)
     {
+        if (configure is null) throw new ArgumentNullException(nameof(configure));
         configure(_config);
         return this;
     }
