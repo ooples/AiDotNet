@@ -58,10 +58,8 @@ public class SafetyBenchmarkRunner<T>
     /// <returns>A benchmark result with precision, recall, and per-category metrics.</returns>
     public SafetyBenchmarkResult RunBenchmark(IReadOnlyList<SafetyBenchmarkCase> testCases)
     {
-        if (testCases == null || testCases.Count == 0)
-        {
-            return SafetyBenchmarkResult.Empty;
-        }
+        if (testCases is null) throw new ArgumentNullException(nameof(testCases));
+        if (testCases.Count == 0) return SafetyBenchmarkResult.Empty;
 
         int truePositives = 0;
         int falsePositives = 0;
