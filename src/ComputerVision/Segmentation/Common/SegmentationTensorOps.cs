@@ -14,6 +14,8 @@ public static class SegmentationTensorOps
     /// </summary>
     public static Tensor<T> EnsureUnbatched<T>(Tensor<T> tensor)
     {
+        if (tensor is null) throw new ArgumentNullException(nameof(tensor));
+
         if (tensor.Rank == 4)
         {
             // [B, C, H, W] -> [C, H, W]
@@ -186,6 +188,10 @@ public static class SegmentationTensorOps
     public static (Tensor<T> LabelMap, int ComponentCount) LabelConnectedComponents<T>(
         Tensor<T> classMap, int targetClass)
     {
+        if (classMap is null) throw new ArgumentNullException(nameof(classMap));
+        if (classMap.Rank != 2)
+            throw new ArgumentException("classMap must be rank 2 [H, W].", nameof(classMap));
+
         var numOps = MathHelper.GetNumericOperations<T>();
         int h = classMap.Shape[0], w = classMap.Shape[1];
         var labelMap = new Tensor<T>([h, w]);
@@ -238,6 +244,7 @@ public static class SegmentationTensorOps
     /// </summary>
     public static Tensor<T> ThresholdMask<T>(Tensor<T> values, double threshold = 0.5)
     {
+        if (values is null) throw new ArgumentNullException(nameof(values));
         var numOps = MathHelper.GetNumericOperations<T>();
         var result = new Tensor<T>(values.Shape);
         var one = numOps.FromDouble(1.0);
@@ -252,6 +259,7 @@ public static class SegmentationTensorOps
     /// </summary>
     public static Tensor<T> Sigmoid<T>(Tensor<T> input)
     {
+        if (input is null) throw new ArgumentNullException(nameof(input));
         var numOps = MathHelper.GetNumericOperations<T>();
         var result = new Tensor<T>(input.Shape);
         for (int i = 0; i < input.Length; i++)
@@ -268,6 +276,10 @@ public static class SegmentationTensorOps
     /// </summary>
     public static Tensor<T> GaussianMask<T>(int height, int width, double cx, double cy, double sigma = 10.0)
     {
+        if (height <= 0) throw new ArgumentOutOfRangeException(nameof(height), "Must be positive.");
+        if (width <= 0) throw new ArgumentOutOfRangeException(nameof(width), "Must be positive.");
+        if (sigma <= 0) throw new ArgumentOutOfRangeException(nameof(sigma), "Must be positive.");
+
         var numOps = MathHelper.GetNumericOperations<T>();
         var result = new Tensor<T>([height, width]);
         double invTwoSigmaSq = 1.0 / (2.0 * sigma * sigma);
@@ -305,6 +317,11 @@ public static class SegmentationTensorOps
     /// </summary>
     public static Tensor<T> WeightedChannelSum<T>(Tensor<T> features, double[] weights)
     {
+        if (features is null) throw new ArgumentNullException(nameof(features));
+        if (weights is null) throw new ArgumentNullException(nameof(weights));
+        if (features.Rank < 3 || features.Rank > 4)
+            throw new ArgumentException("features must be rank 3 [C, H, W] or rank 4 [B, C, H, W].", nameof(features));
+
         var numOps = MathHelper.GetNumericOperations<T>();
 
         if (features.Rank == 4)
@@ -376,6 +393,13 @@ public static class SegmentationTensorOps
     /// </summary>
     public static Tensor<T> PixelAffinity<T>(Tensor<T> features1, Tensor<T> features2)
     {
+        if (features1 is null) throw new ArgumentNullException(nameof(features1));
+        if (features2 is null) throw new ArgumentNullException(nameof(features2));
+        if (features1.Rank < 3 || features1.Rank > 4)
+            throw new ArgumentException("features1 must be rank 3 [C, H, W] or rank 4 [B, C, H, W].", nameof(features1));
+        if (features2.Rank != features1.Rank)
+            throw new ArgumentException("features2 must have the same rank as features1.", nameof(features2));
+
         var numOps = MathHelper.GetNumericOperations<T>();
 
         if (features1.Rank == 4)
@@ -438,6 +462,13 @@ public static class SegmentationTensorOps
     /// </summary>
     public static Tensor<T> WarpMasksByAffinity<T>(Tensor<T> refMasks, Tensor<T> affinity)
     {
+        if (refMasks is null) throw new ArgumentNullException(nameof(refMasks));
+        if (affinity is null) throw new ArgumentNullException(nameof(affinity));
+        if (refMasks.Rank != 3)
+            throw new ArgumentException("refMasks must be rank 3 [N, H, W].", nameof(refMasks));
+        if (affinity.Rank != 2)
+            throw new ArgumentException("affinity must be rank 2 [H, W].", nameof(affinity));
+
         var numOps = MathHelper.GetNumericOperations<T>();
         int n = refMasks.Shape[0], h = refMasks.Shape[1], w = refMasks.Shape[2];
         int aH = affinity.Shape[0], aW = affinity.Shape[1];

@@ -60,7 +60,7 @@ public class SegmentationOutput<T>
     /// <summary>
     /// Confidence score for each detected instance [numInstances].
     /// </summary>
-    public double[]? InstanceScores { get; set; }
+    public T[]? InstanceScores { get; set; }
 
     /// <summary>
     /// Bounding boxes for each instance [numInstances, 4] as (x1, y1, x2, y2).
@@ -85,7 +85,7 @@ public class SegmentationOutput<T>
     /// <summary>
     /// Panoptic segment metadata.
     /// </summary>
-    public List<SegmentInfo>? Segments { get; set; }
+    public List<SegmentInfo<T>>? Segments { get; set; }
 
     #endregion
 
@@ -152,7 +152,8 @@ public enum SegmentationTaskType
 /// <summary>
 /// Metadata for a single segment in panoptic/instance output.
 /// </summary>
-public class SegmentInfo
+/// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
+public class SegmentInfo<T>
 {
     /// <summary>Unique segment ID.</summary>
     public int Id { get; set; }
@@ -167,14 +168,14 @@ public class SegmentInfo
     public bool IsThing { get; set; }
 
     /// <summary>Confidence score in [0, 1].</summary>
-    public double Score { get; set; }
+    public T Score { get; set; } = default!;
 
     /// <summary>Area of this segment in pixels.</summary>
     public int Area { get; set; }
 
     /// <summary>Bounding box [x1, y1, x2, y2] in pixel coordinates (for thing segments).</summary>
-    public double[]? BoundingBox { get; set; }
+    public T[]? BoundingBox { get; set; }
 
     /// <summary>Centroid (x, y) of the segment.</summary>
-    public (double X, double Y)? Centroid { get; set; }
+    public (T X, T Y)? Centroid { get; set; }
 }
