@@ -450,7 +450,15 @@ public class VITSModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         _maxPhonemeLength = maxPhonemeLength;
         Guard.Positive(phonemeVocabSize);
         _phonemeVocabSize = phonemeVocabSize;
-        _upsampleRates = (upsampleRates ?? [8, 8, 2, 2]).ToArray();
+        var rates = (upsampleRates ?? [8, 8, 2, 2]).ToArray();
+        if (rates.Length == 0)
+            throw new ArgumentException("Upsample rates must not be empty.", nameof(upsampleRates));
+        foreach (var rate in rates)
+        {
+            if (rate <= 0)
+                throw new ArgumentException("All upsample rates must be positive.", nameof(upsampleRates));
+        }
+        _upsampleRates = rates;
         _fftSize = fftSize;
         _hopLength = hopLength;
 
