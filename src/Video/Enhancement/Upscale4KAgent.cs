@@ -200,7 +200,11 @@ public class Upscale4KAgent<T> : VideoSuperResolutionBase<T>
     }
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        => new Upscale4KAgent<T>(Architecture, _options);
+    {
+        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
+            return new Upscale4KAgent<T>(Architecture, p, _options);
+        return new Upscale4KAgent<T>(Architecture, _options);
+    }
 
     #endregion
 

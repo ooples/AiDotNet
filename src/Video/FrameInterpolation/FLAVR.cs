@@ -202,7 +202,11 @@ public class FLAVR<T> : FrameInterpolationBase<T>
     }
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        => new FLAVR<T>(Architecture, _options);
+    {
+        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
+            return new FLAVR<T>(Architecture, p, _options);
+        return new FLAVR<T>(Architecture, _options);
+    }
 
     #endregion
 

@@ -206,7 +206,11 @@ public class RealESRGANVideo<T> : VideoSuperResolutionBase<T>
     }
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        => new RealESRGANVideo<T>(Architecture, _options);
+    {
+        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
+            return new RealESRGANVideo<T>(Architecture, p, _options);
+        return new RealESRGANVideo<T>(Architecture, _options);
+    }
 
     #endregion
 

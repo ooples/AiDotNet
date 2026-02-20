@@ -2,7 +2,6 @@ using System.IO;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
-using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
@@ -93,6 +92,8 @@ public class ToonCrafter<T> : FrameInterpolationBase<T>
     public override Tensor<T> Interpolate(Tensor<T> frame0, Tensor<T> frame1, double t = 0.5)
     {
         ThrowIfDisposed();
+        if (t < 0.0 || t > 1.0)
+            throw new ArgumentOutOfRangeException(nameof(t), t, "Timestep t must be in [0, 1].");
         var f0 = PreprocessFrames(frame0);
         var f1 = PreprocessFrames(frame1);
         var concat = ConcatenateFeatures(f0, f1);

@@ -25,6 +25,10 @@ namespace AiDotNet.Video.Enhancement;
 /// - Temporal discriminator: a 3D discriminator evaluates both per-frame quality and
 ///   temporal consistency, penalizing flickering and motion artifacts
 /// - Supports up to 8x upscaling with rich perceptual details
+///
+/// <b>Note:</b> The full VideoGigaGAN architecture (GigaGAN backbone, high-frequency shuttle,
+/// temporal discriminator, anti-aliased flow warping) is available through ONNX inference mode.
+/// Native training mode uses a simplified baseline encoder-decoder for research and fine-tuning.
 /// </para>
 /// <para>
 /// <b>For Beginners:</b> VideoGigaGAN is like a very talented speed-painter. While
@@ -208,7 +212,11 @@ public class VideoGigaGAN<T> : VideoSuperResolutionBase<T>
     }
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        => new VideoGigaGAN<T>(Architecture, _options);
+    {
+        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
+            return new VideoGigaGAN<T>(Architecture, p, _options);
+        return new VideoGigaGAN<T>(Architecture, _options);
+    }
 
     #endregion
 
@@ -223,6 +231,7 @@ public class VideoGigaGAN<T> : VideoSuperResolutionBase<T>
     {
         if (_disposed) return;
         _disposed = true;
+        if (disposing) OnnxModel?.Dispose();
         base.Dispose(disposing);
     }
 
