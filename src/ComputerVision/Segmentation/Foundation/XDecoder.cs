@@ -262,7 +262,7 @@ public class XDecoder<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
             XDecoderModelSize.Tiny => ([96, 192, 384, 768], [2, 2, 6, 2], 256),
             XDecoderModelSize.Base => ([128, 256, 512, 1024], [2, 2, 18, 2], 256),
             XDecoderModelSize.Large => ([192, 384, 768, 1536], [2, 2, 18, 2], 256),
-            _ => ([96, 192, 384, 768], [2, 2, 6, 2], 256)
+            _ => throw new ArgumentOutOfRangeException(nameof(modelSize), modelSize, "Unknown XDecoder model size.")
         };
     }
 
@@ -283,6 +283,8 @@ public class XDecoder<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
     private Tensor<T> PredictOnnx(Tensor<T> input)
     {
         if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");
+        if (input.Rank != 3 && input.Rank != 4)
+            throw new ArgumentException("Input must be rank 3 [C,H,W] or rank 4 [N,C,H,W].", nameof(input));
         bool hasBatch = input.Rank == 4;
         if (!hasBatch) input = AddBatchDimension(input);
         var inputData = new float[input.Length];
@@ -350,6 +352,9 @@ public class XDecoder<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
         else
         {
             const int BackboneStride = 32;
+            if (_height % BackboneStride != 0 || _width % BackboneStride != 0)
+                throw new InvalidOperationException(
+                    $"Input dimensions ({_height}x{_width}) must be divisible by backbone stride ({BackboneStride}).");
             var encoderLayers = LayerHelper<T>.CreateXDecoderEncoderLayers(
                 _channels, _height, _width, _channelDims, _depths, _dropRate).ToList();
             _encoderLayerEnd = encoderLayers.Count;
