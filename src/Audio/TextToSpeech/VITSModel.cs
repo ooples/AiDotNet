@@ -883,10 +883,14 @@ public class VITSModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         {
             _phonemeVocabSize = reader.ReadInt32();
             int ratesLen = reader.ReadInt32();
+            if (ratesLen < 0 || ratesLen > 64)
+                throw new InvalidDataException($"Invalid upsample rates length: {ratesLen}. Expected 0-64.");
             _upsampleRates = new int[ratesLen];
             for (int i = 0; i < ratesLen; i++)
             {
                 _upsampleRates[i] = reader.ReadInt32();
+                if (_upsampleRates[i] <= 0)
+                    throw new InvalidDataException($"Invalid upsample rate at index {i}: {_upsampleRates[i]}. Must be positive.");
             }
         }
         else
