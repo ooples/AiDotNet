@@ -124,8 +124,14 @@ public class XDecoder<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
         XDecoderOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyLoss<T>())
     {
+        if (numClasses <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numClasses), "numClasses must be > 0.");
+        if (numQueries <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numQueries), "numQueries must be > 0.");
         _options = options ?? new XDecoderOptions();
         Options = _options;
+        if (_options.NumStuffClasses is int stuff && (stuff <= 0 || stuff >= numClasses))
+            throw new ArgumentOutOfRangeException(nameof(options), "NumStuffClasses must be between 1 and numClasses-1.");
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 512;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 512;
         _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
@@ -168,8 +174,14 @@ public class XDecoder<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
         XDecoderOptions? options = null)
         : base(architecture, new CrossEntropyLoss<T>())
     {
+        if (numClasses <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numClasses), "numClasses must be > 0.");
+        if (numQueries <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numQueries), "numQueries must be > 0.");
         _options = options ?? new XDecoderOptions();
         Options = _options;
+        if (_options.NumStuffClasses is int stuff && (stuff <= 0 || stuff >= numClasses))
+            throw new ArgumentOutOfRangeException(nameof(options), "NumStuffClasses must be between 1 and numClasses-1.");
 
         if (string.IsNullOrWhiteSpace(onnxModelPath))
             throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
@@ -325,17 +337,22 @@ public class XDecoder<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
         if (!_useNativeMode) { ClearLayers(); return; }
         if (Architecture.Layers != null && Architecture.Layers.Count > 0)
         {
+            var enc = _options.EncoderLayerCount;
+            if (enc is int encVal && (encVal <= 0 || encVal >= Architecture.Layers.Count))
+                throw new ArgumentOutOfRangeException(nameof(_options.EncoderLayerCount),
+                    $"EncoderLayerCount must be between 1 and {Architecture.Layers.Count - 1}.");
             Layers.AddRange(Architecture.Layers);
-            _encoderLayerEnd = _options.EncoderLayerCount ?? Architecture.Layers.Count / 2;
+            _encoderLayerEnd = enc ?? Architecture.Layers.Count / 2;
         }
         else
         {
+            const int BackboneStride = 32;
             var encoderLayers = LayerHelper<T>.CreateXDecoderEncoderLayers(
                 _channels, _height, _width, _channelDims, _depths, _dropRate).ToList();
             _encoderLayerEnd = encoderLayers.Count;
             Layers.AddRange(encoderLayers);
-            int featureH = _height / 32;
-            int featureW = _width / 32;
+            int featureH = _height / BackboneStride;
+            int featureW = _width / BackboneStride;
             var decoderLayers = LayerHelper<T>.CreateXDecoderDecoderLayers(
                 _channelDims[^1], _decoderDim, _numClasses, featureH, featureW);
             Layers.AddRange(decoderLayers);
@@ -353,18 +370,19 @@ public class XDecoder<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
     /// </remarks>
     public override void UpdateParameters(Vector<T> parameters)
     {
+        int expected = 0;
+        foreach (var layer in Layers) expected += layer.GetParameters().Length;
+        if (parameters.Length != expected)
+            throw new ArgumentException($"Parameter vector length {parameters.Length} does not match expected {expected}.", nameof(parameters));
+
         int offset = 0;
         foreach (var layer in Layers)
         {
-            var layerParams = layer.GetParameters();
-            int count = layerParams.Length;
-            if (offset + count <= parameters.Length)
-            {
-                var newParams = new Vector<T>(count);
-                for (int i = 0; i < count; i++) newParams[i] = parameters[offset + i];
-                layer.UpdateParameters(newParams);
-                offset += count;
-            }
+            int count = layer.GetParameters().Length;
+            var newParams = new Vector<T>(count);
+            for (int i = 0; i < count; i++) newParams[i] = parameters[offset + i];
+            layer.UpdateParameters(newParams);
+            offset += count;
         }
     }
 
@@ -501,6 +519,7 @@ public class XDecoder<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
         var semanticMap = Common.SegmentationTensorOps.ArgmaxAlongClassDim(logits);
         int h = semanticMap.Shape[0];
         int w = semanticMap.Shape[1];
+        const int PanopticLabelDivisor = 1000;
         int numStuff = _numStuffClasses;
         var instanceMap = new Tensor<T>([h, w]);
         var panopticMap = new Tensor<T>([h, w]);
@@ -512,13 +531,14 @@ public class XDecoder<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
         {
             int area = 0;
             double sumConf = 0;
+            int segmentId = cls * PanopticLabelDivisor;
             for (int row = 0; row < h; row++)
             {
                 for (int col = 0; col < w; col++)
                 {
                     if (Math.Abs(NumOps.ToDouble(semanticMap[row, col]) - cls) < 0.5)
                     {
-                        panopticMap[row, col] = NumOps.FromDouble(cls * 1000);
+                        panopticMap[row, col] = NumOps.FromDouble(segmentId);
                         area++;
                         sumConf += NumOps.ToDouble(probMap[cls, row, col]);
                     }
@@ -529,7 +549,7 @@ public class XDecoder<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
             {
                 segments.Add(new PanopticSegment<T>
                 {
-                    SegmentId = cls,
+                    SegmentId = segmentId,
                     ClassId = cls,
                     IsThing = false,
                     Confidence = sumConf / area,
@@ -545,6 +565,7 @@ public class XDecoder<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
             for (int comp = 1; comp <= count; comp++)
             {
                 int instId = nextInstId++;
+                int segmentId = cls * PanopticLabelDivisor + instId;
                 int area = 0;
                 double sumConf = 0;
                 var compMask = new Tensor<T>([h, w]);
@@ -556,7 +577,7 @@ public class XDecoder<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
                         if (Math.Abs(NumOps.ToDouble(labelMap[row, col]) - comp) < 0.5)
                         {
                             instanceMap[row, col] = NumOps.FromDouble(instId);
-                            panopticMap[row, col] = NumOps.FromDouble(cls * 1000 + instId);
+                            panopticMap[row, col] = NumOps.FromDouble(segmentId);
                             compMask[row, col] = NumOps.FromDouble(1.0);
                             area++;
                             sumConf += NumOps.ToDouble(probMap[cls, row, col]);
@@ -568,7 +589,7 @@ public class XDecoder<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
                 {
                     segments.Add(new PanopticSegment<T>
                     {
-                        SegmentId = instId,
+                        SegmentId = segmentId,
                         ClassId = cls,
                         IsThing = true,
                         Confidence = sumConf / area,

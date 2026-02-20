@@ -90,6 +90,10 @@ public class FastSAM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
         FastSAMOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyLoss<T>())
     {
+        if (numClasses <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numClasses), "numClasses must be > 0.");
+        if (dropRate < 0 || dropRate > 1)
+            throw new ArgumentOutOfRangeException(nameof(dropRate), "dropRate must be in [0, 1].");
         _options = options ?? new FastSAMOptions(); Options = _options;
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 1024;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 1024;
@@ -97,9 +101,9 @@ public class FastSAM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
         _numClasses = numClasses; _dropRate = dropRate;
         _useNativeMode = true; _onnxModelPath = null;
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        _channelDims = [80, 160, 320, 640];
-        _depths = [3, 6, 6, 3];
-        _decoderDim = 256;
+        _channelDims = _options.ChannelDims ?? [80, 160, 320, 640];
+        _depths = _options.Depths ?? [3, 6, 6, 3];
+        _decoderDim = _options.DecoderDim ?? 256;
         InitializeLayers();
     }
 
@@ -123,6 +127,8 @@ public class FastSAM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
         FastSAMOptions? options = null)
         : base(architecture, new CrossEntropyLoss<T>())
     {
+        if (numClasses <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numClasses), "numClasses must be > 0.");
         _options = options ?? new FastSAMOptions(); Options = _options;
         if (string.IsNullOrWhiteSpace(onnxModelPath))
             throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
@@ -133,9 +139,9 @@ public class FastSAM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
         _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
         _numClasses = numClasses; _dropRate = 0;
         _useNativeMode = false; _onnxModelPath = onnxModelPath; _optimizer = null;
-        _channelDims = [80, 160, 320, 640];
-        _depths = [3, 6, 6, 3];
-        _decoderDim = 256;
+        _channelDims = _options.ChannelDims ?? [80, 160, 320, 640];
+        _depths = _options.Depths ?? [3, 6, 6, 3];
+        _decoderDim = _options.DecoderDim ?? 256;
         try { _onnxSession = new InferenceSession(onnxModelPath); }
         catch (Exception ex) { throw new InvalidOperationException($"Failed to load FastSAM ONNX model: {ex.Message}", ex); }
         InitializeLayers();
@@ -247,7 +253,14 @@ public class FastSAM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
     /// </para>
     /// </remarks>
     public override void UpdateParameters(Vector<T> parameters)
-    { int o = 0; foreach (var l in Layers) { var p = l.GetParameters(); int c = p.Length; if (o + c <= parameters.Length) { var n = new Vector<T>(c); for (int i = 0; i < c; i++) n[i] = parameters[o + i]; l.UpdateParameters(n); o += c; } } }
+    {
+        int expected = 0;
+        foreach (var l in Layers) expected += l.GetParameters().Length;
+        if (parameters.Length != expected)
+            throw new ArgumentException($"Parameter vector length {parameters.Length} does not match expected {expected}.", nameof(parameters));
+        int o = 0;
+        foreach (var l in Layers) { var p = l.GetParameters(); int c = p.Length; var n = new Vector<T>(c); for (int i = 0; i < c; i++) n[i] = parameters[o + i]; l.UpdateParameters(n); o += c; }
+    }
 
     /// <summary>
     /// Collects metadata describing this model's configuration.

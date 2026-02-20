@@ -120,6 +120,8 @@ public abstract class SegmentationModelBase<T> : NeuralNetworkBase<T>, ISegmenta
         int numClasses)
         : base(architecture, lossFunction ?? new CrossEntropyLoss<T>())
     {
+        if (numClasses <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numClasses), "numClasses must be > 0.");
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 512;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 512;
         _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
@@ -144,6 +146,8 @@ public abstract class SegmentationModelBase<T> : NeuralNetworkBase<T>, ISegmenta
         int numClasses)
         : base(architecture, new CrossEntropyLoss<T>())
     {
+        if (numClasses <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numClasses), "numClasses must be > 0.");
         if (string.IsNullOrWhiteSpace(onnxModelPath))
             throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
         if (!File.Exists(onnxModelPath))
@@ -219,6 +223,8 @@ public abstract class SegmentationModelBase<T> : NeuralNetworkBase<T>, ISegmenta
     /// </summary>
     protected virtual Tensor<T> Forward(Tensor<T> input)
     {
+        if (input.Rank != 3 && input.Rank != 4)
+            throw new ArgumentException("Input must be rank 3 [C,H,W] or rank 4 [N,C,H,W].", nameof(input));
         bool hasBatch = input.Rank == 4;
         if (!hasBatch)
         {
@@ -315,6 +321,8 @@ public abstract class SegmentationModelBase<T> : NeuralNetworkBase<T>, ISegmenta
     /// </summary>
     protected Tensor<T> AddBatchDimension(Tensor<T> tensor)
     {
+        if (tensor.Rank != 3)
+            throw new ArgumentException("Expected rank-3 tensor [C,H,W].", nameof(tensor));
         int c = tensor.Shape[0];
         int h = tensor.Shape[1];
         int w = tensor.Shape[2];
@@ -329,6 +337,8 @@ public abstract class SegmentationModelBase<T> : NeuralNetworkBase<T>, ISegmenta
     /// </summary>
     protected Tensor<T> RemoveBatchDimension(Tensor<T> tensor)
     {
+        if (tensor.Rank < 1 || tensor.Shape[0] != 1)
+            throw new ArgumentException("Expected batch dimension of 1 to remove.", nameof(tensor));
         int[] newShape = new int[tensor.Shape.Length - 1];
         for (int i = 0; i < newShape.Length; i++)
         {

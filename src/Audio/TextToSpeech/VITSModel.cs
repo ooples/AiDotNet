@@ -851,6 +851,12 @@ public class VITSModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         writer.Write(_maxPhonemeLength);
         writer.Write(_fftSize);
         writer.Write(_hopLength);
+        writer.Write(_phonemeVocabSize);
+        writer.Write(_upsampleRates.Length);
+        foreach (var rate in _upsampleRates)
+        {
+            writer.Write(rate);
+        }
     }
 
     /// <summary>
@@ -873,6 +879,21 @@ public class VITSModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         _maxPhonemeLength = reader.ReadInt32();
         _fftSize = reader.ReadInt32();
         _hopLength = reader.ReadInt32();
+        if (reader.BaseStream.Position < reader.BaseStream.Length)
+        {
+            _phonemeVocabSize = reader.ReadInt32();
+            int ratesLen = reader.ReadInt32();
+            _upsampleRates = new int[ratesLen];
+            for (int i = 0; i < ratesLen; i++)
+            {
+                _upsampleRates[i] = reader.ReadInt32();
+            }
+        }
+        else
+        {
+            _phonemeVocabSize = 128;
+            _upsampleRates = [8, 8, 2, 2];
+        }
     }
 
     /// <summary>

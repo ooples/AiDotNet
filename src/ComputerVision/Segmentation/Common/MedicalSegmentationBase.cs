@@ -71,6 +71,10 @@ public abstract class MedicalSegmentationBase<T> : SegmentationModelBase<T>, IMe
     public virtual MedicalSegmentationResult<T> SegmentFewShot(
         Tensor<T> queryImage, Tensor<T> supportImages, Tensor<T> supportMasks)
     {
+        if (queryImage is null) throw new ArgumentNullException(nameof(queryImage));
+        if (supportImages is null) throw new ArgumentNullException(nameof(supportImages));
+        if (supportMasks is null) throw new ArgumentNullException(nameof(supportMasks));
+
         if (!SupportsFewShot)
         {
             throw new NotSupportedException(
@@ -115,6 +119,8 @@ public abstract class MedicalSegmentationBase<T> : SegmentationModelBase<T>, IMe
             throw new ArgumentException("Volume must have shape [C, D, H, W].", nameof(volume));
         if (overlap < 0 || overlap >= 1.0)
             throw new ArgumentOutOfRangeException(nameof(overlap), "Overlap must be in [0, 1).");
+        if (patchSize.D <= 0 || patchSize.H <= 0 || patchSize.W <= 0)
+            throw new ArgumentOutOfRangeException(nameof(patchSize), "Patch dimensions must be positive.");
 
         int channels = volume.Shape[0];
         int volD = volume.Shape[1], volH = volume.Shape[2], volW = volume.Shape[3];
