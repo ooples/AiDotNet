@@ -89,6 +89,12 @@ public abstract class FrameInterpolationBase<T> : VideoNeuralNetworkBase<T>
     /// <returns>Tensor containing all intermediate frames [numIntermediate, channels, height, width].</returns>
     public virtual Tensor<T> InterpolateMulti(Tensor<T> frame0, Tensor<T> frame1, int numIntermediate)
     {
+        if (frame0 is null) throw new ArgumentNullException(nameof(frame0));
+        if (frame1 is null) throw new ArgumentNullException(nameof(frame1));
+        if (frame0.Rank < 3)
+            throw new ArgumentException("Frame must have at least 3 dimensions [channels, height, width].", nameof(frame0));
+        if (frame1.Rank < 3)
+            throw new ArgumentException("Frame must have at least 3 dimensions [channels, height, width].", nameof(frame1));
         if (numIntermediate < 1)
             throw new ArgumentOutOfRangeException(nameof(numIntermediate), "Must generate at least 1 intermediate frame.");
 
@@ -115,6 +121,12 @@ public abstract class FrameInterpolationBase<T> : VideoNeuralNetworkBase<T>
     /// <returns>Interpolated sequence with (numFrames - 1) * scaleFactor + 1 frames.</returns>
     public virtual Tensor<T> InterpolateSequence(Tensor<T> frames)
     {
+        if (frames is null) throw new ArgumentNullException(nameof(frames));
+        if (frames.Rank < 4)
+            throw new ArgumentException("Input must have 4 dimensions [numFrames, channels, height, width].", nameof(frames));
+        if (frames.Shape[0] < 2)
+            throw new ArgumentException("At least 2 frames are required for interpolation.", nameof(frames));
+
         int numFrames = frames.Shape[0];
         int channels = frames.Shape[1];
         int height = frames.Shape[2];

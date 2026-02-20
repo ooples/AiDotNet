@@ -135,15 +135,6 @@ public class VRT<T> : VideoSuperResolutionBase<T>
     /// </summary>
     public override bool SupportsTraining => _useNativeMode;
 
-    /// <summary>
-    /// Gets the scale factor for super-resolution.
-    /// </summary>
-    internal new int ScaleFactor => _scaleFactor;
-
-    /// <summary>
-    /// Gets the number of frames processed.
-    /// </summary>
-    internal new int NumFrames => _numFrames;
 
     #endregion
 
@@ -193,8 +184,10 @@ public class VRT<T> : VideoSuperResolutionBase<T>
         _useNativeMode = true;
         _embedDim = embedDim;
         _numFrames = numFrames;
+        NumFrames = numFrames;
         _numBlocks = numBlocks;
         _scaleFactor = scaleFactor;
+        ScaleFactor = scaleFactor;
         _inputHeight = architecture.InputHeight > 0 ? architecture.InputHeight : 64;
         _inputWidth = architecture.InputWidth > 0 ? architecture.InputWidth : 64;
 
@@ -242,8 +235,10 @@ public class VRT<T> : VideoSuperResolutionBase<T>
         _onnxModelPath = onnxModelPath;
         _embedDim = 120;
         _numFrames = 6;
+        NumFrames = 6;
         _numBlocks = 8;
         _scaleFactor = scaleFactor;
+        ScaleFactor = scaleFactor;
         _inputHeight = architecture.InputHeight > 0 ? architecture.InputHeight : 64;
         _inputWidth = architecture.InputWidth > 0 ? architecture.InputWidth : 64;
         _lossFunction = new MeanSquaredErrorLoss<T>();

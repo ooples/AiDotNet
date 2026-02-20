@@ -215,7 +215,7 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
     /// <summary>
     /// Gets the upscaling factor for this model.
     /// </summary>
-    public new int ScaleFactor => _scaleFactor;
+    public int UpscaleFactor => _scaleFactor;
 
     /// <summary>
     /// Gets the last discriminator loss value.
@@ -348,6 +348,7 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
 
         // Store configuration
         _scaleFactor = scaleFactor;
+        ScaleFactor = scaleFactor;
         _numRRDBBlocks = numRRDBBlocks;
         _numFeatures = numFeatures;
         _residualScale = residualScale;
@@ -447,6 +448,7 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
         _useNativeMode = false;
         _onnxModelPath = onnxModelPath;
         _scaleFactor = scaleFactor;
+        ScaleFactor = scaleFactor;
 
         // Set defaults for other fields (not used in ONNX mode)
         _numRRDBBlocks = 23;

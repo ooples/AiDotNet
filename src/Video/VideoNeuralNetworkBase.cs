@@ -239,6 +239,9 @@ public abstract class VideoNeuralNetworkBase<T> : NeuralNetworkBase<T>
     /// <returns>Single frame tensor [channels, height, width].</returns>
     protected Tensor<T> ExtractFrame(Tensor<T> frames, int frameIndex)
     {
+        if (frameIndex < 0 || frameIndex >= frames.Shape[0])
+            throw new ArgumentOutOfRangeException(nameof(frameIndex), $"Frame index {frameIndex} is out of range [0, {frames.Shape[0]}).");
+
         int channels = frames.Shape[1];
         int height = frames.Shape[2];
         int width = frames.Shape[3];
@@ -263,6 +266,9 @@ public abstract class VideoNeuralNetworkBase<T> : NeuralNetworkBase<T>
     /// <param name="frameIndex">Index where the frame should be stored.</param>
     protected void StoreFrame(Tensor<T> output, Tensor<T> frame, int frameIndex)
     {
+        if (frameIndex < 0 || frameIndex >= output.Shape[0])
+            throw new ArgumentOutOfRangeException(nameof(frameIndex), $"Frame index {frameIndex} is out of range [0, {output.Shape[0]}).");
+
         int channels = output.Shape[1];
         int height = output.Shape[2];
         int width = output.Shape[3];

@@ -173,7 +173,7 @@ public class FastDVDNet<T> : VideoDenoisingBase<T>
     /// <summary>
     /// Estimates the noise level in a frame.
     /// </summary>
-    public new double EstimateNoiseLevel(Tensor<T> frame)
+    public override double EstimateNoiseLevel(Tensor<T> frame)
     {
         // Median Absolute Deviation (MAD) estimator
         var data = new List<double>();

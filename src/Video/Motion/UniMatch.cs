@@ -28,8 +28,8 @@ public class UniMatch<T> : OpticalFlowBase<T>
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
 
-    private readonly int _numFeatures;
-    private readonly int _numLayers;
+    private int _numFeatures;
+    private int _numLayers;
     private ConvolutionalLayer<T>? _featureExtract;
     private readonly List<ConvolutionalLayer<T>> _processingBlocks;
     private ConvolutionalLayer<T>? _outputConv;
@@ -64,14 +64,14 @@ public class UniMatch<T> : OpticalFlowBase<T>
         int width = arch.InputWidth > 0 ? arch.InputWidth : 64;
         int channels = arch.InputDepth > 0 ? arch.InputDepth : 3;
 
-        _featureExtract = new ConvolutionalLayer<T>(channels, height, width, _numFeatures, 3, 1, 1);
+        _featureExtract = new ConvolutionalLayer<T>(2 * channels, height, width, _numFeatures, 3, 1, 1);
 
         for (int i = 0; i < _numLayers; i++)
         {
             _processingBlocks.Add(new ConvolutionalLayer<T>(_numFeatures, height, width, _numFeatures, 3, 1, 1));
         }
 
-        _outputConv = new ConvolutionalLayer<T>(_numFeatures, height, width, channels, 3, 1, 1);
+        _outputConv = new ConvolutionalLayer<T>(_numFeatures, height, width, 2, 3, 1, 1);
 
         InitializeLayers();
     }
@@ -103,16 +103,18 @@ public class UniMatch<T> : OpticalFlowBase<T>
 
         // Concatenate frames as input pair
         var concat = ConcatenateFeatures(frame0, frame1);
-        var feat = _featureExtract!.Forward(concat);
+        if (_featureExtract is null || _outputConv is null)
+            throw new InvalidOperationException("Model layers not initialized.");
+
+        var feat = _featureExtract.Forward(concat);
         foreach (var block in _processingBlocks)
         {
             feat = block.Forward(feat);
         }
-        var rawFlow = _outputConv!.Forward(feat);
+        var rawFlow = _outputConv.Forward(feat);
 
         // Extract 2-channel flow field
         var flow = new Tensor<T>([2, height, width]);
-        int pixelsPerChannel = height * width;
         for (int i = 0; i < Math.Min(rawFlow.Length, flow.Length); i++)
         {
             flow.Data.Span[i] = rawFlow.Data.Span[i];
@@ -132,7 +134,15 @@ public class UniMatch<T> : OpticalFlowBase<T>
         }
         if (_outputConv is not null)
         {
-            _outputConv.Backward(gradient);
+            gradient = _outputConv.Backward(gradient);
+        }
+        for (int i = _processingBlocks.Count - 1; i >= 0; i--)
+        {
+            gradient = _processingBlocks[i].Backward(gradient);
+        }
+        if (_featureExtract is not null)
+        {
+            _featureExtract.Backward(gradient);
         }
     }
 
@@ -200,13 +210,13 @@ public class UniMatch<T> : OpticalFlowBase<T>
     /// <inheritdoc/>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
+        _numFeatures = reader.ReadInt32();
+        _numLayers = reader.ReadInt32();
     }
 
     /// <inheritdoc/>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        return new UniMatch<T>(Architecture, _numFeatures, _numLayers);
+        return new UniMatch<T>(Architecture, _numFeatures, _numLayers, _options);
     }
 }

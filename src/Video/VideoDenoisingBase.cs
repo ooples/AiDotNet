@@ -97,6 +97,10 @@ public abstract class VideoDenoisingBase<T> : VideoNeuralNetworkBase<T>
     /// </remarks>
     public virtual double EstimateNoiseLevel(Tensor<T> noisyFrames)
     {
+        if (noisyFrames is null) throw new ArgumentNullException(nameof(noisyFrames));
+        if (noisyFrames.Rank < 4)
+            throw new ArgumentException("Input must have 4 dimensions [numFrames, channels, height, width].", nameof(noisyFrames));
+
         // Simple MAD-based noise estimation on first frame
         int channels = noisyFrames.Shape[1];
         int height = noisyFrames.Shape[2];

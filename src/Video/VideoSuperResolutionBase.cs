@@ -92,6 +92,8 @@ public abstract class VideoSuperResolutionBase<T> : VideoNeuralNetworkBase<T>
 
     /// <summary>
     /// Estimates optical flow between two frames for temporal alignment.
+    /// Override this in derived classes to provide actual flow estimation.
+    /// The default implementation returns a zero-flow tensor (no motion).
     /// </summary>
     /// <param name="frame1">First frame [channels, height, width].</param>
     /// <param name="frame2">Second frame [channels, height, width].</param>
@@ -104,12 +106,12 @@ public abstract class VideoSuperResolutionBase<T> : VideoNeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Performs bicubic upsampling as a baseline or initialization.
+    /// Performs bilinear upsampling as a baseline or initialization.
     /// </summary>
     /// <param name="input">Input tensor [channels, height, width].</param>
     /// <param name="scale">Upscaling factor.</param>
     /// <returns>Upsampled tensor [channels, height*scale, width*scale].</returns>
-    protected Tensor<T> BicubicUpsample(Tensor<T> input, int scale)
+    protected Tensor<T> BilinearUpsample(Tensor<T> input, int scale)
     {
         int channels = input.Shape[0];
         int height = input.Shape[1];

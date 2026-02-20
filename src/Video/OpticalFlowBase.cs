@@ -84,6 +84,8 @@ public abstract class OpticalFlowBase<T> : VideoNeuralNetworkBase<T>
 
     /// <summary>
     /// Estimates optical flow at multiple scales for handling large motions.
+    /// Override this in derived classes to provide actual multi-scale pyramid estimation.
+    /// The default implementation returns only the full-scale flow as a single-element list.
     /// </summary>
     /// <param name="frame0">First frame [channels, height, width].</param>
     /// <param name="frame1">Second frame [channels, height, width].</param>
@@ -91,11 +93,8 @@ public abstract class OpticalFlowBase<T> : VideoNeuralNetworkBase<T>
     /// <returns>List of flow fields from coarsest to finest resolution.</returns>
     public virtual List<Tensor<T>> EstimateFlowMultiScale(Tensor<T> frame0, Tensor<T> frame1, int numLevels = 4)
     {
-        var flows = new List<Tensor<T>>();
-
-        // Default implementation: just call EstimateFlow at full scale
-        flows.Add(EstimateFlow(frame0, frame1));
-        return flows;
+        // Default: single-scale only. Derived classes should override for proper pyramid.
+        return [EstimateFlow(frame0, frame1)];
     }
 
     /// <summary>

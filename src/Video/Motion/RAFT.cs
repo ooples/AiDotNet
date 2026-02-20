@@ -52,7 +52,7 @@ public class RAFT<T> : OpticalFlowBase<T>
     private readonly int _numFeatures;
     private readonly int _correlationLevels;
     private readonly int _correlationRadius;
-    private readonly int _numIterations;
+
 
     // Feature encoder
     private readonly List<ConvolutionalLayer<T>> _featureEncoder;
@@ -107,7 +107,7 @@ public class RAFT<T> : OpticalFlowBase<T>
     /// <summary>
     /// Gets the number of refinement iterations.
     /// </summary>
-    internal new int NumIterations => _numIterations;
+
 
     #endregion
 
@@ -138,7 +138,7 @@ public class RAFT<T> : OpticalFlowBase<T>
         _numFeatures = numFeatures;
         _correlationLevels = correlationLevels;
         _correlationRadius = correlationRadius;
-        _numIterations = numIterations;
+        NumIterations = numIterations;
 
         _featureEncoder = [];
         _contextEncoder = [];
@@ -309,7 +309,7 @@ public class RAFT<T> : OpticalFlowBase<T>
 
         var flowPredictions = new List<Tensor<T>>();
 
-        for (int iter = 0; iter < _numIterations; iter++)
+        for (int iter = 0; iter < NumIterations; iter++)
         {
             var correlation = ComputeCorrelation(fmap1, fmap2, flow);
             var corrFeatures = _correlationConv!.Forward(correlation);
@@ -648,7 +648,7 @@ public class RAFT<T> : OpticalFlowBase<T>
             { "NumFeatures", _numFeatures },
             { "CorrelationLevels", _correlationLevels },
             { "CorrelationRadius", _correlationRadius },
-            { "NumIterations", _numIterations },
+            { "NumIterations", NumIterations },
             { "NumLayers", Layers.Count }
         };
 
@@ -669,7 +669,7 @@ public class RAFT<T> : OpticalFlowBase<T>
         writer.Write(_numFeatures);
         writer.Write(_correlationLevels);
         writer.Write(_correlationRadius);
-        writer.Write(_numIterations);
+        writer.Write(NumIterations);
     }
 
     /// <inheritdoc/>
@@ -687,7 +687,7 @@ public class RAFT<T> : OpticalFlowBase<T>
     /// <inheritdoc/>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        return new RAFT<T>(Architecture, _numFeatures, _correlationLevels, _correlationRadius, _numIterations);
+        return new RAFT<T>(Architecture, _numFeatures, _correlationLevels, _correlationRadius, NumIterations);
     }
 
     #endregion
