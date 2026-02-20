@@ -48,7 +48,7 @@ public class YOLOSeg<T> : InstanceSegmenterBase<T>
         // CSPDarknet backbone (depth=1.0, width=1.0)
         _backbone = new CSPDarknet<T>(depth: 1.0, widthMultiplier: 1.0);
 
-        // PANet neck — CSPDarknet extracts features from stages 1,2,3 with channels [128, 256, 512]
+        // PANet neck — CSPDarknet extracts multi-scale features (P3/8, P4/16, P5/32) with channels [128, 256, 512]
         _neck = new PANet<T>(new[] { 128, 256, 512 }, 256);
 
         // Detection head (YOLO-style) - takes int[] inputChannels, numClasses, numAnchors
