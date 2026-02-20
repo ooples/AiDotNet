@@ -63,17 +63,17 @@ public class SegmentationEvaluation
     public double AP { get; set; }
 
     /// <summary>
-    /// AP for small objects (area &lt; 32^2 pixels).
+    /// AP for small objects (area less than 32^2 pixels).
     /// </summary>
     public double APSmall { get; set; }
 
     /// <summary>
-    /// AP for medium objects (32^2 &lt; area &lt; 96^2 pixels).
+    /// AP for medium objects (32^2 to 96^2 pixels).
     /// </summary>
     public double APMedium { get; set; }
 
     /// <summary>
-    /// AP for large objects (area &gt; 96^2 pixels).
+    /// AP for large objects (area greater than 96^2 pixels).
     /// </summary>
     public double APLarge { get; set; }
 

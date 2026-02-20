@@ -378,7 +378,8 @@ public class DCCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 
         // Store encoder output dim for projection using freqBins (not _fftSize)
         int inChannels = _baseChannels * (int)Math.Pow(2, Math.Min(_numStages - 1, 4));
-        _encoderOutputDim = inChannels * (freqBins / (int)Math.Pow(_stride, _numStages));
+        int stridePower = (int)Math.Pow(_stride, _numStages);
+        _encoderOutputDim = inChannels * Math.Max(1, freqBins / stridePower);
 
         // LSTM layers
         for (int i = 0; i < _numLstmLayers && idx < layers.Count; i++)
