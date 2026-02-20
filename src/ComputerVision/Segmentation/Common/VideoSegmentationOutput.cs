@@ -13,10 +13,17 @@ namespace AiDotNet.ComputerVision.Segmentation.Common;
 /// </remarks>
 public class VideoSegmentationOutput<T>
 {
+    private List<VideoFrameSegmentation<T>> _frames = [];
+    private List<ObjectTrackSummary> _trackSummaries = [];
+
     /// <summary>
     /// Per-frame segmentation results.
     /// </summary>
-    public List<VideoFrameSegmentation<T>> Frames { get; set; } = [];
+    public List<VideoFrameSegmentation<T>> Frames
+    {
+        get => _frames;
+        set => _frames = value ?? [];
+    }
 
     /// <summary>
     /// Total number of tracked objects across all frames.
@@ -43,7 +50,11 @@ public class VideoSegmentationOutput<T>
     /// <summary>
     /// Per-object tracking summaries across the video.
     /// </summary>
-    public List<ObjectTrackSummary> TrackSummaries { get; set; } = [];
+    public List<ObjectTrackSummary> TrackSummaries
+    {
+        get => _trackSummaries;
+        set => _trackSummaries = value ?? [];
+    }
 }
 
 /// <summary>
@@ -52,6 +63,8 @@ public class VideoSegmentationOutput<T>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 public class VideoFrameSegmentation<T>
 {
+    private List<SegmentationMask<T>> _masks = [];
+
     /// <summary>
     /// Frame index in the video sequence.
     /// </summary>
@@ -60,7 +73,11 @@ public class VideoFrameSegmentation<T>
     /// <summary>
     /// Per-object masks for this frame.
     /// </summary>
-    public List<SegmentationMask<T>> Masks { get; set; } = [];
+    public List<SegmentationMask<T>> Masks
+    {
+        get => _masks;
+        set => _masks = value ?? [];
+    }
 
     /// <summary>
     /// Combined semantic map for this frame [H, W] (if applicable).

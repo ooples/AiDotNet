@@ -1,6 +1,7 @@
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Optimizers;
+using AiDotNet.Validation;
 
 namespace AiDotNet.ComputerVision.Segmentation.Common;
 
@@ -41,6 +42,8 @@ public abstract class OpenVocabSegmentationBase<T> : SegmentationModelBase<T>, I
         int maxPromptLength = 77)
         : base(architecture, optimizer, lossFunction, numClasses)
     {
+        Guard.Positive(maxCategories);
+        Guard.Positive(maxPromptLength);
         _maxCategories = maxCategories;
         _maxPromptLength = maxPromptLength;
     }
@@ -56,6 +59,8 @@ public abstract class OpenVocabSegmentationBase<T> : SegmentationModelBase<T>, I
         int maxPromptLength = 77)
         : base(architecture, onnxModelPath, numClasses)
     {
+        Guard.Positive(maxCategories);
+        Guard.Positive(maxPromptLength);
         _maxCategories = maxCategories;
         _maxPromptLength = maxPromptLength;
     }

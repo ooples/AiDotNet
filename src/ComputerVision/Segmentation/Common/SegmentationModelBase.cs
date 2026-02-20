@@ -203,8 +203,7 @@ public abstract class SegmentationModelBase<T> : NeuralNetworkBase<T>, ISegmenta
         }
 
         var predicted = Forward(input);
-        var lossGradient = predicted.Transform((v, idx) =>
-            NumOps.Subtract(v, expectedOutput.Data.Span[idx]));
+        var lossGradient = LossFunction.ComputeGradient(predicted, expectedOutput);
 
         BackwardPass(lossGradient);
 
@@ -395,7 +394,8 @@ public abstract class SegmentationModelBase<T> : NeuralNetworkBase<T>, ISegmenta
         _channels = reader.ReadInt32();
         _numClasses = reader.ReadInt32();
         _useNativeMode = reader.ReadBoolean();
-        _onnxModelPath = reader.ReadString();
+        var onnxPath = reader.ReadString();
+        _onnxModelPath = string.IsNullOrEmpty(onnxPath) ? null : onnxPath;
         _encoderLayerEnd = reader.ReadInt32();
     }
 

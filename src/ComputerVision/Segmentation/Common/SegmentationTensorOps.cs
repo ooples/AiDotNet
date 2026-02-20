@@ -17,7 +17,6 @@ public static class SegmentationTensorOps
         if (tensor.Rank == 4)
         {
             // [B, C, H, W] -> [C, H, W]
-            var numOps = MathHelper.GetNumericOperations<T>();
             int c = tensor.Shape[1], h = tensor.Shape[2], w = tensor.Shape[3];
             var result = new Tensor<T>([c, h, w]);
             for (int ch = 0; ch < c; ch++)
@@ -37,6 +36,10 @@ public static class SegmentationTensorOps
     /// <returns>Class index map [H, W] or [B, H, W].</returns>
     public static Tensor<T> ArgmaxAlongClassDim<T>(Tensor<T> logits)
     {
+        if (logits is null) throw new ArgumentNullException(nameof(logits));
+        if (logits.Rank < 3 || logits.Rank > 4)
+            throw new ArgumentException("Logits must be rank 3 [C, H, W] or rank 4 [B, C, H, W].", nameof(logits));
+
         var numOps = MathHelper.GetNumericOperations<T>();
 
         if (logits.Rank == 3)
@@ -100,6 +103,10 @@ public static class SegmentationTensorOps
     /// <returns>Probability map [C, H, W] or [B, C, H, W] with values in [0, 1].</returns>
     public static Tensor<T> SoftmaxAlongClassDim<T>(Tensor<T> logits)
     {
+        if (logits is null) throw new ArgumentNullException(nameof(logits));
+        if (logits.Rank < 3 || logits.Rank > 4)
+            throw new ArgumentException("Logits must be rank 3 [C, H, W] or rank 4 [B, C, H, W].", nameof(logits));
+
         var numOps = MathHelper.GetNumericOperations<T>();
         var result = new Tensor<T>(logits.Shape);
 

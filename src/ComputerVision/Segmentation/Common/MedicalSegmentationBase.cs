@@ -110,8 +110,78 @@ public abstract class MedicalSegmentationBase<T> : SegmentationModelBase<T>, IMe
         (int D, int H, int W) patchSize,
         double overlap = 0.5)
     {
-        // Default implementation: segment entire volume at once
-        // Subclasses can override for memory-efficient patch-based inference
-        return SegmentVolume(volume);
+        if (volume is null) throw new ArgumentNullException(nameof(volume));
+        if (volume.Rank < 4)
+            throw new ArgumentException("Volume must have shape [C, D, H, W].", nameof(volume));
+        if (overlap < 0 || overlap >= 1.0)
+            throw new ArgumentOutOfRangeException(nameof(overlap), "Overlap must be in [0, 1).");
+
+        int channels = volume.Shape[0];
+        int volD = volume.Shape[1], volH = volume.Shape[2], volW = volume.Shape[3];
+
+        // If volume fits in a single patch, segment directly
+        if (volD <= patchSize.D && volH <= patchSize.H && volW <= patchSize.W)
+            return SegmentVolume(volume);
+
+        int strideD = Math.Max(1, (int)(patchSize.D * (1.0 - overlap)));
+        int strideH = Math.Max(1, (int)(patchSize.H * (1.0 - overlap)));
+        int strideW = Math.Max(1, (int)(patchSize.W * (1.0 - overlap)));
+
+        // Accumulation tensors for weighted averaging in overlap regions
+        var accumOutput = new Tensor<T>([_numClasses, volD, volH, volW]);
+        var accumCount = new double[volD * volH * volW];
+
+        for (int d = 0; d < volD; d += strideD)
+        {
+            for (int h = 0; h < volH; h += strideH)
+            {
+                for (int w = 0; w < volW; w += strideW)
+                {
+                    int endD = Math.Min(d + patchSize.D, volD);
+                    int endH = Math.Min(h + patchSize.H, volH);
+                    int endW = Math.Min(w + patchSize.W, volW);
+                    int pD = endD - d, pH = endH - h, pW = endW - w;
+
+                    // Extract patch
+                    var patch = new Tensor<T>([channels, pD, pH, pW]);
+                    for (int c = 0; c < channels; c++)
+                        for (int dd = 0; dd < pD; dd++)
+                            for (int hh = 0; hh < pH; hh++)
+                                for (int ww = 0; ww < pW; ww++)
+                                    patch[c, dd, hh, ww] = volume[c, d + dd, h + hh, w + ww];
+
+                    // Segment patch
+                    var patchResult = SegmentVolume(patch);
+                    if (patchResult.Probabilities == null) continue;
+
+                    // Accumulate results
+                    for (int cls = 0; cls < _numClasses && cls < patchResult.Probabilities.Shape[0]; cls++)
+                        for (int dd = 0; dd < pD; dd++)
+                            for (int hh = 0; hh < pH; hh++)
+                                for (int ww = 0; ww < pW; ww++)
+                                {
+                                    accumOutput[cls, d + dd, h + hh, w + ww] = NumOps.Add(
+                                        accumOutput[cls, d + dd, h + hh, w + ww],
+                                        patchResult.Probabilities[cls, dd, hh, ww]);
+                                    if (cls == 0)
+                                        accumCount[(d + dd) * volH * volW + (h + hh) * volW + (w + ww)] += 1.0;
+                                }
+                }
+            }
+        }
+
+        // Average overlapping regions
+        for (int cls = 0; cls < _numClasses; cls++)
+            for (int dd = 0; dd < volD; dd++)
+                for (int hh = 0; hh < volH; hh++)
+                    for (int ww = 0; ww < volW; ww++)
+                    {
+                        double count = accumCount[dd * volH * volW + hh * volW + ww];
+                        if (count > 1.0)
+                            accumOutput[cls, dd, hh, ww] = NumOps.FromDouble(
+                                NumOps.ToDouble(accumOutput[cls, dd, hh, ww]) / count);
+                    }
+
+        return new MedicalSegmentationResult<T> { Probabilities = accumOutput };
     }
 }

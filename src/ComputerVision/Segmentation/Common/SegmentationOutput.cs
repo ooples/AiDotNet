@@ -97,9 +97,9 @@ public class SegmentationOutput<T>
     public int NumClasses { get; set; }
 
     /// <summary>
-    /// Number of detected instances.
+    /// Number of detected instances, derived from InstanceMasks (preferred) or InstanceClasses.
     /// </summary>
-    public int NumInstances => InstanceClasses?.Length ?? 0;
+    public int NumInstances => InstanceMasks?.Shape[0] ?? InstanceClasses?.Length ?? 0;
 
     /// <summary>
     /// Input image height.
