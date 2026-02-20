@@ -80,6 +80,7 @@ public class RWKV7LanguageModel<T> : LayerBase<T>
     private Tensor<T>? _lastOutput;
     private Tensor<T>? _lastEmbedded;
     private Tensor<T>? _lastNormedOutput;
+    private Tensor<T>? _lastPostBlocksOutput;  // Output after all blocks, input to final RMS norm
     private Tensor<T>[]? _lastBlockInputs;
     private int[]? _originalInputShape;
 
@@ -267,6 +268,7 @@ public class RWKV7LanguageModel<T> : LayerBase<T>
         }
 
         // Step 3: Final RMS normalization
+        _lastPostBlocksOutput = current;  // Cache for BackwardRMSNorm
         var normed = ApplyRMSNorm(current, _finalNormGamma, batchSize, seqLen);
         _lastNormedOutput = normed;
 
@@ -295,7 +297,7 @@ public class RWKV7LanguageModel<T> : LayerBase<T>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
         if (_lastInput == null || _lastOutput == null || _lastEmbedded == null ||
-            _lastNormedOutput == null || _lastBlockInputs == null)
+            _lastNormedOutput == null || _lastPostBlocksOutput == null || _lastBlockInputs == null)
         {
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
         }
@@ -321,7 +323,7 @@ public class RWKV7LanguageModel<T> : LayerBase<T>
             .Reshape(batchSize, seqLen, _modelDimension);
 
         // Step 3 backward: RMS norm
-        var dPostBlocks = BackwardRMSNorm(dNormed, _lastBlockInputs[_numLayers - 1],
+        var dPostBlocks = BackwardRMSNorm(dNormed, _lastPostBlocksOutput,
             _finalNormGamma, batchSize, seqLen, out var dFinalGamma);
         _finalNormGammaGradient = dFinalGamma;
 
@@ -600,6 +602,7 @@ public class RWKV7LanguageModel<T> : LayerBase<T>
         _lastOutput = null;
         _lastEmbedded = null;
         _lastNormedOutput = null;
+        _lastPostBlocksOutput = null;
         _lastBlockInputs = null;
         _originalInputShape = null;
         _embeddingWeightsGradient = null;
@@ -635,7 +638,7 @@ public class RWKV7LanguageModel<T> : LayerBase<T>
             var blockInputs = new List<ComputationNode<T>> { current };
             var blockOutput = _blocks[i].ExportComputationGraph(blockInputs);
             inputNodes.AddRange(blockInputs.GetRange(1, blockInputs.Count - 1));
-            current = TensorOperations<T>.Add(current, blockOutput);
+            current = blockOutput;  // Blocks have internal residuals; no outer residual in Forward
         }
 
         var lmWeightsNode = TensorOperations<T>.Variable(_lmHeadWeights, "rwkv7_W_lm");
