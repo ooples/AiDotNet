@@ -415,7 +415,7 @@ public class RWKV7LanguageModel<T> : LayerBase<T>
                 {
                     dotProduct = NumOps.Add(dotProduct,
                         NumOps.Multiply(dOut[new[] { b, d }],
-                            NumOps.Multiply(gamma[d], NumOps.Multiply(slice[new[] { b, d }], rmsInv))));
+                            NumOps.Multiply(gamma[d], slice[new[] { b, d }])));
                 }
 
                 T rms3Inv = NumOps.Divide(rmsInv, NumOps.Multiply(rms, rms));
@@ -641,12 +641,18 @@ public class RWKV7LanguageModel<T> : LayerBase<T>
             current = blockOutput;  // Blocks have internal residuals; no outer residual in Forward
         }
 
+        // Final RMS normalization (matches Forward pass line 272: ApplyRMSNorm)
+        var finalNormGammaNode = TensorOperations<T>.Variable(_finalNormGamma, "rwkv7_final_norm_gamma");
+        inputNodes.Add(finalNormGammaNode);
+        var normed = TensorOperations<T>.ElementwiseMultiply(current, finalNormGammaNode);
+
+        // LM head projection
         var lmWeightsNode = TensorOperations<T>.Variable(_lmHeadWeights, "rwkv7_W_lm");
         var lmBiasNode = TensorOperations<T>.Variable(_lmHeadBias, "rwkv7_b_lm");
         inputNodes.Add(lmWeightsNode);
         inputNodes.Add(lmBiasNode);
 
-        var logits = TensorOperations<T>.MatrixMultiply(current, lmWeightsNode);
+        var logits = TensorOperations<T>.MatrixMultiply(normed, lmWeightsNode);
         return TensorOperations<T>.Add(logits, lmBiasNode);
     }
 

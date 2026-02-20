@@ -1054,12 +1054,13 @@ public class RWKV7Block<T> : LayerBase<T>
     {
         if (inputNodes == null)
             throw new ArgumentNullException(nameof(inputNodes));
+        if (inputNodes.Count == 0)
+            throw new ArgumentException("At least one input node is required.", nameof(inputNodes));
 
-        var xPlaceholder = new Tensor<T>(new int[] { 1, _modelDimension });
-        var xNode = TensorOperations<T>.Variable(xPlaceholder, "rwkv7_input");
+        // Use the provided input node (from the parent language model's current embedding)
+        var xNode = inputNodes[0];
         var outWeightsNode = TensorOperations<T>.Variable(_outputWeights, "rwkv7_W_out");
 
-        inputNodes.Add(xNode);
         inputNodes.Add(outWeightsNode);
 
         // Time mixing sub-layer (simplified: only output projection)
