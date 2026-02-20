@@ -45,6 +45,8 @@ public class FlowLens<T> : VideoInpaintingBase<T>
         FlowLensOptions? options = null)
         : base(architecture)
     {
+        if (string.IsNullOrEmpty(modelPath))
+            throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
         _options = options ?? new FlowLensOptions();
         _useNativeMode = false;
         SupportsTemporalPropagation = true;
@@ -120,11 +122,15 @@ public class FlowLens<T> : VideoInpaintingBase<T>
     /// <inheritdoc/>
     public override void UpdateParameters(Vector<T> parameters)
     {
+        if (!_useNativeMode) throw new NotSupportedException("Parameter updates are not supported in ONNX mode.");
+        int required = 0;
+        foreach (var layer in Layers) required += layer.GetParameters().Length;
+        if (parameters.Length < required)
+            throw new ArgumentException($"Parameter vector length {parameters.Length} is less than required {required}.", nameof(parameters));
         int offset = 0;
         foreach (var layer in Layers)
         {
             var p = layer.GetParameters();
-            if (offset + p.Length > parameters.Length) break;
             var sub = new Vector<T>(p.Length);
             for (int i = 0; i < p.Length; i++) sub[i] = parameters[offset + i];
             layer.SetParameters(sub);
@@ -178,6 +184,8 @@ public class FlowLens<T> : VideoInpaintingBase<T>
     /// <inheritdoc/>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
+        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
+            return new FlowLens<T>(Architecture, p, _options);
         return new FlowLens<T>(Architecture, _options);
     }
 

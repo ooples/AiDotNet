@@ -203,7 +203,11 @@ public class DOVE<T> : VideoSuperResolutionBase<T>
     }
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        => new DOVE<T>(Architecture, _options);
+    {
+        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
+            return new DOVE<T>(Architecture, p, _options);
+        return new DOVE<T>(Architecture, _options);
+    }
 
     #endregion
 

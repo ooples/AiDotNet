@@ -62,6 +62,8 @@ public class MoG<T> : FrameInterpolationBase<T>
     public MoG(NeuralNetworkArchitecture<T> architecture, string modelPath, MoGOptions? options = null)
         : base(architecture)
     {
+        if (string.IsNullOrEmpty(modelPath))
+            throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
         _options = options ?? new MoGOptions();
         _useNativeMode = false;
         SupportsArbitraryTimestep = true;
@@ -90,6 +92,8 @@ public class MoG<T> : FrameInterpolationBase<T>
     public override Tensor<T> Interpolate(Tensor<T> frame0, Tensor<T> frame1, double t = 0.5)
     {
         ThrowIfDisposed();
+        if (t < 0.0 || t > 1.0)
+            throw new ArgumentOutOfRangeException(nameof(t), t, "Timestep must be in [0, 1].");
         var f0 = PreprocessFrames(frame0);
         var f1 = PreprocessFrames(frame1);
         var concat = ConcatenateFeatures(f0, f1);
@@ -202,7 +206,11 @@ public class MoG<T> : FrameInterpolationBase<T>
     }
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        => new MoG<T>(Architecture, _options);
+    {
+        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
+            return new MoG<T>(Architecture, p, _options);
+        return new MoG<T>(Architecture, _options);
+    }
 
     #endregion
 

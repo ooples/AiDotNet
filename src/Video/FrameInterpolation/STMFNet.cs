@@ -86,6 +86,10 @@ public class STMFNet<T> : FrameInterpolationBase<T>
     public override Tensor<T> Interpolate(Tensor<T> frame0, Tensor<T> frame1, double t = 0.5)
     {
         ThrowIfDisposed();
+        if (t < 0.0 || t > 1.0)
+            throw new ArgumentOutOfRangeException(nameof(t), t, "Timestep must be in [0, 1].");
+        if (!SupportsArbitraryTimestep && Math.Abs(t - 0.5) > 1e-6)
+            throw new NotSupportedException("STMFNet only supports midpoint interpolation (t=0.5).");
         var f0 = PreprocessFrames(frame0);
         var f1 = PreprocessFrames(frame1);
         var concat = ConcatenateFeatures(f0, f1);
@@ -192,10 +196,16 @@ public class STMFNet<T> : FrameInterpolationBase<T>
         _options.DropoutRate = r.ReadDouble();
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
             OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
+        if (_useNativeMode)
+            InitializeLayers();
     }
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        => new STMFNet<T>(Architecture, _options);
+    {
+        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
+            return new STMFNet<T>(Architecture, p, _options);
+        return new STMFNet<T>(Architecture, _options);
+    }
 
     #endregion
 

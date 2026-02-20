@@ -19,9 +19,11 @@ namespace AiDotNet.Video.Denoising;
 /// <item>Paper: "Unsupervised Deep Video Denoising" (Sheth et al., CVPR 2021)</item>
 /// </list></para>
 /// <para>
-/// UDVD performs blind video denoising without paired training data, using self-supervised
-/// loss that exploits temporal redundancy. It processes frames unidirectionally using only
-/// past frames, enabling real-time streaming operation with adaptive noise handling.
+/// UDVD performs blind video denoising without paired training data. In the original paper,
+/// training uses a self-supervised loss that exploits temporal redundancy. The native Train
+/// method uses a supervised approach with paired clean/noisy data for simplicity; the full
+/// self-supervised training pipeline is available through the ONNX model. It processes frames
+/// unidirectionally using only past frames, enabling real-time streaming operation.
 /// </para>
 /// </remarks>
 public class UDVD<T> : VideoDenoisingBase<T>

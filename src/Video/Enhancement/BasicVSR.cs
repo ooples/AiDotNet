@@ -200,7 +200,11 @@ public class BasicVSR<T> : VideoSuperResolutionBase<T>
     }
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        => new BasicVSR<T>(Architecture, _options);
+    {
+        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
+            return new BasicVSR<T>(Architecture, p, _options);
+        return new BasicVSR<T>(Architecture, _options);
+    }
 
     #endregion
 
@@ -215,6 +219,10 @@ public class BasicVSR<T> : VideoSuperResolutionBase<T>
     {
         if (_disposed) return;
         _disposed = true;
+        if (disposing)
+        {
+            OnnxModel?.Dispose();
+        }
         base.Dispose(disposing);
     }
 

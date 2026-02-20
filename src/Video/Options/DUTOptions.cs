@@ -19,6 +19,8 @@ namespace AiDotNet.Video.Options;
 /// </remarks>
 public class DUTOptions : ModelOptions
 {
+    #region Architecture
+
     /// <summary>
     /// Model variant controlling capacity and speed trade-off.
     /// </summary>
@@ -44,6 +46,20 @@ public class DUTOptions : ModelOptions
     /// </summary>
     public int TemporalWindowSize { get; set; } = 7;
 
+    #endregion
+
+    #region Model Loading
+
+    /// <summary>Path to the ONNX model file for inference mode.</summary>
+    public string? ModelPath { get; set; }
+
+    /// <summary>ONNX runtime options for inference mode.</summary>
+    public OnnxModelOptions OnnxOptions { get; set; } = new();
+
+    #endregion
+
+    #region Training
+
     /// <summary>
     /// Weight for the temporal consistency loss during training.
     /// </summary>
@@ -59,9 +75,5 @@ public class DUTOptions : ModelOptions
     /// </summary>
     public double DropoutRate { get; set; } = 0.0;
 
-    /// <summary>Path to the ONNX model file for inference mode.</summary>
-    public string? ModelPath { get; set; }
-
-    /// <summary>ONNX runtime options for inference mode.</summary>
-    public OnnxModelOptions OnnxOptions { get; set; } = new();
+    #endregion
 }

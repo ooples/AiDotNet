@@ -202,12 +202,17 @@ public class MIAVSR<T> : VideoSuperResolutionBase<T>
         _options.InterMaskRatio = r.ReadDouble();
         _options.IntraMaskRatio = r.ReadDouble();
         _options.DropoutRate = r.ReadDouble();
+        ScaleFactor = _options.ScaleFactor;
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
             OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        => new MIAVSR<T>(Architecture, _options);
+    {
+        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
+            return new MIAVSR<T>(Architecture, mp, _options);
+        return new MIAVSR<T>(Architecture, _options);
+    }
 
     #endregion
 

@@ -44,7 +44,8 @@ public class IconVSROptions : NeuralNetworkOptions
     /// <remarks>Every N-th frame is selected as a keyframe for the information-aggregation module.</remarks>
     public int KeyframeStride { get; set; } = 5;
 
-    /// <summary>Gets or sets the number of EDEMA (Enhanced Deformable Alignment) blocks in the aggregation module.</summary>
+    /// <summary>Gets or sets the number of EDVR-style deformable alignment blocks in the information-aggregation module.</summary>
+    /// <remarks>These are based on the EDVR (Enhanced Deformable Video Restoration) alignment module from Chan et al.</remarks>
     public int NumEdemaBlocks { get; set; } = 5;
 
     #endregion

@@ -48,6 +48,10 @@ public class NeuFlowV2<T> : OpticalFlowBase<T>
         NeuFlowV2Options? options = null)
         : base(architecture, new MeanSquaredErrorLoss<T>())
     {
+        if (numFeatures <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numFeatures), numFeatures, "Number of features must be positive.");
+        if (numLayers <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numLayers), numLayers, "Number of layers must be positive.");
         _options = options ?? new NeuFlowV2Options();
         Options = _options;
 
@@ -97,7 +101,6 @@ public class NeuFlowV2<T> : OpticalFlowBase<T>
     /// <inheritdoc/>
     public override Tensor<T> EstimateFlow(Tensor<T> frame0, Tensor<T> frame1)
     {
-        int channels = frame0.Shape[0];
         int height = frame0.Shape[1];
         int width = frame0.Shape[2];
 
@@ -149,38 +152,35 @@ public class NeuFlowV2<T> : OpticalFlowBase<T>
     /// <inheritdoc/>
     public override void UpdateParameters(Vector<T> parameters)
     {
+        int required = 0;
+        if (_featureExtract is not null) required += _featureExtract.GetParameters().Length;
+        foreach (var block in _processingBlocks) required += block.GetParameters().Length;
+        if (_outputConv is not null) required += _outputConv.GetParameters().Length;
+        if (parameters.Length < required)
+            throw new ArgumentException($"Parameter vector length {parameters.Length} is less than required {required}.", nameof(parameters));
         int offset = 0;
         if (_featureExtract is not null)
         {
             var p = _featureExtract.GetParameters();
-            if (offset + p.Length <= parameters.Length)
-            {
-                var sub = new Vector<T>(p.Length);
-                for (int i = 0; i < p.Length; i++) sub[i] = parameters[offset + i];
-                _featureExtract.SetParameters(sub);
-                offset += p.Length;
-            }
+            var sub = new Vector<T>(p.Length);
+            for (int i = 0; i < p.Length; i++) sub[i] = parameters[offset + i];
+            _featureExtract.SetParameters(sub);
+            offset += p.Length;
         }
         foreach (var block in _processingBlocks)
         {
             var p = block.GetParameters();
-            if (offset + p.Length <= parameters.Length)
-            {
-                var sub = new Vector<T>(p.Length);
-                for (int i = 0; i < p.Length; i++) sub[i] = parameters[offset + i];
-                block.SetParameters(sub);
-                offset += p.Length;
-            }
+            var sub = new Vector<T>(p.Length);
+            for (int i = 0; i < p.Length; i++) sub[i] = parameters[offset + i];
+            block.SetParameters(sub);
+            offset += p.Length;
         }
         if (_outputConv is not null)
         {
             var p = _outputConv.GetParameters();
-            if (offset + p.Length <= parameters.Length)
-            {
-                var sub = new Vector<T>(p.Length);
-                for (int i = 0; i < p.Length; i++) sub[i] = parameters[offset + i];
-                _outputConv.SetParameters(sub);
-            }
+            var sub = new Vector<T>(p.Length);
+            for (int i = 0; i < p.Length; i++) sub[i] = parameters[offset + i];
+            _outputConv.SetParameters(sub);
         }
     }
 

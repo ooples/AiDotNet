@@ -179,8 +179,11 @@ public abstract class OpticalFlowBase<T> : VideoNeuralNetworkBase<T>
     /// <inheritdoc />
     public override Tensor<T> Predict(Tensor<T> input)
     {
-        // For optical flow, input should contain two frames stacked
-        // Split and estimate flow
+        // For optical flow, input should contain two frames stacked [batch, 2*channels, height, width]
+        if (input.Rank < 4)
+            throw new ArgumentException($"Input must be rank 4 [batch, 2*channels, height, width], got rank {input.Rank}.", nameof(input));
+        if (input.Shape[1] % 2 != 0)
+            throw new ArgumentException($"Input channel dimension must be even (two frames stacked), got {input.Shape[1]}.", nameof(input));
         int channels = input.Shape[1] / 2;
         int height = input.Shape[2];
         int width = input.Shape[3];

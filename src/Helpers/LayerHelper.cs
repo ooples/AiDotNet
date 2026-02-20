@@ -7595,7 +7595,8 @@ public static class LayerHelper<T>
     /// <para>
     /// Architecture: Multi-frame U-Net encoder-decoder with residual learning.
     /// Input: concatenated temporal frames (inputChannels * temporalFrames).
-    /// Output: single denoised frame (inputChannels).
+    /// Output: single denoised frame (inputChannels) at 1/4 resolution due to two stride-2 encoder layers.
+    /// The caller is responsible for upsampling to full resolution if needed.
     /// </para>
     /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultVideoDenoisingLayers(
@@ -7642,6 +7643,8 @@ public static class LayerHelper<T>
     /// <para>
     /// Architecture: Encoder processes masked input, attention-based completion,
     /// decoder generates inpainted output. Input includes mask channel (+1).
+    /// Output is at 1/4 resolution due to two stride-2 encoder layers.
+    /// The caller is responsible for upsampling to full resolution if needed.
     /// </para>
     /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultVideoInpaintingLayers(

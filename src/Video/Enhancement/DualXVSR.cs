@@ -200,10 +200,16 @@ public class DualXVSR<T> : VideoSuperResolutionBase<T>
         _options.DropoutRate = r.ReadDouble();
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
             OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
+        if (_useNativeMode)
+            InitializeLayers();
     }
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        => new DualXVSR<T>(Architecture, _options);
+    {
+        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
+            return new DualXVSR<T>(Architecture, mp, _options);
+        return new DualXVSR<T>(Architecture, _options);
+    }
 
     #endregion
 

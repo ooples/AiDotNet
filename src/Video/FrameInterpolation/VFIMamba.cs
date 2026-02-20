@@ -93,6 +93,8 @@ public class VFIMamba<T> : FrameInterpolationBase<T>
     public override Tensor<T> Interpolate(Tensor<T> frame0, Tensor<T> frame1, double t = 0.5)
     {
         ThrowIfDisposed();
+        if (t < 0.0 || t > 1.0)
+            throw new ArgumentOutOfRangeException(nameof(t), t, "Timestep must be in [0, 1].");
         var f0 = PreprocessFrames(frame0);
         var f1 = PreprocessFrames(frame1);
         var concat = ConcatenateFeatures(f0, f1);
@@ -142,11 +144,14 @@ public class VFIMamba<T> : FrameInterpolationBase<T>
     /// <inheritdoc/>
     public override void UpdateParameters(Vector<T> parameters)
     {
+        int required = 0;
+        foreach (var layer in Layers) required += layer.GetParameters().Length;
+        if (parameters.Length < required)
+            throw new ArgumentException($"Parameter vector length {parameters.Length} is less than required {required}.", nameof(parameters));
         int offset = 0;
         foreach (var layer in Layers)
         {
             var p = layer.GetParameters();
-            if (offset + p.Length > parameters.Length) break;
             var sub = new Vector<T>(p.Length);
             for (int i = 0; i < p.Length; i++) sub[i] = parameters[offset + i];
             layer.SetParameters(sub);
