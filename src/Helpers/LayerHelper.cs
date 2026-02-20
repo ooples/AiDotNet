@@ -22797,6 +22797,9 @@ public static class LayerHelper<T>
             yield return new LayerNormalizationLayer<T>(decoderDim);
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
+
+        // === Output projection (text embedding for API consumption) ===
+        yield return new DenseLayer<T>(decoderDim, decoderDim, identityActivation);
     }
 
     /// <summary>

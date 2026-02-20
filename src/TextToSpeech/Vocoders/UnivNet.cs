@@ -18,32 +18,11 @@ public class UnivNet<T> : TtsModelBase<T>, IVocoder<T>
     /// (3) GABlock with gated activation + location-variable conv for adaptive frequency modeling,
     /// (4) Multi-resolution spectrogram discriminator (MRSD) for training.
     /// </summary>
-    public Tensor<T> MelToWaveform(Tensor<T> melSpectrogram)
-    {
-        ThrowIfDisposed(); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(melSpectrogram);
-        // Run mel through learned vocoder layers for feature extraction
-        var features = melSpectrogram;
-        foreach (var l in Layers) features = l.Forward(features);
-        int melLen = features.Length; int waveLen = melLen * _options.HopSize;
-        var waveform = new Tensor<T>([waveLen]);
-        for (int f = 0; f < waveLen; f++)
-        {
-            int melIdx = Math.Min(f / _options.HopSize, melLen - 1);
-            double melVal = NumOps.ToDouble(features[melIdx]);
-            // LVC: location-variable convolution - kernel adapted from mel
-            double lvc = 0;
-            for (int k = 0; k < _options.NumKernels; k++) { double kernelWeight = melVal * 0.3 + Math.Sin(f * (k + 1) * 0.005) * 0.2; lvc += Math.Tanh(kernelWeight); }
-            lvc /= _options.NumKernels;
-            // Gated activation
-            double gate = 1.0 / (1.0 + Math.Exp(-(melVal * 0.5 + lvc)));
-            waveform[f] = NumOps.FromDouble(Math.Tanh(gate * lvc * 0.8 + melVal * 0.2));
-        }
-        return waveform;
-    }
+    public Tensor<T> MelToWaveform(Tensor<T> melSpectrogram) { ThrowIfDisposed(); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(melSpectrogram); return Predict(melSpectrogram); }
     protected override Tensor<T> PreprocessText(string text) { var t = new Tensor<T>([1]); t[0] = NumOps.FromDouble(0.0); return t; } protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
     protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers); else Layers.AddRange(LayerHelper<T>.CreateDefaultVocoderLayers(_options.MelChannels, 512, 1, 4, _options.NumLMBlocks, _options.DropoutRate)); }
     public override Tensor<T> Predict(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
-    public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode."); SetTrainingMode(true); var o = Predict(input); var g = LossFunction.CalculateDerivative(o.ToVector(), expected.ToVector()); var gt = Tensor<T>.FromVector(g); for (int i = Layers.Count - 1; i >= 0; i--) gt = Layers[i].Backward(gt); _optimizer?.UpdateParameters(Layers); SetTrainingMode(false); }
+    public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode."); SetTrainingMode(true); try { var o = Predict(input); var g = LossFunction.CalculateDerivative(o.ToVector(), expected.ToVector()); var gt = Tensor<T>.FromVector(g); for (int i = Layers.Count - 1; i >= 0; i--) gt = Layers[i].Backward(gt); _optimizer?.UpdateParameters(Layers); } finally { SetTrainingMode(false); } }
     public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
     public override ModelMetadata<T> GetModelMetadata() { return new ModelMetadata<T> { Name = _useNativeMode ? "UnivNet-Native" : "UnivNet-ONNX", Description = "UnivNet: Universal Neural Vocoder (Jang et al., 2021)", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.MelChannels }; }
     protected override void SerializeNetworkSpecificData(BinaryWriter writer) { writer.Write(_useNativeMode); writer.Write(_options.ModelPath ?? string.Empty); writer.Write(_options.SampleRate); writer.Write(_options.MelChannels); writer.Write(_options.HopSize); writer.Write(_options.DropoutRate); writer.Write(_options.NumLMBlocks); }

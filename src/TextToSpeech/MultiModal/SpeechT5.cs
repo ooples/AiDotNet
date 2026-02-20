@@ -16,20 +16,16 @@ public class SpeechT5<T> : TtsModelBase<T>, IEndToEndTts<T>
     /// </summary>
     public Tensor<T> Synthesize(string text)
     {
-        ThrowIfDisposed(); var input = PreprocessText(text); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input);
-        int textLen = Math.Min(text.Length, _options.MaxTextLength); int hF = textLen * 2;
-        double[] h = new double[hF]; for (int f = 0; f < hF; f++) { int t = Math.Min(f * textLen / hF, textLen - 1); h[f] = (text[t] % 128) / 128.0; }
-        for (int l = 0; l < 6; l++) for (int f = 0; f < hF; f++) h[f] = Math.Tanh(h[f] * 0.7 + (f > 0 ? h[f-1] * 0.2 : 0) + Math.Sin(f * 0.04 * (l + 1)) * 0.08);
-        int mF = hF * 2; double[] mel = new double[mF]; double p = 0;
-        for (int f = 0; f < mF; f++) { int eI = Math.Min(f * hF / mF, hF - 1); mel[f] = Math.Tanh(h[eI] * 0.6 + p * 0.3 + Math.Sin(f * 0.05) * 0.08); p = mel[f]; }
-        int waveLen = mF * _options.HopSize; var waveform = new Tensor<T>([waveLen]);
-        for (int i = 0; i < waveLen; i++) { int fr = Math.Min(i / Math.Max(1, _options.HopSize), mF - 1); waveform[i] = NumOps.FromDouble(mel[fr] * Math.Sin(i * 0.007) * 0.85); }
-        return waveform;
+        ThrowIfDisposed();
+        var input = PreprocessText(text);
+        if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input);
+        var output = Predict(input);
+        return PostprocessAudio(output);
     }
     protected override Tensor<T> PreprocessText(string text) { int len = Math.Min(text.Length, _options.MaxTextLength); var t = new Tensor<T>([len]); for (int i = 0; i < len; i++) t[i] = NumOps.FromDouble(text[i] / 128.0); return t; } protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
     protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers); else Layers.AddRange(LayerHelper<T>.CreateDefaultVITSLayers(_options.EncoderDim, _options.HiddenDim, _options.DecoderDim, _options.NumEncoderLayers, _options.NumFlowSteps, _options.NumDecoderLayers, _options.NumHeads, _options.DropoutRate)); }
     public override Tensor<T> Predict(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
-    public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode."); SetTrainingMode(true); var o = Predict(input); var g = LossFunction.CalculateDerivative(o.ToVector(), expected.ToVector()); var gt = Tensor<T>.FromVector(g); for (int i = Layers.Count - 1; i >= 0; i--) gt = Layers[i].Backward(gt); _optimizer?.UpdateParameters(Layers); SetTrainingMode(false); }
+    public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode."); SetTrainingMode(true); try { var o = Predict(input); var g = LossFunction.CalculateDerivative(o.ToVector(), expected.ToVector()); var gt = Tensor<T>.FromVector(g); for (int i = Layers.Count - 1; i >= 0; i--) gt = Layers[i].Backward(gt); _optimizer?.UpdateParameters(Layers); } finally { SetTrainingMode(false); } }
     public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
     public override ModelMetadata<T> GetModelMetadata() { return new ModelMetadata<T> { Name = _useNativeMode ? "SpeechT5-Native" : "SpeechT5-ONNX", Description = "SpeechT5 TTS", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.HiddenDim }; }
     protected override void SerializeNetworkSpecificData(BinaryWriter writer) { writer.Write(_useNativeMode); writer.Write(_options.ModelPath ?? string.Empty); writer.Write(_options.SampleRate); writer.Write(_options.DecoderDim); writer.Write(_options.DropoutRate); writer.Write(_options.EncoderDim); writer.Write(_options.HiddenDim); writer.Write(_options.NumDecoderLayers); writer.Write(_options.NumEncoderLayers); writer.Write(_options.NumFlowSteps); writer.Write(_options.NumHeads); }

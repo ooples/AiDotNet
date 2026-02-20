@@ -20,61 +20,16 @@ public class MeloTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
     /// </summary>
     public Tensor<T> Synthesize(string text)
     {
-        ThrowIfDisposed(); var input = PreprocessText(text); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input);
-        int textLen = Math.Min(text.Length, _options.MaxTextLength);
-        int hiddenDim = _options.HiddenDim;
-        // Language ID embedding
-        double[] langEmb = new double[hiddenDim];
-        for (int d = 0; d < hiddenDim; d++) langEmb[d] = Math.Sin(d * 0.08) * 0.25;
-        // BERT-enhanced text encoder with language conditioning
-        double[] textHidden = new double[textLen * hiddenDim];
-        for (int t = 0; t < textLen; t++)
-            for (int d = 0; d < hiddenDim; d++)
-            {
-                double charEmb = (text[t] % 128) / 128.0 - 0.5;
-                double posEnc = Math.Sin((t + 1.0) / Math.Pow(10000, 2.0 * d / hiddenDim));
-                double bertLike = charEmb * Math.Cos(d * 0.03) * 0.3; // BERT-style contextual features
-                textHidden[t * hiddenDim + d] = charEmb * 0.3 + posEnc * 0.25 + bertLike + langEmb[d] * 0.15;
-            }
-        // Duration predictor
-        int[] durations = new int[textLen];
-        for (int t = 0; t < textLen; t++)
-        {
-            double durLogit = 0;
-            for (int d = 0; d < hiddenDim; d++) durLogit += textHidden[t * hiddenDim + d] * 0.01;
-            durations[t] = Math.Max(1, (int)(Math.Exp(durLogit + 1.5) * _options.SpeedFactor));
-        }
-        int totalFrames = 0; for (int t = 0; t < textLen; t++) totalFrames += durations[t];
-        // Expand + flow
-        double[] z = new double[totalFrames * hiddenDim];
-        int fi = 0;
-        for (int t = 0; t < textLen; t++)
-            for (int r = 0; r < durations[t]; r++)
-            {
-                if (fi >= totalFrames) break;
-                for (int d = 0; d < hiddenDim; d++)
-                {
-                    double h = textHidden[t * hiddenDim + d];
-                    z[fi * hiddenDim + d] = h * 1.05 + Math.Tanh(h * 0.25) * 0.2;
-                }
-                fi++;
-            }
-        // HiFi-GAN decoder
-        int waveLen = totalFrames * _options.HopSize;
-        var waveform = new Tensor<T>([waveLen]);
-        for (int i = 0; i < waveLen; i++)
-        {
-            int melFrame = Math.Min(i / _options.HopSize, totalFrames - 1);
-            double sample = 0;
-            for (int d = 0; d < Math.Min(hiddenDim, 16); d++) { double latent = z[melFrame * hiddenDim + d]; sample += Math.Tanh(latent) * Math.Sin(i * (d + 1) * 0.01 + latent) / 16.0; }
-            waveform[i] = NumOps.FromDouble(Math.Tanh(sample));
-        }
-        return waveform;
+        ThrowIfDisposed();
+        var input = PreprocessText(text);
+        if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input);
+        var output = Predict(input);
+        return PostprocessAudio(output);
     }
     protected override Tensor<T> PreprocessText(string text) { int len = Math.Min(text.Length, _options.MaxTextLength); var t = new Tensor<T>([len]); for (int i = 0; i < len; i++) t[i] = NumOps.FromDouble(text[i] / 128.0); return t; } protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
     protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers); else Layers.AddRange(LayerHelper<T>.CreateDefaultVITSLayers(_options.HiddenDim, _options.InterChannels, _options.FilterChannels, _options.NumEncoderLayers, _options.NumFlowSteps, _options.NumDecoderLayers, _options.NumHeads, _options.DropoutRate)); }
     public override Tensor<T> Predict(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
-    public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode."); SetTrainingMode(true); var o = Predict(input); var g = LossFunction.CalculateDerivative(o.ToVector(), expected.ToVector()); var gt = Tensor<T>.FromVector(g); for (int i = Layers.Count - 1; i >= 0; i--) gt = Layers[i].Backward(gt); _optimizer?.UpdateParameters(Layers); SetTrainingMode(false); }
+    public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode."); SetTrainingMode(true); try { var o = Predict(input); var g = LossFunction.CalculateDerivative(o.ToVector(), expected.ToVector()); var gt = Tensor<T>.FromVector(g); for (int i = Layers.Count - 1; i >= 0; i--) gt = Layers[i].Backward(gt); _optimizer?.UpdateParameters(Layers); } finally { SetTrainingMode(false); } }
     public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
     public override ModelMetadata<T> GetModelMetadata() { return new ModelMetadata<T> { Name = _useNativeMode ? "MeloTTS-Native" : "MeloTTS-ONNX", Description = "MeloTTS: High-quality Multilingual TTS (MyShell, 2024)", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.HiddenDim }; }
     protected override void SerializeNetworkSpecificData(BinaryWriter writer) { writer.Write(_useNativeMode); writer.Write(_options.ModelPath ?? string.Empty); writer.Write(_options.SampleRate); writer.Write(_options.MelChannels); writer.Write(_options.HopSize); writer.Write(_options.HiddenDim); writer.Write(_options.DropoutRate); writer.Write(_options.FilterChannels); writer.Write(_options.InterChannels); writer.Write(_options.NumDecoderLayers); writer.Write(_options.NumEncoderLayers); writer.Write(_options.NumFlowSteps); writer.Write(_options.NumHeads); }

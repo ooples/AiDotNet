@@ -20,35 +20,12 @@ public class MelGAN<T> : TtsModelBase<T>, IVocoder<T>
     /// (4) Multi-scale discriminator with feature matching loss.
     /// Key: 10x faster than real-time on CPU, no sequential dependencies.
     /// </summary>
-    public Tensor<T> MelToWaveform(Tensor<T> melSpectrogram)
-    {
-        ThrowIfDisposed();
-        if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(melSpectrogram);
-        // Run mel through learned vocoder layers for feature extraction
-        var features = melSpectrogram;
-        foreach (var l in Layers) features = l.Forward(features);
-        int melLen = features.Length; int waveLen = melLen * _options.HopSize;
-        var waveform = new Tensor<T>([waveLen]);
-        for (int f = 0; f < waveLen; f++)
-        {
-            int melIdx = Math.Min(f / _options.HopSize, melLen - 1);
-            double melVal = NumOps.ToDouble(features[melIdx]);
-            // Transposed conv upsampling + residual stacks with dilated conv
-            double res = melVal;
-            for (int s = 0; s < _options.NumResStacks; s++)
-            {
-                double dilated = Math.Tanh(res * 0.5 + Math.Sin(f * (s + 1) * 0.01) * 0.3);
-                res = res + dilated * 0.2; // residual connection
-            }
-            waveform[f] = NumOps.FromDouble(Math.Tanh(res));
-        }
-        return waveform;
-    }
+    public Tensor<T> MelToWaveform(Tensor<T> melSpectrogram) { ThrowIfDisposed(); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(melSpectrogram); return Predict(melSpectrogram); }
 
     protected override Tensor<T> PreprocessText(string text) { var t = new Tensor<T>([1]); t[0] = NumOps.FromDouble(0.0); return t; } protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
     protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers); else Layers.AddRange(LayerHelper<T>.CreateDefaultVocoderLayers(_options.MelChannels, _options.NgfBase, 1, 4, _options.NumResStacks, _options.DropoutRate)); }
     public override Tensor<T> Predict(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
-    public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode."); SetTrainingMode(true); var o = Predict(input); var g = LossFunction.CalculateDerivative(o.ToVector(), expected.ToVector()); var gt = Tensor<T>.FromVector(g); for (int i = Layers.Count - 1; i >= 0; i--) gt = Layers[i].Backward(gt); _optimizer?.UpdateParameters(Layers); SetTrainingMode(false); }
+    public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode."); SetTrainingMode(true); try { var o = Predict(input); var g = LossFunction.CalculateDerivative(o.ToVector(), expected.ToVector()); var gt = Tensor<T>.FromVector(g); for (int i = Layers.Count - 1; i >= 0; i--) gt = Layers[i].Backward(gt); _optimizer?.UpdateParameters(Layers); } finally { SetTrainingMode(false); } }
     public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
     public override ModelMetadata<T> GetModelMetadata() { var m = new ModelMetadata<T> { Name = _useNativeMode ? "MelGAN-Native" : "MelGAN-ONNX", Description = "MelGAN: Generative Adversarial Networks for Conditional Waveform Synthesis (Kumar et al., 2019)", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.MelChannels, Complexity = _options.NumResStacks * 4 }; m.AdditionalInfo["Architecture"] = "MelGAN"; return m; }
     protected override void SerializeNetworkSpecificData(BinaryWriter writer) { writer.Write(_useNativeMode); writer.Write(_options.ModelPath ?? string.Empty); writer.Write(_options.SampleRate); writer.Write(_options.MelChannels); writer.Write(_options.HopSize); writer.Write(_options.DropoutRate); writer.Write(_options.NgfBase); writer.Write(_options.NumResStacks); }

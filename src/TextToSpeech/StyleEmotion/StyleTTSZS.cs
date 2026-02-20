@@ -16,19 +16,16 @@ public class StyleTTSZS<T> : TtsModelBase<T>, IEndToEndTts<T>
     /// </summary>
     public Tensor<T> Synthesize(string text)
     {
-        ThrowIfDisposed(); var input = PreprocessText(text); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input);
-        int textLen = Math.Min(text.Length, _options.MaxTextLength); int mF = textLen * 4;
-        double[] te = new double[mF]; for (int f = 0; f < mF; f++) { int t = Math.Min(f * textLen / mF, textLen - 1); te[f] = (text[t] % 128) / 128.0; }
-        double[] sv = new double[8]; for (int s = 0; s < 8; s++) { double a = 0; for (int f = 0; f < mF; f++) a += te[f] * Math.Sin(f * 0.05 * (s + 1)); sv[s] = Math.Tanh(a / mF); }
-        double[] mel = new double[mF]; for (int f = 0; f < mF; f++) { double sb = 0; for (int s = 0; s < 8; s++) sb += sv[s] * Math.Sin(f * 0.03 * (s + 1)) / 8.0; mel[f] = Math.Tanh(te[f] * 0.6 + sv[f % 8] * 0.15 + sb * 0.3 + Math.Sin(f * 0.08) * 0.1); }
-        int waveLen = mF * _options.HopSize; var waveform = new Tensor<T>([waveLen]);
-        for (int i = 0; i < waveLen; i++) { int fr = Math.Min(i / Math.Max(1, _options.HopSize), mF - 1); waveform[i] = NumOps.FromDouble(mel[fr] * Math.Sin(i * 0.007) * 0.88); }
-        return waveform;
+        ThrowIfDisposed();
+        var input = PreprocessText(text);
+        if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input);
+        var output = Predict(input);
+        return PostprocessAudio(output);
     }
     protected override Tensor<T> PreprocessText(string text) { int len = Math.Min(text.Length, _options.MaxTextLength); var t = new Tensor<T>([len]); for (int i = 0; i < len; i++) t[i] = NumOps.FromDouble(text[i] / 128.0); return t; } protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
     protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers); else Layers.AddRange(LayerHelper<T>.CreateDefaultStyleTTSLayers(_options.EncoderDim, _options.StyleDim, _options.DecoderDim, _options.NumEncoderLayers, _options.NumStyleLayers, _options.NumDecoderLayers, _options.NumHeads, _options.DropoutRate)); }
     public override Tensor<T> Predict(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
-    public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode."); SetTrainingMode(true); var o = Predict(input); var g = LossFunction.CalculateDerivative(o.ToVector(), expected.ToVector()); var gt = Tensor<T>.FromVector(g); for (int i = Layers.Count - 1; i >= 0; i--) gt = Layers[i].Backward(gt); _optimizer?.UpdateParameters(Layers); SetTrainingMode(false); }
+    public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode."); SetTrainingMode(true); try { var o = Predict(input); var g = LossFunction.CalculateDerivative(o.ToVector(), expected.ToVector()); var gt = Tensor<T>.FromVector(g); for (int i = Layers.Count - 1; i >= 0; i--) gt = Layers[i].Backward(gt); _optimizer?.UpdateParameters(Layers); } finally { SetTrainingMode(false); } }
     public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
     public override ModelMetadata<T> GetModelMetadata() { return new ModelMetadata<T> { Name = _useNativeMode ? "StyleTTSZS-Native" : "StyleTTSZS-ONNX", Description = "StyleTTSZS TTS", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.HiddenDim }; }
     protected override void SerializeNetworkSpecificData(BinaryWriter writer) { writer.Write(_useNativeMode); writer.Write(_options.ModelPath ?? string.Empty); writer.Write(_options.SampleRate); writer.Write(_options.DecoderDim); writer.Write(_options.DropoutRate); writer.Write(_options.EncoderDim); writer.Write(_options.NumDecoderLayers); writer.Write(_options.NumEncoderLayers); writer.Write(_options.NumHeads); writer.Write(_options.NumStyleLayers); writer.Write(_options.StyleDim); }

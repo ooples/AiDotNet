@@ -14,7 +14,12 @@ public class PlayHTOptions : EndToEndTtsOptions
         DropoutRate = 0.0;
     }
 
+    /// <summary>API key for the PlayHT TTS service.</summary>
     public string ApiKey { get; set; } = string.Empty;
+
+    /// <summary>API endpoint URL for the PlayHT TTS service.</summary>
     public string ApiEndpoint { get; set; } = string.Empty;
+
+    /// <summary>Voice identifier to use for synthesis.</summary>
     public string VoiceId { get; set; } = "default";
 }

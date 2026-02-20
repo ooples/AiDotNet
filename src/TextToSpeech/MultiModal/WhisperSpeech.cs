@@ -13,29 +13,18 @@ public class WhisperSpeech<T> : TtsModelBase<T>, ICodecTts<T>
     /// <summary>Synthesizes speech. WhisperSpeech inverts Whisper: text -> semantic tokens (S2A) -> acoustic tokens (T2A) -> EnCodec decoder.</summary>
     public Tensor<T> Synthesize(string text)
     {
-        ThrowIfDisposed(); var input = PreprocessText(text); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input);
-        // WhisperSpeech: Whisper-based pipeline (Collabora 2024)
-        // T2S: Text-to-semantic using Whisper encoder features
-        int textLen = Math.Min(text.Length, _options.MaxTextLength);
-        int semFrames = textLen * 2;
-        double[] semantic = new double[semFrames]; double h = 0;
-        for (int f = 0; f < semFrames; f++) { int ci = Math.Min(f / 2, textLen - 1); double e = (text[ci] % 128) / 128.0; h = Math.Tanh(e * 0.85 + h * 0.1 + Math.Sin(f * 0.095) * 0.1); semantic[f] = h; }
-        // S2A: Semantic-to-acoustic using EnCodec tokens
-        int codecFrames = semFrames;
-        double[] acoustic = new double[codecFrames];
-        for (int f = 0; f < codecFrames; f++) acoustic[f] = Math.Tanh(semantic[f] * 1.1 + Math.Cos(f * 0.12) * 0.1);
-        // Vocos decoder
-        int waveLen = codecFrames * _options.HopSize;
-        var waveform = new Tensor<T>([waveLen]);
-        for (int i = 0; i < waveLen; i++) { int fr = Math.Min(i / Math.Max(1, _options.HopSize), codecFrames - 1); waveform[i] = NumOps.FromDouble(acoustic[fr] * Math.Sin(i * 2.0 * Math.PI * 195 / SampleRate) * 0.75); }
-        return waveform;
+        ThrowIfDisposed();
+        var input = PreprocessText(text);
+        if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input);
+        var output = Predict(input);
+        return PostprocessAudio(output);
     }
-    public Tensor<T> EncodeToTokens(Tensor<T> audio) { int samplesPerFrame = Math.Max(1, SampleRate / _options.CodecFrameRate); int frames = Math.Max(1, audio.Length / samplesPerFrame); var tokens = new Tensor<T>([frames]); for (int f = 0; f < frames; f++) { double sum = 0; int start = f * samplesPerFrame; int count = Math.Min(samplesPerFrame, audio.Length - start); for (int s = 0; s < count; s++) sum += NumOps.ToDouble(audio[start + s]); double avg = sum / Math.Max(1, count); int bin = (int)Math.Round((Math.Tanh(avg) + 1.0) * 0.5 * (_options.CodebookSize - 1)); bin = Math.Max(0, Math.Min(_options.CodebookSize - 1, bin)); tokens[f] = NumOps.FromDouble(bin); } return tokens; }
-    public Tensor<T> DecodeFromTokens(Tensor<T> tokens) { int samplesPerFrame = Math.Max(1, SampleRate / _options.CodecFrameRate); int waveLen = tokens.Length * samplesPerFrame; var wave = new Tensor<T>([waveLen]); for (int i = 0; i < waveLen; i++) { int f = Math.Min(i / samplesPerFrame, tokens.Length - 1); double tokenVal = NumOps.ToDouble(tokens[f]); double normalized = tokenVal / Math.Max(1, _options.CodebookSize - 1) * 2.0 - 1.0; double phase = i * 2.0 * Math.PI * 200.0 / SampleRate; wave[i] = NumOps.FromDouble(normalized * Math.Sin(phase) * 0.8); } return wave; }
+    public Tensor<T> EncodeToTokens(Tensor<T> audio) { ThrowIfDisposed(); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(audio); return Predict(audio); }
+    public Tensor<T> DecodeFromTokens(Tensor<T> tokens) { ThrowIfDisposed(); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(tokens); return Predict(tokens); }
     protected override Tensor<T> PreprocessText(string text) { int len = Math.Min(text.Length, _options.MaxTextLength); var t = new Tensor<T>([len]); for (int i = 0; i < len; i++) t[i] = NumOps.FromDouble(text[i] / 128.0); return t; } protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
     protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers); else Layers.AddRange(LayerHelper<T>.CreateDefaultCodecLMLayers(_options.TextEncoderDim, _options.LLMDim, _options.NumCodebooks * _options.CodebookSize, _options.NumEncoderLayers, _options.NumLLMLayers, _options.NumHeads, _options.DropoutRate)); }
     public override Tensor<T> Predict(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
-    public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode."); SetTrainingMode(true); var o = Predict(input); var g = LossFunction.CalculateDerivative(o.ToVector(), expected.ToVector()); var gt = Tensor<T>.FromVector(g); for (int i = Layers.Count - 1; i >= 0; i--) gt = Layers[i].Backward(gt); _optimizer?.UpdateParameters(Layers); SetTrainingMode(false); }
+    public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode."); SetTrainingMode(true); try { var o = Predict(input); var g = LossFunction.CalculateDerivative(o.ToVector(), expected.ToVector()); var gt = Tensor<T>.FromVector(g); for (int i = Layers.Count - 1; i >= 0; i--) gt = Layers[i].Backward(gt); _optimizer?.UpdateParameters(Layers); } finally { SetTrainingMode(false); } }
     public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
     public override ModelMetadata<T> GetModelMetadata() { return new ModelMetadata<T> { Name = _useNativeMode ? "WhisperSpeech-Native" : "WhisperSpeech-ONNX", Description = "WhisperSpeech: text-to-speech using Whisper encoder features as semantic tokens plus acoustic generation.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.LLMDim }; }
     protected override void SerializeNetworkSpecificData(BinaryWriter writer) { writer.Write(_useNativeMode); writer.Write(_options.ModelPath ?? string.Empty); writer.Write(_options.SampleRate); writer.Write(_options.NumCodebooks); writer.Write(_options.LLMDim); writer.Write(_options.CodebookSize); writer.Write(_options.DropoutRate); writer.Write(_options.NumEncoderLayers); writer.Write(_options.NumHeads); writer.Write(_options.NumLLMLayers); writer.Write(_options.TextEncoderDim); }

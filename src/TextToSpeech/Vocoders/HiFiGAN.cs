@@ -36,37 +36,13 @@ public class HiFiGAN<T> : TtsModelBase<T>, IVocoder<T>
     /// (4) Final conv: channels -> 1 with tanh activation for [-1,1] waveform output.
     /// Discriminators (MPD + MSD) used only during training.
     /// </summary>
-    public Tensor<T> MelToWaveform(Tensor<T> melSpectrogram)
-    {
-        ThrowIfDisposed();
-        if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(melSpectrogram);
-
-        // Run mel through learned vocoder layers for feature extraction
-        var features = melSpectrogram;
-        foreach (var l in Layers) features = l.Forward(features);
-        int melLen = features.Length; int upsampleTotal = UpsampleFactor; int waveLen = melLen * upsampleTotal;
-        // Upsampling blocks with MRF (Multi-Receptive Field Fusion)
-        var waveform = new Tensor<T>([waveLen]);
-        for (int f = 0; f < waveLen; f++)
-        {
-            int melIdx = Math.Min(f / upsampleTotal, melLen - 1);
-            double feat = NumOps.ToDouble(features[melIdx]);
-            // MRF: sum of residual blocks with different receptive fields
-            double mrf = 0;
-            foreach (var k in _options.ResblockKernelSizes) { double phase = f * 2.0 * Math.PI / (k * 10.0); mrf += Math.Sin(phase) * feat * 0.3; }
-            mrf /= _options.ResblockKernelSizes.Length;
-            double val = feat * 0.7 + mrf; val = val >= 0 ? val : val * 0.1; // LeakyReLU
-            waveform[f] = NumOps.FromDouble(Math.Tanh(val));
-        }
-
-        return waveform;
-    }
+    public Tensor<T> MelToWaveform(Tensor<T> melSpectrogram) { ThrowIfDisposed(); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(melSpectrogram); return Predict(melSpectrogram); }
 
     protected override Tensor<T> PreprocessText(string text) { var t = new Tensor<T>([1]); t[0] = NumOps.FromDouble(0.0); return t; }
     protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
     protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers); else Layers.AddRange(LayerHelper<T>.CreateDefaultVocoderLayers(_options.MelChannels, _options.UpsampleInitialChannels, 1, _options.UpsampleRates.Length, _options.ResblockKernelSizes.Length, _options.DropoutRate)); }
     public override Tensor<T> Predict(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
-    public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode."); SetTrainingMode(true); var o = Predict(input); var g = LossFunction.CalculateDerivative(o.ToVector(), expected.ToVector()); var gt = Tensor<T>.FromVector(g); for (int i = Layers.Count - 1; i >= 0; i--) gt = Layers[i].Backward(gt); _optimizer?.UpdateParameters(Layers); SetTrainingMode(false); }
+    public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode."); SetTrainingMode(true); try { var o = Predict(input); var g = LossFunction.CalculateDerivative(o.ToVector(), expected.ToVector()); var gt = Tensor<T>.FromVector(g); for (int i = Layers.Count - 1; i >= 0; i--) gt = Layers[i].Backward(gt); _optimizer?.UpdateParameters(Layers); } finally { SetTrainingMode(false); } }
     public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
     public override ModelMetadata<T> GetModelMetadata() { var m = new ModelMetadata<T> { Name = _useNativeMode ? "HiFiGAN-Native" : "HiFiGAN-ONNX", Description = "HiFi-GAN: Generative Adversarial Networks for Efficient and High Fidelity Speech Synthesis (Kong et al., 2020)", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.MelChannels, Complexity = _options.UpsampleRates.Length + _options.ResblockKernelSizes.Length }; m.AdditionalInfo["Architecture"] = "HiFiGAN"; m.AdditionalInfo["SampleRate"] = _options.SampleRate.ToString(); return m; }
     protected override void SerializeNetworkSpecificData(BinaryWriter writer) { writer.Write(_useNativeMode); writer.Write(_options.ModelPath ?? string.Empty); writer.Write(_options.SampleRate); writer.Write(_options.MelChannels); writer.Write(_options.HopSize); writer.Write(_options.UpsampleInitialChannels); writer.Write(_options.UpsampleRates.Length); foreach (var r in _options.UpsampleRates) writer.Write(r); writer.Write(_options.DropoutRate); }
