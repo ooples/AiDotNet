@@ -151,7 +151,11 @@ public class RWKV7Block<T> : LayerBase<T>
     private Tensor<T>? _prevToken;            // [batch, modelDim] for time mixing token shift
     private Tensor<T>? _prevChannelToken;     // [batch, modelDim] for channel mixing token shift
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Training support is approximate: gradients flow through residual connections and weight
+    /// gradients are accumulated, but full backpropagation through the WKV-7 recurrent kernel
+    /// is not yet implemented. Suitable for fine-tuning with small learning rates.
+    /// </summary>
     public override bool SupportsTraining => true;
 
     /// <summary>Gets the model dimension.</summary>
@@ -450,6 +454,7 @@ public class RWKV7Block<T> : LayerBase<T>
                         T bFactor = NumOps.FromDouble(bSigmoid);
 
                         // State update: S[di, :] = a_t[di] * S[di, :] + b_t[di] * k_t[di] * v_t[:]
+                        // kVal is k[di] used for the rank-1 outer product update
                         T kVal = k[new[] { bi, flatD }];
 
                         T wkvNum = NumOps.Zero;
@@ -467,8 +472,10 @@ public class RWKV7Block<T> : LayerBase<T>
 
                             state[new[] { bi, hi, di, vi }] = newState;
 
-                            // Read from state: output = S * k
-                            wkvNum = NumOps.Add(wkvNum, NumOps.Multiply(newState, kVal));
+                            // Read from state: output[di] = sum_vi(S[di, vi] * k[dimStart + vi])
+                            // Note: kCol uses flatV (= dimStart + vi), NOT kVal (= k[di])
+                            T kCol = k[new[] { bi, flatV }];
+                            wkvNum = NumOps.Add(wkvNum, NumOps.Multiply(newState, kCol));
                         }
 
                         // Apply receptance gate: sigmoid(r) * wkv

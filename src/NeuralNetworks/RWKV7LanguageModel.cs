@@ -229,7 +229,11 @@ public class RWKV7LanguageModel<T> : LayerBase<T>
         _originalInputShape = input.Shape;
 
         int rank = input.Shape.Length;
-        int seqLen = rank >= 2 ? input.Shape[rank - 2] : 1;
+        if (rank < 2)
+            throw new ArgumentException(
+                $"Input must be at least rank 2 [seqLen, vocabSize], got rank {rank}.",
+                nameof(input));
+        int seqLen = input.Shape[rank - 2];
         int inputDim = input.Shape[rank - 1];
 
         int batchSize = 1;
@@ -641,7 +645,9 @@ public class RWKV7LanguageModel<T> : LayerBase<T>
             current = blockOutput;  // Blocks have internal residuals; no outer residual in Forward
         }
 
-        // Final RMS normalization (matches Forward pass line 272: ApplyRMSNorm)
+        // Final RMS normalization: approximate as gamma scaling.
+        // Full RMSNorm (x/rms(x) * gamma) requires runtime statistics not available in a static graph.
+        // The gamma multiply captures the learned scale; the actual rms normalization is applied at runtime in Forward().
         var finalNormGammaNode = TensorOperations<T>.Variable(_finalNormGamma, "rwkv7_final_norm_gamma");
         inputNodes.Add(finalNormGammaNode);
         var normed = TensorOperations<T>.ElementwiseMultiply(current, finalNormGammaNode);
