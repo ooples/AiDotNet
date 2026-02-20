@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Enums;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
@@ -154,57 +155,45 @@ public class UnifiedMultimodalNetwork<T> : NeuralNetworkBase<T>, IUnifiedMultimo
     /// <inheritdoc/>
     protected override void InitializeLayers()
     {
-        IActivationFunction<T>? nullActivation = null;
-        var geluActivation = new GELUActivation<T>() as IActivationFunction<T>;
+        if (Architecture.Layers != null && Architecture.Layers.Count > 0)
+        {
+            Layers.AddRange(Architecture.Layers);
+        }
+        else
+        {
+            Layers.AddRange(LayerHelper<T>.CreateUnifiedMultimodalLayers(
+                _embeddingDimension, _numTransformerLayers));
+        }
 
-        // Modality encoders - project to unified embedding space
-        _textEncoder = new DenseLayer<T>(512, _embeddingDimension, geluActivation);
-        _imageEncoder = new DenseLayer<T>(768, _embeddingDimension, geluActivation);
-        _audioEncoder = new DenseLayer<T>(128, _embeddingDimension, geluActivation);
-        _videoEncoder = new DenseLayer<T>(1024, _embeddingDimension, geluActivation);
+        // Distribute layers to internal fields
+        int idx = 0;
+
+        // 4 modality encoders
+        _textEncoder = (DenseLayer<T>)Layers[idx++];
+        _imageEncoder = (DenseLayer<T>)Layers[idx++];
+        _audioEncoder = (DenseLayer<T>)Layers[idx++];
+        _videoEncoder = (DenseLayer<T>)Layers[idx++];
 
         // Unified transformer layers
-        // Parameters: (sequenceLength, embeddingDimension, headCount, activation)
-        // Use headCount that divides embeddingDimension evenly
-        int headCount = Math.Max(1, _embeddingDimension / 64); // At least 1 head, typically 8 for 512-dim
-        if (_embeddingDimension % headCount != 0)
-        {
-            // Find largest divisor <= 8
-            for (int h = 8; h >= 1; h--)
-            {
-                if (_embeddingDimension % h == 0)
-                {
-                    headCount = h;
-                    break;
-                }
-            }
-        }
-
         _transformerLayers = new MultiHeadAttentionLayer<T>[_numTransformerLayers];
         for (int i = 0; i < _numTransformerLayers; i++)
-        {
-            _transformerLayers[i] = new MultiHeadAttentionLayer<T>(
-                1, _embeddingDimension, headCount, geluActivation);
-        }
+            _transformerLayers[i] = (MultiHeadAttentionLayer<T>)Layers[idx++];
 
-        // Cross-modal attention
+        // Cross-modal attention (4 layers)
         _crossModalAttention = new MultiHeadAttentionLayer<T>[4];
         for (int i = 0; i < 4; i++)
-        {
-            _crossModalAttention[i] = new MultiHeadAttentionLayer<T>(
-                1, _embeddingDimension, headCount, geluActivation);
-        }
+            _crossModalAttention[i] = (MultiHeadAttentionLayer<T>)Layers[idx++];
 
-        // Modality decoders
-        _textDecoder = new DenseLayer<T>(_embeddingDimension, 50000, nullActivation); // vocab size
-        _imageDecoder = new DenseLayer<T>(_embeddingDimension, 768 * 3, nullActivation); // patches * channels
-        _audioDecoder = new DenseLayer<T>(_embeddingDimension, 16000, nullActivation); // sample rate
-        _videoDecoder = new DenseLayer<T>(_embeddingDimension, 768 * 3 * 8, nullActivation); // frames
+        // 4 modality decoders
+        _textDecoder = (DenseLayer<T>)Layers[idx++];
+        _imageDecoder = (DenseLayer<T>)Layers[idx++];
+        _audioDecoder = (DenseLayer<T>)Layers[idx++];
+        _videoDecoder = (DenseLayer<T>)Layers[idx++];
 
-        // Fusion and output
-        _fusionLayer = new DenseLayer<T>(_embeddingDimension * 4, _embeddingDimension, geluActivation);
-        _classificationHead = new DenseLayer<T>(_embeddingDimension, 1000, nullActivation);
-        _generationHead = new DenseLayer<T>(_embeddingDimension, _embeddingDimension, geluActivation);
+        // Fusion and output heads
+        _fusionLayer = (DenseLayer<T>)Layers[idx++];
+        _classificationHead = (DenseLayer<T>)Layers[idx++];
+        _generationHead = (DenseLayer<T>)Layers[idx++];
     }
 
     #endregion

@@ -118,46 +118,40 @@ public class GMFlow<T> : NeuralNetworkBase<T>
         _flowDecoder = [];
         _refinement = [];
 
-        int featH = _height / 8;
-        int featW = _width / 8;
-
-        // Feature encoder (ResNet-like)
-        _encoder.Add(new ConvolutionalLayer<T>(_channels, _height, _width, 64, 7, 2, 3));
-        _encoder.Add(new ConvolutionalLayer<T>(64, _height / 2, _width / 2, 64, 3, 1, 1));
-        _encoder.Add(new ConvolutionalLayer<T>(64, _height / 2, _width / 2, 96, 3, 2, 1));
-        _encoder.Add(new ConvolutionalLayer<T>(96, _height / 4, _width / 4, 96, 3, 1, 1));
-        _encoder.Add(new ConvolutionalLayer<T>(96, _height / 4, _width / 4, _numFeatures, 3, 2, 1));
-        _encoder.Add(new ConvolutionalLayer<T>(_numFeatures, featH, featW, _numFeatures, 3, 1, 1));
-
-        // Transformer layers
-        for (int i = 0; i < _numTransformerLayers; i++)
+        // Check for user-provided custom layers
+        if (Architecture.Layers != null && Architecture.Layers.Count > 0)
         {
-            // Self-attention
-            _selfAttention.Add(new ConvolutionalLayer<T>(_numFeatures, featH, featW, _numFeatures, 1, 1, 0));
-            _selfAttention.Add(new ConvolutionalLayer<T>(_numFeatures, featH, featW, _numFeatures, 1, 1, 0));
-
-            // Cross-attention
-            _crossAttention.Add(new ConvolutionalLayer<T>(_numFeatures * 2, featH, featW, _numFeatures, 1, 1, 0));
-            _crossAttention.Add(new ConvolutionalLayer<T>(_numFeatures, featH, featW, _numFeatures, 1, 1, 0));
+            Layers.AddRange(Architecture.Layers);
+        }
+        else
+        {
+            var layers = LayerHelper<T>.CreateGMFlowLayers(
+                channels: _channels, height: _height, width: _width,
+                numFeatures: _numFeatures, numTransformerLayers: _numTransformerLayers).ToList();
+            Layers.AddRange(layers);
         }
 
-        // Flow decoder
-        _flowDecoder.Add(new ConvolutionalLayer<T>(_numFeatures, featH, featW, 128, 3, 1, 1));
-        _flowDecoder.Add(new ConvolutionalLayer<T>(128, featH, featW, 64, 3, 1, 1));
-        _flowHead = new ConvolutionalLayer<T>(64, featH, featW, 2, 3, 1, 1);
-
-        // Refinement
-        _refinement.Add(new ConvolutionalLayer<T>(_channels * 2 + 2, _height, _width, 64, 3, 1, 1));
-        _refinement.Add(new ConvolutionalLayer<T>(64, _height, _width, 32, 3, 1, 1));
-        _refinement.Add(new ConvolutionalLayer<T>(32, _height, _width, 2, 3, 1, 1));
-
-        // Register layers
-        foreach (var layer in _encoder) Layers.Add(layer);
-        foreach (var layer in _selfAttention) Layers.Add(layer);
-        foreach (var layer in _crossAttention) Layers.Add(layer);
-        foreach (var layer in _flowDecoder) Layers.Add(layer);
-        Layers.Add(_flowHead);
-        foreach (var layer in _refinement) Layers.Add(layer);
+        // Distribute layers to sub-lists for forward pass
+        int idx = 0;
+        // Encoder (6 layers)
+        for (int i = 0; i < 6; i++)
+            _encoder.Add((ConvolutionalLayer<T>)Layers[idx++]);
+        // Transformer layers: 4 per layer (2 self-attn + 2 cross-attn)
+        for (int i = 0; i < _numTransformerLayers; i++)
+        {
+            _selfAttention.Add((ConvolutionalLayer<T>)Layers[idx++]);
+            _selfAttention.Add((ConvolutionalLayer<T>)Layers[idx++]);
+            _crossAttention.Add((ConvolutionalLayer<T>)Layers[idx++]);
+            _crossAttention.Add((ConvolutionalLayer<T>)Layers[idx++]);
+        }
+        // Flow decoder (2 layers)
+        _flowDecoder.Add((ConvolutionalLayer<T>)Layers[idx++]);
+        _flowDecoder.Add((ConvolutionalLayer<T>)Layers[idx++]);
+        // Flow head
+        _flowHead = (ConvolutionalLayer<T>)Layers[idx++];
+        // Refinement (3 layers)
+        for (int i = 0; i < 3; i++)
+            _refinement.Add((ConvolutionalLayer<T>)Layers[idx++]);
     }
 
     #endregion

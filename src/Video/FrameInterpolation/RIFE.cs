@@ -247,54 +247,37 @@ public class RIFE<T> : NeuralNetworkBase<T>
 
     private void InitializeNativeLayers()
     {
-        // Encoder: extract features from concatenated frames
-        _encoder.Add(new ConvolutionalLayer<T>(
-            _channels * 2, _height, _width, _numFeatures, 3, 1, 1));
-        _encoder.Add(new ConvolutionalLayer<T>(
-            _numFeatures, _height, _width, _numFeatures * 2, 3, 2, 1));
-        _encoder.Add(new ConvolutionalLayer<T>(
-            _numFeatures * 2, _height / 2, _width / 2, _numFeatures * 4, 3, 2, 1));
-
-        // Context encoder
-        _contextEncoder.Add(new ConvolutionalLayer<T>(
-            _channels * 2, _height, _width, _numFeatures, 3, 1, 1));
-        _contextEncoder.Add(new ConvolutionalLayer<T>(
-            _numFeatures, _height, _width, _numFeatures, 3, 1, 1));
-
-        // Flow decoder
-        int decoderH = _height / 4;
-        int decoderW = _width / 4;
-
-        _flowDecoder.Add(new ConvolutionalLayer<T>(
-            _numFeatures * 4, decoderH, decoderW, _numFeatures * 2, 3, 1, 1));
-        _flowDecoder.Add(new ConvolutionalLayer<T>(
-            _numFeatures * 2, decoderH * 2, decoderW * 2, _numFeatures, 3, 1, 1));
-        _flowDecoder.Add(new ConvolutionalLayer<T>(
-            _numFeatures, decoderH * 4, decoderW * 4, 4, 3, 1, 1));
-
-        // Flow refinement blocks
-        for (int i = 0; i < _numFlowBlocks; i++)
+        // Check for user-provided custom layers
+        if (Architecture.Layers != null && Architecture.Layers.Count > 0)
         {
-            _flowBlocks.Add(new ConvolutionalLayer<T>(
-                _numFeatures + 4, _height, _width, _numFeatures, 3, 1, 1));
+            Layers.AddRange(Architecture.Layers);
+        }
+        else
+        {
+            var layers = LayerHelper<T>.CreateRIFELayers(
+                channels: _channels, height: _height, width: _width,
+                numFeatures: _numFeatures, numFlowBlocks: _numFlowBlocks).ToList();
+            Layers.AddRange(layers);
         }
 
-        // Fusion layer
-        int fusionInputChannels = _channels * 2 + _numFeatures + 4;
-        _fusion = new ConvolutionalLayer<T>(
-            fusionInputChannels, _height, _width, _numFeatures, 3, 1, 1);
-
-        // Output convolution
-        _outputConv = new ConvolutionalLayer<T>(
-            _numFeatures, _height, _width, _channels, 3, 1, 1);
-
-        // Register all layers
-        foreach (var layer in _encoder) Layers.Add(layer);
-        foreach (var layer in _flowDecoder) Layers.Add(layer);
-        foreach (var layer in _contextEncoder) Layers.Add(layer);
-        foreach (var layer in _flowBlocks) Layers.Add(layer);
-        Layers.Add(_fusion);
-        Layers.Add(_outputConv);
+        // Distribute layers to sub-lists for forward pass
+        int idx = 0;
+        // Encoder (3 layers)
+        for (int i = 0; i < 3; i++)
+            _encoder.Add((ConvolutionalLayer<T>)Layers[idx++]);
+        // Flow decoder (3 layers)
+        for (int i = 0; i < 3; i++)
+            _flowDecoder.Add((ConvolutionalLayer<T>)Layers[idx++]);
+        // Context encoder (2 layers)
+        for (int i = 0; i < 2; i++)
+            _contextEncoder.Add((ConvolutionalLayer<T>)Layers[idx++]);
+        // Flow blocks
+        for (int i = 0; i < _numFlowBlocks; i++)
+            _flowBlocks.Add((ConvolutionalLayer<T>)Layers[idx++]);
+        // Fusion
+        _fusion = (ConvolutionalLayer<T>)Layers[idx++];
+        // Output conv
+        _outputConv = (ConvolutionalLayer<T>)Layers[idx++];
     }
 
     private Tensor<T> ProcessInterpolation(Tensor<T> concatenatedFrames, double timestep)

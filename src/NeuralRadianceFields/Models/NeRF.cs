@@ -1,4 +1,5 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
@@ -421,43 +422,38 @@ public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>
         _positionLayers.Clear();
         _colorLayers.Clear();
 
-        int positionDim = 3 * 2 * _positionEncodingLevels;
-        int directionDim = 3 * 2 * _directionEncodingLevels;
+        if (Architecture.Layers != null && Architecture.Layers.Count > 0)
+        {
+            foreach (var layer in Architecture.Layers)
+                AddLayerToCollection(layer);
+        }
+        else
+        {
+            foreach (var layer in LayerHelper<T>.CreateNeRFLayers(
+                _positionEncodingLevels, _directionEncodingLevels,
+                _hiddenDim, _numLayers, _colorHiddenDim, _colorNumLayers))
+            {
+                AddLayerToCollection(layer);
+            }
+        }
+
+        // Distribute layers to internal fields
+        int idx = 0;
 
         // Position MLP layers
         for (int i = 0; i < _numLayers; i++)
-        {
-            int inputDim = i == 0 ? positionDim : _hiddenDim;
-            if (_skipConnectionLayer >= 0 && i == _skipConnectionLayer)
-            {
-                inputDim = _hiddenDim + positionDim;
-            }
+            _positionLayers.Add((DenseLayer<T>)Layers[idx++]);
 
-            var layer = new DenseLayer<T>(inputDim, _hiddenDim, activationFunction: new ReLUActivation<T>());
-            _positionLayers.Add(layer);
-            AddLayerToCollection(layer);
-        }
-
-        // Density and feature layers
-        _densityLayer = new DenseLayer<T>(_hiddenDim, 1, activationFunction: new IdentityActivation<T>());
-        AddLayerToCollection(_densityLayer);
-
-        _featureLayer = new DenseLayer<T>(_hiddenDim, _hiddenDim, activationFunction: new IdentityActivation<T>());
-        AddLayerToCollection(_featureLayer);
+        // Density + feature layers
+        _densityLayer = (DenseLayer<T>)Layers[idx++];
+        _featureLayer = (DenseLayer<T>)Layers[idx++];
 
         // Color MLP layers
-        int colorInputDim = _hiddenDim + directionDim;
-        int colorHiddenDim = _colorNumLayers > 0 ? _colorHiddenDim : colorInputDim;
         for (int i = 0; i < _colorNumLayers; i++)
-        {
-            int inputDim = i == 0 ? colorInputDim : colorHiddenDim;
-            var layer = new DenseLayer<T>(inputDim, colorHiddenDim, activationFunction: new ReLUActivation<T>());
-            _colorLayers.Add(layer);
-            AddLayerToCollection(layer);
-        }
+            _colorLayers.Add((DenseLayer<T>)Layers[idx++]);
 
-        _colorOutputLayer = new DenseLayer<T>(colorHiddenDim, 3, activationFunction: new IdentityActivation<T>());
-        AddLayerToCollection(_colorOutputLayer);
+        // Color output
+        _colorOutputLayer = (DenseLayer<T>)Layers[idx++];
     }
 
     #endregion

@@ -3079,7 +3079,21 @@ public enum ModelType
     /// Essential when you need reliable probability estimates for decision making.
     /// </para>
     /// </remarks>
-    CalibratedClassifier
+    CalibratedClassifier,
+
+    /// <summary>
+    /// Semantic Segmentation model for dense per-pixel classification.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Semantic Segmentation models classify every pixel in an image into
+    /// a category (e.g., road, sky, person, car). Unlike object detection which draws boxes,
+    /// semantic segmentation produces a full pixel-level map of what's in the scene.
+    ///
+    /// Examples: SegFormer, Mask2Former, DeepLabV3+, PSPNet
+    /// </para>
+    /// </remarks>
+    SemanticSegmentation
 }
 
 

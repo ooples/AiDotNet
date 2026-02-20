@@ -3,6 +3,7 @@ using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
+using AiDotNet.Helpers;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Tensors.Helpers;
@@ -503,9 +504,52 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
     {
         int numPatches = (_imageSize / _patchSize) * (_imageSize / _patchSize);
 
-        // Vision encoder: Patch embedding
-        _patchEmbedding = new PatchEmbeddingLayer<T>(
-            _imageSize, _imageSize, channels, _patchSize, _visionHiddenDim);
+        Layers.Clear();
+
+        if (Architecture.Layers != null && Architecture.Layers.Count > 0)
+        {
+            Layers.AddRange(Architecture.Layers);
+        }
+        else
+        {
+            Layers.AddRange(LayerHelper<T>.CreateBlip2Layers(
+                _imageSize, channels, _patchSize, _visionHiddenDim,
+                _qformerHiddenDim, _numQformerLayers, _numHeads, _vocabularySize,
+                _embeddingDimension, _lmHiddenDim, _numLmDecoderLayers, _maxSequenceLength));
+        }
+
+        // Distribute layers to internal fields
+        int idx = 0;
+
+        // Vision encoder: PatchEmbed
+        _patchEmbedding = Layers[idx++];
+
+        // Q-Former layers: (self-attn + cross-attn + FFN) × numQformerLayers
+        _qformerSelfAttentionLayers.Clear();
+        _qformerCrossAttentionLayers.Clear();
+        _qformerFeedForwardLayers.Clear();
+        for (int i = 0; i < _numQformerLayers; i++)
+        {
+            _qformerSelfAttentionLayers.Add(Layers[idx++]);
+            _qformerCrossAttentionLayers.Add(Layers[idx++]);
+            _qformerFeedForwardLayers.Add((DenseLayer<T>)Layers[idx++]);
+        }
+
+        // Text embedding
+        _textTokenEmbedding = Layers[idx++];
+
+        // ITM head + ITC projection + LM projection
+        _itmHead = Layers[idx++];
+        _itcProjection = Layers[idx++];
+        _languageModelProjection = Layers[idx++];
+
+        // LM decoder layers
+        _lmDecoderLayers.Clear();
+        for (int i = 0; i < _numLmDecoderLayers; i++)
+            _lmDecoderLayers.Add((TransformerDecoderLayer<T>)Layers[idx++]);
+
+        // LM head
+        _lmHead = Layers[idx++];
 
         // Vision CLS token and positional embeddings
         _visionClsToken = Tensor<T>.CreateDefault([1, _visionHiddenDim], NumOps.Zero);
@@ -518,51 +562,6 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
         // Gradient storage for query tokens and positional embeddings
         _queryTokensGradients = Tensor<T>.CreateDefault([_numQueryTokens, _qformerHiddenDim], NumOps.Zero);
         _queryPositionalEmbeddingsGradients = Tensor<T>.CreateDefault([_numQueryTokens, _qformerHiddenDim], NumOps.Zero);
-
-        // Q-Former layers
-        int feedForwardDim = _qformerHiddenDim * 4;
-        for (int i = 0; i < _numQformerLayers; i++)
-        {
-            // Self-attention for queries
-            _qformerSelfAttentionLayers.Add(new TransformerEncoderLayer<T>(
-                _qformerHiddenDim, _numHeads, feedForwardDim));
-
-            // Cross-attention from queries to image features - use TransformerEncoderLayer
-            _qformerCrossAttentionLayers.Add(new TransformerEncoderLayer<T>(
-                _qformerHiddenDim, _numHeads, feedForwardDim));
-
-            // Feed-forward
-            _qformerFeedForwardLayers.Add(new DenseLayer<T>(_qformerHiddenDim, _qformerHiddenDim, (IActivationFunction<T>?)null));
-        }
-
-        // Text embedding for Q-Former's text encoder
-        _textTokenEmbedding = new EmbeddingLayer<T>(_vocabularySize, _qformerHiddenDim);
-
-        // ITM head (binary classification)
-        _itmHead = new DenseLayer<T>(_qformerHiddenDim, 2, (IActivationFunction<T>?)null);
-
-        // ITC projection
-        _itcProjection = new DenseLayer<T>(_qformerHiddenDim, _embeddingDimension, (IActivationFunction<T>?)null);
-
-        // LM projection (project Q-Former output to LLM dimension)
-        _languageModelProjection = new DenseLayer<T>(_qformerHiddenDim, _lmHiddenDim, (IActivationFunction<T>?)null);
-
-        // LM Decoder layers for text generation
-        int lmFeedForwardDim = _lmHiddenDim * 4;
-        int lmNumHeads = Math.Max(8, _lmHiddenDim / 64); // Scale heads with hidden dimension
-        var geluActivation = new GELUActivation<T>();
-        for (int i = 0; i < _numLmDecoderLayers; i++)
-        {
-            _lmDecoderLayers.Add(new TransformerDecoderLayer<T>(
-                embeddingSize: _lmHiddenDim,
-                numHeads: lmNumHeads,
-                feedForwardDim: lmFeedForwardDim,
-                sequenceLength: _maxSequenceLength,
-                ffnActivation: geluActivation));
-        }
-
-        // LM Head: Projects decoder output to vocabulary logits
-        _lmHead = new DenseLayer<T>(_lmHiddenDim, _vocabularySize, (IActivationFunction<T>?)null);
 
         // Initialize with small random values
         InitializeWeights();

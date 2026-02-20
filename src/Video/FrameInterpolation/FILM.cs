@@ -142,53 +142,51 @@ public class FILM<T> : NeuralNetworkBase<T>
         _flowEstimator = [];
         _fusionLayers = [];
 
-        // Multi-scale feature extractor (shared for both frames)
-        _featureExtractor.Add(new ConvolutionalLayer<T>(_channels, _height, _width, _numFeatures, 3, 1, 1));
-        _featureExtractor.Add(new ConvolutionalLayer<T>(_numFeatures, _height, _width, _numFeatures, 3, 1, 1));
-        _featureExtractor.Add(new ConvolutionalLayer<T>(_numFeatures, _height, _width, _numFeatures * 2, 3, 2, 1));
-
-        // Pyramid layers for each scale
-        int currentH = _height / 2;
-        int currentW = _width / 2;
-        int currentC = _numFeatures * 2;
-
-        for (int s = 0; s < _numScales - 1; s++)
+        // Check for user-provided custom layers
+        if (Architecture.Layers != null && Architecture.Layers.Count > 0)
         {
-            _pyramidLayers.Add(new ConvolutionalLayer<T>(currentC, currentH, currentW, currentC * 2, 3, 2, 1));
-            currentH /= 2;
-            currentW /= 2;
-            currentC = Math.Min(currentC * 2, 512);
-            if (currentH < 4 || currentW < 4) break;
+            Layers.AddRange(Architecture.Layers);
+        }
+        else
+        {
+            var layers = LayerHelper<T>.CreateFILMLayers(
+                channels: _channels, height: _height, width: _width,
+                numScales: _numScales, numFeatures: _numFeatures).ToList();
+            Layers.AddRange(layers);
         }
 
-        // Bi-directional flow estimator
-        int flowInputC = _numFeatures * 2 * 2; // Concatenated features from both frames
-        _flowEstimator.Add(new ConvolutionalLayer<T>(flowInputC, _height / 2, _width / 2, _numFeatures * 2, 3, 1, 1));
-        _flowEstimator.Add(new ConvolutionalLayer<T>(_numFeatures * 2, _height / 2, _width / 2, _numFeatures, 3, 1, 1));
-        _flowEstimator.Add(new ConvolutionalLayer<T>(_numFeatures, _height / 2, _width / 2, 4, 3, 1, 1)); // 4 = 2 flows x 2 coords
+        // Compute pyramid count to distribute layers correctly
+        int pyramidCount = 0;
+        {
+            int cH = _height / 2, cW = _width / 2, cC = _numFeatures * 2;
+            for (int s = 0; s < _numScales - 1; s++)
+            {
+                if (cH < 4 || cW < 4) break;
+                pyramidCount++;
+                cH /= 2; cW /= 2; cC = Math.Min(cC * 2, 512);
+            }
+        }
 
+        // Distribute layers to sub-lists for forward pass
+        int idx = 0;
+        // Feature extractor (3 layers)
+        for (int i = 0; i < 3; i++)
+            _featureExtractor.Add((ConvolutionalLayer<T>)Layers[idx++]);
+        // Pyramid layers (variable)
+        for (int i = 0; i < pyramidCount; i++)
+            _pyramidLayers.Add((ConvolutionalLayer<T>)Layers[idx++]);
+        // Flow estimator (3 layers)
+        for (int i = 0; i < 3; i++)
+            _flowEstimator.Add((ConvolutionalLayer<T>)Layers[idx++]);
         // Flow refinement
-        _flowRefinement = new ConvolutionalLayer<T>(4 + _numFeatures, _height / 2, _width / 2, 4, 3, 1, 1);
-
+        _flowRefinement = (ConvolutionalLayer<T>)Layers[idx++];
         // Occlusion estimator
-        _occlusionEstimator = new ConvolutionalLayer<T>(flowInputC + 4, _height / 2, _width / 2, 2, 3, 1, 1);
-
-        // Feature fusion for synthesis
-        int fusionInputC = _numFeatures * 2 * 2 + 4 + 2; // Features + flow + occlusion
-        _fusionLayers.Add(new ConvolutionalLayer<T>(fusionInputC, _height / 2, _width / 2, _numFeatures * 2, 3, 1, 1));
-        _fusionLayers.Add(new ConvolutionalLayer<T>(_numFeatures * 2, _height / 2, _width / 2, _numFeatures, 3, 1, 1));
-
+        _occlusionEstimator = (ConvolutionalLayer<T>)Layers[idx++];
+        // Fusion layers (2 layers)
+        for (int i = 0; i < 2; i++)
+            _fusionLayers.Add((ConvolutionalLayer<T>)Layers[idx++]);
         // Synthesis head
-        _synthesisHead = new ConvolutionalLayer<T>(_numFeatures, _height, _width, _channels, 3, 1, 1);
-
-        // Register layers
-        foreach (var layer in _featureExtractor) Layers.Add(layer);
-        foreach (var layer in _pyramidLayers) Layers.Add(layer);
-        foreach (var layer in _flowEstimator) Layers.Add(layer);
-        Layers.Add(_flowRefinement);
-        Layers.Add(_occlusionEstimator);
-        foreach (var layer in _fusionLayers) Layers.Add(layer);
-        Layers.Add(_synthesisHead);
+        _synthesisHead = (ConvolutionalLayer<T>)Layers[idx++];
     }
 
     #endregion

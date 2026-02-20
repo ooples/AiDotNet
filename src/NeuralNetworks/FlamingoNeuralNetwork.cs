@@ -5,6 +5,7 @@ using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
+using AiDotNet.Helpers;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Tensors.Helpers;
@@ -245,63 +246,69 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
     private void InitializeNativeLayers(int channels)
     {
         int numPatches = (_imageSize / _patchSize) * (_imageSize / _patchSize);
+        int gatedCrossAttnCount = _numLmLayers / 4;
 
-        // Initialize patch embedding for vision encoder
-        _patchEmbedding = new PatchEmbeddingLayer<T>(
-            _imageSize, _imageSize, channels, _patchSize, _visionHiddenDim);
+        Layers.Clear();
+
+        if (Architecture.Layers != null && Architecture.Layers.Count > 0)
+        {
+            Layers.AddRange(Architecture.Layers);
+        }
+        else
+        {
+            Layers.AddRange(LayerHelper<T>.CreateFlamingoLayers(
+                _imageSize, channels, _patchSize, _visionHiddenDim, _lmHiddenDim,
+                _numVisionLayers, _numPerceiverLayers, _numPerceiverTokens,
+                _numLmLayers, _numHeads, _vocabularySize, _maxSequenceLength));
+        }
+
+        // Distribute layers to internal fields
+        int idx = 0;
+
+        // Patch embedding
+        _patchEmbedding = Layers[idx++];
+
+        // Vision encoder transformer layers
+        _visionEncoderLayers.Clear();
+        for (int i = 0; i < _numVisionLayers; i++)
+            _visionEncoderLayers.Add(Layers[idx++]);
+
+        // Perceiver Resampler layers: (CrossAttn + FFN_expand + FFN_contract) × numPerceiverLayers
+        _perceiverLayers.Clear();
+        for (int i = 0; i < _numPerceiverLayers; i++)
+        {
+            _perceiverLayers.Add(Layers[idx++]); // CrossAttention
+            _perceiverLayers.Add(Layers[idx++]); // FFN expand
+            _perceiverLayers.Add(Layers[idx++]); // FFN contract
+        }
+
+        // Gated cross-attention layers
+        _gatedCrossAttentionLayers.Clear();
+        for (int i = 0; i < gatedCrossAttnCount; i++)
+            _gatedCrossAttentionLayers.Add(Layers[idx++]);
+
+        // Text token embedding
+        _textTokenEmbedding = Layers[idx++];
+
+        // Language model transformer layers
+        _languageModelLayers.Clear();
+        for (int i = 0; i < _numLmLayers; i++)
+            _languageModelLayers.Add(Layers[idx++]);
+
+        // Output projection
+        _outputProjection = Layers[idx++];
 
         // Initialize vision positional embeddings
         _visionPositionalEmbeddings = Matrix<T>.CreateDefault(numPatches + 1, _visionHiddenDim, NumOps.Zero);
         InitializePositionalEmbeddings(_visionPositionalEmbeddings);
 
-        // Vision encoder transformer layers
-        int visionFfnDim = _visionHiddenDim * 4;
-        for (int i = 0; i < _numVisionLayers; i++)
-        {
-            _visionEncoderLayers.Add(new TransformerEncoderLayer<T>(
-                _visionHiddenDim, _numHeads, visionFfnDim));
-        }
-
         // Initialize perceiver queries
         _perceiverQueries = Matrix<T>.CreateDefault(_numPerceiverTokens, _lmHiddenDim, NumOps.Zero);
         InitializePerceiverQueries(_perceiverQueries);
 
-        // Perceiver Resampler layers
-        for (int i = 0; i < _numPerceiverLayers; i++)
-        {
-            _perceiverLayers.Add(new CrossAttentionLayer<T>(_lmHiddenDim, _visionHiddenDim, _numHeads));
-            _perceiverLayers.Add(new DenseLayer<T>(
-                _lmHiddenDim, _lmHiddenDim * 4,
-                (IActivationFunction<T>)new GELUActivation<T>()));
-            _perceiverLayers.Add(new DenseLayer<T>(
-                _lmHiddenDim * 4, _lmHiddenDim,
-                (IActivationFunction<T>?)null));
-        }
-
-        // Gated cross-attention layers
-        int gatedCrossAttnCount = _numLmLayers / 4;
-        for (int i = 0; i < gatedCrossAttnCount; i++)
-        {
-            _gatedCrossAttentionLayers.Add(new CrossAttentionLayer<T>(_lmHiddenDim, _lmHiddenDim, _numHeads));
-        }
-
-        // Text token embedding
-        _textTokenEmbedding = new EmbeddingLayer<T>(_vocabularySize, _lmHiddenDim);
-
         // Text positional embeddings
         _textPositionalEmbeddings = Matrix<T>.CreateDefault(_maxSequenceLength, _lmHiddenDim, NumOps.Zero);
         InitializePositionalEmbeddings(_textPositionalEmbeddings);
-
-        // Language model transformer layers
-        int lmFfnDim = _lmHiddenDim * 4;
-        for (int i = 0; i < _numLmLayers; i++)
-        {
-            _languageModelLayers.Add(new TransformerEncoderLayer<T>(
-                _lmHiddenDim, _numHeads, lmFfnDim));
-        }
-
-        // Output projection to vocabulary
-        _outputProjection = new DenseLayer<T>(_lmHiddenDim, _vocabularySize, (IActivationFunction<T>?)null);
     }
 
     private void InitializePositionalEmbeddings(Matrix<T> embeddings)

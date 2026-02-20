@@ -2,6 +2,7 @@ using System.IO;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
+using AiDotNet.Helpers;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Tokenization.Interfaces;
@@ -436,54 +437,51 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
     {
         int numPatches = (_imageSize / _patchSize) * (_imageSize / _patchSize);
 
-        // Vision encoder: Patch embedding + Transformer
-        _patchEmbedding = new PatchEmbeddingLayer<T>(_imageSize, _imageSize, 3, _patchSize, _hiddenDim);
+        Layers.Clear();
+
+        if (Architecture.Layers != null && Architecture.Layers.Count > 0)
+        {
+            Layers.AddRange(Architecture.Layers);
+        }
+        else
+        {
+            Layers.AddRange(LayerHelper<T>.CreateBlipLayers(
+                _imageSize, _patchSize, _hiddenDim, _embeddingDimension,
+                _numLayers, _numDecoderLayers, _numHeads, _mlpDim, _vocabularySize));
+        }
+
+        // Distribute layers to internal fields
+        int idx = 0;
+
+        // Vision encoder: PatchEmbed + numLayers × TransformerEncoder + projection
+        _patchEmbedding = Layers[idx++];
+        _visionEncoderLayers.Clear();
         _visionEncoderLayers.Add(_patchEmbedding);
-
-        // Vision transformer encoder layers
         for (int i = 0; i < _numLayers; i++)
-        {
-            _visionEncoderLayers.Add(new TransformerEncoderLayer<T>(
-                _hiddenDim, _numHeads, _mlpDim));
-        }
+            _visionEncoderLayers.Add(Layers[idx++]);
+        _visionEncoderLayers.Add(Layers[idx++]); // vision projection
 
-        // Vision projection to embedding space
-        _visionEncoderLayers.Add(new DenseLayer<T>(_hiddenDim, _embeddingDimension, (IActivationFunction<T>?)null));
-
-        // Text encoder: Embedding + Transformer
-        _textTokenEmbedding = new EmbeddingLayer<T>(_vocabularySize, _hiddenDim);
+        // Text encoder: EmbeddingLayer + numLayers × TransformerEncoder + projection
+        _textTokenEmbedding = Layers[idx++];
+        _textEncoderLayers.Clear();
         _textEncoderLayers.Add(_textTokenEmbedding);
-
-        // Text transformer encoder layers
         for (int i = 0; i < _numLayers; i++)
-        {
-            _textEncoderLayers.Add(new TransformerEncoderLayer<T>(
-                _hiddenDim, _numHeads, _mlpDim));
-        }
+            _textEncoderLayers.Add(Layers[idx++]);
+        _textEncoderLayers.Add(Layers[idx++]); // text projection
 
-        // Text projection to embedding space
-        _textEncoderLayers.Add(new DenseLayer<T>(_hiddenDim, _embeddingDimension, (IActivationFunction<T>?)null));
-
-        // Text decoder layers (for caption generation)
+        // Text decoder layers
+        _textDecoderLayers.Clear();
         for (int i = 0; i < _numDecoderLayers; i++)
-        {
-            // Decoder uses masked self-attention + cross-attention
-            _textDecoderLayers.Add(new TransformerEncoderLayer<T>(
-                _hiddenDim, _numHeads, _mlpDim));
-        }
+            _textDecoderLayers.Add(Layers[idx++]);
 
-        // Cross-attention layers for ITM
+        // Cross-attention layers (6)
+        _crossAttentionLayers.Clear();
         for (int i = 0; i < 6; i++)
-        {
-            _crossAttentionLayers.Add(new TransformerEncoderLayer<T>(
-                _hiddenDim, _numHeads, _mlpDim));
-        }
+            _crossAttentionLayers.Add(Layers[idx++]);
 
-        // ITM head: binary classification
-        _itmHead = new DenseLayer<T>(_hiddenDim, 2, (IActivationFunction<T>?)null);
-
-        // LM head: project hidden states to vocabulary logits for caption generation
-        _lmHead = new DenseLayer<T>(_hiddenDim, _vocabularySize, (IActivationFunction<T>?)null);
+        // ITM head + LM head
+        _itmHead = Layers[idx++];
+        _lmHead = Layers[idx++];
 
         // Initialize learnable tokens
         _visionClsToken = Matrix<T>.CreateDefault(1, _hiddenDim, NumOps.Zero);
