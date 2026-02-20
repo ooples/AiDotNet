@@ -205,6 +205,8 @@ public class STTN<T> : VideoInpaintingBase<T>
         int c = frames.Shape[1];
         int h = frames.Shape[2];
         int w = frames.Shape[3];
+        if (masks.Shape[1] != 1)
+            throw new ArgumentException($"Masks must have exactly 1 channel, got {masks.Shape[1]}.", nameof(masks));
         if (masks.Shape[0] != n || masks.Shape[2] != h || masks.Shape[3] != w)
             throw new ArgumentException($"Masks spatial dimensions must match frames. Frames: [{n},{c},{h},{w}], Masks: [{masks.Shape[0]},{masks.Shape[1]},{masks.Shape[2]},{masks.Shape[3]}].", nameof(masks));
         var combined = new Tensor<T>([n, c + 1, h, w]);

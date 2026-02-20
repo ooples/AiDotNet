@@ -101,6 +101,14 @@ public class MemFlow<T> : OpticalFlowBase<T>
     /// <inheritdoc/>
     public override Tensor<T> EstimateFlow(Tensor<T> frame0, Tensor<T> frame1)
     {
+        if (frame0.Rank < 3)
+            throw new ArgumentException($"frame0 must be at least rank 3 [C,H,W], got rank {frame0.Rank}.", nameof(frame0));
+        if (frame1.Rank < 3)
+            throw new ArgumentException($"frame1 must be at least rank 3 [C,H,W], got rank {frame1.Rank}.", nameof(frame1));
+        if (frame0.Shape[0] != frame1.Shape[0] || frame0.Shape[1] != frame1.Shape[1] || frame0.Shape[2] != frame1.Shape[2])
+            throw new ArgumentException(
+                $"Frame shapes must match. frame0: [{string.Join(",", frame0.Shape)}], frame1: [{string.Join(",", frame1.Shape)}].",
+                nameof(frame1));
         int height = frame0.Shape[1];
         int width = frame0.Shape[2];
 
@@ -132,10 +140,17 @@ public class MemFlow<T> : OpticalFlowBase<T>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         var output = Predict(input);
-        if (output.Length != expectedOutput.Length)
+        if (output.Rank != expectedOutput.Rank)
             throw new ArgumentException(
-                $"Expected output length {expectedOutput.Length} does not match model output length {output.Length}.",
+                $"Expected output rank {expectedOutput.Rank} does not match model output rank {output.Rank}.",
                 nameof(expectedOutput));
+        for (int d = 0; d < output.Rank; d++)
+        {
+            if (output.Shape[d] != expectedOutput.Shape[d])
+                throw new ArgumentException(
+                    $"Shape mismatch at dimension {d}: model output [{string.Join(",", output.Shape)}] vs expected [{string.Join(",", expectedOutput.Shape)}].",
+                    nameof(expectedOutput));
+        }
         var gradient = new Tensor<T>(output.Shape);
         for (int i = 0; i < output.Length; i++)
         {
@@ -218,6 +233,8 @@ public class MemFlow<T> : OpticalFlowBase<T>
     {
         _numFeatures = reader.ReadInt32();
         _numLayers = reader.ReadInt32();
+        _processingBlocks.Clear();
+        InitializeNativeLayers(Architecture);
     }
 
     /// <inheritdoc/>

@@ -101,6 +101,14 @@ public class FlowFormerPlusPlus<T> : OpticalFlowBase<T>
     /// <inheritdoc/>
     public override Tensor<T> EstimateFlow(Tensor<T> frame0, Tensor<T> frame1)
     {
+        if (frame0.Rank < 3)
+            throw new ArgumentException($"frame0 must be at least rank 3 [C,H,W], got rank {frame0.Rank}.", nameof(frame0));
+        if (frame1.Rank < 3)
+            throw new ArgumentException($"frame1 must be at least rank 3 [C,H,W], got rank {frame1.Rank}.", nameof(frame1));
+        if (frame0.Shape[0] != frame1.Shape[0] || frame0.Shape[1] != frame1.Shape[1] || frame0.Shape[2] != frame1.Shape[2])
+            throw new ArgumentException(
+                $"Frame shapes must match. frame0: [{string.Join(",", frame0.Shape)}], frame1: [{string.Join(",", frame1.Shape)}].",
+                nameof(frame1));
         int height = frame0.Shape[1];
         int width = frame0.Shape[2];
 
@@ -195,7 +203,7 @@ public class FlowFormerPlusPlus<T> : OpticalFlowBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
+            ModelType = ModelType.OpticalFlow,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ModelName", "FlowFormerPlusPlus" },

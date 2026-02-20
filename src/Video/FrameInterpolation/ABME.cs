@@ -99,7 +99,23 @@ public class ABME<T> : FrameInterpolationBase<T>
         var f1 = PreprocessFrames(frame1);
         var concat = ConcatenateFeatures(f0, f1);
         var output = IsOnnxMode ? RunOnnxInference(concat) : Forward(concat);
-        return PostprocessOutput(output);
+        var result = PostprocessOutput(output);
+
+        // Apply timestep for arbitrary-time interpolation (model predicts midpoint frame)
+        if (Math.Abs(t - 0.5) > 1e-6)
+        {
+            var boundary = t < 0.5 ? frame0 : frame1;
+            double alpha = t < 0.5 ? 2.0 * t : 2.0 * (1.0 - t);
+            var a = NumOps.FromDouble(alpha);
+            var oneMinusA = NumOps.FromDouble(1.0 - alpha);
+            int len = Math.Min(result.Length, boundary.Length);
+            for (int i = 0; i < len; i++)
+                result.Data.Span[i] = NumOps.Add(
+                    NumOps.Multiply(a, result.Data.Span[i]),
+                    NumOps.Multiply(oneMinusA, boundary.Data.Span[i]));
+        }
+
+        return result;
     }
 
     #endregion

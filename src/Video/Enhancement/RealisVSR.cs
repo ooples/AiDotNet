@@ -209,6 +209,8 @@ public class RealisVSR<T> : VideoSuperResolutionBase<T>
         }
         else if (_useNativeMode)
         {
+            OnnxModel?.Dispose();
+            OnnxModel = null;
             Layers.Clear();
             InitializeLayers();
         }

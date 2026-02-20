@@ -133,6 +133,7 @@ public class GIMMVFI<T> : FrameInterpolationBase<T>
 
     public override void Train(Tensor<T> input, Tensor<T> expected)
     {
+        ThrowIfDisposed();
         if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
         SetTrainingMode(true);
         try

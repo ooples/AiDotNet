@@ -60,6 +60,10 @@ public class FlashVSR<T> : VideoSuperResolutionBase<T>
     public FlashVSR(NeuralNetworkArchitecture<T> architecture, string modelPath, FlashVSROptions? options = null)
         : base(architecture)
     {
+        if (string.IsNullOrWhiteSpace(modelPath))
+            throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
+        if (!File.Exists(modelPath))
+            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
         _options = options ?? new FlashVSROptions();
         _useNativeMode = false;
         ScaleFactor = _options.ScaleFactor;
@@ -206,10 +210,16 @@ public class FlashVSR<T> : VideoSuperResolutionBase<T>
         _options.NumDecoderBlocks = r.ReadInt32();
         _options.DropoutRate = r.ReadDouble();
         ScaleFactor = _options.ScaleFactor;
+        NumFrames = _options.NumInputFrames;
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
+        {
+            OnnxModel?.Dispose();
             OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
+        }
         else if (_useNativeMode)
         {
+            OnnxModel?.Dispose();
+            OnnxModel = null;
             Layers.Clear();
             InitializeLayers();
         }

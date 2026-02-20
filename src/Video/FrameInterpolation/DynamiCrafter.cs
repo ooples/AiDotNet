@@ -211,9 +211,14 @@ public class DynamiCrafter<T> : FrameInterpolationBase<T>
         _options.GuidanceScale = r.ReadDouble();
         _options.DropoutRate = r.ReadDouble();
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
+        {
+            OnnxModel?.Dispose();
             OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
+        }
         else if (_useNativeMode)
         {
+            OnnxModel?.Dispose();
+            OnnxModel = null;
             Layers.Clear();
             InitializeLayers();
         }

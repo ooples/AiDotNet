@@ -149,11 +149,15 @@ public class ToonCrafter<T> : FrameInterpolationBase<T>
     /// <inheritdoc/>
     public override void UpdateParameters(Vector<T> parameters)
     {
+        int required = Layers.Sum(l => l.ParameterCount);
+        if (parameters.Length < required)
+            throw new ArgumentException(
+                $"Parameter vector length {parameters.Length} is less than required {required}.",
+                nameof(parameters));
         int offset = 0;
         foreach (var layer in Layers)
         {
             var p = layer.GetParameters();
-            if (offset + p.Length > parameters.Length) break;
             var sub = new Vector<T>(p.Length);
             for (int i = 0; i < p.Length; i++) sub[i] = parameters[offset + i];
             layer.SetParameters(sub);

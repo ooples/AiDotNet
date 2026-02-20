@@ -63,6 +63,10 @@ public class DualXVSR<T> : VideoSuperResolutionBase<T>
     public DualXVSR(NeuralNetworkArchitecture<T> architecture, string modelPath, DualXVSROptions? options = null)
         : base(architecture)
     {
+        if (string.IsNullOrWhiteSpace(modelPath))
+            throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
+        if (!File.Exists(modelPath))
+            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
         _options = options ?? new DualXVSROptions();
         _useNativeMode = false;
         ScaleFactor = _options.ScaleFactor;
