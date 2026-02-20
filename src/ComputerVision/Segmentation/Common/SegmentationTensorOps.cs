@@ -299,6 +299,9 @@ public static class SegmentationTensorOps
     /// </summary>
     public static Tensor<T> BoxMask<T>(int height, int width, int x1, int y1, int x2, int y2)
     {
+        if (height <= 0) throw new ArgumentOutOfRangeException(nameof(height), "height must be positive.");
+        if (width <= 0) throw new ArgumentOutOfRangeException(nameof(width), "width must be positive.");
+
         var numOps = MathHelper.GetNumericOperations<T>();
         var result = new Tensor<T>([height, width]);
         var one = numOps.FromDouble(1.0);
@@ -362,6 +365,8 @@ public static class SegmentationTensorOps
     /// </summary>
     public static double[] TextToWeights(string text, int numChannels)
     {
+        if (numChannels <= 0) throw new ArgumentOutOfRangeException(nameof(numChannels), "numChannels must be positive.");
+
         var weights = new double[numChannels];
         if (string.IsNullOrEmpty(text)) return weights;
 

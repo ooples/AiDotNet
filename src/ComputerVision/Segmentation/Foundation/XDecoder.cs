@@ -268,6 +268,9 @@ public class XDecoder<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
 
     private Tensor<T> Forward(Tensor<T> input)
     {
+        if (input.Rank != 3 && input.Rank != 4)
+            throw new ArgumentException("Input must be rank 3 [C,H,W] or rank 4 [N,C,H,W].", nameof(input));
+
         bool hasBatch = input.Rank == 4;
         if (!hasBatch) input = AddBatchDimension(input);
         var features = input;
