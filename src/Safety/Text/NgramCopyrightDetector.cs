@@ -37,8 +37,12 @@ public class NgramCopyrightDetector<T> : TextSafetyModuleBase<T>
 {
     private readonly double _threshold;
     private readonly int _minNgramLength;
+    private readonly string[] _sourceNames;
     private readonly HashSet<string>[] _copyrightedNgrams; // Indexed by n-gram length
-    private const int NgramOverlapAdjustment = 3; // N consecutive 4-gram matches span N+3 words (3-word overlap)
+
+    // N consecutive 4-gram matches span (N + 3) words because each 4-gram overlaps
+    // the next by 3 words: [w1 w2 w3 w4], [w2 w3 w4 w5], ... → N matches = N+3 words.
+    private const int NgramOverlapAdjustment = 3;
 
     /// <inheritdoc />
     public override string ModuleName => "NgramCopyrightDetector";
@@ -62,8 +66,11 @@ public class NgramCopyrightDetector<T> : TextSafetyModuleBase<T>
         double threshold = 0.3,
         int minNgramLength = 5)
     {
+        if (threshold < 0 || threshold > 1)
+            throw new ArgumentOutOfRangeException(nameof(threshold), threshold, "Threshold must be in [0, 1].");
         _threshold = threshold;
         _minNgramLength = minNgramLength;
+        _sourceNames = sourceNames ?? Array.Empty<string>();
         // Build n-gram indices from copyrighted texts
         var texts = copyrightedTexts ?? Array.Empty<string>();
         _copyrightedNgrams = new HashSet<string>[3]; // For n=4,5,6
@@ -113,6 +120,8 @@ public class NgramCopyrightDetector<T> : TextSafetyModuleBase<T>
             int ngramIdx = n - 4;
             int matches = 0;
             int ngrams = 0;
+            int consecutiveRun = 0;
+            int runStartIdx = 0;
 
             for (int i = 0; i <= words.Length - n; i++)
             {
@@ -121,11 +130,19 @@ public class NgramCopyrightDetector<T> : TextSafetyModuleBase<T>
                 if (_copyrightedNgrams[ngramIdx].Contains(ngram))
                 {
                     matches++;
-                    if (n > longestMatch)
+                    if (consecutiveRun == 0) runStartIdx = i;
+                    consecutiveRun++;
+                    // Consecutive n-gram matches span (consecutiveRun + n - 1) words
+                    int spanWords = consecutiveRun + n - 1;
+                    if (spanWords > longestMatch)
                     {
-                        longestMatch = n;
-                        longestMatchText = ngram;
+                        longestMatch = spanWords;
+                        longestMatchText = string.Join(" ", words, runStartIdx, spanWords);
                     }
+                }
+                else
+                {
+                    consecutiveRun = 0;
                 }
             }
 

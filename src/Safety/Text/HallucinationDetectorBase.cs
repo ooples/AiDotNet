@@ -18,12 +18,16 @@ namespace AiDotNet.Safety.Text;
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 public abstract class HallucinationDetectorBase<T> : TextSafetyModuleBase<T>, IHallucinationDetector<T>
 {
+    private const int TruncationThreshold = 80;
+
     /// <inheritdoc />
     public abstract double GetHallucinationScore(string text);
 
     /// <inheritdoc />
     public virtual IReadOnlyList<SafetyFinding> EvaluateAgainstReference(string generatedText, string referenceText)
     {
+        if (string.IsNullOrWhiteSpace(generatedText))
+            throw new ArgumentException("Generated text cannot be null or empty.", nameof(generatedText));
         if (string.IsNullOrWhiteSpace(referenceText))
         {
             // No reference available — fall back to standard evaluation
@@ -38,7 +42,8 @@ public abstract class HallucinationDetectorBase<T> : TextSafetyModuleBase<T>, IH
 
         foreach (string claim in claims)
         {
-            if (claim.Length < 10) continue; // Skip very short fragments
+            const int MinClaimLength = 10;
+            if (claim.Length < MinClaimLength) continue; // Skip very short fragments
 
             // Simple reference check: if the claim text doesn't appear in the reference,
             // it may be hallucinated. Subclasses should override with semantic matching.
@@ -49,14 +54,16 @@ public abstract class HallucinationDetectorBase<T> : TextSafetyModuleBase<T>, IH
                     Category = SafetyCategory.Hallucination,
                     Severity = SafetySeverity.Medium,
                     Confidence = 0.5,
-                    Description = $"Claim not found in reference text: \"{(claim.Length > 80 ? claim[..80] + "..." : claim)}\"",
+                    Description = $"Claim not found in reference text: \"{(claim.Length > TruncationThreshold ? claim[..TruncationThreshold] + "..." : claim)}\"",
                     RecommendedAction = SafetyAction.Warn,
                     SourceModule = ModuleName
                 });
             }
         }
 
-        return findings.Count > 0 ? findings : EvaluateText(generatedText);
+        // If no unsupported claims were found via reference check, report that explicitly
+        // rather than falling back to heuristic evaluation which may produce false positives
+        return findings;
     }
 
     /// <summary>

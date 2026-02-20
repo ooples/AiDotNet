@@ -9,8 +9,8 @@ namespace AiDotNet.Safety.Image;
 /// <remarks>
 /// <para>
 /// Provides shared infrastructure for image safety classifiers including threshold
-/// configuration and common image feature extraction utilities. Concrete implementations
-/// provide the actual classification algorithm (CLIP, ViT, scene graph, ensemble).
+/// configuration. Concrete implementations provide the actual classification
+/// algorithm (CLIP, ViT, scene graph, ensemble).
 /// </para>
 /// <para>
 /// <b>For Beginners:</b> This base class provides common code for all image safety

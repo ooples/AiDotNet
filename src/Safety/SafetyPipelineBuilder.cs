@@ -66,6 +66,7 @@ public class SafetyPipelineBuilder<T>
     /// <returns>This builder for fluent chaining.</returns>
     public SafetyPipelineBuilder<T> AddModule(ISafetyModule<T> module)
     {
+        if (module is null) throw new ArgumentNullException(nameof(module));
         _modules.Add(module);
         return this;
     }
@@ -77,6 +78,7 @@ public class SafetyPipelineBuilder<T>
     /// <returns>This builder for fluent chaining.</returns>
     public SafetyPipelineBuilder<T> AddModules(IEnumerable<ISafetyModule<T>> modules)
     {
+        if (modules is null) throw new ArgumentNullException(nameof(modules));
         _modules.AddRange(modules);
         return this;
     }
@@ -88,6 +90,7 @@ public class SafetyPipelineBuilder<T>
     /// <returns>This builder for fluent chaining.</returns>
     public SafetyPipelineBuilder<T> AddTextModule(ITextSafetyModule<T> module)
     {
+        if (module is null) throw new ArgumentNullException(nameof(module));
         _modules.Add(module);
         return this;
     }
@@ -99,6 +102,7 @@ public class SafetyPipelineBuilder<T>
     /// <returns>This builder for fluent chaining.</returns>
     public SafetyPipelineBuilder<T> AddImageModule(IImageSafetyModule<T> module)
     {
+        if (module is null) throw new ArgumentNullException(nameof(module));
         _modules.Add(module);
         return this;
     }
@@ -110,6 +114,7 @@ public class SafetyPipelineBuilder<T>
     /// <returns>This builder for fluent chaining.</returns>
     public SafetyPipelineBuilder<T> AddAudioModule(IAudioSafetyModule<T> module)
     {
+        if (module is null) throw new ArgumentNullException(nameof(module));
         _modules.Add(module);
         return this;
     }
@@ -121,6 +126,7 @@ public class SafetyPipelineBuilder<T>
     /// <returns>This builder for fluent chaining.</returns>
     public SafetyPipelineBuilder<T> AddVideoModule(IVideoSafetyModule<T> module)
     {
+        if (module is null) throw new ArgumentNullException(nameof(module));
         _modules.Add(module);
         return this;
     }

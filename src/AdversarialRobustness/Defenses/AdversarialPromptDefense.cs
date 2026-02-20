@@ -248,6 +248,9 @@ public class AdversarialPromptDefense<T, TInput, TOutput> : IAdversarialDefense<
         _options = state?.Options ?? new AdversarialDefenseOptions<T>();
         if (state?.PromptData != null)
         {
+            if (state.PromptData.Length != _promptLength)
+                throw new InvalidOperationException(
+                    $"Serialized prompt length ({state.PromptData.Length}) does not match expected prompt length ({_promptLength}).");
             var promptData = new T[state.PromptData.Length];
             for (int i = 0; i < state.PromptData.Length; i++)
                 promptData[i] = NumOps.FromDouble(state.PromptData[i]);
@@ -274,10 +277,22 @@ public class AdversarialPromptDefense<T, TInput, TOutput> : IAdversarialDefense<
     }
 
     /// <inheritdoc/>
-    public void SaveModel(string filePath) => File.WriteAllBytes(filePath, Serialize());
+    public void SaveModel(string filePath)
+    {
+        if (string.IsNullOrWhiteSpace(filePath))
+            throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
+        File.WriteAllBytes(filePath, Serialize());
+    }
 
     /// <inheritdoc/>
-    public void LoadModel(string filePath) => Deserialize(File.ReadAllBytes(filePath));
+    public void LoadModel(string filePath)
+    {
+        if (string.IsNullOrWhiteSpace(filePath))
+            throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
+        if (!File.Exists(filePath))
+            throw new FileNotFoundException($"Model file not found: {filePath}", filePath);
+        Deserialize(File.ReadAllBytes(filePath));
+    }
 
     private TInput ApplyPromptToInput(TInput input)
     {

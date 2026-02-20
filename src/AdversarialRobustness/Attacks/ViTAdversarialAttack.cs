@@ -106,7 +106,7 @@ public class ViTAdversarialAttack<T, TInput, TOutput> : AdversarialAttackBase<T,
 
         // Compute number of patches
         int patchElements = _patchSize * _patchSize;
-        int numPatches = length / patchElements;
+        int numPatches = (length + patchElements - 1) / patchElements; // Ceiling division to include trailing elements
         if (numPatches < 1) numPatches = 1;
 
         // Estimate patch importance using gradient-free saliency

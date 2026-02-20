@@ -71,6 +71,9 @@ public class EqualizedOddsChecker<T> : ITextSafetyModule<T>
     /// <param name="disparityThreshold">Maximum allowed quality disparity between groups (0-1). Default: 0.3.</param>
     public EqualizedOddsChecker(double disparityThreshold = 0.3)
     {
+        if (disparityThreshold < 0 || disparityThreshold > 1)
+            throw new ArgumentOutOfRangeException(nameof(disparityThreshold), disparityThreshold,
+                "Disparity threshold must be in [0, 1].");
         _disparityThreshold = disparityThreshold;
     }
 
@@ -128,7 +131,10 @@ public class EqualizedOddsChecker<T> : ITextSafetyModule<T>
     /// <inheritdoc />
     public IReadOnlyList<SafetyFinding> Evaluate(Vector<T> content)
     {
-        return Array.Empty<SafetyFinding>();
+        // Equalized odds checking is text-based (analyzes language patterns for bias).
+        // Vector inputs do not contain the textual structure needed for group term analysis.
+        throw new NotSupportedException(
+            "EqualizedOddsChecker requires text input. Use EvaluateText(string) instead.");
     }
 
     private static GroupQualityMetrics ComputeGroupQualityMetrics(string[] words, string[] groupTerms)
@@ -141,7 +147,7 @@ public class EqualizedOddsChecker<T> : ITextSafetyModule<T>
             bool isGroupTerm = false;
             foreach (string term in groupTerms)
             {
-                if (words[i] == term || words[i].Contains(term))
+                if (words[i] == term)
                 {
                     isGroupTerm = true;
                     break;

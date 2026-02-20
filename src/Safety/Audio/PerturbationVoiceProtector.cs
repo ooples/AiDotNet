@@ -49,6 +49,9 @@ public class PerturbationVoiceProtector<T> : AudioSafetyModuleBase<T>
     public PerturbationVoiceProtector(double perturbationStrength = 0.02, int sampleRate = 16000)
         : base(sampleRate)
     {
+        if (perturbationStrength <= 0 || perturbationStrength > 1)
+            throw new ArgumentOutOfRangeException(nameof(perturbationStrength), perturbationStrength,
+                "Perturbation strength must be in (0, 1].");
         _perturbationStrength = NumOps.FromDouble(perturbationStrength);
         _fft = new FastFourierTransform<T>();
     }
@@ -204,6 +207,10 @@ public class PerturbationVoiceProtector<T> : AudioSafetyModuleBase<T>
         return Math.Min(1.0, Math.Max(0, (meanAnomaly - 0.3) * 3));
     }
 
+    /// <summary>
+    /// Integer hash using MurmurHash3 finalizer for deterministic pseudo-random perturbation.
+    /// The 0x7FFFFFFF mask ensures a non-negative result.
+    /// </summary>
     private static int HashInt(int x)
     {
         unchecked

@@ -162,21 +162,17 @@ public class GuardrailRule
     private bool EvaluateMaxLength(string text)
     {
         if (Patterns.Length == 0) return false;
-        if (int.TryParse(Patterns[0], out int maxLength))
-        {
-            return text.Length > maxLength;
-        }
-        return false;
+        if (!int.TryParse(Patterns[0], out int maxLength) || maxLength < 0)
+            throw new ArgumentException($"GuardrailRule '{Name}' requires a non-negative MaxLength pattern.");
+        return text.Length > maxLength;
     }
 
     private bool EvaluateMinLength(string text)
     {
         if (Patterns.Length == 0) return false;
-        if (int.TryParse(Patterns[0], out int minLength))
-        {
-            return text.Length < minLength;
-        }
-        return false;
+        if (!int.TryParse(Patterns[0], out int minLength) || minLength < 0)
+            throw new ArgumentException($"GuardrailRule '{Name}' requires a non-negative MinLength pattern.");
+        return text.Length < minLength;
     }
 
     private bool EvaluateCustom(string text)
