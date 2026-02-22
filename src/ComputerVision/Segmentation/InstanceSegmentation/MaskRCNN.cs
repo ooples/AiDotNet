@@ -165,7 +165,7 @@ public class MaskRCNN<T> : InstanceSegmenterBase<T>
             // Objectness is [B, N, 2]: index 1 = foreground score
             double score = objectness.Rank == 3
                 ? NumOps.ToDouble(objectness[0, i, 1])
-                : NumOps.ToDouble(objectness[i * 2 + 1]);
+                : NumOps.ToDouble(objectness[i * 2 + 1]); // Flat [bg, fg, bg, fg, ...] layout
 
             if (score > 0.3) // Pre-NMS threshold
             {

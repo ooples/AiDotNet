@@ -549,7 +549,7 @@ public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
             if (layers.Count > 0 && layers[0] is EmbeddingLayer<T> emb)
             {
                 _embedding = emb;
-                layers = layers.Skip(1).ToList();
+                layers.RemoveAt(0);
             }
         }
         else

@@ -326,7 +326,7 @@ public class SileroVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDetector<T>
             throw new ArgumentException(
                 $"Layer list must have at least {expectedCount} layers " +
                 $"(3 conv + {_numLstmLayers} LSTM + 1 output), but got {layers.Count}.",
-                nameof(Architecture));
+                "Architecture.Layers");
         }
 
         for (int i = 0; i < 3; i++)

@@ -62,6 +62,12 @@ public class VITSModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
 
+    /// <summary>Default phoneme vocabulary size for character-level models.</summary>
+    private const int DefaultPhonemeVocabSize = 128;
+
+    /// <summary>Default HiFi-GAN upsample rates producing 256x upsampling (8*8*2*2).</summary>
+    private static readonly int[] DefaultUpsampleRates = [8, 8, 2, 2];
+
     #region Execution Mode
 
     /// <summary>
@@ -330,8 +336,8 @@ public class VITSModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         _speakerEmbeddingDim = 256;
         _numSpeakers = 1;
         _maxPhonemeLength = 256;
-        _phonemeVocabSize = 128;
-        _upsampleRates = [8, 8, 2, 2];
+        _phonemeVocabSize = DefaultPhonemeVocabSize;
+        _upsampleRates = (int[])DefaultUpsampleRates.Clone();
 
         // Initialize preprocessor
         _preprocessor = new TtsPreprocessor();
@@ -450,14 +456,11 @@ public class VITSModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         _maxPhonemeLength = maxPhonemeLength;
         Guard.Positive(phonemeVocabSize);
         _phonemeVocabSize = phonemeVocabSize;
-        var rates = (upsampleRates ?? [8, 8, 2, 2]).ToArray();
+        var rates = (upsampleRates ?? DefaultUpsampleRates).ToArray();
         if (rates.Length == 0)
             throw new ArgumentException("Upsample rates must not be empty.", nameof(upsampleRates));
-        foreach (var rate in rates)
-        {
-            if (rate <= 0)
-                throw new ArgumentException("All upsample rates must be positive.", nameof(upsampleRates));
-        }
+        if (rates.Any(r => r <= 0))
+            throw new ArgumentException("All upsample rates must be positive.", nameof(upsampleRates));
         _upsampleRates = rates;
         _fftSize = fftSize;
         _hopLength = hopLength;
