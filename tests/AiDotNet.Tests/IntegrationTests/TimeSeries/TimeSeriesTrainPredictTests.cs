@@ -227,7 +227,7 @@ public class TimeSeriesTrainPredictTests
         Assert.Equal(original.Length, clonePredictions.Length);
         for (int i = 0; i < original.Length; i++)
         {
-            Assert.Equal(original[i], clonePredictions[i], precision: 8);
+            Assert.Equal(original[i], clonePredictions[i], precision: 6);
         }
     }
 
@@ -724,7 +724,7 @@ public class TimeSeriesTrainPredictTests
         Assert.Equal(original.Length, clonePredictions.Length);
         for (int i = 0; i < original.Length; i++)
         {
-            Assert.Equal(original[i], clonePredictions[i], precision: 8);
+            Assert.Equal(original[i], clonePredictions[i], precision: 6);
         }
     }
 

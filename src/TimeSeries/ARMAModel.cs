@@ -854,10 +854,6 @@ public class ARMAModel<T> : TimeSeriesModelBase<T>
         // Store training series for in-sample predictions
         _trainedSeries = y;
 
-        // Initialize coefficients
-        _arCoefficients = new Vector<T>(_arOrder);
-        _maCoefficients = new Vector<T>(_maOrder);
-
         int startIdx = Math.Max(_arOrder, _maOrder);
         if (y.Length <= startIdx)
         {
@@ -865,6 +861,10 @@ public class ARMAModel<T> : TimeSeriesModelBase<T>
                 $"Time series length ({y.Length}) must be greater than max(AROrder, MAOrder) = {startIdx}.",
                 nameof(y));
         }
+
+        // Initialize coefficients (after validation to avoid unnecessary allocations)
+        _arCoefficients = new Vector<T>(_arOrder);
+        _maCoefficients = new Vector<T>(_maOrder);
 
         int nSamples = y.Length - startIdx;
 

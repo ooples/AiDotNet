@@ -206,12 +206,15 @@ public class StateSpaceModel<T> : TimeSeriesModelBase<T>
         var smoothedCovariances = new List<Matrix<T>>(filteredCovariances);
 
         // The last smoothed state/covariance equals the last filtered state/covariance
+        // Cache F^T to avoid recomputing per iteration
+        var fTranspose = _transitionMatrix.Transpose();
         for (int t = n - 2; t >= 0; t--)
         {
             // Rauch-Tung-Striebel smoother gain: L_t = P_t|t * F^T * (P_{t+1|t})^(-1)
+            var predictedCovInverse = predictedCovariances[t + 1].Inverse();
             var smoothingGain = filteredCovariances[t]
-                .Multiply(_transitionMatrix.Transpose())
-                .Multiply(predictedCovariances[t + 1].Inverse());
+                .Multiply(fTranspose)
+                .Multiply(predictedCovInverse);
 
             // Smoothed state: x_t|T = x_t|t + L_t * (x_{t+1|T} - x_{t+1|t})
             smoothedStates[t] = filteredStates[t].Add(
@@ -550,7 +553,7 @@ public class StateSpaceModel<T> : TimeSeriesModelBase<T>
                 {
                     lastState[i] = NumOps.FromDouble(reader.ReadDouble());
                 }
-                // Store just the last state — sufficient for out-of-sample prediction
+                // Store last state for deserialization; in-sample predictions use full smoothed states list
                 _smoothedStates.Add(lastState);
             }
         }
