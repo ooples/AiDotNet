@@ -4,8 +4,36 @@ using AiDotNet.Onnx;
 namespace AiDotNet.SpeechRecognition.Foundation;
 
 /// <summary>Options for UniSpeech: unified pre-training for speech representation learning.</summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> These options configure the UniSpeech model. Default values follow the original paper's recommended settings for optimal speech recognition accuracy.</para>
+/// </remarks>
 public class UniSpeechOptions : ModelOptions
 {
+    /// <summary>Initializes a new instance with default values.</summary>
+    public UniSpeechOptions() { }
+
+    /// <summary>Initializes a new instance by copying from another instance.</summary>
+    /// <param name="other">The options instance to copy from.</param>
+    /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
+    public UniSpeechOptions(UniSpeechOptions other)
+    {
+        if (other == null)
+            throw new ArgumentNullException(nameof(other));
+
+        SampleRate = other.SampleRate;
+        MaxAudioLengthSeconds = other.MaxAudioLengthSeconds;
+        EncoderDim = other.EncoderDim;
+        NumEncoderLayers = other.NumEncoderLayers;
+        NumAttentionHeads = other.NumAttentionHeads;
+        NumMels = other.NumMels;
+        VocabSize = other.VocabSize;
+        MaxTextLength = other.MaxTextLength;
+        ModelPath = other.ModelPath;
+        OnnxOptions = other.OnnxOptions;
+        DropoutRate = other.DropoutRate;
+        Language = other.Language;
+    }
+
     public int SampleRate { get; set; } = 16000;
     public int MaxAudioLengthSeconds { get; set; } = 30;
     public int EncoderDim { get; set; } = 768;

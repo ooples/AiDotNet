@@ -16,6 +16,7 @@ namespace AiDotNet.SpeechRecognition.NeMo;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Model: "Parakeet" (NVIDIA NeMo, 2024)</item></list></para>
+/// <para><b>For Beginners:</b> Parakeet-CTC is NVIDIA's state-of-the-art English ASR model built on the NeMo framework. It uses a 24-layer Fast Conformer encoder (optimized Conformer with multi-scale convolutions and 8x subsampling) with a CTC decoder head. Key innovations: Sen...</para>
 /// <para>
 /// Parakeet-CTC is NVIDIA's state-of-the-art English ASR model built on the NeMo framework.
 /// It uses a 24-layer Fast Conformer encoder (optimized Conformer with multi-scale convolutions

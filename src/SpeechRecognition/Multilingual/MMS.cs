@@ -16,6 +16,7 @@ namespace AiDotNet.SpeechRecognition.Multilingual;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Scaling Speech Technology to 1,000+ Languages" (Pratap et al., Meta, 2023)</item></list></para>
+/// <para><b>For Beginners:</b> MMS (Massively Multilingual Speech) extends wav2vec 2.0 to 1100+ languages using religious text recordings and other multilingual data sources. The model uses a shared Transformer encoder pre-trained on unlabeled speech from 1400+ languages, then ...</para>
 /// <para>
 /// MMS (Massively Multilingual Speech) extends wav2vec 2.0 to 1100+ languages using religious text recordings and other multilingual data sources. The model uses a shared Transformer encoder pre-trained on unlabeled speech from 1400+ languages, then fine-tuned with CTC on labeled data. Language-specific adapter layers enable efficient multi-language support without full model duplication. Achieves strong ASR for many low-resource languages previously unsupported.
 /// </para>

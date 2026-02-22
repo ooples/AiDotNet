@@ -16,6 +16,7 @@ namespace AiDotNet.SpeechRecognition.ProprietaryAPI;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>API: "Speechmatics Real-Time ASR" (Speechmatics, 2024)</item></list></para>
+/// <para><b>For Beginners:</b> Speechmatics provides real-time multilingual ASR optimized for accuracy across diverse audio conditions. The platform uses a proprietary Conformer-based architecture trained on diverse multilingual data. Key features include Global English (a sing...</para>
 /// <para>
 /// Speechmatics provides real-time multilingual ASR optimized for accuracy across diverse audio conditions. The platform uses a proprietary Conformer-based architecture trained on diverse multilingual data. Key features include Global English (a single model for all English accents), real-time and batch processing, custom dictionary for domain terms, and translation. Speechmatics supports 50+ languages with automatic language identification and handles challenging audio conditions including telephony, broadcast, and meetings.
 /// </para>

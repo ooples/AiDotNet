@@ -16,6 +16,7 @@ namespace AiDotNet.SpeechRecognition.Specialized;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "VoxtLM: Unified Decoder-Only Models for Consolidating Speech Recognition/Synthesis and Speech/Text Continuation" (Maiti et al., 2024)</item></list></para>
+/// <para><b>For Beginners:</b> VoxtLM uses a single decoder-only Transformer for both ASR and TTS by representing speech and text as interleaved token sequences. Speech is tokenized using a neural codec (EnCodec) into discrete tokens at multiple quantization levels. The model i...</para>
 /// <para>
 /// VoxtLM uses a single decoder-only Transformer for both ASR and TTS by representing speech and text as interleaved token sequences. Speech is tokenized using a neural codec (EnCodec) into discrete tokens at multiple quantization levels. The model is trained to autoregressively predict the next token whether it's speech or text, unifying recognition and synthesis. For ASR, the model takes speech codec tokens as input and generates text tokens.
 /// </para>

@@ -16,6 +16,7 @@ namespace AiDotNet.SpeechRecognition.ProprietaryAPI;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>API: "Sarvam AI Speech-to-Text" (Sarvam AI, 2024)</item></list></para>
+/// <para><b>For Beginners:</b> Sarvam AI provides speech recognition optimized for Indian languages, covering Hindi, Tamil, Telugu, Kannada, Malayalam, Bengali, Marathi, Gujarati, and other major Indian languages. The models are trained on large-scale Indian speech corpora with...</para>
 /// <para>
 /// Sarvam AI provides speech recognition optimized for Indian languages, covering Hindi, Tamil, Telugu, Kannada, Malayalam, Bengali, Marathi, Gujarati, and other major Indian languages. The models are trained on large-scale Indian speech corpora with coverage of regional accents, code-mixing (Hindi-English, Hinglish), and diverse recording conditions. The system uses a Conformer encoder with language-specific vocabulary and LM rescoring. Sarvam achieves significantly better accuracy on Indian languages than general multilingual ASR systems.
 /// </para>

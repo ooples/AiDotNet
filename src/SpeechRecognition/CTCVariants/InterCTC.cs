@@ -16,6 +16,7 @@ namespace AiDotNet.SpeechRecognition.CTCVariants;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Intermediate Loss Regularization for CTC-based Speech Recognition" (Lee and Watanabe, 2021)</item></list></para>
+/// <para><b>For Beginners:</b> InterCTC applies auxiliary CTC losses at intermediate encoder layers, not just the final layer. Each intermediate CTC head provides gradient signals to lower layers, improving training of deep encoders. The intermediate predictions can also be use...</para>
 /// <para>
 /// InterCTC applies auxiliary CTC losses at intermediate encoder layers, not just the final layer. Each intermediate CTC head provides gradient signals to lower layers, improving training of deep encoders. The intermediate predictions can also be used for self-conditioning: each layer receives the CTC posteriors from the layer below, enabling iterative refinement of predictions through the encoder stack. This consistently improves accuracy for deep Conformer encoders (12+ layers).
 /// </para>

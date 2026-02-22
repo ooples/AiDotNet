@@ -16,6 +16,7 @@ namespace AiDotNet.SpeechRecognition.Specialized;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Domain-Specific Speech Recognition for Medical Dictation" (2024)</item></list></para>
+/// <para><b>For Beginners:</b> Medical ASR is specialized for clinical dictation, pathology reports, and medical conversations. The model is fine-tuned on medical speech corpora covering diverse medical specialties, drug names, procedures, and diagnostic terminology. A medical ...</para>
 /// <para>
 /// Medical ASR is specialized for clinical dictation, pathology reports, and medical conversations. The model is fine-tuned on medical speech corpora covering diverse medical specialties, drug names, procedures, and diagnostic terminology. A medical language model provides domain-specific rescoring to handle complex medical vocabulary. The system supports real-time clinical documentation with HIPAA-compliant processing and achieves significantly lower WER on medical speech than general-purpose ASR models.
 /// </para>

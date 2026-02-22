@@ -16,6 +16,7 @@ namespace AiDotNet.SpeechRecognition.ProprietaryAPI;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>API: "Rev AI" (Rev.com, 2024)</item></list></para>
+/// <para><b>For Beginners:</b> Rev AI provides human-quality automatic transcription trained on Rev.com's millions of hours of human-transcribed audio. The models benefit from Rev's unique position as both a human transcription service and AI company, using human-generated labe...</para>
 /// <para>
 /// Rev AI provides human-quality automatic transcription trained on Rev.com's millions of hours of human-transcribed audio. The models benefit from Rev's unique position as both a human transcription service and AI company, using human-generated labels for training. Features include speaker diarization, custom vocabulary, profanity filtering, and real-time streaming. Rev AI supports multiple languages and achieves near-human accuracy on conversational English through continual training on human-corrected transcriptions.
 /// </para>

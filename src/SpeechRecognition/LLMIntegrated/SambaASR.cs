@@ -16,6 +16,7 @@ namespace AiDotNet.SpeechRecognition.LLMIntegrated;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "An Exploration of State Space Models and Mamba for Speech Recognition" (Miyazaki et al., 2024)</item></list></para>
+/// <para><b>For Beginners:</b> Samba-ASR applies the Mamba selective state-space model architecture to speech recognition. Unlike Transformer-based ASR with quadratic attention complexity, Mamba's linear-time SSM layers process sequences efficiently. The model uses selective sc...</para>
 /// <para>
 /// Samba-ASR applies the Mamba selective state-space model architecture to speech recognition. Unlike Transformer-based ASR with quadratic attention complexity, Mamba's linear-time SSM layers process sequences efficiently. The model uses selective scan mechanisms that dynamically filter speech features based on content, achieving competitive WER with significantly lower computational cost for long-form audio processing.
 /// </para>

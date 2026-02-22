@@ -16,6 +16,7 @@ namespace AiDotNet.SpeechRecognition.Robust;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "ESPnet: End-to-End Speech Processing Toolkit" (Watanabe et al., 2018, updated 2024)</item></list></para>
+/// <para><b>For Beginners:</b> ESPnet provides state-of-the-art end-to-end speech processing models with a focus on reproducibility and benchmarking. ESPnet2 ASR models support Conformer, Branchformer, and E-Branchformer encoders with CTC, attention, and transducer decoders. Th...</para>
 /// <para>
 /// ESPnet provides state-of-the-art end-to-end speech processing models with a focus on reproducibility and benchmarking. ESPnet2 ASR models support Conformer, Branchformer, and E-Branchformer encoders with CTC, attention, and transducer decoders. The toolkit includes joint CTC/attention training, language model shallow fusion, and multi-task learning. ESPnet models consistently achieve top results on standard benchmarks including LibriSpeech, AISHELL, and CommonVoice.
 /// </para>

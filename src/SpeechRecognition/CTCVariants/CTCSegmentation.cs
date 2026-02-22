@@ -16,6 +16,7 @@ namespace AiDotNet.SpeechRecognition.CTCVariants;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "CTC-based Audio Segmentation and Alignment" (Kurzinger et al., 2020)</item></list></para>
+/// <para><b>For Beginners:</b> CTC Segmentation uses CTC posterior probabilities for forced alignment of speech to text. Given pre-computed CTC posteriors and a text transcript, the algorithm finds the optimal alignment between frames and characters using dynamic programming. T...</para>
 /// <para>
 /// CTC Segmentation uses CTC posterior probabilities for forced alignment of speech to text. Given pre-computed CTC posteriors and a text transcript, the algorithm finds the optimal alignment between frames and characters using dynamic programming. This enables precise word and phoneme boundaries without requiring an explicit alignment model. Applications include creating training data from long-form audio, subtitle synchronization, and corpus alignment for TTS training.
 /// </para>

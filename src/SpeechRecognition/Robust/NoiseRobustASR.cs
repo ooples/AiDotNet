@@ -16,6 +16,7 @@ namespace AiDotNet.SpeechRecognition.Robust;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Robust Speech Recognition via Large-Scale Weak Supervision" (Radford et al., OpenAI, 2023)</item></list></para>
+/// <para><b>For Beginners:</b> Noise-Robust ASR addresses speech recognition in challenging acoustic environments using multi-condition training and noise-aware preprocessing. The model is trained on diverse noisy conditions (babble, traffic, music, reverberation) with data aug...</para>
 /// <para>
 /// Noise-Robust ASR addresses speech recognition in challenging acoustic environments using multi-condition training and noise-aware preprocessing. The model is trained on diverse noisy conditions (babble, traffic, music, reverberation) with data augmentation including SpecAugment, speed perturbation, and room impulse response simulation. A noise estimation front-end preprocesses audio before the Conformer encoder, enabling robust transcription even at low SNR levels.
 /// </para>

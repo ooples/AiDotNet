@@ -16,6 +16,7 @@ namespace AiDotNet.SpeechRecognition.Multilingual;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Omnilingual ASR" (Meta, 2024)</item></list></para>
+/// <para><b>For Beginners:</b> Omnilingual ASR builds on MMS with improved pre-training using 500k+ hours of multilingual data and a more efficient adapter mechanism. The model uses a language-agnostic encoder with lightweight language-specific projection heads. It supports sea...</para>
 /// <para>
 /// Omnilingual ASR builds on MMS with improved pre-training using 500k+ hours of multilingual data and a more efficient adapter mechanism. The model uses a language-agnostic encoder with lightweight language-specific projection heads. It supports seamless code-switching between languages within a single utterance, enabled by a shared multilingual vocabulary and joint language-identification CTC auxiliary loss.
 /// </para>

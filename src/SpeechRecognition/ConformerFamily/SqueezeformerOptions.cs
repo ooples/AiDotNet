@@ -13,6 +13,32 @@ namespace AiDotNet.SpeechRecognition.ConformerFamily;
 /// </remarks>
 public class SqueezeformerOptions : ModelOptions
 {
+    /// <summary>Initializes a new instance with default values.</summary>
+    public SqueezeformerOptions() { }
+
+    /// <summary>Initializes a new instance by copying from another instance.</summary>
+    /// <param name="other">The options instance to copy from.</param>
+    /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
+    public SqueezeformerOptions(SqueezeformerOptions other)
+    {
+        if (other == null)
+            throw new ArgumentNullException(nameof(other));
+
+        SampleRate = other.SampleRate;
+        MaxAudioLengthSeconds = other.MaxAudioLengthSeconds;
+        EncoderDim = other.EncoderDim;
+        NumEncoderLayers = other.NumEncoderLayers;
+        NumAttentionHeads = other.NumAttentionHeads;
+        FeedForwardExpansionFactor = other.FeedForwardExpansionFactor;
+        NumMels = other.NumMels;
+        VocabSize = other.VocabSize;
+        ModelPath = other.ModelPath;
+        OnnxOptions = other.OnnxOptions;
+        DropoutRate = other.DropoutRate;
+        Language = other.Language;
+        Vocabulary = other.Vocabulary;
+    }
+
     public int SampleRate { get; set; } = 16000;
     public int MaxAudioLengthSeconds { get; set; } = 30;
     public int EncoderDim { get; set; } = 512;

@@ -16,6 +16,7 @@ namespace AiDotNet.SpeechRecognition.ProprietaryAPI;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>API: "Deepgram Nova-2" (Deepgram, 2024)</item></list></para>
+/// <para><b>For Beginners:</b> Deepgram Nova-2 is an ASR model optimized for speed and accuracy in production deployments. The model achieves sub-300ms latency for streaming transcription while maintaining competitive accuracy. Nova-2 uses a proprietary end-to-end architecture ...</para>
 /// <para>
 /// Deepgram Nova-2 is an ASR model optimized for speed and accuracy in production deployments. The model achieves sub-300ms latency for streaming transcription while maintaining competitive accuracy. Nova-2 uses a proprietary end-to-end architecture trained on diverse audio data. Key features include smart formatting (dates, currency, phone numbers), topic detection, sentiment analysis, entity detection, and language detection across 36+ languages. Deepgram's API is designed for high-throughput production use cases.
 /// </para>

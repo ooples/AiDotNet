@@ -16,6 +16,7 @@ namespace AiDotNet.SpeechRecognition.Streaming;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "FastEmit: Low-latency Streaming ASR with Sequence-level Emission Regularization" (Yu et al., Google, 2021)</item></list></para>
+/// <para><b>For Beginners:</b> FastEmit addresses the emission latency problem in RNN-Transducer models, where the model tends to delay token emissions. It introduces an emission regularization term that encourages the model to emit non-blank tokens as soon as possible without ...</para>
 /// <para>
 /// FastEmit addresses the emission latency problem in RNN-Transducer models, where the model tends to delay token emissions. It introduces an emission regularization term that encourages the model to emit non-blank tokens as soon as possible without degrading accuracy. This sequence-level regularization modifies the RNN-T loss to penalize late emissions. FastEmit significantly reduces first-token and average emission latency while maintaining or improving word error rates.
 /// </para>

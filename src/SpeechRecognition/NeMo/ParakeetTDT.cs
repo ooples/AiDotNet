@@ -16,6 +16,7 @@ namespace AiDotNet.SpeechRecognition.NeMo;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Token-and-Duration Transducer for streaming ASR" (NVIDIA, 2024)</item></list></para>
+/// <para><b>For Beginners:</b> Parakeet-TDT extends the standard RNN-T by jointly predicting both the output token and the number of encoder frames to advance (duration). This "Token-and-Duration" formulation allows the model to skip multiple blank frames at once, significantly...</para>
 /// <para>
 /// Parakeet-TDT extends the standard RNN-T by jointly predicting both the output token and
 /// the number of encoder frames to advance (duration). This "Token-and-Duration" formulation

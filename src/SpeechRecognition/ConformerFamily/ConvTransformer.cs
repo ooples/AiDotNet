@@ -16,6 +16,7 @@ namespace AiDotNet.SpeechRecognition.ConformerFamily;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Convolution-Augmented Transformer for Speech Recognition" (2019)</item></list></para>
+/// <para><b>For Beginners:</b> A precursor to the Conformer that adds convolution blocks before or after each Transformer layer. Unlike Conformer's interleaved design, ConvTransformer uses convolution as a separate preprocessing stage, which provides local feature enhancement b...</para>
 /// <para>
 /// A precursor to the Conformer that adds convolution blocks before or after each
 /// Transformer layer. Unlike Conformer's interleaved design, ConvTransformer uses

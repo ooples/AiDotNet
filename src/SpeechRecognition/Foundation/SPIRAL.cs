@@ -16,6 +16,7 @@ namespace AiDotNet.SpeechRecognition.Foundation;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "SPIRAL: Self-supervised Perturbation-Invariant Representation Learning for Speech Pre-Training" (Huang et al., 2022)</item></list></para>
+/// <para><b>For Beginners:</b> SPIRAL learns perturbation-invariant speech representations through self-supervised pre-training. The model uses a teacher-student framework where the student must produce similar representations for different augmented views of the same speech. D...</para>
 /// <para>
 /// SPIRAL learns perturbation-invariant speech representations through self-supervised pre-training. The model uses a teacher-student framework where the student must produce similar representations for different augmented views of the same speech. Data augmentations include speed perturbation, SpecAugment, and noise addition. The invariance objective encourages robust representations that transfer well to downstream ASR tasks.
 /// </para>

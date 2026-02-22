@@ -16,6 +16,7 @@ namespace AiDotNet.SpeechRecognition.Streaming;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Streaming Conformer Transducer with Look-Ahead" (Google, 2023)</item></list></para>
+/// <para><b>For Beginners:</b> Streaming Conformer adapts the standard Conformer architecture for streaming inference by processing audio in fixed-size chunks with limited right-context lookahead. Causal convolutions replace standard convolutions, and attention is restricted to...</para>
 /// <para>
 /// Streaming Conformer adapts the standard Conformer architecture for streaming inference by processing audio in fixed-size chunks with limited right-context lookahead. Causal convolutions replace standard convolutions, and attention is restricted to the current chunk plus a small lookahead window. A chunk-wise cache mechanism stores key-value pairs from previous chunks, enabling the model to maintain long-range context while processing audio in real-time with controllable latency.
 /// </para>

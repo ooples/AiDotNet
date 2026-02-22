@@ -16,6 +16,7 @@ namespace AiDotNet.SpeechRecognition.Streaming;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Model: "Moonshine Base" (Useful Sensors, 2024)</item></list></para>
+/// <para><b>For Beginners:</b> Moonshine Base is the smallest variant of the Moonshine family at 27M parameters, optimized for edge deployment on resource-constrained devices. The model uses a 4-layer encoder and 4-layer decoder with 288-dim embeddings. Despite its small size, ...</para>
 /// <para>
 /// Moonshine Base is the smallest variant of the Moonshine family at 27M parameters, optimized for edge deployment on resource-constrained devices. The model uses a 4-layer encoder and 4-layer decoder with 288-dim embeddings. Despite its small size, Moonshine Base achieves usable accuracy for voice commands and short-form transcription, running at 10x real-time on Raspberry Pi 4 and supporting on-device wake word + transcription pipelines.
 /// </para>

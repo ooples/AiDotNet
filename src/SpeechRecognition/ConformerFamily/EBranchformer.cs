@@ -16,6 +16,7 @@ namespace AiDotNet.SpeechRecognition.ConformerFamily;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "E-Branchformer: Branchformer with Enhanced Merging" (Kim et al., 2022)</item></list></para>
+/// <para><b>For Beginners:</b> Extends Branchformer with an enhanced merge module that applies depthwise convolution before the concatenation-merge, improving local-global fusion. The merge module output is: concat(attn_branch, cgmlp_branch) -> depthwise conv -> linear projecti...</para>
 /// <para>
 /// Extends Branchformer with an enhanced merge module that applies depthwise convolution
 /// before the concatenation-merge, improving local-global fusion. The merge module output

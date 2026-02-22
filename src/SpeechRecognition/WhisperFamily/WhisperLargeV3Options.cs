@@ -4,8 +4,40 @@ using AiDotNet.Onnx;
 namespace AiDotNet.SpeechRecognition.WhisperFamily;
 
 /// <summary>Options for Whisper large-v3 (OpenAI, 2023) with 1.55B parameters and 128 mel bins.</summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> These options configure the WhisperLargeV3 model. Default values follow the original paper's recommended settings for optimal speech recognition accuracy.</para>
+/// </remarks>
 public class WhisperLargeV3Options : ModelOptions
 {
+    /// <summary>Initializes a new instance with default values.</summary>
+    public WhisperLargeV3Options() { }
+
+    /// <summary>Initializes a new instance by copying from another instance.</summary>
+    /// <param name="other">The options instance to copy from.</param>
+    /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
+    public WhisperLargeV3Options(WhisperLargeV3Options other)
+    {
+        if (other == null)
+            throw new ArgumentNullException(nameof(other));
+
+        SampleRate = other.SampleRate;
+        MaxAudioLengthSeconds = other.MaxAudioLengthSeconds;
+        EncoderDim = other.EncoderDim;
+        DecoderDim = other.DecoderDim;
+        NumEncoderLayers = other.NumEncoderLayers;
+        NumDecoderLayers = other.NumDecoderLayers;
+        NumAttentionHeads = other.NumAttentionHeads;
+        FeedForwardDim = other.FeedForwardDim;
+        NumMels = other.NumMels;
+        VocabSize = other.VocabSize;
+        MaxTextLength = other.MaxTextLength;
+        ModelPath = other.ModelPath;
+        OnnxOptions = other.OnnxOptions;
+        DropoutRate = other.DropoutRate;
+        Language = other.Language;
+        SupportedLanguagesList = other.SupportedLanguagesList;
+    }
+
     public int SampleRate { get; set; } = 16000;
     public int MaxAudioLengthSeconds { get; set; } = 30;
     public int EncoderDim { get; set; } = 1280;

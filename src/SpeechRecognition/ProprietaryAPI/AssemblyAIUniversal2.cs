@@ -16,6 +16,7 @@ namespace AiDotNet.SpeechRecognition.ProprietaryAPI;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>API: "AssemblyAI Universal-2" (AssemblyAI, 2024)</item></list></para>
+/// <para><b>For Beginners:</b> AssemblyAI Universal-2 is a state-of-the-art ASR model that achieves best-in-class accuracy across multiple benchmarks. The model is trained on 12.5M hours of multilingual audio data. It supports automatic language detection, code-switching, and p...</para>
 /// <para>
 /// AssemblyAI Universal-2 is a state-of-the-art ASR model that achieves best-in-class accuracy across multiple benchmarks. The model is trained on 12.5M hours of multilingual audio data. It supports automatic language detection, code-switching, and proper noun boosting. The API provides comprehensive audio intelligence features including speaker diarization, sentiment analysis, content moderation, PII redaction, chapter detection, and entity recognition. Universal-2 uses a proprietary Conformer-based architecture with language model rescoring.
 /// </para>

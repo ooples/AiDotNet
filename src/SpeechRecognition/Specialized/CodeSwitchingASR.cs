@@ -16,6 +16,7 @@ namespace AiDotNet.SpeechRecognition.Specialized;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Towards End-to-End Code-Switching Speech Recognition" (2023)</item></list></para>
+/// <para><b>For Beginners:</b> Code-Switching ASR handles speech that mixes two or more languages within a single utterance, common in multilingual communities. The model uses a shared multilingual Conformer encoder trained on code-switched corpora, with a unified vocabulary sp...</para>
 /// <para>
 /// Code-Switching ASR handles speech that mixes two or more languages within a single utterance, common in multilingual communities. The model uses a shared multilingual Conformer encoder trained on code-switched corpora, with a unified vocabulary spanning all target languages. Language identification is performed implicitly through shared encoder representations. The CTC decoder uses a multilingual token set that can output tokens from any supported language within the same transcription.
 /// </para>

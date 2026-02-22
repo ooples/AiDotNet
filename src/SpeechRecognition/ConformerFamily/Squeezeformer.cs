@@ -16,6 +16,7 @@ namespace AiDotNet.SpeechRecognition.ConformerFamily;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Squeezeformer: An Efficient Transformer for Automatic Speech Recognition" (Kim et al., 2022)</item></list></para>
+/// <para><b>For Beginners:</b> Squeezeformer restructures Conformer with: (1) Temporal U-Net: downsamples time resolution in middle layers, upsamples at the end, (2) Micro-macro design: pre-norm (more stable training) replaces post-norm, (3) Simplified block: MHA → Conv → FF (r...</para>
 /// <para>
 /// Squeezeformer restructures Conformer with:
 /// (1) Temporal U-Net: downsamples time resolution in middle layers, upsamples at the end,

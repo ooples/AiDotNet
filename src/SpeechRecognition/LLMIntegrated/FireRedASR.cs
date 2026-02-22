@@ -16,6 +16,7 @@ namespace AiDotNet.SpeechRecognition.LLMIntegrated;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "FireRedASR: Open-Source Industrial-Grade Mandarin Speech Recognition" (FireRed Team, 2025)</item></list></para>
+/// <para><b>For Beginners:</b> FireRedASR is an industrial-grade ASR system using a dual-pass architecture. The first pass (Fire) uses a fast Conformer-CTC encoder for streaming results. The second pass (Reduce) refines the output using attention-based rescoring with language m...</para>
 /// <para>
 /// FireRedASR is an industrial-grade ASR system using a dual-pass architecture. The first pass (Fire) uses a fast Conformer-CTC encoder for streaming results. The second pass (Reduce) refines the output using attention-based rescoring with language model integration. The dual-pass design balances latency and accuracy for production deployments. Achieves state-of-the-art on Mandarin ASR benchmarks with robust performance on accented and noisy speech.
 /// </para>

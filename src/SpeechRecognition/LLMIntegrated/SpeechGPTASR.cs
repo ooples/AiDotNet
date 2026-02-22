@@ -16,6 +16,7 @@ namespace AiDotNet.SpeechRecognition.LLMIntegrated;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "SpeechGPT: Empowering Large Language Models with Intrinsic Cross-Modal Conversational Abilities" (Zhang et al., Fudan, 2023)</item></list></para>
+/// <para><b>For Beginners:</b> SpeechGPT extends a large language model with intrinsic speech understanding and generation capabilities. For ASR, speech is discretized into tokens using HuBERT + k-means clustering, then these discrete speech tokens are treated as a new modality...</para>
 /// <para>
 /// SpeechGPT extends a large language model with intrinsic speech understanding and generation capabilities. For ASR, speech is discretized into tokens using HuBERT + k-means clustering, then these discrete speech tokens are treated as a new modality in the LLM's vocabulary. The model learns to translate between speech tokens and text tokens through instruction tuning. This enables seamless multi-modal conversation without separate encoder/decoder components.
 /// </para>

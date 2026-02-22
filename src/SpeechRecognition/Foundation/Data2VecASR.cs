@@ -16,6 +16,7 @@ namespace AiDotNet.SpeechRecognition.Foundation;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "data2vec: A General Framework for Self-Supervised Learning in Speech, Vision and Language" (Baevski et al., Meta, 2022)</item></list></para>
+/// <para><b>For Beginners:</b> Data2Vec uses a shared self-supervised framework across speech, vision, and language. The teacher network produces contextualized target representations from unmasked input, while the student network predicts these targets from masked input. Unlik...</para>
 /// <para>
 /// Data2Vec uses a shared self-supervised framework across speech, vision, and language. The teacher network produces contextualized target representations from unmasked input, while the student network predicts these targets from masked input. Unlike HuBERT's discrete pseudo-labels, data2vec regresses continuous latent representations. For speech, it achieves competitive ASR performance while using a simpler training objective without quantization.
 /// </para>

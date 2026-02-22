@@ -16,6 +16,7 @@ namespace AiDotNet.SpeechRecognition.WhisperFamily;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Implementation: "WhisperLive: Real-Time Whisper Transcription" (Collabora, 2024)</item></list></para>
+/// <para><b>For Beginners:</b> WhisperLive enables real-time streaming transcription by combining Whisper with Voice Activity Detection (VAD). Audio is chunked based on speech boundaries rather than fixed intervals, allowing natural sentence-level transcription. The system uses...</para>
 /// <para>
 /// WhisperLive enables real-time streaming transcription by combining Whisper with Voice
 /// Activity Detection (VAD). Audio is chunked based on speech boundaries rather than fixed

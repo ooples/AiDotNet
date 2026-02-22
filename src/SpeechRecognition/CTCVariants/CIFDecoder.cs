@@ -16,6 +16,7 @@ namespace AiDotNet.SpeechRecognition.CTCVariants;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "CIF: Continuous Integrate-and-Fire for End-to-End Speech Recognition" (Dong and Xu, 2020)</item></list></para>
+/// <para><b>For Beginners:</b> CIF (Continuous Integrate-and-Fire) is a mechanism that bridges the length mismatch between encoder frames and output tokens. The CIF module accumulates encoder hidden states weighted by learned firing probabilities. When the cumulative weight rea...</para>
 /// <para>
 /// CIF (Continuous Integrate-and-Fire) is a mechanism that bridges the length mismatch between encoder frames and output tokens. The CIF module accumulates encoder hidden states weighted by learned firing probabilities. When the cumulative weight reaches a threshold, an acoustic embedding is emitted and the accumulator resets. This produces exactly the right number of acoustic embeddings for the target sequence, enabling non-autoregressive parallel decoding without the conditional independence assumption of CTC.
 /// </para>

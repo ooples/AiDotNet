@@ -16,6 +16,7 @@ namespace AiDotNet.SpeechRecognition.Multilingual;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "OWSM: Open Whisper-style Speech Models" (Peng et al., CMU, 2024)</item></list></para>
+/// <para><b>For Beginners:</b> OWSM is an open-source reproduction of Whisper's training approach using publicly available data. It uses ESPnet's encoder-decoder architecture with a Conformer encoder and Transformer decoder, trained on a curated collection of open speech datase...</para>
 /// <para>
 /// OWSM is an open-source reproduction of Whisper's training approach using publicly available data. It uses ESPnet's encoder-decoder architecture with a Conformer encoder and Transformer decoder, trained on a curated collection of open speech datasets. OWSM supports ASR, translation, and language identification. Being fully open-source (data, code, and model), it enables reproducible multilingual ASR research.
 /// </para>

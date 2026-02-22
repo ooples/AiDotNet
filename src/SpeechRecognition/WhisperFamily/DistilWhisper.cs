@@ -16,6 +16,7 @@ namespace AiDotNet.SpeechRecognition.WhisperFamily;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Distil-Whisper: Robust Knowledge Distillation via Large-Scale Pseudo Labelling" (Gandhi et al., HuggingFace, 2023)</item></list></para>
+/// <para><b>For Beginners:</b> Distil-Whisper uses layer-wise knowledge distillation from Whisper large-v2/v3. The student model keeps the full 32-layer encoder but reduces the decoder to 2 layers, trained with KL-divergence loss on pseudo-labeled data. The model achieves withi...</para>
 /// <para>
 /// Distil-Whisper uses layer-wise knowledge distillation from Whisper large-v2/v3.
 /// The student model keeps the full 32-layer encoder but reduces the decoder to 2 layers,

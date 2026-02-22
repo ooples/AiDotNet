@@ -16,6 +16,7 @@ namespace AiDotNet.SpeechRecognition.CTCVariants;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "E-Branchformer: Branchformer with Enhanced merging for speech recognition" (Kim et al., 2023)</item></list></para>
+/// <para><b>For Beginners:</b> E-Branchformer enhances the Branchformer architecture with an improved merging strategy. Instead of simple concatenation and gating, E-Branchformer uses a point-wise feed-forward module with depthwise convolution for branch merging. The enhanced m...</para>
 /// <para>
 /// E-Branchformer enhances the Branchformer architecture with an improved merging strategy. Instead of simple concatenation and gating, E-Branchformer uses a point-wise feed-forward module with depthwise convolution for branch merging. The enhanced merge module allows richer interaction between the attention and convolution branch outputs. E-Branchformer achieves the best reported results among non-Whisper models on LibriSpeech and is the default encoder in ESPnet.
 /// </para>

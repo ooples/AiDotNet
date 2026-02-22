@@ -16,6 +16,7 @@ namespace AiDotNet.SpeechRecognition.LLMIntegrated;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Granite Speech: Integrating Speech into Enterprise LLMs" (IBM Research, 2025)</item></list></para>
+/// <para><b>For Beginners:</b> Granite Speech integrates speech understanding into IBM's Granite enterprise LLM family. A pre-trained speech encoder (based on Conformer) is paired with a lightweight adapter that maps speech representations to the Granite LLM's input space. The ...</para>
 /// <para>
 /// Granite Speech integrates speech understanding into IBM's Granite enterprise LLM family. A pre-trained speech encoder (based on Conformer) is paired with a lightweight adapter that maps speech representations to the Granite LLM's input space. The model supports multi-turn spoken dialogue, speech translation, and domain-specific ASR with enterprise-grade accuracy. Fine-tuning on domain data enables specialized performance for business applications.
 /// </para>

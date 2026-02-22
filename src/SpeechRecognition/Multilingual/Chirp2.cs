@@ -16,6 +16,7 @@ namespace AiDotNet.SpeechRecognition.Multilingual;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Model: "Chirp 2" (Google Cloud, 2024)</item></list></para>
+/// <para><b>For Beginners:</b> Chirp 2 improves on the original Chirp with enhanced multilingual capabilities, better handling of accented speech, and improved robustness to background noise. The model uses an updated USM encoder with more training data and improved fine-tuning...</para>
 /// <para>
 /// Chirp 2 improves on the original Chirp with enhanced multilingual capabilities, better handling of accented speech, and improved robustness to background noise. The model uses an updated USM encoder with more training data and improved fine-tuning strategies. Supports 120+ languages with particular improvements for low-resource languages.
 /// </para>

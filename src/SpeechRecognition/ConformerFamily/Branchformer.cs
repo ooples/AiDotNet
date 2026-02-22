@@ -16,6 +16,7 @@ namespace AiDotNet.SpeechRecognition.ConformerFamily;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Branchformer: Parallel MLP-Attention Architectures" (Peng et al., 2022)</item></list></para>
+/// <para><b>For Beginners:</b> The Branchformer processes audio through two parallel branches per layer: (1) Multi-head self-attention for global context, (2) Convolutional gating MLP (cgMLP) for local patterns. The branches are concatenated and merged with a learned linear pro...</para>
 /// <para>
 /// The Branchformer processes audio through two parallel branches per layer:
 /// (1) Multi-head self-attention for global context,

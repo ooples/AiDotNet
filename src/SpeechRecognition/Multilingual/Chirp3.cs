@@ -16,6 +16,7 @@ namespace AiDotNet.SpeechRecognition.Multilingual;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Model: "Chirp 3" (Google Cloud, 2025)</item></list></para>
+/// <para><b>For Beginners:</b> Chirp 3 is Google's latest production ASR model with state-of-the-art accuracy across 125+ languages. It features improved long-form transcription, better punctuation restoration, and enhanced speaker diarization integration. The model uses an upd...</para>
 /// <para>
 /// Chirp 3 is Google's latest production ASR model with state-of-the-art accuracy across 125+ languages. It features improved long-form transcription, better punctuation restoration, and enhanced speaker diarization integration. The model uses an updated architecture with flash attention and improved multilingual vocabulary.
 /// </para>

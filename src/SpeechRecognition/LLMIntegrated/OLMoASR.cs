@@ -16,6 +16,7 @@ namespace AiDotNet.SpeechRecognition.LLMIntegrated;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Adapting Large Language Models for Speech Recognition" (OLMo Team, AI2, 2024)</item></list></para>
+/// <para><b>For Beginners:</b> OLMo-ASR adapts the open-source OLMo language model for speech recognition by adding a speech encoder adapter. A Conformer encoder processes audio, then a learned adapter projects encoder representations into the LLM's embedding space. The LLM dec...</para>
 /// <para>
 /// OLMo-ASR adapts the open-source OLMo language model for speech recognition by adding a speech encoder adapter. A Conformer encoder processes audio, then a learned adapter projects encoder representations into the LLM's embedding space. The LLM decoder generates text autoregressively conditioned on the speech embeddings, leveraging its strong language understanding for accurate transcription.
 /// </para>

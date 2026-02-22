@@ -16,6 +16,7 @@ namespace AiDotNet.SpeechRecognition.WhisperFamily;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "whisper-timestamped: Word-level timestamps for Whisper" (Louradour, 2023)</item></list></para>
+/// <para><b>For Beginners:</b> WhisperTimestamped extracts word-level timestamps from Whisper's cross-attention weights without any additional training or model modification. The key insight: cross-attention weights between decoder tokens and encoder frames reveal temporal alig...</para>
 /// <para>
 /// WhisperTimestamped extracts word-level timestamps from Whisper's cross-attention weights
 /// without any additional training or model modification. The key insight: cross-attention

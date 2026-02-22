@@ -16,6 +16,7 @@ namespace AiDotNet.SpeechRecognition.Robust;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "SpeechBrain: A General-Purpose Speech Toolkit" (Ravanelli et al., 2021)</item></list></para>
+/// <para><b>For Beginners:</b> SpeechBrain provides a comprehensive set of pre-trained ASR models built with the open-source toolkit. The models use various architectures including CRDNN (convolutional-recurrent-DNN), Transformer, and Conformer encoders with CTC or attention-ba...</para>
 /// <para>
 /// SpeechBrain provides a comprehensive set of pre-trained ASR models built with the open-source toolkit. The models use various architectures including CRDNN (convolutional-recurrent-DNN), Transformer, and Conformer encoders with CTC or attention-based decoders. SpeechBrain models are trained with extensive data augmentation, dynamic batching, and mixed-precision training. The toolkit supports over 100 speech processing recipes covering ASR, speaker recognition, speech separation, and more.
 /// </para>

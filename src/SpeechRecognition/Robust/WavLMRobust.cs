@@ -16,6 +16,7 @@ namespace AiDotNet.SpeechRecognition.Robust;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "WavLM: Large-Scale Self-Supervised Pre-Training for Full Stack Speech Processing" (Chen et al., Microsoft, 2022)</item></list></para>
+/// <para><b>For Beginners:</b> WavLM-Robust is a specialized ASR model leveraging WavLM's unique denoising pre-training for robust speech recognition. During pre-training, overlapping utterances from different speakers are used as input, and the model learns to denoise and sepa...</para>
 /// <para>
 /// WavLM-Robust is a specialized ASR model leveraging WavLM's unique denoising pre-training for robust speech recognition. During pre-training, overlapping utterances from different speakers are used as input, and the model learns to denoise and separate while predicting masked tokens. This produces representations inherently robust to noise, reverberation, and overlapping speech. Fine-tuned with CTC for ASR, WavLM-Robust achieves strong performance on noisy benchmarks like CHiME-4 and VoiceBank-DEMAND.
 /// </para>

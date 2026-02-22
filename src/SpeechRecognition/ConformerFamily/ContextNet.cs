@@ -16,6 +16,7 @@ namespace AiDotNet.SpeechRecognition.ConformerFamily;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "ContextNet: Improving Convolutional Neural Networks for ASR with Global Context" (Han et al., 2020)</item></list></para>
+/// <para><b>For Beginners:</b> A purely convolutional encoder that uses squeeze-and-excitation (SE) blocks to capture global context. Each block contains depthwise separable convolutions with SE modules that adaptively reweight channel features based on the entire sequence. Typ...</para>
 /// <para>
 /// A purely convolutional encoder that uses squeeze-and-excitation (SE) blocks to capture
 /// global context. Each block contains depthwise separable convolutions with SE modules

@@ -16,6 +16,7 @@ namespace AiDotNet.SpeechRecognition.Foundation;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "w2v-BERT: Combining Contrastive Learning and Masked Language Modeling for Self-Supervised Speech Pre-Training" (Chung et al., Google, 2021)</item></list></para>
+/// <para><b>For Beginners:</b> W2v-BERT combines the contrastive learning objective of wav2vec 2.0 with the masked prediction objective of BERT. The lower Transformer layers solve a contrastive task to produce discrete tokens, while upper layers perform masked language modeling...</para>
 /// <para>
 /// W2v-BERT combines the contrastive learning objective of wav2vec 2.0 with the masked prediction objective of BERT. The lower Transformer layers solve a contrastive task to produce discrete tokens, while upper layers perform masked language modeling over these tokens. This two-stage approach within a single model produces representations that capture both acoustic and linguistic information, achieving strong ASR performance.
 /// </para>

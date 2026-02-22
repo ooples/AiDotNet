@@ -16,6 +16,7 @@ namespace AiDotNet.SpeechRecognition.NeMo;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Model: "Canary-Flash" (NVIDIA NeMo, 2025)</item></list></para>
+/// <para><b>For Beginners:</b> Canary-Flash is a smaller, faster variant of the Canary multilingual ASR family. It uses a Fast Conformer encoder with a lightweight attention-based encoder-decoder (AED), not a full LLM. The hybrid CTC/attention training uses both a CTC auxiliary...</para>
 /// <para>
 /// Canary-Flash is a smaller, faster variant of the Canary multilingual ASR family. It uses
 /// a Fast Conformer encoder with a lightweight attention-based encoder-decoder (AED), not a

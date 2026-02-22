@@ -16,6 +16,7 @@ namespace AiDotNet.SpeechRecognition.ProprietaryAPI;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>API: "Google Cloud Speech-to-Text V2" (Google Cloud, 2024)</item></list></para>
+/// <para><b>For Beginners:</b> Google Cloud Speech-to-Text V2 provides production-grade ASR through Google's cloud API. The V2 API uses the Chirp universal speech model as its backbone, supporting 100+ languages with automatic language detection. Features include word-level tim...</para>
 /// <para>
 /// Google Cloud Speech-to-Text V2 provides production-grade ASR through Google's cloud API. The V2 API uses the Chirp universal speech model as its backbone, supporting 100+ languages with automatic language detection. Features include word-level timestamps, speaker diarization, profanity filtering, automatic punctuation, and speech adaptation for domain-specific vocabulary. The API supports batch and streaming modes with configurable models (short, long, telephony, medical).
 /// </para>

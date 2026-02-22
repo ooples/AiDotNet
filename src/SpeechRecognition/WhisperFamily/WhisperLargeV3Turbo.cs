@@ -16,6 +16,7 @@ namespace AiDotNet.SpeechRecognition.WhisperFamily;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Technical note: "Whisper large-v3-turbo" (OpenAI, 2024)</item></list></para>
+/// <para><b>For Beginners:</b> Whisper large-v3-turbo retains the full 32-layer encoder from large-v3 but reduces the decoder from 32 layers to only 4, achieving ~6x faster inference with minimal quality loss. The model uses 128 mel bins, 20-head attention, and the same 51866-t...</para>
 /// <para>
 /// Whisper large-v3-turbo retains the full 32-layer encoder from large-v3 but reduces the
 /// decoder from 32 layers to only 4, achieving ~6x faster inference with minimal quality loss.

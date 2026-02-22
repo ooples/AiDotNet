@@ -16,6 +16,7 @@ namespace AiDotNet.SpeechRecognition.Specialized;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Multi-talker ASR with Speaker-Aware Serialized Output Training" (2024)</item></list></para>
+/// <para><b>For Beginners:</b> Speaker-Diarized ASR jointly performs speech recognition and speaker diarization, producing timestamped transcriptions attributed to individual speakers. The model uses a shared Conformer encoder with a speaker-aware serialized output (SA-SOT) dec...</para>
 /// <para>
 /// Speaker-Diarized ASR jointly performs speech recognition and speaker diarization, producing timestamped transcriptions attributed to individual speakers. The model uses a shared Conformer encoder with a speaker-aware serialized output (SA-SOT) decoder that emits speaker change tokens alongside text tokens. Speaker embeddings from an auxiliary speaker encoder condition the decoder to distinguish between speakers. The system handles overlapping speech through multi-talker serialized output.
 /// </para>

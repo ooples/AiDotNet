@@ -16,6 +16,7 @@ namespace AiDotNet.SpeechRecognition.NeMo;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Model: "Parakeet-RNNT" (NVIDIA NeMo, 2024)</item></list></para>
+/// <para><b>For Beginners:</b> Parakeet-RNNT pairs the same 24-layer Fast Conformer encoder as Parakeet-CTC with an RNN-Transducer decoder instead of CTC. The RNN-T decoder consists of a prediction network (LSTM) that models text history and a joint network that combines encode...</para>
 /// <para>
 /// Parakeet-RNNT pairs the same 24-layer Fast Conformer encoder as Parakeet-CTC with an
 /// RNN-Transducer decoder instead of CTC. The RNN-T decoder consists of a prediction network

@@ -16,6 +16,7 @@ namespace AiDotNet.SpeechRecognition.WhisperFamily;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Robust Speech Recognition via Large-Scale Weak Supervision" (Radford et al., OpenAI, 2023)</item></list></para>
+/// <para><b>For Beginners:</b> Whisper large-v3 uses a 32-layer Transformer encoder-decoder trained on 680k hours of multilingual audio. Key improvements over v2: 128 mel bins (vs 80), improved language coverage (100 languages), and better long-form transcription. The encoder p...</para>
 /// <para>
 /// Whisper large-v3 uses a 32-layer Transformer encoder-decoder trained on 680k hours of
 /// multilingual audio. Key improvements over v2: 128 mel bins (vs 80), improved language

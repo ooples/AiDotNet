@@ -16,6 +16,7 @@ namespace AiDotNet.SpeechRecognition.AlibabaASR;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Model: "Paraformer-Large" (Alibaba DAMO/FunASR, 2023)</item></list></para>
+/// <para><b>For Beginners:</b> Paraformer-Large scales up the Paraformer architecture to 220M parameters with a wider encoder (1024-dim, 16 heads) and deeper stack (50 encoder layers). Trained on 60k hours of Mandarin/English data with data augmentation (SpecAugment, speed pert...</para>
 /// <para>
 /// Paraformer-Large scales up the Paraformer architecture to 220M parameters with a wider encoder (1024-dim, 16 heads) and deeper stack (50 encoder layers). Trained on 60k hours of Mandarin/English data with data augmentation (SpecAugment, speed perturbation). The model uses a 4x convolutional subsampling front-end and SentencePiece tokenization. Achieves state-of-the-art CER on AISHELL-1 and competitive results on LibriSpeech.
 /// </para>

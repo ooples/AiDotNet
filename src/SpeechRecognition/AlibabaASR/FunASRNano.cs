@@ -16,6 +16,7 @@ namespace AiDotNet.SpeechRecognition.AlibabaASR;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Model: "FunASR-Nano" (Alibaba FunASR, 2024)</item></list></para>
+/// <para><b>For Beginners:</b> FunASR-Nano is an ultra-lightweight ASR model designed for on-device deployment. It uses a compact Conformer encoder (256-dim, 6 layers) with aggressive subsampling and a CTC decoder. Knowledge distillation from Paraformer-Large provides strong pe...</para>
 /// <para>
 /// FunASR-Nano is an ultra-lightweight ASR model designed for on-device deployment. It uses a compact Conformer encoder (256-dim, 6 layers) with aggressive subsampling and a CTC decoder. Knowledge distillation from Paraformer-Large provides strong performance despite the small model size. Optimized for mobile and edge devices with <50MB model size and real-time inference on CPU.
 /// </para>

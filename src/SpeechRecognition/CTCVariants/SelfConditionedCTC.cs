@@ -16,6 +16,7 @@ namespace AiDotNet.SpeechRecognition.CTCVariants;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Self-Conditioned CTC: CTC Alignment Conditioning on Intermediate Predictions" (Nozaki and Komatsu, 2021)</item></list></para>
+/// <para><b>For Beginners:</b> Self-Conditioned CTC feeds CTC alignment predictions from intermediate layers back into subsequent encoder layers as conditioning information. Each encoder block receives both the audio features and the CTC posterior distribution from the previous...</para>
 /// <para>
 /// Self-Conditioned CTC feeds CTC alignment predictions from intermediate layers back into subsequent encoder layers as conditioning information. Each encoder block receives both the audio features and the CTC posterior distribution from the previous block's auxiliary CTC head. This self-conditioning enables iterative refinement: lower layers produce rough alignments that upper layers refine. The technique significantly reduces CTC's conditional independence assumption limitation.
 /// </para>

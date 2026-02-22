@@ -16,6 +16,7 @@ namespace AiDotNet.SpeechRecognition.NeMo;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Citrinet: Closing the Gap between Non-Autoregressive and Autoregressive End-to-End Models for Automatic Speech Recognition" (Majumdar et al., NVIDIA, 2021)</item></list></para>
+/// <para><b>For Beginners:</b> Citrinet extends QuartzNet/Jasper with: (1) 1D time-channel separable convolutions that factorize standard convolutions into depthwise temporal and pointwise channel components; (2) Squeeze-and-Excitation (SE) blocks for channel attention; (3) sub...</para>
 /// <para>
 /// Citrinet extends QuartzNet/Jasper with: (1) 1D time-channel separable convolutions that
 /// factorize standard convolutions into depthwise temporal and pointwise channel components;

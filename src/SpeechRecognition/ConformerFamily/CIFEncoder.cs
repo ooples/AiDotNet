@@ -16,6 +16,7 @@ namespace AiDotNet.SpeechRecognition.ConformerFamily;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "CIF: Continuous Integrate-and-Fire for End-to-End Speech Recognition" (Dong &amp; Xu, 2020)</item></list></para>
+/// <para><b>For Beginners:</b> CIF provides a soft, monotonic alignment mechanism between encoder frames and output tokens. Each encoder frame produces a firing weight; when cumulative weight exceeds a threshold (1.0), the accumulated weighted features "fire" as an output token...</para>
 /// <para>
 /// CIF provides a soft, monotonic alignment mechanism between encoder frames and output tokens.
 /// Each encoder frame produces a firing weight; when cumulative weight exceeds a threshold (1.0),

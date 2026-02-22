@@ -16,6 +16,7 @@ namespace AiDotNet.SpeechRecognition.ConformerFamily;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Conformer: Convolution-augmented Transformer" (Gulati et al., 2020) + RNN-T (Graves, 2012)</item></list></para>
+/// <para><b>For Beginners:</b> Combines the Conformer encoder's strong acoustic modeling with the RNN-T decoder's streaming capability. The prediction network maintains output history, the joint network combines encoder and prediction states, and the model autoregressively emit...</para>
 /// <para>
 /// Combines the Conformer encoder's strong acoustic modeling with the RNN-T decoder's
 /// streaming capability. The prediction network maintains output history, the joint network

@@ -16,6 +16,7 @@ namespace AiDotNet.SpeechRecognition.WhisperFamily;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Implementation: "Faster-Whisper" (SYSTRAN/CTranslate2, 2023)</item></list></para>
+/// <para><b>For Beginners:</b> Faster-Whisper re-implements Whisper using CTranslate2's optimized inference engine. Key optimizations: (1) int8 quantization reducing model size by ~4x with minimal accuracy loss; (2) batched beam search with KV-cache reuse; (3) fused attention k...</para>
 /// <para>
 /// Faster-Whisper re-implements Whisper using CTranslate2's optimized inference engine.
 /// Key optimizations: (1) int8 quantization reducing model size by ~4x with minimal accuracy loss;

@@ -16,6 +16,7 @@ namespace AiDotNet.SpeechRecognition.WhisperFamily;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Model: "Kotoba-Whisper" (Kotoba Technologies, 2024)</item></list></para>
+/// <para><b>For Beginners:</b> Kotoba-Whisper applies Distil-Whisper's knowledge distillation specifically for Japanese ASR. The model retains the full 32-layer encoder from Whisper large-v3 but uses only 2 decoder layers, trained with pseudo-labeled Japanese audio data. Japane...</para>
 /// <para>
 /// Kotoba-Whisper applies Distil-Whisper's knowledge distillation specifically for Japanese ASR.
 /// The model retains the full 32-layer encoder from Whisper large-v3 but uses only 2 decoder

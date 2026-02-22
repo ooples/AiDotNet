@@ -16,6 +16,7 @@ namespace AiDotNet.SpeechRecognition.NeMo;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Model: "Canary-Qwen" (NVIDIA NeMo, 2025)</item></list></para>
+/// <para><b>For Beginners:</b> Canary-Qwen combines a Fast Conformer encoder with a Qwen-2.5 1.5B LLM decoder for multilingual ASR and speech translation. The architecture uses a perceiver-style adapter (downsampling cross-attention) between the encoder and the LLM to bridge th...</para>
 /// <para>
 /// Canary-Qwen combines a Fast Conformer encoder with a Qwen-2.5 1.5B LLM decoder for
 /// multilingual ASR and speech translation. The architecture uses a perceiver-style adapter

@@ -16,6 +16,7 @@ namespace AiDotNet.SpeechRecognition.ProprietaryAPI;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>API: "Gladia Audio Transcription" (Gladia, 2024)</item></list></para>
+/// <para><b>For Beginners:</b> Gladia provides enterprise audio transcription powered by optimized Whisper models with proprietary enhancements. The service adds real-time streaming, word-level timestamps, speaker diarization, and audio intelligence features on top of Whisper's...</para>
 /// <para>
 /// Gladia provides enterprise audio transcription powered by optimized Whisper models with proprietary enhancements. The service adds real-time streaming, word-level timestamps, speaker diarization, and audio intelligence features on top of Whisper's multilingual capabilities. Gladia's proprietary preprocessing pipeline handles audio normalization, VAD-based segmentation, and noise reduction before feeding audio to the transcription model. The API supports 100+ languages with automatic language detection.
 /// </para>

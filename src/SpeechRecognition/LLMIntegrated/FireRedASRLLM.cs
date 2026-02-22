@@ -16,6 +16,7 @@ namespace AiDotNet.SpeechRecognition.LLMIntegrated;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "FireRedASR: Open-Source Industrial-Grade Mandarin Speech Recognition" (FireRed Team, 2025)</item></list></para>
+/// <para><b>For Beginners:</b> FireRedASR-LLM extends the base system with Qwen2-7B as the decoder, using the speech encoder's output as prefix tokens for the LLM. This enables the model to leverage the LLM's extensive language knowledge for improved accuracy on complex utteran...</para>
 /// <para>
 /// FireRedASR-LLM extends the base system with Qwen2-7B as the decoder, using the speech encoder's output as prefix tokens for the LLM. This enables the model to leverage the LLM's extensive language knowledge for improved accuracy on complex utterances. The adapter module aligns speech encoder dimensions with the LLM's embedding space. This approach achieves significant WER reductions on hard test sets with proper nouns, code-switching, and domain-specific terminology.
 /// </para>

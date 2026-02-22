@@ -16,6 +16,7 @@ namespace AiDotNet.SpeechRecognition.ConformerFamily;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Efficient Conformer: Progressive Downsampling and Grouped Attention" (Burchi &amp; Vielzeuf, 2021)</item></list></para>
+/// <para><b>For Beginners:</b> Progressively downsamples both frequency and time dimensions through the encoder layers, reducing computation while preserving accuracy. Groups of encoder layers operate at different resolutions, with strided convolution transitions between groups...</para>
 /// <para>
 /// Progressively downsamples both frequency and time dimensions through the encoder layers,
 /// reducing computation while preserving accuracy. Groups of encoder layers operate at

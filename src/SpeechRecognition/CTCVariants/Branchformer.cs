@@ -16,6 +16,7 @@ namespace AiDotNet.SpeechRecognition.CTCVariants;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Branchformer: Parallel MLP-Attention Architectures to Capture Local and Global Context for Speech Classification and Recognition" (Peng et al., 2022)</item></list></para>
+/// <para><b>For Beginners:</b> Branchformer processes each encoder block through two parallel branches: a self-attention branch for global context and a convolutional branch (cgMLP) for local patterns. The branches operate independently and their outputs are merged via a learne...</para>
 /// <para>
 /// Branchformer processes each encoder block through two parallel branches: a self-attention branch for global context and a convolutional branch (cgMLP) for local patterns. The branches operate independently and their outputs are merged via a learned gating mechanism. This parallel design allows the model to capture both local acoustic details and long-range dependencies more effectively than Conformer's sequential attention-convolution design. Branchformer consistently outperforms Conformer on ASR benchmarks.
 /// </para>

@@ -16,6 +16,7 @@ namespace AiDotNet.SpeechRecognition.Streaming;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Efficient Sequence Transduction by Jointly Predicting Tokens and Durations" (Xu et al., NVIDIA, 2023)</item></list></para>
+/// <para><b>For Beginners:</b> The TDT (Token-and-Duration Transducer) decoder extends standard RNN-T by jointly predicting both the output token and the number of encoder frames to skip. When a non-blank token is emitted, the duration head predicts how many blank frames to ski...</para>
 /// <para>
 /// The TDT (Token-and-Duration Transducer) decoder extends standard RNN-T by jointly predicting both the output token and the number of encoder frames to skip. When a non-blank token is emitted, the duration head predicts how many blank frames to skip, reducing the number of joint network forward passes. This achieves up to 2.5x inference speedup over standard RNN-T without accuracy degradation. The approach is orthogonal to encoder optimization and combines well with Fast Conformer.
 /// </para>

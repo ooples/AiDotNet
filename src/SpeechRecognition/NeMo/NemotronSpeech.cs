@@ -16,6 +16,7 @@ namespace AiDotNet.SpeechRecognition.NeMo;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Model: "Nemotron-Speech" (NVIDIA, 2025)</item></list></para>
+/// <para><b>For Beginners:</b> Nemotron-Speech uses a Fast Conformer encoder paired with a Nemotron LLM decoder for multi-task speech understanding: ASR, translation, summarization, and instruction-following on audio input. The architecture uses a linear adapter between encoder...</para>
 /// <para>
 /// Nemotron-Speech uses a Fast Conformer encoder paired with a Nemotron LLM decoder for
 /// multi-task speech understanding: ASR, translation, summarization, and instruction-following

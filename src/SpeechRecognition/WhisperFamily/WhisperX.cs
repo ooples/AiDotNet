@@ -16,6 +16,7 @@ namespace AiDotNet.SpeechRecognition.WhisperFamily;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "WhisperX: Time-Accurate Speech Transcription of Long-Form Audio" (Bain et al., 2023)</item></list></para>
+/// <para><b>For Beginners:</b> WhisperX addresses Whisper's limitations with long-form audio by adding: (1) Voice Activity Detection (VAD) for pre-segmentation, splitting audio at speech boundaries instead of fixed 30s chunks, eliminating hallucination on silence; (2) forced ph...</para>
 /// <para>
 /// WhisperX addresses Whisper's limitations with long-form audio by adding: (1) Voice Activity
 /// Detection (VAD) for pre-segmentation, splitting audio at speech boundaries instead of fixed

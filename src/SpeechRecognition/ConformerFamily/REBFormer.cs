@@ -16,6 +16,7 @@ namespace AiDotNet.SpeechRecognition.ConformerFamily;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "REB-former: RWKV-Enhanced E-Branchformer for Speech Recognition" (Song et al., 2025)</item></list></para>
+/// <para><b>For Beginners:</b> Replaces the self-attention branch in E-Branchformer with RWKV (Receptance Weighted Key Value), a linear-complexity alternative to quadratic self-attention. This enables efficient processing of long audio sequences while maintaining the parallel b...</para>
 /// <para>
 /// Replaces the self-attention branch in E-Branchformer with RWKV (Receptance Weighted Key Value),
 /// a linear-complexity alternative to quadratic self-attention. This enables efficient processing

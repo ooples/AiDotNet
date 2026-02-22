@@ -16,6 +16,7 @@ namespace AiDotNet.SpeechRecognition.NeMo;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Model: "NeMo Multitask AED" (NVIDIA, 2024)</item></list></para>
+/// <para><b>For Beginners:</b> NeMo Multitask uses an attention-based encoder-decoder (AED) architecture for multi-task speech processing. The Fast Conformer encoder processes mel spectrograms, and a Transformer decoder with cross-attention generates text conditioned on special...</para>
 /// <para>
 /// NeMo Multitask uses an attention-based encoder-decoder (AED) architecture for multi-task
 /// speech processing. The Fast Conformer encoder processes mel spectrograms, and a Transformer

@@ -16,6 +16,7 @@ namespace AiDotNet.SpeechRecognition.ProprietaryAPI;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>API: "Amazon Transcribe" (AWS, 2024)</item></list></para>
+/// <para><b>For Beginners:</b> AWS Transcribe provides automatic speech recognition optimized for production workloads. The service supports real-time streaming and batch transcription across 100+ languages. Key features include custom vocabulary for domain terms, content redac...</para>
 /// <para>
 /// AWS Transcribe provides automatic speech recognition optimized for production workloads. The service supports real-time streaming and batch transcription across 100+ languages. Key features include custom vocabulary for domain terms, content redaction for PII, automatic language identification, and toxicity detection. Transcribe Medical is a specialized variant for HIPAA-compliant clinical documentation. The service integrates with the AWS ecosystem (S3, Lambda, Connect) for scalable speech processing pipelines.
 /// </para>

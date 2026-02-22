@@ -16,6 +16,7 @@ namespace AiDotNet.SpeechRecognition.LLMIntegrated;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "SALM: Speech-augmented Language Model with In-context Learning for Speech Recognition" (NVIDIA, 2024)</item></list></para>
+/// <para><b>For Beginners:</b> SALM augments an LLM with speech understanding via in-context learning. A frozen speech encoder (Conformer or wav2vec 2.0) extracts features, which are projected into the LLM's embedding space via a lightweight adapter. The LLM generates transcrip...</para>
 /// <para>
 /// SALM augments an LLM with speech understanding via in-context learning. A frozen speech encoder (Conformer or wav2vec 2.0) extracts features, which are projected into the LLM's embedding space via a lightweight adapter. The LLM generates transcriptions using in-context examples and instructions. SALM demonstrates that LLMs can perform competitive ASR through prompting strategies without explicit ASR fine-tuning, leveraging their pre-trained language abilities.
 /// </para>

@@ -16,6 +16,7 @@ namespace AiDotNet.SpeechRecognition.Multilingual;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "XLS-R: Self-supervised Cross-lingual Speech Representation Learning at Scale" (Babu et al., Meta, 2022)</item></list></para>
+/// <para><b>For Beginners:</b> XLS-R scales wav2vec 2.0 pre-training to 128 languages using 436k hours of unlabeled speech. The model (up to 2B parameters) uses the same contrastive pre-training approach but with massively multilingual data. Fine-tuning with CTC on labeled data...</para>
 /// <para>
 /// XLS-R scales wav2vec 2.0 pre-training to 128 languages using 436k hours of unlabeled speech. The model (up to 2B parameters) uses the same contrastive pre-training approach but with massively multilingual data. Fine-tuning with CTC on labeled data achieves strong results across many languages, with particularly significant improvements for low-resource languages. The cross-lingual transfer is enabled by shared phonetic structures across languages.
 /// </para>

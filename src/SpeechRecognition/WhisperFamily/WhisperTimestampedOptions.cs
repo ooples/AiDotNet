@@ -4,8 +4,38 @@ using AiDotNet.Onnx;
 namespace AiDotNet.SpeechRecognition.WhisperFamily;
 
 /// <summary>Options for WhisperTimestamped (Louradour, 2023): cross-attention-based word timestamps for Whisper.</summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> These options configure the WhisperTimestamped model. Default values follow the original paper's recommended settings for optimal speech recognition accuracy.</para>
+/// </remarks>
 public class WhisperTimestampedOptions : ModelOptions
 {
+    /// <summary>Initializes a new instance with default values.</summary>
+    public WhisperTimestampedOptions() { }
+
+    /// <summary>Initializes a new instance by copying from another instance.</summary>
+    /// <param name="other">The options instance to copy from.</param>
+    /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
+    public WhisperTimestampedOptions(WhisperTimestampedOptions other)
+    {
+        if (other == null)
+            throw new ArgumentNullException(nameof(other));
+
+        SampleRate = other.SampleRate;
+        MaxAudioLengthSeconds = other.MaxAudioLengthSeconds;
+        EncoderDim = other.EncoderDim;
+        DecoderDim = other.DecoderDim;
+        NumEncoderLayers = other.NumEncoderLayers;
+        NumDecoderLayers = other.NumDecoderLayers;
+        NumAttentionHeads = other.NumAttentionHeads;
+        NumMels = other.NumMels;
+        VocabSize = other.VocabSize;
+        ModelPath = other.ModelPath;
+        OnnxOptions = other.OnnxOptions;
+        DropoutRate = other.DropoutRate;
+        Language = other.Language;
+        MinWordConfidence = other.MinWordConfidence;
+    }
+
     public int SampleRate { get; set; } = 16000;
     public int MaxAudioLengthSeconds { get; set; } = 30;
     public int EncoderDim { get; set; } = 1280;

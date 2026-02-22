@@ -16,6 +16,7 @@ namespace AiDotNet.SpeechRecognition.Specialized;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Software: "whisper.cpp" (Gerganov, 2022-2025)</item></list></para>
+/// <para><b>For Beginners:</b> Whisper.cpp is a high-performance C++ implementation of OpenAI's Whisper model optimized for CPU inference. It uses GGML tensor library with quantization support (Q4, Q5, Q8) for reduced memory and faster processing. The implementation supports Ap...</para>
 /// <para>
 /// Whisper.cpp is a high-performance C++ implementation of OpenAI's Whisper model optimized for CPU inference. It uses GGML tensor library with quantization support (Q4, Q5, Q8) for reduced memory and faster processing. The implementation supports Apple Silicon acceleration (Metal, Core ML, ANE), x86 AVX/AVX2/AVX-512, and ARM NEON. Whisper.cpp achieves 10-20x speedup over the original Python implementation and enables real-time transcription on consumer hardware without GPU.
 /// </para>

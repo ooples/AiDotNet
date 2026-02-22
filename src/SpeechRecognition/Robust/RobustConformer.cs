@@ -16,6 +16,7 @@ namespace AiDotNet.SpeechRecognition.Robust;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Improving Noise Robustness of Contrastive Speech Representation Learning with Speech Reconstruction" (2023)</item></list></para>
+/// <para><b>For Beginners:</b> Robust Conformer uses adversarial training and speech reconstruction objectives to improve noise robustness. The model adds a speech reconstruction head during training that forces the encoder to preserve clean speech information even when process...</para>
 /// <para>
 /// Robust Conformer uses adversarial training and speech reconstruction objectives to improve noise robustness. The model adds a speech reconstruction head during training that forces the encoder to preserve clean speech information even when processing noisy input. An adversarial noise classifier encourages the encoder to produce noise-invariant representations. The dual objective produces a Conformer encoder that maintains accuracy across clean and noisy conditions without explicit noise estimation.
 /// </para>
