@@ -113,6 +113,8 @@ public class TokenFlowModel<T> : VideoDiffusionModelBase<T>
         Tensor<T> imageEmbedding,
         Tensor<T> motionEmbedding)
     {
+        // TokenFlow applies token propagation via spatial attention editing,
+        // so motion embedding is not needed for noise prediction.
         return _predictor.PredictNoise(latents, timestep, imageEmbedding);
     }
 

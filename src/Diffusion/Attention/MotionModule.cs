@@ -79,6 +79,10 @@ public class MotionModule<T> : LayerBase<T>
             throw new ArgumentOutOfRangeException(nameof(numHeads), "Number of heads must be positive.");
         if (numFrames <= 0)
             throw new ArgumentOutOfRangeException(nameof(numFrames), "Number of frames must be positive.");
+        if (spatialSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(spatialSize), "Spatial size must be positive.");
+        if (ffnMultiplier <= 0)
+            throw new ArgumentOutOfRangeException(nameof(ffnMultiplier), "FFN multiplier must be positive.");
 
         _channels = channels;
         _numHeads = numHeads;

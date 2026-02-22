@@ -224,6 +224,17 @@ public class STDiTBlock<T> : LayerBase<T>
             _spatialNorm, _temporalNorm, _crossNorm, _ffnNorm
         };
 
+        int expectedLength = 0;
+        foreach (var layer in parts)
+            expectedLength += layer.GetParameters().Length;
+
+        if (parameters.Length != expectedLength)
+        {
+            throw new ArgumentException(
+                $"Parameter vector length ({parameters.Length}) does not match expected length ({expectedLength}).",
+                nameof(parameters));
+        }
+
         int offset = 0;
         foreach (var layer in parts)
         {

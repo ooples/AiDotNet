@@ -42,6 +42,7 @@ public class Sora2Model<T> : VideoDiffusionModelBase<T>
     private DiTNoisePredictor<T> _predictor;
     private TemporalVAE<T> _temporalVAE;
     private readonly IConditioningModule<T>? _conditioner;
+    private readonly int? _seed;
 
     public override INoisePredictor<T> NoisePredictor => _predictor;
     public override IVAEModel<T> VAE => _temporalVAE;
@@ -80,6 +81,11 @@ public class Sora2Model<T> : VideoDiffusionModelBase<T>
             architecture)
     {
         _conditioner = conditioner;
+        _seed = seed;
+        if (seed.HasValue)
+        {
+            RandomGenerator = RandomHelper.CreateSeededRandom(seed.Value);
+        }
         InitializeLayers(predictor, temporalVAE);
     }
 

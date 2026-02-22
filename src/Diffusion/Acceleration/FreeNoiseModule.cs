@@ -85,6 +85,13 @@ public class FreeNoiseModule<T>
     /// <returns>Noise tensor for all target frames.</returns>
     public Tensor<T> GenerateRescheduledNoise(int targetFrames, int[] latentShape)
     {
+        Guard.Positive(targetFrames);
+        Guard.NotNull(latentShape);
+        if (latentShape.Length == 0)
+        {
+            throw new ArgumentException("Latent shape must have at least one dimension.", nameof(latentShape));
+        }
+
         // Generate base noise for the window size
         int elementsPerFrame = 1;
         foreach (int dim in latentShape) elementsPerFrame *= dim;

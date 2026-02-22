@@ -25,9 +25,9 @@ public class PABCache<T>
     private readonly int _spatialBroadcastInterval;
     private readonly int _temporalBroadcastInterval;
     private readonly int _crossBroadcastInterval;
-    private Dictionary<string, Tensor<T>> _spatialCache;
-    private Dictionary<string, Tensor<T>> _temporalCache;
-    private Dictionary<string, Tensor<T>> _crossCache;
+    private readonly Dictionary<string, Tensor<T>> _spatialCache;
+    private readonly Dictionary<string, Tensor<T>> _temporalCache;
+    private readonly Dictionary<string, Tensor<T>> _crossCache;
     private int _currentStep;
 
     /// <summary>
@@ -84,6 +84,7 @@ public class PABCache<T>
     /// <returns>True if recomputation is needed.</returns>
     public bool ShouldRecomputeSpatial(string layerKey)
     {
+        Guard.NotNull(layerKey, nameof(layerKey));
         return _currentStep % _spatialBroadcastInterval == 0 || !_spatialCache.ContainsKey(layerKey);
     }
 
@@ -94,6 +95,7 @@ public class PABCache<T>
     /// <returns>True if recomputation is needed.</returns>
     public bool ShouldRecomputeTemporal(string layerKey)
     {
+        Guard.NotNull(layerKey, nameof(layerKey));
         return _currentStep % _temporalBroadcastInterval == 0 || !_temporalCache.ContainsKey(layerKey);
     }
 
@@ -104,6 +106,7 @@ public class PABCache<T>
     /// <returns>True if recomputation is needed.</returns>
     public bool ShouldRecomputeCross(string layerKey)
     {
+        Guard.NotNull(layerKey, nameof(layerKey));
         return _currentStep % _crossBroadcastInterval == 0 || !_crossCache.ContainsKey(layerKey);
     }
 

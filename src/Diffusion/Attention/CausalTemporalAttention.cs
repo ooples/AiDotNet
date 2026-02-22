@@ -47,6 +47,11 @@ public class CausalTemporalAttention<T> : LayerBase<T>
     public int Channels => _channels;
 
     /// <summary>
+    /// Gets the number of attention heads.
+    /// </summary>
+    public int NumHeads => _numHeads;
+
+    /// <summary>
     /// Gets the number of frames.
     /// </summary>
     public int NumFrames => _numFrames;
@@ -78,6 +83,8 @@ public class CausalTemporalAttention<T> : LayerBase<T>
             throw new ArgumentOutOfRangeException(nameof(numHeads), "Number of heads must be positive.");
         if (channels % numHeads != 0)
             throw new ArgumentException($"Channels ({channels}) must be divisible by numHeads ({numHeads}).");
+        if (numFrames <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numFrames), "Number of frames must be positive.");
 
         _channels = channels;
         _numHeads = numHeads;

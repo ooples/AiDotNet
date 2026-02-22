@@ -141,7 +141,24 @@ public class SlidingWindowVideoGen<T>
 
         for (int f = 0; f < overlapElements && f < currentWindow.Shape[0]; f++)
         {
-            double alpha = (double)(f + 1) / (overlapElements + 1);
+            double t = (double)(f + 1) / (overlapElements + 1);
+            double alpha;
+            switch (_blendingMode)
+            {
+                case BlendingMode.CosineBlend:
+                    alpha = 0.5 * (1.0 - Math.Cos(Math.PI * t));
+                    break;
+                case BlendingMode.HardCut:
+                    alpha = t >= 0.5 ? 1.0 : 0.0;
+                    break;
+                case BlendingMode.SlerpBlend:
+                    // Hermite smoothstep for SLERP-like transition
+                    alpha = t * t * (3.0 - 2.0 * t);
+                    break;
+                default: // LinearBlend
+                    alpha = t;
+                    break;
+            }
             int accOffset = (accFrames - overlapElements + f) * elementsPerFrame;
             int curOffset = f * elementsPerFrame;
             for (int j = 0; j < elementsPerFrame && accOffset + j < result.Data.Length; j++)

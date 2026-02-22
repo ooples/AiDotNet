@@ -166,6 +166,24 @@ public class TemporalInterpolationVAE<T> : VAEModelBase<T>
     /// <returns>Interpolated latent frame.</returns>
     public Tensor<T>[] InterpolateLatent(Tensor<T> latentA, Tensor<T> latentB)
     {
+        Guard.NotNull(latentA);
+        Guard.NotNull(latentB);
+
+        if (latentA.Shape.Length != latentB.Shape.Length)
+        {
+            throw new ArgumentException(
+                $"Latent shapes must have the same rank: latentA has {latentA.Shape.Length} dims, latentB has {latentB.Shape.Length} dims.");
+        }
+
+        for (int d = 0; d < latentA.Shape.Length; d++)
+        {
+            if (latentA.Shape[d] != latentB.Shape[d])
+            {
+                throw new ArgumentException(
+                    $"Latent shape mismatch at dimension {d}: latentA={latentA.Shape[d]}, latentB={latentB.Shape[d]}.");
+            }
+        }
+
         var results = new Tensor<T>[_interpolationFactor];
         var numOps = MathHelper.GetNumericOperations<T>();
 
