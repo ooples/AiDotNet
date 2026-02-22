@@ -563,6 +563,13 @@ public class LayoutXLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, ID
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {
+        // LayoutXLM has a very large embedding layer (250K+ vocab × 768 hidden dim = 192M+ params).
+        // Serializing all parameters to a byte array in GetModelMetadata would require ~1.5 GB of memory.
+        // Use file-based Save/Load for model persistence instead.
+        long totalParams = 0;
+        foreach (var layer in Layers)
+            totalParams += layer.GetParameters().Length;
+
         return new ModelMetadata<T>
         {
             Name = "LayoutXLM",
@@ -580,9 +587,10 @@ public class LayoutXLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, ID
                 { "visual_backbone_channels", _visualBackboneChannels },
                 { "num_classes", _numClasses },
                 { "num_languages", _numLanguages },
-                { "use_native_mode", _useNativeMode }
+                { "use_native_mode", _useNativeMode },
+                { "total_parameters", totalParams }
             },
-            ModelData = this.Serialize()
+            ModelData = totalParams > 50_000_000 ? Array.Empty<byte>() : this.Serialize()
         };
     }
 

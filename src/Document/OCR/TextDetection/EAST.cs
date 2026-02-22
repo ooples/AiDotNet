@@ -579,6 +579,69 @@ public class EAST<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
 
     #region NeuralNetworkBase Implementation
 
+    /// <summary>
+    /// Overrides Forward to handle EAST's parallel output heads (score map + geometry).
+    /// The last two layers are parallel heads that both receive the feature map,
+    /// not sequential layers.
+    /// </summary>
+    protected override Tensor<T> Forward(Tensor<T> input)
+    {
+        if (Layers.Count < 3)
+            return base.Forward(input);
+
+        // Run all layers except the last two (which are parallel output heads)
+        Tensor<T> featureMap = input;
+        for (int i = 0; i < Layers.Count - 2; i++)
+        {
+            featureMap = Layers[i].Forward(featureMap);
+        }
+
+        // Run score map head and geometry head in parallel on the same feature map
+        var scoreMap = Layers[^2].Forward(featureMap);
+        var geometry = Layers[^1].Forward(featureMap);
+
+        // Concatenate along channel dimension: [batch, 1+geometryChannels, H, W]
+        return ConcatenateTensors(scoreMap, geometry);
+    }
+
+    private static Tensor<T> ConcatenateTensors(Tensor<T> a, Tensor<T> b)
+    {
+        // Both tensors have shape [batch, channels, H, W]
+        // Concatenate along dimension 1 (channels)
+        int batch = a.Shape[0];
+        int cA = a.Shape[1];
+        int cB = b.Shape[1];
+        int h = a.Shape[2];
+        int w = a.Shape[3];
+        int totalChannels = cA + cB;
+
+        var result = new Tensor<T>([batch, totalChannels, h, w]);
+        int planeSize = h * w;
+
+        for (int n = 0; n < batch; n++)
+        {
+            int batchOffset = n * totalChannels * planeSize;
+            int srcBatchOffsetA = n * cA * planeSize;
+            int srcBatchOffsetB = n * cB * planeSize;
+
+            // Copy channels from tensor a
+            for (int c = 0; c < cA; c++)
+            {
+                a.Data.Span.Slice(srcBatchOffsetA + c * planeSize, planeSize)
+                    .CopyTo(result.Data.Span.Slice(batchOffset + c * planeSize, planeSize));
+            }
+
+            // Copy channels from tensor b
+            for (int c = 0; c < cB; c++)
+            {
+                b.Data.Span.Slice(srcBatchOffsetB + c * planeSize, planeSize)
+                    .CopyTo(result.Data.Span.Slice(batchOffset + (cA + c) * planeSize, planeSize));
+            }
+        }
+
+        return result;
+    }
+
     /// <inheritdoc/>
     public override Tensor<T> Predict(Tensor<T> input)
     {

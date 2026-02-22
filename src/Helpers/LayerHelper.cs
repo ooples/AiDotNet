@@ -10343,9 +10343,8 @@ public static class LayerHelper<T>
         int intermediateSize = hiddenDim * 4;
         int numPatches = (imageSize / patchSize) * (imageSize / patchSize);
 
-        // Patch embedding (linear projection of flattened patches)
-        yield return new ConvolutionalLayer<T>(3, imageSize, imageSize, hiddenDim, patchSize, patchSize, 0);
-        yield return new FlattenLayer<T>([hiddenDim, imageSize / patchSize, imageSize / patchSize]);
+        // Patch embedding: [B, 3, imageSize, imageSize] -> [B, numPatches, hiddenDim]
+        yield return new PatchEmbeddingLayer<T>(imageSize, imageSize, 3, patchSize, hiddenDim);
 
         // Position embeddings
         yield return new PositionalEncodingLayer<T>(numPatches + 1, hiddenDim);
