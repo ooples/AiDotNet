@@ -1,3 +1,6 @@
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+
 namespace AiDotNet.ComputerVision.Segmentation.Common;
 
 /// <summary>
@@ -155,6 +158,8 @@ public enum SegmentationTaskType
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 public class SegmentInfo<T>
 {
+    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
     /// <summary>Unique segment ID.</summary>
     public int Id { get; set; }
 
@@ -168,7 +173,7 @@ public class SegmentInfo<T>
     public bool IsThing { get; set; }
 
     /// <summary>Confidence score in [0, 1].</summary>
-    public T Score { get; set; } = default!;
+    public T Score { get; set; } = NumOps.Zero;
 
     /// <summary>Area of this segment in pixels.</summary>
     public int Area { get; set; }
