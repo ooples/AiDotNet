@@ -606,7 +606,15 @@ public class EAST<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
 
     private static Tensor<T> ConcatenateTensors(Tensor<T> a, Tensor<T> b)
     {
-        // Both tensors have shape [batch, channels, H, W]
+        // Both tensors must be 4-D: [batch, channels, H, W]
+        if (a.Shape.Length != 4)
+            throw new ArgumentException($"Tensor 'a' must be 4-D, got {a.Shape.Length}-D.", nameof(a));
+        if (b.Shape.Length != 4)
+            throw new ArgumentException($"Tensor 'b' must be 4-D, got {b.Shape.Length}-D.", nameof(b));
+        if (a.Shape[0] != b.Shape[0] || a.Shape[2] != b.Shape[2] || a.Shape[3] != b.Shape[3])
+            throw new ArgumentException(
+                $"Tensor shapes must match on batch/height/width: a=[{string.Join(",", a.Shape)}], b=[{string.Join(",", b.Shape)}].");
+
         // Concatenate along dimension 1 (channels)
         int batch = a.Shape[0];
         int cA = a.Shape[1];

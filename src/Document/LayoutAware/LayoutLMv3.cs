@@ -904,10 +904,9 @@ public class LayoutLMv3<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
         return normalized;
     }
 
-    private static Tensor<T> ResizeBilinear(Tensor<T> image, int batchSize, int channels,
+    private Tensor<T> ResizeBilinear(Tensor<T> image, int batchSize, int channels,
         int srcH, int srcW, int dstH, int dstW)
     {
-        INumericOperations<T> numOps = MathHelper.GetNumericOperations<T>();
         var resized = new Tensor<T>([batchSize, channels, dstH, dstW]);
 
         double scaleH = (double)srcH / dstH;
@@ -932,16 +931,16 @@ public class LayoutLMv3<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
                         double fx = srcX - x0;
 
                         int baseIdx = b * channels * srcH * srcW + c * srcH * srcW;
-                        double v00 = numOps.ToDouble(image.Data.Span[baseIdx + y0 * srcW + x0]);
-                        double v01 = numOps.ToDouble(image.Data.Span[baseIdx + y0 * srcW + x1]);
-                        double v10 = numOps.ToDouble(image.Data.Span[baseIdx + y1 * srcW + x0]);
-                        double v11 = numOps.ToDouble(image.Data.Span[baseIdx + y1 * srcW + x1]);
+                        double v00 = NumOps.ToDouble(image.Data.Span[baseIdx + y0 * srcW + x0]);
+                        double v01 = NumOps.ToDouble(image.Data.Span[baseIdx + y0 * srcW + x1]);
+                        double v10 = NumOps.ToDouble(image.Data.Span[baseIdx + y1 * srcW + x0]);
+                        double v11 = NumOps.ToDouble(image.Data.Span[baseIdx + y1 * srcW + x1]);
 
                         double val = v00 * (1 - fy) * (1 - fx) + v01 * (1 - fy) * fx
                                    + v10 * fy * (1 - fx) + v11 * fy * fx;
 
                         int dstIdx = b * channels * dstH * dstW + c * dstH * dstW + h * dstW + w;
-                        resized.Data.Span[dstIdx] = numOps.FromDouble(val);
+                        resized.Data.Span[dstIdx] = NumOps.FromDouble(val);
                     }
                 }
             }

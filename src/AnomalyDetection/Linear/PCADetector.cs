@@ -36,6 +36,9 @@ namespace AiDotNet.AnomalyDetection.Linear;
 /// </remarks>
 public class PCADetector<T> : AnomalyDetectorBase<T>
 {
+    /// <summary>Eigenvalues below this threshold are treated as zero to avoid division by near-zero values in Mahalanobis distance.</summary>
+    private const double EigenvalueFloor = 1e-10;
+
     private readonly int? _nComponents;
     private readonly double _varianceThreshold;
     private int _fittedComponents;
@@ -207,15 +210,16 @@ public class PCADetector<T> : AnomalyDetectorBase<T>
             for (int c = 0; c < _fittedComponents; c++)
             {
                 double eigenvalue = NumOps.ToDouble(_explainedVariance![c]);
-                if (eigenvalue > 1e-10)
+                if (eigenvalue > EigenvalueFloor)
                 {
                     double proj = NumOps.ToDouble(projected[c]);
                     mahalanobis += (proj * proj) / eigenvalue;
                 }
             }
 
-            // Combined score: Mahalanobis distance + reconstruction error
-            scores[i] = NumOps.FromDouble(Math.Sqrt(mahalanobis + reconstructionError));
+            // Combined score: Hotelling's T² (Mahalanobis in PC space) + SPE/Q (reconstruction error).
+            // Both are kept as squared statistics, consistent with standard MSPC-based PCA anomaly scoring.
+            scores[i] = NumOps.FromDouble(mahalanobis + reconstructionError);
         }
 
         return scores;

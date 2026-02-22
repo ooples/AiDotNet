@@ -40,6 +40,9 @@ namespace AiDotNet.AnomalyDetection.TimeSeries;
 /// </remarks>
 public class MatrixProfileDetector<T> : AnomalyDetectorBase<T>
 {
+    /// <summary>Weight for the value-deviation component in the combined anomaly score.</summary>
+    private const double ValueDeviationWeight = 0.1;
+
     private readonly int _subsequenceLength;
     private readonly int _exclusionZone;
     private double[]? _matrixProfile;
@@ -307,8 +310,8 @@ public class MatrixProfileDetector<T> : AnomalyDetectorBase<T>
                     double valueDeviation = Math.Abs(values[i] - globalMean) / globalStd;
 
                     // Combined score (weighted sum)
-                    double score = profileScore + 0.1 * valueDeviation;
-                    scores[i] = NumOps.FromDouble(score);
+                    double score = profileScore + ValueDeviationWeight * valueDeviation;
+                    scores[i] = NumOps.FromDouble(Math.Min(score, 1.0));
                 }
 
                 return scores;

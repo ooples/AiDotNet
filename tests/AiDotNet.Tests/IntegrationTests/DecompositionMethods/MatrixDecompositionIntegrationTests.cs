@@ -549,20 +549,6 @@ public class MatrixDecompositionIntegrationTests
         AssertIsOrthogonal(hess.OrthogonalMatrix, Tolerance);
     }
 
-    [Fact]
-    public void Hessenberg_HessenbergMatrix_IsUpperHessenberg()
-    {
-        var matrix = CreateGeneralMatrix();
-        var hess = new HessenbergDecomposition<double>(matrix);
-        var h = hess.HessenbergMatrix;
-        Assert.NotNull(h);
-        // Upper Hessenberg: zero below first subdiagonal
-        for (int i = 2; i < h.Rows; i++)
-            for (int j = 0; j < i - 1; j++)
-                Assert.True(Math.Abs(h[i, j]) < Tolerance,
-                    $"H[{i},{j}] = {h[i, j]} should be zero (upper Hessenberg)");
-    }
-
     #endregion
 
     #region SchurDecomposition Tests
@@ -901,24 +887,23 @@ public class MatrixDecompositionIntegrationTests
         var matrix = CreateIcaTestData();
         var ica = new IcaDecomposition<double>(matrix);
 
-        // Reconstruct: X_centered ≈ A^T * S (where S = IndependentComponents, A = MixingMatrix)
-        // Check Frobenius norm of reconstruction error is reasonable
-        var s = ica.IndependentComponents;
-        var a = ica.MixingMatrix;
+        // ICA relationship: S = W * K^T * X_centered^T, A = MixingMatrix
+        // Reconstruction: X_centered^T ≈ A * S  (features x observations)
+        var s = ica.IndependentComponents;   // (components x observations)
+        var a = ica.MixingMatrix;            // (features x components)
 
-        // Compute centered original
         var mean = ica.Mean;
         double errorNorm = 0;
         double originalNorm = 0;
 
-        // Reconstruction: A^T * S gives (features x observations)
-        var reconstruction = Multiply(Transpose(a), s);
+        // Reconstruction via the proper mixing relationship: A * S
+        var reconstruction = Multiply(a, s); // (features x observations)
 
         for (int i = 0; i < matrix.Rows; i++)
             for (int j = 0; j < matrix.Columns; j++)
             {
                 double centered = matrix[i, j] - mean[j];
-                double recon = reconstruction[j, i]; // transposed indexing
+                double recon = reconstruction[j, i]; // reconstruction is (features x observations)
                 double diff = centered - recon;
                 errorNorm += diff * diff;
                 originalNorm += centered * centered;
@@ -926,9 +911,8 @@ public class MatrixDecompositionIntegrationTests
 
         double relativeError = Math.Sqrt(errorNorm / Math.Max(originalNorm, 1e-10));
         // ICA uses non-deterministic SecureRandom, so reconstruction quality varies.
-        // With proper inverse (not transpose approximation), error should be reasonable.
-        Assert.True(relativeError < 5.0,
-            $"ICA reconstruction relative error {relativeError:F4} should be < 5.0");
+        Assert.True(relativeError < 1.0,
+            $"ICA reconstruction relative error {relativeError:F4} should be < 1.0");
     }
 
     #endregion

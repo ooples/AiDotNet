@@ -39,6 +39,15 @@ namespace AiDotNet.AnomalyDetection.DistanceBased;
 /// </remarks>
 public class LOCIDetector<T> : AnomalyDetectorBase<T>
 {
+    /// <summary>Number of radius steps used to sweep from zero to <c>_maxRadius</c>.</summary>
+    private const int NumRadiiSteps = 20;
+
+    /// <summary>Multiplier applied to <c>_maxRadius</c> so the sweep slightly exceeds it, avoiding floating-point edge cases.</summary>
+    private const double RadiusOvershootFactor = 1.1;
+
+    /// <summary>MDEF score assigned to points that have counting neighbors but zero sampling neighbors, indicating extreme isolation.</summary>
+    private const double IsolatedPointScore = 1.0;
+
     private readonly double _alpha;
     private readonly int _kMax;
     private Matrix<T>? _trainingData;
@@ -126,11 +135,10 @@ public class LOCIDetector<T> : AnomalyDetectorBase<T>
             bool hadNeighbors = false;
 
             // Test multiple radii (use more steps for better resolution)
-            int numRadii = 20;
-            for (int ri = 1; ri <= numRadii; ri++)
+            for (int ri = 1; ri <= NumRadiiSteps; ri++)
             {
                 // Use slightly larger than _maxRadius to handle floating-point edge cases
-                double r = (_maxRadius * 1.1 * ri) / numRadii;
+                double r = (_maxRadius * RadiusOvershootFactor * ri) / NumRadiiSteps;
                 double alphaR = _alpha * r;
 
                 // Count points in r-neighborhood (counting neighborhood)
@@ -147,8 +155,7 @@ public class LOCIDetector<T> : AnomalyDetectorBase<T>
                     // No sampling neighbors means this point is extremely isolated at this radius.
                     // It has counting neighbors at radius r but not at alpha*r, indicating
                     // a large gap between this point and its neighborhood.
-                    double isolatedScore = 1.0;
-                    if (isolatedScore > maxMdef) maxMdef = isolatedScore;
+                    if (IsolatedPointScore > maxMdef) maxMdef = IsolatedPointScore;
                     continue;
                 }
 
