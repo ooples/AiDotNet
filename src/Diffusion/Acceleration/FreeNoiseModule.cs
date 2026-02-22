@@ -109,10 +109,15 @@ public class FreeNoiseModule<T>
             noise[i] = NumOps.FromDouble(SampleGaussian());
         }
 
-        // For extended frames, shift and blend with fresh noise
+        // For extended frames, use stride-shifted noise from the base window.
+        // Each stride-length block maps to a shifted region of the base noise,
+        // following the FreeNoise rescheduling algorithm.
         for (int frame = _windowSize; frame < targetFrames; frame++)
         {
-            int sourceFrame = (frame - _windowSize) % _windowSize;
+            int extIdx = frame - _windowSize;
+            int windowIdx = extIdx / _noiseShiftStride;
+            int frameInWindow = extIdx % _noiseShiftStride;
+            int sourceFrame = ((windowIdx + 1) * _noiseShiftStride + frameInWindow) % _windowSize;
             int frameOffset = frame * elementsPerFrame;
             int sourceOffset = sourceFrame * elementsPerFrame;
 

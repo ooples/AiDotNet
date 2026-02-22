@@ -69,8 +69,8 @@ public class TemporalSelfAttention<T> : LayerBase<T>
         int numFrames = 16,
         int spatialSize = 64)
         : base(
-            new[] { 1, numFrames * spatialSize * spatialSize, channels },
-            new[] { 1, numFrames * spatialSize * spatialSize, channels })
+            new[] { spatialSize * spatialSize, numFrames, channels },
+            new[] { spatialSize * spatialSize, numFrames, channels })
     {
         if (channels <= 0)
             throw new ArgumentOutOfRangeException(nameof(channels), "Channels must be positive.");
@@ -94,16 +94,13 @@ public class TemporalSelfAttention<T> : LayerBase<T>
     /// <summary>
     /// Performs temporal self-attention across frames for each spatial position.
     /// </summary>
-    /// <param name="input">Input tensor of shape [batch, frames * H * W, channels].</param>
-    /// <returns>Output tensor with temporal information mixed.</returns>
+    /// <param name="input">Input tensor of shape [batch * H * W, frames, channels].
+    /// Spatial positions are folded into the batch dimension so each position independently
+    /// attends across the temporal (frames) axis.</param>
+    /// <returns>Output tensor with temporal information mixed, same shape as input.</returns>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         _lastInput = input;
-
-        // Applies temporal attention across all frames.
-        // In a full reshape-based implementation, input would be reshaped to
-        // [batch * H * W, frames, channels] to isolate per-spatial-position temporal sequences.
-        // This simplified version delegates directly to the attention layer.
         return _temporalAttention.Forward(input);
     }
 
