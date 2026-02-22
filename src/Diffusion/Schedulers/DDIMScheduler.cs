@@ -1,4 +1,4 @@
-namespace AiDotNet.Diffusion.Schedulers;
+namespace AiDotNet.Diffusion;
 
 /// <summary>
 /// DDIM (Denoising Diffusion Implicit Models) scheduler implementation.

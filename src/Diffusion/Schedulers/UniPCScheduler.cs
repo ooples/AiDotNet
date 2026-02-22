@@ -1,6 +1,6 @@
 using AiDotNet.Enums;
 
-namespace AiDotNet.Diffusion.Schedulers;
+namespace AiDotNet.Diffusion;
 
 /// <summary>
 /// UniPC (Unified Predictor-Corrector) scheduler for fast, high-quality diffusion sampling.

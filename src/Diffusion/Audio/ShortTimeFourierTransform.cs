@@ -3,7 +3,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.WindowFunctions;
 
-namespace AiDotNet.Diffusion.Audio;
+namespace AiDotNet.Diffusion;
 
 /// <summary>
 /// Short-Time Fourier Transform (STFT) for analyzing audio signals over time.

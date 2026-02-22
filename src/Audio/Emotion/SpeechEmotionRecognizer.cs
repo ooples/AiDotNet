@@ -1,6 +1,6 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Audio.Classification;
-using AiDotNet.Diffusion.Audio;
+using AiDotNet.Diffusion;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;

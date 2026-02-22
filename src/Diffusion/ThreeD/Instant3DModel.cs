@@ -1,15 +1,12 @@
 using System.Diagnostics.CodeAnalysis;
-using AiDotNet.Diffusion.NoisePredictors;
-using AiDotNet.Diffusion.VAE;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
-using AiDotNet.Diffusion.Schedulers;
 using AiDotNet.NeuralNetworks;
 
-namespace AiDotNet.Diffusion.ThreeD;
+namespace AiDotNet.Diffusion;
 
 /// <summary>
 /// Instant3D model -- fast text-to-3D with feed-forward generation.

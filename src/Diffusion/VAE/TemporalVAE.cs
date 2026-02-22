@@ -5,7 +5,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks.Layers;
 
-namespace AiDotNet.Diffusion.VAE;
+namespace AiDotNet.Diffusion;
 
 /// <summary>
 /// Temporal-aware Variational Autoencoder for video diffusion models.

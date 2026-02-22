@@ -1,18 +1,14 @@
 using System.Diagnostics.CodeAnalysis;
 using AiDotNet.ActivationFunctions;
-using AiDotNet.Diffusion.Audio;
-using AiDotNet.Diffusion.NoisePredictors;
-using AiDotNet.Diffusion.VAE;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
-using AiDotNet.Diffusion.Schedulers;
 using AiDotNet.NeuralNetworks.Layers;
 
-namespace AiDotNet.Diffusion.Audio;
+namespace AiDotNet.Diffusion;
 
 /// <summary>
 /// Riffusion model for music generation via spectrogram diffusion.

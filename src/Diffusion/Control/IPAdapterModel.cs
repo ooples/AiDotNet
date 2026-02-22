@@ -1,16 +1,13 @@
 using AiDotNet.ActivationFunctions;
-using AiDotNet.Diffusion.NoisePredictors;
-using AiDotNet.Diffusion.VAE;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
-using AiDotNet.Diffusion.Schedulers;
 using AiDotNet.NeuralNetworks.Layers;
 
-namespace AiDotNet.Diffusion.Control;
+namespace AiDotNet.Diffusion;
 
 /// <summary>
 /// IP-Adapter model for image-based prompt conditioning in diffusion models.

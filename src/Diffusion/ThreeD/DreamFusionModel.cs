@@ -1,7 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
 using AiDotNet.ActivationFunctions;
-using AiDotNet.Diffusion.NoisePredictors;
-using AiDotNet.Diffusion.VAE;
 using AiDotNet.Enums;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -9,10 +7,9 @@ using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
-using AiDotNet.Diffusion.Schedulers;
 using AiDotNet.NeuralNetworks.Layers;
 
-namespace AiDotNet.Diffusion.ThreeD;
+namespace AiDotNet.Diffusion;
 
 /// <summary>
 /// DreamFusion model for text-to-3D generation via Score Distillation Sampling (SDS).

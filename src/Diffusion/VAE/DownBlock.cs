@@ -3,7 +3,7 @@ using AiDotNet.Engines;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
 
-namespace AiDotNet.Diffusion.VAE;
+namespace AiDotNet.Diffusion;
 
 /// <summary>
 /// Downsampling block for VAE encoder with multiple ResBlocks and strided convolution.

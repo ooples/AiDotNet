@@ -2,7 +2,6 @@ using System.Diagnostics.CodeAnalysis;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
-using AiDotNet.Diffusion.Schedulers;
 
 namespace AiDotNet.Diffusion;
 

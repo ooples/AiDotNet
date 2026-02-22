@@ -1,4 +1,4 @@
-using AiDotNet.Diffusion.Audio;
+using AiDotNet.Diffusion;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.Interfaces;

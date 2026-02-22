@@ -1,15 +1,12 @@
 using System.Diagnostics.CodeAnalysis;
-using AiDotNet.Diffusion.NoisePredictors;
-using AiDotNet.Diffusion.VAE;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
-using AiDotNet.Diffusion.Schedulers;
 
-namespace AiDotNet.Diffusion.Video;
+namespace AiDotNet.Diffusion;
 
 /// <summary>
 /// Lumina-T2X model — transformer-based text-to-any generation (image, video, 3D, audio).

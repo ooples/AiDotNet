@@ -1,4 +1,4 @@
-namespace AiDotNet.Diffusion.Schedulers;
+namespace AiDotNet.Diffusion;
 
 /// <summary>
 /// PNDM (Pseudo Numerical Methods for Diffusion Models) scheduler implementation.

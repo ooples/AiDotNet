@@ -3,7 +3,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 
-namespace AiDotNet.Diffusion.VAE;
+namespace AiDotNet.Diffusion;
 
 /// <summary>
 /// Base class for Variational Autoencoder (VAE) models used in latent diffusion.

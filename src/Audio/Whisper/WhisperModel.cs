@@ -1,5 +1,5 @@
 using System.Diagnostics;
-using AiDotNet.Diffusion.Audio;
+using AiDotNet.Diffusion;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;

@@ -1,5 +1,5 @@
 using AiDotNet.Enums;
-using AiDotNet.Diffusion.Schedulers;
+using AiDotNet.Diffusion;
 using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.Diffusion.Schedulers;

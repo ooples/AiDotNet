@@ -1,15 +1,12 @@
 using System.Diagnostics.CodeAnalysis;
-using AiDotNet.Diffusion.NoisePredictors;
-using AiDotNet.Diffusion.VAE;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
-using AiDotNet.Diffusion.Schedulers;
 
-namespace AiDotNet.Diffusion.Video;
+namespace AiDotNet.Diffusion;
 
 /// <summary>
 /// CogVideo/CogVideoX model for text-to-video and image-to-video generation.

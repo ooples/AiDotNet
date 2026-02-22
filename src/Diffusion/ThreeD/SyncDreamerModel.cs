@@ -1,15 +1,12 @@
 using System.Diagnostics.CodeAnalysis;
-using AiDotNet.Diffusion.NoisePredictors;
-using AiDotNet.Diffusion.VAE;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
-using AiDotNet.Diffusion.Schedulers;
 
-namespace AiDotNet.Diffusion.ThreeD;
+namespace AiDotNet.Diffusion;
 
 /// <summary>
 /// SyncDreamer model for synchronized multi-view diffusion with 3D-consistent generation.

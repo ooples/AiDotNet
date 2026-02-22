@@ -1,4 +1,4 @@
-using AiDotNet.Diffusion.Memory;
+using AiDotNet.Diffusion;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;

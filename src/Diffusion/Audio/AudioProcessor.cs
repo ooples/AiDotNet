@@ -1,6 +1,6 @@
 using AiDotNet.Interfaces;
 
-namespace AiDotNet.Diffusion.Audio;
+namespace AiDotNet.Diffusion;
 
 /// <summary>
 /// Complete audio processing pipeline for diffusion-based audio generation.

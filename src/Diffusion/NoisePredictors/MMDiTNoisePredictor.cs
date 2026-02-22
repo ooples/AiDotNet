@@ -6,7 +6,7 @@ using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 
-namespace AiDotNet.Diffusion.NoisePredictors;
+namespace AiDotNet.Diffusion;
 
 /// <summary>
 /// Multi-Modal Diffusion Transformer (MMDiT) noise predictor for SD3 and FLUX architectures.

@@ -1,6 +1,6 @@
 using AiDotNet.Interfaces;
 
-namespace AiDotNet.Diffusion.Memory;
+namespace AiDotNet.Diffusion;
 
 /// <summary>
 /// Enables model sharding across multiple devices for large model inference.

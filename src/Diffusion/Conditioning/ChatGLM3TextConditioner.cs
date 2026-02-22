@@ -2,7 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 
-namespace AiDotNet.Diffusion.Conditioning;
+namespace AiDotNet.Diffusion;
 
 /// <summary>
 /// ChatGLM3 text conditioning module for multilingual diffusion models.

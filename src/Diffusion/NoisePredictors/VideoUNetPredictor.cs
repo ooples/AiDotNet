@@ -6,7 +6,7 @@ using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.Engines;
 
-namespace AiDotNet.Diffusion.NoisePredictors;
+namespace AiDotNet.Diffusion;
 
 /// <summary>
 /// 3D U-Net architecture for video noise prediction in diffusion models.

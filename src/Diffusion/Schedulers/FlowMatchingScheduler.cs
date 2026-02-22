@@ -2,7 +2,7 @@ using AiDotNet.Engines;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 
-namespace AiDotNet.Diffusion.Schedulers;
+namespace AiDotNet.Diffusion;
 
 /// <summary>
 /// Flow matching scheduler implementing rectified flow ODE sampling.

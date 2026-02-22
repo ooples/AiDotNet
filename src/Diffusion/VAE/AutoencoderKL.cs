@@ -1,7 +1,7 @@
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 
-namespace AiDotNet.Diffusion.VAE;
+namespace AiDotNet.Diffusion;
 
 /// <summary>
 /// KL-regularized Variational Autoencoder for latent diffusion models.

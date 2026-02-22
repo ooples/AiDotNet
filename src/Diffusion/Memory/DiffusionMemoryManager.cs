@@ -1,8 +1,7 @@
 using AiDotNet.Autodiff;
-using AiDotNet.Diffusion.VAE;
 using AiDotNet.Interfaces;
 
-namespace AiDotNet.Diffusion.Memory;
+namespace AiDotNet.Diffusion;
 
 /// <summary>
 /// Memory management utilities for diffusion models including gradient checkpointing,

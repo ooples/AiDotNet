@@ -2,7 +2,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.WindowFunctions;
 
-namespace AiDotNet.Diffusion.Audio;
+namespace AiDotNet.Diffusion;
 
 /// <summary>
 /// Computes Mel spectrograms from audio signals.

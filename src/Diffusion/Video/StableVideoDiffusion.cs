@@ -1,13 +1,10 @@
-using AiDotNet.Diffusion.NoisePredictors;
-using AiDotNet.Diffusion.VAE;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
-using AiDotNet.Diffusion.Schedulers;
 
-namespace AiDotNet.Diffusion.Video;
+namespace AiDotNet.Diffusion;
 
 /// <summary>
 /// Stable Video Diffusion (SVD) model for image-to-video generation.

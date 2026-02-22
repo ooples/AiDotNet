@@ -3,7 +3,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Attention;
 using AiDotNet.NeuralNetworks.Layers;
 
-namespace AiDotNet.Diffusion.Attention;
+namespace AiDotNet.Diffusion;
 
 /// <summary>
 /// Memory-efficient attention layer for diffusion models using Flash Attention.
