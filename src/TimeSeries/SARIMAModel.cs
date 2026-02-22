@@ -473,17 +473,23 @@ public class SARIMAModel<T> : TimeSeriesModelBase<T>
             predictions[i] = prediction;
 
             // Update last observed values and errors for next prediction
-            for (int j = lastObservedValues.Length - 1; j > 0; j--)
+            if (lastObservedValues.Length > 0)
             {
-                lastObservedValues[j] = lastObservedValues[j - 1];
+                for (int j = lastObservedValues.Length - 1; j > 0; j--)
+                {
+                    lastObservedValues[j] = lastObservedValues[j - 1];
+                }
+                lastObservedValues[0] = prediction;
             }
-            lastObservedValues[0] = prediction;
 
-            for (int j = lastErrors.Length - 1; j > 0; j--)
+            if (lastErrors.Length > 0)
             {
-                lastErrors[j] = lastErrors[j - 1];
+                for (int j = lastErrors.Length - 1; j > 0; j--)
+                {
+                    lastErrors[j] = lastErrors[j - 1];
+                }
+                lastErrors[0] = NumOps.Zero; // Assume zero error for future predictions
             }
-            lastErrors[0] = NumOps.Zero; // Assume zero error for future predictions
         }
 
         return predictions;
