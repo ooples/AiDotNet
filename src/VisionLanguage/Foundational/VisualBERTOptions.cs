@@ -11,6 +11,38 @@ namespace AiDotNet.VisionLanguage.Foundational;
 /// </remarks>
 public class VisualBERTOptions : FoundationalVLMOptions
 {
+    /// <summary>Initializes a new instance by copying from another instance.</summary>
+    /// <param name="other">The options instance to copy from.</param>
+    /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
+    public VisualBERTOptions(VisualBERTOptions other)
+    {
+        if (other == null)
+            throw new ArgumentNullException(nameof(other));
+
+        Seed = other.Seed;
+        ImageSize = other.ImageSize;
+        VisionDim = other.VisionDim;
+        TextDim = other.TextDim;
+        FusionDim = other.FusionDim;
+        NumVisionLayers = other.NumVisionLayers;
+        NumTextLayers = other.NumTextLayers;
+        NumFusionLayers = other.NumFusionLayers;
+        NumHeads = other.NumHeads;
+        MaxSequenceLength = other.MaxSequenceLength;
+        VocabSize = other.VocabSize;
+        DropoutRate = other.DropoutRate;
+        FusionType = other.FusionType;
+        VisualFeatureType = other.VisualFeatureType;
+        ImageMean = other.ImageMean;
+        ImageStd = other.ImageStd;
+        ModelPath = other.ModelPath;
+        OnnxOptions = other.OnnxOptions;
+        LearningRate = other.LearningRate;
+        WeightDecay = other.WeightDecay;
+        MaxVisualTokens = other.MaxVisualTokens;
+        UseVisualSegmentEmbeddings = other.UseVisualSegmentEmbeddings;
+    }
+
     /// <summary>Gets or sets the maximum number of visual tokens.</summary>
     public int MaxVisualTokens { get; set; } = 36;
 

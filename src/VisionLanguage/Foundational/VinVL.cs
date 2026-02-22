@@ -23,6 +23,7 @@ namespace AiDotNet.VisionLanguage.Foundational;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "VinVL: Revisiting Visual Representations in Vision-Language Models" (Zhang et al., CVPR 2021)</item></list></para>
+/// <para><b>For Beginners:</b> VinVL is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class VinVL<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T>
 {

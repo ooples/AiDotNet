@@ -23,6 +23,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Fuyu-8B: A Multimodal Architecture for AI Agents" (Adept, 2023)</item></list></para>
+/// <para><b>For Beginners:</b> Fuyu is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class Fuyu<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {

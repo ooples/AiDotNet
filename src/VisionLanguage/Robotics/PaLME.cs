@@ -18,6 +18,7 @@ namespace AiDotNet.VisionLanguage.Robotics;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "PaLM-E: An Embodied Multimodal Language Model (Google, 2023)"</item></list></para>
+/// <para><b>For Beginners:</b> PaLME is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class PaLME<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
 {

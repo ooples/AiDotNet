@@ -18,6 +18,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Monkey: Image Resolution and Text Label Are Important Things for Large Multi-modal Models" (2024)</item></list></para>
+/// <para><b>For Beginners:</b> Monkey is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class Monkey<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {

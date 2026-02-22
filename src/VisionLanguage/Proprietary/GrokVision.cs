@@ -18,6 +18,7 @@ namespace AiDotNet.VisionLanguage.Proprietary;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Grok Vision: real-time data processing with multimodal input (xAI, 2024-2025)</item></list></para>
+/// <para><b>For Beginners:</b> GrokVision is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class GrokVision<T> : VisionLanguageModelBase<T>, IProprietaryVLM<T>
 {

@@ -17,6 +17,7 @@ namespace AiDotNet.VisionLanguage.VideoLanguage;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "LongVILA: Scaling Long-Context Visual Language Models for Long Videos" (NVIDIA, 2024)</item></list></para>
+/// <para><b>For Beginners:</b> LongVILA is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class LongVILA<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<T>
 {

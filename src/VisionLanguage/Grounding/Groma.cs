@@ -18,6 +18,7 @@ namespace AiDotNet.VisionLanguage.Grounding;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Groma: Localized Visual Tokenization for Grounding Multimodal Large Language Models" (ByteDance, 2024)</item></list></para>
+/// <para><b>For Beginners:</b> Groma is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class Groma<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
 {

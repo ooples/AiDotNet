@@ -18,6 +18,7 @@ namespace AiDotNet.VisionLanguage.Grounding;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Simple Open-Vocabulary Object Detection with Vision Transformers" (Google, 2022)</item></list></para>
+/// <para><b>For Beginners:</b> OWLViT is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class OWLViT<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
 {

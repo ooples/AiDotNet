@@ -23,6 +23,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "The Llama 3 Herd of Models" (Meta, 2024)</item></list></para>
+/// <para><b>For Beginners:</b> Llama32Vision is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class Llama32Vision<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {

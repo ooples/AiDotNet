@@ -18,6 +18,7 @@ namespace AiDotNet.VisionLanguage.Unified;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Show-o2: Improved Unified Multimodal Understanding and Generation" (NUS, 2025)</item></list></para>
+/// <para><b>For Beginners:</b> ShowO2 is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class ShowO2<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
 {

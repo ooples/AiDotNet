@@ -23,6 +23,7 @@ namespace AiDotNet.VisionLanguage.Generative;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "PaLI: A Jointly-Scaled Multilingual Language-Image Model" (Chen et al., ICLR 2023)</item></list></para>
+/// <para><b>For Beginners:</b> PaLI is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class PaLI<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageModel<T>
 {

@@ -23,6 +23,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Pixtral 12B" (Mistral, 2024)</item></list></para>
+/// <para><b>For Beginners:</b> Pixtral is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class Pixtral<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {

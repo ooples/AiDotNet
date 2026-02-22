@@ -26,6 +26,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
 /// <item>Paper: "Combined Scaling for Zero-shot Transfer Learning" (Pham et al., 2022)</item>
 /// </list>
 /// </para>
+/// <para><b>For Beginners:</b> BASIC is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class BASIC<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
 {

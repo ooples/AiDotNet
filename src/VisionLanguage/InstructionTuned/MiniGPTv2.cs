@@ -24,6 +24,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "MiniGPT-v2: Large Language Model as a Unified Interface for Vision-Language Multi-task Learning" (Chen et al., 2023)</item></list></para>
+/// <para><b>For Beginners:</b> MiniGPTv2 is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class MiniGPTv2<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {

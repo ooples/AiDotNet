@@ -18,6 +18,7 @@ namespace AiDotNet.VisionLanguage.VideoLanguage;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "MVBench: A Comprehensive Multi-modal Video Understanding Benchmark" (Shanghai AI Lab, 2023)</item></list></para>
+/// <para><b>For Beginners:</b> VideoChat2 is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class VideoChat2<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<T>
 {

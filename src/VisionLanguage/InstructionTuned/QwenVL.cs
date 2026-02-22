@@ -24,6 +24,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Qwen-VL: A Versatile Vision-Language Model for Understanding, Localization, Text Reading, and Beyond" (Bai et al., 2023)</item></list></para>
+/// <para><b>For Beginners:</b> QwenVL is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class QwenVL<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {

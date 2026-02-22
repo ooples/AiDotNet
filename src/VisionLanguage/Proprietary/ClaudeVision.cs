@@ -18,6 +18,7 @@ namespace AiDotNet.VisionLanguage.Proprietary;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Claude 3/4 Vision: strong document and chart understanding with extended thinking (Anthropic, 2024-2025)</item></list></para>
+/// <para><b>For Beginners:</b> ClaudeVision is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class ClaudeVision<T> : VisionLanguageModelBase<T>, IProprietaryVLM<T>
 {

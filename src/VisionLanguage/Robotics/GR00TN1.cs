@@ -18,6 +18,7 @@ namespace AiDotNet.VisionLanguage.Robotics;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "GR00T N1: An Open Foundation Model for Generalist Humanoid Robots (NVIDIA, 2025)"</item></list></para>
+/// <para><b>For Beginners:</b> GR00TN1 is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class GR00TN1<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
 {

@@ -24,6 +24,45 @@ namespace AiDotNet.VisionLanguage.Encoders;
 /// </remarks>
 public class ContrastiveEncoderOptions : ModelOptions
 {
+    /// <summary>Initializes a new instance with default values.</summary>
+    public ContrastiveEncoderOptions() { }
+
+    /// <summary>Initializes a new instance by copying from another instance.</summary>
+    /// <param name="other">The options instance to copy from.</param>
+    /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
+    public ContrastiveEncoderOptions(ContrastiveEncoderOptions other)
+    {
+        if (other == null)
+            throw new ArgumentNullException(nameof(other));
+
+        Seed = other.Seed;
+        ImageSize = other.ImageSize;
+        VisionEmbeddingDim = other.VisionEmbeddingDim;
+        VisionEncoderVariant = other.VisionEncoderVariant;
+        PatchSize = other.PatchSize;
+        NumVisionLayers = other.NumVisionLayers;
+        NumVisionHeads = other.NumVisionHeads;
+        VisionFfnMultiplier = other.VisionFfnMultiplier;
+        TextEmbeddingDim = other.TextEmbeddingDim;
+        TextEncoderVariant = other.TextEncoderVariant;
+        MaxSequenceLength = other.MaxSequenceLength;
+        VocabSize = other.VocabSize;
+        NumTextLayers = other.NumTextLayers;
+        NumTextHeads = other.NumTextHeads;
+        ProjectionDim = other.ProjectionDim;
+        Temperature = other.Temperature;
+        DropoutRate = other.DropoutRate;
+        ImageMean = other.ImageMean;
+        ImageStd = other.ImageStd;
+        ImageEncoderModelPath = other.ImageEncoderModelPath;
+        TextEncoderModelPath = other.TextEncoderModelPath;
+        OnnxOptions = other.OnnxOptions;
+        LearningRate = other.LearningRate;
+        WeightDecay = other.WeightDecay;
+        WarmUpSteps = other.WarmUpSteps;
+        LabelSmoothing = other.LabelSmoothing;
+    }
+
     #region Image Encoder
 
     /// <summary>

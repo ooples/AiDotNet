@@ -14,6 +14,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Data Filtering Networks" (Fang et al., 2023)</item></list></para>
+/// <para><b>For Beginners:</b> DFNCLIP is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class DFNCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
 {

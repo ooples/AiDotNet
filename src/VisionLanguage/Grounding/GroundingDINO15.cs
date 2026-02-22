@@ -18,6 +18,7 @@ namespace AiDotNet.VisionLanguage.Grounding;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Grounding DINO 1.5: Advance the Edge of Open-Set Object Detection" (IDEA, 2024)</item></list></para>
+/// <para><b>For Beginners:</b> GroundingDINO15 is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class GroundingDINO15<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
 {

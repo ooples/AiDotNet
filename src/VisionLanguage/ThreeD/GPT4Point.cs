@@ -18,6 +18,7 @@ namespace AiDotNet.VisionLanguage.ThreeD;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "GPT4Point: A Unified Framework for Point-Language Understanding and Generation (Various, 2024)"</item></list></para>
+/// <para><b>For Beginners:</b> GPT4Point is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class GPT4Point<T> : VisionLanguageModelBase<T>, IThreeDVisionLanguageModel<T>
 {

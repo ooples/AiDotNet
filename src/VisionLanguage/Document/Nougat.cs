@@ -18,6 +18,7 @@ namespace AiDotNet.VisionLanguage.Document;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Nougat: Neural Optical Understanding for Academic Documents" (Meta, 2023)</item></list></para>
+/// <para><b>For Beginners:</b> Nougat is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class Nougat<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<T>
 {

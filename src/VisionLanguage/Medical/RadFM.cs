@@ -18,6 +18,7 @@ namespace AiDotNet.VisionLanguage.Medical;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "RadFM: Towards Generalist Foundation Model for Radiology (Various, 2024)"</item></list></para>
+/// <para><b>For Beginners:</b> RadFM is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class RadFM<T> : VisionLanguageModelBase<T>, IMedicalVLM<T>
 {

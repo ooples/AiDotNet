@@ -18,6 +18,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "VILA-U: a Unified Foundation Model Integrating Visual Understanding and Generation" (NVIDIA, 2024)</item></list></para>
+/// <para><b>For Beginners:</b> VILAU is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class VILAU<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {

@@ -18,6 +18,7 @@ namespace AiDotNet.VisionLanguage.Medical;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Dragonfly-Med: Multi-Resolution Visual Encoding for Medical Image Understanding (Together.ai, 2024)"</item></list></para>
+/// <para><b>For Beginners:</b> DragonflyMed is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class DragonflyMed<T> : VisionLanguageModelBase<T>, IMedicalVLM<T>
 {

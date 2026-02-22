@@ -24,6 +24,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "LLaVA-OneVision: Easy Visual Task Transfer" (Li et al., 2024)</item></list></para>
+/// <para><b>For Beginners:</b> LLaVAOneVision is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class LLaVAOneVision<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {

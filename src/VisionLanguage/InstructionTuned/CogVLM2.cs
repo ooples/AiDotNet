@@ -24,6 +24,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "CogVLM2: Visual Language Models for Image and Video Understanding" (Hong et al., 2024)</item></list></para>
+/// <para><b>For Beginners:</b> CogVLM2 is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class CogVLM2<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {

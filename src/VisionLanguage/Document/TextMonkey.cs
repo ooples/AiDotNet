@@ -18,6 +18,7 @@ namespace AiDotNet.VisionLanguage.Document;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "TextMonkey: An OCR-Free Large Multimodal Model for Understanding Document" (HUST, 2024)</item></list></para>
+/// <para><b>For Beginners:</b> TextMonkey is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class TextMonkey<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<T>
 {

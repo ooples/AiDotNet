@@ -22,6 +22,7 @@ namespace AiDotNet.VisionLanguage.Generative;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "xGen-MM (BLIP-3): A Family of Open Large Multimodal Models" (Salesforce, 2024)</item></list></para>
+/// <para><b>For Beginners:</b> BLIP3 is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class BLIP3<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageModel<T>
 {

@@ -18,6 +18,7 @@ namespace AiDotNet.VisionLanguage.Document;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "mPLUG-DocOwl 2: High-resolution Compressing for OCR-free Multi-page Document Understanding" (Alibaba, 2024)</item></list></para>
+/// <para><b>For Beginners:</b> MPLUGDocOwl2 is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class MPLUGDocOwl2<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<T>
 {

@@ -18,6 +18,7 @@ namespace AiDotNet.VisionLanguage.Robotics;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "RT-2: Vision-Language-Action Models Transfer Web Knowledge to Robotic Control (Google DeepMind, 2023)"</item></list></para>
+/// <para><b>For Beginners:</b> RT2 is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class RT2<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
 {

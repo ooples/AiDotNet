@@ -24,6 +24,7 @@ namespace AiDotNet.VisionLanguage.Generative;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Generative Pretraining in Multimodality" (Sun et al., 2023)</item></list></para>
+/// <para><b>For Beginners:</b> Emu is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class Emu<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageModel<T>
 {

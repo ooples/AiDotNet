@@ -18,6 +18,7 @@ namespace AiDotNet.VisionLanguage.Unified;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "OmniGen2: Advancing Unified Image Generation with Dual-Path Architecture" (THU, 2025)</item></list></para>
+/// <para><b>For Beginners:</b> OmniGen2 is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class OmniGen2<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
 {

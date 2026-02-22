@@ -14,6 +14,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "RegionCLIP: Region-based Language-Image Pretraining" (Zhong et al., CVPR 2022)</item></list></para>
+/// <para><b>For Beginners:</b> RegionCLIP is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class RegionCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
 {

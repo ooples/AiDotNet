@@ -18,6 +18,7 @@ namespace AiDotNet.VisionLanguage.Reasoning;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Kimi-VL Technical Report" (Moonshot AI, 2025)</item></list></para>
+/// <para><b>For Beginners:</b> KimiVL is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class KimiVL<T> : VisionLanguageModelBase<T>, IReasoningVLM<T>
 {

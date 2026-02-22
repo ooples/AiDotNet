@@ -28,6 +28,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
 /// <item>Paper: "LiT: Zero-Shot Transfer with Locked-image text Tuning" (Zhai et al., CVPR 2022)</item>
 /// </list>
 /// </para>
+/// <para><b>For Beginners:</b> LiT is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class LiT<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
 {

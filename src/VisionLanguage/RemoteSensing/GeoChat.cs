@@ -18,6 +18,7 @@ namespace AiDotNet.VisionLanguage.RemoteSensing;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "GeoChat: Grounded Large Vision-Language Model for Remote Sensing (MBZUAI, 2024)"</item></list></para>
+/// <para><b>For Beginners:</b> GeoChat is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class GeoChat<T> : VisionLanguageModelBase<T>, IRemoteSensingVLM<T>
 {

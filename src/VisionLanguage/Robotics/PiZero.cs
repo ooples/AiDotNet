@@ -18,6 +18,7 @@ namespace AiDotNet.VisionLanguage.Robotics;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "pi-zero: A Zero-Shot Robot Policy with Flow Matching (Physical Intelligence, 2024)"</item></list></para>
+/// <para><b>For Beginners:</b> PiZero is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class PiZero<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
 {

@@ -14,6 +14,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Demystifying CLIP Data" (Xu et al., 2023)</item></list></para>
+/// <para><b>For Beginners:</b> MetaCLIP is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class MetaCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
 {

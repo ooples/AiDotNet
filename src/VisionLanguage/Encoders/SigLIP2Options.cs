@@ -31,6 +31,55 @@ namespace AiDotNet.VisionLanguage.Encoders;
 /// </remarks>
 public class SigLIP2Options : ContrastiveEncoderOptions
 {
+    /// <summary>Initializes a new instance by copying from another instance.</summary>
+    /// <param name="other">The options instance to copy from.</param>
+    /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
+    public SigLIP2Options(SigLIP2Options other)
+    {
+        if (other == null)
+            throw new ArgumentNullException(nameof(other));
+
+        Seed = other.Seed;
+        ImageSize = other.ImageSize;
+        VisionEmbeddingDim = other.VisionEmbeddingDim;
+        VisionEncoderVariant = other.VisionEncoderVariant;
+        PatchSize = other.PatchSize;
+        NumVisionLayers = other.NumVisionLayers;
+        NumVisionHeads = other.NumVisionHeads;
+        VisionFfnMultiplier = other.VisionFfnMultiplier;
+        TextEmbeddingDim = other.TextEmbeddingDim;
+        TextEncoderVariant = other.TextEncoderVariant;
+        MaxSequenceLength = other.MaxSequenceLength;
+        VocabSize = other.VocabSize;
+        NumTextLayers = other.NumTextLayers;
+        NumTextHeads = other.NumTextHeads;
+        ProjectionDim = other.ProjectionDim;
+        Temperature = other.Temperature;
+        DropoutRate = other.DropoutRate;
+        ImageMean = other.ImageMean;
+        ImageStd = other.ImageStd;
+        ImageEncoderModelPath = other.ImageEncoderModelPath;
+        TextEncoderModelPath = other.TextEncoderModelPath;
+        OnnxOptions = other.OnnxOptions;
+        LearningRate = other.LearningRate;
+        WeightDecay = other.WeightDecay;
+        WarmUpSteps = other.WarmUpSteps;
+        LabelSmoothing = other.LabelSmoothing;
+        LossType = other.LossType;
+        SigmoidBias = other.SigmoidBias;
+        CaptioningLossWeight = other.CaptioningLossWeight;
+        SelfSupervisedLossWeight = other.SelfSupervisedLossWeight;
+        MimMaskRatio = other.MimMaskRatio;
+        NumCaptioningDecoderLayers = other.NumCaptioningDecoderLayers;
+        NumCaptioningDecoderHeads = other.NumCaptioningDecoderHeads;
+        CaptioningDecoderDim = other.CaptioningDecoderDim;
+        MaxCaptionLength = other.MaxCaptionLength;
+        Multilingual = other.Multilingual;
+        MimDecoderDim = other.MimDecoderDim;
+        NumMimDecoderLayers = other.NumMimDecoderLayers;
+        IncludeCaptioningDecoder = other.IncludeCaptioningDecoder;
+    }
+
     /// <summary>
     /// Gets or sets the contrastive loss type (default: Sigmoid for SigLIP family).
     /// </summary>

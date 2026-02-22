@@ -24,6 +24,7 @@ namespace AiDotNet.VisionLanguage.Foundational;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "BridgeTower: Building Bridges Between Encoders in Vision-Language Representation Learning" (Xu et al., AAAI 2023)</item></list></para>
+/// <para><b>For Beginners:</b> BridgeTower is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class BridgeTower<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T>
 {

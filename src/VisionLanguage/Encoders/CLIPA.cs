@@ -13,6 +13,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "An Inverse Scaling Law for CLIP Training" (Li et al., 2023)</item></list></para>
+/// <para><b>For Beginners:</b> CLIPA is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class CLIPA<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
 {

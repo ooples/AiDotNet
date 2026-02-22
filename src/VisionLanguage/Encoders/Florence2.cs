@@ -21,6 +21,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Florence-2: Advancing a Unified Representation for a Variety of Vision Tasks" (Xiao et al., 2024)</item></list></para>
+/// <para><b>For Beginners:</b> Florence2 is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class Florence2<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
 {

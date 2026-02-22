@@ -17,6 +17,7 @@ namespace AiDotNet.VisionLanguage.VideoLanguage;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Video Instruction Tuning With Synthetic Data" (ByteDance, 2024)</item></list></para>
+/// <para><b>For Beginners:</b> LLaVAVideo is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class LLaVAVideo<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<T>
 {

@@ -18,6 +18,7 @@ namespace AiDotNet.VisionLanguage.Document;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Pix2Struct: Screenshot Parsing as Pretraining for Visual Language Understanding" (Google, 2023)</item></list></para>
+/// <para><b>For Beginners:</b> Pix2Struct is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class Pix2Struct<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<T>
 {

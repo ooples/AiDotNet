@@ -18,6 +18,7 @@ namespace AiDotNet.VisionLanguage.Document;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "OCR-free Document Understanding Transformer" (NAVER, 2022)</item></list></para>
+/// <para><b>For Beginners:</b> Donut is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class Donut<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<T>
 {

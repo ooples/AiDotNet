@@ -23,6 +23,7 @@ namespace AiDotNet.VisionLanguage.Generative;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "CoCa: Contrastive Captioners are Image-Text Foundation Models" (Yu et al., TMLR 2022)</item></list></para>
+/// <para><b>For Beginners:</b> CoCa is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class CoCa<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageModel<T>
 {

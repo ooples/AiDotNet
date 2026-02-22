@@ -18,6 +18,7 @@ namespace AiDotNet.VisionLanguage.Grounding;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "GLaMM: Pixel Grounding Large Multimodal Model" (MBZUAI, 2024)</item></list></para>
+/// <para><b>For Beginners:</b> GLaMM is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class GLaMM<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
 {

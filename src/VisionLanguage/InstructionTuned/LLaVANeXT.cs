@@ -23,6 +23,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "LLaVA-NeXT: Improved reasoning, OCR, and world knowledge" (Liu et al., 2024)</item></list></para>
+/// <para><b>For Beginners:</b> LLaVANeXT is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class LLaVANeXT<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {

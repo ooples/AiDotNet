@@ -20,6 +20,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "DINOv2: Learning Robust Visual Features without Supervision" (Oquab et al., 2024)</item></list></para>
+/// <para><b>For Beginners:</b> DINOv2 is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class DINOv2<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
 {

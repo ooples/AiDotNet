@@ -24,6 +24,7 @@ namespace AiDotNet.VisionLanguage.Generative;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "What matters when building vision-language models?" (Laurencon et al., 2024)</item></list></para>
+/// <para><b>For Beginners:</b> IDEFICS2 is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class IDEFICS2<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageModel<T>
 {

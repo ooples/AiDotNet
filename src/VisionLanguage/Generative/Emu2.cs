@@ -23,6 +23,7 @@ namespace AiDotNet.VisionLanguage.Generative;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Generative Multimodal Models are In-Context Learners" (Sun et al., 2024)</item></list></para>
+/// <para><b>For Beginners:</b> Emu2 is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class Emu2<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageModel<T>
 {

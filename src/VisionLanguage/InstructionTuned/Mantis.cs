@@ -18,6 +18,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Mantis: Interleaved Multi-Image Instruction Tuning" (2024)</item></list></para>
+/// <para><b>For Beginners:</b> Mantis is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class Mantis<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {

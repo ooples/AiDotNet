@@ -18,6 +18,7 @@ namespace AiDotNet.VisionLanguage.Reasoning;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "LLaVA-CoT: Let Vision Language Models Reason Step-by-Step" (2024)</item></list></para>
+/// <para><b>For Beginners:</b> LLaVACoT is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class LLaVACoT<T> : VisionLanguageModelBase<T>, IReasoningVLM<T>
 {

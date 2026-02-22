@@ -18,6 +18,7 @@ namespace AiDotNet.VisionLanguage.Document;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "LayoutLMv3: Pre-training for Document AI with Unified Text and Image Masking" (Microsoft, 2022)</item></list></para>
+/// <para><b>For Beginners:</b> LayoutLMv3 is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class LayoutLMv3<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<T>
 {

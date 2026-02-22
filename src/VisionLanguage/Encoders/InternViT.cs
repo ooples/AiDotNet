@@ -20,6 +20,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "InternVL: Scaling up Vision Foundation Models and Aligning for Generic Visual-Linguistic Tasks" (Chen et al., 2024)</item></list></para>
+/// <para><b>For Beginners:</b> InternViT is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class InternViT<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
 {

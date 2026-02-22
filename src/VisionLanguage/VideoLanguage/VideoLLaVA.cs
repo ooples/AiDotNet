@@ -18,6 +18,7 @@ namespace AiDotNet.VisionLanguage.VideoLanguage;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Video-LLaVA: Learning United Visual Representation by Alignment Before Projection" (PKU, 2024)</item></list></para>
+/// <para><b>For Beginners:</b> VideoLLaVA is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class VideoLLaVA<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<T>
 {

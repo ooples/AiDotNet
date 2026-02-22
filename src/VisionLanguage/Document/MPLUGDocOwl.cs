@@ -18,6 +18,7 @@ namespace AiDotNet.VisionLanguage.Document;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "mPLUG-DocOwl: Modularized Multimodal Large Language Model for Document Understanding" (Alibaba, 2023)</item></list></para>
+/// <para><b>For Beginners:</b> MPLUGDocOwl is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class MPLUGDocOwl<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<T>
 {

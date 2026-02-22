@@ -14,6 +14,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "RemoteCLIP: A Vision Language Foundation Model for Remote Sensing" (Liu et al., 2023)</item></list></para>
+/// <para><b>For Beginners:</b> RemoteCLIP is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class RemoteCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
 {

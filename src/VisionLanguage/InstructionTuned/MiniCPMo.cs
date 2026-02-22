@@ -18,6 +18,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "MiniCPM-o: A GPT-4o Level MLLM for Vision, Speech and Multimodal Live Streaming" (2025)</item></list></para>
+/// <para><b>For Beginners:</b> MiniCPMo is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class MiniCPMo<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {

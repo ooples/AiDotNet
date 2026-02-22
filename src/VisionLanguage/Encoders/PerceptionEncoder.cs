@@ -21,6 +21,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Perception Encoder: The best satisfies all" (Meta, 2025)</item></list></para>
+/// <para><b>For Beginners:</b> PerceptionEncoder is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class PerceptionEncoder<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
 {

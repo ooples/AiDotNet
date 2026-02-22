@@ -18,6 +18,7 @@ namespace AiDotNet.VisionLanguage.ThreeD;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "3D-LLM: Injecting the 3D World into Large Language Models (UCLA, 2023)"</item></list></para>
+/// <para><b>For Beginners:</b> ThreeDLLM is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class ThreeDLLM<T> : VisionLanguageModelBase<T>, IThreeDVisionLanguageModel<T>
 {

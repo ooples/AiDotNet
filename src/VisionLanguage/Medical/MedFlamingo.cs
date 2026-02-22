@@ -18,6 +18,7 @@ namespace AiDotNet.VisionLanguage.Medical;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Med-Flamingo: A Multimodal Medical Few-shot Learner (Various, 2023)"</item></list></para>
+/// <para><b>For Beginners:</b> MedFlamingo is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class MedFlamingo<T> : VisionLanguageModelBase<T>, IMedicalVLM<T>
 {

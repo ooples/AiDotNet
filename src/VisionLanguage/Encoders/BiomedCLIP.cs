@@ -13,6 +13,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "BiomedCLIP: A Multimodal Biomedical Foundation Model" (Zhang et al., 2023)</item></list></para>
+/// <para><b>For Beginners:</b> BiomedCLIP is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class BiomedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
 {

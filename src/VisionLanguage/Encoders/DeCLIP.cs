@@ -13,6 +13,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Supervision Exists Everywhere: A Data-Efficient Contrastive Language-Image Pre-training Paradigm" (Li et al., ICLR 2022)</item></list></para>
+/// <para><b>For Beginners:</b> DeCLIP is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class DeCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
 {

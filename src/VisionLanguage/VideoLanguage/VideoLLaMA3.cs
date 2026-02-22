@@ -17,6 +17,7 @@ namespace AiDotNet.VisionLanguage.VideoLanguage;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "VideoLLaMA 3: Frontier Multimodal Foundation Models" (Alibaba, 2025)</item></list></para>
+/// <para><b>For Beginners:</b> VideoLLaMA3 is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class VideoLLaMA3<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<T>
 {

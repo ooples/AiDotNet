@@ -20,6 +20,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Sigmoid Loss for Language Image Pre-Training" (Zhai et al., ICCV 2023)</item></list></para>
+/// <para><b>For Beginners:</b> SigLIPSO is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class SigLIPSO<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
 {

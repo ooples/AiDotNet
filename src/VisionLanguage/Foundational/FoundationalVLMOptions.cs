@@ -7,8 +7,44 @@ namespace AiDotNet.VisionLanguage.Foundational;
 /// <summary>
 /// Base configuration options for foundational vision-language fusion models.
 /// </summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> These options configure the Foundational model. Default values follow the original paper settings.</para>
+/// </remarks>
 public class FoundationalVLMOptions : ModelOptions
 {
+    /// <summary>Initializes a new instance with default values.</summary>
+    public FoundationalVLMOptions() { }
+
+    /// <summary>Initializes a new instance by copying from another instance.</summary>
+    /// <param name="other">The options instance to copy from.</param>
+    /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
+    public FoundationalVLMOptions(FoundationalVLMOptions other)
+    {
+        if (other == null)
+            throw new ArgumentNullException(nameof(other));
+
+        Seed = other.Seed;
+        ImageSize = other.ImageSize;
+        VisionDim = other.VisionDim;
+        TextDim = other.TextDim;
+        FusionDim = other.FusionDim;
+        NumVisionLayers = other.NumVisionLayers;
+        NumTextLayers = other.NumTextLayers;
+        NumFusionLayers = other.NumFusionLayers;
+        NumHeads = other.NumHeads;
+        MaxSequenceLength = other.MaxSequenceLength;
+        VocabSize = other.VocabSize;
+        DropoutRate = other.DropoutRate;
+        FusionType = other.FusionType;
+        VisualFeatureType = other.VisualFeatureType;
+        ImageMean = other.ImageMean;
+        ImageStd = other.ImageStd;
+        ModelPath = other.ModelPath;
+        OnnxOptions = other.OnnxOptions;
+        LearningRate = other.LearningRate;
+        WeightDecay = other.WeightDecay;
+    }
+
     /// <summary>Gets or sets the input image size.</summary>
     public int ImageSize { get; set; } = 224;
 

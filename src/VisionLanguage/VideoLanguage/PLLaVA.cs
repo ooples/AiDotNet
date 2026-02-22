@@ -17,6 +17,7 @@ namespace AiDotNet.VisionLanguage.VideoLanguage;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "PLLaVA: Parameter-free LLaVA Extension from Images to Videos" (HKU, 2024)</item></list></para>
+/// <para><b>For Beginners:</b> PLLaVA is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class PLLaVA<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<T>
 {

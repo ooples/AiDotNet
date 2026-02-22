@@ -23,6 +23,7 @@ namespace AiDotNet.VisionLanguage.Generative;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "PaLI-3 Vision Language Models: Smaller, Faster, Stronger" (Chen et al., 2023)</item></list></para>
+/// <para><b>For Beginners:</b> PaLI3 is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class PaLI3<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageModel<T>
 {

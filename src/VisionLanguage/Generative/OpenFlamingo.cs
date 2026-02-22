@@ -24,6 +24,7 @@ namespace AiDotNet.VisionLanguage.Generative;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "OpenFlamingo: An Open-Source Framework for Training Large Autoregressive Vision-Language Models" (Awadalla et al., 2023)</item></list></para>
+/// <para><b>For Beginners:</b> OpenFlamingo is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class OpenFlamingo<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageModel<T>
 {

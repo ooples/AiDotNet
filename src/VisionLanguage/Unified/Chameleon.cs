@@ -18,6 +18,7 @@ namespace AiDotNet.VisionLanguage.Unified;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Chameleon: Mixed-Modal Early-Fusion Foundation Models" (Meta, 2024)</item></list></para>
+/// <para><b>For Beginners:</b> Chameleon is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class Chameleon<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
 {

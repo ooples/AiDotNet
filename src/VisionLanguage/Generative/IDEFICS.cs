@@ -24,6 +24,7 @@ namespace AiDotNet.VisionLanguage.Generative;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "OBELICS: An Open Web-Scale Filtered Dataset of Interleaved Image-Text Documents" (Laurencon et al., NeurIPS 2023)</item></list></para>
+/// <para><b>For Beginners:</b> IDEFICS is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class IDEFICS<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageModel<T>
 {

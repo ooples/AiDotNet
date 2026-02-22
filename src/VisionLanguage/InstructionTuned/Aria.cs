@@ -18,6 +18,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Aria: An Open Multimodal Native Mixture-of-Experts Model" (Rhymes AI, 2024)</item></list></para>
+/// <para><b>For Beginners:</b> Aria is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class Aria<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {

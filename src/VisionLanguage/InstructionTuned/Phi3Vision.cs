@@ -23,6 +23,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Phi-3 Technical Report: A Highly Capable Language Model Locally on Your Phone" (Abdin et al., 2024)</item></list></para>
+/// <para><b>For Beginners:</b> Phi3Vision is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class Phi3Vision<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {

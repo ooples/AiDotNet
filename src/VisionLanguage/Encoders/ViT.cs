@@ -21,6 +21,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "An Image is Worth 16x16 Words: Transformers for Image Recognition at Scale" (Dosovitskiy et al., ICLR 2021)</item></list></para>
+/// <para><b>For Beginners:</b> ViT is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class ViT<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
 {

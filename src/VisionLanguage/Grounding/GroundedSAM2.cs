@@ -18,6 +18,7 @@ namespace AiDotNet.VisionLanguage.Grounding;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Grounded SAM 2: Ground and Track Anything in Videos" (IDEA, 2024)</item></list></para>
+/// <para><b>For Beginners:</b> GroundedSAM2 is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class GroundedSAM2<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
 {

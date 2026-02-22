@@ -18,6 +18,7 @@ namespace AiDotNet.VisionLanguage.Unified;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "SEED-X: Multimodal Models with Unified Multi-granularity Comprehension and Generation" (Tencent, 2024)</item></list></para>
+/// <para><b>For Beginners:</b> SEEDX is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class SEEDX<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
 {

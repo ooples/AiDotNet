@@ -23,6 +23,7 @@ namespace AiDotNet.VisionLanguage.Foundational;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "UNITER: UNiversal Image-TExt Representation Learning" (Chen et al., ECCV 2020)</item></list></para>
+/// <para><b>For Beginners:</b> UNITER is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class UNITER<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T>
 {

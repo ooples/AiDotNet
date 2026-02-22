@@ -23,6 +23,7 @@ namespace AiDotNet.VisionLanguage.Foundational;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "An Empirical Study of Training End-to-End Vision-and-Language Transformers" (Dou et al., CVPR 2022)</item></list></para>
+/// <para><b>For Beginners:</b> METER is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class METER<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T>
 {

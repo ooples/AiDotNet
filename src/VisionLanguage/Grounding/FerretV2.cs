@@ -18,6 +18,7 @@ namespace AiDotNet.VisionLanguage.Grounding;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Ferret-v2: An Improved Baseline for Referring and Grounding" (Apple, 2024)</item></list></para>
+/// <para><b>For Beginners:</b> FerretV2 is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class FerretV2<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
 {

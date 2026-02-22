@@ -23,6 +23,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "LLaVA-OneVision 1.5: Improved and Fully Open" (Li et al., 2025)</item></list></para>
+/// <para><b>For Beginners:</b> LLaVAOneVision15 is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class LLaVAOneVision15<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {

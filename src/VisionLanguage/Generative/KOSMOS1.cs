@@ -24,6 +24,7 @@ namespace AiDotNet.VisionLanguage.Generative;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Language Is Not All You Need: Aligning Perception with Language Models" (Huang et al., 2023)</item></list></para>
+/// <para><b>For Beginners:</b> KOSMOS1 is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class KOSMOS1<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageModel<T>
 {

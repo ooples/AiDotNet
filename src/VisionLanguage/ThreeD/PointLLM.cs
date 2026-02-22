@@ -18,6 +18,7 @@ namespace AiDotNet.VisionLanguage.ThreeD;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "PointLLM: Empowering Large Language Models to Understand Point Clouds (OpenRobot Lab, 2024)"</item></list></para>
+/// <para><b>For Beginners:</b> PointLLM is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class PointLLM<T> : VisionLanguageModelBase<T>, IThreeDVisionLanguageModel<T>
 {

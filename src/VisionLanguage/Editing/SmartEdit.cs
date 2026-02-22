@@ -18,6 +18,7 @@ namespace AiDotNet.VisionLanguage.Editing;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "SmartEdit: Exploring Complex Instruction-based Image Editing with Multimodal LLMs" (2024)</item></list></para>
+/// <para><b>For Beginners:</b> SmartEdit is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class SmartEdit<T> : VisionLanguageModelBase<T>, IImageEditingVLM<T>
 {

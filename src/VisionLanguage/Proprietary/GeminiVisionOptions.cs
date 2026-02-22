@@ -5,8 +5,44 @@ namespace AiDotNet.VisionLanguage.Proprietary;
 /// <summary>
 /// Configuration options for Gemini Vision.
 /// </summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> These options configure the GeminiVision model. Default values follow the original paper settings.</para>
+/// </remarks>
 public class GeminiVisionOptions : ProprietaryVLMOptions
 {
+    /// <summary>Initializes a new instance by copying from another instance.</summary>
+    /// <param name="other">The options instance to copy from.</param>
+    /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
+    public GeminiVisionOptions(GeminiVisionOptions other)
+    {
+        if (other == null)
+            throw new ArgumentNullException(nameof(other));
+
+        Seed = other.Seed;
+        ImageSize = other.ImageSize;
+        VisionDim = other.VisionDim;
+        DecoderDim = other.DecoderDim;
+        NumVisionLayers = other.NumVisionLayers;
+        NumDecoderLayers = other.NumDecoderLayers;
+        NumHeads = other.NumHeads;
+        VocabSize = other.VocabSize;
+        MaxSequenceLength = other.MaxSequenceLength;
+        MaxGenerationLength = other.MaxGenerationLength;
+        DropoutRate = other.DropoutRate;
+        ArchitectureType = other.ArchitectureType;
+        ImageMean = other.ImageMean;
+        ImageStd = other.ImageStd;
+        ModelPath = other.ModelPath;
+        OnnxOptions = other.OnnxOptions;
+        LearningRate = other.LearningRate;
+        WeightDecay = other.WeightDecay;
+        Provider = other.Provider;
+        LanguageModelName = other.LanguageModelName;
+        MaxContextLength = other.MaxContextLength;
+        MaxContextTokens = other.MaxContextTokens;
+        NumExperts = other.NumExperts;
+    }
+
     public GeminiVisionOptions()
     {
         VisionDim = 1024;

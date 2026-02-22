@@ -23,6 +23,7 @@ namespace AiDotNet.VisionLanguage.Generative;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "GIT: A Generative Image-to-text Transformer for Vision and Language" (Wang et al., TMLR 2022)</item></list></para>
+/// <para><b>For Beginners:</b> GIT is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class GIT<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageModel<T>
 {

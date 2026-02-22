@@ -20,6 +20,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "AM-RADIO: Agglomerative Vision Foundation Model" (Ranzinger et al., 2025)</item></list></para>
+/// <para><b>For Beginners:</b> RADIOv25 is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class RADIOv25<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
 {

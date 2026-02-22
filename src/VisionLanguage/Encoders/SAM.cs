@@ -20,6 +20,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Segment Anything" (Kirillov et al., 2023)</item></list></para>
+/// <para><b>For Beginners:</b> SAM is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class SAM<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
 {

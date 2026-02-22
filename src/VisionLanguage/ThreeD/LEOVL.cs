@@ -18,6 +18,7 @@ namespace AiDotNet.VisionLanguage.ThreeD;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "LEO-VL: Efficient 3D Scene Understanding via Multi-View RGB-D (Various, 2025)"</item></list></para>
+/// <para><b>For Beginners:</b> LEOVL is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class LEOVL<T> : VisionLanguageModelBase<T>, IThreeDVisionLanguageModel<T>
 {

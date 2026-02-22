@@ -18,6 +18,7 @@ namespace AiDotNet.VisionLanguage.ThreeD;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Scene-LLM: Extending Language Model for 3D Visual Understanding and Reasoning (Various, 2024)"</item></list></para>
+/// <para><b>For Beginners:</b> SceneLLM is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class SceneLLM<T> : VisionLanguageModelBase<T>, IThreeDVisionLanguageModel<T>
 {

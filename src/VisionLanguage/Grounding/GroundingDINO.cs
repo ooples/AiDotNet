@@ -18,6 +18,7 @@ namespace AiDotNet.VisionLanguage.Grounding;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Grounding DINO: Marrying DINO with Grounded Pre-Training" (IDEA, 2024)</item></list></para>
+/// <para><b>For Beginners:</b> GroundingDINO is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class GroundingDINO<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
 {

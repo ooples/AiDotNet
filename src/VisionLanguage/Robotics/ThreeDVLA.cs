@@ -18,6 +18,7 @@ namespace AiDotNet.VisionLanguage.Robotics;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "3D-VLA: A 3D Vision-Language-Action Generative World Model (UMass, 2024)"</item></list></para>
+/// <para><b>For Beginners:</b> ThreeDVLA is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class ThreeDVLA<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
 {

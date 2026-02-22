@@ -18,6 +18,7 @@ namespace AiDotNet.VisionLanguage.Grounding;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "DINO-X: A Unified Vision Model for Open-World Object Detection and Understanding" (IDEA, 2024)</item></list></para>
+/// <para><b>For Beginners:</b> DINOX is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class DINOX<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
 {

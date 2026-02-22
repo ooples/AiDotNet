@@ -23,6 +23,7 @@ namespace AiDotNet.VisionLanguage.Foundational;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "ViLT: Vision-and-Language Transformer Without Convolution or Region Supervision" (Kim et al., ICML 2021)</item></list></para>
+/// <para><b>For Beginners:</b> ViLT is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class ViLT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T>
 {

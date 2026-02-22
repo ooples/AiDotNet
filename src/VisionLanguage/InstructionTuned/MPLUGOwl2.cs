@@ -22,6 +22,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "mPLUG-Owl2: Revolutionizing Multi-modal Large Language Model with Modality Collaboration" (2024)</item></list></para>
+/// <para><b>For Beginners:</b> MPLUGOwl2 is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class MPLUGOwl2<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {

@@ -18,6 +18,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Molmo and PixMo: Open Weights and Open Data for State-of-the-Art Multimodal Models" (AI2, 2024)</item></list></para>
+/// <para><b>For Beginners:</b> Molmo is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class Molmo<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {

@@ -18,6 +18,7 @@ namespace AiDotNet.VisionLanguage.Proprietary;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Gemini: Google's natively multimodal model family with 1M+ token context (Google, 2024-2026)</item></list></para>
+/// <para><b>For Beginners:</b> GeminiVision is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class GeminiVision<T> : VisionLanguageModelBase<T>, IProprietaryVLM<T>
 {

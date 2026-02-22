@@ -18,6 +18,7 @@ namespace AiDotNet.VisionLanguage.Unified;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Janus-Pro: Unified Multimodal Understanding and Generation with Data and Model Scaling" (DeepSeek, 2025)</item></list></para>
+/// <para><b>For Beginners:</b> JanusPro is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class JanusPro<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
 {

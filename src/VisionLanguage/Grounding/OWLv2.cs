@@ -18,6 +18,7 @@ namespace AiDotNet.VisionLanguage.Grounding;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Scaling Open-Vocabulary Object Detection" (Google, 2023)</item></list></para>
+/// <para><b>For Beginners:</b> OWLv2 is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class OWLv2<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
 {

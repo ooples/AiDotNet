@@ -18,6 +18,7 @@ namespace AiDotNet.VisionLanguage.Unified;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Janus: Decoupling Visual Encoding for Unified Multimodal Understanding and Generation" (DeepSeek, 2024)</item></list></para>
+/// <para><b>For Beginners:</b> Janus is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class Janus<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
 {

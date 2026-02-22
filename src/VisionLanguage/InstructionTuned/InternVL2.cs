@@ -23,6 +23,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "InternVL2: Better than the Best - Expanding Performance Boundaries of Open-Source Multimodal Models" (Chen et al., 2024)</item></list></para>
+/// <para><b>For Beginners:</b> InternVL2 is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class InternVL2<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {

@@ -18,6 +18,7 @@ namespace AiDotNet.VisionLanguage.Document;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "UReader: Universal OCR-free Visually-situated Language Understanding" (2024)</item></list></para>
+/// <para><b>For Beginners:</b> UReader is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class UReader<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<T>
 {

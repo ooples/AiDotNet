@@ -26,6 +26,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
 /// <item>Paper: "Scaling Language-Image Pre-training via Masking" (Li et al., 2022)</item>
 /// </list>
 /// </para>
+/// <para><b>For Beginners:</b> FLIP is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class FLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
 {

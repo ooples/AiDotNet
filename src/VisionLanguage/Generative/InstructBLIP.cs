@@ -23,6 +23,7 @@ namespace AiDotNet.VisionLanguage.Generative;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "InstructBLIP: Towards General-purpose Vision-Language Models with Instruction Tuning" (Dai et al., NeurIPS 2023)</item></list></para>
+/// <para><b>For Beginners:</b> InstructBLIP is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class InstructBLIP<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageModel<T>
 {

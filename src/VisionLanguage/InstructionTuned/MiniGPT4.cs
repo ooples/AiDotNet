@@ -24,6 +24,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "MiniGPT-4: Enhancing Vision-Language Understanding with Advanced Large Language Models" (Zhu et al., 2023)</item></list></para>
+/// <para><b>For Beginners:</b> MiniGPT4 is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class MiniGPT4<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {

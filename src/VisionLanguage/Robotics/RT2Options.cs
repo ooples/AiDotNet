@@ -5,8 +5,43 @@ namespace AiDotNet.VisionLanguage.Robotics;
 /// <summary>
 /// Configuration options for RT-2.
 /// </summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> These options configure the RT2 model. Default values follow the original paper settings.</para>
+/// </remarks>
 public class RT2Options : VisionLanguageActionOptions
 {
+    /// <summary>Initializes a new instance by copying from another instance.</summary>
+    /// <param name="other">The options instance to copy from.</param>
+    /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
+    public RT2Options(RT2Options other)
+    {
+        if (other == null)
+            throw new ArgumentNullException(nameof(other));
+
+        Seed = other.Seed;
+        ImageSize = other.ImageSize;
+        VisionDim = other.VisionDim;
+        DecoderDim = other.DecoderDim;
+        NumVisionLayers = other.NumVisionLayers;
+        NumDecoderLayers = other.NumDecoderLayers;
+        NumHeads = other.NumHeads;
+        VocabSize = other.VocabSize;
+        MaxSequenceLength = other.MaxSequenceLength;
+        MaxGenerationLength = other.MaxGenerationLength;
+        DropoutRate = other.DropoutRate;
+        ArchitectureType = other.ArchitectureType;
+        ImageMean = other.ImageMean;
+        ImageStd = other.ImageStd;
+        ModelPath = other.ModelPath;
+        OnnxOptions = other.OnnxOptions;
+        LearningRate = other.LearningRate;
+        WeightDecay = other.WeightDecay;
+        ActionDimension = other.ActionDimension;
+        LanguageModelName = other.LanguageModelName;
+        PredictionHorizon = other.PredictionHorizon;
+        ObservationHistory = other.ObservationHistory;
+    }
+
     public RT2Options()
     {
         VisionDim = 1024;

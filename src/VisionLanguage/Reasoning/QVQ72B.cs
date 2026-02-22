@@ -18,6 +18,7 @@ namespace AiDotNet.VisionLanguage.Reasoning;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "QVQ: To See the World with Wisdom" (Qwen Team, 2024)</item></list></para>
+/// <para><b>For Beginners:</b> QVQ72B is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class QVQ72B<T> : VisionLanguageModelBase<T>, IReasoningVLM<T>
 {

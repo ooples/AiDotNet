@@ -17,6 +17,7 @@ namespace AiDotNet.VisionLanguage.VideoLanguage;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "SlowFast-LLaVA: A Strong Training-Free Baseline for Video Large Language Models" (Meta, 2025)</item></list></para>
+/// <para><b>For Beginners:</b> SlowFastLLaVA is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class SlowFastLLaVA<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<T>
 {

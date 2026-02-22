@@ -18,6 +18,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Maya: An Instruction Finetuned Multilingual Multimodal Model" (2024)</item></list></para>
+/// <para><b>For Beginners:</b> Maya is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class Maya<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {

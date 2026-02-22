@@ -10,6 +10,37 @@ namespace AiDotNet.VisionLanguage.Encoders;
 /// </remarks>
 public class Florence2Options : VisionEncoderOptions
 {
+    /// <summary>Initializes a new instance by copying from another instance.</summary>
+    /// <param name="other">The options instance to copy from.</param>
+    /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
+    public Florence2Options(Florence2Options other)
+    {
+        if (other == null)
+            throw new ArgumentNullException(nameof(other));
+
+        Seed = other.Seed;
+        ImageSize = other.ImageSize;
+        EmbeddingDim = other.EmbeddingDim;
+        PatchSize = other.PatchSize;
+        NumLayers = other.NumLayers;
+        NumHeads = other.NumHeads;
+        FfnMultiplier = other.FfnMultiplier;
+        DropoutRate = other.DropoutRate;
+        ImageMean = other.ImageMean;
+        ImageStd = other.ImageStd;
+        ModelPath = other.ModelPath;
+        OnnxOptions = other.OnnxOptions;
+        LearningRate = other.LearningRate;
+        WeightDecay = other.WeightDecay;
+        MaxOutputTokens = other.MaxOutputTokens;
+        NumDecoderLayers = other.NumDecoderLayers;
+        DecoderEmbeddingDim = other.DecoderEmbeddingDim;
+        NumDecoderHeads = other.NumDecoderHeads;
+        VocabSize = other.VocabSize;
+        ModelSize = other.ModelSize;
+        UseDaViT = other.UseDaViT;
+    }
+
     /// <summary>
     /// Gets or sets the maximum number of output tokens for the text decoder.
     /// </summary>

@@ -18,6 +18,7 @@ namespace AiDotNet.VisionLanguage.Robotics;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Octo: An Open-Source Generalist Robot Policy (Berkeley, 2024)"</item></list></para>
+/// <para><b>For Beginners:</b> Octo is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class Octo<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
 {

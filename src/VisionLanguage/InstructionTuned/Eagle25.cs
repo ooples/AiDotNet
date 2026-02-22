@@ -18,6 +18,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Eagle 2.5: Boosting Long-Context Post-Training for Frontier Vision-Language Models" (2025)</item></list></para>
+/// <para><b>For Beginners:</b> Eagle25 is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class Eagle25<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {

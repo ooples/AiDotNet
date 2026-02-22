@@ -18,6 +18,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "SmolVLM: Redefining Small and Efficient Multimodal Models" (HuggingFace, 2025)</item></list></para>
+/// <para><b>For Beginners:</b> SmolVLM is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class SmolVLM<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {

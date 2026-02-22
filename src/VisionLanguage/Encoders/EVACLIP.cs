@@ -26,6 +26,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
 /// <item>Paper: "EVA-CLIP: Improved Training Techniques for CLIP at Scale" (Sun et al., 2023)</item>
 /// </list>
 /// </para>
+/// <para><b>For Beginners:</b> EVACLIP is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class EVACLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
 {

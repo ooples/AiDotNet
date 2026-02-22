@@ -23,6 +23,7 @@ namespace AiDotNet.VisionLanguage.Foundational;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "LXMERT: Learning Cross-Modality Encoder Representations from Transformers" (Tan and Bansal, EMNLP 2019)</item></list></para>
+/// <para><b>For Beginners:</b> LXMERT is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class LXMERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T>
 {

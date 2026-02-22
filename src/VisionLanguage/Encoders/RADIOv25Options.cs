@@ -10,6 +10,34 @@ namespace AiDotNet.VisionLanguage.Encoders;
 /// </remarks>
 public class RADIOv25Options : VisionEncoderOptions
 {
+    /// <summary>Initializes a new instance by copying from another instance.</summary>
+    /// <param name="other">The options instance to copy from.</param>
+    /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
+    public RADIOv25Options(RADIOv25Options other)
+    {
+        if (other == null)
+            throw new ArgumentNullException(nameof(other));
+
+        Seed = other.Seed;
+        ImageSize = other.ImageSize;
+        EmbeddingDim = other.EmbeddingDim;
+        PatchSize = other.PatchSize;
+        NumLayers = other.NumLayers;
+        NumHeads = other.NumHeads;
+        FfnMultiplier = other.FfnMultiplier;
+        DropoutRate = other.DropoutRate;
+        ImageMean = other.ImageMean;
+        ImageStd = other.ImageStd;
+        ModelPath = other.ModelPath;
+        OnnxOptions = other.OnnxOptions;
+        LearningRate = other.LearningRate;
+        WeightDecay = other.WeightDecay;
+        TeacherModels = other.TeacherModels;
+        NumSummaryTokens = other.NumSummaryTokens;
+        UseTeacherSpecificHeads = other.UseTeacherSpecificHeads;
+        AdapterDim = other.AdapterDim;
+    }
+
     /// <summary>
     /// Gets or sets the teacher models used for distillation.
     /// </summary>

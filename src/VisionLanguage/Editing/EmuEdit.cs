@@ -18,6 +18,7 @@ namespace AiDotNet.VisionLanguage.Editing;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Emu Edit: Precise Image Editing via Recognition and Generation Tasks" (Meta, 2024)</item></list></para>
+/// <para><b>For Beginners:</b> EmuEdit is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class EmuEdit<T> : VisionLanguageModelBase<T>, IImageEditingVLM<T>
 {

@@ -18,6 +18,7 @@ namespace AiDotNet.VisionLanguage.Unified;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Transfusion: Predict the Next Token and Diffuse Images with One Multi-Modal Model" (Meta, 2024)</item></list></para>
+/// <para><b>For Beginners:</b> Transfusion is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class Transfusion<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
 {

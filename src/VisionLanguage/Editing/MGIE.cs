@@ -18,6 +18,7 @@ namespace AiDotNet.VisionLanguage.Editing;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Guiding Instruction-Based Image Editing via Multimodal Large Language Models" (Apple, 2024)</item></list></para>
+/// <para><b>For Beginners:</b> MGIE is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class MGIE<T> : VisionLanguageModelBase<T>, IImageEditingVLM<T>
 {

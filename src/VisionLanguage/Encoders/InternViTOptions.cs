@@ -10,6 +10,34 @@ namespace AiDotNet.VisionLanguage.Encoders;
 /// </remarks>
 public class InternViTOptions : VisionEncoderOptions
 {
+    /// <summary>Initializes a new instance by copying from another instance.</summary>
+    /// <param name="other">The options instance to copy from.</param>
+    /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
+    public InternViTOptions(InternViTOptions other)
+    {
+        if (other == null)
+            throw new ArgumentNullException(nameof(other));
+
+        Seed = other.Seed;
+        ImageSize = other.ImageSize;
+        EmbeddingDim = other.EmbeddingDim;
+        PatchSize = other.PatchSize;
+        NumLayers = other.NumLayers;
+        NumHeads = other.NumHeads;
+        FfnMultiplier = other.FfnMultiplier;
+        DropoutRate = other.DropoutRate;
+        ImageMean = other.ImageMean;
+        ImageStd = other.ImageStd;
+        ModelPath = other.ModelPath;
+        OnnxOptions = other.OnnxOptions;
+        LearningRate = other.LearningRate;
+        WeightDecay = other.WeightDecay;
+        MaxTiles = other.MaxTiles;
+        PixelShuffleRatio = other.PixelShuffleRatio;
+        UseDynamicResolution = other.UseDynamicResolution;
+        Use3DRoPE = other.Use3DRoPE;
+    }
+
     /// <summary>
     /// Gets or sets the maximum number of tiles for dynamic resolution.
     /// </summary>

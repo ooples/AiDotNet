@@ -20,6 +20,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "DINOv3: Self-Supervised Vision at Scale" (Meta, 2025)</item></list></para>
+/// <para><b>For Beginners:</b> DINOv3 is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class DINOv3<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
 {

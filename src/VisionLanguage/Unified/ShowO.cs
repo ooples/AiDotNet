@@ -18,6 +18,7 @@ namespace AiDotNet.VisionLanguage.Unified;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Show-o: One Single Transformer to Unify Multimodal Understanding and Generation" (NUS, 2024)</item></list></para>
+/// <para><b>For Beginners:</b> ShowO is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class ShowO<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
 {

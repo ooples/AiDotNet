@@ -23,6 +23,7 @@ namespace AiDotNet.VisionLanguage.Foundational;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "VisualBERT: A Simple and Performant Baseline for Vision and Language" (Li et al., 2019)</item></list></para>
+/// <para><b>For Beginners:</b> VisualBERT is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class VisualBERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T>
 {

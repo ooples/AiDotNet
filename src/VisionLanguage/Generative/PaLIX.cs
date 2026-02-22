@@ -23,6 +23,7 @@ namespace AiDotNet.VisionLanguage.Generative;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "PaLI-X: On Scaling up a Multilingual Vision and Language Model" (Chen et al., 2023)</item></list></para>
+/// <para><b>For Beginners:</b> PaLIX is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class PaLIX<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageModel<T>
 {

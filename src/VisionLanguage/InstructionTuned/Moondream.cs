@@ -18,6 +18,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Moondream: A Tiny Vision Language Model" (Vikhyat Korrapati, 2024)</item></list></para>
+/// <para><b>For Beginners:</b> Moondream is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class Moondream<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {

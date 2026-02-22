@@ -18,6 +18,7 @@ namespace AiDotNet.VisionLanguage.Document;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "mPLUG-DocOwl 1.5: Unified Structure Learning for OCR-free Document Understanding" (Alibaba, 2024)</item></list></para>
+/// <para><b>For Beginners:</b> MPLUGDocOwl15 is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class MPLUGDocOwl15<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<T>
 {

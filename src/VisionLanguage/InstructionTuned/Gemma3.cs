@@ -23,6 +23,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Gemma 3 Technical Report" (Google, 2025)</item></list></para>
+/// <para><b>For Beginners:</b> Gemma3 is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class Gemma3<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {

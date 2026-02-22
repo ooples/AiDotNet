@@ -18,6 +18,7 @@ namespace AiDotNet.VisionLanguage.RemoteSensing;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "RSGPT: A Remote Sensing Vision Language Model and Benchmark (Various, 2024)"</item></list></para>
+/// <para><b>For Beginners:</b> RSGPT is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class RSGPT<T> : VisionLanguageModelBase<T>, IRemoteSensingVLM<T>
 {

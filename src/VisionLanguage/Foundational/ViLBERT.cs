@@ -23,6 +23,7 @@ namespace AiDotNet.VisionLanguage.Foundational;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "ViLBERT: Pretraining Task-Agnostic Visiolinguistic Representations for Vision-and-Language Tasks" (Lu et al., NeurIPS 2019)</item></list></para>
+/// <para><b>For Beginners:</b> ViLBERT is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class ViLBERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T>
 {

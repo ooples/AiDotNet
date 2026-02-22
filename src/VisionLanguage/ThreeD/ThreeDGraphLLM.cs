@@ -18,6 +18,7 @@ namespace AiDotNet.VisionLanguage.ThreeD;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "3DGraphLLM: 3D Scene Graph as Input for Large Language Models (CogAI, 2025)"</item></list></para>
+/// <para><b>For Beginners:</b> ThreeDGraphLLM is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class ThreeDGraphLLM<T> : VisionLanguageModelBase<T>, IThreeDVisionLanguageModel<T>
 {

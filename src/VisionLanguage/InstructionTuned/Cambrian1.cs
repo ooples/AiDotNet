@@ -23,6 +23,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Cambrian-1: A Fully Open, Vision-Centric Exploration of Multimodal LLMs" (2024)</item></list></para>
+/// <para><b>For Beginners:</b> Cambrian1 is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class Cambrian1<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {

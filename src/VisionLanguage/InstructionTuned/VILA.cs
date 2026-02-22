@@ -18,6 +18,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "VILA: On Pre-training for Visual Language Models" (NVIDIA, 2024)</item></list></para>
+/// <para><b>For Beginners:</b> VILA is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class VILA<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {

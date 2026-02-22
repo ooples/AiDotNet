@@ -23,6 +23,7 @@ namespace AiDotNet.VisionLanguage.Foundational;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Oscar: Object-Semantics Aligned Pre-training for Vision-Language Tasks" (Li et al., ECCV 2020)</item></list></para>
+/// <para><b>For Beginners:</b> Oscar is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class Oscar<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T>
 {

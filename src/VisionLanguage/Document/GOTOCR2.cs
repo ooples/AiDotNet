@@ -18,6 +18,7 @@ namespace AiDotNet.VisionLanguage.Document;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "General OCR Theory: Towards OCR-2.0 via a Unified End-to-end Model" (StepFun, 2024)</item></list></para>
+/// <para><b>For Beginners:</b> GOTOCR2 is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class GOTOCR2<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<T>
 {

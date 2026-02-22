@@ -23,6 +23,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Phi-4-Multimodal Technical Report" (Microsoft, 2025)</item></list></para>
+/// <para><b>For Beginners:</b> Phi4Multimodal is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class Phi4Multimodal<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {

@@ -18,6 +18,7 @@ namespace AiDotNet.VisionLanguage.Grounding;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Shikra: Unleashing Multimodal LLM Referential Dialogue" (SenseTime, 2023)</item></list></para>
+/// <para><b>For Beginners:</b> Shikra is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class Shikra<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
 {

@@ -18,6 +18,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "MiniCPM-V: A GPT-4V Level MLLM on Your Phone" (OpenBMB, 2024)</item></list></para>
+/// <para><b>For Beginners:</b> MiniCPMV is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class MiniCPMV<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {

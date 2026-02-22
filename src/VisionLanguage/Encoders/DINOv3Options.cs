@@ -10,6 +10,35 @@ namespace AiDotNet.VisionLanguage.Encoders;
 /// </remarks>
 public class DINOv3Options : VisionEncoderOptions
 {
+    /// <summary>Initializes a new instance by copying from another instance.</summary>
+    /// <param name="other">The options instance to copy from.</param>
+    /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
+    public DINOv3Options(DINOv3Options other)
+    {
+        if (other == null)
+            throw new ArgumentNullException(nameof(other));
+
+        Seed = other.Seed;
+        ImageSize = other.ImageSize;
+        EmbeddingDim = other.EmbeddingDim;
+        PatchSize = other.PatchSize;
+        NumLayers = other.NumLayers;
+        NumHeads = other.NumHeads;
+        FfnMultiplier = other.FfnMultiplier;
+        DropoutRate = other.DropoutRate;
+        ImageMean = other.ImageMean;
+        ImageStd = other.ImageStd;
+        ModelPath = other.ModelPath;
+        OnnxOptions = other.OnnxOptions;
+        LearningRate = other.LearningRate;
+        WeightDecay = other.WeightDecay;
+        NumRegisterTokens = other.NumRegisterTokens;
+        UseRegisterTokens = other.UseRegisterTokens;
+        DINOHeadDim = other.DINOHeadDim;
+        IBOTMaskRatio = other.IBOTMaskRatio;
+        UseSwiGLU = other.UseSwiGLU;
+    }
+
     /// <summary>
     /// Gets or sets the number of register tokens.
     /// </summary>

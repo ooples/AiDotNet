@@ -18,6 +18,7 @@ namespace AiDotNet.VisionLanguage.VideoLanguage;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "LLaVA-NeXT: A Strong Zero-shot Video Understanding Model" (ByteDance, 2024)</item></list></para>
+/// <para><b>For Beginners:</b> LLaVANeXTVideo is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class LLaVANeXTVideo<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<T>
 {

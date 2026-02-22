@@ -18,6 +18,7 @@ namespace AiDotNet.VisionLanguage.Document;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Surya: Multi-language OCR Toolkit" (Datalab, 2024)</item></list></para>
+/// <para><b>For Beginners:</b> Surya is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class Surya<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<T>
 {

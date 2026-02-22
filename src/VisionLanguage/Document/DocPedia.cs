@@ -18,6 +18,7 @@ namespace AiDotNet.VisionLanguage.Document;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "DocPedia: Unleashing the Power of Large Multimodal Model in the Frequency Domain" (2024)</item></list></para>
+/// <para><b>For Beginners:</b> DocPedia is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class DocPedia<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<T>
 {

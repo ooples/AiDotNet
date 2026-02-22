@@ -24,6 +24,7 @@ namespace AiDotNet.VisionLanguage.Generative;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Kosmos-2: Grounding Multimodal Large Language Models to the World" (Peng et al., 2023)</item></list></para>
+/// <para><b>For Beginners:</b> KOSMOS2 is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class KOSMOS2<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageModel<T>
 {

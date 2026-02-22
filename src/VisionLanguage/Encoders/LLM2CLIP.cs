@@ -13,6 +13,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "LLM2CLIP: Powerful Language Model Unlock Richer Visual Representation" (Huang et al., 2024)</item></list></para>
+/// <para><b>For Beginners:</b> LLM2CLIP is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class LLM2CLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
 {
