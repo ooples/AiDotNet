@@ -140,7 +140,7 @@ reviews:
       instructions: |
         ## Golden Pattern: Neural Network Model Classes
 
-        Every neural network model class MUST follow the golden pattern established by RWKV7LanguageModel.
+        Every neural network model class MUST follow the golden pattern.
         Flag violations as **BLOCKING**.
 
         ### Required Elements (BLOCKING if missing)
@@ -171,7 +171,7 @@ reviews:
       instructions: |
         ## Golden Pattern: Options Classes
 
-        Every Options class MUST follow the golden pattern established by RWKV7LanguageModelOptions.
+        Every Options class MUST follow the golden pattern.
         Flag violations as **BLOCKING**.
 
         ### Required Elements (BLOCKING if missing)
@@ -195,7 +195,7 @@ reviews:
         When reviewing a copy constructor, verify that EVERY property declared in the class is
         copied. Missing properties are a **BLOCKING** bug that causes silent data loss.
 
-    - path: "src/Helpers/LayerHelper.cs"
+    - path: "src/Helpers/LayerHelper*.cs"
       instructions: |
         ## Golden Pattern: LayerHelper CreateDefault Methods
 
@@ -217,22 +217,32 @@ reviews:
         - Check that the final layer output matches the model's expected output dimension
         - Check that parameters have sensible defaults matching the Options class
 
-    - path: "src/TextToSpeech/**"
+    - path: "src/Audio/TextToSpeech/**"
       instructions: |
         ## Golden Pattern: Text-to-Speech Models
 
-        All TTS models must follow the golden pattern. Additionally:
+        All TTS models must follow all applicable golden patterns:
+        - Neural network classes: see `src/NeuralNetworks/**` golden pattern
+        - Options classes: see `src/Models/Options/**` golden pattern
+        - LayerHelper methods: see `src/Helpers/LayerHelper*.cs` golden pattern
+
+        Additionally:
         - Models should implement proper mel-spectrogram or waveform generation
         - Vocoder models must handle audio sample rate configuration
         - Each model needs an Options class with paper-referenced defaults
         - LayerHelper must have a `CreateDefault{ModelName}Layers` method
         - Reference the original TTS paper in XML docs
 
-    - path: "src/SpeechRecognition/**"
+    - path: "src/Audio/SpeechRecognition/**"
       instructions: |
         ## Golden Pattern: Speech Recognition Models
 
-        All ASR models must follow the golden pattern. Additionally:
+        All ASR models must follow all applicable golden patterns:
+        - Neural network classes: see `src/NeuralNetworks/**` golden pattern
+        - Options classes: see `src/Models/Options/**` golden pattern
+        - LayerHelper methods: see `src/Helpers/LayerHelper*.cs` golden pattern
+
+        Additionally:
         - Models should implement proper audio feature extraction (mel, MFCC, etc.)
         - CTC or attention-based decoding must be properly implemented
         - Each model needs an Options class with paper-referenced defaults
@@ -243,7 +253,12 @@ reviews:
       instructions: |
         ## Golden Pattern: Video Models
 
-        All video models must follow the golden pattern. Additionally:
+        All video models must follow all applicable golden patterns:
+        - Neural network classes: see `src/NeuralNetworks/**` golden pattern
+        - Options classes: see `src/Models/Options/**` golden pattern
+        - LayerHelper methods: see `src/Helpers/LayerHelper*.cs` golden pattern
+
+        Additionally:
         - Video generation models must handle temporal consistency
         - Video enhancement models must specify input/output resolution handling
         - Each model needs an Options class with paper-referenced defaults
@@ -254,29 +269,44 @@ reviews:
       instructions: |
         ## Golden Pattern: Segmentation Models
 
-        All segmentation models must follow the golden pattern. Additionally:
+        All segmentation models must follow all applicable golden patterns:
+        - Neural network classes: see `src/NeuralNetworks/**` golden pattern
+        - Options classes: see `src/Models/Options/**` golden pattern
+        - LayerHelper methods: see `src/Helpers/LayerHelper*.cs` golden pattern
+
+        Additionally:
         - Models should implement proper pixel-level classification
         - Encoder-decoder architecture with skip connections where applicable
         - Each model needs an Options class with paper-referenced defaults
         - LayerHelper must have a `CreateDefault{ModelName}Layers` method
         - Reference the original segmentation paper in XML docs
 
-    - path: "src/VisionLanguage/**"
+    - path: "src/Document/VisionLanguage/**"
       instructions: |
         ## Golden Pattern: Vision-Language Models
 
-        All VLM models must follow the golden pattern. Additionally:
+        All VLM models must follow all applicable golden patterns:
+        - Neural network classes: see `src/NeuralNetworks/**` golden pattern
+        - Options classes: see `src/Models/Options/**` golden pattern
+        - LayerHelper methods: see `src/Helpers/LayerHelper*.cs` golden pattern
+
+        Additionally:
         - Models must handle multi-modal inputs (image + text)
         - Contrastive or generative alignment must be properly implemented
         - Each model needs an Options class with paper-referenced defaults
         - LayerHelper must have a `CreateDefault{ModelName}Layers` method
         - Reference the original VLM paper in XML docs
 
-    - path: "src/Safety/**"
+    - path: "src/AdversarialRobustness/**"
       instructions: |
         ## Golden Pattern: Safety & Content Filtering Models
 
-        All safety models must follow the golden pattern. Additionally:
+        All safety models must follow all applicable golden patterns:
+        - Neural network classes: see `src/NeuralNetworks/**` golden pattern
+        - Options classes: see `src/Models/Options/**` golden pattern
+        - LayerHelper methods: see `src/Helpers/LayerHelper*.cs` golden pattern
+
+        Additionally:
         - Models must handle multi-modal content analysis where applicable
         - Confidence scores and category labels must be properly typed
         - Each model needs an Options class with paper-referenced defaults
