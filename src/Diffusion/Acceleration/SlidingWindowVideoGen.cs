@@ -88,6 +88,9 @@ public class SlidingWindowVideoGen<T>
     /// <returns>Number of generation windows required.</returns>
     public int ComputeNumWindows(int targetFrames)
     {
+        if (targetFrames <= 0)
+            throw new ArgumentOutOfRangeException(nameof(targetFrames), "Target frames must be positive.");
+
         if (targetFrames <= _windowSize)
             return 1;
 
@@ -128,10 +131,29 @@ public class SlidingWindowVideoGen<T>
             return currentWindow;
         }
 
-        // For simplicity, return the current window
-        // In a full implementation, this would blend the overlap region
+        // Blend the overlap region between accumulated and current window
+        int overlapElements = _overlapSize;
+        int elementsPerFrame = currentWindow.Data.Length / Math.Max(1, currentWindow.Shape[0]);
+        int accFrames = accumulated.Shape[0];
+
+        var result = new Tensor<T>(accumulated.Shape);
+        accumulated.Data.Span.CopyTo(result.Data.Span);
+
+        for (int f = 0; f < overlapElements && f < currentWindow.Shape[0]; f++)
+        {
+            double alpha = (double)(f + 1) / (overlapElements + 1);
+            int accOffset = (accFrames - overlapElements + f) * elementsPerFrame;
+            int curOffset = f * elementsPerFrame;
+            for (int j = 0; j < elementsPerFrame && accOffset + j < result.Data.Length; j++)
+            {
+                double accVal = NumOps.ToDouble(result[accOffset + j]);
+                double curVal = NumOps.ToDouble(currentWindow[curOffset + j]);
+                result[accOffset + j] = NumOps.FromDouble(accVal * (1.0 - alpha) + curVal * alpha);
+            }
+        }
+
         _previousWindowLatents = currentWindow;
-        return currentWindow;
+        return result;
     }
 
     /// <summary>

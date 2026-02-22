@@ -44,9 +44,13 @@ public class STDiTBlock<T> : LayerBase<T>
     private readonly LayerNormalizationLayer<T> _crossNorm;
     private readonly LayerNormalizationLayer<T> _ffnNorm;
 
+    // Intentionally shadows base class NumOps with static field for use in static AddTensors helper
     private static new readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     private Tensor<T>? _lastInput;
+    private Tensor<T>? _afterSpatial;
+    private Tensor<T>? _afterTemporal;
+    private Tensor<T>? _afterCross;
 
     /// <inheritdoc />
     public override bool SupportsTraining => true;
@@ -126,22 +130,20 @@ public class STDiTBlock<T> : LayerBase<T>
     {
         _lastInput = input;
 
-        // 1. Spatial self-attention
-        var x = AddTensors(input, _spatialAttention.Forward(_spatialNorm.Forward(input)));
+        // 1. Spatial self-attention with residual
+        _afterSpatial = AddTensors(input, _spatialAttention.Forward(_spatialNorm.Forward(input)));
 
-        // 2. Temporal self-attention
-        x = AddTensors(x, _temporalAttention.Forward(_temporalNorm.Forward(x)));
+        // 2. Temporal self-attention with residual
+        _afterTemporal = AddTensors(_afterSpatial, _temporalAttention.Forward(_temporalNorm.Forward(_afterSpatial)));
 
-        // 3. Cross-attention (self-attention when no context provided)
-        x = AddTensors(x, _crossAttention.Forward(_crossNorm.Forward(x)));
+        // 3. Cross-attention with residual
+        _afterCross = AddTensors(_afterTemporal, _crossAttention.Forward(_crossNorm.Forward(_afterTemporal)));
 
-        // 4. Feed-forward network
-        var ffnInput = _ffnNorm.Forward(x);
+        // 4. Feed-forward network with residual
+        var ffnInput = _ffnNorm.Forward(_afterCross);
         var ffnHidden = _ffnIn.Forward(ffnInput);
         var ffnOutput = _ffnOut.Forward(ffnHidden);
-        x = AddTensors(x, ffnOutput);
-
-        return x;
+        return AddTensors(_afterCross, ffnOutput);
     }
 
     /// <inheritdoc />
@@ -150,26 +152,27 @@ public class STDiTBlock<T> : LayerBase<T>
         if (_lastInput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        // Backward through FFN
+        // Backward through FFN residual: output = afterCross + ffn(norm(afterCross))
+        // Gradient flows both through the FFN branch and the skip connection
         var ffnOutGrad = _ffnOut.Backward(outputGradient);
         var ffnInGrad = _ffnIn.Backward(ffnOutGrad);
         var ffnNormGrad = _ffnNorm.Backward(ffnInGrad);
-        var afterFfnGrad = AddTensors(outputGradient, ffnNormGrad);
+        var afterCrossGrad = AddTensors(outputGradient, ffnNormGrad);
 
-        // Backward through cross-attention
-        var crossGrad = _crossAttention.Backward(afterFfnGrad);
+        // Backward through cross-attention residual: afterCross = afterTemporal + cross(norm(afterTemporal))
+        var crossGrad = _crossAttention.Backward(afterCrossGrad);
         var crossNormGrad = _crossNorm.Backward(crossGrad);
-        var afterCrossGrad = AddTensors(afterFfnGrad, crossNormGrad);
+        var afterTemporalGrad = AddTensors(afterCrossGrad, crossNormGrad);
 
-        // Backward through temporal attention
-        var temporalGrad = _temporalAttention.Backward(afterCrossGrad);
+        // Backward through temporal attention residual: afterTemporal = afterSpatial + temporal(norm(afterSpatial))
+        var temporalGrad = _temporalAttention.Backward(afterTemporalGrad);
         var temporalNormGrad = _temporalNorm.Backward(temporalGrad);
-        var afterTemporalGrad = AddTensors(afterCrossGrad, temporalNormGrad);
+        var afterSpatialGrad = AddTensors(afterTemporalGrad, temporalNormGrad);
 
-        // Backward through spatial attention
-        var spatialGrad = _spatialAttention.Backward(afterTemporalGrad);
+        // Backward through spatial attention residual: afterSpatial = input + spatial(norm(input))
+        var spatialGrad = _spatialAttention.Backward(afterSpatialGrad);
         var spatialNormGrad = _spatialNorm.Backward(spatialGrad);
-        return AddTensors(afterTemporalGrad, spatialNormGrad);
+        return AddTensors(afterSpatialGrad, spatialNormGrad);
     }
 
     /// <inheritdoc />
@@ -237,6 +240,9 @@ public class STDiTBlock<T> : LayerBase<T>
     public override void ResetState()
     {
         _lastInput = null;
+        _afterSpatial = null;
+        _afterTemporal = null;
+        _afterCross = null;
         _spatialAttention.ResetState();
         _temporalAttention.ResetState();
         _crossAttention.ResetState();

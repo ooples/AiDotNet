@@ -1,5 +1,3 @@
-using AiDotNet.Interfaces;
-
 namespace AiDotNet.Diffusion.Acceleration;
 
 /// <summary>
@@ -26,12 +24,11 @@ namespace AiDotNet.Diffusion.Acceleration;
 /// </remarks>
 public class TeaCache<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
-
     private readonly double _reuseThreshold;
     private readonly int _maxCacheSize;
-    private Dictionary<string, Tensor<T>> _kvCache;
-    private Dictionary<string, double> _lastTimestepEmbedding;
+    private readonly Dictionary<string, Tensor<T>> _kvCache;
+    private readonly Dictionary<string, double> _lastTimestepEmbedding;
+    private readonly List<string> _insertionOrder;
     private int _cacheHits;
     private int _cacheMisses;
 
@@ -71,10 +68,16 @@ public class TeaCache<T>
         double reuseThreshold = 0.05,
         int maxCacheSize = 256)
     {
+        if (reuseThreshold < 0.0 || reuseThreshold > 1.0)
+            throw new ArgumentOutOfRangeException(nameof(reuseThreshold), "Reuse threshold must be between 0.0 and 1.0.");
+        if (maxCacheSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(maxCacheSize), "Max cache size must be positive.");
+
         _reuseThreshold = reuseThreshold;
         _maxCacheSize = maxCacheSize;
         _kvCache = new Dictionary<string, Tensor<T>>();
         _lastTimestepEmbedding = new Dictionary<string, double>();
+        _insertionOrder = new List<string>();
         _cacheHits = 0;
         _cacheMisses = 0;
     }
@@ -87,13 +90,13 @@ public class TeaCache<T>
     /// <returns>True if cached values should be reused.</returns>
     public bool ShouldReuse(string layerKey, double timestepEmbedding)
     {
-        if (!_kvCache.ContainsKey(layerKey) || !_lastTimestepEmbedding.ContainsKey(layerKey))
+        if (!_kvCache.ContainsKey(layerKey) || !_lastTimestepEmbedding.TryGetValue(layerKey, out double lastEmbedding))
         {
             _cacheMisses++;
             return false;
         }
 
-        double diff = Math.Abs(timestepEmbedding - _lastTimestepEmbedding[layerKey]);
+        double diff = Math.Abs(timestepEmbedding - lastEmbedding);
         if (diff < _reuseThreshold)
         {
             _cacheHits++;
@@ -112,13 +115,17 @@ public class TeaCache<T>
     /// <param name="timestepEmbedding">The timestep embedding magnitude when this was computed.</param>
     public void Store(string layerKey, Tensor<T> kvPairs, double timestepEmbedding)
     {
-        // Evict oldest entries if cache is full
+        // Evict oldest entry if cache is full (use explicit insertion order for net471 compatibility)
         if (_kvCache.Count >= _maxCacheSize && !_kvCache.ContainsKey(layerKey))
         {
-            var firstKey = _kvCache.Keys.First();
-            _kvCache.Remove(firstKey);
-            _lastTimestepEmbedding.Remove(firstKey);
+            var oldestKey = _insertionOrder[0];
+            _insertionOrder.RemoveAt(0);
+            _kvCache.Remove(oldestKey);
+            _lastTimestepEmbedding.Remove(oldestKey);
         }
+
+        if (!_kvCache.ContainsKey(layerKey))
+            _insertionOrder.Add(layerKey);
 
         _kvCache[layerKey] = kvPairs;
         _lastTimestepEmbedding[layerKey] = timestepEmbedding;
@@ -141,6 +148,7 @@ public class TeaCache<T>
     {
         _kvCache.Clear();
         _lastTimestepEmbedding.Clear();
+        _insertionOrder.Clear();
         _cacheHits = 0;
         _cacheMisses = 0;
     }

@@ -100,15 +100,11 @@ public class TemporalSelfAttention<T> : LayerBase<T>
     {
         _lastInput = input;
 
-        int totalSeq = input.Shape.Length > 1 ? input.Shape[1] : input.Shape[0];
-        int channels = input.Shape.Length > 2 ? input.Shape[2] : input.Shape[1];
-        int spatialPositions = _spatialSize * _spatialSize;
-
-        // For each spatial position, gather tokens from all frames and apply attention
-        // This is a simplified implementation that processes the temporal dimension
-        var output = _temporalAttention.Forward(input);
-
-        return output;
+        // Applies temporal attention across all frames.
+        // In a full reshape-based implementation, input would be reshaped to
+        // [batch * H * W, frames, channels] to isolate per-spatial-position temporal sequences.
+        // This simplified version delegates directly to the attention layer.
+        return _temporalAttention.Forward(input);
     }
 
     /// <inheritdoc />

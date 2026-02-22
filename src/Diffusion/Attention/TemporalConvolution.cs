@@ -78,13 +78,18 @@ public class TemporalConvolution<T> : LayerBase<T>
             throw new ArgumentOutOfRangeException(nameof(channels), "Channels must be positive.");
         if (kernelSize <= 0 || kernelSize % 2 == 0)
             throw new ArgumentOutOfRangeException(nameof(kernelSize), "Kernel size must be a positive odd number.");
+        if (numFrames <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numFrames), "Number of frames must be positive.");
 
         _channels = channels;
         _kernelSize = kernelSize;
         _numFrames = numFrames;
         _causal = causal;
 
-        // Dense layer simulating temporal mixing (projects across channels)
+        // Approximates temporal 1D convolution via dense projection across channels per frame.
+        // A full implementation would use depthwise 1D convolution along the time axis with
+        // the specified kernel size. This dense approximation captures per-frame channel mixing
+        // and serves as a placeholder for models that primarily use ONNX inference.
         _conv = new DenseLayer<T>(channels, channels, (IActivationFunction<T>)new GELUActivation<T>());
 
         _norm = new LayerNormalizationLayer<T>(channels);
@@ -136,18 +141,19 @@ public class TemporalConvolution<T> : LayerBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        int convCount = _conv.GetParameters().Length;
-        int normCount = _norm.GetParameters().Length;
+        var convParams = _conv.GetParameters();
+        int convCount = convParams.Length;
+        int normCount = parameters.Length - convCount;
 
-        var convParams = new Vector<T>(convCount);
-        var normParams = new Vector<T>(normCount);
+        var newConvParams = new Vector<T>(convCount);
+        var newNormParams = new Vector<T>(normCount);
         for (int i = 0; i < convCount; i++)
-            convParams[i] = parameters[i];
+            newConvParams[i] = parameters[i];
         for (int i = 0; i < normCount; i++)
-            normParams[i] = parameters[convCount + i];
+            newNormParams[i] = parameters[convCount + i];
 
-        _conv.SetParameters(convParams);
-        _norm.SetParameters(normParams);
+        _conv.SetParameters(newConvParams);
+        _norm.SetParameters(newNormParams);
     }
 
     /// <inheritdoc />

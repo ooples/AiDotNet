@@ -73,6 +73,13 @@ public class MotionModule<T> : LayerBase<T>
             new[] { 1, numFrames * spatialSize * spatialSize, channels },
             new[] { 1, numFrames * spatialSize * spatialSize, channels })
     {
+        if (channels <= 0)
+            throw new ArgumentOutOfRangeException(nameof(channels), "Channels must be positive.");
+        if (numHeads <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numHeads), "Number of heads must be positive.");
+        if (numFrames <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numFrames), "Number of frames must be positive.");
+
         _channels = channels;
         _numHeads = numHeads;
         _numFrames = numFrames;

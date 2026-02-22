@@ -1,5 +1,3 @@
-using AiDotNet.Interfaces;
-
 namespace AiDotNet.Diffusion.Acceleration;
 
 /// <summary>
@@ -24,8 +22,6 @@ namespace AiDotNet.Diffusion.Acceleration;
 /// </remarks>
 public class PABCache<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
-
     private readonly int _spatialBroadcastInterval;
     private readonly int _temporalBroadcastInterval;
     private readonly int _crossBroadcastInterval;
@@ -65,6 +61,13 @@ public class PABCache<T>
         int temporalBroadcastInterval = 3,
         int crossBroadcastInterval = 1)
     {
+        if (spatialBroadcastInterval <= 0)
+            throw new ArgumentOutOfRangeException(nameof(spatialBroadcastInterval), "Broadcast interval must be positive.");
+        if (temporalBroadcastInterval <= 0)
+            throw new ArgumentOutOfRangeException(nameof(temporalBroadcastInterval), "Broadcast interval must be positive.");
+        if (crossBroadcastInterval <= 0)
+            throw new ArgumentOutOfRangeException(nameof(crossBroadcastInterval), "Broadcast interval must be positive.");
+
         _spatialBroadcastInterval = spatialBroadcastInterval;
         _temporalBroadcastInterval = temporalBroadcastInterval;
         _crossBroadcastInterval = crossBroadcastInterval;
@@ -109,6 +112,7 @@ public class PABCache<T>
     /// </summary>
     public void CacheSpatial(string layerKey, Tensor<T> output)
     {
+        Guard.NotNull(layerKey, nameof(layerKey));
         _spatialCache[layerKey] = output;
     }
 
@@ -117,6 +121,7 @@ public class PABCache<T>
     /// </summary>
     public void CacheTemporal(string layerKey, Tensor<T> output)
     {
+        Guard.NotNull(layerKey, nameof(layerKey));
         _temporalCache[layerKey] = output;
     }
 
@@ -125,6 +130,7 @@ public class PABCache<T>
     /// </summary>
     public void CacheCross(string layerKey, Tensor<T> output)
     {
+        Guard.NotNull(layerKey, nameof(layerKey));
         _crossCache[layerKey] = output;
     }
 

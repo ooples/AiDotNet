@@ -94,12 +94,14 @@ public class Causal3DVAE<T> : VAEModelBase<T>
 
         int maxChannels = baseChannels * _channelMultipliers[^1];
 
+        // Encoder: inputChannels -> baseChannels -> (norm at baseChannels) -> latentChannels*2
         _encoderIn = new DenseLayer<T>(inputChannels, baseChannels, (IActivationFunction<T>)new GELUActivation<T>());
-        _encoderOut = new DenseLayer<T>(maxChannels, latentChannels * 2, (IActivationFunction<T>)new IdentityActivation<T>());
+        _encoderNorm = new LayerNormalizationLayer<T>(baseChannels);
+        _encoderOut = new DenseLayer<T>(baseChannels, latentChannels * 2, (IActivationFunction<T>)new IdentityActivation<T>());
+        // Decoder: latentChannels -> maxChannels -> (norm at maxChannels) -> inputChannels
         _decoderIn = new DenseLayer<T>(latentChannels, maxChannels, (IActivationFunction<T>)new GELUActivation<T>());
-        _decoderOut = new DenseLayer<T>(baseChannels, inputChannels, (IActivationFunction<T>)new IdentityActivation<T>());
-        _encoderNorm = new LayerNormalizationLayer<T>(maxChannels);
-        _decoderNorm = new LayerNormalizationLayer<T>(baseChannels);
+        _decoderNorm = new LayerNormalizationLayer<T>(maxChannels);
+        _decoderOut = new DenseLayer<T>(maxChannels, inputChannels, (IActivationFunction<T>)new IdentityActivation<T>());
     }
 
     /// <inheritdoc />
@@ -194,6 +196,11 @@ public class Causal3DVAE<T> : VAEModelBase<T>
             _encoderIn, _encoderOut, _decoderIn, _decoderOut,
             _encoderNorm, _decoderNorm
         };
+
+        int expected = 0;
+        foreach (var layer in layers) expected += layer.GetParameters().Length;
+        if (parameters.Length != expected)
+            throw new ArgumentException($"Expected {expected} parameters, got {parameters.Length}.", nameof(parameters));
 
         int offset = 0;
         foreach (var layer in layers)

@@ -66,9 +66,12 @@ public class FreeNoiseModule<T>
         if (noiseShiftStride <= 0 || noiseShiftStride > windowSize)
             throw new ArgumentOutOfRangeException(nameof(noiseShiftStride), "Shift stride must be between 1 and window size.");
 
+        if (blendRatio < 0.0 || blendRatio > 1.0)
+            throw new ArgumentOutOfRangeException(nameof(blendRatio), "Blend ratio must be between 0.0 and 1.0.");
+
         _windowSize = windowSize;
         _noiseShiftStride = noiseShiftStride;
-        _blendRatio = Math.Max(0.0, Math.Min(1.0, blendRatio));
+        _blendRatio = blendRatio;
         _random = seed.HasValue
             ? RandomHelper.CreateSeededRandom(seed.Value)
             : RandomHelper.CreateSecureRandom();
@@ -96,10 +99,7 @@ public class FreeNoiseModule<T>
         int baseElements = Math.Min(targetFrames, _windowSize) * elementsPerFrame;
         for (int i = 0; i < baseElements; i++)
         {
-            double u1 = 1.0 - _random.NextDouble();
-            double u2 = _random.NextDouble();
-            double normal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-            noise[i] = NumOps.FromDouble(normal);
+            noise[i] = NumOps.FromDouble(SampleGaussian());
         }
 
         // For extended frames, shift and blend with fresh noise
@@ -112,9 +112,7 @@ public class FreeNoiseModule<T>
             for (int j = 0; j < elementsPerFrame; j++)
             {
                 double baseVal = NumOps.ToDouble(noise[sourceOffset + j]);
-                double u1 = 1.0 - _random.NextDouble();
-                double u2 = _random.NextDouble();
-                double freshVal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
+                double freshVal = SampleGaussian();
                 double blended = _blendRatio * baseVal + (1.0 - _blendRatio) * freshVal;
                 noise[frameOffset + j] = NumOps.FromDouble(blended);
             }
@@ -125,11 +123,14 @@ public class FreeNoiseModule<T>
     }
 
     /// <summary>
-    /// Gets the stored base noise from the last generation.
+    /// Gets a copy of the stored base noise from the last generation.
     /// </summary>
     public Tensor<T>? GetBaseNoise()
     {
-        return _baseNoise;
+        if (_baseNoise is null) return null;
+        var copy = new Tensor<T>(_baseNoise.Shape);
+        _baseNoise.Data.Span.CopyTo(copy.Data.Span);
+        return copy;
     }
 
     /// <summary>
@@ -138,5 +139,15 @@ public class FreeNoiseModule<T>
     public void Reset()
     {
         _baseNoise = null;
+    }
+
+    /// <summary>
+    /// Samples a value from the standard normal distribution using Box-Muller transform.
+    /// </summary>
+    private double SampleGaussian()
+    {
+        double u1 = 1.0 - _random.NextDouble();
+        double u2 = _random.NextDouble();
+        return Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
     }
 }

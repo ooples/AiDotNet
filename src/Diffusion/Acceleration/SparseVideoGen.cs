@@ -1,5 +1,3 @@
-using AiDotNet.Interfaces;
-
 namespace AiDotNet.Diffusion.Acceleration;
 
 /// <summary>
@@ -23,8 +21,6 @@ namespace AiDotNet.Diffusion.Acceleration;
 /// </remarks>
 public class SparseVideoGen<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
-
     private readonly int _totalFrames;
     private readonly int _keyframeInterval;
     private readonly double _sparsityRatio;
@@ -69,9 +65,12 @@ public class SparseVideoGen<T>
         if (keyframeInterval <= 0 || keyframeInterval > totalFrames)
             throw new ArgumentOutOfRangeException(nameof(keyframeInterval), "Keyframe interval must be between 1 and total frames.");
 
+        if (sparsityRatio < 0.0 || sparsityRatio > 0.9)
+            throw new ArgumentOutOfRangeException(nameof(sparsityRatio), "Sparsity ratio must be between 0.0 and 0.9.");
+
         _totalFrames = totalFrames;
         _keyframeInterval = keyframeInterval;
-        _sparsityRatio = Math.Max(0.0, Math.Min(0.9, sparsityRatio));
+        _sparsityRatio = sparsityRatio;
         _strategy = strategy;
 
         BuildKeyframeMask();
@@ -112,6 +111,9 @@ public class SparseVideoGen<T>
     /// <returns>Set of block indices to skip.</returns>
     public HashSet<int> GetBlocksToSkip(int totalBlocks)
     {
+        if (totalBlocks <= 0)
+            throw new ArgumentOutOfRangeException(nameof(totalBlocks), "Total blocks must be positive.");
+
         var skipSet = new HashSet<int>();
         int blocksToSkip = (int)(totalBlocks * _sparsityRatio);
 
@@ -173,19 +175,7 @@ public class SparseVideoGen<T>
     /// <summary>
     /// Gets the number of keyframes.
     /// </summary>
-    public int KeyframeCount
-    {
-        get
-        {
-            if (_keyframeMask is null) return 0;
-            int count = 0;
-            foreach (bool isKey in _keyframeMask)
-            {
-                if (isKey) count++;
-            }
-            return count;
-        }
-    }
+    public int KeyframeCount => _keyframeMask?.Count(k => k) ?? 0;
 }
 
 /// <summary>

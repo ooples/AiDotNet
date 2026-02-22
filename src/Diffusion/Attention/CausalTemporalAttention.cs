@@ -35,7 +35,6 @@ public class CausalTemporalAttention<T> : LayerBase<T>
     private readonly int _channels;
     private readonly int _numHeads;
     private readonly int _numFrames;
-    private readonly int _spatialSize;
     private readonly FlashAttentionLayer<T> _causalAttention;
     private Tensor<T>? _lastInput;
 
@@ -83,7 +82,6 @@ public class CausalTemporalAttention<T> : LayerBase<T>
         _channels = channels;
         _numHeads = numHeads;
         _numFrames = numFrames;
-        _spatialSize = spatialSize;
 
         var config = new FlashAttentionConfig
         {

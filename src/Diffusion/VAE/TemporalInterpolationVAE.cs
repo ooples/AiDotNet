@@ -92,17 +92,19 @@ public class TemporalInterpolationVAE<T> : VAEModelBase<T>
 
         int hiddenChannels = baseChannels * 4;
 
+        // Encoder: inputChannels -> baseChannels -> (norm at baseChannels) -> latentChannels*2
         _encoderIn = new DenseLayer<T>(inputChannels, baseChannels, (IActivationFunction<T>)new GELUActivation<T>());
-        _encoderOut = new DenseLayer<T>(hiddenChannels, latentChannels * 2, (IActivationFunction<T>)new IdentityActivation<T>());
+        _encoderOut = new DenseLayer<T>(baseChannels, latentChannels * 2, (IActivationFunction<T>)new IdentityActivation<T>());
+        // Decoder: latentChannels -> hiddenChannels -> (norm at hiddenChannels) -> inputChannels
         _decoderIn = new DenseLayer<T>(latentChannels, hiddenChannels, (IActivationFunction<T>)new GELUActivation<T>());
-        _decoderOut = new DenseLayer<T>(baseChannels, inputChannels, (IActivationFunction<T>)new IdentityActivation<T>());
+        _decoderOut = new DenseLayer<T>(hiddenChannels, inputChannels, (IActivationFunction<T>)new IdentityActivation<T>());
 
         // Interpolation network: takes two latent frames and produces intermediate frame
         _interpIn = new DenseLayer<T>(latentChannels * 2, hiddenChannels, (IActivationFunction<T>)new GELUActivation<T>());
         _interpOut = new DenseLayer<T>(hiddenChannels, latentChannels, (IActivationFunction<T>)new IdentityActivation<T>());
 
-        _encoderNorm = new LayerNormalizationLayer<T>(hiddenChannels);
-        _decoderNorm = new LayerNormalizationLayer<T>(baseChannels);
+        _encoderNorm = new LayerNormalizationLayer<T>(baseChannels);
+        _decoderNorm = new LayerNormalizationLayer<T>(hiddenChannels);
     }
 
     /// <inheritdoc />
@@ -162,12 +164,23 @@ public class TemporalInterpolationVAE<T> : VAEModelBase<T>
     /// <param name="latentA">Latent representation of the first frame.</param>
     /// <param name="latentB">Latent representation of the second frame.</param>
     /// <returns>Interpolated latent frame.</returns>
-    public Tensor<T> InterpolateLatent(Tensor<T> latentA, Tensor<T> latentB)
+    public Tensor<T>[] InterpolateLatent(Tensor<T> latentA, Tensor<T> latentB)
     {
-        // Concatenate two latent frames as input to interpolation network
-        var combined = latentA.ConcatenateTensors(latentB);
-        var hidden = _interpIn.Forward(combined);
-        return _interpOut.Forward(hidden);
+        var results = new Tensor<T>[_interpolationFactor];
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        for (int i = 0; i < _interpolationFactor; i++)
+        {
+            double t = (double)(i + 1) / (_interpolationFactor + 1);
+            // Blend input pair weighted by interpolation position
+            var blendedA = latentA.Transform((v, _) => numOps.Multiply(v, numOps.FromDouble(1.0 - t)));
+            var blendedB = latentB.Transform((v, _) => numOps.Multiply(v, numOps.FromDouble(t)));
+            var combined = blendedA.ConcatenateTensors(blendedB);
+            var hidden = _interpIn.Forward(combined);
+            results[i] = _interpOut.Forward(hidden);
+        }
+
+        return results;
     }
 
     private static int[] GetReducedShape(int[] shape, int lastDim)
@@ -210,6 +223,11 @@ public class TemporalInterpolationVAE<T> : VAEModelBase<T>
             _encoderIn, _encoderOut, _decoderIn, _decoderOut,
             _interpIn, _interpOut, _encoderNorm, _decoderNorm
         };
+
+        int expected = 0;
+        foreach (var layer in layers) expected += layer.GetParameters().Length;
+        if (parameters.Length != expected)
+            throw new ArgumentException($"Expected {expected} parameters, got {parameters.Length}.", nameof(parameters));
 
         int offset = 0;
         foreach (var layer in layers)
