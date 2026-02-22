@@ -1,0 +1,199 @@
+using AiDotNet.LinearAlgebra;
+using AiDotNet.OnlineLearning;
+using Xunit;
+
+namespace AiDotNet.Tests.IntegrationTests.OnlineLearning;
+
+/// <summary>
+/// Integration tests for online learning classes.
+/// </summary>
+public class OnlineLearningIntegrationTests
+{
+    #region OnlineSGDClassifier Tests
+
+    [Fact]
+    public void OnlineSGDClassifier_Construction_DefaultParams()
+    {
+        var clf = new OnlineSGDClassifier<double>();
+        Assert.NotNull(clf);
+        Assert.False(clf.IsTrained);
+    }
+
+    [Fact]
+    public void OnlineSGDClassifier_PartialFit_DoesNotThrow()
+    {
+        var clf = new OnlineSGDClassifier<double>(learningRate: 0.1);
+        var x = new Vector<double>(new[] { 1.0, 2.0 });
+        clf.PartialFit(x, 1.0);
+        Assert.True(clf.IsTrained);
+    }
+
+    [Fact]
+    public void OnlineSGDClassifier_PartialFitBatch_TrainsModel()
+    {
+        var clf = new OnlineSGDClassifier<double>(learningRate: 0.1, l2Penalty: 0.0);
+
+        // Simple linearly separable data: x[0] > 0 => class 1
+        var X = new Matrix<double>(new double[,]
+        {
+            { 1.0, 0.0 },
+            { 2.0, 0.0 },
+            { -1.0, 0.0 },
+            { -2.0, 0.0 },
+        });
+        var y = new Vector<double>(new[] { 1.0, 1.0, 0.0, 0.0 });
+
+        // Train multiple epochs
+        for (int epoch = 0; epoch < 50; epoch++)
+        {
+            clf.PartialFit(X, y);
+        }
+
+        Assert.True(clf.IsTrained);
+    }
+
+    [Fact]
+    public void OnlineSGDClassifier_Predict_ReturnsValues()
+    {
+        var clf = new OnlineSGDClassifier<double>(learningRate: 0.1);
+
+        // Train
+        var X = new Matrix<double>(new double[,]
+        {
+            { 1.0, 0.0 },
+            { -1.0, 0.0 },
+        });
+        var y = new Vector<double>(new[] { 1.0, 0.0 });
+        for (int epoch = 0; epoch < 20; epoch++)
+            clf.PartialFit(X, y);
+
+        // Predict
+        var predictions = clf.Predict(X);
+        Assert.Equal(2, predictions.Length);
+    }
+
+    #endregion
+
+    #region OnlineSGDRegressor Tests
+
+    [Fact]
+    public void OnlineSGDRegressor_Construction_DefaultParams()
+    {
+        var reg = new OnlineSGDRegressor<double>();
+        Assert.NotNull(reg);
+        Assert.False(reg.IsTrained);
+    }
+
+    [Fact]
+    public void OnlineSGDRegressor_PartialFit_DoesNotThrow()
+    {
+        var reg = new OnlineSGDRegressor<double>(learningRate: 0.01);
+        var x = new Vector<double>(new[] { 1.0, 2.0 });
+        reg.PartialFit(x, 3.0);
+        Assert.True(reg.IsTrained);
+    }
+
+    [Fact]
+    public void OnlineSGDRegressor_PartialFitBatch_TrainsModel()
+    {
+        var reg = new OnlineSGDRegressor<double>(learningRate: 0.01, l2Penalty: 0.0);
+
+        // Simple linear data: y = x[0]
+        var X = new Matrix<double>(new double[,]
+        {
+            { 1.0 },
+            { 2.0 },
+            { 3.0 },
+        });
+        var y = new Vector<double>(new[] { 1.0, 2.0, 3.0 });
+
+        for (int epoch = 0; epoch < 100; epoch++)
+            reg.PartialFit(X, y);
+
+        Assert.True(reg.IsTrained);
+    }
+
+    #endregion
+
+    #region OnlinePassiveAggressiveClassifier Tests
+
+    [Fact]
+    public void OnlinePAClassifier_Construction_DefaultParams()
+    {
+        var clf = new OnlinePassiveAggressiveClassifier<double>();
+        Assert.NotNull(clf);
+        Assert.False(clf.IsTrained);
+    }
+
+    [Fact]
+    public void OnlinePAClassifier_PartialFit_DoesNotThrow()
+    {
+        var clf = new OnlinePassiveAggressiveClassifier<double>();
+        var x = new Vector<double>(new[] { 1.0, 2.0 });
+        clf.PartialFit(x, 1.0);
+        Assert.True(clf.IsTrained);
+    }
+
+    [Fact]
+    public void OnlinePAClassifier_LinearlySeparableData_ClassifiesCorrectly()
+    {
+        var clf = new OnlinePassiveAggressiveClassifier<double>();
+
+        // Train on linearly separable data
+        for (int epoch = 0; epoch < 20; epoch++)
+        {
+            clf.PartialFit(new Vector<double>(new[] { 3.0, 0.0 }), 1.0);
+            clf.PartialFit(new Vector<double>(new[] { -3.0, 0.0 }), 0.0);
+        }
+
+        Assert.True(clf.IsTrained);
+    }
+
+    #endregion
+
+    #region OnlinePassiveAggressiveRegressor Tests
+
+    [Fact]
+    public void OnlinePARegressor_Construction_DefaultParams()
+    {
+        var reg = new OnlinePassiveAggressiveRegressor<double>();
+        Assert.NotNull(reg);
+        Assert.False(reg.IsTrained);
+    }
+
+    [Fact]
+    public void OnlinePARegressor_PartialFit_DoesNotThrow()
+    {
+        var reg = new OnlinePassiveAggressiveRegressor<double>();
+        var x = new Vector<double>(new[] { 1.0, 2.0 });
+        reg.PartialFit(x, 3.0);
+        Assert.True(reg.IsTrained);
+    }
+
+    #endregion
+
+    #region ADWINDriftDetector Tests
+
+    [Fact]
+    public void ADWINDriftDetector_StableStream_NoDrift()
+    {
+        var detector = new ADWINDriftDetector<double>();
+        for (int i = 0; i < 100; i++)
+            detector.Update(0.0);
+
+        Assert.False(detector.IsDriftDetected);
+    }
+
+    [Fact]
+    public void ADWINDriftDetector_Reset_ClearsState()
+    {
+        var detector = new ADWINDriftDetector<double>();
+        for (int i = 0; i < 50; i++)
+            detector.Update(1.0);
+
+        detector.Reset();
+        Assert.False(detector.IsDriftDetected);
+    }
+
+    #endregion
+}
