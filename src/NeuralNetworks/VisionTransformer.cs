@@ -99,7 +99,7 @@ public class VisionTransformer<T> : NeuralNetworkBase<T>
     /// <summary>
     /// The final classification head (MLP).
     /// </summary>
-    private DenseLayer<T> _classificationHead = default!;
+    private DenseLayer<T>? _classificationHead;
 
     /// <summary>
     /// Indicates whether this network supports training.
@@ -369,6 +369,11 @@ public class VisionTransformer<T> : NeuralNetworkBase<T>
             {
                 reshapedForClassification[b, 0, d] = clsOutput[b, d];
             }
+        }
+
+        if (_classificationHead is null)
+        {
+            throw new InvalidOperationException("Classification head not initialized.");
         }
 
         var output = _classificationHead.Forward(reshapedForClassification);
