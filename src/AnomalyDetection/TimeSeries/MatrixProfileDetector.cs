@@ -256,24 +256,59 @@ public class MatrixProfileDetector<T> : AnomalyDetectorBase<T>
                     throw new InvalidOperationException("Model not properly fitted.");
                 }
 
-                // Return profile-based scores
+                // Return profile-based scores.
+                // For each time point, use the MAXIMUM profile value across all
+                // subsequences that contain that point. Also add a point-level
+                // value deviation signal to disambiguate points within the same
+                // high-discord subsequence (e.g., the spike vs. adjacent normal values).
                 var scores = new Vector<T>(n);
                 int m = _subsequenceLength;
+                int profileLength = n - m + 1;
+
+                // Compute global mean and std for value deviation scoring
+                double globalMean = 0;
+                for (int i = 0; i < n; i++)
+                {
+                    globalMean += values[i];
+                }
+                globalMean /= n;
+
+                double globalVar = 0;
+                for (int i = 0; i < n; i++)
+                {
+                    double diff = values[i] - globalMean;
+                    globalVar += diff * diff;
+                }
+                double globalStd = Math.Sqrt(globalVar / n);
+                if (globalStd < 1e-10) globalStd = 1.0;
 
                 for (int i = 0; i < n; i++)
                 {
-                    double score;
-                    if (i < n - m + 1)
+                    double maxProfileValue = 0;
+
+                    // Find all subsequences that contain point i
+                    int subStart = Math.Max(0, i - m + 1);
+                    int subEnd = Math.Min(i, profileLength - 1);
+
+                    for (int s = subStart; s <= subEnd; s++)
                     {
-                        // Normalize profile value
-                        score = matrixProfile[i] / (2 * Math.Sqrt(m)); // Max normalized distance
+                        if (matrixProfile[s] > maxProfileValue)
+                        {
+                            maxProfileValue = matrixProfile[s];
+                        }
                     }
-                    else
-                    {
-                        // Use last available profile value
-                        score = matrixProfile[n - m];
-                    }
-                    scores[i] = NumOps.FromDouble(Math.Min(score, 1.0));
+
+                    // Profile component: normalized discord distance
+                    double profileScore = maxProfileValue / (2 * Math.Sqrt(m));
+
+                    // Value deviation component: how extreme this specific point is.
+                    // This disambiguates the actual anomaly point from adjacent normal
+                    // points that share the same high-discord subsequence.
+                    double valueDeviation = Math.Abs(values[i] - globalMean) / globalStd;
+
+                    // Combined score (weighted sum)
+                    double score = profileScore + 0.1 * valueDeviation;
+                    scores[i] = NumOps.FromDouble(score);
                 }
 
                 return scores;

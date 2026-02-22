@@ -353,8 +353,9 @@ public class KernelPCADetector<T> : AnomalyDetectorBase<T>
                 kVec[t] = kVec[t] - kMean - mean[t] + grandMean;
             }
 
-            // Project to kernel PCA space and reconstruct
+            // Project to kernel PCA space and compute scores
             double reconstructionError = ComputeKernel(point, point, effectiveGamma);
+            double mahalanobis = 0;
 
             for (int c = 0; c < _nComponents; c++)
             {
@@ -365,11 +366,20 @@ public class KernelPCADetector<T> : AnomalyDetectorBase<T>
                     proj += alphas[c][t] * kVec[t];
                 }
 
-                // Subtract reconstructed variance
+                // Subtract reconstructed variance for reconstruction error
                 reconstructionError -= proj * proj / lambdas[c];
+
+                // Mahalanobis distance in kernel PCA space: sum(proj^2 / lambda)
+                // This catches outliers that are far from the mean in kernel space,
+                // even if reconstruction error is near zero
+                if (lambdas[c] > 1e-10)
+                {
+                    mahalanobis += (proj * proj) / lambdas[c];
+                }
             }
 
-            scores[i] = NumOps.FromDouble(Math.Max(0, reconstructionError));
+            // Combined score: Mahalanobis distance + reconstruction error
+            scores[i] = NumOps.FromDouble(Math.Sqrt(mahalanobis + Math.Max(0, reconstructionError)));
         }
 
         return scores;
