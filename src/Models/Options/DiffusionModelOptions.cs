@@ -24,6 +24,34 @@ namespace AiDotNet.Models.Options;
 public class DiffusionModelOptions<T> : ModelOptions
 {
     /// <summary>
+    /// Initializes a new instance with default values.
+    /// </summary>
+    public DiffusionModelOptions()
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance by copying from another instance.
+    /// </summary>
+    /// <param name="other">The options instance to copy from.</param>
+    /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
+    public DiffusionModelOptions(DiffusionModelOptions<T> other)
+    {
+        if (other == null)
+            throw new ArgumentNullException(nameof(other));
+
+        LearningRate = other.LearningRate;
+        TrainTimesteps = other.TrainTimesteps;
+        BetaStart = other.BetaStart;
+        BetaEnd = other.BetaEnd;
+        BetaSchedule = other.BetaSchedule;
+        PredictionType = other.PredictionType;
+        ClipSample = other.ClipSample;
+        DefaultInferenceSteps = other.DefaultInferenceSteps;
+        LossFunction = other.LossFunction;
+    }
+
+    /// <summary>
     /// Gets or sets the learning rate for training parameter updates.
     /// </summary>
     /// <value>The learning rate, defaulting to 0.001.</value>
