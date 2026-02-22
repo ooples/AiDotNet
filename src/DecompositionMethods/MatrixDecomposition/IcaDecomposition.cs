@@ -504,10 +504,25 @@ public class IcaDecomposition<T> : MatrixDecompositionBase<T>
     /// <returns>Mixing matrix.</returns>
     private Matrix<T> ComputeMixingMatrix(Matrix<T> W, Matrix<T> K)
     {
-        // A = (W * K)⁻¹ = K⁻¹ * W⁻¹
-        // For simplicity, use the transpose as an approximation
+        // The total unmixing is WK: S = W * K * X_centered^T
+        // The mixing matrix is the (pseudo-)inverse of WK: A = pinv(W * K)
         Matrix<T> WK = W.Multiply(K);
-        return WK.Transpose();
+
+        if (WK.Rows == WK.Columns)
+        {
+            // Square case: use LU decomposition for proper inverse
+            var lu = new LuDecomposition<T>(WK);
+            return lu.Invert();
+        }
+        else
+        {
+            // Non-square case: use pseudo-inverse pinv(WK) = WK^T * (WK * WK^T)^{-1}
+            Matrix<T> WKT = WK.Transpose();
+            Matrix<T> WKWKt = WK.Multiply(WKT);
+            var lu = new LuDecomposition<T>(WKWKt);
+            Matrix<T> WKWKtInv = lu.Invert();
+            return WKT.Multiply(WKWKtInv);
+        }
     }
 
     /// <summary>
