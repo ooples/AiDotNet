@@ -4,6 +4,7 @@ using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Tensors;
 using Xunit;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Tests.IntegrationTests.ComputerVision;
 
@@ -21,7 +22,7 @@ public class VideoDiffusionSegmentationIntegrationTests
     {
         int total = 1; foreach (int s in shape) total *= s;
         var data = new double[total];
-        var rng = new Random(42);
+        var rng = RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < total; i++) data[i] = rng.NextDouble();
         return new Tensor<double>(shape, new Vector<double>(data));
     }

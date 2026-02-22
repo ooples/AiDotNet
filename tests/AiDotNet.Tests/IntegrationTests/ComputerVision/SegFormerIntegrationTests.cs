@@ -6,6 +6,7 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors;
 using Xunit;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Tests.IntegrationTests.ComputerVision;
 
@@ -350,7 +351,7 @@ public class SegFormerIntegrationTests
     {
         int totalSize = shape.Aggregate(1, (a, b) => a * b);
         var data = new double[totalSize];
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < totalSize; i++)
             data[i] = random.NextDouble();
         return new Tensor<double>(shape, new Vector<double>(data));
