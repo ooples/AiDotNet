@@ -301,9 +301,17 @@ public class ARMAModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     public override Vector<T> Predict(Matrix<T> input)
     {
+        if (_trainedSeries.Length == 0)
+        {
+            throw new InvalidOperationException(
+                "Model has not been trained. Call Train() before Predict().");
+        }
+
         // Use the stored training series and residuals for in-sample predictions.
-        var series = _trainedSeries ?? new Vector<T>(input.Rows);
-        var residuals = _trainedResiduals ?? new Vector<T>(series.Length);
+        var series = _trainedSeries;
+        var residuals = _trainedResiduals.Length > 0
+            ? _trainedResiduals
+            : new Vector<T>(series.Length);
         int horizon = input.Rows;
         Vector<T> predictions = new Vector<T>(horizon);
 
@@ -851,8 +859,12 @@ public class ARMAModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     protected override void TrainCore(Matrix<T> x, Vector<T> y)
     {
-        // Store training series for in-sample predictions
-        _trainedSeries = y;
+        // Store a defensive copy of the training series for in-sample predictions
+        _trainedSeries = new Vector<T>(y.Length);
+        for (int i = 0; i < y.Length; i++)
+        {
+            _trainedSeries[i] = y[i];
+        }
 
         int startIdx = Math.Max(_arOrder, _maOrder);
         if (y.Length <= startIdx)
