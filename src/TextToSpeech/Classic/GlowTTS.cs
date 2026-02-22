@@ -17,6 +17,8 @@ namespace AiDotNet.TextToSpeech.Classic;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Glow-TTS: A Generative Flow for Text-to-Speech via Monotonic Alignment Search" (Kim et al., 2020)</item></list></para>
+/// <para><b>For Beginners:</b> /// Glow-TTS: flow-based generative model for non-autoregressive TTS with monotonic alignment search (MAS).
+///. This model converts text input into speech audio output.</para>
 /// </remarks>
 public class GlowTTS<T> : TtsModelBase<T>, IAcousticModel<T>
 {

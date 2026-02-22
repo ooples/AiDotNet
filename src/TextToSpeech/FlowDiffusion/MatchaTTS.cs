@@ -2,7 +2,7 @@ using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options
 namespace AiDotNet.TextToSpeech.FlowDiffusion;
 /// <summary>Matcha-TTS: optimal-transport conditional flow matching for fast non-autoregressive TTS.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "Matcha-TTS: A Fast TTS Architecture with Conditional Flow Matching" (Mehta et al., 2024)</item></list></para></remarks>
+/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "Matcha-TTS: A Fast TTS Architecture with Conditional Flow Matching" (Mehta et al., 2024)</item></list></para><para><b>For Beginners:</b> Matcha-TTS: optimal-transport conditional flow matching for fast non-autoregressive TTS.. This model converts text input into speech audio output.</para></remarks>
 public class MatchaTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly MatchaTTSOptions _options; public override ModelOptions GetOptions() => _options;

@@ -17,6 +17,8 @@ namespace AiDotNet.TextToSpeech.Classic;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Tacotron: Towards End-to-End Speech Synthesis" (Wang et al., 2017)</item></list></para>
+/// <para><b>For Beginners:</b> /// Tacotron: sequence-to-sequence attention-based TTS with CBHG encoder and autoregressive decoder.
+///. This model converts text input into speech audio output.</para>
 /// </remarks>
 public class Tacotron<T> : TtsModelBase<T>, IAcousticModel<T>
 {

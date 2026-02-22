@@ -2,7 +2,7 @@ using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options
 namespace AiDotNet.TextToSpeech.FlowDiffusion;
 /// <summary>CoMoSpeech: CoMoSpeech: One-Step Speech Synthesis via Consistency Model.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "CoMoSpeech: One-Step Speech Synthesis via Consistency Model" (Ye et al., 2023)</item></list></para></remarks>
+/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "CoMoSpeech: One-Step Speech Synthesis via Consistency Model" (Ye et al., 2023)</item></list></para><para><b>For Beginners:</b> CoMoSpeech: CoMoSpeech: One-Step Speech Synthesis via Consistency Model.. This model converts text input into speech audio output.</para></remarks>
 public class CoMoSpeech<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly CoMoSpeechOptions _options; public override ModelOptions GetOptions() => _options;

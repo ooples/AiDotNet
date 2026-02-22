@@ -17,6 +17,8 @@ namespace AiDotNet.TextToSpeech.Classic;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Neural Speech Synthesis with Transformer Network" (Li et al., 2019)</item></list></para>
+/// <para><b>For Beginners:</b> /// Transformer TTS: multi-head self-attention based acoustic model replacing RNNs with transformers.
+///. This model converts text input into speech audio output.</para>
 /// </remarks>
 public class TransformerTTS<T> : TtsModelBase<T>, IAcousticModel<T>
 {

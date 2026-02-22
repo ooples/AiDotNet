@@ -1,6 +1,9 @@
 namespace AiDotNet.TextToSpeech.VoiceCloning;
 
 /// <summary>Options for CosyVoiceClone voice cloning model.</summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> These options configure the CosyVoiceClone model. Default values follow the original paper settings.</para>
+/// </remarks>
 public class CosyVoiceCloneOptions : VoiceCloningOptions
 {
     public CosyVoiceCloneOptions()

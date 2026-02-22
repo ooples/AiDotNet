@@ -2,7 +2,7 @@ using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options
 namespace AiDotNet.TextToSpeech.VoiceCloning;
 /// <summary>CosyVoice: scalable zero-shot voice cloning using supervised semantic tokens and OT-CFM decoder.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "CosyVoice: A Scalable Multilingual Zero-shot Text-to-speech Synthesizer Based on Supervised Semantic Tokens" (Du et al., 2024)</item></list></para></remarks>
+/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "CosyVoice: A Scalable Multilingual Zero-shot Text-to-speech Synthesizer Based on Supervised Semantic Tokens" (Du et al., 2024)</item></list></para><para><b>For Beginners:</b> CosyVoice: scalable zero-shot voice cloning using supervised semantic tokens and OT-CFM decoder.. This model converts text input into speech audio output.</para></remarks>
 public class CosyVoiceClone<T> : TtsModelBase<T>, ICodecTts<T>, IVoiceCloner<T>
 {
     private readonly CosyVoiceCloneOptions _options; public override ModelOptions GetOptions() => _options;

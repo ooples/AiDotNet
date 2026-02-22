@@ -2,7 +2,7 @@ using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options
 namespace AiDotNet.TextToSpeech.EndToEnd;
 /// <summary>VITS: end-to-end TTS with conditional VAE, normalizing flows, and adversarial training for parallel high-quality synthesis.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "Conditional Variational Autoencoder with Adversarial Learning for End-to-End Text-to-Speech" (Kim et al., 2021)</item></list></para></remarks>
+/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "Conditional Variational Autoencoder with Adversarial Learning for End-to-End Text-to-Speech" (Kim et al., 2021)</item></list></para><para><b>For Beginners:</b> VITS: end-to-end TTS with conditional VAE, normalizing flows, and adversarial training for parallel high-quality synthesis.. This model converts text input into speech audio output.</para></remarks>
 public class VITS<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly VITSOptions _options; public override ModelOptions GetOptions() => _options;

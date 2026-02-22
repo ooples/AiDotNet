@@ -2,7 +2,7 @@ using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options
 namespace AiDotNet.TextToSpeech.FlowDiffusion;
 /// <summary>E2 TTS: fully non-autoregressive flow-matching TTS with character-level text input.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "Embarrassingly Easy Text-to-Speech" (Eskimez et al., 2024)</item></list></para></remarks>
+/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "Embarrassingly Easy Text-to-Speech" (Eskimez et al., 2024)</item></list></para><para><b>For Beginners:</b> E2 TTS: fully non-autoregressive flow-matching TTS with character-level text input.. This model converts text input into speech audio output.</para></remarks>
 public class E2TTS<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly E2TTSOptions _options; public override ModelOptions GetOptions() => _options;

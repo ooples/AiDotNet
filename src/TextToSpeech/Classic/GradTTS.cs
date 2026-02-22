@@ -17,6 +17,8 @@ namespace AiDotNet.TextToSpeech.Classic;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Grad-TTS: A Diffusion Probabilistic Model for Text-to-Speech" (Popov et al., 2021)</item></list></para>
+/// <para><b>For Beginners:</b> /// Grad-TTS: diffusion-based acoustic model using score matching and stochastic differential equations.
+///. This model converts text input into speech audio output.</para>
 /// </remarks>
 public class GradTTS<T> : TtsModelBase<T>, IAcousticModel<T>
 {

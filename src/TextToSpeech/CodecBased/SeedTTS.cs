@@ -2,7 +2,7 @@ using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options
 namespace AiDotNet.TextToSpeech.CodecBased;
 /// <summary>Seed-TTS: large-scale autoregressive TTS with self-distillation for in-context learning.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "Seed-TTS: High-Quality Versatile Speech Generation Models" (Anastassiou et al., 2024)</item></list></para></remarks>
+/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "Seed-TTS: High-Quality Versatile Speech Generation Models" (Anastassiou et al., 2024)</item></list></para><para><b>For Beginners:</b> Seed-TTS: large-scale autoregressive TTS with self-distillation for in-context learning.. This model converts text input into speech audio output.</para></remarks>
 public class SeedTTS<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly SeedTTSOptions _options; public override ModelOptions GetOptions() => _options;

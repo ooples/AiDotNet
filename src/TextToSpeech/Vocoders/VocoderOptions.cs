@@ -3,8 +3,29 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 /// <summary>
 /// Base configuration options for neural vocoder models.
 /// </summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> These options configure the Vocoder model. Default values follow the original paper settings.</para>
+/// </remarks>
 public class VocoderOptions : TtsModelOptions
 {
+    /// <summary>Initializes a new instance with default values.</summary>
+    public VocoderOptions() { }
+
+    /// <summary>Initializes a new instance by copying from another instance.</summary>
+    /// <param name="other">The options instance to copy from.</param>
+    /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
+    public VocoderOptions(VocoderOptions other)
+    {
+        if (other == null)
+            throw new ArgumentNullException(nameof(other));
+
+        UpsampleRates = other.UpsampleRates;
+        UpsampleKernelSizes = other.UpsampleKernelSizes;
+        UpsampleInitialChannels = other.UpsampleInitialChannels;
+        ResblockKernelSizes = other.ResblockKernelSizes;
+        NumDiffusionSteps = other.NumDiffusionSteps;
+    }
+
     /// <summary>Gets or sets the upsample rates for each upsampling block.</summary>
     public int[] UpsampleRates { get; set; } = [8, 8, 2, 2];
 

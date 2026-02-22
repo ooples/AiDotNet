@@ -17,6 +17,8 @@ namespace AiDotNet.TextToSpeech.Classic;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Forward Tacotron: A Non-Autoregressive Alternative to Tacotron" (Elias et al., 2021)</item></list></para>
+/// <para><b>For Beginners:</b> /// Forward Tacotron: non-autoregressive Tacotron variant using duration predictor instead of attention.
+///. This model converts text input into speech audio output.</para>
 /// </remarks>
 public class ForwardTacotron<T> : TtsModelBase<T>, IAcousticModel<T>
 {

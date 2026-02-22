@@ -1,5 +1,8 @@
 namespace AiDotNet.TextToSpeech.CodecBased;
 /// <summary>Options for OrpheusTTS.</summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> These options configure the OrpheusTTS model. Default values follow the original paper settings.</para>
+/// </remarks>
 public class OrpheusTTSOptions : CodecTtsOptions
 {
     public OrpheusTTSOptions()

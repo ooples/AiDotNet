@@ -2,7 +2,7 @@ using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options
 namespace AiDotNet.TextToSpeech.CodecBased;
 /// <summary>Dia: dialogue-oriented TTS generating multi-speaker conversations with expressive prosody.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks><para><b>References:</b><list type="bullet"><item>Project: "Dia: Generate realistic dialogue" (Nari AI, 2025)</item></list></para></remarks>
+/// <remarks><para><b>References:</b><list type="bullet"><item>Project: "Dia: Generate realistic dialogue" (Nari AI, 2025)</item></list></para><para><b>For Beginners:</b> Dia: dialogue-oriented TTS generating multi-speaker conversations with expressive prosody.. This model converts text input into speech audio output.</para></remarks>
 public class Dia<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly DiaOptions _options; public override ModelOptions GetOptions() => _options;

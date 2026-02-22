@@ -2,7 +2,7 @@ using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options
 namespace AiDotNet.TextToSpeech.FlowDiffusion;
 /// <summary>E3 TTS: non-autoregressive end-to-end diffusion TTS without explicit duration modeling.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "Simple and Efficient Non-Autoregressive Text-to-Speech" (Gao et al., 2023)</item></list></para></remarks>
+/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "Simple and Efficient Non-Autoregressive Text-to-Speech" (Gao et al., 2023)</item></list></para><para><b>For Beginners:</b> E3 TTS: non-autoregressive end-to-end diffusion TTS without explicit duration modeling.. This model converts text input into speech audio output.</para></remarks>
 public class E3TTS<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly E3TTSOptions _options; public override ModelOptions GetOptions() => _options;

@@ -2,7 +2,7 @@ using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options
 namespace AiDotNet.TextToSpeech.Vocoders;
 /// <summary>WaveGlow: flow-based generative vocoder combining Glow invertible 1x1 convolutions with WaveNet affine coupling layers.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "WaveGlow: A Flow-based Generative Network for Speech Synthesis" (Prenger et al., 2019)</item></list></para></remarks>
+/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "WaveGlow: A Flow-based Generative Network for Speech Synthesis" (Prenger et al., 2019)</item></list></para><para><b>For Beginners:</b> WaveGlow: flow-based generative vocoder combining Glow invertible 1x1 convolutions with WaveNet affine coupling layers.. This model converts text input into speech audio output.</para></remarks>
 public class WaveGlow<T> : TtsModelBase<T>, IVocoder<T>
 {
     private readonly WaveGlowOptions _options; public override ModelOptions GetOptions() => _options;

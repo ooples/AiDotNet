@@ -2,7 +2,7 @@ using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options
 namespace AiDotNet.TextToSpeech.CodecBased;
 /// <summary>Voicebox: Voicebox: Text-Guided Multilingual Universal Speech Generation at Scale.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "Voicebox: Text-Guided Multilingual Universal Speech Generation at Scale" (Le et al., 2023)</item></list></para></remarks>
+/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "Voicebox: Text-Guided Multilingual Universal Speech Generation at Scale" (Le et al., 2023)</item></list></para><para><b>For Beginners:</b> Voicebox: Voicebox: Text-Guided Multilingual Universal Speech Generation at Scale.. This model converts text input into speech audio output.</para></remarks>
 public class Voicebox<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly VoiceboxOptions _options; public override ModelOptions GetOptions() => _options;

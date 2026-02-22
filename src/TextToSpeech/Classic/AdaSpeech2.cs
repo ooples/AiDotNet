@@ -7,6 +7,8 @@ namespace AiDotNet.TextToSpeech.Classic;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "AdaSpeech 2: Adaptive Text to Speech with Untranscribed Data" (Yan et al., 2021)</item></list></para>
+/// <para><b>For Beginners:</b> /// AdaSpeech 2: adaptive TTS that leverages untranscribed speech via mel-to-phoneme pipeline.
+///. This model converts text input into speech audio output.</para>
 /// </remarks>
 public class AdaSpeech2<T> : TtsModelBase<T>, IAcousticModel<T>
 {

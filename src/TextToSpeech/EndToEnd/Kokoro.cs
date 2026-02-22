@@ -2,7 +2,7 @@ using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options
 namespace AiDotNet.TextToSpeech.EndToEnd;
 /// <summary>Kokoro: lightweight end-to-end TTS with StyleTTS2-inspired architecture using style tokens and ISTFTNet decoder for fast inference.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks><para><b>References:</b><list type="bullet"><item>Project: "Kokoro: A frontier TTS model for its size of 82M params" (Hexgrad, 2024)</item></list></para></remarks>
+/// <remarks><para><b>References:</b><list type="bullet"><item>Project: "Kokoro: A frontier TTS model for its size of 82M params" (Hexgrad, 2024)</item></list></para><para><b>For Beginners:</b> Kokoro: lightweight end-to-end TTS with StyleTTS2-inspired architecture using style tokens and ISTFTNet decoder for fast inference.. This model converts text input into speech audio output.</para></remarks>
 public class Kokoro<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly KokoroOptions _options; public override ModelOptions GetOptions() => _options;

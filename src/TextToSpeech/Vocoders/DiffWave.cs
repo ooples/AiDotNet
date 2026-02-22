@@ -2,7 +2,7 @@ using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options
 namespace AiDotNet.TextToSpeech.Vocoders;
 /// <summary>DiffWave: diffusion probabilistic model for conditional and unconditional waveform generation.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "DiffWave: A Versatile Diffusion Model for Audio Synthesis" (Kong et al., 2021)</item></list></para></remarks>
+/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "DiffWave: A Versatile Diffusion Model for Audio Synthesis" (Kong et al., 2021)</item></list></para><para><b>For Beginners:</b> DiffWave: diffusion probabilistic model for conditional and unconditional waveform generation.. This model converts text input into speech audio output.</para></remarks>
 public class DiffWave<T> : TtsModelBase<T>, IVocoder<T>
 {
     private readonly DiffWaveOptions _options; public override ModelOptions GetOptions() => _options;

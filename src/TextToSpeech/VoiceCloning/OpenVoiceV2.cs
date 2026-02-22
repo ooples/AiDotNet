@@ -2,7 +2,7 @@ using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options
 namespace AiDotNet.TextToSpeech.VoiceCloning;
 /// <summary>OpenVoiceV2: OpenVoice V2: Improved Instant Voice Cloning.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "OpenVoice V2: Improved Instant Voice Cloning" (Qin et al., 2024)</item></list></para></remarks>
+/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "OpenVoice V2: Improved Instant Voice Cloning" (Qin et al., 2024)</item></list></para><para><b>For Beginners:</b> OpenVoiceV2: OpenVoice V2: Improved Instant Voice Cloning.. This model converts text input into speech audio output.</para></remarks>
 public class OpenVoiceV2<T> : TtsModelBase<T>, IEndToEndTts<T>, IVoiceCloner<T>
 {
     private readonly OpenVoiceV2Options _options; public override ModelOptions GetOptions() => _options;

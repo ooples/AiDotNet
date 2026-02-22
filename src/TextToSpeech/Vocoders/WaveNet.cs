@@ -5,7 +5,8 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b>
-/// <list type="bullet"><item>Paper: "WaveNet: A Generative Model for Raw Audio" (van den Oord et al., 2016)</item></list></para></remarks>
+/// <list type="bullet"><item>Paper: "WaveNet: A Generative Model for Raw Audio" (van den Oord et al., 2016)</item></list></para><para><b>For Beginners:</b> /// WaveNet: autoregressive generative model using dilated causal convolutions for raw audio generation.
+///. This model converts text input into speech audio output.</para></remarks>
 public class WaveNet<T> : TtsModelBase<T>, IVocoder<T>
 {
     private readonly WaveNetOptions _options; public override ModelOptions GetOptions() => _options;

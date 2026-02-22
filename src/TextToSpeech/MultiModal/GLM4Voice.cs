@@ -2,7 +2,7 @@ using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options
 namespace AiDotNet.TextToSpeech.MultiModal;
 /// <summary>GLM-4-Voice: intelligent and human-like end-to-end spoken chatbot with emotion and prosody control.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "GLM-4-Voice: Towards Intelligent and Human-Like End-to-End Spoken Chatbot" (Zeng et al., 2024)</item></list></para></remarks>
+/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "GLM-4-Voice: Towards Intelligent and Human-Like End-to-End Spoken Chatbot" (Zeng et al., 2024)</item></list></para><para><b>For Beginners:</b> GLM-4-Voice: intelligent and human-like end-to-end spoken chatbot with emotion and prosody control.. This model converts text input into speech audio output.</para></remarks>
 public class GLM4Voice<T> : TtsModelBase<T>, ICodecTts<T>, IStreamingTts<T>
 {
     private readonly GLM4VoiceOptions _options; public override ModelOptions GetOptions() => _options;

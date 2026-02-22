@@ -2,7 +2,7 @@ using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options
 namespace AiDotNet.TextToSpeech.MultiModal;
 /// <summary>LLaMA-Omni: seamless speech interaction with LLM, enabling low-latency speech-to-speech conversation.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "LLaMA-Omni: Seamless Speech Interaction with Large Language Model" (Fang et al., 2024)</item></list></para></remarks>
+/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "LLaMA-Omni: Seamless Speech Interaction with Large Language Model" (Fang et al., 2024)</item></list></para><para><b>For Beginners:</b> LLaMA-Omni: seamless speech interaction with LLM, enabling low-latency speech-to-speech conversation.. This model converts text input into speech audio output.</para></remarks>
 public class LlamaOmni<T> : TtsModelBase<T>, ICodecTts<T>, IStreamingTts<T>
 {
     private readonly LlamaOmniOptions _options; public override ModelOptions GetOptions() => _options;

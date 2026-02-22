@@ -2,7 +2,7 @@ using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options
 namespace AiDotNet.TextToSpeech.CodecBased;
 /// <summary>CosyVoice: multilingual TTS with supervised semantic tokens and conditional flow matching.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "CosyVoice: A Scalable Multilingual TTS Based on Supervised Semantic Tokens" (Du et al., 2024)</item></list></para></remarks>
+/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "CosyVoice: A Scalable Multilingual TTS Based on Supervised Semantic Tokens" (Du et al., 2024)</item></list></para><para><b>For Beginners:</b> CosyVoice: multilingual TTS with supervised semantic tokens and conditional flow matching.. This model converts text input into speech audio output.</para></remarks>
 public class CosyVoice<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly CosyVoiceOptions _options; public override ModelOptions GetOptions() => _options;

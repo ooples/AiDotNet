@@ -2,7 +2,7 @@ using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options
 namespace AiDotNet.TextToSpeech.CodecBased;
 /// <summary>Orpheus: real-time emotion-controllable TTS with SNAC codec and LLaMA backbone.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks><para><b>References:</b><list type="bullet"><item>Project: "Orpheus: Real-time human-like speech" (Canopy Labs, 2025)</item></list></para></remarks>
+/// <remarks><para><b>References:</b><list type="bullet"><item>Project: "Orpheus: Real-time human-like speech" (Canopy Labs, 2025)</item></list></para><para><b>For Beginners:</b> Orpheus: real-time emotion-controllable TTS with SNAC codec and LLaMA backbone.. This model converts text input into speech audio output.</para></remarks>
 public class OrpheusTTS<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly OrpheusTTSOptions _options; public override ModelOptions GetOptions() => _options;

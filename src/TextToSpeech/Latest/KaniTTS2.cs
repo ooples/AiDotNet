@@ -2,7 +2,7 @@ using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options
 namespace AiDotNet.TextToSpeech.Latest;
 /// <summary>KaniTTS2: Kani-TTS-2: Improved Lightweight Codec TTS.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "Kani-TTS-2: Improved Lightweight Codec TTS" (-, 2026)</item></list></para></remarks>
+/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "Kani-TTS-2: Improved Lightweight Codec TTS" (-, 2026)</item></list></para><para><b>For Beginners:</b> KaniTTS2: Kani-TTS-2: Improved Lightweight Codec TTS.. This model converts text input into speech audio output.</para></remarks>
 public class KaniTTS2<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly KaniTTS2Options _options; public override ModelOptions GetOptions() => _options;

@@ -2,7 +2,7 @@ using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options
 namespace AiDotNet.TextToSpeech.CodecBased;
 /// <summary>MARS5-TTS: two-stage TTS with shallow AR for coarse prosody then deep NAR for fine acoustics.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "MARS5-TTS: A Two-Stage Shallow AR, Deep NAR System" (CAMB AI, 2024)</item></list></para></remarks>
+/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "MARS5-TTS: A Two-Stage Shallow AR, Deep NAR System" (CAMB AI, 2024)</item></list></para><para><b>For Beginners:</b> MARS5-TTS: two-stage TTS with shallow AR for coarse prosody then deep NAR for fine acoustics.. This model converts text input into speech audio output.</para></remarks>
 public class MARS5TTS<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly MARS5TTSOptions _options; public override ModelOptions GetOptions() => _options;

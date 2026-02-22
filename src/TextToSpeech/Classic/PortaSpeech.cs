@@ -7,6 +7,8 @@ namespace AiDotNet.TextToSpeech.Classic;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "PortaSpeech: Portable and High-Quality Generative Text-to-Speech" (Ren et al., 2021)</item></list></para>
+/// <para><b>For Beginners:</b> /// PortaSpeech: portable TTS with word-level prosody modeling and normalizing flow-based post-net for expressiveness.
+///. This model converts text input into speech audio output.</para>
 /// </remarks>
 public class PortaSpeech<T> : TtsModelBase<T>, IAcousticModel<T>
 {

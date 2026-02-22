@@ -2,7 +2,7 @@ using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options
 namespace AiDotNet.TextToSpeech.DescriptionBased;
 /// <summary>Parler-TTS: text-described TTS that generates speech matching a natural language voice description.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "Natural language guidance of high-fidelity text-to-speech" (Lyth et al., 2024)</item></list></para></remarks>
+/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "Natural language guidance of high-fidelity text-to-speech" (Lyth et al., 2024)</item></list></para><para><b>For Beginners:</b> Parler-TTS: text-described TTS that generates speech matching a natural language voice description.. This model converts text input into speech audio output.</para></remarks>
 public class ParlerTTS<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly ParlerTTSOptions _options; public override ModelOptions GetOptions() => _options;

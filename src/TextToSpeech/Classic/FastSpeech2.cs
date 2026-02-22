@@ -17,6 +17,8 @@ namespace AiDotNet.TextToSpeech.Classic;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "FastSpeech 2: Fast and High-Quality End-to-End Text to Speech" (Ren et al., 2020)</item></list></para>
+/// <para><b>For Beginners:</b> /// FastSpeech 2: non-autoregressive TTS with variance adaptor for pitch, energy, and duration.
+///. This model converts text input into speech audio output.</para>
 /// </remarks>
 public class FastSpeech2<T> : TtsModelBase<T>, IAcousticModel<T>
 {

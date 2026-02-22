@@ -1,6 +1,9 @@
 using AiDotNet.TextToSpeech.CodecBased;
 namespace AiDotNet.TextToSpeech.DescriptionBased;
 /// <summary>Options for ParlerTTS.</summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> These options configure the ParlerTTS model. Default values follow the original paper settings.</para>
+/// </remarks>
 public class ParlerTTSOptions : CodecTtsOptions
 {
     public ParlerTTSOptions()

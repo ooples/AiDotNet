@@ -2,7 +2,7 @@ using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options
 namespace AiDotNet.TextToSpeech.Vocoders;
 /// <summary>BigVGAN: large-scale universal vocoder with anti-aliased multi-periodicity composition (AMP) and Snake activation for high-fidelity synthesis.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "BigVGAN: A Universal Neural Vocoder with Large-Scale Training" (Lee et al., 2023)</item></list></para></remarks>
+/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "BigVGAN: A Universal Neural Vocoder with Large-Scale Training" (Lee et al., 2023)</item></list></para><para><b>For Beginners:</b> BigVGAN: large-scale universal vocoder with anti-aliased multi-periodicity composition (AMP) and Snake activation for high-fidelity synthesis.. This model converts text input into speech audio output.</para></remarks>
 public class BigVGAN<T> : TtsModelBase<T>, IVocoder<T>
 {
     private readonly BigVGANOptions _options; public override ModelOptions GetOptions() => _options;

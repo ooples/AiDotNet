@@ -2,7 +2,7 @@ using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options
 namespace AiDotNet.TextToSpeech.CodecBased;
 /// <summary>NaturalSpeech 3: factorized codec + diffusion for disentangled speech attribute control.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "NaturalSpeech 3: Zero-Shot Speech Synthesis with a Factorized Codec and Diffusion Models" (Ju et al., 2024)</item></list></para></remarks>
+/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "NaturalSpeech 3: Zero-Shot Speech Synthesis with a Factorized Codec and Diffusion Models" (Ju et al., 2024)</item></list></para><para><b>For Beginners:</b> NaturalSpeech 3: factorized codec + diffusion for disentangled speech attribute control.. This model converts text input into speech audio output.</para></remarks>
 public class NaturalSpeech3<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly NaturalSpeech3Options _options; public override ModelOptions GetOptions() => _options;

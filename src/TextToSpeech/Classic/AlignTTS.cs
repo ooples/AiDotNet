@@ -17,6 +17,8 @@ namespace AiDotNet.TextToSpeech.Classic;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "AlignTTS: Efficient Feed-Forward Text-to-Speech Model without Explicit Alignment" (Zeng et al., 2020)</item></list></para>
+/// <para><b>For Beginners:</b> /// AlignTTS: alignment-free non-autoregressive TTS using feed-forward transformer with mix density network alignment.
+///. This model converts text input into speech audio output.</para>
 /// </remarks>
 public class AlignTTS<T> : TtsModelBase<T>, IAcousticModel<T>
 {

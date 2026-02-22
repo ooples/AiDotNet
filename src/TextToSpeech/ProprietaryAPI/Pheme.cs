@@ -2,7 +2,7 @@ using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options
 namespace AiDotNet.TextToSpeech.ProprietaryAPI;
 /// <summary>Pheme: Pheme: Efficient and Conversational Speech Generation.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "Pheme: Efficient and Conversational Speech Generation" (PolyAI Team, 2024)</item></list></para></remarks>
+/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "Pheme: Efficient and Conversational Speech Generation" (PolyAI Team, 2024)</item></list></para><para><b>For Beginners:</b> Pheme: Pheme: Efficient and Conversational Speech Generation.. This model converts text input into speech audio output.</para></remarks>
 public class Pheme<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly PhemeOptions _options; public override ModelOptions GetOptions() => _options;

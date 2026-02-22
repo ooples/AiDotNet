@@ -2,7 +2,7 @@ using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options
 namespace AiDotNet.TextToSpeech.VoiceCloning;
 /// <summary>XTTS v2: multilingual zero-shot TTS using GPT-2 backbone to autoregressively predict VQ-VAE audio tokens.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks><para><b>References:</b><list type="bullet"><item>Project: "XTTS: A Massively Multilingual Zero-Shot Text-to-Speech Model" (Coqui AI, 2023)</item></list></para></remarks>
+/// <remarks><para><b>References:</b><list type="bullet"><item>Project: "XTTS: A Massively Multilingual Zero-Shot Text-to-Speech Model" (Coqui AI, 2023)</item></list></para><para><b>For Beginners:</b> XTTS v2: multilingual zero-shot TTS using GPT-2 backbone to autoregressively predict VQ-VAE audio tokens.. This model converts text input into speech audio output.</para></remarks>
 public class XTTSv2<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly XTTSv2Options _options; public override ModelOptions GetOptions() => _options;

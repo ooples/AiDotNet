@@ -2,7 +2,7 @@ using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options
 namespace AiDotNet.TextToSpeech.Vocoders;
 /// <summary>Vocos: ConvNeXt-based vocoder that reconstructs waveform from Fourier coefficients (STFT magnitude + phase via ISTFT) instead of time-domain upsampling.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "Vocos: Closing the Gap between Time-Domain and Fourier-Based Neural Vocoders for High-Quality Audio Synthesis" (Siuzdak, 2023)</item></list></para></remarks>
+/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "Vocos: Closing the Gap between Time-Domain and Fourier-Based Neural Vocoders for High-Quality Audio Synthesis" (Siuzdak, 2023)</item></list></para><para><b>For Beginners:</b> Vocos: ConvNeXt-based vocoder that reconstructs waveform from Fourier coefficients (STFT magnitude + phase via ISTFT) instead of time-domain upsampling.. This model converts text input into speech audio output.</para></remarks>
 public class Vocos<T> : TtsModelBase<T>, IVocoder<T>
 {
     private readonly VocosOptions _options; public override ModelOptions GetOptions() => _options;

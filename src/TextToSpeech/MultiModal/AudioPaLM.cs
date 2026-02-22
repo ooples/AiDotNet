@@ -2,7 +2,7 @@ using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options
 namespace AiDotNet.TextToSpeech.MultiModal;
 /// <summary>AudioPaLM: AudioPaLM: A Large Language Model That Can Speak and Listen.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "AudioPaLM: A Large Language Model That Can Speak and Listen" (Rubenstein et al., 2023)</item></list></para></remarks>
+/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "AudioPaLM: A Large Language Model That Can Speak and Listen" (Rubenstein et al., 2023)</item></list></para><para><b>For Beginners:</b> AudioPaLM: AudioPaLM: A Large Language Model That Can Speak and Listen.. This model converts text input into speech audio output.</para></remarks>
 public class AudioPaLM<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly AudioPaLMOptions _options; public override ModelOptions GetOptions() => _options;

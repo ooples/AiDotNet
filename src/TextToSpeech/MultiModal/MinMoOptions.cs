@@ -3,8 +3,22 @@ using AiDotNet.TextToSpeech.CodecBased;
 namespace AiDotNet.TextToSpeech.MultiModal;
 
 /// <summary>Options for MinMo TTS model.</summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> These options configure the MinMo model. Default values follow the original paper settings.</para>
+/// </remarks>
 public class MinMoOptions : CodecTtsOptions
 {
+    /// <summary>Initializes a new instance by copying from another instance.</summary>
+    /// <param name="other">The options instance to copy from.</param>
+    /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
+    public MinMoOptions(MinMoOptions other)
+    {
+        if (other == null)
+            throw new ArgumentNullException(nameof(other));
+
+        FirstPacketLatencyMs = other.FirstPacketLatencyMs;
+    }
+
     public MinMoOptions()
     {
         TextEncoderDim = 256;

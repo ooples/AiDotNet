@@ -2,7 +2,7 @@ using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options
 namespace AiDotNet.TextToSpeech.Vocoders;
 /// <summary>iSTFTNet: vocoder that predicts STFT magnitude and phase, then uses inverse STFT for waveform reconstruction.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "iSTFTNet: Fast and Lightweight Mel-Spectrogram Vocoder Incorporating Inverse Short-Time Fourier Transform" (Kaneko et al., 2022)</item></list></para></remarks>
+/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "iSTFTNet: Fast and Lightweight Mel-Spectrogram Vocoder Incorporating Inverse Short-Time Fourier Transform" (Kaneko et al., 2022)</item></list></para><para><b>For Beginners:</b> iSTFTNet: vocoder that predicts STFT magnitude and phase, then uses inverse STFT for waveform reconstruction.. This model converts text input into speech audio output.</para></remarks>
 public class ISTFTNet<T> : TtsModelBase<T>, IVocoder<T>
 {
     private readonly ISTFTNetOptions _options; public override ModelOptions GetOptions() => _options;

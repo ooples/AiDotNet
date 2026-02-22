@@ -2,7 +2,7 @@ using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options
 namespace AiDotNet.TextToSpeech.StyleEmotion;
 /// <summary>StyleTTS 2: style diffusion and adversarial training with large SLMs for human-level expressive TTS.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "StyleTTS 2: Towards Human-Level Text-to-Speech through Style Diffusion and Adversarial Training with Large Speech Language Models" (Li et al., 2023)</item></list></para></remarks>
+/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "StyleTTS 2: Towards Human-Level Text-to-Speech through Style Diffusion and Adversarial Training with Large Speech Language Models" (Li et al., 2023)</item></list></para><para><b>For Beginners:</b> StyleTTS 2: style diffusion and adversarial training with large SLMs for human-level expressive TTS.. This model converts text input into speech audio output.</para></remarks>
 public class StyleTTS2<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly StyleTTS2Options _options; public override ModelOptions GetOptions() => _options;

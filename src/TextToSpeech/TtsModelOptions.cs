@@ -6,8 +6,40 @@ namespace AiDotNet.TextToSpeech;
 /// <summary>
 /// Base configuration options for text-to-speech models.
 /// </summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> These options configure the TtsModel model. Default values follow the original paper settings.</para>
+/// </remarks>
 public class TtsModelOptions : ModelOptions
 {
+    /// <summary>Initializes a new instance with default values.</summary>
+    public TtsModelOptions() { }
+
+    /// <summary>Initializes a new instance by copying from another instance.</summary>
+    /// <param name="other">The options instance to copy from.</param>
+    /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
+    public TtsModelOptions(TtsModelOptions other)
+    {
+        if (other == null)
+            throw new ArgumentNullException(nameof(other));
+
+        SampleRate = other.SampleRate;
+        MelChannels = other.MelChannels;
+        HopSize = other.HopSize;
+        FftSize = other.FftSize;
+        HiddenDim = other.HiddenDim;
+        NumEncoderLayers = other.NumEncoderLayers;
+        NumDecoderLayers = other.NumDecoderLayers;
+        NumHeads = other.NumHeads;
+        VocabSize = other.VocabSize;
+        MaxTextLength = other.MaxTextLength;
+        MaxMelLength = other.MaxMelLength;
+        DropoutRate = other.DropoutRate;
+        ModelPath = other.ModelPath;
+        OnnxOptions = other.OnnxOptions;
+        LearningRate = other.LearningRate;
+        WeightDecay = other.WeightDecay;
+    }
+
     /// <summary>Gets or sets the audio sample rate in Hz.</summary>
     public int SampleRate { get; set; } = 22050;
 

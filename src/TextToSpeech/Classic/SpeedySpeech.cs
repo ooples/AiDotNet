@@ -17,6 +17,8 @@ namespace AiDotNet.TextToSpeech.Classic;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "SpeedySpeech: Efficient Neural Speech Synthesis" (Vainer and Durnov, 2020)</item></list></para>
+/// <para><b>For Beginners:</b> /// SpeedySpeech: lightweight non-autoregressive TTS with convolutional residual blocks and teacher-student duration distillation.
+///. This model converts text input into speech audio output.</para>
 /// </remarks>
 public class SpeedySpeech<T> : TtsModelBase<T>, IAcousticModel<T>
 {

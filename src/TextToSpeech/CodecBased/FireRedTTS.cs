@@ -2,7 +2,7 @@ using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options
 namespace AiDotNet.TextToSpeech.CodecBased;
 /// <summary>FireRedTTS: foundation TTS model with large-scale training and multi-codebook generation.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "FireRedTTS: A Foundation TTS Framework" (Guo et al., 2024)</item></list></para></remarks>
+/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "FireRedTTS: A Foundation TTS Framework" (Guo et al., 2024)</item></list></para><para><b>For Beginners:</b> FireRedTTS: foundation TTS model with large-scale training and multi-codebook generation.. This model converts text input into speech audio output.</para></remarks>
 public class FireRedTTS<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly FireRedTTSOptions _options; public override ModelOptions GetOptions() => _options;

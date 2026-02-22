@@ -2,7 +2,7 @@ using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options
 namespace AiDotNet.TextToSpeech.StyleEmotion;
 /// <summary>StyleTTSZS: StyleTTS-ZS: Zero-Shot Voice Cloning with Style and Duration Control.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "StyleTTS-ZS: Zero-Shot Voice Cloning with Style and Duration Control" (Li et al., 2024)</item></list></para></remarks>
+/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "StyleTTS-ZS: Zero-Shot Voice Cloning with Style and Duration Control" (Li et al., 2024)</item></list></para><para><b>For Beginners:</b> StyleTTSZS: StyleTTS-ZS: Zero-Shot Voice Cloning with Style and Duration Control.. This model converts text input into speech audio output.</para></remarks>
 public class StyleTTSZS<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly StyleTTSZSOptions _options; public override ModelOptions GetOptions() => _options;

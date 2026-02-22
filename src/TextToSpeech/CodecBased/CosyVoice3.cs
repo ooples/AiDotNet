@@ -2,7 +2,7 @@ using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options
 namespace AiDotNet.TextToSpeech.CodecBased;
 /// <summary>CosyVoice3: Fun-CosyVoice 3: Zero-Shot Multilingual TTS.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "Fun-CosyVoice 3: Zero-Shot Multilingual TTS" (Alibaba DAMO, 2025)</item></list></para></remarks>
+/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "Fun-CosyVoice 3: Zero-Shot Multilingual TTS" (Alibaba DAMO, 2025)</item></list></para><para><b>For Beginners:</b> CosyVoice3: Fun-CosyVoice 3: Zero-Shot Multilingual TTS.. This model converts text input into speech audio output.</para></remarks>
 public class CosyVoice3<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly CosyVoice3Options _options; public override ModelOptions GetOptions() => _options;

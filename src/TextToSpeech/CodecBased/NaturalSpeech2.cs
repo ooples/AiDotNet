@@ -2,7 +2,7 @@ using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options
 namespace AiDotNet.TextToSpeech.CodecBased;
 /// <summary>NaturalSpeech 2: latent diffusion model with continuous latent vectors for zero-shot speech synthesis.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "NaturalSpeech 2: Latent Diffusion Models are Natural and Zero-Shot Speech and Singing Synthesizers" (Shen et al., 2023)</item></list></para></remarks>
+/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "NaturalSpeech 2: Latent Diffusion Models are Natural and Zero-Shot Speech and Singing Synthesizers" (Shen et al., 2023)</item></list></para><para><b>For Beginners:</b> NaturalSpeech 2: latent diffusion model with continuous latent vectors for zero-shot speech synthesis.. This model converts text input into speech audio output.</para></remarks>
 public class NaturalSpeech2<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly NaturalSpeech2Options _options; public override ModelOptions GetOptions() => _options;

@@ -2,7 +2,7 @@ using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options
 namespace AiDotNet.TextToSpeech.FlowDiffusion;
 /// <summary>MaskGCT: non-autoregressive masked generative codec transformer for zero-shot TTS.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "MaskGCT: Zero-Shot TTS with Masked Generative Codec Transformer" (Wang et al., 2024)</item></list></para></remarks>
+/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "MaskGCT: Zero-Shot TTS with Masked Generative Codec Transformer" (Wang et al., 2024)</item></list></para><para><b>For Beginners:</b> MaskGCT: non-autoregressive masked generative codec transformer for zero-shot TTS.. This model converts text input into speech audio output.</para></remarks>
 public class MaskGCT<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly MaskGCTOptions _options; public override ModelOptions GetOptions() => _options;

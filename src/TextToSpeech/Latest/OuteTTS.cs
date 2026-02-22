@@ -2,7 +2,7 @@ using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options
 namespace AiDotNet.TextToSpeech.Latest;
 /// <summary>OuteTTS: text-to-speech using pure language modeling on audio tokens.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks><para><b>References:</b><list type="bullet"><item>Project: "OuteTTS: Pure language modeling TTS" (Oute, 2024)</item></list></para></remarks>
+/// <remarks><para><b>References:</b><list type="bullet"><item>Project: "OuteTTS: Pure language modeling TTS" (Oute, 2024)</item></list></para><para><b>For Beginners:</b> OuteTTS: text-to-speech using pure language modeling on audio tokens.. This model converts text input into speech audio output.</para></remarks>
 public class OuteTTS<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly OuteTTSOptions _options; public override ModelOptions GetOptions() => _options;

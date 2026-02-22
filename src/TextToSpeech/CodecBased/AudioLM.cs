@@ -2,7 +2,7 @@ using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options
 namespace AiDotNet.TextToSpeech.CodecBased;
 /// <summary>AudioLM: language modeling approach to audio generation with semantic and acoustic tokens.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "AudioLM: A Language Modeling Approach to Audio Generation" (Borsos et al., 2023)</item></list></para></remarks>
+/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "AudioLM: A Language Modeling Approach to Audio Generation" (Borsos et al., 2023)</item></list></para><para><b>For Beginners:</b> AudioLM: language modeling approach to audio generation with semantic and acoustic tokens.. This model converts text input into speech audio output.</para></remarks>
 public class AudioLM<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly AudioLMOptions _options; public override ModelOptions GetOptions() => _options;

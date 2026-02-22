@@ -17,6 +17,8 @@ namespace AiDotNet.TextToSpeech.Classic;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Deep Voice 3: Scaling Text-to-Speech with Convolutional Sequence Learning" (Ping et al., 2018)</item></list></para>
+/// <para><b>For Beginners:</b> /// Deep Voice 3: fully convolutional attention-based TTS with monotonic attention.
+///. This model converts text input into speech audio output.</para>
 /// </remarks>
 public class DeepVoice3<T> : TtsModelBase<T>, IAcousticModel<T>
 {

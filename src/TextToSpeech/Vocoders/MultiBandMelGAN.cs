@@ -2,7 +2,7 @@ using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options
 namespace AiDotNet.TextToSpeech.Vocoders;
 /// <summary>Multi-band MelGAN: decomposes target into sub-bands, generates each in parallel, then synthesizes full-band.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "Multi-band MelGAN: Faster Waveform Generation for High-Quality Text-to-Speech" (Yang et al., 2021)</item></list></para></remarks>
+/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "Multi-band MelGAN: Faster Waveform Generation for High-Quality Text-to-Speech" (Yang et al., 2021)</item></list></para><para><b>For Beginners:</b> Multi-band MelGAN: decomposes target into sub-bands, generates each in parallel, then synthesizes full-band.. This model converts text input into speech audio output.</para></remarks>
 public class MultiBandMelGAN<T> : TtsModelBase<T>, IVocoder<T>
 {
     private readonly MultiBandMelGANOptions _options; public override ModelOptions GetOptions() => _options;

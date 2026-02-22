@@ -2,7 +2,7 @@ using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options
 namespace AiDotNet.TextToSpeech.Vocoders;
 /// <summary>APNet2: improved amplitude-phase network with ResNet backbone and multi-resolution STFT loss for higher-quality waveform reconstruction.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "APNet 2: High-Quality and High-Efficiency Neural Vocoder with Direct Prediction of Amplitude and Phase Spectra" (Du et al., 2023)</item></list></para></remarks>
+/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "APNet 2: High-Quality and High-Efficiency Neural Vocoder with Direct Prediction of Amplitude and Phase Spectra" (Du et al., 2023)</item></list></para><para><b>For Beginners:</b> APNet2: improved amplitude-phase network with ResNet backbone and multi-resolution STFT loss for higher-quality waveform reconstruction.. This model converts text input into speech audio output.</para></remarks>
 public class APNet2<T> : TtsModelBase<T>, IVocoder<T>
 {
     private readonly APNet2Options _options; public override ModelOptions GetOptions() => _options;

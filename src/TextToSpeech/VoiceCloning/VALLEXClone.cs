@@ -2,7 +2,7 @@ using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options
 namespace AiDotNet.TextToSpeech.VoiceCloning;
 /// <summary>VALL-E X: cross-lingual zero-shot voice cloning with language ID conditioning for multi-language synthesis.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "VALL-E X: Speak Foreign Languages with Your Own Voice via Cross-Lingual Neural Codec Language Modeling" (Zhang et al., 2023)</item></list></para></remarks>
+/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "VALL-E X: Speak Foreign Languages with Your Own Voice via Cross-Lingual Neural Codec Language Modeling" (Zhang et al., 2023)</item></list></para><para><b>For Beginners:</b> VALL-E X: cross-lingual zero-shot voice cloning with language ID conditioning for multi-language synthesis.. This model converts text input into speech audio output.</para></remarks>
 public class VALLEXClone<T> : TtsModelBase<T>, ICodecTts<T>, IVoiceCloner<T>
 {
     private readonly VALLEXCloneOptions _options; public override ModelOptions GetOptions() => _options;

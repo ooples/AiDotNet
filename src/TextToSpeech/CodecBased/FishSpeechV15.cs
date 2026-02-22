@@ -2,7 +2,7 @@ using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options
 namespace AiDotNet.TextToSpeech.CodecBased;
 /// <summary>FishSpeechV15: Fish Speech V1.5: Improved Multilingual TTS.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "Fish Speech V1.5: Improved Multilingual TTS" (Fish Audio Team, 2025)</item></list></para></remarks>
+/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "Fish Speech V1.5: Improved Multilingual TTS" (Fish Audio Team, 2025)</item></list></para><para><b>For Beginners:</b> FishSpeechV15: Fish Speech V1.5: Improved Multilingual TTS.. This model converts text input into speech audio output.</para></remarks>
 public class FishSpeechV15<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly FishSpeechV15Options _options; public override ModelOptions GetOptions() => _options;

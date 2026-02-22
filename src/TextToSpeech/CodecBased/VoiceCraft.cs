@@ -2,7 +2,7 @@ using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options
 namespace AiDotNet.TextToSpeech.CodecBased;
 /// <summary>VoiceCraft: VoiceCraft: Zero-Shot Speech Editing and TTS in the Wild.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "VoiceCraft: Zero-Shot Speech Editing and TTS in the Wild" (Peng et al., 2024)</item></list></para></remarks>
+/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "VoiceCraft: Zero-Shot Speech Editing and TTS in the Wild" (Peng et al., 2024)</item></list></para><para><b>For Beginners:</b> VoiceCraft: VoiceCraft: Zero-Shot Speech Editing and TTS in the Wild.. This model converts text input into speech audio output.</para></remarks>
 public class VoiceCraft<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly VoiceCraftOptions _options; public override ModelOptions GetOptions() => _options;

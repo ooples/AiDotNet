@@ -2,7 +2,7 @@ using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options
 namespace AiDotNet.TextToSpeech.Vocoders;
 /// <summary>MelGAN: lightweight non-autoregressive GAN vocoder with feature matching loss for fast inference.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "MelGAN: Generative Adversarial Networks for Conditional Waveform Synthesis" (Kumar et al., 2019)</item></list></para></remarks>
+/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "MelGAN: Generative Adversarial Networks for Conditional Waveform Synthesis" (Kumar et al., 2019)</item></list></para><para><b>For Beginners:</b> MelGAN: lightweight non-autoregressive GAN vocoder with feature matching loss for fast inference.. This model converts text input into speech audio output.</para></remarks>
 public class MelGAN<T> : TtsModelBase<T>, IVocoder<T>
 {
     private readonly MelGANOptions _options; public override ModelOptions GetOptions() => _options;

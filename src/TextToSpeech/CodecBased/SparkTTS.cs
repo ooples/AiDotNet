@@ -2,7 +2,7 @@ using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options
 namespace AiDotNet.TextToSpeech.CodecBased;
 /// <summary>Spark-TTS: LLM-based zero-shot TTS with BiCodec for controllable synthesis.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "Spark-TTS: Efficient LLM-Based TTS with Decoupled Speech Tokens" (Wang et al., 2025)</item></list></para></remarks>
+/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "Spark-TTS: Efficient LLM-Based TTS with Decoupled Speech Tokens" (Wang et al., 2025)</item></list></para><para><b>For Beginners:</b> Spark-TTS: LLM-based zero-shot TTS with BiCodec for controllable synthesis.. This model converts text input into speech audio output.</para></remarks>
 public class SparkTTS<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly SparkTTSOptions _options; public override ModelOptions GetOptions() => _options;

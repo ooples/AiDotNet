@@ -2,7 +2,7 @@ using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options
 namespace AiDotNet.TextToSpeech.VoiceCloning;
 /// <summary>Seed-TTS: diffusion-based zero-shot voice cloning with speaker factorization for high-fidelity synthesis.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "Seed-TTS: A Family of High-Quality Versatile Speech Generation Models" (Anastassiou et al., 2024)</item></list></para></remarks>
+/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "Seed-TTS: A Family of High-Quality Versatile Speech Generation Models" (Anastassiou et al., 2024)</item></list></para><para><b>For Beginners:</b> Seed-TTS: diffusion-based zero-shot voice cloning with speaker factorization for high-fidelity synthesis.. This model converts text input into speech audio output.</para></remarks>
 public class SeedTTSClone<T> : TtsModelBase<T>, ICodecTts<T>, IVoiceCloner<T>
 {
     private readonly SeedTTSCloneOptions _options; public override ModelOptions GetOptions() => _options;

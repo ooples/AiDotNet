@@ -7,6 +7,8 @@ namespace AiDotNet.TextToSpeech.Classic;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "ProDiff: Progressive Fast Diffusion Model for High-Quality Text-to-Speech" (Huang et al., 2022)</item></list></para>
+/// <para><b>For Beginners:</b> /// ProDiff: progressive fast diffusion model for high-quality TTS with knowledge distillation.
+///. This model converts text input into speech audio output.</para>
 /// </remarks>
 public class ProDiff<T> : TtsModelBase<T>, IAcousticModel<T>
 {

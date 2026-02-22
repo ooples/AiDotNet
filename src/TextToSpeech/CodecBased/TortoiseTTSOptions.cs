@@ -1,6 +1,9 @@
 namespace AiDotNet.TextToSpeech.CodecBased;
 
 /// <summary>Options for TortoiseTTS TTS model.</summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> These options configure the TortoiseTTS model. Default values follow the original paper settings.</para>
+/// </remarks>
 public class TortoiseTTSOptions : CodecTtsOptions
 {
     public TortoiseTTSOptions()

@@ -3,8 +3,33 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// <summary>
 /// Base configuration options for codec-based TTS models.
 /// </summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> These options configure the CodecTts model. Default values follow the original paper settings.</para>
+/// </remarks>
 public class CodecTtsOptions : TtsModelOptions
 {
+    /// <summary>Initializes a new instance with default values.</summary>
+    public CodecTtsOptions() { }
+
+    /// <summary>Initializes a new instance by copying from another instance.</summary>
+    /// <param name="other">The options instance to copy from.</param>
+    /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
+    public CodecTtsOptions(CodecTtsOptions other)
+    {
+        if (other == null)
+            throw new ArgumentNullException(nameof(other));
+
+        NumCodebooks = other.NumCodebooks;
+        CodebookSize = other.CodebookSize;
+        CodecFrameRate = other.CodecFrameRate;
+        LLMDim = other.LLMDim;
+        NumLLMLayers = other.NumLLMLayers;
+        TextEncoderDim = other.TextEncoderDim;
+        SpeakerEmbeddingDim = other.SpeakerEmbeddingDim;
+        MaxCodecFrames = other.MaxCodecFrames;
+        LanguageModelName = other.LanguageModelName;
+    }
+
     /// <summary>Gets or sets the number of RVQ codebooks.</summary>
     public int NumCodebooks { get; set; } = 8;
 

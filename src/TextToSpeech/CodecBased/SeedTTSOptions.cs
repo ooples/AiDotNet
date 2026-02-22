@@ -1,5 +1,8 @@
 namespace AiDotNet.TextToSpeech.CodecBased;
 /// <summary>Options for SeedTTS.</summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> These options configure the SeedTTS model. Default values follow the original paper settings.</para>
+/// </remarks>
 public class SeedTTSOptions : CodecTtsOptions
 {
     public SeedTTSOptions()

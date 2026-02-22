@@ -2,7 +2,7 @@ using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options
 namespace AiDotNet.TextToSpeech.FlowDiffusion;
 /// <summary>F5-TTS: non-autoregressive flow-matching TTS that generates speech from text using DiT backbone.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "F5-TTS: A Fairytaler that Fakes Fluent and Faithful Speech with Flow Matching" (Chen et al., 2024)</item></list></para></remarks>
+/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "F5-TTS: A Fairytaler that Fakes Fluent and Faithful Speech with Flow Matching" (Chen et al., 2024)</item></list></para><para><b>For Beginners:</b> F5-TTS: non-autoregressive flow-matching TTS that generates speech from text using DiT backbone.. This model converts text input into speech audio output.</para></remarks>
 public class F5TTS<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly F5TTSOptions _options; public override ModelOptions GetOptions() => _options;

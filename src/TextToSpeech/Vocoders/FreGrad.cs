@@ -2,7 +2,7 @@ using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options
 namespace AiDotNet.TextToSpeech.Vocoders;
 /// <summary>FreGrad: lightweight diffusion vocoder that operates in the frequency domain via DWT (discrete wavelet transform) for faster synthesis.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "FreGrad: Lightweight and Fast Frequency-aware Diffusion Vocoder" (Shin et al., 2022)</item></list></para></remarks>
+/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "FreGrad: Lightweight and Fast Frequency-aware Diffusion Vocoder" (Shin et al., 2022)</item></list></para><para><b>For Beginners:</b> FreGrad: lightweight diffusion vocoder that operates in the frequency domain via DWT (discrete wavelet transform) for faster synthesis.. This model converts text input into speech audio output.</para></remarks>
 public class FreGrad<T> : TtsModelBase<T>, IVocoder<T>
 {
     private readonly FreGradOptions _options; public override ModelOptions GetOptions() => _options;

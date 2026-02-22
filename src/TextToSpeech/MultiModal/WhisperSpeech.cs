@@ -2,7 +2,7 @@ using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options
 namespace AiDotNet.TextToSpeech.MultiModal;
 /// <summary>WhisperSpeech: text-to-speech using Whisper encoder features as semantic tokens plus acoustic generation.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks><para><b>References:</b><list type="bullet"><item>Project: "WhisperSpeech: Inverse Whisper TTS" (Collabora, 2024)</item></list></para></remarks>
+/// <remarks><para><b>References:</b><list type="bullet"><item>Project: "WhisperSpeech: Inverse Whisper TTS" (Collabora, 2024)</item></list></para><para><b>For Beginners:</b> WhisperSpeech: text-to-speech using Whisper encoder features as semantic tokens plus acoustic generation.. This model converts text input into speech audio output.</para></remarks>
 public class WhisperSpeech<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly WhisperSpeechOptions _options; public override ModelOptions GetOptions() => _options;

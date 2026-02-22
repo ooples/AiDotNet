@@ -1,6 +1,9 @@
 namespace AiDotNet.TextToSpeech.VoiceCloning;
 
 /// <summary>Options for XTTSv2Clone voice cloning model.</summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> These options configure the XTTSv2Clone model. Default values follow the original paper settings.</para>
+/// </remarks>
 public class XTTSv2CloneOptions : VoiceCloningOptions
 {
     public XTTSv2CloneOptions()

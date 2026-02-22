@@ -15,6 +15,8 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "HiFi-GAN: Generative Adversarial Networks for Efficient and High Fidelity Speech Synthesis" (Kong et al., 2020)</item></list></para>
+/// <para><b>For Beginners:</b> /// HiFi-GAN: high-fidelity neural vocoder with multi-receptive field fusion for parallel waveform generation.
+///. This model converts text input into speech audio output.</para>
 /// </remarks>
 public class HiFiGAN<T> : TtsModelBase<T>, IVocoder<T>
 {

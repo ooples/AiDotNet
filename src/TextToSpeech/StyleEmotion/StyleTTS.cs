@@ -2,7 +2,7 @@ using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options
 namespace AiDotNet.TextToSpeech.StyleEmotion;
 /// <summary>StyleTTS: style-based generative model for expressive TTS with style diffusion and adversarial training.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "StyleTTS: A Style-Based Generative Model for Natural and Diverse Text-to-Speech Synthesis" (Li et al., 2022)</item></list></para></remarks>
+/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "StyleTTS: A Style-Based Generative Model for Natural and Diverse Text-to-Speech Synthesis" (Li et al., 2022)</item></list></para><para><b>For Beginners:</b> StyleTTS: style-based generative model for expressive TTS with style diffusion and adversarial training.. This model converts text input into speech audio output.</para></remarks>
 public class StyleTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly StyleTTSOptions _options; public override ModelOptions GetOptions() => _options;

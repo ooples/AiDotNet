@@ -2,7 +2,7 @@ using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options
 namespace AiDotNet.TextToSpeech.CodecBased;
 /// <summary>TortoiseTTS: TorToise: Better Speech Synthesis Through Scaling.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "TorToise: Better Speech Synthesis Through Scaling" (Betker, 2023)</item></list></para></remarks>
+/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "TorToise: Better Speech Synthesis Through Scaling" (Betker, 2023)</item></list></para><para><b>For Beginners:</b> TortoiseTTS: TorToise: Better Speech Synthesis Through Scaling.. This model converts text input into speech audio output.</para></remarks>
 public class TortoiseTTS<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly TortoiseTTSOptions _options; public override ModelOptions GetOptions() => _options;

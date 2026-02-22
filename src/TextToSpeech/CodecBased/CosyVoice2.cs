@@ -2,7 +2,7 @@ using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options
 namespace AiDotNet.TextToSpeech.CodecBased;
 /// <summary>CosyVoice 2: improved streaming TTS with chunk-aware causal flow matching and FSQ.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "CosyVoice 2: Scalable Streaming Speech Synthesis with LLMs" (Du et al., 2024)</item></list></para></remarks>
+/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "CosyVoice 2: Scalable Streaming Speech Synthesis with LLMs" (Du et al., 2024)</item></list></para><para><b>For Beginners:</b> CosyVoice 2: improved streaming TTS with chunk-aware causal flow matching and FSQ.. This model converts text input into speech audio output.</para></remarks>
 public class CosyVoice2<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly CosyVoice2Options _options; public override ModelOptions GetOptions() => _options;

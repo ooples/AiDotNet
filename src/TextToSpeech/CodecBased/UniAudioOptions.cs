@@ -1,6 +1,9 @@
 namespace AiDotNet.TextToSpeech.CodecBased;
 
 /// <summary>Options for UniAudio TTS model.</summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> These options configure the UniAudio model. Default values follow the original paper settings.</para>
+/// </remarks>
 public class UniAudioOptions : CodecTtsOptions
 {
     public UniAudioOptions()

@@ -7,6 +7,8 @@ namespace AiDotNet.TextToSpeech.Classic;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "AdaSpeech: Adaptive Text to Speech for Custom Voice" (Chen et al., 2021)</item></list></para>
+/// <para><b>For Beginners:</b> /// AdaSpeech: adaptive TTS for custom voice with acoustic condition modeling and conditional layer normalization.
+///. This model converts text input into speech audio output.</para>
 /// </remarks>
 public class AdaSpeech<T> : TtsModelBase<T>, IAcousticModel<T>
 {

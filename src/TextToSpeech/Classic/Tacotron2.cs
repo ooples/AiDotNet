@@ -17,6 +17,8 @@ namespace AiDotNet.TextToSpeech.Classic;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Natural TTS Synthesis by Conditioning WaveNet on Mel Spectrogram Predictions" (Shen et al., 2018)</item></list></para>
+/// <para><b>For Beginners:</b> /// Tacotron 2: improved attention-based TTS with location-sensitive attention and simplified decoder.
+///. This model converts text input into speech audio output.</para>
 /// </remarks>
 public class Tacotron2<T> : TtsModelBase<T>, IAcousticModel<T>
 {

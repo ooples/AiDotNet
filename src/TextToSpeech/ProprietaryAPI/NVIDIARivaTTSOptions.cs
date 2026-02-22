@@ -3,6 +3,9 @@ using AiDotNet.TextToSpeech.EndToEnd;
 namespace AiDotNet.TextToSpeech.ProprietaryAPI;
 
 /// <summary>Options for NVIDIARivaTTS TTS model.</summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> These options configure the NVIDIARivaTTS model. Default values follow the original paper settings.</para>
+/// </remarks>
 public class NVIDIARivaTTSOptions : EndToEndTtsOptions
 {
     public NVIDIARivaTTSOptions()

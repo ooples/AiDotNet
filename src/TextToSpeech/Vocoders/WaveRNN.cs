@@ -2,7 +2,7 @@ using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options
 namespace AiDotNet.TextToSpeech.Vocoders;
 /// <summary>WaveRNN: efficient autoregressive vocoder with dual softmax and subscale sample generation.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "Efficient Neural Audio Synthesis" (Kalchbrenner et al., 2018)</item></list></para></remarks>
+/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "Efficient Neural Audio Synthesis" (Kalchbrenner et al., 2018)</item></list></para><para><b>For Beginners:</b> WaveRNN: efficient autoregressive vocoder with dual softmax and subscale sample generation.. This model converts text input into speech audio output.</para></remarks>
 public class WaveRNN<T> : TtsModelBase<T>, IVocoder<T>
 {
     private readonly WaveRNNOptions _options; public override ModelOptions GetOptions() => _options;

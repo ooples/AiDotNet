@@ -2,7 +2,7 @@ using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options
 namespace AiDotNet.TextToSpeech.CodecBased;
 /// <summary>UniAudio: unified multi-task audio tokenizer and language model for TTS, music, and sound effects.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "UniAudio: An Audio Foundation Model Toward Universal Audio Generation" (Yang et al., 2024)</item></list></para></remarks>
+/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "UniAudio: An Audio Foundation Model Toward Universal Audio Generation" (Yang et al., 2024)</item></list></para><para><b>For Beginners:</b> UniAudio: unified multi-task audio tokenizer and language model for TTS, music, and sound effects.. This model converts text input into speech audio output.</para></remarks>
 public class UniAudio<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly UniAudioOptions _options; public override ModelOptions GetOptions() => _options;

@@ -2,7 +2,7 @@ using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options
 namespace AiDotNet.TextToSpeech.CodecBased;
 /// <summary>VALL-E X: cross-lingual zero-shot TTS extending VALL-E with language ID conditioning.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "VALL-E X: Speak Foreign Languages with Your Own Voice" (Zhang et al., 2023)</item></list></para></remarks>
+/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "VALL-E X: Speak Foreign Languages with Your Own Voice" (Zhang et al., 2023)</item></list></para><para><b>For Beginners:</b> VALL-E X: cross-lingual zero-shot TTS extending VALL-E with language ID conditioning.. This model converts text input into speech audio output.</para></remarks>
 public class VALLEX<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly VALLEXOptions _options; public override ModelOptions GetOptions() => _options;

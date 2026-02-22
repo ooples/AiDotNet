@@ -17,6 +17,8 @@ namespace AiDotNet.TextToSpeech.Classic;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "FastSpeech: Fast, Robust and Controllable Text to Speech" (Ren et al., 2019)</item></list></para>
+/// <para><b>For Beginners:</b> /// FastSpeech: non-autoregressive TTS with knowledge-distilled duration predictor for parallel generation.
+///. This model converts text input into speech audio output.</para>
 /// </remarks>
 public class FastSpeech<T> : TtsModelBase<T>, IAcousticModel<T>
 {

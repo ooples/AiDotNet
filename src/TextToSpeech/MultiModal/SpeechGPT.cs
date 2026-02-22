@@ -2,7 +2,7 @@ using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options
 namespace AiDotNet.TextToSpeech.MultiModal;
 /// <summary>SpeechGPT: empowering LLMs with intrinsic cross-modal conversational abilities via discrete speech tokens.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "SpeechGPT: Empowering Large Language Models with Intrinsic Cross-Modal Conversational Abilities" (Zhang et al., 2023)</item></list></para></remarks>
+/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "SpeechGPT: Empowering Large Language Models with Intrinsic Cross-Modal Conversational Abilities" (Zhang et al., 2023)</item></list></para><para><b>For Beginners:</b> SpeechGPT: empowering LLMs with intrinsic cross-modal conversational abilities via discrete speech tokens.. This model converts text input into speech audio output.</para></remarks>
 public class SpeechGPT<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly SpeechGPTOptions _options; public override ModelOptions GetOptions() => _options;

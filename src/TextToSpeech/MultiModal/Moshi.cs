@@ -2,7 +2,7 @@ using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options
 namespace AiDotNet.TextToSpeech.MultiModal;
 /// <summary>Moshi: full-duplex spoken dialogue framework enabling real-time voice interaction.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "Moshi: A Speech-Text Foundation Model for Real-Time Dialogue" (Defossez et al., 2024)</item></list></para></remarks>
+/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "Moshi: A Speech-Text Foundation Model for Real-Time Dialogue" (Defossez et al., 2024)</item></list></para><para><b>For Beginners:</b> Moshi: full-duplex spoken dialogue framework enabling real-time voice interaction.. This model converts text input into speech audio output.</para></remarks>
 public class Moshi<T> : TtsModelBase<T>, ICodecTts<T>, IStreamingTts<T>
 {
     private readonly MoshiOptions _options; public override ModelOptions GetOptions() => _options;
