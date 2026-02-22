@@ -18,6 +18,7 @@ namespace AiDotNet.Diffusion.Video;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Reference: Luma AI Ray 3 (2025)</item></list></para>
+/// <para><b>For Beginners:</b> Luma Ray 3 uses Hi-Fi Diffusion to generate videos at up to 4K HDR quality. It produces the highest resolution output among video generation models with exceptional visual clarity.</para>
 /// <para>
 /// Ray 3 introduces Hi-Fi Diffusion technology that produces production-ready high-fidelity 4K HDR
 /// footage. The model packs significantly more detail in the same resolution compared to Ray 2,

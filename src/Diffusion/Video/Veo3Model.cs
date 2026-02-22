@@ -18,6 +18,7 @@ namespace AiDotNet.Diffusion.Video;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Reference: Google DeepMind Veo 3 (2025)</item></list></para>
+/// <para><b>For Beginners:</b> Veo 3 from Google DeepMind generates videos with native audio including dialogue synchronization. It produces high-fidelity video with matching soundtracks, ambient audio, and character dialogue.</para>
 /// <para>
 /// Veo 3 is the only major model that generates fully synchronized audio including dialogue, music,
 /// and ambient sound directly from a text prompt. It produces cinematic-quality videos optimized for

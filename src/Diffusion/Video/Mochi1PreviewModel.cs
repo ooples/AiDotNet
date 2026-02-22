@@ -18,6 +18,7 @@ namespace AiDotNet.Diffusion.Video;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Mochi 1: A New SOTA in Open-Source Video Generation" (Genmo, 2024)</item></list></para>
+/// <para><b>For Beginners:</b> Mochi 1 Preview uses an Asymmetric Diffusion Transformer (AsymmDiT) that processes text and video with different-sized networks. This asymmetry efficiently handles rich text understanding for prompt adherence while maintaining high video quality.</para>
 /// <para>
 /// Mochi 1 Preview is a 10B parameter model using the novel Asymmetric Diffusion Transformer
 /// (AsymmDiT) architecture, which uses different computational blocks for the conditioning

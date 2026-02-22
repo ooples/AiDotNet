@@ -18,6 +18,7 @@ namespace AiDotNet.Diffusion.Video;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Reference: OpenAI Sora 2 (2025)</item></list></para>
+/// <para><b>For Beginners:</b> Sora 2 is OpenAI's advanced video generation model producing cinematic-quality videos with realistic physics simulation and synchronized audio. It understands 3D scene consistency, camera motion, and can generate videos up to a minute long.</para>
 /// <para>
 /// Sora 2 generates cinematic-quality videos with realistic physics simulation, synchronized audio,
 /// and strong prompt adherence. The model demonstrates understanding of cause-and-effect relationships

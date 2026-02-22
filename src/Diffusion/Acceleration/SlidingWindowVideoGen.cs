@@ -12,6 +12,7 @@ namespace AiDotNet.Diffusion.Acceleration;
 /// <item>Paper: "StreamingT2V: Consistent, Dynamic, and Extendable Long Video Generation from Text" (2024)</item>
 /// <item>Paper: "FreeNoise: Tuning-Free Longer Video Diffusion via Noise Rescheduling" (2024)</item>
 /// </list></para>
+/// <para><b>For Beginners:</b> Sliding Window Video Generation creates long videos by generating overlapping short segments. Each window overlaps with the previous one for smooth transitions, enabling videos much longer than the model's native capacity.</para>
 /// <para>
 /// Sliding window generation enables producing videos longer than the model's native frame count
 /// by generating overlapping windows and blending them. Key components:

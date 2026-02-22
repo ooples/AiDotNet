@@ -18,6 +18,7 @@ namespace AiDotNet.Diffusion.Video.VideoEditing;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Video-P2P: Video Editing with Cross-attention Control" (Liu et al., 2024)</item></list></para>
+/// <para><b>For Beginners:</b> VideoP2P extends prompt-to-prompt image editing to video by controlling cross-attention maps across frames. You can change specific elements (e.g., cat to dog) while preserving the rest of the video content.</para>
 /// <para>
 /// VideoP2P extends the Prompt-to-Prompt image editing approach to video by manipulating cross-
 /// attention maps in the diffusion UNet during video generation. Enables precise semantic editing

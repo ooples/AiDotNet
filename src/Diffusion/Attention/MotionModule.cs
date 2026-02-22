@@ -14,6 +14,7 @@ namespace AiDotNet.Diffusion.Attention;
 /// <list type="bullet">
 /// <item>Paper: "AnimateDiff: Animate Your Personalized Text-to-Image Diffusion Models without Specific Tuning" (Guo et al., 2023)</item>
 /// </list></para>
+/// <para><b>For Beginners:</b> The Motion Module is a plug-in temporal attention layer that can be added to any image diffusion model to enable video generation. It learns temporal motion patterns that are applied on top of existing spatial features.</para>
 /// <para>
 /// The motion module is a plug-in temporal attention block that can be inserted into any
 /// image diffusion UNet to add video generation capability. It consists of:

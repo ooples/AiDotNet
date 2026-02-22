@@ -18,6 +18,7 @@ namespace AiDotNet.Diffusion.Video.WorldModels;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "UniSim: Learning Interactive Real-World Simulators" (2024)</item></list></para>
+/// <para><b>For Beginners:</b> UniSim is a universal simulator that learns to simulate any environment from video and action pairs. It generalizes across different domains (robotics, games, real-world) to predict future observations.</para>
 /// <para>
 /// UniSim is a universal simulator that learns from diverse real-world and simulated videos.
 /// Given a previous video segment and an action prompt, it predicts the continuation video through

@@ -18,6 +18,7 @@ namespace AiDotNet.Diffusion.Video;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Movie Gen: A Cast of Media Foundation Models" (Meta, 2024)</item></list></para>
+/// <para><b>For Beginners:</b> Movie Gen from Meta is a massive 30B parameter model that generates 16-second video clips at 16 FPS with synchronized audio. It is one of the largest video generation models, designed for high-fidelity movie-quality content.</para>
 /// <para>
 /// MovieGen is Meta's 30B parameter foundation model generating 1080p HD videos at 16 FPS with
 /// synchronized audio. Trained with a maximum context of 73K video tokens for 16-second generation.

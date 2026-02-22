@@ -18,6 +18,7 @@ namespace AiDotNet.Diffusion.Video;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Reference: Luma AI Ray 2 (2025)</item></list></para>
+/// <para><b>For Beginners:</b> Luma Ray 2 produces videos with fast, natural motion using 10x more compute than its predecessor. It excels at realistic movement patterns and physical interactions between objects.</para>
 /// <para>
 /// Ray 2 was trained with 10x more compute than Ray1, offering fast, natural coherent motion and
 /// physics understanding. The model generates videos with natural motion dynamics and good temporal

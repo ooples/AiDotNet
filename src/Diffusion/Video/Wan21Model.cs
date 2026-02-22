@@ -18,6 +18,12 @@ namespace AiDotNet.Diffusion.Video;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Wan: Open and Advanced Large-Scale Video Generative Models" (Alibaba, 2025)</item></list></para>
+/// <para><b>For Beginners:</b> Wan 2.1 is an open-source AI that creates videos from text descriptions
+/// or still images. Think of it as a very advanced animation tool: you describe a scene in words, and
+/// it generates a realistic video clip. It uses a technique called "Mixture of Experts" where different
+/// parts of the model specialize in different aspects of video creation (lighting, motion, detail), then
+/// combine their outputs. With 14 billion parameters, it produces some of the highest quality open-source
+/// video generation results available.</para>
 /// <para>
 /// Wan 2.1 introduces Mixture-of-Experts (MoE) into the DiT denoising backbone, enabling
 /// specialized experts for different denoising phases. Combined with the Causal 3D VAE and flow matching

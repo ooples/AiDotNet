@@ -16,6 +16,7 @@ namespace AiDotNet.Diffusion.VAE;
 /// <item>Paper: "FILM: Frame Interpolation for Large Motion" (Reda et al., 2022)</item>
 /// <item>Paper: "Stable Video Diffusion" (Blattmann et al., 2023)</item>
 /// </list></para>
+/// <para><b>For Beginners:</b> The Temporal Interpolation VAE supports variable frame rate encoding and decoding. It can compress videos at different temporal resolutions, enabling efficient processing of both fast-action and slow-motion content.</para>
 /// <para>
 /// The Temporal Interpolation VAE extends standard video VAE with the ability to generate
 /// intermediate frames between keyframes. This enables:

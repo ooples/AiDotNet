@@ -18,6 +18,7 @@ namespace AiDotNet.Diffusion.Video.LongVideo;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "StreamingT2V: Consistent, Dynamic, and Extendable Long Video Generation from Text" (2024)</item></list></para>
+/// <para><b>For Beginners:</b> Streaming T2V generates long videos (up to 2 minutes / 1200 frames) by producing segments autoregressively - each new segment continues seamlessly from the previous one. This overcomes the memory limitations of generating all frames at once.</para>
 /// <para>
 /// StreamingT2V enables creation of long videos (up to 1200 frames / 2 minutes) through an advanced
 /// autoregressive technique. It generates short clips and extends them using temporal overlap and

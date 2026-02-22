@@ -12,6 +12,7 @@ namespace AiDotNet.Diffusion.Acceleration;
 /// <list type="bullet">
 /// <item>Paper: "FreeNoise: Tuning-Free Longer Video Diffusion via Noise Rescheduling" (Qiu et al., 2024)</item>
 /// </list></para>
+/// <para><b>For Beginners:</b> The FreeNoise module rearranges noise patterns to enable longer video generation from models trained on short clips. It is a simple, training-free technique that extends video length without quality loss.</para>
 /// <para>
 /// FreeNoise enables generating longer videos from short-video diffusion models without any
 /// fine-tuning. The key idea is noise rescheduling: instead of using independent random noise

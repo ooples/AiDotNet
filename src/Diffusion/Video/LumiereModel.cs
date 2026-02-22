@@ -18,6 +18,7 @@ namespace AiDotNet.Diffusion.Video;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Lumiere: A Space-Time Diffusion Model for Video Generation" (Google, 2024)</item></list></para>
+/// <para><b>For Beginners:</b> Lumiere from Google uses a Space-Time UNet (STUNet) to generate entire video sequences in a single pass rather than frame-by-frame. This produces globally consistent motion across all 80 frames simultaneously.</para>
 /// <para>
 /// Lumiere uses a novel Space-Time UNet (STUNet) architecture that downsamples in both space and
 /// time, generating 80 frames at 16 FPS in a single pass. This holistic approach produces more

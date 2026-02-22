@@ -14,6 +14,7 @@ namespace AiDotNet.Diffusion.Attention;
 /// <item>Paper: "Make-A-Video: Text-to-Video Generation without Text-Video Data" (Singer et al., 2022)</item>
 /// <item>Paper: "Video Diffusion Models" (Ho et al., 2022)</item>
 /// </list></para>
+/// <para><b>For Beginners:</b> Temporal Convolution applies 1D convolution along the time dimension, treating each spatial position independently. This pseudo-3D approach is much faster than full 3D attention while still modeling temporal relationships.</para>
 /// <para>
 /// Temporal convolution applies 1D convolution across the time dimension for each spatial position.
 /// This provides local temporal modeling (mixing information from adjacent frames) as a complement

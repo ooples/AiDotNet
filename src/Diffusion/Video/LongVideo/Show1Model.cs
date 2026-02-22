@@ -18,6 +18,7 @@ namespace AiDotNet.Diffusion.Video.LongVideo;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Show-1: Marrying Pixel and Latent Diffusion Models for Text-to-Video Generation" (2023)</item></list></para>
+/// <para><b>For Beginners:</b> Show-1 combines pixel-space and latent-space diffusion in a two-stage pipeline. The first stage generates coarse video in pixel space, then the second refines it in latent space for high-quality output.</para>
 /// <para>
 /// Show-1 combines pixel-space and latent-space diffusion models in a cascaded pipeline. The pixel
 /// diffusion model handles low-resolution generation for accurate motion, while the latent diffusion

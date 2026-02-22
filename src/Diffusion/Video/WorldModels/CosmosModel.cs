@@ -18,6 +18,7 @@ namespace AiDotNet.Diffusion.Video.WorldModels;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Reference: NVIDIA Cosmos (2025)</item></list></para>
+/// <para><b>For Beginners:</b> Cosmos from NVIDIA is a physics-aware world generation model that understands real-world physics. It comes in Nano/Super/Ultra sizes and generates videos where objects obey gravity, collisions, and other physical laws.</para>
 /// <para>
 /// Cosmos is NVIDIA's world foundation model for physical AI development. Split into Nano (4B),
 /// Super (8B), and Ultra (14B) tiers, it generates physics-aware video and synthetic sensor data.

@@ -18,6 +18,7 @@ namespace AiDotNet.Diffusion.Video;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Reference: MiniMax Hailuo I2V-01-Live (2024)</item></list></para>
+/// <para><b>For Beginners:</b> Minimax Video (Hailuo) excels at image-to-video generation, animating still images into natural-looking video clips. It produces smooth motion from a single reference image while maintaining the original image style.</para>
 /// <para>
 /// MiniMax Hailuo produces some of the most realistic AI-generated videos with impressive camera
 /// control for cinematic scenes. Enhanced motion rendering provides smoother, more natural character

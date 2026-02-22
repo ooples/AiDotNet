@@ -18,6 +18,7 @@ namespace AiDotNet.Diffusion.Video;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Open-Sora 2.0: Training a Commercial-Level Video Generation Model in $200k" (HPC-AI Tech, 2025)</item></list></para>
+/// <para><b>For Beginners:</b> Open-Sora 2.0 is a commercial-grade open-source video generator trained for under $200K. It produces high-quality videos competitive with proprietary models, using an improved architecture with better temporal modeling and data curation.</para>
 /// <para>
 /// Open-Sora 2.0 achieves commercial-level video quality comparable to HunyuanVideo and Runway Gen-3
 /// alpha while being trained for only $200k. Uses an improved STDiT backbone with enhanced temporal

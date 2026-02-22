@@ -15,6 +15,7 @@ namespace AiDotNet.Diffusion.Attention;
 /// <item>Paper: "CogVideoX: Text-to-Video Diffusion Models with An Expert Transformer" (2024)</item>
 /// <item>Paper: "Cosmos World Foundation Model" (NVIDIA, 2024)</item>
 /// </list></para>
+/// <para><b>For Beginners:</b> Causal Temporal Attention only looks at past and current frames (never future frames) when processing video. This is essential for streaming and autoregressive generation where future frames have not been generated yet.</para>
 /// <para>
 /// Causal temporal attention ensures that each frame can only attend to previous frames
 /// and itself, not future frames. This is essential for:

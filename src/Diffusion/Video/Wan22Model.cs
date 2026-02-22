@@ -18,6 +18,7 @@ namespace AiDotNet.Diffusion.Video;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Wan 2.2: Timestep-Specialized Mixture-of-Experts for Video Generation" (Alibaba, 2025)</item></list></para>
+/// <para><b>For Beginners:</b> Wan 2.2 improves on Wan 2.1 by assigning different expert sub-networks to different stages of the video creation process. Early stages focus on overall structure while later stages refine fine details. This timestep specialization produces sharper, more temporally consistent videos.</para>
 /// <para>
 /// Wan 2.2 upgrades the MoE architecture with timestep-specialized experts, where different
 /// expert subnetworks activate at different denoising stages. Early timesteps use structure experts

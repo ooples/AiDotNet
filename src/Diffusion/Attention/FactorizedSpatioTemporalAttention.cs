@@ -15,6 +15,7 @@ namespace AiDotNet.Diffusion.Attention;
 /// <item>Paper: "Scalable Diffusion Models with Transformers" (Peebles and Xie, 2023)</item>
 /// <item>Paper: "Video Diffusion Models" (Ho et al., 2022)</item>
 /// </list></para>
+/// <para><b>For Beginners:</b> Factorized Spatio-Temporal Attention processes spatial (within-frame) and temporal (across-frame) relationships separately. This is much more efficient than joint attention while still capturing both spatial detail and temporal motion.</para>
 /// <para>
 /// Factorized spatio-temporal attention decomposes full 3D attention into separate spatial
 /// and temporal components. This reduces computational complexity from O((T*H*W)^2) to

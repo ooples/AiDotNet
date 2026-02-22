@@ -18,6 +18,7 @@ namespace AiDotNet.Diffusion.Video;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Pyramid Flow: Multi-Resolution Flow Matching for Video Generation" (Community, 2024)</item></list></para>
+/// <para><b>For Beginners:</b> Pyramid Flow generates videos by starting at low resolution and progressively adding detail, similar to building a pyramid. This multi-resolution approach produces more globally consistent results and is computationally efficient.</para>
 /// <para>
 /// Pyramid Flow generates videos at multiple resolutions using a pyramid flow matching approach.
 /// Starting from low resolution, each pyramid level adds spatial and temporal detail through

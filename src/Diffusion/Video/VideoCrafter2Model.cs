@@ -18,6 +18,7 @@ namespace AiDotNet.Diffusion.Video;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "VideoCrafter2: Overcoming Data Limitations for High-Quality Video Diffusion Models" (Tencent, 2024)</item></list></para>
+/// <para><b>For Beginners:</b> VideoCrafter 2 improves on its predecessor with better visual quality and the ability to blend artistic styles into generated videos. It combines quality improvements with style transfer capabilities for creative video generation.</para>
 /// <para>
 /// VideoCrafter 2 improves video quality by overcoming data limitations through better data curation
 /// and augmentation strategies. Uses a Video LDM architecture with factorized spatiotemporal attention

@@ -15,6 +15,7 @@ namespace AiDotNet.Diffusion.Attention;
 /// <item>Paper: "Sora: Creating video from text" (OpenAI, 2024)</item>
 /// <item>Paper: "MovieGen: A Cast of Media Foundation Models" (Meta, 2024)</item>
 /// </list></para>
+/// <para><b>For Beginners:</b> Full 3D Attention jointly attends to all spatial and temporal positions simultaneously. While computationally expensive, it captures the richest interactions between space and time for highest quality results.</para>
 /// <para>
 /// Full 3D attention computes attention across all tokens in the video volume simultaneously
 /// (all frames, all spatial positions). While computationally expensive at O((T*H*W)^2),

@@ -18,6 +18,7 @@ namespace AiDotNet.Diffusion.Video;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Allegro: Open the Black Box of Commercial-Level Video Generation Model" (Community, 2024)</item></list></para>
+/// <para><b>For Beginners:</b> Allegro is an open-source AI video generator that achieves commercial-level quality with only 3 billion parameters. It creates videos from text prompts with good visual quality and prompt adherence, making advanced video generation accessible to researchers.</para>
 /// <para>
 /// Allegro is a ~3B parameter DiT-based video generation model focused on efficiency and quality.
 /// It achieves commercial-level quality through careful architecture design, data curation, and

@@ -18,6 +18,7 @@ namespace AiDotNet.Diffusion.Video.LongVideo;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Loong: Generating Minute-level Long Videos with Autoregressive Language Models" (2024)</item></list></para>
+/// <para><b>For Beginners:</b> Loong uses a large language model approach to generate minute-long videos by treating video frames as tokens in a sequence. This autoregressive approach naturally handles long-range temporal dependencies.</para>
 /// <para>
 /// Loong generates minute-long videos using an autoregressive LLM-based approach with progressive
 /// short-to-long training. It addresses the loss imbalance problem for long video training through

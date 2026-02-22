@@ -18,6 +18,7 @@ namespace AiDotNet.Diffusion.Video.WorldModels;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "DIAMOND: Diffusion for World Modeling" (2024)</item></list></para>
+/// <para><b>For Beginners:</b> DIAMOND is a game engine built from video - it learns to simulate game environments from recorded gameplay. Given an action (e.g., press right), it predicts what the next frame should look like.</para>
 /// <para>
 /// DIAMOND (DIffusion As a Model Of eNvironment Dreams) creates a game engine from video using
 /// action-conditioned diffusion. The model learns environment dynamics from gameplay video and

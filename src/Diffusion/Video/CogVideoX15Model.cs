@@ -18,6 +18,7 @@ namespace AiDotNet.Diffusion.Video;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "CogVideoX: Text-to-Video Diffusion Models with An Expert Transformer" (Zhipu AI/THUDM, 2024)</item></list></para>
+/// <para><b>For Beginners:</b> CogVideoX 1.5 creates 10-second videos at any resolution from text prompts. It compresses video efficiently using a 3D causal VAE (reducing memory 128x) and uses specialized expert transformer blocks that understand both spatial layout and temporal motion.</para>
 /// <para>
 /// CogVideoX 1.5 extends the original CogVideoX to 10-second generation with any-resolution support.
 /// Uses 3D causal VAE with 4x temporal and 8x spatial compression, expert transformer blocks with

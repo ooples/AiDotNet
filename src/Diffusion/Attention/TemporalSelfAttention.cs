@@ -15,6 +15,7 @@ namespace AiDotNet.Diffusion.Attention;
 /// <item>Paper: "Align your Latents: High-Resolution Video Synthesis with Latent Diffusion Models" (Blattmann et al., 2023)</item>
 /// <item>Paper: "AnimateDiff: Animate Your Personalized Text-to-Image Diffusion Models" (Guo et al., 2023)</item>
 /// </list></para>
+/// <para><b>For Beginners:</b> Temporal Self-Attention computes attention exclusively along the time dimension - each spatial position attends to the same position across all frames. This captures how individual pixels or regions change over time.</para>
 /// <para>
 /// Temporal self-attention applies attention across the time dimension of video features.
 /// For each spatial position, tokens from all frames attend to each other, enabling the model

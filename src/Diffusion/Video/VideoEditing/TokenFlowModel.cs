@@ -18,6 +18,7 @@ namespace AiDotNet.Diffusion.Video.VideoEditing;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "TokenFlow: Consistent Diffusion Features for Consistent Video Editing" (Bar-Tal et al., 2023)</item></list></para>
+/// <para><b>For Beginners:</b> TokenFlow enables consistent video editing by propagating visual changes through time using token flow, tracking how image features move between frames. This ensures edits look natural and consistent across the entire video.</para>
 /// <para>
 /// TokenFlow achieves consistent video editing by explicitly enforcing semantic correspondences of
 /// diffusion features across video frames. The method propagates edited tokens from keyframes to

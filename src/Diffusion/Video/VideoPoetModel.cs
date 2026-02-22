@@ -18,6 +18,7 @@ namespace AiDotNet.Diffusion.Video;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "VideoPoet: A Large Language Model for Zero-Shot Video Generation" (Google, 2024)</item></list></para>
+/// <para><b>For Beginners:</b> VideoPoet from Google uses a large language model (LLM) architecture for zero-shot video generation. Instead of diffusion, it treats video generation as a token prediction task, enabling diverse creative outputs without task-specific fine-tuning.</para>
 /// <para>
 /// VideoPoet uses a large language model for zero-shot video generation, treating video as a
 /// sequence of discrete tokens. The model synthesizes high-quality video with matching audio from

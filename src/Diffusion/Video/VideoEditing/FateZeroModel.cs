@@ -18,6 +18,7 @@ namespace AiDotNet.Diffusion.Video.VideoEditing;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "FateZero: Fusing Attentions for Zero-shot Text-based Video Editing" (Qi et al., 2023)</item></list></para>
+/// <para><b>For Beginners:</b> FateZero performs zero-shot video editing by blending attention patterns from the original and edited videos. It requires no training or fine-tuning - just describe the desired change and it applies it consistently across frames.</para>
 /// <para>
 /// FateZero enables zero-shot video editing by fusing self-attention maps from the source video's
 /// DDIM inversion with cross-attention maps from the target prompt. This attention blending preserves

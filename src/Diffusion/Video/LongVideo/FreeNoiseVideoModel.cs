@@ -18,6 +18,7 @@ namespace AiDotNet.Diffusion.Video.LongVideo;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "FreeNoise: Tuning-Free Longer Video Diffusion via Noise Rescheduling" (2024)</item></list></para>
+/// <para><b>For Beginners:</b> FreeNoise extends short video generators to produce longer sequences by intelligently rescheduling the noise patterns. This simple technique enables existing models to generate longer videos without retraining.</para>
 /// <para>
 /// FreeNoise enables longer video generation without additional training by rescheduling the noise
 /// initialization. Instead of independent noise for each frame, it uses temporally correlated noise

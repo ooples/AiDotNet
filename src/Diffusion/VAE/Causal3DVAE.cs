@@ -15,6 +15,7 @@ namespace AiDotNet.Diffusion.VAE;
 /// <item>Paper: "CogVideoX: Text-to-Video Diffusion Models with An Expert Transformer" (2024)</item>
 /// <item>Paper: "Open-Sora Plan" (2024)</item>
 /// </list></para>
+/// <para><b>For Beginners:</b> The Causal 3D VAE compresses video into a much smaller latent space while preserving temporal information. Causal means it only uses past frames to encode each frame, enabling streaming video compression.</para>
 /// <para>
 /// The Causal 3D VAE uses causal 3D convolutions to encode and decode video. Causal convolutions
 /// ensure that each frame's encoding depends only on the current and previous frames, enabling:

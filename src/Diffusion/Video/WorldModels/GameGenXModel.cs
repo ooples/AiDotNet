@@ -18,6 +18,7 @@ namespace AiDotNet.Diffusion.Video.WorldModels;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "GameGen-X: Interactive Open-world Game Video Generation" (ICLR 2025)</item></list></para>
+/// <para><b>For Beginners:</b> GameGen-X generates open-world game environments with interactive control. Users can take actions (move, interact) and the model generates the next frame in response, creating a playable game experience.</para>
 /// <para>
 /// GameGen-X is the first open-world game generation model supporting interactive control. Through
 /// a two-stage training strategy, it achieves high-quality game content generation and dynamic

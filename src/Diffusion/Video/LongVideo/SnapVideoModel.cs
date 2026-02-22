@@ -18,6 +18,7 @@ namespace AiDotNet.Diffusion.Video.LongVideo;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Snap Video: Scaled Spatiotemporal Transformers for Text-to-Video Synthesis" (Snap, 2024)</item></list></para>
+/// <para><b>For Beginners:</b> SnapVideo from Snap uses a scaled spatiotemporal transformer that processes space and time jointly for high-quality video generation. Its efficient architecture scales well to longer durations.</para>
 /// <para>
 /// Snap Video uses a scaled spatiotemporal transformer architecture for efficient text-to-video
 /// synthesis. The model scales transformer attention across both spatial and temporal dimensions

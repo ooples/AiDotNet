@@ -11,6 +11,7 @@ namespace AiDotNet.Diffusion.Acceleration;
 /// <list type="bullet">
 /// <item>Paper: "Real-Time Video Generation with Pyramid Attention Broadcast" (2024)</item>
 /// </list></para>
+/// <para><b>For Beginners:</b> PAB (Pyramid Attention Broadcast) Cache speeds up video generation by reusing attention computations across nearby diffusion timesteps. Since adjacent steps produce similar attention patterns, caching avoids redundant computation.</para>
 /// <para>
 /// PAB exploits the observation that attention outputs in video diffusion models change slowly
 /// across denoising timesteps. Instead of recomputing attention at every step, PAB broadcasts

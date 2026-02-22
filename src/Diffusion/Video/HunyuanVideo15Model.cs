@@ -18,6 +18,7 @@ namespace AiDotNet.Diffusion.Video;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "HunyuanVideo 1.5: A Systematic Framework for Large Video Generation Model" (Tencent, 2025)</item></list></para>
+/// <para><b>For Beginners:</b> HunyuanVideo 1.5 is a large (8.3B parameter) video generator that can run on consumer GPUs. It combines image and video generation in one model, understands complex text prompts via a multimodal language model encoder, and produces high-quality clips at up to 720p.</para>
 /// <para>
 /// HunyuanVideo 1.5 is an efficient 8.3B parameter model achieving state-of-the-art visual quality
 /// while running on consumer GPUs. It combines a unified image-video generation architecture with

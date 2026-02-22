@@ -18,6 +18,7 @@ namespace AiDotNet.Diffusion.Video;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "SkyReels V1: Human-Centric Video Foundation Model" (Kunlun Tech, 2025)</item></list></para>
+/// <para><b>For Beginners:</b> SkyReels V1 is a video generation model trained on 10 million film clips, specializing in realistic human-centric content. It excels at generating natural human motion, facial expressions, and interactions in cinematic style.</para>
 /// <para>
 /// SkyReels V1 is a specialized human-centric video model built by fine-tuning HunyuanVideo on
 /// approximately 10 million high-quality film and television clips. It focuses on realistic human

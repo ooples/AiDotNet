@@ -18,6 +18,7 @@ namespace AiDotNet.Diffusion.Video.WorldModels;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Reference: Google DeepMind Genie 2 (2024)</item></list></para>
+/// <para><b>For Beginners:</b> Genie 2 from Google DeepMind generates real-time interactive 3D environments from a single image. It creates explorable worlds where user actions produce consistent, realistic responses.</para>
 /// <para>
 /// Genie 2 generates real-time interactive 3D environments from single images or text descriptions.
 /// The model enables interactive exploration of generated worlds with consistent physics and

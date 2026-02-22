@@ -15,6 +15,7 @@ namespace AiDotNet.Diffusion.Attention;
 /// <item>Paper: "Open-Sora: Democratizing Efficient Video Production for All" (2024)</item>
 /// <item>Paper: "Latte: Latent Diffusion Transformer for Video Generation" (Ma et al., 2024)</item>
 /// </list></para>
+/// <para><b>For Beginners:</b> The STDiT (Spatial-Temporal DiT) Block alternates between spatial and temporal attention within a single transformer block. This efficient design is used in Open-Sora for balanced spatial and temporal processing.</para>
 /// <para>
 /// STDiT is the core building block for video DiT architectures. It combines spatial and temporal
 /// attention with cross-attention conditioning in a single transformer block:

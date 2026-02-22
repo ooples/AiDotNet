@@ -18,6 +18,7 @@ namespace AiDotNet.Diffusion.Video.AudioVisual;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Emu Video: Factorizing Text-to-Video Generation by Explicit Image Conditioning" (Meta, 2023)</item></list></para>
+/// <para><b>For Beginners:</b> Emu Video from Meta generates high-quality videos with strong temporal consistency, meaning objects maintain their appearance and motion stays smooth throughout the clip. It uses a factored approach separating image generation from temporal animation.</para>
 /// <para>
 /// Emu Video generates high-quality videos by factorizing the text-to-video problem into two stages:
 /// first generating a conditioning image from text, then animating it. This factorization simplifies

@@ -18,6 +18,7 @@ namespace AiDotNet.Diffusion.Video;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "MAGI-1: Autoregressive Video Generation at Scale" (Sand AI, 2025)</item></list></para>
+/// <para><b>For Beginners:</b> MAGI-1 is a ~10B parameter video model with strong temporal coherence, meaning objects and people stay consistent across frames. It supports multiple tasks (text-to-video, image-to-video) and produces smooth, natural-looking motion.</para>
 /// <para>
 /// MAGI-1 is a ~10B parameter model from Sand AI achieving strong temporal coherence through
 /// autoregressive generation with latent space consistency mechanisms. It supports multiple tasks

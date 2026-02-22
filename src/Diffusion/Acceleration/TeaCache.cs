@@ -11,6 +11,7 @@ namespace AiDotNet.Diffusion.Acceleration;
 /// <list type="bullet">
 /// <item>Paper: "TeaCache: Timestep-Aware KV-Cache for Efficient Video Diffusion" (2025)</item>
 /// </list></para>
+/// <para><b>For Beginners:</b> TeaCache (Timestep Embedding Aware Cache) accelerates DiT-based video generation by caching and reusing intermediate computations when timestep embeddings are similar. It provides significant speedup with minimal quality loss.</para>
 /// <para>
 /// TeaCache accelerates video diffusion inference by caching and reusing key-value pairs
 /// across denoising timesteps. The key insight is that adjacent timesteps have very similar

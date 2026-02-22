@@ -18,6 +18,7 @@ namespace AiDotNet.Diffusion.Video;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Reference: ByteDance Seedance 1 (2025)</item></list></para>
+/// <para><b>For Beginners:</b> Seedance 1 from ByteDance ranks first on video generation leaderboards for both text-to-video and image-to-video. It produces highly detailed, temporally consistent videos with excellent prompt adherence.</para>
 /// <para>
 /// Seedance 1 from ByteDance achieved #1 ranking on the Artificial Analysis T2V and I2V leaderboards.
 /// The model combines efficient DiT architecture with advanced temporal modeling and precise text

@@ -18,6 +18,7 @@ namespace AiDotNet.Diffusion.Video.VideoEditing;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "InstructVid2Vid: Controllable Video Editing with Natural Language Instructions" (ICME, 2024)</item></list></para>
+/// <para><b>For Beginners:</b> InstructVid2Vid allows natural language video editing - describe what you want changed (e.g., make it snowy) and the model applies that edit across all frames while preserving motion and structure.</para>
 /// <para>
 /// InstructVid2Vid enables video editing through natural language instructions, similar to
 /// InstructPix2Pix but extended to video. The model learns to follow editing instructions while

@@ -18,6 +18,7 @@ namespace AiDotNet.Diffusion.Video;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Reference: Pika Labs Pika 2.1 (2025)</item></list></para>
+/// <para><b>For Beginners:</b> Pika 2.1 specializes in short-form video generation with creative physics effects like crush, inflate, and melt. It is designed for social media content creation with fun, viral-ready video effects.</para>
 /// <para>
 /// Pika 2.1 specializes in short-form video generation with creative effects like crush, inflate,
 /// melt, and explode. Features scene ingredients for visual consistency across different scenes

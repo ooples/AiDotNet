@@ -11,6 +11,7 @@ namespace AiDotNet.Diffusion.Acceleration;
 /// <list type="bullet">
 /// <item>Paper: "Sparse VideoGen: Accelerating Video Diffusion Transformers with Flexible Sparsity" (2025)</item>
 /// </list></para>
+/// <para><b>For Beginners:</b> Sparse Video Generation achieves ~2x speedup by exploiting spatial-temporal sparsity - skipping computations in regions that change little between frames or across spatial locations.</para>
 /// <para>
 /// SparseVideoGen accelerates video diffusion inference by identifying and skipping redundant
 /// computations. The key insight is that not all frames require equal denoising effort:

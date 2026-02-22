@@ -18,6 +18,7 @@ namespace AiDotNet.Diffusion.Video;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "StepVideo: Text-to-Video Generation with Scalable Diffusion Transformers" (StepFun, 2025)</item></list></para>
+/// <para><b>For Beginners:</b> Step Video is a ~10B parameter text-to-video model that competes with state-of-the-art proprietary models. It excels at generating diverse, high-quality video content with strong prompt adherence.</para>
 /// <para>
 /// StepVideo is a ~10B parameter T2V model from StepFun competing with HunyuanVideo on quality
 /// benchmarks. It uses a scalable DiT architecture with deep text understanding, handling complex

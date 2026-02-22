@@ -18,6 +18,7 @@ namespace AiDotNet.Diffusion.Video;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Reference: Kuaishou Kling 2.6 (2025)</item></list></para>
+/// <para><b>For Beginners:</b> Kling 2.6 generates videos with simultaneous audio and visual output, producing synchronized sound effects and dialogue. It excels at audio-visual coherence where sounds match the visual content naturally.</para>
 /// <para>
 /// Kling 2.6 delivers fast output with natural sound effects and strong motion consistency.
 /// The model generates synchronized audio-visual content in a single pass, making it particularly

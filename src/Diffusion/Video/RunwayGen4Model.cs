@@ -18,6 +18,7 @@ namespace AiDotNet.Diffusion.Video;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Reference: Runway Gen-4 (2025)</item></list></para>
+/// <para><b>For Beginners:</b> Runway Gen-4 combines scene understanding with video generation, enabling multi-modal control over the output. It can generate from text, images, or existing video with fine-grained control over style, motion, and composition.</para>
 /// <para>
 /// Runway Gen-4 combines multi-modal understanding with video generation, enabling the model to
 /// understand and generate video from diverse inputs including text, images, video references, and

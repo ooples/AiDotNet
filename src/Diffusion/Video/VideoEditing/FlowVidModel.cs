@@ -18,6 +18,7 @@ namespace AiDotNet.Diffusion.Video.VideoEditing;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "FlowVid: Taming Imperfect Optical Flows for Consistent Video-to-Video Synthesis" (2024)</item></list></para>
+/// <para><b>For Beginners:</b> FlowVid uses optical flow (tracking pixel movement between frames) to guide video-to-video synthesis. This ensures that edits follow the natural motion in the original video for temporal consistency.</para>
 /// <para>
 /// FlowVid uses optical flow to guide video-to-video synthesis, maintaining temporal consistency by
 /// warping features along motion trajectories. The method handles imperfect optical flows through

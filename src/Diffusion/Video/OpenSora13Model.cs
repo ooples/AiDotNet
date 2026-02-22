@@ -18,6 +18,7 @@ namespace AiDotNet.Diffusion.Video;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Open-Sora: Democratizing Efficient Video Production for All" (HPC-AI Tech, 2024)</item></list></para>
+/// <para><b>For Beginners:</b> Open-Sora 1.3 is a fully open-source video generation model that supports any resolution and aspect ratio. It uses alternating spatial and temporal attention (STDiT) for efficiency and rectified flow training for stable, high-quality generation from text prompts.</para>
 /// <para>
 /// Open-Sora 1.3 features an upgraded 3D-VAE with improved temporal compression and rectified flow
 /// training objective. The STDiT backbone alternates spatial and temporal attention for efficient

@@ -18,6 +18,7 @@ namespace AiDotNet.Diffusion.Video.AudioVisual;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Reference: Meta Emu Video 2 (2024)</item></list></para>
+/// <para><b>For Beginners:</b> Emu Video 2 improves on the original with better generation quality, sharper details, and more natural motion. It builds on Meta's Emu architecture with enhanced temporal modeling.</para>
 /// <para>
 /// Emu Video 2 improves upon the original with enhanced generation quality, better motion dynamics,
 /// and longer video support. Uses an improved DiT backbone with refined temporal attention and
