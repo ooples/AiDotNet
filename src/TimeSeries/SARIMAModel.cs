@@ -92,6 +92,16 @@ public class SARIMAModel<T> : TimeSeriesModelBase<T>
     private readonly int _D;
 
     /// <summary>
+    /// Stored differenced training values for initializing Predict(Matrix) state.
+    /// </summary>
+    private Vector<T> _lastTrainDiffValues;
+
+    /// <summary>
+    /// Stored AR+SAR residuals from training for initializing Predict(Matrix) state.
+    /// </summary>
+    private Vector<T> _lastTrainResiduals;
+
+    /// <summary>
     /// Initializes a new instance of the SARIMAModel class with the specified options.
     /// </summary>
     /// <param name="options">The configuration options for the SARIMA model.</param>
@@ -103,6 +113,8 @@ public class SARIMAModel<T> : TimeSeriesModelBase<T>
         _maCoefficients = Vector<T>.Empty();
         _sarCoefficients = Vector<T>.Empty();
         _smaCoefficients = Vector<T>.Empty();
+        _lastTrainDiffValues = Vector<T>.Empty();
+        _lastTrainResiduals = Vector<T>.Empty();
         _p = _sarimaOptions.P;
         _q = _sarimaOptions.Q;
         _d = _sarimaOptions.D;
@@ -405,7 +417,22 @@ public class SARIMAModel<T> : TimeSeriesModelBase<T>
         Vector<T> predictions = new(input.Rows);
         int maxLag = Math.Max(_p, _P * _m);
         Vector<T> lastObservedValues = new(maxLag);
-        Vector<T> lastErrors = new(Math.Max(_q, _Q * _m));
+        // Initialize from stored training state instead of zeros
+        if (_lastTrainDiffValues.Length > 0)
+        {
+            int copyLen = Math.Min(_lastTrainDiffValues.Length, lastObservedValues.Length);
+            for (int j = 0; j < copyLen; j++)
+                lastObservedValues[j] = _lastTrainDiffValues[j];
+        }
+
+        int maxErrLag = Math.Max(_q, _Q * _m);
+        Vector<T> lastErrors = new(maxErrLag);
+        if (_lastTrainResiduals.Length > 0)
+        {
+            int copyLen = Math.Min(_lastTrainResiduals.Length, lastErrors.Length);
+            for (int j = 0; j < copyLen; j++)
+                lastErrors[j] = _lastTrainResiduals[j];
+        }
 
         for (int i = 0; i < predictions.Length; i++)
         {
@@ -613,6 +640,21 @@ public class SARIMAModel<T> : TimeSeriesModelBase<T>
 
         // Step 7: Estimate constant term
         _constant = EstimateConstant(diffY);
+
+        // Step 8: Store last training state for Predict(Matrix) initialization
+        int maxLag = Math.Max(_p, _P * _m);
+        int maxErrLag = Math.Max(_q, _Q * _m);
+        _lastTrainDiffValues = new Vector<T>(maxLag);
+        for (int i = 0; i < Math.Min(maxLag, diffY.Length); i++)
+        {
+            _lastTrainDiffValues[i] = diffY[diffY.Length - 1 - i];
+        }
+
+        _lastTrainResiduals = new Vector<T>(maxErrLag);
+        for (int i = 0; i < Math.Min(maxErrLag, arResiduals.Length); i++)
+        {
+            _lastTrainResiduals[i] = arResiduals[arResiduals.Length - 1 - i];
+        }
     }
 
     /// <summary>
