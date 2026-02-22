@@ -266,7 +266,7 @@ public class TimeSeriesTrainPredictTests
 
     #region ARMAModel Tests
 
-    [Fact(Skip = "Pre-existing AiDotNet bug: ARMAModel.Predict produces NaN at position [1]")]
+    [Fact]
     public void ARMAModel_TrainAndPredict_ProducesFinitePredictions()
     {
         var (x, y) = CreateStationaryData(100);
@@ -279,7 +279,7 @@ public class TimeSeriesTrainPredictTests
         AssertFiniteVector(predictions, "ARMAModel.Predict");
     }
 
-    [Fact(Skip = "Pre-existing AiDotNet bug: ARMAModel.Forecast produces NaN")]
+    [Fact]
     public void ARMAModel_Forecast_ProducesFiniteResults()
     {
         var (x, y) = CreateStationaryData(100);
@@ -517,7 +517,7 @@ public class TimeSeriesTrainPredictTests
 
     #region StateSpaceModel Tests
 
-    [Fact(Skip = "Pre-existing AiDotNet bug: StateSpaceModel.Predict produces NaN")]
+    [Fact]
     public void StateSpaceModel_TrainAndPredict_ProducesFinitePredictions()
     {
         var (x, y) = CreateStationaryData(60);
