@@ -1,6 +1,6 @@
 using AiDotNet.Enums;
 
-namespace AiDotNet.Diffusion;
+namespace AiDotNet.Diffusion.Schedulers;
 
 /// <summary>
 /// Linear Multi-Step (LMS) discrete scheduler for diffusion model sampling.

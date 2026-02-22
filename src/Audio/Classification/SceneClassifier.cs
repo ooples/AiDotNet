@@ -1,5 +1,5 @@
 using AiDotNet.Audio.Features;
-using AiDotNet.Diffusion;
+using AiDotNet.Diffusion.Audio;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;

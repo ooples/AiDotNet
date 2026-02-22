@@ -1,6 +1,6 @@
 using AiDotNet.Enums;
 
-namespace AiDotNet.Diffusion;
+namespace AiDotNet.Diffusion.Schedulers;
 
 /// <summary>
 /// DDPM (Denoising Diffusion Probabilistic Models) scheduler implementation.

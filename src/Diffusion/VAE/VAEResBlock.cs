@@ -3,7 +3,7 @@ using AiDotNet.Engines;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
 
-namespace AiDotNet.Diffusion;
+namespace AiDotNet.Diffusion.VAE;
 
 /// <summary>
 /// Residual block for VAE encoder/decoder with GroupNorm and skip connections.

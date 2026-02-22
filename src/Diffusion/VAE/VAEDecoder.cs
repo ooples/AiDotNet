@@ -3,7 +3,7 @@ using AiDotNet.Engines;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
 
-namespace AiDotNet.Diffusion;
+namespace AiDotNet.Diffusion.VAE;
 
 /// <summary>
 /// Convolutional decoder for VAE that reconstructs images from latent space.

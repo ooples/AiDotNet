@@ -1,13 +1,14 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Diffusion.Attention;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 
-namespace AiDotNet.Diffusion;
+namespace AiDotNet.Diffusion.NoisePredictors;
 
 /// <summary>
 /// U-Net architecture for noise prediction in diffusion models.

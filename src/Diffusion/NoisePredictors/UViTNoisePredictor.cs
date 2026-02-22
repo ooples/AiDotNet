@@ -6,7 +6,7 @@ using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 
-namespace AiDotNet.Diffusion;
+namespace AiDotNet.Diffusion.NoisePredictors;
 
 /// <summary>
 /// U-shaped Vision Transformer (U-ViT) noise predictor for diffusion models.

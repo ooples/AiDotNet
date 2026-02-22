@@ -1,4 +1,4 @@
-using AiDotNet.Diffusion;
+using AiDotNet.Diffusion.Conditioning;
 using AiDotNet.Interfaces;
 using Xunit;
 

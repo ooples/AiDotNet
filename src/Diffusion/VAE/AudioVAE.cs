@@ -1,9 +1,10 @@
+using AiDotNet.Diffusion.Audio;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks.Layers;
 
-namespace AiDotNet.Diffusion;
+namespace AiDotNet.Diffusion.VAE;
 
 /// <summary>
 /// Variational Autoencoder for audio mel-spectrogram encoding and decoding.

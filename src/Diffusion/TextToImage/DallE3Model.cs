@@ -1,14 +1,17 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Text.RegularExpressions;
+using AiDotNet.Diffusion.NoisePredictors;
+using AiDotNet.Diffusion.VAE;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.Diffusion.Schedulers;
 using AiDotNet.Tensors.Helpers;
 
-namespace AiDotNet.Diffusion;
+namespace AiDotNet.Diffusion.TextToImage;
 
 /// <summary>
 /// DALL-E 3 style text-to-image generation model with advanced prompt understanding

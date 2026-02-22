@@ -3,7 +3,7 @@ using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Validation;
 
-namespace AiDotNet.Diffusion;
+namespace AiDotNet.Diffusion.Schedulers;
 
 /// <summary>
 /// Base class for diffusion model noise schedulers providing common functionality.

@@ -1,7 +1,7 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 
-namespace AiDotNet.Diffusion;
+namespace AiDotNet.Diffusion.Conditioning;
 
 /// <summary>
 /// Dual text encoder conditioning module combining CLIP and T5 encoders.

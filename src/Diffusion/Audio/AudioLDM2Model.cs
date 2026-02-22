@@ -1,11 +1,14 @@
 using System.Diagnostics.CodeAnalysis;
+using AiDotNet.Diffusion.NoisePredictors;
+using AiDotNet.Diffusion.VAE;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.Diffusion.Schedulers;
 
-namespace AiDotNet.Diffusion;
+namespace AiDotNet.Diffusion.Audio;
 
 /// <summary>
 /// AudioLDM 2 - Enhanced Audio Latent Diffusion Model with dual text encoders.

@@ -4,7 +4,7 @@ using AiDotNet.Tensors.Engines;
 using AiDotNet.WindowFunctions;
 using AiDotNet.Validation;
 
-namespace AiDotNet.Diffusion;
+namespace AiDotNet.Diffusion.Audio;
 
 /// <summary>
 /// Griffin-Lim algorithm for audio reconstruction from magnitude spectrograms.

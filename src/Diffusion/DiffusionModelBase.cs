@@ -8,6 +8,7 @@ using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.Diffusion.Schedulers;
 using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Diffusion;

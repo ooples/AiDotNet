@@ -7,9 +7,10 @@ using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.Diffusion.Schedulers;
 using AiDotNet.NeuralNetworks.Layers;
 
-namespace AiDotNet.Diffusion;
+namespace AiDotNet.Diffusion.Audio;
 
 /// <summary>
 /// DiffWave model for high-quality audio waveform synthesis using diffusion.

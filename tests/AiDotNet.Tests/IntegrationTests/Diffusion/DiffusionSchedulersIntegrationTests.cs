@@ -1,7 +1,7 @@
 using System;
 using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
-using AiDotNet.Diffusion;
+using AiDotNet.Diffusion.Schedulers;
 using Xunit;
 
 namespace AiDotNet.Tests.IntegrationTests.Diffusion;

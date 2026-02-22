@@ -1,6 +1,6 @@
 using AiDotNet.Enums;
 
-namespace AiDotNet.Diffusion;
+namespace AiDotNet.Diffusion.Schedulers;
 
 /// <summary>
 /// DPM-Solver++ multistep scheduler for fast diffusion model sampling.

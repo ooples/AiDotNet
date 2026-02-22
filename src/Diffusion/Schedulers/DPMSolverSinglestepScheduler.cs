@@ -1,6 +1,6 @@
 using AiDotNet.Enums;
 
-namespace AiDotNet.Diffusion;
+namespace AiDotNet.Diffusion.Schedulers;
 
 /// <summary>
 /// DPM++ 2S Ancestral scheduler — single-step DPM-Solver++ with ancestral sampling.

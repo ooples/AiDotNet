@@ -1,11 +1,14 @@
 using System.Diagnostics.CodeAnalysis;
+using AiDotNet.Diffusion.NoisePredictors;
+using AiDotNet.Diffusion.VAE;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.Diffusion.Schedulers;
 
-namespace AiDotNet.Diffusion;
+namespace AiDotNet.Diffusion.Audio;
 
 /// <summary>
 /// MusicGen - Diffusion-based music generation model with advanced musical controls.

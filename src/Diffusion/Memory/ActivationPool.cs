@@ -1,7 +1,7 @@
 using System.Collections.Concurrent;
 using AiDotNet.Interfaces;
 
-namespace AiDotNet.Diffusion;
+namespace AiDotNet.Diffusion.Memory;
 
 /// <summary>
 /// Memory pool for tensor activations during diffusion model forward/backward passes.

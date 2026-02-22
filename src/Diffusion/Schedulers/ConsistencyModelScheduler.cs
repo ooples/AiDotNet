@@ -1,7 +1,7 @@
 using AiDotNet.Enums;
 using AiDotNet.Tensors.Helpers;
 
-namespace AiDotNet.Diffusion;
+namespace AiDotNet.Diffusion.Schedulers;
 
 /// <summary>
 /// Consistency Model scheduler for single-step or few-step diffusion sampling.

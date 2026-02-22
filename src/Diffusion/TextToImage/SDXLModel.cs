@@ -1,4 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
+using AiDotNet.Diffusion.NoisePredictors;
+using AiDotNet.Diffusion.VAE;
 using AiDotNet.Enums;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -7,8 +9,9 @@ using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.Diffusion.Schedulers;
 
-namespace AiDotNet.Diffusion;
+namespace AiDotNet.Diffusion.TextToImage;
 
 /// <summary>
 /// Stable Diffusion XL (SDXL) model for high-resolution image generation.

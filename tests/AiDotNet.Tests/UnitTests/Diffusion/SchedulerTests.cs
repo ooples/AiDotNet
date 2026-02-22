@@ -1,4 +1,4 @@
-using AiDotNet.Diffusion;
+using AiDotNet.Diffusion.Schedulers;
 using AiDotNet.Tensors;
 using Xunit;
 

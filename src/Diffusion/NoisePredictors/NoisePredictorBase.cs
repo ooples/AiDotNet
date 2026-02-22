@@ -4,7 +4,7 @@ using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 
-namespace AiDotNet.Diffusion;
+namespace AiDotNet.Diffusion.NoisePredictors;
 
 /// <summary>
 /// Base class for noise prediction networks used in diffusion models.

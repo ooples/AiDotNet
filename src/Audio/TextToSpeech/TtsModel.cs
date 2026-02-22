@@ -1,6 +1,6 @@
 using System.Diagnostics;
 using AiDotNet.ActivationFunctions;
-using AiDotNet.Diffusion;
+using AiDotNet.Diffusion.Audio;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;

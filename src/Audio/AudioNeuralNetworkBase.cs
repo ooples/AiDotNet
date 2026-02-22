@@ -1,4 +1,4 @@
-using AiDotNet.Diffusion;
+using AiDotNet.Diffusion.Audio;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models.Options;

@@ -1,4 +1,4 @@
-using AiDotNet.Diffusion;
+using AiDotNet.Diffusion.Audio;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;

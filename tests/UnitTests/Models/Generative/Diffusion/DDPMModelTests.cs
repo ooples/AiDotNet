@@ -1,6 +1,6 @@
 using Xunit;
 using AiDotNet.Models.Generative.Diffusion;
-using AiDotNet.Diffusion;
+using AiDotNet.Diffusion.Schedulers;
 using AiDotNet.LinearAlgebra;
 
 namespace UnitTests.Models.Generative.Diffusion

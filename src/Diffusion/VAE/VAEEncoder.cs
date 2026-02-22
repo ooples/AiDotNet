@@ -4,7 +4,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 
-namespace AiDotNet.Diffusion;
+namespace AiDotNet.Diffusion.VAE;
 
 /// <summary>
 /// Convolutional encoder for VAE that compresses images to latent space.

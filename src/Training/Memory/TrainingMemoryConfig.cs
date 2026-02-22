@@ -1,4 +1,4 @@
-using AiDotNet.Diffusion;
+using AiDotNet.Diffusion.Memory;
 using AiDotNet.Initialization;
 using AiDotNet.Memory;
 

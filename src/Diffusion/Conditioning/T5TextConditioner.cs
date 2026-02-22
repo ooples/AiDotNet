@@ -1,7 +1,7 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 
-namespace AiDotNet.Diffusion;
+namespace AiDotNet.Diffusion.Conditioning;
 
 /// <summary>
 /// T5 text encoder conditioning module for diffusion models.

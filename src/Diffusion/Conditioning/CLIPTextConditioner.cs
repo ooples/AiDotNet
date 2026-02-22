@@ -1,7 +1,7 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 
-namespace AiDotNet.Diffusion;
+namespace AiDotNet.Diffusion.Conditioning;
 
 /// <summary>
 /// CLIP text encoder conditioning module for diffusion models.

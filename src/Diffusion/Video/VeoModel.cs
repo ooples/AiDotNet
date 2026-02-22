@@ -1,12 +1,15 @@
 using System.Diagnostics.CodeAnalysis;
+using AiDotNet.Diffusion.NoisePredictors;
+using AiDotNet.Diffusion.VAE;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.Diffusion.Schedulers;
 
-namespace AiDotNet.Diffusion;
+namespace AiDotNet.Diffusion.Video;
 
 /// <summary>
 /// Veo model for Google's high-fidelity cascaded video generation with temporal super-resolution.
