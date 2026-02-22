@@ -3,6 +3,9 @@ namespace AiDotNet.Safety.Text;
 /// <summary>
 /// Detailed result from hallucination detection with per-claim verdicts.
 /// </summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> HallucinationResult provides AI safety functionality. Default values follow the original paper settings.</para>
+/// </remarks>
 public class HallucinationResult
 {
     /// <summary>Overall hallucination score (0.0 = grounded, 1.0 = fabricated).</summary>

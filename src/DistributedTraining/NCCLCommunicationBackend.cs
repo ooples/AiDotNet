@@ -90,6 +90,9 @@ internal enum ncclResult_t
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for operations</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> NCCLCommunicationBackend provides AI safety functionality. Default values follow the original paper settings.</para>
+/// </remarks>
 public class NCCLCommunicationBackend<T> : CommunicationBackendBase<T>
 {
     private readonly int _rank;

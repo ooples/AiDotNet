@@ -3,6 +3,9 @@ namespace AiDotNet.Safety.Image;
 /// <summary>
 /// Detailed result from deepfake and AI-generated image detection.
 /// </summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> DeepfakeResult provides AI safety functionality. Default values follow the original paper settings.</para>
+/// </remarks>
 public class DeepfakeResult
 {
     /// <summary>Overall deepfake probability score (0.0 = authentic, 1.0 = fake).</summary>

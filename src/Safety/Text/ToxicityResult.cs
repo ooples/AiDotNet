@@ -3,6 +3,9 @@ namespace AiDotNet.Safety.Text;
 /// <summary>
 /// Detailed result from toxicity detection with per-category scores and spans.
 /// </summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> ToxicityResult provides AI safety functionality. Default values follow the original paper settings.</para>
+/// </remarks>
 public class ToxicityResult
 {
     /// <summary>Overall toxicity score (0.0 = safe, 1.0 = maximally toxic).</summary>

@@ -3,6 +3,9 @@ namespace AiDotNet.Safety.Watermarking;
 /// <summary>
 /// Detailed result from watermark detection across any modality.
 /// </summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> WatermarkResult provides AI safety functionality. Default values follow the original paper settings.</para>
+/// </remarks>
 public class WatermarkResult
 {
     /// <summary>Whether a watermark was detected.</summary>

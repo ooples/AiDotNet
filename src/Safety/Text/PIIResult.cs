@@ -3,6 +3,9 @@ namespace AiDotNet.Safety.Text;
 /// <summary>
 /// Detailed result from PII detection with detected entities and redacted text.
 /// </summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> PIIResult provides AI safety functionality. Default values follow the original paper settings.</para>
+/// </remarks>
 public class PIIResult
 {
     /// <summary>Whether any PII was detected.</summary>

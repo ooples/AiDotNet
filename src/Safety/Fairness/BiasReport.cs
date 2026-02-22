@@ -3,6 +3,9 @@ namespace AiDotNet.Safety.Fairness;
 /// <summary>
 /// Detailed report from bias and fairness evaluation.
 /// </summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> BiasReport provides AI safety functionality. Default values follow the original paper settings.</para>
+/// </remarks>
 public class BiasReport
 {
     /// <summary>Whether any bias was detected above the threshold.</summary>

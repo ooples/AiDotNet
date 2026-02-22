@@ -3,6 +3,9 @@ namespace AiDotNet.Safety.Compliance;
 /// <summary>
 /// Detailed report from regulatory compliance evaluation.
 /// </summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> ComplianceReport provides AI safety functionality. Default values follow the original paper settings.</para>
+/// </remarks>
 public class ComplianceReport
 {
     /// <summary>Whether the system is compliant with all checked regulations.</summary>

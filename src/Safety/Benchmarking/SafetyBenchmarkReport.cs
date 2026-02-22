@@ -3,6 +3,9 @@ namespace AiDotNet.Safety.Benchmarking;
 /// <summary>
 /// Comprehensive report from running all safety benchmarks.
 /// </summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> SafetyBenchmarkReport provides AI safety functionality. Default values follow the original paper settings.</para>
+/// </remarks>
 public class SafetyBenchmarkReport
 {
     /// <summary>Individual benchmark results by benchmark name.</summary>

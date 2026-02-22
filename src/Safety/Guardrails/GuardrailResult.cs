@@ -5,6 +5,9 @@ namespace AiDotNet.Safety.Guardrails;
 /// <summary>
 /// Result from guardrail evaluation.
 /// </summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> GuardrailResult provides AI safety functionality. Default values follow the original paper settings.</para>
+/// </remarks>
 public class GuardrailResult
 {
     /// <summary>Whether the content passed the guardrail check.</summary>

@@ -3,6 +3,9 @@ namespace AiDotNet.Safety.Text;
 /// <summary>
 /// A match between generated text and potentially copyrighted content.
 /// </summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> CopyrightMatch provides AI safety functionality. Default values follow the original paper settings.</para>
+/// </remarks>
 public class CopyrightMatch
 {
     /// <summary>The matching text segment.</summary>

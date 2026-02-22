@@ -3,6 +3,9 @@ namespace AiDotNet.Safety.Video;
 /// <summary>
 /// Detailed result from video safety evaluation with per-frame annotations.
 /// </summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> VideoSafetyResult provides AI safety functionality. Default values follow the original paper settings.</para>
+/// </remarks>
 public class VideoSafetyResult
 {
     /// <summary>Whether the video is safe overall.</summary>

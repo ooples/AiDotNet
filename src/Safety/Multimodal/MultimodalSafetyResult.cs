@@ -3,6 +3,9 @@ namespace AiDotNet.Safety.Multimodal;
 /// <summary>
 /// Detailed result from multimodal safety evaluation.
 /// </summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> MultimodalSafetyResult provides AI safety functionality. Default values follow the original paper settings.</para>
+/// </remarks>
 public class MultimodalSafetyResult
 {
     /// <summary>Whether the multimodal content is safe overall.</summary>
