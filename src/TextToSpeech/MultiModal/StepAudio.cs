@@ -16,6 +16,8 @@ public class StepAudio<T> : TtsModelBase<T>, ICodecTts<T>, IStreamingTts<T>
     public Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
+        if (string.IsNullOrEmpty(text))
+            throw new ArgumentException("Text cannot be null or empty.", nameof(text));
         var input = PreprocessText(text);
         if (IsOnnxMode && OnnxModel is not null) return PostprocessAudio(OnnxModel.Run(input));
         var output = Predict(input);
@@ -27,7 +29,7 @@ public class StepAudio<T> : TtsModelBase<T>, ICodecTts<T>, IStreamingTts<T>
     public Tensor<T> SynthesizeNextChunk()
     {
         if (_streamPosition >= _streamText.Length) return new Tensor<T>([0]);
-        int chunkTextLen = Math.Min(Math.Max(1, _chunkSamples * _options.CodecFrameRate / SampleRate), _streamText.Length - _streamPosition);
+        int chunkTextLen = Math.Min(Math.Min(Math.Max(1, _chunkSamples * _options.CodecFrameRate / SampleRate), _options.MaxTextLength), _streamText.Length - _streamPosition);
         string chunk = _streamText.Substring(_streamPosition, chunkTextLen);
         _streamPosition += chunkTextLen;
         var audio = Synthesize(chunk);

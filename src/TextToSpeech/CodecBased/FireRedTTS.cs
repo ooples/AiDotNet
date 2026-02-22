@@ -15,7 +15,7 @@ public class FireRedTTS<T> : TtsModelBase<T>, ICodecTts<T>
     {
         ThrowIfDisposed();
         var input = PreprocessText(text);
-        if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input);
+        if (IsOnnxMode && OnnxModel is not null) return PostprocessAudio(OnnxModel.Run(input));
         var output = Predict(input);
         return PostprocessAudio(output);
     }
