@@ -32,6 +32,9 @@ public class HybridCausalDiscoveryTests
         var algo = new MMHCAlgorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
         Assert.NotNull(graph);
+        Assert.Equal(3, graph.FeatureNames.Length);
+        Assert.Equal(3, graph.AdjacencyMatrix.Rows);
+        Assert.Equal(3, graph.AdjacencyMatrix.Columns);
     }
 
     [Fact]
@@ -40,6 +43,9 @@ public class HybridCausalDiscoveryTests
         var algo = new GFCIAlgorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
         Assert.NotNull(graph);
+        Assert.Equal(3, graph.FeatureNames.Length);
+        Assert.Equal(3, graph.AdjacencyMatrix.Rows);
+        Assert.Equal(3, graph.AdjacencyMatrix.Columns);
     }
 
     [Fact]
@@ -48,6 +54,9 @@ public class HybridCausalDiscoveryTests
         var algo = new H2PCAlgorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
         Assert.NotNull(graph);
+        Assert.Equal(3, graph.FeatureNames.Length);
+        Assert.Equal(3, graph.AdjacencyMatrix.Rows);
+        Assert.Equal(3, graph.AdjacencyMatrix.Columns);
     }
 
     [Fact]
@@ -56,6 +65,9 @@ public class HybridCausalDiscoveryTests
         var algo = new PCNOTEARSAlgorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
         Assert.NotNull(graph);
+        Assert.Equal(3, graph.FeatureNames.Length);
+        Assert.Equal(3, graph.AdjacencyMatrix.Rows);
+        Assert.Equal(3, graph.AdjacencyMatrix.Columns);
     }
 
     [Fact]
@@ -64,5 +76,8 @@ public class HybridCausalDiscoveryTests
         var algo = new RSMAX2Algorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
         Assert.NotNull(graph);
+        Assert.Equal(3, graph.FeatureNames.Length);
+        Assert.Equal(3, graph.AdjacencyMatrix.Rows);
+        Assert.Equal(3, graph.AdjacencyMatrix.Columns);
     }
 }

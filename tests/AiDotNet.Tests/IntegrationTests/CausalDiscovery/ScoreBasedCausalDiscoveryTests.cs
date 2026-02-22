@@ -41,6 +41,9 @@ public class ScoreBasedCausalDiscoveryTests
         var algo = new FGESAlgorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
         Assert.NotNull(graph);
+        Assert.Equal(3, graph.FeatureNames.Length);
+        Assert.Equal(3, graph.AdjacencyMatrix.Rows);
+        Assert.Equal(3, graph.AdjacencyMatrix.Columns);
     }
 
     [Fact]
@@ -49,6 +52,9 @@ public class ScoreBasedCausalDiscoveryTests
         var algo = new HillClimbingAlgorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
         Assert.NotNull(graph);
+        Assert.Equal(3, graph.FeatureNames.Length);
+        Assert.Equal(3, graph.AdjacencyMatrix.Rows);
+        Assert.Equal(3, graph.AdjacencyMatrix.Columns);
     }
 
     [Fact]
@@ -57,6 +63,9 @@ public class ScoreBasedCausalDiscoveryTests
         var algo = new TabuSearchAlgorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
         Assert.NotNull(graph);
+        Assert.Equal(3, graph.FeatureNames.Length);
+        Assert.Equal(3, graph.AdjacencyMatrix.Rows);
+        Assert.Equal(3, graph.AdjacencyMatrix.Columns);
     }
 
     [Fact]
@@ -65,6 +74,9 @@ public class ScoreBasedCausalDiscoveryTests
         var algo = new K2Algorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
         Assert.NotNull(graph);
+        Assert.Equal(3, graph.FeatureNames.Length);
+        Assert.Equal(3, graph.AdjacencyMatrix.Rows);
+        Assert.Equal(3, graph.AdjacencyMatrix.Columns);
     }
 
     [Fact]
@@ -73,6 +85,9 @@ public class ScoreBasedCausalDiscoveryTests
         var algo = new BOSSAlgorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
         Assert.NotNull(graph);
+        Assert.Equal(3, graph.FeatureNames.Length);
+        Assert.Equal(3, graph.AdjacencyMatrix.Rows);
+        Assert.Equal(3, graph.AdjacencyMatrix.Columns);
     }
 
     [Fact]
@@ -81,6 +96,9 @@ public class ScoreBasedCausalDiscoveryTests
         var algo = new GRaSPAlgorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
         Assert.NotNull(graph);
+        Assert.Equal(3, graph.FeatureNames.Length);
+        Assert.Equal(3, graph.AdjacencyMatrix.Rows);
+        Assert.Equal(3, graph.AdjacencyMatrix.Columns);
     }
 
     [Fact]
@@ -89,5 +107,8 @@ public class ScoreBasedCausalDiscoveryTests
         var algo = new ExactSearchAlgorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
         Assert.NotNull(graph);
+        Assert.Equal(3, graph.FeatureNames.Length);
+        Assert.Equal(3, graph.AdjacencyMatrix.Rows);
+        Assert.Equal(3, graph.AdjacencyMatrix.Columns);
     }
 }

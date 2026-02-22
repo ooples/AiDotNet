@@ -45,13 +45,15 @@ public class DocumentAnalysisTests
     }
 
     [Fact]
-    public void DocBank_Predict_ReturnsOutput()
+    public void DocBank_Predict_ReturnsOutputWithShape()
     {
         var arch = CreateArchitecture();
         var model = new DocBank<double>(arch, imageSize: 64);
         var input = CreateSmallImage();
         var output = model.Predict(input);
         Assert.NotNull(output);
+        Assert.True(output.Shape.Length > 0, "Output should have non-empty shape");
+        Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
     }
 
     [Fact]
@@ -76,13 +78,15 @@ public class DocumentAnalysisTests
     }
 
     [Fact]
-    public void TableTransformer_Predict_ReturnsOutput()
+    public void TableTransformer_Predict_ReturnsOutputWithShape()
     {
         var arch = CreateArchitecture();
         var model = new TableTransformer<double>(arch, imageSize: 64);
         var input = CreateSmallImage();
         var output = model.Predict(input);
         Assert.NotNull(output);
+        Assert.True(output.Shape.Length > 0, "Output should have non-empty shape");
+        Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
     }
 
     [Fact]

@@ -244,6 +244,23 @@ public class MatrixDecompositionIntegrationTests
         Assert.NotNull(eigen);
     }
 
+    [Fact]
+    public void Eigen_Eigenvalues_AreReal_ForSymmetricMatrix()
+    {
+        var matrix = CreateSPDMatrix();
+        var eigen = new EigenDecomposition<double>(matrix);
+        var eigenvalues = eigen.EigenValues;
+        Assert.NotNull(eigenvalues);
+        Assert.Equal(3, eigenvalues.Length);
+
+        // For SPD matrix, all eigenvalues should be positive
+        for (int i = 0; i < eigenvalues.Length; i++)
+        {
+            Assert.True(eigenvalues[i] > 0,
+                $"Eigenvalue [{i}] = {eigenvalues[i]} should be positive for SPD matrix");
+        }
+    }
+
     #endregion
 
     #region LdlDecomposition Tests
@@ -281,6 +298,17 @@ public class MatrixDecompositionIntegrationTests
         Assert.NotNull(bidiag);
     }
 
+    [Fact]
+    public void Bidiagonal_B_HasCorrectDimensions()
+    {
+        var matrix = CreateGeneralMatrix();
+        var bidiag = new BidiagonalDecomposition<double>(matrix);
+        var b = bidiag.B;
+        Assert.NotNull(b);
+        Assert.Equal(matrix.Rows, b.Rows);
+        Assert.Equal(matrix.Columns, b.Columns);
+    }
+
     #endregion
 
     #region HessenbergDecomposition Tests
@@ -291,6 +319,20 @@ public class MatrixDecompositionIntegrationTests
         var matrix = CreateGeneralMatrix();
         var hess = new HessenbergDecomposition<double>(matrix);
         Assert.NotNull(hess);
+    }
+
+    [Fact]
+    public void Hessenberg_HessenbergMatrix_IsUpperHessenberg()
+    {
+        var matrix = CreateGeneralMatrix();
+        var hess = new HessenbergDecomposition<double>(matrix);
+        var h = hess.HessenbergMatrix;
+        Assert.NotNull(h);
+        // Upper Hessenberg: zero below first subdiagonal
+        for (int i = 2; i < h.Rows; i++)
+            for (int j = 0; j < i - 1; j++)
+                Assert.True(Math.Abs(h[i, j]) < Tolerance,
+                    $"H[{i},{j}] = {h[i, j]} should be zero (upper Hessenberg)");
     }
 
     #endregion
@@ -305,6 +347,17 @@ public class MatrixDecompositionIntegrationTests
         Assert.NotNull(schur);
     }
 
+    [Fact]
+    public void Schur_SchurMatrix_HasCorrectDimensions()
+    {
+        var matrix = CreateGeneralMatrix();
+        var schur = new SchurDecomposition<double>(matrix);
+        var s = schur.SchurMatrix;
+        Assert.NotNull(s);
+        Assert.Equal(matrix.Rows, s.Rows);
+        Assert.Equal(matrix.Columns, s.Columns);
+    }
+
     #endregion
 
     #region TridiagonalDecomposition Tests
@@ -315,6 +368,17 @@ public class MatrixDecompositionIntegrationTests
         var matrix = CreateSPDMatrix();
         var trid = new TridiagonalDecomposition<double>(matrix);
         Assert.NotNull(trid);
+    }
+
+    [Fact]
+    public void Tridiagonal_TMatrix_HasCorrectDimensions()
+    {
+        var matrix = CreateSPDMatrix();
+        var trid = new TridiagonalDecomposition<double>(matrix);
+        var t = trid.TMatrix;
+        Assert.NotNull(t);
+        Assert.Equal(matrix.Rows, t.Rows);
+        Assert.Equal(matrix.Columns, t.Columns);
     }
 
     #endregion
@@ -335,7 +399,7 @@ public class MatrixDecompositionIntegrationTests
         var matrix = CreateGeneralMatrix();
         var polar = new PolarDecomposition<double>(matrix);
         var reconstructed = Multiply(polar.U, polar.P);
-        AssertMatricesEqual(matrix, reconstructed, 0.1); // Polar decomposition may have some numerical error
+        AssertMatricesEqual(matrix, reconstructed, 1e-6);
     }
 
     #endregion

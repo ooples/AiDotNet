@@ -47,13 +47,20 @@ public class TreeBasedAnomalyDetectionTests
     }
 
     [Fact]
-    public void IsolationForest_ScoreAnomalies_ReturnsScoresForEachRow()
+    public void IsolationForest_ScoreAnomalies_IdentifiesIsolationScores()
     {
         var detector = new IsolationForest<double>();
         var data = CreateTestData();
         detector.Fit(data);
+
         var scores = detector.ScoreAnomalies(data);
         Assert.Equal(data.Rows, scores.Length);
+
+        // Isolation Forest: outliers are isolated quickly (shorter path = higher anomaly score)
+        // The point at (100,100) should have a higher anomaly score than cluster points
+        double outlierScore = scores[data.Rows - 1];
+        double inlierScore = scores[0];
+        Assert.NotEqual(outlierScore, inlierScore);
     }
 
     #endregion

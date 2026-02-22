@@ -32,5 +32,8 @@ public class SpecializedCausalDiscoveryTests
         var algo = new GOBNILPAlgorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
         Assert.NotNull(graph);
+        Assert.Equal(3, graph.FeatureNames.Length);
+        Assert.Equal(3, graph.AdjacencyMatrix.Rows);
+        Assert.Equal(3, graph.AdjacencyMatrix.Columns);
     }
 }

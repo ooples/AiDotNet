@@ -43,7 +43,7 @@ public class ModelLoadingIntegrationTests
     }
 
     [Fact]
-    public void WeightMapping_Construction_WithMappings()
+    public void WeightMapping_Construction_WithMappings_PreservesMappings()
     {
         var mappings = new Dictionary<string, string>
         {
@@ -52,6 +52,10 @@ public class ModelLoadingIntegrationTests
         };
         var mapping = new WeightMapping(mappings);
         Assert.NotNull(mapping);
+
+        // Verify mappings were stored correctly
+        Assert.Equal("target.layer1.weight", mapping.Map("source.layer1.weight"));
+        Assert.Equal("target.layer2.bias", mapping.Map("source.layer2.bias"));
     }
 
     [Fact]

@@ -83,7 +83,7 @@ public class SurvivalAnalysisIntegrationTests
     }
 
     [Fact]
-    public void KaplanMeier_PredictSurvival_ReturnsCorrectShape()
+    public void KaplanMeier_PredictSurvival_ReturnsValidProbabilities()
     {
         var km = new KaplanMeierEstimator<double>();
         var (features, times, events) = CreateSyntheticSurvivalData();
@@ -93,10 +93,20 @@ public class SurvivalAnalysisIntegrationTests
         var result = km.PredictSurvivalProbability(features, queryTimes);
         Assert.Equal(features.Rows, result.Rows);
         Assert.Equal(3, result.Columns);
+
+        // Survival probabilities should be between 0 and 1
+        for (int r = 0; r < result.Rows; r++)
+            for (int c = 0; c < result.Columns; c++)
+                Assert.InRange(result[r, c], 0.0, 1.0);
+
+        // Survival at later times should be <= survival at earlier times (monotone decreasing)
+        for (int r = 0; r < result.Rows; r++)
+            Assert.True(result[r, 2] <= result[r, 0],
+                "Survival probability should decrease over time");
     }
 
     [Fact]
-    public void KaplanMeier_GetNumberAtRisk_ReturnsValues()
+    public void KaplanMeier_GetNumberAtRisk_DecreasesOverTime()
     {
         var km = new KaplanMeierEstimator<double>();
         var (features, times, events) = CreateSyntheticSurvivalData();
@@ -105,6 +115,10 @@ public class SurvivalAnalysisIntegrationTests
         var atRisk = km.GetNumberAtRisk();
         Assert.NotNull(atRisk);
         Assert.True(atRisk.Length > 0);
+
+        // Number at risk should start at full sample and decrease
+        Assert.True(atRisk[0] >= atRisk[atRisk.Length - 1],
+            "Number at risk should generally decrease over time");
     }
 
     #endregion
@@ -249,7 +263,7 @@ public class SurvivalAnalysisIntegrationTests
     }
 
     [Fact]
-    public void WeibullAFT_Predict_ReturnsValues()
+    public void WeibullAFT_Predict_ReturnsPositiveSurvivalTimes()
     {
         var weibull = new WeibullAFT<double>(maxIterations: 50);
         var (features, times, events) = CreateSyntheticSurvivalData();
@@ -257,6 +271,10 @@ public class SurvivalAnalysisIntegrationTests
 
         var predictions = weibull.Predict(features);
         Assert.Equal(features.Rows, predictions.Length);
+
+        // Predicted survival times should be positive
+        for (int i = 0; i < predictions.Length; i++)
+            Assert.True(predictions[i] > 0, $"Predicted survival time at {i} should be positive, got {predictions[i]}");
     }
 
     #endregion
@@ -281,7 +299,7 @@ public class SurvivalAnalysisIntegrationTests
     }
 
     [Fact]
-    public void LogNormalAFT_Predict_ReturnsValues()
+    public void LogNormalAFT_Predict_ReturnsPositiveSurvivalTimes()
     {
         var lognormal = new LogNormalAFT<double>(maxIterations: 50);
         var (features, times, events) = CreateSyntheticSurvivalData();
@@ -289,6 +307,10 @@ public class SurvivalAnalysisIntegrationTests
 
         var predictions = lognormal.Predict(features);
         Assert.Equal(features.Rows, predictions.Length);
+
+        // Predicted survival times should be positive
+        for (int i = 0; i < predictions.Length; i++)
+            Assert.True(predictions[i] > 0, $"Predicted survival time at {i} should be positive, got {predictions[i]}");
     }
 
     #endregion
@@ -313,7 +335,7 @@ public class SurvivalAnalysisIntegrationTests
     }
 
     [Fact]
-    public void RandomSurvivalForest_Predict_ReturnsValues()
+    public void RandomSurvivalForest_Predict_ReturnsPositiveSurvivalTimes()
     {
         var rsf = new RandomSurvivalForest<double>(numTrees: 5, maxDepth: 3, seed: 42);
         var (features, times, events) = CreateSyntheticSurvivalData();
@@ -321,6 +343,10 @@ public class SurvivalAnalysisIntegrationTests
 
         var predictions = rsf.Predict(features);
         Assert.Equal(features.Rows, predictions.Length);
+
+        // Predicted survival times should be positive
+        for (int i = 0; i < predictions.Length; i++)
+            Assert.True(predictions[i] > 0, $"Predicted survival time at {i} should be positive, got {predictions[i]}");
     }
 
     #endregion
@@ -337,6 +363,7 @@ public class SurvivalAnalysisIntegrationTests
             new CoxProportionalHazards<double>(),
             new WeibullAFT<double>(),
             new LogNormalAFT<double>(),
+            new RandomSurvivalForest<double>(numTrees: 5, maxDepth: 3),
         };
 
         var features = new Matrix<double>(1, 2);

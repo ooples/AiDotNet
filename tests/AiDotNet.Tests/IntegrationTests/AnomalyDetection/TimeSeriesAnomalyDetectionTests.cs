@@ -38,14 +38,24 @@ public class TimeSeriesAnomalyDetectionTests
     }
 
     [Fact]
-    public void MovingAverage_FitAndPredict_Works()
+    public void MovingAverage_FitAndPredict_DetectsSpike()
     {
         var detector = new MovingAverageDetector<double>(windowSize: 5);
         var data = CreateTimeSeriesData();
         detector.Fit(data);
         Assert.True(detector.IsFitted);
+
         var predictions = detector.Predict(data);
         Assert.Equal(data.Rows, predictions.Length);
+
+        // The spike at index 25 (value=100 vs normal ~10) should be detected
+        Assert.Equal(-1.0, predictions[25]);
+
+        // Verify anomaly scores: spike should have highest score
+        var scores = detector.ScoreAnomalies(data);
+        double spikeScore = scores[25];
+        double normalScore = scores[0];
+        Assert.True(spikeScore > normalScore, "Spike score should exceed normal score");
     }
 
     #endregion

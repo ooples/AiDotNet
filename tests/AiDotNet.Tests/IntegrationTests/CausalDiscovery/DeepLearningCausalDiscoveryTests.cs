@@ -32,6 +32,9 @@ public class DeepLearningCausalDiscoveryTests
         var algo = new DAGGNNAlgorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
         Assert.NotNull(graph);
+        Assert.Equal(3, graph.FeatureNames.Length);
+        Assert.Equal(3, graph.AdjacencyMatrix.Rows);
+        Assert.Equal(3, graph.AdjacencyMatrix.Columns);
     }
 
     [Fact]
@@ -40,6 +43,9 @@ public class DeepLearningCausalDiscoveryTests
         var algo = new GAEAlgorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
         Assert.NotNull(graph);
+        Assert.Equal(3, graph.FeatureNames.Length);
+        Assert.Equal(3, graph.AdjacencyMatrix.Rows);
+        Assert.Equal(3, graph.AdjacencyMatrix.Columns);
     }
 
     [Fact]
@@ -48,6 +54,9 @@ public class DeepLearningCausalDiscoveryTests
         var algo = new GraNDAGAlgorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
         Assert.NotNull(graph);
+        Assert.Equal(3, graph.FeatureNames.Length);
+        Assert.Equal(3, graph.AdjacencyMatrix.Rows);
+        Assert.Equal(3, graph.AdjacencyMatrix.Columns);
     }
 
     [Fact]
@@ -56,6 +65,9 @@ public class DeepLearningCausalDiscoveryTests
         var algo = new CGNNAlgorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
         Assert.NotNull(graph);
+        Assert.Equal(3, graph.FeatureNames.Length);
+        Assert.Equal(3, graph.AdjacencyMatrix.Rows);
+        Assert.Equal(3, graph.AdjacencyMatrix.Columns);
     }
 
     [Fact]
@@ -64,6 +76,9 @@ public class DeepLearningCausalDiscoveryTests
         var algo = new CASTLEAlgorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
         Assert.NotNull(graph);
+        Assert.Equal(3, graph.FeatureNames.Length);
+        Assert.Equal(3, graph.AdjacencyMatrix.Rows);
+        Assert.Equal(3, graph.AdjacencyMatrix.Columns);
     }
 
     [Fact]
@@ -72,6 +87,9 @@ public class DeepLearningCausalDiscoveryTests
         var algo = new DECIAlgorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
         Assert.NotNull(graph);
+        Assert.Equal(3, graph.FeatureNames.Length);
+        Assert.Equal(3, graph.AdjacencyMatrix.Rows);
+        Assert.Equal(3, graph.AdjacencyMatrix.Columns);
     }
 
     [Fact]
@@ -80,6 +98,9 @@ public class DeepLearningCausalDiscoveryTests
         var algo = new AVICIAlgorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
         Assert.NotNull(graph);
+        Assert.Equal(3, graph.FeatureNames.Length);
+        Assert.Equal(3, graph.AdjacencyMatrix.Rows);
+        Assert.Equal(3, graph.AdjacencyMatrix.Columns);
     }
 
     [Fact]
@@ -88,6 +109,9 @@ public class DeepLearningCausalDiscoveryTests
         var algo = new AmortizedCDAlgorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
         Assert.NotNull(graph);
+        Assert.Equal(3, graph.FeatureNames.Length);
+        Assert.Equal(3, graph.AdjacencyMatrix.Rows);
+        Assert.Equal(3, graph.AdjacencyMatrix.Columns);
     }
 
     [Fact]
@@ -96,6 +120,9 @@ public class DeepLearningCausalDiscoveryTests
         var algo = new CausalVAEAlgorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
         Assert.NotNull(graph);
+        Assert.Equal(3, graph.FeatureNames.Length);
+        Assert.Equal(3, graph.AdjacencyMatrix.Rows);
+        Assert.Equal(3, graph.AdjacencyMatrix.Columns);
     }
 
     [Fact]
@@ -104,5 +131,8 @@ public class DeepLearningCausalDiscoveryTests
         var algo = new TCDFAlgorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
         Assert.NotNull(graph);
+        Assert.Equal(3, graph.FeatureNames.Length);
+        Assert.Equal(3, graph.AdjacencyMatrix.Rows);
+        Assert.Equal(3, graph.AdjacencyMatrix.Columns);
     }
 }

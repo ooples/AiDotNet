@@ -32,6 +32,9 @@ public class InformationTheoreticCausalDiscoveryTests
         var algo = new TransferEntropyAlgorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
         Assert.NotNull(graph);
+        Assert.Equal(3, graph.FeatureNames.Length);
+        Assert.Equal(3, graph.AdjacencyMatrix.Rows);
+        Assert.Equal(3, graph.AdjacencyMatrix.Columns);
     }
 
     [Fact]
@@ -40,6 +43,9 @@ public class InformationTheoreticCausalDiscoveryTests
         var algo = new KraskovMIAlgorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
         Assert.NotNull(graph);
+        Assert.Equal(3, graph.FeatureNames.Length);
+        Assert.Equal(3, graph.AdjacencyMatrix.Rows);
+        Assert.Equal(3, graph.AdjacencyMatrix.Columns);
     }
 
     [Fact]
@@ -48,5 +54,8 @@ public class InformationTheoreticCausalDiscoveryTests
         var algo = new OCSEAlgorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
         Assert.NotNull(graph);
+        Assert.Equal(3, graph.FeatureNames.Length);
+        Assert.Equal(3, graph.AdjacencyMatrix.Rows);
+        Assert.Equal(3, graph.AdjacencyMatrix.Columns);
     }
 }

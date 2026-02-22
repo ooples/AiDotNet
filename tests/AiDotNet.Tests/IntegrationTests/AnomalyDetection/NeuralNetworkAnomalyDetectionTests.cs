@@ -32,7 +32,7 @@ public class NeuralNetworkAnomalyDetectionTests
     #region AutoencoderDetector Tests
 
     [Fact]
-    public void Autoencoder_Construction_DoesNotThrow()
+    public void Autoencoder_Construction_SetsDefaults()
     {
         var detector = new AutoencoderDetector<double>();
         Assert.NotNull(detector);
@@ -40,14 +40,24 @@ public class NeuralNetworkAnomalyDetectionTests
     }
 
     [Fact]
-    public void Autoencoder_FitAndPredict_Works()
+    public void Autoencoder_FitAndPredict_ProducesValidPredictions()
     {
         var detector = new AutoencoderDetector<double>(epochs: 5);
         var data = CreateTestData();
         detector.Fit(data);
         Assert.True(detector.IsFitted);
+
         var predictions = detector.Predict(data);
         Assert.Equal(data.Rows, predictions.Length);
+
+        // Every prediction should be either -1 (anomaly) or 1 (inlier)
+        for (int i = 0; i < predictions.Length; i++)
+            Assert.True(predictions[i] == -1.0 || predictions[i] == 1.0,
+                $"Prediction at index {i} should be -1 or 1, got {predictions[i]}");
+
+        // Scores should differentiate outlier from inlier
+        var scores = detector.ScoreAnomalies(data);
+        Assert.NotEqual(scores[0], scores[data.Rows - 1]);
     }
 
     #endregion

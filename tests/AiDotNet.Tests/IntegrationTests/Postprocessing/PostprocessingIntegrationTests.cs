@@ -32,12 +32,13 @@ public class PostprocessingIntegrationTests
     }
 
     [Fact]
-    public void TextPostprocessor_Process_ReturnsNonNull()
+    public void TextPostprocessor_Process_PreservesText()
     {
         using var processor = new TextPostprocessor<double>();
         var result = processor.Process("Hello  World");
         Assert.NotNull(result);
-        Assert.True(result.Length > 0);
+        Assert.Contains("Hello", result);
+        Assert.Contains("World", result);
     }
 
     [Fact]
@@ -52,7 +53,7 @@ public class PostprocessingIntegrationTests
         };
         using var processor = new TextPostprocessor<double>(opts);
         var result = processor.Process("Hello   World");
-        Assert.DoesNotContain("   ", result);
+        Assert.Equal("Hello World", result);
     }
 
     #endregion
@@ -67,13 +68,16 @@ public class PostprocessingIntegrationTests
     }
 
     [Fact]
-    public void StructuredOutputParser_ParseKeyValuePairs_ExtractsPairs()
+    public void StructuredOutputParser_ParseKeyValuePairs_ExtractsPairsCorrectly()
     {
         using var parser = new StructuredOutputParser<double>();
         var text = "Name: John\nAge: 30\nCity: New York";
         var result = parser.ParseKeyValuePairs(text);
         Assert.NotNull(result);
-        Assert.True(result.Count > 0);
+        Assert.Equal(3, result.Count);
+        Assert.Equal("John", result["Name"]);
+        Assert.Equal("30", result["Age"]);
+        Assert.Equal("New York", result["City"]);
     }
 
     #endregion
@@ -95,11 +99,13 @@ public class PostprocessingIntegrationTests
     }
 
     [Fact]
-    public void SpellCorrection_Process_ReturnsNonNull()
+    public void SpellCorrection_Process_ReturnsProcessedText()
     {
         using var corrector = new SpellCorrection<double>();
         var result = corrector.Process("hello world");
         Assert.NotNull(result);
+        Assert.True(result.Length > 0, "Spell correction should return non-empty text");
+        Assert.Contains("hello", result.ToLowerInvariant());
     }
 
     #endregion
@@ -114,7 +120,7 @@ public class PostprocessingIntegrationTests
     }
 
     [Fact]
-    public void EntityLinking_RegisterEntity_DoesNotThrow()
+    public void EntityLinking_RegisterEntity_PersistsEntity()
     {
         using var linker = new EntityLinking<double>();
         var entity = new Entity
@@ -124,6 +130,11 @@ public class PostprocessingIntegrationTests
             Confidence = 1.0,
         };
         linker.RegisterEntity(entity);
+
+        // Verify the entity was registered by linking it
+        var linked = linker.LinkEntity(entity);
+        Assert.NotNull(linked);
+        Assert.Equal("Microsoft", linked.Text);
     }
 
     #endregion
@@ -150,6 +161,7 @@ public class PostprocessingIntegrationTests
         Assert.Equal(10, entity.EndIndex);
         Assert.Equal(0.95, entity.Confidence, 1e-6);
         Assert.Equal("apple_inc", entity.NormalizedValue);
+        Assert.Equal("Apple Inc.", entity.CanonicalName);
         Assert.NotNull(entity.Attributes);
     }
 
@@ -220,7 +232,9 @@ public class PostprocessingIntegrationTests
 
         Assert.Equal("INV-001", invoice.InvoiceNumber);
         Assert.Equal("Acme Corp", invoice.Vendor);
+        Assert.Equal("John Doe", invoice.Customer);
         Assert.Equal(100.50m, invoice.Total);
+        Assert.Equal(10.05m, invoice.Tax);
         Assert.NotNull(invoice.LineItems);
     }
 
@@ -236,7 +250,9 @@ public class PostprocessingIntegrationTests
         };
 
         Assert.Equal("Store ABC", receipt.StoreName);
+        Assert.Equal("123 Main St", receipt.StoreAddress);
         Assert.Equal(25.99m, receipt.Total);
+        Assert.Equal("Credit Card", receipt.PaymentMethod);
         Assert.NotNull(receipt.Items);
     }
 

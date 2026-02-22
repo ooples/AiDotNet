@@ -58,13 +58,25 @@ public class ClusterBasedAnomalyDetectionTests
     }
 
     [Fact]
-    public void DBSCAN_FitAndPredict_Works()
+    public void DBSCAN_FitAndPredict_DetectsNoisePoints()
     {
         var detector = new DBSCANDetector<double>();
         var data = CreateTestData();
         detector.Fit(data);
+        Assert.True(detector.IsFitted);
+
         var predictions = detector.Predict(data);
         Assert.Equal(data.Rows, predictions.Length);
+
+        // The outlier at (100,100) should be detected as anomaly (-1)
+        var outlierPrediction = predictions[data.Rows - 1];
+        Assert.Equal(-1.0, outlierPrediction);
+
+        // At least some cluster points should be inliers (1)
+        var inlierCount = 0;
+        for (int i = 0; i < predictions.Length - 1; i++)
+            if (predictions[i] == 1.0) inlierCount++;
+        Assert.True(inlierCount > 0, "Expected at least some inlier predictions");
     }
 
     #endregion

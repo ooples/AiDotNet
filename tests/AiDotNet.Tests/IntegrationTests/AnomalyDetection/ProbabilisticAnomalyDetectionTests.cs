@@ -36,14 +36,22 @@ public class ProbabilisticAnomalyDetectionTests
     }
 
     [Fact]
-    public void Bayesian_FitAndPredict_Works()
+    public void Bayesian_FitAndPredict_DetectsOutlier()
     {
         var detector = new BayesianDetector<double>();
         var data = CreateTestData();
         detector.Fit(data);
         Assert.True(detector.IsFitted);
+
         var predictions = detector.Predict(data);
         Assert.Equal(data.Rows, predictions.Length);
+
+        // Outlier at (100,100) should be detected
+        Assert.Equal(-1.0, predictions[data.Rows - 1]);
+
+        // Scores should differentiate outlier
+        var scores = detector.ScoreAnomalies(data);
+        Assert.NotEqual(scores[0], scores[data.Rows - 1]);
     }
 
     #endregion

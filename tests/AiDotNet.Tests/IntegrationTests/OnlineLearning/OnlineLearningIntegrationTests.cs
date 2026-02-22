@@ -70,6 +70,10 @@ public class OnlineLearningIntegrationTests
         // Predict
         var predictions = clf.Predict(X);
         Assert.Equal(2, predictions.Length);
+
+        // Verify classifier learned the pattern: positive x => class 1, negative x => class 0
+        Assert.Equal(1.0, predictions[0]);
+        Assert.Equal(0.0, predictions[1]);
     }
 
     #endregion
@@ -111,6 +115,13 @@ public class OnlineLearningIntegrationTests
             reg.PartialFit(X, y);
 
         Assert.True(reg.IsTrained);
+
+        // Verify regression learned approximately y = x
+        var predictions = reg.Predict(X);
+        Assert.Equal(3, predictions.Length);
+        for (int i = 0; i < predictions.Length; i++)
+            Assert.True(Math.Abs(predictions[i] - y[i]) < 1.0,
+                $"Prediction {predictions[i]} should be close to {y[i]}");
     }
 
     #endregion
@@ -147,6 +158,16 @@ public class OnlineLearningIntegrationTests
         }
 
         Assert.True(clf.IsTrained);
+
+        // Verify classifier learned the pattern
+        var testX = new Matrix<double>(new double[,]
+        {
+            { 3.0, 0.0 },
+            { -3.0, 0.0 },
+        });
+        var preds = clf.Predict(testX);
+        Assert.Equal(1.0, preds[0]);
+        Assert.Equal(0.0, preds[1]);
     }
 
     #endregion

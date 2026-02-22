@@ -85,6 +85,20 @@ public class InitializationIntegrationTests
         Assert.True(hasNonZero);
     }
 
+    [Fact]
+    public void Lazy_InitializeBiases_ProducesZeros()
+    {
+        var strategy = new LazyInitializationStrategy<double>();
+        var biases = new Tensor<double>(new[] { 5 });
+        biases[0] = 99.0;
+        strategy.InitializeBiases(biases);
+
+        for (int i = 0; i < biases.Length; i++)
+        {
+            Assert.Equal(0.0, biases[i], 1e-10);
+        }
+    }
+
     #endregion
 
     #region ZeroInitializationStrategy Tests
@@ -226,6 +240,43 @@ public class InitializationIntegrationTests
         }
     }
 
+    [Fact]
+    public void FromFile_ValidJsonFile_LoadsBiases()
+    {
+        var tempFile = Path.GetTempFileName() + ".json";
+        try
+        {
+            var data = new
+            {
+                weights = new Dictionary<string, double[]>
+                {
+                    ["weights_0"] = new double[] { 1.0, 2.0, 3.0, 4.0 }
+                },
+                biases = new Dictionary<string, double[]>
+                {
+                    ["biases_0"] = new double[] { 0.1, 0.2 }
+                }
+            };
+            File.WriteAllText(tempFile, JsonConvert.SerializeObject(data));
+
+            var strategy = new FromFileInitializationStrategy<double>(tempFile);
+            // Load weights first (required to initialize internal state)
+            var weights = new Tensor<double>(new[] { 4 });
+            strategy.InitializeWeights(weights, 2, 2);
+
+            var biases = new Tensor<double>(new[] { 2 });
+            strategy.InitializeBiases(biases);
+
+            Assert.Equal(0.1, biases[0], 1e-10);
+            Assert.Equal(0.2, biases[1], 1e-10);
+        }
+        finally
+        {
+            if (File.Exists(tempFile))
+                File.Delete(tempFile);
+        }
+    }
+
     #endregion
 
     #region InitializationStrategies Factory Tests
@@ -236,6 +287,7 @@ public class InitializationIntegrationTests
         var strategy = InitializationStrategies<double>.Lazy;
         Assert.NotNull(strategy);
         Assert.True(strategy.IsLazy);
+        Assert.False(strategy.LoadFromExternal);
     }
 
     [Fact]
@@ -244,6 +296,7 @@ public class InitializationIntegrationTests
         var strategy = InitializationStrategies<double>.Eager;
         Assert.NotNull(strategy);
         Assert.False(strategy.IsLazy);
+        Assert.False(strategy.LoadFromExternal);
     }
 
     [Fact]
@@ -252,6 +305,7 @@ public class InitializationIntegrationTests
         var strategy = InitializationStrategies<double>.Zero;
         Assert.NotNull(strategy);
         Assert.False(strategy.IsLazy);
+        Assert.False(strategy.LoadFromExternal);
     }
 
     [Fact]
@@ -264,6 +318,10 @@ public class InitializationIntegrationTests
         var eager1 = InitializationStrategies<double>.Eager;
         var eager2 = InitializationStrategies<double>.Eager;
         Assert.Same(eager1, eager2);
+
+        var zero1 = InitializationStrategies<double>.Zero;
+        var zero2 = InitializationStrategies<double>.Zero;
+        Assert.Same(zero1, zero2);
     }
 
     [Fact]

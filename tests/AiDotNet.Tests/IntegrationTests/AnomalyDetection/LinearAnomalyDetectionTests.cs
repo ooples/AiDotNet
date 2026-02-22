@@ -30,7 +30,7 @@ public class LinearAnomalyDetectionTests
     #region PCADetector Tests
 
     [Fact]
-    public void PCA_Construction_DoesNotThrow()
+    public void PCA_Construction_SetsDefaults()
     {
         var detector = new PCADetector<double>();
         Assert.NotNull(detector);
@@ -38,14 +38,22 @@ public class LinearAnomalyDetectionTests
     }
 
     [Fact]
-    public void PCA_FitAndPredict_Works()
+    public void PCA_FitAndPredict_DetectsOutlier()
     {
         var detector = new PCADetector<double>();
         var data = CreateTestData();
         detector.Fit(data);
         Assert.True(detector.IsFitted);
+
         var predictions = detector.Predict(data);
         Assert.Equal(data.Rows, predictions.Length);
+
+        // PCA should detect (100,100,100) as anomalous
+        Assert.Equal(-1.0, predictions[data.Rows - 1]);
+
+        // Verify scores differentiate outlier from inlier
+        var scores = detector.ScoreAnomalies(data);
+        Assert.NotEqual(scores[0], scores[data.Rows - 1]);
     }
 
     #endregion

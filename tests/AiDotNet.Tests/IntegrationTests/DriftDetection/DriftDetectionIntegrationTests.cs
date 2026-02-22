@@ -46,7 +46,8 @@ public class DriftDetectionIntegrationTests
             }
         }
 
-        Assert.True(driftDetected || ddm.IsInDrift);
+        Assert.True(driftDetected, "DDM should detect drift after sustained high error rate");
+        Assert.True(ddm.IsInDrift, "DDM IsInDrift flag should be set after drift detection");
     }
 
     [Fact]
@@ -145,7 +146,8 @@ public class DriftDetectionIntegrationTests
             }
         }
 
-        Assert.True(driftDetected || eddm.IsInDrift || eddm.IsInWarning);
+        Assert.True(driftDetected || eddm.IsInDrift,
+            "EDDM should detect drift or be in drift state after high error rate");
     }
 
     [Fact]
@@ -198,7 +200,8 @@ public class DriftDetectionIntegrationTests
             }
         }
 
-        Assert.True(driftDetected || adwin.IsInDrift);
+        Assert.True(driftDetected, "ADWIN should detect drift after mean shift from 0 to 1");
+        Assert.True(adwin.IsInDrift, "ADWIN IsInDrift should be set after drift detection");
     }
 
     [Fact]
@@ -249,7 +252,8 @@ public class DriftDetectionIntegrationTests
             }
         }
 
-        Assert.True(driftDetected || ph.IsInDrift);
+        Assert.True(driftDetected, "PageHinkley should detect drift after mean shift from 0 to 5");
+        Assert.True(ph.IsInDrift, "PageHinkley IsInDrift should be set after drift detection");
     }
 
     [Fact]
@@ -269,37 +273,45 @@ public class DriftDetectionIntegrationTests
     #region Wrapper Tests
 
     [Fact]
-    public void DDMDriftDetector_BehavesLikeDDM()
+    public void DDMDriftDetector_StableNoDrift_DriftOnHighErrors()
     {
         var detector = new DDMDriftDetector<double>();
-        for (int i = 0; i < 50; i++)
-            detector.AddObservation(0.0);
+        // Stable period
+        for (int i = 0; i < 100; i++)
+            detector.AddObservation(i % 20 == 0 ? 1.0 : 0.0);
 
-        Assert.False(detector.IsInDrift);
+        Assert.False(detector.IsInDrift, "DDMDriftDetector should not detect drift with 5% errors");
+        Assert.Equal(100, detector.ObservationCount);
+
         detector.Reset();
         Assert.Equal(0, detector.ObservationCount);
+        Assert.False(detector.IsInDrift);
     }
 
     [Fact]
-    public void EDDMDriftDetector_BehavesLikeEDDM()
+    public void EDDMDriftDetector_StableNoDrift()
     {
         var detector = new EDDMDriftDetector<double>();
-        for (int i = 0; i < 50; i++)
+        for (int i = 0; i < 100; i++)
             detector.AddObservation(0.0);
 
-        Assert.False(detector.IsInDrift);
+        Assert.False(detector.IsInDrift, "EDDMDriftDetector should not detect drift with zero errors");
+        Assert.Equal(100, detector.ObservationCount);
+
         detector.Reset();
         Assert.Equal(0, detector.ObservationCount);
     }
 
     [Fact]
-    public void PageHinkleyDriftDetector_BehavesLikePageHinkley()
+    public void PageHinkleyDriftDetector_StableNoDrift()
     {
         var detector = new PageHinkleyDriftDetector<double>();
-        for (int i = 0; i < 50; i++)
+        for (int i = 0; i < 100; i++)
             detector.AddObservation(0.0);
 
-        Assert.False(detector.IsInDrift);
+        Assert.False(detector.IsInDrift, "PageHinkleyDriftDetector should not detect drift with stable stream");
+        Assert.Equal(100, detector.ObservationCount);
+
         detector.Reset();
         Assert.Equal(0, detector.ObservationCount);
     }

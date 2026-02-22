@@ -36,14 +36,23 @@ public class DistanceBasedAnomalyDetectionTests
     }
 
     [Fact]
-    public void LOF_FitAndPredict_Works()
+    public void LOF_FitAndPredict_DetectsOutlier()
     {
         var detector = new LocalOutlierFactor<double>();
         var data = CreateTestData();
         detector.Fit(data);
         Assert.True(detector.IsFitted);
+
         var predictions = detector.Predict(data);
         Assert.Equal(data.Rows, predictions.Length);
+
+        // LOF should detect (100,100) as outlier (-1) vs cluster at (1,2)
+        Assert.Equal(-1.0, predictions[data.Rows - 1]);
+
+        // Verify anomaly scores differ for outlier vs inlier
+        var scores = detector.ScoreAnomalies(data);
+        Assert.Equal(data.Rows, scores.Length);
+        Assert.NotEqual(scores[0], scores[data.Rows - 1]);
     }
 
     #endregion

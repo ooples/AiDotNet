@@ -73,13 +73,13 @@ public class TimeSeriesDecompositionIntegrationTests
     }
 
     [Fact]
-    public void Additive_GetComponents_ContainsTrendAndSeasonal()
+    public void Additive_GetComponents_ReturnsMultipleComponents()
     {
         var ts = CreateSeasonalTimeSeries();
         var decomp = new AdditiveDecomposition<double>(ts);
         var components = decomp.GetComponents();
         Assert.NotNull(components);
-        Assert.True(components.Count > 0, "Should have at least one component");
+        Assert.True(components.Count >= 2, $"Should have at least 2 components (trend+residual), got {components.Count}");
     }
 
     [Fact]
@@ -240,11 +240,10 @@ public class TimeSeriesDecompositionIntegrationTests
         var decomp = new HodrickPrescottDecomposition<double>(ts, lambda: 1600);
         var components = decomp.GetComponents();
 
-        if (components.ContainsKey(DecompositionComponentType.Trend))
-        {
-            var trend = (Vector<double>)components[DecompositionComponentType.Trend];
-            Assert.Equal(ts.Length, trend.Length);
-        }
+        Assert.True(components.ContainsKey(DecompositionComponentType.Trend),
+            "HP filter must produce a Trend component");
+        var trend = (Vector<double>)components[DecompositionComponentType.Trend];
+        Assert.Equal(ts.Length, trend.Length);
     }
 
     #endregion

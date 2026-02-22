@@ -12,6 +12,40 @@ public class LinkFunctionsIntegrationTests
 {
     private const double Tolerance = 1e-4;
 
+    #region Edge Case Tests
+
+    [Fact]
+    public void LogitLink_NearBoundary_ProducesLargeValues()
+    {
+        var link = new LogitLink<double>();
+        // Near 0, logit approaches -infinity
+        var nearZero = link.Link(0.0001);
+        Assert.True(nearZero < -5.0, $"Logit(0.0001) should be large negative, got {nearZero}");
+        // Near 1, logit approaches +infinity
+        var nearOne = link.Link(0.9999);
+        Assert.True(nearOne > 5.0, $"Logit(0.9999) should be large positive, got {nearOne}");
+    }
+
+    [Fact]
+    public void ProbitLink_NearBoundary_ProducesLargeValues()
+    {
+        var link = new ProbitLink<double>();
+        var nearZero = link.Link(0.001);
+        Assert.True(nearZero < -2.0, $"Probit(0.001) should be large negative, got {nearZero}");
+        var nearOne = link.Link(0.999);
+        Assert.True(nearOne > 2.0, $"Probit(0.999) should be large positive, got {nearOne}");
+    }
+
+    [Fact]
+    public void LogLink_VerySmallPositive_ProducesLargeNegative()
+    {
+        var link = new LogLink<double>();
+        var result = link.Link(0.001);
+        Assert.True(result < -5.0, $"Log(0.001) should be large negative, got {result}");
+    }
+
+    #endregion
+
     #region LogitLink Tests
 
     [Fact]
@@ -383,6 +417,17 @@ public class LinkFunctionsIntegrationTests
     {
         var allLinks = LinkFunctionFactory<double>.GetAllLinkFunctions();
         Assert.Equal(8, allLinks.Count);
+
+        // Verify all expected link functions are present
+        var names = new HashSet<string>(allLinks.Values.Select(l => l.Name));
+        Assert.Contains("Identity", names);
+        Assert.Contains("Logit", names);
+        Assert.Contains("Log", names);
+        Assert.Contains("Probit", names);
+        Assert.Contains("Inverse", names);
+        Assert.Contains("CLogLog", names);
+        Assert.Contains("Sqrt", names);
+        Assert.Contains("InverseSquared", names);
     }
 
     [Fact]

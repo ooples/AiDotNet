@@ -83,6 +83,8 @@ public class DistributionsIntegrationTests
         Assert.NotNull(clone);
         Assert.Equal(dist.Mean, clone.Mean, Tolerance);
         Assert.Equal(dist.Variance, clone.Variance, Tolerance);
+        // Verify independence: clone is a separate instance
+        Assert.NotSame(dist, clone);
     }
 
     [Fact]
@@ -302,11 +304,14 @@ public class DistributionsIntegrationTests
     }
 
     [Fact]
-    public void LogNormal_Clone_Works()
+    public void LogNormal_Clone_ReturnsIndependentCopy()
     {
         var dist = new LogNormalDistribution<double>(1.0, 0.5);
         var clone = dist.Clone();
         Assert.NotNull(clone);
+        Assert.NotSame(dist, clone);
+        Assert.Equal(dist.Mean, clone.Mean, Tolerance);
+        Assert.Equal(dist.Variance, clone.Variance, Tolerance);
     }
 
     #endregion

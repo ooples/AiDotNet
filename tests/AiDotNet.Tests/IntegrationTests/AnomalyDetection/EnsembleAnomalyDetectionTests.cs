@@ -38,14 +38,22 @@ public class EnsembleAnomalyDetectionTests
     }
 
     [Fact]
-    public void Averaging_FitAndPredict_Works()
+    public void Averaging_FitAndPredict_DetectsOutlier()
     {
         var detector = new AveragingDetector<double>();
         var data = CreateTestData();
         detector.Fit(data);
         Assert.True(detector.IsFitted);
+
         var predictions = detector.Predict(data);
         Assert.Equal(data.Rows, predictions.Length);
+
+        // Ensemble should detect the extreme outlier at (100,100,100)
+        Assert.Equal(-1.0, predictions[data.Rows - 1]);
+
+        // Verify scores differentiate outlier from inlier
+        var scores = detector.ScoreAnomalies(data);
+        Assert.NotEqual(scores[0], scores[data.Rows - 1]);
     }
 
     #endregion

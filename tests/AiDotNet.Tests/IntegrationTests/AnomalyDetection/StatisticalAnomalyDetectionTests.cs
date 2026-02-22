@@ -48,13 +48,23 @@ public class StatisticalAnomalyDetectionTests
     }
 
     [Fact]
-    public void ZScore_Predict_ReturnsCorrectLength()
+    public void ZScore_Predict_DetectsStatisticalOutlier()
     {
         var detector = new ZScoreDetector<double>();
         var data = CreateTestData();
         detector.Fit(data);
+
         var predictions = detector.Predict(data);
         Assert.Equal(data.Rows, predictions.Length);
+
+        // The outlier at (100,100) should have a z-score far above threshold
+        Assert.Equal(-1.0, predictions[data.Rows - 1]);
+
+        // Verify scores: outlier should have much higher anomaly score
+        var scores = detector.ScoreAnomalies(data);
+        double outlierScore = scores[data.Rows - 1];
+        double inlierScore = scores[0];
+        Assert.True(outlierScore > inlierScore, "Outlier score should exceed inlier score");
     }
 
     #endregion

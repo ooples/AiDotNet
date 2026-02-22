@@ -51,6 +51,8 @@ public class OCRTextDetectionTests
         var input = CreateSmallImage();
         var output = model.Predict(input);
         Assert.NotNull(output);
+        Assert.True(output.Shape.Length > 0, "Output should have non-empty shape");
+        Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
     }
 
     [Fact]
@@ -92,6 +94,8 @@ public class OCRTextDetectionTests
         var input = CreateSmallImage();
         var output = model.Predict(input);
         Assert.NotNull(output);
+        Assert.True(output.Shape.Length > 0, "Output should have non-empty shape");
+        Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
     }
 
     [Fact]
@@ -123,6 +127,8 @@ public class OCRTextDetectionTests
         var input = CreateSmallImage();
         var output = model.Predict(input);
         Assert.NotNull(output);
+        Assert.True(output.Shape.Length > 0, "Output should have non-empty shape");
+        Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
     }
 
     [Fact]
@@ -154,6 +160,8 @@ public class OCRTextDetectionTests
         var input = CreateSmallImage();
         var output = model.Predict(input);
         Assert.NotNull(output);
+        Assert.True(output.Shape.Length > 0, "Output should have non-empty shape");
+        Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
     }
 
     [Fact]

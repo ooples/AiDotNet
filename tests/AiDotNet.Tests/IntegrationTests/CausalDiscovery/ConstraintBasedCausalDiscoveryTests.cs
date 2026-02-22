@@ -26,77 +26,86 @@ public class ConstraintBasedCausalDiscoveryTests
 
     private static readonly string[] FeatureNames = ["X0", "X1", "X2"];
 
-    [Fact]
-    public void PC_Construction_And_Discover()
+    private static void AssertValidGraph(AiDotNet.CausalDiscovery.CausalGraph<double> graph)
     {
-        var algo = new PCAlgorithm<double>();
-        Assert.NotNull(algo);
-        var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
         Assert.NotNull(graph);
         Assert.Equal(3, graph.FeatureNames.Length);
+        Assert.Equal("X0", graph.FeatureNames[0]);
+        Assert.Equal("X1", graph.FeatureNames[1]);
+        Assert.Equal("X2", graph.FeatureNames[2]);
+        Assert.Equal(3, graph.AdjacencyMatrix.Rows);
+        Assert.Equal(3, graph.AdjacencyMatrix.Columns);
     }
 
     [Fact]
-    public void FCI_Construction_And_Discover()
+    public void PC_Discover_ReturnsValidGraph()
+    {
+        var algo = new PCAlgorithm<double>();
+        var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
+        AssertValidGraph(graph);
+    }
+
+    [Fact]
+    public void FCI_Discover_ReturnsValidGraph()
     {
         var algo = new FCIAlgorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
-        Assert.NotNull(graph);
+        AssertValidGraph(graph);
     }
 
     [Fact]
-    public void RFCI_Construction_And_Discover()
+    public void RFCI_Discover_ReturnsValidGraph()
     {
         var algo = new RFCIAlgorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
-        Assert.NotNull(graph);
+        AssertValidGraph(graph);
     }
 
     [Fact]
-    public void CPC_Construction_And_Discover()
+    public void CPC_Discover_ReturnsValidGraph()
     {
         var algo = new CPCAlgorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
-        Assert.NotNull(graph);
+        AssertValidGraph(graph);
     }
 
     [Fact]
-    public void MMPC_Construction_And_Discover()
+    public void MMPC_Discover_ReturnsValidGraph()
     {
         var algo = new MMPCAlgorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
-        Assert.NotNull(graph);
+        AssertValidGraph(graph);
     }
 
     [Fact]
-    public void IAMB_Construction_And_Discover()
+    public void IAMB_Discover_ReturnsValidGraph()
     {
         var algo = new IAMBAlgorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
-        Assert.NotNull(graph);
+        AssertValidGraph(graph);
     }
 
     [Fact]
-    public void FastIAMB_Construction_And_Discover()
+    public void FastIAMB_Discover_ReturnsValidGraph()
     {
         var algo = new FastIAMBAlgorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
-        Assert.NotNull(graph);
+        AssertValidGraph(graph);
     }
 
     [Fact]
-    public void MarkovBlanket_Construction_And_Discover()
+    public void MarkovBlanket_Discover_ReturnsValidGraph()
     {
         var algo = new MarkovBlanketAlgorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
-        Assert.NotNull(graph);
+        AssertValidGraph(graph);
     }
 
     [Fact]
-    public void CDNOD_Construction_And_Discover()
+    public void CDNOD_Discover_ReturnsValidGraph()
     {
         var algo = new CDNODAlgorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
-        Assert.NotNull(graph);
+        AssertValidGraph(graph);
     }
 }

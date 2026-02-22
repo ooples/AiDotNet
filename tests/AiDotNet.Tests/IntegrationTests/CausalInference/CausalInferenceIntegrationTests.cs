@@ -42,6 +42,14 @@ public class CausalInferenceIntegrationTests
         return (new Matrix<double>(data), new Vector<double>(treatArr), new Vector<double>(outcomeArr));
     }
 
+    private static Vector<int> ToIntTreatment(Vector<double> treatment)
+    {
+        var result = new Vector<int>(new int[treatment.Length]);
+        for (int i = 0; i < treatment.Length; i++)
+            result[i] = (int)treatment[i];
+        return result;
+    }
+
     #region SLearner Tests
 
     [Fact]
@@ -53,23 +61,21 @@ public class CausalInferenceIntegrationTests
     }
 
     [Fact]
-    public void SLearner_Fit_DoesNotThrow()
-    {
-        var learner = new SLearner<double>(maxIterations: 50, learningRate: 0.01);
-        var (features, treatment, outcome) = CreateSyntheticData();
-        learner.Fit(features, treatment, outcome);
-        Assert.True(learner.IsTrained);
-    }
-
-    [Fact]
-    public void SLearner_EstimateTreatmentEffect_ReturnsValues()
+    public void SLearner_EstimateTreatmentEffect_ReturnsPositiveEffect()
     {
         var learner = new SLearner<double>(maxIterations: 100, learningRate: 0.01);
         var (features, treatment, outcome) = CreateSyntheticData();
         learner.Fit(features, treatment, outcome);
+        Assert.True(learner.IsTrained);
 
         var effects = learner.EstimateTreatmentEffect(features);
         Assert.Equal(features.Rows, effects.Length);
+
+        // Treatment effect is +5 in synthetic data; at minimum effects should be non-zero
+        double avgEffect = 0;
+        for (int i = 0; i < effects.Length; i++) avgEffect += effects[i];
+        avgEffect /= effects.Length;
+        Assert.True(avgEffect > 0, $"Expected positive average treatment effect, got {avgEffect}");
     }
 
     #endregion
@@ -77,31 +83,20 @@ public class CausalInferenceIntegrationTests
     #region TLearner Tests
 
     [Fact]
-    public void TLearner_Construction_WithDefaults()
-    {
-        var learner = new TLearner<double>();
-        Assert.NotNull(learner);
-        Assert.False(learner.IsTrained);
-    }
-
-    [Fact]
-    public void TLearner_Fit_DoesNotThrow()
-    {
-        var learner = new TLearner<double>(maxIterations: 50, learningRate: 0.01);
-        var (features, treatment, outcome) = CreateSyntheticData();
-        learner.Fit(features, treatment, outcome);
-        Assert.True(learner.IsTrained);
-    }
-
-    [Fact]
-    public void TLearner_EstimateTreatmentEffect_ReturnsValues()
+    public void TLearner_EstimateTreatmentEffect_ReturnsPositiveEffect()
     {
         var learner = new TLearner<double>(maxIterations: 100, learningRate: 0.01);
         var (features, treatment, outcome) = CreateSyntheticData();
         learner.Fit(features, treatment, outcome);
+        Assert.True(learner.IsTrained);
 
         var effects = learner.EstimateTreatmentEffect(features);
         Assert.Equal(features.Rows, effects.Length);
+
+        double avgEffect = 0;
+        for (int i = 0; i < effects.Length; i++) avgEffect += effects[i];
+        avgEffect /= effects.Length;
+        Assert.True(avgEffect > 0, $"Expected positive average treatment effect, got {avgEffect}");
     }
 
     #endregion
@@ -109,20 +104,21 @@ public class CausalInferenceIntegrationTests
     #region XLearner Tests
 
     [Fact]
-    public void XLearner_Construction_WithDefaults()
+    public void XLearner_EstimateTreatmentEffect_ReturnsValues()
     {
-        var learner = new XLearner<double>();
-        Assert.NotNull(learner);
-        Assert.False(learner.IsTrained);
-    }
-
-    [Fact]
-    public void XLearner_Fit_DoesNotThrow()
-    {
-        var learner = new XLearner<double>(maxIterations: 50, learningRate: 0.01);
+        var learner = new XLearner<double>(maxIterations: 100, learningRate: 0.01);
         var (features, treatment, outcome) = CreateSyntheticData();
         learner.Fit(features, treatment, outcome);
         Assert.True(learner.IsTrained);
+
+        var effects = learner.EstimateTreatmentEffect(features);
+        Assert.Equal(features.Rows, effects.Length);
+
+        // XLearner should detect a positive treatment effect
+        double avgEffect = 0;
+        for (int i = 0; i < effects.Length; i++) avgEffect += effects[i];
+        avgEffect /= effects.Length;
+        Assert.True(avgEffect > 0, $"Expected positive average treatment effect, got {avgEffect}");
     }
 
     #endregion
@@ -130,20 +126,15 @@ public class CausalInferenceIntegrationTests
     #region DoublyRobustEstimator Tests
 
     [Fact]
-    public void DoublyRobust_Construction_WithDefaults()
-    {
-        var dr = new DoublyRobustEstimator<double>();
-        Assert.NotNull(dr);
-        Assert.False(dr.IsTrained);
-    }
-
-    [Fact]
-    public void DoublyRobust_Fit_DoesNotThrow()
+    public void DoublyRobust_EstimateTreatmentEffect_ReturnsValues()
     {
         var dr = new DoublyRobustEstimator<double>();
         var (features, treatment, outcome) = CreateSyntheticData();
         dr.Fit(features, treatment, outcome);
         Assert.True(dr.IsTrained);
+
+        var effects = dr.EstimateTreatmentEffect(features);
+        Assert.Equal(features.Rows, effects.Length);
     }
 
     #endregion
@@ -151,20 +142,15 @@ public class CausalInferenceIntegrationTests
     #region InverseProbabilityWeighting Tests
 
     [Fact]
-    public void IPW_Construction_WithDefaults()
-    {
-        var ipw = new InverseProbabilityWeighting<double>();
-        Assert.NotNull(ipw);
-        Assert.False(ipw.IsTrained);
-    }
-
-    [Fact]
-    public void IPW_Fit_DoesNotThrow()
+    public void IPW_EstimateTreatmentEffect_ReturnsValues()
     {
         var ipw = new InverseProbabilityWeighting<double>();
         var (features, treatment, outcome) = CreateSyntheticData();
         ipw.Fit(features, treatment, outcome);
         Assert.True(ipw.IsTrained);
+
+        var effects = ipw.EstimateTreatmentEffect(features);
+        Assert.Equal(features.Rows, effects.Length);
     }
 
     #endregion
@@ -172,20 +158,15 @@ public class CausalInferenceIntegrationTests
     #region PropensityScoreMatching Tests
 
     [Fact]
-    public void PropensityScoreMatching_Construction_WithDefaults()
-    {
-        var psm = new PropensityScoreMatching<double>();
-        Assert.NotNull(psm);
-        Assert.False(psm.IsTrained);
-    }
-
-    [Fact]
-    public void PropensityScoreMatching_Fit_DoesNotThrow()
+    public void PropensityScoreMatching_EstimateTreatmentEffect_ReturnsValues()
     {
         var psm = new PropensityScoreMatching<double>();
         var (features, treatment, outcome) = CreateSyntheticData();
         psm.Fit(features, treatment, outcome);
         Assert.True(psm.IsTrained);
+
+        var effects = psm.EstimateTreatmentEffect(features);
+        Assert.Equal(features.Rows, effects.Length);
     }
 
     #endregion
@@ -193,24 +174,16 @@ public class CausalInferenceIntegrationTests
     #region CausalForest Tests
 
     [Fact]
-    public void CausalForest_Construction()
-    {
-        var forest = new CausalForest<double>();
-        Assert.NotNull(forest);
-    }
-
-    [Fact]
-    public void CausalForest_Fit_DoesNotThrow()
+    public void CausalForest_FitAndEstimate_ReturnsEffects()
     {
         var forest = new CausalForest<double>(numTrees: 5, maxDepth: 3);
         var (features, treatment, outcome) = CreateSyntheticData();
-
-        // CausalForest.Fit uses Vector<int> for treatment
-        var treatmentInt = new Vector<int>(new int[treatment.Length]);
-        for (int i = 0; i < treatment.Length; i++)
-            treatmentInt[i] = (int)treatment[i];
+        var treatmentInt = ToIntTreatment(treatment);
 
         forest.Fit(features, treatmentInt, outcome);
+
+        var effects = forest.EstimateTreatmentEffect(features);
+        Assert.Equal(features.Rows, effects.Length);
     }
 
     #endregion

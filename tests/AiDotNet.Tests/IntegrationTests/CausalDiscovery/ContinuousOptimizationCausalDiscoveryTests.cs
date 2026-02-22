@@ -26,83 +26,91 @@ public class ContinuousOptimizationCausalDiscoveryTests
 
     private static readonly string[] FeatureNames = ["X0", "X1", "X2"];
 
+    private static void AssertValidGraph(AiDotNet.CausalDiscovery.CausalGraph<double> graph)
+    {
+        Assert.NotNull(graph);
+        Assert.Equal(3, graph.FeatureNames.Length);
+        Assert.Equal(3, graph.AdjacencyMatrix.Rows);
+        Assert.Equal(3, graph.AdjacencyMatrix.Columns);
+    }
+
     [Fact]
-    public void NOTEARSLinear_Construction_And_Discover()
+    public void NOTEARSLinear_Discover_ReturnsValidGraph()
     {
         var algo = new NOTEARSLinear<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
-        Assert.NotNull(graph);
+        AssertValidGraph(graph);
     }
 
     [Fact]
-    public void NOTEARSNonlinear_Construction_And_Discover()
+    public void NOTEARSNonlinear_Discover_ReturnsValidGraph()
     {
         var algo = new NOTEARSNonlinear<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
-        Assert.NotNull(graph);
+        AssertValidGraph(graph);
     }
 
     [Fact]
-    public void NOTEARSLowRank_Construction_And_Discover()
+    public void NOTEARSLowRank_Discover_ReturnsValidGraph()
     {
         var algo = new NOTEARSLowRank<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
-        Assert.NotNull(graph);
+        AssertValidGraph(graph);
     }
 
     [Fact]
-    public void NOTEARSSobolev_Construction_And_Discover()
+    public void NOTEARSSobolev_Discover_ReturnsValidGraph()
     {
         var algo = new NOTEARSSobolev<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
-        Assert.NotNull(graph);
+        AssertValidGraph(graph);
     }
 
     [Fact]
-    public void DAGMALinear_Construction_And_Discover()
+    public void DAGMALinear_Discover_ReturnsValidGraph()
     {
         var algo = new DAGMALinear<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
-        Assert.NotNull(graph);
+        AssertValidGraph(graph);
     }
 
     [Fact]
-    public void DAGMANonlinear_Construction_And_Discover()
+    public void DAGMANonlinear_Discover_ReturnsValidGraph()
     {
         var algo = new DAGMANonlinear<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
-        Assert.NotNull(graph);
+        AssertValidGraph(graph);
     }
 
     [Fact]
-    public void GOLEM_Construction_And_Discover()
+    public void GOLEM_Discover_ReturnsValidGraph()
     {
         var algo = new GOLEMAlgorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
-        Assert.NotNull(graph);
+        AssertValidGraph(graph);
     }
 
     [Fact]
-    public void MCSL_Construction_And_Discover()
+    public void MCSL_Discover_ReturnsValidGraph()
     {
         var algo = new MCSLAlgorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
-        Assert.NotNull(graph);
+        AssertValidGraph(graph);
     }
 
     [Fact]
-    public void NoCurl_Construction_And_Discover()
+    public void NoCurl_Discover_ReturnsValidGraph()
     {
         var algo = new NoCurlAlgorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
-        Assert.NotNull(graph);
+        AssertValidGraph(graph);
     }
 
     [Fact]
-    public void CORL_Construction_And_Discover()
+    public void CORL_Discover_ReturnsValidGraph()
     {
         var algo = new CORLAlgorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
-        Assert.NotNull(graph);
+        AssertValidGraph(graph);
     }
 }

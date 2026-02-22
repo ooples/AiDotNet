@@ -31,11 +31,14 @@ public class MemoryIntegrationTests
         pool.Return(tensor1);
 
         var stats = pool.GetStatistics();
-        Assert.True(stats.PooledTensorCount >= 1);
+        Assert.True(stats.PooledTensorCount >= 1, "Pool should contain the returned tensor");
 
         var tensor2 = pool.Rent(new[] { 5 });
         Assert.NotNull(tensor2);
         Assert.Equal(5, tensor2.Shape[0]);
+
+        // Verify reuse: tensor2 should be the same instance as tensor1
+        Assert.Same(tensor1, tensor2);
         pool.Return(tensor2);
     }
 
@@ -104,7 +107,8 @@ public class MemoryIntegrationTests
 
         // After disposing the PooledTensor, it should be back in the pool
         var stats = pool.GetStatistics();
-        Assert.True(stats.PooledTensorCount >= 0);
+        Assert.True(stats.PooledTensorCount >= 1,
+            $"After auto-return, pool should have at least 1 tensor, got {stats.PooledTensorCount}");
     }
 
     [Fact]
