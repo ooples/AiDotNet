@@ -15,4 +15,19 @@ namespace AiDotNet.ComputerVision.Segmentation.Foundation;
 /// </remarks>
 public class Mask2FormerOptions : NeuralNetworkOptions
 {
+    /// <summary>Initializes a new instance with default values.</summary>
+    public Mask2FormerOptions() { }
+
+    /// <summary>Initializes a new instance by copying from another instance.</summary>
+    /// <param name="other">The options instance to copy from.</param>
+    /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
+    public Mask2FormerOptions(Mask2FormerOptions other)
+    {
+        if (other == null)
+            throw new ArgumentNullException(nameof(other));
+
+        Seed = other.Seed;
+        EncoderLayerCount = other.EncoderLayerCount;
+    }
+
 }

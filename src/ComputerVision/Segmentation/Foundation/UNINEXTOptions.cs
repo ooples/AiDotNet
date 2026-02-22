@@ -13,4 +13,19 @@ namespace AiDotNet.ComputerVision.Segmentation.Foundation;
 /// </remarks>
 public class UNINEXTOptions : NeuralNetworkOptions
 {
+    /// <summary>Initializes a new instance with default values.</summary>
+    public UNINEXTOptions() { }
+
+    /// <summary>Initializes a new instance by copying from another instance.</summary>
+    /// <param name="other">The options instance to copy from.</param>
+    /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
+    public UNINEXTOptions(UNINEXTOptions other)
+    {
+        if (other == null)
+            throw new ArgumentNullException(nameof(other));
+
+        Seed = other.Seed;
+        EncoderLayerCount = other.EncoderLayerCount;
+    }
+
 }

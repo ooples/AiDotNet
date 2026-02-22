@@ -14,6 +14,22 @@ namespace AiDotNet.ComputerVision.Segmentation.Foundation;
 /// </remarks>
 public class XDecoderOptions : NeuralNetworkOptions
 {
+    /// <summary>Initializes a new instance with default values.</summary>
+    public XDecoderOptions() { }
+
+    /// <summary>Initializes a new instance by copying from another instance.</summary>
+    /// <param name="other">The options instance to copy from.</param>
+    /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
+    public XDecoderOptions(XDecoderOptions other)
+    {
+        if (other == null)
+            throw new ArgumentNullException(nameof(other));
+
+        Seed = other.Seed;
+        EncoderLayerCount = other.EncoderLayerCount;
+        NumStuffClasses = other.NumStuffClasses;
+    }
+
     /// <summary>
     /// Number of stuff (non-countable background) classes for panoptic segmentation.
     /// When null, defaults to numClasses / 3.
