@@ -52,6 +52,11 @@ public class ARModel<T> : TimeSeriesModelBase<T>
     private Vector<T> _arCoefficients;
 
     /// <summary>
+    /// The time series values from training, used for in-sample predictions via Predict(Matrix).
+    /// </summary>
+    private Vector<T> _trainedSeries;
+
+    /// <summary>
     /// The number of past observations to consider (the AR order).
     /// </summary>
     /// <remarks>
@@ -140,6 +145,7 @@ public class ARModel<T> : TimeSeriesModelBase<T>
         _maxIterations = options.MaxIterations;
         _tolerance = options.Tolerance;
         _arCoefficients = Vector<T>.Empty();
+        _trainedSeries = Vector<T>.Empty();
     }
 
     /// <summary>
@@ -264,13 +270,27 @@ public class ARModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     public override Vector<T> Predict(Matrix<T> input)
     {
-        // For AR models, the input should contain time series values as the first column
-        // or be a single-column matrix representing the full time series
-        Vector<T> y = input.Columns == 1 ? input.GetColumn(0) : input.GetColumn(0);
-        Vector<T> predictions = new Vector<T>(input.Rows);
-        for (int t = 0; t < input.Rows; t++)
+        // Use the stored training series for in-sample predictions.
+        // The matrix rows indicate how many predictions to make.
+        var series = _trainedSeries.Length > 0 ? _trainedSeries : input.GetColumn(0);
+        int horizon = input.Rows;
+        Vector<T> predictions = new Vector<T>(horizon);
+        for (int t = 0; t < horizon; t++)
         {
-            predictions[t] = Predict(y, t);
+            if (t < series.Length)
+            {
+                predictions[t] = Predict(series, t);
+            }
+            else
+            {
+                // Out-of-sample: predict using available history including prior predictions
+                var extended = new Vector<T>(series.Length + (t - series.Length + 1));
+                for (int j = 0; j < series.Length; j++)
+                    extended[j] = series[j];
+                for (int j = series.Length; j <= t; j++)
+                    extended[j] = predictions[j];
+                predictions[t] = Predict(extended, t);
+            }
         }
 
         return predictions;
@@ -389,6 +409,13 @@ public class ARModel<T> : TimeSeriesModelBase<T>
         {
             writer.Write(Convert.ToDouble(_arCoefficients[i]));
         }
+
+        // Serialize training series for in-sample prediction support
+        writer.Write(_trainedSeries.Length);
+        for (int i = 0; i < _trainedSeries.Length; i++)
+        {
+            writer.Write(Convert.ToDouble(_trainedSeries[i]));
+        }
     }
 
     /// <summary>
@@ -417,6 +444,21 @@ public class ARModel<T> : TimeSeriesModelBase<T>
         for (int i = 0; i < _arOrder; i++)
         {
             _arCoefficients[i] = NumOps.FromDouble(reader.ReadDouble());
+        }
+
+        // Deserialize training series if available
+        if (reader.BaseStream.Position < reader.BaseStream.Length)
+        {
+            int seriesLength = reader.ReadInt32();
+            _trainedSeries = new Vector<T>(seriesLength);
+            for (int i = 0; i < seriesLength; i++)
+            {
+                _trainedSeries[i] = NumOps.FromDouble(reader.ReadDouble());
+            }
+        }
+        else
+        {
+            _trainedSeries = Vector<T>.Empty();
         }
     }
 
@@ -615,6 +657,7 @@ public class ARModel<T> : TimeSeriesModelBase<T>
     public override void Reset()
     {
         _arCoefficients = Vector<T>.Empty();
+        _trainedSeries = Vector<T>.Empty();
     }
 
     /// <summary>
@@ -655,6 +698,16 @@ public class ARModel<T> : TimeSeriesModelBase<T>
             }
         }
 
+        // Copy stored training series
+        if (_trainedSeries.Length > 0)
+        {
+            clone._trainedSeries = new Vector<T>(_trainedSeries.Length);
+            for (int i = 0; i < _trainedSeries.Length; i++)
+            {
+                clone._trainedSeries[i] = _trainedSeries[i];
+            }
+        }
+
         return clone;
     }
 
@@ -682,6 +735,9 @@ public class ARModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     protected override void TrainCore(Matrix<T> x, Vector<T> y)
     {
+        // Store training series for in-sample predictions via Predict(Matrix<T>)
+        _trainedSeries = y;
+
         // Initialize coefficients
         _arCoefficients = new Vector<T>(_arOrder);
 
