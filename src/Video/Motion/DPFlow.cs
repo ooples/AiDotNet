@@ -17,6 +17,7 @@ namespace AiDotNet.Video.Motion;
 /// <list type="bullet">
 /// <item>Paper: "DPFlow: Dual-Pyramid Optical Flow" (Morimitsu et al., CVPR 2025)</item>
 /// </list></para>
+/// <para><b>For Beginners:</b> DPFlow (Dual-Path Flow) estimates optical flow using parallel spatial and temporal processing paths. The dual-path design captures both fine spatial detail and broad temporal motion patterns.</para>
 /// <para>
 /// DPFlow combines the advantages of image pyramids (capturing large motions) and feature pyramids (rich semantics) in a unified dual-pyramid framework.
 /// </para>

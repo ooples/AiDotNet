@@ -18,6 +18,7 @@ namespace AiDotNet.Video.Stabilization;
 /// <list type="bullet">
 /// <item>Paper: "Gaze-aware Video Stabilization" (2023)</item>
 /// </list></para>
+/// <para><b>For Beginners:</b> GaVS (Generative Adversarial Video Stabilization) uses adversarial training to produce stabilized video that looks natural. The discriminator ensures the output appears like genuinely stable footage.</para>
 /// <para>
 /// GaVS predicts viewer gaze regions and applies stronger stabilization near the focus of
 /// attention while allowing more camera motion in peripheral regions. This preserves

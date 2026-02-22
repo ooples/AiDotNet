@@ -18,6 +18,7 @@ namespace AiDotNet.Video.Inpainting;
 /// <list type="bullet">
 /// <item>Paper: "FuseFormer: Fusing Fine-Grained Information in Transformers for Video Inpainting" (Liu et al., ICCV 2021)</item>
 /// </list></para>
+/// <para><b>For Beginners:</b> FuseFormer uses transformer attention to fuse information from multiple frames for video inpainting. It fills missing regions by attending to relevant visible content across the entire video.</para>
 /// <para>
 /// FuseFormer applies soft split and soft composition operations within a transformer encoder
 /// to fuse fine-grained spatial-temporal features from overlapping patches, attending to both

@@ -12,6 +12,7 @@ namespace AiDotNet.Video.Options;
 /// <list type="bullet">
 /// <item>Paper: "FuSta: Hybrid Approach for Full-frame Video Stabilization" (Liu et al., 2021)</item>
 /// </list></para>
+/// <para><b>For Beginners:</b> FuSta options configure the fusion-based video stabilization model.</para>
 /// <para>
 /// FuSta combines optical flow-based warping with outpainting to achieve full-frame stabilization
 /// without cropping, using a two-stage pipeline: motion compensation + content completion.
@@ -19,6 +20,34 @@ namespace AiDotNet.Video.Options;
 /// </remarks>
 public class FuStaOptions : ModelOptions
 {
+    /// <summary>
+    /// Initializes a new instance with default values.
+    /// </summary>
+    public FuStaOptions()
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance by copying from another instance.
+    /// </summary>
+    /// <param name="other">The options instance to copy from.</param>
+    /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
+    public FuStaOptions(FuStaOptions other)
+    {
+        if (other == null)
+            throw new ArgumentNullException(nameof(other));
+
+        Variant = other.Variant;
+        NumFeatures = other.NumFeatures;
+        NumLevels = other.NumLevels;
+        NumResBlocks = other.NumResBlocks;
+        NumHeads = other.NumHeads;
+        LearningRate = other.LearningRate;
+        DropoutRate = other.DropoutRate;
+        ModelPath = other.ModelPath;
+        OnnxOptions = other.OnnxOptions;
+    }
+
     /// <summary>
     /// Model variant controlling capacity and speed trade-off.
     /// </summary>

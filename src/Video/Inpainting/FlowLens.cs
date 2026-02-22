@@ -18,6 +18,7 @@ namespace AiDotNet.Video.Inpainting;
 /// <list type="bullet">
 /// <item>Paper: "FlowLens: Seeing Beyond the FoV via Optical Flow Completion" (Xu et al., ECCV 2022)</item>
 /// </list></para>
+/// <para><b>For Beginners:</b> FlowLens performs video inpainting by using optical flow as a lens to guide content from visible regions into masked areas. It produces temporally consistent fills for removed objects.</para>
 /// <para>
 /// FlowLens decouples motion estimation from pixel synthesis by first completing optical flow
 /// in masked regions, then using the completed flow for temporal propagation of known pixels,

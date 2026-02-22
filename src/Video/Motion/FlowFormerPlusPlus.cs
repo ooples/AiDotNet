@@ -17,6 +17,7 @@ namespace AiDotNet.Video.Motion;
 /// <list type="bullet">
 /// <item>Paper: "FlowFormer++: Masked Cost Volume Autoencoding for Pretraining Optical Flow Estimation" (Shi et al., 2023)</item>
 /// </list></para>
+/// <para><b>For Beginners:</b> FlowFormer++ improves on FlowFormer with enhanced cost volume processing and better handling of occlusions. It achieves state-of-the-art accuracy on optical flow benchmarks.</para>
 /// <para>
 /// FlowFormer++ extends FlowFormer with masked cost volume autoencoding pretraining and tile-based processing for high-resolution optical flow.
 /// </para>

@@ -18,6 +18,7 @@ namespace AiDotNet.Video.Denoising;
 /// <list type="bullet">
 /// <item>Paper: "Flowing Recurrent Network for Video Denoising" (Li et al., AAAI 2022)</item>
 /// </list></para>
+/// <para><b>For Beginners:</b> FloRNN (Flow-guided Recurrent Neural Network) denoises video frames by using optical flow to align neighboring frames before applying recurrent processing. This flow-guided approach preserves temporal consistency.</para>
 /// <para>
 /// FloRNN uses optical flow to guide recurrent denoising, warping previous hidden states
 /// for temporal alignment before feeding them to ConvLSTM/ConvGRU units, with occlusion-aware

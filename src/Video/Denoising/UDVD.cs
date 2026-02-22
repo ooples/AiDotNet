@@ -18,6 +18,7 @@ namespace AiDotNet.Video.Denoising;
 /// <list type="bullet">
 /// <item>Paper: "Unsupervised Deep Video Denoising" (Sheth et al., CVPR 2021)</item>
 /// </list></para>
+/// <para><b>For Beginners:</b> UDVD (Unidirectional Video Denoising) processes video in a single temporal direction for causal denoising. This makes it suitable for streaming applications where future frames are not available.</para>
 /// <para>
 /// UDVD performs blind video denoising without paired training data. In the original paper,
 /// training uses a self-supervised loss that exploits temporal redundancy. The native Train

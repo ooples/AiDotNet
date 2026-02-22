@@ -12,6 +12,7 @@ namespace AiDotNet.Video.Options;
 /// <list type="bullet">
 /// <item>Paper: "FuseFormer: Fusing Fine-Grained Information in Transformers for Video Inpainting" (Liu et al., ICCV 2021)</item>
 /// </list></para>
+/// <para><b>For Beginners:</b> FuseFormer options configure the transformer video inpainting model.</para>
 /// <para>
 /// FuseFormer uses a transformer architecture with soft split and composition operations
 /// to fuse fine-grained spatial-temporal information at multiple scales for high-quality
@@ -20,6 +21,34 @@ namespace AiDotNet.Video.Options;
 /// </remarks>
 public class FuseFormerOptions : ModelOptions
 {
+    /// <summary>
+    /// Initializes a new instance with default values.
+    /// </summary>
+    public FuseFormerOptions()
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance by copying from another instance.
+    /// </summary>
+    /// <param name="other">The options instance to copy from.</param>
+    /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
+    public FuseFormerOptions(FuseFormerOptions other)
+    {
+        if (other == null)
+            throw new ArgumentNullException(nameof(other));
+
+        Variant = other.Variant;
+        NumFeatures = other.NumFeatures;
+        NumTransformerLayers = other.NumTransformerLayers;
+        NumHeads = other.NumHeads;
+        PatchSize = other.PatchSize;
+        LearningRate = other.LearningRate;
+        DropoutRate = other.DropoutRate;
+        ModelPath = other.ModelPath;
+        OnnxOptions = other.OnnxOptions;
+    }
+
     /// <summary>
     /// Model variant controlling capacity and speed trade-off.
     /// </summary>

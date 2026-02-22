@@ -17,6 +17,7 @@ namespace AiDotNet.Video.Motion;
 /// <list type="bullet">
 /// <item>Paper: "DKM: Dense Kernelized Feature Matching for Geometry Estimation" (Edstedt et al., CVPR 2023)</item>
 /// </list></para>
+/// <para><b>For Beginners:</b> DKM (Dense Kernelized Matching) estimates dense correspondences between image pairs using learned kernels. It produces accurate pixel-level matching for optical flow and stereo vision.</para>
 /// <para>
 /// DKM uses dense kernelized matching to establish pixel-level correspondences between images for accurate geometry estimation.
 /// </para>

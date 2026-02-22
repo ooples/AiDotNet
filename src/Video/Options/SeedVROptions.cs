@@ -26,6 +26,38 @@ namespace AiDotNet.Video.Options;
 /// </remarks>
 public class SeedVROptions : NeuralNetworkOptions
 {
+    /// <summary>
+    /// Initializes a new instance with default values.
+    /// </summary>
+    public SeedVROptions()
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance by copying from another instance.
+    /// </summary>
+    /// <param name="other">The options instance to copy from.</param>
+    /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
+    public SeedVROptions(SeedVROptions other)
+    {
+        if (other == null)
+            throw new ArgumentNullException(nameof(other));
+
+        Variant = other.Variant;
+        NumFeatures = other.NumFeatures;
+        NumDiTBlocks = other.NumDiTBlocks;
+        PatchSize = other.PatchSize;
+        WindowSize = other.WindowSize;
+        NumHeads = other.NumHeads;
+        NumDenoisingSteps = other.NumDenoisingSteps;
+        ScaleFactor = other.ScaleFactor;
+        ModelPath = other.ModelPath;
+        OnnxOptions = other.OnnxOptions;
+        LearningRate = other.LearningRate;
+        DropoutRate = other.DropoutRate;
+        WarmupSteps = other.WarmupSteps;
+    }
+
     #region Architecture
 
     /// <summary>Gets or sets the model variant.</summary>

@@ -18,6 +18,7 @@ namespace AiDotNet.Video.Stabilization;
 /// <list type="bullet">
 /// <item>Paper: "3D Video Stabilization with Depth Estimation by CNN-based Optimization" (Lee &amp; Lee, CVPR 2021)</item>
 /// </list></para>
+/// <para><b>For Beginners:</b> 3DMF (3D Motion Field) stabilizes video by estimating 3D camera motion and removing unwanted shake while preserving intentional camera movements like pans and tilts.</para>
 /// <para>
 /// 3DMF estimates depth and 3D camera motion to perform stabilization in 3D space,
 /// jointly predicting per-pixel depth maps and 6-DOF camera poses to compute

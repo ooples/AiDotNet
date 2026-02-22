@@ -17,6 +17,7 @@ namespace AiDotNet.Video.Motion;
 /// <list type="bullet">
 /// <item>Paper: "RAPIDFlow: Recurrent Adaptable Pyramids with Iterative Decoding for Optical Flow" (2024)</item>
 /// </list></para>
+/// <para><b>For Beginners:</b> RAPID Flow estimates optical flow rapidly using an efficient architecture designed for speed. It trades minimal accuracy for significant speedup, suitable for real-time applications.</para>
 /// <para>
 /// RAPIDFlow combines recurrent adaptable pyramids with efficient NeXt1D convolutions for fast and accurate optical flow estimation.
 /// </para>

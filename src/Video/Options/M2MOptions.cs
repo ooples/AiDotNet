@@ -31,6 +31,35 @@ namespace AiDotNet.Video.Options;
 /// </remarks>
 public class M2MOptions : NeuralNetworkOptions
 {
+    /// <summary>
+    /// Initializes a new instance with default values.
+    /// </summary>
+    public M2MOptions()
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance by copying from another instance.
+    /// </summary>
+    /// <param name="other">The options instance to copy from.</param>
+    /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
+    public M2MOptions(M2MOptions other)
+    {
+        if (other == null)
+            throw new ArgumentNullException(nameof(other));
+
+        Variant = other.Variant;
+        NumFeatures = other.NumFeatures;
+        NumFlowHypotheses = other.NumFlowHypotheses;
+        NumPyramidLevels = other.NumPyramidLevels;
+        NumRefineBlocks = other.NumRefineBlocks;
+        SplattingRadius = other.SplattingRadius;
+        ModelPath = other.ModelPath;
+        OnnxOptions = other.OnnxOptions;
+        LearningRate = other.LearningRate;
+        DropoutRate = other.DropoutRate;
+    }
+
     #region Architecture
 
     /// <summary>Gets or sets the model variant.</summary>

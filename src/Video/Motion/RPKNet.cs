@@ -17,6 +17,7 @@ namespace AiDotNet.Video.Motion;
 /// <list type="bullet">
 /// <item>Paper: "RPKNet: Recurrent Partial Kernel Network for Efficient Optical Flow" (Morimitsu et al., AAAI 2024)</item>
 /// </list></para>
+/// <para><b>For Beginners:</b> RPKNet (Recurrent Position-aware Kernel Network) uses position-aware convolution kernels that adapt to each pixel position for accurate optical flow estimation.</para>
 /// <para>
 /// RPKNet uses recurrent partial kernel processing with separable large kernels for variable multi-scale feature extraction in optical flow.
 /// </para>

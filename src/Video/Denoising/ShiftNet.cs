@@ -18,6 +18,7 @@ namespace AiDotNet.Video.Denoising;
 /// <list type="bullet">
 /// <item>Paper: "An Efficient Recurrent Architecture for Video Denoising via Temporal Shift" (Maggioni et al., 2021)</item>
 /// </list></para>
+/// <para><b>For Beginners:</b> ShiftNet uses efficient shift operations instead of expensive 3D convolutions for video denoising. By shifting feature maps along the temporal dimension, it captures motion at minimal computational cost.</para>
 /// <para>
 /// ShiftNet shifts feature channels along the temporal dimension without explicit alignment,
 /// using a U-Net backbone where each conv block incorporates channel shifting for temporal

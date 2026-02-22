@@ -30,6 +30,35 @@ namespace AiDotNet.Video.Options;
 /// </remarks>
 public class XVFIOptions : NeuralNetworkOptions
 {
+    /// <summary>
+    /// Initializes a new instance with default values.
+    /// </summary>
+    public XVFIOptions()
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance by copying from another instance.
+    /// </summary>
+    /// <param name="other">The options instance to copy from.</param>
+    /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
+    public XVFIOptions(XVFIOptions other)
+    {
+        if (other == null)
+            throw new ArgumentNullException(nameof(other));
+
+        Variant = other.Variant;
+        NumFeatures = other.NumFeatures;
+        NumPyramidLevels = other.NumPyramidLevels;
+        NumResBlocks = other.NumResBlocks;
+        NumAffineParams = other.NumAffineParams;
+        UseComplementaryFlow = other.UseComplementaryFlow;
+        ModelPath = other.ModelPath;
+        OnnxOptions = other.OnnxOptions;
+        LearningRate = other.LearningRate;
+        DropoutRate = other.DropoutRate;
+    }
+
     #region Architecture
 
     /// <summary>Gets or sets the model variant.</summary>

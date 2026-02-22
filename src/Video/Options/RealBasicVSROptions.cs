@@ -24,6 +24,36 @@ namespace AiDotNet.Video.Options;
 /// </remarks>
 public class RealBasicVSROptions : NeuralNetworkOptions
 {
+    /// <summary>
+    /// Initializes a new instance with default values.
+    /// </summary>
+    public RealBasicVSROptions()
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance by copying from another instance.
+    /// </summary>
+    /// <param name="other">The options instance to copy from.</param>
+    /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
+    public RealBasicVSROptions(RealBasicVSROptions other)
+    {
+        if (other == null)
+            throw new ArgumentNullException(nameof(other));
+
+        Variant = other.Variant;
+        NumFeatures = other.NumFeatures;
+        NumResBlocks = other.NumResBlocks;
+        CleaningModuleBlocks = other.CleaningModuleBlocks;
+        ScaleFactor = other.ScaleFactor;
+        NumFrames = other.NumFrames;
+        ModelPath = other.ModelPath;
+        OnnxOptions = other.OnnxOptions;
+        LearningRate = other.LearningRate;
+        DropoutRate = other.DropoutRate;
+        WarmupSteps = other.WarmupSteps;
+    }
+
     #region Architecture
 
     /// <summary>Gets or sets the model variant.</summary>

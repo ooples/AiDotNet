@@ -17,6 +17,7 @@ namespace AiDotNet.Video.Motion;
 /// <list type="bullet">
 /// <item>Paper: "NeuFlow v2: High-Efficiency Optical Flow Estimation on Edge Devices" (Zhang et al., 2024)</item>
 /// </list></para>
+/// <para><b>For Beginners:</b> NeuFlow V2 is a fast, lightweight optical flow estimator designed for real-time applications. It achieves good accuracy with significantly reduced computation compared to transformer-based methods.</para>
 /// <para>
 /// NeuFlow v2 achieves high-efficiency optical flow estimation suitable for edge devices through a lightweight backbone and optimized inference.
 /// </para>

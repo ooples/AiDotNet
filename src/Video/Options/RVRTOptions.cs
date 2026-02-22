@@ -28,6 +28,38 @@ namespace AiDotNet.Video.Options;
 /// </remarks>
 public class RVRTOptions : NeuralNetworkOptions
 {
+    /// <summary>
+    /// Initializes a new instance with default values.
+    /// </summary>
+    public RVRTOptions()
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance by copying from another instance.
+    /// </summary>
+    /// <param name="other">The options instance to copy from.</param>
+    /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
+    public RVRTOptions(RVRTOptions other)
+    {
+        if (other == null)
+            throw new ArgumentNullException(nameof(other));
+
+        Variant = other.Variant;
+        NumFeatures = other.NumFeatures;
+        NumBlocks = other.NumBlocks;
+        ScaleFactor = other.ScaleFactor;
+        ClipSize = other.ClipSize;
+        NumFrameGroups = other.NumFrameGroups;
+        NumHeads = other.NumHeads;
+        NumSamplingPoints = other.NumSamplingPoints;
+        WindowSize = other.WindowSize;
+        ModelPath = other.ModelPath;
+        OnnxOptions = other.OnnxOptions;
+        LearningRate = other.LearningRate;
+        DropoutRate = other.DropoutRate;
+    }
+
     #region Architecture
 
     /// <summary>Gets or sets the model variant.</summary>

@@ -17,6 +17,7 @@ namespace AiDotNet.Video.Motion;
 /// <list type="bullet">
 /// <item>Paper: "MemFlow: Optical Flow Estimation and Prediction with Memory" (Dong et al., CVPR 2024)</item>
 /// </list></para>
+/// <para><b>For Beginners:</b> MemFlow uses memory-efficient transformers for optical flow estimation. It reduces memory consumption while maintaining high accuracy through a chunked attention mechanism.</para>
 /// <para>
 /// MemFlow augments flow estimation with an explicit memory module that aggregates historical motion information for improved temporal consistency.
 /// </para>

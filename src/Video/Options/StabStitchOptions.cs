@@ -12,6 +12,7 @@ namespace AiDotNet.Video.Options;
 /// <list type="bullet">
 /// <item>Paper: "StabStitch: Simultaneous Video Stabilization and Stitching" (2023)</item>
 /// </list></para>
+/// <para><b>For Beginners:</b> StabStitch options configure the joint stabilization and stitching model.</para>
 /// <para>
 /// StabStitch jointly performs video stabilization and stitching, simultaneously removing
 /// camera shake while producing a seamless panoramic output from moving cameras.
@@ -19,6 +20,34 @@ namespace AiDotNet.Video.Options;
 /// </remarks>
 public class StabStitchOptions : ModelOptions
 {
+    /// <summary>
+    /// Initializes a new instance with default values.
+    /// </summary>
+    public StabStitchOptions()
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance by copying from another instance.
+    /// </summary>
+    /// <param name="other">The options instance to copy from.</param>
+    /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
+    public StabStitchOptions(StabStitchOptions other)
+    {
+        if (other == null)
+            throw new ArgumentNullException(nameof(other));
+
+        Variant = other.Variant;
+        NumFeatures = other.NumFeatures;
+        NumWarpBranches = other.NumWarpBranches;
+        MeshGridRows = other.MeshGridRows;
+        MeshGridCols = other.MeshGridCols;
+        LearningRate = other.LearningRate;
+        DropoutRate = other.DropoutRate;
+        ModelPath = other.ModelPath;
+        OnnxOptions = other.OnnxOptions;
+    }
+
     /// <summary>
     /// Model variant controlling capacity and speed trade-off.
     /// </summary>

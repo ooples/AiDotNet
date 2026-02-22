@@ -17,6 +17,7 @@ namespace AiDotNet.Video.Motion;
 /// <list type="bullet">
 /// <item>Paper: "Unifying Flow, Stereo and Depth Estimation" (Xu et al., TPAMI 2023)</item>
 /// </list></para>
+/// <para><b>For Beginners:</b> UniMatch is a unified model for dense matching that handles optical flow, stereo matching, and depth estimation with a single architecture. It learns general correspondence features.</para>
 /// <para>
 /// UniMatch unifies optical flow, stereo matching, and depth estimation in a single architecture, enabling cross-task transfer learning.
 /// </para>

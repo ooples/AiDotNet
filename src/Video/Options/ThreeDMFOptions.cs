@@ -12,6 +12,7 @@ namespace AiDotNet.Video.Options;
 /// <list type="bullet">
 /// <item>Paper: "3D Video Stabilization with Depth Estimation by CNN-based Optimization" (Lee &amp; Lee, CVPR 2021)</item>
 /// </list></para>
+/// <para><b>For Beginners:</b> 3DMF options configure the 3D motion field video stabilizer.</para>
 /// <para>
 /// 3DMF estimates depth and 3D camera motion to perform stabilization in 3D space,
 /// better handling parallax and depth-dependent motion than 2D methods.
@@ -19,6 +20,34 @@ namespace AiDotNet.Video.Options;
 /// </remarks>
 public class ThreeDMFOptions : ModelOptions
 {
+    /// <summary>
+    /// Initializes a new instance with default values.
+    /// </summary>
+    public ThreeDMFOptions()
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance by copying from another instance.
+    /// </summary>
+    /// <param name="other">The options instance to copy from.</param>
+    /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
+    public ThreeDMFOptions(ThreeDMFOptions other)
+    {
+        if (other == null)
+            throw new ArgumentNullException(nameof(other));
+
+        Variant = other.Variant;
+        NumFeatures = other.NumFeatures;
+        NumDepthLayers = other.NumDepthLayers;
+        NumMotionIters = other.NumMotionIters;
+        NumResBlocks = other.NumResBlocks;
+        LearningRate = other.LearningRate;
+        DropoutRate = other.DropoutRate;
+        ModelPath = other.ModelPath;
+        OnnxOptions = other.OnnxOptions;
+    }
+
     /// <summary>
     /// Model variant controlling capacity and speed trade-off.
     /// </summary>

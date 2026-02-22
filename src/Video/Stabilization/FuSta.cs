@@ -18,6 +18,7 @@ namespace AiDotNet.Video.Stabilization;
 /// <list type="bullet">
 /// <item>Paper: "FuSta: Hybrid Approach for Full-frame Video Stabilization" (Liu et al., 2021)</item>
 /// </list></para>
+/// <para><b>For Beginners:</b> FuSta (Fusion Stabilization) stabilizes video by fusing multiple stabilization strategies including trajectory smoothing and homography warping for robust results.</para>
 /// <para>
 /// FuSta achieves full-frame stabilization through a two-stage approach: first warping frames
 /// using optical-flow-based motion compensation, then using a neural outpainting network

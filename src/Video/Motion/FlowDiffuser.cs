@@ -17,6 +17,7 @@ namespace AiDotNet.Video.Motion;
 /// <list type="bullet">
 /// <item>Paper: "FlowDiffuser: Advancing Optical Flow Estimation with Diffusion Models" (Luo et al., CVPR 2024)</item>
 /// </list></para>
+/// <para><b>For Beginners:</b> FlowDiffuser uses a diffusion process to iteratively refine optical flow estimates. Starting from random noise, it progressively denoises to produce accurate dense flow fields.</para>
 /// <para>
 /// FlowDiffuser applies diffusion models to optical flow estimation with iterative refinement, producing accurate and smooth flow fields.
 /// </para>

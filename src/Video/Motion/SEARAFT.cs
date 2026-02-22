@@ -17,6 +17,7 @@ namespace AiDotNet.Video.Motion;
 /// <list type="bullet">
 /// <item>Paper: "SEA-RAFT: Simple, Efficient, Accurate RAFT for Optical Flow" (Teed et al., ECCV 2024 Oral, Best Paper Candidate)</item>
 /// </list></para>
+/// <para><b>For Beginners:</b> SEA-RAFT extends RAFT with Scale-Equivariant Architecture for better handling of objects at different scales. It improves flow accuracy for both small and large motions.</para>
 /// <para>
 /// SEA-RAFT simplifies RAFT with a mixture of Laplace loss and direct initial flow prediction, achieving state-of-the-art accuracy with improved efficiency.
 /// </para>

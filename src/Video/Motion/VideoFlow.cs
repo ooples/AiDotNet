@@ -17,6 +17,7 @@ namespace AiDotNet.Video.Motion;
 /// <list type="bullet">
 /// <item>Paper: "VideoFlow: Exploiting Temporal Cues for Multi-frame Optical Flow Estimation" (Shi et al., 2023)</item>
 /// </list></para>
+/// <para><b>For Beginners:</b> VideoFlow extends optical flow estimation to video sequences by exploiting temporal continuity. It produces smoother, more consistent flow fields across consecutive frames.</para>
 /// <para>
 /// VideoFlow exploits temporal cues from multiple frames simultaneously to improve optical flow estimation accuracy and temporal consistency.
 /// </para>

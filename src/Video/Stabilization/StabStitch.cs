@@ -18,6 +18,7 @@ namespace AiDotNet.Video.Stabilization;
 /// <list type="bullet">
 /// <item>Paper: "StabStitch: Simultaneous Video Stabilization and Stitching" (2023)</item>
 /// </list></para>
+/// <para><b>For Beginners:</b> StabStitch jointly stabilizes and stitches video for panoramic applications. It produces smooth, wide-angle video from multiple camera feeds or a moving camera.</para>
 /// <para>
 /// StabStitch jointly optimizes video stabilization and stitching from moving cameras,
 /// using thin-plate-spline mesh warping to simultaneously remove camera shake and produce

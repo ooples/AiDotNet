@@ -18,6 +18,7 @@ namespace AiDotNet.Video.Denoising;
 /// <list type="bullet">
 /// <item>Paper: "LiteDVDNet: A Lightweight Deep Video Denoising Network" (2020)</item>
 /// </list></para>
+/// <para><b>For Beginners:</b> LiteDVDNet is a lightweight video denoiser designed for real-time performance. It achieves good denoising quality with significantly fewer parameters than full-scale models like DVDNet.</para>
 /// <para>
 /// LiteDVDNet is an efficient two-stage denoiser that first processes frames independently
 /// then fuses temporal information, using depthwise separable convolutions for 8-10x

@@ -18,6 +18,7 @@ namespace AiDotNet.Video.Stabilization;
 /// <list type="bullet">
 /// <item>Paper: "PWStableNet: Learning Pixel-Wise Warping Maps for Video Stabilization" (Zhao et al., IEEE TIP 2020)</item>
 /// </list></para>
+/// <para><b>For Beginners:</b> PWStableNet (Pixel-Wise Stable Network) stabilizes video with pixel-level precision, handling parallax and dynamic scenes better than methods that assume a single global motion.</para>
 /// <para>
 /// PWStableNet predicts per-pixel warping maps instead of global homographies, enabling
 /// more flexible stabilization that can handle parallax, rolling shutter distortion, and

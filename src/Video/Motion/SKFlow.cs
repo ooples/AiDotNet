@@ -17,6 +17,7 @@ namespace AiDotNet.Video.Motion;
 /// <list type="bullet">
 /// <item>Paper: "SKFlow: Learning Optical Flow with Super Kernels" (Sun et al., 2022)</item>
 /// </list></para>
+/// <para><b>For Beginners:</b> SKFlow uses selective kernels that adapt their receptive field size based on local motion patterns. Different kernel sizes handle different motion scales automatically.</para>
 /// <para>
 /// SKFlow uses selective kernel attention mechanisms to efficiently capture multi-scale motion information for optical flow estimation.
 /// </para>

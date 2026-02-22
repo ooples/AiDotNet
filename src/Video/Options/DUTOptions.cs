@@ -12,6 +12,7 @@ namespace AiDotNet.Video.Options;
 /// <list type="bullet">
 /// <item>Paper: "DUT: Learning Video Stabilization by Simply Watching Unstable Videos" (Xu et al., ICCV 2022)</item>
 /// </list></para>
+/// <para><b>For Beginners:</b> DUT options configure the Deep Unsupervised Trajectory video stabilizer.</para>
 /// <para>
 /// DUT learns stabilization in an unsupervised manner by watching unstable videos,
 /// predicting per-pixel flow fields for warping without requiring paired stable/unstable data.
@@ -20,6 +21,35 @@ namespace AiDotNet.Video.Options;
 public class DUTOptions : ModelOptions
 {
     #region Architecture
+
+    /// <summary>
+    /// Initializes a new instance with default values.
+    /// </summary>
+    public DUTOptions()
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance by copying from another instance.
+    /// </summary>
+    /// <param name="other">The options instance to copy from.</param>
+    /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
+    public DUTOptions(DUTOptions other)
+    {
+        if (other == null)
+            throw new ArgumentNullException(nameof(other));
+
+        Variant = other.Variant;
+        NumFeatures = other.NumFeatures;
+        NumPyramidLevels = other.NumPyramidLevels;
+        NumResBlocks = other.NumResBlocks;
+        TemporalWindowSize = other.TemporalWindowSize;
+        TemporalLossWeight = other.TemporalLossWeight;
+        LearningRate = other.LearningRate;
+        DropoutRate = other.DropoutRate;
+        ModelPath = other.ModelPath;
+        OnnxOptions = other.OnnxOptions;
+    }
 
     /// <summary>
     /// Model variant controlling capacity and speed trade-off.

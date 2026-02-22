@@ -31,6 +31,35 @@ namespace AiDotNet.Video.Options;
 /// </remarks>
 public class TLBVFIOptions : NeuralNetworkOptions
 {
+    /// <summary>
+    /// Initializes a new instance with default values.
+    /// </summary>
+    public TLBVFIOptions()
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance by copying from another instance.
+    /// </summary>
+    /// <param name="other">The options instance to copy from.</param>
+    /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
+    public TLBVFIOptions(TLBVFIOptions other)
+    {
+        if (other == null)
+            throw new ArgumentNullException(nameof(other));
+
+        Variant = other.Variant;
+        NumFeatures = other.NumFeatures;
+        TokenSize = other.TokenSize;
+        NumMatchingBlocks = other.NumMatchingBlocks;
+        NumHeads = other.NumHeads;
+        NumSynthesisBlocks = other.NumSynthesisBlocks;
+        ModelPath = other.ModelPath;
+        OnnxOptions = other.OnnxOptions;
+        LearningRate = other.LearningRate;
+        DropoutRate = other.DropoutRate;
+    }
+
     #region Architecture
 
     /// <summary>Gets or sets the model variant.</summary>

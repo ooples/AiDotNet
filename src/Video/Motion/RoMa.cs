@@ -17,6 +17,7 @@ namespace AiDotNet.Video.Motion;
 /// <list type="bullet">
 /// <item>Paper: "RoMa: Robust Dense Feature Matching" (Edstedt et al., CVPR 2024)</item>
 /// </list></para>
+/// <para><b>For Beginners:</b> RoMa (Robust Dense Matching) estimates robust pixel correspondences between images. It handles challenging cases like occlusions, textureless regions, and large displacements.</para>
 /// <para>
 /// RoMa achieves robust dense feature matching using DINOv2 foundation features, producing pixel-dense correspondence maps for geometry estimation.
 /// </para>

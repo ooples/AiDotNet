@@ -18,6 +18,7 @@ namespace AiDotNet.Video.Stabilization;
 /// <list type="bullet">
 /// <item>Paper: "DUT: Learning Video Stabilization by Simply Watching Unstable Videos" (Xu et al., ICCV 2022)</item>
 /// </list></para>
+/// <para><b>For Beginners:</b> DUT (Deep Unsupervised Trajectory) stabilizes shaky video by learning smooth camera trajectories without requiring ground truth stabilized footage for training.</para>
 /// <para>
 /// DUT learns to stabilize video in an unsupervised manner by predicting per-pixel flow fields
 /// from unstable videos alone. It uses a coarse-to-fine pyramid with temporal consistency loss

@@ -12,6 +12,7 @@ namespace AiDotNet.Video.Options;
 /// <list type="bullet">
 /// <item>Paper: "PWStableNet: Learning Pixel-Wise Warping Maps for Video Stabilization" (Zhao et al., IEEE TIP 2020)</item>
 /// </list></para>
+/// <para><b>For Beginners:</b> PWStableNet options configure the pixel-wise video stabilization model.</para>
 /// <para>
 /// PWStableNet predicts per-pixel warping maps (not global homographies) for more flexible
 /// stabilization that handles parallax and rolling shutter distortion.
@@ -19,6 +20,34 @@ namespace AiDotNet.Video.Options;
 /// </remarks>
 public class PWStableNetOptions : ModelOptions
 {
+    /// <summary>
+    /// Initializes a new instance with default values.
+    /// </summary>
+    public PWStableNetOptions()
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance by copying from another instance.
+    /// </summary>
+    /// <param name="other">The options instance to copy from.</param>
+    /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
+    public PWStableNetOptions(PWStableNetOptions other)
+    {
+        if (other == null)
+            throw new ArgumentNullException(nameof(other));
+
+        Variant = other.Variant;
+        NumFeatures = other.NumFeatures;
+        NumRefinementIters = other.NumRefinementIters;
+        GridSize = other.GridSize;
+        NumResBlocks = other.NumResBlocks;
+        LearningRate = other.LearningRate;
+        DropoutRate = other.DropoutRate;
+        ModelPath = other.ModelPath;
+        OnnxOptions = other.OnnxOptions;
+    }
+
     /// <summary>
     /// Model variant controlling capacity and speed trade-off.
     /// </summary>

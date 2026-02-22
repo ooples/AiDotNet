@@ -17,6 +17,7 @@ namespace AiDotNet.Video.Motion;
 /// <list type="bullet">
 /// <item>Paper: "UFM: Unified Flow and Matching" (2025)</item>
 /// </list></para>
+/// <para><b>For Beginners:</b> UFM (Unified Flow Matching) provides a unified framework for optical flow that handles both forward and backward flow estimation in a single model pass.</para>
 /// <para>
 /// UFM is the first to demonstrate that unified training for optical flow and feature matching outperforms specialized models on both tasks.
 /// </para>

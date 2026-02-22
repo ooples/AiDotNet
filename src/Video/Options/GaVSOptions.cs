@@ -12,6 +12,7 @@ namespace AiDotNet.Video.Options;
 /// <list type="bullet">
 /// <item>Paper: "Gaze-aware Video Stabilization" (2023)</item>
 /// </list></para>
+/// <para><b>For Beginners:</b> GaVS options configure the adversarial video stabilization model.</para>
 /// <para>
 /// GaVS incorporates gaze prediction to stabilize video while preserving the viewer's
 /// region of interest, weighting stabilization strength based on visual saliency.
@@ -19,6 +20,34 @@ namespace AiDotNet.Video.Options;
 /// </remarks>
 public class GaVSOptions : ModelOptions
 {
+    /// <summary>
+    /// Initializes a new instance with default values.
+    /// </summary>
+    public GaVSOptions()
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance by copying from another instance.
+    /// </summary>
+    /// <param name="other">The options instance to copy from.</param>
+    /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
+    public GaVSOptions(GaVSOptions other)
+    {
+        if (other == null)
+            throw new ArgumentNullException(nameof(other));
+
+        Variant = other.Variant;
+        NumFeatures = other.NumFeatures;
+        NumGazeHeads = other.NumGazeHeads;
+        GazeHiddenDim = other.GazeHiddenDim;
+        SmoothingWindow = other.SmoothingWindow;
+        LearningRate = other.LearningRate;
+        DropoutRate = other.DropoutRate;
+        ModelPath = other.ModelPath;
+        OnnxOptions = other.OnnxOptions;
+    }
+
     /// <summary>
     /// Model variant controlling capacity and speed trade-off.
     /// </summary>

@@ -18,6 +18,7 @@ namespace AiDotNet.Video.Inpainting;
 /// <list type="bullet">
 /// <item>Paper: "Learning Joint Spatial-Temporal Transformations for Video Inpainting" (Zeng et al., ECCV 2020)</item>
 /// </list></para>
+/// <para><b>For Beginners:</b> STTN (Spatial-Temporal Transformer Network) performs video inpainting using transformers that jointly attend to spatial and temporal dimensions to fill holes consistently across frames.</para>
 /// <para>
 /// STTN uses multi-scale spatial-temporal transformers that jointly search for and attend to
 /// relevant patches across both space and time dimensions. Multi-head attention at multiple

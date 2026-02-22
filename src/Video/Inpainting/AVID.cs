@@ -18,6 +18,7 @@ namespace AiDotNet.Video.Inpainting;
 /// <list type="bullet">
 /// <item>Paper: "AVID: Any-Length Video Inpainting with Diffusion Model" (Zhang et al., CVPR 2024)</item>
 /// </list></para>
+/// <para><b>For Beginners:</b> AVID (Adaptive Video Inpainting via Diffusion) fills in missing or damaged regions of video using diffusion models. It adaptively propagates content from neighboring frames and regions.</para>
 /// <para>
 /// AVID uses a diffusion U-Net with temporal attention to iteratively denoise masked video regions,
 /// processing long videos through an autoregressive temporal pipeline with overlapping windows

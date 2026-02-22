@@ -12,6 +12,7 @@ namespace AiDotNet.Video.Options;
 /// <list type="bullet">
 /// <item>Paper: "Learning Joint Spatial-Temporal Transformations for Video Inpainting" (Zeng et al., ECCV 2020)</item>
 /// </list></para>
+/// <para><b>For Beginners:</b> STTN options configure the spatial-temporal transformer inpainting network.</para>
 /// <para>
 /// STTN uses multi-scale spatial-temporal transformers to simultaneously search for and
 /// attend to relevant patches across space and time, filling masked regions with content
@@ -20,6 +21,34 @@ namespace AiDotNet.Video.Options;
 /// </remarks>
 public class STTNOptions : ModelOptions
 {
+    /// <summary>
+    /// Initializes a new instance with default values.
+    /// </summary>
+    public STTNOptions()
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance by copying from another instance.
+    /// </summary>
+    /// <param name="other">The options instance to copy from.</param>
+    /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
+    public STTNOptions(STTNOptions other)
+    {
+        if (other == null)
+            throw new ArgumentNullException(nameof(other));
+
+        Variant = other.Variant;
+        NumFeatures = other.NumFeatures;
+        NumTransformerLayers = other.NumTransformerLayers;
+        NumHeads = other.NumHeads;
+        NumScales = other.NumScales;
+        LearningRate = other.LearningRate;
+        DropoutRate = other.DropoutRate;
+        ModelPath = other.ModelPath;
+        OnnxOptions = other.OnnxOptions;
+    }
+
     /// <summary>
     /// Model variant controlling capacity and speed trade-off.
     /// </summary>

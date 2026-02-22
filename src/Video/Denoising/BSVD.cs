@@ -18,6 +18,7 @@ namespace AiDotNet.Video.Denoising;
 /// <list type="bullet">
 /// <item>Paper: "BSVD: Bidirectional Streaming Video Denoising" (Qi et al., ACM MM 2022)</item>
 /// </list></para>
+/// <para><b>For Beginners:</b> BSVD (Blind Spot Video Denoising) removes noise from video without needing clean reference frames. It uses a blind-spot network that learns denoising patterns directly from noisy video data.</para>
 /// <para>
 /// BSVD enables real-time video denoising through bidirectional streaming with efficient
 /// buffer management. It processes video in forward and backward passes, maintaining compact

@@ -31,6 +31,35 @@ namespace AiDotNet.Video.Options;
 /// </remarks>
 public class GIMMVFIOptions : NeuralNetworkOptions
 {
+    /// <summary>
+    /// Initializes a new instance with default values.
+    /// </summary>
+    public GIMMVFIOptions()
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance by copying from another instance.
+    /// </summary>
+    /// <param name="other">The options instance to copy from.</param>
+    /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
+    public GIMMVFIOptions(GIMMVFIOptions other)
+    {
+        if (other == null)
+            throw new ArgumentNullException(nameof(other));
+
+        Variant = other.Variant;
+        NumFeatures = other.NumFeatures;
+        NumEncoderBlocks = other.NumEncoderBlocks;
+        ImplicitDim = other.ImplicitDim;
+        NumImplicitLayers = other.NumImplicitLayers;
+        NumFrequencies = other.NumFrequencies;
+        ModelPath = other.ModelPath;
+        OnnxOptions = other.OnnxOptions;
+        LearningRate = other.LearningRate;
+        DropoutRate = other.DropoutRate;
+    }
+
     #region Architecture
 
     /// <summary>Gets or sets the model variant.</summary>
