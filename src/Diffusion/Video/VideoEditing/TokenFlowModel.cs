@@ -52,7 +52,7 @@ public class TokenFlowModel<T> : VideoDiffusionModelBase<T>
     public override bool SupportsImageToVideo => false;
     public override bool SupportsTextToVideo => true;
     public override bool SupportsVideoToVideo => true;
-    public override int ParameterCount => _predictor.ParameterCount + _temporalVAE.GetParameters().Length;
+    public override int ParameterCount => _predictor.ParameterCount + _temporalVAE.ParameterCount;
 
     /// <summary>
     /// Initializes a new instance of TokenFlowModel with full customization support.

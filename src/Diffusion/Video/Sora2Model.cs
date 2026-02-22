@@ -52,7 +52,7 @@ public class Sora2Model<T> : VideoDiffusionModelBase<T>
     public override bool SupportsImageToVideo => true;
     public override bool SupportsTextToVideo => true;
     public override bool SupportsVideoToVideo => false;
-    public override int ParameterCount => _predictor.ParameterCount + _temporalVAE.GetParameters().Length;
+    public override int ParameterCount => _predictor.ParameterCount + _temporalVAE.ParameterCount;
 
     /// <summary>
     /// Initializes a new instance of Sora2Model with full customization support.
@@ -165,9 +165,10 @@ public class Sora2Model<T> : VideoDiffusionModelBase<T>
             scheduler: Scheduler,
             predictor: clonedPredictor,
             temporalVAE: (TemporalVAE<T>)_temporalVAE.Clone(),
-            conditioner: _conditioner,
+            conditioner: _conditioner, // Conditioners are typically stateless; shared reference is safe
             defaultNumFrames: DefaultNumFrames,
-            defaultFPS: DefaultFPS);
+            defaultFPS: DefaultFPS,
+            seed: _seed);
     }
 
     public override ModelMetadata<T> GetModelMetadata()

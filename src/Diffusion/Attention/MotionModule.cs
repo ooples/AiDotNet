@@ -188,6 +188,10 @@ public class MotionModule<T> : LayerBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
+        int expected = GetParameters().Length;
+        if (parameters.Length != expected)
+            throw new ArgumentException($"Expected {expected} parameters, got {parameters.Length}.", nameof(parameters));
+
         int offset = 0;
         SetSubParams(_temporalAttention, parameters, ref offset);
         SetSubParams(_ffnIn, parameters, ref offset);

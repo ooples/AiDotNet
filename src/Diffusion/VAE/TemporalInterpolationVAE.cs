@@ -84,6 +84,11 @@ public class TemporalInterpolationVAE<T> : VAEModelBase<T>
         double latentScaleFactor = 0.18215)
         : base(new MeanSquaredErrorLoss<T>())
     {
+        Guard.Positive(inputChannels, nameof(inputChannels));
+        Guard.Positive(latentChannels, nameof(latentChannels));
+        Guard.Positive(baseChannels, nameof(baseChannels));
+        Guard.Positive(interpolationFactor, nameof(interpolationFactor));
+
         _inputChannels = inputChannels;
         _latentChannels = latentChannels;
         _baseChannels = baseChannels;
@@ -110,6 +115,7 @@ public class TemporalInterpolationVAE<T> : VAEModelBase<T>
     /// <inheritdoc />
     public override Tensor<T> Encode(Tensor<T> input, bool sampleMode = true)
     {
+        Guard.NotNull(input, nameof(input));
         var (mean, logVar) = EncodeWithDistribution(input);
         return sampleMode ? Sample(mean, logVar) : mean;
     }
@@ -138,6 +144,7 @@ public class TemporalInterpolationVAE<T> : VAEModelBase<T>
     /// <inheritdoc />
     public override Tensor<T> Decode(Tensor<T> latent)
     {
+        Guard.NotNull(latent, nameof(latent));
         var unscaled = UnscaleLatent(latent);
         var x = _decoderIn.Forward(unscaled);
         x = _decoderNorm.Forward(x);

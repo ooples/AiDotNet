@@ -67,12 +67,10 @@ public class CausalTemporalAttention<T> : LayerBase<T>
     /// <param name="channels">Number of feature channels.</param>
     /// <param name="numHeads">Number of attention heads.</param>
     /// <param name="numFrames">Maximum number of video frames.</param>
-    /// <param name="spatialSize">Spatial size of feature maps.</param>
     public CausalTemporalAttention(
         int channels,
         int numHeads = 8,
-        int numFrames = 16,
-        int spatialSize = 64)
+        int numFrames = 16)
         : base(
             new[] { 1, numFrames, channels },
             new[] { 1, numFrames, channels })

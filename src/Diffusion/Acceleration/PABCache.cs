@@ -116,6 +116,7 @@ public class PABCache<T>
     public void CacheSpatial(string layerKey, Tensor<T> output)
     {
         Guard.NotNull(layerKey, nameof(layerKey));
+        Guard.NotNull(output, nameof(output));
         _spatialCache[layerKey] = output;
     }
 
@@ -125,6 +126,7 @@ public class PABCache<T>
     public void CacheTemporal(string layerKey, Tensor<T> output)
     {
         Guard.NotNull(layerKey, nameof(layerKey));
+        Guard.NotNull(output, nameof(output));
         _temporalCache[layerKey] = output;
     }
 
@@ -134,6 +136,7 @@ public class PABCache<T>
     public void CacheCross(string layerKey, Tensor<T> output)
     {
         Guard.NotNull(layerKey, nameof(layerKey));
+        Guard.NotNull(output, nameof(output));
         _crossCache[layerKey] = output;
     }
 

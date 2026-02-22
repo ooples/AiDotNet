@@ -90,6 +90,19 @@ public class STDiTBlock<T> : LayerBase<T>
             new[] { 1, numFrames * spatialSize * spatialSize, channels },
             new[] { 1, numFrames * spatialSize * spatialSize, channels })
     {
+        if (channels <= 0)
+            throw new ArgumentOutOfRangeException(nameof(channels), "Channels must be positive.");
+        if (numHeads <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numHeads), "Number of heads must be positive.");
+        if (channels % numHeads != 0)
+            throw new ArgumentException($"Channels ({channels}) must be divisible by numHeads ({numHeads}).");
+        if (contextDim <= 0)
+            throw new ArgumentOutOfRangeException(nameof(contextDim), "Context dimension must be positive.");
+        if (numFrames <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numFrames), "Number of frames must be positive.");
+        if (spatialSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(spatialSize), "Spatial size must be positive.");
+
         _channels = channels;
         _numHeads = numHeads;
         _contextDim = contextDim;

@@ -125,6 +125,10 @@ public class SlidingWindowVideoGen<T>
     /// <returns>Blended result.</returns>
     public Tensor<T> BlendWindow(Tensor<T> currentWindow, Tensor<T>? accumulated)
     {
+        Guard.NotNull(currentWindow, nameof(currentWindow));
+        if (currentWindow.Shape.Length == 0)
+            throw new ArgumentException("Current window must have at least one dimension.", nameof(currentWindow));
+
         if (accumulated == null || _currentWindowIndex == 0)
         {
             _previousWindowLatents = currentWindow;
@@ -152,7 +156,7 @@ public class SlidingWindowVideoGen<T>
                     alpha = t >= 0.5 ? 1.0 : 0.0;
                     break;
                 case BlendingMode.SlerpBlend:
-                    // Hermite smoothstep for SLERP-like transition
+                    // Hermite smoothstep: smooth ease-in/ease-out transition (S-curve)
                     alpha = t * t * (3.0 - 2.0 * t);
                     break;
                 default: // LinearBlend
