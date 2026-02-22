@@ -321,22 +321,20 @@ public class StateSpaceModel<T> : TimeSeriesModelBase<T>
 
         if (_smoothedStates != null && _smoothedStates.Count > 0)
         {
-            // Use smoothed states for in-sample, propagate for out-of-sample
-            for (int t = 0; t < input.Rows; t++)
+            // Use smoothed states for in-sample predictions
+            int inSampleCount = Math.Min(input.Rows, _smoothedStates.Count);
+            for (int t = 0; t < inSampleCount; t++)
             {
-                if (t < _smoothedStates.Count)
+                predictions[t] = _observationMatrix.Multiply(_smoothedStates[t])[0];
+            }
+
+            // O(N) out-of-sample: propagate rolling state forward from last smoothed state
+            if (input.Rows > _smoothedStates.Count)
+            {
+                Vector<T> state = _smoothedStates[_smoothedStates.Count - 1];
+                for (int t = _smoothedStates.Count; t < input.Rows; t++)
                 {
-                    predictions[t] = _observationMatrix.Multiply(_smoothedStates[t])[0];
-                }
-                else
-                {
-                    // Propagate forward from last smoothed state
-                    Vector<T> state = _smoothedStates[_smoothedStates.Count - 1];
-                    int stepsAhead = t - _smoothedStates.Count + 1;
-                    for (int s = 0; s < stepsAhead; s++)
-                    {
-                        state = _transitionMatrix.Multiply(state);
-                    }
+                    state = _transitionMatrix.Multiply(state);
                     predictions[t] = _observationMatrix.Multiply(state)[0];
                 }
             }
@@ -484,6 +482,22 @@ public class StateSpaceModel<T> : TimeSeriesModelBase<T>
         writer.Write(_maxIterations);
         writer.Write(_tolerance);
         writer.Write(_convergenceThreshold);
+
+        // Serialize last smoothed state for prediction support
+        if (_smoothedStates != null && _smoothedStates.Count > 0)
+        {
+            writer.Write(_smoothedStates.Count);
+            var lastState = _smoothedStates[_smoothedStates.Count - 1];
+            writer.Write(lastState.Length);
+            for (int i = 0; i < lastState.Length; i++)
+            {
+                writer.Write(Convert.ToDouble(lastState[i]));
+            }
+        }
+        else
+        {
+            writer.Write(0);
+        }
     }
 
     /// <summary>
@@ -522,6 +536,28 @@ public class StateSpaceModel<T> : TimeSeriesModelBase<T>
         _maxIterations = reader.ReadInt32();
         _tolerance = reader.ReadDouble();
         _convergenceThreshold = reader.ReadDouble();
+
+        // Deserialize smoothed states if available (backward-compatible)
+        _smoothedStates = new List<Vector<T>>();
+        try
+        {
+            int smoothedCount = reader.ReadInt32();
+            if (smoothedCount > 0)
+            {
+                int stateLen = reader.ReadInt32();
+                var lastState = new Vector<T>(stateLen);
+                for (int i = 0; i < stateLen; i++)
+                {
+                    lastState[i] = NumOps.FromDouble(reader.ReadDouble());
+                }
+                // Store just the last state — sufficient for out-of-sample prediction
+                _smoothedStates.Add(lastState);
+            }
+        }
+        catch (EndOfStreamException)
+        {
+            // Older serialized models don't include smoothed states — leave empty
+        }
     }
 
     /// <summary>
@@ -642,23 +678,14 @@ public class StateSpaceModel<T> : TimeSeriesModelBase<T>
             throw new InvalidOperationException("Model has not been properly initialized. Please train the model before prediction.");
         }
 
-        // Create a single-row matrix from the input vector
+        // Delegate to Predict(Matrix) to use trained smoothed states consistently
         Matrix<T> inputMatrix = new Matrix<T>(1, input.Length);
         for (int i = 0; i < input.Length; i++)
         {
             inputMatrix[0, i] = input[i];
         }
 
-        // Use the current state to make a prediction
-        Vector<T> currentState = _initialState;
-        currentState = _transitionMatrix.Multiply(currentState);
-
-        // Transform the state to the observation space
-        Vector<T> observation = _observationMatrix.Multiply(currentState);
-
-        // Return the first element of the observation vector
-        // (assuming the target variable is the first or only element)
-        return observation[0];
+        return Predict(inputMatrix)[0];
     }
 
     /// <summary>

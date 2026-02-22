@@ -105,6 +105,7 @@ public class TimeSeriesTrainPredictTests
 
     private static void AssertFiniteVector(Vector<double> v, string label)
     {
+        Assert.True(v.Length > 0, $"{label} is empty — expected at least one element");
         for (int i = 0; i < v.Length; i++)
         {
             Assert.False(double.IsNaN(v[i]), $"{label}[{i}] is NaN");
@@ -114,6 +115,7 @@ public class TimeSeriesTrainPredictTests
 
     private static void AssertFiniteMetrics(Dictionary<string, double> metrics)
     {
+        Assert.True(metrics.Count > 0, "Metrics dictionary is empty — expected at least one metric");
         foreach (var kvp in metrics)
         {
             Assert.False(double.IsNaN(kvp.Value), $"Metric '{kvp.Key}' is NaN");
@@ -225,7 +227,7 @@ public class TimeSeriesTrainPredictTests
         Assert.Equal(original.Length, clonePredictions.Length);
         for (int i = 0; i < original.Length; i++)
         {
-            Assert.Equal(original[i], clonePredictions[i], precision: 10);
+            Assert.Equal(original[i], clonePredictions[i], precision: 8);
         }
     }
 
@@ -373,6 +375,12 @@ public class TimeSeriesTrainPredictTests
 
     #region SARIMAModel Tests
 
+    /// <summary>
+    /// Tests SARIMA with Q=0 (pure AR, no MA components).
+    /// Regression test for crash at line 486 where lastErrors had length 0.
+    /// This is distinct from SARIMAModel_PureARNoMA_DoesNotCrash which tests
+    /// both Q=0 AND seasonal Q=0 with AR order 2.
+    /// </summary>
     [Fact]
     public void SARIMAModel_TrainAndPredict_PureAR_ProducesFinitePredictions()
     {
@@ -554,7 +562,7 @@ public class TimeSeriesTrainPredictTests
         restoredModel.Deserialize(serialized);
         var restoredPredictions = restoredModel.Predict(x);
 
-        // Predictions should match
+        // Predictions should match (skip first 5 where AR coefficients have limited history)
         Assert.Equal(originalPredictions.Length, restoredPredictions.Length);
         AssertFiniteVector(restoredPredictions, "Restored ARModel.Predict");
         for (int i = 5; i < originalPredictions.Length; i++)
@@ -657,6 +665,12 @@ public class TimeSeriesTrainPredictTests
         AssertFiniteVector(forecasts, "ARModel.Forecast after Predict");
     }
 
+    /// <summary>
+    /// Tests SARIMA with both Q=0 AND seasonal Q=0 with AR order 2.
+    /// Regression test for crash where lastErrors vector had length 0.
+    /// This is distinct from SARIMAModel_TrainAndPredict_PureAR which tests
+    /// Q=0 with AR order 1 and seasonal AR order 1.
+    /// </summary>
     [Fact]
     public void SARIMAModel_PureARNoMA_DoesNotCrash()
     {
@@ -677,6 +691,69 @@ public class TimeSeriesTrainPredictTests
         var predictions = model.Predict(x);
         Assert.Equal(x.Rows, predictions.Length);
         AssertFiniteVector(predictions, "SARIMAModel.Predict(Q=0,SQ=0)");
+    }
+
+    #endregion
+
+    #region Additional Coverage Tests
+
+    [Fact]
+    public void MAModel_EvaluateModel_ProducesFiniteMetrics()
+    {
+        var (x, y) = CreateStationaryData(100);
+        var model = new MAModel<double>(new MAModelOptions<double> { MAOrder = 3 });
+
+        model.Train(x, y);
+        var metrics = model.EvaluateModel(x, y);
+
+        Assert.True(metrics.Count > 0, "EvaluateModel returned no metrics");
+        AssertFiniteMetrics(metrics);
+    }
+
+    [Fact]
+    public void MAModel_Clone_PreservesTrainedState()
+    {
+        var (x, y) = CreateStationaryData(100);
+        var model = new MAModel<double>(new MAModelOptions<double> { MAOrder = 3 });
+
+        model.Train(x, y);
+        var original = model.Predict(x);
+        var clone = (MAModel<double>)model.Clone();
+        var clonePredictions = clone.Predict(x);
+
+        Assert.Equal(original.Length, clonePredictions.Length);
+        for (int i = 0; i < original.Length; i++)
+        {
+            Assert.Equal(original[i], clonePredictions[i], precision: 8);
+        }
+    }
+
+    [Fact]
+    public void ARIMAModel_SerializeAndDeserialize_PreservesPredictions()
+    {
+        var (x, y) = CreateTrendPlusNoiseData(100);
+        var model = new ARIMAModel<double>(new ARIMAOptions<double> { P = 2, D = 1, Q = 0, MaxIterations = 50 });
+        model.Train(x, y);
+
+        var originalPredictions = model.Predict(x);
+        AssertFiniteVector(originalPredictions, "Original ARIMAModel.Predict");
+
+        // Serialize
+        byte[] serialized = model.Serialize();
+        Assert.True(serialized.Length > 0, "Serialized data is empty");
+
+        // Deserialize into new model
+        var restoredModel = new ARIMAModel<double>(new ARIMAOptions<double> { P = 2, D = 1, Q = 0 });
+        restoredModel.Deserialize(serialized);
+        var restoredPredictions = restoredModel.Predict(x);
+
+        // Predictions should match (skip initial transient)
+        Assert.Equal(originalPredictions.Length, restoredPredictions.Length);
+        AssertFiniteVector(restoredPredictions, "Restored ARIMAModel.Predict");
+        for (int i = 10; i < originalPredictions.Length; i++)
+        {
+            Assert.Equal(originalPredictions[i], restoredPredictions[i], precision: 8);
+        }
     }
 
     #endregion

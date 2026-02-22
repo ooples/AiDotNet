@@ -272,7 +272,13 @@ public class ARModel<T> : TimeSeriesModelBase<T>
     {
         // Use the stored training series for in-sample predictions.
         // The matrix rows indicate how many predictions to make.
-        var series = _trainedSeries.Length > 0 ? _trainedSeries : input.GetColumn(0);
+        if (_trainedSeries.Length == 0)
+        {
+            throw new InvalidOperationException(
+                "Model has not been trained. Call Train() before Predict().");
+        }
+
+        var series = _trainedSeries;
         int horizon = input.Rows;
         Vector<T> predictions = new Vector<T>(horizon);
         for (int t = 0; t < horizon; t++)
@@ -284,10 +290,10 @@ public class ARModel<T> : TimeSeriesModelBase<T>
             else
             {
                 // Out-of-sample: predict using available history including prior predictions
-                var extended = new Vector<T>(series.Length + (t - series.Length + 1));
+                var extended = new Vector<T>(t + 1);
                 for (int j = 0; j < series.Length; j++)
                     extended[j] = series[j];
-                for (int j = series.Length; j <= t; j++)
+                for (int j = series.Length; j < t; j++)
                     extended[j] = predictions[j];
                 predictions[t] = Predict(extended, t);
             }
@@ -446,19 +452,23 @@ public class ARModel<T> : TimeSeriesModelBase<T>
             _arCoefficients[i] = NumOps.FromDouble(reader.ReadDouble());
         }
 
-        // Deserialize training series if available
-        if (reader.BaseStream.Position < reader.BaseStream.Length)
+        // Deserialize training series if available (backward-compatible)
+        _trainedSeries = Vector<T>.Empty();
+        try
         {
             int seriesLength = reader.ReadInt32();
-            _trainedSeries = new Vector<T>(seriesLength);
-            for (int i = 0; i < seriesLength; i++)
+            if (seriesLength > 0)
             {
-                _trainedSeries[i] = NumOps.FromDouble(reader.ReadDouble());
+                _trainedSeries = new Vector<T>(seriesLength);
+                for (int i = 0; i < seriesLength; i++)
+                {
+                    _trainedSeries[i] = NumOps.FromDouble(reader.ReadDouble());
+                }
             }
         }
-        else
+        catch (EndOfStreamException)
         {
-            _trainedSeries = Vector<T>.Empty();
+            // Older serialized models don't include training series — leave empty
         }
     }
 
@@ -735,8 +745,12 @@ public class ARModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     protected override void TrainCore(Matrix<T> x, Vector<T> y)
     {
-        // Store training series for in-sample predictions via Predict(Matrix<T>)
-        _trainedSeries = y;
+        // Store defensive copy of training series for in-sample predictions via Predict(Matrix<T>)
+        _trainedSeries = new Vector<T>(y.Length);
+        for (int i = 0; i < y.Length; i++)
+        {
+            _trainedSeries[i] = y[i];
+        }
 
         // Initialize coefficients
         _arCoefficients = new Vector<T>(_arOrder);

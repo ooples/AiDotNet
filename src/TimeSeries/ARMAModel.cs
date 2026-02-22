@@ -325,15 +325,22 @@ public class ARMAModel<T> : TimeSeriesModelBase<T>
             }
             else
             {
-                // Out-of-sample: use last available values, residuals assumed 0
+                // Out-of-sample: use recursive predictions for lag values beyond series
                 for (int i = 0; i < _arOrder; i++)
                 {
-                    int idx = series.Length - i - 1;
-                    if (idx >= 0)
+                    int lagIdx = t - i - 1;
+                    T lagValue;
+                    if (lagIdx < series.Length)
                     {
-                        prediction = NumOps.Add(prediction, NumOps.Multiply(_arCoefficients[i], series[idx]));
+                        lagValue = lagIdx >= 0 ? series[lagIdx] : NumOps.Zero;
                     }
+                    else
+                    {
+                        lagValue = predictions[lagIdx];
+                    }
+                    prediction = NumOps.Add(prediction, NumOps.Multiply(_arCoefficients[i], lagValue));
                 }
+                // MA residuals are assumed 0 for out-of-sample (no actual observations)
             }
 
             predictions[t] = prediction;
@@ -469,6 +476,19 @@ public class ARMAModel<T> : TimeSeriesModelBase<T>
         {
             writer.Write(Convert.ToDouble(_maCoefficients[i]));
         }
+
+        // Serialize training state for in-sample prediction support
+        writer.Write(_trainedSeries.Length);
+        for (int i = 0; i < _trainedSeries.Length; i++)
+        {
+            writer.Write(Convert.ToDouble(_trainedSeries[i]));
+        }
+
+        writer.Write(_trainedResiduals.Length);
+        for (int i = 0; i < _trainedResiduals.Length; i++)
+        {
+            writer.Write(Convert.ToDouble(_trainedResiduals[i]));
+        }
     }
 
     /// <summary>
@@ -504,6 +524,36 @@ public class ARMAModel<T> : TimeSeriesModelBase<T>
         for (int i = 0; i < _maOrder; i++)
         {
             _maCoefficients[i] = NumOps.FromDouble(reader.ReadDouble());
+        }
+
+        // Deserialize training state if available (backward-compatible)
+        _trainedSeries = Vector<T>.Empty();
+        _trainedResiduals = Vector<T>.Empty();
+        try
+        {
+            int seriesLength = reader.ReadInt32();
+            if (seriesLength > 0)
+            {
+                _trainedSeries = new Vector<T>(seriesLength);
+                for (int i = 0; i < seriesLength; i++)
+                {
+                    _trainedSeries[i] = NumOps.FromDouble(reader.ReadDouble());
+                }
+            }
+
+            int residualsLength = reader.ReadInt32();
+            if (residualsLength > 0)
+            {
+                _trainedResiduals = new Vector<T>(residualsLength);
+                for (int i = 0; i < residualsLength; i++)
+                {
+                    _trainedResiduals[i] = NumOps.FromDouble(reader.ReadDouble());
+                }
+            }
+        }
+        catch (EndOfStreamException)
+        {
+            // Older serialized models don't include training state — leave empty
         }
     }
 
@@ -755,6 +805,25 @@ public class ARMAModel<T> : TimeSeriesModelBase<T>
             }
         }
 
+        // Deep copy training state
+        if (_trainedSeries.Length > 0)
+        {
+            clone._trainedSeries = new Vector<T>(_trainedSeries.Length);
+            for (int i = 0; i < _trainedSeries.Length; i++)
+            {
+                clone._trainedSeries[i] = _trainedSeries[i];
+            }
+        }
+
+        if (_trainedResiduals.Length > 0)
+        {
+            clone._trainedResiduals = new Vector<T>(_trainedResiduals.Length);
+            for (int i = 0; i < _trainedResiduals.Length; i++)
+            {
+                clone._trainedResiduals[i] = _trainedResiduals[i];
+            }
+        }
+
         return clone;
     }
 
@@ -790,6 +859,13 @@ public class ARMAModel<T> : TimeSeriesModelBase<T>
         _maCoefficients = new Vector<T>(_maOrder);
 
         int startIdx = Math.Max(_arOrder, _maOrder);
+        if (y.Length <= startIdx)
+        {
+            throw new ArgumentException(
+                $"Time series length ({y.Length}) must be greater than max(AROrder, MAOrder) = {startIdx}.",
+                nameof(y));
+        }
+
         int nSamples = y.Length - startIdx;
 
         Vector<T> prevGradAR = new Vector<T>(_arOrder);
