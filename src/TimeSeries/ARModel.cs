@@ -748,10 +748,18 @@ public class ARModel<T> : TimeSeriesModelBase<T>
             Vector<T> residuals = CalculateResiduals(y);
             Vector<T> gradAR = CalculateGradients(y, residuals);
 
-            // VECTORIZED: Update coefficients using gradient descent with Engine operations
+            // Normalize gradient by number of data points used
+            int nSamples = y.Length - _arOrder;
+            if (nSamples > 0)
+            {
+                var invN = NumOps.FromDouble(1.0 / nSamples);
+                gradAR = (Vector<T>)Engine.Multiply(gradAR, invN);
+            }
+
+            // Gradient descent: grad = (1/N) * Σ r[t]*y[t-i-1] = -∂L/∂φ, so ADD to descend
             var learningRateT = NumOps.FromDouble(_learningRate);
             var update = (Vector<T>)Engine.Multiply(gradAR, learningRateT);
-            _arCoefficients = (Vector<T>)Engine.Subtract(_arCoefficients, update);
+            _arCoefficients = (Vector<T>)Engine.Add(_arCoefficients, update);
 
             // Check for convergence
             if (CheckConvergence(gradAR, prevGradAR))
