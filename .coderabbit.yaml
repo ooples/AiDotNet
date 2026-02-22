@@ -134,6 +134,155 @@ reviews:
         - Test edge cases and error conditions
         - Use unconditional assertions (the test should FAIL if behavior is wrong)
 
+    # ===== Golden Pattern Enforcement (based on RWKV-7 reference implementation) =====
+
+    - path: "src/NeuralNetworks/**"
+      instructions: |
+        ## Golden Pattern: Neural Network Model Classes
+
+        Every neural network model class MUST follow the golden pattern established by RWKV7LanguageModel.
+        Flag violations as **BLOCKING**.
+
+        ### Required Elements (BLOCKING if missing)
+        1. **XML Documentation**: Class-level `<summary>`, `<typeparam>`, and `<remarks>` with:
+           - Technical description of the architecture
+           - `<para><b>For Beginners:</b>` section explaining in plain language what the model does
+           - `<para><b>Reference:</b>` citing the original research paper (authors, title, year)
+        2. **Forward Method**: Must accept `Tensor<T> input` and return `Tensor<T>`. Must implement
+           the actual forward pass of the model, not a stub.
+        3. **Backward Method**: Must accept `Tensor<T> outputGradient` and return `Tensor<T>`.
+           Must implement actual backpropagation through all layers.
+        4. **GetParameters / UpdateParameters**: Must enumerate all trainable parameters and apply
+           updates respectively. No stubs.
+        5. **GetMetadata**: Must return a dictionary with at minimum: ModelType, ParameterCount,
+           Architecture, and InputShape/OutputShape.
+        6. **No NotImplementedException**: Zero tolerance. Every method must have a real implementation.
+        7. **No `new Random()`**: Use `RandomHelper.CreateSeededRandom()` or `RandomHelper.CreateSecureRandom()`.
+        8. **No `default!`**: Use proper initialization with meaningful defaults.
+        9. **No `// TODO`**: Every code path must be complete.
+
+        ### Architecture Pattern
+        - Constructor takes an Options class (e.g., `ModelNameOptions<T>`) and `NeuralNetworkArchitecture<T>`
+        - Layers are initialized in the constructor from the options
+        - Forward pass chains through layers in sequence
+        - Backward pass chains in reverse order
+
+    - path: "src/Models/Options/**"
+      instructions: |
+        ## Golden Pattern: Options Classes
+
+        Every Options class MUST follow the golden pattern established by RWKV7LanguageModelOptions.
+        Flag violations as **BLOCKING**.
+
+        ### Required Elements (BLOCKING if missing)
+        1. **XML Documentation on class**: `<summary>`, `<typeparam>`, `<remarks>` with:
+           - `<para><b>For Beginners:</b>` section explaining what each option means in plain language
+           - `<para><b>Reference:</b>` citing the original research paper
+           - Key architecture details and typical model sizes
+        2. **Default Constructor**: Parameterless constructor `public ModelNameOptions() { }`
+        3. **Copy Constructor**: `public ModelNameOptions(ModelNameOptions<T> other)` that:
+           - Throws `ArgumentNullException` if other is null
+           - Copies ALL properties from other to this
+           - Does not miss any property (check every property is copied)
+        4. **XML Documentation on every property**: Each property needs `<summary>`, `<value>`, and
+           `<remarks>` with `<para><b>For Beginners:</b>` explaining what the property controls
+        5. **Industry-standard defaults**: Default values must match the original paper's recommended
+           values, not arbitrary numbers. Document where each default comes from.
+        6. **Extends ModelOptions**: Class must extend `ModelOptions` base class
+        7. **No `default!`**: Use proper initialization (e.g., `string.Empty`, `new List<T>()`, `0`, `0.0`)
+
+        ### Copy Constructor Verification
+        When reviewing a copy constructor, verify that EVERY property declared in the class is
+        copied. Missing properties are a **BLOCKING** bug that causes silent data loss.
+
+    - path: "src/Helpers/LayerHelper.cs"
+      instructions: |
+        ## Golden Pattern: LayerHelper CreateDefault Methods
+
+        Every model that uses custom layers MUST have a `CreateDefault{ModelName}Layers` method.
+        Flag violations as **BLOCKING**.
+
+        ### Required Elements (BLOCKING if missing)
+        1. **Method Signature**: `public static IEnumerable<ILayer<T>> CreateDefault{ModelName}Layers(`
+           - First parameter MUST be `NeuralNetworkArchitecture<T> architecture`
+           - Additional parameters for model-specific config with defaults matching Options class
+        2. **Yield Return Pattern**: Must use `yield return` for each layer, not build a list
+        3. **Inline Comments**: Each layer group must have a comment explaining its purpose
+           (e.g., `// === Token Embedding ===`, `// === Encoder Blocks ===`)
+        4. **XML Documentation**: `<summary>`, `<param>`, `<returns>`, `<remarks>` with
+           `<para><b>For Beginners:</b>` section
+
+        ### Verification
+        - Check that the layer dimensions chain correctly (output of layer N = input of layer N+1)
+        - Check that the final layer output matches the model's expected output dimension
+        - Check that parameters have sensible defaults matching the Options class
+
+    - path: "src/TextToSpeech/**"
+      instructions: |
+        ## Golden Pattern: Text-to-Speech Models
+
+        All TTS models must follow the golden pattern. Additionally:
+        - Models should implement proper mel-spectrogram or waveform generation
+        - Vocoder models must handle audio sample rate configuration
+        - Each model needs an Options class with paper-referenced defaults
+        - LayerHelper must have a `CreateDefault{ModelName}Layers` method
+        - Reference the original TTS paper in XML docs
+
+    - path: "src/SpeechRecognition/**"
+      instructions: |
+        ## Golden Pattern: Speech Recognition Models
+
+        All ASR models must follow the golden pattern. Additionally:
+        - Models should implement proper audio feature extraction (mel, MFCC, etc.)
+        - CTC or attention-based decoding must be properly implemented
+        - Each model needs an Options class with paper-referenced defaults
+        - LayerHelper must have a `CreateDefault{ModelName}Layers` method
+        - Reference the original ASR paper in XML docs
+
+    - path: "src/Video/**"
+      instructions: |
+        ## Golden Pattern: Video Models
+
+        All video models must follow the golden pattern. Additionally:
+        - Video generation models must handle temporal consistency
+        - Video enhancement models must specify input/output resolution handling
+        - Each model needs an Options class with paper-referenced defaults
+        - LayerHelper must have a `CreateDefault{ModelName}Layers` method
+        - Reference the original paper in XML docs
+
+    - path: "src/ComputerVision/Segmentation/**"
+      instructions: |
+        ## Golden Pattern: Segmentation Models
+
+        All segmentation models must follow the golden pattern. Additionally:
+        - Models should implement proper pixel-level classification
+        - Encoder-decoder architecture with skip connections where applicable
+        - Each model needs an Options class with paper-referenced defaults
+        - LayerHelper must have a `CreateDefault{ModelName}Layers` method
+        - Reference the original segmentation paper in XML docs
+
+    - path: "src/VisionLanguage/**"
+      instructions: |
+        ## Golden Pattern: Vision-Language Models
+
+        All VLM models must follow the golden pattern. Additionally:
+        - Models must handle multi-modal inputs (image + text)
+        - Contrastive or generative alignment must be properly implemented
+        - Each model needs an Options class with paper-referenced defaults
+        - LayerHelper must have a `CreateDefault{ModelName}Layers` method
+        - Reference the original VLM paper in XML docs
+
+    - path: "src/Safety/**"
+      instructions: |
+        ## Golden Pattern: Safety & Content Filtering Models
+
+        All safety models must follow the golden pattern. Additionally:
+        - Models must handle multi-modal content analysis where applicable
+        - Confidence scores and category labels must be properly typed
+        - Each model needs an Options class with paper-referenced defaults
+        - LayerHelper must have a `CreateDefault{ModelName}Layers` method
+        - Reference the original safety paper in XML docs
+
 chat:
   auto_reply: true
 
