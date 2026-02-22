@@ -679,7 +679,7 @@ public class ARMAModel<T> : TimeSeriesModelBase<T>
         }
 
         // Use stored residuals for initial MA values, assume 0 for future residuals
-        var storedResiduals = _trainedResiduals ?? new Vector<T>(history.Length);
+        var storedResiduals = _trainedResiduals;
 
         Vector<T> extendedHistory = new Vector<T>(history.Length + horizon);
         Vector<T> extendedResiduals = new Vector<T>(history.Length + horizon);
