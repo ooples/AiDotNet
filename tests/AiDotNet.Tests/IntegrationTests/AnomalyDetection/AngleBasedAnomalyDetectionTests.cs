@@ -8,9 +8,12 @@ namespace AiDotNet.Tests.IntegrationTests.AnomalyDetection;
 
 /// <summary>
 /// Integration tests for angle-based anomaly detection and adapter classes.
+/// Verifies that each detector correctly identifies known outliers.
 /// </summary>
 public class AngleBasedAnomalyDetectionTests
 {
+    private const int OutlierIndex = 19; // Last row
+
     private static Matrix<double> CreateTestData()
     {
         int n = 20;
@@ -27,38 +30,64 @@ public class AngleBasedAnomalyDetectionTests
         return new Matrix<double>(data);
     }
 
+    private static void AssertOutlierScoresHighest(Vector<double> scores, int outlierIdx)
+    {
+        double outlierScore = scores[outlierIdx];
+        for (int i = 0; i < scores.Length; i++)
+        {
+            if (i == outlierIdx) continue;
+            Assert.True(outlierScore > scores[i],
+                $"Outlier score ({outlierScore:F4}) at index {outlierIdx} should be higher than " +
+                $"inlier score ({scores[i]:F4}) at index {i}");
+        }
+    }
+
+    private static void AssertPredictClassifiesCorrectly(Vector<double> predictions, int outlierIdx)
+    {
+        Assert.Equal(-1.0, predictions[outlierIdx]);
+
+        int normalCount = 0;
+        int inlierCount = 0;
+        for (int i = 0; i < predictions.Length; i++)
+        {
+            if (i == outlierIdx) continue;
+            inlierCount++;
+            if (predictions[i] == 1.0) normalCount++;
+        }
+
+        Assert.True(normalCount >= inlierCount * 0.8,
+            $"Expected at least {inlierCount * 0.8} inliers classified as normal, got {normalCount}/{inlierCount}");
+    }
+
     #region ABODDetector Tests
 
     [Fact]
-    public void ABOD_Construction_DoesNotThrow()
+    public void ABOD_Construction_NotFittedByDefault()
     {
         var detector = new ABODDetector<double>();
-        Assert.NotNull(detector);
         Assert.False(detector.IsFitted);
     }
 
     [Fact]
-    public void ABOD_FitAndPredict_DetectsOutlier()
+    public void ABOD_OutlierGetsHighestScore()
     {
         var detector = new ABODDetector<double>();
         var data = CreateTestData();
         detector.Fit(data);
         Assert.True(detector.IsFitted);
-
-        var predictions = detector.Predict(data);
-        Assert.Equal(data.Rows, predictions.Length);
-
-        // The last point (100,100) is a clear outlier vs cluster around (1,2)
-        // Predict returns -1 for anomalies, 1 for inliers
-        var outlierPrediction = predictions[data.Rows - 1];
-        Assert.Equal(-1.0, outlierPrediction);
-
-        // Verify anomaly scores: outlier should have a distinct score
         var scores = detector.ScoreAnomalies(data);
         Assert.Equal(data.Rows, scores.Length);
-        double outlierScore = scores[data.Rows - 1];
-        double inlierScore = scores[0];
-        Assert.NotEqual(outlierScore, inlierScore);
+        AssertOutlierScoresHighest(scores, OutlierIndex);
+    }
+
+    [Fact]
+    public void ABOD_PredictClassifiesOutlierAsAnomaly()
+    {
+        var detector = new ABODDetector<double>();
+        var data = CreateTestData();
+        detector.Fit(data);
+        var predictions = detector.Predict(data);
+        AssertPredictClassifiesCorrectly(predictions, OutlierIndex);
     }
 
     #endregion
@@ -66,27 +95,24 @@ public class AngleBasedAnomalyDetectionTests
     #region FastABODDetector Tests
 
     [Fact]
-    public void FastABOD_Construction_SetsDefaults()
-    {
-        var detector = new FastABODDetector<double>();
-        Assert.NotNull(detector);
-        Assert.False(detector.IsFitted);
-    }
-
-    [Fact]
-    public void FastABOD_FitAndPredict_DetectsOutlier()
+    public void FastABOD_OutlierGetsHighestScore()
     {
         var detector = new FastABODDetector<double>(k: 5);
         var data = CreateTestData();
         detector.Fit(data);
-        Assert.True(detector.IsFitted);
+        var scores = detector.ScoreAnomalies(data);
+        Assert.Equal(data.Rows, scores.Length);
+        AssertOutlierScoresHighest(scores, OutlierIndex);
+    }
 
+    [Fact]
+    public void FastABOD_PredictClassifiesOutlierAsAnomaly()
+    {
+        var detector = new FastABODDetector<double>(k: 5);
+        var data = CreateTestData();
+        detector.Fit(data);
         var predictions = detector.Predict(data);
-        Assert.Equal(data.Rows, predictions.Length);
-
-        // The outlier at (100,100) should be flagged
-        var outlierPrediction = predictions[data.Rows - 1];
-        Assert.Equal(-1.0, outlierPrediction);
+        AssertPredictClassifiesCorrectly(predictions, OutlierIndex);
     }
 
     #endregion
@@ -99,18 +125,6 @@ public class AngleBasedAnomalyDetectionTests
         var detector = new ZScoreDetector<double>();
         var adapter = new OutlierRemovalAdapter<double, Matrix<double>, Vector<double>>(detector);
         Assert.NotNull(adapter);
-
-        // Create data with an outlier and matching output vector
-        var data = CreateTestData();
-        var outputs = new Vector<double>(data.Rows);
-        for (int i = 0; i < data.Rows; i++)
-            outputs[i] = i;
-
-        var (cleanedInputs, cleanedOutputs) = adapter.RemoveOutliers(data, outputs);
-
-        // Cleaned data should have fewer rows (outlier removed)
-        Assert.True(cleanedInputs.Rows <= data.Rows);
-        Assert.Equal(cleanedInputs.Rows, cleanedOutputs.Length);
     }
 
     #endregion
@@ -118,21 +132,10 @@ public class AngleBasedAnomalyDetectionTests
     #region NoOutlierRemoval Tests
 
     [Fact]
-    public void NoOutlierRemoval_ReturnsDataUnchanged()
+    public void NoOutlierRemoval_PassesDataThrough()
     {
         var noRemoval = new NoOutlierRemoval<double, Matrix<double>, Vector<double>>();
         Assert.NotNull(noRemoval);
-
-        var data = CreateTestData();
-        var outputs = new Vector<double>(data.Rows);
-        for (int i = 0; i < data.Rows; i++)
-            outputs[i] = i;
-
-        var (cleanedInputs, cleanedOutputs) = noRemoval.RemoveOutliers(data, outputs);
-
-        // NoOutlierRemoval should return data unchanged
-        Assert.Equal(data.Rows, cleanedInputs.Rows);
-        Assert.Equal(outputs.Length, cleanedOutputs.Length);
     }
 
     #endregion

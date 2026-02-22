@@ -1,3 +1,4 @@
+using AiDotNet.AnomalyDetection;
 using AiDotNet.AnomalyDetection.NeuralNetwork;
 using AiDotNet.LinearAlgebra;
 using Xunit;
@@ -6,9 +7,12 @@ namespace AiDotNet.Tests.IntegrationTests.AnomalyDetection;
 
 /// <summary>
 /// Integration tests for neural network anomaly detection classes.
+/// Verifies that each detector correctly identifies known outliers.
 /// </summary>
 public class NeuralNetworkAnomalyDetectionTests
 {
+    private const int OutlierIndex = 29; // Last row
+
     private static Matrix<double> CreateTestData()
     {
         int n = 30;
@@ -29,35 +33,64 @@ public class NeuralNetworkAnomalyDetectionTests
         return new Matrix<double>(data);
     }
 
+    private static void AssertOutlierScoresHighest(Vector<double> scores, int outlierIdx)
+    {
+        double outlierScore = scores[outlierIdx];
+        for (int i = 0; i < scores.Length; i++)
+        {
+            if (i == outlierIdx) continue;
+            Assert.True(outlierScore > scores[i],
+                $"Outlier score ({outlierScore:F4}) at index {outlierIdx} should be higher than " +
+                $"inlier score ({scores[i]:F4}) at index {i}");
+        }
+    }
+
+    private static void AssertPredictClassifiesCorrectly(Vector<double> predictions, int outlierIdx)
+    {
+        Assert.Equal(-1.0, predictions[outlierIdx]);
+
+        int normalCount = 0;
+        int inlierCount = 0;
+        for (int i = 0; i < predictions.Length; i++)
+        {
+            if (i == outlierIdx) continue;
+            inlierCount++;
+            if (predictions[i] == 1.0) normalCount++;
+        }
+
+        Assert.True(normalCount >= inlierCount * 0.8,
+            $"Expected at least {inlierCount * 0.8} inliers classified as normal, got {normalCount}/{inlierCount}");
+    }
+
     #region AutoencoderDetector Tests
 
     [Fact]
-    public void Autoencoder_Construction_SetsDefaults()
+    public void Autoencoder_Construction_NotFittedByDefault()
     {
         var detector = new AutoencoderDetector<double>();
-        Assert.NotNull(detector);
         Assert.False(detector.IsFitted);
     }
 
     [Fact]
-    public void Autoencoder_FitAndPredict_ProducesValidPredictions()
+    public void Autoencoder_OutlierGetsHighestScore()
     {
-        var detector = new AutoencoderDetector<double>(epochs: 5);
+        var detector = new AutoencoderDetector<double>(epochs: 10);
         var data = CreateTestData();
         detector.Fit(data);
         Assert.True(detector.IsFitted);
-
-        var predictions = detector.Predict(data);
-        Assert.Equal(data.Rows, predictions.Length);
-
-        // Every prediction should be either -1 (anomaly) or 1 (inlier)
-        for (int i = 0; i < predictions.Length; i++)
-            Assert.True(predictions[i] == -1.0 || predictions[i] == 1.0,
-                $"Prediction at index {i} should be -1 or 1, got {predictions[i]}");
-
-        // Scores should differentiate outlier from inlier
         var scores = detector.ScoreAnomalies(data);
-        Assert.NotEqual(scores[0], scores[data.Rows - 1]);
+        Assert.Equal(data.Rows, scores.Length);
+        AssertOutlierScoresHighest(scores, OutlierIndex);
+    }
+
+    [Fact]
+    public void Autoencoder_PredictClassifiesOutlierAsAnomaly()
+    {
+        var detector = new AutoencoderDetector<double>(epochs: 10);
+        var data = CreateTestData();
+        detector.Fit(data);
+        var predictions = detector.Predict(data);
+        AssertPredictClassifiesCorrectly(predictions, OutlierIndex);
     }
 
     #endregion
@@ -65,20 +98,24 @@ public class NeuralNetworkAnomalyDetectionTests
     #region VAEDetector Tests
 
     [Fact]
-    public void VAE_Construction_DoesNotThrow()
+    public void VAE_OutlierGetsHighestScore()
     {
-        var detector = new VAEDetector<double>();
-        Assert.NotNull(detector);
+        var detector = new VAEDetector<double>(epochs: 10);
+        var data = CreateTestData();
+        detector.Fit(data);
+        var scores = detector.ScoreAnomalies(data);
+        Assert.Equal(data.Rows, scores.Length);
+        AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
     [Fact]
-    public void VAE_FitAndPredict_Works()
+    public void VAE_PredictClassifiesOutlierAsAnomaly()
     {
-        var detector = new VAEDetector<double>(epochs: 5);
+        var detector = new VAEDetector<double>(epochs: 10);
         var data = CreateTestData();
         detector.Fit(data);
         var predictions = detector.Predict(data);
-        Assert.Equal(data.Rows, predictions.Length);
+        AssertPredictClassifiesCorrectly(predictions, OutlierIndex);
     }
 
     #endregion
@@ -86,20 +123,24 @@ public class NeuralNetworkAnomalyDetectionTests
     #region DAGMMDetector Tests
 
     [Fact]
-    public void DAGMM_Construction_DoesNotThrow()
+    public void DAGMM_OutlierGetsHighestScore()
     {
-        var detector = new DAGMMDetector<double>();
-        Assert.NotNull(detector);
+        var detector = new DAGMMDetector<double>(epochs: 10);
+        var data = CreateTestData();
+        detector.Fit(data);
+        var scores = detector.ScoreAnomalies(data);
+        Assert.Equal(data.Rows, scores.Length);
+        AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
     [Fact]
-    public void DAGMM_FitAndPredict_Works()
+    public void DAGMM_PredictClassifiesOutlierAsAnomaly()
     {
-        var detector = new DAGMMDetector<double>(epochs: 5);
+        var detector = new DAGMMDetector<double>(epochs: 10);
         var data = CreateTestData();
         detector.Fit(data);
         var predictions = detector.Predict(data);
-        Assert.Equal(data.Rows, predictions.Length);
+        AssertPredictClassifiesCorrectly(predictions, OutlierIndex);
     }
 
     #endregion
@@ -107,20 +148,24 @@ public class NeuralNetworkAnomalyDetectionTests
     #region DeepSVDDDetector Tests
 
     [Fact]
-    public void DeepSVDD_Construction_DoesNotThrow()
+    public void DeepSVDD_OutlierGetsHighestScore()
     {
-        var detector = new DeepSVDDDetector<double>();
-        Assert.NotNull(detector);
+        var detector = new DeepSVDDDetector<double>(epochs: 10);
+        var data = CreateTestData();
+        detector.Fit(data);
+        var scores = detector.ScoreAnomalies(data);
+        Assert.Equal(data.Rows, scores.Length);
+        AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
     [Fact]
-    public void DeepSVDD_FitAndPredict_Works()
+    public void DeepSVDD_PredictClassifiesOutlierAsAnomaly()
     {
-        var detector = new DeepSVDDDetector<double>(epochs: 5);
+        var detector = new DeepSVDDDetector<double>(epochs: 10);
         var data = CreateTestData();
         detector.Fit(data);
         var predictions = detector.Predict(data);
-        Assert.Equal(data.Rows, predictions.Length);
+        AssertPredictClassifiesCorrectly(predictions, OutlierIndex);
     }
 
     #endregion
@@ -128,20 +173,24 @@ public class NeuralNetworkAnomalyDetectionTests
     #region DevNetDetector Tests
 
     [Fact]
-    public void DevNet_Construction_DoesNotThrow()
+    public void DevNet_OutlierGetsHighestScore()
     {
-        var detector = new DevNetDetector<double>();
-        Assert.NotNull(detector);
+        var detector = new DevNetDetector<double>(epochs: 10);
+        var data = CreateTestData();
+        detector.Fit(data);
+        var scores = detector.ScoreAnomalies(data);
+        Assert.Equal(data.Rows, scores.Length);
+        AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
     [Fact]
-    public void DevNet_FitAndPredict_Works()
+    public void DevNet_PredictClassifiesOutlierAsAnomaly()
     {
-        var detector = new DevNetDetector<double>(epochs: 5);
+        var detector = new DevNetDetector<double>(epochs: 10);
         var data = CreateTestData();
         detector.Fit(data);
         var predictions = detector.Predict(data);
-        Assert.Equal(data.Rows, predictions.Length);
+        AssertPredictClassifiesCorrectly(predictions, OutlierIndex);
     }
 
     #endregion
@@ -149,20 +198,24 @@ public class NeuralNetworkAnomalyDetectionTests
     #region GANomalyDetector Tests
 
     [Fact]
-    public void GAnomaly_Construction_DoesNotThrow()
+    public void GAnomaly_OutlierGetsHighestScore()
     {
-        var detector = new GANomalyDetector<double>();
-        Assert.NotNull(detector);
+        var detector = new GANomalyDetector<double>(epochs: 10);
+        var data = CreateTestData();
+        detector.Fit(data);
+        var scores = detector.ScoreAnomalies(data);
+        Assert.Equal(data.Rows, scores.Length);
+        AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
     [Fact]
-    public void GAnomaly_FitAndPredict_Works()
+    public void GAnomaly_PredictClassifiesOutlierAsAnomaly()
     {
-        var detector = new GANomalyDetector<double>(epochs: 5);
+        var detector = new GANomalyDetector<double>(epochs: 10);
         var data = CreateTestData();
         detector.Fit(data);
         var predictions = detector.Predict(data);
-        Assert.Equal(data.Rows, predictions.Length);
+        AssertPredictClassifiesCorrectly(predictions, OutlierIndex);
     }
 
     #endregion
@@ -170,20 +223,49 @@ public class NeuralNetworkAnomalyDetectionTests
     #region AnoGANDetector Tests
 
     [Fact]
-    public void AnoGAN_Construction_DoesNotThrow()
+    public void AnoGAN_OutlierGetsHighestScore()
     {
-        var detector = new AnoGANDetector<double>();
-        Assert.NotNull(detector);
+        var detector = new AnoGANDetector<double>(epochs: 10);
+        var data = CreateTestData();
+        detector.Fit(data);
+        var scores = detector.ScoreAnomalies(data);
+        Assert.Equal(data.Rows, scores.Length);
+        AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
     [Fact]
-    public void AnoGAN_FitAndPredict_Works()
+    public void AnoGAN_PredictClassifiesOutlierAsAnomaly()
     {
-        var detector = new AnoGANDetector<double>(epochs: 5);
+        var detector = new AnoGANDetector<double>(epochs: 10);
         var data = CreateTestData();
         detector.Fit(data);
         var predictions = detector.Predict(data);
-        Assert.Equal(data.Rows, predictions.Length);
+        AssertPredictClassifiesCorrectly(predictions, OutlierIndex);
+    }
+
+    #endregion
+
+    #region Cross-Detector Tests
+
+    [Fact]
+    public void AllNeuralNetworkDetectors_PredictBeforeFit_Throws()
+    {
+        var detectors = new AnomalyDetectorBase<double>[]
+        {
+            new AutoencoderDetector<double>(),
+            new VAEDetector<double>(),
+            new DAGMMDetector<double>(),
+            new DeepSVDDDetector<double>(),
+            new DevNetDetector<double>(),
+            new GANomalyDetector<double>(),
+            new AnoGANDetector<double>(),
+        };
+
+        var data = CreateTestData();
+        foreach (var detector in detectors)
+        {
+            Assert.Throws<InvalidOperationException>(() => detector.Predict(data));
+        }
     }
 
     #endregion

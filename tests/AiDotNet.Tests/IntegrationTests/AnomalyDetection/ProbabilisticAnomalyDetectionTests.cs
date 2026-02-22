@@ -1,3 +1,4 @@
+using AiDotNet.AnomalyDetection;
 using AiDotNet.AnomalyDetection.Probabilistic;
 using AiDotNet.LinearAlgebra;
 using Xunit;
@@ -6,9 +7,12 @@ namespace AiDotNet.Tests.IntegrationTests.AnomalyDetection;
 
 /// <summary>
 /// Integration tests for probabilistic anomaly detection classes.
+/// Verifies that each detector correctly identifies known outliers.
 /// </summary>
 public class ProbabilisticAnomalyDetectionTests
 {
+    private const int OutlierIndex = 29; // Last row
+
     private static Matrix<double> CreateTestData()
     {
         int n = 30;
@@ -25,33 +29,64 @@ public class ProbabilisticAnomalyDetectionTests
         return new Matrix<double>(data);
     }
 
+    private static void AssertOutlierScoresHighest(Vector<double> scores, int outlierIdx)
+    {
+        double outlierScore = scores[outlierIdx];
+        for (int i = 0; i < scores.Length; i++)
+        {
+            if (i == outlierIdx) continue;
+            Assert.True(outlierScore > scores[i],
+                $"Outlier score ({outlierScore:F4}) at index {outlierIdx} should be higher than " +
+                $"inlier score ({scores[i]:F4}) at index {i}");
+        }
+    }
+
+    private static void AssertPredictClassifiesCorrectly(Vector<double> predictions, int outlierIdx)
+    {
+        Assert.Equal(-1.0, predictions[outlierIdx]);
+
+        int normalCount = 0;
+        int inlierCount = 0;
+        for (int i = 0; i < predictions.Length; i++)
+        {
+            if (i == outlierIdx) continue;
+            inlierCount++;
+            if (predictions[i] == 1.0) normalCount++;
+        }
+
+        Assert.True(normalCount >= inlierCount * 0.8,
+            $"Expected at least {inlierCount * 0.8} inliers classified as normal, got {normalCount}/{inlierCount}");
+    }
+
     #region BayesianDetector Tests
 
     [Fact]
-    public void Bayesian_Construction_DoesNotThrow()
+    public void Bayesian_Construction_NotFittedByDefault()
     {
         var detector = new BayesianDetector<double>();
-        Assert.NotNull(detector);
         Assert.False(detector.IsFitted);
     }
 
     [Fact]
-    public void Bayesian_FitAndPredict_DetectsOutlier()
+    public void Bayesian_OutlierGetsHighestScore()
     {
         var detector = new BayesianDetector<double>();
         var data = CreateTestData();
         detector.Fit(data);
         Assert.True(detector.IsFitted);
-
-        var predictions = detector.Predict(data);
-        Assert.Equal(data.Rows, predictions.Length);
-
-        // Outlier at (100,100) should be detected
-        Assert.Equal(-1.0, predictions[data.Rows - 1]);
-
-        // Scores should differentiate outlier
         var scores = detector.ScoreAnomalies(data);
-        Assert.NotEqual(scores[0], scores[data.Rows - 1]);
+        Assert.Equal(data.Rows, scores.Length);
+        AssertOutlierScoresHighest(scores, OutlierIndex);
+    }
+
+    [Fact]
+    public void Bayesian_PredictClassifiesOutlierAsAnomaly()
+    {
+        var detector = new BayesianDetector<double>();
+        var data = CreateTestData();
+        detector.Fit(data);
+        var predictions = detector.Predict(data);
+        AssertPredictClassifiesCorrectly(predictions, OutlierIndex);
     }
 
     #endregion
@@ -59,20 +94,24 @@ public class ProbabilisticAnomalyDetectionTests
     #region GMMDetector Tests
 
     [Fact]
-    public void GMM_Construction_DoesNotThrow()
+    public void GMM_OutlierGetsHighestScore()
     {
-        var detector = new GMMDetector<double>();
-        Assert.NotNull(detector);
+        var detector = new GMMDetector<double>(nComponents: 2);
+        var data = CreateTestData();
+        detector.Fit(data);
+        var scores = detector.ScoreAnomalies(data);
+        Assert.Equal(data.Rows, scores.Length);
+        AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
     [Fact]
-    public void GMM_FitAndPredict_Works()
+    public void GMM_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new GMMDetector<double>(nComponents: 2);
         var data = CreateTestData();
         detector.Fit(data);
         var predictions = detector.Predict(data);
-        Assert.Equal(data.Rows, predictions.Length);
+        AssertPredictClassifiesCorrectly(predictions, OutlierIndex);
     }
 
     #endregion
@@ -80,20 +119,24 @@ public class ProbabilisticAnomalyDetectionTests
     #region COPODDetector Tests
 
     [Fact]
-    public void COPOD_Construction_DoesNotThrow()
+    public void COPOD_OutlierGetsHighestScore()
     {
         var detector = new COPODDetector<double>();
-        Assert.NotNull(detector);
+        var data = CreateTestData();
+        detector.Fit(data);
+        var scores = detector.ScoreAnomalies(data);
+        Assert.Equal(data.Rows, scores.Length);
+        AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
     [Fact]
-    public void COPOD_FitAndPredict_Works()
+    public void COPOD_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new COPODDetector<double>();
         var data = CreateTestData();
         detector.Fit(data);
         var predictions = detector.Predict(data);
-        Assert.Equal(data.Rows, predictions.Length);
+        AssertPredictClassifiesCorrectly(predictions, OutlierIndex);
     }
 
     #endregion
@@ -101,20 +144,46 @@ public class ProbabilisticAnomalyDetectionTests
     #region ECODDetector Tests
 
     [Fact]
-    public void ECOD_Construction_DoesNotThrow()
+    public void ECOD_OutlierGetsHighestScore()
     {
         var detector = new ECODDetector<double>();
-        Assert.NotNull(detector);
+        var data = CreateTestData();
+        detector.Fit(data);
+        var scores = detector.ScoreAnomalies(data);
+        Assert.Equal(data.Rows, scores.Length);
+        AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
     [Fact]
-    public void ECOD_FitAndPredict_Works()
+    public void ECOD_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new ECODDetector<double>();
         var data = CreateTestData();
         detector.Fit(data);
         var predictions = detector.Predict(data);
-        Assert.Equal(data.Rows, predictions.Length);
+        AssertPredictClassifiesCorrectly(predictions, OutlierIndex);
+    }
+
+    #endregion
+
+    #region Cross-Detector Tests
+
+    [Fact]
+    public void AllProbabilisticDetectors_PredictBeforeFit_Throws()
+    {
+        var detectors = new AnomalyDetectorBase<double>[]
+        {
+            new BayesianDetector<double>(),
+            new GMMDetector<double>(),
+            new COPODDetector<double>(),
+            new ECODDetector<double>(),
+        };
+
+        var data = CreateTestData();
+        foreach (var detector in detectors)
+        {
+            Assert.Throws<InvalidOperationException>(() => detector.Predict(data));
+        }
     }
 
     #endregion

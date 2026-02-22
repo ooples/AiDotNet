@@ -1,3 +1,4 @@
+using AiDotNet.AnomalyDetection;
 using AiDotNet.AnomalyDetection.ClusterBased;
 using AiDotNet.LinearAlgebra;
 using Xunit;
@@ -6,9 +7,12 @@ namespace AiDotNet.Tests.IntegrationTests.AnomalyDetection;
 
 /// <summary>
 /// Integration tests for cluster-based anomaly detection classes.
+/// Verifies that each detector correctly identifies known outliers.
 /// </summary>
 public class ClusterBasedAnomalyDetectionTests
 {
+    private const int OutlierIndex = 29; // Last row
+
     private static Matrix<double> CreateTestData()
     {
         int n = 30;
@@ -25,25 +29,64 @@ public class ClusterBasedAnomalyDetectionTests
         return new Matrix<double>(data);
     }
 
+    private static void AssertOutlierScoresHighest(Vector<double> scores, int outlierIdx)
+    {
+        double outlierScore = scores[outlierIdx];
+        for (int i = 0; i < scores.Length; i++)
+        {
+            if (i == outlierIdx) continue;
+            Assert.True(outlierScore > scores[i],
+                $"Outlier score ({outlierScore:F4}) at index {outlierIdx} should be higher than " +
+                $"inlier score ({scores[i]:F4}) at index {i}");
+        }
+    }
+
+    private static void AssertPredictClassifiesCorrectly(Vector<double> predictions, int outlierIdx)
+    {
+        Assert.Equal(-1.0, predictions[outlierIdx]);
+
+        int normalCount = 0;
+        int inlierCount = 0;
+        for (int i = 0; i < predictions.Length; i++)
+        {
+            if (i == outlierIdx) continue;
+            inlierCount++;
+            if (predictions[i] == 1.0) normalCount++;
+        }
+
+        Assert.True(normalCount >= inlierCount * 0.8,
+            $"Expected at least {inlierCount * 0.8} inliers classified as normal, got {normalCount}/{inlierCount}");
+    }
+
     #region KMeansDetector Tests
 
     [Fact]
-    public void KMeans_Construction_DoesNotThrow()
+    public void KMeans_Construction_NotFittedByDefault()
     {
         var detector = new KMeansDetector<double>();
-        Assert.NotNull(detector);
         Assert.False(detector.IsFitted);
     }
 
     [Fact]
-    public void KMeans_FitAndPredict_Works()
+    public void KMeans_OutlierGetsHighestScore()
     {
         var detector = new KMeansDetector<double>(k: 3);
         var data = CreateTestData();
         detector.Fit(data);
         Assert.True(detector.IsFitted);
+        var scores = detector.ScoreAnomalies(data);
+        Assert.Equal(data.Rows, scores.Length);
+        AssertOutlierScoresHighest(scores, OutlierIndex);
+    }
+
+    [Fact]
+    public void KMeans_PredictClassifiesOutlierAsAnomaly()
+    {
+        var detector = new KMeansDetector<double>(k: 3);
+        var data = CreateTestData();
+        detector.Fit(data);
         var predictions = detector.Predict(data);
-        Assert.Equal(data.Rows, predictions.Length);
+        AssertPredictClassifiesCorrectly(predictions, OutlierIndex);
     }
 
     #endregion
@@ -51,32 +94,24 @@ public class ClusterBasedAnomalyDetectionTests
     #region DBSCANDetector Tests
 
     [Fact]
-    public void DBSCAN_Construction_DoesNotThrow()
-    {
-        var detector = new DBSCANDetector<double>();
-        Assert.NotNull(detector);
-    }
-
-    [Fact]
-    public void DBSCAN_FitAndPredict_DetectsNoisePoints()
+    public void DBSCAN_OutlierGetsHighestScore()
     {
         var detector = new DBSCANDetector<double>();
         var data = CreateTestData();
         detector.Fit(data);
-        Assert.True(detector.IsFitted);
+        var scores = detector.ScoreAnomalies(data);
+        Assert.Equal(data.Rows, scores.Length);
+        AssertOutlierScoresHighest(scores, OutlierIndex);
+    }
 
+    [Fact]
+    public void DBSCAN_PredictClassifiesOutlierAsAnomaly()
+    {
+        var detector = new DBSCANDetector<double>();
+        var data = CreateTestData();
+        detector.Fit(data);
         var predictions = detector.Predict(data);
-        Assert.Equal(data.Rows, predictions.Length);
-
-        // The outlier at (100,100) should be detected as anomaly (-1)
-        var outlierPrediction = predictions[data.Rows - 1];
-        Assert.Equal(-1.0, outlierPrediction);
-
-        // At least some cluster points should be inliers (1)
-        var inlierCount = 0;
-        for (int i = 0; i < predictions.Length - 1; i++)
-            if (predictions[i] == 1.0) inlierCount++;
-        Assert.True(inlierCount > 0, "Expected at least some inlier predictions");
+        AssertPredictClassifiesCorrectly(predictions, OutlierIndex);
     }
 
     #endregion
@@ -84,20 +119,24 @@ public class ClusterBasedAnomalyDetectionTests
     #region HDBSCANDetector Tests
 
     [Fact]
-    public void HDBSCAN_Construction_DoesNotThrow()
+    public void HDBSCAN_OutlierGetsHighestScore()
     {
         var detector = new HDBSCANDetector<double>();
-        Assert.NotNull(detector);
+        var data = CreateTestData();
+        detector.Fit(data);
+        var scores = detector.ScoreAnomalies(data);
+        Assert.Equal(data.Rows, scores.Length);
+        AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
     [Fact]
-    public void HDBSCAN_FitAndPredict_Works()
+    public void HDBSCAN_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new HDBSCANDetector<double>();
         var data = CreateTestData();
         detector.Fit(data);
         var predictions = detector.Predict(data);
-        Assert.Equal(data.Rows, predictions.Length);
+        AssertPredictClassifiesCorrectly(predictions, OutlierIndex);
     }
 
     #endregion
@@ -105,20 +144,46 @@ public class ClusterBasedAnomalyDetectionTests
     #region CBLOFDetector Tests
 
     [Fact]
-    public void CBLOF_Construction_DoesNotThrow()
+    public void CBLOF_OutlierGetsHighestScore()
     {
         var detector = new CBLOFDetector<double>();
-        Assert.NotNull(detector);
+        var data = CreateTestData();
+        detector.Fit(data);
+        var scores = detector.ScoreAnomalies(data);
+        Assert.Equal(data.Rows, scores.Length);
+        AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
     [Fact]
-    public void CBLOF_FitAndPredict_Works()
+    public void CBLOF_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new CBLOFDetector<double>();
         var data = CreateTestData();
         detector.Fit(data);
         var predictions = detector.Predict(data);
-        Assert.Equal(data.Rows, predictions.Length);
+        AssertPredictClassifiesCorrectly(predictions, OutlierIndex);
+    }
+
+    #endregion
+
+    #region Cross-Detector Tests
+
+    [Fact]
+    public void AllClusterDetectors_PredictBeforeFit_Throws()
+    {
+        var detectors = new AnomalyDetectorBase<double>[]
+        {
+            new KMeansDetector<double>(),
+            new DBSCANDetector<double>(),
+            new HDBSCANDetector<double>(),
+            new CBLOFDetector<double>(),
+        };
+
+        var data = CreateTestData();
+        foreach (var detector in detectors)
+        {
+            Assert.Throws<InvalidOperationException>(() => detector.Predict(data));
+        }
     }
 
     #endregion

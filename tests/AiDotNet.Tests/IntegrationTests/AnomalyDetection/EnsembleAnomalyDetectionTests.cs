@@ -1,3 +1,4 @@
+using AiDotNet.AnomalyDetection;
 using AiDotNet.AnomalyDetection.Ensemble;
 using AiDotNet.LinearAlgebra;
 using Xunit;
@@ -6,9 +7,12 @@ namespace AiDotNet.Tests.IntegrationTests.AnomalyDetection;
 
 /// <summary>
 /// Integration tests for ensemble anomaly detection classes.
+/// Verifies that each detector correctly identifies known outliers.
 /// </summary>
 public class EnsembleAnomalyDetectionTests
 {
+    private const int OutlierIndex = 29; // Last row
+
     private static Matrix<double> CreateTestData()
     {
         int n = 30;
@@ -27,33 +31,64 @@ public class EnsembleAnomalyDetectionTests
         return new Matrix<double>(data);
     }
 
+    private static void AssertOutlierScoresHighest(Vector<double> scores, int outlierIdx)
+    {
+        double outlierScore = scores[outlierIdx];
+        for (int i = 0; i < scores.Length; i++)
+        {
+            if (i == outlierIdx) continue;
+            Assert.True(outlierScore > scores[i],
+                $"Outlier score ({outlierScore:F4}) at index {outlierIdx} should be higher than " +
+                $"inlier score ({scores[i]:F4}) at index {i}");
+        }
+    }
+
+    private static void AssertPredictClassifiesCorrectly(Vector<double> predictions, int outlierIdx)
+    {
+        Assert.Equal(-1.0, predictions[outlierIdx]);
+
+        int normalCount = 0;
+        int inlierCount = 0;
+        for (int i = 0; i < predictions.Length; i++)
+        {
+            if (i == outlierIdx) continue;
+            inlierCount++;
+            if (predictions[i] == 1.0) normalCount++;
+        }
+
+        Assert.True(normalCount >= inlierCount * 0.8,
+            $"Expected at least {inlierCount * 0.8} inliers classified as normal, got {normalCount}/{inlierCount}");
+    }
+
     #region AveragingDetector Tests
 
     [Fact]
-    public void Averaging_Construction_DoesNotThrow()
+    public void Averaging_Construction_NotFittedByDefault()
     {
         var detector = new AveragingDetector<double>();
-        Assert.NotNull(detector);
         Assert.False(detector.IsFitted);
     }
 
     [Fact]
-    public void Averaging_FitAndPredict_DetectsOutlier()
+    public void Averaging_OutlierGetsHighestScore()
     {
         var detector = new AveragingDetector<double>();
         var data = CreateTestData();
         detector.Fit(data);
         Assert.True(detector.IsFitted);
-
-        var predictions = detector.Predict(data);
-        Assert.Equal(data.Rows, predictions.Length);
-
-        // Ensemble should detect the extreme outlier at (100,100,100)
-        Assert.Equal(-1.0, predictions[data.Rows - 1]);
-
-        // Verify scores differentiate outlier from inlier
         var scores = detector.ScoreAnomalies(data);
-        Assert.NotEqual(scores[0], scores[data.Rows - 1]);
+        Assert.Equal(data.Rows, scores.Length);
+        AssertOutlierScoresHighest(scores, OutlierIndex);
+    }
+
+    [Fact]
+    public void Averaging_PredictClassifiesOutlierAsAnomaly()
+    {
+        var detector = new AveragingDetector<double>();
+        var data = CreateTestData();
+        detector.Fit(data);
+        var predictions = detector.Predict(data);
+        AssertPredictClassifiesCorrectly(predictions, OutlierIndex);
     }
 
     #endregion
@@ -61,20 +96,24 @@ public class EnsembleAnomalyDetectionTests
     #region MaximumDetector Tests
 
     [Fact]
-    public void Maximum_Construction_DoesNotThrow()
+    public void Maximum_OutlierGetsHighestScore()
     {
         var detector = new MaximumDetector<double>();
-        Assert.NotNull(detector);
+        var data = CreateTestData();
+        detector.Fit(data);
+        var scores = detector.ScoreAnomalies(data);
+        Assert.Equal(data.Rows, scores.Length);
+        AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
     [Fact]
-    public void Maximum_FitAndPredict_Works()
+    public void Maximum_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new MaximumDetector<double>();
         var data = CreateTestData();
         detector.Fit(data);
         var predictions = detector.Predict(data);
-        Assert.Equal(data.Rows, predictions.Length);
+        AssertPredictClassifiesCorrectly(predictions, OutlierIndex);
     }
 
     #endregion
@@ -82,20 +121,24 @@ public class EnsembleAnomalyDetectionTests
     #region FeatureBaggingDetector Tests
 
     [Fact]
-    public void FeatureBagging_Construction_DoesNotThrow()
+    public void FeatureBagging_OutlierGetsHighestScore()
     {
         var detector = new FeatureBaggingDetector<double>();
-        Assert.NotNull(detector);
+        var data = CreateTestData();
+        detector.Fit(data);
+        var scores = detector.ScoreAnomalies(data);
+        Assert.Equal(data.Rows, scores.Length);
+        AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
     [Fact]
-    public void FeatureBagging_FitAndPredict_Works()
+    public void FeatureBagging_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new FeatureBaggingDetector<double>();
         var data = CreateTestData();
         detector.Fit(data);
         var predictions = detector.Predict(data);
-        Assert.Equal(data.Rows, predictions.Length);
+        AssertPredictClassifiesCorrectly(predictions, OutlierIndex);
     }
 
     #endregion
@@ -103,20 +146,24 @@ public class EnsembleAnomalyDetectionTests
     #region RandomSubspaceDetector Tests
 
     [Fact]
-    public void RandomSubspace_Construction_DoesNotThrow()
+    public void RandomSubspace_OutlierGetsHighestScore()
     {
         var detector = new RandomSubspaceDetector<double>();
-        Assert.NotNull(detector);
+        var data = CreateTestData();
+        detector.Fit(data);
+        var scores = detector.ScoreAnomalies(data);
+        Assert.Equal(data.Rows, scores.Length);
+        AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
     [Fact]
-    public void RandomSubspace_FitAndPredict_Works()
+    public void RandomSubspace_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new RandomSubspaceDetector<double>();
         var data = CreateTestData();
         detector.Fit(data);
         var predictions = detector.Predict(data);
-        Assert.Equal(data.Rows, predictions.Length);
+        AssertPredictClassifiesCorrectly(predictions, OutlierIndex);
     }
 
     #endregion
@@ -124,20 +171,24 @@ public class EnsembleAnomalyDetectionTests
     #region LSCPDetector Tests
 
     [Fact]
-    public void LSCP_Construction_DoesNotThrow()
+    public void LSCP_OutlierGetsHighestScore()
     {
         var detector = new LSCPDetector<double>();
-        Assert.NotNull(detector);
+        var data = CreateTestData();
+        detector.Fit(data);
+        var scores = detector.ScoreAnomalies(data);
+        Assert.Equal(data.Rows, scores.Length);
+        AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
     [Fact]
-    public void LSCP_FitAndPredict_Works()
+    public void LSCP_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new LSCPDetector<double>();
         var data = CreateTestData();
         detector.Fit(data);
         var predictions = detector.Predict(data);
-        Assert.Equal(data.Rows, predictions.Length);
+        AssertPredictClassifiesCorrectly(predictions, OutlierIndex);
     }
 
     #endregion
@@ -145,20 +196,24 @@ public class EnsembleAnomalyDetectionTests
     #region SUODDetector Tests
 
     [Fact]
-    public void SUOD_Construction_DoesNotThrow()
+    public void SUOD_OutlierGetsHighestScore()
     {
         var detector = new SUODDetector<double>();
-        Assert.NotNull(detector);
+        var data = CreateTestData();
+        detector.Fit(data);
+        var scores = detector.ScoreAnomalies(data);
+        Assert.Equal(data.Rows, scores.Length);
+        AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
     [Fact]
-    public void SUOD_FitAndPredict_Works()
+    public void SUOD_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new SUODDetector<double>();
         var data = CreateTestData();
         detector.Fit(data);
         var predictions = detector.Predict(data);
-        Assert.Equal(data.Rows, predictions.Length);
+        AssertPredictClassifiesCorrectly(predictions, OutlierIndex);
     }
 
     #endregion
@@ -166,20 +221,49 @@ public class EnsembleAnomalyDetectionTests
     #region XGBODDetector Tests
 
     [Fact]
-    public void XGBOD_Construction_DoesNotThrow()
+    public void XGBOD_OutlierGetsHighestScore()
     {
         var detector = new XGBODDetector<double>();
-        Assert.NotNull(detector);
+        var data = CreateTestData();
+        detector.Fit(data);
+        var scores = detector.ScoreAnomalies(data);
+        Assert.Equal(data.Rows, scores.Length);
+        AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
     [Fact]
-    public void XGBOD_FitAndPredict_Works()
+    public void XGBOD_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new XGBODDetector<double>();
         var data = CreateTestData();
         detector.Fit(data);
         var predictions = detector.Predict(data);
-        Assert.Equal(data.Rows, predictions.Length);
+        AssertPredictClassifiesCorrectly(predictions, OutlierIndex);
+    }
+
+    #endregion
+
+    #region Cross-Detector Tests
+
+    [Fact]
+    public void AllEnsembleDetectors_PredictBeforeFit_Throws()
+    {
+        var detectors = new AnomalyDetectorBase<double>[]
+        {
+            new AveragingDetector<double>(),
+            new MaximumDetector<double>(),
+            new FeatureBaggingDetector<double>(),
+            new RandomSubspaceDetector<double>(),
+            new LSCPDetector<double>(),
+            new SUODDetector<double>(),
+            new XGBODDetector<double>(),
+        };
+
+        var data = CreateTestData();
+        foreach (var detector in detectors)
+        {
+            Assert.Throws<InvalidOperationException>(() => detector.Predict(data));
+        }
     }
 
     #endregion

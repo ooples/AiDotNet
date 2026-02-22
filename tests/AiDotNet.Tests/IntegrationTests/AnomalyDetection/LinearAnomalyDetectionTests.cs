@@ -1,3 +1,4 @@
+using AiDotNet.AnomalyDetection;
 using AiDotNet.AnomalyDetection.Linear;
 using AiDotNet.LinearAlgebra;
 using Xunit;
@@ -6,9 +7,12 @@ namespace AiDotNet.Tests.IntegrationTests.AnomalyDetection;
 
 /// <summary>
 /// Integration tests for linear anomaly detection classes.
+/// Verifies that each detector correctly identifies known outliers.
 /// </summary>
 public class LinearAnomalyDetectionTests
 {
+    private const int OutlierIndex = 29; // Last row
+
     private static Matrix<double> CreateTestData()
     {
         int n = 30;
@@ -27,33 +31,64 @@ public class LinearAnomalyDetectionTests
         return new Matrix<double>(data);
     }
 
+    private static void AssertOutlierScoresHighest(Vector<double> scores, int outlierIdx)
+    {
+        double outlierScore = scores[outlierIdx];
+        for (int i = 0; i < scores.Length; i++)
+        {
+            if (i == outlierIdx) continue;
+            Assert.True(outlierScore > scores[i],
+                $"Outlier score ({outlierScore:F4}) at index {outlierIdx} should be higher than " +
+                $"inlier score ({scores[i]:F4}) at index {i}");
+        }
+    }
+
+    private static void AssertPredictClassifiesCorrectly(Vector<double> predictions, int outlierIdx)
+    {
+        Assert.Equal(-1.0, predictions[outlierIdx]);
+
+        int normalCount = 0;
+        int inlierCount = 0;
+        for (int i = 0; i < predictions.Length; i++)
+        {
+            if (i == outlierIdx) continue;
+            inlierCount++;
+            if (predictions[i] == 1.0) normalCount++;
+        }
+
+        Assert.True(normalCount >= inlierCount * 0.8,
+            $"Expected at least {inlierCount * 0.8} inliers classified as normal, got {normalCount}/{inlierCount}");
+    }
+
     #region PCADetector Tests
 
     [Fact]
-    public void PCA_Construction_SetsDefaults()
+    public void PCA_Construction_NotFittedByDefault()
     {
         var detector = new PCADetector<double>();
-        Assert.NotNull(detector);
         Assert.False(detector.IsFitted);
     }
 
     [Fact]
-    public void PCA_FitAndPredict_DetectsOutlier()
+    public void PCA_OutlierGetsHighestScore()
     {
         var detector = new PCADetector<double>();
         var data = CreateTestData();
         detector.Fit(data);
         Assert.True(detector.IsFitted);
-
-        var predictions = detector.Predict(data);
-        Assert.Equal(data.Rows, predictions.Length);
-
-        // PCA should detect (100,100,100) as anomalous
-        Assert.Equal(-1.0, predictions[data.Rows - 1]);
-
-        // Verify scores differentiate outlier from inlier
         var scores = detector.ScoreAnomalies(data);
-        Assert.NotEqual(scores[0], scores[data.Rows - 1]);
+        Assert.Equal(data.Rows, scores.Length);
+        AssertOutlierScoresHighest(scores, OutlierIndex);
+    }
+
+    [Fact]
+    public void PCA_PredictClassifiesOutlierAsAnomaly()
+    {
+        var detector = new PCADetector<double>();
+        var data = CreateTestData();
+        detector.Fit(data);
+        var predictions = detector.Predict(data);
+        AssertPredictClassifiesCorrectly(predictions, OutlierIndex);
     }
 
     #endregion
@@ -61,20 +96,24 @@ public class LinearAnomalyDetectionTests
     #region OneClassSVM Tests
 
     [Fact]
-    public void OneClassSVM_Construction_DoesNotThrow()
+    public void OneClassSVM_OutlierGetsHighestScore()
     {
         var detector = new OneClassSVM<double>();
-        Assert.NotNull(detector);
+        var data = CreateTestData();
+        detector.Fit(data);
+        var scores = detector.ScoreAnomalies(data);
+        Assert.Equal(data.Rows, scores.Length);
+        AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
     [Fact]
-    public void OneClassSVM_FitAndPredict_Works()
+    public void OneClassSVM_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new OneClassSVM<double>();
         var data = CreateTestData();
         detector.Fit(data);
         var predictions = detector.Predict(data);
-        Assert.Equal(data.Rows, predictions.Length);
+        AssertPredictClassifiesCorrectly(predictions, OutlierIndex);
     }
 
     #endregion
@@ -82,20 +121,24 @@ public class LinearAnomalyDetectionTests
     #region EllipticEnvelopeDetector Tests
 
     [Fact]
-    public void EllipticEnvelope_Construction_DoesNotThrow()
+    public void EllipticEnvelope_OutlierGetsHighestScore()
     {
         var detector = new EllipticEnvelopeDetector<double>();
-        Assert.NotNull(detector);
+        var data = CreateTestData();
+        detector.Fit(data);
+        var scores = detector.ScoreAnomalies(data);
+        Assert.Equal(data.Rows, scores.Length);
+        AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
     [Fact]
-    public void EllipticEnvelope_FitAndPredict_Works()
+    public void EllipticEnvelope_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new EllipticEnvelopeDetector<double>();
         var data = CreateTestData();
         detector.Fit(data);
         var predictions = detector.Predict(data);
-        Assert.Equal(data.Rows, predictions.Length);
+        AssertPredictClassifiesCorrectly(predictions, OutlierIndex);
     }
 
     #endregion
@@ -103,20 +146,24 @@ public class LinearAnomalyDetectionTests
     #region MCDDetector Tests
 
     [Fact]
-    public void MCD_Construction_DoesNotThrow()
+    public void MCD_OutlierGetsHighestScore()
     {
         var detector = new MCDDetector<double>();
-        Assert.NotNull(detector);
+        var data = CreateTestData();
+        detector.Fit(data);
+        var scores = detector.ScoreAnomalies(data);
+        Assert.Equal(data.Rows, scores.Length);
+        AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
     [Fact]
-    public void MCD_FitAndPredict_Works()
+    public void MCD_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new MCDDetector<double>();
         var data = CreateTestData();
         detector.Fit(data);
         var predictions = detector.Predict(data);
-        Assert.Equal(data.Rows, predictions.Length);
+        AssertPredictClassifiesCorrectly(predictions, OutlierIndex);
     }
 
     #endregion
@@ -124,20 +171,24 @@ public class LinearAnomalyDetectionTests
     #region KernelPCADetector Tests
 
     [Fact]
-    public void KernelPCA_Construction_DoesNotThrow()
+    public void KernelPCA_OutlierGetsHighestScore()
     {
         var detector = new KernelPCADetector<double>();
-        Assert.NotNull(detector);
+        var data = CreateTestData();
+        detector.Fit(data);
+        var scores = detector.ScoreAnomalies(data);
+        Assert.Equal(data.Rows, scores.Length);
+        AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
     [Fact]
-    public void KernelPCA_FitAndPredict_Works()
+    public void KernelPCA_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new KernelPCADetector<double>();
         var data = CreateTestData();
         detector.Fit(data);
         var predictions = detector.Predict(data);
-        Assert.Equal(data.Rows, predictions.Length);
+        AssertPredictClassifiesCorrectly(predictions, OutlierIndex);
     }
 
     #endregion
@@ -145,20 +196,48 @@ public class LinearAnomalyDetectionTests
     #region RobustPCADetector Tests
 
     [Fact]
-    public void RobustPCA_Construction_DoesNotThrow()
+    public void RobustPCA_OutlierGetsHighestScore()
     {
         var detector = new RobustPCADetector<double>();
-        Assert.NotNull(detector);
+        var data = CreateTestData();
+        detector.Fit(data);
+        var scores = detector.ScoreAnomalies(data);
+        Assert.Equal(data.Rows, scores.Length);
+        AssertOutlierScoresHighest(scores, OutlierIndex);
     }
 
     [Fact]
-    public void RobustPCA_FitAndPredict_Works()
+    public void RobustPCA_PredictClassifiesOutlierAsAnomaly()
     {
         var detector = new RobustPCADetector<double>();
         var data = CreateTestData();
         detector.Fit(data);
         var predictions = detector.Predict(data);
-        Assert.Equal(data.Rows, predictions.Length);
+        AssertPredictClassifiesCorrectly(predictions, OutlierIndex);
+    }
+
+    #endregion
+
+    #region Cross-Detector Tests
+
+    [Fact]
+    public void AllLinearDetectors_PredictBeforeFit_Throws()
+    {
+        var detectors = new AnomalyDetectorBase<double>[]
+        {
+            new PCADetector<double>(),
+            new OneClassSVM<double>(),
+            new EllipticEnvelopeDetector<double>(),
+            new MCDDetector<double>(),
+            new KernelPCADetector<double>(),
+            new RobustPCADetector<double>(),
+        };
+
+        var data = CreateTestData();
+        foreach (var detector in detectors)
+        {
+            Assert.Throws<InvalidOperationException>(() => detector.Predict(data));
+        }
     }
 
     #endregion
