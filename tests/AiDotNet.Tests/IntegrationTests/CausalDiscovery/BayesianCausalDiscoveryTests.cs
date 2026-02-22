@@ -1,0 +1,76 @@
+using AiDotNet.CausalDiscovery.Bayesian;
+using AiDotNet.LinearAlgebra;
+using Xunit;
+
+namespace AiDotNet.Tests.IntegrationTests.CausalDiscovery;
+
+/// <summary>
+/// Integration tests for Bayesian causal discovery algorithms.
+/// </summary>
+public class BayesianCausalDiscoveryTests
+{
+    private static Matrix<double> CreateSyntheticData()
+    {
+        int n = 30;
+        var data = new double[n, 3];
+        for (int i = 0; i < n; i++)
+        {
+            double x = i * 0.1;
+            data[i, 0] = x;
+            data[i, 1] = 2.0 * x + 0.5;
+            data[i, 2] = x + data[i, 1] * 0.3;
+        }
+
+        return new Matrix<double>(data);
+    }
+
+    private static readonly string[] FeatureNames = ["X0", "X1", "X2"];
+
+    [Fact]
+    public void OrderMCMC_Construction_And_Discover()
+    {
+        var algo = new OrderMCMCAlgorithm<double>();
+        var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
+        Assert.NotNull(graph);
+    }
+
+    [Fact]
+    public void PartitionMCMC_Construction_And_Discover()
+    {
+        var algo = new PartitionMCMCAlgorithm<double>();
+        var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
+        Assert.NotNull(graph);
+    }
+
+    [Fact]
+    public void IterativeMCMC_Construction_And_Discover()
+    {
+        var algo = new IterativeMCMCAlgorithm<double>();
+        var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
+        Assert.NotNull(graph);
+    }
+
+    [Fact]
+    public void BayesDAG_Construction_And_Discover()
+    {
+        var algo = new BayesDAGAlgorithm<double>();
+        var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
+        Assert.NotNull(graph);
+    }
+
+    [Fact]
+    public void DiBS_Construction_And_Discover()
+    {
+        var algo = new DiBSAlgorithm<double>();
+        var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
+        Assert.NotNull(graph);
+    }
+
+    [Fact]
+    public void BCDNets_Construction_And_Discover()
+    {
+        var algo = new BCDNetsAlgorithm<double>();
+        var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
+        Assert.NotNull(graph);
+    }
+}
