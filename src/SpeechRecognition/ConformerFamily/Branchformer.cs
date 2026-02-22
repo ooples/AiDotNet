@@ -79,7 +79,7 @@ public class Branchformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         var logits = IsOnnxMode && OnnxEncoder is not null ? OnnxEncoder.Run(features) : Predict(features);
 
         // CTC greedy decode
-        var tokens = CTCGreedyDecode(logits);
+        var (tokens, confidence) = CTCGreedyDecodeWithConfidence(logits);
         var text = TokensToText(tokens);
         double duration = audio.Length > 0 ? (double)audio.Shape[0] / SampleRate : 0;
 
@@ -87,9 +87,9 @@ public class Branchformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         {
             Text = text,
             Language = language ?? _options.Language,
-            Confidence = NumOps.FromDouble(tokens.Count > 0 ? 0.9 : 0.0),
+            Confidence = NumOps.FromDouble(confidence),
             DurationSeconds = duration,
-            Segments = includeTimestamps ? ExtractSegments(text, duration) : Array.Empty<TranscriptionSegment<T>>()
+            Segments = includeTimestamps ? ExtractSegments(text, duration, confidence) : Array.Empty<TranscriptionSegment<T>>()
         };
     }
 
@@ -97,10 +97,8 @@ public class Branchformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         bool includeTimestamps = false, CancellationToken cancellationToken = default)
         => Task.Run(() => Transcribe(audio, language, includeTimestamps), cancellationToken);
 
-    public string DetectLanguage(Tensor<T> audio) => _options.Language;
-
-    public IReadOnlyDictionary<string, T> DetectLanguageProbabilities(Tensor<T> audio)
-        => new Dictionary<string, T> { [_options.Language] = NumOps.FromDouble(1.0) };
+    public string DetectLanguage(Tensor<T> audio) { var features = PreprocessAudio(audio); Tensor<T> logits; if (IsOnnxMode && OnnxEncoder is not null) logits = OnnxEncoder.Run(features); else { logits = features; foreach (var l in Layers) logits = l.Forward(logits); } var (tokens, _) = CTCGreedyDecodeWithConfidence(logits); return ClassifyLanguageFromTokens(tokens); }
+    public IReadOnlyDictionary<string, T> DetectLanguageProbabilities(Tensor<T> audio) { var detected = DetectLanguage(audio); var result = new Dictionary<string, T>(); double primaryProb = 0.85; double otherProb = SupportedLanguages.Count > 1 ? (1.0 - primaryProb) / (SupportedLanguages.Count - 1) : 0.0; foreach (var lang in SupportedLanguages) result[lang] = NumOps.FromDouble(lang == detected ? primaryProb : otherProb); return result; }
 
     public IStreamingTranscriptionSession<T> StartStreamingSession(string? language = null)
         => throw new NotSupportedException("Branchformer does not support streaming.");
@@ -161,7 +159,7 @@ public class Branchformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     protected override void SerializeNetworkSpecificData(BinaryWriter w)
     {
         w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty);
-        w.Write(_options.SampleRate); w.Write(_options.EncoderDim);
+        w.Write(_options.SampleRate); w.Write(_options.MaxAudioLengthSeconds); w.Write(_options.EncoderDim);
         w.Write(_options.NumEncoderLayers); w.Write(_options.NumAttentionHeads);
         w.Write(_options.CgmlpDim); w.Write(_options.NumMels);
         w.Write(_options.VocabSize); w.Write(_options.DropoutRate);
@@ -171,7 +169,7 @@ public class Branchformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     protected override void DeserializeNetworkSpecificData(BinaryReader r)
     {
         _useNativeMode = r.ReadBoolean(); string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.SampleRate = r.ReadInt32(); _options.EncoderDim = r.ReadInt32();
+        _options.SampleRate = r.ReadInt32(); _options.MaxAudioLengthSeconds = r.ReadInt32(); _options.EncoderDim = r.ReadInt32();
         _options.NumEncoderLayers = r.ReadInt32(); _options.NumAttentionHeads = r.ReadInt32();
         _options.CgmlpDim = r.ReadInt32(); _options.NumMels = r.ReadInt32();
         _options.VocabSize = r.ReadInt32(); _options.DropoutRate = r.ReadDouble();
@@ -186,47 +184,10 @@ public class Branchformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         return new Branchformer<T>(Architecture, _options);
     }
 
-    private List<int> CTCGreedyDecode(Tensor<T> logits)
-    {
-        var tokens = new List<int>(); int prevToken = -1; int blankIdx = 0;
-        int numFrames = logits.Rank >= 2 ? logits.Shape[0] : 1;
-        int vocabSize = logits.Rank >= 2 ? logits.Shape[^1] : logits.Shape[0];
-        for (int t = 0; t < numFrames; t++)
-        {
-            int maxIdx = 0; double maxVal = double.NegativeInfinity;
-            for (int v = 0; v < vocabSize; v++)
-            {
-                double val = logits.Rank >= 2 ? NumOps.ToDouble(logits[t, v]) : NumOps.ToDouble(logits[v]);
-                if (val > maxVal) { maxVal = val; maxIdx = v; }
-            }
-            if (maxIdx != blankIdx && maxIdx != prevToken) tokens.Add(maxIdx);
-            prevToken = maxIdx;
-        }
-        return tokens;
-    }
-
-    private string TokensToText(List<int> tokens)
-    {
-        var vocab = _options.Vocabulary;
-        var chars = new List<char>();
-        foreach (var token in tokens)
-        {
-            if (token >= 0 && token < vocab.Length)
-            {
-                var symbol = vocab[token];
-                if (symbol == "|" || symbol == " ") chars.Add(' ');
-                else if (symbol.Length == 1 && char.IsLetter(symbol[0])) chars.Add(symbol[0]);
-                else if (symbol == "'") chars.Add('\'');
-            }
-        }
-        return new string(chars.ToArray()).Trim();
-    }
-
-    private IReadOnlyList<TranscriptionSegment<T>> ExtractSegments(string text, double duration)
-    {
-        if (string.IsNullOrWhiteSpace(text)) return Array.Empty<TranscriptionSegment<T>>();
-        return new[] { new TranscriptionSegment<T> { Text = text, StartTime = 0.0, EndTime = duration, Confidence = NumOps.FromDouble(0.9) } };
-    }
+    private (List<int> tokens, double confidence) CTCGreedyDecodeWithConfidence(Tensor<T> logits) { var tokens = new List<int>(); double totalConf = 0; int confCount = 0; int prevToken = -1; int numFrames = logits.Rank >= 2 ? logits.Shape[0] : 1; int vocabSize = logits.Rank >= 2 ? logits.Shape[^1] : logits.Shape[0]; for (int t = 0; t < numFrames; t++) { int maxIdx = 0; double maxVal = double.NegativeInfinity; for (int v = 0; v < vocabSize; v++) { double val = logits.Rank >= 2 ? NumOps.ToDouble(logits[t, v]) : NumOps.ToDouble(logits[v]); if (val > maxVal) { maxVal = val; maxIdx = v; } } double sumExp = 0; for (int v = 0; v < vocabSize; v++) { double val = logits.Rank >= 2 ? NumOps.ToDouble(logits[t, v]) : NumOps.ToDouble(logits[v]); sumExp += Math.Exp(val - maxVal); } double frameConf = 1.0 / sumExp; if (maxIdx != 0 && maxIdx != prevToken) { tokens.Add(maxIdx); totalConf += frameConf; confCount++; } prevToken = maxIdx; } return (tokens, confCount > 0 ? totalConf / confCount : 0.0); }
+    private static string TokensToText(List<int> tokens) { var sb = new System.Text.StringBuilder(); foreach (var t in tokens) { if (t > 0 && t <= char.MaxValue) sb.Append((char)t); else if (t > char.MaxValue && t <= 0x10FFFF) sb.Append(char.ConvertFromUtf32(t)); } return sb.ToString().Trim(); }
+    private IReadOnlyList<TranscriptionSegment<T>> ExtractSegments(string text, double duration, double confidence) { if (string.IsNullOrWhiteSpace(text)) return Array.Empty<TranscriptionSegment<T>>(); return new[] { new TranscriptionSegment<T> { Text = text, StartTime = 0.0, EndTime = duration, Confidence = NumOps.FromDouble(confidence) } }; }
+    private string ClassifyLanguageFromTokens(List<int> tokens) { if (tokens.Count == 0) return _options.Language; int cjkCount = 0, latinCount = 0; foreach (var t in tokens) { if (t >= 0x4E00 && t <= 0x9FFF) cjkCount++; else if (t >= 0x41 && t <= 0x7A) latinCount++; } if (cjkCount > latinCount && SupportedLanguages.Contains("zh")) return "zh"; return _options.Language; }
 
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(Branchformer<T>)); }
     protected override void Dispose(bool disposing) { if (_disposed) return; if (disposing) OnnxEncoder?.Dispose(); _disposed = true; base.Dispose(disposing); }

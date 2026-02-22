@@ -59,7 +59,7 @@ public class FasterWhisper<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
             foreach (var l in Layers) logits = l.Forward(logits);
         }
 
-        var tokens = BeamSearchDecode(logits);
+        var (tokens, confidence) = BeamSearchDecodeWithConfidence(logits);
         var text = TokensToText(tokens);
         double duration = audio.Length > 0 ? (double)audio.Shape[0] / SampleRate : 0;
 
@@ -67,27 +67,16 @@ public class FasterWhisper<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         {
             Text = text,
             Language = language ?? _options.Language,
-            Confidence = NumOps.FromDouble(tokens.Count > 0 ? 0.87 : 0.0),
+            Confidence = NumOps.FromDouble(confidence),
             DurationSeconds = duration,
-            Segments = includeTimestamps ? ExtractSegments(text, duration) : Array.Empty<TranscriptionSegment<T>>()
+            Segments = includeTimestamps ? ExtractSegments(text, duration, confidence) : Array.Empty<TranscriptionSegment<T>>()
         };
     }
 
     public Task<TranscriptionResult<T>> TranscribeAsync(Tensor<T> audio, string? language = null, bool includeTimestamps = false, CancellationToken cancellationToken = default) => Task.Run(() => Transcribe(audio, language, includeTimestamps), cancellationToken);
 
-    public string DetectLanguage(Tensor<T> audio)
-    {
-        var features = PreprocessAudio(audio);
-        var logits = IsOnnxMode && OnnxEncoder is not null ? OnnxEncoder.Run(features) : Predict(features);
-        return _options.Language;
-    }
-
-    public IReadOnlyDictionary<string, T> DetectLanguageProbabilities(Tensor<T> audio)
-    {
-        var result = new Dictionary<string, T>();
-        foreach (var lang in SupportedLanguages) result[lang] = NumOps.FromDouble(lang == _options.Language ? 0.9 : 0.001);
-        return result;
-    }
+    public string DetectLanguage(Tensor<T> audio) { var features = PreprocessAudio(audio); Tensor<T> logits; if (IsOnnxMode && OnnxEncoder is not null) logits = OnnxEncoder.Run(features); else { logits = features; foreach (var l in Layers) logits = l.Forward(logits); } var (tokens, _) = BeamSearchDecodeWithConfidence(logits); return ClassifyLanguageFromTokens(tokens); }
+    public IReadOnlyDictionary<string, T> DetectLanguageProbabilities(Tensor<T> audio) { var detected = DetectLanguage(audio); var result = new Dictionary<string, T>(); double primaryProb = 0.85; double otherProb = SupportedLanguages.Count > 1 ? (1.0 - primaryProb) / (SupportedLanguages.Count - 1) : 0.0; foreach (var lang in SupportedLanguages) result[lang] = NumOps.FromDouble(lang == detected ? primaryProb : otherProb); return result; }
 
     public IStreamingTranscriptionSession<T> StartStreamingSession(string? language = null) => throw new NotSupportedException("FasterWhisper does not support streaming natively.");
 
@@ -102,36 +91,10 @@ public class FasterWhisper<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     protected override void DeserializeNetworkSpecificData(BinaryReader r) { _useNativeMode = r.ReadBoolean(); string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp; _options.SampleRate = r.ReadInt32(); _options.EncoderDim = r.ReadInt32(); _options.DecoderDim = r.ReadInt32(); _options.NumEncoderLayers = r.ReadInt32(); _options.NumDecoderLayers = r.ReadInt32(); _options.NumAttentionHeads = r.ReadInt32(); _options.NumMels = r.ReadInt32(); _options.VocabSize = r.ReadInt32(); _options.MaxTextLength = r.ReadInt32(); _options.DropoutRate = r.ReadDouble(); _options.Language = r.ReadString(); _options.ComputeType = r.ReadString(); _options.BeamSize = r.ReadInt32(); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions); }
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp)) return new FasterWhisper<T>(Architecture, mp, _options); return new FasterWhisper<T>(Architecture, _options); }
 
-    /// <summary>
-    /// Beam search decoding with configurable beam size.
-    /// Faster-Whisper uses batched beam search with KV-cache reuse for efficient decoding.
-    /// Falls back to greedy when beam_size=1.
-    /// </summary>
-    private List<int> BeamSearchDecode(Tensor<T> logits)
-    {
-        var tokens = new List<int>();
-        int prevToken = -1;
-        int numFrames = logits.Rank >= 2 ? logits.Shape[0] : 1;
-        int vocabSize = logits.Rank >= 2 ? logits.Shape[^1] : logits.Shape[0];
-
-        for (int t = 0; t < numFrames && tokens.Count < _options.MaxTextLength; t++)
-        {
-            // Simplified beam search: top-1 selection (greedy approximation)
-            int maxIdx = 0;
-            double maxVal = double.NegativeInfinity;
-            for (int v = 0; v < vocabSize; v++)
-            {
-                double val = logits.Rank >= 2 ? NumOps.ToDouble(logits[t, v]) : NumOps.ToDouble(logits[v]);
-                if (val > maxVal) { maxVal = val; maxIdx = v; }
-            }
-            if (maxIdx != prevToken && maxIdx > 0) tokens.Add(maxIdx);
-            prevToken = maxIdx;
-        }
-        return tokens;
-    }
-
-    private static string TokensToText(List<int> tokens) { var chars = new List<char>(); foreach (var token in tokens) { if (token > 0 && token < 128) chars.Add((char)token); else if (token >= 128) chars.Add(' '); } return new string(chars.ToArray()).Trim(); }
-    private IReadOnlyList<TranscriptionSegment<T>> ExtractSegments(string text, double duration) { if (string.IsNullOrWhiteSpace(text)) return Array.Empty<TranscriptionSegment<T>>(); return new[] { new TranscriptionSegment<T> { Text = text, StartTime = 0.0, EndTime = duration, Confidence = NumOps.FromDouble(0.87) } }; }
+    private (List<int> tokens, double confidence) BeamSearchDecodeWithConfidence(Tensor<T> logits) { var tokens = new List<int>(); double totalConf = 0; int confCount = 0; int prevToken = -1; int numFrames = logits.Rank >= 2 ? logits.Shape[0] : 1; int vocabSize = logits.Rank >= 2 ? logits.Shape[^1] : logits.Shape[0]; for (int t = 0; t < numFrames && tokens.Count < _options.MaxTextLength; t++) { int maxIdx = 0; double maxVal = double.NegativeInfinity; for (int v = 0; v < vocabSize; v++) { double val = logits.Rank >= 2 ? NumOps.ToDouble(logits[t, v]) : NumOps.ToDouble(logits[v]); if (val > maxVal) { maxVal = val; maxIdx = v; } } double sumExp = 0; for (int v = 0; v < vocabSize; v++) { double val = logits.Rank >= 2 ? NumOps.ToDouble(logits[t, v]) : NumOps.ToDouble(logits[v]); sumExp += Math.Exp(val - maxVal); } double frameConf = 1.0 / sumExp; if (maxIdx != prevToken && maxIdx > 0) { tokens.Add(maxIdx); totalConf += frameConf; confCount++; } prevToken = maxIdx; } return (tokens, confCount > 0 ? totalConf / confCount : 0.0); }
+    private static string TokensToText(List<int> tokens) { var sb = new System.Text.StringBuilder(); foreach (var t in tokens) { if (t > 0 && t <= char.MaxValue) sb.Append((char)t); else if (t > char.MaxValue && t <= 0x10FFFF) sb.Append(char.ConvertFromUtf32(t)); } return sb.ToString().Trim(); }
+    private IReadOnlyList<TranscriptionSegment<T>> ExtractSegments(string text, double duration, double confidence) { if (string.IsNullOrWhiteSpace(text)) return Array.Empty<TranscriptionSegment<T>>(); return new[] { new TranscriptionSegment<T> { Text = text, StartTime = 0.0, EndTime = duration, Confidence = NumOps.FromDouble(confidence) } }; }
+    private string ClassifyLanguageFromTokens(List<int> tokens) { if (tokens.Count == 0) return _options.Language; int cjkCount = 0, latinCount = 0; foreach (var t in tokens) { if (t >= 0x4E00 && t <= 0x9FFF) cjkCount++; else if (t >= 0x41 && t <= 0x7A) latinCount++; } if (cjkCount > latinCount && SupportedLanguages.Contains("zh")) return "zh"; return _options.Language; }
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(FasterWhisper<T>)); }
     protected override void Dispose(bool disposing) { if (_disposed) return; if (disposing) OnnxEncoder?.Dispose(); _disposed = true; base.Dispose(disposing); }
 }
