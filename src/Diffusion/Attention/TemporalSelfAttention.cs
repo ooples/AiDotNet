@@ -78,6 +78,8 @@ public class TemporalSelfAttention<T> : LayerBase<T>
             throw new ArgumentOutOfRangeException(nameof(numHeads), "Number of heads must be positive.");
         if (channels % numHeads != 0)
             throw new ArgumentException($"Channels ({channels}) must be divisible by numHeads ({numHeads}).");
+        Guard.Positive(numFrames, nameof(numFrames));
+        Guard.Positive(spatialSize, nameof(spatialSize));
 
         _channels = channels;
         _numHeads = numHeads;
