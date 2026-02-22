@@ -42,7 +42,7 @@ public class NgramCopyrightDetector<T> : TextSafetyModuleBase<T>
 
     // N consecutive 4-gram matches span (N + 3) words because each 4-gram overlaps
     // the next by 3 words: [w1 w2 w3 w4], [w2 w3 w4 w5], ... → N matches = N+3 words.
-    private const int NgramOverlapAdjustment = 3;
+    private const int NgramToWordCountAdjustment = 3;
 
     /// <inheritdoc />
     public override string ModuleName => "NgramCopyrightDetector";
@@ -214,7 +214,7 @@ public class NgramCopyrightDetector<T> : TextSafetyModuleBase<T>
         // Convert from count of consecutive 4-gram matches to total word count.
         // Each 4-gram spans 4 words and consecutive 4-grams overlap by 3 words,
         // so N consecutive matches represent N + 3 total words.
-        return maxConsecutive > 0 ? maxConsecutive + NgramOverlapAdjustment : 0;
+        return maxConsecutive > 0 ? maxConsecutive + NgramToWordCountAdjustment : 0;
     }
 
     private static string[] TokenizeWords(string text)

@@ -39,7 +39,7 @@ namespace AiDotNet.Safety.Multimodal;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-internal class CrossModalConsistencyChecker<T> : ITextSafetyModule<T>
+public class CrossModalConsistencyChecker<T> : ITextSafetyModule<T>
 {
     private readonly double _mismatchThreshold;
 

@@ -163,7 +163,7 @@ public class GuardrailRule
     {
         if (Patterns.Length == 0) return false;
         if (!int.TryParse(Patterns[0], out int maxLength) || maxLength < 0)
-            throw new ArgumentException($"GuardrailRule '{Name}' requires a non-negative MaxLength pattern.");
+            throw new ArgumentException($"GuardrailRule '{Name}' requires a MaxLength pattern that is an integer >= 0.");
         return text.Length > maxLength;
     }
 
@@ -171,7 +171,7 @@ public class GuardrailRule
     {
         if (Patterns.Length == 0) return false;
         if (!int.TryParse(Patterns[0], out int minLength) || minLength < 0)
-            throw new ArgumentException($"GuardrailRule '{Name}' requires a non-negative MinLength pattern.");
+            throw new ArgumentException($"GuardrailRule '{Name}' requires a MinLength pattern that is an integer >= 0.");
         return text.Length < minLength;
     }
 

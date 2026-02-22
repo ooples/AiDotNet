@@ -36,7 +36,7 @@ namespace AiDotNet.Safety.Compliance;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-internal class EUAIActComplianceChecker<T> : ITextSafetyModule<T>
+public class EUAIActComplianceChecker<T> : ITextSafetyModule<T>
 {
     private readonly SafetyConfig _config;
 
