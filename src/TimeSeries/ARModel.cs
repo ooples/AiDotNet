@@ -770,7 +770,8 @@ public class ARModel<T> : TimeSeriesModelBase<T>
                 gradAR = (Vector<T>)Engine.Multiply(gradAR, invN);
             }
 
-            // Gradient descent: grad = (1/N) * Σ r[t]*y[t-i-1] = -∂L/∂φ (negated during computation), so ADD to descend
+            // Gradient descent update where L = loss function, φ = AR coefficients.
+            // grad = (1/N) * Σ r[t]*y[t-i-1] = -∂L/∂φ (negated during computation), so ADD to descend.
             var learningRateT = NumOps.FromDouble(_learningRate);
             var update = (Vector<T>)Engine.Multiply(gradAR, learningRateT);
             _arCoefficients = (Vector<T>)Engine.Add(_arCoefficients, update);
