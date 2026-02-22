@@ -80,14 +80,13 @@ public class Sora2Model<T> : VideoDiffusionModelBase<T>
             architecture)
     {
         _conditioner = conditioner;
-        InitializeLayers(predictor, temporalVAE, seed);
+        InitializeLayers(predictor, temporalVAE);
     }
 
     [MemberNotNull(nameof(_predictor), nameof(_temporalVAE))]
     private void InitializeLayers(
         DiTNoisePredictor<T>? predictor,
-        TemporalVAE<T>? temporalVAE,
-        int? seed)
+        TemporalVAE<T>? temporalVAE)
     {
         _predictor = predictor ?? new DiTNoisePredictor<T>(
             inputChannels: LATENT_CHANNELS,
@@ -155,6 +154,9 @@ public class Sora2Model<T> : VideoDiffusionModelBase<T>
         clonedPredictor.SetParameters(_predictor.GetParameters());
 
         return new Sora2Model<T>(
+            architecture: Architecture,
+            options: Options as DiffusionModelOptions<T>,
+            scheduler: Scheduler,
             predictor: clonedPredictor,
             temporalVAE: (TemporalVAE<T>)_temporalVAE.Clone(),
             conditioner: _conditioner,

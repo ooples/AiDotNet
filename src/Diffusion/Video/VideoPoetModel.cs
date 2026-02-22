@@ -18,11 +18,12 @@ namespace AiDotNet.Diffusion.Video;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "VideoPoet: A Large Language Model for Zero-Shot Video Generation" (Google, 2024)</item></list></para>
-/// <para><b>For Beginners:</b> VideoPoet from Google uses a large language model (LLM) architecture for zero-shot video generation. Instead of diffusion, it treats video generation as a token prediction task, enabling diverse creative outputs without task-specific fine-tuning.</para>
+/// <para><b>For Beginners:</b> VideoPoet from Google uses a large language model (LLM) architecture for zero-shot video generation. The original paper treats video generation as a token prediction task. This implementation approximates its capabilities using a diffusion-based backbone for compatibility with the framework.</para>
 /// <para>
 /// VideoPoet uses a large language model for zero-shot video generation, treating video as a
 /// sequence of discrete tokens. The model synthesizes high-quality video with matching audio from
 /// diverse conditioning signals. Won the ICML 2024 award for its approach to video generation.
+/// Note: This implementation uses a DiT-based diffusion approximation of the original LLM architecture.
 /// </para>
 /// <para>
 /// Technical specifications:
@@ -64,8 +65,7 @@ public class VideoPoetModel<T> : VideoDiffusionModelBase<T>
         TemporalVAE<T>? temporalVAE = null,
         IConditioningModule<T>? conditioner = null,
         int defaultNumFrames = DEFAULT_NUM_FRAMES,
-        int defaultFPS = DEFAULT_FPS,
-        int? seed = null)
+        int defaultFPS = DEFAULT_FPS)
         : base(
             options ?? new DiffusionModelOptions<T>
             {
@@ -80,14 +80,13 @@ public class VideoPoetModel<T> : VideoDiffusionModelBase<T>
             architecture)
     {
         _conditioner = conditioner;
-        InitializeLayers(predictor, temporalVAE, seed);
+        InitializeLayers(predictor, temporalVAE);
     }
 
     [MemberNotNull(nameof(_predictor), nameof(_temporalVAE))]
     private void InitializeLayers(
         DiTNoisePredictor<T>? predictor,
-        TemporalVAE<T>? temporalVAE,
-        int? seed)
+        TemporalVAE<T>? temporalVAE)
     {
         _predictor = predictor ?? new DiTNoisePredictor<T>(
             inputChannels: LATENT_CHANNELS,
@@ -155,6 +154,9 @@ public class VideoPoetModel<T> : VideoDiffusionModelBase<T>
         clonedPredictor.SetParameters(_predictor.GetParameters());
 
         return new VideoPoetModel<T>(
+            architecture: Architecture,
+            options: Options as DiffusionModelOptions<T>,
+            scheduler: Scheduler,
             predictor: clonedPredictor,
             temporalVAE: (TemporalVAE<T>)_temporalVAE.Clone(),
             conditioner: _conditioner,

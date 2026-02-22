@@ -64,8 +64,7 @@ public class Seedance1Model<T> : VideoDiffusionModelBase<T>
         TemporalVAE<T>? temporalVAE = null,
         IConditioningModule<T>? conditioner = null,
         int defaultNumFrames = DEFAULT_NUM_FRAMES,
-        int defaultFPS = DEFAULT_FPS,
-        int? seed = null)
+        int defaultFPS = DEFAULT_FPS)
         : base(
             options ?? new DiffusionModelOptions<T>
             {
@@ -80,14 +79,13 @@ public class Seedance1Model<T> : VideoDiffusionModelBase<T>
             architecture)
     {
         _conditioner = conditioner;
-        InitializeLayers(predictor, temporalVAE, seed);
+        InitializeLayers(predictor, temporalVAE);
     }
 
     [MemberNotNull(nameof(_predictor), nameof(_temporalVAE))]
     private void InitializeLayers(
         DiTNoisePredictor<T>? predictor,
-        TemporalVAE<T>? temporalVAE,
-        int? seed)
+        TemporalVAE<T>? temporalVAE)
     {
         _predictor = predictor ?? new DiTNoisePredictor<T>(
             inputChannels: LATENT_CHANNELS,
@@ -155,6 +153,9 @@ public class Seedance1Model<T> : VideoDiffusionModelBase<T>
         clonedPredictor.SetParameters(_predictor.GetParameters());
 
         return new Seedance1Model<T>(
+            architecture: Architecture,
+            options: Options as DiffusionModelOptions<T>,
+            scheduler: Scheduler,
             predictor: clonedPredictor,
             temporalVAE: (TemporalVAE<T>)_temporalVAE.Clone(),
             conditioner: _conditioner,
