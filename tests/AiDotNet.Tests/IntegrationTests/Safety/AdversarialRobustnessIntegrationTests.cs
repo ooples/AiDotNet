@@ -85,7 +85,7 @@ public class AdversarialRobustnessIntegrationTests
     {
         var evaluator = new AdversarialImageEvaluator<double>();
         var data = new double[3 * 32 * 32];
-        var rng = new Random(42);
+        var rng = RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < data.Length; i++) data[i] = rng.NextDouble();
 
         var tensor = new Tensor<double>(data, new[] { 3, 32, 32 });
@@ -111,7 +111,7 @@ public class AdversarialRobustnessIntegrationTests
     {
         var evaluator = new AdversarialImageEvaluator<double>(threshold: 0.3);
         var data = new double[3 * 16 * 16];
-        var rng = new Random(42);
+        var rng = RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < data.Length; i++) data[i] = rng.NextDouble();
 
         var tensor = new Tensor<double>(data, new[] { 3, 16, 16 });
@@ -369,7 +369,7 @@ public class AdversarialRobustnessIntegrationTests
             _inputDim = inputDim;
             _outputDim = outputDim;
             _weights = new double[inputDim * outputDim];
-            var rng = new Random(42);
+            var rng = RandomHelper.CreateSeededRandom(42);
             for (int i = 0; i < _weights.Length; i++)
             {
                 _weights[i] = (rng.NextDouble() - 0.5) * weightScale;
@@ -453,7 +453,7 @@ public class AdversarialRobustnessIntegrationTests
 
     private static AlignmentFeedbackData<double> CreateMockFeedbackData(int numSamples, int dim)
     {
-        var rng = new Random(42);
+        var rng = RandomHelper.CreateSeededRandom(42);
         var inputMatrix = new Matrix<double>(numSamples, dim);
         var outputMatrix = new Matrix<double>(numSamples, dim);
 
@@ -481,7 +481,7 @@ public class AdversarialRobustnessIntegrationTests
 
     private static AlignmentEvaluationData<double> CreateMockEvaluationData(int numSamples, int dim)
     {
-        var rng = new Random(42);
+        var rng = RandomHelper.CreateSeededRandom(42);
         var inputMatrix = new Matrix<double>(numSamples, dim);
         var outputMatrix = new Matrix<double>(numSamples, dim);
 
@@ -506,7 +506,7 @@ public class AdversarialRobustnessIntegrationTests
 
     private static Matrix<double> CreateRandomMatrix(int rows, int cols)
     {
-        var rng = new Random(42);
+        var rng = RandomHelper.CreateSeededRandom(42);
         var matrix = new Matrix<double>(rows, cols);
         for (int r = 0; r < rows; r++)
         {

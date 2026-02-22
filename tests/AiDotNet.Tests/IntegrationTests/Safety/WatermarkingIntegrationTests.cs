@@ -2,6 +2,7 @@
 using AiDotNet.Safety.Watermarking;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Tests.IntegrationTests.Safety;
 
@@ -270,7 +271,7 @@ public class WatermarkingIntegrationTests
     private static Tensor<double> CreateRandomImageTensor(int channels, int height, int width)
     {
         var data = new double[channels * height * width];
-        var rng = new Random(42);
+        var rng = RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < data.Length; i++)
         {
             data[i] = rng.NextDouble();

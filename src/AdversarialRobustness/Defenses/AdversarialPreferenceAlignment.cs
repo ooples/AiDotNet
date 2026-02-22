@@ -110,7 +110,7 @@ public class AdversarialPreferenceAlignment<T> : IAlignmentMethod<T>
         int helpfulCount = 0, harmlessCount = 0, honestCount = 0;
         int adversarialRobustCount = 0;
         double totalPreferenceMatch = 0.0;
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
 
         for (int i = 0; i < evaluationData.TestInputs.Rows; i++)
         {
@@ -153,7 +153,7 @@ public class AdversarialPreferenceAlignment<T> : IAlignmentMethod<T>
         if (model is IGradientComputable<T, Vector<T>, Vector<T>> trainableModel
             && trainableModel is IParameterizable<T, Vector<T>, Vector<T>> parameterizable)
         {
-            var random = new Random(42);
+            var random = RandomHelper.CreateSeededRandom(42);
             var learningRate = NumOps.FromDouble(_options.LearningRate);
             double complianceThreshold = 0.5;
 
@@ -194,7 +194,7 @@ public class AdversarialPreferenceAlignment<T> : IAlignmentMethod<T>
         int totalAttempts = adversarialPrompts.Rows;
         int successfulAttacks = 0;
         double totalSeverity = 0;
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
         var successArray = new bool[totalAttempts];
 
         for (int i = 0; i < totalAttempts; i++)
@@ -323,7 +323,7 @@ public class AdversarialPreferenceAlignment<T> : IAlignmentMethod<T>
             if (trainableModel is not IParameterizable<T, Vector<T>, Vector<T>> parameterizable)
                 throw new InvalidOperationException("Model supports gradient computation but does not implement IParameterizable.");
             var referenceParams = CopyVector(parameterizable.GetParameters());
-            var random = new Random(42);
+            var random = RandomHelper.CreateSeededRandom(42);
             var learningRate = NumOps.FromDouble(_options.LearningRate);
 
             for (int epoch = 0; epoch < _options.TrainingIterations; epoch++)

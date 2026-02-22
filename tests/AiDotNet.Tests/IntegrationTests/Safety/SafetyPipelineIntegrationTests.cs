@@ -218,7 +218,7 @@ public class SafetyPipelineIntegrationTests
         var classifier = new CLIPImageSafetyClassifier<double>();
         // Create a small test image tensor [3, 8, 8] with random-ish values
         var data = new double[3 * 8 * 8];
-        var rng = new Random(42);
+        var rng = RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < data.Length; i++) data[i] = rng.NextDouble();
 
         var tensor = new Tensor<double>(data, new[] { 3, 8, 8 });
@@ -232,7 +232,7 @@ public class SafetyPipelineIntegrationTests
     {
         var classifier = new EnsembleImageSafetyClassifier<double>();
         var data = new double[3 * 16 * 16];
-        var rng = new Random(42);
+        var rng = RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < data.Length; i++) data[i] = rng.NextDouble();
 
         var tensor = new Tensor<double>(data, new[] { 3, 16, 16 });
@@ -246,7 +246,7 @@ public class SafetyPipelineIntegrationTests
     {
         var detector = new FrequencyDeepfakeDetector<double>();
         var data = new double[3 * 32 * 32];
-        var rng = new Random(42);
+        var rng = RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < data.Length; i++) data[i] = rng.NextDouble() * 255;
 
         var tensor = new Tensor<double>(data, new[] { 3, 32, 32 });
@@ -260,7 +260,7 @@ public class SafetyPipelineIntegrationTests
     {
         var detector = new ConsistencyDeepfakeDetector<double>();
         var data = new double[3 * 32 * 32];
-        var rng = new Random(42);
+        var rng = RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < data.Length; i++) data[i] = rng.NextDouble() * 255;
 
         var tensor = new Tensor<double>(data, new[] { 3, 32, 32 });
@@ -274,7 +274,7 @@ public class SafetyPipelineIntegrationTests
     {
         var detector = new ProvenanceDeepfakeDetector<double>();
         var data = new double[3 * 32 * 32];
-        var rng = new Random(42);
+        var rng = RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < data.Length; i++) data[i] = rng.NextDouble() * 255;
 
         var tensor = new Tensor<double>(data, new[] { 3, 32, 32 });
@@ -398,7 +398,7 @@ public class SafetyPipelineIntegrationTests
     {
         var watermarker = new ImageWatermarker<double>();
         var data = new double[3 * 16 * 16];
-        var rng = new Random(42);
+        var rng = RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < data.Length; i++) data[i] = rng.NextDouble();
 
         var tensor = new Tensor<double>(data, new[] { 3, 16, 16 });
@@ -479,7 +479,7 @@ public class SafetyPipelineIntegrationTests
     {
         var evaluator = new AdversarialImageEvaluator<double>();
         var data = new double[3 * 32 * 32];
-        var rng = new Random(42);
+        var rng = RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < data.Length; i++) data[i] = rng.NextDouble();
 
         var tensor = new Tensor<double>(data, new[] { 3, 32, 32 });
@@ -756,7 +756,7 @@ public class SafetyPipelineIntegrationTests
     private static IReadOnlyList<Tensor<double>> GenerateTestFrames(int numFrames, int height, int width)
     {
         var frames = new List<Tensor<double>>();
-        var rng = new Random(42);
+        var rng = RandomHelper.CreateSeededRandom(42);
 
         for (int f = 0; f < numFrames; f++)
         {

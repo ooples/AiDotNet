@@ -4,6 +4,7 @@ using AiDotNet.Safety;
 using AiDotNet.Safety.Image;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Tests.IntegrationTests.Safety;
 
@@ -240,7 +241,7 @@ public class ImageSafetyIntegrationTests
         int channels, int height, int width, double scale = 1.0)
     {
         var data = new double[channels * height * width];
-        var rng = new Random(42);
+        var rng = RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < data.Length; i++)
         {
             data[i] = rng.NextDouble() * scale;

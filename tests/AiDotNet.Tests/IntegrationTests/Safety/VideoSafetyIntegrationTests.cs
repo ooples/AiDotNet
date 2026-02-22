@@ -2,6 +2,7 @@
 using AiDotNet.Safety.Video;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Tests.IntegrationTests.Safety;
 
@@ -160,7 +161,7 @@ public class VideoSafetyIntegrationTests
         int numFrames, int height, int width)
     {
         var frames = new List<Tensor<double>>();
-        var rng = new Random(42);
+        var rng = RandomHelper.CreateSeededRandom(42);
 
         for (int f = 0; f < numFrames; f++)
         {
@@ -181,7 +182,7 @@ public class VideoSafetyIntegrationTests
     {
         var frames = new List<Tensor<double>>();
         var data = new double[3 * height * width];
-        var rng = new Random(42);
+        var rng = RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < data.Length; i++)
         {
             data[i] = rng.NextDouble() * 255;

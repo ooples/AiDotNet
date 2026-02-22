@@ -5,6 +5,7 @@ using AiDotNet.Safety.Text;
 using AiDotNet.Safety.Guardrails;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Tests.IntegrationTests.Safety;
 
@@ -315,7 +316,7 @@ public class SafetyPipelineEndToEndTests
         var pipeline = SafetyPipelineFactory<double>.Create(config);
 
         var data = new double[3 * 16 * 16];
-        var rng = new Random(42);
+        var rng = RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < data.Length; i++) data[i] = rng.NextDouble();
         var tensor = new Tensor<double>(data, new[] { 3, 16, 16 });
 
