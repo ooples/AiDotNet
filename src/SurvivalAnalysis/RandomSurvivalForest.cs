@@ -133,7 +133,8 @@ public class RandomSurvivalForest<T> : SurvivalModelBase<T>
             var allIndices = Enumerable.Range(0, n).ToArray();
 
             // Get average survival at each time point
-            var survivalProbs = PredictSurvivalProbability(x, TrainedEventTimes);
+            // Use internal method to avoid EnsureFitted() check during fitting
+            var survivalProbs = PredictSurvivalProbabilityInternal(x, TrainedEventTimes);
             for (int t = 0; t < TrainedEventTimes.Length; t++)
             {
                 double avgSurvival = 0;
@@ -322,7 +323,11 @@ public class RandomSurvivalForest<T> : SurvivalModelBase<T>
     public override Matrix<T> PredictSurvivalProbability(Matrix<T> x, Vector<T> times)
     {
         EnsureFitted();
+        return PredictSurvivalProbabilityInternal(x, times);
+    }
 
+    private Matrix<T> PredictSurvivalProbabilityInternal(Matrix<T> x, Vector<T> times)
+    {
         int numSubjects = x.Rows;
         var result = new Matrix<T>(numSubjects, times.Length);
 
