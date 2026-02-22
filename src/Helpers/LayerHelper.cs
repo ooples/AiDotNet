@@ -7623,11 +7623,13 @@ public static class LayerHelper<T>
         yield return new ConvolutionalLayer<T>(numFeatures * 2, h, w, numFeatures * 4, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
         yield return new ConvolutionalLayer<T>(numFeatures * 4, h, w, numFeatures * 2, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
 
-        // Decoder (at downsampled resolution, model handles upsampling externally)
-        yield return new ConvolutionalLayer<T>(numFeatures * 2, h, w, numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
-        yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        // Decoder with upsampling to restore original resolution
+        yield return new DeconvolutionalLayer<T>([1, numFeatures * 2, h, w], numFeatures, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        h *= 2; w *= 2;
+        yield return new DeconvolutionalLayer<T>([1, numFeatures, h, w], numFeatures, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        h *= 2; w *= 2;
 
-        // Output head (residual prediction)
+        // Output head (residual prediction at original resolution)
         yield return new ConvolutionalLayer<T>(numFeatures, h, w, inputChannels, 3, 1, 1);
     }
 

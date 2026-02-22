@@ -81,6 +81,10 @@ public class UniMatch<T> : OpticalFlowBase<T>
     protected override void InitializeLayers()
     {
         ClearLayers();
+        // Register native layers in base collection for parameter counting and serialization
+        if (_featureExtract is not null) Layers.Add(_featureExtract);
+        foreach (var block in _processingBlocks) Layers.Add(block);
+        if (_outputConv is not null) Layers.Add(_outputConv);
     }
 
     /// <inheritdoc/>
@@ -114,8 +118,11 @@ public class UniMatch<T> : OpticalFlowBase<T>
         }
         var rawFlow = _outputConv.Forward(feat);
 
-        // Extract 2-channel flow field
+        // Extract 2-channel flow field; warn if shapes differ which may indicate misconfiguration
         var flow = new Tensor<T>([2, height, width]);
+        if (rawFlow.Length != flow.Length)
+            System.Diagnostics.Debug.WriteLine(
+                $"UniMatch: flow output length {rawFlow.Length} differs from expected {flow.Length} (2x{height}x{width}). Check layer configuration.");
         for (int i = 0; i < Math.Min(rawFlow.Length, flow.Length); i++)
         {
             flow.Data.Span[i] = rawFlow.Data.Span[i];
@@ -213,6 +220,15 @@ public class UniMatch<T> : OpticalFlowBase<T>
     {
         _numFeatures = reader.ReadInt32();
         _numLayers = reader.ReadInt32();
+        // Reinitialize native layers from deserialized parameters
+        int ch = Architecture.InputDepth > 0 ? Architecture.InputDepth : 3;
+        int h = Architecture.InputHeight > 0 ? Architecture.InputHeight : 128;
+        int w = Architecture.InputWidth > 0 ? Architecture.InputWidth : 128;
+        _featureExtract = new ConvolutionalLayer<T>(ch * 2, h, w, _numFeatures, 3, 1, 1);
+        _processingBlocks.Clear();
+        for (int i = 0; i < _numLayers; i++)
+            _processingBlocks.Add(new ConvolutionalLayer<T>(_numFeatures, h, w, _numFeatures, 3, 1, 1));
+        _outputConv = new ConvolutionalLayer<T>(_numFeatures, h, w, 2, 3, 1, 1);
     }
 
     /// <inheritdoc/>

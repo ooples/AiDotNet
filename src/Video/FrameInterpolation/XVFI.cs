@@ -89,7 +89,12 @@ public class XVFI<T> : FrameInterpolationBase<T>
         InitializeLayers();
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Interpolates between two frames at timestep t.
+    /// Note: In native mode, t is embedded in the model weights after training.
+    /// In ONNX mode, the timestep is passed as part of the model input when supported.
+    /// The default layer stack produces midpoint (t=0.5) interpolation.
+    /// </summary>
     public override Tensor<T> Interpolate(Tensor<T> frame0, Tensor<T> frame1, double t = 0.5)
     {
         ThrowIfDisposed();

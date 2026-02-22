@@ -194,7 +194,11 @@ public class TDPNet<T> : FrameInterpolationBase<T>
     }
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        => new TDPNet<T>(Architecture, _options);
+    {
+        if (IsOnnxMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
+            return new TDPNet<T>(Architecture, mp, _options);
+        return new TDPNet<T>(Architecture, _options);
+    }
 
     #endregion
 

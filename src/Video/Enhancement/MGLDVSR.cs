@@ -202,7 +202,11 @@ public class MGLDVSR<T> : VideoSuperResolutionBase<T>
     }
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        => new MGLDVSR<T>(Architecture, _options);
+    {
+        if (IsOnnxMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
+            return new MGLDVSR<T>(Architecture, mp, _options);
+        return new MGLDVSR<T>(Architecture, _options);
+    }
 
     #endregion
 

@@ -83,7 +83,11 @@ public class SoftSplat<T> : FrameInterpolationBase<T>
 
     #region Frame Interpolation
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Interpolates between two frames using softmax splatting at timestep t.
+    /// Note: In native mode, the default layer stack produces midpoint (t=0.5) interpolation.
+    /// In ONNX mode, arbitrary timestep support depends on the loaded model weights.
+    /// </summary>
     public override Tensor<T> Interpolate(Tensor<T> frame0, Tensor<T> frame1, double t = 0.5)
     {
         ThrowIfDisposed();
@@ -196,7 +200,11 @@ public class SoftSplat<T> : FrameInterpolationBase<T>
     }
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        => new SoftSplat<T>(Architecture, _options);
+    {
+        if (IsOnnxMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
+            return new SoftSplat<T>(Architecture, mp, _options);
+        return new SoftSplat<T>(Architecture, _options);
+    }
 
     #endregion
 
