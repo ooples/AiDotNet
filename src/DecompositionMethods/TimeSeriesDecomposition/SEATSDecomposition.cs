@@ -647,7 +647,7 @@ public class SEATSDecomposition<T> : TimeSeriesDecompositionBase<T>
         var _trendModel = new SARIMAModel<T>(_trendOptions);
         _trendModel.Train(new Matrix<T>(TimeSeries.Length, 1), TimeSeries);
 
-        return _trendModel.Predict(new Matrix<T>(_forecastHorizon, 1));
+        return _trendModel.Predict(new Matrix<T>(TimeSeries.Length, 1));
     }
 
     /// <summary>
@@ -655,8 +655,8 @@ public class SEATSDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> The seasonal component represents repeating patterns in your data that occur at 
-    /// regular intervals (like sales increasing during holidays every year). This method isolates these 
+    /// <b>For Beginners:</b> The seasonal component represents repeating patterns in your data that occur at
+    /// regular intervals (like sales increasing during holidays every year). This method isolates these
     /// recurring patterns from your data, similar to identifying which notes repeat in a musical composition.
     /// </para>
     /// <para>
@@ -683,7 +683,7 @@ public class SEATSDecomposition<T> : TimeSeriesDecompositionBase<T>
         var _seasonalModel = new SARIMAModel<T>(_seasonalOptions);
         _seasonalModel.Train(new Matrix<T>(TimeSeries.Length, 1), TimeSeries);
 
-        return _seasonalModel.Predict(new Matrix<T>(_forecastHorizon, 1));
+        return _seasonalModel.Predict(new Matrix<T>(TimeSeries.Length, 1));
     }
 
     /// <summary>

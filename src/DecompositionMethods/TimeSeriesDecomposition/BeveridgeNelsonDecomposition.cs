@@ -44,6 +44,7 @@ public class BeveridgeNelsonDecomposition<T> : TimeSeriesDecompositionBase<T>
         _arimaOptions = arimaOptions ?? new ARIMAOptions<T> { P = 1, D = 1, Q = 1 };
         _forecastHorizon = forecastHorizon;
         _multivariateSeries = multivariateSeries ?? new Matrix<T>(TimeSeries.Length, 1);
+        Decompose();
     }
 
     /// <summary>
