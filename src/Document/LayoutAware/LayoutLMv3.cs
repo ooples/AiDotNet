@@ -918,6 +918,9 @@ public class LayoutLMv3<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
         {
             for (int c = 0; c < channels; c++)
             {
+                int srcBaseIdx = b * channels * srcH * srcW + c * srcH * srcW;
+                int dstBaseIdx = b * channels * dstH * dstW + c * dstH * dstW;
+
                 for (int h = 0; h < dstH; h++)
                 {
                     double srcY = (h + 0.5) * scaleH - 0.5;
@@ -932,17 +935,15 @@ public class LayoutLMv3<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
                         int x1 = Math.Min(srcW - 1, x0 + 1);
                         double fx = srcX - x0;
 
-                        int baseIdx = b * channels * srcH * srcW + c * srcH * srcW;
-                        double v00 = NumOps.ToDouble(image.Data.Span[baseIdx + y0 * srcW + x0]);
-                        double v01 = NumOps.ToDouble(image.Data.Span[baseIdx + y0 * srcW + x1]);
-                        double v10 = NumOps.ToDouble(image.Data.Span[baseIdx + y1 * srcW + x0]);
-                        double v11 = NumOps.ToDouble(image.Data.Span[baseIdx + y1 * srcW + x1]);
+                        double v00 = NumOps.ToDouble(image.Data.Span[srcBaseIdx + y0 * srcW + x0]);
+                        double v01 = NumOps.ToDouble(image.Data.Span[srcBaseIdx + y0 * srcW + x1]);
+                        double v10 = NumOps.ToDouble(image.Data.Span[srcBaseIdx + y1 * srcW + x0]);
+                        double v11 = NumOps.ToDouble(image.Data.Span[srcBaseIdx + y1 * srcW + x1]);
 
                         double val = v00 * (1 - fy) * (1 - fx) + v01 * (1 - fy) * fx
                                    + v10 * fy * (1 - fx) + v11 * fy * fx;
 
-                        int dstIdx = b * channels * dstH * dstW + c * dstH * dstW + h * dstW + w;
-                        resized.Data.Span[dstIdx] = NumOps.FromDouble(val);
+                        resized.Data.Span[dstBaseIdx + h * dstW + w] = NumOps.FromDouble(val);
                     }
                 }
             }
@@ -1144,9 +1145,13 @@ public class LayoutLMv3<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
                 output = layer.Forward(output);
 
             // Route through classification head layers (all layers not in embedding/transformer groups)
+            var excludedLayers = new HashSet<ILayer<T>>(_imageEmbeddingLayers);
+            foreach (var l in _textEmbeddingLayers) excludedLayers.Add(l);
+            foreach (var l in _transformerLayers) excludedLayers.Add(l);
+
             foreach (var layer in Layers)
             {
-                if (!_imageEmbeddingLayers.Contains(layer) && !_transformerLayers.Contains(layer))
+                if (!excludedLayers.Contains(layer))
                     output = layer.Forward(output);
             }
 
