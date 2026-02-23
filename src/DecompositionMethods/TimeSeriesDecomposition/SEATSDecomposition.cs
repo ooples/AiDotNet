@@ -25,15 +25,17 @@ public class SEATSDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// <param name="timeSeries">The time series data to decompose.</param>
     /// <param name="sarimaOptions">Options for the SARIMA model. If null, default options will be used.</param>
     /// <param name="algorithm">The algorithm variant to use for decomposition.</param>
+    /// <param name="forecastHorizon">Kept for backward compatibility; this parameter is not used.</param>
     /// <remarks>
     /// <b>For Beginners:</b> When creating a SEATS decomposition:
     /// - timeSeries: Your data points arranged in time order
     /// - sarimaOptions: Settings for the statistical model (you can use default settings)
     /// - algorithm: Which calculation method to use (Standard is a good default)
     /// </remarks>
-    public SEATSDecomposition(Vector<T> timeSeries, SARIMAOptions<T>? sarimaOptions = null, SEATSAlgorithmType algorithm = SEATSAlgorithmType.Standard)
+    public SEATSDecomposition(Vector<T> timeSeries, SARIMAOptions<T>? sarimaOptions = null, SEATSAlgorithmType algorithm = SEATSAlgorithmType.Standard, int forecastHorizon = 10)
         : base(timeSeries)
     {
+        _ = forecastHorizon; // kept for API compatibility
         _sarimaOptions = sarimaOptions ?? new();
         _algorithm = algorithm;
         Decompose();
