@@ -421,8 +421,14 @@ public static class LayerHelper<T>
         NeuralNetworkArchitecture<T> architecture,
         int hiddenLayerCount = 1,
         int hiddenLayerSize = 64,
-        int outputSize = 1)
+        int outputSize = -1)
     {
+        // Use architecture's output size if not explicitly provided
+        if (outputSize <= 0)
+        {
+            outputSize = architecture.OutputSize > 0 ? architecture.OutputSize : 1;
+        }
+
         ValidateLayerParameters(hiddenLayerCount, hiddenLayerSize, outputSize);
 
         int inputSize = architecture.CalculatedInputSize;
@@ -477,7 +483,15 @@ public static class LayerHelper<T>
         ValidateLayerParameters(convLayerCount, filterCount, kernelSize);
         ValidateLayerParameters(denseLayerCount, denseLayerSize, outputSize);
 
-        var inputShape = architecture.GetInputShape();
+        var rawShape = architecture.GetInputShape();
+
+        // Normalize to 3D [depth, height, width] - 2D input [height, width] is treated as single-channel
+        var inputShape = rawShape.Length switch
+        {
+            3 => rawShape,
+            2 => new[] { 1, rawShape[0], rawShape[1] },
+            _ => throw new ArgumentException($"CNN requires 2D or 3D input, got {rawShape.Length}D input shape.")
+        };
 
         // Convolutional layers
         for (int i = 0; i < convLayerCount; i++)
@@ -663,7 +677,9 @@ public static class LayerHelper<T>
         ValidateLayerParameters(1, 32, architecture.OutputSize);
 
         var inputShape = architecture.GetInputShape();
-        int inputFeatures = inputShape[2];  // Assuming shape is [batch, time, features]
+        // For 2D input [time, features], features is the last element
+        // For 3D input [batch, time, features], features is also the last element
+        int inputFeatures = inputShape[inputShape.Length - 1];
 
         // LSTM layers to process temporal data
         yield return new LSTMLayer<T>(
@@ -3878,13 +3894,18 @@ public static class LayerHelper<T>
 
         var hiddenActivation = new TanhActivation<T>() as IActivationFunction<T>;
 
-        // First hidden layer
+        // First hidden layer projects input to hidden dimension
         yield return new DenseLayer<T>(inputSize, hiddenLayerSize, hiddenActivation);
 
-        // Additional hidden layers
-        for (int i = 1; i < hiddenLayerCount; i++)
+        // Deep Ritz uses residual blocks with skip connections
+        // This follows the original Deep Ritz paper (Weinan E & Bing Yu, 2018)
+        int numResidualBlocks = Math.Max(1, hiddenLayerCount / 2);
+        for (int i = 0; i < numResidualBlocks; i++)
         {
-            yield return new DenseLayer<T>(hiddenLayerSize, hiddenLayerSize, hiddenActivation);
+            yield return new ResidualLayer<T>(
+                [hiddenLayerSize],
+                new DenseLayer<T>(hiddenLayerSize, hiddenLayerSize, hiddenActivation),
+                hiddenActivation);
         }
 
         // Output layer - linear for energy/solution values

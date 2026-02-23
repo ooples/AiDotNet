@@ -595,6 +595,14 @@ public class ReservoirLayer<T> : LayerBase<T>
     /// remains unchanged during training.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Gets the total number of parameters (reservoir weights + input weights).
+    /// </summary>
+    /// <remarks>
+    /// Although these parameters are fixed during training, the reservoir still has them.
+    /// </remarks>
+    public override int ParameterCount => _reservoirWeights.Length + _inputWeights.Length;
+
     public override void UpdateParameters(T learningRate)
     {
         // In ESN, we don't update the reservoir weights
