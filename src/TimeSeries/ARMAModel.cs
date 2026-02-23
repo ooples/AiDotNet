@@ -932,8 +932,8 @@ public class ARMAModel<T> : TimeSeriesModelBase<T>
                 }
             }
 
-            // Gradient descent update where L = loss function, φ = AR/MA coefficients.
-            // grad = -(∂L/∂φ), so ADD to minimize loss.
+            // Gradient descent update: θ := θ - α * ∂L/∂θ.
+            // Gradients are pre-negated (grad = -∂L/∂φ) during computation above, so we ADD here.
             T lr = NumOps.FromDouble(_learningRate);
             for (int i = 0; i < _arOrder; i++)
             {

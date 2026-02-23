@@ -384,7 +384,7 @@ public class TimeSeriesTrainPredictTests
     [Fact]
     public void SARIMAModel_TrainAndPredict_PureAR_ProducesFinitePredictions()
     {
-        // Test SARIMA with Q=0 (no MA components) — previously crashed at line 486
+        // Test SARIMA with Q=0 (no MA components) — previously crashed
         // with ArgumentOutOfRangeException because lastErrors had length 0
         var (x, y) = CreateSeasonalData(120, period: 12);
         var model = new SARIMAModel<double>(new SARIMAOptions<double>
@@ -674,7 +674,7 @@ public class TimeSeriesTrainPredictTests
     [Fact]
     public void SARIMAModel_PureARNoMA_DoesNotCrash()
     {
-        // Regression test: SARIMA with Q=0 and seasonal Q=0 crashed at line 486
+        // Regression test: SARIMA with Q=0 and seasonal Q=0 crashed
         // because lastErrors vector had length 0 and code tried to access index 0
         var (x, y) = CreateSeasonalData(120, period: 12);
         var model = new SARIMAModel<double>(new SARIMAOptions<double>

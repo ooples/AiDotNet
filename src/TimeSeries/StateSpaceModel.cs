@@ -553,7 +553,8 @@ public class StateSpaceModel<T> : TimeSeriesModelBase<T>
                 {
                     lastState[i] = NumOps.FromDouble(reader.ReadDouble());
                 }
-                // Store last state for deserialization; in-sample predictions use full smoothed states list
+                // Only the last state is serialized; after deserialization, in-sample predictions
+                // beyond index 0 will fall through to forecast mode using this single state.
                 _smoothedStates.Add(lastState);
             }
         }
