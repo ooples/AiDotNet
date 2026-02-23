@@ -32,6 +32,8 @@ public abstract class CopyrightDetectorBase<T> : TextSafetyModuleBase<T>, ICopyr
         if (text is null) throw new ArgumentNullException(nameof(text));
         if (n <= 0) throw new ArgumentOutOfRangeException(nameof(n), "N-gram size must be positive.");
 
+        // Note: For very long texts, a rolling-hash approach would reduce allocations.
+        // Current substring approach is acceptable for typical safety-check text lengths.
         var ngrams = new HashSet<string>();
         if (text.Length < n) return ngrams;
 

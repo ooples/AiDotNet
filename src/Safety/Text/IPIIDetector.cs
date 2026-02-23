@@ -48,7 +48,7 @@ public class PIIEntity
     /// <summary>Start character offset in the original text.</summary>
     public int StartIndex { get; init; }
 
-    /// <summary>End character offset in the original text.</summary>
+    /// <summary>End character offset in the original text (exclusive, consistent with <see cref="SafetyFinding.SpanEnd"/>).</summary>
     public int EndIndex { get; init; }
 
     /// <summary>Detection confidence between 0.0 and 1.0.</summary>

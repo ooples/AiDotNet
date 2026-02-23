@@ -11,7 +11,8 @@ namespace AiDotNet.FederatedLearning.Trainers;
 /// <typeparam name="TMetadata">The type of metadata returned by training.</typeparam>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
-/// <para><b>For Beginners:</b> for provides AI safety functionality. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> This base class provides federated learning training coordination.
+/// Federated learning trains a shared model across multiple clients without sharing their raw data.</para>
 /// </remarks>
 public abstract class FederatedTrainerBase<TModel, TData, TMetadata, T> :
     AiDotNet.FederatedLearning.Infrastructure.FederatedLearningComponentBase<T>,

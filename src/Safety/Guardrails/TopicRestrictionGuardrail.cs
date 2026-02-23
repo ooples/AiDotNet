@@ -91,7 +91,7 @@ public class TopicRestrictionGuardrail<T> : ITextSafetyModule<T>
                 {
                     findings.Add(new SafetyFinding
                     {
-                        Category = SafetyCategory.PromptInjection,
+                        Category = SafetyCategory.PolicyViolation,
                         Severity = SafetySeverity.Medium,
                         Confidence = 0.9,
                         Description = $"Input references restricted topic: \"{topic}\".",

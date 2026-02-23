@@ -43,7 +43,6 @@ public class AudioGenOptions : ModelOptions
         TopK = other.TopK;
         TopP = other.TopP;
         GuidanceScale = other.GuidanceScale;
-        Seed = other.Seed;
         Channels = other.Channels;
         TextEncoderPath = other.TextEncoderPath;
         LanguageModelPath = other.LanguageModelPath;

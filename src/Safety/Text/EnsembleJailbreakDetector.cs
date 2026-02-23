@@ -90,10 +90,20 @@ public class EnsembleJailbreakDetector<T> : TextSafetyModuleBase<T>
         {
             if (detectors[i] is null) throw new ArgumentException($"Detector at index {i} is null.", nameof(detectors));
         }
+        for (int i = 0; i < weights.Length; i++)
+        {
+            if (weights[i] < 0) throw new ArgumentException($"Weight at index {i} is negative.", nameof(weights));
+        }
+        double weightSum = 0;
+        for (int i = 0; i < weights.Length; i++) weightSum += weights[i];
+        if (weightSum <= 0) throw new ArgumentException("Weights must sum to a positive value.", nameof(weights));
 
         _threshold = threshold;
         _detectors = detectors;
-        _weights = weights;
+        // Normalize weights to sum to 1.0
+        var normalized = new double[weights.Length];
+        for (int i = 0; i < weights.Length; i++) normalized[i] = weights[i] / weightSum;
+        _weights = normalized;
     }
 
     /// <inheritdoc />

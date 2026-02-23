@@ -112,11 +112,15 @@ public class CompositePIIDetector<T> : TextSafetyModuleBase<T>
                 continue;
             }
 
-            // Check for overlap with already-covered ranges
+            // Check for overlap with already-covered ranges of the SAME category.
+            // Different PII types (e.g., name vs address) at the same span are kept.
             bool overlaps = false;
-            foreach (var (rStart, rEnd) in coveredRanges)
+            for (int r = 0; r < coveredRanges.Count; r++)
             {
-                // Check if ranges overlap significantly (>50% of either range)
+                var (rStart, rEnd) = coveredRanges[r];
+                // Only suppress duplicates within the same category
+                if (result[r].Category != finding.Category) continue;
+
                 int overlapStart = Math.Max(start, rStart);
                 int overlapEnd = Math.Min(end, rEnd);
                 int overlapLength = Math.Max(0, overlapEnd - overlapStart);

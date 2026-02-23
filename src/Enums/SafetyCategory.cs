@@ -249,5 +249,12 @@ public enum SafetyCategory
     /// <summary>
     /// Content that lacks transparency about AI involvement (regulatory compliance).
     /// </summary>
-    TransparencyViolation
+    TransparencyViolation,
+
+    // === Policy ===
+
+    /// <summary>
+    /// Content that violates a topic restriction or custom policy rule.
+    /// </summary>
+    PolicyViolation
 }
