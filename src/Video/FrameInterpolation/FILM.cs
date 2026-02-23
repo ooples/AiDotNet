@@ -35,7 +35,7 @@ namespace AiDotNet.Video.FrameInterpolation;
 /// ECCV 2022.
 /// </para>
 /// </remarks>
-public class FILM<T> : NeuralNetworkBase<T>
+public class FILM<T> : FrameInterpolationBase<T>
 {
     private readonly FILMOptions _options;
 
@@ -202,7 +202,7 @@ public class FILM<T> : NeuralNetworkBase<T>
     /// <param name="frame2">Second input frame [C, H, W] or [B, C, H, W].</param>
     /// <param name="timestep">Interpolation position (0.0 = frame1, 1.0 = frame2, 0.5 = middle).</param>
     /// <returns>Interpolated frame at the specified timestep.</returns>
-    public Tensor<T> Interpolate(Tensor<T> frame1, Tensor<T> frame2, double timestep = 0.5)
+    public override Tensor<T> Interpolate(Tensor<T> frame1, Tensor<T> frame2, double timestep = 0.5)
     {
         bool hasBatch = frame1.Rank == 4;
         if (!hasBatch)
@@ -1306,4 +1306,21 @@ public class FILM<T> : NeuralNetworkBase<T>
         new FILM<T>(Architecture, _numScales, _numFeatures);
 
     #endregion
+
+    #region Base Class Abstract Methods
+
+    /// <inheritdoc/>
+    protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames)
+    {
+        return NormalizeFrames(rawFrames);
+    }
+
+    /// <inheritdoc/>
+    protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput)
+    {
+        return DenormalizeFrames(modelOutput);
+    }
+
+    #endregion
+
 }

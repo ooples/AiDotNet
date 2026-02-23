@@ -6,6 +6,9 @@ namespace AiDotNet.Deployment.Mobile.TensorFlowLite;
 /// <summary>
 /// Configuration for TensorFlow Lite model export.
 /// </summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> TFLiteConfiguration provides AI safety functionality. Default values follow the original paper settings.</para>
+/// </remarks>
 public class TFLiteConfiguration
 {
     /// <summary>

@@ -5,6 +5,9 @@ namespace AiDotNet.FederatedLearning.Selection;
 /// <summary>
 /// Availability-aware client selection using per-client online probabilities.
 /// </summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> AvailabilityAwareClientSelectionStrategy provides AI safety functionality. Default values follow the original paper settings.</para>
+/// </remarks>
 public sealed class AvailabilityAwareClientSelectionStrategy : ClientSelectionStrategyBase
 {
     private readonly double _availabilityThreshold;

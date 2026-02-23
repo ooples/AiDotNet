@@ -5,6 +5,9 @@ namespace AiDotNet.FederatedLearning.ServerOptimizers;
 /// <summary>
 /// FedAdagrad server optimizer.
 /// </summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> FedAdagradServerOptimizer provides AI safety functionality. Default values follow the original paper settings.</para>
+/// </remarks>
 public sealed class FedAdagradServerOptimizer<T> : FederatedServerOptimizerBase<T>
 {
     private readonly double _learningRate;

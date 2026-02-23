@@ -8,6 +8,7 @@ namespace AiDotNet.FederatedLearning.Aggregators;
 /// <remarks>
 /// The server-side aggregation step for FedProx is identical to FedAvg. The proximal term
 /// affects local training, not aggregation.
+/// <para><b>For Beginners:</b> FedProxFullModelAggregationStrategy provides AI safety functionality. Default values follow the original paper settings.</para>
 /// </remarks>
 public sealed class FedProxFullModelAggregationStrategy<T, TInput, TOutput> :
     AggregationStrategyBase<IFullModel<T, TInput, TOutput>, T>

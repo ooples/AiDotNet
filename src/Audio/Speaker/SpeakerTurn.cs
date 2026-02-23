@@ -3,6 +3,9 @@ namespace AiDotNet.Audio.Speaker;
 /// <summary>
 /// Represents a speaker turn in diarization output.
 /// </summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> SpeakerTurn provides AI safety functionality. Default values follow the original paper settings.</para>
+/// </remarks>
 public class SpeakerTurn
 {
     /// <summary>

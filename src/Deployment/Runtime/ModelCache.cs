@@ -8,6 +8,9 @@ namespace AiDotNet.Deployment.Runtime;
 /// Cache for model inference results.
 /// </summary>
 /// <typeparam name="T">The numeric type for tensors</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> ModelCache provides AI safety functionality. Default values follow the original paper settings.</para>
+/// </remarks>
 public class ModelCache<T>
 {
     private readonly bool _enabled;

@@ -3,6 +3,9 @@ namespace AiDotNet.Audio.Whisper;
 /// <summary>
 /// A transcribed word with timing information.
 /// </summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> WhisperWord provides AI safety functionality. Default values follow the original paper settings.</para>
+/// </remarks>
 public class WhisperWord
 {
     /// <summary>

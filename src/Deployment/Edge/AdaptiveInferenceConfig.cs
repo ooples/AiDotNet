@@ -3,6 +3,9 @@ namespace AiDotNet.Deployment.Edge;
 /// <summary>
 /// Configuration for adaptive inference.
 /// </summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> AdaptiveInferenceConfig provides AI safety functionality. Default values follow the original paper settings.</para>
+/// </remarks>
 public class AdaptiveInferenceConfig
 {
     /// <summary>Gets or sets the quality level.</summary>

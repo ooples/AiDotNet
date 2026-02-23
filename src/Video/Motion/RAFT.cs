@@ -37,7 +37,7 @@ namespace AiDotNet.Video.Motion;
 /// ECCV 2020.
 /// </para>
 /// </remarks>
-public class RAFT<T> : NeuralNetworkBase<T>
+public class RAFT<T> : OpticalFlowBase<T>
 {
     private readonly RAFTOptions _options;
 
@@ -52,7 +52,7 @@ public class RAFT<T> : NeuralNetworkBase<T>
     private readonly int _numFeatures;
     private readonly int _correlationLevels;
     private readonly int _correlationRadius;
-    private readonly int _numIterations;
+
 
     // Feature encoder
     private readonly List<ConvolutionalLayer<T>> _featureEncoder;
@@ -107,7 +107,7 @@ public class RAFT<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Gets the number of refinement iterations.
     /// </summary>
-    internal int NumIterations => _numIterations;
+
 
     #endregion
 
@@ -138,7 +138,7 @@ public class RAFT<T> : NeuralNetworkBase<T>
         _numFeatures = numFeatures;
         _correlationLevels = correlationLevels;
         _correlationRadius = correlationRadius;
-        _numIterations = numIterations;
+        NumIterations = numIterations;
 
         _featureEncoder = [];
         _contextEncoder = [];
@@ -156,7 +156,7 @@ public class RAFT<T> : NeuralNetworkBase<T>
     /// <param name="frame1">The first frame tensor [C, H, W] or [B, C, H, W].</param>
     /// <param name="frame2">The second frame tensor [C, H, W] or [B, C, H, W].</param>
     /// <returns>The optical flow tensor [2, H, W] or [B, 2, H, W].</returns>
-    public Tensor<T> EstimateFlow(Tensor<T> frame1, Tensor<T> frame2)
+    public override Tensor<T> EstimateFlow(Tensor<T> frame1, Tensor<T> frame2)
     {
         bool hasBatch = frame1.Rank == 4;
         if (!hasBatch)
@@ -309,7 +309,7 @@ public class RAFT<T> : NeuralNetworkBase<T>
 
         var flowPredictions = new List<Tensor<T>>();
 
-        for (int iter = 0; iter < _numIterations; iter++)
+        for (int iter = 0; iter < NumIterations; iter++)
         {
             var correlation = ComputeCorrelation(fmap1, fmap2, flow);
             var corrFeatures = _correlationConv!.Forward(correlation);
@@ -648,7 +648,7 @@ public class RAFT<T> : NeuralNetworkBase<T>
             { "NumFeatures", _numFeatures },
             { "CorrelationLevels", _correlationLevels },
             { "CorrelationRadius", _correlationRadius },
-            { "NumIterations", _numIterations },
+            { "NumIterations", NumIterations },
             { "NumLayers", Layers.Count }
         };
 
@@ -669,7 +669,7 @@ public class RAFT<T> : NeuralNetworkBase<T>
         writer.Write(_numFeatures);
         writer.Write(_correlationLevels);
         writer.Write(_correlationRadius);
-        writer.Write(_numIterations);
+        writer.Write(NumIterations);
     }
 
     /// <inheritdoc/>
@@ -687,8 +687,25 @@ public class RAFT<T> : NeuralNetworkBase<T>
     /// <inheritdoc/>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        return new RAFT<T>(Architecture, _numFeatures, _correlationLevels, _correlationRadius, _numIterations);
+        return new RAFT<T>(Architecture, _numFeatures, _correlationLevels, _correlationRadius, NumIterations);
     }
 
     #endregion
+
+    #region Base Class Abstract Methods
+
+    /// <inheritdoc/>
+    protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames)
+    {
+        return NormalizeFrames(rawFrames);
+    }
+
+    /// <inheritdoc/>
+    protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput)
+    {
+        return modelOutput;
+    }
+
+    #endregion
+
 }

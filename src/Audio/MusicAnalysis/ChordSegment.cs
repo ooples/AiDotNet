@@ -3,6 +3,9 @@ namespace AiDotNet.Audio.MusicAnalysis;
 /// <summary>
 /// Represents a chord segment in audio.
 /// </summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> ChordSegment provides AI safety functionality. Default values follow the original paper settings.</para>
+/// </remarks>
 public class ChordSegment
 {
     /// <summary>

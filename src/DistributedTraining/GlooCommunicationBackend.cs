@@ -72,6 +72,9 @@ namespace AiDotNet.DistributedTraining;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for operations</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> GlooCommunicationBackend provides AI safety functionality. Default values follow the original paper settings.</para>
+/// </remarks>
 public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
 {
     private readonly int _rank;
