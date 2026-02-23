@@ -10,6 +10,9 @@ namespace AiDotNet.Deployment.Runtime;
 /// Runtime environment for deployed models with warm-up, versioning, A/B testing, and telemetry.
 /// </summary>
 /// <typeparam name="T">The numeric type for input/output tensors</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> DeploymentRuntime provides AI safety functionality. Default values follow the original paper settings.</para>
+/// </remarks>
 public class DeploymentRuntime<T>
 {
     private readonly RuntimeConfiguration _config;

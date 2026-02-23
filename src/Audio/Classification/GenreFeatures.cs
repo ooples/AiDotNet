@@ -3,6 +3,9 @@ namespace AiDotNet.Audio.Classification;
 /// <summary>
 /// Features extracted for genre classification.
 /// </summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> GenreFeatures provides AI safety functionality. Default values follow the original paper settings.</para>
+/// </remarks>
 public class GenreFeatures
 {
     /// <summary>Mean of MFCC coefficients across time.</summary>

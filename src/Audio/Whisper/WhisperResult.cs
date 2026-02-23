@@ -3,6 +3,9 @@ namespace AiDotNet.Audio.Whisper;
 /// <summary>
 /// Result of Whisper transcription.
 /// </summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> WhisperResult provides AI safety functionality. Default values follow the original paper settings.</para>
+/// </remarks>
 public class WhisperResult
 {
     /// <summary>

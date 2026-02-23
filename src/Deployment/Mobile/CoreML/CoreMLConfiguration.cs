@@ -6,6 +6,9 @@ namespace AiDotNet.Deployment.Mobile.CoreML;
 /// <summary>
 /// Configuration for CoreML model export.
 /// </summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> CoreMLConfiguration provides AI safety functionality. Default values follow the original paper settings.</para>
+/// </remarks>
 public class CoreMLConfiguration
 {
     /// <summary>

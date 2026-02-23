@@ -3,6 +3,9 @@ namespace AiDotNet.Deployment.Export.Onnx;
 /// <summary>
 /// Represents an ONNX computational graph.
 /// </summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> OnnxGraph provides AI safety functionality. Default values follow the original paper settings.</para>
+/// </remarks>
 public class OnnxGraph
 {
     /// <summary>

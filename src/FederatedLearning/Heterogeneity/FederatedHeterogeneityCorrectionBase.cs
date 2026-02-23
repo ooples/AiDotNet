@@ -7,6 +7,9 @@ namespace AiDotNet.FederatedLearning.Heterogeneity;
 /// Base class for heterogeneity correction implementations.
 /// </summary>
 /// <typeparam name="T">Numeric type.</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> for provides AI safety functionality. Default values follow the original paper settings.</para>
+/// </remarks>
 public abstract class FederatedHeterogeneityCorrectionBase<T> : FederatedLearningComponentBase<T>, IFederatedHeterogeneityCorrection<T>
 {
     public abstract Vector<T> Correct(int clientId, int roundNumber, Vector<T> globalParameters, Vector<T> localParameters, int localEpochs);

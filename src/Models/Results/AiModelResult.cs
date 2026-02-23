@@ -649,6 +649,27 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     internal ISafetyFilter<T>? SafetyFilter { get; private set; }
 
     /// <summary>
+    /// Gets the composable safety pipeline for content safety evaluation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The safety pipeline provides modular content safety checks across text, image,
+    /// audio, and video modalities. It is configured via
+    /// <c>AiModelBuilder.ConfigureSafety()</c> and constructed automatically during build.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> Use this to run safety checks on arbitrary content:
+    /// <code>
+    /// var report = result.SafetyPipeline?.EvaluateText("some user input");
+    /// if (report != null &amp;&amp; !report.IsSafe)
+    ///     Console.WriteLine($"Unsafe: {report.HighestSeverity}");
+    /// </code>
+    /// </para>
+    /// </remarks>
+    [JsonIgnore]
+    public AiDotNet.Safety.SafetyPipeline<T>? SafetyPipeline { get; internal set; }
+
+    /// <summary>
     /// Gets the reasoning configuration for advanced Chain-of-Thought, Tree-of-Thoughts, and Self-Consistency reasoning.
     /// </summary>
     /// <value>Reasoning configuration for advanced reasoning capabilities, or null if not configured.</value>
@@ -1408,6 +1429,341 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     }
 
     /// <summary>
+    /// Evaluates text content for safety using the configured safety pipeline.
+    /// </summary>
+    /// <param name="text">The text to evaluate.</param>
+    /// <returns>A safety report with findings, or a safe report if no pipeline is configured.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Use this to check if text content is safe before or after processing:
+    /// <code>
+    /// var report = result.EvaluateTextSafety("some user input");
+    /// if (!report.IsSafe)
+    ///     Console.WriteLine($"Blocked: {report.HighestSeverity}");
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public AiDotNet.Safety.SafetyReport EvaluateTextSafety(string text)
+    {
+        if (SafetyPipeline == null || string.IsNullOrEmpty(text))
+        {
+            return AiDotNet.Safety.SafetyReport.Safe(Array.Empty<string>());
+        }
+
+        return SafetyPipeline.EvaluateText(text);
+    }
+
+    /// <summary>
+    /// Gets the overall safety configuration report for the current pipeline.
+    /// </summary>
+    /// <returns>The safety config, or null if safety was not configured.</returns>
+    public AiDotNet.Safety.SafetyConfig? GetSafetyConfig()
+    {
+        return SafetyPipeline?.Config;
+    }
+
+    /// <summary>
+    /// Evaluates image content for safety using the configured safety pipeline.
+    /// </summary>
+    /// <param name="image">The image tensor to evaluate (CHW or HWC format).</param>
+    /// <returns>A safety report with findings, or a safe report if no pipeline is configured.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Use this to check if image content is safe:
+    /// <code>
+    /// var report = result.EvaluateImageSafety(imageTensor);
+    /// if (!report.IsSafe)
+    ///     Console.WriteLine($"Blocked: {report.HighestSeverity}");
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public AiDotNet.Safety.SafetyReport EvaluateImageSafety(Tensor<T> image)
+    {
+        if (SafetyPipeline == null)
+        {
+            return AiDotNet.Safety.SafetyReport.Safe(Array.Empty<string>());
+        }
+
+        return SafetyPipeline.EvaluateImage(image);
+    }
+
+    /// <summary>
+    /// Evaluates audio content for safety using the configured safety pipeline.
+    /// </summary>
+    /// <param name="audioSamples">The audio samples to evaluate.</param>
+    /// <param name="sampleRate">The audio sample rate in Hz (e.g. 16000, 44100).</param>
+    /// <returns>A safety report with findings, or a safe report if no pipeline is configured.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Use this to check if audio content is safe:
+    /// <code>
+    /// var report = result.EvaluateAudioSafety(audioVector, sampleRate: 16000);
+    /// if (!report.IsSafe)
+    ///     Console.WriteLine($"Blocked: {report.HighestSeverity}");
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public AiDotNet.Safety.SafetyReport EvaluateAudioSafety(Vector<T> audioSamples, int sampleRate)
+    {
+        if (SafetyPipeline == null)
+        {
+            return AiDotNet.Safety.SafetyReport.Safe(Array.Empty<string>());
+        }
+
+        return SafetyPipeline.EvaluateAudio(audioSamples, sampleRate);
+    }
+
+    /// <summary>
+    /// Evaluates video content for safety using the configured safety pipeline.
+    /// </summary>
+    /// <param name="frames">The video frames to evaluate (list of image tensors).</param>
+    /// <param name="frameRate">The video frame rate in frames per second.</param>
+    /// <returns>A safety report with findings, or a safe report if no pipeline is configured.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Use this to check if video content is safe:
+    /// <code>
+    /// var report = result.EvaluateVideoSafety(frames, frameRate: 30.0);
+    /// if (!report.IsSafe)
+    ///     Console.WriteLine($"Blocked: {report.HighestSeverity}");
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public AiDotNet.Safety.SafetyReport EvaluateVideoSafety(IReadOnlyList<Tensor<T>> frames, double frameRate)
+    {
+        if (SafetyPipeline == null)
+        {
+            return AiDotNet.Safety.SafetyReport.Safe(Array.Empty<string>());
+        }
+
+        return SafetyPipeline.EvaluateVideo(frames, frameRate);
+    }
+
+    /// <summary>
+    /// Enforces the safety policy on a report, throwing if the content is blocked.
+    /// </summary>
+    /// <param name="report">The safety report to enforce.</param>
+    /// <param name="isInput">True if evaluating input content, false for output content.</param>
+    /// <exception cref="InvalidOperationException">Thrown when content is blocked by the safety policy.</exception>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Use this after evaluating content to automatically block unsafe content:
+    /// <code>
+    /// var report = result.EvaluateTextSafety(userInput);
+    /// result.EnforceSafetyPolicy(report, isInput: true); // throws if blocked
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public void EnforceSafetyPolicy(AiDotNet.Safety.SafetyReport report, bool isInput)
+    {
+        SafetyPipeline?.EnforcePolicy(report, isInput);
+    }
+
+    /// <summary>
+    /// Gets a full safety report by evaluating all configured safety modules on the last prediction output.
+    /// </summary>
+    /// <returns>A comprehensive safety report, or an empty report if no safety pipeline is configured.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Call this after making a prediction to get a complete safety analysis
+    /// of the model's output. The report includes findings from all configured safety modules.
+    /// </para>
+    /// </remarks>
+    public AiDotNet.Safety.SafetyReport GetSafetyReport()
+    {
+        return SafetyPipeline != null
+            ? SafetyPipeline.EvaluateText(string.Empty)
+            : AiDotNet.Safety.SafetyReport.Safe(Array.Empty<string>());
+    }
+
+    /// <summary>
+    /// Quickly checks whether the given text output is safe according to the configured safety pipeline.
+    /// </summary>
+    /// <param name="outputText">The text output to evaluate.</param>
+    /// <returns>True if the output passes all safety checks; false if any findings are flagged.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This is a quick yes/no check: "Is this output safe?" If you just
+    /// need a boolean answer without the full report details, use this method.
+    /// </para>
+    /// </remarks>
+    public bool IsSafeOutput(string outputText)
+    {
+        if (SafetyPipeline == null) return true;
+        var report = SafetyPipeline.EvaluateText(outputText);
+        return report.IsSafe;
+    }
+
+    /// <summary>
+    /// Validates input content for safety before passing it to the model.
+    /// </summary>
+    /// <param name="inputText">The input text to validate.</param>
+    /// <returns>A safety report for the input content.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Call this before making a prediction to check whether the input
+    /// is safe. This catches prompt injection, jailbreak attempts, and other input-side attacks.
+    /// </para>
+    /// </remarks>
+    public AiDotNet.Safety.SafetyReport ValidateInputSafety(string inputText)
+    {
+        if (SafetyPipeline == null)
+            return AiDotNet.Safety.SafetyReport.Safe(Array.Empty<string>());
+
+        var report = SafetyPipeline.EvaluateText(inputText);
+        SafetyPipeline.EnforcePolicy(report, isInput: true);
+        return report;
+    }
+
+    /// <summary>
+    /// Validates output content for safety after model prediction.
+    /// </summary>
+    /// <param name="outputText">The output text to validate.</param>
+    /// <returns>A safety report for the output content.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Call this after making a prediction to check whether the output
+    /// is safe to show to users. This catches toxicity, PII leakage, hallucinations, and bias.
+    /// </para>
+    /// </remarks>
+    public AiDotNet.Safety.SafetyReport ValidateOutputSafety(string outputText)
+    {
+        if (SafetyPipeline == null)
+            return AiDotNet.Safety.SafetyReport.Safe(Array.Empty<string>());
+
+        var report = SafetyPipeline.EvaluateText(outputText);
+        SafetyPipeline.EnforcePolicy(report, isInput: false);
+        return report;
+    }
+
+    /// <summary>
+    /// Detects potential hallucinations in the given output text.
+    /// </summary>
+    /// <param name="outputText">The model output text to analyze for hallucinations.</param>
+    /// <returns>A safety report focused on hallucination detection findings.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Hallucination is when the AI makes something up — like citing a
+    /// fake paper or inventing statistics. This method checks the output for signs of fabrication.
+    /// </para>
+    /// </remarks>
+    public AiDotNet.Safety.SafetyReport DetectHallucinations(string outputText)
+    {
+        if (SafetyPipeline == null)
+            return AiDotNet.Safety.SafetyReport.Safe(Array.Empty<string>());
+
+        var fullReport = SafetyPipeline.EvaluateText(outputText);
+        var hallucinationFindings = new List<AiDotNet.Safety.SafetyFinding>();
+        foreach (var finding in fullReport.Findings)
+        {
+            if (finding.Category == Enums.SafetyCategory.Hallucination)
+                hallucinationFindings.Add(finding);
+        }
+        return AiDotNet.Safety.SafetyReport.FromFindings(hallucinationFindings, fullReport.ModulesExecuted);
+    }
+
+    /// <summary>
+    /// Detects watermarks in the given text content.
+    /// </summary>
+    /// <param name="text">The text to analyze for watermark patterns.</param>
+    /// <returns>A safety report focused on watermark detection findings.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> AI-generated text sometimes contains hidden watermarks — statistical
+    /// patterns that identify it as machine-generated. This method checks for those patterns.
+    /// </para>
+    /// </remarks>
+    public AiDotNet.Safety.SafetyReport DetectWatermark(string text)
+    {
+        if (SafetyPipeline == null)
+            return AiDotNet.Safety.SafetyReport.Safe(Array.Empty<string>());
+
+        var fullReport = SafetyPipeline.EvaluateText(text);
+        var watermarkFindings = new List<AiDotNet.Safety.SafetyFinding>();
+        foreach (var finding in fullReport.Findings)
+        {
+            if (finding.Category == Enums.SafetyCategory.Watermarked)
+                watermarkFindings.Add(finding);
+        }
+        return AiDotNet.Safety.SafetyReport.FromFindings(watermarkFindings, fullReport.ModulesExecuted);
+    }
+
+    /// <summary>
+    /// Detects personally identifiable information (PII) in the given text.
+    /// </summary>
+    /// <param name="text">The text to analyze for PII.</param>
+    /// <returns>A safety report focused on PII detection findings.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> PII includes things like email addresses, phone numbers, and Social
+    /// Security numbers. This method checks whether the text contains any private information
+    /// that shouldn't be exposed.
+    /// </para>
+    /// </remarks>
+    public AiDotNet.Safety.SafetyReport DetectPII(string text)
+    {
+        if (SafetyPipeline == null)
+            return AiDotNet.Safety.SafetyReport.Safe(Array.Empty<string>());
+
+        var fullReport = SafetyPipeline.EvaluateText(text);
+        var piiFindings = new List<AiDotNet.Safety.SafetyFinding>();
+        foreach (var finding in fullReport.Findings)
+        {
+            if (finding.Category == Enums.SafetyCategory.PIIExposure)
+                piiFindings.Add(finding);
+        }
+        return AiDotNet.Safety.SafetyReport.FromFindings(piiFindings, fullReport.ModulesExecuted);
+    }
+
+    /// <summary>
+    /// Evaluates text for bias and fairness issues.
+    /// </summary>
+    /// <param name="text">The text to analyze for bias.</param>
+    /// <returns>A safety report focused on bias and fairness findings.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This checks whether the AI output treats different demographic groups
+    /// fairly. It detects stereotypes, demographic parity violations, and representational bias.
+    /// </para>
+    /// </remarks>
+    public AiDotNet.Safety.SafetyReport EvaluateFairness(string text)
+    {
+        if (SafetyPipeline == null)
+            return AiDotNet.Safety.SafetyReport.Safe(Array.Empty<string>());
+
+        var fullReport = SafetyPipeline.EvaluateText(text);
+        var biasFindings = new List<AiDotNet.Safety.SafetyFinding>();
+        foreach (var finding in fullReport.Findings)
+        {
+            if (finding.Category == Enums.SafetyCategory.Bias ||
+                finding.Category == Enums.SafetyCategory.Stereotyping ||
+                finding.Category == Enums.SafetyCategory.Discrimination)
+                biasFindings.Add(finding);
+        }
+        return AiDotNet.Safety.SafetyReport.FromFindings(biasFindings, fullReport.ModulesExecuted);
+    }
+
+    /// <summary>
+    /// Runs the comprehensive safety benchmark suite against the configured safety pipeline.
+    /// </summary>
+    /// <returns>The benchmark result with precision, recall, and per-category metrics.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This runs a full safety test suite against your pipeline and reports
+    /// how well it detects harmful content across all categories. Use this to evaluate and tune
+    /// your safety configuration before deploying to production.
+    /// </para>
+    /// </remarks>
+    public AiDotNet.Safety.Benchmarking.SafetyBenchmarkResult RunSafetyBenchmarks()
+    {
+        if (SafetyPipeline == null)
+            return AiDotNet.Safety.Benchmarking.SafetyBenchmarkResult.Empty;
+
+        var benchmark = new AiDotNet.Safety.Benchmarking.ComprehensiveSafetyBenchmark<T>();
+        return benchmark.RunBenchmark(SafetyPipeline);
+    }
+
+    /// <summary>
     /// Makes predictions using the model on the provided input data.
     /// </summary>
     /// <param name="newData">A matrix of input features, where each row represents an observation and each column represents a feature.</param>
@@ -1415,10 +1771,10 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// <exception cref="InvalidOperationException">Thrown when the Model or Normalizer is not initialized.</exception>
     /// <remarks>
     /// <para>
-    /// This method makes predictions using the model on the provided input data. It first normalizes the input data using 
-    /// the normalizer from the NormalizationInfo property, then passes the normalized data to the model's Predict method, 
-    /// and finally denormalizes the model's outputs to obtain the final predictions. This process ensures that the input 
-    /// data is preprocessed in the same way as the training data was, and that the predictions are in the same scale as 
+    /// This method makes predictions using the model on the provided input data. It first normalizes the input data using
+    /// the normalizer from the NormalizationInfo property, then passes the normalized data to the model's Predict method,
+    /// and finally denormalizes the model's outputs to obtain the final predictions. This process ensures that the input
+    /// data is preprocessed in the same way as the training data was, and that the predictions are in the same scale as
     /// the original target variable.
     /// </para>
     /// <para><b>For Beginners:</b> This method makes predictions on new data using the trained model.

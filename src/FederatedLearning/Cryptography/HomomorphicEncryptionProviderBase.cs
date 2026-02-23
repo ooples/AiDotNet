@@ -9,6 +9,9 @@ namespace AiDotNet.FederatedLearning.Cryptography;
 /// Base class for homomorphic encryption providers.
 /// </summary>
 /// <typeparam name="T">Numeric type.</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> for provides AI safety functionality. Default values follow the original paper settings.</para>
+/// </remarks>
 public abstract class HomomorphicEncryptionProviderBase<T> : FederatedLearningComponentBase<T>, IHomomorphicEncryptionProvider<T>
 {
     public abstract Vector<T> AggregateEncryptedWeightedAverage(

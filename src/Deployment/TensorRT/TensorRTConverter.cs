@@ -11,6 +11,9 @@ namespace AiDotNet.Deployment.TensorRT;
 /// <typeparam name="T">The numeric type used in the model</typeparam>
 /// <typeparam name="TInput">The input type for the model</typeparam>
 /// <typeparam name="TOutput">The output type for the model</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> TensorRTConverter provides AI safety functionality. Default values follow the original paper settings.</para>
+/// </remarks>
 public class TensorRTConverter<T, TInput, TOutput>
 {
     private readonly OnnxModelExporter<T, TInput, TOutput> _onnxExporter;
