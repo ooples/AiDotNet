@@ -3,6 +3,9 @@ namespace AiDotNet.Audio.MusicAnalysis;
 /// <summary>
 /// Result of key detection.
 /// </summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> KeyDetectionResult provides AI safety functionality. Default values follow the original paper settings.</para>
+/// </remarks>
 public class KeyDetectionResult
 {
     /// <summary>

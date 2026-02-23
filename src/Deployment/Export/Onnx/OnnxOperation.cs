@@ -5,6 +5,9 @@ namespace AiDotNet.Deployment.Export.Onnx;
 /// <summary>
 /// Represents an ONNX operation (node in the computational graph).
 /// </summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> OnnxOperation provides AI safety functionality. Default values follow the original paper settings.</para>
+/// </remarks>
 public class OnnxOperation
 {
     /// <summary>

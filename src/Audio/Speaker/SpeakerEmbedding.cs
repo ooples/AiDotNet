@@ -7,6 +7,9 @@ namespace AiDotNet.Audio.Speaker;
 /// Represents a speaker embedding vector.
 /// </summary>
 /// <typeparam name="T">The numeric type.</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> SpeakerEmbedding provides AI safety functionality. Default values follow the original paper settings.</para>
+/// </remarks>
 public class SpeakerEmbedding<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();

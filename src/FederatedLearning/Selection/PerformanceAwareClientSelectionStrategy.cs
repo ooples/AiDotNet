@@ -5,6 +5,9 @@ namespace AiDotNet.FederatedLearning.Selection;
 /// <summary>
 /// Performance-aware client selection using an explore/exploit policy over historical scores.
 /// </summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> PerformanceAwareClientSelectionStrategy provides AI safety functionality. Default values follow the original paper settings.</para>
+/// </remarks>
 public sealed class PerformanceAwareClientSelectionStrategy : ClientSelectionStrategyBase
 {
     private readonly double _explorationRate;

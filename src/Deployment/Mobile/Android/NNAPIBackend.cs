@@ -8,6 +8,9 @@ namespace AiDotNet.Deployment.Mobile.Android;
 /// Provides hardware acceleration on Android devices.
 /// </summary>
 /// <typeparam name="T">The numeric type for input/output tensors</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> NNAPIBackend provides AI safety functionality. Default values follow the original paper settings.</para>
+/// </remarks>
 public class NNAPIBackend<T>
 {
     private readonly NNAPIConfiguration _config;

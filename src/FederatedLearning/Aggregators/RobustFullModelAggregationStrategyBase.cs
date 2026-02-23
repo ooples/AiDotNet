@@ -9,6 +9,9 @@ namespace AiDotNet.FederatedLearning.Aggregators;
 /// <typeparam name="T">Numeric type.</typeparam>
 /// <typeparam name="TInput">Model input type.</typeparam>
 /// <typeparam name="TOutput">Model output type.</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> for provides AI safety functionality. Default values follow the original paper settings.</para>
+/// </remarks>
 public abstract class RobustFullModelAggregationStrategyBase<T, TInput, TOutput> :
     AggregationStrategyBase<IFullModel<T, TInput, TOutput>, T>
 {

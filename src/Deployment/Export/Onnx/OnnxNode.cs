@@ -3,6 +3,9 @@ namespace AiDotNet.Deployment.Export.Onnx;
 /// <summary>
 /// Represents an ONNX node (input or output).
 /// </summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> OnnxNode provides AI safety functionality. Default values follow the original paper settings.</para>
+/// </remarks>
 public class OnnxNode
 {
     /// <summary>

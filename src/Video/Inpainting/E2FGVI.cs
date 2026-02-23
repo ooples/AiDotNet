@@ -31,7 +31,7 @@ namespace AiDotNet.Video.Inpainting;
 /// - Temporal consistency enforcement
 /// </para>
 /// </remarks>
-public class E2FGVI<T> : NeuralNetworkBase<T>
+public class E2FGVI<T> : VideoInpaintingBase<T>
 {
     private readonly E2FGVIOptions _options;
 
@@ -845,4 +845,28 @@ public class E2FGVI<T> : NeuralNetworkBase<T>
         new E2FGVI<T>(Architecture, _numFeatures);
 
     #endregion
+
+    #region Base Class Abstract Methods
+
+    /// <inheritdoc/>
+    public override Tensor<T> Inpaint(Tensor<T> frames, Tensor<T> masks)
+    {
+        var stacked = ConcatenateFeatures(frames, masks);
+        return Forward(stacked);
+    }
+
+    /// <inheritdoc/>
+    protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames)
+    {
+        return NormalizeFrames(rawFrames);
+    }
+
+    /// <inheritdoc/>
+    protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput)
+    {
+        return DenormalizeFrames(modelOutput);
+    }
+
+    #endregion
+
 }

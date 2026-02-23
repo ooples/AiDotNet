@@ -36,7 +36,7 @@ namespace AiDotNet.Video.Inpainting;
 /// ICCV 2023.
 /// </para>
 /// </remarks>
-public class ProPainter<T> : NeuralNetworkBase<T>
+public class ProPainter<T> : VideoInpaintingBase<T>
 {
     private readonly ProPainterOptions _options;
 
@@ -937,4 +937,28 @@ public class ProPainter<T> : NeuralNetworkBase<T>
     }
 
     #endregion
+
+    #region Base Class Abstract Methods
+
+    /// <inheritdoc/>
+    public override Tensor<T> Inpaint(Tensor<T> frames, Tensor<T> masks)
+    {
+        var stacked = ConcatenateFeatures(frames, masks);
+        return Forward(stacked);
+    }
+
+    /// <inheritdoc/>
+    protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames)
+    {
+        return NormalizeFrames(rawFrames);
+    }
+
+    /// <inheritdoc/>
+    protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput)
+    {
+        return DenormalizeFrames(modelOutput);
+    }
+
+    #endregion
+
 }

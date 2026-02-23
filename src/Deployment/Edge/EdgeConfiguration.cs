@@ -5,6 +5,9 @@ namespace AiDotNet.Deployment.Edge;
 /// <summary>
 /// Configuration for edge device deployment optimization.
 /// </summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> EdgeConfiguration provides AI safety functionality. Default values follow the original paper settings.</para>
+/// </remarks>
 public class EdgeConfiguration
 {
     /// <summary>

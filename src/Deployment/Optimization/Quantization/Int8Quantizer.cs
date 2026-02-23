@@ -11,6 +11,9 @@ namespace AiDotNet.Deployment.Optimization.Quantization;
 /// <typeparam name="T">The numeric type used in the model</typeparam>
 /// <typeparam name="TInput">The input type for the model</typeparam>
 /// <typeparam name="TOutput">The output type for the model</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> Int8Quantizer provides AI safety functionality. Default values follow the original paper settings.</para>
+/// </remarks>
 public class Int8Quantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOutput>
 {
     private readonly Dictionary<string, double> _scaleFactors = new();
