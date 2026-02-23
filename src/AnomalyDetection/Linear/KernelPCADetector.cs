@@ -366,14 +366,14 @@ public class KernelPCADetector<T> : AnomalyDetectorBase<T>
                     proj += alphas[c][t] * kVec[t];
                 }
 
-                // Subtract reconstructed variance for reconstruction error
-                reconstructionError -= proj * proj / lambdas[c];
-
-                // Mahalanobis distance in kernel PCA space: sum(proj^2 / lambda)
-                // This catches outliers that are far from the mean in kernel space,
-                // even if reconstruction error is near zero
+                // Only use components with sufficiently large eigenvalues to avoid
+                // division by near-zero lambdas causing numerical instability
                 if (lambdas[c] > 1e-10)
                 {
+                    // Subtract reconstructed variance for reconstruction error
+                    reconstructionError -= proj * proj / lambdas[c];
+
+                    // Mahalanobis distance in kernel PCA space: sum(proj^2 / lambda)
                     mahalanobis += (proj * proj) / lambdas[c];
                 }
             }
