@@ -48,6 +48,9 @@ public class LOCIDetector<T> : AnomalyDetectorBase<T>
     /// <summary>MDEF score assigned to points that have counting neighbors but zero sampling neighbors, indicating extreme isolation.</summary>
     private const double IsolatedPointScore = 1.0;
 
+    /// <summary>Score for points with no neighbors at any radius. Chosen to be within Half max (~65504).</summary>
+    private const double NoNeighborScore = 60000.0;
+
     private readonly double _alpha;
     private readonly int _kMax;
     private Matrix<T>? _trainingData;
@@ -194,10 +197,10 @@ public class LOCIDetector<T> : AnomalyDetectorBase<T>
             }
 
             // If the point had no neighbors at ANY tested radius, it is an extreme isolate.
-            // Use a large but finite score (avoids overflow to Infinity for float/half T).
+            // Use a large but finite score safely representable for Half/float/double.
             if (!hadNeighbors)
             {
-                maxMdef = 1e10;
+                maxMdef = NoNeighborScore;
             }
 
             scores[i] = NumOps.FromDouble(maxMdef);

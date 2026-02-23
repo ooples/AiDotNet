@@ -304,7 +304,7 @@ public class GMMDetector<T> : AnomalyDetectorBase<T>
                     for (int j = 0; j < d; j++)
                     {
                         double currentVar = NumOps.ToDouble(_covariances![c][j, j]);
-                        double minVar = _globalVariance![j] * 0.01;
+                        double minVar = Math.Max(_globalVariance![j] * 0.01, 1e-6);
                         if (currentVar < minVar)
                         {
                             _covariances[c][j, j] = NumOps.FromDouble(minVar);
