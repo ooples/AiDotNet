@@ -1,3 +1,4 @@
+#nullable disable
 using AiDotNet.Enums;
 using AiDotNet.FitnessCalculators;
 using AiDotNet.Models;

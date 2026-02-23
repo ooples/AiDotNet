@@ -25,8 +25,39 @@ namespace AiDotNet.Audio.MusicGen;
 /// - Mention energy level (energetic, calm, building)
 /// </para>
 /// </remarks>
-public class MusicGenOptions
+public class MusicGenOptions : AiDotNet.Models.Options.ModelOptions
 {
+    /// <summary>Initializes a new instance with default values.</summary>
+    public MusicGenOptions() { }
+
+    /// <summary>Initializes a new instance by copying from another instance.</summary>
+    /// <param name="other">The options instance to copy from.</param>
+    /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
+    public MusicGenOptions(MusicGenOptions other)
+    {
+        if (other == null)
+            throw new ArgumentNullException(nameof(other));
+
+        ModelSize = other.ModelSize;
+        SampleRate = other.SampleRate;
+        DurationSeconds = other.DurationSeconds;
+        MaxDurationSeconds = other.MaxDurationSeconds;
+        Temperature = other.Temperature;
+        TopK = other.TopK;
+        TopP = other.TopP;
+        GuidanceScale = other.GuidanceScale;
+        Stereo = other.Stereo;
+        NumCodebooks = other.NumCodebooks;
+        CodebookSize = other.CodebookSize;
+        UseDelayPattern = other.UseDelayPattern;
+        TextEncoderPath = other.TextEncoderPath;
+        LanguageModelPath = other.LanguageModelPath;
+        EnCodecDecoderPath = other.EnCodecDecoderPath;
+        OnnxOptions = other.OnnxOptions;
+        DropoutRate = other.DropoutRate;
+        MaxTextLength = other.MaxTextLength;
+    }
+
     /// <summary>
     /// Gets or sets the model size variant.
     /// </summary>
@@ -102,15 +133,6 @@ public class MusicGenOptions
     /// </para>
     /// </remarks>
     public double GuidanceScale { get; set; } = 3.0;
-
-    /// <summary>
-    /// Gets or sets the random seed for reproducibility.
-    /// </summary>
-    /// <remarks>
-    /// Set to a specific value to generate the same music each time.
-    /// Null for random generation.
-    /// </remarks>
-    public int? Seed { get; set; }
 
     /// <summary>
     /// Gets or sets whether to generate stereo audio.

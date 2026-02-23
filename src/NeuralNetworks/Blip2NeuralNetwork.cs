@@ -4,10 +4,12 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tokenization.Interfaces;
 using AiDotNet.Tokenization.Models;
 using Microsoft.ML.OnnxRuntime;
+using AiDotNet.Validation;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
 
 namespace AiDotNet.NeuralNetworks;
@@ -45,6 +47,11 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
 {
+    private readonly Blip2Options _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     #region Execution Mode
 
     /// <summary>
@@ -319,11 +326,15 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
         int maxSequenceLength = 32,
         int imageSize = 224,
         IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        Blip2Options? options = null)
         : base(architecture,
                lossFunction ?? new ContrastiveLoss<T>(),
                1.0)
     {
+        _options = options ?? new Blip2Options();
+        Options = _options;
+
         // Validate ONNX model paths
         if (string.IsNullOrWhiteSpace(visionEncoderPath))
             throw new ArgumentException("Vision encoder path cannot be null or empty.", nameof(visionEncoderPath));
@@ -370,8 +381,8 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
             _languageModel = languageModel;
 
             // Tokenizer is required for ONNX mode - must match the language model backbone
-            _tokenizer = tokenizer ?? throw new ArgumentNullException(nameof(tokenizer),
-                $"Tokenizer is required for ONNX mode. Use AutoTokenizer.FromPretrained(\"{Tokenization.LanguageModelTokenizerFactory.GetHuggingFaceModelName(languageModelBackbone)}\") or equivalent.");
+            Guard.NotNull(tokenizer);
+            _tokenizer = tokenizer;
 
             _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
             _lossFunction = lossFunction ?? new ContrastiveLoss<T>();
@@ -441,11 +452,15 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
         LanguageModelBackbone languageModelBackbone = LanguageModelBackbone.OPT,
         ITokenizer? tokenizer = null,
         IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        Blip2Options? options = null)
         : base(architecture,
                lossFunction ?? new ContrastiveLoss<T>(),
                1.0)
     {
+        _options = options ?? new Blip2Options();
+        Options = _options;
+
         _useNativeMode = true;
         _embeddingDimension = embeddingDimension;
         _maxSequenceLength = maxSequenceLength;

@@ -60,5 +60,10 @@ internal sealed class SinglePassTestOptimizer : IOptimizer<double, Matrix<double
     public void LoadModel(string filePath)
     {
     }
+
+    public void SetModel(IFullModel<double, Matrix<double>, Vector<double>> model)
+    {
+        // No-op for test optimizer
+    }
 }
 

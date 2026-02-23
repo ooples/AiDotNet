@@ -35,7 +35,7 @@ namespace AiDotNet.Models.Options;
 /// so you can quickly identify and fix issues in your neural network.
 /// </para>
 /// </remarks>
-public class NeuralNetworkFitDetectorOptions
+public class NeuralNetworkFitDetectorOptions : ModelOptions
 {
     /// <summary>
     /// Gets or sets the maximum error threshold for classifying a model's fit as "good".

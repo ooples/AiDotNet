@@ -1,5 +1,6 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Document.Interfaces;
+using AiDotNet.Document.Options;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -12,6 +13,7 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tokenization;
 using AiDotNet.Tokenization.Interfaces;
 using Microsoft.ML.OnnxRuntime;
+using AiDotNet.Validation;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
 
 namespace AiDotNet.Document.LayoutAware;
@@ -57,6 +59,11 @@ namespace AiDotNet.Document.LayoutAware;
 /// </remarks>
 public class LayoutLMv3<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocumentQA<T>
 {
+    private readonly LayoutLMv3Options _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     #region Fields
 
     private readonly bool _useNativeMode;
@@ -148,16 +155,21 @@ public class LayoutLMv3<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
         int numHeads = 12,
         int vocabSize = 50265,
         IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        LayoutLMv3Options? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyLoss<T>(), 1.0)
     {
+        _options = options ?? new LayoutLMv3Options();
+        Options = _options;
+
         if (string.IsNullOrWhiteSpace(onnxModelPath))
             throw new ArgumentNullException(nameof(onnxModelPath));
 
         if (!File.Exists(onnxModelPath))
             throw new FileNotFoundException($"ONNX model file not found: {onnxModelPath}", onnxModelPath);
 
-        _tokenizer = tokenizer ?? throw new ArgumentNullException(nameof(tokenizer));
+        Guard.NotNull(tokenizer);
+        _tokenizer = tokenizer;
         _useNativeMode = false;
         _numClasses = numClasses;
         _hiddenDim = hiddenDim;
@@ -213,9 +225,13 @@ public class LayoutLMv3<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
         int numHeads = 12,
         int vocabSize = 50265,
         IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        LayoutLMv3Options? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyLoss<T>(), 1.0)
     {
+        _options = options ?? new LayoutLMv3Options();
+        Options = _options;
+
         _useNativeMode = true;
         _numClasses = numClasses;
         _hiddenDim = hiddenDim;

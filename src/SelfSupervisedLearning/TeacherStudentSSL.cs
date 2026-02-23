@@ -1,5 +1,6 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Validation;
 
 namespace AiDotNet.SelfSupervisedLearning;
 
@@ -84,8 +85,10 @@ public abstract class TeacherStudentSSL<T> : SSLMethodBase<T>
         SSLConfig? config = null)
         : base(studentEncoder, studentProjector, config ?? new SSLConfig())
     {
-        TeacherEncoder = teacherEncoder ?? throw new ArgumentNullException(nameof(teacherEncoder));
-        TeacherProjector = teacherProjector ?? throw new ArgumentNullException(nameof(teacherProjector));
+        Guard.NotNull(teacherEncoder);
+        TeacherEncoder = teacherEncoder;
+        Guard.NotNull(teacherProjector);
+        TeacherProjector = teacherProjector;
 
         BaseMomentum = teacherEncoder.Momentum;
         Centering = new CenteringMechanism<T>(outputDim);

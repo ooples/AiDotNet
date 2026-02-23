@@ -1,4 +1,5 @@
 using AiDotNet.Document.Interfaces;
+using AiDotNet.Document.Options;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -49,6 +50,11 @@ namespace AiDotNet.Document.Analysis.PageSegmentation;
 /// </remarks>
 public class DocBank<T> : DocumentNeuralNetworkBase<T>, IPageSegmenter<T>
 {
+    private readonly DocBankOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     #region Fields
 
     private readonly bool _useNativeMode;
@@ -131,9 +137,13 @@ public class DocBank<T> : DocumentNeuralNetworkBase<T>, IPageSegmenter<T>
         int numClasses = 13,
         bool useTextFeatures = false,
         IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        DocBankOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyLoss<T>(), 1.0)
     {
+        _options = options ?? new DocBankOptions();
+        Options = _options;
+
         if (string.IsNullOrWhiteSpace(onnxModelPath))
             throw new ArgumentNullException(nameof(onnxModelPath));
 
@@ -182,9 +192,13 @@ public class DocBank<T> : DocumentNeuralNetworkBase<T>, IPageSegmenter<T>
         int hiddenDim = 256,
         bool useTextFeatures = false,
         IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        DocBankOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyLoss<T>(), 1.0)
     {
+        _options = options ?? new DocBankOptions();
+        Options = _options;
+
         _useNativeMode = true;
         _backboneChannels = backboneChannels;
         _numClasses = numClasses;

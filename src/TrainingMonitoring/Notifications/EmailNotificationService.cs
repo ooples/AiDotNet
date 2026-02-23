@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Mail;
 using System.Text;
+using AiDotNet.Validation;
 
 namespace AiDotNet.TrainingMonitoring.Notifications;
 
@@ -157,7 +158,8 @@ public class EmailNotificationService : INotificationService
     /// <param name="configuration">Email configuration.</param>
     public EmailNotificationService(EmailConfiguration configuration)
     {
-        _config = configuration ?? throw new ArgumentNullException(nameof(configuration));
+        Guard.NotNull(configuration);
+        _config = configuration;
 
         _smtpClient = new SmtpClient(_config.SmtpHost, _config.SmtpPort)
         {

@@ -1,5 +1,6 @@
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Inference.SpeculativeDecoding;
 
@@ -41,7 +42,8 @@ internal class NeuralDraftModel<T> : IDraftModel<T>
         int maxDraftTokens = 5,
         int? seed = null)
     {
-        _forwardFunc = forwardFunc ?? throw new ArgumentNullException(nameof(forwardFunc));
+        Guard.NotNull(forwardFunc);
+        _forwardFunc = forwardFunc;
         _vocabSize = vocabSize;
         _maxDraftTokens = maxDraftTokens;
         _random = seed.HasValue

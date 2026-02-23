@@ -1,3 +1,4 @@
+using AiDotNet.Models.Options;
 using AiDotNet.Onnx;
 
 namespace AiDotNet.Audio.Localization;
@@ -5,8 +6,33 @@ namespace AiDotNet.Audio.Localization;
 /// <summary>
 /// Options for sound source localization.
 /// </summary>
-public class SoundLocalizerOptions
+/// <remarks>
+/// <para><b>For Beginners:</b> These options configure the SoundLocalizer model. Default values follow the original paper settings.</para>
+/// </remarks>
+public class SoundLocalizerOptions : ModelOptions
 {
+    /// <summary>Initializes a new instance with default values.</summary>
+    public SoundLocalizerOptions() { }
+
+    /// <summary>Initializes a new instance by copying from another instance.</summary>
+    /// <param name="other">The options instance to copy from.</param>
+    /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
+    public SoundLocalizerOptions(SoundLocalizerOptions other)
+    {
+        if (other == null)
+            throw new ArgumentNullException(nameof(other));
+
+        Seed = other.Seed;
+        SampleRate = other.SampleRate;
+        SpeedOfSound = other.SpeedOfSound;
+        Algorithm = other.Algorithm;
+        AngleResolution = other.AngleResolution;
+        FrameSize = other.FrameSize;
+        CenterFrequency = other.CenterFrequency;
+        ModelPath = other.ModelPath;
+        OnnxOptions = other.OnnxOptions;
+    }
+
     /// <summary>Audio sample rate. Default: 16000.</summary>
     public int SampleRate { get; set; } = 16000;
 

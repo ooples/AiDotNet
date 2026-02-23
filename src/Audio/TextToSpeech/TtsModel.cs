@@ -56,6 +56,11 @@ namespace AiDotNet.Audio.TextToSpeech;
 /// </remarks>
 public class TtsModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
 {
+    private readonly TtsOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     #region Execution Mode
 
     /// <summary>
@@ -105,12 +110,12 @@ public class TtsModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
     /// <summary>
     /// Optimizer for training.
     /// </summary>
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
 
     /// <summary>
     /// Loss function for training.
     /// </summary>
-    private readonly ILossFunction<T> _lossFunction;
+    private ILossFunction<T> _lossFunction;
 
     /// <summary>
     /// Whether the model has been disposed.
@@ -273,9 +278,12 @@ public class TtsModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         int griffinLimIterations = 60,
         int fftSize = 1024,
         int hopLength = 256,
-        OnnxModelOptions? onnxOptions = null)
+        OnnxModelOptions? onnxOptions = null,
+        TtsOptions? options = null)
         : base(architecture)
     {
+        _options = options ?? new TtsOptions();
+        Options = _options;
         if (acousticModelPath is null)
             throw new ArgumentNullException(nameof(acousticModelPath));
 
@@ -346,9 +354,8 @@ public class TtsModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         // Initialize available voices
         AvailableVoices = GetDefaultVoices();
 
-        // Initialize optimizer and loss function (not used in ONNX mode, but required for readonly fields)
+        // Default loss function (MSE is standard for TTS mel-spectrogram prediction)
         _lossFunction = new MeanSquaredErrorLoss<T>();
-        _optimizer = new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         // Initialize layers (empty for ONNX mode)
         InitializeLayers();
@@ -411,9 +418,12 @@ public class TtsModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         int hopLength = 256,
         int griffinLimIterations = 60,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        TtsOptions? options = null)
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>())
     {
+        _options = options ?? new TtsOptions();
+        Options = _options;
         _useNativeMode = true;
         _acousticModelPath = null;
         _vocoderModelPath = null;
@@ -732,7 +742,7 @@ public class TtsModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         Backpropagate(Tensor<T>.FromVector(lossGradient));
 
         // 6. Update parameters using optimizer
-        _optimizer.UpdateParameters(Layers);
+        _optimizer?.UpdateParameters(Layers);
 
         // 7. Exit training mode
         SetTrainingMode(false);

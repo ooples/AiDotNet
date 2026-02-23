@@ -3,6 +3,7 @@ using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Video.Options;
 
 namespace AiDotNet.Video.Inpainting;
 
@@ -30,8 +31,13 @@ namespace AiDotNet.Video.Inpainting;
 /// - Temporal consistency enforcement
 /// </para>
 /// </remarks>
-public class E2FGVI<T> : NeuralNetworkBase<T>
+public class E2FGVI<T> : VideoInpaintingBase<T>
 {
+    private readonly E2FGVIOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     #region Fields
 
     private int _height;
@@ -81,9 +87,13 @@ public class E2FGVI<T> : NeuralNetworkBase<T>
 
     public E2FGVI(
         NeuralNetworkArchitecture<T> architecture,
-        int numFeatures = 128)
+        int numFeatures = 128,
+        E2FGVIOptions? options = null)
         : base(architecture, new MeanSquaredErrorLoss<T>())
     {
+        _options = options ?? new E2FGVIOptions();
+        Options = _options;
+
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 432;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 240;
         _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
@@ -836,4 +846,28 @@ public class E2FGVI<T> : NeuralNetworkBase<T>
         new E2FGVI<T>(Architecture, _numFeatures);
 
     #endregion
+
+    #region Base Class Abstract Methods
+
+    /// <inheritdoc/>
+    public override Tensor<T> Inpaint(Tensor<T> frames, Tensor<T> masks)
+    {
+        var stacked = ConcatenateFeatures(frames, masks);
+        return Forward(stacked);
+    }
+
+    /// <inheritdoc/>
+    protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames)
+    {
+        return NormalizeFrames(rawFrames);
+    }
+
+    /// <inheritdoc/>
+    protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput)
+    {
+        return DenormalizeFrames(modelOutput);
+    }
+
+    #endregion
+
 }

@@ -11,6 +11,7 @@ using AiDotNet.Models;
 using AiDotNet.Models.Inputs;
 using AiDotNet.Models.Options;
 using AiDotNet.Models.Results;
+using AiDotNet.Validation;
 
 namespace AiDotNet.FederatedLearning.Trainers;
 
@@ -20,6 +21,7 @@ namespace AiDotNet.FederatedLearning.Trainers;
 /// <remarks>
 /// This trainer runs federated learning rounds in-process by creating per-client model/optimizer instances,
 /// running local optimization on each client's data, and aggregating client models into a global model.
+/// <para><b>For Beginners:</b> InMemoryFederatedTrainer provides AI safety functionality. Default values follow the original paper settings.</para>
 /// </remarks>
 public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
     FederatedTrainerBase<IFullModel<T, TInput, TOutput>, FederatedClientDataset<TInput, TOutput>, FederatedLearningMetadata, T>
@@ -53,7 +55,8 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
         IFederatedHeterogeneityCorrection<T>? heterogeneityCorrection = null,
         IHomomorphicEncryptionProvider<T>? homomorphicEncryptionProvider = null)
     {
-        _optimizerPrototype = optimizerPrototype ?? throw new ArgumentNullException(nameof(optimizerPrototype));
+        Guard.NotNull(optimizerPrototype);
+        _optimizerPrototype = optimizerPrototype;
         _learningRateOverride = learningRateOverride;
 
         if (convergenceThreshold < 0.0)

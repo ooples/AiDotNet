@@ -17,6 +17,9 @@ namespace AiDotNet.ReinforcementLearning.Agents.MonteCarlo;
 public class OffPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
 {
     private OffPolicyMonteCarloOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
     private Dictionary<string, Dictionary<int, T>> _qTable;
     private Dictionary<string, Dictionary<int, T>> _cTable;  // Cumulative weights
     private List<(Vector<T> state, int action, T reward)> _episode;

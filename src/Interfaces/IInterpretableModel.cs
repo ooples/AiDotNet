@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using AiDotNet.Interpretability;
+using AiDotNet.Interpretability.Explainers;
 using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.Interfaces
@@ -9,6 +10,30 @@ namespace AiDotNet.Interfaces
     /// Interface for models that support interpretability features.
     /// </summary>
     /// <typeparam name="T">The numeric type for calculations.</typeparam>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This interface provides a unified way to explain model predictions.
+    /// Models implementing this interface can use various explanation techniques:
+    ///
+    /// <b>Model-Agnostic Methods</b> (work with any model):
+    /// - SHAP: Shapley value-based feature attribution
+    /// - LIME: Local linear approximations
+    /// - Partial Dependence: Feature effect plots
+    /// - Counterfactual: "What-if" explanations
+    /// - Anchor: Rule-based explanations
+    /// - Feature Importance: Permutation-based importance
+    /// - Feature Interaction: H-statistic for interactions
+    ///
+    /// <b>Neural Network Methods</b> (require gradient access):
+    /// - Integrated Gradients: Path-based attribution
+    /// - DeepLIFT: Activation-based attribution
+    /// - GradCAM: Visual CNN explanations
+    ///
+    /// Enable methods through <see cref="EnableMethod"/> and configure via
+    /// <see cref="Models.Options.InterpretabilityOptions"/>.
+    /// </para>
+    /// </remarks>
+    [AiDotNet.Configuration.YamlConfigurable("InterpretableModel")]
     public interface IInterpretableModel<T>
     {
         /// <summary>
@@ -93,6 +118,62 @@ namespace AiDotNet.Interfaces
         /// <param name="threshold">The threshold for anchor construction.</param>
         /// <returns>An anchor explanation.</returns>
         Task<AnchorExplanation<T>> GetAnchorExplanationAsync(Tensor<T> input, T threshold);
+
+        /// <summary>
+        /// Gets Integrated Gradients attributions for a neural network prediction.
+        /// </summary>
+        /// <param name="input">The input tensor to explain.</param>
+        /// <param name="baseline">The baseline input (defaults to zeros if null).</param>
+        /// <param name="numSteps">Number of integration steps (default: 50).</param>
+        /// <returns>Integrated Gradients explanation with feature attributions.</returns>
+        /// <remarks>
+        /// <para>
+        /// <b>For Beginners:</b> Integrated Gradients is a theoretically-grounded method
+        /// that satisfies completeness (attributions sum to prediction - baseline_prediction)
+        /// and sensitivity (important features get non-zero attributions).
+        ///
+        /// It integrates gradients along a path from baseline to input.
+        /// </para>
+        /// </remarks>
+        Task<IntegratedGradientsExplanation<T>> GetIntegratedGradientsAsync(
+            Tensor<T> input,
+            Tensor<T>? baseline = null,
+            int numSteps = 50);
+
+        /// <summary>
+        /// Gets DeepLIFT attributions for a neural network prediction.
+        /// </summary>
+        /// <param name="input">The input tensor to explain.</param>
+        /// <param name="baseline">The baseline input (defaults to zeros if null).</param>
+        /// <param name="useRevealCancel">Use RevealCancel rule instead of Rescale.</param>
+        /// <returns>DeepLIFT explanation with feature attributions.</returns>
+        /// <remarks>
+        /// <para>
+        /// <b>For Beginners:</b> DeepLIFT compares activations to a reference baseline.
+        /// It's faster than Integrated Gradients and handles non-linearities better
+        /// than vanilla gradients.
+        /// </para>
+        /// </remarks>
+        Task<DeepLIFTExplanation<T>> GetDeepLIFTAsync(
+            Tensor<T> input,
+            Tensor<T>? baseline = null,
+            bool useRevealCancel = false);
+
+        /// <summary>
+        /// Gets GradCAM visual explanation for a CNN prediction.
+        /// </summary>
+        /// <param name="input">The input image tensor.</param>
+        /// <param name="targetClass">Target class to explain (-1 for predicted class).</param>
+        /// <returns>GradCAM explanation with heatmap.</returns>
+        /// <remarks>
+        /// <para>
+        /// <b>For Beginners:</b> GradCAM creates visual heatmaps showing which parts
+        /// of an image were most important for the CNN's prediction.
+        /// </para>
+        /// </remarks>
+        Task<GradCAMExplanation<T>> GetGradCAMAsync(
+            Tensor<T> input,
+            int targetClass = -1);
 
         /// <summary>
         /// Sets the base model for interpretability analysis.

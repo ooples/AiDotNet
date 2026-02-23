@@ -4,6 +4,7 @@ using System.Linq;
 using AiDotNet.Tokenization.Core;
 using AiDotNet.Tokenization.Interfaces;
 using AiDotNet.Tokenization.Models;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Tokenization.Algorithms
 {
@@ -25,7 +26,8 @@ namespace AiDotNet.Tokenization.Algorithms
             int maxTokenLength = 16)
             : base(vocabulary, specialTokens)
         {
-            _tokenScores = tokenScores ?? throw new ArgumentNullException(nameof(tokenScores));
+            Guard.NotNull(tokenScores);
+            _tokenScores = tokenScores;
             _maxTokenLength = maxTokenLength;
         }
 

@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Optimizers;
 
 namespace AiDotNet.NeuralNetworks;
@@ -34,6 +35,11 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 public class SparseNeuralNetwork<T> : NeuralNetworkBase<T>
 {
+    private readonly SparseNeuralNetworkOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// The loss function used to calculate the error between predicted and expected outputs.
     /// </summary>
@@ -69,8 +75,12 @@ public class SparseNeuralNetwork<T> : NeuralNetworkBase<T>
         double sparsity = 0.9,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
-        double maxGradNorm = 1.0) : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), maxGradNorm)
+        double maxGradNorm = 1.0,
+        SparseNeuralNetworkOptions? options = null) : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), maxGradNorm)
     {
+        _options = options ?? new SparseNeuralNetworkOptions();
+        Options = _options;
+
         if (sparsity < 0 || sparsity >= 1.0)
         {
             throw new ArgumentException("Sparsity must be in [0, 1).", nameof(sparsity));

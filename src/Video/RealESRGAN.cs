@@ -4,6 +4,7 @@ using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
+using AiDotNet.Video.Options;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
 
@@ -59,8 +60,13 @@ namespace AiDotNet.Video;
 /// with Pure Synthetic Data", ICCV 2021. https://arxiv.org/abs/2107.10833
 /// </para>
 /// </remarks>
-public class RealESRGAN<T> : NeuralNetworkBase<T>
+public class RealESRGAN<T> : VideoSuperResolutionBase<T>
 {
+    private readonly RealESRGANOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     #region Execution Mode
 
     /// <summary>
@@ -209,7 +215,7 @@ public class RealESRGAN<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Gets the upscaling factor for this model.
     /// </summary>
-    public int ScaleFactor => _scaleFactor;
+    public int UpscaleFactor => _scaleFactor;
 
     /// <summary>
     /// Gets the last discriminator loss value.
@@ -316,10 +322,13 @@ public class RealESRGAN<T> : NeuralNetworkBase<T>
         double residualScale = 0.2,
         double l1Lambda = 1.0,
         double perceptualLambda = 1.0,
-        double ganLambda = 0.1)
+        double ganLambda = 0.1,
+        RealESRGANOptions? options = null)
         : base(ValidateAndGetArchitecture(generatorArchitecture, discriminatorArchitecture, inputType),
                new RealESRGANLoss<T>(l1Lambda, perceptualLambda, ganLambda))
     {
+        _options = options ?? new RealESRGANOptions();
+        Options = _options;
         // Validate numeric inputs (null validation already done in ValidateAndGetArchitecture)
         if (scaleFactor < 1)
             throw new ArgumentOutOfRangeException(nameof(scaleFactor), scaleFactor, "Scale factor must be at least 1.");
@@ -339,6 +348,7 @@ public class RealESRGAN<T> : NeuralNetworkBase<T>
 
         // Store configuration
         _scaleFactor = scaleFactor;
+        ScaleFactor = scaleFactor;
         _numRRDBBlocks = numRRDBBlocks;
         _numFeatures = numFeatures;
         _residualScale = residualScale;
@@ -421,9 +431,12 @@ public class RealESRGAN<T> : NeuralNetworkBase<T>
     public RealESRGAN(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
-        int scaleFactor = 4)
+        int scaleFactor = 4,
+        RealESRGANOptions? options = null)
         : base(architecture, new MeanAbsoluteErrorLoss<T>())
     {
+        _options = options ?? new RealESRGANOptions();
+        Options = _options;
         if (string.IsNullOrWhiteSpace(onnxModelPath))
             throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
         if (!File.Exists(onnxModelPath))
@@ -435,6 +448,7 @@ public class RealESRGAN<T> : NeuralNetworkBase<T>
         _useNativeMode = false;
         _onnxModelPath = onnxModelPath;
         _scaleFactor = scaleFactor;
+        ScaleFactor = scaleFactor;
 
         // Set defaults for other fields (not used in ONNX mode)
         _numRRDBBlocks = 23;
@@ -640,7 +654,7 @@ public class RealESRGAN<T> : NeuralNetworkBase<T>
     /// </code>
     /// </para>
     /// </remarks>
-    public Tensor<T> Upscale(Tensor<T> lowResImage)
+    public override Tensor<T> Upscale(Tensor<T> lowResImage)
     {
         if (lowResImage is null)
             throw new ArgumentNullException(nameof(lowResImage));
@@ -1121,4 +1135,21 @@ public class RealESRGAN<T> : NeuralNetworkBase<T>
     }
 
     #endregion
+
+    #region Base Class Abstract Methods
+
+    /// <inheritdoc/>
+    protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames)
+    {
+        return NormalizeFrames(rawFrames);
+    }
+
+    /// <inheritdoc/>
+    protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput)
+    {
+        return DenormalizeFrames(modelOutput);
+    }
+
+    #endregion
+
 }

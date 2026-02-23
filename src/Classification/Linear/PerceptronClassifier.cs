@@ -164,7 +164,7 @@ public class PerceptronClassifier<T> : LinearClassifierBase<T>
             Alpha = Options.Alpha,
             Shuffle = Options.Shuffle,
             Penalty = Options.Penalty,
-            RandomState = Options.RandomState
+            Seed = Options.Seed
         });
     }
 

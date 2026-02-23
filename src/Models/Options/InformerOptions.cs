@@ -54,7 +54,7 @@ public class InformerOptions<T> : TimeSeriesRegressionOptions<T>
     /// <summary>
     /// Gets or sets the embedding dimension.
     /// </summary>
-    public int EmbeddingDim { get; set; } = 512;
+    public int EmbeddingDim { get; set; } = 64;
 
     /// <summary>
     /// Gets or sets the number of encoder layers.
@@ -84,7 +84,7 @@ public class InformerOptions<T> : TimeSeriesRegressionOptions<T>
     /// <summary>
     /// Gets or sets the number of training epochs.
     /// </summary>
-    public int Epochs { get; set; } = 100;
+    public int Epochs { get; set; } = 10;
 
     /// <summary>
     /// Gets or sets the batch size.

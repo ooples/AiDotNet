@@ -7,7 +7,7 @@ namespace AiDotNet.Models.Options;
 /// <b>For Beginners:</b> In federated learning, clients often have different data and different compute speeds.
 /// Heterogeneity correction methods help reduce "client drift" so the global model converges more reliably on non-IID data.
 /// </remarks>
-public class FederatedHeterogeneityCorrectionOptions
+public class FederatedHeterogeneityCorrectionOptions : ModelOptions
 {
     /// <summary>
     /// Gets or sets the heterogeneity correction algorithm.

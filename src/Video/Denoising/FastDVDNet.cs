@@ -5,6 +5,7 @@ using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Video.Options;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
 
@@ -44,8 +45,13 @@ namespace AiDotNet.Video.Denoising;
 /// https://arxiv.org/abs/1907.01361
 /// </para>
 /// </remarks>
-public class FastDVDNet<T> : NeuralNetworkBase<T>
+public class FastDVDNet<T> : VideoDenoisingBase<T>
 {
+    private readonly FastDVDNetOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     #region Fields
 
     private readonly bool _useNativeMode;
@@ -76,9 +82,13 @@ public class FastDVDNet<T> : NeuralNetworkBase<T>
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         int numFeatures = 32,
-        int numInputFrames = 5)
+        int numInputFrames = 5,
+        FastDVDNetOptions? options = null)
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>())
     {
+        _options = options ?? new FastDVDNetOptions();
+        Options = _options;
+
         _useNativeMode = true;
         _numFeatures = numFeatures;
         _numInputFrames = numInputFrames;
@@ -93,9 +103,13 @@ public class FastDVDNet<T> : NeuralNetworkBase<T>
 
     public FastDVDNet(
         NeuralNetworkArchitecture<T> architecture,
-        string onnxModelPath)
+        string onnxModelPath,
+        FastDVDNetOptions? options = null)
         : base(architecture, new MeanSquaredErrorLoss<T>())
     {
+        _options = options ?? new FastDVDNetOptions();
+        Options = _options;
+
         if (string.IsNullOrWhiteSpace(onnxModelPath))
             throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
         if (!File.Exists(onnxModelPath))
@@ -159,7 +173,7 @@ public class FastDVDNet<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Estimates the noise level in a frame.
     /// </summary>
-    public double EstimateNoiseLevel(Tensor<T> frame)
+    public override double EstimateNoiseLevel(Tensor<T> frame)
     {
         // Median Absolute Deviation (MAD) estimator
         var data = new List<double>();
@@ -239,7 +253,7 @@ public class FastDVDNet<T> : NeuralNetworkBase<T>
 
     #region Private Methods
 
-    private Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> Forward(Tensor<T> input)
     {
         var result = input;
         foreach (var layer in Layers) result = layer.Forward(result);
@@ -440,4 +454,27 @@ public class FastDVDNet<T> : NeuralNetworkBase<T>
         new FastDVDNet<T>(Architecture, _optimizer, _lossFunction, _numFeatures, _numInputFrames);
 
     #endregion
+
+    #region Base Class Abstract Methods
+
+    /// <inheritdoc/>
+    public override Tensor<T> Denoise(Tensor<T> noisyFrames)
+    {
+        return Forward(noisyFrames);
+    }
+
+    /// <inheritdoc/>
+    protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames)
+    {
+        return NormalizeFrames(rawFrames);
+    }
+
+    /// <inheritdoc/>
+    protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput)
+    {
+        return DenormalizeFrames(modelOutput);
+    }
+
+    #endregion
+
 }

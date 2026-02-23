@@ -124,8 +124,8 @@ public class NuSupportVectorClassifier<T> : SVMBase<T>
         NumClasses = ClassLabels.Length;
         TaskType = InferTaskType(y);
 
-        _random = Options.RandomState.HasValue
-            ? RandomHelper.CreateSeededRandom(Options.RandomState.Value)
+        _random = Options.Seed.HasValue
+            ? RandomHelper.CreateSeededRandom(Options.Seed.Value)
             : RandomHelper.CreateSecureRandom();
 
         // Store training data
@@ -509,7 +509,7 @@ public class NuSupportVectorClassifier<T> : SVMBase<T>
             Coef0 = Options.Coef0,
             Tolerance = Options.Tolerance,
             MaxIterations = Options.MaxIterations,
-            RandomState = Options.RandomState
+            Seed = Options.Seed
         }, null, _nu);
     }
 
@@ -524,7 +524,7 @@ public class NuSupportVectorClassifier<T> : SVMBase<T>
             Coef0 = Options.Coef0,
             Tolerance = Options.Tolerance,
             MaxIterations = Options.MaxIterations,
-            RandomState = Options.RandomState
+            Seed = Options.Seed
         }, null, _nu);
 
         clone.NumFeatures = NumFeatures;

@@ -345,6 +345,7 @@ public class BALDStrategy<T, TInput, TOutput> : IBayesianStrategy<T, TInput, TOu
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <typeparam name="TInput">The input data type.</typeparam>
 /// <typeparam name="TOutput">The output data type.</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("DropoutModel")]
 public interface IDropoutModel<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
 {
     /// <summary>

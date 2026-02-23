@@ -1,5 +1,6 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Reasoning.Models;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Reasoning.Verification;
 
@@ -42,7 +43,8 @@ internal class SelfRefinementEngine<T> : ISelfRefinementEngine<T>
     /// <param name="maxIterations">Maximum refinement attempts per step (default: 3).</param>
     public SelfRefinementEngine(IChatModel<T> chatModel, int maxIterations = 3)
     {
-        _chatModel = chatModel ?? throw new ArgumentNullException(nameof(chatModel));
+        Guard.NotNull(chatModel);
+        _chatModel = chatModel;
         _maxIterations = maxIterations > 0 ? maxIterations : 3;
     }
 

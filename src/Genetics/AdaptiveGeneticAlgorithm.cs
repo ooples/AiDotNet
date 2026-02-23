@@ -13,12 +13,11 @@ public class AdaptiveGeneticAlgorithm<T, TInput, TOutput> :
     public AdaptiveGeneticAlgorithm(
         Func<IFullModel<T, TInput, TOutput>> modelFactory,
         IFitnessCalculator<T, TInput, TOutput> fitnessCalculator,
-        IModelEvaluator<T, TInput, TOutput> modelEvaluator,
         double minMutationRate = 0.001,
         double maxMutationRate = 0.5,
         double minCrossoverRate = 0.4,
         double maxCrossoverRate = 0.95)
-        : base(modelFactory, fitnessCalculator, modelEvaluator)
+        : base(modelFactory, fitnessCalculator)
     {
         _minMutationRate = minMutationRate;
         _maxMutationRate = maxMutationRate;

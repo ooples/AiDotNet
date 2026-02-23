@@ -3,6 +3,7 @@ using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Video.Options;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
 
@@ -42,8 +43,13 @@ namespace AiDotNet.Video.Stabilization;
 /// https://arxiv.org/abs/2005.07055
 /// </para>
 /// </remarks>
-public class DIFRINT<T> : NeuralNetworkBase<T>
+public class DIFRINT<T> : VideoStabilizationBase<T>
 {
+    private readonly DIFRINTOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     #region Fields
 
     private readonly bool _useNativeMode;
@@ -74,9 +80,12 @@ public class DIFRINT<T> : NeuralNetworkBase<T>
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         int numFeatures = 64,
-        int numIterations = 3)
+        int numIterations = 3,
+        DIFRINTOptions? options = null)
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>())
     {
+        _options = options ?? new DIFRINTOptions();
+        Options = _options;
         _useNativeMode = true;
         _numFeatures = numFeatures;
         _numIterations = numIterations;
@@ -91,9 +100,12 @@ public class DIFRINT<T> : NeuralNetworkBase<T>
 
     public DIFRINT(
         NeuralNetworkArchitecture<T> architecture,
-        string onnxModelPath)
+        string onnxModelPath,
+        DIFRINTOptions? options = null)
         : base(architecture, new MeanSquaredErrorLoss<T>())
     {
+        _options = options ?? new DIFRINTOptions();
+        Options = _options;
         if (string.IsNullOrWhiteSpace(onnxModelPath))
             throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
         if (!File.Exists(onnxModelPath))
@@ -171,7 +183,7 @@ public class DIFRINT<T> : NeuralNetworkBase<T>
 
     #region Private Methods
 
-    private Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> Forward(Tensor<T> input)
     {
         var result = input;
         foreach (var layer in Layers) result = layer.Forward(result);
@@ -490,4 +502,27 @@ public class DIFRINT<T> : NeuralNetworkBase<T>
         new DIFRINT<T>(Architecture, _optimizer, _lossFunction, _numFeatures, _numIterations);
 
     #endregion
+
+    #region Base Class Abstract Methods
+
+    /// <inheritdoc/>
+    public override Tensor<T> Stabilize(Tensor<T> unstableFrames)
+    {
+        return Forward(unstableFrames);
+    }
+
+    /// <inheritdoc/>
+    protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames)
+    {
+        return NormalizeFrames(rawFrames);
+    }
+
+    /// <inheritdoc/>
+    protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput)
+    {
+        return DenormalizeFrames(modelOutput);
+    }
+
+    #endregion
+
 }

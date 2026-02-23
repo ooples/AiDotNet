@@ -1,5 +1,6 @@
 using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Models.Results;
 
@@ -65,7 +66,8 @@ public sealed class UncertaintyPredictionResult<T, TOutput>
         MethodUsed = methodUsed;
         Prediction = prediction;
         Variance = variance;
-        Metrics = metrics ?? throw new ArgumentNullException(nameof(metrics));
+        Guard.NotNull(metrics);
+        Metrics = metrics;
         RegressionInterval = regressionInterval;
         ClassificationSet = classificationSet;
     }

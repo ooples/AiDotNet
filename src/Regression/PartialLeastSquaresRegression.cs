@@ -33,6 +33,9 @@ public class PartialLeastSquaresRegression<T> : RegressionBase<T>
     /// </value>
     private readonly PartialLeastSquaresRegressionOptions<T> _options;
 
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// The loadings matrix (P) that represents how the original variables load onto the components.
     /// </summary>

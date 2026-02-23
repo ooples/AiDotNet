@@ -12,6 +12,9 @@ namespace AiDotNet.ReinforcementLearning.Agents.MonteCarlo;
 public class EveryVisitMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
 {
     private MonteCarloOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
     private Dictionary<string, Dictionary<int, T>> _qTable;
     private Dictionary<string, Dictionary<int, List<T>>> _returns;
     private List<(string state, int action, T reward)> _episode;

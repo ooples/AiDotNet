@@ -1,5 +1,7 @@
 global using AiDotNet.NeuralNetworks.Layers;
 
+using AiDotNet.NeuralNetworks.Options;
+
 namespace AiDotNet.NeuralNetworks;
 
 /// <summary>
@@ -28,6 +30,11 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 public class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
 {
+    private readonly SiameseNetworkOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// Gets or sets whether auxiliary loss (contrastive/triplet loss) should be used during training.
     /// </summary>
@@ -118,9 +125,12 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     /// where 0 means "completely different" and 1 means "identical".
     /// </para>
     /// </remarks>
-    public SiameseNetwork(NeuralNetworkArchitecture<T> architecture, ILossFunction<T>? lossFunction = null) :
+    public SiameseNetwork(NeuralNetworkArchitecture<T> architecture, ILossFunction<T>? lossFunction = null,
+        SiameseNetworkOptions? options = null) :
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
+        _options = options ?? new SiameseNetworkOptions();
+        Options = _options;
         _subnetwork = new ConvolutionalNeuralNetwork<T>(architecture);
         int embeddingSize = architecture.GetOutputShape()[0];
         _outputLayer = new DenseLayer<T>(embeddingSize * 2, 1, new SigmoidActivation<T>() as IActivationFunction<T>);

@@ -25,8 +25,41 @@ namespace AiDotNet.Audio.AudioLDM;
 /// - Mention acoustic properties (loud, soft, distant, echoing)
 /// </para>
 /// </remarks>
-public class AudioLDMOptions
+public class AudioLDMOptions : AiDotNet.Models.Options.ModelOptions
 {
+    /// <summary>Initializes a new instance with default values.</summary>
+    public AudioLDMOptions() { }
+
+    /// <summary>Initializes a new instance by copying from another instance.</summary>
+    /// <param name="other">The options instance to copy from.</param>
+    /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
+    public AudioLDMOptions(AudioLDMOptions other)
+    {
+        if (other == null)
+            throw new ArgumentNullException(nameof(other));
+
+        ModelSize = other.ModelSize;
+        SampleRate = other.SampleRate;
+        DurationSeconds = other.DurationSeconds;
+        MaxDurationSeconds = other.MaxDurationSeconds;
+        NumInferenceSteps = other.NumInferenceSteps;
+        GuidanceScale = other.GuidanceScale;
+        NumMelBins = other.NumMelBins;
+        HopLength = other.HopLength;
+        WindowSize = other.WindowSize;
+        LatentDimension = other.LatentDimension;
+        LatentDownsampleFactor = other.LatentDownsampleFactor;
+        Stereo = other.Stereo;
+        ClapEncoderPath = other.ClapEncoderPath;
+        VaePath = other.VaePath;
+        UNetPath = other.UNetPath;
+        VocoderPath = other.VocoderPath;
+        OnnxOptions = other.OnnxOptions;
+        DropoutRate = other.DropoutRate;
+        MaxTextLength = other.MaxTextLength;
+        ClapEmbeddingDim = other.ClapEmbeddingDim;
+    }
+
     /// <summary>
     /// Gets or sets the model size variant.
     /// </summary>
@@ -84,15 +117,6 @@ public class AudioLDMOptions
     /// </para>
     /// </remarks>
     public double GuidanceScale { get; set; } = 2.5;
-
-    /// <summary>
-    /// Gets or sets the random seed for reproducibility.
-    /// </summary>
-    /// <remarks>
-    /// Set to a specific value to generate the same audio each time.
-    /// Null for random generation.
-    /// </remarks>
-    public int? Seed { get; set; }
 
     /// <summary>
     /// Gets or sets the number of mel spectrogram bins.

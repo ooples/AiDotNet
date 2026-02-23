@@ -3,6 +3,7 @@ using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Video.Options;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
 
@@ -51,8 +52,13 @@ namespace AiDotNet.Video.Enhancement;
 /// Enhanced Propagation and Alignment", CVPR 2022. https://arxiv.org/abs/2104.13371
 /// </para>
 /// </remarks>
-public class BasicVSRPlusPlus<T> : NeuralNetworkBase<T>
+public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
 {
+    private readonly BasicVSRPlusPlusOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     #region Execution Mode
 
     /// <summary>
@@ -185,7 +191,7 @@ public class BasicVSRPlusPlus<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Gets the upscaling factor for this model.
     /// </summary>
-    internal int ScaleFactor => _scaleFactor;
+    internal int UpscaleFactor => _scaleFactor;
 
     /// <summary>
     /// Gets the number of feature channels.
@@ -230,9 +236,13 @@ public class BasicVSRPlusPlus<T> : NeuralNetworkBase<T>
         int numFeatures = 64,
         int numResidualBlocks = 15,
         int numPropagations = 2,
-        double learningRate = 0.0001)
+        double learningRate = 0.0001,
+        BasicVSRPlusPlusOptions? options = null)
         : base(architecture, new CharbonnierLoss<T>())
     {
+        _options = options ?? new BasicVSRPlusPlusOptions();
+        Options = _options;
+
         if (scaleFactor != 2 && scaleFactor != 4)
             throw new ArgumentOutOfRangeException(nameof(scaleFactor), "Scale factor must be 2 or 4.");
         if (numFeatures < 1)
@@ -242,6 +252,7 @@ public class BasicVSRPlusPlus<T> : NeuralNetworkBase<T>
 
         _useNativeMode = true;
         _scaleFactor = scaleFactor;
+        ScaleFactor = scaleFactor;
         _numFeatures = numFeatures;
         _numResidualBlocks = numResidualBlocks;
         _numPropagations = numPropagations;
@@ -290,9 +301,13 @@ public class BasicVSRPlusPlus<T> : NeuralNetworkBase<T>
         int scaleFactor = 4,
         int numFeatures = 64,
         int numResidualBlocks = 15,
-        int numPropagations = 2)
+        int numPropagations = 2,
+        BasicVSRPlusPlusOptions? options = null)
         : base(architecture, new CharbonnierLoss<T>())
     {
+        _options = options ?? new BasicVSRPlusPlusOptions();
+        Options = _options;
+
         if (string.IsNullOrWhiteSpace(onnxModelPath))
             throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
         if (!File.Exists(onnxModelPath))
@@ -301,6 +316,7 @@ public class BasicVSRPlusPlus<T> : NeuralNetworkBase<T>
         _useNativeMode = false;
         _onnxModelPath = onnxModelPath;
         _scaleFactor = scaleFactor;
+        ScaleFactor = scaleFactor;
         _numFeatures = numFeatures;
         _numResidualBlocks = numResidualBlocks;
         _numPropagations = numPropagations;
@@ -484,7 +500,7 @@ public class BasicVSRPlusPlus<T> : NeuralNetworkBase<T>
         var frameFeatures = new List<Tensor<T>>();
         for (int i = 0; i < numFrames; i++)
         {
-            var frame = ExtractFrame(frames, i);
+            var frame = ExtractFrameBatch(frames, i);
             var feat = _featExtract!.Forward(frame);
             frameFeatures.Add(feat);
             _cachedInitialFeatures.Add(feat);
@@ -530,7 +546,7 @@ public class BasicVSRPlusPlus<T> : NeuralNetworkBase<T>
             var output = _outputConv!.Forward(feat);
 
             // Store in output tensor
-            StoreFrame(outputFrames, output, i);
+            StoreFrameBatch(outputFrames, output, i);
         }
 
         return outputFrames;
@@ -562,8 +578,8 @@ public class BasicVSRPlusPlus<T> : NeuralNetworkBase<T>
 
         for (int i = 0; i < numFrames - 1; i++)
         {
-            var frame1 = ExtractFrame(frames, i);
-            var frame2 = ExtractFrame(frames, i + 1);
+            var frame1 = ExtractFrameBatch(frames, i);
+            var frame2 = ExtractFrameBatch(frames, i + 1);
 
             // Forward flow: frame i -> frame i+1
             var forwardFlow = _flowEstimator!.EstimateFlow(frame1, frame2);
@@ -598,16 +614,16 @@ public class BasicVSRPlusPlus<T> : NeuralNetworkBase<T>
             for (int i = numFrames - 2; i >= 0; i--)
             {
                 // Warp feature from frame i+1 to frame i using backward flow
-                var warpedFeat = WarpFeature(backwardFeats[i + 1], flows[i].backward);
+                var warpedFeat = WarpFeatureBatch(backwardFeats[i + 1], flows[i].backward);
 
                 // Concatenate current and warped features
-                var concat = ConcatenateFeatures(propagatedFeatures[i], warpedFeat);
+                var concat = ConcatenateFeaturesBatch(propagatedFeatures[i], warpedFeat);
 
                 // Apply deformable alignment
                 var aligned = _backwardAlignments[iter].Forward(concat);
 
                 // Fuse with propagation conv
-                concat = ConcatenateFeatures(propagatedFeatures[i], aligned);
+                concat = ConcatenateFeaturesBatch(propagatedFeatures[i], aligned);
                 backwardFeats[i] = _backwardConvs[iter].Forward(concat);
             }
 
@@ -616,16 +632,16 @@ public class BasicVSRPlusPlus<T> : NeuralNetworkBase<T>
             for (int i = 1; i < numFrames; i++)
             {
                 // Warp feature from frame i-1 to frame i using forward flow
-                var warpedFeat = WarpFeature(forwardFeats[i - 1], flows[i - 1].forward);
+                var warpedFeat = WarpFeatureBatch(forwardFeats[i - 1], flows[i - 1].forward);
 
                 // Concatenate current and warped features
-                var concat = ConcatenateFeatures(backwardFeats[i], warpedFeat);
+                var concat = ConcatenateFeaturesBatch(backwardFeats[i], warpedFeat);
 
                 // Apply deformable alignment
                 var aligned = _forwardAlignments[iter].Forward(concat);
 
                 // Fuse with propagation conv
-                concat = ConcatenateFeatures(backwardFeats[i], aligned);
+                concat = ConcatenateFeaturesBatch(backwardFeats[i], aligned);
                 forwardFeats[i] = _forwardConvs[iter].Forward(concat);
             }
 
@@ -692,10 +708,10 @@ public class BasicVSRPlusPlus<T> : NeuralNetworkBase<T>
             for (int i = numFrames - 2; i >= 0; i--)
             {
                 // Warp feature from frame i+1 to frame i using backward flow
-                var warpedFeat = WarpFeature(backwardFeats[i + 1], flows[i].backward);
+                var warpedFeat = WarpFeatureBatch(backwardFeats[i + 1], flows[i].backward);
 
                 // Concatenate current and warped features
-                var alignInput = ConcatenateFeatures(propagatedFeatures[i], warpedFeat);
+                var alignInput = ConcatenateFeaturesBatch(propagatedFeatures[i], warpedFeat);
                 iterBackwardAlignInputs[i] = alignInput;
 
                 // Apply deformable alignment
@@ -703,7 +719,7 @@ public class BasicVSRPlusPlus<T> : NeuralNetworkBase<T>
                 iterBackwardAlignOutputs[i] = aligned;
 
                 // Fuse with propagation conv
-                var propInput = ConcatenateFeatures(propagatedFeatures[i], aligned);
+                var propInput = ConcatenateFeaturesBatch(propagatedFeatures[i], aligned);
                 iterBackwardPropFeatures[i] = propInput;
                 backwardFeats[i] = _backwardConvs[iter].Forward(propInput);
             }
@@ -719,10 +735,10 @@ public class BasicVSRPlusPlus<T> : NeuralNetworkBase<T>
             for (int i = 1; i < numFrames; i++)
             {
                 // Warp feature from frame i-1 to frame i using forward flow
-                var warpedFeat = WarpFeature(forwardFeats[i - 1], flows[i - 1].forward);
+                var warpedFeat = WarpFeatureBatch(forwardFeats[i - 1], flows[i - 1].forward);
 
                 // Concatenate current and warped features
-                var alignInput = ConcatenateFeatures(backwardFeats[i], warpedFeat);
+                var alignInput = ConcatenateFeaturesBatch(backwardFeats[i], warpedFeat);
                 iterForwardAlignInputs[i] = alignInput;
 
                 // Apply deformable alignment
@@ -730,7 +746,7 @@ public class BasicVSRPlusPlus<T> : NeuralNetworkBase<T>
                 iterForwardAlignOutputs[i] = aligned;
 
                 // Fuse with propagation conv
-                var propInput = ConcatenateFeatures(backwardFeats[i], aligned);
+                var propInput = ConcatenateFeaturesBatch(backwardFeats[i], aligned);
                 iterForwardPropFeatures[i] = propInput;
                 forwardFeats[i] = _forwardConvs[iter].Forward(propInput);
             }
@@ -749,7 +765,7 @@ public class BasicVSRPlusPlus<T> : NeuralNetworkBase<T>
         return propagatedFeatures;
     }
 
-    private Tensor<T> WarpFeature(Tensor<T> feature, Tensor<T> flow)
+    private Tensor<T> WarpFeatureBatch(Tensor<T> feature, Tensor<T> flow)
     {
         // Warp feature using optical flow (bilinear sampling)
         bool hasBatch = feature.Rank == 4;
@@ -783,7 +799,7 @@ public class BasicVSRPlusPlus<T> : NeuralNetworkBase<T>
                     // Bilinear sample for each channel
                     for (int c = 0; c < channels; c++)
                     {
-                        T value = BilinearSample(feature, b, c, srcY, srcX, hasBatch, height, width, channels);
+                        T value = BilinearSampleBatch(feature, b, c, srcY, srcX, hasBatch, height, width, channels);
                         int outIdx = hasBatch
                             ? b * channels * height * width + c * height * width + h * width + w
                             : c * height * width + h * width + w;
@@ -796,7 +812,7 @@ public class BasicVSRPlusPlus<T> : NeuralNetworkBase<T>
         return warped;
     }
 
-    private T BilinearSample(Tensor<T> tensor, int b, int c, double h, double w, bool hasBatch, int height, int width, int channels)
+    private T BilinearSampleBatch(Tensor<T> tensor, int b, int c, double h, double w, bool hasBatch, int height, int width, int channels)
     {
         int h0 = (int)Math.Floor(h);
         int w0 = (int)Math.Floor(w);
@@ -837,7 +853,7 @@ public class BasicVSRPlusPlus<T> : NeuralNetworkBase<T>
         return tensor.Data.Span[idx];
     }
 
-    private Tensor<T> ConcatenateFeatures(Tensor<T> feat1, Tensor<T> feat2)
+    private Tensor<T> ConcatenateFeaturesBatch(Tensor<T> feat1, Tensor<T> feat2)
     {
         bool hasBatch = feat1.Rank == 4;
         int batch = hasBatch ? feat1.Shape[0] : 1;
@@ -883,7 +899,7 @@ public class BasicVSRPlusPlus<T> : NeuralNetworkBase<T>
         return output;
     }
 
-    private Tensor<T> ExtractFrame(Tensor<T> frames, int frameIndex)
+    private Tensor<T> ExtractFrameBatch(Tensor<T> frames, int frameIndex)
     {
         int channels = frames.Shape[1];
         int height = frames.Shape[2];
@@ -901,7 +917,7 @@ public class BasicVSRPlusPlus<T> : NeuralNetworkBase<T>
         return frame;
     }
 
-    private void StoreFrame(Tensor<T> output, Tensor<T> frame, int frameIndex)
+    private void StoreFrameBatch(Tensor<T> output, Tensor<T> frame, int frameIndex)
     {
         int channels = output.Shape[1];
         int height = output.Shape[2];
@@ -1001,7 +1017,7 @@ public class BasicVSRPlusPlus<T> : NeuralNetworkBase<T>
         for (int f = 0; f < numFrames; f++)
         {
             // Extract per-frame gradient
-            var frameGrad = ExtractFrame(gradient, f);
+            var frameGrad = ExtractFrameBatch(gradient, f);
 
             // Backward through output convolution
             var grad = _outputConv!.Backward(frameGrad);
@@ -1619,4 +1635,27 @@ public class BasicVSRPlusPlus<T> : NeuralNetworkBase<T>
     }
 
     #endregion
+
+    #region Base Class Abstract Methods
+
+    /// <inheritdoc/>
+    public override Tensor<T> Upscale(Tensor<T> lowResFrames)
+    {
+        return Forward(lowResFrames);
+    }
+
+    /// <inheritdoc/>
+    protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames)
+    {
+        return NormalizeFrames(rawFrames);
+    }
+
+    /// <inheritdoc/>
+    protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput)
+    {
+        return DenormalizeFrames(modelOutput);
+    }
+
+    #endregion
+
 }

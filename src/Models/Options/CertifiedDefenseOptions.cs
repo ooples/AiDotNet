@@ -13,7 +13,7 @@ namespace AiDotNet.Models.Options;
 /// certification method to apply.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for calculations (e.g., float, double).</typeparam>
-public class CertifiedDefenseOptions<T>
+public class CertifiedDefenseOptions<T> : ModelOptions
 {
     /// <summary>
     /// Gets or sets the number of samples for randomized smoothing.

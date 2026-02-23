@@ -2,6 +2,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using AiDotNet.Validation;
 
 namespace AiDotNet.ReinforcementLearning.Agents.AdvancedRL;
 
@@ -12,12 +13,16 @@ namespace AiDotNet.ReinforcementLearning.Agents.AdvancedRL;
 public class TabularActorCriticAgent<T> : ReinforcementLearningAgentBase<T>
 {
     private TabularActorCriticOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
     private Dictionary<string, Dictionary<int, T>> _policy;  // Actor: π(a|s)
     private Dictionary<string, T> _valueTable;  // Critic: V(s)
 
     public TabularActorCriticAgent(TabularActorCriticOptions<T> options) : base(options)
     {
-        _options = options ?? throw new ArgumentNullException(nameof(options));
+        Guard.NotNull(options);
+        _options = options;
         _policy = new Dictionary<string, Dictionary<int, T>>();
         _valueTable = new Dictionary<string, T>();
     }

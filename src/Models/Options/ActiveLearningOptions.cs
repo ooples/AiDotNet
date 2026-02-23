@@ -116,7 +116,7 @@ public enum ActiveLearningStrategyType
 /// <item><description><b>BALD/BatchBALD:</b> State-of-the-art for Bayesian neural networks.</description></item>
 /// </list>
 /// </remarks>
-public class ActiveLearningOptions
+public class ActiveLearningOptions : ModelOptions
 {
     /// <summary>
     /// Gets or sets the active learning strategy to use.

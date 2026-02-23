@@ -1,4 +1,5 @@
 using Newtonsoft.Json;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Genetics;
 
@@ -52,11 +53,6 @@ public abstract class GeneticBase<T, TInput, TOutput> :
     protected IFitnessCalculator<T, TInput, TOutput> FitnessCalculator { get; set; }
 
     /// <summary>
-    /// The fitness calculator used to evaluate individuals.
-    /// </summary>
-    protected IModelEvaluator<T, TInput, TOutput> ModelEvaluator { get; set; }
-
-    /// <summary>
     /// The random number generator used for stochastic operations.
     /// </summary>
     protected Random Random { get; set; }
@@ -93,9 +89,10 @@ public abstract class GeneticBase<T, TInput, TOutput> :
     /// Initializes a new instance of the GeneticModelBase class.
     /// </summary>
     /// <param name="fitnessCalculator">The fitness calculator to use.</param>
-    protected GeneticBase(IFitnessCalculator<T, TInput, TOutput> fitnessCalculator, IModelEvaluator<T, TInput, TOutput> modelEvaluator)
+    protected GeneticBase(IFitnessCalculator<T, TInput, TOutput> fitnessCalculator)
     {
-        FitnessCalculator = fitnessCalculator ?? throw new ArgumentNullException(nameof(fitnessCalculator));
+        Guard.NotNull(fitnessCalculator);
+        FitnessCalculator = fitnessCalculator;
         Population = new List<ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>>();
         GeneticParams = new GeneticParameters();
         Random = RandomHelper.CreateSecureRandom();
@@ -103,7 +100,6 @@ public abstract class GeneticBase<T, TInput, TOutput> :
         MutationOperators = new Dictionary<string, Func<ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>, double, ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>>>();
         EvolutionStopwatch = new Stopwatch();
         CurrentStats = new EvolutionStats<T, TInput, TOutput>(fitnessCalculator);
-        ModelEvaluator = modelEvaluator ?? throw new ArgumentNullException(nameof(modelEvaluator));
 
         // Register default operators
         AddDefaultCrossoverOperators();
@@ -333,7 +329,8 @@ public abstract class GeneticBase<T, TInput, TOutput> :
     /// <param name="fitnessCalculator">The fitness calculator to use.</param>
     public void SetFitnessCalculator(IFitnessCalculator<T, TInput, TOutput> fitnessCalculator)
     {
-        FitnessCalculator = fitnessCalculator ?? throw new ArgumentNullException(nameof(fitnessCalculator));
+        Guard.NotNull(fitnessCalculator);
+        FitnessCalculator = fitnessCalculator;
         CurrentStats = new EvolutionStats<T, TInput, TOutput>(fitnessCalculator);
     }
 
@@ -402,13 +399,131 @@ public abstract class GeneticBase<T, TInput, TOutput> :
             input.InputData.YValidation = validationOutput;
         }
 
-        var evaluationData = ModelEvaluator.EvaluateModel(input);
+        var evaluationData = EvaluateModelForGenetics(input);
         var currentFitnessScore = FitnessCalculator.CalculateFitnessScore(evaluationData);
 
         // Update the individual's fitness
         individual.SetFitness(currentFitnessScore);
 
         return currentFitnessScore;
+    }
+
+    /// <summary>
+    /// Evaluates a model for genetic algorithm fitness calculation.
+    /// </summary>
+    private ModelEvaluationData<T, TInput, TOutput> EvaluateModelForGenetics(ModelEvaluationInput<T, TInput, TOutput> input)
+    {
+        var model = input.Model;
+        var inputData = input.InputData;
+        var predictionType = input.PredictionTypeOverride
+            ?? PredictionTypeInference.InferFromTargets<T, TOutput>(inputData.YTrain);
+
+        var trainingSet = CalculateDataSetStatsForGenetics(
+            model, inputData.XTrain, inputData.YTrain, predictionType);
+
+        DataSetStats<T, TInput, TOutput>? validationSet = null;
+        if (inputData.XValidation != null && InputHelper<T, TInput>.GetInputSize(inputData.XValidation) > 0)
+        {
+            validationSet = CalculateDataSetStatsForGenetics(
+                model, inputData.XValidation, inputData.YValidation, predictionType);
+        }
+
+        return new ModelEvaluationData<T, TInput, TOutput>
+        {
+            TrainingSet = trainingSet,
+            ValidationSet = validationSet ?? new DataSetStats<T, TInput, TOutput>(),
+            TestSet = new DataSetStats<T, TInput, TOutput>(),
+            ModelStats = ModelStats<T, TInput, TOutput>.Empty()
+        };
+    }
+
+    private DataSetStats<T, TInput, TOutput> CalculateDataSetStatsForGenetics(
+        IFullModel<T, TInput, TOutput>? model,
+        TInput X,
+        TOutput y,
+        PredictionType predictionType)
+    {
+        if (model == null)
+        {
+            return new DataSetStats<T, TInput, TOutput>
+            {
+                ErrorStats = ErrorStats<T>.Empty(),
+                ActualBasicStats = BasicStats<T>.Empty(),
+                PredictedBasicStats = BasicStats<T>.Empty(),
+                PredictionStats = PredictionStats<T>.Empty(),
+                IsDataProvided = true
+            };
+        }
+
+        var predictions = model.Predict(X);
+        var inputSize = InputHelper<T, TInput>.GetInputSize(X);
+
+        if (!TryGetAlignedVectorsForGenetics(y, predictions, out var actual, out var predicted))
+        {
+            return new DataSetStats<T, TInput, TOutput>
+            {
+                ErrorStats = ErrorStats<T>.Empty(),
+                ActualBasicStats = BasicStats<T>.Empty(),
+                PredictedBasicStats = BasicStats<T>.Empty(),
+                PredictionStats = PredictionStats<T>.Empty(),
+                Predicted = predictions,
+                Features = X,
+                Actual = y,
+                IsDataProvided = true
+            };
+        }
+
+        return new DataSetStats<T, TInput, TOutput>
+        {
+            ErrorStats = new ErrorStats<T>(new ErrorStatsInputs<T>
+            {
+                Actual = actual,
+                Predicted = predicted,
+                FeatureCount = inputSize,
+                PredictionType = predictionType
+            }),
+            ActualBasicStats = new BasicStats<T>(new BasicStatsInputs<T> { Values = actual }),
+            PredictedBasicStats = new BasicStats<T>(new BasicStatsInputs<T> { Values = predicted }),
+            PredictionStats = new PredictionStats<T>(new PredictionStatsInputs<T>
+            {
+                Actual = actual,
+                Predicted = predicted,
+                NumberOfParameters = inputSize,
+                ConfidenceLevel = 0.95,
+                LearningCurveSteps = 10,
+                PredictionType = predictionType
+            }),
+            Predicted = predictions,
+            Features = X,
+            Actual = y,
+            IsDataProvided = true
+        };
+    }
+
+    private static bool TryGetAlignedVectorsForGenetics(
+        TOutput actualOutput,
+        TOutput predictedOutput,
+        out Vector<T> actual,
+        out Vector<T> predicted)
+    {
+        actual = Vector<T>.Empty();
+        predicted = Vector<T>.Empty();
+
+        try
+        {
+            actual = ConversionsHelper.ConvertToVector<T, TOutput>(actualOutput);
+            predicted = ConversionsHelper.ConvertToVector<T, TOutput>(predictedOutput);
+
+            if (actual.Length == predicted.Length)
+            {
+                return true;
+            }
+        }
+        catch (InvalidOperationException) { }
+        catch (ArgumentException) { }
+        catch (NotSupportedException) { }
+
+        return false;
     }
 
     /// <summary>
@@ -1200,7 +1315,8 @@ public abstract class GeneticBase<T, TInput, TOutput> :
     /// <param name="parameters">The genetic algorithm parameters to use.</param>
     public virtual void ConfigureGeneticParameters(GeneticParameters parameters)
     {
-        GeneticParams = parameters ?? throw new ArgumentNullException(nameof(parameters));
+        Guard.NotNull(parameters);
+        GeneticParams = parameters;
     }
 
     /// <summary>
@@ -1229,7 +1345,8 @@ public abstract class GeneticBase<T, TInput, TOutput> :
             throw new ArgumentException("Operator name cannot be null or empty.", nameof(name));
         }
 
-        CrossoverOperators[name] = crossoverOperator ?? throw new ArgumentNullException(nameof(crossoverOperator));
+        Guard.NotNull(crossoverOperator);
+        CrossoverOperators[name] = crossoverOperator;
     }
 
     /// <summary>
@@ -1248,7 +1365,8 @@ public abstract class GeneticBase<T, TInput, TOutput> :
             throw new ArgumentException("Operator name cannot be null or empty.", nameof(name));
         }
 
-        MutationOperators[name] = mutationOperator ?? throw new ArgumentNullException(nameof(mutationOperator));
+        Guard.NotNull(mutationOperator);
+        MutationOperators[name] = mutationOperator;
     }
 
     /// <summary>

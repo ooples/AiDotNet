@@ -3,6 +3,7 @@ using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Video.Options;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
 
@@ -49,6 +50,11 @@ namespace AiDotNet.Video.Segmentation;
 /// </remarks>
 public class XMem<T> : NeuralNetworkBase<T>
 {
+    private readonly XMemOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     #region Execution Mode
 
     private readonly bool _useNativeMode;
@@ -105,9 +111,12 @@ public class XMem<T> : NeuralNetworkBase<T>
         int numFeatures = 256,
         int sensoryMemorySize = 3,
         int workingMemorySize = 10,
-        int longTermMemorySize = 100)
+        int longTermMemorySize = 100,
+        XMemOptions? options = null)
         : base(architecture, lossFunction ?? new BinaryCrossEntropyLoss<T>())
     {
+        _options = options ?? new XMemOptions();
+        Options = _options;
         _useNativeMode = true;
         _inputHeight = architecture.InputHeight > 0 ? architecture.InputHeight : 480;
         _inputWidth = architecture.InputWidth > 0 ? architecture.InputWidth : 854;
@@ -135,9 +144,12 @@ public class XMem<T> : NeuralNetworkBase<T>
         string onnxModelPath,
         int sensoryMemorySize = 3,
         int workingMemorySize = 10,
-        int longTermMemorySize = 100)
+        int longTermMemorySize = 100,
+        XMemOptions? options = null)
         : base(architecture, new BinaryCrossEntropyLoss<T>())
     {
+        _options = options ?? new XMemOptions();
+        Options = _options;
         if (string.IsNullOrWhiteSpace(onnxModelPath))
             throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
         if (!File.Exists(onnxModelPath))

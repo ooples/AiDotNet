@@ -2,6 +2,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralRadianceFields.Interfaces;
+using AiDotNet.Validation;
 
 namespace AiDotNet.NeuralRadianceFields.Models;
 
@@ -171,6 +172,11 @@ namespace AiDotNet.NeuralRadianceFields.Models;
 /// </remarks>
 public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>
 {
+    private readonly GaussianSplattingOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// Represents a single 3D Gaussian in the scene.
     /// </summary>
@@ -214,10 +220,14 @@ public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>
             Vector<T> color,
             T opacity)
         {
-            Source = source ?? throw new ArgumentNullException(nameof(source));
-            Position = position ?? throw new ArgumentNullException(nameof(position));
-            Covariance = covariance ?? throw new ArgumentNullException(nameof(covariance));
-            Color = color ?? throw new ArgumentNullException(nameof(color));
+            Guard.NotNull(source);
+            Source = source;
+            Guard.NotNull(position);
+            Position = position;
+            Guard.NotNull(covariance);
+            Covariance = covariance;
+            Guard.NotNull(color);
+            Color = color;
             Opacity = opacity;
         }
 
@@ -251,7 +261,8 @@ public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>
             double camZ,
             double focalLength)
         {
-            Source = source ?? throw new ArgumentNullException(nameof(source));
+            Guard.NotNull(source);
+            Source = source;
             MeanX = meanX;
             MeanY = meanY;
             Depth = depth;
@@ -428,6 +439,8 @@ public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>
         {
             throw new ArgumentNullException(nameof(options));
         }
+        _options = options;
+        Options = _options;
         if (options.ShDegree < 0 || options.ShDegree > 3)
         {
             throw new ArgumentOutOfRangeException(nameof(options.ShDegree), "shDegree must be between 0 and 3.");

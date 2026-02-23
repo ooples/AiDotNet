@@ -129,20 +129,6 @@ public class DecisionTreeClassifierOptions<T> : ClassifierOptions<T>
     public ClassificationSplitCriterion Criterion { get; set; } = ClassificationSplitCriterion.Gini;
 
     /// <summary>
-    /// Gets or sets the random state for reproducibility.
-    /// </summary>
-    /// <value>
-    /// The random seed, or null for non-deterministic behavior. Default is null.
-    /// </value>
-    /// <remarks>
-    /// <para>
-    /// When MaxFeatures is set or when there are ties in split decisions,
-    /// randomness is used. Setting this value ensures reproducible results.
-    /// </para>
-    /// </remarks>
-    public int? RandomState { get; set; } = null;
-
-    /// <summary>
     /// Gets or sets the minimum impurity decrease required for a split.
     /// </summary>
     /// <value>

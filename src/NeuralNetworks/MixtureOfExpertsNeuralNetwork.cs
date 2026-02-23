@@ -53,6 +53,9 @@ public class MixtureOfExpertsNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </summary>
     private readonly MixtureOfExpertsOptions<T> _options;
 
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// The loss function used to calculate the error between predicted and expected outputs.
     /// </summary>
@@ -140,7 +143,9 @@ public class MixtureOfExpertsNeuralNetwork<T> : NeuralNetworkBase<T>
         double maxGradNorm = 1.0)
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), maxGradNorm)
     {
-        _options = options ?? throw new ArgumentNullException(nameof(options));
+        Guard.NotNull(options);
+        _options = options;
+        Options = _options;
         _options.Validate();
 
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);

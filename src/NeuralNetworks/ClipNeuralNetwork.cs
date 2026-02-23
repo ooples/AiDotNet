@@ -5,8 +5,10 @@ using System.Linq;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
+using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Tokenization.Interfaces;
 using Microsoft.ML.OnnxRuntime;
+using AiDotNet.Validation;
 
 namespace AiDotNet.NeuralNetworks;
 
@@ -17,6 +19,11 @@ namespace AiDotNet.NeuralNetworks;
 /// <typeparam name="T">The numeric type used for computations (typically float or double).</typeparam>
 public class ClipNeuralNetwork<T> : NeuralNetworkBase<T>, IMultimodalEmbedding<T>, IDisposable
 {
+    private readonly ClipOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     private string _imageEncoderPath;
     private string _textEncoderPath;
     private readonly ITokenizer _tokenizer;
@@ -66,15 +73,20 @@ public class ClipNeuralNetwork<T> : NeuralNetworkBase<T>, IMultimodalEmbedding<T
         ILossFunction<T>? lossFunction = null,
         int embeddingDimension = 512,
         int maxSequenceLength = 77,
-        int imageSize = 224)
+        int imageSize = 224,
+        ClipOptions? options = null)
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>())
     {
+        _options = options ?? new ClipOptions();
+        Options = _options;
+
         if (string.IsNullOrWhiteSpace(imageEncoderPath))
             throw new ArgumentException("Image encoder path cannot be null or empty.", nameof(imageEncoderPath));
         if (string.IsNullOrWhiteSpace(textEncoderPath))
             throw new ArgumentException("Text encoder path cannot be null or empty.", nameof(textEncoderPath));
 
-        _tokenizer = tokenizer ?? throw new ArgumentNullException(nameof(tokenizer));
+        Guard.NotNull(tokenizer);
+        _tokenizer = tokenizer;
 
         if (!File.Exists(imageEncoderPath))
             throw new FileNotFoundException($"Image encoder model file not found: {imageEncoderPath}", imageEncoderPath);
@@ -292,7 +304,8 @@ public class ClipNeuralNetwork<T> : NeuralNetworkBase<T>, IMultimodalEmbedding<T
         if (imageData == null || imageData.Length == 0)
             throw new ArgumentException("Image data cannot be null or empty", nameof(imageData));
 
-        var labelList = labels?.ToList() ?? throw new ArgumentNullException(nameof(labels));
+        Guard.NotNull(labels);
+        var labelList = labels.ToList();
         if (labelList.Count == 0)
             throw new ArgumentException("Labels collection cannot be empty", nameof(labels));
 

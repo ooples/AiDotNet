@@ -7,6 +7,7 @@ using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.ReinforcementLearning.Common;
+using AiDotNet.Validation;
 
 namespace AiDotNet.ReinforcementLearning.Agents.REINFORCE;
 
@@ -44,6 +45,9 @@ namespace AiDotNet.ReinforcementLearning.Agents.REINFORCE;
 public class REINFORCEAgent<T> : DeepReinforcementLearningAgentBase<T>
 {
     private REINFORCEOptions<T> _reinforceOptions;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _reinforceOptions;
     private readonly Trajectory<T> _trajectory;
 
     private NeuralNetwork<T> _policyNetwork;
@@ -60,7 +64,8 @@ public class REINFORCEAgent<T> : DeepReinforcementLearningAgentBase<T>
             Seed = options.Seed
         })
     {
-        _reinforceOptions = options ?? throw new ArgumentNullException(nameof(options));
+        Guard.NotNull(options);
+        _reinforceOptions = options;
         _trajectory = new Trajectory<T>();
 
         _policyNetwork = BuildPolicyNetwork();

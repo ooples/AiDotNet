@@ -89,14 +89,6 @@ public class LinearClassifierOptions<T> : ClassifierOptions<T>
     public double Alpha { get; set; } = 0.0001;
 
     /// <summary>
-    /// Gets or sets the random state for reproducibility.
-    /// </summary>
-    /// <value>
-    /// The random seed, or null for non-deterministic. Default is null.
-    /// </value>
-    public int? RandomState { get; set; } = null;
-
-    /// <summary>
     /// Gets or sets whether to shuffle training data at each epoch.
     /// </summary>
     /// <value>

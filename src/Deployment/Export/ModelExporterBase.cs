@@ -9,6 +9,9 @@ namespace AiDotNet.Deployment.Export;
 /// <typeparam name="T">The numeric type used in the model</typeparam>
 /// <typeparam name="TInput">The input type for the model</typeparam>
 /// <typeparam name="TOutput">The output type for the model</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> for provides AI safety functionality. Default values follow the original paper settings.</para>
+/// </remarks>
 public abstract class ModelExporterBase<T, TInput, TOutput> : IModelExporter<T, TInput, TOutput>
 {
     /// <inheritdoc/>
@@ -103,6 +106,11 @@ public abstract class ModelExporterBase<T, TInput, TOutput> : IModelExporter<T, 
     /// <summary>
     /// Gets the input shape from the model or configuration.
     /// </summary>
+    /// <remarks>
+    /// <para>When the model implements <see cref="ILayeredModel{T}"/>, the input shape can
+    /// be automatically inferred from the first layer's input shape, eliminating the need
+    /// to specify it manually in the export configuration.</para>
+    /// </remarks>
     protected int[] GetInputShape(IFullModel<T, TInput, TOutput> model, ExportConfiguration config)
     {
         if (config.InputShape != null && config.InputShape.Length > 0)
@@ -110,9 +118,61 @@ public abstract class ModelExporterBase<T, TInput, TOutput> : IModelExporter<T, 
             return config.InputShape;
         }
 
-        // Input shape must be explicitly provided in configuration
-        // Cannot reliably infer from parameter count as it represents total model parameters, not input dimensions
+        // Try to infer from ILayeredModel if available
+        if (model is ILayeredModel<T> layeredModel && layeredModel.LayerCount > 0)
+        {
+            var firstLayerInput = layeredModel.Layers[0].GetInputShape();
+            if (firstLayerInput.Length > 0)
+            {
+                return firstLayerInput;
+            }
+        }
+
         throw new InvalidOperationException(
             "Could not determine input shape. Please specify InputShape in ExportConfiguration.");
+    }
+
+    /// <summary>
+    /// Gets the output shape from the model or configuration.
+    /// </summary>
+    /// <remarks>
+    /// <para>When the model implements <see cref="ILayeredModel{T}"/>, the output shape can
+    /// be automatically inferred from the last layer's output shape.</para>
+    /// </remarks>
+    protected int[] GetOutputShape(IFullModel<T, TInput, TOutput> model, ExportConfiguration config)
+    {
+        if (config.OutputShape != null && config.OutputShape.Length > 0)
+        {
+            return config.OutputShape;
+        }
+
+        // Try to infer from ILayeredModel if available
+        if (model is ILayeredModel<T> layeredModel && layeredModel.LayerCount > 0)
+        {
+            var lastLayerOutput = layeredModel.Layers[layeredModel.LayerCount - 1].GetOutputShape();
+            if (lastLayerOutput.Length > 0)
+            {
+                return lastLayerOutput;
+            }
+        }
+
+        throw new InvalidOperationException(
+            "Could not determine output shape. Please specify OutputShape in ExportConfiguration.");
+    }
+
+    /// <summary>
+    /// Gets a summary of all layers for export metadata, using <see cref="ILayeredModel{T}"/>
+    /// when available.
+    /// </summary>
+    /// <param name="model">The model to summarize.</param>
+    /// <returns>A list of layer descriptions, or an empty list if layer info is unavailable.</returns>
+    protected IReadOnlyList<LayerInfo<T>> GetLayerSummary(IFullModel<T, TInput, TOutput> model)
+    {
+        if (model is ILayeredModel<T> layeredModel)
+        {
+            return layeredModel.GetAllLayerInfo();
+        }
+
+        return Array.Empty<LayerInfo<T>>();
     }
 }

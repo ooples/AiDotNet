@@ -15,7 +15,7 @@ namespace AiDotNet.Models.Options;
 /// you get more reliable recommendations about which AI algorithms will work best for your specific problem.
 /// It's like asking several doctors for a diagnosis instead of relying on just one opinion.</para>
 /// </remarks>
-public class EnsembleFitDetectorOptions
+public class EnsembleFitDetectorOptions : ModelOptions
 {
     /// <summary>
     /// Gets or sets the weights applied to each detector in the ensemble.

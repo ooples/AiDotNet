@@ -3,6 +3,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using Newtonsoft.Json;
+using AiDotNet.Validation;
 
 namespace AiDotNet.ReinforcementLearning.Agents.Bandits;
 
@@ -13,6 +14,9 @@ namespace AiDotNet.ReinforcementLearning.Agents.Bandits;
 public class GradientBanditAgent<T> : ReinforcementLearningAgentBase<T>
 {
     private GradientBanditOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
     private Random _random;
     private Vector<T> _preferences;  // H(a)
     private T _averageReward;
@@ -20,7 +24,8 @@ public class GradientBanditAgent<T> : ReinforcementLearningAgentBase<T>
 
     public GradientBanditAgent(GradientBanditOptions<T> options) : base(options)
     {
-        _options = options ?? throw new ArgumentNullException(nameof(options));
+        Guard.NotNull(options);
+        _options = options;
         _random = RandomHelper.CreateSecureRandom();
         _preferences = new Vector<T>(_options.NumArms);
         for (int i = 0; i < _options.NumArms; i++)

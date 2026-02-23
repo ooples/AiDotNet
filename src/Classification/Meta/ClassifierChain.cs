@@ -31,7 +31,7 @@ namespace AiDotNet.Classification.Meta;
 /// - Error propagation (early mistakes affect later predictions)
 /// </para>
 /// </remarks>
-public class ClassifierChain<T> : MetaClassifierBase<T>, IMultiLabelClassifier<T>
+public class ClassifierChain<T> : MetaClassifierBase<T>
 {
     /// <summary>
     /// Gets the chain-specific options.
@@ -48,8 +48,15 @@ public class ClassifierChain<T> : MetaClassifierBase<T>, IMultiLabelClassifier<T
     /// </summary>
     private int[]? _order;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets the number of labels (same as number of classes for multi-label).
+    /// </summary>
     public int NumLabels => NumClasses;
+
+    /// <summary>
+    /// Gets or sets the label names if available.
+    /// </summary>
+    public string[]? LabelNames { get; set; }
 
     /// <summary>
     /// Initializes a new instance of the ClassifierChain class.
@@ -169,8 +176,8 @@ public class ClassifierChain<T> : MetaClassifierBase<T>, IMultiLabelClassifier<T
                 order[i] = i;
             }
 
-            var random = Options.RandomState.HasValue
-                ? RandomHelper.CreateSeededRandom(Options.RandomState.Value)
+            var random = Options.Seed.HasValue
+                ? RandomHelper.CreateSeededRandom(Options.Seed.Value)
                 : RandomHelper.CreateSeededRandom(42);
 
             for (int i = NumClasses - 1; i > 0; i--)
@@ -245,7 +252,11 @@ public class ClassifierChain<T> : MetaClassifierBase<T>, IMultiLabelClassifier<T
         return predictions;
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Predicts multi-label output for the given input.
+    /// </summary>
+    /// <param name="input">The input features matrix.</param>
+    /// <returns>A matrix of binary predictions for each label.</returns>
     public Matrix<T> PredictMultiLabel(Matrix<T> input)
     {
         if (_classifiers is null || _order is null)
@@ -401,7 +412,7 @@ public class ClassifierChain<T> : MetaClassifierBase<T>, IMultiLabelClassifier<T
         {
             Order = Options.Order,
             RandomOrder = Options.RandomOrder,
-            RandomState = Options.RandomState
+            Seed = Options.Seed
         });
     }
 
@@ -467,8 +478,4 @@ public class ClassifierChainOptions<T> : MetaClassifierOptions<T>
     /// <value>True for random order. Default is false.</value>
     public bool RandomOrder { get; set; } = false;
 
-    /// <summary>
-    /// Gets or sets the random state for reproducibility.
-    /// </summary>
-    public int? RandomState { get; set; }
 }

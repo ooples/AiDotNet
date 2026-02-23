@@ -18,7 +18,7 @@ namespace AiDotNet.Models.Options;
 /// problems with how well your model fits the data. If many points are influential, your model might be too simple
 /// (underfitting). If very few points are influential, your model might be too complex (overfitting).</para>
 /// </remarks>
-public class CookDistanceFitDetectorOptions
+public class CookDistanceFitDetectorOptions : ModelOptions
 {
     /// <summary>
     /// Gets or sets the threshold for determining when a data point is considered influential.

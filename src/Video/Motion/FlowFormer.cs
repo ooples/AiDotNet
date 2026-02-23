@@ -1,5 +1,6 @@
 using System.IO;
 using AiDotNet.Helpers;
+using AiDotNet.Video.Options;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
@@ -43,8 +44,13 @@ namespace AiDotNet.Video.Motion;
 /// https://arxiv.org/abs/2203.16194
 /// </para>
 /// </remarks>
-public class FlowFormer<T> : NeuralNetworkBase<T>
+public class FlowFormer<T> : OpticalFlowBase<T>
 {
+    private readonly FlowFormerOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     #region Fields
 
     private readonly bool _useNativeMode;
@@ -66,7 +72,7 @@ public class FlowFormer<T> : NeuralNetworkBase<T>
     public override bool SupportsTraining => _useNativeMode;
     internal int EmbedDim => _embedDim;
     internal int NumLayers => _numLayers;
-    internal int NumIterations => _numIterations;
+    internal new int NumIterations => _numIterations;
 
     #endregion
 
@@ -78,9 +84,13 @@ public class FlowFormer<T> : NeuralNetworkBase<T>
         ILossFunction<T>? lossFunction = null,
         int embedDim = 256,
         int numLayers = 6,
-        int numIterations = 12)
+        int numIterations = 12,
+        FlowFormerOptions? options = null)
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>())
     {
+        _options = options ?? new FlowFormerOptions();
+        Options = _options;
+
         _useNativeMode = true;
         _embedDim = embedDim;
         _numLayers = numLayers;
@@ -96,9 +106,13 @@ public class FlowFormer<T> : NeuralNetworkBase<T>
 
     public FlowFormer(
         NeuralNetworkArchitecture<T> architecture,
-        string onnxModelPath)
+        string onnxModelPath,
+        FlowFormerOptions? options = null)
         : base(architecture, new MeanSquaredErrorLoss<T>())
     {
+        _options = options ?? new FlowFormerOptions();
+        Options = _options;
+
         if (string.IsNullOrWhiteSpace(onnxModelPath))
             throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
         if (!File.Exists(onnxModelPath))
@@ -129,7 +143,7 @@ public class FlowFormer<T> : NeuralNetworkBase<T>
     /// <param name="frame1">First frame [B, C, H, W] or [C, H, W].</param>
     /// <param name="frame2">Second frame with same shape.</param>
     /// <returns>Flow tensor [B, 2, H, W] where channel 0 is horizontal and channel 1 is vertical flow.</returns>
-    public Tensor<T> EstimateFlow(Tensor<T> frame1, Tensor<T> frame2)
+    public override Tensor<T> EstimateFlow(Tensor<T> frame1, Tensor<T> frame2)
     {
         if (frame1 is null) throw new ArgumentNullException(nameof(frame1));
         if (frame2 is null) throw new ArgumentNullException(nameof(frame2));
@@ -200,7 +214,7 @@ public class FlowFormer<T> : NeuralNetworkBase<T>
 
     #region Inference
 
-    private Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> Forward(Tensor<T> input)
     {
         var result = input;
         foreach (var layer in Layers) result = layer.Forward(result);
@@ -333,4 +347,21 @@ public class FlowFormer<T> : NeuralNetworkBase<T>
         new FlowFormer<T>(Architecture, _optimizer, _lossFunction, _embedDim, _numLayers, _numIterations);
 
     #endregion
+
+    #region Base Class Abstract Methods
+
+    /// <inheritdoc/>
+    protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames)
+    {
+        return NormalizeFrames(rawFrames);
+    }
+
+    /// <inheritdoc/>
+    protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput)
+    {
+        return modelOutput;
+    }
+
+    #endregion
+
 }

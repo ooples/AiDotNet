@@ -1,5 +1,6 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Data.Sampling;
 
@@ -175,7 +176,13 @@ public abstract class WeightedSamplerBase<T> : DataSamplerBase, IWeightedSampler
         get => WeightsArray;
         set
         {
-            WeightsArray = value?.ToArray() ?? throw new ArgumentNullException(nameof(value));
+            Guard.NotNull(value);
+            var array = value.ToArray();
+            if (array.Length == 0)
+            {
+                throw new ArgumentException("Weights cannot be empty.", nameof(value));
+            }
+            WeightsArray = array;
             ComputeCumulativeProbabilities();
         }
     }

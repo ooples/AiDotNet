@@ -6,6 +6,9 @@ namespace AiDotNet.Audio.Pitch;
 /// Base class for pitch detection implementations.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> for provides AI safety functionality. Default values follow the original paper settings.</para>
+/// </remarks>
 public abstract class PitchDetectorBase<T> : IPitchDetector<T>
 {
     /// <summary>

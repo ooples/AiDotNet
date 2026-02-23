@@ -7,6 +7,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Generators;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 using AiDotNet.RetrievalAugmentedGeneration.Retrievers;
+using AiDotNet.Validation;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns;
 
@@ -100,8 +101,10 @@ public class SelfCorrectingRetriever<T>
         RetrieverBase<T> baseRetriever,
         int maxIterations = 3)
     {
-        _generator = generator ?? throw new ArgumentNullException(nameof(generator));
-        _baseRetriever = baseRetriever ?? throw new ArgumentNullException(nameof(baseRetriever));
+        Guard.NotNull(generator);
+        _generator = generator;
+        Guard.NotNull(baseRetriever);
+        _baseRetriever = baseRetriever;
 
         if (maxIterations <= 0)
             throw new ArgumentOutOfRangeException(nameof(maxIterations), "Max iterations must be positive");

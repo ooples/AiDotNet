@@ -16,7 +16,7 @@ namespace AiDotNet.Models.Options;
 /// identify potential problems with your model, like whether it's focusing too much on unimportant details or not
 /// capturing important patterns. The options below let you adjust how sensitive this analysis should be.</para>
 /// </remarks>
-public class FeatureImportanceFitDetectorOptions
+public class FeatureImportanceFitDetectorOptions : ModelOptions
 {
     /// <summary>
     /// Gets or sets the threshold for considering feature importance as high.

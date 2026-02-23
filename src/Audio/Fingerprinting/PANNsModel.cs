@@ -48,6 +48,11 @@ namespace AiDotNet.Audio.Fingerprinting;
 /// </remarks>
 public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
 {
+    private readonly PANNsModelOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     private readonly INumericOperations<T> _numOps;
 
     // Model configuration (non-readonly for deserialization support)
@@ -73,7 +78,7 @@ public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
     private string[] _classLabels;
 
     // Optimizer for training
-    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
 
     /// <inheritdoc/>
     public string Name => $"PANNs-{_architectureType}";
@@ -112,9 +117,12 @@ public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         int sampleRate = 32000,
         int numClasses = 527,
         int embeddingDim = 2048,
-        OnnxModelOptions? onnxOptions = null)
+        OnnxModelOptions? onnxOptions = null,
+        PANNsModelOptions? options = null)
         : base(architecture)
     {
+        _options = options ?? new PANNsModelOptions();
+        Options = _options;
         _numOps = MathHelper.GetNumericOperations<T>();
 
         if (string.IsNullOrWhiteSpace(modelPath))
@@ -145,9 +153,6 @@ public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         _embeddingWeight = Array.Empty<T>();
         _embeddingBias = Array.Empty<T>();
         _classLabels = GetDefaultClassLabels();
-
-        // Initialize optimizer (not used in ONNX mode but required for readonly field)
-        _optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
     }
 
     /// <summary>
@@ -175,9 +180,12 @@ public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         int hopSize = 320,
         double dropout = 0.2,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        PANNsModelOptions? options = null)
         : base(architecture, lossFunction)
     {
+        _options = options ?? new PANNsModelOptions();
+        Options = _options;
         _numOps = MathHelper.GetNumericOperations<T>();
 
         SampleRate = sampleRate;
@@ -779,6 +787,7 @@ public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         var paramVector = new Vector<T>(allParams.ToArray());
 
         // Use optimizer to compute updated parameters
+        if (_optimizer is null) throw new InvalidOperationException("Optimizer not initialized. Use the training constructor.");
         var updatedParams = _optimizer.UpdateParameters(paramVector, gradientVector);
 
         // Distribute updated parameters back to weight arrays
@@ -850,6 +859,10 @@ public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         {
             _convBlocks = CreateConvBlocks(_architectureType, _numMelBands);
         }
+
+        // Rehydrate optimizer for native training mode
+        if (!IsOnnxMode && _optimizer is null)
+            _optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
     }
 
     private void WriteArray(BinaryWriter writer, T[] array)
@@ -1036,7 +1049,9 @@ public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
             _fcBias = new T[_numClasses];
         }
 
-        // Note: IsOnnxMode state is handled by base class during full deserialization
+        // Rehydrate optimizer for training mode
+        if (!isOnnxMode && _optimizer is null)
+            _optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
     }
 
     /// <inheritdoc/>

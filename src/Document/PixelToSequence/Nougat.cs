@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using AiDotNet.Document.Interfaces;
+using AiDotNet.Document.Options;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -13,6 +14,7 @@ using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tokenization;
 using AiDotNet.Tokenization.Interfaces;
 using Microsoft.ML.OnnxRuntime;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Document.PixelToSequence;
 
@@ -46,6 +48,11 @@ namespace AiDotNet.Document.PixelToSequence;
 /// </remarks>
 public class Nougat<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
 {
+    private readonly NougatOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     #region Fields
 
     private bool _useNativeMode;
@@ -114,15 +121,20 @@ public class Nougat<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
         int numHeads = 16,
         int vocabSize = 50000,
         IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        NougatOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyLoss<T>(), 1.0)
     {
+        _options = options ?? new NougatOptions();
+        Options = _options;
+
         if (string.IsNullOrWhiteSpace(onnxModelPath))
             throw new ArgumentNullException(nameof(onnxModelPath));
         if (!File.Exists(onnxModelPath))
             throw new FileNotFoundException($"ONNX model not found: {onnxModelPath}", onnxModelPath);
 
-        _tokenizer = tokenizer ?? throw new ArgumentNullException(nameof(tokenizer));
+        Guard.NotNull(tokenizer);
+        _tokenizer = tokenizer;
         _useNativeMode = false;
         _hiddenDim = hiddenDim;
         _numEncoderLayers = numEncoderLayers;
@@ -179,9 +191,13 @@ public class Nougat<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
         int numHeads = 16,
         int vocabSize = 50000,
         IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        NougatOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyLoss<T>(), 1.0)
     {
+        _options = options ?? new NougatOptions();
+        Options = _options;
+
         _useNativeMode = true;
         _hiddenDim = hiddenDim;
         _numEncoderLayers = numEncoderLayers;

@@ -1,10 +1,35 @@
+using AiDotNet.Models.Options;
+
 namespace AiDotNet.Audio.MusicAnalysis;
 
 /// <summary>
 /// Configuration options for chord recognition.
 /// </summary>
-public class ChordRecognizerOptions
+/// <remarks>
+/// <para><b>For Beginners:</b> These options configure the ChordRecognizer model. Default values follow the original paper settings.</para>
+/// </remarks>
+public class ChordRecognizerOptions : ModelOptions
 {
+    /// <summary>Initializes a new instance with default values.</summary>
+    public ChordRecognizerOptions() { }
+
+    /// <summary>Initializes a new instance by copying from another instance.</summary>
+    /// <param name="other">The options instance to copy from.</param>
+    /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
+    public ChordRecognizerOptions(ChordRecognizerOptions other)
+    {
+        if (other == null)
+            throw new ArgumentNullException(nameof(other));
+
+        Seed = other.Seed;
+        SampleRate = other.SampleRate;
+        FftSize = other.FftSize;
+        HopLength = other.HopLength;
+        MinChromaEnergy = other.MinChromaEnergy;
+        MinConfidence = other.MinConfidence;
+        MinSegmentDuration = other.MinSegmentDuration;
+    }
+
     /// <summary>
     /// Gets or sets the sample rate.
     /// </summary>

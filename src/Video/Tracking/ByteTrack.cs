@@ -3,6 +3,7 @@ using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Video.Options;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
 
@@ -45,6 +46,11 @@ namespace AiDotNet.Video.Tracking;
 /// </remarks>
 public class ByteTrack<T> : NeuralNetworkBase<T>
 {
+    private readonly ByteTrackOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     #region Fields
 
     private readonly bool _useNativeMode;
@@ -85,9 +91,12 @@ public class ByteTrack<T> : NeuralNetworkBase<T>
         int numClasses = 1,
         double highThreshold = 0.6,
         double lowThreshold = 0.1,
-        int maxAge = 30)
+        int maxAge = 30,
+        ByteTrackOptions? options = null)
         : base(architecture, lossFunction ?? new FocalLoss<T>())
     {
+        _options = options ?? new ByteTrackOptions();
+        Options = _options;
         _useNativeMode = true;
         _numFeatures = numFeatures;
         _numClasses = numClasses;
@@ -106,9 +115,12 @@ public class ByteTrack<T> : NeuralNetworkBase<T>
     public ByteTrack(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
-        int numClasses = 1)
+        int numClasses = 1,
+        ByteTrackOptions? options = null)
         : base(architecture, new FocalLoss<T>())
     {
+        _options = options ?? new ByteTrackOptions();
+        Options = _options;
         if (string.IsNullOrWhiteSpace(onnxModelPath))
             throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
         if (!File.Exists(onnxModelPath))

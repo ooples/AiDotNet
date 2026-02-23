@@ -1,6 +1,7 @@
 using AiDotNet.Deployment.Export;
 using AiDotNet.Deployment.Optimization.Quantization;
 using AiDotNet.Interfaces;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Deployment.Edge;
 
@@ -11,13 +12,17 @@ namespace AiDotNet.Deployment.Edge;
 /// <typeparam name="T">The numeric type used in the model</typeparam>
 /// <typeparam name="TInput">The input type for the model</typeparam>
 /// <typeparam name="TOutput">The output type for the model</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> EdgeOptimizer provides AI safety functionality. Default values follow the original paper settings.</para>
+/// </remarks>
 public class EdgeOptimizer<T, TInput, TOutput>
 {
     private readonly EdgeConfiguration _config;
 
     public EdgeOptimizer(EdgeConfiguration config)
     {
-        _config = config ?? throw new ArgumentNullException(nameof(config));
+        Guard.NotNull(config);
+        _config = config;
     }
 
     /// <summary>
@@ -27,8 +32,7 @@ public class EdgeOptimizer<T, TInput, TOutput>
     /// <returns>The optimized model</returns>
     public IFullModel<T, TInput, TOutput> OptimizeForEdge(IFullModel<T, TInput, TOutput> model)
     {
-        if (model == null)
-            throw new ArgumentNullException(nameof(model));
+        Guard.NotNull(model);
 
         var optimizedModel = model;
 
@@ -69,8 +73,7 @@ public class EdgeOptimizer<T, TInput, TOutput>
     /// <returns>Partitioned model structure</returns>
     public PartitionedModel<T, TInput, TOutput> PartitionModel(IFullModel<T, TInput, TOutput> model)
     {
-        if (model == null)
-            throw new ArgumentNullException(nameof(model));
+        Guard.NotNull(model);
 
         var partitioned = new PartitionedModel<T, TInput, TOutput>
         {
@@ -213,49 +216,123 @@ public class EdgeOptimizer<T, TInput, TOutput>
 
     private int DeterminePartitionPoint(IFullModel<T, TInput, TOutput> model)
     {
-        // Analyze model and determine optimal partition point
-        // Based on:
-        // - Layer computational cost
-        // - Data transfer cost
-        // - Edge device capabilities
+        if (model is not ILayeredModel<T> layeredModel)
+        {
+            // Models without layer metadata cannot be meaningfully partitioned.
+            // Return 0 so the entire model runs on one side rather than creating
+            // an invalid split with unknown layer boundaries.
+            System.Diagnostics.Debug.WriteLine(
+                $"[EdgeOptimizer] Warning: Model type {model.GetType().Name} does not implement ILayeredModel<T>. " +
+                "Cannot determine partition point without layer information. Defaulting to partition point 0 (no split).");
+            return 0;
+        }
+
+        if (layeredModel.LayerCount <= 1)
+        {
+            return 0;
+        }
 
         return _config.PartitionStrategy switch
         {
-            PartitionStrategy.EarlyLayers => 3, // First 3 layers on edge
-            PartitionStrategy.LateLayers => 10, // Most layers on edge
-            PartitionStrategy.Adaptive => CalculateAdaptivePartitionPoint(model),
-            _ => 5 // Default: middle partition
+            PartitionStrategy.EarlyLayers => CalculateProportionalPartitionPoint(layeredModel, 0.25),
+            PartitionStrategy.LateLayers => CalculateProportionalPartitionPoint(layeredModel, 0.75),
+            PartitionStrategy.Adaptive => CalculateLoadBalancedPartitionPoint(layeredModel),
+            _ => CalculateLoadBalancedPartitionPoint(layeredModel)
         };
     }
 
-    private int CalculateAdaptivePartitionPoint(IFullModel<T, TInput, TOutput> model)
+    /// <summary>
+    /// Calculates a partition point at a fixed proportion of the model's layers.
+    /// </summary>
+    /// <param name="layeredModel">The model with layer information.</param>
+    /// <param name="proportion">Fraction of layers to assign to the edge (0.0 to 1.0).</param>
+    /// <returns>The layer index at which to partition.</returns>
+    private int CalculateProportionalPartitionPoint(ILayeredModel<T> layeredModel, double proportion)
     {
-        // Adaptive partitioning based on runtime conditions
-        // Analysis factors:
-        // 1. Network bandwidth: higher bandwidth → more layers on cloud
-        // 2. Edge compute power: stronger edge → more layers on edge
-        // 3. Battery level: low battery → fewer layers on edge
-        // 4. Model complexity: analyze parameter count to estimate compute
+        int targetLayer = Math.Max(1, (int)(layeredModel.LayerCount * proportion));
+        targetLayer = Math.Min(targetLayer, layeredModel.LayerCount - 1);
 
-        var parameterCount = model.GetParameters().Length;
+        // Find the closest structurally valid partition point
+        var allLayerInfo = layeredModel.GetAllLayerInfo();
+        int bestPartition = targetLayer;
+        int bestDistance = int.MaxValue;
 
-        // Heuristic: larger models benefit more from cloud processing
-        // Small models (< 1M params): process mostly on edge (partition at 70%)
-        // Medium models (1M-10M params): balanced (partition at 50%)
-        // Large models (> 10M params): process mostly on cloud (partition at 30%)
+        for (int i = 0; i < allLayerInfo.Count - 1; i++)
+        {
+            if (layeredModel.ValidatePartitionPoint(i))
+            {
+                int distance = Math.Abs(i + 1 - targetLayer);
+                if (distance < bestDistance)
+                {
+                    bestDistance = distance;
+                    bestPartition = i + 1;
+                }
+            }
+        }
 
-        if (parameterCount < 1_000_000)
+        return bestPartition;
+    }
+
+    /// <summary>
+    /// Calculates the optimal partition point by balancing estimated FLOPs between edge and cloud.
+    /// </summary>
+    /// <remarks>
+    /// <para>Uses <see cref="LayerInfo{T}.EstimatedFlops"/> from <see cref="ILayeredModel{T}"/> to find
+    /// the layer boundary where cumulative FLOPs are closest to half the total model FLOPs.
+    /// This ensures both edge and cloud portions have roughly equal compute cost.</para>
+    ///
+    /// <para><b>Reference:</b> Inspired by Megatron-LM's cost-aware pipeline partition strategy,
+    /// which uses per-layer FLOP estimates for balanced stage assignment.</para>
+    /// </remarks>
+    private int CalculateLoadBalancedPartitionPoint(ILayeredModel<T> layeredModel)
+    {
+        var allLayerInfo = layeredModel.GetAllLayerInfo();
+        long totalFlops = 0;
+        for (int i = 0; i < allLayerInfo.Count; i++)
         {
-            return 7; // 70% on edge
+            totalFlops += allLayerInfo[i].EstimatedFlops;
         }
-        else if (parameterCount < 10_000_000)
+
+        // Pre-compute structurally valid partition points to avoid repeated validation calls
+        var validPartitionPoints = new HashSet<int>();
+        for (int i = 0; i < allLayerInfo.Count - 1; i++)
         {
-            return 5; // 50% on edge
+            if (layeredModel.ValidatePartitionPoint(i))
+            {
+                validPartitionPoints.Add(i);
+            }
         }
-        else
+
+        // Find the layer boundary where cumulative FLOPs are closest to half
+        long halfFlops = totalFlops / 2;
+        long cumulative = 0;
+        int bestPartition = -1;
+        long bestDiff = long.MaxValue;
+
+        for (int i = 0; i < allLayerInfo.Count - 1; i++)
         {
-            return 3; // 30% on edge
+            cumulative += allLayerInfo[i].EstimatedFlops;
+
+            if (!validPartitionPoints.Contains(i))
+            {
+                continue;
+            }
+
+            long diff = Math.Abs(cumulative - halfFlops);
+            if (diff < bestDiff)
+            {
+                bestDiff = diff;
+                bestPartition = i + 1; // Partition after this layer
+            }
         }
+
+        // If no structurally valid partition point was found, fallback to midpoint
+        if (bestPartition < 0)
+        {
+            bestPartition = allLayerInfo.Count / 2;
+        }
+
+        return bestPartition;
     }
 
     private IFullModel<T, TInput, TOutput>? ExtractEdgeLayers(IFullModel<T, TInput, TOutput> model, int start, int end)

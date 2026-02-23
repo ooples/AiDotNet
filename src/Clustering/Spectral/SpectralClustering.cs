@@ -37,6 +37,9 @@ namespace AiDotNet.Clustering.Spectral;
 public class SpectralClustering<T> : ClusteringBase<T>
 {
     private readonly SpectralOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
     private double[,]? _embedding;
     private double[,]? _affinityMatrix;
 
@@ -445,7 +448,7 @@ public class SpectralClustering<T> : ClusteringBase<T>
             {
                 NumClusters = k,
                 MaxIterations = Options.MaxIterations,
-                RandomState = Options.RandomState
+                Seed = Options.Seed
             });
             kmeans.Train(embeddingMatrix);
             return kmeans.Labels!;

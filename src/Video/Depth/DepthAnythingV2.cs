@@ -3,6 +3,7 @@ using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Video.Options;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
 
@@ -39,6 +40,11 @@ namespace AiDotNet.Video.Depth;
 /// </remarks>
 public class DepthAnythingV2<T> : NeuralNetworkBase<T>
 {
+    private readonly DepthAnythingV2Options _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     #region Enums
 
     /// <summary>
@@ -125,9 +131,13 @@ public class DepthAnythingV2<T> : NeuralNetworkBase<T>
         NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
-        ModelSize modelSize = ModelSize.Base)
+        ModelSize modelSize = ModelSize.Base,
+        DepthAnythingV2Options? options = null)
         : base(architecture, lossFunction ?? new ScaleInvariantDepthLoss<T>())
     {
+        _options = options ?? new DepthAnythingV2Options();
+        Options = _options;
+
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 480;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 640;
         _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
@@ -171,9 +181,13 @@ public class DepthAnythingV2<T> : NeuralNetworkBase<T>
     public DepthAnythingV2(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
-        ModelSize modelSize = ModelSize.Base)
+        ModelSize modelSize = ModelSize.Base,
+        DepthAnythingV2Options? options = null)
         : base(architecture, new ScaleInvariantDepthLoss<T>())
     {
+        _options = options ?? new DepthAnythingV2Options();
+        Options = _options;
+
         if (string.IsNullOrWhiteSpace(onnxModelPath))
             throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
         if (!File.Exists(onnxModelPath))

@@ -54,6 +54,9 @@ public class SpiralNet<T> : NeuralNetworkBase<T>
     /// </summary>
     private SpiralNetOptions _options;
 
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// Cached spiral indices for each resolution level.
     /// </summary>

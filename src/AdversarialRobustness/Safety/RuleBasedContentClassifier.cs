@@ -3,6 +3,7 @@ using System.Text.RegularExpressions;
 using AiDotNet.Serialization;
 using AiDotNet.Tensors.LinearAlgebra;
 using Newtonsoft.Json;
+using AiDotNet.Validation;
 
 namespace AiDotNet.AdversarialRobustness.Safety;
 
@@ -58,7 +59,8 @@ public class RuleBasedContentClassifier<T> : ContentClassifierBase<T>
         double threshold = 0.5)
         : base(threshold)
     {
-        _categoryPatterns = categoryPatterns ?? throw new ArgumentNullException(nameof(categoryPatterns));
+        Guard.NotNull(categoryPatterns);
+        _categoryPatterns = categoryPatterns;
         SupportedCategories = _categoryPatterns.Keys.ToArray();
         _isReady = true;
     }

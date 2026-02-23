@@ -48,6 +48,11 @@ namespace AiDotNet.Audio.Enhancement;
 /// </remarks>
 public class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 {
+    private readonly NeuralNoiseReducerOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     #region Execution Mode
 
     /// <summary>
@@ -192,9 +197,12 @@ public class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
         int fftSize = 512,
         int hopSize = 256,
         int numChannels = 1,
-        double enhancementStrength = 0.8)
+        double enhancementStrength = 0.8,
+        NeuralNoiseReducerOptions? options = null)
         : base(architecture, new MeanAbsoluteErrorLoss<T>())
     {
+        _options = options ?? new NeuralNoiseReducerOptions();
+        Options = _options;
         if (string.IsNullOrWhiteSpace(modelPath))
             throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
         if (enhancementStrength < 0.0 || enhancementStrength > 1.0)
@@ -255,9 +263,12 @@ public class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
         int baseFilters = 32,
         int bottleneckDim = 256,
         double enhancementStrength = 0.8,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        NeuralNoiseReducerOptions? options = null)
         : base(architecture, lossFunction ?? new MeanAbsoluteErrorLoss<T>())
     {
+        _options = options ?? new NeuralNoiseReducerOptions();
+        Options = _options;
         // Validate parameters
         if (enhancementStrength < 0.0 || enhancementStrength > 1.0)
             throw new ArgumentOutOfRangeException(nameof(enhancementStrength), "Enhancement strength must be between 0.0 and 1.0.");

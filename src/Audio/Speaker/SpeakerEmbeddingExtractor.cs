@@ -73,17 +73,20 @@ public class SpeakerEmbeddingExtractor<T> : SpeakerRecognitionBase<T>, ISpeakerE
     /// <summary>
     /// Optimizer for training.
     /// </summary>
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
 
     /// <summary>
     /// Loss function for training.
     /// </summary>
-    private readonly ILossFunction<T> _lossFunction;
+    private ILossFunction<T> _lossFunction;
 
     /// <summary>
     /// Speaker embedding options.
     /// </summary>
     private readonly SpeakerEmbeddingOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
 
     /// <summary>
     /// Whether the model has been disposed.
@@ -222,9 +225,8 @@ public class SpeakerEmbeddingExtractor<T> : SpeakerRecognitionBase<T>, ISpeakerE
         _onnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
         OnnxModel = _onnxModel;
 
-        // Initialize optimizer and loss function (not used in ONNX mode, but required for readonly fields)
+        // Default loss function (MSE is standard for embedding extraction)
         _lossFunction = new MeanSquaredErrorLoss<T>();
-        _optimizer = new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         // Initialize layers (empty for ONNX mode)
         InitializeLayers();
@@ -508,7 +510,7 @@ public class SpeakerEmbeddingExtractor<T> : SpeakerRecognitionBase<T>, ISpeakerE
         Backpropagate(Tensor<T>.FromVector(lossGradient));
 
         // 6. Update parameters using optimizer
-        _optimizer.UpdateParameters(Layers);
+        _optimizer?.UpdateParameters(Layers);
 
         // 7. Exit training mode
         SetTrainingMode(false);

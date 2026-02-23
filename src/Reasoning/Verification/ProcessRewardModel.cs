@@ -6,6 +6,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.Reasoning.Models;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Reasoning.Verification;
 
@@ -53,7 +54,8 @@ internal class ProcessRewardModel<T> : IRewardModel<T>
     /// <param name="chatModel">The chat model used for reward scoring.</param>
     public ProcessRewardModel(IChatModel<T> chatModel)
     {
-        _chatModel = chatModel ?? throw new ArgumentNullException(nameof(chatModel));
+        Guard.NotNull(chatModel);
+        _chatModel = chatModel;
         _numOps = MathHelper.GetNumericOperations<T>();
     }
 

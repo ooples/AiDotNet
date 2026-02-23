@@ -14,6 +14,7 @@ namespace AiDotNet.PhysicsInformed.Interfaces;
 ///
 /// This interface tracks metrics for each fidelity level during training.
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("MultiFidelityTrainingHistory")]
 public interface IMultiFidelityTrainingHistory<T>
 {
     /// <summary>

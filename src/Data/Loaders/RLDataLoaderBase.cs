@@ -6,6 +6,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.ReinforcementLearning.ReplayBuffers;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Data.Loaders;
 
@@ -74,8 +75,10 @@ public abstract class RLDataLoaderBase<T> : DataLoaderBase<T>, IRLDataLoader<T>
         bool verbose = true,
         int? seed = null)
     {
-        _environment = environment ?? throw new ArgumentNullException(nameof(environment));
-        _replayBuffer = replayBuffer ?? throw new ArgumentNullException(nameof(replayBuffer));
+        Guard.NotNull(environment);
+        _environment = environment;
+        Guard.NotNull(replayBuffer);
+        _replayBuffer = replayBuffer;
         _episodes = episodes;
         _maxStepsPerEpisode = maxStepsPerEpisode;
         _minExperiencesBeforeTraining = minExperiencesBeforeTraining;

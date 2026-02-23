@@ -23,7 +23,7 @@ public class ClusteringSklearnComparisonIntegrationTests
             NumClusters = 2,
             InitMethod = KMeansInitMethod.KMeansPlusPlus,
             NumInitializations = 10,
-            RandomState = 42,
+            Seed = 42,
             MaxIterations = 300
         };
 

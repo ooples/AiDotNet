@@ -1,4 +1,5 @@
 using AiDotNet.LossFunctions;
+using AiDotNet.Models.Options;
 using AiDotNet.ReinforcementLearning.Policies.Exploration;
 
 namespace AiDotNet.ReinforcementLearning.Policies
@@ -45,7 +46,7 @@ namespace AiDotNet.ReinforcementLearning.Policies
     /// </para>
     /// </remarks>
     /// <typeparam name="T">The numeric type used for calculations (float, double, etc.).</typeparam>
-    public class ContinuousPolicyOptions<T>
+    public class ContinuousPolicyOptions<T> : ModelOptions
     {
         /// <summary>
         /// Gets or sets the size of the observation/state space.
@@ -102,6 +103,6 @@ namespace AiDotNet.ReinforcementLearning.Policies
         public ILossFunction<T> LossFunction { get; set; } = new MeanSquaredErrorLoss<T>();
         public IExplorationStrategy<T> ExplorationStrategy { get; set; } = new GaussianNoiseExploration<T>();
         public bool UseTanhSquashing { get; set; } = false;
-        public int? Seed { get; set; } = null;
+        public new int? Seed { get; set; } = null;
     }
 }

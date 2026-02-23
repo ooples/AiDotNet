@@ -37,7 +37,7 @@ for (int k = 2; k <= 8; k++)
         NumClusters = k,
         MaxIterations = 300,
         Tolerance = 1e-4,
-        RandomState = 42,
+        Seed = 42,
         NumInitializations = 10,
         InitMethod = KMeansInitMethod.KMeansPlusPlus
     });
@@ -65,7 +65,7 @@ var finalKMeans = new KMeans<double>(new KMeansOptions<double>
     NumClusters = optimalK,
     MaxIterations = 300,
     Tolerance = 1e-4,
-    RandomState = 42,
+    Seed = 42,
     NumInitializations = 10,
     InitMethod = KMeansInitMethod.KMeansPlusPlus
 });

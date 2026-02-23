@@ -1,4 +1,5 @@
 using System.Text;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Logging;
 
@@ -51,7 +52,8 @@ public class TensorBoardWriter : IDisposable
     /// <param name="filename">Optional filename prefix. Uses default format if not specified.</param>
     public TensorBoardWriter(string logDir, string? filename = null)
     {
-        _logDir = logDir ?? throw new ArgumentNullException(nameof(logDir));
+        Guard.NotNull(logDir);
+        _logDir = logDir;
 
         // Create directory if it doesn't exist
         Directory.CreateDirectory(_logDir);

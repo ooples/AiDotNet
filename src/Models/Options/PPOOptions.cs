@@ -26,7 +26,7 @@ namespace AiDotNet.Models.Options;
 /// Famous for: OpenAI's ChatGPT uses PPO for RLHF (Reinforcement Learning from Human Feedback)
 /// </para>
 /// </remarks>
-public class PPOOptions<T>
+public class PPOOptions<T> : ModelOptions
 {
     /// <summary>
     /// Size of the state observation space.
@@ -150,11 +150,6 @@ public class PPOOptions<T>
     /// Hidden layer sizes for value network.
     /// </summary>
     public List<int> ValueHiddenLayers { get; set; } = new List<int> { 64, 64 };
-
-    /// <summary>
-    /// Random seed for reproducibility (optional).
-    /// </summary>
-    public int? Seed { get; set; }
 
     public PPOOptions()
     {

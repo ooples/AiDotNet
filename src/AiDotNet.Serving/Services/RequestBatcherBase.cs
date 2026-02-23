@@ -3,6 +3,7 @@ using AiDotNet.Serving.Configuration;
 using AiDotNet.Serving.Scheduling;
 using AiDotNet.Tensors.LinearAlgebra;
 using Microsoft.Extensions.Logging;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Serving.Services;
 
@@ -85,9 +86,12 @@ public abstract class RequestBatcherBase : IRequestBatcher, IDisposable
         ILogger logger,
         ServingOptions options)
     {
-        ModelRepository = modelRepository ?? throw new ArgumentNullException(nameof(modelRepository));
-        Logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        Options = options ?? throw new ArgumentNullException(nameof(options));
+        Guard.NotNull(modelRepository);
+        ModelRepository = modelRepository;
+        Guard.NotNull(logger);
+        Logger = logger;
+        Guard.NotNull(options);
+        Options = options;
     }
 
     /// <summary>

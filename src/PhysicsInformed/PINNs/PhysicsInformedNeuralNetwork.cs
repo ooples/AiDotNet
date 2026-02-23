@@ -10,7 +10,9 @@ using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Optimizers;
 using AiDotNet.PhysicsInformed.Interfaces;
+using AiDotNet.PhysicsInformed.Options;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Validation;
 
 namespace AiDotNet.PhysicsInformed.PINNs
 {
@@ -67,6 +69,11 @@ namespace AiDotNet.PhysicsInformed.PINNs
     /// </remarks>
     public class PhysicsInformedNeuralNetwork<T> : NeuralNetworkBase<T>
     {
+        private readonly PhysicsInformedNeuralNetworkOptions _options;
+
+        /// <inheritdoc/>
+        public override ModelOptions GetOptions() => _options;
+
         /// <summary>
         /// The PDE specification that defines the physics constraints.
         /// Protected to allow derived classes (e.g., MultiFidelityPINN) to evaluate residuals on custom solutions.
@@ -128,11 +135,17 @@ namespace AiDotNet.PhysicsInformed.PINNs
             double? dataWeight = null,
             double? pdeWeight = null,
             double? boundaryWeight = null,
-            double? initialWeight = null)
+            double? initialWeight = null,
+            PhysicsInformedNeuralNetworkOptions? options = null)
             : base(architecture, NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), 1.0)
         {
-            _pdeSpecification = pdeSpecification ?? throw new ArgumentNullException(nameof(pdeSpecification));
-            _boundaryConditions = boundaryConditions ?? throw new ArgumentNullException(nameof(boundaryConditions));
+            _options = options ?? new PhysicsInformedNeuralNetworkOptions();
+            Options = _options;
+
+            Guard.NotNull(pdeSpecification);
+            _pdeSpecification = pdeSpecification;
+            Guard.NotNull(boundaryConditions);
+            _boundaryConditions = boundaryConditions;
             _initialCondition = initialCondition;
             _numCollocationPoints = numCollocationPoints;
 

@@ -44,6 +44,9 @@ public class TimeSeriesRegression<T> : RegressionBase<T>
     /// </remarks>
     private readonly TimeSeriesRegressionOptions<T> _options;
 
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// The underlying time series model that handles the core prediction logic.
     /// </summary>

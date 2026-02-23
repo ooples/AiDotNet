@@ -1,3 +1,5 @@
+using AiDotNet.NeuralNetworks.Options;
+
 namespace AiDotNet.NeuralNetworks;
 
 /// <summary>
@@ -32,6 +34,11 @@ namespace AiDotNet.NeuralNetworks;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 public class HTMNetwork<T> : NeuralNetworkBase<T>
 {
+    private readonly HTMNetworkOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// Gets the size of the input vector.
     /// </summary>
@@ -170,9 +177,12 @@ public class HTMNetwork<T> : NeuralNetworkBase<T>
         int columnCount = 2048,
         int cellsPerColumn = 32,
         double sparsityThreshold = 0.02,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        HTMNetworkOptions? options = null)
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
+        _options = options ?? new HTMNetworkOptions();
+        Options = _options;
         var inputShape = Architecture.GetInputShape();
         if (inputShape == null || inputShape.Length == 0)
         {

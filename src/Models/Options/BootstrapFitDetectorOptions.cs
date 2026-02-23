@@ -15,7 +15,7 @@ namespace AiDotNet.Models.Options;
 /// model on these different datasets and seeing how consistent the results are, we can tell if your model is learning 
 /// real patterns or just memorizing the training data.</para>
 /// </remarks>
-public class BootstrapFitDetectorOptions
+public class BootstrapFitDetectorOptions : ModelOptions
 {
     /// <summary>
     /// Gets or sets the number of bootstrap samples to generate for evaluation.

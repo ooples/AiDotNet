@@ -779,7 +779,7 @@ var options = new KMeansOptions<double>
     MaxIterations = 100,
     Tolerance = 1e-4,
     NumInitializations = 10,
-    RandomState = 42  // For reproducibility
+    Seed = 42  // For reproducibility
 };
 var kmeans = new KMeans<double>(options);
 
@@ -835,7 +835,7 @@ var dataLoader = DataLoaders.FromMatrix(data);
 
 for (int k = 2; k <= 4; k++)
 {
-    var options = new KMeansOptions<double> { NumClusters = k, RandomState = 42 };
+    var options = new KMeansOptions<double> { NumClusters = k, Seed = 42 };
     var kmeans = new KMeans<double>(options);
 
     // Use AiModelBuilder pattern
@@ -2032,7 +2032,9 @@ foreach (var idx in topAnomalies)
                     Tags = ["anomaly", "outlier", "zscore", "statistics"],
                     Code = @"// Z-Score Outlier Removal with AiModelBuilder
 using AiDotNet;
-using AiDotNet.OutlierRemoval;
+using AiDotNet.AnomalyDetection;
+using AiDotNet.AnomalyDetection.Statistical;
+using AiDotNet.Preprocessing.DataPreparation;
 using AiDotNet.Regression;
 using AiDotNet.Tensors.LinearAlgebra;
 
@@ -2056,13 +2058,14 @@ features[47, 0] = -50; features[47, 1] = -50; labels[47] = -100;
 features[48, 0] = 6; features[48, 1] = 11; labels[48] = 17.5;  // Normal
 features[49, 0] = 500; features[49, 1] = 500; labels[49] = 1000;
 
-// Build model with AiModelBuilder + outlier removal
+// Build model with AiModelBuilder + outlier removal using ZScoreDetector
 var loader = DataLoaders.FromArrays(features, labels);
-var outlierRemover = new ZScoreOutlierRemoval<double, Matrix<double>, Vector<double>>(threshold: 3.0);
+var detector = new ZScoreDetector<double>(zThreshold: 3.0);
+var outlierRemovalOp = new OutlierRemovalOperation<double>(detector);
 
 var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
     .ConfigureDataLoader(loader)
-    .ConfigureOutlierRemoval(outlierRemover)
+    .ConfigureDataPreparation(prep => prep.Add(outlierRemovalOp))
     .ConfigureModel(new SimpleRegression<double>())
     .BuildAsync();
 
@@ -2090,7 +2093,9 @@ for (int i = 0; i < predictions.Length; i++)
                     Tags = ["anomaly", "outlier", "iqr", "statistics"],
                     Code = @"// IQR Outlier Removal with AiModelBuilder
 using AiDotNet;
-using AiDotNet.OutlierRemoval;
+using AiDotNet.AnomalyDetection;
+using AiDotNet.AnomalyDetection.Statistical;
+using AiDotNet.Preprocessing.DataPreparation;
 using AiDotNet.Regression;
 using AiDotNet.Tensors.LinearAlgebra;
 
@@ -2115,13 +2120,14 @@ features[57, 0] = 60; features[57, 1] = 110; features[57, 2] = 150; labels[57] =
 features[58, 0] = -100; features[58, 1] = -200; features[58, 2] = -50; labels[58] = -500;
 features[59, 0] = 60; features[59, 1] = 115; features[59, 2] = 28; labels[59] = 173.5; // Normal
 
-// Build model with AiModelBuilder + IQR outlier removal
+// Build model with AiModelBuilder + IQR outlier removal using IQRDetector
 var loader = DataLoaders.FromArrays(features, labels);
-var outlierRemover = new IQROutlierRemoval<double, Matrix<double>, Vector<double>>(iqrMultiplier: 1.5);
+var detector = new IQRDetector<double>(multiplier: 1.5);
+var outlierRemovalOp = new OutlierRemovalOperation<double>(detector);
 
 var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
     .ConfigureDataLoader(loader)
-    .ConfigureOutlierRemoval(outlierRemover)
+    .ConfigureDataPreparation(prep => prep.Add(outlierRemovalOp))
     .ConfigureModel(new SimpleRegression<double>())
     .BuildAsync();
 
@@ -4531,7 +4537,7 @@ using AiDotNet.Kernels;
 using AiDotNet.Tensors.LinearAlgebra;
 
 var rbfKernel = new GaussianKernel<double>(sigma: 1.0);
-var matern = new MaternKernel<double>(nu: 2.5, length: 1.0);
+var matern = new MaternKernel<double>(nu: 2.5, lengthScale: 1.0);
 var laplacian = new LaplacianKernel<double>(sigma: 1.0);
 
 var origin = new Vector<double>(new double[] { 0.0 });

@@ -15,7 +15,7 @@ namespace AiDotNet.Models.Options;
 /// are to the actual values, while others might focus on whether your model captures the overall patterns in
 /// the data. These options let you choose which scoring system to use and how to interpret the scores.</para>
 /// </remarks>
-public class FitnessCalculatorOptions
+public class FitnessCalculatorOptions : ModelOptions
 {
     /// <summary>
     /// Gets or sets the type of metric used to calculate the fitness score.

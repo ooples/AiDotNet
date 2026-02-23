@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using AiDotNet.Interfaces;
 using AiDotNet.Serialization;
 using Newtonsoft.Json;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Models;
 
@@ -104,7 +105,8 @@ public class ExperimentRun<T> : IExperimentRun<T>
     public ExperimentRun(string experimentId, string? runName = null, Dictionary<string, string>? tags = null)
     {
         RunId = Guid.NewGuid().ToString();
-        ExperimentId = experimentId ?? throw new ArgumentNullException(nameof(experimentId));
+        Guard.NotNull(experimentId);
+        ExperimentId = experimentId;
         RunName = runName;
         StartTime = DateTime.UtcNow;
         _status = "Running";

@@ -3,6 +3,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Optimizers;
 
 namespace AiDotNet.NeuralNetworks;
@@ -33,6 +34,10 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 public class HyperbolicNeuralNetwork<T> : NeuralNetworkBase<T>
 {
+    private readonly HyperbolicNeuralNetworkOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
 
     /// <summary>
     /// The optimization algorithm used to update the network's parameters during training.
@@ -64,8 +69,11 @@ public class HyperbolicNeuralNetwork<T> : NeuralNetworkBase<T>
         double curvature = -1.0,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
-        double maxGradNorm = 1.0) : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), maxGradNorm)
+        double maxGradNorm = 1.0,
+        HyperbolicNeuralNetworkOptions? options = null) : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), maxGradNorm)
     {
+        _options = options ?? new HyperbolicNeuralNetworkOptions();
+        Options = _options;
         if (curvature >= 0)
         {
             throw new ArgumentException("Curvature must be negative for hyperbolic space.", nameof(curvature));

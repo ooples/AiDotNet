@@ -1,5 +1,6 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Validation;
 
 namespace AiDotNet.MetaLearning.Data;
 
@@ -59,7 +60,8 @@ public class TaskBatch<T, TInput, TOutput>
         T[,]? taskSimilarities = null,
         CurriculumStage? curriculumStage = null)
     {
-        Tasks = tasks ?? throw new ArgumentNullException(nameof(tasks));
+        Guard.NotNull(tasks);
+        Tasks = tasks;
         if (tasks.Length == 0)
         {
             throw new ArgumentException("Task batch cannot be empty.", nameof(tasks));

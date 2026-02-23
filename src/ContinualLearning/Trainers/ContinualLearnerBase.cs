@@ -7,6 +7,7 @@ using AiDotNet.ContinualLearning.Results;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using Newtonsoft.Json.Linq;
+using AiDotNet.Validation;
 
 namespace AiDotNet.ContinualLearning.Trainers;
 
@@ -188,10 +189,14 @@ public abstract class ContinualLearnerBase<T, TInput, TOutput> : IContinualLearn
         IContinualLearnerConfig<T> config,
         IContinualLearningStrategy<T, TInput, TOutput> strategy)
     {
-        Model = model ?? throw new ArgumentNullException(nameof(model));
-        LossFunction = lossFunction ?? throw new ArgumentNullException(nameof(lossFunction));
-        Configuration = config ?? throw new ArgumentNullException(nameof(config));
-        Strategy = strategy ?? throw new ArgumentNullException(nameof(strategy));
+        Guard.NotNull(model);
+        Model = model;
+        Guard.NotNull(lossFunction);
+        LossFunction = lossFunction;
+        Guard.NotNull(config);
+        Configuration = config;
+        Guard.NotNull(strategy);
+        Strategy = strategy;
 
         if (!config.IsValid())
             throw new ArgumentException("Configuration validation failed", nameof(config));

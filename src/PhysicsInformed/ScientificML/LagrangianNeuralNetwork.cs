@@ -9,6 +9,7 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
 using AiDotNet.PhysicsInformed.Interfaces;
+using AiDotNet.PhysicsInformed.Options;
 
 namespace AiDotNet.PhysicsInformed.ScientificML
 {
@@ -53,16 +54,25 @@ namespace AiDotNet.PhysicsInformed.ScientificML
     /// </remarks>
     public class LagrangianNeuralNetwork<T> : NeuralNetworkBase<T>
     {
+        private readonly LagrangianNeuralNetworkOptions _options;
+
+        /// <inheritdoc/>
+        public override ModelOptions GetOptions() => _options;
+
         private readonly int _configurationDim; // Dimension of configuration space (q)
         private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
 
         public LagrangianNeuralNetwork(
             NeuralNetworkArchitecture<T> architecture,
             int configurationDim,
-            IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
+            IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+            LagrangianNeuralNetworkOptions? options = null)
             : base(architecture ?? throw new ArgumentNullException(nameof(architecture)),
                 NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), 1.0)
         {
+            _options = options ?? new LagrangianNeuralNetworkOptions();
+            Options = _options;
+
             if (configurationDim <= 0)
             {
                 throw new ArgumentOutOfRangeException(nameof(configurationDim), "Configuration dimension must be positive.");

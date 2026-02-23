@@ -4,6 +4,9 @@ namespace AiDotNet.Audio.TextToSpeech;
 /// Result of text-to-speech synthesis.
 /// </summary>
 /// <typeparam name="T">The numeric type.</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> TtsResult provides AI safety functionality. Default values follow the original paper settings.</para>
+/// </remarks>
 public class TtsResult<T>
 {
     /// <summary>

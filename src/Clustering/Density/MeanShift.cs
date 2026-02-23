@@ -46,6 +46,9 @@ namespace AiDotNet.Clustering.Density;
 public class MeanShift<T> : ClusteringBase<T>
 {
     private readonly MeanShiftOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
     private double _bandwidth;
 
     /// <summary>

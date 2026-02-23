@@ -1,5 +1,7 @@
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
+using AiDotNet.Models.Options;
+using AiDotNet.Validation;
 
 namespace AiDotNet.MetaLearning.Options;
 
@@ -28,7 +30,7 @@ namespace AiDotNet.MetaLearning.Options;
 /// network to measure "how related" two examples are.
 /// </para>
 /// </remarks>
-public class RelationNetworkOptions<T, TInput, TOutput> : IMetaLearnerOptions<T>
+public class RelationNetworkOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions<T>
 {
     #region Required Properties
 
@@ -113,7 +115,7 @@ public class RelationNetworkOptions<T, TInput, TOutput> : IMetaLearnerOptions<T>
     /// <summary>
     /// Gets or sets the random seed for reproducibility.
     /// </summary>
-    public int? RandomSeed { get; set; }
+    public int? RandomSeed { get => Seed; set => Seed = value; }
 
     /// <summary>
     /// Gets or sets the number of tasks to use for evaluation.
@@ -222,7 +224,8 @@ public class RelationNetworkOptions<T, TInput, TOutput> : IMetaLearnerOptions<T>
     /// <exception cref="ArgumentNullException">Thrown when metaModel is null.</exception>
     public RelationNetworkOptions(IFullModel<T, TInput, TOutput> metaModel)
     {
-        MetaModel = metaModel ?? throw new ArgumentNullException(nameof(metaModel));
+        Guard.NotNull(metaModel);
+        MetaModel = metaModel;
     }
 
     #endregion

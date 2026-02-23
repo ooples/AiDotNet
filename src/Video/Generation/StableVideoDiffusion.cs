@@ -5,6 +5,7 @@ using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Video.Options;
 
 namespace AiDotNet.Video.Generation;
 
@@ -44,6 +45,11 @@ namespace AiDotNet.Video.Generation;
 /// </remarks>
 public class StableVideoDiffusion<T> : NeuralNetworkBase<T>
 {
+    private readonly StableVideoDiffusionOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     #region Fields
 
     private int _height;
@@ -141,9 +147,13 @@ public class StableVideoDiffusion<T> : NeuralNetworkBase<T>
         SVDModelVariant variant = SVDModelVariant.SVD,
         int numFrames = 14,
         int numInferenceSteps = 25,
-        double guidanceScale = 7.5)
+        double guidanceScale = 7.5,
+        StableVideoDiffusionOptions? options = null)
         : base(architecture, new MeanSquaredErrorLoss<T>())
     {
+        _options = options ?? new StableVideoDiffusionOptions();
+        Options = _options;
+
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 576;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 1024;
         _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;

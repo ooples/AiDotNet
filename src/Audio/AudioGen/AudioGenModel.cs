@@ -10,6 +10,7 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tokenization.Interfaces;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Audio.AudioGen;
 
@@ -60,6 +61,11 @@ namespace AiDotNet.Audio.AudioGen;
 /// </remarks>
 public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
 {
+    private readonly AudioGenOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     #region Execution Mode
 
     /// <summary>
@@ -113,12 +119,12 @@ public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
     /// <summary>
     /// Optimizer for training.
     /// </summary>
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
 
     /// <summary>
     /// Loss function for training.
     /// </summary>
-    private readonly ILossFunction<T> _lossFunction;
+    private ILossFunction<T> _lossFunction;
 
     /// <summary>
     /// Random number generator for sampling.
@@ -316,9 +322,12 @@ public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         int channels = 1,
         int? seed = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        AudioGenOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyLoss<T>(), 1.0)
     {
+        _options = options ?? new AudioGenOptions();
+        Options = _options;
         // Validate ONNX model paths
         if (string.IsNullOrWhiteSpace(textEncoderPath))
             throw new ArgumentException("Text encoder path cannot be null or empty.", nameof(textEncoderPath));
@@ -394,11 +403,10 @@ public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
             OnnxModel = audioDecoder;
 
             // Tokenizer is required for ONNX mode - must match the text encoder
-            _tokenizer = tokenizer ?? throw new ArgumentNullException(nameof(tokenizer),
-                "Tokenizer is required for ONNX mode. AudioGen uses T5-based text encoders. " +
-                "Use AutoTokenizer.FromPretrained(\"t5-base\") or the tokenizer matching your text encoder.");
+            Guard.NotNull(tokenizer);
+            _tokenizer = tokenizer;
 
-            _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+            _optimizer = optimizer;
             _lossFunction = lossFunction ?? new CrossEntropyLoss<T>();
 
             _random = seed.HasValue
@@ -473,9 +481,12 @@ public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         int? seed = null,
         ITokenizer? tokenizer = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        AudioGenOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyLoss<T>(), 1.0)
     {
+        _options = options ?? new AudioGenOptions();
+        Options = _options;
         // Validate parameters
         if (temperature <= 0)
             throw new ArgumentOutOfRangeException(nameof(temperature), "Temperature must be positive.");
@@ -887,7 +898,7 @@ public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         Backpropagate(Tensor<T>.FromVector(lossGradient));
 
         // Update parameters using optimizer
-        _optimizer.UpdateParameters(Layers);
+        _optimizer?.UpdateParameters(Layers);
 
         SetTrainingMode(false);
     }

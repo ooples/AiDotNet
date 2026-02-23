@@ -91,8 +91,10 @@ public class GraphRetriever<T> : RetrieverBase<T>
         IEmbeddingModel<T> embeddingModel,
         bool enableAdvancedEntityExtraction = true)
     {
-        _documentStore = documentStore ?? throw new ArgumentNullException(nameof(documentStore));
-        _embeddingModel = embeddingModel ?? throw new ArgumentNullException(nameof(embeddingModel));
+        Guard.NotNull(documentStore);
+        _documentStore = documentStore;
+        Guard.NotNull(embeddingModel);
+        _embeddingModel = embeddingModel;
         _enableAdvancedEntityExtraction = enableAdvancedEntityExtraction;
     }
 

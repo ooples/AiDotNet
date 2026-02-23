@@ -45,6 +45,11 @@ namespace AiDotNet.Audio.Enhancement;
 /// </remarks>
 public class DCCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 {
+    private readonly DCCRNOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     #region Model Architecture Parameters
 
     /// <summary>
@@ -144,12 +149,12 @@ public class DCCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     /// <summary>
     /// Loss function for training.
     /// </summary>
-    private readonly ILossFunction<T> _lossFunction;
+    private ILossFunction<T> _lossFunction;
 
     /// <summary>
     /// Optimizer for training.
     /// </summary>
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
 
     /// <summary>
     /// Cached encoder outputs for skip connections.
@@ -220,9 +225,12 @@ public class DCCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         int sampleRate = 16000,
         int fftSize = 512,
         int hopSize = 256,
-        OnnxModelOptions? onnxOptions = null)
+        OnnxModelOptions? onnxOptions = null,
+        DCCRNOptions? options = null)
         : base(architecture, new MeanSquaredErrorLoss<T>())
     {
+        _options = options ?? new DCCRNOptions();
+        Options = _options;
         if (string.IsNullOrWhiteSpace(modelPath))
             throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
         if (!File.Exists(modelPath))
@@ -238,12 +246,10 @@ public class DCCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         _useComplexMask = true;
         _kernelSize = 5;
         _stride = 2;
-        _lossFunction = new MeanSquaredErrorLoss<T>();
-
         OnnxModel = new OnnxModel<T>(modelPath, onnxOptions);
 
-        // Initialize optimizer (not used in ONNX mode but required for readonly field)
-        _optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Default loss function (MSE is standard for speech enhancement)
+        _lossFunction = new MeanSquaredErrorLoss<T>();
     }
 
     /// <summary>
@@ -291,9 +297,12 @@ public class DCCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         int hopSize = 256,
         bool useComplexMask = true,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        DCCRNOptions? options = null)
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>())
     {
+        _options = options ?? new DCCRNOptions();
+        Options = _options;
         // Validate parameters
         if (sampleRate <= 0)
             throw new ArgumentOutOfRangeException(nameof(sampleRate), "Sample rate must be positive.");
@@ -516,7 +525,7 @@ public class DCCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         BackwardNative(gradientTensor);
 
         // Update parameters via optimizer
-        _optimizer.UpdateParameters(Layers);
+        _optimizer?.UpdateParameters(Layers);
 
         SetTrainingMode(false);
     }

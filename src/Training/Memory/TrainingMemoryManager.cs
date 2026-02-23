@@ -149,6 +149,85 @@ public class TrainingMemoryManager<T> : IDisposable
     }
 
     /// <summary>
+    /// Determines which layers should be checkpointed using layer-aware metadata from an <see cref="ILayeredModel{T}"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>This overload uses <see cref="LayerInfo{T}.EstimatedActivationMemory"/> and
+    /// <see cref="LayerInfo{T}.Category"/> to make smarter checkpointing decisions:</para>
+    /// <list type="bullet">
+    /// <item><description>Attention layers are checkpointed by default (high memory, moderate recompute cost)</description></item>
+    /// <item><description>Residual layers are checkpointed when configured</description></item>
+    /// <item><description>Layers with high activation memory are prioritized for checkpointing</description></item>
+    /// <item><description>The interval-based fallback is still applied for remaining layers</description></item>
+    /// </list>
+    /// </remarks>
+    /// <param name="layeredModel">The model with layer-level metadata access.</param>
+    public void ComputeCheckpointIndices(ILayeredModel<T> layeredModel)
+    {
+        if (layeredModel is null)
+        {
+            throw new ArgumentNullException(nameof(layeredModel));
+        }
+
+        _checkpointIndices.Clear();
+
+        if (!Config.UseGradientCheckpointing)
+            return;
+
+        if (Config.CheckpointEveryNLayers <= 0)
+        {
+            throw new ArgumentException(
+                $"CheckpointEveryNLayers must be positive, but was {Config.CheckpointEveryNLayers}.",
+                nameof(Config));
+        }
+
+        if (Config.HighActivationMemoryThresholdBytes < 0)
+        {
+            throw new ArgumentException(
+                $"HighActivationMemoryThresholdBytes must be non-negative, but was {Config.HighActivationMemoryThresholdBytes}.",
+                nameof(Config));
+        }
+
+        var allLayerInfo = layeredModel.GetAllLayerInfo();
+
+        for (int i = 0; i < allLayerInfo.Count; i++)
+        {
+            var info = allLayerInfo[i];
+            bool shouldCheckpoint = false;
+
+            // Interval-based checkpointing
+            if (i % Config.CheckpointEveryNLayers == 0)
+            {
+                shouldCheckpoint = true;
+            }
+
+            // Layer-category-based checkpointing
+            if (Config.CheckpointAttentionLayers &&
+                info.Category == LayerCategory.Attention)
+            {
+                shouldCheckpoint = true;
+            }
+
+            if (Config.CheckpointResidualBlocks &&
+                info.Category == LayerCategory.Residual)
+            {
+                shouldCheckpoint = true;
+            }
+
+            // High activation memory layers benefit most from checkpointing
+            if (info.EstimatedActivationMemory > Config.HighActivationMemoryThresholdBytes)
+            {
+                shouldCheckpoint = true;
+            }
+
+            if (shouldCheckpoint)
+            {
+                _checkpointIndices.Add(i);
+            }
+        }
+    }
+
+    /// <summary>
     /// Determines if a specific layer should be checkpointed.
     /// </summary>
     /// <param name="layerIndex">Index of the layer.</param>
@@ -181,7 +260,8 @@ public class TrainingMemoryManager<T> : IDisposable
     {
         if (!Config.UseGradientCheckpointing || !ShouldCheckpoint(layerIndex))
         {
-            return layer.Forward(input);
+            // Use precision-aware forward pass for mixed-precision support
+            return layer.ForwardWithPrecisionCheck(input);
         }
 
         // Save checkpoint: store input and layer reference
@@ -192,8 +272,8 @@ public class TrainingMemoryManager<T> : IDisposable
             LayerIndex = layerIndex
         };
 
-        // Run forward pass
-        return layer.Forward(input);
+        // Run forward pass with precision awareness
+        return layer.ForwardWithPrecisionCheck(input);
     }
 
     /// <summary>
@@ -232,8 +312,8 @@ public class TrainingMemoryManager<T> : IDisposable
         // If this is a checkpointed layer, we need to recompute forward first
         if (_checkpoints.TryGetValue(layerIndex, out var checkpoint))
         {
-            // Recompute forward pass from checkpoint
-            _ = layer.Forward(checkpoint.Input);
+            // Recompute forward pass from checkpoint with precision awareness
+            _ = layer.ForwardWithPrecisionCheck(checkpoint.Input);
         }
 
         // Now run backward pass

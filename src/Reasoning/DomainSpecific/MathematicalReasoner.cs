@@ -2,6 +2,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Reasoning.Models;
 using AiDotNet.Reasoning.Strategies;
 using AiDotNet.Reasoning.Verification;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Reasoning.DomainSpecific;
 
@@ -58,7 +59,8 @@ public class MathematicalReasoner<T>
     /// </remarks>
     public MathematicalReasoner(IChatModel<T> chatModel, IEnumerable<ITool>? tools = null)
     {
-        _chatModel = chatModel ?? throw new ArgumentNullException(nameof(chatModel));
+        Guard.NotNull(chatModel);
+        _chatModel = chatModel;
         _cotStrategy = new ChainOfThoughtStrategy<T>(chatModel, tools);
         _selfConsistencyStrategy = new SelfConsistencyStrategy<T>(chatModel, tools);
         _calculatorVerifier = new CalculatorVerifier<T>();

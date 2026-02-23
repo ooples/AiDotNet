@@ -418,16 +418,6 @@ public class OptimizationAlgorithmOptions<T, TInput, TOutput> : ModelOptions
     public ModelStatsOptions ModelStatsOptions { get; set; } = new();
 
     /// <summary>
-    /// Gets or sets the model evaluator to use for assessing model performance.
-    /// </summary>
-    /// <value>The model evaluator implementation.</value>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> The model evaluator is responsible for testing how well your model performs
-    /// on data. It calculates metrics like accuracy or error rates that tell you how good your model is.</para>
-    /// </remarks>
-    public IModelEvaluator<T, TInput, TOutput> ModelEvaluator { get; set; } = new DefaultModelEvaluator<T, TInput, TOutput>();
-
-    /// <summary>
     /// Gets or sets the fit detector to determine when a model has converged or is overfitting.
     /// </summary>
     /// <value>The fit detector implementation.</value>
@@ -484,7 +474,6 @@ public class OptimizationAlgorithmOptions<T, TInput, TOutput> : ModelOptions
             PredictionOptions = new PredictionStatsOptions(),
             ModelStatsOptions = new ModelStatsOptions(),
             // Set up common components that exist in our codebase
-            ModelEvaluator = new DefaultModelEvaluator<T, TInput, TOutput>(),
             FitDetector = new CalibratedProbabilityFitDetector<T, TInput, TOutput>(),
             FitnessCalculator = new RSquaredFitnessCalculator<T, TInput, TOutput>()
         };

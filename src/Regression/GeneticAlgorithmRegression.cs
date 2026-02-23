@@ -1,3 +1,5 @@
+using AiDotNet.Preprocessing;
+
 namespace AiDotNet.Regression;
 
 /// <summary>
@@ -41,16 +43,6 @@ public class GeneticAlgorithmRegression<T> : RegressionBase<T>
     private GeneticAlgorithmOptimizer<T, Matrix<T>, Vector<T>>? _optimizer;
 
     /// <summary>
-    /// Component responsible for normalizing feature values to a common scale.
-    /// </summary>
-    private readonly INormalizer<T, Matrix<T>, Vector<T>> _normalizer;
-
-    /// <summary>
-    /// Component that selects the most relevant features for the model.
-    /// </summary>
-    private readonly IFeatureSelector<T, Matrix<T>> _featureSelector;
-
-    /// <summary>
     /// Component that identifies and removes outliers from the training data.
     /// </summary>
     private readonly IOutlierRemoval<T, Matrix<T>, Vector<T>> _outlierRemoval;
@@ -58,7 +50,7 @@ public class GeneticAlgorithmRegression<T> : RegressionBase<T>
     /// <summary>
     /// Component that handles all data preprocessing steps before training.
     /// </summary>
-    private readonly IDataPreprocessor<T, Matrix<T>, Vector<T>> _dataPreprocessor;
+    private readonly PreprocessingPipeline<T, Matrix<T>, Matrix<T>>? _preprocessingPipeline;
 
     /// <summary>
     /// The best model found by the genetic algorithm.
@@ -71,10 +63,8 @@ public class GeneticAlgorithmRegression<T> : RegressionBase<T>
     /// <param name="options">Optional regression options for the model.</param>
     /// <param name="gaOptions">Optional configuration options for the genetic algorithm optimizer.</param>
     /// <param name="regularization">Optional regularization strategy to prevent overfitting.</param>
-    /// <param name="normalizer">Optional component for normalizing feature values.</param>
-    /// <param name="featureSelector">Optional component for selecting relevant features.</param>
     /// <param name="outlierRemoval">Optional component for removing outliers.</param>
-    /// <param name="dataPreprocessor">Optional component for preprocessing data.</param>
+    /// <param name="preprocessingPipeline">Optional preprocessing pipeline for data transformation.</param>
     /// <remarks>
     /// <para>
     /// This constructor creates a new Genetic Algorithm Regression model with the specified components and configuration
@@ -82,20 +72,20 @@ public class GeneticAlgorithmRegression<T> : RegressionBase<T>
     /// necessary infrastructure for the genetic algorithm to optimize model parameters.
     /// </para>
     /// <para><b>For Beginners:</b> This is how you create a new Genetic Algorithm Regression model.
-    /// 
+    ///
     /// The constructor allows you to customize many aspects of the model:
     /// - General regression settings (like whether to include an intercept term)
     /// - Genetic algorithm settings (like population size and mutation rate)
     /// - How to measure how well solutions perform (fitness calculation)
-    /// - How to prepare your data before training (normalization, feature selection, outlier removal)
-    /// 
+    /// - How to prepare your data before training (preprocessing pipeline)
+    ///
     /// If you don't specify these parameters, the model will use reasonable default settings.
-    /// 
+    ///
     /// Example:
     /// ```csharp
     /// // Create a basic model with default settings
     /// var gaRegression = new GeneticAlgorithmRegression&lt;double&gt;();
-    /// 
+    ///
     /// // Create a model with custom genetic algorithm settings
     /// var gaOptions = new GeneticAlgorithmOptimizerOptions {
     ///     PopulationSize = 200,
@@ -110,19 +100,15 @@ public class GeneticAlgorithmRegression<T> : RegressionBase<T>
         RegressionOptions<T>? options = null,
         GeneticAlgorithmOptimizerOptions<T, Matrix<T>, Vector<T>>? gaOptions = null,
         IRegularization<T, Matrix<T>, Vector<T>>? regularization = null,
-        INormalizer<T, Matrix<T>, Vector<T>>? normalizer = null,
-        IFeatureSelector<T, Matrix<T>>? featureSelector = null,
         IOutlierRemoval<T, Matrix<T>, Vector<T>>? outlierRemoval = null,
-        IDataPreprocessor<T, Matrix<T>, Vector<T>>? dataPreprocessor = null)
+        PreprocessingPipeline<T, Matrix<T>, Matrix<T>>? preprocessingPipeline = null)
         : base(options, regularization)
     {
         _gaOptions = gaOptions ?? new GeneticAlgorithmOptimizerOptions<T, Matrix<T>, Vector<T>>();
         var dummyModel = new VectorModel<T>(Vector<T>.Empty());
         _optimizer = new GeneticAlgorithmOptimizer<T, Matrix<T>, Vector<T>>(dummyModel, _gaOptions);
-        _normalizer = normalizer ?? new NoNormalizer<T, Matrix<T>, Vector<T>>();
-        _featureSelector = featureSelector ?? new NoFeatureSelector<T, Matrix<T>>();
         _outlierRemoval = outlierRemoval ?? new NoOutlierRemoval<T, Matrix<T>, Vector<T>>();
-        _dataPreprocessor = dataPreprocessor ?? new DefaultDataPreprocessor<T, Matrix<T>, Vector<T>>(_normalizer, _featureSelector, _outlierRemoval);
+        _preprocessingPipeline = preprocessingPipeline;
     }
 
     /// <summary>
@@ -161,11 +147,24 @@ public class GeneticAlgorithmRegression<T> : RegressionBase<T>
     /// </remarks>
     public override void Train(Matrix<T> x, Vector<T> y)
     {
-        // Preprocess the data
-        var (preprocessedX, preprocessedY, _) = _dataPreprocessor.PreprocessData(x, y);
+        // Preprocess the data if pipeline is configured
+        var preprocessedX = _preprocessingPipeline is not null
+            ? _preprocessingPipeline.FitTransform(x)
+            : x;
+        var preprocessedY = y;
 
-        // Split the data
-        var (xTrain, yTrain, xVal, yVal, xTest, yTest) = _dataPreprocessor.SplitData(preprocessedX, preprocessedY);
+        // Split the data using the base class options
+        int totalSamples = preprocessedX.Rows;
+        int trainSize = (int)(totalSamples * 0.7);  // 70% training
+        int valSize = (int)(totalSamples * 0.15);    // 15% validation
+        int testSize = totalSamples - trainSize - valSize;
+
+        var xTrain = preprocessedX.GetSubMatrix(0, trainSize, 0, preprocessedX.Columns);
+        var yTrain = preprocessedY.SubVector(0, trainSize);
+        var xVal = preprocessedX.GetSubMatrix(trainSize, valSize, 0, preprocessedX.Columns);
+        var yVal = preprocessedY.SubVector(trainSize, valSize);
+        var xTest = preprocessedX.GetSubMatrix(trainSize + valSize, testSize, 0, preprocessedX.Columns);
+        var yTest = preprocessedY.SubVector(trainSize + valSize, testSize);
 
         // If HasIntercept is true, prepend a column of 1s to each matrix for the intercept term
         if (HasIntercept)
@@ -428,9 +427,7 @@ public class GeneticAlgorithmRegression<T> : RegressionBase<T>
             Options,
             _gaOptions,
             Regularization,
-            _normalizer,
-            _featureSelector,
             _outlierRemoval,
-            _dataPreprocessor);
+            _preprocessingPipeline);
     }
 }

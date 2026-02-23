@@ -16,6 +16,7 @@ namespace AiDotNet.UncertaintyQuantification.Interfaces;
 /// which is crucial for safety-critical applications.
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("BayesianLayer")]
 public interface IBayesianLayer<T>
 {
     /// <summary>

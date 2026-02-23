@@ -43,6 +43,9 @@ namespace AiDotNet.Clustering.SemiSupervised;
 public class COPKMeans<T> : ClusteringBase<T>
 {
     private readonly COPKMeansOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
     private HashSet<(int, int)>? _mustLinkClosure;
     private HashSet<(int, int)>? _cannotLinkClosure;
 
@@ -100,8 +103,8 @@ public class COPKMeans<T> : ClusteringBase<T>
         NumFeatures = d;
         NumClusters = k;
 
-        var rand = Options.RandomState.HasValue
-            ? RandomHelper.CreateSeededRandom(Options.RandomState.Value)
+        var rand = Options.Seed.HasValue
+            ? RandomHelper.CreateSeededRandom(Options.Seed.Value)
             : RandomHelper.CreateSecureRandom();
         var metric = _options.DistanceMetric ?? new EuclideanDistance<T>();
 

@@ -42,6 +42,9 @@ namespace AiDotNet.Clustering.Partitioning;
 public class KMedoids<T> : ClusteringBase<T>
 {
     private readonly KMedoidsOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
     private int[]? _medoidIndices;
 
     /// <summary>

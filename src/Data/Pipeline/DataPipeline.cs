@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Threading.Channels;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Data.Pipeline;
 
@@ -43,7 +44,8 @@ public class DataPipeline<T> : IEnumerable<T>
     /// <param name="sourceFactory">Factory function that creates the source enumerable.</param>
     public DataPipeline(Func<IEnumerable<T>> sourceFactory)
     {
-        _sourceFactory = sourceFactory ?? throw new ArgumentNullException(nameof(sourceFactory));
+        Guard.NotNull(sourceFactory);
+        _sourceFactory = sourceFactory;
     }
 
     /// <summary>
@@ -635,7 +637,8 @@ public class AsyncDataPipeline<T> : IAsyncEnumerable<T>
     /// <param name="provider">Provider that creates the async source.</param>
     internal AsyncDataPipeline(IAsyncEnumerableProvider<T> provider)
     {
-        _provider = provider ?? throw new ArgumentNullException(nameof(provider));
+        Guard.NotNull(provider);
+        _provider = provider;
     }
 
     /// <summary>

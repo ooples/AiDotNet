@@ -5,6 +5,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Optimizers;
 using AiDotNet.Validation;
 
@@ -54,6 +55,11 @@ namespace AiDotNet.NeuralNetworks;
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 public class DenseNetNetwork<T> : NeuralNetworkBase<T>
 {
+    private readonly DenseNetOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     private readonly ILossFunction<T> _lossFunction;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly DenseNetConfiguration _configuration;
@@ -86,10 +92,14 @@ public class DenseNetNetwork<T> : NeuralNetworkBase<T>
         DenseNetConfiguration configuration,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
-        double maxGradNorm = 1.0)
+        double maxGradNorm = 1.0,
+        DenseNetOptions? options = null)
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), maxGradNorm)
     {
-        _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
+        _options = options ?? new DenseNetOptions();
+        Options = _options;
+        Guard.NotNull(configuration);
+        _configuration = configuration;
 
         ArchitectureValidator.ValidateInputType(
             architecture,

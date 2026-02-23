@@ -2,6 +2,7 @@ using System.Net.Http;
 using AiDotNet.ProgramSynthesis.Enums;
 using AiDotNet.ProgramSynthesis.Execution;
 using AiDotNet.ProgramSynthesis.Interfaces;
+using AiDotNet.Validation;
 
 namespace AiDotNet.ProgramSynthesis.Serving;
 
@@ -15,7 +16,8 @@ public sealed class ServingProgramExecutionEngine : IProgramExecutionEngine
 
     public ServingProgramExecutionEngine(IProgramSynthesisServingClient client)
     {
-        _client = client ?? throw new ArgumentNullException(nameof(client));
+        Guard.NotNull(client);
+        _client = client;
     }
 
     public ServingProgramExecutionEngine(IProgramSynthesisServingClient client, TimeSpan timeout)
@@ -25,7 +27,8 @@ public sealed class ServingProgramExecutionEngine : IProgramExecutionEngine
             throw new ArgumentOutOfRangeException(nameof(timeout), "Timeout must be > 0.");
         }
 
-        _client = client ?? throw new ArgumentNullException(nameof(client));
+        Guard.NotNull(client);
+        _client = client;
         _timeout = timeout;
     }
 

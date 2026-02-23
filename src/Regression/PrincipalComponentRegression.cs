@@ -34,6 +34,9 @@ public class PrincipalComponentRegression<T> : RegressionBase<T>
     /// </value>
     private readonly PrincipalComponentRegressionOptions<T> _options;
 
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// The principal components extracted from the training data.
     /// </summary>

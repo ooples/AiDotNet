@@ -1,4 +1,5 @@
 using AiDotNet.Augmentation.Image;
+using AiDotNet.Validation;
 
 
 
@@ -74,7 +75,8 @@ public class OneOf<T, TData> : IAugmentation<T, TData>, ISpatialAugmentation<T, 
         if (probability < 0 || probability > 1)
             throw new ArgumentOutOfRangeException(nameof(probability), "Probability must be between 0 and 1");
 
-        _augmentations = augmentations?.ToList() ?? throw new ArgumentNullException(nameof(augmentations));
+        Guard.NotNull(augmentations);
+        _augmentations = augmentations.ToList();
         if (_augmentations.Count == 0)
             throw new ArgumentException("At least one augmentation is required", nameof(augmentations));
 
@@ -95,7 +97,8 @@ public class OneOf<T, TData> : IAugmentation<T, TData>, ISpatialAugmentation<T, 
         if (probability < 0 || probability > 1)
             throw new ArgumentOutOfRangeException(nameof(probability), "Probability must be between 0 and 1");
 
-        var list = augmentationsWithWeights?.ToList() ?? throw new ArgumentNullException(nameof(augmentationsWithWeights));
+        Guard.NotNull(augmentationsWithWeights);
+        var list = augmentationsWithWeights.ToList();
         if (list.Count == 0)
             throw new ArgumentException("At least one augmentation is required", nameof(augmentationsWithWeights));
 

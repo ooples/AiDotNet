@@ -9,6 +9,7 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
 using AiDotNet.ReinforcementLearning.ReplayBuffers;
+using AiDotNet.Validation;
 
 namespace AiDotNet.ReinforcementLearning.Agents.MADDPG;
 
@@ -41,6 +42,9 @@ namespace AiDotNet.ReinforcementLearning.Agents.MADDPG;
 public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
 {
     private MADDPGOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
     private IOptimizer<T, Vector<T>, Vector<T>> _optimizer;
 
     // Networks for each agent
@@ -59,7 +63,8 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
     public MADDPGAgent(MADDPGOptions<T> options, IOptimizer<T, Vector<T>, Vector<T>>? optimizer = null)
         : base(options)
     {
-        _options = options ?? throw new ArgumentNullException(nameof(options));
+        Guard.NotNull(options);
+        _options = options;
         _options.Validate();
         // Issue #3 fix: Use configured actor learning rate for default optimizer
         _optimizer = optimizer ?? options.Optimizer ?? new AdamOptimizer<T, Vector<T>, Vector<T>>(this, new AdamOptimizerOptions<T, Vector<T>, Vector<T>>

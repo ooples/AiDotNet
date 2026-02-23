@@ -1,3 +1,6 @@
+using AiDotNet.NeuralNetworks.Options;
+using AiDotNet.Preprocessing;
+
 namespace AiDotNet.NeuralNetworks;
 
 /// <summary>
@@ -27,6 +30,11 @@ namespace AiDotNet.NeuralNetworks;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 public class QuantumNeuralNetwork<T> : NeuralNetworkBase<T>
 {
+    private readonly QuantumNeuralNetworkOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// Gets or sets the number of qubits used in the quantum neural network.
     /// </summary>
@@ -50,7 +58,10 @@ public class QuantumNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     private int _numQubits;
 
-    private readonly INormalizer<T, Tensor<T>, Tensor<T>> _normalizer;
+    /// <summary>
+    /// The preprocessing pipeline that handles data transformation for quantum state preparation.
+    /// </summary>
+    private readonly PreprocessingPipeline<T, Tensor<T>, Tensor<T>>? _preprocessingPipeline;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="QuantumNeuralNetwork{T}"/> class with the specified architecture and number of qubits.
@@ -78,11 +89,14 @@ public class QuantumNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
 
     public QuantumNeuralNetwork(NeuralNetworkArchitecture<T> architecture, int numQubits,
-        INormalizer<T, Tensor<T>, Tensor<T>>? normalizer = null, ILossFunction<T>? lossFunction = null) :
+        PreprocessingPipeline<T, Tensor<T>, Tensor<T>>? preprocessingPipeline = null, ILossFunction<T>? lossFunction = null,
+        QuantumNeuralNetworkOptions? options = null) :
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
+        _options = options ?? new QuantumNeuralNetworkOptions();
+        Options = _options;
         _numQubits = numQubits;
-        _normalizer = normalizer ?? new NoNormalizer<T, Tensor<T>, Tensor<T>>();
+        _preprocessingPipeline = preprocessingPipeline;
 
         InitializeLayers();
     }
@@ -385,17 +399,20 @@ public class QuantumNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     private Tensor<Complex<T>> PrepareQuantumState(Tensor<T> input)
     {
-        // Ensure input is 2D for normalizer (reshape 1D [n] to [1, n])
+        // Ensure input is 2D for preprocessing pipeline (reshape 1D [n] to [1, n])
         var workingInput = input.Shape.Length == 1
             ? input.Reshape([1, input.Shape[0]])
             : input;
 
-        var (normalizedInput, _) = _normalizer.NormalizeInput(workingInput);
+        // Apply preprocessing pipeline if configured
+        var processedInput = _preprocessingPipeline is not null
+            ? _preprocessingPipeline.Transform(workingInput)
+            : workingInput;
 
         // Flatten back to 1D for quantum state preparation
-        var flatInput = normalizedInput.Shape.Length > 1
-            ? normalizedInput.Reshape([normalizedInput.Length])
-            : normalizedInput;
+        var flatInput = processedInput.Shape.Length > 1
+            ? processedInput.Reshape([processedInput.Length])
+            : processedInput;
 
         var quantumState = new Tensor<Complex<T>>([flatInput.Length]);
 
@@ -600,7 +617,7 @@ public class QuantumNeuralNetwork<T> : NeuralNetworkBase<T>
         return new QuantumNeuralNetwork<T>(
             Architecture,
             _numQubits,
-            _normalizer,
+            _preprocessingPipeline,
             LossFunction
         );
     }

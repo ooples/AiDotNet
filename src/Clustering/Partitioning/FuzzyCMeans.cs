@@ -41,6 +41,9 @@ namespace AiDotNet.Clustering.Partitioning;
 public class FuzzyCMeans<T> : ClusteringBase<T>
 {
     private readonly FuzzyCMeansOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
     private double[,]? _membershipMatrix;
 
     /// <summary>
@@ -101,8 +104,8 @@ public class FuzzyCMeans<T> : ClusteringBase<T>
             throw new ArgumentException("Fuzziness must be greater than 1.");
         }
 
-        var rand = Options.RandomState.HasValue
-            ? RandomHelper.CreateSeededRandom(Options.RandomState.Value)
+        var rand = Options.Seed.HasValue
+            ? RandomHelper.CreateSeededRandom(Options.Seed.Value)
             : RandomHelper.CreateSecureRandom();
         var metric = _options.DistanceMetric ?? new EuclideanDistance<T>();
 

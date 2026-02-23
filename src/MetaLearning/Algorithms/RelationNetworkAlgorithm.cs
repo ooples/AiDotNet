@@ -197,8 +197,8 @@ public class RelationNetworkAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
         // Step 6: Add regularization terms
         loss = AddRegularizationTerms(loss);
 
-        // Step 7: Backpropagate and update both networks (simplified)
-        UpdateNetworks(loss);
+        // Step 7: Backpropagate and update both networks
+        UpdateNetworks(task);
 
         return loss;
     }
@@ -483,14 +483,75 @@ public class RelationNetworkAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
     }
 
     /// <summary>
-    /// Updates both feature encoder and relation module parameters.
+    /// Updates both feature encoder and relation module parameters using gradient descent.
     /// </summary>
-    private void UpdateNetworks(T loss)
+    /// <param name="loss">The current episode loss used as baseline for finite differences.</param>
+    /// <param name="task">The current meta-learning task providing input/output data.</param>
+    /// <remarks>
+    /// <para>
+    /// Updates both networks:
+    /// 1. Feature encoder: uses base class gradient computation
+    /// 2. Relation module: uses sampled finite differences for gradient approximation
+    /// </para>
+    /// <para><b>For Beginners:</b> After computing the loss, we need to update both
+    /// the feature extractor (how we represent examples) and the relation module
+    /// (how we compare examples). We use gradient descent to adjust both sets of
+    /// weights to reduce the loss.
+    /// </para>
+    /// </remarks>
+    private void UpdateNetworks(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        // In a real implementation, this would:
-        // 1. Compute gradients with respect to both networks
-        // 2. Apply optimizers to update parameters
-        // 3. Handle gradient flow between networks
+        // Update feature encoder using base class gradient computation
+        var featureGradients = ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput);
+        featureGradients = ClipGradients(featureGradients);
+        var currentParams = MetaModel.GetParameters();
+        var updatedParams = ApplyGradients(currentParams, featureGradients, _relationOptions.OuterLearningRate);
+        MetaModel.SetParameters(updatedParams);
+
+        // Update relation module parameters using sampled finite differences
+        var relationParams = _relationModule.GetParameters();
+        if (relationParams.Length == 0) return;
+
+        // Cache encoded features once (encoder params are fixed for this update step)
+        var cachedSupportFeatures = EncodeExamples(task.SupportInput);
+        var cachedQueryFeatures = EncodeExamples(task.QueryInput);
+        var cachedClassFeatures = GroupFeaturesByClass(cachedSupportFeatures, task.SupportOutput);
+
+        // Compute baseline loss with cached features
+        var baseScores = ComputeRelationScores(cachedQueryFeatures, cachedClassFeatures);
+        var baseProbabilities = ApplySoftmaxToScores(baseScores);
+        T baseLoss = ComputeCrossEntropyLoss(baseProbabilities, task.QueryOutput);
+
+        double epsilon = 1e-4;
+        int sampleCount = Math.Min(50, relationParams.Length);
+        double scaleFactor = sampleCount > 0 ? (double)relationParams.Length / sampleCount : 1.0;
+        var relationGradients = new Vector<T>(relationParams.Length);
+
+        for (int s = 0; s < sampleCount; s++)
+        {
+            int i = (s * relationParams.Length) / sampleCount;
+
+            // Perturb parameter
+            T original = relationParams[i];
+            relationParams[i] = NumOps.Add(original, NumOps.FromDouble(epsilon));
+            _relationModule.SetParameters(relationParams);
+
+            // Recompute only relation scores with perturbed module (encoder features are cached)
+            var scores = ComputeRelationScores(cachedQueryFeatures, cachedClassFeatures);
+            var probabilities = ApplySoftmaxToScores(scores);
+            T perturbedLoss = ComputeCrossEntropyLoss(probabilities, task.QueryOutput);
+
+            double grad = (NumOps.ToDouble(perturbedLoss) - NumOps.ToDouble(baseLoss)) / epsilon;
+            relationGradients[i] = NumOps.FromDouble(grad * scaleFactor);
+
+            // Restore original parameter
+            relationParams[i] = original;
+        }
+
+        // Restore original parameters and apply gradient update
+        _relationModule.SetParameters(relationParams);
+        var updatedRelation = ApplyGradients(relationParams, relationGradients, _relationOptions.OuterLearningRate);
+        _relationModule.SetParameters(updatedRelation);
     }
 
     // Helper methods

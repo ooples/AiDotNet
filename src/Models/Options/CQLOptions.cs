@@ -26,7 +26,7 @@ namespace AiDotNet.Models.Options;
 /// Based on SAC architecture with conservative regularization.
 /// </para>
 /// </remarks>
-public class CQLOptions<T>
+public class CQLOptions<T> : ModelOptions
 {
     public int StateSize { get; set; }
     public int ActionSize { get; set; }
@@ -52,7 +52,6 @@ public class CQLOptions<T>
     public ILossFunction<T> QLossFunction { get; set; } = new MeanSquaredErrorLoss<T>();
     public List<int> PolicyHiddenLayers { get; set; } = new List<int> { 256, 256 };
     public List<int> QHiddenLayers { get; set; } = new List<int> { 256, 256 };
-    public int? Seed { get; set; }
 
     public CQLOptions()
     {

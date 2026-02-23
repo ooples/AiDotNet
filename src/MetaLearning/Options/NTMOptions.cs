@@ -1,4 +1,6 @@
 using AiDotNet.Interfaces;
+using AiDotNet.Models.Options;
+using AiDotNet.Validation;
 
 namespace AiDotNet.MetaLearning.Options;
 
@@ -73,7 +75,7 @@ public enum NTMMemoryInitialization
 /// This allows learning algorithms like sorting, copying, and associative recall!
 /// </para>
 /// </remarks>
-public class NTMOptions<T, TInput, TOutput> : IMetaLearnerOptions<T>
+public class NTMOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions<T>
 {
     #region Required Properties
 
@@ -149,7 +151,7 @@ public class NTMOptions<T, TInput, TOutput> : IMetaLearnerOptions<T>
     /// <summary>
     /// Gets or sets the random seed for reproducibility.
     /// </summary>
-    public int? RandomSeed { get; set; }
+    public int? RandomSeed { get => Seed; set => Seed = value; }
 
     /// <summary>
     /// Gets or sets the number of tasks to use for evaluation.
@@ -257,7 +259,8 @@ public class NTMOptions<T, TInput, TOutput> : IMetaLearnerOptions<T>
     /// <exception cref="ArgumentNullException">Thrown when metaModel is null.</exception>
     public NTMOptions(IFullModel<T, TInput, TOutput> metaModel)
     {
-        MetaModel = metaModel ?? throw new ArgumentNullException(nameof(metaModel));
+        Guard.NotNull(metaModel);
+        MetaModel = metaModel;
     }
 
     #endregion

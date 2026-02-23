@@ -41,6 +41,7 @@ namespace AiDotNet.Interfaces;
 /// This interface extends <see cref="IFullModel{T, TInput, TOutput}"/> for Tensor-based audio processing.
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("AudioEventDetector")]
 public interface IAudioEventDetector<T> : IFullModel<T, Tensor<T>, Tensor<T>>
 {
     /// <summary>
@@ -260,6 +261,7 @@ public class EventStatistics<T>
 /// Interface for streaming event detection sessions.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("StreamingEventDetectionSession")]
 public interface IStreamingEventDetectionSession<T> : IDisposable
 {
     /// <summary>

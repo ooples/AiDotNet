@@ -1,5 +1,6 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Document.Interfaces;
+using AiDotNet.Document.Options;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -12,6 +13,7 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tokenization;
 using AiDotNet.Tokenization.Interfaces;
 using Microsoft.ML.OnnxRuntime;
+using AiDotNet.Validation;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
 
 namespace AiDotNet.Document.PixelToSequence;
@@ -55,6 +57,11 @@ namespace AiDotNet.Document.PixelToSequence;
 /// </remarks>
 public class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDocumentQA<T>
 {
+    private readonly DonutOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     #region Fields
 
     private bool _useNativeMode;
@@ -166,9 +173,13 @@ public class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDocumentQA<
         int decoderHeads = 16,
         int vocabSize = 57522,
         IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        DonutOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyLoss<T>(), 1.0)
     {
+        _options = options ?? new DonutOptions();
+        Options = _options;
+
         if (string.IsNullOrWhiteSpace(encoderPath))
             throw new ArgumentNullException(nameof(encoderPath));
         if (string.IsNullOrWhiteSpace(decoderPath))
@@ -178,7 +189,8 @@ public class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDocumentQA<
         if (!File.Exists(decoderPath))
             throw new FileNotFoundException($"Decoder model not found: {decoderPath}", decoderPath);
 
-        _tokenizer = tokenizer ?? throw new ArgumentNullException(nameof(tokenizer));
+        Guard.NotNull(tokenizer);
+        _tokenizer = tokenizer;
         _useNativeMode = false;
         _onnxEncoderModelPath = encoderPath;
         _onnxDecoderModelPath = decoderPath;
@@ -254,9 +266,13 @@ public class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDocumentQA<
         int decoderHeads = 16,
         int vocabSize = 57522,
         IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        DonutOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyLoss<T>(), 1.0)
     {
+        _options = options ?? new DonutOptions();
+        Options = _options;
+
         _useNativeMode = true;
         _onnxEncoderModelPath = null;
         _onnxDecoderModelPath = null;

@@ -3,6 +3,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using Newtonsoft.Json;
+using AiDotNet.Validation;
 
 namespace AiDotNet.ReinforcementLearning.Agents.Bandits;
 
@@ -13,13 +14,17 @@ namespace AiDotNet.ReinforcementLearning.Agents.Bandits;
 public class ThompsonSamplingAgent<T> : ReinforcementLearningAgentBase<T>
 {
     private ThompsonSamplingOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
     private Random _random;
     private Vector<int> _successCounts;
     private Vector<int> _failureCounts;
 
     public ThompsonSamplingAgent(ThompsonSamplingOptions<T> options) : base(options)
     {
-        _options = options ?? throw new ArgumentNullException(nameof(options));
+        Guard.NotNull(options);
+        _options = options;
         _random = RandomHelper.CreateSecureRandom();
         _successCounts = new Vector<int>(_options.NumArms);
         _failureCounts = new Vector<int>(_options.NumArms);

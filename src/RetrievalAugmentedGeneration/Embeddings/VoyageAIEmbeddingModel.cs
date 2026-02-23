@@ -2,6 +2,7 @@ using System;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.Embeddings;
+using AiDotNet.Validation;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels;
 
@@ -35,8 +36,10 @@ public class VoyageAIEmbeddingModel<T> : EmbeddingModelBase<T>
 #pragma warning disable CS0414 // Field is assigned but its value is never used
         _apiKey = apiKey; // Kept for API compatibility but unused
 #pragma warning restore CS0414
-        _model = model ?? throw new ArgumentNullException(nameof(model));
-        _inputType = inputType ?? throw new ArgumentNullException(nameof(inputType));
+        Guard.NotNull(model);
+        _model = model;
+        Guard.NotNull(inputType);
+        _inputType = inputType;
         _dimension = dimension;
 
         // Initialize ONNX transformer once

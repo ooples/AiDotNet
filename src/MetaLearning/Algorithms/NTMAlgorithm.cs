@@ -5,6 +5,7 @@ using AiDotNet.MetaLearning.Options;
 using AiDotNet.Models;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Validation;
 
 namespace AiDotNet.MetaLearning.Algorithms;
 
@@ -97,6 +98,9 @@ namespace AiDotNet.MetaLearning.Algorithms;
 public class NTMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private readonly NTMOptions<T, TInput, TOutput> _ntmOptions;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _ntmOptions;
     private readonly INTMController<T> _controller;
     private readonly NTMMemory<T> _memory;
     private readonly List<NTMReadHead<T>> _readHeads;
@@ -725,11 +729,16 @@ public class NTMModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadat
         NTMWriteHead<T> writeHead,
         NTMOptions<T, TInput, TOutput> options)
     {
-        _controller = controller ?? throw new ArgumentNullException(nameof(controller));
-        _memory = memory ?? throw new ArgumentNullException(nameof(memory));
-        _readHeads = readHeads ?? throw new ArgumentNullException(nameof(readHeads));
-        _writeHead = writeHead ?? throw new ArgumentNullException(nameof(writeHead));
-        _options = options ?? throw new ArgumentNullException(nameof(options));
+        Guard.NotNull(controller);
+        _controller = controller;
+        Guard.NotNull(memory);
+        _memory = memory;
+        Guard.NotNull(readHeads);
+        _readHeads = readHeads;
+        Guard.NotNull(writeHead);
+        _writeHead = writeHead;
+        Guard.NotNull(options);
+        _options = options;
 
         // Initialize read contents
         _readContents = new List<Tensor<T>>();
@@ -1145,6 +1154,7 @@ public class NTMMemory<T>
 /// Interface for NTM controller.
 /// </summary>
 /// <typeparam name="T">The numeric type.</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("NTMController")]
 public interface INTMController<T>
 {
     /// <summary>
@@ -1273,7 +1283,8 @@ public class LSTMNTMController<T, TInput, TOutput> : INTMController<T>
     /// <param name="options">The NTM options.</param>
     public LSTMNTMController(NTMOptions<T, TInput, TOutput> options)
     {
-        _options = options ?? throw new ArgumentNullException(nameof(options));
+        Guard.NotNull(options);
+        _options = options;
 
         _hiddenSize = options.ControllerHiddenSize;
         _memoryWidth = options.MemoryWidth;
@@ -1707,7 +1718,8 @@ public class MLPNTMController<T, TInput, TOutput> : INTMController<T>
     /// <param name="options">The NTM options.</param>
     public MLPNTMController(NTMOptions<T, TInput, TOutput> options)
     {
-        _options = options ?? throw new ArgumentNullException(nameof(options));
+        Guard.NotNull(options);
+        _options = options;
 
         _hiddenSize = options.ControllerHiddenSize;
         _memoryWidth = options.MemoryWidth;

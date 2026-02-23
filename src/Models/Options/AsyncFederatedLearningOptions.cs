@@ -8,7 +8,7 @@ namespace AiDotNet.Models.Options;
 /// before updating the global model. In asynchronous federated learning, the server can update as client
 /// updates arrive (or in small buffers), which can reduce waiting on slow clients.
 /// </remarks>
-public class AsyncFederatedLearningOptions
+public class AsyncFederatedLearningOptions : ModelOptions
 {
     /// <summary>
     /// Gets or sets the async mode.

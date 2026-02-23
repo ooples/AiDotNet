@@ -24,7 +24,7 @@ namespace AiDotNet.Regression;
 /// questions and answers based on numerical data.
 /// </para>
 /// </remarks>
-public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<T>
+public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<T>, IConfigurableModel<T>
 {
     /// <summary>
     /// Gets the numeric operations for the type T.
@@ -45,6 +45,9 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
     /// Gets the options used to configure the decision tree.
     /// </summary>
     protected DecisionTreeOptions Options { get; private set; }
+
+    /// <inheritdoc/>
+    public virtual ModelOptions GetOptions() => Options;
 
     /// <summary>
     /// Gets the regularization method used to prevent overfitting.

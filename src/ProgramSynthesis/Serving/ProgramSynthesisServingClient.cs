@@ -6,6 +6,7 @@ using AiDotNet.ProgramSynthesis.Execution;
 using AiDotNet.ProgramSynthesis.Requests;
 using AiDotNet.ProgramSynthesis.Results;
 using Newtonsoft.Json;
+using AiDotNet.Validation;
 
 namespace AiDotNet.ProgramSynthesis.Serving;
 
@@ -21,7 +22,8 @@ public sealed class ProgramSynthesisServingClient : IProgramSynthesisServingClie
 
     public ProgramSynthesisServingClient(ProgramSynthesisServingClientOptions options)
     {
-        _options = options ?? throw new ArgumentNullException(nameof(options));
+        Guard.NotNull(options);
+        _options = options;
         if (_options.BaseAddress is null)
         {
             throw new ArgumentException("BaseAddress is required.", nameof(options));

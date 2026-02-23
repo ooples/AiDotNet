@@ -3,6 +3,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using Newtonsoft.Json;
+using AiDotNet.Validation;
 
 namespace AiDotNet.ReinforcementLearning.Agents.Planning;
 
@@ -13,6 +14,9 @@ namespace AiDotNet.ReinforcementLearning.Agents.Planning;
 public class DynaQPlusAgent<T> : ReinforcementLearningAgentBase<T>
 {
     private DynaQPlusOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
     private Dictionary<string, Dictionary<int, T>> _qTable;
     private Dictionary<string, Dictionary<int, (string nextState, T reward)>> _model;
     private Dictionary<string, Dictionary<int, int>> _timeSteps;  // Track last visit time
@@ -23,7 +27,8 @@ public class DynaQPlusAgent<T> : ReinforcementLearningAgentBase<T>
 
     public DynaQPlusAgent(DynaQPlusOptions<T> options) : base(options)
     {
-        _options = options ?? throw new ArgumentNullException(nameof(options));
+        Guard.NotNull(options);
+        _options = options;
         _qTable = new Dictionary<string, Dictionary<int, T>>();
         _model = new Dictionary<string, Dictionary<int, (string, T)>>();
         _timeSteps = new Dictionary<string, Dictionary<int, int>>();

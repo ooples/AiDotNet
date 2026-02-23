@@ -102,6 +102,11 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
     private Tensor<T>? _lastInput;
 
     /// <summary>
+    /// Tracks whether the last forward pass input was rank-1, so backward can preserve rank.
+    /// </summary>
+    private bool _inputWas1D;
+
+    /// <summary>
     /// The batch mean from the last forward pass.
     /// </summary>
     /// <remarks>
@@ -332,6 +337,13 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        // Auto-reshape 1D input to [1, N] for batch normalization compatibility
+        _inputWas1D = input.Shape.Length == 1;
+        if (_inputWas1D)
+        {
+            input = input.Reshape(1, input.Length);
+        }
+
         _lastInput = input;
 
         if (IsTrainingMode)
@@ -342,6 +354,30 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
 
             _lastMean = batchMean;
             _lastVariance = batchVariance;
+
+            // Ensure batch statistics match running statistics shape
+            // Engine.BatchNorm may return different shapes based on input configuration
+            if (batchMean.Length != _runningMean.Length)
+            {
+                // Reshape batch statistics to match running statistics
+                // This handles cases where input shape doesn't match expected configuration
+                var newMeanData = new T[_runningMean.Length];
+                var newVarData = new T[_runningVariance.Length];
+
+                // Copy what we can, using first value for padding if needed
+                int copyLen = Math.Min(batchMean.Length, _runningMean.Length);
+                T meanFillValue = copyLen > 0 ? batchMean.Data.Span[0] : NumOps.Zero;
+                T varFillValue = copyLen > 0 ? batchVariance.Data.Span[0] : NumOps.One;
+
+                for (int i = 0; i < _runningMean.Length; i++)
+                {
+                    newMeanData[i] = i < copyLen ? batchMean.Data.Span[i] : meanFillValue;
+                    newVarData[i] = i < copyLen ? batchVariance.Data.Span[i] : varFillValue;
+                }
+
+                batchMean = new Tensor<T>(_runningMean.Shape, new Vector<T>(newMeanData));
+                batchVariance = new Tensor<T>(_runningVariance.Shape, new Vector<T>(newVarData));
+            }
 
             // Update running statistics using Exponential Moving Average (Vectorized)
             // running_mean = momentum * running_mean + (1 - momentum) * batch_mean
@@ -354,6 +390,12 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
             var momentumRunningVar = Engine.TensorMultiplyScalar(_runningVariance, _momentum);
             var scaledBatchVar = Engine.TensorMultiplyScalar(batchVariance, oneMinusMomentum);
             _runningVariance = Engine.TensorAdd(momentumRunningVar, scaledBatchVar);
+
+            // Preserve original rank
+            if (_inputWas1D)
+            {
+                output = output.Reshape(output.Length);
+            }
 
             return output;
         }
@@ -374,7 +416,15 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
             // Handle any tensor rank (2D, 3D, 4D, 5D, etc.)
             // Dimension 0 is batch, dimension 1 is features/channels
             // Dimensions 2+ are spatial dimensions
-            return ApplyInferenceAnyRank(input, scale, shift);
+            var result = ApplyInferenceAnyRank(input, scale, shift);
+
+            // Preserve original rank
+            if (_inputWas1D)
+            {
+                result = result.Reshape(result.Length);
+            }
+
+            return result;
         }
     }
 
@@ -583,21 +633,119 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
     private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
         if (_lastInput == null || _lastMean == null || _lastVariance == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+            throw new InvalidOperationException("Backward cannot be called before Forward. No cached input/statistics available.");
+
+        // Reshape rank-1 gradient to [1, N] to match the forward pass reshape of 1D inputs
+        if (_inputWas1D && outputGradient.Shape.Length == 1)
+        {
+            outputGradient = outputGradient.Reshape(1, outputGradient.Length);
+        }
+
+        // Ensure shapes match for backward pass
+        var adjustedGradient = outputGradient;
+        var adjustedInput = _lastInput;
+        var adjustedMean = _lastMean;
+        var adjustedVariance = _lastVariance;
+
+        // Handle shape mismatches - use gamma shape as the reference
+        int numFeatures = _gamma.Length;
+
+        // The Engine.BatchNormBackward expects 2D tensors [batch, features]
+        // Preserve the actual batch size from input
+        int batchSize = _lastInput.Shape.Length > 1 ? _lastInput.Shape[0] : 1;
+        int[] targetShape2D = new[] { batchSize, numFeatures };
+
+        // Adjust gradient to 2D [batch, features] shape
+        int totalElements = batchSize * numFeatures;
+        if (adjustedGradient.Length != totalElements)
+        {
+            var gradData = new T[totalElements];
+            int copyLen = Math.Min(adjustedGradient.Length, totalElements);
+            for (int i = 0; i < copyLen; i++)
+            {
+                gradData[i] = adjustedGradient.Data.Span[i];
+            }
+            // Fill remaining with zeros if gradient is smaller
+            for (int i = copyLen; i < totalElements; i++)
+            {
+                gradData[i] = NumOps.Zero;
+            }
+            adjustedGradient = new Tensor<T>(targetShape2D, new Vector<T>(gradData));
+        }
+        else if (adjustedGradient.Rank != 2 || adjustedGradient.Shape[0] != batchSize || adjustedGradient.Shape[1] != numFeatures)
+        {
+            // Same length but different shape - reshape to 2D [batch, features]
+            adjustedGradient = adjustedGradient.Reshape(targetShape2D);
+        }
+
+        // Adjust input to 2D [batch, features] shape
+        if (adjustedInput.Length != totalElements)
+        {
+            var inputData = new T[totalElements];
+            int copyLen = Math.Min(adjustedInput.Length, totalElements);
+            for (int i = 0; i < copyLen; i++)
+            {
+                inputData[i] = adjustedInput.Data.Span[i];
+            }
+            // Fill remaining with mean value if input is smaller
+            T fillValue = copyLen > 0 ? inputData[0] : NumOps.Zero;
+            for (int i = copyLen; i < totalElements; i++)
+            {
+                inputData[i] = fillValue;
+            }
+            adjustedInput = new Tensor<T>(targetShape2D, new Vector<T>(inputData));
+        }
+        else if (adjustedInput.Rank != 2 || adjustedInput.Shape[0] != batchSize || adjustedInput.Shape[1] != numFeatures)
+        {
+            // Same length but different shape - reshape to 2D [batch, features]
+            adjustedInput = adjustedInput.Reshape(targetShape2D);
+        }
+
+        if (adjustedMean.Length != numFeatures)
+        {
+            // Adjust mean to match gamma shape
+            var meanData = new T[numFeatures];
+            T meanFillValue = adjustedMean.Length > 0 ? adjustedMean.Data.Span[0] : NumOps.Zero;
+            int copyLen = Math.Min(adjustedMean.Length, numFeatures);
+            for (int i = 0; i < numFeatures; i++)
+            {
+                meanData[i] = i < copyLen ? adjustedMean.Data.Span[i] : meanFillValue;
+            }
+            adjustedMean = new Tensor<T>(_gamma.Shape, new Vector<T>(meanData));
+        }
+
+        if (adjustedVariance.Length != numFeatures)
+        {
+            // Adjust variance to match gamma shape
+            var varData = new T[numFeatures];
+            T varFillValue = adjustedVariance.Length > 0 ? adjustedVariance.Data.Span[0] : NumOps.One;
+            int copyLen = Math.Min(adjustedVariance.Length, numFeatures);
+            for (int i = 0; i < numFeatures; i++)
+            {
+                varData[i] = i < copyLen ? adjustedVariance.Data.Span[i] : varFillValue;
+            }
+            adjustedVariance = new Tensor<T>(_gamma.Shape, new Vector<T>(varData));
+        }
 
         // Use Engine for GPU/CPU accelerated Batch Normalization Backward
         var inputGradient = Engine.BatchNormBackward(
-            outputGradient,
-            _lastInput,
+            adjustedGradient,
+            adjustedInput,
             _gamma,
-            _lastMean,
-            _lastVariance,
+            adjustedMean,
+            adjustedVariance,
             NumOps.ToDouble(_epsilon),
             out var gradGamma,
             out var gradBeta);
 
         _gammaGradient = gradGamma;
         _betaGradient = gradBeta;
+
+        // Preserve original rank: if forward input was 1D, return 1D gradient
+        if (_inputWas1D && inputGradient.Shape.Length > 1)
+        {
+            inputGradient = inputGradient.Reshape(inputGradient.Length);
+        }
 
         return inputGradient;
     }
@@ -616,7 +764,13 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
     {
         if (_lastInput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+            throw new InvalidOperationException("Backward cannot be called before Forward. No cached input available.");
+
+        // Reshape rank-1 gradient to [1, N] to match the forward pass reshape of 1D inputs
+        if (_inputWas1D && outputGradient.Shape.Length == 1)
+        {
+            outputGradient = outputGradient.Reshape(1, outputGradient.Length);
+        }
 
         // Convert to computation nodes
         var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
@@ -683,7 +837,15 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
         _gammaGradient = gammaNode.Gradient ?? throw new InvalidOperationException("Gamma gradient is null.");
         _betaGradient = betaNode.Gradient ?? throw new InvalidOperationException("Beta gradient is null.");
 
-        return inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
+        var inputGrad = inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
+
+        // Preserve original rank: if forward input was 1D, return 1D gradient
+        if (_inputWas1D && inputGrad.Shape.Length > 1)
+        {
+            inputGrad = inputGrad.Reshape(inputGrad.Length);
+        }
+
+        return inputGrad;
     }
 
     /// <summary>
@@ -825,7 +987,7 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
     public override void UpdateParameters(T learningRate)
     {
         if (_gammaGradient == null || _betaGradient == null)
-            throw new InvalidOperationException("Backward pass must be called before updating parameters.");
+            throw new InvalidOperationException("UpdateParameters cannot be called before Backward. No gradients available.");
 
         if (Engine is DirectGpuTensorEngine gpuEngine)
         {

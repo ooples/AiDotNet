@@ -2,6 +2,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using AiDotNet.Validation;
 
 namespace AiDotNet.ReinforcementLearning.Agents.AdvancedRL;
 
@@ -12,12 +13,16 @@ namespace AiDotNet.ReinforcementLearning.Agents.AdvancedRL;
 public class LinearQLearningAgent<T> : ReinforcementLearningAgentBase<T>
 {
     private LinearQLearningOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
     private Matrix<T> _weights;  // Weight matrix: [ActionSize x FeatureSize]
     private double _epsilon;
 
     public LinearQLearningAgent(LinearQLearningOptions<T> options) : base(options)
     {
-        _options = options ?? throw new ArgumentNullException(nameof(options));
+        Guard.NotNull(options);
+        _options = options;
         _weights = new Matrix<T>(_options.ActionSize, _options.FeatureSize);
 
         // Initialize weights to zero

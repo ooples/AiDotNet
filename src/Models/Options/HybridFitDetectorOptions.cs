@@ -28,7 +28,7 @@ namespace AiDotNet.Models.Options;
 /// This hybrid approach is especially useful when individual detection methods might give conflicting
 /// signals or when you want extra confidence in your model quality assessment.</para>
 /// </remarks>
-public class HybridFitDetectorOptions
+public class HybridFitDetectorOptions : ModelOptions
 {
     /// <summary>
     /// Gets or sets the threshold for detecting overfitting based on a composite score from multiple evaluation methods.

@@ -1,6 +1,7 @@
 using System.Text;
 using AiDotNet.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Agents;
 
@@ -144,8 +145,10 @@ public class RAGAgent<T> : AgentBase<T>
         bool allowQueryRefinement = true)
         : base(chatModel, null) // RAG agents don't use traditional tools
     {
-        _retriever = retriever ?? throw new ArgumentNullException(nameof(retriever));
-        _generator = generator ?? throw new ArgumentNullException(nameof(generator));
+        Guard.NotNull(retriever);
+        _retriever = retriever;
+        Guard.NotNull(generator);
+        _generator = generator;
         _reranker = reranker;
         _retrievalTopK = retrievalTopK;
         _rerankTopK = rerankTopK;

@@ -1,6 +1,7 @@
 using AiDotNet.ActiveLearning.Interfaces;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Validation;
 
 namespace AiDotNet.ContinualLearning;
 
@@ -90,7 +91,7 @@ public class LearningWithoutForgetting<T> : IContinualLearningStrategy<T>
     /// <inheritdoc />
     public void BeforeTask(INeuralNetwork<T> network, int taskId)
     {
-        _ = network ?? throw new ArgumentNullException(nameof(network));
+        Guard.NotNull(network);
         // LwF preparation happens through PrepareDistillation when you have the new task data
     }
 
@@ -108,8 +109,8 @@ public class LearningWithoutForgetting<T> : IContinualLearningStrategy<T>
     /// </remarks>
     public void PrepareDistillation(INeuralNetwork<T> network, Tensor<T> newTaskInputs, int taskId)
     {
-        _ = network ?? throw new ArgumentNullException(nameof(network));
-        _ = newTaskInputs ?? throw new ArgumentNullException(nameof(newTaskInputs));
+        Guard.NotNull(network);
+        Guard.NotNull(newTaskInputs);
 
         _currentTaskInputs = newTaskInputs.Clone();
 
@@ -131,7 +132,7 @@ public class LearningWithoutForgetting<T> : IContinualLearningStrategy<T>
     /// <inheritdoc />
     public T ComputeLoss(INeuralNetwork<T> network)
     {
-        _ = network ?? throw new ArgumentNullException(nameof(network));
+        Guard.NotNull(network);
 
         if (_oldPredictions.Count == 0 || _currentTaskInputs == null)
         {
@@ -162,8 +163,8 @@ public class LearningWithoutForgetting<T> : IContinualLearningStrategy<T>
     /// <returns>The distillation loss (KL divergence with temperature scaling).</returns>
     public T ComputeDistillationLoss(Tensor<T> currentPredictions, Tensor<T> oldPredictions)
     {
-        _ = currentPredictions ?? throw new ArgumentNullException(nameof(currentPredictions));
-        _ = oldPredictions ?? throw new ArgumentNullException(nameof(oldPredictions));
+        Guard.NotNull(currentPredictions);
+        Guard.NotNull(oldPredictions);
 
         var batchSize = currentPredictions.Shape[0];
         var numClasses = currentPredictions.Length / batchSize;

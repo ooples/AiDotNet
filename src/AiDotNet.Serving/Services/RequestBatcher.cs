@@ -9,6 +9,7 @@ using AiDotNet.Serving.Scheduling;
 using AiDotNet.Tensors.LinearAlgebra;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Serving.Services;
 
@@ -62,9 +63,12 @@ public class RequestBatcher : IRequestBatcher, IDisposable
         ILogger<RequestBatcher> logger,
         IOptions<ServingOptions> options)
     {
-        _modelRepository = modelRepository ?? throw new ArgumentNullException(nameof(modelRepository));
-        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
+        Guard.NotNull(modelRepository);
+        _modelRepository = modelRepository;
+        Guard.NotNull(logger);
+        _logger = logger;
+        Guard.NotNull(options);
+        _options = options.Value;
 
         // Initialize request channel with bounded capacity for backpressure
         var channelOptions = new BoundedChannelOptions(_options.MaxQueueSize > 0 ? _options.MaxQueueSize : 1000)

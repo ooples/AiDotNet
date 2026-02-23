@@ -1,5 +1,6 @@
 using System.IO;
 using AiDotNet.Helpers;
+using AiDotNet.Video.Options;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
@@ -35,8 +36,13 @@ namespace AiDotNet.Video.Motion;
 /// CVPR 2022.
 /// </para>
 /// </remarks>
-public class GMFlow<T> : NeuralNetworkBase<T>
+public class GMFlow<T> : OpticalFlowBase<T>
 {
+    private readonly GMFlowOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     #region Fields
 
     private readonly int _height;
@@ -92,9 +98,13 @@ public class GMFlow<T> : NeuralNetworkBase<T>
         NeuralNetworkArchitecture<T> architecture,
         int numFeatures = 128,
         int numTransformerLayers = 6,
-        int numHeads = 8)
+        int numHeads = 8,
+        GMFlowOptions? options = null)
         : base(architecture, new MeanSquaredErrorLoss<T>())
     {
+        _options = options ?? new GMFlowOptions();
+        Options = _options;
+
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 480;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 640;
         _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
@@ -157,7 +167,7 @@ public class GMFlow<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Estimates optical flow between two frames.
     /// </summary>
-    public Tensor<T> EstimateFlow(Tensor<T> frame1, Tensor<T> frame2)
+    public override Tensor<T> EstimateFlow(Tensor<T> frame1, Tensor<T> frame2)
     {
         bool hasBatch = frame1.Rank == 4;
         if (!hasBatch)
@@ -689,4 +699,21 @@ public class GMFlow<T> : NeuralNetworkBase<T>
         new GMFlow<T>(Architecture, _numFeatures, _numTransformerLayers, _numHeads);
 
     #endregion
+
+    #region Base Class Abstract Methods
+
+    /// <inheritdoc/>
+    protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames)
+    {
+        return NormalizeFrames(rawFrames);
+    }
+
+    /// <inheritdoc/>
+    protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput)
+    {
+        return modelOutput;
+    }
+
+    #endregion
+
 }

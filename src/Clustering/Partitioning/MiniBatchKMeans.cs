@@ -44,6 +44,9 @@ namespace AiDotNet.Clustering.Partitioning;
 public class MiniBatchKMeans<T> : ClusteringBase<T>
 {
     private readonly MiniBatchKMeansOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
     private Random _random;
     private int _numIterations;
     private int[] _centerCounts;
@@ -56,8 +59,8 @@ public class MiniBatchKMeans<T> : ClusteringBase<T>
         : base(options ?? new MiniBatchKMeansOptions<T>())
     {
         _options = options ?? new MiniBatchKMeansOptions<T>();
-        _random = _options.RandomState.HasValue
-            ? RandomHelper.CreateSeededRandom(_options.RandomState.Value)
+        _random = _options.Seed.HasValue
+            ? RandomHelper.CreateSeededRandom(_options.Seed.Value)
             : RandomHelper.CreateSeededRandom(42);
         _centerCounts = new int[_options.NumClusters];
 
@@ -86,7 +89,7 @@ public class MiniBatchKMeans<T> : ClusteringBase<T>
             NumClusters = _options.NumClusters,
             MaxIterations = _options.MaxIterations,
             Tolerance = _options.Tolerance,
-            RandomState = _options.RandomState,
+            Seed = _options.Seed,
             NumInitializations = _options.NumInitializations,
             BatchSize = _options.BatchSize,
             InitMethod = _options.InitMethod,

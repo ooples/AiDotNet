@@ -1,3 +1,4 @@
+#nullable disable
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Inputs;
 using AiDotNet.Models.Options;

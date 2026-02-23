@@ -1,5 +1,7 @@
+#nullable disable
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels;
@@ -9,13 +11,16 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
 {
     public class SentenceTransformersFineTunerTests
     {
+        private static string GetMissingModelPath() =>
+            Path.Combine(Path.GetTempPath(), $"missing-{Guid.NewGuid():N}.onnx");
+
         [Fact]
         public void Constructor_WithValidParameters_CreatesInstance()
         {
             // Arrange & Act
             var model = new SentenceTransformersFineTuner<double>(
-                "base-model-path.onnx",
-                "output-model-path.onnx",
+                GetMissingModelPath(),
+                GetMissingModelPath(),
                 10,
                 0.00002,
                 384
@@ -32,7 +37,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
         {
             // Arrange & Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                new SentenceTransformersFineTuner<double>(null, "output-model-path.onnx", 10, 0.00002, 384));
+                new SentenceTransformersFineTuner<double>(null, GetMissingModelPath(), 10, 0.00002, 384));
         }
 
         [Fact]
@@ -40,7 +45,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
         {
             // Arrange & Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                new SentenceTransformersFineTuner<double>("base-model-path.onnx", null, 10, 0.00002, 384));
+                new SentenceTransformersFineTuner<double>(GetMissingModelPath(), null, 10, 0.00002, 384));
         }
 
         [Fact]
@@ -48,7 +53,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
         {
             // Arrange & Act & Assert
             Assert.Throws<ArgumentOutOfRangeException>(() =>
-                new SentenceTransformersFineTuner<double>("base-model-path.onnx", "output-model-path.onnx", 0, 0.00002, 384));
+                new SentenceTransformersFineTuner<double>(GetMissingModelPath(), GetMissingModelPath(), 0, 0.00002, 384));
         }
 
         [Fact]
@@ -56,28 +61,23 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
         {
             // Arrange & Act & Assert
             Assert.Throws<ArgumentOutOfRangeException>(() =>
-                new SentenceTransformersFineTuner<double>("base-model-path.onnx", "output-model-path.onnx", -1, 0.00002, 384));
+                new SentenceTransformersFineTuner<double>(GetMissingModelPath(), GetMissingModelPath(), -1, 0.00002, 384));
         }
 
         [Fact]
-        public void Embed_BeforeFineTuning_UsesBaseModel()
+        public void Embed_WithMissingModelFile_ThrowsFileNotFoundException()
         {
-            // Arrange
+            // Arrange - model file does not exist on disk
             var model = new SentenceTransformersFineTuner<double>(
-                "base-model-path.onnx",
-                "output-model-path.onnx",
+                GetMissingModelPath(),
+                GetMissingModelPath(),
                 10,
                 0.00002,
                 384
             );
-            var text = "Test text";
 
-            // Act
-            var embedding = model.Embed(text);
-
-            // Assert
-            Assert.NotNull(embedding);
-            Assert.Equal(384, embedding.Length);
+            // Act & Assert - should throw because ONNX model file doesn't exist
+            Assert.Throws<FileNotFoundException>(() => model.Embed("Test text"));
         }
 
         [Fact]
@@ -85,8 +85,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
         {
             // Arrange
             var model = new SentenceTransformersFineTuner<double>(
-                "base-model-path.onnx",
-                "output-model-path.onnx",
+                GetMissingModelPath(),
+                GetMissingModelPath(),
                 10,
                 0.00002,
                 384
@@ -101,8 +101,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
         {
             // Arrange
             var model = new SentenceTransformersFineTuner<double>(
-                "base-model-path.onnx",
-                "output-model-path.onnx",
+                GetMissingModelPath(),
+                GetMissingModelPath(),
                 10,
                 0.00002,
                 384
@@ -113,12 +113,12 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
         }
 
         [Fact]
-        public void FineTune_WithValidTrainingPairs_Succeeds()
+        public void FineTune_WithMissingModelFile_ThrowsFileNotFoundException()
         {
-            // Arrange
+            // Arrange - using a non-existent model path
             var model = new SentenceTransformersFineTuner<double>(
-                "base-model-path.onnx",
-                "output-model-path.onnx",
+                GetMissingModelPath(),
+                GetMissingModelPath(),
                 5,
                 0.00002,
                 384
@@ -130,12 +130,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
                 ("anchor3", "positive3", "negative3")
             };
 
-            // Act
-            model.FineTune(trainingPairs);
-
-            // Assert - Should not throw, and we can verify embeddings work after
-            var embedding = model.Embed("test");
-            Assert.NotNull(embedding);
+            // Act & Assert - should throw because model file doesn't exist
+            Assert.Throws<FileNotFoundException>(() => model.FineTune(trainingPairs));
         }
 
         [Fact]
@@ -143,8 +139,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
         {
             // Arrange
             var model = new SentenceTransformersFineTuner<double>(
-                "base-model-path.onnx",
-                "output-model-path.onnx",
+                GetMissingModelPath(),
+                GetMissingModelPath(),
                 10,
                 0.00002,
                 384
@@ -159,8 +155,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
         {
             // Arrange
             var model = new SentenceTransformersFineTuner<double>(
-                "base-model-path.onnx",
-                "output-model-path.onnx",
+                GetMissingModelPath(),
+                GetMissingModelPath(),
                 10,
                 0.00002,
                 384
@@ -173,101 +169,12 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
         }
 
         [Fact]
-        public void Embed_AfterFineTuning_UsesFineTunedEmbeddings()
-        {
-            // Arrange
-            var model = new SentenceTransformersFineTuner<double>(
-                "base-model-path.onnx",
-                "output-model-path.onnx",
-                5,
-                0.00002,
-                384
-            );
-            var anchorText = "test anchor";
-            var trainingPairs = new List<(string, string, string)>
-            {
-                (anchorText, "positive", "negative")
-            };
-
-            // Get embedding before fine-tuning
-            var embeddingBefore = model.Embed(anchorText);
-
-            // Act - Fine-tune
-            model.FineTune(trainingPairs);
-
-            // Get embedding after fine-tuning
-            var embeddingAfter = model.Embed(anchorText);
-
-            // Assert - Embeddings should be different after fine-tuning for the trained text
-            // Note: Due to the implementation, the embedding might be adjusted
-            Assert.NotNull(embeddingBefore);
-            Assert.NotNull(embeddingAfter);
-            Assert.Equal(384, embeddingBefore.Length);
-            Assert.Equal(384, embeddingAfter.Length);
-        }
-
-        [Fact]
-        public void Embed_AfterFineTuning_UntrainedTextsUseBaseModel()
-        {
-            // Arrange
-            var model = new SentenceTransformersFineTuner<double>(
-                "base-model-path.onnx",
-                "output-model-path.onnx",
-                5,
-                0.00002,
-                384
-            );
-            var trainingPairs = new List<(string, string, string)>
-            {
-                ("trained anchor", "positive", "negative")
-            };
-            var untrainedText = "untrained text";
-
-            // Get embedding before fine-tuning
-            var embeddingBefore = model.Embed(untrainedText);
-
-            // Act - Fine-tune
-            model.FineTune(trainingPairs);
-
-            // Get embedding after fine-tuning
-            var embeddingAfter = model.Embed(untrainedText);
-
-            // Assert - Embeddings should be same for untrained text
-            for (int i = 0; i < embeddingBefore.Length; i++)
-            {
-                Assert.Equal(embeddingBefore[i], embeddingAfter[i], 10);
-            }
-        }
-
-        [Fact]
-        public void EmbedBatch_WithValidTexts_ReturnsMatrixOfCorrectDimensions()
-        {
-            // Arrange
-            var model = new SentenceTransformersFineTuner<double>(
-                "base-model-path.onnx",
-                "output-model-path.onnx",
-                10,
-                0.00002,
-                384
-            );
-            var texts = new List<string> { "First text", "Second text", "Third text" };
-
-            // Act
-            var embeddings = model.EmbedBatch(texts);
-
-            // Assert
-            Assert.NotNull(embeddings);
-            Assert.Equal(3, embeddings.Rows);
-            Assert.Equal(384, embeddings.Columns);
-        }
-
-        [Fact]
         public void EmbedBatch_WithNullTexts_ThrowsArgumentNullException()
         {
             // Arrange
             var model = new SentenceTransformersFineTuner<double>(
-                "base-model-path.onnx",
-                "output-model-path.onnx",
+                GetMissingModelPath(),
+                GetMissingModelPath(),
                 10,
                 0.00002,
                 384
@@ -282,8 +189,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
         {
             // Arrange
             var model = new SentenceTransformersFineTuner<double>(
-                "base-model-path.onnx",
-                "output-model-path.onnx",
+                GetMissingModelPath(),
+                GetMissingModelPath(),
                 10,
                 0.00002,
                 384
@@ -295,95 +202,36 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
         }
 
         [Fact]
-        public void Embed_WithFloatType_WorksCorrectly()
+        public void EmbedBatch_WithMissingModelFile_ThrowsFileNotFoundException()
         {
-            // Arrange
+            // Arrange - model file does not exist on disk
+            var model = new SentenceTransformersFineTuner<double>(
+                GetMissingModelPath(),
+                GetMissingModelPath(),
+                10,
+                0.00002,
+                384
+            );
+            var texts = new List<string> { "First text", "Second text", "Third text" };
+
+            // Act & Assert - should throw because ONNX model file doesn't exist
+            Assert.Throws<FileNotFoundException>(() => model.EmbedBatch(texts));
+        }
+
+        [Fact]
+        public void Embed_WithFloatType_MissingModelFile_ThrowsFileNotFoundException()
+        {
+            // Arrange - model file does not exist on disk
             var model = new SentenceTransformersFineTuner<float>(
-                "base-model-path.onnx",
-                "output-model-path.onnx",
+                GetMissingModelPath(),
+                GetMissingModelPath(),
                 10,
                 0.00002f,
                 384
             );
-            var text = "Test with float type";
 
-            // Act
-            var embedding = model.Embed(text);
-
-            // Assert
-            Assert.NotNull(embedding);
-            Assert.Equal(384, embedding.Length);
-        }
-
-        [Fact]
-        public void Embed_WithCustomDimension_ReturnsCorrectSize()
-        {
-            // Arrange
-            var customDimension = 768;
-            var model = new SentenceTransformersFineTuner<double>(
-                "base-model-path.onnx",
-                "output-model-path.onnx",
-                10,
-                0.00002,
-                customDimension
-            );
-            var text = "Testing custom dimension";
-
-            // Act
-            var embedding = model.Embed(text);
-
-            // Assert
-            Assert.Equal(customDimension, embedding.Length);
-        }
-
-        [Fact]
-        public void FineTune_WithMultipleEpochs_ProcessesAllEpochs()
-        {
-            // Arrange
-            var epochs = 3;
-            var model = new SentenceTransformersFineTuner<double>(
-                "base-model-path.onnx",
-                "output-model-path.onnx",
-                epochs,
-                0.00002,
-                384
-            );
-            var trainingPairs = new List<(string, string, string)>
-            {
-                ("anchor", "positive", "negative")
-            };
-
-            // Act - Should complete without throwing
-            model.FineTune(trainingPairs);
-
-            // Assert - Model should still function
-            var embedding = model.Embed("test");
-            Assert.NotNull(embedding);
-            Assert.Equal(384, embedding.Length);
-        }
-
-        [Fact]
-        public void FineTune_WithLargeTrainingSet_Succeeds()
-        {
-            // Arrange
-            var model = new SentenceTransformersFineTuner<double>(
-                "base-model-path.onnx",
-                "output-model-path.onnx",
-                2,
-                0.00002,
-                384
-            );
-            var trainingPairs = Enumerable.Range(0, 50)
-                .Select(i => ($"anchor{i}", $"positive{i}", $"negative{i}"))
-                .ToList();
-
-            // Act
-            model.FineTune(trainingPairs);
-
-            // Assert
-            var embedding = model.Embed("test");
-            Assert.NotNull(embedding);
-            Assert.Equal(384, embedding.Length);
+            // Act & Assert - should throw because ONNX model file doesn't exist
+            Assert.Throws<FileNotFoundException>(() => model.Embed("Test with float type"));
         }
 
         [Fact]
@@ -391,8 +239,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
         {
             // Arrange
             var model = new SentenceTransformersFineTuner<double>(
-                "base-model-path.onnx",
-                "output-model-path.onnx",
+                GetMissingModelPath(),
+                GetMissingModelPath(),
                 10,
                 0.00002,
                 384
@@ -406,19 +254,38 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
         }
 
         [Fact]
-        public void FineTune_WithDifferentLearningRates_Succeeds()
+        public void FineTune_WithLargeTrainingSet_ThrowsFileNotFoundException()
         {
-            // Arrange
+            // Arrange - using a non-existent model path
+            var model = new SentenceTransformersFineTuner<double>(
+                GetMissingModelPath(),
+                GetMissingModelPath(),
+                2,
+                0.00002,
+                384
+            );
+            var trainingPairs = Enumerable.Range(0, 50)
+                .Select(i => ($"anchor{i}", $"positive{i}", $"negative{i}"))
+                .ToList();
+
+            // Act & Assert - should throw because model file doesn't exist
+            Assert.Throws<FileNotFoundException>(() => model.FineTune(trainingPairs));
+        }
+
+        [Fact]
+        public void FineTune_WithDifferentLearningRates_MissingModelFile_ThrowsFileNotFoundException()
+        {
+            // Arrange - model files don't exist, both should throw
             var model1 = new SentenceTransformersFineTuner<double>(
-                "base-model-path.onnx",
-                "output-model-path.onnx",
+                GetMissingModelPath(),
+                GetMissingModelPath(),
                 5,
                 0.00001,
                 384
             );
             var model2 = new SentenceTransformersFineTuner<double>(
-                "base-model-path.onnx",
-                "output-model-path.onnx",
+                GetMissingModelPath(),
+                GetMissingModelPath(),
                 5,
                 0.0001,
                 384
@@ -428,15 +295,9 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
                 ("anchor", "positive", "negative")
             };
 
-            // Act
-            model1.FineTune(trainingPairs);
-            model2.FineTune(trainingPairs);
-
-            // Assert
-            var embedding1 = model1.Embed("test");
-            var embedding2 = model2.Embed("test");
-            Assert.NotNull(embedding1);
-            Assert.NotNull(embedding2);
+            // Act & Assert - both should throw because model file doesn't exist
+            Assert.Throws<FileNotFoundException>(() => model1.FineTune(trainingPairs));
+            Assert.Throws<FileNotFoundException>(() => model2.FineTune(trainingPairs));
         }
     }
 }

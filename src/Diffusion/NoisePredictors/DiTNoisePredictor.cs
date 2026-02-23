@@ -1,8 +1,9 @@
+using System.Diagnostics.CodeAnalysis;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
-using AiDotNet.NeuralNetworks.Diffusion;
+using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 
 namespace AiDotNet.Diffusion.NoisePredictors;
@@ -118,6 +119,11 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     private readonly double _mlpRatio;
 
     /// <summary>
+    /// The neural network architecture configuration, if provided.
+    /// </summary>
+    private readonly NeuralNetworkArchitecture<T>? _architecture;
+
+    /// <summary>
     /// Patch embedding layer.
     /// </summary>
     private DenseLayer<T>? _patchEmbed;
@@ -188,33 +194,49 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     public int PatchSize => _patchSize;
 
     /// <summary>
-    /// Initializes a new DiT noise predictor with default XL/2 parameters.
+    /// Initializes a new instance of the DiTNoisePredictor class with full customization support.
     /// </summary>
-    public DiTNoisePredictor()
-        : this(
-            inputChannels: 4,
-            hiddenSize: ModelSizes.XLarge.hiddenSize,
-            numLayers: ModelSizes.XLarge.numLayers,
-            numHeads: ModelSizes.XLarge.numHeads,
-            patchSize: 2,
-            contextDim: 1024,
-            mlpRatio: 4.0)
-    {
-    }
-
-    /// <summary>
-    /// Initializes a new DiT noise predictor with custom parameters.
-    /// </summary>
-    /// <param name="inputChannels">Number of input channels.</param>
-    /// <param name="hiddenSize">Hidden dimension size.</param>
-    /// <param name="numLayers">Number of transformer layers.</param>
-    /// <param name="numHeads">Number of attention heads.</param>
-    /// <param name="patchSize">Patch size for tokenization.</param>
-    /// <param name="contextDim">Conditioning context dimension.</param>
-    /// <param name="mlpRatio">MLP hidden dimension ratio.</param>
+    /// <param name="architecture">
+    /// Optional neural network architecture with custom layers. If the architecture's Layers
+    /// list contains layers, those will be used for the transformer blocks. If null or empty,
+    /// industry-standard DiT-XL/2 layers are created automatically.
+    /// </param>
+    /// <param name="inputChannels">Number of input channels (default: 4 for latent diffusion).</param>
+    /// <param name="hiddenSize">Hidden dimension size (default: 1152 for DiT-XL).</param>
+    /// <param name="numLayers">Number of transformer layers (default: 28 for DiT-XL).</param>
+    /// <param name="numHeads">Number of attention heads (default: 16).</param>
+    /// <param name="patchSize">Patch size for tokenization (default: 2).</param>
+    /// <param name="contextDim">Conditioning context dimension (default: 1024).</param>
+    /// <param name="mlpRatio">MLP hidden dimension ratio (default: 4.0).</param>
     /// <param name="numClasses">Number of classes for class conditioning (0 for text-only).</param>
+    /// <param name="customBlocks">
+    /// Optional custom transformer blocks. If provided, these blocks are used instead of creating
+    /// default blocks. This allows full customization of the transformer architecture.
+    /// </param>
+    /// <param name="lossFunction">Optional loss function (default: MSE).</param>
     /// <param name="seed">Random seed for initialization.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> All parameters are optional with industry-standard defaults
+    /// from the DiT-XL/2 paper. You can create a ready-to-use DiT with no arguments,
+    /// or customize any component:
+    ///
+    /// <code>
+    /// // Default DiT-XL/2 configuration (recommended for most users)
+    /// var dit = new DiTNoisePredictor&lt;float&gt;();
+    ///
+    /// // Custom layers via NeuralNetworkArchitecture
+    /// var arch = new NeuralNetworkArchitecture&lt;float&gt;(..., layers: myCustomLayers);
+    /// var dit = new DiTNoisePredictor&lt;float&gt;(architecture: arch);
+    ///
+    /// // DiT-L/2 configuration
+    /// var dit = new DiTNoisePredictor&lt;float&gt;(
+    ///     hiddenSize: 1024, numLayers: 24, numHeads: 16);
+    /// </code>
+    /// </para>
+    /// </remarks>
     public DiTNoisePredictor(
+        NeuralNetworkArchitecture<T>? architecture = null,
         int inputChannels = 4,
         int hiddenSize = 1152,
         int numLayers = 28,
@@ -223,9 +245,12 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
         int contextDim = 1024,
         double mlpRatio = 4.0,
         int numClasses = 0,
+        List<DiTBlock>? customBlocks = null,
+        ILossFunction<T>? lossFunction = null,
         int? seed = null)
-        : base(null, seed)
+        : base(lossFunction, seed)
     {
+        _architecture = architecture;
         _inputChannels = inputChannels;
         _hiddenSize = hiddenSize;
         _numLayers = numLayers;
@@ -236,21 +261,37 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
 
         _blocks = new List<DiTBlock>();
 
-        InitializeLayers(numClasses);
+        InitializeLayers(architecture, numClasses, customBlocks);
     }
 
     /// <summary>
-    /// Initializes all layers.
+    /// Initializes all layers of the DiT, using custom layers from the user
+    /// if provided or creating industry-standard layers from the DiT paper.
     /// </summary>
-    private void InitializeLayers(int numClasses)
+    /// <param name="architecture">Optional architecture with custom layers.</param>
+    /// <param name="numClasses">Number of classes for class conditioning.</param>
+    /// <param name="customBlocks">Optional custom transformer blocks.</param>
+    /// <remarks>
+    /// <para>
+    /// Layer resolution order:
+    /// 1. If custom blocks are provided directly, use those
+    /// 2. If a NeuralNetworkArchitecture with layers is provided, wrap those as transformer blocks
+    /// 3. Otherwise, create industry-standard DiT-XL/2 layers
+    /// </para>
+    /// </remarks>
+    [MemberNotNull(nameof(_patchEmbed), nameof(_timeEmbed1), nameof(_timeEmbed2),
+                   nameof(_finalNorm), nameof(_outputProj), nameof(_adaln_modulation))]
+    private void InitializeLayers(
+        NeuralNetworkArchitecture<T>? architecture,
+        int numClasses,
+        List<DiTBlock>? customBlocks)
     {
         var patchDim = _inputChannels * _patchSize * _patchSize;
+        var timeEmbedDim = _hiddenSize * 4;
 
-        // Patch embedding: linear projection from patch to hidden
+        // Always create patch embedding, time embedding, and final layers
         _patchEmbed = new DenseLayer<T>(patchDim, _hiddenSize, activationFunction: null);
 
-        // Time embedding MLP
-        var timeEmbedDim = _hiddenSize * 4;
         _timeEmbed1 = new DenseLayer<T>(
             _hiddenSize,
             timeEmbedDim,
@@ -266,7 +307,57 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
             _labelEmbed = new DenseLayer<T>(numClasses, _hiddenSize, activationFunction: null);
         }
 
-        // Transformer blocks with self-attention and cross-attention
+        _finalNorm = new LayerNormalizationLayer<T>(_hiddenSize);
+        _adaln_modulation = new DenseLayer<T>(timeEmbedDim, _hiddenSize * 2, activationFunction: null);
+        _outputProj = new DenseLayer<T>(_hiddenSize, patchDim, activationFunction: null);
+
+        // Priority 1: Use custom blocks passed directly
+        if (customBlocks != null && customBlocks.Count > 0)
+        {
+            _blocks.AddRange(customBlocks);
+            return;
+        }
+
+        // Priority 2: Use layers from NeuralNetworkArchitecture as block components
+        if (architecture?.Layers != null && architecture.Layers.Count > 0)
+        {
+            foreach (var layer in architecture.Layers)
+            {
+                // Use a provided DenseLayer<T> for MLP1 if available; otherwise create a
+                // standard MLP layer with dimensions (_hiddenSize -> _hiddenSize * _mlpRatio).
+                // Note: if the provided DenseLayer has different dimensions, it will auto-resize
+                // weights on the first forward pass via EnsureWeightShapeForInput.
+                var mlp1 = layer as DenseLayer<T>
+                    ?? new DenseLayer<T>(_hiddenSize, (int)(_hiddenSize * _mlpRatio),
+                        (IActivationFunction<T>)new GELUActivation<T>());
+
+                _blocks.Add(new DiTBlock
+                {
+                    Norm1 = new LayerNormalizationLayer<T>(_hiddenSize),
+                    Attention = CreateAttentionLayer(),
+                    Norm2 = new LayerNormalizationLayer<T>(_hiddenSize),
+                    MLP1 = mlp1,
+                    MLP2 = new DenseLayer<T>((int)(_hiddenSize * _mlpRatio), _hiddenSize, activationFunction: null),
+                    AdaLNModulation = new DenseLayer<T>(timeEmbedDim, _hiddenSize * 6, activationFunction: null),
+                    CrossAttnNorm = new LayerNormalizationLayer<T>(_hiddenSize),
+                    CrossAttnQ = new DenseLayer<T>(_hiddenSize, _hiddenSize, activationFunction: null),
+                    CrossAttnK = new DenseLayer<T>(_contextDim, _hiddenSize, activationFunction: null),
+                    CrossAttnV = new DenseLayer<T>(_contextDim, _hiddenSize, activationFunction: null),
+                    CrossAttnOut = new DenseLayer<T>(_hiddenSize, _hiddenSize, activationFunction: null)
+                });
+            }
+            return;
+        }
+
+        // Priority 3: Create industry-standard DiT transformer blocks
+        CreateDefaultBlocks(timeEmbedDim);
+    }
+
+    /// <summary>
+    /// Creates industry-standard DiT transformer blocks.
+    /// </summary>
+    private void CreateDefaultBlocks(int timeEmbedDim)
+    {
         var mlpHidden = (int)(_hiddenSize * _mlpRatio);
 
         for (int i = 0; i < _numLayers; i++)
@@ -278,8 +369,7 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
                 Norm2 = new LayerNormalizationLayer<T>(_hiddenSize),
                 MLP1 = new DenseLayer<T>(_hiddenSize, mlpHidden, (IActivationFunction<T>)new GELUActivation<T>()),
                 MLP2 = new DenseLayer<T>(mlpHidden, _hiddenSize, activationFunction: null),
-                AdaLNModulation = new DenseLayer<T>(_hiddenSize * 4, _hiddenSize * 6, activationFunction: null),
-                // Cross-attention layers for conditioning
+                AdaLNModulation = new DenseLayer<T>(timeEmbedDim, _hiddenSize * 6, activationFunction: null),
                 CrossAttnNorm = new LayerNormalizationLayer<T>(_hiddenSize),
                 CrossAttnQ = new DenseLayer<T>(_hiddenSize, _hiddenSize, activationFunction: null),
                 CrossAttnK = new DenseLayer<T>(_contextDim, _hiddenSize, activationFunction: null),
@@ -287,11 +377,6 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
                 CrossAttnOut = new DenseLayer<T>(_hiddenSize, _hiddenSize, activationFunction: null)
             });
         }
-
-        // Final norm and projection
-        _finalNorm = new LayerNormalizationLayer<T>(_hiddenSize);
-        _adaln_modulation = new DenseLayer<T>(_hiddenSize * 4, _hiddenSize * 2, activationFunction: null);
-        _outputProj = new DenseLayer<T>(_hiddenSize, patchDim, activationFunction: null);
     }
 
     /// <summary>
@@ -1051,13 +1136,13 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     public override INoisePredictor<T> Clone()
     {
         var clone = new DiTNoisePredictor<T>(
-            _inputChannels,
-            _hiddenSize,
-            _numLayers,
-            _numHeads,
-            _patchSize,
-            _contextDim,
-            _mlpRatio);
+            inputChannels: _inputChannels,
+            hiddenSize: _hiddenSize,
+            numLayers: _numLayers,
+            numHeads: _numHeads,
+            patchSize: _patchSize,
+            contextDim: _contextDim,
+            mlpRatio: _mlpRatio);
 
         // Preserve trained weights
         clone.SetParameters(GetParameters());
@@ -1080,9 +1165,9 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
 
     /// <summary>
-    /// Internal block structure for DiT.
+    /// Block structure for DiT transformer layers containing attention, MLP, and conditioning layers.
     /// </summary>
-    private class DiTBlock
+    public class DiTBlock
     {
         public LayerNormalizationLayer<T>? Norm1 { get; set; }
         public SelfAttentionLayer<T>? Attention { get; set; }

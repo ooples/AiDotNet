@@ -54,8 +54,12 @@ public class SpeakerDiarizer<T> : SpeakerRecognitionBase<T>, ISpeakerDiarizer<T>
     #region Fields
 
     private readonly SpeakerDiarizerOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     private readonly SpeakerEmbeddingExtractor<T> _embeddingExtractor;
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly bool _useNativeMode;
     private bool _disposed;
 
@@ -164,9 +168,6 @@ public class SpeakerDiarizer<T> : SpeakerRecognitionBase<T>, ISpeakerDiarizer<T>
                 sampleRate: _options.SampleRate,
                 embeddingDimension: _options.EmbeddingDimension);
         }
-
-        // Optimizer not used in ONNX mode but required by interface
-        _optimizer = new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         InitializeLayers();
     }
@@ -642,7 +643,7 @@ public class SpeakerDiarizer<T> : SpeakerRecognitionBase<T>, ISpeakerDiarizer<T>
         }
 
         // Update parameters using optimizer
-        _optimizer.UpdateParameters(Layers);
+        _optimizer?.UpdateParameters(Layers);
 
         // Set inference mode
         SetTrainingMode(false);

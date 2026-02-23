@@ -1,5 +1,6 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Validation;
 
 namespace AiDotNet.SelfSupervisedLearning.Evaluation;
 
@@ -61,7 +62,8 @@ public class KNNEvaluator<T>
         bool useCosine = true,
         double temperature = 0.07)
     {
-        _encoder = encoder ?? throw new ArgumentNullException(nameof(encoder));
+        Guard.NotNull(encoder);
+        _encoder = encoder;
         _k = k;
         _useCosine = useCosine;
         _temperature = temperature;

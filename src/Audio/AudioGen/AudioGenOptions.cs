@@ -1,3 +1,4 @@
+using AiDotNet.Models.Options;
 using AiDotNet.Onnx;
 
 namespace AiDotNet.Audio.AudioGen;
@@ -20,8 +21,35 @@ namespace AiDotNet.Audio.AudioGen;
 /// - "Crowd cheering at a sports event"
 /// </para>
 /// </remarks>
-public class AudioGenOptions
+public class AudioGenOptions : ModelOptions
 {
+    /// <summary>Initializes a new instance with default values.</summary>
+    public AudioGenOptions() { }
+
+    /// <summary>Initializes a new instance by copying from another instance.</summary>
+    /// <param name="other">The options instance to copy from.</param>
+    /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
+    public AudioGenOptions(AudioGenOptions other)
+    {
+        if (other == null)
+            throw new ArgumentNullException(nameof(other));
+
+        Seed = other.Seed;
+        ModelSize = other.ModelSize;
+        SampleRate = other.SampleRate;
+        DurationSeconds = other.DurationSeconds;
+        MaxDurationSeconds = other.MaxDurationSeconds;
+        Temperature = other.Temperature;
+        TopK = other.TopK;
+        TopP = other.TopP;
+        GuidanceScale = other.GuidanceScale;
+        Channels = other.Channels;
+        TextEncoderPath = other.TextEncoderPath;
+        LanguageModelPath = other.LanguageModelPath;
+        AudioCodecPath = other.AudioCodecPath;
+        OnnxOptions = other.OnnxOptions;
+    }
+
     /// <summary>
     /// Gets or sets the model size to use.
     /// </summary>
@@ -69,7 +97,7 @@ public class AudioGenOptions
     /// Gets or sets the random seed for reproducibility.
     /// Null for random generation.
     /// </summary>
-    public int? Seed { get; set; }
+    public new int? Seed { get; set; }
 
     /// <summary>
     /// Gets or sets the number of audio channels (1=mono, 2=stereo).

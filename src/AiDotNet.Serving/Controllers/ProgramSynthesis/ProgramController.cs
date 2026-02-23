@@ -4,6 +4,7 @@ using AiDotNet.Serving.ProgramSynthesis;
 using AiDotNet.Serving.Sandboxing.Execution;
 using AiDotNet.Serving.Security;
 using Microsoft.AspNetCore.Mvc;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Serving.Controllers.ProgramSynthesis;
 
@@ -27,12 +28,18 @@ public sealed class ProgramController : ControllerBase
         IServingRequestContextAccessor requestContextAccessor,
         ILogger<ProgramController> logger)
     {
-        _executor = executor ?? throw new ArgumentNullException(nameof(executor));
-        _evaluator = evaluator ?? throw new ArgumentNullException(nameof(evaluator));
-        _responseRedactor = responseRedactor ?? throw new ArgumentNullException(nameof(responseRedactor));
-        _evaluateIoResponseRedactor = evaluateIoResponseRedactor ?? throw new ArgumentNullException(nameof(evaluateIoResponseRedactor));
-        _requestContextAccessor = requestContextAccessor ?? throw new ArgumentNullException(nameof(requestContextAccessor));
-        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        Guard.NotNull(executor);
+        _executor = executor;
+        Guard.NotNull(evaluator);
+        _evaluator = evaluator;
+        Guard.NotNull(responseRedactor);
+        _responseRedactor = responseRedactor;
+        Guard.NotNull(evaluateIoResponseRedactor);
+        _evaluateIoResponseRedactor = evaluateIoResponseRedactor;
+        Guard.NotNull(requestContextAccessor);
+        _requestContextAccessor = requestContextAccessor;
+        Guard.NotNull(logger);
+        _logger = logger;
     }
 
     [HttpPost("execute")]

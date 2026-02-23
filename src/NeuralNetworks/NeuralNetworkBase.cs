@@ -1,11 +1,14 @@
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Interpretability;
+using AiDotNet.Models.Options;
+using AiDotNet.Interpretability.Explainers;
 using AiDotNet.MixedPrecision;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
+using AiDotNet.Validation;
 
 namespace AiDotNet.NeuralNetworks;
 
@@ -20,7 +23,7 @@ namespace AiDotNet.NeuralNetworks;
 /// This class provides the foundation for building different types of neural networks.
 /// </para>
 /// </remarks>
-public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpretableModel<T>, IInputGradientComputable<T>, IDisposable
+public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpretableModel<T>, IInputGradientComputable<T>, IConfigurableModel<T>, IDisposable
 {
     /// <summary>
     /// The internal collection of layers that make up this neural network.
@@ -100,6 +103,17 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </para>
     /// </remarks>
     private HashSet<int>? _explicitlySetActiveFeatures;
+
+    /// <summary>
+    /// Configuration options for this neural network model.
+    /// </summary>
+    /// <remarks>
+    /// Derived classes should set this to their specific options type in their constructor.
+    /// </remarks>
+    protected ModelOptions Options { get; set; } = new NeuralNetworkOptions();
+
+    /// <inheritdoc/>
+    public virtual ModelOptions GetOptions() => Options;
 
     /// <summary>
     /// Mathematical operations for the numeric type T.
@@ -1024,8 +1038,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // Store input to each layer for backpropagation
             _layerInputs[i] = current;
 
-            // Forward pass through layer
-            current = Layers[i].Forward(current);
+            // Forward pass through layer with mixed-precision awareness
+            // ForwardWithPrecisionCheck automatically handles precision based on
+            // the current MixedPrecisionScope and LayerPrecisionPolicy
+            current = Layers[i].ForwardWithPrecisionCheck(current);
 
             // Store output from each layer for backpropagation
             _layerOutputs[i] = current;
@@ -1841,6 +1857,18 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     protected void InvalidateParameterCountCache()
     {
         _cachedParameterCount = null;
+        InvalidateLayerInfoCache();
+    }
+
+    /// <summary>
+    /// Invalidates the cached layer info so that <see cref="GetAllLayerInfo"/> recomputes
+    /// layer metadata on the next call. Called automatically from all layer mutation methods
+    /// and deserialization.
+    /// </summary>
+    private void InvalidateLayerInfoCache()
+    {
+        _cachedLayerInfo = null;
+        _cachedLayerCount = -1;
     }
 
     /// <summary>
@@ -2818,7 +2846,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             _layers.Add(layer);
         }
 
-        // Invalidate parameter count cache after loading all layers
+        // Invalidate caches after loading all layers
+        // (InvalidateParameterCountCache already calls InvalidateLayerInfoCache)
         InvalidateParameterCountCache();
 
         // Read network-specific data
@@ -3165,6 +3194,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
     #region IInterpretableModel Implementation
 
+    // Suppress CS0618 (obsolete) warnings for legacy interface implementations that call deprecated helper overloads.
+    // The interface methods maintain backwards compatibility while the helper exposes new overloads with required background data.
+#pragma warning disable CS0618
+
     /// <summary>
     /// Set of interpretation methods that are enabled for this neural network model.
     /// Controls which interpretability features (SHAP, LIME, etc.) are available.
@@ -3258,17 +3291,41 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// <summary>
     /// Gets feature interaction effects between two features.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Feature interactions occur when the effect of one feature depends on the value
+    /// of another feature. For example, in a house price model, the effect of "number of bathrooms" might
+    /// depend on "house size" - adding a bathroom to a large house has a different effect than adding one
+    /// to a small house.
+    /// </para>
+    /// <para>
+    /// This method computes the H-statistic, which measures interaction strength from 0 (no interaction)
+    /// to 1 (complete dependence).
+    /// </para>
+    /// </remarks>
     public virtual async Task<T> GetFeatureInteractionAsync(int feature1Index, int feature2Index)
     {
-        return await InterpretableModelHelper.GetFeatureInteractionAsync<T>(_enabledMethods, feature1Index, feature2Index);
+        return await InterpretableModelHelper.GetFeatureInteractionAsync(this, _enabledMethods, feature1Index, feature2Index);
     }
 
     /// <summary>
     /// Validates fairness metrics for the given inputs.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Fairness metrics help identify if your model treats different groups of people
+    /// fairly. For example, if you have a loan approval model, you want to ensure it doesn't discriminate
+    /// based on gender, race, or other sensitive attributes.
+    /// </para>
+    /// <para>
+    /// Key metrics computed include:
+    /// - Demographic Parity: Are positive predictions equally distributed across groups?
+    /// - Disparate Impact: Ratio of positive prediction rates between groups (should be close to 1)
+    /// </para>
+    /// </remarks>
     public virtual async Task<FairnessMetrics<T>> ValidateFairnessAsync(Tensor<T> inputs, int sensitiveFeatureIndex)
     {
-        return await InterpretableModelHelper.ValidateFairnessAsync<T>(_fairnessMetrics);
+        return await InterpretableModelHelper.ValidateFairnessAsync(this, inputs, sensitiveFeatureIndex, _fairnessMetrics);
     }
 
     /// <summary>
@@ -3280,6 +3337,81 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     }
 
     /// <summary>
+    /// Gets Integrated Gradients attributions for a neural network prediction.
+    /// </summary>
+    /// <param name="input">The input tensor to explain.</param>
+    /// <param name="baseline">The baseline input (defaults to zeros if null).</param>
+    /// <param name="numSteps">Number of integration steps (default: 50).</param>
+    /// <returns>Integrated Gradients explanation with feature attributions.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Integrated Gradients is a theoretically-grounded method
+    /// that satisfies completeness (attributions sum to prediction - baseline_prediction)
+    /// and sensitivity (important features get non-zero attributions).
+    /// </para>
+    /// </remarks>
+    public virtual async Task<IntegratedGradientsExplanation<T>> GetIntegratedGradientsAsync(
+        Tensor<T> input,
+        Tensor<T>? baseline = null,
+        int numSteps = 50)
+    {
+        // Use backprop-based version for efficient gradient computation
+        return await InterpretableModelHelper.GetIntegratedGradientsWithBackpropAsync(this, _enabledMethods, input, baseline, numSteps);
+    }
+
+    /// <summary>
+    /// Gets DeepLIFT attributions for a neural network prediction.
+    /// </summary>
+    /// <param name="input">The input tensor to explain.</param>
+    /// <param name="baseline">The baseline input (defaults to zeros if null).</param>
+    /// <param name="useRevealCancel">Use RevealCancel rule instead of Rescale.</param>
+    /// <returns>DeepLIFT explanation with feature attributions.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> DeepLIFT compares activations to a reference baseline.
+    /// It's faster than Integrated Gradients and handles non-linearities better.
+    /// </para>
+    /// </remarks>
+    public virtual async Task<DeepLIFTExplanation<T>> GetDeepLIFTAsync(
+        Tensor<T> input,
+        Tensor<T>? baseline = null,
+        bool useRevealCancel = false)
+    {
+        var rule = useRevealCancel ? DeepLIFTRule.RevealCancel : DeepLIFTRule.Rescale;
+        // Use backprop-based version for efficient gradient computation
+        return await InterpretableModelHelper.GetDeepLIFTWithBackpropAsync(this, _enabledMethods, input, baseline, rule);
+    }
+
+    /// <summary>
+    /// Gets GradCAM visual explanation for a CNN prediction.
+    /// </summary>
+    /// <param name="input">The input image tensor.</param>
+    /// <param name="targetClass">Target class to explain (-1 for predicted class).</param>
+    /// <returns>GradCAM explanation with heatmap.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> GradCAM creates visual heatmaps showing which parts
+    /// of an image were most important for the CNN's prediction.
+    /// </para>
+    /// </remarks>
+    public virtual async Task<GradCAMExplanation<T>> GetGradCAMAsync(
+        Tensor<T> input,
+        int targetClass = -1)
+    {
+        // Get input shape from the tensor
+        int[] inputShape = input.Shape;
+
+        // For GradCAM we need feature map shape, which depends on the network architecture
+        // Default to a reasonable size; users can override with the helper method directly
+        int[] featureMapShape = inputShape.Length >= 3
+            ? new[] { inputShape[0], inputShape[1] / 4, inputShape[2] / 4, 64 }
+            : new[] { 7, 7, 64 };
+
+        return await InterpretableModelHelper.GetGradCAMAsync(
+            this, _enabledMethods, input, inputShape, featureMapShape, targetClass);
+    }
+
+    /// <summary>
     /// Sets the base model for interpretability analysis.
     /// </summary>
     /// <typeparam name="TInput">The input type for the model.</typeparam>
@@ -3288,7 +3420,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// <exception cref="ArgumentNullException">Thrown when model is null.</exception>
     public virtual void SetBaseModel<TInput, TOutput>(IFullModel<T, TInput, TOutput> model)
     {
-        _baseModel = (model ?? throw new ArgumentNullException(nameof(model))) as IFullModel<T, Tensor<T>, Tensor<T>>;
+        Guard.NotNull(model);
+        _baseModel = model as IFullModel<T, Tensor<T>, Tensor<T>>;
     }
 
     /// <summary>
@@ -3307,10 +3440,13 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </summary>
     public virtual void ConfigureFairness(Vector<int> sensitiveFeatures, params FairnessMetric[] fairnessMetrics)
     {
-        _sensitiveFeatures = sensitiveFeatures ?? throw new ArgumentNullException(nameof(sensitiveFeatures));
+        Guard.NotNull(sensitiveFeatures);
+        _sensitiveFeatures = sensitiveFeatures;
         _fairnessMetrics.Clear();
         _fairnessMetrics.AddRange(fairnessMetrics);
     }
+
+#pragma warning restore CS0618
 
     #endregion
 
@@ -3923,6 +4059,196 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         return layer.ExportComputationGraph(layerInputs);
     }
 
+
+    #endregion
+
+    #region ILayeredModel<T> Implementation
+
+    /// <summary>
+    /// Gets the ordered list of layers in this model (explicit interface implementation).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This provides read-only access to the model's layers
+    /// for tools that need to inspect the model structure without modifying it.</para>
+    /// </remarks>
+    IReadOnlyList<ILayer<T>> ILayeredModel<T>.Layers => _layers.AsReadOnly();
+
+    /// <summary>
+    /// Gets metadata for a specific layer including its parameter offset
+    /// within the flat parameter vector.
+    /// </summary>
+    /// <param name="layerIndex">Zero-based index of the layer.</param>
+    /// <returns>Metadata about the layer at the specified index.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// Thrown when <paramref name="layerIndex"/> is negative or greater than or equal to <see cref="LayerCount"/>.
+    /// </exception>
+    public LayerInfo<T> GetLayerInfo(int layerIndex)
+    {
+        if (layerIndex < 0 || layerIndex >= _layers.Count)
+        {
+            throw new ArgumentOutOfRangeException(nameof(layerIndex),
+                $"Layer index {layerIndex} is out of range. Valid range: 0 to {_layers.Count - 1}.");
+        }
+
+        // Use cached layer info to avoid O(n) offset computation per call
+        var allInfo = GetAllLayerInfo();
+        return allInfo[layerIndex];
+    }
+
+    /// <summary>
+    /// Cached layer info list, invalidated when layers change.
+    /// </summary>
+    private IReadOnlyList<LayerInfo<T>>? _cachedLayerInfo;
+    private int _cachedLayerCount = -1;
+
+    /// <summary>
+    /// Gets metadata for all layers, including parameter offsets, types,
+    /// shapes, names, and cost estimates.
+    /// </summary>
+    /// <returns>An ordered list of layer metadata.</returns>
+    public IReadOnlyList<LayerInfo<T>> GetAllLayerInfo()
+    {
+        // Return cached result if layer count hasn't changed
+        if (_cachedLayerInfo is not null && _cachedLayerCount == _layers.Count)
+        {
+            return _cachedLayerInfo;
+        }
+
+        var result = new List<LayerInfo<T>>(_layers.Count);
+        int parameterOffset = 0;
+
+        for (int i = 0; i < _layers.Count; i++)
+        {
+            var layer = _layers[i];
+            var layerBase = layer as LayerBase<T>;
+
+            result.Add(new LayerInfo<T>
+            {
+                Index = i,
+                Name = layer.LayerName,
+                Category = layerBase?.GetLayerCategory() ?? LayerCategory.Other,
+                Layer = layer,
+                ParameterOffset = parameterOffset,
+                ParameterCount = layer.ParameterCount,
+                InputShape = layer.GetInputShape(),
+                OutputShape = layer.GetOutputShape(),
+                IsTrainable = layer.SupportsTraining && layer.ParameterCount > 0,
+                EstimatedFlops = layerBase?.EstimateFlops() ?? 2L * layer.ParameterCount,
+                EstimatedActivationMemory = layerBase?.EstimateActivationMemory() ?? 0L,
+            });
+
+            parameterOffset += layer.ParameterCount;
+        }
+
+        _cachedLayerInfo = result.AsReadOnly();
+        _cachedLayerCount = _layers.Count;
+        return _cachedLayerInfo;
+    }
+
+    /// <summary>
+    /// Validates that a partition point between layers is valid for pipeline parallelism.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> When splitting a neural network across multiple GPUs,
+    /// each GPU handles a different set of layers. The split must happen at a point where
+    /// the output of one group of layers is compatible with the input of the next group.</para>
+    ///
+    /// <para>This method checks that the output shape of the layer at <paramref name="afterLayerIndex"/>
+    /// matches the input shape of the next layer, ensuring a valid split point.</para>
+    /// </remarks>
+    /// <param name="afterLayerIndex">The index of the layer after which to partition.
+    /// Must be between 0 and <see cref="LayerCount"/> - 2.</param>
+    /// <returns>True if the partition point is valid; false otherwise.</returns>
+    public bool ValidatePartitionPoint(int afterLayerIndex)
+    {
+        if (afterLayerIndex < 0 || afterLayerIndex >= _layers.Count - 1)
+        {
+            return false;
+        }
+
+        var currentLayer = _layers[afterLayerIndex];
+        var nextLayer = _layers[afterLayerIndex + 1];
+
+        var outputShape = currentLayer.GetOutputShape();
+        var inputShape = nextLayer.GetInputShape();
+
+        // Shapes are compatible if they have the same number of dimensions
+        // and each dimension matches
+        if (outputShape.Length != inputShape.Length)
+        {
+            return false;
+        }
+
+        for (int i = 0; i < outputShape.Length; i++)
+        {
+            if (outputShape[i] != inputShape[i])
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Extracts a contiguous sub-model from <paramref name="startLayer"/> to
+    /// <paramref name="endLayer"/> (inclusive).
+    /// </summary>
+    /// <param name="startLayer">Zero-based index of the first layer to include.</param>
+    /// <param name="endLayer">Zero-based index of the last layer to include (inclusive).</param>
+    /// <returns>A sub-model containing the specified layer range with metadata.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// Thrown when layer indices are out of range or startLayer > endLayer.
+    /// </exception>
+    public SubModel<T> ExtractSubModel(int startLayer, int endLayer)
+    {
+        if (startLayer < 0 || startLayer >= _layers.Count)
+        {
+            throw new ArgumentOutOfRangeException(nameof(startLayer),
+                $"Start layer index {startLayer} is out of range. Valid range: 0 to {_layers.Count - 1}.");
+        }
+        if (endLayer < 0 || endLayer >= _layers.Count)
+        {
+            throw new ArgumentOutOfRangeException(nameof(endLayer),
+                $"End layer index {endLayer} is out of range. Valid range: 0 to {_layers.Count - 1}.");
+        }
+        if (startLayer > endLayer)
+        {
+            throw new ArgumentOutOfRangeException(nameof(startLayer),
+                $"Start layer index {startLayer} cannot be greater than end layer index {endLayer}.");
+        }
+
+        int count = endLayer - startLayer + 1;
+        var subLayers = new List<ILayer<T>>(count);
+        var subInfos = new List<LayerInfo<T>>(count);
+
+        int localOffset = 0;
+        for (int i = startLayer; i <= endLayer; i++)
+        {
+            var layer = _layers[i];
+            var layerBase = layer as LayerBase<T>;
+
+            subLayers.Add(layer);
+            subInfos.Add(new LayerInfo<T>
+            {
+                Index = i - startLayer,
+                Name = layer.LayerName,
+                Category = layerBase?.GetLayerCategory() ?? LayerCategory.Other,
+                Layer = layer,
+                ParameterOffset = localOffset,
+                ParameterCount = layer.ParameterCount,
+                InputShape = layer.GetInputShape(),
+                OutputShape = layer.GetOutputShape(),
+                IsTrainable = layer.SupportsTraining && layer.ParameterCount > 0,
+                EstimatedFlops = layerBase?.EstimateFlops() ?? 2L * layer.ParameterCount,
+                EstimatedActivationMemory = layerBase?.EstimateActivationMemory() ?? 0L,
+            });
+
+            localOffset += layer.ParameterCount;
+        }
+
+        return new SubModel<T>(subLayers, subInfos, startLayer, endLayer);
+    }
 
     #endregion
 

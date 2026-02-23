@@ -38,6 +38,7 @@ namespace AiDotNet.Interfaces;
 /// </code>
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("IntermediateActivationStrategy")]
 public interface IIntermediateActivationStrategy<T>
 {
     /// <summary>

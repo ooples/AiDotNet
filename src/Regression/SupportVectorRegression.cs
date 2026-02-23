@@ -56,6 +56,9 @@ public class SupportVectorRegression<T> : NonLinearRegressionBase<T>
     /// </remarks>
     private readonly SupportVectorRegressionOptions _options;
 
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// Creates a new Support Vector Regression model.
     /// </summary>

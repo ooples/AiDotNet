@@ -64,6 +64,7 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
     public NBEATSModel(NBEATSModelOptions<T>? options = null) : base(options ?? new NBEATSModelOptions<T>())
     {
         _options = options ?? new NBEATSModelOptions<T>();
+        Options = _options;
         _numOps = MathHelper.GetNumericOperations<T>();
         _blocks = new List<NBEATSBlock<T>>();
 
@@ -300,11 +301,23 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
 
         for (int sampleIdx = batchStart; sampleIdx < batchEnd; sampleIdx++)
         {
-            // Extract input vector for this sample
             Vector<T> input = new Vector<T>(_options.LookbackWindow);
-            for (int j = 0; j < _options.LookbackWindow; j++)
+            if (x.Columns >= _options.LookbackWindow)
             {
-                input[j] = x[sampleIdx, j];
+                // Feature matrix already has lookback-width columns
+                for (int j = 0; j < _options.LookbackWindow; j++)
+                {
+                    input[j] = x[sampleIdx, j];
+                }
+            }
+            else
+            {
+                // Univariate: construct lookback window from preceding y values
+                for (int j = 0; j < _options.LookbackWindow; j++)
+                {
+                    int yIdx = sampleIdx - _options.LookbackWindow + j;
+                    input[j] = yIdx >= 0 ? y[yIdx] : NumOps.Zero;
+                }
             }
 
             // Get prediction

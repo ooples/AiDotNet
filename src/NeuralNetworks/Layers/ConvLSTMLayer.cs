@@ -669,8 +669,13 @@ public class ConvLSTMLayer<T> : LayerBase<T>
         var shape = input.Shape;
         int rank = shape.Length;
 
-        // Parse input dimensions
+        // Support any rank >= 4: last 4 dims are [T, H, W, C], earlier dims are batch-like
+        if (rank < 4)
+            throw new ArgumentException($"ConvLSTM layer requires at least 4D tensor [T,H,W,C]. Got rank {rank}.");
+
         int batchSize, timeSteps, height, width, channels;
+        var originalShape = shape;
+
         if (rank == 4)
         {
             // 4D: [timeSteps, height, width, channels]
@@ -691,7 +696,14 @@ public class ConvLSTMLayer<T> : LayerBase<T>
         }
         else
         {
-            throw new ArgumentException($"ConvLSTMLayer requires 4D or 5D input, got {rank}D");
+            // Higher rank: flatten leading dimensions into batch
+            batchSize = 1;
+            for (int d = 0; d < rank - 4; d++)
+                batchSize *= shape[d];
+            timeSteps = shape[rank - 4];
+            height = shape[rank - 3];
+            width = shape[rank - 2];
+            channels = shape[rank - 1];
         }
 
         // Calculate output spatial dimensions (same as input with padding)
@@ -935,10 +947,26 @@ public class ConvLSTMLayer<T> : LayerBase<T>
             newCellBuffer.Dispose();
             newHiddenBuffer.Dispose();
 
-            // Determine output shape
-            int[] outputShape = rank == 4
-                ? [timeSteps, outHeight, outWidth, _filters]
-                : [batchSize, timeSteps, outHeight, outWidth, _filters];
+            // Determine output shape — restore original leading dims for higher-rank input
+            int[] outputShape;
+            if (originalShape.Length > 5)
+            {
+                outputShape = new int[originalShape.Length];
+                for (int d = 0; d < originalShape.Length - 4; d++)
+                    outputShape[d] = originalShape[d];
+                outputShape[originalShape.Length - 4] = timeSteps;
+                outputShape[originalShape.Length - 3] = outHeight;
+                outputShape[originalShape.Length - 2] = outWidth;
+                outputShape[originalShape.Length - 1] = _filters;
+            }
+            else if (rank == 4)
+            {
+                outputShape = [timeSteps, outHeight, outWidth, _filters];
+            }
+            else
+            {
+                outputShape = [batchSize, timeSteps, outHeight, outWidth, _filters];
+            }
 
             return new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
         }

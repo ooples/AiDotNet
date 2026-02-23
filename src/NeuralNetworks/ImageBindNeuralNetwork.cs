@@ -3,9 +3,11 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tokenization.Interfaces;
 using Microsoft.ML.OnnxRuntime;
+using AiDotNet.Validation;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
 
 namespace AiDotNet.NeuralNetworks;
@@ -36,6 +38,11 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 public class ImageBindNeuralNetwork<T> : NeuralNetworkBase<T>, IImageBindModel<T>
 {
+    private readonly ImageBindOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     #region Execution Mode
 
     private readonly bool _useNativeMode;
@@ -148,9 +155,12 @@ public class ImageBindNeuralNetwork<T> : NeuralNetworkBase<T>, IImageBindModel<T
         int imageSize = 224,
         int audioSampleRate = 16000,
         IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        ImageBindOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyLoss<T>(), 1.0)
     {
+        _options = options ?? new ImageBindOptions();
+        Options = _options;
         if (string.IsNullOrWhiteSpace(imageEncoderPath))
             throw new ArgumentException("Image encoder path cannot be null or empty.", nameof(imageEncoderPath));
         if (string.IsNullOrWhiteSpace(textEncoderPath))
@@ -199,7 +209,8 @@ public class ImageBindNeuralNetwork<T> : NeuralNetworkBase<T>, IImageBindModel<T
             _imageEncoder = imageEncoder;
             _textEncoder = textEncoder;
             _audioEncoder = audioEncoder;
-            _tokenizer = tokenizer ?? throw new ArgumentNullException(nameof(tokenizer));
+            Guard.NotNull(tokenizer);
+            _tokenizer = tokenizer;
             _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
             _lossFunction = lossFunction ?? new CrossEntropyLoss<T>();
             InitializeLayers();
@@ -233,9 +244,12 @@ public class ImageBindNeuralNetwork<T> : NeuralNetworkBase<T>, IImageBindModel<T
         int numVideoFrames = 2,
         ITokenizer? tokenizer = null,
         IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        ImageBindOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyLoss<T>(), 1.0)
     {
+        _options = options ?? new ImageBindOptions();
+        Options = _options;
         _useNativeMode = true;
         _embeddingDimension = embeddingDimension;
         _maxSequenceLength = maxSequenceLength;

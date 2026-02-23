@@ -32,8 +32,34 @@ namespace AiDotNet.Audio.LanguageIdentification;
 /// </code>
 /// </para>
 /// </remarks>
-public class LanguageIdentifierOptions
+public class LanguageIdentifierOptions : AiDotNet.Models.Options.ModelOptions
 {
+    /// <summary>Initializes a new instance with default values.</summary>
+    public LanguageIdentifierOptions() { }
+
+    /// <summary>Initializes a new instance by copying from another instance.</summary>
+    /// <param name="other">The options instance to copy from.</param>
+    /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
+    public LanguageIdentifierOptions(LanguageIdentifierOptions other)
+    {
+        if (other == null)
+            throw new ArgumentNullException(nameof(other));
+
+        Seed = other.Seed;
+        SampleRate = other.SampleRate;
+        FftSize = other.FftSize;
+        HopLength = other.HopLength;
+        NumMels = other.NumMels;
+        EmbeddingDimension = other.EmbeddingDimension;
+        MinConfidence = other.MinConfidence;
+        TopK = other.TopK;
+        MinDurationSeconds = other.MinDurationSeconds;
+        SegmentWindowMs = other.SegmentWindowMs;
+        UseVoiceActivityDetection = other.UseVoiceActivityDetection;
+        ModelPath = other.ModelPath;
+        OnnxOptions = other.OnnxOptions;
+    }
+
     /// <summary>
     /// Gets or sets the sample rate of input audio in Hz.
     /// </summary>

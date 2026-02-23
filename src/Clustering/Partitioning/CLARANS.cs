@@ -44,6 +44,9 @@ namespace AiDotNet.Clustering.Partitioning;
 public class CLARANS<T> : ClusteringBase<T>
 {
     private readonly CLARANSOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
     private int[]? _medoidIndices;
     private double _bestCost;
 

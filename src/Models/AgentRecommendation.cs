@@ -401,4 +401,30 @@ public class AgentRecommendation<T, TInput, TOutput>
     /// </para>
     /// </remarks>
     public string? ExpectedCompressionMetrics { get; set; }
+
+    /// <summary>
+    /// Gets or sets the results of auto-applying hyperparameter recommendations to the model.
+    /// </summary>
+    /// <value>
+    /// A HyperparameterApplicationResult containing details about which parameters were applied,
+    /// skipped, or failed, or null if auto-apply was not enabled or no hyperparameters were recommended.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// This property is populated when EnableAutoApplyHyperparameters is true and the model implements
+    /// IConfigurableModel&lt;T&gt;. It provides a detailed accounting of the hyperparameter application
+    /// process, including which parameters were successfully set, which had no matching property,
+    /// and which failed due to type conversion or other errors.
+    /// </para>
+    /// <para><b>For Beginners:</b> This tells you exactly what happened when the AI agent's
+    /// hyperparameter recommendations were applied to your model:
+    /// - **Applied**: Parameters that were successfully set (e.g., "NumberOfTrees = 100")
+    /// - **Skipped**: Parameters the model doesn't support (e.g., "max_features" on a model that doesn't have it)
+    /// - **Failed**: Parameters that couldn't be set due to errors
+    /// - **Warnings**: Issues like values outside typical ranges
+    ///
+    /// Check result.HyperparameterApplicationResult.GetSummary() for a human-readable report.
+    /// </para>
+    /// </remarks>
+    public HyperparameterApplicationResult? HyperparameterApplicationResult { get; set; }
 }

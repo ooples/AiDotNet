@@ -56,6 +56,11 @@ namespace AiDotNet.Audio.TextToSpeech;
 /// </remarks>
 public class VITSModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
 {
+    private readonly VITSModelOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     #region Execution Mode
 
     /// <summary>
@@ -128,12 +133,12 @@ public class VITSModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
     /// <summary>
     /// Optimizer for training.
     /// </summary>
-    private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private IOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
 
     /// <summary>
     /// Loss function for training.
     /// </summary>
-    private readonly ILossFunction<T> _lossFunction;
+    private ILossFunction<T> _lossFunction;
 
     /// <summary>
     /// Whether the model has been disposed.
@@ -282,9 +287,12 @@ public class VITSModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         double lengthScale = 1.0,
         int fftSize = 1024,
         int hopLength = 256,
-        OnnxModelOptions? onnxOptions = null)
+        OnnxModelOptions? onnxOptions = null,
+        VITSModelOptions? options = null)
         : base(architecture)
     {
+        _options = options ?? new VITSModelOptions();
+        Options = _options;
         if (architecture is null)
             throw new ArgumentNullException(nameof(architecture));
         if (modelPath is null)
@@ -325,20 +333,19 @@ public class VITSModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         MelSpec = _melSpectrogram;
 
         // Load ONNX models
-        var options = onnxOptions ?? new OnnxModelOptions();
-        OnnxModel = new OnnxModel<T>(modelPath, options);
+        var onnxOpts = onnxOptions ?? new OnnxModelOptions();
+        OnnxModel = new OnnxModel<T>(modelPath, onnxOpts);
 
         if (speakerEncoderPath is not null && speakerEncoderPath.Length > 0)
         {
-            _speakerEncoder = new OnnxModel<T>(speakerEncoderPath, options);
+            _speakerEncoder = new OnnxModel<T>(speakerEncoderPath, onnxOpts);
         }
 
         // Initialize available voices
         AvailableVoices = GetDefaultVoices();
 
-        // Initialize optimizer and loss (not used in ONNX mode)
+        // Default loss function (MSE is standard for TTS mel-spectrogram prediction)
         _lossFunction = new MeanSquaredErrorLoss<T>();
-        _optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         InitializeLayers();
     }
@@ -400,9 +407,12 @@ public class VITSModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         int fftSize = 1024,
         int hopLength = 256,
         IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        VITSModelOptions? options = null)
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>())
     {
+        _options = options ?? new VITSModelOptions();
+        Options = _options;
         if (architecture is null)
             throw new ArgumentNullException(nameof(architecture));
 

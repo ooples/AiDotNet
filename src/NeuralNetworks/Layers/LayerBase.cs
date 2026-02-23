@@ -34,6 +34,16 @@ namespace AiDotNet.NeuralNetworks.Layers;
 public abstract class LayerBase<T> : ILayer<T>, IDisposable
 {
     /// <summary>
+    /// Counter for generating unique instance IDs across all layer instances.
+    /// </summary>
+    private static int _instanceCounter;
+
+    /// <summary>
+    /// The unique instance ID for this layer, used to distinguish multiple instances of the same layer type.
+    /// </summary>
+    private readonly int _instanceId;
+
+    /// <summary>
     /// Gets the global execution engine for vector operations.
     /// </summary>
     protected IEngine Engine => AiDotNetEngine.Current;
@@ -440,6 +450,7 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     /// </remarks>
     protected LayerBase(int[] inputShape, int[] outputShape)
     {
+        _instanceId = Interlocked.Increment(ref _instanceCounter);
         InputShape = inputShape;
         InputShapes = [inputShape];
         OutputShape = outputShape;
@@ -524,8 +535,11 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     /// </remarks>
     protected LayerBase(int[][] inputShapes, int[] outputShape)
     {
+        _instanceId = Interlocked.Increment(ref _instanceCounter);
         InputShapes = inputShapes;
-        InputShape = inputShapes.Length == 1 ? inputShapes[0] : [];
+        // For multi-input layers, use the first input shape as the primary input shape
+        // This ensures GetInputShape() always returns a valid (non-empty) shape
+        InputShape = inputShapes.Length > 0 ? inputShapes[0] : [];
         OutputShape = outputShape;
         Parameters = Vector<T>.Empty();
     }
@@ -691,7 +705,8 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     /// For layers with multiple inputs, this returns just the first input shape.
     /// </para>
     /// </remarks>
-    public virtual int[] GetInputShape() => InputShape ?? InputShapes[0];
+    public virtual int[] GetInputShape() =>
+        InputShape != null && InputShape.Length > 0 ? InputShape : InputShapes[0];
 
     /// <summary>
     /// Gets all input shapes for this layer.
@@ -845,6 +860,338 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     /// </para>
     /// </remarks>
     public abstract Tensor<T> Forward(Tensor<T> input);
+
+    #region Mixed Precision Support
+
+    /// <summary>
+    /// Gets the name of this layer for mixed-precision policy lookup.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This name is used to determine whether the layer should
+    /// use full precision (FP32) or reduced precision (FP16/FP8) during mixed-precision training.
+    ///
+    /// Layers like BatchNorm, LayerNorm, and Softmax typically need full precision for stability.
+    /// The name is matched against patterns in <see cref="MixedPrecision.LayerPrecisionPolicy"/>.
+    /// </para>
+    /// </remarks>
+    public virtual string LayerName => $"{GetType().Name}_{_instanceId}";
+
+    /// <summary>
+    /// Gets the category classification for this layer, used by automated per-layer tools
+    /// like quantizers, pruners, pipeline partitioners, and LoRA adapters.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Different types of layers (dense, convolution, attention, etc.)
+    /// often need different treatment. For example, a quantizer might keep attention layers at
+    /// higher precision while reducing dense layers to lower precision.</para>
+    ///
+    /// <para>This method classifies the layer based on its type name. Subclasses can override
+    /// this to return a more specific category if the default name-based classification
+    /// is not accurate.</para>
+    /// </remarks>
+    /// <returns>The <see cref="LayerCategory"/> that best describes this layer type.</returns>
+    public virtual LayerCategory GetLayerCategory()
+    {
+        var typeName = GetType().Name;
+
+        // Remove generic arity suffix (e.g., "`1")
+        int backtickIndex = typeName.IndexOf('`');
+        if (backtickIndex >= 0)
+        {
+            typeName = typeName[..backtickIndex];
+        }
+
+        // Attention layers
+        if (typeName.Contains("Attention", StringComparison.OrdinalIgnoreCase) ||
+            typeName.Contains("Transformer", StringComparison.OrdinalIgnoreCase))
+        {
+            return LayerCategory.Attention;
+        }
+
+        // Graph layers
+        if (typeName.Contains("Graph", StringComparison.OrdinalIgnoreCase) ||
+            typeName.Contains("MessagePassing", StringComparison.OrdinalIgnoreCase) ||
+            typeName.Contains("Mesh", StringComparison.OrdinalIgnoreCase))
+        {
+            return LayerCategory.Graph;
+        }
+
+        // Convolution layers (check before Dense since some names overlap)
+        if (typeName.Contains("Conv", StringComparison.OrdinalIgnoreCase) ||
+            typeName.Contains("Deconv", StringComparison.OrdinalIgnoreCase))
+        {
+            return LayerCategory.Convolution;
+        }
+
+        // Recurrent layers
+        if (typeName.Contains("LSTM", StringComparison.OrdinalIgnoreCase) ||
+            typeName.Contains("GRU", StringComparison.OrdinalIgnoreCase) ||
+            typeName.Contains("Recurrent", StringComparison.OrdinalIgnoreCase) ||
+            typeName.Contains("Bidirectional", StringComparison.OrdinalIgnoreCase))
+        {
+            return LayerCategory.Recurrent;
+        }
+
+        // Normalization layers
+        if (typeName.Contains("Norm", StringComparison.OrdinalIgnoreCase) ||
+            typeName.Contains("BatchNorm", StringComparison.OrdinalIgnoreCase))
+        {
+            return LayerCategory.Normalization;
+        }
+
+        // Pooling layers
+        if (typeName.Contains("Pool", StringComparison.OrdinalIgnoreCase))
+        {
+            return LayerCategory.Pooling;
+        }
+
+        // Activation layers
+        if (typeName.Contains("Activation", StringComparison.OrdinalIgnoreCase) ||
+            typeName.Contains("GatedLinearUnit", StringComparison.OrdinalIgnoreCase))
+        {
+            return LayerCategory.Activation;
+        }
+
+        // Embedding layers
+        if (typeName.Contains("Embedding", StringComparison.OrdinalIgnoreCase) ||
+            typeName.Contains("Positional", StringComparison.OrdinalIgnoreCase))
+        {
+            return LayerCategory.Embedding;
+        }
+
+        // Regularization layers
+        if (typeName.Contains("Dropout", StringComparison.OrdinalIgnoreCase) ||
+            typeName.Contains("GaussianNoise", StringComparison.OrdinalIgnoreCase))
+        {
+            return LayerCategory.Regularization;
+        }
+
+        // Residual/skip layers
+        if (typeName.Contains("Residual", StringComparison.OrdinalIgnoreCase) ||
+            typeName.Contains("Highway", StringComparison.OrdinalIgnoreCase) ||
+            typeName.Contains("SqueezeAndExcitation", StringComparison.OrdinalIgnoreCase))
+        {
+            return LayerCategory.Residual;
+        }
+
+        // Feed-forward / MLP block layers
+        if (typeName.Contains("FeedForward", StringComparison.OrdinalIgnoreCase) ||
+            typeName.Contains("MixtureOfExperts", StringComparison.OrdinalIgnoreCase) ||
+            typeName.Contains("Expert", StringComparison.OrdinalIgnoreCase))
+        {
+            return LayerCategory.FeedForward;
+        }
+
+        // Structural layers
+        if (typeName.Contains("Flatten", StringComparison.OrdinalIgnoreCase) ||
+            typeName.Contains("Reshape", StringComparison.OrdinalIgnoreCase) ||
+            typeName.Contains("Concatenate", StringComparison.OrdinalIgnoreCase) ||
+            typeName.Contains("Split", StringComparison.OrdinalIgnoreCase) ||
+            typeName.Contains("Add", StringComparison.OrdinalIgnoreCase) ||
+            typeName.Contains("Multiply", StringComparison.OrdinalIgnoreCase) ||
+            typeName.Contains("Cropping", StringComparison.OrdinalIgnoreCase) ||
+            typeName.Contains("Padding", StringComparison.OrdinalIgnoreCase) ||
+            typeName.Contains("Upsampling", StringComparison.OrdinalIgnoreCase) ||
+            typeName.Contains("PixelShuffle", StringComparison.OrdinalIgnoreCase) ||
+            typeName.Contains("Mean", StringComparison.OrdinalIgnoreCase) ||
+            typeName.Contains("SequenceLast", StringComparison.OrdinalIgnoreCase))
+        {
+            return LayerCategory.Structural;
+        }
+
+        // Input layers
+        if (typeName.Contains("Input", StringComparison.OrdinalIgnoreCase))
+        {
+            return LayerCategory.Input;
+        }
+
+        // Dense/fully-connected layers
+        if (typeName.Contains("Dense", StringComparison.OrdinalIgnoreCase) ||
+            typeName.Contains("FullyConnected", StringComparison.OrdinalIgnoreCase) ||
+            typeName.Contains("Linear", StringComparison.OrdinalIgnoreCase) ||
+            typeName.Contains("Readout", StringComparison.OrdinalIgnoreCase))
+        {
+            return LayerCategory.Dense;
+        }
+
+        return LayerCategory.Other;
+    }
+
+    /// <summary>
+    /// Estimates the computational cost (FLOPs) for a single forward pass through this layer.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> FLOPs (Floating-Point Operations) measure how much
+    /// computation this layer requires. Pipeline schedulers use this to distribute layers
+    /// evenly across GPUs so no single GPU is a bottleneck.</para>
+    ///
+    /// <para>The default implementation estimates based on parameter count. Dense layers
+    /// override this with <c>2 * inputSize * outputSize</c>. Subclasses should override
+    /// for more accurate estimates.</para>
+    /// </remarks>
+    /// <returns>Estimated FLOPs for one forward pass.</returns>
+    public virtual long EstimateFlops()
+    {
+        // Default: roughly 2 FLOPs per parameter (multiply + accumulate)
+        return 2L * ParameterCount;
+    }
+
+    /// <summary>
+    /// Estimates the activation memory (in bytes) needed during a forward pass.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> During training, each layer saves its output (activation)
+    /// so the backward pass can compute gradients. This method estimates how much memory
+    /// that output will consume.</para>
+    ///
+    /// <para>Selective activation checkpointing uses this to decide which layers to
+    /// recompute versus which to keep in memory.</para>
+    /// </remarks>
+    /// <returns>Estimated activation memory in bytes.</returns>
+    public virtual long EstimateActivationMemory()
+    {
+        // Default: output shape elements * sizeof(T)
+        var outputShape = GetOutputShape();
+        long elements = 1;
+        foreach (var dim in outputShape)
+        {
+            elements *= dim;
+        }
+
+        int bytesPerElement = GetBytesPerElement();
+        return elements * bytesPerElement;
+    }
+
+    /// <summary>
+    /// Gets the number of bytes per element for the numeric type <typeparamref name="T"/>.
+    /// </summary>
+    private static int GetBytesPerElement()
+    {
+        if (typeof(T) == typeof(double))
+            return 8;
+        if (typeof(T) == typeof(float))
+            return 4;
+        if (typeof(T) == typeof(decimal))
+            return 16;
+        if (typeof(T) == typeof(Half))
+            return 2;
+
+        // Fallback: try System.Runtime.InteropServices.Marshal.SizeOf
+        try
+        {
+            return System.Runtime.InteropServices.Marshal.SizeOf<T>();
+        }
+        catch (ArgumentException)
+        {
+            System.Diagnostics.Debug.WriteLine(
+                $"[LayerBase] Marshal.SizeOf<{typeof(T).Name}>() failed; defaulting to 4 bytes.");
+            return 4; // Default to 4 bytes if Marshal.SizeOf can't determine the size for T
+        }
+    }
+
+    /// <summary>
+    /// Gets whether mixed-precision training is currently active.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Check this property to see if the network is currently
+    /// running in mixed-precision mode. When true, you may need to handle precision
+    /// conversions in your layer implementation.
+    /// </para>
+    /// </remarks>
+    protected static bool IsMixedPrecisionActive => MixedPrecision.MixedPrecisionScope.Current != null;
+
+    /// <summary>
+    /// Gets whether this layer should use full precision (FP32) even during mixed-precision training.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Some layers need higher precision to work correctly:
+    /// - Normalization layers (BatchNorm, LayerNorm) compute mean/variance
+    /// - Softmax involves exponentials that can overflow in low precision
+    /// - Loss computation needs accuracy
+    ///
+    /// This property checks the current mixed-precision policy to determine if this layer
+    /// is one that should stay in full precision.
+    /// </para>
+    /// </remarks>
+    protected bool ShouldUseFP32
+    {
+        get
+        {
+            var scope = MixedPrecision.MixedPrecisionScope.Current;
+            return scope?.ShouldUseFP32(LayerName) ?? false;
+        }
+    }
+
+    /// <summary>
+    /// Gets the precision type this layer should use based on the current mixed-precision policy.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This returns the specific precision type (FP16, FP32, FP8, etc.)
+    /// that this layer should use according to the current training configuration.
+    /// </para>
+    /// </remarks>
+    protected Enums.MixedPrecisionType CurrentPrecision
+    {
+        get
+        {
+            var scope = MixedPrecision.MixedPrecisionScope.Current;
+            return scope?.GetLayerPrecision(LayerName) ?? Enums.MixedPrecisionType.None;
+        }
+    }
+
+    /// <summary>
+    /// Performs a forward pass with automatic mixed-precision handling.
+    /// </summary>
+    /// <param name="input">The input tensor to process.</param>
+    /// <returns>The output tensor after processing with appropriate precision.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method wraps the standard Forward pass with
+    /// automatic precision handling for mixed-precision training.
+    ///
+    /// When mixed-precision is active:
+    /// - If the layer should use FP32 (like BatchNorm), it processes in full precision
+    /// - If the layer can use lower precision, the scope tracks tensor versions
+    /// - The precision policy determines which layers need full precision
+    ///
+    /// This enables faster training on modern GPUs while maintaining numerical stability.
+    /// </para>
+    /// </remarks>
+    public virtual Tensor<T> ForwardWithPrecisionCheck(Tensor<T> input)
+    {
+        var scope = MixedPrecision.MixedPrecisionScope.Current;
+
+        // If no scope is active, use standard forward pass
+        if (scope == null)
+        {
+            return Forward(input);
+        }
+
+        // Check if this layer requires full precision
+        bool requiresFP32 = scope.ShouldUseFP32(LayerName);
+
+        if (requiresFP32)
+        {
+            // Layer needs FP32 - register the input so it can be retrieved if needed
+            // For T=float, this is a no-op in terms of precision but tracks the tensor
+            string tensorName = $"{LayerName}_input";
+            if (typeof(T) == typeof(float) && !scope.HasTensor(tensorName))
+            {
+                // Only register if it's a float tensor (standard case)
+                var floatInput = input as Tensor<float>;
+                if (floatInput != null)
+                {
+                    scope.RegisterAndCastToFP16(tensorName, floatInput);
+                }
+            }
+        }
+
+        // Perform the forward pass
+        // The actual precision handling is done at the network level
+        // This method allows layers to be aware of the precision context
+        return Forward(input);
+    }
+
+    #endregion
 
     /// <summary>
     /// Maps the layer's activation function to a <see cref="FusedActivationType"/> for GPU-fused operations.

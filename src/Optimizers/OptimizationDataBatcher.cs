@@ -3,6 +3,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Optimizers;
 
@@ -61,7 +62,8 @@ public class OptimizationDataBatcher<T, TInput, TOutput>
         int? seed = null,
         IDataSampler? sampler = null)
     {
-        _inputData = inputData ?? throw new ArgumentNullException(nameof(inputData));
+        Guard.NotNull(inputData);
+        _inputData = inputData;
         _batchSize = batchSize > 0 ? batchSize : throw new ArgumentOutOfRangeException(nameof(batchSize));
         _shuffle = shuffle;
         _dropLast = dropLast;

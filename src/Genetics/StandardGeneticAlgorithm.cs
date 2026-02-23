@@ -1,4 +1,5 @@
 using AiDotNet.Extensions;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Genetics;
 
@@ -9,11 +10,11 @@ public class StandardGeneticAlgorithm<T, TInput, TOutput> :
 
     public StandardGeneticAlgorithm(
         Func<IFullModel<T, TInput, TOutput>> modelFactory,
-        IFitnessCalculator<T, TInput, TOutput> fitnessCalculator,
-        IModelEvaluator<T, TInput, TOutput> modelEvaluator)
-        : base(fitnessCalculator, modelEvaluator)
+        IFitnessCalculator<T, TInput, TOutput> fitnessCalculator)
+        : base(fitnessCalculator)
     {
-        _modelFactory = modelFactory ?? throw new ArgumentNullException(nameof(modelFactory));
+        Guard.NotNull(modelFactory);
+        _modelFactory = modelFactory;
     }
 
     protected override ModelParameterGene<T> MutateGene(ModelParameterGene<T> gene)
@@ -54,19 +55,27 @@ public class StandardGeneticAlgorithm<T, TInput, TOutput> :
             // Get model parameters - if insufficient (untrained model), determine correct dimensions
             var parameters = model.GetParameters();
 
-            // Check if model is untrained by comparing parameter count to expected count based on input
-            // For untrained models with UseIntercept=true, GetParameters() returns just [intercept] (length 1)
-            // For untrained models with UseIntercept=false, GetParameters() returns empty (length 0)
-            // We need: numFeatures coefficients + optional intercept
+            // Check if model is untrained by comparing parameter count to input dimensions
+            // Different model types have different parameter requirements:
+            // - VectorModel: parameters = features only (no intercept)
+            // - RegressionBase with UseIntercept=true: parameters = features + 1 (intercept)
+            // - RegressionBase with UseIntercept=false: parameters = features only
+            //
+            // Heuristic: if parameters.Length < inputDimensions, model is untrained and needs resizing
+            // For untrained models, GetParameters().Length indicates baseline params:
+            //   0 = no intercept, 1 = has intercept
             if (TrainingInputForInitialization is not null)
             {
                 int inputDimensions = InputHelper<T, TInput>.GetInputSize(TrainingInputForInitialization);
-                // For most regression models: numFeatures + 1 intercept (assuming UseIntercept=true as default)
-                int expectedParameterCount = inputDimensions + 1;
 
-                // If parameters don't match expected count, model is likely untrained - recreate with correct size
-                if (parameters.Length != expectedParameterCount)
+                // Model is considered untrained if it has fewer parameters than input dimensions
+                // (properly initialized models have at least inputDimensions parameters)
+                if (parameters.Length < inputDimensions)
                 {
+                    // For untrained models, parameters.Length tells us the intercept/bias term count
+                    // (0 for VectorModel/no intercept, 1 for RegressionBase with intercept)
+                    int interceptCount = parameters.Length;
+                    int expectedParameterCount = inputDimensions + interceptCount;
                     parameters = new Vector<T>(expectedParameterCount);
                 }
             }

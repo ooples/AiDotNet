@@ -254,7 +254,7 @@ public class SGDClassifier<T> : LinearClassifierBase<T>
             Shuffle = Options.Shuffle,
             Penalty = Options.Penalty,
             Loss = Options.Loss,
-            RandomState = Options.RandomState
+            Seed = Options.Seed
         });
     }
 

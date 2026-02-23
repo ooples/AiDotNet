@@ -40,7 +40,7 @@ namespace AiDotNet.TimeSeries;
 /// - Website traffic prediction
 /// </para>
 /// </remarks>
-public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
+public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurableModel<T>
 {
     /// <summary>
     /// Configuration options for the time series model.
@@ -60,7 +60,10 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
     /// - AutocorrelationCorrection: Whether to fix systematic errors in predictions
     /// </para>
     /// </remarks>
-    protected TimeSeriesRegressionOptions<T> Options { get; private set; }
+    protected TimeSeriesRegressionOptions<T> Options { get; set; }
+
+    /// <inheritdoc/>
+    public virtual ModelOptions GetOptions() => Options;
 
     /// <summary>
     /// Provides numeric operations for the specific type T.
@@ -1137,8 +1140,20 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
     /// Sets the parameters for this model.
     /// </summary>
     /// <param name="parameters">A vector containing the model parameters.</param>
+    /// <remarks>
+    /// If the model is untrained (ModelParameters is empty), this method will
+    /// resize ModelParameters to accept the incoming parameters. This allows
+    /// optimizers to initialize untrained models with random parameters.
+    /// </remarks>
     public virtual void SetParameters(Vector<T> parameters)
     {
+        // If model is untrained (empty parameters), resize to accept the new parameters
+        // This allows optimizers to initialize untrained models with random parameters
+        if (ModelParameters.Length == 0 && parameters.Length > 0)
+        {
+            ModelParameters = new Vector<T>(parameters.Length);
+        }
+
         if (parameters.Length != ModelParameters.Length)
         {
             throw new ArgumentException($"Expected {ModelParameters.Length} parameters, but got {parameters.Length}", nameof(parameters));

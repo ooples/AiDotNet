@@ -23,6 +23,7 @@ namespace AiDotNet.Interfaces;
 /// - Focuses on core functionality: get predictions and report output dimension
 /// - Avoids type-unsafe methods (no object? returns)</para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("TeacherModel")]
 public interface ITeacherModel<TInput, TOutput>
 {
     /// <summary>

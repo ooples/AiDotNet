@@ -32,7 +32,7 @@ namespace AiDotNet.Models.Options;
 /// cross-validation results, helping you diagnose and fix model training problems.
 /// </para>
 /// </remarks>
-public class TimeSeriesCrossValidationFitDetectorOptions
+public class TimeSeriesCrossValidationFitDetectorOptions : ModelOptions
 {
     /// <summary>
     /// Gets or sets the threshold for detecting overfitting.

@@ -100,6 +100,7 @@ public class MaxPool3DLayer<T> : LayerBase<T>
     /// Whether batch dimension was added in ForwardGpu.
     /// </summary>
     private bool _addedBatchDimension;
+    private int[]? _originalInputShape;
 
     /// <summary>
     /// GPU buffer containing pooling indices for backward pass.
@@ -210,22 +211,31 @@ public class MaxPool3DLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         _lastInput = input;
+        _originalInputShape = input.Shape;
+        int rank = input.Rank;
 
-        bool hasBatch = input.Rank == 5;
         Tensor<T> batchedInput;
 
-        if (hasBatch)
+        if (rank == 5)
         {
             batchedInput = input;
         }
-        else if (input.Rank == 4)
+        else if (rank == 4)
         {
             batchedInput = input.Reshape(1, input.Shape[0], input.Shape[1], input.Shape[2], input.Shape[3]);
+        }
+        else if (rank >= 6)
+        {
+            // Higher rank: flatten leading dimensions into batch
+            int flatBatch = 1;
+            for (int d = 0; d < rank - 4; d++)
+                flatBatch *= input.Shape[d];
+            batchedInput = input.Reshape(flatBatch, input.Shape[rank - 4], input.Shape[rank - 3], input.Shape[rank - 2], input.Shape[rank - 1]);
         }
         else
         {
             throw new ArgumentException(
-                $"MaxPool3DLayer expects 4D [C,D,H,W] or 5D [N,C,D,H,W] input, got {input.Rank}D.", nameof(input));
+                $"MaxPool3D layer requires at least 4D tensor [C,D,H,W]. Got rank {rank}.", nameof(input));
         }
 
         var output = Engine.MaxPool3DWithIndices(
@@ -234,7 +244,19 @@ public class MaxPool3DLayer<T> : LayerBase<T>
             [Stride, Stride, Stride],
             out _maxIndices);
 
-        if (!hasBatch && output.Rank == 5 && output.Shape[0] == 1)
+        // Restore original tensor rank
+        if (_originalInputShape.Length > 5)
+        {
+            var outputShape = new int[_originalInputShape.Length];
+            for (int d = 0; d < _originalInputShape.Length - 4; d++)
+                outputShape[d] = _originalInputShape[d];
+            outputShape[_originalInputShape.Length - 4] = output.Shape[1];
+            outputShape[_originalInputShape.Length - 3] = output.Shape[2];
+            outputShape[_originalInputShape.Length - 2] = output.Shape[3];
+            outputShape[_originalInputShape.Length - 1] = output.Shape[4];
+            return output.Reshape(outputShape);
+        }
+        if (_originalInputShape.Length == 4)
         {
             return output.Reshape(output.Shape[1], output.Shape[2], output.Shape[3], output.Shape[4]);
         }
@@ -257,23 +279,31 @@ public class MaxPool3DLayer<T> : LayerBase<T>
 
         var input = inputs[0];
 
-        // Ensure input is 5D [batch, channels, depth, height, width]
+        // Support any rank >= 4
+        if (input.Shape.Length < 4)
+            throw new ArgumentException($"MaxPool3D layer requires at least 4D tensor [C,D,H,W]. Got rank {input.Shape.Length}.");
+
         IGpuTensor<T> input5D;
         bool addedBatch = false;
+        _originalInputShape = input.Shape;
+        int rank = input.Shape.Length;
 
-        if (input.Shape.Length == 4)
+        if (rank == 4)
         {
-            // Add batch dimension: [C, D, H, W] -> [1, C, D, H, W]
             addedBatch = true;
             input5D = input.CreateView(0, new[] { 1, input.Shape[0], input.Shape[1], input.Shape[2], input.Shape[3] });
         }
-        else if (input.Shape.Length == 5)
+        else if (rank == 5)
         {
             input5D = input;
         }
         else
         {
-            throw new ArgumentException("Input must be 4D [C, D, H, W] or 5D [batch, C, D, H, W]");
+            // Higher rank: flatten leading dimensions into batch
+            int flatBatch = 1;
+            for (int d = 0; d < rank - 4; d++)
+                flatBatch *= input.Shape[d];
+            input5D = input.CreateView(0, new[] { flatBatch, input.Shape[rank - 4], input.Shape[rank - 3], input.Shape[rank - 2], input.Shape[rank - 1] });
         }
 
         _gpuInputShape = input5D.Shape;
@@ -287,7 +317,18 @@ public class MaxPool3DLayer<T> : LayerBase<T>
         // Store _lastInput for backward pass
         _lastInput = input.ToTensor();
 
-        // Return with matching dimensions
+        // Restore original tensor rank
+        if (_originalInputShape.Length > 5)
+        {
+            var outputShape = new int[_originalInputShape.Length];
+            for (int d = 0; d < _originalInputShape.Length - 4; d++)
+                outputShape[d] = _originalInputShape[d];
+            outputShape[_originalInputShape.Length - 4] = output.Shape[1];
+            outputShape[_originalInputShape.Length - 3] = output.Shape[2];
+            outputShape[_originalInputShape.Length - 2] = output.Shape[3];
+            outputShape[_originalInputShape.Length - 1] = output.Shape[4];
+            return output.CreateView(0, outputShape);
+        }
         if (addedBatch)
         {
             return output.CreateView(0, new[] { output.Shape[1], output.Shape[2], output.Shape[3], output.Shape[4] });
@@ -308,15 +349,25 @@ public class MaxPool3DLayer<T> : LayerBase<T>
         if (_gpuInputShape == null || _gpuIndicesBuffer == null)
             throw new InvalidOperationException("ForwardGpu must be called before BackwardGpu");
 
-        // Ensure gradient is 5D
+        // Flatten gradient to 5D the same way forward flattened input
+        int rank = outputGradient.Shape.Length;
         IGpuTensor<T> gradient5D;
-        if (outputGradient.Shape.Length == 4)
+
+        if (rank == 4)
         {
             gradient5D = outputGradient.CreateView(0, new[] { 1, outputGradient.Shape[0], outputGradient.Shape[1], outputGradient.Shape[2], outputGradient.Shape[3] });
         }
-        else
+        else if (rank == 5)
         {
             gradient5D = outputGradient;
+        }
+        else
+        {
+            // Higher rank: flatten leading dimensions into batch
+            int flatBatch = 1;
+            for (int d = 0; d < rank - 4; d++)
+                flatBatch *= outputGradient.Shape[d];
+            gradient5D = outputGradient.CreateView(0, new[] { flatBatch, outputGradient.Shape[rank - 4], outputGradient.Shape[rank - 3], outputGradient.Shape[rank - 2], outputGradient.Shape[rank - 1] });
         }
 
         var poolSizeArr = new[] { PoolSize, PoolSize, PoolSize };
@@ -324,7 +375,18 @@ public class MaxPool3DLayer<T> : LayerBase<T>
 
         var inputGrad = gpuEngine.MaxPool3DBackwardGpu<T>(gradient5D, _gpuIndicesBuffer, _gpuInputShape, poolSizeArr, strideArr);
 
-        // Return with matching dimensions
+        // Restore to original input shape
+        if (_originalInputShape != null && _originalInputShape.Length > 5)
+        {
+            var restoreShape = new int[_originalInputShape.Length];
+            for (int d = 0; d < _originalInputShape.Length - 4; d++)
+                restoreShape[d] = _originalInputShape[d];
+            restoreShape[_originalInputShape.Length - 4] = inputGrad.Shape[1];
+            restoreShape[_originalInputShape.Length - 3] = inputGrad.Shape[2];
+            restoreShape[_originalInputShape.Length - 2] = inputGrad.Shape[3];
+            restoreShape[_originalInputShape.Length - 1] = inputGrad.Shape[4];
+            return inputGrad.CreateView(0, restoreShape);
+        }
         if (_addedBatchDimension)
         {
             return inputGrad.CreateView(0, new[] { inputGrad.Shape[1], inputGrad.Shape[2], inputGrad.Shape[3], inputGrad.Shape[4] });
@@ -353,21 +415,34 @@ public class MaxPool3DLayer<T> : LayerBase<T>
         if (_lastInput == null || _maxIndices == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        bool hasBatch = _lastInput.Rank == 5;
+        int rank = outputGradient.Rank;
         Tensor<T> batchedGradient;
         int[] inputShape;
 
-        if (hasBatch)
+        if (rank == 5)
         {
             batchedGradient = outputGradient;
-            inputShape = _lastInput.Shape;
+            inputShape = _lastInput.Shape.Length == 5
+                ? _lastInput.Shape
+                : new[] { 1, _lastInput.Shape[0], _lastInput.Shape[1], _lastInput.Shape[2], _lastInput.Shape[3] };
+        }
+        else if (rank == 4)
+        {
+            batchedGradient = outputGradient.Reshape(1, outputGradient.Shape[0], outputGradient.Shape[1], outputGradient.Shape[2], outputGradient.Shape[3]);
+            inputShape = new[] { 1, _lastInput.Shape[0], _lastInput.Shape[1], _lastInput.Shape[2], _lastInput.Shape[3] };
         }
         else
         {
-            batchedGradient = outputGradient.Rank == 4
-                ? outputGradient.Reshape(1, outputGradient.Shape[0], outputGradient.Shape[1], outputGradient.Shape[2], outputGradient.Shape[3])
-                : outputGradient;
-            inputShape = [1, _lastInput.Shape[0], _lastInput.Shape[1], _lastInput.Shape[2], _lastInput.Shape[3]];
+            // Higher rank: flatten leading dimensions into batch
+            int flatBatch = 1;
+            for (int d = 0; d < rank - 4; d++)
+                flatBatch *= outputGradient.Shape[d];
+            batchedGradient = outputGradient.Reshape(flatBatch, outputGradient.Shape[rank - 4], outputGradient.Shape[rank - 3], outputGradient.Shape[rank - 2], outputGradient.Shape[rank - 1]);
+
+            int inputFlatBatch = 1;
+            for (int d = 0; d < _lastInput.Shape.Length - 4; d++)
+                inputFlatBatch *= _lastInput.Shape[d];
+            inputShape = new[] { inputFlatBatch, _lastInput.Shape[_lastInput.Shape.Length - 4], _lastInput.Shape[_lastInput.Shape.Length - 3], _lastInput.Shape[_lastInput.Shape.Length - 2], _lastInput.Shape[_lastInput.Shape.Length - 1] };
         }
 
         var inputGrad = Engine.MaxPool3DBackward(
@@ -377,12 +452,8 @@ public class MaxPool3DLayer<T> : LayerBase<T>
             [PoolSize, PoolSize, PoolSize],
             [Stride, Stride, Stride]);
 
-        if (!hasBatch && inputGrad.Rank == 5 && inputGrad.Shape[0] == 1)
-        {
-            return inputGrad.Reshape(inputGrad.Shape[1], inputGrad.Shape[2], inputGrad.Shape[3], inputGrad.Shape[4]);
-        }
-
-        return inputGrad;
+        // Restore to original input shape
+        return inputGrad.Reshape(_lastInput.Shape);
     }
 
     #endregion

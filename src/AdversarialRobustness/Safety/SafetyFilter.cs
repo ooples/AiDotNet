@@ -6,6 +6,7 @@ using AiDotNet.Models.Options;
 using AiDotNet.Serialization;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Validation;
 using Newtonsoft.Json;
 
 namespace AiDotNet.AdversarialRobustness.Safety;
@@ -43,7 +44,8 @@ public class SafetyFilter<T> : ISafetyFilter<T>
     /// <param name="options">The safety filter configuration options.</param>
     public SafetyFilter(SafetyFilterOptions<T> options)
     {
-        this.options = options ?? throw new ArgumentNullException(nameof(options));
+        Guard.NotNull(options);
+        this.options = options;
         jailbreakPatterns = new List<string>();
         harmfulContentPatterns = new Dictionary<string, List<string>>();
         InitializePatterns();

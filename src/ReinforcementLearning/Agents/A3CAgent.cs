@@ -8,6 +8,7 @@ using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
+using AiDotNet.Validation;
 
 namespace AiDotNet.ReinforcementLearning.Agents.A3C;
 
@@ -38,6 +39,9 @@ namespace AiDotNet.ReinforcementLearning.Agents.A3C;
 public class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>
 {
     private readonly A3COptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
     private readonly IOptimizer<T, Vector<T>, Vector<T>> _optimizer;
 
     private INeuralNetwork<T> _globalPolicyNetwork;
@@ -49,7 +53,8 @@ public class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>
     public A3CAgent(A3COptions<T> options, IOptimizer<T, Vector<T>, Vector<T>>? optimizer = null)
         : base(options)
     {
-        _options = options ?? throw new ArgumentNullException(nameof(options));
+        Guard.NotNull(options);
+        _options = options;
         _optimizer = optimizer ?? options.Optimizer ?? new AdamOptimizer<T, Vector<T>, Vector<T>>(this, new AdamOptimizerOptions<T, Vector<T>, Vector<T>>
         {
             InitialLearningRate = 0.001,

@@ -5,6 +5,7 @@ using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Video.Options;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
 
@@ -55,6 +56,11 @@ namespace AiDotNet.Video.Generation;
 /// </remarks>
 public class CogVideo<T> : NeuralNetworkBase<T>
 {
+    private readonly CogVideoOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     #region Execution Mode
 
     /// <summary>
@@ -225,9 +231,13 @@ public class CogVideo<T> : NeuralNetworkBase<T>
         int embedDim = 1024,
         int numLayers = 24,
         int numFrames = 16,
-        int numTimesteps = 1000)
+        int numTimesteps = 1000,
+        CogVideoOptions? options = null)
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>())
     {
+        _options = options ?? new CogVideoOptions();
+        Options = _options;
+
         if (embedDim < 1)
             throw new ArgumentOutOfRangeException(nameof(embedDim), embedDim, "Embedding dimension must be at least 1.");
         if (numLayers < 1)
@@ -277,9 +287,13 @@ public class CogVideo<T> : NeuralNetworkBase<T>
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
         int numFrames = 16,
-        int numTimesteps = 1000)
+        int numTimesteps = 1000,
+        CogVideoOptions? options = null)
         : base(architecture, new MeanSquaredErrorLoss<T>())
     {
+        _options = options ?? new CogVideoOptions();
+        Options = _options;
+
         if (string.IsNullOrWhiteSpace(onnxModelPath))
             throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
         if (!File.Exists(onnxModelPath))

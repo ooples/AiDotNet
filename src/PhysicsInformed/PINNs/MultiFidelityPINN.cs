@@ -9,6 +9,7 @@ using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Optimizers;
 using AiDotNet.PhysicsInformed.Interfaces;
+using AiDotNet.PhysicsInformed.Options;
 using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.PhysicsInformed.PINNs;
@@ -58,6 +59,11 @@ namespace AiDotNet.PhysicsInformed.PINNs;
 /// </remarks>
 public class MultiFidelityPINN<T> : PhysicsInformedNeuralNetwork<T>
 {
+    private readonly MultiFidelityPINNOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     private readonly PhysicsInformedNeuralNetwork<T> _lowFidelityNetwork;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _multiFidelityOptimizer;
 
@@ -117,10 +123,14 @@ public class MultiFidelityPINN<T> : PhysicsInformedNeuralNetwork<T>
         double correlationWeight = 1.0,
         double pdeWeight = 1.0,
         double boundaryWeight = 1.0,
-        bool freezeLowFidelityAfterPretraining = true)
+        bool freezeLowFidelityAfterPretraining = true,
+        MultiFidelityPINNOptions? options = null)
         : base(architecture, pdeSpecification, boundaryConditions, initialCondition,
                numCollocationPoints, optimizer, null, pdeWeight, boundaryWeight, null)
     {
+        _options = options ?? new MultiFidelityPINNOptions();
+        Options = _options;
+
         _lowFidelityWeight = lowFidelityWeight;
         _highFidelityWeight = highFidelityWeight;
         _correlationWeight = correlationWeight;

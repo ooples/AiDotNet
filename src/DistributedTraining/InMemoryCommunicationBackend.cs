@@ -1,4 +1,5 @@
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Validation;
 
 namespace AiDotNet.DistributedTraining;
 
@@ -539,7 +540,8 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
         // For single process, return a clone (maintains consistency with multi-process behavior)
         if (_worldSize == 1)
         {
-            return data?.Clone() ?? throw new ArgumentNullException(nameof(data));
+            Guard.NotNull(data);
+            return data.Clone();
         }
 
         lock (_globalLock)
@@ -631,7 +633,8 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
         // For single process, just return a copy
         if (_worldSize == 1)
         {
-            return sendData?.Clone() ?? throw new ArgumentNullException(nameof(sendData));
+            Guard.NotNull(sendData);
+            return sendData.Clone();
         }
 
         lock (_globalLock)

@@ -58,9 +58,13 @@ public class ECAPATDNNLanguageIdentifier<T> : AudioNeuralNetworkBase<T>, ILangua
 
     private readonly INumericOperations<T> _numOps;
     private readonly ECAPATDNNOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     private readonly MfccExtractor<T> _mfccExtractor;
     private readonly ILossFunction<T> _lossFunction;
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
 
     // ECAPA-TDNN architecture components
     private readonly List<ILayer<T>> _tdnnLayers = [];
@@ -117,6 +121,7 @@ public class ECAPATDNNLanguageIdentifier<T> : AudioNeuralNetworkBase<T>, ILangua
 
         _numOps = MathHelper.GetNumericOperations<T>();
         _options = options ?? new ECAPATDNNOptions();
+        Options = _options;
         _options.ModelPath = modelPath;
 
         SampleRate = _options.SampleRate;
@@ -141,8 +146,6 @@ public class ECAPATDNNLanguageIdentifier<T> : AudioNeuralNetworkBase<T>, ILangua
         // Load ONNX model
         OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
 
-        // Initialize optimizer (not used in ONNX mode but required for readonly field)
-        _optimizer = new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
     }
 
     /// <summary>
@@ -168,6 +171,7 @@ public class ECAPATDNNLanguageIdentifier<T> : AudioNeuralNetworkBase<T>, ILangua
 
         _numOps = MathHelper.GetNumericOperations<T>();
         _options = options ?? new ECAPATDNNOptions();
+        Options = _options;
 
         SampleRate = _options.SampleRate;
         NumMels = _options.NumMels;
@@ -419,7 +423,7 @@ public class ECAPATDNNLanguageIdentifier<T> : AudioNeuralNetworkBase<T>, ILangua
         var gradientTensor = Tensor<T>.FromVector(gradientVector, predicted.Shape);
 
         BackwardNative(gradientTensor);
-        _optimizer.UpdateParameters(Layers);
+        _optimizer?.UpdateParameters(Layers);
 
         SetTrainingMode(false);
     }

@@ -1,4 +1,6 @@
 using AiDotNet.Interfaces;
+using AiDotNet.Models.Options;
+using AiDotNet.Validation;
 
 namespace AiDotNet.MetaLearning.Options;
 
@@ -18,7 +20,7 @@ namespace AiDotNet.MetaLearning.Options;
 /// - Outer loop: Slow learning of good initialization (uses OuterLearningRate)
 /// </para>
 /// </remarks>
-public class MAMLOptions<T, TInput, TOutput> : IMetaLearnerOptions<T>
+public class MAMLOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions<T>
 {
     #region Required Properties
 
@@ -183,7 +185,7 @@ public class MAMLOptions<T, TInput, TOutput> : IMetaLearnerOptions<T>
     /// This is useful for debugging and comparing experiments.
     /// </para>
     /// </remarks>
-    public int? RandomSeed { get; set; }
+    public int? RandomSeed { get => Seed; set => Seed = value; }
 
     /// <summary>
     /// Gets or sets the number of tasks to use for evaluation during meta-training.
@@ -265,7 +267,8 @@ public class MAMLOptions<T, TInput, TOutput> : IMetaLearnerOptions<T>
     /// <param name="metaModel">The meta-model to be trained (required).</param>
     public MAMLOptions(IFullModel<T, TInput, TOutput> metaModel)
     {
-        MetaModel = metaModel ?? throw new ArgumentNullException(nameof(metaModel));
+        Guard.NotNull(metaModel);
+        MetaModel = metaModel;
     }
 
     #endregion

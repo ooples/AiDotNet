@@ -48,6 +48,11 @@ namespace AiDotNet.Audio.Fingerprinting;
 /// </remarks>
 public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
 {
+    private readonly CLAPModelOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     private readonly INumericOperations<T> _numOps;
 
     // Model configuration
@@ -86,7 +91,7 @@ public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
     private readonly int _maxTextLength;
 
     // Optimizer for training
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
 
     /// <inheritdoc/>
     public string Name => "CLAP";
@@ -122,9 +127,12 @@ public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         int sampleRate = 48000,
         int embeddingDim = 768,
         int projectionDim = 512,
-        OnnxModelOptions? onnxOptions = null)
+        OnnxModelOptions? onnxOptions = null,
+        CLAPModelOptions? options = null)
         : base(architecture)
     {
+        _options = options ?? new CLAPModelOptions();
+        Options = _options;
         _numOps = MathHelper.GetNumericOperations<T>();
 
         if (string.IsNullOrWhiteSpace(audioEncoderPath))
@@ -171,8 +179,7 @@ public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         _audioEncoderHeads = 12;
         _audioHiddenDim = embeddingDim;
 
-        // Initialize optimizer (not used in ONNX mode but required for readonly field)
-        _optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // audioEncoderPath is used by OnnxModel above
     }
 
     /// <summary>
@@ -206,9 +213,12 @@ public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         int hopSize = 480,
         double temperature = 0.07,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        CLAPModelOptions? options = null)
         : base(architecture, lossFunction)
     {
+        _options = options ?? new CLAPModelOptions();
+        Options = _options;
         _numOps = MathHelper.GetNumericOperations<T>();
 
         SampleRate = sampleRate;

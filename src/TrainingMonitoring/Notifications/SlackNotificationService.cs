@@ -4,6 +4,7 @@
 using System.Net.Http;
 using System.Text;
 using Newtonsoft.Json;
+using AiDotNet.Validation;
 
 namespace AiDotNet.TrainingMonitoring.Notifications;
 
@@ -134,7 +135,8 @@ public class SlackNotificationService : INotificationService
     /// <param name="httpClient">Optional HTTP client to use.</param>
     public SlackNotificationService(SlackConfiguration configuration, HttpClient? httpClient = null)
     {
-        _config = configuration ?? throw new ArgumentNullException(nameof(configuration));
+        Guard.NotNull(configuration);
+        _config = configuration;
 
         if (httpClient is not null)
         {

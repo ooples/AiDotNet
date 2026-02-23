@@ -1,4 +1,5 @@
 using AiDotNet.Document.Interfaces;
+using AiDotNet.Document.Options;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -46,6 +47,11 @@ namespace AiDotNet.Document.OCR.TextDetection;
 /// </remarks>
 public class PSENet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
 {
+    private readonly PSENetOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     #region Fields
 
     private readonly bool _useNativeMode;
@@ -102,9 +108,13 @@ public class PSENet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
         int featureChannels = 256,
         int numKernels = 7,
         IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        PSENetOptions? options = null)
         : base(architecture, lossFunction ?? new BinaryCrossEntropyLoss<T>(), 1.0)
     {
+        _options = options ?? new PSENetOptions();
+        Options = _options;
+
         if (string.IsNullOrWhiteSpace(onnxModelPath))
             throw new ArgumentNullException(nameof(onnxModelPath));
         if (!File.Exists(onnxModelPath))
@@ -142,9 +152,13 @@ public class PSENet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
         int featureChannels = 256,
         int numKernels = 7,
         IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        PSENetOptions? options = null)
         : base(architecture, lossFunction ?? new BinaryCrossEntropyLoss<T>(), 1.0)
     {
+        _options = options ?? new PSENetOptions();
+        Options = _options;
+
         _useNativeMode = true;
         _backboneChannels = backboneChannels;
         _featureChannels = featureChannels;

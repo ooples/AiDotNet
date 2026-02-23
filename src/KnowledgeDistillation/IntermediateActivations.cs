@@ -87,4 +87,9 @@ public class IntermediateActivations<T>
     /// Gets the number of layers with stored activations.
     /// </summary>
     public int LayerCount => _activations.Count;
+
+    /// <summary>
+    /// Gets the names of all layers with stored activations.
+    /// </summary>
+    public IEnumerable<string> LayerNames => _activations.Keys;
 }

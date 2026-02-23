@@ -1,3 +1,5 @@
+using AiDotNet.NeuralNetworks.Options;
+
 namespace AiDotNet.NeuralNetworks;
 
 /// <summary>
@@ -30,6 +32,11 @@ namespace AiDotNet.NeuralNetworks;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 public class GRUNeuralNetwork<T> : NeuralNetworkBase<T>
 {
+    private readonly GRUOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="GRUNeuralNetwork{T}"/> class with the specified architecture.
     /// </summary>
@@ -51,9 +58,11 @@ public class GRUNeuralNetwork<T> : NeuralNetworkBase<T>
     /// that will determine how information flows through your network.
     /// </para>
     /// </remarks>
-    public GRUNeuralNetwork(NeuralNetworkArchitecture<T> architecture, ILossFunction<T>? lossFunction = null) :
+    public GRUNeuralNetwork(NeuralNetworkArchitecture<T> architecture, ILossFunction<T>? lossFunction = null, GRUOptions? options = null) :
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
+        _options = options ?? new GRUOptions();
+        Options = _options;
         InitializeGRULayers();
     }
 

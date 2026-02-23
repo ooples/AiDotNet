@@ -6,6 +6,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
+using AiDotNet.Validation;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Generators;
 
@@ -102,7 +103,8 @@ public class NeuralGenerator<T> : IGenerator<T>
         double temperature = 0.7,
         IDictionary<string, int>? prebuiltVocabulary = null)
     {
-        _network = network ?? throw new ArgumentNullException(nameof(network));
+        Guard.NotNull(network);
+        _network = network;
 
         if (vocabularySize <= 0)
             throw new ArgumentException("Vocabulary size must be positive", nameof(vocabularySize));

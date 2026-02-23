@@ -1,3 +1,5 @@
+using AiDotNet.NeuralNetworks.Options;
+
 namespace AiDotNet.NeuralNetworks;
 
 /// <summary>
@@ -30,6 +32,11 @@ namespace AiDotNet.NeuralNetworks;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 public class AttentionNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
 {
+    private readonly AttentionNetworkOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// The maximum length of sequences this network can process.
     /// </summary>
@@ -142,9 +149,12 @@ public class AttentionNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     /// Cross-Entropy Loss is used by default because it works well for many language-related tasks.
     /// </para>
     /// </remarks>
-    public AttentionNetwork(NeuralNetworkArchitecture<T> architecture, int sequenceLength, int embeddingSize, ILossFunction<T>? lossFunction = null) :
+    public AttentionNetwork(NeuralNetworkArchitecture<T> architecture, int sequenceLength, int embeddingSize, ILossFunction<T>? lossFunction = null, AttentionNetworkOptions? options = null) :
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
+        _options = options ?? new AttentionNetworkOptions();
+        Options = _options;
+
         AuxiliaryLossWeight = NumOps.FromDouble(0.01);
         _lastAttentionEntropyLoss = NumOps.Zero;
 

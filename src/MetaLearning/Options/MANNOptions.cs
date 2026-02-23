@@ -1,4 +1,6 @@
 using AiDotNet.Interfaces;
+using AiDotNet.Models.Options;
+using AiDotNet.Validation;
 
 namespace AiDotNet.MetaLearning.Options;
 
@@ -24,7 +26,7 @@ namespace AiDotNet.MetaLearning.Options;
 /// This allows one-shot learning - see an example once, store it, use it later!
 /// </para>
 /// </remarks>
-public class MANNOptions<T, TInput, TOutput> : IMetaLearnerOptions<T>
+public class MANNOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions<T>
 {
     #region Required Properties
 
@@ -109,7 +111,7 @@ public class MANNOptions<T, TInput, TOutput> : IMetaLearnerOptions<T>
     /// <summary>
     /// Gets or sets the random seed for reproducibility.
     /// </summary>
-    public int? RandomSeed { get; set; }
+    public int? RandomSeed { get => Seed; set => Seed = value; }
 
     /// <summary>
     /// Gets or sets the number of tasks to use for evaluation.
@@ -303,7 +305,8 @@ public class MANNOptions<T, TInput, TOutput> : IMetaLearnerOptions<T>
     /// </example>
     public MANNOptions(IFullModel<T, TInput, TOutput> metaModel)
     {
-        MetaModel = metaModel ?? throw new ArgumentNullException(nameof(metaModel));
+        Guard.NotNull(metaModel);
+        MetaModel = metaModel;
     }
 
     #endregion

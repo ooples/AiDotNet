@@ -6,6 +6,7 @@ using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Validation;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -472,7 +473,8 @@ public class DiffusionConvLayer<T> : LayerBase<T>
     /// </remarks>
     public void SetLaplacian(Tensor<T> laplacian, Tensor<T>? massMatrix = null)
     {
-        _laplacian = laplacian ?? throw new ArgumentNullException(nameof(laplacian));
+        Guard.NotNull(laplacian);
+        _laplacian = laplacian;
         _massMatrix = massMatrix;
         _eigenvalues = null;
         _eigenvectors = null;
@@ -854,6 +856,12 @@ public class DiffusionConvLayer<T> : LayerBase<T>
         int numVertices;
         int inputChannels;
 
+        // Support any rank >= 2: last 2 dims are [nodes, features], earlier dims are batch-like
+        if (shape.Length < 2)
+            throw new ArgumentException($"DiffusionConv layer requires at least 2D tensor [nodes, features]. Got rank {shape.Length}.");
+
+        var originalShape = shape;
+
         if (shape.Length == 2)
         {
             batchSize = 1;
@@ -868,7 +876,12 @@ public class DiffusionConvLayer<T> : LayerBase<T>
         }
         else
         {
-            throw new ArgumentException($"Input must be 2D or 3D, got {shape.Length}D");
+            // Higher rank: flatten leading dimensions into batch
+            batchSize = 1;
+            for (int d = 0; d < shape.Length - 2; d++)
+                batchSize *= shape[d];
+            numVertices = shape[shape.Length - 2];
+            inputChannels = shape[shape.Length - 1];
         }
 
         if (inputChannels != InputChannels)
@@ -1062,10 +1075,24 @@ public class DiffusionConvLayer<T> : LayerBase<T>
             var fusedActivation = GetFusedActivationType();
             ApplyGpuActivation(backend, preActivationBuffer, outputBuffer, batchSize * numVertices * OutputChannels, fusedActivation);
 
-            // Create output shape
-            int[] outputShape = batchSize == 1
-                ? [numVertices, OutputChannels]
-                : [batchSize, numVertices, OutputChannels];
+            // Create output shape — restore original leading dims for higher-rank input
+            int[] outputShape;
+            if (originalShape.Length > 3)
+            {
+                outputShape = new int[originalShape.Length];
+                for (int d = 0; d < originalShape.Length - 2; d++)
+                    outputShape[d] = originalShape[d];
+                outputShape[originalShape.Length - 2] = numVertices;
+                outputShape[originalShape.Length - 1] = OutputChannels;
+            }
+            else if (originalShape.Length == 2)
+            {
+                outputShape = [numVertices, OutputChannels];
+            }
+            else
+            {
+                outputShape = [batchSize, numVertices, OutputChannels];
+            }
 
             if (IsTrainingMode)
             {
@@ -1139,7 +1166,12 @@ public class DiffusionConvLayer<T> : LayerBase<T>
         }
         else
         {
-            throw new ArgumentException($"Input must be 2D or 3D, got {_gpuInputShape.Length}D");
+            // Higher rank: flatten leading dimensions into batch
+            batchSize = 1;
+            for (int d = 0; d < _gpuInputShape.Length - 2; d++)
+                batchSize *= _gpuInputShape[d];
+            numVertices = _gpuInputShape[_gpuInputShape.Length - 2];
+            inputChannels = _gpuInputShape[_gpuInputShape.Length - 1];
         }
 
         int diffusedSize = InputChannels * NumTimeScales;
@@ -1151,13 +1183,10 @@ public class DiffusionConvLayer<T> : LayerBase<T>
         {
             outputGrad2D = outputGradient;
         }
-        else if (outputGradient.Shape.Length == 3)
-        {
-            outputGrad2D = outputGradient.CreateView(0, [outputRows, outputCols]);
-        }
         else
         {
-            throw new ArgumentException($"Output gradient must be 2D or 3D, got {outputGradient.Shape.Length}D");
+            // Flatten any rank >= 3 to 2D [batchSize * numVertices, outputCols]
+            outputGrad2D = outputGradient.CreateView(0, [outputRows, outputCols]);
         }
 
         if (outputGrad2D.Shape[0] != outputRows || outputGrad2D.Shape[1] != outputCols)
@@ -1419,9 +1448,20 @@ public class DiffusionConvLayer<T> : LayerBase<T>
                     GpuTensorRole.Gradient);
             }
 
-            int[] inputGradShape = batchSize == 1
-                ? [numVertices, inputChannels]
-                : [batchSize, numVertices, inputChannels];
+            // Restore original tensor rank for the input gradient
+            int[] inputGradShape;
+            if (_gpuInputShape.Length > 3)
+            {
+                inputGradShape = _gpuInputShape;
+            }
+            else if (_gpuInputShape.Length == 2)
+            {
+                inputGradShape = [numVertices, inputChannels];
+            }
+            else
+            {
+                inputGradShape = [batchSize, numVertices, inputChannels];
+            }
 
             ClearGpuCache();
 

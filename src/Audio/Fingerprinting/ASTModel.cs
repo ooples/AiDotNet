@@ -55,6 +55,11 @@ namespace AiDotNet.Audio.Fingerprinting;
 /// </remarks>
 public class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
 {
+    private readonly ASTModelOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     private readonly INumericOperations<T> _numOps;
 
     // Model configuration
@@ -88,7 +93,7 @@ public class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
     private readonly string[] _classLabels;
 
     // Optimizer for training
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
 
     /// <inheritdoc/>
     public string Name => "AST";
@@ -132,9 +137,12 @@ public class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         int sampleRate = 16000,
         int numClasses = 527,
         int embeddingDim = 768,
-        OnnxModelOptions? onnxOptions = null)
+        OnnxModelOptions? onnxOptions = null,
+        ASTModelOptions? options = null)
         : base(architecture)
     {
+        _options = options ?? new ASTModelOptions();
+        Options = _options;
         _numOps = MathHelper.GetNumericOperations<T>();
 
         if (string.IsNullOrWhiteSpace(modelPath))
@@ -172,8 +180,7 @@ public class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         _transformerBlocks = new List<TransformerBlock>();
         _classLabels = GetDefaultClassLabels();
 
-        // Initialize optimizer (not used in ONNX mode but required for readonly field)
-        _optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // modelPath is used by OnnxModel above
     }
 
     /// <summary>
@@ -207,9 +214,12 @@ public class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         double dropout = 0.0,
         bool useDistillation = true,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        ASTModelOptions? options = null)
         : base(architecture, lossFunction)
     {
+        _options = options ?? new ASTModelOptions();
+        Options = _options;
         _numOps = MathHelper.GetNumericOperations<T>();
 
         SampleRate = sampleRate;

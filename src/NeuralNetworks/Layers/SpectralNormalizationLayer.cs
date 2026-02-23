@@ -3,6 +3,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -416,7 +417,7 @@ public class SpectralNormalizationLayer<T> : LayerBase<T>
             // Create random normalized vectors on CPU, then upload to GPU
             var uData = new float[rows];
             var vData = new float[cols];
-            var random = new Random();
+            var random = RandomHelper.CreateSecureRandom();
 
             // Initialize with random values
             float uNorm = 0, vNorm = 0;

@@ -1,6 +1,7 @@
 using System.Buffers;
 using System.Runtime.CompilerServices;
 using AiDotNet.Inference.Quantization;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Inference.PagedAttention;
 
@@ -40,7 +41,8 @@ internal class PagedAttentionKernel<T>
     /// </summary>
     public PagedAttentionKernel(PagedKVCache<T> kvCache, PagedAttentionConfig? config = null)
     {
-        _kvCache = kvCache ?? throw new ArgumentNullException(nameof(kvCache));
+        Guard.NotNull(kvCache);
+        _kvCache = kvCache;
         _config = config ?? new PagedAttentionConfig
         {
             NumHeads = kvCache.Config.NumHeads,
@@ -194,7 +196,9 @@ internal class PagedAttentionKernel<T>
         long sequenceId,
         int layer,
         Span<float> output,
-        float scale)
+        float scale,
+        float[]? alibiSlopes = null,
+        int queryPosition = -1)
     {
         int numHeads = _config.NumHeads;
         int headDim = _config.HeadDimension;
@@ -207,6 +211,9 @@ internal class PagedAttentionKernel<T>
             output.Clear();
             return;
         }
+
+        // If queryPosition not specified, default to end of sequence (autoregressive decode)
+        int qPos = queryPosition >= 0 ? queryPosition : seqLen - 1;
 
         int numBlocks = blockTable.Length;
 
@@ -247,13 +254,20 @@ internal class PagedAttentionKernel<T>
                 {
                     int offset = head * headDim;
 
-                    // Compute score
+                    // Compute score = Q dot K * scale
                     float score = 0;
                     for (int d = 0; d < headDim; d++)
                     {
                         score += query[offset + d] * ToFloat(keyBuffer[offset + d]);
                     }
                     score *= scale;
+
+                    // Apply ALiBi bias: -slope[head] * |keyPos - queryPos|
+                    // Consistent with ALiBiPositionalBiasLayer.ComputeBias which uses -slope * |i - j|
+                    if (alibiSlopes != null)
+                    {
+                        score += -alibiSlopes[head] * Math.Abs(pos - qPos);
+                    }
 
                     // Online softmax update
                     float oldMax = maxScores[head];

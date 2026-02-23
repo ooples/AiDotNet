@@ -5,6 +5,7 @@ using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using Newtonsoft.Json;
+using AiDotNet.Validation;
 
 namespace AiDotNet.AdversarialRobustness.Attacks;
 
@@ -14,6 +15,9 @@ namespace AiDotNet.AdversarialRobustness.Attacks;
 /// <typeparam name="T">The numeric data type used for calculations.</typeparam>
 /// <typeparam name="TInput">The input data type for the model.</typeparam>
 /// <typeparam name="TOutput">The output data type for the model.</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> for provides AI safety functionality. Default values follow the original paper settings.</para>
+/// </remarks>
 public abstract class AdversarialAttackBase<T, TInput, TOutput> : IAdversarialAttack<T, TInput, TOutput>
 {
     /// <summary>
@@ -42,7 +46,8 @@ public abstract class AdversarialAttackBase<T, TInput, TOutput> : IAdversarialAt
     /// <param name="options">The configuration options for the attack.</param>
     protected AdversarialAttackBase(AdversarialAttackOptions<T> options)
     {
-        Options = options ?? throw new ArgumentNullException(nameof(options));
+        Guard.NotNull(options);
+        Options = options;
         Random = RandomHelper.CreateSeededRandom(Options.RandomSeed);
     }
 

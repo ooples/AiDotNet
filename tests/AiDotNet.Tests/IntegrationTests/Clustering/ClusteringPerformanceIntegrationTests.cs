@@ -23,7 +23,7 @@ public class ClusteringPerformanceIntegrationTests
             NumClusters = 3,
             MaxIterations = 50,
             NumInitializations = 3,
-            RandomState = 42
+            Seed = 42
         };
 
         var kmeans = new KMeans<double>(options);

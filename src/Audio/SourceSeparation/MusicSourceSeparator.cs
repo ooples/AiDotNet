@@ -46,8 +46,12 @@ public class MusicSourceSeparator<T> : AudioNeuralNetworkBase<T>, IMusicSourceSe
     #region Fields
 
     private readonly SourceSeparationOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     private readonly ShortTimeFourierTransform<T> _stft;
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly bool _useNativeMode;
     private bool _disposed;
 
@@ -74,7 +78,7 @@ public class MusicSourceSeparator<T> : AudioNeuralNetworkBase<T>, IMusicSourceSe
     {
         _options = options ?? new SourceSeparationOptions();
         _useNativeMode = false;
-        _optimizer = new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _options.ModelPath = modelPath;
 
         // Set base class properties
         base.SampleRate = _options.SampleRate;
@@ -121,7 +125,6 @@ public class MusicSourceSeparator<T> : AudioNeuralNetworkBase<T>, IMusicSourceSe
     {
         _options = options ?? new SourceSeparationOptions();
         _useNativeMode = false;
-        _optimizer = new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         // Set base class properties
         base.SampleRate = _options.SampleRate;
@@ -160,7 +163,7 @@ public class MusicSourceSeparator<T> : AudioNeuralNetworkBase<T>, IMusicSourceSe
     /// <summary>
     /// Creates a MusicSourceSeparator asynchronously, downloading models if needed.
     /// </summary>
-    public static async Task<MusicSourceSeparator<T>> CreateAsync(
+    internal static async Task<MusicSourceSeparator<T>> CreateAsync(
         SourceSeparationOptions? options = null,
         IProgress<double>? progress = null,
         CancellationToken cancellationToken = default)
@@ -463,7 +466,7 @@ public class MusicSourceSeparator<T> : AudioNeuralNetworkBase<T>, IMusicSourceSe
         }
 
         // Update parameters
-        _optimizer.UpdateParameters(Layers);
+        _optimizer?.UpdateParameters(Layers);
 
         SetTrainingMode(false);
     }

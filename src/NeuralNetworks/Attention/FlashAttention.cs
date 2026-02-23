@@ -47,13 +47,20 @@ internal static class FlashAttention<T>
     /// Optional offset for causal masking when <paramref name="query"/> represents a window into a longer KV sequence.
     /// Use this for KV-cached decoding where Q is the newly appended tokens and K/V contain the full cached sequence.
     /// </param>
+    /// <param name="attentionBias">
+    /// Optional additive bias tensor added to attention scores before softmax.
+    /// For 4D inputs: shape [heads, seqLenQ, seqLenKV] or [batch, heads, seqLenQ, seqLenKV].
+    /// For 3D inputs: shape [seqLenQ, seqLenKV] or [batch, seqLenQ, seqLenKV].
+    /// Used for ALiBi positional bias, relative position encodings, or custom attention masks.
+    /// </param>
     /// <returns>Output tensor of same shape as query, and optionally attention weights if configured.</returns>
     public static (Tensor<T> Output, Tensor<T>? AttentionWeights) Forward(
         Tensor<T> query,
         Tensor<T> key,
         Tensor<T> value,
         FlashAttentionConfig? config = null,
-        int queryOffset = 0)
+        int queryOffset = 0,
+        Tensor<T>? attentionBias = null)
     {
         config ??= FlashAttentionConfig.Default;
 
@@ -73,8 +80,8 @@ internal static class FlashAttention<T>
         }
 
         return is4D
-            ? Forward4D(query, key, value, config, queryOffset)
-            : Forward3D(query, key, value, config, queryOffset);
+            ? Forward4D(query, key, value, config, queryOffset, attentionBias)
+            : Forward3D(query, key, value, config, queryOffset, attentionBias);
     }
 
     /// <summary>
@@ -85,7 +92,8 @@ internal static class FlashAttention<T>
         Tensor<T> key,
         Tensor<T> value,
         FlashAttentionConfig config,
-        int queryOffset)
+        int queryOffset,
+        Tensor<T>? attentionBias)
     {
         int batchSize = query.Shape[0];
         int seqLenQ = query.Shape[1];
@@ -110,7 +118,7 @@ internal static class FlashAttention<T>
         {
             FlashAttentionCore(
                 query, key, value, output, attentionWeights,
-                b, 0, seqLenQ, seqLenKV, headDim, scale, config, queryOffset);
+                b, 0, seqLenQ, seqLenKV, headDim, scale, config, queryOffset, attentionBias);
         }
 
         return (output, attentionWeights);
@@ -124,7 +132,8 @@ internal static class FlashAttention<T>
         Tensor<T> key,
         Tensor<T> value,
         FlashAttentionConfig config,
-        int queryOffset)
+        int queryOffset,
+        Tensor<T>? attentionBias)
     {
         int batchSize = query.Shape[0];
         int numHeads = query.Shape[1];
@@ -152,7 +161,7 @@ internal static class FlashAttention<T>
             {
                 FlashAttentionCore4D(
                     query, key, value, output, attentionWeights,
-                    b, h, seqLenQ, seqLenKV, headDim, scale, config, queryOffset);
+                    b, h, seqLenQ, seqLenKV, headDim, scale, config, queryOffset, attentionBias);
             }
         }
 
@@ -185,7 +194,8 @@ internal static class FlashAttention<T>
         int headDim,
         T scale,
         FlashAttentionConfig config,
-        int queryOffset)
+        int queryOffset,
+        Tensor<T>? attentionBias = null)
     {
         int blockSizeQ = Math.Min(config.BlockSizeQ, seqLenQ);
         int blockSizeKV = Math.Min(config.BlockSizeKV, seqLenKV);
@@ -255,7 +265,21 @@ internal static class FlashAttention<T>
                             dotProduct = NumOps.Add(dotProduct, NumOps.Multiply(qVal, kVal));
                         }
 
-                        scores[qi, kj] = NumOps.Multiply(dotProduct, scale);
+                        T score = NumOps.Multiply(dotProduct, scale);
+
+                        // Add attention bias (e.g., ALiBi positional bias)
+                        if (attentionBias != null)
+                        {
+                            T bias = attentionBias.Rank switch
+                            {
+                                3 => attentionBias[new[] { batch, qIdx, kIdx }],  // [batch, seqQ, seqKV]
+                                2 => attentionBias[new[] { qIdx, kIdx }],          // [seqQ, seqKV]
+                                _ => NumOps.Zero
+                            };
+                            score = NumOps.Add(score, bias);
+                        }
+
+                        scores[qi, kj] = score;
                     }
                 }
 
@@ -362,7 +386,8 @@ internal static class FlashAttention<T>
         int headDim,
         T scale,
         FlashAttentionConfig config,
-        int queryOffset)
+        int queryOffset,
+        Tensor<T>? attentionBias = null)
     {
         int blockSizeQ = Math.Min(config.BlockSizeQ, seqLenQ);
         int blockSizeKV = Math.Min(config.BlockSizeKV, seqLenKV);
@@ -424,7 +449,21 @@ internal static class FlashAttention<T>
                             dotProduct = NumOps.Add(dotProduct, NumOps.Multiply(qVal, kVal));
                         }
 
-                        scores[qi, kj] = NumOps.Multiply(dotProduct, scale);
+                        T score = NumOps.Multiply(dotProduct, scale);
+
+                        // Add attention bias (e.g., ALiBi positional bias)
+                        if (attentionBias != null)
+                        {
+                            T bias = attentionBias.Rank switch
+                            {
+                                4 => attentionBias[new[] { batch, head, qIdx, kIdx }],  // [batch, heads, seqQ, seqKV]
+                                3 => attentionBias[new[] { head, qIdx, kIdx }],          // [heads, seqQ, seqKV]
+                                _ => NumOps.Zero
+                            };
+                            score = NumOps.Add(score, bias);
+                        }
+
+                        scores[qi, kj] = score;
                     }
                 }
 
@@ -517,20 +556,16 @@ internal static class FlashAttention<T>
         Tensor<T> key,
         Tensor<T> value,
         Tensor<T> output,
-        FlashAttentionConfig? config = null)
+        FlashAttentionConfig? config = null,
+        Tensor<T>? attentionBias = null)
     {
         config ??= FlashAttentionConfig.Default;
 
         bool is4D = query.Shape.Length == 4;
 
-        if (is4D)
-        {
-            return Backward4D(gradOutput, query, key, value, output, config);
-        }
-        else
-        {
-            return Backward3D(gradOutput, query, key, value, output, config);
-        }
+        return is4D
+            ? Backward4D(gradOutput, query, key, value, output, config, attentionBias)
+            : Backward3D(gradOutput, query, key, value, output, config, attentionBias);
     }
 
     /// <summary>
@@ -542,7 +577,8 @@ internal static class FlashAttention<T>
         Tensor<T> key,
         Tensor<T> value,
         Tensor<T> output,
-        FlashAttentionConfig config)
+        FlashAttentionConfig config,
+        Tensor<T>? attentionBias)
     {
         int batchSize = query.Shape[0];
         int seqLenQ = query.Shape[1];
@@ -562,7 +598,7 @@ internal static class FlashAttention<T>
         {
             BackwardCore3D(gradOutput, query, key, value, output,
                 gradQuery, gradKey, gradValue,
-                b, seqLenQ, seqLenKV, headDim, scale, config);
+                b, seqLenQ, seqLenKV, headDim, scale, config, attentionBias);
         }
 
         return (gradQuery, gradKey, gradValue);
@@ -585,7 +621,8 @@ internal static class FlashAttention<T>
         int seqLenKV,
         int headDim,
         T scale,
-        FlashAttentionConfig config)
+        FlashAttentionConfig config,
+        Tensor<T>? attentionBias = null)
     {
         T negInf = NumOps.FromDouble(double.NegativeInfinity);
 
@@ -629,6 +666,18 @@ internal static class FlashAttention<T>
                     dot = NumOps.Add(dot, NumOps.Multiply(qVal, kVal));
                 }
                 scores[j] = NumOps.Multiply(dot, scale);
+
+                // Add attention bias during recomputation (must match forward pass)
+                if (attentionBias != null)
+                {
+                    T bias = attentionBias.Rank switch
+                    {
+                        3 => attentionBias[new[] { batch, i, j }],
+                        2 => attentionBias[new[] { i, j }],
+                        _ => NumOps.Zero
+                    };
+                    scores[j] = NumOps.Add(scores[j], bias);
+                }
 
                 if (NumOps.GreaterThan(scores[j], maxScore))
                 {
@@ -715,7 +764,8 @@ internal static class FlashAttention<T>
         Tensor<T> key,
         Tensor<T> value,
         Tensor<T> output,
-        FlashAttentionConfig config)
+        FlashAttentionConfig config,
+        Tensor<T>? attentionBias)
     {
         int batchSize = query.Shape[0];
         int numHeads = query.Shape[1];
@@ -737,7 +787,7 @@ internal static class FlashAttention<T>
             {
                 BackwardCore4D(gradOutput, query, key, value, output,
                     gradQuery, gradKey, gradValue,
-                    b, h, seqLenQ, seqLenKV, headDim, scale, config);
+                    b, h, seqLenQ, seqLenKV, headDim, scale, config, attentionBias);
             }
         }
 
@@ -762,7 +812,8 @@ internal static class FlashAttention<T>
         int seqLenKV,
         int headDim,
         T scale,
-        FlashAttentionConfig config)
+        FlashAttentionConfig config,
+        Tensor<T>? attentionBias = null)
     {
         T negInf = NumOps.FromDouble(double.NegativeInfinity);
 
@@ -801,6 +852,18 @@ internal static class FlashAttention<T>
                     dot = NumOps.Add(dot, NumOps.Multiply(qVal, kVal));
                 }
                 scores[j] = NumOps.Multiply(dot, scale);
+
+                // Add attention bias during recomputation (must match forward pass)
+                if (attentionBias != null)
+                {
+                    T bias = attentionBias.Rank switch
+                    {
+                        4 => attentionBias[new[] { batch, head, i, j }],
+                        3 => attentionBias[new[] { head, i, j }],
+                        _ => NumOps.Zero
+                    };
+                    scores[j] = NumOps.Add(scores[j], bias);
+                }
 
                 if (NumOps.GreaterThan(scores[j], maxScore))
                 {

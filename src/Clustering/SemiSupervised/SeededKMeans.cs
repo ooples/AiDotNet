@@ -47,6 +47,9 @@ public class SeededKMeans<T> : ClusteringBase<T>
 {
     private readonly SeededKMeansOptions<T> _options;
 
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// Initializes a new Seeded K-Means instance.
     /// </summary>
@@ -230,8 +233,8 @@ public class SeededKMeans<T> : ClusteringBase<T>
         }
 
         // Average the sums
-        var rand = Options.RandomState.HasValue
-            ? RandomHelper.CreateSeededRandom(Options.RandomState.Value)
+        var rand = Options.Seed.HasValue
+            ? RandomHelper.CreateSeededRandom(Options.Seed.Value)
             : RandomHelper.CreateSecureRandom();
 
         for (int c = 0; c < k; c++)

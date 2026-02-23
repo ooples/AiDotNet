@@ -1,10 +1,37 @@
+using AiDotNet.Models.Options;
+
 namespace AiDotNet.Audio.Speaker;
 
 /// <summary>
 /// Configuration options for speaker diarization.
 /// </summary>
-public class SpeakerDiarizerOptions
+/// <remarks>
+/// <para><b>For Beginners:</b> These options configure the SpeakerDiarizer model. Default values follow the original paper settings.</para>
+/// </remarks>
+public class SpeakerDiarizerOptions : ModelOptions
 {
+    /// <summary>Initializes a new instance with default values.</summary>
+    public SpeakerDiarizerOptions() { }
+
+    /// <summary>Initializes a new instance by copying from another instance.</summary>
+    /// <param name="other">The options instance to copy from.</param>
+    /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
+    public SpeakerDiarizerOptions(SpeakerDiarizerOptions other)
+    {
+        if (other == null)
+            throw new ArgumentNullException(nameof(other));
+
+        Seed = other.Seed;
+        SampleRate = other.SampleRate;
+        WindowDurationSeconds = other.WindowDurationSeconds;
+        HopDurationSeconds = other.HopDurationSeconds;
+        EmbeddingDimension = other.EmbeddingDimension;
+        ClusteringThreshold = other.ClusteringThreshold;
+        MinTurnDuration = other.MinTurnDuration;
+        MaxSpeakers = other.MaxSpeakers;
+        EmbeddingModelPath = other.EmbeddingModelPath;
+    }
+
     /// <summary>
     /// Gets or sets the sample rate.
     /// </summary>

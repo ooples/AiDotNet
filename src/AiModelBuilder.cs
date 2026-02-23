@@ -2,13 +2,11 @@
 
 global using AiDotNet.Agents;
 global using AiDotNet.Configuration;
-global using AiDotNet.DataProcessor;
 global using AiDotNet.Deployment.Configuration;
 global using AiDotNet.Diagnostics;
 global using AiDotNet.DistributedTraining;
 global using AiDotNet.Enums;
 global using AiDotNet.Extensions;
-global using AiDotNet.FeatureSelectors;
 global using AiDotNet.FitDetectors;
 global using AiDotNet.FitnessCalculators;
 global using AiDotNet.Helpers;
@@ -21,9 +19,8 @@ global using AiDotNet.MixedPrecision;
 global using AiDotNet.Models;
 global using AiDotNet.Models.Inputs;
 global using AiDotNet.Models.Options;
-global using AiDotNet.Normalizers;
 global using AiDotNet.Optimizers;
-global using AiDotNet.OutlierRemoval;
+global using AiDotNet.AnomalyDetection;
 global using AiDotNet.ProgramSynthesis.Interfaces;
 global using AiDotNet.ProgramSynthesis.Serving;
 global using AiDotNet.PromptEngineering.Chains;
@@ -41,13 +38,17 @@ global using AiDotNet.Tools;
 global using AiDotNet.UncertaintyQuantification.Layers;
 using AiDotNet.Augmentation;
 using AiDotNet.AutoML.NAS;
+using AiDotNet.RetrievalAugmentedGeneration.Graph.Communities;
+using AiDotNet.RetrievalAugmentedGeneration.Graph.Embeddings;
 using AiDotNet.AutoML.Policies;
 using AiDotNet.AutoML.SearchSpace;
 using AiDotNet.Postprocessing;
 using AiDotNet.Preprocessing;
+using AiDotNet.Preprocessing.DataPreparation;
 using AiDotNet.Preprocessing.Imputers;
 using AiDotNet.Preprocessing.Scalers;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Validation;
 
 namespace AiDotNet;
 
@@ -137,20 +138,24 @@ namespace AiDotNet;
 /// </remarks>
 public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TInput, TOutput>
 {
-    private IFeatureSelector<T, TInput>? _featureSelector;
-    private INormalizer<T, TInput, TOutput>? _normalizer;
     private PreprocessingPipeline<T, TInput, TInput>? _preprocessingPipeline;
     private PostprocessingPipeline<T, TOutput, TOutput>? _postprocessingPipeline;
     private IRegularization<T, TInput, TOutput>? _regularization;
     private IFitnessCalculator<T, TInput, TOutput>? _fitnessCalculator;
     private IFitDetector<T, TInput, TOutput>? _fitDetector;
     private IFullModel<T, TInput, TOutput>? _model;
+
+    /// <summary>
+    /// Gets the configured model instance for use by domain-specific partial class methods.
+    /// </summary>
+    internal IFullModel<T, TInput, TOutput>? ConfiguredModel => _model;
+
     private IOptimizer<T, TInput, TOutput>? _optimizer;
-    private IDataPreprocessor<T, TInput, TOutput>? _dataPreprocessor;
     private IDataLoader<T>? _dataLoader;
-    private IOutlierRemoval<T, TInput, TOutput>? _outlierRemoval;
+    private DataPreparationPipeline<T>? _dataPreparationPipeline;
     private IBiasDetector<T>? _biasDetector;
     private IFairnessEvaluator<T>? _fairnessEvaluator;
+    private InterpretabilityOptions? _interpretabilityOptions;
     private AdversarialRobustnessConfiguration<T, TInput, TOutput>? _adversarialRobustnessConfiguration;
     private FineTuningConfiguration<T, TInput, TOutput>? _fineTuningConfiguration;
     private ILoRAConfiguration<T>? _loraConfiguration;
@@ -163,11 +168,15 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     private KnowledgeGraph<T>? _knowledgeGraph;
     private IGraphStore<T>? _graphStore;
     private HybridGraphRetriever<T>? _hybridGraphRetriever;
+    private KnowledgeGraphOptions? _knowledgeGraphOptions;
     private IMetaLearner<T, TInput, TOutput>? _metaLearner;
     private ICommunicationBackend<T>? _distributedBackend;
     private DistributedStrategy _distributedStrategy = DistributedStrategy.DDP;
     private IShardingConfiguration<T>? _distributedConfiguration;
-    private IModelEvaluator<T, TInput, TOutput>? _modelEvaluator;
+    private IPipelinePartitionStrategy<T>? _pipelinePartitionStrategy;
+    private IPipelineSchedule<T>? _pipelineSchedule;
+    private ActivationCheckpointConfig? _pipelineCheckpointConfig;
+    private int _pipelineMicroBatchCount = 1;
     private ICrossValidator<T, TInput, TOutput>? _crossValidator;
     private AgentConfiguration<T>? _agentConfig;
     private AgentAssistanceOptions _agentOptions = AgentAssistanceOptions.Default;
@@ -195,6 +204,14 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     private IFederatedServerOptimizer<T>? _federatedServerOptimizer;
     private IFederatedHeterogeneityCorrection<T>? _federatedHeterogeneityCorrection;
     private IHomomorphicEncryptionProvider<T>? _federatedHomomorphicEncryptionProvider;
+    private FederatedLearning.PSI.IPrivateSetIntersection? _federatedPrivateSetIntersection;
+    private FederatedLearning.MPC.ISecureComputationProtocol<T>? _federatedSecureComputationProtocol;
+    private FederatedLearning.TEE.ITeeProvider<T>? _federatedTeeProvider;
+    private FederatedLearning.Verification.IZkProofSystem? _federatedZkProofSystem;
+    private FederatedLearning.Unlearning.IFederatedUnlearner<T>? _federatedUnlearner;
+    private FederatedLearning.DriftDetection.IFederatedDriftDetector<T>? _federatedDriftDetector;
+    private FederatedLearning.Fairness.IClientContributionEvaluator<T>? _federatedContributionEvaluator;
+    private FederatedLearning.Fairness.IFairnessConstraint<T>? _federatedFairnessConstraint;
 
     // Deployment configuration fields
     private QuantizationConfig? _quantizationConfig;
@@ -208,6 +225,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     private ReasoningConfig? _reasoningConfig;
     private ProfilingConfig? _profilingConfig;
     private BenchmarkingOptions? _benchmarkingOptions;
+    private AiDotNet.Safety.SafetyConfig? _safetyPipelineConfig;
 
     // Tokenization configuration
     private ITokenizer? _tokenizer;
@@ -246,38 +264,84 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     // Memory management configuration for gradient checkpointing, activation pooling, and model sharding
     private Training.Memory.TrainingMemoryConfig? _memoryConfig;
 
+    // Internal accessors for test verification (visible to AiDotNetTests via InternalsVisibleTo)
+    internal IOptimizer<T, TInput, TOutput>? ConfiguredOptimizer => _optimizer;
+    internal CacheConfig? ConfiguredCaching => _cacheConfig;
+    internal AiDotNet.Configuration.JitCompilationConfig? ConfiguredJitCompilation => _jitCompilationConfig;
+    internal AiDotNet.Configuration.InferenceOptimizationConfig? ConfiguredInferenceOptimizations => _inferenceOptimizationConfig;
+    internal InterpretabilityOptions? ConfiguredInterpretability => _interpretabilityOptions;
+    internal Training.Memory.TrainingMemoryConfig? ConfiguredMemoryManagement => _memoryConfig;
+
     /// <summary>
-    /// Configures which features (input variables) should be used in the model.
+    /// Creates a new <see cref="AiModelBuilder{T, TInput, TOutput}"/> with configuration loaded from a YAML file.
     /// </summary>
-    /// <param name="selector">The feature selection strategy to use.</param>
-    /// <returns>This builder instance for method chaining.</returns>
+    /// <param name="configFilePath">The path to a YAML configuration file.</param>
     /// <remarks>
-    /// <b>For Beginners:</b> Sometimes, not all of your data is useful for making predictions.
-    /// Feature selection helps pick out which parts of your data are most important.
-    /// For example, when predicting house prices, the number of bedrooms might be important,
-    /// but the house's street number probably isn't.
+    /// <para>
+    /// <b>For Beginners:</b> Instead of configuring everything in C# code, you can write your
+    /// configuration in a YAML file and load it automatically. The YAML file sets the base
+    /// configuration, and you can still override any setting using the fluent <c>.Configure*()</c>
+    /// methods afterwards.
+    /// </para>
+    /// <para>
+    /// <b>Example YAML file (training-recipe.yaml):</b>
+    /// </para>
+    /// <code>
+    /// optimizer:
+    ///   type: "Adam"
+    ///
+    /// quantization:
+    ///   mode: Int8
+    ///   targetBitWidth: 4
+    ///
+    /// caching:
+    ///   enabled: true
+    ///   maxCacheSize: 1000
+    ///
+    /// jitCompilation:
+    ///   enabled: true
+    ///   throwOnFailure: false
+    /// </code>
+    /// <para>
+    /// <b>Usage:</b>
+    /// </para>
+    /// <code>
+    /// // YAML base + optional code overrides
+    /// var result = await new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;("config.yaml")
+    ///     .ConfigureOptimizer(customOptimizer)  // Override YAML optimizer
+    ///     .BuildAsync();
+    /// </code>
     /// </remarks>
-    public IAiModelBuilder<T, TInput, TOutput> ConfigureFeatureSelector(IFeatureSelector<T, TInput> selector)
+    /// <exception cref="ArgumentException">Thrown when <paramref name="configFilePath"/> is null or empty.</exception>
+    /// <exception cref="FileNotFoundException">Thrown when the YAML file does not exist.</exception>
+    public AiModelBuilder(string configFilePath)
     {
-        _featureSelector = selector;
-        return this;
+        if (string.IsNullOrWhiteSpace(configFilePath))
+        {
+            throw new ArgumentException("Config file path cannot be null or empty.", nameof(configFilePath));
+        }
+
+        var fullPath = Path.GetFullPath(configFilePath);
+        if (!File.Exists(fullPath))
+        {
+            throw new FileNotFoundException("YAML config file not found.", fullPath);
+        }
+
+        var config = YamlConfigLoader.LoadFromFile(fullPath);
+        YamlConfigApplier<T, TInput, TOutput>.Apply(config, this);
     }
 
     /// <summary>
-    /// Configures how the input data should be normalized (scaled).
+    /// Creates a new <see cref="AiModelBuilder{T, TInput, TOutput}"/> with default (empty) configuration.
     /// </summary>
-    /// <param name="normalizer">The normalization strategy to use.</param>
-    /// <returns>This builder instance for method chaining.</returns>
     /// <remarks>
-    /// <b>For Beginners:</b> Normalization makes sure all your data is on a similar scale.
-    /// For example, if you have data about people's ages (0-100) and incomes ($0-$1,000,000),
-    /// normalization might scale both to ranges like 0-1 so the model doesn't think
-    /// income is 10,000 times more important than age just because the numbers are bigger.
+    /// <para>
+    /// <b>For Beginners:</b> Use this when you want to configure everything via the fluent
+    /// <c>.Configure*()</c> methods in C# code.
+    /// </para>
     /// </remarks>
-    public IAiModelBuilder<T, TInput, TOutput> ConfigureNormalizer(INormalizer<T, TInput, TOutput> normalizer)
+    public AiModelBuilder()
     {
-        _normalizer = normalizer;
-        return this;
     }
 
     /// <summary>
@@ -610,10 +674,29 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// <summary>
     /// Enables federated learning training using the provided options.
     /// </summary>
-    /// <param name="options">Federated learning configuration options.</param>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This is the single entry point for all federated learning configurations.
+    /// Set <see cref="FederatedLearningOptions.Mode"/> to choose horizontal (default) or vertical FL.
+    /// All v2 subsystems (PSI, MPC, TEE, ZK verification, graph FL, unlearning, fairness, advanced
+    /// compression, drift detection) are configured via properties on the options object.</para>
+    ///
+    /// <para>Optional injectable interface parameters allow advanced users to provide custom
+    /// implementations that override the defaults derived from options.</para>
+    /// </remarks>
+    /// <param name="options">Federated learning configuration options (horizontal or vertical mode, privacy, compression, etc.).</param>
     /// <param name="aggregationStrategy">Optional aggregation strategy override (null uses defaults based on options).</param>
     /// <param name="clientSelectionStrategy">Optional client selection strategy override (null uses defaults based on options).</param>
     /// <param name="serverOptimizer">Optional server-side optimizer override (null uses defaults based on options).</param>
+    /// <param name="heterogeneityCorrection">Optional heterogeneity correction strategy override.</param>
+    /// <param name="homomorphicEncryptionProvider">Optional homomorphic encryption provider for encrypted aggregation.</param>
+    /// <param name="privateSetIntersection">Optional custom PSI protocol for entity alignment in vertical FL or graph FL.</param>
+    /// <param name="secureComputationProtocol">Optional custom MPC protocol for secure gradient operations.</param>
+    /// <param name="teeProvider">Optional custom TEE provider for hardware-backed secure aggregation.</param>
+    /// <param name="zkProofSystem">Optional custom zero-knowledge proof system for verifiable FL.</param>
+    /// <param name="federatedUnlearner">Optional custom unlearning implementation for GDPR compliance.</param>
+    /// <param name="driftDetector">Optional custom drift detector for concept drift adaptation.</param>
+    /// <param name="contributionEvaluator">Optional custom contribution evaluator for client value assessment.</param>
+    /// <param name="fairnessConstraint">Optional custom fairness constraint for equitable model performance.</param>
     /// <returns>This builder instance for method chaining.</returns>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureFederatedLearning(
         FederatedLearningOptions options,
@@ -621,14 +704,31 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         IClientSelectionStrategy? clientSelectionStrategy = null,
         IFederatedServerOptimizer<T>? serverOptimizer = null,
         IFederatedHeterogeneityCorrection<T>? heterogeneityCorrection = null,
-        IHomomorphicEncryptionProvider<T>? homomorphicEncryptionProvider = null)
+        IHomomorphicEncryptionProvider<T>? homomorphicEncryptionProvider = null,
+        FederatedLearning.PSI.IPrivateSetIntersection? privateSetIntersection = null,
+        FederatedLearning.MPC.ISecureComputationProtocol<T>? secureComputationProtocol = null,
+        FederatedLearning.TEE.ITeeProvider<T>? teeProvider = null,
+        FederatedLearning.Verification.IZkProofSystem? zkProofSystem = null,
+        FederatedLearning.Unlearning.IFederatedUnlearner<T>? federatedUnlearner = null,
+        FederatedLearning.DriftDetection.IFederatedDriftDetector<T>? driftDetector = null,
+        FederatedLearning.Fairness.IClientContributionEvaluator<T>? contributionEvaluator = null,
+        FederatedLearning.Fairness.IFairnessConstraint<T>? fairnessConstraint = null)
     {
-        _federatedLearningOptions = options ?? throw new ArgumentNullException(nameof(options));
+        Guard.NotNull(options);
+        _federatedLearningOptions = options;
         _federatedAggregationStrategy = aggregationStrategy;
         _federatedClientSelectionStrategy = clientSelectionStrategy;
         _federatedServerOptimizer = serverOptimizer;
         _federatedHeterogeneityCorrection = heterogeneityCorrection;
         _federatedHomomorphicEncryptionProvider = homomorphicEncryptionProvider;
+        _federatedPrivateSetIntersection = privateSetIntersection;
+        _federatedSecureComputationProtocol = secureComputationProtocol;
+        _federatedTeeProvider = teeProvider;
+        _federatedZkProofSystem = zkProofSystem;
+        _federatedUnlearner = federatedUnlearner;
+        _federatedDriftDetector = driftDetector;
+        _federatedContributionEvaluator = contributionEvaluator;
+        _federatedFairnessConstraint = fairnessConstraint;
         return this;
     }
 
@@ -967,22 +1067,6 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     }
 
     /// <summary>
-    /// Configures how the data should be preprocessed before training.
-    /// </summary>
-    /// <param name="dataPreprocessor">The data preprocessing strategy to use.</param>
-    /// <returns>This builder instance for method chaining.</returns>
-    /// <remarks>
-    /// <b>For Beginners:</b> Data preprocessing cleans and prepares your raw data before feeding it to the model.
-    /// It's like washing and cutting vegetables before cooking. This might include handling missing values,
-    /// converting text to numbers, or combining related features.
-    /// </remarks>
-    public IAiModelBuilder<T, TInput, TOutput> ConfigureDataPreprocessor(IDataPreprocessor<T, TInput, TOutput> dataPreprocessor)
-    {
-        _dataPreprocessor = dataPreprocessor;
-        return this;
-    }
-
-    /// <summary>
     /// Configures the data loader for providing training data.
     /// </summary>
     /// <param name="dataLoader">The data loader that provides training data.</param>
@@ -1017,19 +1101,39 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     }
 
     /// <summary>
-    /// Configures how to detect and handle outliers in the data.
+    /// Configures data preparation operations that change row count (outlier removal, augmentation).
     /// </summary>
-    /// <param name="outlierRemoval">The outlier removal strategy to use.</param>
+    /// <param name="pipelineBuilder">Action to configure the data preparation pipeline.</param>
     /// <returns>This builder instance for method chaining.</returns>
     /// <remarks>
-    /// <b>For Beginners:</b> Outliers are unusual data points that are very different from the rest of your data.
-    /// For example, if you're analyzing house prices and most are between $100,000-$500,000,
-    /// a $10,000,000 mansion would be an outlier. These unusual points can sometimes confuse the model,
-    /// so we might want to handle them specially.
+    /// <para>
+    /// <b>For Beginners:</b> Data preparation handles operations that add or remove data points:
+    /// - <b>Outlier removal:</b> Removes unusual data points that might confuse the model
+    /// - <b>Data augmentation (SMOTE):</b> Creates synthetic samples to balance imbalanced classes
+    /// </para>
+    /// <para>
+    /// These operations are only applied during training, not during prediction.
+    /// </para>
+    /// <para>
+    /// <b>Example:</b>
+    /// <code>
+    /// builder.ConfigureDataPreparation(prep => prep
+    ///     .Add(new OutlierRemovalOperation&lt;double&gt;(new IsolationForest&lt;double&gt;()))
+    ///     .Add(new AugmentationOperation&lt;double&gt;(new SmoteAugmenter&lt;double&gt;())));
+    /// </code>
+    /// </para>
     /// </remarks>
-    public IAiModelBuilder<T, TInput, TOutput> ConfigureOutlierRemoval(IOutlierRemoval<T, TInput, TOutput> outlierRemoval)
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureDataPreparation(
+        Action<DataPreparationPipeline<T>> pipelineBuilder)
     {
-        _outlierRemoval = outlierRemoval;
+        if (pipelineBuilder is null)
+        {
+            throw new ArgumentNullException(nameof(pipelineBuilder));
+        }
+
+        _dataPreparationPipeline = new DataPreparationPipeline<T>();
+        pipelineBuilder(_dataPreparationPipeline);
+        DataPreparationRegistry<T>.Current = _dataPreparationPipeline;
         return this;
     }
 
@@ -1143,6 +1247,14 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
 
     private AiModelResult<T, TInput, TOutput> BuildProgramSynthesisInferenceOnlyResult()
     {
+        // Preprocessing requires fitted statistics - for inference-only builds, the pipeline must be pre-fitted
+        if (_preprocessingPipeline is not null && !_preprocessingPipeline.IsFitted)
+        {
+            throw new InvalidOperationException(
+                "Inference-only builds require a pre-fitted preprocessing pipeline. " +
+                "Either fit the pipeline on training data first, preprocess data externally, or omit ConfigurePreprocessing().");
+        }
+
         // Ensure inference-only builds still honor configured GPU acceleration.
         ApplyGpuConfiguration();
 
@@ -1165,7 +1277,9 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         var options = new AiModelResultOptions<T, TInput, TOutput>
         {
             OptimizationResult = optimizationResult,
-            NormalizationInfo = new NormalizationInfo<T, TInput, TOutput> { Normalizer = new NoNormalizer<T, TInput, TOutput>() },
+            PreprocessingInfo = _preprocessingPipeline is not null && _preprocessingPipeline.IsFitted
+                ? new PreprocessingInfo<T, TInput, TOutput>(_preprocessingPipeline)
+                : null,
             Tokenizer = _tokenizer,
             TokenizationConfig = _tokenizationConfig,
             ProgramSynthesisModel = _programSynthesisModel,
@@ -1177,6 +1291,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             DeploymentConfiguration = deploymentConfig,
             BiasDetector = _biasDetector,
             FairnessEvaluator = _fairnessEvaluator,
+            InterpretabilityOptions = _interpretabilityOptions,
             RagRetriever = _ragRetriever,
             RagReranker = _ragReranker,
             RagGenerator = _ragGenerator,
@@ -1194,7 +1309,158 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             MemoryConfig = _memoryConfig
         };
 
-        return new AiModelResult<T, TInput, TOutput>(options);
+        var programSynthesisResult = new AiModelResult<T, TInput, TOutput>(options);
+        ProcessKnowledgeGraphOptions(programSynthesisResult);
+        AttachSafetyPipeline(programSynthesisResult);
+        return programSynthesisResult;
+    }
+
+    private void AttachSafetyPipeline(AiModelResult<T, TInput, TOutput> result)
+    {
+        if (_safetyPipelineConfig != null)
+        {
+            result.SafetyPipeline = AiDotNet.Safety.SafetyPipelineFactory<T>.Create(_safetyPipelineConfig);
+        }
+    }
+
+    private void ProcessKnowledgeGraphOptions(AiModelResult<T, TInput, TOutput> result)
+    {
+        if (_knowledgeGraphOptions == null)
+            return;
+
+        if (_knowledgeGraph == null)
+        {
+            throw new InvalidOperationException(
+                "KnowledgeGraph options were configured via ConfigureKnowledgeGraph(), " +
+                "but no KnowledgeGraph instance was provided. " +
+                "Call ConfigureRetrievalAugmentedGeneration() to set up the KnowledgeGraph, then ConfigureKnowledgeGraph() to enable advanced features.");
+        }
+
+        var kgResult = new Models.Results.KnowledgeGraphResult<T>();
+
+        // Run KG construction from text if configured
+        if (_knowledgeGraphOptions.ConstructionTexts != null &&
+            _knowledgeGraphOptions.ConstructionTexts.Count > 0)
+        {
+            var constructor = new AiDotNet.RetrievalAugmentedGeneration.Graph.Construction.KGConstructor<T>();
+            foreach (var text in _knowledgeGraphOptions.ConstructionTexts)
+            {
+                if (!string.IsNullOrWhiteSpace(text))
+                {
+                    constructor.ConstructFromText(text, _knowledgeGraph, _knowledgeGraphOptions.ConstructionOptions);
+                }
+            }
+        }
+
+        var needsLinkPrediction = _knowledgeGraphOptions.GetEffectiveEnableLinkPrediction();
+        var needsTraining = _knowledgeGraphOptions.GetEffectiveTrainEmbeddings();
+
+        if (needsLinkPrediction && !needsTraining)
+        {
+            throw new InvalidOperationException(
+                "EnableLinkPrediction requires TrainEmbeddings to be true. " +
+                "Link prediction evaluation needs a trained embedding model.");
+        }
+
+        List<GraphEdge<T>>? testEdges = null;
+        KnowledgeGraph<T> trainingGraph = _knowledgeGraph;
+
+        // Split edges for evaluation when both link prediction and training are enabled.
+        if (needsLinkPrediction && needsTraining)
+        {
+            var allEdges = _knowledgeGraph.GetAllEdges().ToList();
+            var testFraction = _knowledgeGraphOptions.GetEffectiveLinkPredictionTestFraction();
+            var maxTestEdges = _knowledgeGraphOptions.GetEffectiveLinkPredictionMaxTestEdges();
+            int testSize = Math.Min((int)Math.Round(allEdges.Count * testFraction), maxTestEdges);
+
+            // Ensure at least 5 edges remain for training after the split
+            const int minTrainingEdges = 5;
+            if (testSize > 0 && allEdges.Count - testSize >= minTrainingEdges)
+            {
+                // Shuffle edges for a random split using seed from embedding options if available
+                var splitRng = _knowledgeGraphOptions.EmbeddingOptions?.Seed is int seed
+                    ? RandomHelper.CreateSeededRandom(seed)
+                    : RandomHelper.CreateSecureRandom();
+                for (int i = allEdges.Count - 1; i > 0; i--)
+                {
+                    int j = splitRng.Next(i + 1);
+                    (allEdges[i], allEdges[j]) = (allEdges[j], allEdges[i]);
+                }
+
+                testEdges = allEdges.GetRange(allEdges.Count - testSize, testSize);
+                var trainEdges = allEdges.GetRange(0, allEdges.Count - testSize);
+
+                // Build a training-only graph (same nodes, fewer edges)
+                trainingGraph = new KnowledgeGraph<T>();
+                foreach (var node in _knowledgeGraph.GetAllNodes())
+                    trainingGraph.AddNode(node);
+                foreach (var edge in trainEdges)
+                    trainingGraph.AddEdge(edge);
+            }
+        }
+
+        // Train embeddings if requested
+        if (_knowledgeGraphOptions.GetEffectiveTrainEmbeddings())
+        {
+            var embedding = CreateEmbeddingModel(_knowledgeGraphOptions.GetEffectiveEmbeddingType());
+            var trainingResult = embedding.Train(trainingGraph, _knowledgeGraphOptions.EmbeddingOptions);
+            kgResult.EmbeddingTrainingResult = trainingResult;
+            kgResult.TrainedEmbedding = embedding;
+        }
+
+        // Set up GraphRAG options with mode from KG options
+        var ragOptions = _knowledgeGraphOptions.GraphRAGOptions ?? new GraphRAGOptions();
+        if (_knowledgeGraphOptions.GraphRAGMode.HasValue)
+        {
+            ragOptions.Mode = _knowledgeGraphOptions.GraphRAGMode.Value;
+        }
+
+        // Create EnhancedGraphRAG (uses full graph for retrieval)
+        var enhancedRAG = new EnhancedGraphRAG<T>(_knowledgeGraph, ragOptions);
+
+        // Build community index for Global/Drift modes
+        var effectiveMode = ragOptions.Mode ?? Enums.GraphRAGMode.Local;
+        if (effectiveMode == Enums.GraphRAGMode.Global || effectiveMode == Enums.GraphRAGMode.Drift)
+        {
+            enhancedRAG.BuildCommunityIndex();
+            kgResult.CommunityStructure = enhancedRAG.CommunityStructure;
+
+            // Generate community summaries
+            if (kgResult.CommunityStructure != null)
+            {
+                var summarizer = new CommunitySummarizer<T>();
+                kgResult.CommunitySummaries = summarizer.Summarize(_knowledgeGraph, kgResult.CommunityStructure);
+            }
+        }
+
+        kgResult.EnhancedGraphRAG = enhancedRAG;
+
+        // Run link prediction evaluation on held-out test edges
+        if (needsLinkPrediction && kgResult.TrainedEmbedding != null && testEdges != null && testEdges.Count > 0)
+        {
+            var predictor = new LinkPredictor<T>(kgResult.TrainedEmbedding);
+            var testTriples = testEdges.Select(e => (e.SourceId, e.RelationType, e.TargetId));
+
+            // Evaluate against the full graph (standard filtered setting)
+            kgResult.LinkPredictionEvaluation = predictor.EvaluateModel(_knowledgeGraph, testTriples);
+        }
+
+        result.KnowledgeGraphResult = kgResult;
+    }
+
+    private static IKnowledgeGraphEmbedding<T> CreateEmbeddingModel(KGEmbeddingType embeddingType)
+    {
+        return embeddingType switch
+        {
+            KGEmbeddingType.TransE => new TransEEmbedding<T>(),
+            KGEmbeddingType.RotatE => new RotatEEmbedding<T>(),
+            KGEmbeddingType.ComplEx => new ComplExEmbedding<T>(),
+            KGEmbeddingType.DistMult => new DistMultEmbedding<T>(),
+            KGEmbeddingType.TemporalTransE => new TemporalTransEEmbedding<T>(),
+            _ => throw new NotSupportedException(
+                $"Unknown KGEmbeddingType '{embeddingType}'. " +
+                $"Supported types: {string.Join(", ", Enum.GetNames(typeof(KGEmbeddingType)))}")
+        };
     }
 
     private Task RunBenchmarksIfConfiguredAsync(AiModelResult<T, TInput, TOutput> result)
@@ -1260,6 +1526,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         // Training metrics
         T totalLoss = numOps.Zero;
         int totalBatches = 0;
+        bool pipelineFitted = _preprocessingPipeline?.IsFitted ?? true;
 
         // Train for the specified number of epochs
         for (int epoch = 0; epoch < epochs; epoch++)
@@ -1270,20 +1537,40 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             // Iterate through all batches in the streaming loader
             await foreach (var (inputs, outputs) in streamingLoader.GetBatchesAsync(shuffle: true))
             {
+                // Fit preprocessing pipeline on first batch if not already fitted
+                if (_preprocessingPipeline is not null && !pipelineFitted && inputs.Length > 0)
+                {
+                    _preprocessingPipeline.Fit(inputs[0]);
+                    pipelineFitted = true;
+                }
+
                 // Process each sample in the batch
                 for (int i = 0; i < inputs.Length; i++)
                 {
                     var input = inputs[i];
                     var target = outputs[i];
 
+                    // Apply preprocessing to input features if configured
+                    TInput processedInput = input;
+                    if (_preprocessingPipeline is not null && pipelineFitted)
+                    {
+                        // Transform features - pipeline returns TOutput but for feature preprocessing
+                        // without a final transformer, TInput == TOutput (same type returned)
+                        var transformed = _preprocessingPipeline.Transform(input);
+                        if (transformed is TInput typedTransformed)
+                        {
+                            processedInput = typedTransformed;
+                        }
+                    }
+
                     // Compute gradients without updating parameters
-                    var gradients = _model.ComputeGradients(input, target, lossFunction);
+                    var gradients = _model.ComputeGradients(processedInput, target, lossFunction);
 
                     // Apply gradients with current learning rate
                     _model.ApplyGradients(gradients, learningRate);
 
                     // Accumulate loss for monitoring (optional - compute prediction loss)
-                    var prediction = _model.Predict(input);
+                    var prediction = _model.Predict(processedInput);
                     var predictionVector = ConversionsHelper.ConvertToVector<T, TOutput>(prediction);
                     var targetVector = ConversionsHelper.ConvertToVector<T, TOutput>(target);
                     var loss = lossFunction.CalculateLoss(predictionVector, targetVector);
@@ -1342,7 +1629,9 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         var options = new AiModelResultOptions<T, TInput, TOutput>
         {
             OptimizationResult = optimizationResult,
-            NormalizationInfo = new NormalizationInfo<T, TInput, TOutput> { Normalizer = new NoNormalizer<T, TInput, TOutput>() },
+            PreprocessingInfo = _preprocessingPipeline is not null && pipelineFitted
+                ? new PreprocessingInfo<T, TInput, TOutput>(_preprocessingPipeline)
+                : null,
             Tokenizer = _tokenizer,
             TokenizationConfig = _tokenizationConfig,
             ProgramSynthesisModel = _programSynthesisModel,
@@ -1354,6 +1643,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             DeploymentConfiguration = deploymentConfig,
             BiasDetector = _biasDetector,
             FairnessEvaluator = _fairnessEvaluator,
+            InterpretabilityOptions = _interpretabilityOptions,
             RagRetriever = _ragRetriever,
             RagReranker = _ragReranker,
             RagGenerator = _ragGenerator,
@@ -1366,7 +1656,10 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             MemoryConfig = _memoryConfig
         };
 
-        return new AiModelResult<T, TInput, TOutput>(options);
+        var nnResult = new AiModelResult<T, TInput, TOutput>(options);
+        ProcessKnowledgeGraphOptions(nnResult);
+        AttachSafetyPipeline(nnResult);
+        return nnResult;
     }
 
     /// <summary>
@@ -1507,31 +1800,42 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             Console.WriteLine("AutoML configured - starting model search...");
             var searchStartedUtc = DateTimeOffset.UtcNow;
 
-            // Set up preprocessing for AutoML search
-            var autoMLNormalizer = _normalizer ?? new NoNormalizer<T, TInput, TOutput>();
-            var autoMLFeatureSelector = _featureSelector ?? new NoFeatureSelector<T, TInput>();
-            var autoMLOutlierRemoval = _outlierRemoval ?? new NoOutlierRemoval<T, TInput, TOutput>();
-
-            var autoMLDataProcessorOptions = new DataProcessorOptions();
-            if (_autoMLOptions?.TaskFamilyOverride == AutoMLTaskFamily.TimeSeriesForecasting
-                || _autoMLOptions?.TaskFamilyOverride == AutoMLTaskFamily.TimeSeriesAnomalyDetection)
+            // Step 1: Apply data preparation (outlier removal, augmentation) - changes row count
+            TInput autoMLPreparedX = x;
+            TOutput autoMLPreparedY = y;
+            if (_dataPreparationPipeline != null && _dataPreparationPipeline.Count > 0)
             {
-                autoMLDataProcessorOptions.ShuffleBeforeSplit = false;
+                if (x is Matrix<T> xMatrix && y is Vector<T> yVector)
+                {
+                    var (prepX, prepY) = _dataPreparationPipeline.FitResample(xMatrix, yVector);
+                    autoMLPreparedX = (TInput)(object)prepX;
+                    autoMLPreparedY = (TOutput)(object)prepY;
+                }
+                else if (x is Tensor<T> xTensor && y is Tensor<T> yTensor)
+                {
+                    var (prepX, prepY) = _dataPreparationPipeline.FitResampleTensor(xTensor, yTensor);
+                    autoMLPreparedX = (TInput)(object)prepX;
+                    autoMLPreparedY = (TOutput)(object)prepY;
+                }
             }
 
-            var autoMLPreprocessor = _dataPreprocessor ?? new DefaultDataPreprocessor<T, TInput, TOutput>(
-                autoMLNormalizer, autoMLFeatureSelector, autoMLOutlierRemoval, autoMLDataProcessorOptions);
-
-            // Preprocess and split data for AutoML search
-            var (autoMLPreprocessedX, autoMLPreprocessedY, _) = autoMLPreprocessor.PreprocessData(x, y);
-            var (autoMLXTrain, autoMLYTrain, autoMLXVal, autoMLYVal, _, _) = autoMLPreprocessor.SplitData(
-                autoMLPreprocessedX, autoMLPreprocessedY);
-
-            // Configure AutoML with model evaluator if available
-            if (_modelEvaluator != null)
+            // Step 2: Apply preprocessing pipeline (scaling, encoding, etc.) - doesn't change row count
+            TInput autoMLPreprocessedX = autoMLPreparedX;
+            if (_preprocessingPipeline != null)
             {
-                _autoMLModel.SetModelEvaluator(_modelEvaluator);
+                autoMLPreprocessedX = _preprocessingPipeline.FitTransform(autoMLPreparedX);
             }
+
+            // Step 3: Split data for AutoML search
+            bool shuffleBeforeSplit = !(_autoMLOptions?.TaskFamilyOverride == AutoMLTaskFamily.TimeSeriesForecasting
+                || _autoMLOptions?.TaskFamilyOverride == AutoMLTaskFamily.TimeSeriesAnomalyDetection);
+
+            var splitResult = DataSplitter.Split<T, TInput, TOutput>(
+                autoMLPreprocessedX, autoMLPreparedY, trainRatio: 0.7, validationRatio: 0.15, shuffle: shuffleBeforeSplit);
+            var autoMLXTrain = splitResult.XTrain;
+            var autoMLYTrain = splitResult.yTrain;
+            var autoMLXVal = splitResult.XVal;
+            var autoMLYVal = splitResult.yVal;
 
             if (_autoMLOptions?.TaskFamilyOverride is AutoMLTaskFamily taskFamilyOverride)
             {
@@ -1572,12 +1876,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         if (_model == null)
             throw new InvalidOperationException("Model implementation must be specified. Use ConfigureModel() to set a model, ConfigureAutoML() for automatic model selection, or enable agent assistance.");
 
-        // Use defaults for these interfaces if they aren't set
-        var normalizer = _normalizer ?? new NoNormalizer<T, TInput, TOutput>();
+        // Use defaults for the optimizer if not set
         var optimizer = _optimizer ?? new NormalOptimizer<T, TInput, TOutput>(_model);
-        var featureSelector = _featureSelector ?? new NoFeatureSelector<T, TInput>();
-        var outlierRemoval = _outlierRemoval ?? new NoOutlierRemoval<T, TInput, TOutput>();
-        var dataPreprocessor = _dataPreprocessor ?? new DefaultDataPreprocessor<T, TInput, TOutput>(normalizer, featureSelector, outlierRemoval);
 
         // LORA ADAPTATION (if configured)
         // Apply LoRA adapters to neural network layers for parameter-efficient fine-tuning
@@ -1673,7 +1973,12 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                         new DistributedTraining.ZeRO3Model<T, TInput, TOutput>(_model, shardingConfig),
                         new DistributedTraining.ZeRO3Optimizer<T, TInput, TOutput>(optimizer, shardingConfig)),
                     DistributedStrategy.PipelineParallel => CreateDistributedPair(
-                        new DistributedTraining.PipelineParallelModel<T, TInput, TOutput>(_model, shardingConfig),
+                        new DistributedTraining.PipelineParallelModel<T, TInput, TOutput>(
+                            _model, shardingConfig,
+                            microBatchCount: _pipelineMicroBatchCount,
+                            partitionStrategy: _pipelinePartitionStrategy,
+                            schedule: _pipelineSchedule,
+                            checkpointConfig: _pipelineCheckpointConfig),
                         new DistributedTraining.PipelineParallelOptimizer<T, TInput, TOutput>(optimizer, shardingConfig)),
                     DistributedStrategy.TensorParallel => CreateDistributedPair(
                         new DistributedTraining.TensorParallelModel<T, TInput, TOutput>(_model, shardingConfig),
@@ -1696,31 +2001,49 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             }
         }
 
-        // Preprocess the data
+        // Preprocess the data in two stages:
+        // 1. Data preparation (row-changing operations like outlier removal, augmentation)
+        // 2. Preprocessing pipeline (transforms like scaling, encoding)
+        TInput preparedX = x;
+        TOutput preparedY = y;
         TInput preprocessedX;
         TOutput preprocessedY;
-        NormalizationInfo<T, TInput, TOutput>? normInfo = null;
         PreprocessingInfo<T, TInput, TOutput>? preprocessingInfo = null;
 
+        // Step 1: Apply data preparation (outlier removal, augmentation) - changes row count
+        if (_dataPreparationPipeline != null && _dataPreparationPipeline.Count > 0)
+        {
+            if (x is Matrix<T> xMatrix && y is Vector<T> yVector)
+            {
+                var (prepX, prepY) = _dataPreparationPipeline.FitResample(xMatrix, yVector);
+                preparedX = (TInput)(object)prepX;
+                preparedY = (TOutput)(object)prepY;
+            }
+            else if (x is Tensor<T> xTensor && y is Tensor<T> yTensor)
+            {
+                var (prepX, prepY) = _dataPreparationPipeline.FitResampleTensor(xTensor, yTensor);
+                preparedX = (TInput)(object)prepX;
+                preparedY = (TOutput)(object)prepY;
+            }
+        }
+
+        // Step 2: Apply preprocessing pipeline (scaling, encoding, etc.) - doesn't change row count
         if (_preprocessingPipeline is not null)
         {
-            // Use new preprocessing pipeline
-            preprocessedX = _preprocessingPipeline.FitTransform(x);
-            preprocessedY = y; // Target preprocessing handled separately if needed
+            preprocessedX = _preprocessingPipeline.FitTransform(preparedX);
+            preprocessedY = preparedY;
 
             // Create PreprocessingInfo with fitted pipeline
             preprocessingInfo = new PreprocessingInfo<T, TInput, TOutput>(
                 _preprocessingPipeline,
-                targetPipeline: null // Target pipeline can be added later if needed
+                targetPipeline: null
             );
-
-            // Create a legacy normInfo for backward compatibility with NoNormalizer
-            normInfo = new NormalizationInfo<T, TInput, TOutput> { Normalizer = new NoNormalizer<T, TInput, TOutput>() };
         }
         else
         {
-            // Use legacy dataPreprocessor
-            (preprocessedX, preprocessedY, normInfo) = dataPreprocessor.PreprocessData(x, y);
+            // No preprocessing pipeline configured - pass through
+            preprocessedX = preparedX;
+            preprocessedY = preparedY;
         }
 
         if (usePartitionedFederatedData)
@@ -1762,28 +2085,59 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         else
         {
             // Standard supervised learning path: split into train/validation/test.
-            (XTrain, yTrain, XVal, yVal, XTest, yTest) = dataPreprocessor.SplitData(preprocessedX, preprocessedY);
+            (XTrain, yTrain, XVal, yVal, XTest, yTest) = DataSplitter.Split<T, TInput, TOutput>(
+                preprocessedX, preprocessedY, trainRatio: 0.7, validationRatio: 0.15, shuffle: true);
         }
 
-        // Perform cross-validation on training data BEFORE final model training (if configured)
-        // This follows industry standard patterns from H2O and caret where CV is integrated into model building
+        // Cross-validation can be performed using the new evaluation framework via AiModelResult.
+        // Users can call CrossValidationEngine<T> directly for cross-validation needs.
         CrossValidationResult<T, TInput, TOutput>? cvResults = null;
-        if (_crossValidator != null && _modelEvaluator != null)
-        {
-            // Cross-validation uses only the training data to prevent data leakage
-            // It trains multiple models on different folds to assess generalization
-            cvResults = _modelEvaluator.PerformCrossValidation(
-                model: _model,
-                X: XTrain,
-                y: yTrain,
-                optimizer: optimizer,
-                crossValidator: _crossValidator
-            );
-        }
 
-        // Reset optimizer state after cross-validation to ensure final model training starts fresh
-        // This prevents state contamination from CV (accumulated fitness lists, cache, learning rates)
-        optimizer.Reset();
+        // ============================================================================
+        // Causal Discovery (if configured)
+        // ============================================================================
+        CausalDiscovery.CausalDiscoveryResult<T>? causalDiscoveryResult = null;
+        if (_causalDiscoveryOptions != null)
+        {
+            try
+            {
+                var cdStopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+                // Select algorithm: user-specified or auto-select based on data characteristics
+                var algorithmType = _causalDiscoveryOptions.Algorithm
+                    ?? AutoSelectCausalAlgorithm(convertedX.Columns);
+
+                var algorithm = CausalDiscovery.CausalDiscoveryAlgorithmFactory<T>.Create(
+                    algorithmType, _causalDiscoveryOptions);
+
+                // Use feature names from options, or generate defaults
+                var featureNames = _causalDiscoveryOptions.FeatureNames;
+                if ((featureNames == null || featureNames.Length != convertedX.Columns) && convertedX.Columns > 0)
+                {
+                    featureNames = new string[convertedX.Columns];
+                    for (int fi = 0; fi < convertedX.Columns; fi++)
+                        featureNames[fi] = $"X{fi}";
+                }
+
+                // Run causal discovery with target variable for supervised context
+                var causalGraph = algorithm.DiscoverStructure(convertedX, convertedY, featureNames);
+
+                cdStopwatch.Stop();
+
+                var category = CausalDiscovery.CausalDiscoveryAlgorithmFactory<T>.GetCategory(algorithmType);
+
+                causalDiscoveryResult = new CausalDiscovery.CausalDiscoveryResult<T>(
+                    graph: causalGraph,
+                    algorithmUsed: algorithmType,
+                    category: category,
+                    elapsedTime: cdStopwatch.Elapsed);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Trace.TraceWarning(
+                    $"Causal discovery failed: {ex.Message}");
+            }
+        }
 
         // ============================================================================
         // Start Training Infrastructure (before optimization)
@@ -1856,7 +2210,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                         runId: experimentRunId,
                         modelId: null); // Model ID will be set after registry
                 }
-                catch
+                catch (Exception)
                 {
                     // Data version control linkage is optional - don't fail training
                 }
@@ -1900,12 +2254,15 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                 // Create objective function that trains the model and returns validation loss
                 T ObjectiveFunction(Dictionary<string, object> trialHyperparameters)
                 {
-                    // Reset optimizer for fresh training
-                    finalOptimizer.Reset();
-
-                    // Apply trial hyperparameters to the optimizer
+                    // Apply trial hyperparameters first so Reset() initializes adaptive state from them
                     var optimizerOptions = finalOptimizer.GetOptions();
                     ApplyTrialHyperparameters(optimizerOptions, trialHyperparameters);
+
+                    // Reset optimizer state to reinitialize adaptive parameters from new hyperparameters
+                    finalOptimizer.Reset();
+
+                    // Ensure the optimizer has a model set (required if optimizer was constructed without one)
+                    finalOptimizer.SetModel(model);
 
                     // Log hyperparameters for this trial to experiment tracker
                     if (experimentRun is not null)
@@ -2066,6 +2423,10 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         else
         {
             // REGULAR TRAINING PATH
+            // Ensure the optimizer has the model configured before optimization
+            // This is required for InitializeRandomSolution to access model.ParameterCount
+            finalOptimizer.SetModel(model);
+
             // Optimize the final model on the full training set (optionally using knowledge distillation)
             optimizationResult = _knowledgeDistillationOptions != null
                 ? await PerformKnowledgeDistillationAsync(
@@ -2266,7 +2627,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             hyperparameters["model_type"] = model.GetType().Name;
             hyperparameters["optimizer_type"] = finalOptimizer.GetType().Name;
         }
-        catch
+        catch (Exception)
         {
             // Ignore errors collecting hyperparameters - they are optional
         }
@@ -2284,15 +2645,61 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             trainingMetricsHistory["fitness"] = fitnessHistoryAsDouble;
         }
 
+        // QUANTIZATION (if configured)
+        // Apply post-training quantization to reduce model size and improve inference speed
+        QuantizationInfo? quantizationInfo = null;
+        if (_quantizationConfig != null && _quantizationConfig.Mode != QuantizationMode.None && optimizationResult.BestSolution != null)
+        {
+            try
+            {
+                // Use preprocessed training data as calibration data for consistent quantization
+                // This ensures calibration sees the same data distribution as during training
+                int calibrationSampleCount = _quantizationConfig?.CalibrationSamples ?? 100;
+                IEnumerable<TInput>? calibrationData = null;
+                if (XTrain is TInput[] xTrainArray)
+                {
+                    calibrationData = xTrainArray.Take(Math.Min(calibrationSampleCount, xTrainArray.Length));
+                }
+                else if (XTrain is IEnumerable<TInput> xTrainEnumerable)
+                {
+                    calibrationData = xTrainEnumerable.Take(calibrationSampleCount);
+                }
+                else if (XTrain != null)
+                {
+                    // Wrap single item as calibration data if not enumerable
+                    calibrationData = new[] { XTrain };
+                }
+
+                var (quantizedModel, quantizationInfoResult) = ApplyQuantizationIfConfigured(
+                    optimizationResult.BestSolution,
+                    _quantizationConfig,
+                    calibrationData);
+
+                if (quantizedModel != null && quantizationInfoResult != null)
+                {
+                    // CRITICAL: Use the quantized model instead of the original
+                    optimizationResult.BestSolution = quantizedModel;
+                    quantizationInfo = quantizationInfoResult;
+                    var strategy = _quantizationConfig?.Strategy ?? QuantizationStrategy.Dynamic;
+                    Console.WriteLine($"Quantization applied: {strategy} strategy, " +
+                        $"{quantizationInfo.BitWidth}-bit, compression ratio: {quantizationInfo.CompressionRatio:F2}x");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Warning: Quantization failed: {ex.Message}. Model will use original precision.");
+            }
+        }
+
         // Return AiModelResult with CV results, agent data, JIT compilation, reasoning config, and training infrastructure
         var options = new AiModelResultOptions<T, TInput, TOutput>
         {
             OptimizationResult = optimizationResult,
-            NormalizationInfo = normInfo,
             PreprocessingInfo = preprocessingInfo,
             AutoMLSummary = autoMLSummary,
             BiasDetector = _biasDetector,
             FairnessEvaluator = _fairnessEvaluator,
+            InterpretabilityOptions = _interpretabilityOptions,
             RagRetriever = _ragRetriever,
             RagReranker = _ragReranker,
             RagGenerator = _ragGenerator,
@@ -2302,6 +2709,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             AgentConfig = _agentConfig,
             AgentRecommendation = agentRecommendation,
             DeploymentConfiguration = deploymentConfig,
+            QuantizationInfo = quantizationInfo,
             JitCompiledFunction = jitCompiledFunction,
             InferenceOptimizationConfig = _inferenceOptimizationConfig,
             AugmentationConfig = _augmentationConfig,
@@ -2345,10 +2753,20 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         TryComputeAndAttachDeepEnsembleModels(finalResult, deepEnsembleTemplate, optimizationInputData, optimizer, _uncertaintyQuantificationOptions);
         TryComputeAndAttachUncertaintyCalibrationArtifacts(finalResult);
 
+        if (causalDiscoveryResult != null)
+        {
+            finalResult.SetCausalDiscoveryResult(causalDiscoveryResult);
+        }
+
         if (federatedLearningMetadata != null)
         {
             finalResult.GetModelMetadata().SetProperty(FederatedLearningMetadata.MetadataKey, federatedLearningMetadata);
         }
+
+        ProcessKnowledgeGraphOptions(finalResult);
+
+        // Build and attach the composable safety pipeline if configured
+        AttachSafetyPipeline(finalResult);
 
         return finalResult;
     }
@@ -2453,6 +2871,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             LoRAConfiguration = _loraConfiguration,
             BiasDetector = _biasDetector,
             FairnessEvaluator = _fairnessEvaluator,
+            InterpretabilityOptions = _interpretabilityOptions,
             RagRetriever = _ragRetriever,
             RagReranker = _ragReranker,
             RagGenerator = _ragGenerator,
@@ -2479,6 +2898,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         };
 
         var result = new AiModelResult<T, TInput, TOutput>(metaOptions);
+        ProcessKnowledgeGraphOptions(result);
+        AttachSafetyPipeline(result);
 
         return result;
     }
@@ -2745,11 +3166,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             BestSolution = _model
         };
 
-        // Create normalization info with NoNormalizer (RL doesn't use normalization like supervised learning)
-        var normInfo = new NormalizationInfo<T, TInput, TOutput>
-        {
-            Normalizer = new NoNormalizer<T, TInput, TOutput>()
-        };
+        // RL doesn't use preprocessing like supervised learning - set to null
         PreprocessingInfo<T, TInput, TOutput>? preprocessingInfo = null;
 
         // Create deployment configuration from individual configs
@@ -2770,11 +3187,11 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         var rlOptions = new AiModelResultOptions<T, TInput, TOutput>
         {
             OptimizationResult = optimizationResult,
-            NormalizationInfo = normInfo,
             PreprocessingInfo = preprocessingInfo,
             AutoMLSummary = autoMLSummary,
             BiasDetector = _biasDetector,
             FairnessEvaluator = _fairnessEvaluator,
+            InterpretabilityOptions = _interpretabilityOptions,
             RagRetriever = _ragRetriever,
             RagReranker = _ragReranker,
             RagGenerator = _ragGenerator,
@@ -2803,6 +3220,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         };
 
         var result = new AiModelResult<T, TInput, TOutput>(rlOptions);
+        ProcessKnowledgeGraphOptions(result);
+        AttachSafetyPipeline(result);
 
         return result;
     }
@@ -2948,6 +3367,50 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     public IAiModelBuilder<T, TInput, TOutput> ConfigureFairnessEvaluator(IFairnessEvaluator<T> evaluator)
     {
         _fairnessEvaluator = evaluator;
+        return this;
+    }
+
+    /// <summary>
+    /// Configures model interpretability and explainability features.
+    /// </summary>
+    /// <param name="options">The interpretability configuration options. When null, uses default settings.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// This configures model-agnostic explanation methods that help understand how the model makes predictions:
+    /// </para>
+    /// <list type="bullet">
+    /// <item><term>SHAP</term><description>Kernel SHAP for local and global feature attribution using Shapley values</description></item>
+    /// <item><term>LIME</term><description>Local Interpretable Model-agnostic Explanations for individual predictions</description></item>
+    /// <item><term>Permutation Importance</term><description>Global feature importance by measuring score drop when features are shuffled</description></item>
+    /// <item><term>Global Surrogate</term><description>Train a simple model to approximate the complex model's behavior</description></item>
+    /// </list>
+    /// <para><b>For Beginners:</b> These methods help you understand why your model makes certain predictions.
+    ///
+    /// After training, you can ask questions like:
+    /// - "Why did the model predict this person would default on their loan?"
+    /// - "Which features are most important for the model overall?"
+    /// - "Can I explain the model's behavior with simple rules?"
+    ///
+    /// Example:
+    /// <code>
+    /// builder.ConfigureInterpretability(new InterpretabilityOptions
+    /// {
+    ///     EnableSHAP = true,
+    ///     EnablePermutationImportance = true,
+    ///     FeatureNames = new[] { "Age", "Income", "CreditScore" }
+    /// });
+    ///
+    /// // After training
+    /// var result = builder.Build();
+    /// var shapExplanation = result.ExplainWithSHAP(inputInstance, backgroundData);
+    /// Console.WriteLine($"Age contributed: {shapExplanation.ShapValues[0]}");
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureInterpretability(InterpretabilityOptions? options = null)
+    {
+        _interpretabilityOptions = options ?? new InterpretabilityOptions();
         return this;
     }
 
@@ -3265,33 +3728,49 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     }
 
     /// <summary>
-    /// Configures the model evaluator component for comprehensive model evaluation and cross-validation.
+    /// Configures advanced knowledge graph capabilities including embeddings, community detection,
+    /// link prediction, temporal queries, and KG construction.
     /// </summary>
-    /// <param name="evaluator">The model evaluator implementation to use.</param>
+    /// <param name="configure">An action that configures the knowledge graph options.</param>
     /// <returns>This builder instance for method chaining.</returns>
     /// <remarks>
-    /// <b>For Beginners:</b> The model evaluator helps you understand how well your model performs.
-    /// If you configure both a model evaluator and cross-validator (via ConfigureCrossValidation),
-    /// cross-validation will automatically run during Build() on your training data, and the results
-    /// will be included in your trained model.
+    /// <para>
+    /// This is separate from <see cref="ConfigureRetrievalAugmentedGeneration"/>, which handles
+    /// low-level plumbing (IGraphStore, KnowledgeGraph, HybridGraphRetriever). This method
+    /// configures higher-level features built on top of the existing infrastructure.
+    /// </para>
+    /// <para><b>For Beginners:</b> After setting up your knowledge graph via <c>ConfigureRetrievalAugmentedGeneration()</c>,
+    /// use this method to enable advanced features:
+    ///
+    /// <code>
+    /// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    ///     .ConfigureRetrievalAugmentedGeneration(graphStore: new MemoryGraphStore&lt;double&gt;())
+    ///     .ConfigureKnowledgeGraph(options =&gt; {
+    ///         options.TrainEmbeddings = true;
+    ///         options.EmbeddingType = KGEmbeddingType.TransE;
+    ///         options.GraphRAGMode = GraphRAGMode.Global;
+    ///     })
+    ///     .Build(X, y);
+    /// </code>
+    /// </para>
     /// </remarks>
-    public IAiModelBuilder<T, TInput, TOutput> ConfigureModelEvaluator(IModelEvaluator<T, TInput, TOutput> evaluator)
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureKnowledgeGraph(
+        Action<KnowledgeGraphOptions>? configure = null)
     {
-        _modelEvaluator = evaluator;
+        _knowledgeGraphOptions = new KnowledgeGraphOptions();
+        configure?.Invoke(_knowledgeGraphOptions);
         return this;
     }
 
     /// <summary>
-    /// Configures the cross-validation strategy for automatic model evaluation during training.
+    /// Configures the cross-validation strategy for model evaluation.
     /// </summary>
     /// <param name="crossValidator">The cross-validation strategy to use.</param>
     /// <returns>This builder instance for method chaining.</returns>
     /// <remarks>
     /// <b>For Beginners:</b> Cross-validation tests how well your model will perform on new data
     /// by training and testing it multiple times on different subsets of your training data.
-    /// If you configure both a cross-validator and model evaluator (via ConfigureModelEvaluator),
-    /// cross-validation will automatically run during Build() and the results will be included
-    /// in your trained model.
+    /// Use the evaluation methods on AiModelResult to perform cross-validation after building.
     /// </remarks>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureCrossValidation(ICrossValidator<T, TInput, TOutput> crossValidator)
     {
@@ -3468,10 +3947,10 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     {
         return strategy switch
         {
-            AutoMLSearchStrategy.RandomSearch => new AiDotNet.AutoML.RandomSearchAutoML<T, TInput, TOutput>(_modelEvaluator, RandomHelper.CreateSecureRandom()),
-            AutoMLSearchStrategy.BayesianOptimization => new AiDotNet.AutoML.BayesianOptimizationAutoML<T, TInput, TOutput>(_modelEvaluator, RandomHelper.CreateSecureRandom()),
-            AutoMLSearchStrategy.Evolutionary => new AiDotNet.AutoML.EvolutionaryAutoML<T, TInput, TOutput>(_modelEvaluator, RandomHelper.CreateSecureRandom()),
-            AutoMLSearchStrategy.MultiFidelity => new AiDotNet.AutoML.MultiFidelityAutoML<T, TInput, TOutput>(_modelEvaluator, RandomHelper.CreateSecureRandom(), _autoMLOptions?.MultiFidelity),
+            AutoMLSearchStrategy.RandomSearch => new AiDotNet.AutoML.RandomSearchAutoML<T, TInput, TOutput>(RandomHelper.CreateSecureRandom()),
+            AutoMLSearchStrategy.BayesianOptimization => new AiDotNet.AutoML.BayesianOptimizationAutoML<T, TInput, TOutput>(RandomHelper.CreateSecureRandom()),
+            AutoMLSearchStrategy.Evolutionary => new AiDotNet.AutoML.EvolutionaryAutoML<T, TInput, TOutput>(RandomHelper.CreateSecureRandom()),
+            AutoMLSearchStrategy.MultiFidelity => new AiDotNet.AutoML.MultiFidelityAutoML<T, TInput, TOutput>(RandomHelper.CreateSecureRandom(), _autoMLOptions?.MultiFidelity),
             AutoMLSearchStrategy.NeuralArchitectureSearch or
             AutoMLSearchStrategy.DARTS or
             AutoMLSearchStrategy.GDAS or
@@ -3622,6 +4101,10 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     ///
     /// You just train as normal - the distributed magic happens behind the scenes!
     /// </para>
+    /// <para>
+    /// For pipeline parallelism, call <see cref="ConfigurePipelineParallelism"/> after this method
+    /// to customize scheduling, partitioning, and activation checkpointing.
+    /// </para>
     /// </remarks>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureDistributedTraining(
         ICommunicationBackend<T>? backend = null,
@@ -3631,6 +4114,72 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         _distributedBackend = backend;
         _distributedStrategy = strategy;
         _distributedConfiguration = configuration;
+        return this;
+    }
+
+    /// <summary>
+    /// Configures pipeline-specific options for pipeline parallel training.
+    /// </summary>
+    /// <param name="schedule">
+    /// Pipeline execution schedule. If null, uses GPipeSchedule.
+    /// Use <see cref="DistributedTraining.OneForwardOneBackwardSchedule{T}"/> for reduced pipeline bubble (~12-15% vs ~50%).
+    /// </param>
+    /// <param name="partitionStrategy">
+    /// Strategy for partitioning layers across pipeline stages.
+    /// If null, uses uniform partitioning. Use <see cref="DistributedTraining.LoadBalancedPartitionStrategy{T}"/>
+    /// to balance computational cost across stages.
+    /// </param>
+    /// <param name="checkpointConfig">
+    /// Activation checkpointing configuration.
+    /// If null, checkpointing is disabled. Enable to reduce memory from O(L) to O(sqrt(L)).
+    /// </param>
+    /// <param name="microBatchCount">
+    /// Number of micro-batches to split the full batch into for pipeline execution.
+    /// Higher values reduce pipeline bubble but increase memory. Default: 1.
+    /// </param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// Call this after <see cref="ConfigureDistributedTraining"/> with
+    /// <c>DistributedStrategy.PipelineParallel</c> to customize pipeline scheduling,
+    /// partitioning, activation checkpointing, and micro-batch count.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This method fine-tunes how pipeline parallelism works.
+    /// You only need to call it if you want to change the defaults (GPipe schedule,
+    /// uniform partitioning, no checkpointing, 1 micro-batch).
+    /// </para>
+    /// <para>
+    /// <b>Example:</b>
+    /// <code>
+    /// var result = builder
+    ///     .ConfigureModel(myModel)
+    ///     .ConfigureDistributedTraining(strategy: DistributedStrategy.PipelineParallel)
+    ///     .ConfigurePipelineParallelism(
+    ///         schedule: new OneForwardOneBackwardSchedule(),
+    ///         partitionStrategy: new LoadBalancedPartitionStrategy&lt;double&gt;(estimatedLayerSize: 1024),
+    ///         checkpointConfig: new ActivationCheckpointConfig { Enabled = true },
+    ///         microBatchCount: 8)
+    ///     .Build(xTrain, yTrain);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public IAiModelBuilder<T, TInput, TOutput> ConfigurePipelineParallelism(
+        IPipelineSchedule<T>? schedule = null,
+        IPipelinePartitionStrategy<T>? partitionStrategy = null,
+        ActivationCheckpointConfig? checkpointConfig = null,
+        int microBatchCount = 1)
+    {
+        if (microBatchCount <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(microBatchCount),
+                $"Micro-batch count must be at least 1, but was {microBatchCount}.");
+        }
+
+        _pipelineSchedule = schedule;
+        _pipelinePartitionStrategy = partitionStrategy;
+        _pipelineCheckpointConfig = checkpointConfig;
+        _pipelineMicroBatchCount = microBatchCount;
         return this;
     }
 
@@ -3925,6 +4474,41 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     public IAiModelBuilder<T, TInput, TOutput> ConfigureProfiling(ProfilingConfig? config = null)
     {
         _profilingConfig = config ?? new ProfilingConfig { Enabled = true };
+        return this;
+    }
+
+    /// <summary>
+    /// Configures the comprehensive safety pipeline for input validation and output filtering.
+    /// </summary>
+    /// <param name="configure">
+    /// Action to configure safety settings. If null, safety is enabled with default settings
+    /// (text toxicity, PII detection, and jailbreak detection are all enabled).
+    /// </param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// The safety pipeline provides modular, composable content safety checks across text,
+    /// image, audio, and video modalities. All settings use nullable types with industry-standard
+    /// defaults — if you don't configure something, a sensible default is used automatically.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This is your one-stop safety control panel. Enable the checks
+    /// you need and the pipeline handles the rest:
+    /// <code>
+    /// builder.ConfigureSafety(safety =&gt;
+    /// {
+    ///     safety.Text.ToxicityDetection = true;
+    ///     safety.Text.PIIDetection = true;
+    ///     safety.Image.NSFWDetection = true;
+    ///     safety.Guardrails.InputGuardrails = true;
+    /// });
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureSafety(Action<AiDotNet.Safety.SafetyConfig>? configure = null)
+    {
+        _safetyPipelineConfig = new AiDotNet.Safety.SafetyConfig();
+        configure?.Invoke(_safetyPipelineConfig);
         return this;
     }
 
@@ -5137,6 +5721,9 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         {
             Console.WriteLine($"Error setting up knowledge distillation: {ex.Message}");
             Console.WriteLine("Falling back to standard training.");
+            // Reset optimizer and set model before falling back to standard training
+            optimizer.Reset();
+            optimizer.SetModel(studentModel);
             return Task.FromResult(optimizer.Optimize(OptimizerHelper<T, TInput, TOutput>.CreateOptimizationInputData(
                 XTrain, yTrain, XVal, yVal, XTest, yTest)));
         }
@@ -5341,11 +5928,17 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             recommendation.TuningReasoning = hyperparameterResult;
             reasoningTrace.AppendLine($"Hyperparameter Recommendations:\n{hyperparameterResult}\n");
 
-            // Try to extract hyperparameters (simplified - could be enhanced)
-            recommendation.SuggestedHyperparameters = new Dictionary<string, object>
+            // Parse structured hyperparameters from the LLM response
+            try
             {
-                ["info"] = "See TuningReasoning for detailed hyperparameter recommendations"
-            };
+                var hyperparameterParser = new HyperparameterResponseParser();
+                recommendation.SuggestedHyperparameters = hyperparameterParser.Parse(hyperparameterResult);
+            }
+            catch (Exception ex)
+            {
+                recommendation.SuggestedHyperparameters = new Dictionary<string, object>();
+                reasoningTrace.AppendLine($"Warning: Failed to parse hyperparameter response: {ex.Message}");
+            }
         }
 
         // 4. FEATURE ANALYSIS
@@ -5601,7 +6194,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                     property.SetValue(options, convertedValue);
                 }
             }
-            catch
+            catch (Exception)
             {
                 // Skip hyperparameters that cannot be converted - this is non-fatal
                 // as the optimizer will use its default value
@@ -5739,7 +6332,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         {
             return Convert.ChangeType(value, targetType);
         }
-        catch
+        catch (Exception)
         {
             return null;
         }
@@ -5775,8 +6368,57 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             Console.WriteLine("===========================\n");
         }
 
-        // Note: Hyperparameter recommendations are currently stored in recommendation.SuggestedHyperparameters
-        // but not auto-applied. Future enhancement: Apply hyperparameters to compatible models.
+        // Auto-apply hyperparameters if enabled
+        if (_agentOptions.EnableAutoApplyHyperparameters
+            && _model is IConfigurableModel<T> configurableModel
+            && recommendation.SuggestedHyperparameters is { Count: > 0 })
+        {
+            var registry = new HyperparameterRegistry();
+            var applicator = new AgentHyperparameterApplicator<T>(registry);
+            var modelType = recommendation.SuggestedModelType ?? DeriveModelTypeFromModel(_model);
+
+            var applicationResult = applicator.Apply(configurableModel, modelType, recommendation.SuggestedHyperparameters);
+            recommendation.HyperparameterApplicationResult = applicationResult;
+
+            if (applicationResult.HasAppliedParameters)
+            {
+                System.Diagnostics.Trace.WriteLine("=== AGENT HYPERPARAMETER APPLICATION ===");
+                System.Diagnostics.Trace.WriteLine(applicationResult.GetSummary());
+                System.Diagnostics.Trace.WriteLine("========================================");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Derives the ModelType from the actual model instance by examining its class name.
+    /// </summary>
+    private static ModelType DeriveModelTypeFromModel(IFullModel<T, TInput, TOutput>? model)
+    {
+        if (model == null) return ModelType.None;
+
+        var modelTypeName = model.GetType().Name;
+
+        // Try direct enum parse first (handles cases like "RandomForest", "GradientBoosting")
+        if (Enum.TryParse<ModelType>(modelTypeName, true, out var parsedType))
+        {
+            return parsedType;
+        }
+
+        // Try common suffixes removal
+        var suffixes = new[] { "Regression", "Model", "Classifier", "Network" };
+        foreach (var suffix in suffixes)
+        {
+            if (modelTypeName.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+            {
+                var baseName = modelTypeName.Substring(0, modelTypeName.Length - suffix.Length);
+                if (Enum.TryParse<ModelType>(baseName, true, out var strippedType))
+                {
+                    return strippedType;
+                }
+            }
+        }
+
+        return ModelType.None;
     }
 
     /// <summary>
@@ -5938,7 +6580,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             {
                 AiDotNetEngine.AutoDetectAndConfigureGpu();
             }
-            catch
+            catch (Exception)
             {
                 // Silently fall back to CPU if GPU detection fails
                 // This ensures the library works out of the box on any hardware
@@ -6659,6 +7301,9 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             var memberOptimizer = CreateOptimizerForEnsembleMember(memberModel, templateOptimizer);
             memberOptimizer.Reset();
 
+            // Ensure the optimizer has a model set before calling Optimize/InitializeRandomSolution
+            memberOptimizer.SetModel(memberModel);
+
             var memberInputData = CreateDeepEnsembleMemberOptimizationInputData(optimizationInputData, baseSeed, memberIndex);
             var memberResult = memberOptimizer.Optimize(memberInputData);
             if (memberResult.BestSolution != null)
@@ -7010,5 +7655,136 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                 config.AzureDeployment ?? "gpt-4"),
             _ => throw new ArgumentException($"Unknown provider: {config.Provider}")
         };
+    }
+
+    /// <summary>
+    /// Applies quantization to the model if configured.
+    /// </summary>
+    /// <param name="model">The model to quantize.</param>
+    /// <param name="config">The quantization configuration.</param>
+    /// <param name="calibrationData">Optional calibration data for advanced quantization strategies.</param>
+    /// <returns>A tuple containing the quantized model and QuantizationInfo, or (null, null) if quantization was not configured.</returns>
+    private (IFullModel<T, TInput, TOutput>? QuantizedModel, QuantizationInfo? Info) ApplyQuantizationIfConfigured(
+        IFullModel<T, TInput, TOutput> model,
+        QuantizationConfig? config,
+        IEnumerable<TInput>? calibrationData = null)
+    {
+        // Check if quantization is enabled (Mode != None indicates enabled)
+        if (config == null || config.Mode == QuantizationMode.None)
+        {
+            return (null, null);
+        }
+
+        // Convert user-facing config to internal configuration
+        var internalConfig = config.ToQuantizationConfiguration();
+
+        // Create the appropriate quantizer based on strategy
+        Deployment.Optimization.Quantization.IQuantizer<T, TInput, TOutput> quantizer = internalConfig.Strategy switch
+        {
+            QuantizationStrategy.GPTQ => new Deployment.Optimization.Quantization.Strategies.GPTQQuantizer<T, TInput, TOutput>(internalConfig),
+            QuantizationStrategy.AWQ => new Deployment.Optimization.Quantization.Strategies.AWQQuantizer<T, TInput, TOutput>(internalConfig),
+            QuantizationStrategy.SmoothQuant => new Deployment.Optimization.Quantization.Strategies.SmoothQuantQuantizer<T, TInput, TOutput>(internalConfig),
+            QuantizationStrategy.SpinQuant => new Deployment.Optimization.Quantization.Strategies.SpinQuantQuantizer<T, TInput, TOutput>(internalConfig),
+            QuantizationStrategy.QuIPSharp => new Deployment.Optimization.Quantization.Strategies.QuIPSharpQuantizer<T, TInput, TOutput>(internalConfig),
+            QuantizationStrategy.MinMax or QuantizationStrategy.Dynamic => internalConfig.Mode switch
+            {
+                QuantizationMode.Int8 => new Deployment.Optimization.Quantization.Int8Quantizer<T, TInput, TOutput>(),
+                QuantizationMode.Float16 => new Deployment.Optimization.Quantization.Float16Quantizer<T, TInput, TOutput>(),
+                QuantizationMode.Float32 => throw new NotSupportedException("Float32 mode represents no quantization. Use QuantizationMode.None instead."),
+                QuantizationMode.Mixed => throw new NotSupportedException("Mixed precision requires a specific strategy like GPTQ or AWQ."),
+                _ => throw new NotSupportedException($"Quantization mode {internalConfig.Mode} is not supported with {internalConfig.Strategy} strategy. " +
+                    "Use a specific strategy like GPTQ or AWQ for advanced quantization, or use Int8/Float16 mode.")
+            },
+            _ => new Deployment.Optimization.Quantization.Int8Quantizer<T, TInput, TOutput>()
+        };
+
+        // Get model parameters for size calculation
+        var parameters = model.GetParameters();
+        // Estimate parameter size based on type: 8 bytes for double, 4 for float/int, 2 for half
+        int bytesPerParameter = typeof(T) == typeof(float) ? 4
+            : typeof(T) == typeof(double) ? 8
+            : typeof(T) == typeof(Half) ? 2
+            : 8; // Default to 8 bytes for unknown types
+        // Cast to long first to prevent int overflow for large models
+        long originalSizeBytes = (long)parameters.Length * bytesPerParameter;
+
+        // Calibrate if calibration data is provided and strategy requires it
+        if (calibrationData != null && internalConfig.CalibrationMethod != CalibrationMethod.None)
+        {
+            try
+            {
+                quantizer.Calibrate(model, calibrationData);
+            }
+            catch (Exception ex)
+            {
+                // Log detailed error info to help diagnose calibration issues
+                Console.WriteLine($"Warning: Calibration failed ({ex.GetType().Name}): {ex.Message}");
+                if (ex.InnerException != null)
+                {
+                    Console.WriteLine($"  Inner exception: {ex.InnerException.Message}");
+                }
+                Console.WriteLine("Proceeding with default quantization behavior.");
+            }
+        }
+
+        // QAT SIMULATION (Post-Training): If QAT is enabled, apply fake quantization once
+        // to condition parameters. NOTE: This is a simplified post-training simulation, not true QAT.
+        // Real QAT integrates fake quantization into the training loop across multiple epochs,
+        // allowing the model to learn under quantization constraints. This simulation provides
+        // some benefit by conditioning parameters but won't achieve the full accuracy of true QAT.
+        // For full QAT, use the training API with quantization hooks enabled during training.
+        if (internalConfig.UseQuantizationAwareTraining)
+        {
+            try
+            {
+                var qatHook = new Deployment.Optimization.Quantization.Training.QATTrainingHook<T>(internalConfig);
+
+                // Simulate warmup completion by setting epoch to warmup value
+                qatHook.OnEpochStart(internalConfig.QATWarmupEpochs);
+
+                // Apply fake quantization to model parameters to condition them for quantization
+                // This simulates what would happen during QAT training iterations
+                var currentParams = model.GetParameters();
+                var qatConditionedParams = qatHook.ApplyFakeQuantization(currentParams, "model_weights");
+
+                // Create a new model with QAT-conditioned parameters
+                model = model.WithParameters(qatConditionedParams);
+
+                Console.WriteLine($"QAT simulation applied using {internalConfig.QATMethod} method");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Warning: QAT simulation failed: {ex.Message}. Proceeding with standard PTQ.");
+            }
+        }
+
+        // Apply quantization - this returns a NEW model with quantized parameters
+        var quantizedModel = quantizer.Quantize(model, internalConfig);
+        var quantizedParameters = quantizedModel.GetParameters();
+
+        // Calculate actual quantized size based on bit width
+        // For sub-byte quantization (4-bit), we need to account for packing
+        long quantizedSizeBytes = ((long)quantizedParameters.Length * internalConfig.EffectiveBitWidth + 7) / 8;
+
+        // Build QuantizationInfo
+        var info = new QuantizationInfo
+        {
+            IsQuantized = true,
+            Mode = internalConfig.Mode,
+            Strategy = internalConfig.Strategy,
+            Granularity = internalConfig.Granularity,
+            BitWidth = internalConfig.EffectiveBitWidth,
+            OriginalSizeBytes = originalSizeBytes,
+            QuantizedSizeBytes = quantizedSizeBytes,
+            TotalParameters = parameters.Length,
+            QuantizedParameters = quantizedParameters.Length,
+            CalibrationMethod = internalConfig.CalibrationMethod,
+            GroupSize = internalConfig.Granularity == QuantizationGranularity.PerGroup ? internalConfig.GroupSize : 128,
+            ActivationsQuantized = internalConfig.QuantizeActivations,
+            UsedQAT = internalConfig.UseQuantizationAwareTraining,
+            QATMethod = internalConfig.UseQuantizationAwareTraining ? internalConfig.QATMethod : null
+        };
+
+        return (quantizedModel, info);
     }
 }

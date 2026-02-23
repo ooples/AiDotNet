@@ -642,23 +642,19 @@ public sealed class UncertaintyQuantificationFacadeTests
                 UncertaintyCalibrationData<Tensor<double>, Tensor<double>>.ForClassification(xCal, yCalLabels))
             .BuildAsync();
 
-        var evaluator = new DefaultModelEvaluator<double, Tensor<double>, Tensor<double>>();
-        var eval = evaluator.EvaluateModel(new ModelEvaluationInput<double, Tensor<double>, Tensor<double>>
+        // Use the AiModelResult facade for evaluation
+        var inputData = new OptimizationInputData<double, Tensor<double>, Tensor<double>>
         {
-            Model = result,
-            NormInfo = result.NormalizationInfo,
-            InputData = new OptimizationInputData<double, Tensor<double>, Tensor<double>>
-            {
-                XTrain = xTrain,
-                YTrain = yTrain,
-                XValidation = xTrain,
-                YValidation = yTrain,
-                XTest = xTrain,
-                YTest = yTrain
-            }
-        });
+            XTrain = xTrain,
+            YTrain = yTrain,
+            XValidation = xTrain,
+            YValidation = yTrain,
+            XTest = xTrain,
+            YTest = yTrain
+        };
+        var eval = result.EvaluateFull(inputData);
 
-        Assert.True(eval.TrainingSet.UncertaintyStats.Metrics.ContainsKey("expected_calibration_error"));
+        Assert.True(eval.TrainingSet.UncertaintyStats?.Metrics.ContainsKey("expected_calibration_error") == true);
     }
 
     [Fact]

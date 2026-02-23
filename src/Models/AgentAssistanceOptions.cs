@@ -213,6 +213,37 @@ public class AgentAssistanceOptions
     public bool EnableMetaLearningAdvice { get; set; } = false;
 
     /// <summary>
+    /// Gets or sets a value indicating whether agent-recommended hyperparameters should be automatically
+    /// applied to the model's options before training.
+    /// </summary>
+    /// <value>True to auto-apply recommended hyperparameters; false to store them for review only. Default is false.</value>
+    /// <remarks>
+    /// <para>
+    /// When enabled and EnableHyperparameterTuning is also enabled, the AI agent's hyperparameter
+    /// recommendations are automatically applied to the model's configuration before training begins.
+    /// The results of the application (what was applied, skipped, or failed) are available in the
+    /// AgentRecommendation.HyperparameterApplicationResult property. This feature requires the model
+    /// to implement IConfigurableModel&lt;T&gt;.
+    /// </para>
+    /// <para><b>For Beginners:</b> When the AI agent suggests settings like "use 100 trees with depth 15",
+    /// this option controls whether those settings are automatically applied to your model.
+    ///
+    /// - **Disabled (default)**: The agent's suggestions are stored for you to review, but your model
+    ///   keeps its current settings. You can read the recommendations and apply them manually.
+    /// - **Enabled**: The agent's suggestions are automatically applied to your model before training.
+    ///   You can check what was applied in the results.
+    ///
+    /// This is disabled by default because:
+    /// - You may want to review recommendations before applying them
+    /// - Not all models support all hyperparameters
+    /// - You might want to selectively apply only some recommendations
+    ///
+    /// Enable this when: You trust the agent's recommendations and want a fully automated workflow.
+    /// </para>
+    /// </remarks>
+    public bool EnableAutoApplyHyperparameters { get; set; } = false;
+
+    /// <summary>
     /// Gets a predefined configuration with data analysis and model selection enabled.
     /// </summary>
     /// <value>An AgentAssistanceOptions instance with default settings suitable for most users.</value>
@@ -296,7 +327,8 @@ public class AgentAssistanceOptions
         EnableModelSelection = true,
         EnableHyperparameterTuning = true,
         EnableFeatureAnalysis = true,
-        EnableMetaLearningAdvice = true
+        EnableMetaLearningAdvice = true,
+        EnableAutoApplyHyperparameters = true
     };
 
     /// <summary>
@@ -331,6 +363,7 @@ public class AgentAssistanceOptions
         EnableModelSelection = this.EnableModelSelection,
         EnableHyperparameterTuning = this.EnableHyperparameterTuning,
         EnableFeatureAnalysis = this.EnableFeatureAnalysis,
-        EnableMetaLearningAdvice = this.EnableMetaLearningAdvice
+        EnableMetaLearningAdvice = this.EnableMetaLearningAdvice,
+        EnableAutoApplyHyperparameters = this.EnableAutoApplyHyperparameters
     };
 }

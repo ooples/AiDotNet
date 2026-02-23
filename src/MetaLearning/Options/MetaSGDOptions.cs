@@ -1,4 +1,6 @@
 using AiDotNet.Interfaces;
+using AiDotNet.Models.Options;
+using AiDotNet.Validation;
 
 namespace AiDotNet.MetaLearning.Options;
 
@@ -60,7 +62,7 @@ namespace AiDotNet.MetaLearning.Options;
 /// Meta-SGD: Learning to Learn Quickly for Few-Shot Learning.
 /// </para>
 /// </remarks>
-public class MetaSGDOptions<T, TInput, TOutput> : IMetaLearnerOptions<T>
+public class MetaSGDOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions<T>
 {
     #region Required Properties
 
@@ -246,7 +248,7 @@ public class MetaSGDOptions<T, TInput, TOutput> : IMetaLearnerOptions<T>
     /// Gets or sets the random seed for reproducibility.
     /// </summary>
     /// <value>Default: null (non-deterministic).</value>
-    public int? RandomSeed { get; set; }
+    public int? RandomSeed { get => Seed; set => Seed = value; }
 
     /// <summary>
     /// Gets or sets the number of tasks to use for evaluation.
@@ -665,7 +667,8 @@ public class MetaSGDOptions<T, TInput, TOutput> : IMetaLearnerOptions<T>
     /// </example>
     public MetaSGDOptions(IFullModel<T, TInput, TOutput> metaModel)
     {
-        MetaModel = metaModel ?? throw new ArgumentNullException(nameof(metaModel));
+        Guard.NotNull(metaModel);
+        MetaModel = metaModel;
     }
 
     #endregion

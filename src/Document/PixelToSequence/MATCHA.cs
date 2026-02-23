@@ -1,4 +1,5 @@
 using AiDotNet.Document.Interfaces;
+using AiDotNet.Document.Options;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -47,6 +48,11 @@ namespace AiDotNet.Document.PixelToSequence;
 /// </remarks>
 public class MATCHA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, ITableExtractor<T>
 {
+    private readonly MATCHAOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     #region Fields
 
     private readonly bool _useNativeMode;
@@ -124,9 +130,13 @@ public class MATCHA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, ITableExt
         int vocabSize = 50265,
         int maxPatchesPerImage = 4096,
         IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        MATCHAOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyLoss<T>(), 1.0)
     {
+        _options = options ?? new MATCHAOptions();
+        Options = _options;
+
         if (string.IsNullOrWhiteSpace(onnxModelPath))
             throw new ArgumentNullException(nameof(onnxModelPath));
         if (!File.Exists(onnxModelPath))
@@ -175,9 +185,13 @@ public class MATCHA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, ITableExt
         int vocabSize = 50265,
         int maxPatchesPerImage = 4096,
         IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        MATCHAOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyLoss<T>(), 1.0)
     {
+        _options = options ?? new MATCHAOptions();
+        Options = _options;
+
         _useNativeMode = true;
         _encoderDim = encoderDim;
         _decoderDim = decoderDim;

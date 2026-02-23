@@ -1,4 +1,5 @@
 using AiDotNet.Interfaces;
+using AiDotNet.Validation;
 
 namespace AiDotNet.FederatedLearning.Trainers;
 
@@ -9,6 +10,10 @@ namespace AiDotNet.FederatedLearning.Trainers;
 /// <typeparam name="TData">The type of per-client training data.</typeparam>
 /// <typeparam name="TMetadata">The type of metadata returned by training.</typeparam>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> This base class provides federated learning training coordination.
+/// Federated learning trains a shared model across multiple clients without sharing their raw data.</para>
+/// </remarks>
 public abstract class FederatedTrainerBase<TModel, TData, TMetadata, T> :
     AiDotNet.FederatedLearning.Infrastructure.FederatedLearningComponentBase<T>,
     IFederatedTrainer<TModel, TData, TMetadata>
@@ -47,7 +52,8 @@ public abstract class FederatedTrainerBase<TModel, TData, TMetadata, T> :
 
     public void SetAggregationStrategy(IAggregationStrategy<TModel> strategy)
     {
-        _aggregationStrategy = strategy ?? throw new ArgumentNullException(nameof(strategy));
+        Guard.NotNull(strategy);
+        _aggregationStrategy = strategy;
     }
 
     public abstract TMetadata TrainRound(Dictionary<int, TData> clientData, double clientSelectionFraction = 1.0, int localEpochs = 1);

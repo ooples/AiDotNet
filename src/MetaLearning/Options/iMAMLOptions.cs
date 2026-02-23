@@ -1,4 +1,6 @@
 using AiDotNet.Interfaces;
+using AiDotNet.Models.Options;
+using AiDotNet.Validation;
 
 namespace AiDotNet.MetaLearning.Options;
 
@@ -25,7 +27,7 @@ namespace AiDotNet.MetaLearning.Options;
 /// - ConjugateGradientTolerance: When to stop CG early if converged
 /// </para>
 /// </remarks>
-public class iMAMLOptions<T, TInput, TOutput> : IMetaLearnerOptions<T>
+public class iMAMLOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions<T>
 {
     #region Required Properties
 
@@ -146,7 +148,7 @@ public class iMAMLOptions<T, TInput, TOutput> : IMetaLearnerOptions<T>
     /// Gets or sets the random seed for reproducibility.
     /// </summary>
     /// <value>Default: null (non-deterministic).</value>
-    public int? RandomSeed { get; set; }
+    public int? RandomSeed { get => Seed; set => Seed = value; }
 
     /// <summary>
     /// Gets or sets the number of tasks to use for evaluation.
@@ -259,7 +261,8 @@ public class iMAMLOptions<T, TInput, TOutput> : IMetaLearnerOptions<T>
     /// <exception cref="ArgumentNullException">Thrown when metaModel is null.</exception>
     public iMAMLOptions(IFullModel<T, TInput, TOutput> metaModel)
     {
-        MetaModel = metaModel ?? throw new ArgumentNullException(nameof(metaModel));
+        Guard.NotNull(metaModel);
+        MetaModel = metaModel;
     }
 
     #endregion

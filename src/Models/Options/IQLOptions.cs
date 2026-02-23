@@ -28,7 +28,7 @@ namespace AiDotNet.Models.Options;
 /// Advantages: Simpler, more stable than CQL in many cases
 /// </para>
 /// </remarks>
-public class IQLOptions<T>
+public class IQLOptions<T> : ModelOptions
 {
     public int StateSize { get; set; }
     public int ActionSize { get; set; }
@@ -49,7 +49,6 @@ public class IQLOptions<T>
     public List<int> PolicyHiddenLayers { get; set; } = new List<int> { 256, 256 };
     public List<int> QHiddenLayers { get; set; } = new List<int> { 256, 256 };
     public List<int> ValueHiddenLayers { get; set; } = new List<int> { 256, 256 };
-    public int? Seed { get; set; }
 
     public IQLOptions()
     {

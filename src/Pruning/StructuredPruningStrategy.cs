@@ -1,5 +1,6 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.ModelCompression;
 
 namespace AiDotNet.Pruning;
@@ -940,5 +941,96 @@ public class StructuredPruningStrategy<T> : IPruningStrategy<T>
             ColumnPointers = colPointers,
             OriginalShape = shape
         };
+    }
+
+    /// <summary>
+    /// Applies layer-aware structured pruning to a model using per-category sparsity targets.
+    /// </summary>
+    /// <param name="model">The model to prune (must implement <see cref="ILayeredModel{T}"/>).</param>
+    /// <param name="config">Pruning configuration with <see cref="PruningConfig.CategorySparsityTargets"/>.</param>
+    /// <returns>A dictionary mapping layer index to the pruning mask applied, or empty if the model
+    /// does not implement <see cref="ILayeredModel{T}"/>.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method applies different pruning strengths to different layer types.
+    /// For example, attention layers might keep 90% of their weights (10% sparsity) while
+    /// dense layers might only keep 50% (50% sparsity).</para>
+    ///
+    /// <para><b>How it works:</b></para>
+    /// <list type="number">
+    /// <item><description>Gets layer metadata from <see cref="ILayeredModel{T}"/>.</description></item>
+    /// <item><description>For each trainable layer, looks up its <see cref="LayerCategory"/> in the config's
+    /// <see cref="PruningConfig.CategorySparsityTargets"/>.</description></item>
+    /// <item><description>If a name-based target exists in <see cref="PruningConfig.LayerSparsityTargets"/>,
+    /// that takes precedence over category targets.</description></item>
+    /// <item><description>Applies structured pruning to each layer's weight matrix at its effective sparsity level.</description></item>
+    /// </list>
+    ///
+    /// <para><b>Research References:</b></para>
+    /// <list type="bullet">
+    /// <item><description>Lottery Ticket Hypothesis (Frankle &amp; Carlin, 2019): Different layers have different pruning sensitivity</description></item>
+    /// <item><description>Layer-Adaptive Sparsity (LAMP, 2021): Per-layer sparsity allocation based on layer sensitivity</description></item>
+    /// </list>
+    /// </remarks>
+    public Dictionary<int, IPruningMask<T>> ApplyLayerAwarePruning(
+        IFullModel<T, Tensor<T>, Tensor<T>> model, PruningConfig config)
+    {
+        var result = new Dictionary<int, IPruningMask<T>>();
+
+        if (model is not ILayeredModel<T> layeredModel)
+        {
+            return result;
+        }
+
+        var allLayerInfo = layeredModel.GetAllLayerInfo();
+        double defaultSparsity = config.TargetSparsity;
+
+        for (int i = 0; i < allLayerInfo.Count; i++)
+        {
+            var info = allLayerInfo[i];
+
+            // Skip non-trainable layers
+            if (!info.IsTrainable || info.ParameterCount == 0)
+            {
+                continue;
+            }
+
+            // Determine effective sparsity: name override > category override > default
+            double layerSparsity = defaultSparsity;
+
+            if (config.LayerSparsityTargets is not null &&
+                config.LayerSparsityTargets.TryGetValue(info.Name, out double nameSparsity))
+            {
+                layerSparsity = nameSparsity;
+            }
+            else if (config.CategorySparsityTargets is not null &&
+                     config.CategorySparsityTargets.TryGetValue(info.Category, out double categorySparsity))
+            {
+                layerSparsity = categorySparsity;
+            }
+
+            // Skip layers with zero sparsity target
+            if (layerSparsity <= 0.0)
+            {
+                continue;
+            }
+
+            // Get the layer's weights
+            var weights = info.Layer.GetWeights();
+            if (weights is null)
+            {
+                continue;
+            }
+
+            // Compute importance scores and create mask
+            var importanceScores = ComputeImportanceScores(weights);
+            var mask = CreateMask(importanceScores, layerSparsity);
+
+            // Apply the mask to the weights
+            ApplyPruning(weights, mask);
+
+            result[i] = mask;
+        }
+
+        return result;
     }
 }

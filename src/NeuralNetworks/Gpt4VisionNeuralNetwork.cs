@@ -5,8 +5,10 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Tokenization.Interfaces;
 using Microsoft.ML.OnnxRuntime;
+using AiDotNet.Validation;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
 
 namespace AiDotNet.NeuralNetworks;
@@ -29,6 +31,11 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 public class Gpt4VisionNeuralNetwork<T> : NeuralNetworkBase<T>, IGpt4VisionModel<T>
 {
+    private readonly Gpt4VisionOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// Timeout for regex operations to prevent ReDoS attacks.
     /// </summary>
@@ -145,9 +152,12 @@ public class Gpt4VisionNeuralNetwork<T> : NeuralNetworkBase<T>, IGpt4VisionModel
         int contextWindowSize = 128000,
         int imageSize = 336,
         int maxImagesPerRequest = 10,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        Gpt4VisionOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyLoss<T>(), 1.0)
     {
+        _options = options ?? new Gpt4VisionOptions();
+        Options = _options;
         // Validate ONNX model paths
         if (string.IsNullOrWhiteSpace(visionEncoderPath))
             throw new ArgumentException("Vision encoder path cannot be null or empty.", nameof(visionEncoderPath));
@@ -161,7 +171,8 @@ public class Gpt4VisionNeuralNetwork<T> : NeuralNetworkBase<T>, IGpt4VisionModel
         _useNativeMode = false;
         _visionEncoderPath = visionEncoderPath;
         _languageModelPath = languageModelPath;
-        _tokenizer = tokenizer ?? throw new ArgumentNullException(nameof(tokenizer));
+        Guard.NotNull(tokenizer);
+        _tokenizer = tokenizer;
         _embeddingDimension = embeddingDimension;
         _visionEmbeddingDim = visionEmbeddingDim;
         _maxSequenceLength = maxSequenceLength;
@@ -198,11 +209,15 @@ public class Gpt4VisionNeuralNetwork<T> : NeuralNetworkBase<T>, IGpt4VisionModel
         int patchSize = 14,
         int vocabularySize = 128256,
         int maxImagesPerRequest = 10,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        Gpt4VisionOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyLoss<T>(), 1.0)
     {
+        _options = options ?? new Gpt4VisionOptions();
+        Options = _options;
         _useNativeMode = true;
-        _tokenizer = tokenizer ?? throw new ArgumentNullException(nameof(tokenizer));
+        Guard.NotNull(tokenizer);
+        _tokenizer = tokenizer;
         _embeddingDimension = embeddingDimension;
         _visionEmbeddingDim = visionEmbeddingDim;
         _maxSequenceLength = maxSequenceLength;

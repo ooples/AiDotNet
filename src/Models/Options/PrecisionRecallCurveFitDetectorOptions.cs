@@ -37,7 +37,7 @@ namespace AiDotNet.Models.Options;
 /// This class lets you configure how the detector evaluates model quality based on these metrics.
 /// </para>
 /// </remarks>
-public class PrecisionRecallCurveFitDetectorOptions
+public class PrecisionRecallCurveFitDetectorOptions : ModelOptions
 {
     /// <summary>
     /// Gets or sets the minimum acceptable Area Under the Precision-Recall Curve (AUC-PR) value.

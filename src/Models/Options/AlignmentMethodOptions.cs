@@ -13,7 +13,7 @@ namespace AiDotNet.Models.Options;
 /// and how thoroughly to test for problems.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for calculations (e.g., float, double).</typeparam>
-public class AlignmentMethodOptions<T>
+public class AlignmentMethodOptions<T> : ModelOptions
 {
     /// <summary>
     /// Gets or sets the learning rate for alignment training.

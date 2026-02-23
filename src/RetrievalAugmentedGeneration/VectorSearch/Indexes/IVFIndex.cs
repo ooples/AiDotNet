@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Validation;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
 {
@@ -37,7 +38,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
         /// <param name="numProbes">Number of clusters to search during query (default: 1).</param>
         public IVFIndex(ISimilarityMetric<T> metric, int numClusters = 100, int numProbes = 1)
         {
-            _metric = metric ?? throw new ArgumentNullException(nameof(metric));
+            Guard.NotNull(metric);
+            _metric = metric;
             if (numClusters <= 0)
                 throw new ArgumentException("Number of clusters must be positive", nameof(numClusters));
             if (numProbes <= 0)

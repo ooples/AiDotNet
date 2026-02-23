@@ -1,6 +1,7 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Reasoning.Models;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Reasoning.Verification;
 
@@ -117,8 +118,10 @@ internal class HybridRewardModel<T> : IRewardModel<T>
         double outcomeWeight = 0.5,
         bool normalizeWeights = true)
     {
-        _prm = prm ?? throw new ArgumentNullException(nameof(prm));
-        _orm = orm ?? throw new ArgumentNullException(nameof(orm));
+        Guard.NotNull(prm);
+        _prm = prm;
+        Guard.NotNull(orm);
+        _orm = orm;
         _numOps = MathHelper.GetNumericOperations<T>();
         _normalizeWeights = normalizeWeights;
 

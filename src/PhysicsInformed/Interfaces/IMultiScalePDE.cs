@@ -33,6 +33,7 @@ namespace AiDotNet.PhysicsInformed.Interfaces
     /// - Cross-scale Coupling: How different scales interact
     /// - Homogenization: Averaging fine-scale behavior for coarse-scale equations
     /// </remarks>
+    [AiDotNet.Configuration.YamlConfigurable("MultiScalePDE")]
     public interface IMultiScalePDE<T> : IPDESpecification<T>
     {
         /// <summary>
@@ -137,6 +138,7 @@ namespace AiDotNet.PhysicsInformed.Interfaces
     /// Provides gradient information for multi-scale PDE residuals.
     /// </summary>
     /// <typeparam name="T">The numeric type.</typeparam>
+    [AiDotNet.Configuration.YamlConfigurable("MultiScalePDEGradient")]
     public interface IMultiScalePDEGradient<T> : IMultiScalePDE<T>
     {
         /// <summary>
@@ -178,7 +180,7 @@ namespace AiDotNet.PhysicsInformed.Interfaces
     /// Configuration options for multi-scale PINN training.
     /// </summary>
     /// <typeparam name="T">The numeric type.</typeparam>
-    public class MultiScaleTrainingOptions<T>
+    public class MultiScaleTrainingOptions<T> : AiDotNet.Models.Options.ModelOptions
     {
         /// <summary>
         /// Whether to use adaptive scale weighting during training.

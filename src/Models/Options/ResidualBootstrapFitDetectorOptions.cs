@@ -1,3 +1,5 @@
+using AiDotNet.Models.Options;
+
 namespace AiDotNet.Models;
 
 /// <summary>
@@ -35,7 +37,7 @@ namespace AiDotNet.Models;
 /// The settings in this class control how thoroughly and strictly this testing process works.
 /// </para>
 /// </remarks>
-public class ResidualBootstrapFitDetectorOptions
+public class ResidualBootstrapFitDetectorOptions : ModelOptions
 {
     /// <summary>
     /// Gets or sets the number of bootstrap samples to generate for the analysis.
@@ -219,5 +221,5 @@ public class ResidualBootstrapFitDetectorOptions
     /// you might set a seed value so others can reproduce your exact findings.
     /// </para>
     /// </remarks>
-    public int? Seed { get; set; } = null;
+    public new int? Seed { get; set; } = null;
 }

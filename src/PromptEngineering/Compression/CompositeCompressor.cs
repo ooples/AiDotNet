@@ -1,4 +1,5 @@
 using AiDotNet.Interfaces;
+using AiDotNet.Validation;
 
 namespace AiDotNet.PromptEngineering.Compression;
 
@@ -56,7 +57,8 @@ public class CompositeCompressor : PromptCompressorBase
         Func<string, int>? tokenCounter = null)
         : base(BuildName(compressors), tokenCounter)
     {
-        _compressors = compressors?.ToList() ?? throw new ArgumentNullException(nameof(compressors));
+        Guard.NotNull(compressors);
+        _compressors = compressors.ToList();
 
         if (_compressors.Count == 0)
         {

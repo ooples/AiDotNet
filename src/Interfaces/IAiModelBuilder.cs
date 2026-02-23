@@ -1,3 +1,4 @@
+using AiDotNet.Clustering.Interfaces;
 using AiDotNet.Configuration;
 using AiDotNet.Deployment.Configuration;
 using AiDotNet.DistributedTraining;
@@ -10,6 +11,7 @@ using AiDotNet.Models.Options;
 using AiDotNet.Models.Results;
 using AiDotNet.Postprocessing;
 using AiDotNet.Preprocessing;
+using AiDotNet.Preprocessing.DataPreparation;
 using AiDotNet.ProgramSynthesis.Options;
 using AiDotNet.ProgramSynthesis.Serving;
 using AiDotNet.PromptEngineering.FewShot;
@@ -38,42 +40,6 @@ namespace AiDotNet.Interfaces;
 /// <typeparam name="T">The numeric data type used for calculations (e.g., float, double).</typeparam>
 public interface IAiModelBuilder<T, TInput, TOutput>
 {
-    /// <summary>
-    /// Configures the feature selector component for the model.
-    /// </summary>
-    /// <remarks>
-    /// A feature selector helps identify which input variables (features) are most important
-    /// for making predictions.
-    /// 
-    /// <b>For Beginners:</b> Imagine you're trying to predict house prices. You have many possible 
-    /// factors: size, location, age, number of rooms, etc. A feature selector helps figure out 
-    /// which of these factors actually matter for making good predictions. This can improve 
-    /// your model's accuracy and make it run faster by focusing only on what's important.
-    /// </remarks>
-    /// <param name="selector">The feature selector implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    IAiModelBuilder<T, TInput, TOutput> ConfigureFeatureSelector(IFeatureSelector<T, TInput> selector);
-
-    /// <summary>
-    /// Configures the data normalizer component for the model.
-    /// </summary>
-    /// <remarks>
-    /// A normalizer transforms data to a standard scale, which helps many machine learning
-    /// algorithms perform better.
-    ///
-    /// <b>For Beginners:</b> Different features in your data might use different scales. For example,
-    /// a person's age (0-100) and income (thousands or millions) are on very different scales.
-    /// Normalization converts all features to a similar scale (like 0-1), which prevents features
-    /// with larger numbers from dominating the learning process just because they have bigger values.
-    ///
-    /// <b>Note:</b> This method is maintained for backward compatibility. For new code, prefer
-    /// <see cref="ConfigurePreprocessing(IDataTransformer{T, TInput, TInput})"/> which supports
-    /// the full range of preprocessing transformers (scalers, encoders, imputers, etc.).
-    /// </remarks>
-    /// <param name="normalizer">The normalizer implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    IAiModelBuilder<T, TInput, TOutput> ConfigureNormalizer(INormalizer<T, TInput, TOutput> normalizer);
-
     /// <summary>
     /// Configures the data preprocessing pipeline for the model using a single transformer.
     /// </summary>
@@ -314,15 +280,32 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     /// Enables federated learning training using the provided options.
     /// </summary>
     /// <remarks>
-    /// Federated learning is orchestrated internally by the builder to preserve the public facade API.
-    /// Users typically only provide an options object; optional strategy injection is available for advanced scenarios.
+    /// <para>Federated learning is orchestrated internally by the builder to preserve the public facade API.
+    /// Users typically only provide an options object; optional strategy injection is available for advanced scenarios.</para>
+    ///
+    /// <para>Supports both horizontal FL (clients share feature space, different samples) and vertical FL
+    /// (clients share entity space, different features). Set <see cref="FederatedLearningOptions.Mode"/> to
+    /// <see cref="FederatedLearningMode.Vertical"/> and configure
+    /// <see cref="FederatedLearningOptions.VerticalLearning"/> for VFL.</para>
+    ///
+    /// <para>v2 subsystems (PSI, MPC, TEE, ZK verification, graph FL, unlearning, fairness, compression,
+    /// drift detection) are configured via properties on <see cref="FederatedLearningOptions"/>.
+    /// Injectable interfaces below allow custom implementations to override defaults.</para>
     /// </remarks>
-    /// <param name="options">Federated learning configuration options.</param>
+    /// <param name="options">Federated learning configuration options (horizontal or vertical mode, privacy, compression, etc.).</param>
     /// <param name="aggregationStrategy">Optional aggregation strategy override (null uses defaults based on options).</param>
     /// <param name="clientSelectionStrategy">Optional client selection strategy override (null uses defaults based on options).</param>
     /// <param name="serverOptimizer">Optional server-side optimizer override (null uses defaults based on options).</param>
     /// <param name="heterogeneityCorrection">Optional heterogeneity correction strategy override (null uses defaults based on options).</param>
     /// <param name="homomorphicEncryptionProvider">Optional homomorphic encryption provider for encrypted aggregation (null uses plaintext aggregation).</param>
+    /// <param name="privateSetIntersection">Optional custom PSI protocol for entity alignment in vertical FL or graph FL (null uses default based on options).</param>
+    /// <param name="secureComputationProtocol">Optional custom MPC protocol for secure gradient operations (null uses default based on options).</param>
+    /// <param name="teeProvider">Optional custom TEE provider for hardware-backed secure aggregation (null uses default based on options).</param>
+    /// <param name="zkProofSystem">Optional custom zero-knowledge proof system for verifiable FL (null uses default based on options).</param>
+    /// <param name="federatedUnlearner">Optional custom unlearning implementation for GDPR compliance (null uses default based on options).</param>
+    /// <param name="driftDetector">Optional custom drift detector for concept drift adaptation (null uses default based on options).</param>
+    /// <param name="contributionEvaluator">Optional custom contribution evaluator for client value assessment (null uses default based on options).</param>
+    /// <param name="fairnessConstraint">Optional custom fairness constraint for equitable model performance (null uses default based on options).</param>
     /// <returns>The builder instance for method chaining.</returns>
     IAiModelBuilder<T, TInput, TOutput> ConfigureFederatedLearning(
         FederatedLearningOptions options,
@@ -330,42 +313,49 @@ public interface IAiModelBuilder<T, TInput, TOutput>
         IClientSelectionStrategy? clientSelectionStrategy = null,
         IFederatedServerOptimizer<T>? serverOptimizer = null,
         IFederatedHeterogeneityCorrection<T>? heterogeneityCorrection = null,
-        IHomomorphicEncryptionProvider<T>? homomorphicEncryptionProvider = null);
+        IHomomorphicEncryptionProvider<T>? homomorphicEncryptionProvider = null,
+        FederatedLearning.PSI.IPrivateSetIntersection? privateSetIntersection = null,
+        FederatedLearning.MPC.ISecureComputationProtocol<T>? secureComputationProtocol = null,
+        FederatedLearning.TEE.ITeeProvider<T>? teeProvider = null,
+        FederatedLearning.Verification.IZkProofSystem? zkProofSystem = null,
+        FederatedLearning.Unlearning.IFederatedUnlearner<T>? federatedUnlearner = null,
+        FederatedLearning.DriftDetection.IFederatedDriftDetector<T>? driftDetector = null,
+        FederatedLearning.Fairness.IClientContributionEvaluator<T>? contributionEvaluator = null,
+        FederatedLearning.Fairness.IFairnessConstraint<T>? fairnessConstraint = null);
 
     /// <summary>
-    /// Configures the data preprocessing component for the model.
+    /// Configures the data preparation pipeline for row-changing operations.
     /// </summary>
     /// <remarks>
-    /// A data preprocessor cleans and transforms raw data before it's used for training.
-    /// 
-    /// <b>For Beginners:</b> Data preprocessing is like preparing ingredients before cooking. 
-    /// It involves:
-    /// - Cleaning data (removing or fixing errors)
-    /// - Transforming data (converting text to numbers, etc.)
-    /// - Organizing data (putting it in the right format)
-    /// 
-    /// Good preprocessing can dramatically improve your model's performance by ensuring 
-    /// it learns from high-quality data.
+    /// <para>
+    /// Data preparation handles operations that change the number of rows in your dataset,
+    /// such as outlier removal (removes rows) or SMOTE augmentation (adds synthetic rows).
+    /// These operations are applied during training only, not during prediction.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> Data preparation is the first step before preprocessing. While
+    /// preprocessing (scaling, encoding) keeps all your data rows, data preparation may
+    /// add or remove rows:
+    /// - <b>Outlier removal:</b> Removes unusual data points that could confuse the model
+    /// - <b>SMOTE augmentation:</b> Creates synthetic samples to balance imbalanced classes
+    /// </para>
+    /// <para>
+    /// Example usage:
+    /// <code>
+    /// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    ///     .ConfigureDataPreparation(pipeline => pipeline
+    ///         .RemoveOutliers(new IsolationForest&lt;double&gt;())
+    ///         .AddAugmentation(new SmoteAugmenter&lt;double&gt;()))
+    ///     .ConfigurePreprocessing(new StandardScaler&lt;double&gt;())
+    ///     .ConfigureModel(new LogisticRegression&lt;double&gt;())
+    ///     .Build(X, y);
+    /// </code>
+    /// </para>
     /// </remarks>
-    /// <param name="dataPreprocessor">The data preprocessor implementation to use.</param>
+    /// <param name="pipelineBuilder">An action that configures the data preparation pipeline.</param>
     /// <returns>The builder instance for method chaining.</returns>
-    IAiModelBuilder<T, TInput, TOutput> ConfigureDataPreprocessor(IDataPreprocessor<T, TInput, TOutput> dataPreprocessor);
-
-    /// <summary>
-    /// Configures the outlier removal component for the model.
-    /// </summary>
-    /// <remarks>
-    /// An outlier removal component identifies and handles unusual data points that might
-    /// negatively impact the model's performance.
-    /// 
-    /// <b>For Beginners:</b> Outliers are unusual data points that don't follow the general pattern. 
-    /// For example, if you're analyzing house prices and most houses cost $100,000-$500,000, 
-    /// a $10 million mansion would be an outlier. These unusual points can confuse your model 
-    /// and make it perform worse. Outlier removal helps identify and handle these unusual cases.
-    /// </remarks>
-    /// <param name="outlierRemoval">The outlier removal implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    IAiModelBuilder<T, TInput, TOutput> ConfigureOutlierRemoval(IOutlierRemoval<T, TInput, TOutput> outlierRemoval);
+    IAiModelBuilder<T, TInput, TOutput> ConfigureDataPreparation(
+        Action<DataPreparationPipeline<T>> pipelineBuilder);
 
     /// <summary>
     /// Uses a trained model to make predictions on new data.
@@ -655,6 +645,36 @@ public interface IAiModelBuilder<T, TInput, TOutput>
         IDocumentStore<T>? documentStore = null);
 
     /// <summary>
+    /// Configures advanced knowledge graph capabilities including embeddings, community detection,
+    /// link prediction, temporal queries, and KG construction.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is separate from <see cref="ConfigureRetrievalAugmentedGeneration"/>, which handles
+    /// low-level plumbing (IGraphStore, KnowledgeGraph, HybridGraphRetriever). This method
+    /// configures higher-level features built on top of the existing infrastructure.
+    /// </para>
+    /// <para><b>For Beginners:</b> After setting up your knowledge graph via <c>ConfigureRetrievalAugmentedGeneration()</c>,
+    /// use this method to enable advanced features:
+    ///
+    /// <code>
+    /// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    ///     .ConfigureRetrievalAugmentedGeneration(graphStore: new MemoryGraphStore&lt;double&gt;())
+    ///     .ConfigureKnowledgeGraph(options => {
+    ///         options.TrainEmbeddings = true;
+    ///         options.EmbeddingType = KGEmbeddingType.TransE;
+    ///         options.GraphRAGMode = GraphRAGMode.Global;
+    ///     })
+    ///     .Build(X, y);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <param name="configure">An action that configures the knowledge graph options.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureKnowledgeGraph(
+        Action<KnowledgeGraphOptions>? configure = null);
+
+    /// <summary>
     /// Configures AI agent assistance during model building and inference.
     /// </summary>
     /// <remarks>
@@ -809,23 +829,29 @@ public interface IAiModelBuilder<T, TInput, TOutput>
         IShardingConfiguration<T>? configuration = null);
 
     /// <summary>
-    /// Configures the model evaluator component for comprehensive model evaluation and cross-validation.
+    /// Configures pipeline-specific options for pipeline parallel training.
     /// </summary>
     /// <remarks>
-    /// A model evaluator provides methods to evaluate model performance on different datasets and
-    /// perform cross-validation to assess generalization.
-    ///
-    /// <b>For Beginners:</b> The model evaluator helps you understand how well your model performs.
-    /// If you configure both a model evaluator and cross-validator (via ConfigureCrossValidation),
-    /// cross-validation will automatically run during Build() and the results will be included
-    /// in your trained model.
+    /// <para>Call this after <see cref="ConfigureDistributedTraining"/> with
+    /// <c>DistributedStrategy.PipelineParallel</c> to customize pipeline scheduling,
+    /// partitioning, activation checkpointing, and micro-batch count.</para>
+    /// <para><b>For Beginners:</b> This method fine-tunes how pipeline parallelism works.
+    /// You only need to call it if you want to change the defaults (GPipe schedule,
+    /// uniform partitioning, no checkpointing, 1 micro-batch).</para>
     /// </remarks>
-    /// <param name="evaluator">The model evaluator implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    IAiModelBuilder<T, TInput, TOutput> ConfigureModelEvaluator(IModelEvaluator<T, TInput, TOutput> evaluator);
+    /// <param name="schedule">Pipeline schedule. Null = GPipeSchedule.</param>
+    /// <param name="partitionStrategy">Partition strategy. Null = uniform.</param>
+    /// <param name="checkpointConfig">Activation checkpointing config. Null = disabled.</param>
+    /// <param name="microBatchCount">Number of micro-batches to split the full batch into. Default: 1.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigurePipelineParallelism(
+        IPipelineSchedule<T>? schedule = null,
+        IPipelinePartitionStrategy<T>? partitionStrategy = null,
+        ActivationCheckpointConfig? checkpointConfig = null,
+        int microBatchCount = 1);
 
     /// <summary>
-    /// Configures the cross-validation strategy for automatic model evaluation during training.
+    /// Configures the cross-validation strategy for model evaluation.
     /// </summary>
     /// <remarks>
     /// A cross-validator determines how data should be split into folds for cross-validation.
@@ -834,9 +860,7 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     ///
     /// <b>For Beginners:</b> Cross-validation tests how well your model will perform on new data
     /// by training and testing it multiple times on different subsets of your training data.
-    /// If you configure both a cross-validator and model evaluator (via ConfigureModelEvaluator),
-    /// cross-validation will automatically run during Build() and the results will be included
-    /// in your trained model.
+    /// Use the evaluation methods on AiModelResult to perform cross-validation after building.
     ///
     /// Common strategies:
     /// - StandardCrossValidator (K-Fold): General purpose, splits data into K equal parts
@@ -1160,6 +1184,13 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     /// <param name="config">The telemetry configuration (optional, uses default telemetry settings if null).</param>
     /// <returns>The builder instance for method chaining.</returns>
     IAiModelBuilder<T, TInput, TOutput> ConfigureTelemetry(TelemetryConfig? config = null);
+
+    /// <summary>
+    /// Configures the comprehensive safety pipeline for input validation and output filtering.
+    /// </summary>
+    /// <param name="configure">Action to configure safety settings. If null, safety is enabled with defaults.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureSafety(Action<AiDotNet.Safety.SafetyConfig>? configure = null);
 
     /// <summary>
     /// Configures benchmarking to run standardized benchmark suites and attach a structured report to the built model.
@@ -1548,6 +1579,26 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     /// </para>
     /// </remarks>
     IAiModelBuilder<T, TInput, TOutput> ConfigureReasoning(ReasoningConfig? config = null);
+
+    /// <summary>
+    /// Configures causal structure discovery to learn a DAG from the training data.
+    /// </summary>
+    /// <param name="configure">Action to configure causal discovery options. If null, defaults are used.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// When configured, the builder will run a causal discovery algorithm (e.g., NOTEARS, DAGMA, PC)
+    /// to learn the causal structure between variables. The result is available on
+    /// <c>AiModelResult.CausalDiscoveryResult</c>.
+    /// </para>
+    /// </remarks>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureCausalDiscovery(
+        Action<CausalDiscoveryOptions>? configure = null);
+
+    /// <summary>
+    /// Configures causal structure discovery with a pre-built options object.
+    /// </summary>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureCausalDiscovery(CausalDiscoveryOptions? options);
 
     /// <summary>
     /// Configures the data loader for providing training data.
@@ -1970,5 +2021,659 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     /// <returns>The builder instance for method chaining.</returns>
     IAiModelBuilder<T, TInput, TOutput> ConfigureAugmentation(
         Augmentation.AugmentationConfig? config = null);
+
+    // ========================================================================
+    // Core ML Building Blocks
+    // ========================================================================
+
+    /// <summary>
+    /// Configures the loss function used to measure prediction error during training.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> A loss function measures how far off your model's predictions
+    /// are from the correct answers. Lower loss means better predictions. Different loss functions
+    /// are suited for different tasks (e.g., MSE for regression, CrossEntropy for classification).</para>
+    /// </remarks>
+    /// <param name="lossFunction">The loss function implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureLossFunction(ILossFunction<T> lossFunction);
+
+    /// <summary>
+    /// Configures the activation function for neural network layers.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Activation functions add non-linearity to neural networks,
+    /// enabling them to learn complex patterns. Common choices include ReLU (fast, general-purpose),
+    /// Sigmoid (0-1 output), and Tanh (-1 to 1 output).</para>
+    /// </remarks>
+    /// <param name="activationFunction">The activation function implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureActivationFunction(IActivationFunction<T> activationFunction);
+
+    /// <summary>
+    /// Configures the kernel function for kernel-based methods (SVM, Gaussian processes, etc.).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Kernel functions measure similarity between data points in a
+    /// higher-dimensional space. They enable algorithms like SVM to find complex decision boundaries
+    /// without explicitly computing the high-dimensional transformation.</para>
+    /// </remarks>
+    /// <param name="kernelFunction">The kernel function implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureKernelFunction(IKernelFunction<T> kernelFunction);
+
+    /// <summary>
+    /// Configures a regression algorithm for predicting continuous numeric values.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Regression predicts numeric values (e.g., house prices, temperature).
+    /// Available algorithms include Linear Regression, Ridge, Lasso, Polynomial Regression,
+    /// and many more specialized methods.</para>
+    /// </remarks>
+    /// <param name="regression">The regression implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureRegression(IRegression<T> regression);
+
+    /// <summary>
+    /// Configures a classification algorithm for categorizing data into discrete classes.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Classification assigns data points to categories (e.g., spam/not-spam,
+    /// cat/dog/bird). Available algorithms include Logistic Regression, SVM, Decision Trees,
+    /// Random Forest, and many more.</para>
+    /// </remarks>
+    /// <param name="classifier">The classifier implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureClassifier(IClassifier<T> classifier);
+
+    /// <summary>
+    /// Configures a clustering algorithm for grouping similar data points together.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Clustering finds natural groups in your data without needing
+    /// labeled examples. For instance, it can group customers by purchasing behavior or
+    /// documents by topic. Popular algorithms include K-Means, DBSCAN, and Hierarchical Clustering.</para>
+    /// </remarks>
+    /// <param name="clustering">The clustering implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureClustering(IClustering<T> clustering);
+
+    /// <summary>
+    /// Configures a neural network layer for building custom network architectures.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Layers are the building blocks of neural networks. Each layer
+    /// transforms data in a specific way. Common types include Dense (fully connected), Convolutional
+    /// (for images), LSTM/GRU (for sequences), and Attention layers (for transformers).</para>
+    /// </remarks>
+    /// <param name="layer">The layer implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureLayer(ILayer<T> layer);
+
+    /// <summary>
+    /// Configures an anomaly detection algorithm for identifying unusual data points.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Anomaly detection finds data points that don't fit the normal
+    /// pattern, like fraudulent transactions, network intrusions, or equipment failures.
+    /// Available methods include Isolation Forest, One-Class SVM, Autoencoders, and more.</para>
+    /// </remarks>
+    /// <param name="anomalyDetector">The anomaly detector implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureAnomalyDetector(IAnomalyDetector<T> anomalyDetector);
+
+    /// <summary>
+    /// Configures a 1D interpolation method for estimating values between known data points.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Interpolation estimates values between known data points.
+    /// For example, if you know temperatures at noon and 2pm, interpolation can estimate
+    /// the temperature at 1pm. Methods include Linear, Cubic Spline, and Polynomial interpolation.</para>
+    /// </remarks>
+    /// <param name="interpolation">The interpolation implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureInterpolation(IInterpolation<T> interpolation);
+
+    /// <summary>
+    /// Configures a 2D interpolation method for estimating values on a surface between known data points.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> 2D interpolation estimates values across a surface (two dimensions).
+    /// For example, estimating elevation at any point on a map given known elevation measurements
+    /// at specific locations. Methods include Bilinear and Bicubic interpolation.</para>
+    /// </remarks>
+    /// <param name="interpolation">The 2D interpolation implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureInterpolation2D(I2DInterpolation<T> interpolation);
+
+    /// <summary>
+    /// Configures a window function for signal processing and spectral analysis.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Window functions shape a signal before frequency analysis (FFT),
+    /// reducing spectral leakage and improving frequency resolution. Common choices include
+    /// Hamming, Hanning, Blackman, and Kaiser windows.</para>
+    /// </remarks>
+    /// <param name="windowFunction">The window function implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureWindowFunction(IWindowFunction<T> windowFunction);
+
+    /// <summary>
+    /// Configures a wavelet function for time-frequency analysis and signal decomposition.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Wavelets decompose signals into components at different scales,
+    /// capturing both time and frequency information. They're useful for denoising, compression,
+    /// and feature extraction. Common wavelets include Haar, Daubechies, and Morlet.</para>
+    /// </remarks>
+    /// <param name="waveletFunction">The wavelet function implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureWaveletFunction(IWaveletFunction<T> waveletFunction);
+
+    /// <summary>
+    /// Configures a learning rate scheduler that adjusts the learning rate during training.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> A learning rate scheduler changes how fast your model learns
+    /// over the course of training. Typically you start with a higher learning rate and reduce it
+    /// over time, allowing the model to make large improvements early and fine-tune later.
+    /// Common schedulers include StepLR, CosineAnnealing, and ReduceOnPlateau.</para>
+    /// </remarks>
+    /// <param name="scheduler">The learning rate scheduler implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureLearningRateScheduler(LearningRateSchedulers.ILearningRateScheduler scheduler);
+
+    /// <summary>
+    /// Configures a link function for generalized linear models (GLMs).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Link functions connect the linear predictor in a GLM to the
+    /// expected response. For example, the Logit link transforms probabilities to the real line
+    /// for logistic regression, while the Log link is used for count data (Poisson regression).</para>
+    /// </remarks>
+    /// <param name="linkFunction">The link function implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureLinkFunction(ILinkFunction<T> linkFunction);
+
+    /// <summary>
+    /// Configures a matrix decomposition method for linear algebra operations.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Matrix decomposition breaks a matrix into simpler components,
+    /// enabling efficient solutions to linear systems, dimensionality reduction, and data compression.
+    /// Common methods include SVD, QR, LU, and Cholesky decomposition.</para>
+    /// </remarks>
+    /// <param name="decomposition">The matrix decomposition implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureMatrixDecomposition(IMatrixDecomposition<T> decomposition);
+
+    /// <summary>
+    /// Configures a Gaussian process model for probabilistic predictions with uncertainty estimates.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Gaussian processes provide predictions along with uncertainty
+    /// estimates, telling you not just what the prediction is but how confident the model is.
+    /// They are ideal for small datasets and situations where knowing prediction confidence matters,
+    /// such as Bayesian optimization and active learning.</para>
+    /// </remarks>
+    /// <param name="gaussianProcess">The Gaussian process implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureGaussianProcess(IGaussianProcess<T> gaussianProcess);
+
+    // ========================================================================
+    // Domain-Specific ML Categories
+    // ========================================================================
+
+    /// <summary>
+    /// Configures an audio effect for audio signal processing pipelines.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Audio effects transform sound signals, such as applying
+    /// reverb, equalization, noise reduction, or pitch shifting. These are useful for audio
+    /// preprocessing and augmentation in speech and music ML pipelines.</para>
+    /// </remarks>
+    /// <param name="audioEffect">The audio effect implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureAudioEffect(IAudioEffect<T> audioEffect);
+
+    /// <summary>
+    /// Configures a speech recognition model for converting spoken audio to text.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Speech recognition (ASR) converts spoken words into written text.
+    /// This enables voice assistants, transcription services, and voice-controlled applications.
+    /// Available models range from simple HMM-based to modern transformer architectures.</para>
+    /// </remarks>
+    /// <param name="recognizer">The speech recognizer implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureSpeechRecognizer(ISpeechRecognizer<T> recognizer);
+
+    /// <summary>
+    /// Configures a text-to-speech model for converting written text to spoken audio.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Text-to-speech (TTS) generates natural-sounding audio from text.
+    /// Modern TTS systems can produce highly realistic speech with controllable voice characteristics,
+    /// useful for accessibility, virtual assistants, and content creation.</para>
+    /// </remarks>
+    /// <param name="tts">The text-to-speech implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureTextToSpeech(ITextToSpeech<T> tts);
+
+    /// <summary>
+    /// Configures a diffusion model for generative tasks (image/audio/video generation).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Diffusion models generate new data (images, audio, etc.) by
+    /// learning to gradually remove noise from random data. They power tools like DALL-E and
+    /// Stable Diffusion for image generation and can be applied to audio and video as well.</para>
+    /// </remarks>
+    /// <param name="diffusionModel">The diffusion model implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureDiffusionModel(IDiffusionModel<T> diffusionModel);
+
+    /// <summary>
+    /// Configures an active learning strategy for intelligently selecting training samples.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Active learning helps your model learn more efficiently by
+    /// choosing the most informative samples to label next. Instead of labeling all your data,
+    /// the model asks for labels on the examples it's most uncertain about, saving labeling effort.</para>
+    /// </remarks>
+    /// <param name="strategy">The active learning strategy implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureActiveLearning(IActiveLearningStrategy<T> strategy);
+
+    /// <summary>
+    /// Configures a continual learning trainer that can learn new tasks without forgetting old ones.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Continual learning (lifelong learning) enables your model to
+    /// learn new tasks over time without forgetting what it learned before. Traditional neural
+    /// networks suffer from "catastrophic forgetting" - continual learning techniques like
+    /// EWC, LwF, and GEM prevent this.</para>
+    /// </remarks>
+    /// <param name="learner">The continual learner implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureContinualLearning(ContinualLearning.Interfaces.IContinualLearner<T, TInput, TOutput> learner);
+
+    /// <summary>
+    /// Configures an online learning model that updates incrementally with new data.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Online learning updates the model one sample at a time (or in
+    /// small batches) as new data arrives, rather than retraining from scratch. This is essential
+    /// for streaming data, real-time systems, and scenarios where data is too large to store.</para>
+    /// </remarks>
+    /// <param name="learner">The online learning model implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureOnlineLearning(IOnlineLearningModel<T> learner);
+
+    /// <summary>
+    /// Configures a causal inference model for understanding cause-and-effect relationships.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Causal inference goes beyond prediction to understand why things
+    /// happen. While regular ML finds correlations, causal models identify actual causes. This is
+    /// crucial for decision-making, policy evaluation, and understanding treatment effects.</para>
+    /// </remarks>
+    /// <param name="causalModel">The causal model implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureCausalInference(ICausalModel<T> causalModel);
+
+    /// <summary>
+    /// Configures a drift detector for monitoring changes in data distribution over time.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Drift detection monitors whether the data your model sees in
+    /// production is changing compared to what it was trained on. If drift is detected, it may
+    /// signal that your model needs retraining. Common detectors include DDM, ADWIN, and
+    /// Page-Hinkley methods.</para>
+    /// </remarks>
+    /// <param name="driftDetector">The drift detector implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureDriftDetection(DriftDetection.IDriftDetector<T> driftDetector);
+
+    /// <summary>
+    /// Configures a survival analysis model for time-to-event prediction.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Survival analysis predicts how long until an event occurs,
+    /// such as customer churn, equipment failure, or patient outcomes. Unlike regular regression,
+    /// it handles censored data (when the event hasn't occurred yet for some subjects).
+    /// Common models include Cox Proportional Hazards and Kaplan-Meier.</para>
+    /// </remarks>
+    /// <param name="survivalModel">The survival model implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureSurvivalAnalysis(ISurvivalModel<T> survivalModel);
+
+    /// <summary>
+    /// Configures a video model for video understanding and generation tasks.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Video models process sequences of frames for tasks like
+    /// action recognition, video classification, temporal segmentation, and video generation.
+    /// They capture both spatial (within-frame) and temporal (across-frame) information.</para>
+    /// </remarks>
+    /// <param name="videoModel">The video model implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureVideoModel(Video.Interfaces.IVideoModel<T> videoModel);
+
+    /// <summary>
+    /// Configures a point cloud model for 3D data processing.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Point cloud models process 3D data represented as collections of
+    /// points in space (from LiDAR, depth cameras, etc.). They enable tasks like 3D object detection,
+    /// segmentation, and scene understanding for autonomous driving and robotics.</para>
+    /// </remarks>
+    /// <param name="model">The point cloud model implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigurePointCloudModel(PointCloud.Interfaces.IPointCloudModel<T> model);
+
+    /// <summary>
+    /// Configures a document model for document understanding and processing.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Document models understand the layout and content of documents
+    /// (PDFs, forms, invoices). They combine text understanding with spatial layout information
+    /// to extract structured data, classify documents, and answer questions about document content.</para>
+    /// </remarks>
+    /// <param name="documentModel">The document model implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureDocumentModel(Document.Interfaces.IDocumentModel<T> documentModel);
+
+    /// <summary>
+    /// Configures a financial model for quantitative finance and risk analysis.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Financial models apply ML to finance tasks such as portfolio
+    /// optimization, risk assessment, option pricing, credit scoring, and algorithmic trading.
+    /// They handle specialized requirements like time-series data and risk-adjusted metrics.</para>
+    /// </remarks>
+    /// <param name="financialModel">The financial model implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureFinancialModel(Finance.Interfaces.IFinancialModel<T> financialModel);
+
+    /// <summary>
+    /// Configures a radial basis function for RBF networks and interpolation.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Radial basis functions measure the distance from a center point
+    /// and produce a response that depends only on that distance. They are used in RBF neural networks
+    /// for function approximation and in scattered data interpolation. Common types include
+    /// Gaussian, Multiquadric, and Thin Plate Spline.</para>
+    /// </remarks>
+    /// <param name="rbf">The radial basis function implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureRadialBasisFunction(IRadialBasisFunction<T> rbf);
+
+    /// <summary>
+    /// Configures a distance metric for measuring similarity between data points.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Distance metrics measure how different two data points are.
+    /// They are fundamental to clustering, nearest-neighbor search, and many other ML algorithms.
+    /// Common metrics include Euclidean, Manhattan, Cosine, and Mahalanobis distance.</para>
+    /// </remarks>
+    /// <param name="distanceMetric">The distance metric implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureDistanceMetric(Clustering.Interfaces.IDistanceMetric<T> distanceMetric);
+
+    /// <summary>
+    /// Configures an embedding model for learning dense vector representations.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Embedding models convert high-dimensional or categorical data
+    /// into compact, dense vectors that capture semantic meaning. Similar items end up close
+    /// together in the embedding space. Used for text (Word2Vec, BERT), images, graphs, and more.</para>
+    /// </remarks>
+    /// <param name="embeddingModel">The embedding model implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureEmbeddingModel(IEmbeddingModel<T> embeddingModel);
+
+    /// <summary>
+    /// Configures a scoring rule for evaluating probabilistic predictions.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Scoring rules evaluate how good probabilistic predictions are.
+    /// Unlike simple accuracy, they assess whether predicted probabilities are well-calibrated.
+    /// Common scoring rules include Brier Score, Log Loss, and CRPS (Continuous Ranked
+    /// Probability Score).</para>
+    /// </remarks>
+    /// <param name="scorer">The scoring rule implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureScoringRule(Scoring.IScoringRule<T> scorer);
+
+    /// <summary>
+    /// Configures a model explainer for understanding model predictions.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Model explainers help you understand why a model makes specific
+    /// predictions. This is crucial for trust, debugging, and regulatory compliance. Methods
+    /// include SHAP (feature importance), LIME (local explanations), Integrated Gradients,
+    /// and Attention visualization.</para>
+    /// </remarks>
+    /// <param name="explainer">The model explainer implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureModelExplainer(IModelExplainer<T> explainer);
+
+    /// <summary>
+    /// Configures a reinforcement learning agent for learning through interaction with an environment.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> RL agents learn by trial and error, receiving rewards or penalties
+    /// for their actions in an environment. They're used for game playing, robotics, recommendation
+    /// systems, and resource optimization. Available agents include DQN, PPO, SAC, and A2C.</para>
+    /// </remarks>
+    /// <param name="agent">The RL agent implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureRLAgent(IAgent<T> agent);
+
+    // ── Extended Coverage: Model Options, Data Transformers, Splitting, Metrics, Vectorization, Storage ──
+
+    /// <summary>
+    /// Configures model options that control training behavior and hyperparameters.
+    /// </summary>
+    /// <param name="options">The model options to apply.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureModelOptions(Models.Options.ModelOptions options);
+
+    /// <summary>
+    /// Configures a data transformer for preprocessing or postprocessing data transformations.
+    /// </summary>
+    /// <param name="transformer">The data transformer implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureDataTransformer(IDataTransformer<T, TInput, TInput> transformer);
+
+    /// <summary>
+    /// Configures a data splitting strategy for dividing datasets into train/test/validation sets.
+    /// </summary>
+    /// <param name="splitter">The data splitter implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureDataSplitter(Preprocessing.DataPreparation.IDataSplitter<T> splitter);
+
+    /// <summary>
+    /// Configures a classification metric for evaluating classifier performance.
+    /// </summary>
+    /// <param name="metric">The classification metric implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureClassificationMetric(Evaluation.Metrics.IClassificationMetric<T> metric);
+
+    /// <summary>
+    /// Configures a regression metric for evaluating regression model performance.
+    /// </summary>
+    /// <param name="metric">The regression metric implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureRegressionMetric(Evaluation.Metrics.IRegressionMetric<T> metric);
+
+    /// <summary>
+    /// Configures a text vectorizer for converting text data into numeric feature vectors.
+    /// </summary>
+    /// <param name="vectorizer">The text vectorizer implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureTextVectorizer(ITextVectorizer<T> vectorizer);
+
+    /// <summary>
+    /// Configures a document store for persisting and retrieving documents with vector similarity search.
+    /// </summary>
+    /// <param name="store">The document store implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureDocumentStore(IDocumentStore<T> store);
+
+    /// <summary>
+    /// Configures a benchmark for evaluating and comparing model performance.
+    /// </summary>
+    /// <param name="benchmark">The benchmark implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureBenchmark(IBenchmark<T> benchmark);
+
+    // ── Extended Coverage: Physics, Clustering Evaluation, Curriculum Learning ──
+
+    /// <summary>
+    /// Configures a PDE specification for physics-informed neural network training.
+    /// </summary>
+    /// <param name="specification">The PDE specification implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigurePDESpecification(PhysicsInformed.Interfaces.IPDESpecification<T> specification);
+
+    /// <summary>
+    /// Configures an internal cluster metric for evaluating clustering quality without ground truth labels.
+    /// </summary>
+    /// <param name="metric">The cluster metric implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureClusterMetric(Clustering.Evaluation.IClusterMetric<T> metric);
+
+    /// <summary>
+    /// Configures an external cluster metric for evaluating clustering quality against ground truth labels.
+    /// </summary>
+    /// <param name="metric">The external cluster metric implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureExternalClusterMetric(Clustering.Evaluation.IExternalClusterMetric<T> metric);
+
+    /// <summary>
+    /// Configures a curriculum scheduler for ordering training samples by difficulty.
+    /// </summary>
+    /// <param name="scheduler">The curriculum scheduler implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureCurriculumScheduler(CurriculumLearning.Interfaces.ICurriculumScheduler<T> scheduler);
+
+    // ── Extended Coverage: RL Exploration, SSL, Active Learning, Time Series ──
+
+    /// <summary>
+    /// Configures an exploration strategy for reinforcement learning agents.
+    /// </summary>
+    /// <param name="strategy">The exploration strategy implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureExplorationStrategy(ReinforcementLearning.Policies.Exploration.IExplorationStrategy<T> strategy);
+
+    /// <summary>
+    /// Configures a self-supervised learning method for learning representations without labeled data.
+    /// </summary>
+    /// <param name="method">The SSL method implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureSSLMethod(SelfSupervisedLearning.ISSLMethod<T> method);
+
+    /// <summary>
+    /// Configures a stopping criterion for active learning loops.
+    /// </summary>
+    /// <param name="criterion">The stopping criterion implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureStoppingCriterion(ActiveLearning.Interfaces.IStoppingCriterion<T> criterion);
+
+    /// <summary>
+    /// Configures a time series decomposition method for separating time series into components.
+    /// </summary>
+    /// <param name="decomposition">The time series decomposition implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureTimeSeriesDecomposition(ITimeSeriesDecomposition<T> decomposition);
+
+    // ── Extended Coverage: Distillation, Compression, Tools ──
+
+    /// <summary>
+    /// Configures a knowledge distillation strategy for transferring knowledge between models.
+    /// </summary>
+    /// <param name="strategy">The distillation strategy implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureDistillationStrategy(IDistillationStrategy<T> strategy);
+
+    /// <summary>
+    /// Configures a model compression strategy for reducing model size and inference cost.
+    /// </summary>
+    /// <param name="strategy">The model compression strategy implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureModelCompressionStrategy(IModelCompressionStrategy<T> strategy);
+
+    /// <summary>
+    /// Configures a tool for agent-based systems and function calling.
+    /// </summary>
+    /// <param name="tool">The tool implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureTool(ITool tool);
+
+    // ── Extended Coverage: Diffusion, RL Environments, Adversarial, Audio, Similarity ──
+
+    /// <summary>
+    /// Configures a noise scheduler for diffusion model training and sampling.
+    /// </summary>
+    /// <param name="scheduler">The noise scheduler implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureNoiseScheduler(INoiseScheduler<T> scheduler);
+
+    /// <summary>
+    /// Configures a reinforcement learning environment for agent training.
+    /// </summary>
+    /// <param name="environment">The environment implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureEnvironment(IEnvironment<T> environment);
+
+    /// <summary>
+    /// Configures an adversarial attack method for evaluating model robustness.
+    /// </summary>
+    /// <param name="attack">The adversarial attack implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureAdversarialAttack(IAdversarialAttack<T, TInput, TOutput> attack);
+
+    /// <summary>
+    /// Configures an adversarial defense method for improving model robustness.
+    /// </summary>
+    /// <param name="defense">The adversarial defense implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureAdversarialDefense(IAdversarialDefense<T, TInput, TOutput> defense);
+
+    /// <summary>
+    /// Configures a certified defense for providing formal robustness guarantees.
+    /// </summary>
+    /// <param name="defense">The certified defense implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureCertifiedDefense(ICertifiedDefense<T, TInput, TOutput> defense);
+
+    /// <summary>
+    /// Configures a query strategy for active learning sample selection.
+    /// </summary>
+    /// <param name="strategy">The query strategy implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureQueryStrategy(ActiveLearning.Interfaces.IQueryStrategy<T, TInput, TOutput> strategy);
+
+    /// <summary>
+    /// Configures an audio enhancer for improving audio quality.
+    /// </summary>
+    /// <param name="enhancer">The audio enhancer implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureAudioEnhancer(IAudioEnhancer<T> enhancer);
+
+    /// <summary>
+    /// Configures an audio generator for creating audio from various inputs.
+    /// </summary>
+    /// <param name="generator">The audio generator implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureAudioGenerator(IAudioGenerator<T> generator);
+
+    /// <summary>
+    /// Configures a similarity metric for vector similarity search operations.
+    /// </summary>
+    /// <param name="metric">The similarity metric implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureSimilarityMetric(RetrievalAugmentedGeneration.VectorSearch.ISimilarityMetric<T> metric);
 
 }

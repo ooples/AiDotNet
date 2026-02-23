@@ -2,6 +2,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using AiDotNet.Validation;
 
 namespace AiDotNet.ReinforcementLearning.Agents.AdvancedRL;
 
@@ -12,6 +13,9 @@ namespace AiDotNet.ReinforcementLearning.Agents.AdvancedRL;
 public class LinearSARSAAgent<T> : ReinforcementLearningAgentBase<T>
 {
     private LinearSARSAOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
     private Matrix<T> _weights;  // Weight matrix: [ActionSize x FeatureSize]
     private double _epsilon;
     private int _lastAction = -1;
@@ -19,7 +23,8 @@ public class LinearSARSAAgent<T> : ReinforcementLearningAgentBase<T>
 
     public LinearSARSAAgent(LinearSARSAOptions<T> options) : base(options)
     {
-        _options = options ?? throw new ArgumentNullException(nameof(options));
+        Guard.NotNull(options);
+        _options = options;
         _weights = new Matrix<T>(_options.ActionSize, _options.FeatureSize);
 
         // Initialize weights to zero

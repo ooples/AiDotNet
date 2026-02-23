@@ -4,9 +4,11 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.MetaLearning.Data;
 using AiDotNet.Models;
+using AiDotNet.Models.Options;
 using AiDotNet.Models.Results;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Validation;
 
 namespace AiDotNet.MetaLearning;
 
@@ -40,7 +42,7 @@ namespace AiDotNet.MetaLearning;
 /// 5. All shared functionality (metrics, saving, evaluation) is handled automatically
 /// </para>
 /// </remarks>
-public abstract class MetaLearnerBase<T, TInput, TOutput> : IMetaLearner<T, TInput, TOutput>
+public abstract class MetaLearnerBase<T, TInput, TOutput> : IMetaLearner<T, TInput, TOutput>, IConfigurableModel<T>
 {
     #region Fields
 
@@ -121,6 +123,9 @@ public abstract class MetaLearnerBase<T, TInput, TOutput> : IMetaLearner<T, TInp
     public IMetaLearnerOptions<T> Options => _options;
 
     /// <inheritdoc/>
+    public virtual ModelOptions GetOptions() => (ModelOptions)_options;
+
+    /// <inheritdoc/>
     public int CurrentIteration => _currentIteration;
 
     /// <inheritdoc/>
@@ -158,9 +163,12 @@ public abstract class MetaLearnerBase<T, TInput, TOutput> : IMetaLearner<T, TInp
         IGradientBasedOptimizer<T, TInput, TOutput>? metaOptimizer = null,
         IGradientBasedOptimizer<T, TInput, TOutput>? innerOptimizer = null)
     {
-        MetaModel = metaModel ?? throw new ArgumentNullException(nameof(metaModel));
-        LossFunction = lossFunction ?? throw new ArgumentNullException(nameof(lossFunction));
-        _options = options ?? throw new ArgumentNullException(nameof(options));
+        Guard.NotNull(metaModel);
+        MetaModel = metaModel;
+        Guard.NotNull(lossFunction);
+        LossFunction = lossFunction;
+        Guard.NotNull(options);
+        _options = options;
 
         if (!options.IsValid())
         {
@@ -244,8 +252,8 @@ public abstract class MetaLearnerBase<T, TInput, TOutput> : IMetaLearner<T, TInp
 
         // Perform meta-training
         var metaLoss = MetaTrain(taskBatch);
-
         _currentIteration++;
+
         stopwatch.Stop();
 
         // MetaTrainingStepResult constructor: metaLoss, taskLoss, accuracy, numTasks, iteration, timeMs
@@ -378,7 +386,8 @@ public abstract class MetaLearnerBase<T, TInput, TOutput> : IMetaLearner<T, TInp
     /// <inheritdoc/>
     public void SetMetaModel(IFullModel<T, TInput, TOutput> model)
     {
-        MetaModel = model ?? throw new ArgumentNullException(nameof(model));
+        Guard.NotNull(model);
+        MetaModel = model;
 
         // Reset optimizer state when the model changes to avoid stale momentum/velocity vectors
         // from the previous model's parameter space
@@ -731,6 +740,83 @@ public abstract class MetaLearnerBase<T, TInput, TOutput> : IMetaLearner<T, TInp
     }
 
     /// <summary>
+    /// Applies gradients with per-layer learning rates using <see cref="ILayeredModel{T}"/> metadata.
+    /// </summary>
+    /// <remarks>
+    /// <para>Per-layer learning rates are a key meta-learning technique where different parts of the
+    /// network adapt at different speeds. For example, early (feature extraction) layers might use
+    /// smaller learning rates to preserve general features, while later (task-specific) layers
+    /// use larger rates for faster adaptation.</para>
+    ///
+    /// <para><b>For Beginners:</b> When fine-tuning a neural network for a new task, you often
+    /// want to make small adjustments to early layers (which detect basic patterns) and larger
+    /// adjustments to later layers (which detect task-specific patterns). This method enables
+    /// that by using the layer structure to apply different learning rates to different layers.</para>
+    /// </remarks>
+    /// <param name="model">The model to update (must implement ILayeredModel).</param>
+    /// <param name="gradients">The full gradient vector.</param>
+    /// <param name="perLayerLearningRates">Learning rates for each layer, indexed by layer index.
+    /// If null or missing an index, uses <paramref name="defaultLearningRate"/>.</param>
+    /// <param name="defaultLearningRate">Default learning rate for layers not in the map.</param>
+    /// <returns>Updated parameter vector.</returns>
+    protected virtual Vector<T> ApplyPerLayerGradients(
+        IFullModel<T, TInput, TOutput> model,
+        Vector<T> gradients,
+        Dictionary<int, double>? perLayerLearningRates,
+        double defaultLearningRate)
+    {
+        if (model is not ILayeredModel<T> layeredModel || perLayerLearningRates == null)
+        {
+            return ApplyGradients(model.GetParameters(), gradients, defaultLearningRate);
+        }
+
+        var parameters = model.GetParameters();
+        if (gradients.Length != parameters.Length)
+        {
+            throw new InvalidOperationException(
+                $"Gradient length ({gradients.Length}) does not match parameter length ({parameters.Length}).");
+        }
+
+        var allLayerInfo = layeredModel.GetAllLayerInfo();
+        var updated = new Vector<T>(parameters.Length);
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            updated[i] = parameters[i];
+        }
+
+        foreach (var info in allLayerInfo.Where(l => l.ParameterCount > 0 && l.IsTrainable))
+        {
+            // Validate that the layer's parameter range is within bounds
+            if (info.ParameterOffset < 0 ||
+                info.ParameterOffset + info.ParameterCount > parameters.Length ||
+                info.ParameterOffset + info.ParameterCount > gradients.Length)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    $"[MetaLearnerBase] Skipping layer '{info.Name}' (index {info.Index}): " +
+                    $"ParameterOffset={info.ParameterOffset}, ParameterCount={info.ParameterCount} " +
+                    $"is out of bounds (parameters.Length={parameters.Length}, gradients.Length={gradients.Length}). " +
+                    "LayerInfo metadata may be stale or misconfigured.");
+                continue;
+            }
+
+            double lr = perLayerLearningRates.TryGetValue(info.Index, out double layerLr)
+                ? layerLr
+                : defaultLearningRate;
+
+            T lrT = NumOps.FromDouble(lr);
+
+            for (int i = 0; i < info.ParameterCount; i++)
+            {
+                int idx = info.ParameterOffset + i;
+                updated[idx] = NumOps.Subtract(parameters[idx],
+                    NumOps.Multiply(gradients[idx], lrT));
+            }
+        }
+
+        return updated;
+    }
+
+    /// <summary>
     /// Clips gradients to prevent exploding gradients.
     /// </summary>
     /// <param name="gradients">Gradients to clip.</param>
@@ -769,9 +855,119 @@ public abstract class MetaLearnerBase<T, TInput, TOutput> : IMetaLearner<T, TInp
         return Engine.Multiply(gradients, scale);
     }
 
+    /// <summary>
+    /// Updates auxiliary parameters using multi-sample SPSA (Simultaneous Perturbation Stochastic
+    /// Approximation) with a caller-provided loss function. The loss delegate must use the
+    /// auxiliary parameters (which are perturbed in-place via the <paramref name="auxParams"/> ref)
+    /// so that the finite-difference gradient estimate reflects their actual effect on the loss.
+    /// </summary>
+    /// <param name="taskBatch">The current task batch for loss evaluation.</param>
+    /// <param name="auxParams">The auxiliary parameters to update (modified in place).</param>
+    /// <param name="learningRate">Learning rate for the update step.</param>
+    /// <param name="computeLoss">
+    /// Delegate that computes the average loss over the task batch using the current state of
+    /// <paramref name="auxParams"/>. The delegate is called with params already perturbed,
+    /// so it should read the auxiliary param field directly (which is the same ref).
+    /// </param>
+    /// <param name="numSamples">Number of perturbation directions to average (default 3).</param>
+    /// <param name="epsilon">Perturbation magnitude for finite differences (default 1e-5).</param>
+    /// <remarks>
+    /// <para>
+    /// SPSA (Spall, 1992) estimates gradients using one-sided finite differences: one base
+    /// evaluation plus one perturbed evaluation per sample direction (numSamples + 1 total).
+    /// Multi-sample averaging reduces variance of the gradient estimate.
+    /// </para>
+    /// <para><b>For Beginners:</b> When we can't compute exact gradients for auxiliary parameters
+    /// (because they're not part of the main neural network), we estimate them by:
+    /// 1. Randomly perturbing all parameters simultaneously
+    /// 2. Measuring how the loss changes via a delegate that actually USES the perturbed params
+    /// 3. Inferring the gradient direction from the change
+    /// Doing this multiple times and averaging gives a more reliable gradient estimate.
+    /// </para>
+    /// </remarks>
+    protected void UpdateAuxiliaryParamsSPSA(
+        TaskBatch<T, TInput, TOutput> taskBatch,
+        ref Vector<T> auxParams,
+        double learningRate,
+        Func<TaskBatch<T, TInput, TOutput>, double> computeLoss,
+        int numSamples = 3,
+        double epsilon = 1e-5)
+    {
+        if (auxParams.Length == 0 || taskBatch.Tasks.Length == 0)
+            return;
+
+        // Guard hyperparameters to prevent divide-by-zero
+        numSamples = Math.Max(numSamples, 1);
+        epsilon = Math.Max(epsilon, 1e-10);
+
+        // Compute base loss once (shared across all samples)
+        // The delegate reads the current (unperturbed) aux params
+        double baseLoss = computeLoss(taskBatch);
+
+        // Accumulate gradient estimates across multiple perturbation directions
+        var gradientAccum = new double[auxParams.Length];
+
+        for (int s = 0; s < numSamples; s++)
+        {
+            // Generate random Rademacher direction (+1/-1 per component)
+            var direction = new double[auxParams.Length];
+            for (int i = 0; i < auxParams.Length; i++)
+                direction[i] = RandomGenerator.NextDouble() > 0.5 ? 1.0 : -1.0;
+
+            // Perturb parameters: auxParams += epsilon * direction
+            for (int i = 0; i < auxParams.Length; i++)
+                auxParams[i] = NumOps.Add(auxParams[i], NumOps.FromDouble(epsilon * direction[i]));
+
+            // Compute perturbed loss — delegate reads the now-perturbed aux params
+            double perturbedLoss = computeLoss(taskBatch);
+
+            // Restore parameters: auxParams -= epsilon * direction
+            for (int i = 0; i < auxParams.Length; i++)
+                auxParams[i] = NumOps.Subtract(auxParams[i], NumOps.FromDouble(epsilon * direction[i]));
+
+            // Accumulate per-component gradient estimate: g_i = (loss+ - loss0) / (epsilon * direction_i)
+            double directionalGrad = (perturbedLoss - baseLoss) / epsilon;
+            for (int i = 0; i < auxParams.Length; i++)
+                gradientAccum[i] += directionalGrad * direction[i];
+        }
+
+        // Average gradient estimates and apply update
+        double scale = learningRate / numSamples;
+        for (int i = 0; i < auxParams.Length; i++)
+            auxParams[i] = NumOps.Subtract(auxParams[i], NumOps.FromDouble(scale * gradientAccum[i]));
+    }
+
     #endregion
 
     #region Helper Methods
+
+    /// <summary>
+    /// Computes the element-wise average of a list of vectors.
+    /// </summary>
+    /// <param name="vectors">The vectors to average. If lengths differ, shorter vectors
+    /// contribute zeros for the missing trailing dimensions (truncated to first vector's length).</param>
+    /// <returns>The element-wise average vector, or an empty vector if the list is empty.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Given multiple gradient vectors (one per task), this computes
+    /// the average gradient by summing all vectors element-wise and dividing by the count.
+    /// This is used to aggregate gradients across a batch of meta-learning tasks.</para>
+    /// </remarks>
+    protected Vector<T> AverageVectors(List<Vector<T>> vectors)
+    {
+        if (vectors.Count == 0) return new Vector<T>(0);
+        int expectedLength = vectors[0].Length;
+        var result = new Vector<T>(expectedLength);
+        foreach (var v in vectors)
+        {
+            int len = Math.Min(v.Length, expectedLength);
+            for (int i = 0; i < len; i++)
+                result[i] = NumOps.Add(result[i], v[i]);
+        }
+        var scale = NumOps.FromDouble(1.0 / vectors.Count);
+        for (int i = 0; i < result.Length; i++)
+            result[i] = NumOps.Multiply(result[i], scale);
+        return result;
+    }
 
     /// <summary>
     /// Creates a TaskBatch from a list of MetaLearningTasks.
@@ -976,24 +1172,7 @@ public abstract class MetaLearnerBase<T, TInput, TOutput> : IMetaLearner<T, TInp
             return (IFullModel<T, TInput, TOutput>)cloneable.Clone();
         }
 
-        // Fallback: Create a shallow copy by copying parameters
-        // This preserves the original model structure while creating independent parameters
-        var parameters = MetaModel.GetParameters();
-        if (parameters.Length > 0)
-        {
-            // Create a copy of parameters to avoid shared state
-            var clonedParams = new Vector<T>(parameters.Length);
-            for (int i = 0; i < parameters.Length; i++)
-            {
-                clonedParams[i] = parameters[i];
-            }
-
-            // Set the cloned parameters back (creates a new parameter vector internally)
-            MetaModel.SetParameters(clonedParams);
-        }
-
-        // If model doesn't implement ICloneable and can't be parameter-cloned,
-        // throw to prevent silent parameter corruption
+        // If model doesn't implement ICloneable, throw to prevent silent parameter corruption
         throw new InvalidOperationException(
             $"Cannot clone model of type {MetaModel.GetType().Name}. " +
             $"Meta-learning algorithms require models that implement ICloneable " +

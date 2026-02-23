@@ -2,8 +2,8 @@ using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
-using AiDotNet.NeuralNetworks.Diffusion;
-using AiDotNet.NeuralNetworks.Diffusion.Schedulers;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Diffusion.Schedulers;
 using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Diffusion;
@@ -56,8 +56,12 @@ public abstract class LatentDiffusionModelBase<T> : DiffusionModelBase<T>, ILate
     /// </summary>
     /// <param name="options">Configuration options for the diffusion model.</param>
     /// <param name="scheduler">Optional custom scheduler.</param>
-    protected LatentDiffusionModelBase(DiffusionModelOptions<T>? options = null, INoiseScheduler<T>? scheduler = null)
-        : base(options, scheduler)
+    /// <param name="architecture">Optional neural network architecture for custom layer configuration.</param>
+    protected LatentDiffusionModelBase(
+        DiffusionModelOptions<T>? options = null,
+        INoiseScheduler<T>? scheduler = null,
+        NeuralNetworkArchitecture<T>? architecture = null)
+        : base(options, scheduler, architecture)
     {
     }
 

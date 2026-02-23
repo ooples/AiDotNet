@@ -1,10 +1,35 @@
+using AiDotNet.Models.Options;
+
 namespace AiDotNet.Audio.Fingerprinting;
 
 /// <summary>
 /// Configuration options for Chromaprint fingerprinting.
 /// </summary>
-public class ChromaprintOptions
+/// <remarks>
+/// <para><b>For Beginners:</b> These options configure the Chromaprint model. Default values follow the original paper settings.</para>
+/// </remarks>
+public class ChromaprintOptions : ModelOptions
 {
+    /// <summary>Initializes a new instance with default values.</summary>
+    public ChromaprintOptions() { }
+
+    /// <summary>Initializes a new instance by copying from another instance.</summary>
+    /// <param name="other">The options instance to copy from.</param>
+    /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
+    public ChromaprintOptions(ChromaprintOptions other)
+    {
+        if (other == null)
+            throw new ArgumentNullException(nameof(other));
+
+        Seed = other.Seed;
+        SampleRate = other.SampleRate;
+        FftSize = other.FftSize;
+        HopLength = other.HopLength;
+        ContextSize = other.ContextSize;
+        HashStep = other.HashStep;
+        MaxBitDifference = other.MaxBitDifference;
+    }
+
     /// <summary>
     /// Gets or sets the sample rate (default 11025 Hz for efficiency).
     /// </summary>

@@ -50,6 +50,7 @@ namespace AiDotNet.PhysicsInformed.Interfaces
     /// - Can handle noisy and sparse data
     /// - No need for iterative PDE solves
     /// </remarks>
+    [AiDotNet.Configuration.YamlConfigurable("InverseProblem")]
     public interface IInverseProblem<T>
     {
         /// <summary>
@@ -169,6 +170,7 @@ namespace AiDotNet.PhysicsInformed.Interfaces
     /// Provides gradient information for inverse problem parameters.
     /// </summary>
     /// <typeparam name="T">The numeric type.</typeparam>
+    [AiDotNet.Configuration.YamlConfigurable("InverseProblemGradient")]
     public interface IInverseProblemGradient<T> : IInverseProblem<T>
     {
         /// <summary>
@@ -259,7 +261,7 @@ namespace AiDotNet.PhysicsInformed.Interfaces
     /// Configuration options for inverse problem PINN training.
     /// </summary>
     /// <typeparam name="T">The numeric type.</typeparam>
-    public class InverseProblemOptions<T>
+    public class InverseProblemOptions<T> : AiDotNet.Models.Options.ModelOptions
     {
         /// <summary>
         /// The type of regularization to apply.

@@ -1,3 +1,4 @@
+#nullable disable
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using AiDotNet.Initialization;
@@ -220,7 +221,7 @@ public class Phase2GateTests
     [Fact]
     public void InitializationStrategy_Lazy_HasCorrectProperties()
     {
-        var strategy = InitializationStrategy<float>.Lazy;
+        var strategy = InitializationStrategies<float>.Lazy;
 
         Assert.True(strategy.IsLazy);
         Assert.False(strategy.LoadFromExternal);
@@ -229,7 +230,7 @@ public class Phase2GateTests
     [Fact]
     public void InitializationStrategy_Eager_HasCorrectProperties()
     {
-        var strategy = InitializationStrategy<float>.Eager;
+        var strategy = InitializationStrategies<float>.Eager;
 
         Assert.False(strategy.IsLazy);
         Assert.False(strategy.LoadFromExternal);
@@ -238,7 +239,7 @@ public class Phase2GateTests
     [Fact]
     public void InitializationStrategy_Zero_HasCorrectProperties()
     {
-        var strategy = InitializationStrategy<float>.Zero;
+        var strategy = InitializationStrategies<float>.Zero;
 
         Assert.False(strategy.IsLazy);
         Assert.False(strategy.LoadFromExternal);
@@ -247,7 +248,7 @@ public class Phase2GateTests
     [Fact]
     public void InitializationStrategy_Zero_InitializesToZero()
     {
-        var strategy = InitializationStrategy<float>.Zero;
+        var strategy = InitializationStrategies<float>.Zero;
         var weights = new Tensor<float>(new[] { 10, 10 });
         var biases = new Tensor<float>(new[] { 10 });
 
@@ -279,7 +280,7 @@ public class Phase2GateTests
     [Fact]
     public void InitializationStrategy_Eager_InitializesWithXavier()
     {
-        var strategy = InitializationStrategy<float>.Eager;
+        var strategy = InitializationStrategies<float>.Eager;
         var weights = new Tensor<float>(new[] { 100, 100 });
 
         strategy.InitializeWeights(weights, 100, 100);
@@ -345,7 +346,7 @@ public class Phase2GateTests
     public void DenseLayer_LazyInit_IsNotInitializedAfterConstruction()
     {
         var layer = new DenseLayer<float>(100, 50,
-            initializationStrategy: InitializationStrategy<float>.Lazy);
+            initializationStrategy: InitializationStrategies<float>.Lazy);
 
         Assert.False(layer.IsInitialized);
     }
@@ -354,7 +355,7 @@ public class Phase2GateTests
     public void DenseLayer_LazyInit_IsInitializedAfterForward()
     {
         var layer = new DenseLayer<float>(100, 50,
-            initializationStrategy: InitializationStrategy<float>.Lazy);
+            initializationStrategy: InitializationStrategies<float>.Lazy);
 
         Assert.False(layer.IsInitialized);
 
@@ -369,7 +370,7 @@ public class Phase2GateTests
     public void DenseLayer_EagerInit_IsInitializedImmediately()
     {
         var layer = new DenseLayer<float>(100, 50,
-            initializationStrategy: InitializationStrategy<float>.Eager);
+            initializationStrategy: InitializationStrategies<float>.Eager);
 
         Assert.True(layer.IsInitialized);
     }
@@ -394,7 +395,7 @@ public class Phase2GateTests
         for (int i = 0; i < iterations; i++)
         {
             var layer = new DenseLayer<float>(inputSize, outputSize,
-                initializationStrategy: InitializationStrategy<float>.Eager);
+                initializationStrategy: InitializationStrategies<float>.Eager);
         }
         swEager.Stop();
 
@@ -403,7 +404,7 @@ public class Phase2GateTests
         for (int i = 0; i < iterations; i++)
         {
             var layer = new DenseLayer<float>(inputSize, outputSize,
-                initializationStrategy: InitializationStrategy<float>.Lazy);
+                initializationStrategy: InitializationStrategies<float>.Lazy);
         }
         swLazy.Stop();
 
@@ -416,9 +417,9 @@ public class Phase2GateTests
     public void DenseLayer_LazyInit_ProducesCorrectOutput()
     {
         var eagerLayer = new DenseLayer<float>(10, 5,
-            initializationStrategy: InitializationStrategy<float>.Zero);
+            initializationStrategy: InitializationStrategies<float>.Zero);
         var lazyLayer = new DenseLayer<float>(10, 5,
-            initializationStrategy: InitializationStrategy<float>.Lazy);
+            initializationStrategy: InitializationStrategies<float>.Lazy);
 
         // Set the lazy layer's strategy to also use zero init after it's created
         // We need to test that the forward pass produces valid output
@@ -440,7 +441,7 @@ public class Phase2GateTests
     public void DenseLayer_LazyInit_ThreadSafe()
     {
         var layer = new DenseLayer<float>(100, 50,
-            initializationStrategy: InitializationStrategy<float>.Lazy);
+            initializationStrategy: InitializationStrategies<float>.Lazy);
         var exceptions = new ConcurrentBag<Exception>();
 
         // Multiple threads trying to initialize simultaneously
@@ -468,7 +469,7 @@ public class Phase2GateTests
         var layer = new ConvolutionalLayer<float>(
             inputDepth: 3, inputHeight: 32, inputWidth: 32,
             outputDepth: 16, kernelSize: 3,
-            initializationStrategy: InitializationStrategy<float>.Lazy);
+            initializationStrategy: InitializationStrategies<float>.Lazy);
 
         Assert.False(layer.IsInitialized);
     }
@@ -479,7 +480,7 @@ public class Phase2GateTests
         var layer = new ConvolutionalLayer<float>(
             inputDepth: 3, inputHeight: 32, inputWidth: 32,
             outputDepth: 16, kernelSize: 3,
-            initializationStrategy: InitializationStrategy<float>.Lazy);
+            initializationStrategy: InitializationStrategies<float>.Lazy);
 
         Assert.False(layer.IsInitialized);
 
@@ -496,7 +497,7 @@ public class Phase2GateTests
         var layer = new ConvolutionalLayer<float>(
             inputDepth: 3, inputHeight: 32, inputWidth: 32,
             outputDepth: 16, kernelSize: 3,
-            initializationStrategy: InitializationStrategy<float>.Eager);
+            initializationStrategy: InitializationStrategies<float>.Eager);
 
         Assert.True(layer.IsInitialized);
     }
@@ -527,7 +528,7 @@ public class Phase2GateTests
         {
             var layer = new ConvolutionalLayer<float>(
                 inputDepth, inputHeight, inputWidth, outputDepth, kernelSize,
-                initializationStrategy: InitializationStrategy<float>.Eager);
+                initializationStrategy: InitializationStrategies<float>.Eager);
         }
         swEager.Stop();
 
@@ -537,7 +538,7 @@ public class Phase2GateTests
         {
             var layer = new ConvolutionalLayer<float>(
                 inputDepth, inputHeight, inputWidth, outputDepth, kernelSize,
-                initializationStrategy: InitializationStrategy<float>.Lazy);
+                initializationStrategy: InitializationStrategies<float>.Lazy);
         }
         swLazy.Stop();
 
@@ -552,7 +553,7 @@ public class Phase2GateTests
         var layer = new ConvolutionalLayer<float>(
             inputDepth: 3, inputHeight: 32, inputWidth: 32,
             outputDepth: 16, kernelSize: 3, stride: 1, padding: 1,
-            initializationStrategy: InitializationStrategy<float>.Lazy);
+            initializationStrategy: InitializationStrategies<float>.Lazy);
 
         var input = new Tensor<float>(new[] { 1, 3, 32, 32 });
         var output = layer.Forward(input);

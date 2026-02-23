@@ -1,3 +1,5 @@
+using AiDotNet.NeuralNetworks.Options;
+
 namespace AiDotNet.NeuralNetworks;
 
 /// <summary>
@@ -30,6 +32,11 @@ namespace AiDotNet.NeuralNetworks;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
 {
+    private readonly DeepBeliefNetworkOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// Gets or sets the list of RBM layers for greedy layer-wise pre-training.
     /// </summary>
@@ -183,9 +190,13 @@ public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
         T? learningRate = default,
         int epochs = 10,
         int batchSize = 32,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        DeepBeliefNetworkOptions? options = null)
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
+        _options = options ?? new DeepBeliefNetworkOptions();
+        Options = _options;
+
         _learningRate = learningRate ?? NumOps.FromDouble(0.01);
         _epochs = epochs;
         _batchSize = batchSize;

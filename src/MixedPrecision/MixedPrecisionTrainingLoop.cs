@@ -2,6 +2,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Optimizers;
+using AiDotNet.Validation;
 
 namespace AiDotNet.MixedPrecision;
 
@@ -49,6 +50,7 @@ public class MixedPrecisionTrainingLoop<T>
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ILossFunction<T> _lossFunction;
     private readonly MixedPrecisionContext _context;
+    private readonly LayerPrecisionPolicy _policy;
 
     /// <summary>
     /// Gets the total number of training steps performed.
@@ -77,12 +79,14 @@ public class MixedPrecisionTrainingLoop<T>
     /// <param name="optimizer">The optimizer to use for parameter updates.</param>
     /// <param name="lossFunction">The loss function to minimize.</param>
     /// <param name="context">The mixed-precision training context.</param>
+    /// <param name="policy">The layer precision policy (optional, uses default based on config if null).</param>
     /// <exception cref="ArgumentException">Thrown when T is not float.</exception>
     public MixedPrecisionTrainingLoop(
         NeuralNetworkBase<T> network,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer,
         ILossFunction<T> lossFunction,
-        MixedPrecisionContext context)
+        MixedPrecisionContext context,
+        LayerPrecisionPolicy? policy = null)
     {
         if (typeof(T) != typeof(float))
         {
@@ -90,11 +94,34 @@ public class MixedPrecisionTrainingLoop<T>
                 $"Mixed-precision training requires T = float, got T = {typeof(T).Name}");
         }
 
-        _network = network ?? throw new ArgumentNullException(nameof(network));
-        _optimizer = optimizer ?? throw new ArgumentNullException(nameof(optimizer));
-        _lossFunction = lossFunction ?? throw new ArgumentNullException(nameof(lossFunction));
-        _context = context ?? throw new ArgumentNullException(nameof(context));
+        Guard.NotNull(network);
+        _network = network;
+        Guard.NotNull(optimizer);
+        _optimizer = optimizer;
+        Guard.NotNull(lossFunction);
+        _lossFunction = lossFunction;
+        Guard.NotNull(context);
+        _context = context;
+
+        // Select appropriate policy based on precision type
+        _policy = policy ?? GetDefaultPolicy(context.Config.PrecisionType);
+
         TotalSteps = 0;
+    }
+
+    /// <summary>
+    /// Gets the default layer precision policy based on the precision type.
+    /// </summary>
+    private static LayerPrecisionPolicy GetDefaultPolicy(Enums.MixedPrecisionType precisionType)
+    {
+        return precisionType switch
+        {
+            Enums.MixedPrecisionType.BF16 => LayerPrecisionPolicy.ForBF16(),
+            Enums.MixedPrecisionType.FP8_E4M3 or
+            Enums.MixedPrecisionType.FP8_E5M2 or
+            Enums.MixedPrecisionType.FP8_Hybrid => LayerPrecisionPolicy.ForFP8(),
+            _ => LayerPrecisionPolicy.ForFP16()
+        };
     }
 
     /// <summary>
@@ -116,15 +143,25 @@ public class MixedPrecisionTrainingLoop<T>
     {
         TotalSteps++;
 
-        // Step 1: Cast weights to FP16 (if not already done)
-        // Note: In a real implementation, this would happen at the layer level
-        // For now, we'll work with the existing architecture
+        Tensor<T> output;
 
-        // Step 2: Forward pass
-        // The network computes in whatever precision it's configured for
-        var output = _network.ForwardWithMemory(input);
+        // Wrap forward pass in MixedPrecisionScope for automatic precision management
+        // Layers can check MixedPrecisionScope.Current to determine their precision
+        using (new MixedPrecisionScope(_context, _policy))
+        {
+            // Step 1: Cast master weights to FP16 working weights
+            // This prepares the context for layers that need to access working weights
+            _context.CastWeightsToFP16();
 
-        // Step 3: Compute loss in FP32
+            // Step 2: Forward pass within the scope
+            // Layers can check MixedPrecisionScope.Current to access:
+            // - MixedPrecisionScope.Current.ShouldUseFP32(layerName) to check if they need full precision
+            // - MixedPrecisionScope.Current.GetFP32Tensor(name) to get FP32 versions of registered tensors
+            output = _network.ForwardWithMemory(input);
+        }
+        // Scope is disposed here, MixedPrecisionScope.Current becomes null
+
+        // Step 3: Compute loss in FP32 (outside scope for numerical stability)
         var outputVector = output.ToVector();
         var targetVector = target.ToVector();
         var loss = _lossFunction.CalculateLoss(outputVector, targetVector);
@@ -137,7 +174,7 @@ public class MixedPrecisionTrainingLoop<T>
         // Compute error gradient
         var errorVector = _lossFunction.CalculateDerivative(outputVector, targetVector);
 
-        // Scale the error by the scale factor (not by loss * scale)
+        // Scale the error by the scale factor to prevent gradient underflow
         var scaledError = new Vector<T>(errorVector.Length);
         for (int i = 0; i < errorVector.Length; i++)
         {
@@ -146,7 +183,7 @@ public class MixedPrecisionTrainingLoop<T>
 
         var errorTensor = Tensor<T>.FromVector(scaledError, output.Shape);
 
-        // Backpropagate
+        // Backpropagate with scaled gradients
         _network.Backpropagate(errorTensor);
 
         // Step 6: Get gradients and unscale them
@@ -159,6 +196,7 @@ public class MixedPrecisionTrainingLoop<T>
         if (!isValid)
         {
             // Gradient overflow detected - skip this update
+            // The LossScaler has already reduced the scale for the next iteration
             return false;
         }
 
@@ -167,11 +205,16 @@ public class MixedPrecisionTrainingLoop<T>
         var parameters = _network.GetParameters();
         var updatedModel = _optimizer.ApplyGradients(parameters, gradients, _network);
 
-        // Update network parameters
+        // Update network parameters from master weights
         _network.SetParameters(updatedModel.GetParameters());
 
         return true;
     }
+
+    /// <summary>
+    /// Gets the layer precision policy used by this training loop.
+    /// </summary>
+    public LayerPrecisionPolicy Policy => _policy;
 
     /// <summary>
     /// Gets statistics about the training process.
@@ -183,6 +226,7 @@ public class MixedPrecisionTrainingLoop<T>
                $"TotalSteps={TotalSteps}, " +
                $"SkippedSteps={SkippedSteps} ({(double)SkippedSteps / Math.Max(1, TotalSteps):P2}), " +
                $"CurrentScale={CurrentLossScale:F0}, " +
-               $"LastLoss={LastLoss}";
+               $"LastLoss={LastLoss}, " +
+               $"Policy={_policy.DefaultPrecision}";
     }
 }

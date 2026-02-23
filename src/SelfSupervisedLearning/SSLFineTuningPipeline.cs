@@ -1,5 +1,6 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Validation;
 
 namespace AiDotNet.SelfSupervisedLearning;
 
@@ -47,7 +48,8 @@ public class SSLFineTuningPipeline<T>
         int encoderOutputDim,
         int numClasses)
     {
-        _encoder = encoder ?? throw new ArgumentNullException(nameof(encoder));
+        Guard.NotNull(encoder);
+        _encoder = encoder;
         _encoderOutputDim = encoderOutputDim;
         _numClasses = numClasses;
         _config = new FineTuningConfig();

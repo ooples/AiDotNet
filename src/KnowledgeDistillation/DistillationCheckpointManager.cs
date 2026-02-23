@@ -1,6 +1,7 @@
 using AiDotNet.Interfaces;
 using AiDotNet.KnowledgeDistillation.Strategies;
 using Newtonsoft.Json;
+using AiDotNet.Validation;
 
 namespace AiDotNet.KnowledgeDistillation;
 
@@ -67,7 +68,8 @@ public class DistillationCheckpointManager<T>
     /// </remarks>
     public DistillationCheckpointManager(DistillationCheckpointConfig config)
     {
-        _config = config ?? throw new ArgumentNullException(nameof(config));
+        Guard.NotNull(config);
+        _config = config;
         _savedCheckpoints = new List<CheckpointMetadata>();
         _batchCounter = 0;
 

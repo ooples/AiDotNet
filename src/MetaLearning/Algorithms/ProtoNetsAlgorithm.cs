@@ -6,6 +6,7 @@ using AiDotNet.MetaLearning.Options;
 using AiDotNet.Models;
 using AiDotNet.Models.Results;
 using AiDotNet.Tensors;
+using AiDotNet.Validation;
 
 namespace AiDotNet.MetaLearning.Algorithms;
 
@@ -83,6 +84,9 @@ namespace AiDotNet.MetaLearning.Algorithms;
 public class ProtoNetsAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private readonly ProtoNetsOptions<T, TInput, TOutput> _protoNetsOptions;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _protoNetsOptions;
 
     /// <summary>
     /// Attention weights for prototype enhancement (if enabled).
@@ -913,9 +917,12 @@ public class PrototypicalModel<T, TInput, TOutput> : IModel<TInput, TOutput, Mod
         ProtoNetsOptions<T, TInput, TOutput> options,
         INumericOperations<T> numOps)
     {
-        _featureEncoder = featureEncoder ?? throw new ArgumentNullException(nameof(featureEncoder));
-        _options = options ?? throw new ArgumentNullException(nameof(options));
-        _numOps = numOps ?? throw new ArgumentNullException(nameof(numOps));
+        Guard.NotNull(featureEncoder);
+        _featureEncoder = featureEncoder;
+        Guard.NotNull(options);
+        _options = options;
+        Guard.NotNull(numOps);
+        _numOps = numOps;
         _classPrototypes = new Dictionary<int, Vector<T>>();
 
         // Compute prototypes from support set

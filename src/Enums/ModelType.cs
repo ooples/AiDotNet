@@ -133,6 +133,19 @@ public enum ModelType
     GradientBoosting,
 
     /// <summary>
+    /// A histogram-based gradient boosting model that uses binned features for fast training.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Histogram Gradient Boosting is a faster version of gradient boosting
+    /// that groups similar feature values into "bins" (like putting numbers into buckets).
+    /// This makes training much faster, especially for large datasets, while often achieving
+    /// similar accuracy. It's similar to popular libraries like LightGBM and XGBoost.
+    /// </para>
+    /// </remarks>
+    HistGradientBoosting,
+
+    /// <summary>
     /// A boosting algorithm specifically designed for regression problems.
     /// </summary>
     /// <remarks>
@@ -576,6 +589,47 @@ public enum ModelType
     /// </para>
     /// </remarks>
     PoissonRegression,
+
+    /// <summary>
+    /// A generalized linear model for positive continuous data with right-skewed distributions.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Gamma Regression is used when you need to predict positive continuous values
+    /// that tend to be skewed to the right (like income, claim amounts, or time durations). Unlike linear
+    /// regression, it naturally handles data where larger values have more variability, and it ensures
+    /// predictions are always positive. Common applications include insurance claims, hospital lengths
+    /// of stay, and any data where zeros are impossible and large values are more variable.
+    /// </para>
+    /// </remarks>
+    GammaRegression,
+
+    /// <summary>
+    /// A generalized linear model for positive continuous data with inverse Gaussian distribution.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Inverse Gaussian Regression models positive continuous data where the variance
+    /// increases faster than in Gamma regression. It's useful for modeling time-to-event data, degradation
+    /// processes, and reliability analysis. The inverse Gaussian distribution naturally captures the
+    /// physics of many real-world processes involving first passage times.
+    /// </para>
+    /// </remarks>
+    InverseGaussianRegression,
+
+    /// <summary>
+    /// A flexible generalized linear model that encompasses several distributions as special cases.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Tweedie Regression is like a Swiss Army knife of regression models - it can
+    /// behave like Poisson, Gamma, or inverse Gaussian regression depending on a "power" parameter. It's
+    /// especially useful for data with many zeros and positive continuous values (like insurance claims
+    /// where many customers have no claims but some have large claims). By tuning the power parameter,
+    /// you can find the distribution that best fits your data.
+    /// </para>
+    /// </remarks>
+    TweedieRegression,
 
     /// <summary>
     /// A model for predicting categorical outcomes with more than two possible values.
@@ -1875,6 +1929,176 @@ public enum ModelType
     /// </remarks>
     VotingClassifier,
 
+    /// <summary>
+    /// Ordinal regression classifier for predicting ordered categorical outcomes.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Ordinal Regression is used when your categories have a natural order but the distances
+    /// between them aren't necessarily equal. Examples include star ratings (1-5 stars), education levels
+    /// (high school, bachelor's, master's, PhD), or pain levels (none, mild, moderate, severe).
+    /// Unlike regular classification that ignores the order, ordinal regression uses this ordering information
+    /// to make better predictions and meaningful errors (predicting 3 when the answer is 4 is better than predicting 1).
+    /// </para>
+    /// </remarks>
+    OrdinalRegression,
+
+    // ==================== Semi-Supervised Learning ====================
+
+    /// <summary>
+    /// Self-Training classifier that iteratively labels unlabeled data with high confidence predictions.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Self-Training is like a student who learns from a small set of labeled examples,
+    /// then uses what they learned to make guesses about unlabeled examples. When they're confident about
+    /// a guess, they treat it as a real example and continue learning. This is useful when labeling data
+    /// is expensive but you have lots of unlabeled data.
+    /// </para>
+    /// </remarks>
+    SelfTrainingClassifier,
+
+    /// <summary>
+    /// Label Propagation classifier that spreads labels through a similarity graph.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Label Propagation builds a graph where similar data points are connected.
+    /// Labels from the few labeled examples then spread through the graph to nearby unlabeled points,
+    /// like colors spreading through connected water droplets. Points that are similar to labeled
+    /// examples get the same labels.
+    /// </para>
+    /// </remarks>
+    LabelPropagation,
+
+    /// <summary>
+    /// Label Spreading classifier similar to Label Propagation but with normalization for stability.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Label Spreading is like Label Propagation but more careful. It normalizes
+    /// the connections in the graph so that labels spread more evenly and the process is more stable.
+    /// This helps when your data has clusters of different sizes or densities.
+    /// </para>
+    /// </remarks>
+    LabelSpreading,
+
+    // ==================== Multi-Label Classification ====================
+
+    /// <summary>
+    /// Binary Relevance classifier that trains one binary classifier per label independently.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Binary Relevance is the simplest multi-label approach. It trains a separate
+    /// binary classifier for each label (e.g., "is this a comedy?" "is this an action movie?"). Each classifier
+    /// makes an independent yes/no decision. Simple but ignores label correlations.
+    /// </para>
+    /// </remarks>
+    BinaryRelevanceClassifier,
+
+    /// <summary>
+    /// Label Powerset classifier that treats each unique label combination as a separate class.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Label Powerset converts multi-label into multi-class by treating each unique
+    /// combination of labels as its own class. For example, "action+comedy" becomes one class, "drama+romance"
+    /// becomes another. Captures label correlations perfectly but may have many classes with few examples.
+    /// </para>
+    /// </remarks>
+    LabelPowersetClassifier,
+
+    // ==================== Finance Models ====================
+
+    /// <summary>
+    /// PatchTST time series forecasting model.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> PatchTST splits a time series into small patches and uses
+    /// transformer attention to forecast future values.
+    /// </para>
+    /// </remarks>
+    PatchTST,
+
+    /// <summary>
+    /// Inverted Transformer (iTransformer) for time series forecasting.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> iTransformer treats each variable as a token so the model
+    /// learns relationships across features while forecasting.
+    /// </para>
+    /// </remarks>
+    ITransformer,
+
+    /// <summary>
+    /// DeepAR probabilistic forecasting model.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> DeepAR predicts future values by learning autoregressive
+    /// patterns and uncertainty from historical data.
+    /// </para>
+    /// </remarks>
+    DeepAR,
+
+    /// <summary>
+    /// N-BEATS neural basis expansion model for forecasting.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> N-BEATS breaks a time series into trend and seasonal parts
+    /// to make accurate forecasts.
+    /// </para>
+    /// </remarks>
+    NBEATS,
+
+    /// <summary>
+    /// Temporal Fusion Transformer (TFT) forecasting model.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> TFT combines attention with gating to forecast multiple
+    /// steps ahead and provide interpretable signals.
+    /// </para>
+    /// </remarks>
+    TFT,
+
+    /// <summary>
+    /// Neural Value at Risk model for financial risk estimation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> NeuralVaR estimates how much you could lose in a worst-case
+    /// scenario given a confidence level.
+    /// </para>
+    /// </remarks>
+    NeuralVaR,
+
+    /// <summary>
+    /// TabNet model for structured financial risk prediction.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> TabNet uses attentive feature selection to focus on the
+    /// most important columns in tabular data.
+    /// </para>
+    /// </remarks>
+    TabNet,
+
+    /// <summary>
+    /// TabTransformer model for tabular financial data.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> TabTransformer applies transformer attention to columns
+    /// in a table to model feature interactions.
+    /// </para>
+    /// </remarks>
+    TabTransformer,
+
     // ==================== Clustering Models ====================
 
     /// <summary>
@@ -2074,7 +2298,788 @@ public enum ModelType
     /// Examples: FastDVDNet, VRT
     /// </para>
     /// </remarks>
-    VideoDenoising
+    VideoDenoising,
+
+    // ==================== Imbalanced Learning ====================
+
+    /// <summary>
+    /// SMOTE (Synthetic Minority Over-sampling Technique) for handling imbalanced data.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> SMOTE creates synthetic minority class samples by interpolating
+    /// between existing minority samples. This helps balance datasets where one class is
+    /// much smaller than others, improving classifier performance on minority classes.
+    /// </para>
+    /// </remarks>
+    SMOTE,
+
+    /// <summary>
+    /// ADASYN (Adaptive Synthetic Sampling) for handling imbalanced data.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> ADASYN is like SMOTE but smarter - it creates more synthetic samples
+    /// in regions where minority samples are harder to learn (surrounded by majority samples).
+    /// This focuses oversampling effort where it's most needed.
+    /// </para>
+    /// </remarks>
+    ADASYN,
+
+    /// <summary>
+    /// Borderline-SMOTE for focused oversampling near decision boundaries.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Borderline-SMOTE only creates synthetic samples from minority samples
+    /// that are near the decision boundary (borderline cases). This is where the classifier
+    /// needs the most help distinguishing between classes.
+    /// </para>
+    /// </remarks>
+    BorderlineSMOTE,
+
+    /// <summary>
+    /// Random Oversampling that duplicates minority samples.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Random Oversampling simply duplicates existing minority samples
+    /// until classes are balanced. It's the simplest approach but can lead to overfitting
+    /// since it creates exact copies rather than new synthetic samples.
+    /// </para>
+    /// </remarks>
+    RandomOverSampler,
+
+    /// <summary>
+    /// Random Undersampling that removes majority samples.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Random Undersampling randomly removes majority class samples
+    /// until classes are balanced. It's fast but loses potentially useful information.
+    /// Good for very large datasets where data loss is acceptable.
+    /// </para>
+    /// </remarks>
+    RandomUnderSampler,
+
+    /// <summary>
+    /// Tomek Links undersampling for cleaning decision boundaries.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Tomek Links removes majority samples that form "Tomek links"
+    /// with minority samples - pairs where each is the other's nearest neighbor. This cleans
+    /// up ambiguous boundary regions without removing too many samples.
+    /// </para>
+    /// </remarks>
+    TomekLinksUndersampler,
+
+    /// <summary>
+    /// Edited Nearest Neighbors (ENN) undersampling for removing noisy samples.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> ENN removes majority samples that would be misclassified by
+    /// their k nearest neighbors. This removes noisy and borderline samples, creating
+    /// a cleaner decision boundary.
+    /// </para>
+    /// </remarks>
+    EditedNearestNeighborsUndersampler,
+
+    /// <summary>
+    /// NearMiss undersampling that keeps majority samples near minority samples.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> NearMiss intelligently selects which majority samples to keep
+    /// based on their distance to minority samples. It keeps the most informative samples
+    /// near the decision boundary rather than removing randomly.
+    /// </para>
+    /// </remarks>
+    NearMissUndersampler,
+
+    /// <summary>
+    /// SMOTE + ENN combination (SMOTEENN) for balanced and clean data.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> SMOTEENN first applies SMOTE to oversample, then applies ENN
+    /// to clean up noisy samples from both classes. This combination often produces better
+    /// results than either method alone - balanced AND clean data.
+    /// </para>
+    /// </remarks>
+    SMOTEENN,
+
+    /// <summary>
+    /// SMOTE + Tomek Links combination (SMOTETomek) for balanced and clean data.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> SMOTETomek first applies SMOTE to oversample, then removes
+    /// Tomek links to clean the boundary. Less aggressive than SMOTEENN but still
+    /// improves the decision boundary after oversampling.
+    /// </para>
+    /// </remarks>
+    SMOTETomek,
+
+    // ==================== Survival Analysis ====================
+
+    /// <summary>
+    /// Kaplan-Meier estimator for non-parametric survival analysis.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Kaplan-Meier creates a survival curve showing the probability
+    /// of surviving beyond each time point. It handles censored data (subjects who haven't
+    /// had the event yet) naturally. It's the simplest survival method but doesn't use
+    /// patient features - everyone gets the same survival curve.
+    /// </para>
+    /// </remarks>
+    KaplanMeierEstimator,
+
+    /// <summary>
+    /// Cox Proportional Hazards model for survival analysis with covariates.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Cox model is the most widely used survival model. It tells you
+    /// how patient features (age, treatment, etc.) affect survival risk. Each feature gets
+    /// a "hazard ratio" - a value greater than 1 means higher risk, less than 1 means
+    /// lower risk. Unlike Kaplan-Meier, it personalizes survival predictions.
+    /// </para>
+    /// </remarks>
+    CoxProportionalHazards,
+
+    // ===== Causal Inference Models =====
+
+    /// <summary>
+    /// Propensity Score Matching for causal effect estimation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> PSM estimates treatment effects by matching treated individuals
+    /// to control individuals with similar propensity scores. Think of it as finding "twins"
+    /// who were equally likely to receive treatment, then comparing their outcomes.
+    /// </para>
+    /// </remarks>
+    PropensityScoreMatching,
+
+    /// <summary>
+    /// Inverse Probability Weighting for causal effect estimation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> IPW weights each observation by the inverse of its probability
+    /// of being in its actual treatment group. This creates a "pseudo-population" where
+    /// treatment is independent of covariates, like a randomized experiment.
+    /// </para>
+    /// </remarks>
+    InverseProbabilityWeighting,
+
+    /// <summary>
+    /// Doubly Robust estimator combining outcome modeling and propensity scores.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> The doubly robust estimator combines two approaches: modeling
+    /// the outcome and modeling the propensity score. It's "doubly robust" because it gives
+    /// correct results if EITHER model is correct, providing protection against misspecification.
+    /// </para>
+    /// </remarks>
+    DoublyRobustEstimator,
+
+    /// <summary>
+    /// Causal Forest for heterogeneous treatment effect estimation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Causal Forest is like Random Forest but for treatment effects.
+    /// It estimates how treatment effects vary across individuals based on their
+    /// characteristics, identifying who benefits most from treatment.
+    /// </para>
+    /// </remarks>
+    CausalForest,
+
+    // ===== Online Learning Models =====
+
+    /// <summary>
+    /// Online SGD Classifier for incremental binary classification.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This classifier learns from streaming data one example at a time.
+    /// It uses stochastic gradient descent to update a logistic regression model incrementally,
+    /// making it suitable for large-scale or real-time learning scenarios.
+    /// </para>
+    /// </remarks>
+    OnlineSGDClassifier,
+
+    /// <summary>
+    /// Online SGD Regressor for incremental regression.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Similar to OnlineSGDClassifier but for continuous targets.
+    /// Uses SGD to incrementally fit a linear regression model to streaming data.
+    /// </para>
+    /// </remarks>
+    OnlineSGDRegressor,
+
+    /// <summary>
+    /// Online Passive-Aggressive classifier for margin-based online learning.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> PA algorithms aggressively update when mistakes are made but stay
+    /// passive when predictions are correct. Good for noisy data and concept drift scenarios.
+    /// </para>
+    /// </remarks>
+    OnlinePassiveAggressiveClassifier,
+
+    /// <summary>
+    /// Online Passive-Aggressive regressor for incremental regression with aggressive updates on errors.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Like the PA classifier but for predicting continuous values.
+    /// Updates aggressively when the prediction error exceeds a threshold (epsilon-insensitive).
+    /// Good for online regression with streaming data.
+    /// </para>
+    /// </remarks>
+    OnlinePassiveAggressiveRegressor,
+
+    /// <summary>
+    /// A classifier for time series data using specialized feature extraction.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Time Series Classifiers are designed to classify sequences of data
+    /// points ordered in time. Examples include classifying ECG recordings, sensor data, or
+    /// activity recognition from accelerometer data.
+    /// </para>
+    /// </remarks>
+    TimeSeriesClassifier,
+
+    /// <summary>
+    /// An online (incremental) learning model that can learn from streaming data.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Online Learning models can update their knowledge one sample at a time.
+    /// This is useful when data arrives continuously (like social media feeds or sensor streams)
+    /// or when the dataset is too large to fit in memory. Examples include Hoeffding Tree and
+    /// Online Naive Bayes.
+    /// </para>
+    /// </remarks>
+    OnlineLearning,
+
+    /// <summary>
+    /// A classifier that assigns multiple labels to each sample.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Multi-label classifiers handle cases where each sample can have
+    /// multiple tags or categories. For example, a movie might be both "Action" and "Comedy".
+    /// Examples include ML-kNN and RAkEL.
+    /// </para>
+    /// </remarks>
+    MultiLabelClassifier,
+
+    /// <summary>
+    /// A survival analysis model for time-to-event prediction.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Survival models predict when an event will occur, handling cases
+    /// where some events haven't happened yet (censoring). Used in medical studies, churn
+    /// prediction, and reliability engineering.
+    /// </para>
+    /// </remarks>
+    SurvivalModel,
+
+    /// <summary>
+    /// A causal inference model for estimating treatment effects.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Causal models estimate what would happen if we apply a treatment
+    /// or intervention. Unlike prediction, they answer "what if" questions about cause and effect.
+    /// </para>
+    /// </remarks>
+    CausalModel,
+
+    /// <summary>
+    /// An ordinal classifier for ordered categories.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Ordinal classifiers handle categories with a natural order like
+    /// ratings (1-5 stars) or education levels. They consider that predicting nearby categories
+    /// is better than predicting distant ones.
+    /// </para>
+    /// </remarks>
+    OrdinalClassifier,
+
+    /// <summary>
+    /// Ordinal logistic regression (proportional odds model).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> A standard approach for ordinal data that models cumulative
+    /// probabilities. It assumes the effect of each feature is the same regardless of
+    /// which threshold is being considered (proportional odds assumption).
+    /// </para>
+    /// </remarks>
+    OrdinalLogisticRegression,
+
+    /// <summary>
+    /// Ordinal ridge regression with regularization.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Like ordinal logistic regression but with L2 regularization
+    /// that prevents overfitting by penalizing large coefficients. Useful when you have
+    /// many features relative to samples.
+    /// </para>
+    /// </remarks>
+    OrdinalRidgeRegression,
+
+    /// <summary>
+    /// Histogram-based gradient boosting classifier.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> A fast gradient boosting implementation that uses histograms
+    /// to bin continuous features. Much faster than traditional gradient boosting on large
+    /// datasets while maintaining similar accuracy.
+    /// </para>
+    /// </remarks>
+    HistGradientBoostingClassifier,
+
+    /// <summary>
+    /// Balanced random forest for imbalanced classification.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> A random forest variant that handles class imbalance by
+    /// sampling each bootstrap sample to have equal numbers of each class. Better than
+    /// standard random forests when one class is rare.
+    /// </para>
+    /// </remarks>
+    BalancedRandomForestClassifier,
+
+    /// <summary>
+    /// Easy ensemble classifier for imbalanced data.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> An ensemble method that trains multiple classifiers on different
+    /// balanced subsets created by undersampling the majority class. Effectively utilizes
+    /// all majority class samples across the ensemble.
+    /// </para>
+    /// </remarks>
+    EasyEnsembleClassifier,
+
+    /// <summary>
+    /// Balanced Bagging Classifier for imbalanced datasets.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Bagging with undersampling. Creates diverse classifiers by training
+    /// each on a balanced bootstrap sample, combining their predictions via majority voting.
+    /// </para>
+    /// </remarks>
+    BalancedBaggingClassifier,
+
+    // ==================== Additional Survival Analysis ====================
+
+    /// <summary>
+    /// Nelson-Aalen estimator for non-parametric cumulative hazard estimation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Nelson-Aalen estimates the cumulative hazard function (accumulated
+    /// risk over time) rather than survival directly. It's useful for understanding how risk
+    /// accumulates and is related to Kaplan-Meier by S(t) = exp(-H(t)).
+    /// </para>
+    /// </remarks>
+    NelsonAalenEstimator,
+
+    /// <summary>
+    /// Weibull Accelerated Failure Time model for survival analysis.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Weibull AFT assumes survival times follow a Weibull distribution.
+    /// Unlike Cox models that focus on hazard ratios, AFT models directly model how covariates
+    /// accelerate or decelerate time to event. Useful when you want to interpret effects as
+    /// "this treatment increases survival time by X%".
+    /// </para>
+    /// </remarks>
+    WeibullAFT,
+
+    /// <summary>
+    /// Log-Normal Accelerated Failure Time model for survival analysis.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Log-Normal AFT assumes the log of survival times follows a normal
+    /// distribution. Good when survival times have a bell-curve shape after log-transformation.
+    /// Provides interpretable coefficients showing how covariates affect survival time.
+    /// </para>
+    /// </remarks>
+    LogNormalAFT,
+
+    /// <summary>
+    /// Random Survival Forest for survival analysis using ensemble of survival trees.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Random Survival Forest extends Random Forest to survival data.
+    /// It builds many survival trees using log-rank statistics to find splits and aggregates
+    /// their survival predictions. Handles non-linear relationships and interactions naturally.
+    /// </para>
+    /// </remarks>
+    RandomSurvivalForest,
+
+    // ==================== Causal Inference Meta-Learners ====================
+
+    /// <summary>
+    /// S-Learner (Single-model learner) for treatment effect estimation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> S-Learner trains a single model with treatment as just another feature.
+    /// To estimate treatment effects, it predicts outcomes with treatment=1 and treatment=0,
+    /// taking the difference. Simple but may underestimate heterogeneous treatment effects.
+    /// </para>
+    /// </remarks>
+    SLearner,
+
+    /// <summary>
+    /// T-Learner (Two-model learner) for treatment effect estimation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> T-Learner trains separate models for treated and control groups.
+    /// Treatment effect = prediction from treatment model - prediction from control model.
+    /// Better at capturing heterogeneous effects but may have issues when groups overlap poorly.
+    /// </para>
+    /// </remarks>
+    TLearner,
+
+    /// <summary>
+    /// X-Learner (Cross-learner) for treatment effect estimation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> X-Learner is a sophisticated approach that uses both treatment
+    /// models and imputed treatment effects in a cross-fitting procedure. It handles imbalanced
+    /// treatment groups better than T-Learner by leveraging information from both groups.
+    /// </para>
+    /// </remarks>
+    XLearner,
+
+    // ==================== Online Learning & Drift Detection ====================
+
+    /// <summary>
+    /// Hoeffding Tree classifier for incremental decision tree learning.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Hoeffding Tree is a decision tree that learns from streaming data.
+    /// It uses the Hoeffding bound to determine with high confidence when a split decision
+    /// is optimal, requiring only a small number of samples rather than the full dataset.
+    /// </para>
+    /// </remarks>
+    HoeffdingTreeClassifier,
+
+    /// <summary>
+    /// Adaptive Random Forest for online learning with concept drift handling.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> ARF extends Random Forest to handle streaming data and concept drift.
+    /// Each tree uses Hoeffding bounds for splitting and has a drift detector. When drift is
+    /// detected, trees are replaced with new ones trained on recent data.
+    /// </para>
+    /// </remarks>
+    AdaptiveRandomForestClassifier,
+
+    /// <summary>
+    /// Online Naive Bayes for incremental probabilistic classification.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Online Naive Bayes updates its probability estimates incrementally
+    /// as each new sample arrives. It's fast, memory-efficient, and naturally handles concept
+    /// drift as newer samples gradually update the statistics.
+    /// </para>
+    /// </remarks>
+    OnlineNaiveBayes,
+
+    /// <summary>
+    /// ADWIN (ADaptive WINdowing) drift detector.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> ADWIN maintains a variable-size window of recent data and detects
+    /// when the statistical properties change significantly. It automatically shrinks the window
+    /// when drift is detected, keeping only relevant recent data.
+    /// </para>
+    /// </remarks>
+    ADWIN,
+
+    /// <summary>
+    /// DDM (Drift Detection Method) for concept drift detection.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> DDM monitors the error rate of a classifier. When the error rate
+    /// increases significantly beyond a warning threshold, it signals drift. Simple and effective
+    /// for detecting gradual or sudden drift in classification accuracy.
+    /// </para>
+    /// </remarks>
+    DDM,
+
+    /// <summary>
+    /// EDDM (Early Drift Detection Method) for early drift detection.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> EDDM improves on DDM by monitoring the distance between errors
+    /// rather than just the error rate. This makes it more sensitive to gradual drift and
+    /// can detect drift earlier than DDM in many cases.
+    /// </para>
+    /// </remarks>
+    EDDM,
+
+    /// <summary>
+    /// Page-Hinkley test for change point detection in streams.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Page-Hinkley monitors for changes in the mean of a data stream.
+    /// It accumulates deviations from the expected mean and signals drift when this sum
+    /// exceeds a threshold. Good for detecting gradual or sudden mean shifts.
+    /// </para>
+    /// </remarks>
+    PageHinkley,
+
+    // ==================== Multi-Label Classification ====================
+
+    /// <summary>
+    /// RAkEL (Random k-Labelsets) for multi-label classification.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> RAkEL trains multiple Label Powerset classifiers on random subsets
+    /// of k labels. It combines their predictions through voting, capturing label correlations
+    /// while avoiding the exponential label combinations of full Label Powerset.
+    /// </para>
+    /// </remarks>
+    RAkEL,
+
+    /// <summary>
+    /// SVM-SMOTE for generating synthetic samples using SVM boundaries.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> SVM-SMOTE uses support vectors from an SVM to identify borderline
+    /// samples, then generates synthetic samples interpolating between these difficult cases.
+    /// This focuses synthetic data generation on the decision boundary where it matters most.
+    /// </para>
+    /// </remarks>
+    SvmSMOTE,
+
+    // ==================== Probabilistic Boosting Classifiers ====================
+
+    /// <summary>
+    /// NGBoost classifier for probabilistic classification with calibrated probabilities.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> NGBoost classifier produces well-calibrated probability estimates.
+    /// When it says 70% probability for a class, approximately 70% of similar predictions will
+    /// actually be that class. Uses natural gradients for stable training.
+    /// </para>
+    /// </remarks>
+    NGBoostClassifier,
+
+    /// <summary>
+    /// DART classifier with dropout regularization for boosting.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> DART classifier applies dropout regularization to gradient boosting.
+    /// During training, random trees are temporarily dropped when fitting new trees. This prevents
+    /// overfitting and produces more robust models, especially on smaller datasets.
+    /// </para>
+    /// </remarks>
+    DARTClassifier,
+
+    /// <summary>
+    /// Explainable Boosting Machine classifier - a glass-box interpretable model.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> EBM classifier provides both high accuracy and full interpretability.
+    /// You can see exactly how each feature contributes to predictions through visual shape functions.
+    /// Crucial for domains requiring explainable AI like healthcare and finance.
+    /// </para>
+    /// </remarks>
+    ExplainableBoostingClassifier,
+
+    /// <summary>
+    /// Natural Gradient Boosting for probabilistic regression.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> NGBoost predicts not just a single value but a full probability distribution.
+    /// Instead of saying "the house price will be $300,000", it says "the price is most likely $300,000
+    /// but could reasonably be anywhere from $250,000 to $350,000". This uncertainty information is
+    /// valuable for decision-making. NGBoost uses natural gradients for more stable training and
+    /// supports different distributions for different types of data.
+    /// </para>
+    /// </remarks>
+    NGBoost,
+
+    /// <summary>
+    /// Explainable Boosting Machine - a glass-box interpretable model.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> EBM is special because it gives you both high accuracy AND full explainability.
+    /// Unlike "black box" models, EBM shows you exactly how each feature affects predictions through
+    /// interpretable graphs called "shape functions." This is crucial for healthcare, finance, and
+    /// other domains where you need to explain and justify predictions.
+    /// </para>
+    /// </remarks>
+    ExplainableBoostingMachine,
+
+    /// <summary>
+    /// Generalized Additive Models for Location, Scale, and Shape.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> GAMLSS extends regression by modeling not just the mean but all parameters
+    /// of a probability distribution. This allows uncertainty (variance) to depend on features, giving
+    /// you proper prediction intervals that vary with input conditions. Useful for financial forecasting,
+    /// medical studies, and any scenario where uncertainty varies.
+    /// </para>
+    /// </remarks>
+    GAMLSS,
+
+    /// <summary>
+    /// Beta Regression for modeling proportions and rates in (0,1).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Beta Regression is used when predicting proportions (percentages, rates)
+    /// that must be between 0 and 1. Unlike regular regression, it always produces valid predictions
+    /// and properly handles the bounded nature of proportion data.
+    /// </para>
+    /// </remarks>
+    BetaRegression,
+
+    /// <summary>
+    /// Zero-Inflated regression for count data with excess zeros.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Zero-Inflated models are for counting things when there are lots of zeros.
+    /// They distinguish between "structural zeros" (people who never do something) and "sampling zeros"
+    /// (people who could but happened not to). Examples: insurance claims, store visits, disease counts.
+    /// </para>
+    /// </remarks>
+    ZeroInflatedRegression,
+
+    /// <summary>
+    /// DeepSurv - deep learning for survival analysis.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> DeepSurv predicts "time until an event" using neural networks.
+    /// Examples: patient survival, customer churn timing, equipment failure. It handles
+    /// censored data (when we don't know the exact event time) and outputs risk scores
+    /// and survival probabilities.
+    /// </para>
+    /// </remarks>
+    DeepSurv,
+
+    /// <summary>
+    /// DeepHit - deep learning for survival analysis with competing risks.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> DeepHit directly predicts the probability of an event at each time point
+    /// without assuming proportional hazards. Unlike DeepSurv, it can handle multiple competing risks
+    /// (e.g., patient could die from disease OR treatment side effects). It outputs probability
+    /// distributions over discrete time bins.
+    /// </para>
+    /// </remarks>
+    DeepHit,
+
+    /// <summary>
+    /// DART - Dropouts meet Multiple Additive Regression Trees.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> DART applies dropout regularization to gradient boosting. During training,
+    /// random trees are "dropped out" (temporarily removed) when fitting new trees. This prevents
+    /// overfitting and improves generalization, similar to dropout in neural networks.
+    /// </para>
+    /// </remarks>
+    DART,
+
+    /// <summary>
+    /// Mixed-Effects Model (Hierarchical/Multilevel) for clustered data.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Mixed-effects models handle data with natural grouping (students in schools,
+    /// patients in hospitals, measurements over time). They estimate both population-level patterns
+    /// (fixed effects) and group-level variations (random effects), properly accounting for the
+    /// correlation structure in hierarchical data.
+    /// </para>
+    /// </remarks>
+    MixedEffectsModel,
+
+    /// <summary>
+    /// Generalized Linear Mixed-Effects Model (GLMM) for non-Gaussian hierarchical data.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> GLMMs extend mixed models to non-continuous outcomes like
+    /// binary (yes/no), count (0,1,2,...), or positive continuous data. Use logistic GLMM
+    /// for pass/fail outcomes, Poisson GLMM for count data with clustering.
+    /// </para>
+    /// </remarks>
+    GeneralizedLinearMixedModel,
+
+    /// <summary>
+    /// Super Learner (Stacking) ensemble for optimal model combination.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Super Learner combines multiple models using cross-validation to learn
+    /// optimal combination weights. It's mathematically proven to perform at least as well as the
+    /// best individual model and often outperforms all of them.
+    /// </para>
+    /// </remarks>
+    SuperLearner,
+
+    /// <summary>
+    /// Calibrated classifier wrapper for improved probability estimates.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Wraps any classifier and improves its probability predictions
+    /// using calibration methods like Platt scaling, isotonic regression, or beta calibration.
+    /// Essential when you need reliable probability estimates for decision making.
+    /// </para>
+    /// </remarks>
+    CalibratedClassifier
 }
 
 

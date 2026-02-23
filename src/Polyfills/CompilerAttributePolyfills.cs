@@ -60,6 +60,28 @@ namespace System.Runtime.CompilerServices
     }
 }
 
+namespace System.Runtime.CompilerServices
+{
+    /// <summary>
+    /// Polyfill for CallerArgumentExpressionAttribute, introduced in C# 10 / .NET 6.
+    /// Allows methods to capture the expression passed to a parameter as a string.
+    /// When using a C# compiler that supports CallerArgumentExpression (for example, Roslyn with
+    /// <c>LangVersion</c> 10 or later), the compiler will populate this automatically even when
+    /// targeting older frameworks such as .NET Framework. With older compilers or language versions
+    /// that do not support CallerArgumentExpression, callers must pass <c>nameof(param)</c> explicitly.
+    /// </summary>
+    [AttributeUsage(AttributeTargets.Parameter, AllowMultiple = false, Inherited = false)]
+    internal sealed class CallerArgumentExpressionAttribute : Attribute
+    {
+        public CallerArgumentExpressionAttribute(string parameterName)
+        {
+            ParameterName = parameterName;
+        }
+
+        public string ParameterName { get; }
+    }
+}
+
 namespace System.Diagnostics.CodeAnalysis
 {
     /// <summary>
@@ -83,6 +105,35 @@ namespace System.Diagnostics.CodeAnalysis
         }
 
         public bool ReturnValue { get; }
+    }
+
+    /// <summary>
+    /// Specifies that the method or property will ensure that the listed field and property members
+    /// have non-null values when returning with the specified return value condition.
+    /// </summary>
+    [AttributeUsage(AttributeTargets.Method | AttributeTargets.Property, AllowMultiple = true, Inherited = false)]
+    public sealed class MemberNotNullAttribute : Attribute
+    {
+        public MemberNotNullAttribute(string member)
+        {
+            Members = [member];
+        }
+
+        public MemberNotNullAttribute(params string[] members)
+        {
+            Members = members;
+        }
+
+        public string[] Members { get; }
+    }
+
+    /// <summary>
+    /// Specifies that an output is not null even if the corresponding type allows it.
+    /// Applied to Guard.NotNull's parameter to tell the compiler the value is non-null after the call.
+    /// </summary>
+    [AttributeUsage(AttributeTargets.Property | AttributeTargets.Field | AttributeTargets.Parameter | AttributeTargets.ReturnValue, Inherited = false)]
+    internal sealed class NotNullAttribute : Attribute
+    {
     }
 }
 

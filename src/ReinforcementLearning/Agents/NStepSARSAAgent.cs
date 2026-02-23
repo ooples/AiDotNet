@@ -32,6 +32,9 @@ namespace AiDotNet.ReinforcementLearning.Agents.NStepSARSA;
 public class NStepSARSAAgent<T> : ReinforcementLearningAgentBase<T>
 {
     private NStepSARSAOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
     private Dictionary<string, Dictionary<int, T>> _qTable;
     private List<(string state, int action, T reward)> _nStepBuffer;
     private double _epsilon;

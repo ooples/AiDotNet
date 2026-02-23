@@ -28,7 +28,7 @@ namespace AiDotNet.Models.Options;
 /// The jackknife approach is particularly useful for smaller datasets where you can't afford to set
 /// aside a large validation set.</para>
 /// </remarks>
-public class JackknifeFitDetectorOptions
+public class JackknifeFitDetectorOptions : ModelOptions
 {
     /// <summary>
     /// Gets or sets the minimum sample size required to perform jackknife analysis.

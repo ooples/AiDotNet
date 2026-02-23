@@ -1,0 +1,330 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+language: en-US
+tone_instructions: "Be thorough and aggressive about code quality. Flag ALL stubs, placeholders, TODO comments, simplified implementations, and non-production-ready code as BLOCKING issues. Focus on production readiness, architectural concerns, and API surface area."
+early_access: true
+enable_free_tier: true
+
+reviews:
+  profile: assertive
+  request_changes_workflow: true
+  high_level_summary: true
+  high_level_summary_placeholder: "@coderabbitai summary"
+  auto_title_placeholder: "@coderabbitai"
+  review_status: true
+  commit_status: true
+  poem: true
+  collapse_walkthrough: false
+  sequence_diagrams: true
+  changed_files_summary: true
+  labeling_instructions: []
+  path_filters: []
+  path_instructions:
+    - path: "src/**"
+      instructions: |
+        ## AiDotNet Architecture Guidelines
+
+        This library uses the **Facade Pattern**. When reviewing code changes, apply these principles:
+
+        ### Public API Surface (CRITICAL)
+        - **Users should ONLY interact with `AiModelBuilder.cs` and `AiModelResult.cs`**
+        - These are the facade classes that expose a clean, simple API
+        - Any new public methods or classes that users might call directly should be scrutinized
+        - Ask: "Does this need to be public, or can it be internal?"
+
+        ### Access Modifier Guidelines
+        - **Prefer `internal` over `public`** for plumbing/helper classes that users never instantiate or consume
+        - **Prefer `private` over `internal`** when the member is only used within its own class
+        - Helper classes, utilities, and implementation details should be `internal`
+
+        ### Types That SHOULD Be Public (Do NOT suggest making these internal)
+        - **Options classes** (`*Options`, `*Config`) - Users instantiate these to configure models, clustering, classifiers, etc.
+        - **Model base classes** - Users may extend these or reference them
+        - **Result/data types** returned from the facade - Users consume these
+        - **Enum types** - Users pass these as configuration values
+        - **Methods on base classes** (e.g., `GetOptions()`, `Train()`, `Predict()`) that users call directly
+        - Any type that appears in a **public constructor parameter**, **public method parameter**, or **public property type**
+
+        ### Types That Should Be Internal
+        - Agent plumbing classes (parsers, registries, applicators)
+        - Internal interfaces that only the library implements
+        - Intermediate helper/utility classes
+        - Validation result types used only internally
+
+        ### Why This Matters
+        1. **Simplicity**: Users get a clean API without overwhelming options
+        2. **IP Protection**: Internal implementation details are hidden
+        3. **Flexibility**: We can refactor internals without breaking changes
+        4. **Maintainability**: Smaller public API surface = fewer breaking changes
+        5. **Usability**: Users MUST be able to instantiate options and configure models
+
+        ### Production Readiness (CRITICAL - Flag as BLOCKING)
+        **Every PR must contain production-ready code. Flag ALL of the following as blocking issues requiring immediate fix:**
+
+        - **Stubs/Placeholders**: Methods with `throw new NotImplementedException()`, empty method bodies, `// TODO` comments, placeholder return values (e.g., `return default;` when real logic is needed), or `// Future enhancement` comments
+        - **Simplified implementations**: Code that takes shortcuts like hardcoded values instead of proper logic, missing error handling at system boundaries, missing validation of external inputs, or methods that just log/print instead of doing real work
+        - **Incomplete features**: Half-implemented patterns where some code paths work but others silently do nothing, missing null checks on external data, or catch blocks that swallow exceptions without logging
+        - **Non-production patterns**: Using `Console.WriteLine` for logging instead of proper logging abstractions, hardcoded file paths or connection strings, magic numbers without constants or configuration
+        - **Dead code**: Commented-out code blocks, unreachable code paths, unused variables/parameters that suggest incomplete refactoring
+        - **Test quality**: Tests that always pass regardless of implementation (e.g., conditional assertions that skip when things fail), tests with no meaningful assertions, test methods that are empty or only test trivial behavior
+
+        **When you find ANY of the above, your review comment MUST:**
+        1. Explicitly state this is a blocking issue
+        2. Describe what production-ready code should look like instead
+        3. Provide a concrete code suggestion for the fix
+
+        ### Review Checklist
+        - [ ] **BLOCKING**: No stubs, placeholders, TODOs, or NotImplementedException anywhere in the diff
+        - [ ] **BLOCKING**: All methods have complete, production-ready implementations
+        - [ ] **BLOCKING**: Tests have meaningful assertions that actually verify behavior
+        - [ ] If suggesting `internal`, verify the type is NOT used in any public constructor, method parameter, or property
+        - [ ] Options classes (`*Options`) should almost always be `public` since users instantiate them
+        - [ ] Does the change maintain the facade pattern (users use AiModelBuilder/AiModelResult)?
+        - [ ] Are implementation details (parsers, registries, applicators) properly hidden as internal/private?
+        - [ ] Could this change prevent users from configuring or extending models?
+
+    - path: "src/Interfaces/**"
+      instructions: |
+        ## Interface Review Guidelines
+
+        Interfaces in this library serve different roles - some are internal plumbing, others are user-facing extension points.
+
+        ### Key Principles
+        - **Internal interfaces**: Plumbing interfaces that only the library implements (e.g., `IConfigurableModel`)
+        - **Public interfaces**: Extension points where users may provide implementations, or interfaces used in public API signatures
+        - `IOptimizer`, `IModel`, `IDataLoader` etc. are internal extension points
+        - Adding methods to interfaces is a breaking change for any external implementations
+
+        ### When Reviewing Interface Changes
+        - Check if the interface appears in any public API signature - if so, it must be `public`
+        - Interfaces only used internally by the library can be `internal`
+        - Document breaking changes in PR description if modifying public interfaces
+        - Consider if the change could be handled through the facade instead
+
+    - path: "src/Optimizers/**"
+      instructions: |
+        ## Optimizer Review Guidelines
+
+        Optimizers are **internal implementation details**. Users select optimizers through `AiModelBuilder` configuration, not by instantiating them directly.
+
+        ### Key Principles
+        - Optimizer classes should be `internal` or have internal constructors
+        - Users configure optimizers via `AiModelBuilder.ConfigureOptimizer()` fluent API
+        - Complex optimizer logic should be hidden from users
+
+    - path: "tests/**"
+      instructions: |
+        ## Test Review Guidelines
+
+        - Tests may need access to internal members via `[assembly: InternalsVisibleTo]`
+        - Test classes implementing interfaces (like `IOptimizer`) need all interface methods
+        - Prefer testing through the public facade (`AiModelBuilder`) when possible
+
+        ### Test Quality (CRITICAL - Flag as BLOCKING)
+        **Tests MUST be production-quality. Flag ALL of the following as blocking issues:**
+
+        - **Always-passing tests**: Tests with conditional assertions that skip verification when things fail (e.g., `if (result != null) Assert.Equal(...)` - this passes even when result IS null)
+        - **Missing assertions**: Test methods that call code but don't assert anything meaningful
+        - **Trivial assertions**: Tests that only check `Assert.NotNull` when they should verify actual behavior/values
+        - **Placeholder tests**: Tests with `// TODO: add assertions` or empty test bodies
+        - **Duplicate coverage**: Multiple tests that verify the exact same thing with no variation
+
+        **Good tests should:**
+        - Have clear Arrange/Act/Assert structure
+        - Assert specific expected values, not just non-null
+        - Test edge cases and error conditions
+        - Use unconditional assertions (the test should FAIL if behavior is wrong)
+
+    # ===== Golden Pattern Enforcement (based on RWKV-7 reference implementation) =====
+
+    - path: "src/NeuralNetworks/**"
+      instructions: |
+        ## Golden Pattern: Neural Network Model Classes
+
+        Every neural network model class MUST follow the golden pattern.
+        Flag violations as **BLOCKING**.
+
+        ### Required Elements (BLOCKING if missing)
+        1. **XML Documentation**: Class-level `<summary>`, `<typeparam>`, and `<remarks>` with:
+           - Technical description of the architecture
+           - `<para><b>For Beginners:</b>` section explaining in plain language what the model does
+           - `<para><b>Reference:</b>` citing the original research paper (authors, title, year)
+        2. **Forward Method**: Must accept `Tensor<T> input` and return `Tensor<T>`. Must implement
+           the actual forward pass of the model, not a stub.
+        3. **Backward Method**: Must accept `Tensor<T> outputGradient` and return `Tensor<T>`.
+           Must implement actual backpropagation through all layers.
+        4. **GetParameters / UpdateParameters**: Must enumerate all trainable parameters and apply
+           updates respectively. No stubs.
+        5. **GetMetadata**: Must return a dictionary with at minimum: ModelType, ParameterCount,
+           Architecture, and InputShape/OutputShape.
+        6. **No NotImplementedException**: Zero tolerance. Every method must have a real implementation.
+        7. **No `new Random()`**: Use `RandomHelper.CreateSeededRandom()` or `RandomHelper.CreateSecureRandom()`.
+        8. **No `default!`**: Use proper initialization with meaningful defaults.
+        9. **No `// TODO`**: Every code path must be complete.
+
+        ### Architecture Pattern
+        - Constructor takes an Options class (e.g., `ModelNameOptions<T>`) and `NeuralNetworkArchitecture<T>`
+        - Layers are initialized in the constructor from the options
+        - Forward pass chains through layers in sequence
+        - Backward pass chains in reverse order
+
+    - path: "src/Models/Options/**"
+      instructions: |
+        ## Golden Pattern: Options Classes
+
+        Every Options class MUST follow the golden pattern.
+        Flag violations as **BLOCKING**.
+
+        ### Required Elements (BLOCKING if missing)
+        1. **XML Documentation on class**: `<summary>`, `<typeparam>`, `<remarks>` with:
+           - `<para><b>For Beginners:</b>` section explaining what each option means in plain language
+           - `<para><b>Reference:</b>` citing the original research paper
+           - Key architecture details and typical model sizes
+        2. **Default Constructor**: Parameterless constructor `public ModelNameOptions() { }`
+        3. **Copy Constructor**: `public ModelNameOptions(ModelNameOptions<T> other)` that:
+           - Throws `ArgumentNullException` if other is null
+           - Copies ALL properties from other to this
+           - Does not miss any property (check every property is copied)
+        4. **XML Documentation on every property**: Each property needs `<summary>`, `<value>`, and
+           `<remarks>` with `<para><b>For Beginners:</b>` explaining what the property controls
+        5. **Industry-standard defaults**: Default values must match the original paper's recommended
+           values, not arbitrary numbers. Document where each default comes from.
+        6. **Extends ModelOptions**: Class must extend `ModelOptions` base class
+        7. **No `default!`**: Use proper initialization (e.g., `string.Empty`, `new List<T>()`, `0`, `0.0`)
+
+        ### Copy Constructor Verification
+        When reviewing a copy constructor, verify that EVERY property declared in the class is
+        copied. Missing properties are a **BLOCKING** bug that causes silent data loss.
+
+    - path: "src/Helpers/LayerHelper*.cs"
+      instructions: |
+        ## Golden Pattern: LayerHelper CreateDefault Methods
+
+        Every model that uses custom layers MUST have a `CreateDefault{ModelName}Layers` method.
+        Flag violations as **BLOCKING**.
+
+        ### Required Elements (BLOCKING if missing)
+        1. **Method Signature**: `public static IEnumerable<ILayer<T>> CreateDefault{ModelName}Layers(`
+           - First parameter MUST be `NeuralNetworkArchitecture<T> architecture`
+           - Additional parameters for model-specific config with defaults matching Options class
+        2. **Yield Return Pattern**: Must use `yield return` for each layer, not build a list
+        3. **Inline Comments**: Each layer group must have a comment explaining its purpose
+           (e.g., `// === Token Embedding ===`, `// === Encoder Blocks ===`)
+        4. **XML Documentation**: `<summary>`, `<param>`, `<returns>`, `<remarks>` with
+           `<para><b>For Beginners:</b>` section
+
+        ### Verification
+        - Check that the layer dimensions chain correctly (output of layer N = input of layer N+1)
+        - Check that the final layer output matches the model's expected output dimension
+        - Check that parameters have sensible defaults matching the Options class
+
+    - path: "src/Audio/TextToSpeech/**"
+      instructions: |
+        ## Golden Pattern: Text-to-Speech Models
+
+        All TTS models must follow all applicable golden patterns:
+        - Neural network classes: see `src/NeuralNetworks/**` golden pattern
+        - Options classes: see `src/Models/Options/**` golden pattern
+        - LayerHelper methods: see `src/Helpers/LayerHelper*.cs` golden pattern
+
+        Additionally:
+        - Models should implement proper mel-spectrogram or waveform generation
+        - Vocoder models must handle audio sample rate configuration
+        - Each model needs an Options class with paper-referenced defaults
+        - LayerHelper must have a `CreateDefault{ModelName}Layers` method
+        - Reference the original TTS paper in XML docs
+
+    - path: "src/Audio/SpeechRecognition/**"
+      instructions: |
+        ## Golden Pattern: Speech Recognition Models
+
+        All ASR models must follow all applicable golden patterns:
+        - Neural network classes: see `src/NeuralNetworks/**` golden pattern
+        - Options classes: see `src/Models/Options/**` golden pattern
+        - LayerHelper methods: see `src/Helpers/LayerHelper*.cs` golden pattern
+
+        Additionally:
+        - Models should implement proper audio feature extraction (mel, MFCC, etc.)
+        - CTC or attention-based decoding must be properly implemented
+        - Each model needs an Options class with paper-referenced defaults
+        - LayerHelper must have a `CreateDefault{ModelName}Layers` method
+        - Reference the original ASR paper in XML docs
+
+    - path: "src/Video/**"
+      instructions: |
+        ## Golden Pattern: Video Models
+
+        All video models must follow all applicable golden patterns:
+        - Neural network classes: see `src/NeuralNetworks/**` golden pattern
+        - Options classes: see `src/Models/Options/**` golden pattern
+        - LayerHelper methods: see `src/Helpers/LayerHelper*.cs` golden pattern
+
+        Additionally:
+        - Video generation models must handle temporal consistency
+        - Video enhancement models must specify input/output resolution handling
+        - Each model needs an Options class with paper-referenced defaults
+        - LayerHelper must have a `CreateDefault{ModelName}Layers` method
+        - Reference the original paper in XML docs
+
+    - path: "src/ComputerVision/Segmentation/**"
+      instructions: |
+        ## Golden Pattern: Segmentation Models
+
+        All segmentation models must follow all applicable golden patterns:
+        - Neural network classes: see `src/NeuralNetworks/**` golden pattern
+        - Options classes: see `src/Models/Options/**` golden pattern
+        - LayerHelper methods: see `src/Helpers/LayerHelper*.cs` golden pattern
+
+        Additionally:
+        - Models should implement proper pixel-level classification
+        - Encoder-decoder architecture with skip connections where applicable
+        - Each model needs an Options class with paper-referenced defaults
+        - LayerHelper must have a `CreateDefault{ModelName}Layers` method
+        - Reference the original segmentation paper in XML docs
+
+    - path: "src/Document/VisionLanguage/**"
+      instructions: |
+        ## Golden Pattern: Vision-Language Models
+
+        All VLM models must follow all applicable golden patterns:
+        - Neural network classes: see `src/NeuralNetworks/**` golden pattern
+        - Options classes: see `src/Models/Options/**` golden pattern
+        - LayerHelper methods: see `src/Helpers/LayerHelper*.cs` golden pattern
+
+        Additionally:
+        - Models must handle multi-modal inputs (image + text)
+        - Contrastive or generative alignment must be properly implemented
+        - Each model needs an Options class with paper-referenced defaults
+        - LayerHelper must have a `CreateDefault{ModelName}Layers` method
+        - Reference the original VLM paper in XML docs
+
+    - path: "src/AdversarialRobustness/**"
+      instructions: |
+        ## Golden Pattern: Safety & Content Filtering Models
+
+        All safety models must follow all applicable golden patterns:
+        - Neural network classes: see `src/NeuralNetworks/**` golden pattern
+        - Options classes: see `src/Models/Options/**` golden pattern
+        - LayerHelper methods: see `src/Helpers/LayerHelper*.cs` golden pattern
+
+        Additionally:
+        - Models must handle multi-modal content analysis where applicable
+        - Confidence scores and category labels must be properly typed
+        - Each model needs an Options class with paper-referenced defaults
+        - LayerHelper must have a `CreateDefault{ModelName}Layers` method
+        - Reference the original safety paper in XML docs
+
+chat:
+  auto_reply: true
+
+knowledge_base:
+  opt_out: false
+  learnings:
+    scope: auto
+  issues:
+    scope: auto
+  jira:
+    project_keys: []
+  linear:
+    team_keys: []
+  pull_requests:
+    scope: auto

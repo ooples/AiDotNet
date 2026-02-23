@@ -21,7 +21,8 @@ public sealed class LeafFederatedDataset<TInput, TOutput>
         LeafFederatedSplit<TInput, TOutput> train,
         LeafFederatedSplit<TInput, TOutput>? test = null)
     {
-        Train = train ?? throw new ArgumentNullException(nameof(train));
+        Guard.NotNull(train);
+        Train = train;
         Test = test;
     }
 

@@ -1,5 +1,6 @@
 using AiDotNet.Autodiff;
 using AiDotNet.LossFunctions;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Models;
 
@@ -158,7 +159,8 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
     /// </remarks>
     public NeuralNetworkModel(NeuralNetworkArchitecture<T> architecture)
     {
-        Architecture = architecture ?? throw new ArgumentNullException(nameof(architecture));
+        Guard.NotNull(architecture);
+        Architecture = architecture;
         Network = new NeuralNetwork<T>(architecture);
         _learningRate = _numOps.FromDouble(0.01); // Default learning rate
     }

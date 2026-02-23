@@ -4,6 +4,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.MetaLearning.Options;
 using AiDotNet.Models;
 using AiDotNet.Tensors;
+using AiDotNet.Validation;
 
 namespace AiDotNet.MetaLearning.Models;
 
@@ -50,11 +51,15 @@ public class TADAMModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetad
         T temperature,
         TADAMOptions<T, TInput, TOutput> options)
     {
-        _featureEncoder = featureEncoder ?? throw new ArgumentNullException(nameof(featureEncoder));
-        _prototypes = prototypes ?? throw new ArgumentNullException(nameof(prototypes));
-        _metricScale = metricScale ?? throw new ArgumentNullException(nameof(metricScale));
+        Guard.NotNull(featureEncoder);
+        _featureEncoder = featureEncoder;
+        Guard.NotNull(prototypes);
+        _prototypes = prototypes;
+        Guard.NotNull(metricScale);
+        _metricScale = metricScale;
         _temperature = temperature;
-        _options = options ?? throw new ArgumentNullException(nameof(options));
+        Guard.NotNull(options);
+        _options = options;
     }
 
     /// <inheritdoc/>

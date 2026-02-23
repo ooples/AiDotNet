@@ -70,7 +70,7 @@ jobs:
         run: dotnet restore src/AiDotNet.csproj
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@19b2f06db2b6f5108140aeb04014ef02b648f789 # v4
+        uses: github/codeql-action/init@89a39a4e59826350b863aa6b6252a07ad50cf83e # v4
         with:
           languages: csharp
           config-file: ./.github/codeql/codeql-config.yml
@@ -83,14 +83,14 @@ jobs:
 
       - name: Perform CodeQL Analysis (no SARIF upload for huge PRs)
         if: github.event_name == 'pull_request' && github.event.pull_request.changed_files > 250
-        uses: github/codeql-action/analyze@19b2f06db2b6f5108140aeb04014ef02b648f789 # v4
+        uses: github/codeql-action/analyze@89a39a4e59826350b863aa6b6252a07ad50cf83e # v4
         with:
           category: "/language:csharp"
           upload: never
 
       - name: Perform CodeQL Analysis
         if: github.event_name != 'pull_request' || github.event.pull_request.changed_files <= 250
-        uses: github/codeql-action/analyze@19b2f06db2b6f5108140aeb04014ef02b648f789 # v4
+        uses: github/codeql-action/analyze@89a39a4e59826350b863aa6b6252a07ad50cf83e # v4
         with:
           category: "/language:csharp"
           upload: always
@@ -124,8 +124,14 @@ jobs:
       - name: Restore dependencies
         run: dotnet restore
 
+      - name: Build source generator first
+        run: dotnet build src/AiDotNet.Generators/AiDotNet.Generators.csproj -c Release --no-restore
+
+      - name: Shutdown build servers to release file handles
+        run: dotnet build-server shutdown
+
       - name: Build (Release)
-        run: dotnet build -c Release --no-restore
+        run: dotnet build -c Release --no-restore -p:UseSharedCompilation=false -p:nodeReuse=false
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v4
@@ -463,8 +469,14 @@ jobs:
 
           & "${{ runner.temp }}\scanner\dotnet-sonarscanner" begin @params
 
+      - name: Build source generator first
+        run: dotnet build src/AiDotNet.Generators/AiDotNet.Generators.csproj -c Release --no-restore
+
+      - name: Shutdown build servers to release file handles
+        run: dotnet build-server shutdown
+
       - name: Build (Release)
-        run: dotnet build -c Release --no-restore
+        run: dotnet build -c Release --no-restore -p:UseSharedCompilation=false -p:nodeReuse=false
 
       - name: End SonarCloud analysis
         if: github.event_name != 'pull_request' || github.event.pull_request.changed_files <= 250

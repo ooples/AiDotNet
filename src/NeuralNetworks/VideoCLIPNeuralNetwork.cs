@@ -3,9 +3,11 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tokenization.Interfaces;
 using Microsoft.ML.OnnxRuntime;
+using AiDotNet.Validation;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
 
 namespace AiDotNet.NeuralNetworks;
@@ -36,6 +38,11 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T>
 {
+    private readonly VideoCLIPOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     #region Execution Mode
 
     private readonly bool _useNativeMode;
@@ -134,9 +141,13 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
         int maxSequenceLength = 77,
         int imageSize = 224,
         IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        VideoCLIPOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyLoss<T>(), 1.0)
     {
+        _options = options ?? new VideoCLIPOptions();
+        Options = _options;
+
         if (string.IsNullOrWhiteSpace(videoEncoderPath))
             throw new ArgumentException("Video encoder path cannot be null or empty.", nameof(videoEncoderPath));
         if (string.IsNullOrWhiteSpace(textEncoderPath))
@@ -173,7 +184,8 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
             textEncoder = new InferenceSession(textEncoderPath);
             _videoEncoder = videoEncoder;
             _textEncoder = textEncoder;
-            _tokenizer = tokenizer ?? throw new ArgumentNullException(nameof(tokenizer));
+            Guard.NotNull(tokenizer);
+            _tokenizer = tokenizer;
             _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
             _lossFunction = lossFunction ?? new CrossEntropyLoss<T>();
             InitializeLayers();
@@ -208,9 +220,13 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
         string temporalAggregation = "temporal_transformer",
         ITokenizer? tokenizer = null,
         IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        VideoCLIPOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyLoss<T>(), 1.0)
     {
+        _options = options ?? new VideoCLIPOptions();
+        Options = _options;
+
         _useNativeMode = true;
         _embeddingDimension = embeddingDimension;
         _maxSequenceLength = maxSequenceLength;

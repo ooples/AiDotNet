@@ -46,6 +46,9 @@ namespace AiDotNet.Clustering.Hierarchical;
 public class CURE<T> : ClusteringBase<T>
 {
     private readonly CUREOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
     private readonly IDistanceMetric<T> _distanceMetric;
     private Random _random;
     private List<CureCluster>? _clusters;
@@ -60,8 +63,8 @@ public class CURE<T> : ClusteringBase<T>
         // Use the options passed to base constructor to avoid double instantiation
         _options = (CUREOptions<T>)Options;
         _distanceMetric = _options.DistanceMetric ?? new EuclideanDistance<T>();
-        _random = _options.RandomState.HasValue
-            ? RandomHelper.CreateSeededRandom(_options.RandomState.Value)
+        _random = _options.Seed.HasValue
+            ? RandomHelper.CreateSeededRandom(_options.Seed.Value)
             : RandomHelper.CreateSeededRandom(42);
         NumClusters = _options.NumClusters;
     }
@@ -77,7 +80,7 @@ public class CURE<T> : ClusteringBase<T>
             NumClusters = _options.NumClusters,
             MaxIterations = _options.MaxIterations,
             Tolerance = _options.Tolerance,
-            RandomState = _options.RandomState,
+            Seed = _options.Seed,
             NumRepresentatives = _options.NumRepresentatives,
             ShrinkFactor = _options.ShrinkFactor,
             SampleFraction = _options.SampleFraction,

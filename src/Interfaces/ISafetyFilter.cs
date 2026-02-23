@@ -26,6 +26,7 @@ using AiDotNet.Tensors.LinearAlgebra;
 /// - They catch edge cases and adversarial inputs
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for calculations (e.g., float, double).</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("SafetyFilter")]
 public interface ISafetyFilter<T> : IModelSerializer
 {
     /// <summary>

@@ -182,7 +182,7 @@ public class GapStatistic<T>
             NumClusters = k,
             MaxIterations = 100,
             NumInitializations = 3,
-            RandomState = _randomState
+            Seed = _randomState
         });
 
         try

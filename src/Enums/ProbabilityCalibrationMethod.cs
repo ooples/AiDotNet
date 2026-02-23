@@ -34,6 +34,29 @@ public enum ProbabilityCalibrationMethod
     /// <summary>
     /// Uses isotonic regression calibration (non-parametric monotonic calibration, typically for binary classification).
     /// </summary>
-    IsotonicRegression
+    IsotonicRegression,
+
+    /// <summary>
+    /// Uses beta calibration (more flexible than Platt scaling, handles asymmetric distortions).
+    /// </summary>
+    BetaCalibration,
+
+    /// <summary>
+    /// Histogram Binning - assigns average probability to each bin.
+    /// Simple and interpretable but may need many samples.
+    /// </summary>
+    HistogramBinning,
+
+    /// <summary>
+    /// Bayesian Binning into Quantiles (BBQ) - adaptive binning.
+    /// Good balance between flexibility and reliability.
+    /// </summary>
+    BayesianBinning,
+
+    /// <summary>
+    /// Venn-ABERS - provides probability intervals, not point estimates.
+    /// Useful when you need calibration guarantees.
+    /// </summary>
+    VennABERS
 }
 

@@ -1,7 +1,9 @@
+using AiDotNet.NeuralNetworks.Options;
+
 namespace AiDotNet.NeuralNetworks;
 
 /// <summary>
-/// Represents a Transformer neural network architecture, which is particularly effective for 
+/// Represents a Transformer neural network architecture, which is particularly effective for
 /// sequence-based tasks like natural language processing.
 /// </summary>
 /// <remarks>
@@ -35,6 +37,11 @@ namespace AiDotNet.NeuralNetworks;
 /// <typeparam name="T">The data type used for calculations (typically float or double).</typeparam>
 public class Transformer<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
 {
+    private readonly TransformerOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// Gets or sets whether auxiliary loss (attention regularization) should be used during training.
     /// </summary>
@@ -157,9 +164,11 @@ public class Transformer<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     /// </para>
     /// </remarks>
     public Transformer(TransformerArchitecture<T> architecture, ILossFunction<T>? lossFunction = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) :
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null, TransformerOptions? options = null) :
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
+        _options = options ?? new TransformerOptions();
+        Options = _options;
         _transformerArchitecture = architecture;
         _optimizer = optimizer ?? new GradientDescentOptimizer<T, Tensor<T>, Tensor<T>>(this);
 

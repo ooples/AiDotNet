@@ -1,5 +1,6 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Validation;
 
 namespace AiDotNet.SelfSupervisedLearning;
 
@@ -56,7 +57,8 @@ public class MomentumEncoder<T> : IMomentumEncoder<T>
     /// <param name="momentum">Initial momentum coefficient (0-1, typically 0.99-0.9999).</param>
     public MomentumEncoder(INeuralNetwork<T> encoder, double momentum = 0.999)
     {
-        _encoder = encoder ?? throw new ArgumentNullException(nameof(encoder));
+        Guard.NotNull(encoder);
+        _encoder = encoder;
 
         if (momentum < 0 || momentum > 1)
         {

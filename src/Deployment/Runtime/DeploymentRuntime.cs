@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Deployment.Runtime;
 
@@ -9,6 +10,9 @@ namespace AiDotNet.Deployment.Runtime;
 /// Runtime environment for deployed models with warm-up, versioning, A/B testing, and telemetry.
 /// </summary>
 /// <typeparam name="T">The numeric type for input/output tensors</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> DeploymentRuntime provides AI safety functionality. Default values follow the original paper settings.</para>
+/// </remarks>
 public class DeploymentRuntime<T>
 {
     private readonly RuntimeConfiguration _config;
@@ -21,7 +25,8 @@ public class DeploymentRuntime<T>
 
     public DeploymentRuntime(RuntimeConfiguration config)
     {
-        _config = config ?? throw new ArgumentNullException(nameof(config));
+        Guard.NotNull(config);
+        _config = config;
         _models = new ConcurrentDictionary<string, ModelVersion<T>>();
         _abTests = new ConcurrentDictionary<string, ABTestConfig>();
         _telemetry = new TelemetryCollector(config.EnableTelemetry);

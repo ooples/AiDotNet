@@ -1,3 +1,5 @@
+using AiDotNet.NeuralNetworks.Options;
+
 namespace AiDotNet.NeuralNetworks;
 
 /// <summary>
@@ -28,6 +30,11 @@ namespace AiDotNet.NeuralNetworks;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
 {
+    private readonly DeepBoltzmannMachineOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// Gets or sets the bias vectors for each layer in the network.
     /// </summary>
@@ -233,9 +240,12 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
         ILossFunction<T>? lossFunction = null,
         IActivationFunction<T>? activationFunction = null,
         int batchSize = 32,
-        int cdSteps = 1)
+        int cdSteps = 1,
+        DeepBoltzmannMachineOptions? options = null)
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
+        _options = options ?? new DeepBoltzmannMachineOptions();
+        Options = _options;
         _epochs = epochs;
         _learningRate = learningRate;
         _learningRateDecay = NumOps.FromDouble(learningRateDecay);
@@ -272,9 +282,12 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
         ILossFunction<T>? lossFunction = null,
         IVectorActivationFunction<T>? vectorActivationFunction = null,
         int batchSize = 32,
-        int cdSteps = 1)
+        int cdSteps = 1,
+        DeepBoltzmannMachineOptions? options = null)
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
+        _options = options ?? new DeepBoltzmannMachineOptions();
+        Options = _options;
         _epochs = epochs;
         _learningRate = learningRate;
         _learningRateDecay = NumOps.FromDouble(learningRateDecay);

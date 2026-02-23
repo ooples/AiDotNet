@@ -233,13 +233,19 @@ public class BOILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
             }
             else
             {
-                for (int i = 0; i < accumulatedBodyGradients.Length; i++)
+                if (accumulatedBodyGradients != null)
                 {
-                    accumulatedBodyGradients[i] = NumOps.Add(accumulatedBodyGradients[i], bodyGrads[i]);
+                    for (int i = 0; i < accumulatedBodyGradients.Length; i++)
+                    {
+                        accumulatedBodyGradients[i] = NumOps.Add(accumulatedBodyGradients[i], bodyGrads[i]);
+                    }
                 }
-                for (int i = 0; i < accumulatedHeadGradients!.Length; i++)
+                if (accumulatedHeadGradients != null)
                 {
-                    accumulatedHeadGradients[i] = NumOps.Add(accumulatedHeadGradients[i], headGrads[i]);
+                    for (int i = 0; i < accumulatedHeadGradients.Length; i++)
+                    {
+                        accumulatedHeadGradients[i] = NumOps.Add(accumulatedHeadGradients[i], headGrads[i]);
+                    }
                 }
             }
         }

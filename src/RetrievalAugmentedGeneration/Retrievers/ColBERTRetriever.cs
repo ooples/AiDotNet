@@ -6,6 +6,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.DocumentStores;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
+using AiDotNet.Validation;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 
@@ -94,8 +95,10 @@ public class ColBERTRetriever<T> : RetrieverBase<T>
         int maxDocLength,
         int maxQueryLength)
     {
-        _documentStore = documentStore ?? throw new ArgumentNullException(nameof(documentStore));
-        _modelPath = modelPath ?? throw new ArgumentNullException(nameof(modelPath));
+        Guard.NotNull(documentStore);
+        _documentStore = documentStore;
+        Guard.NotNull(modelPath);
+        _modelPath = modelPath;
 
         if (maxDocLength <= 0)
             throw new ArgumentOutOfRangeException(nameof(maxDocLength), "Max document length must be positive");

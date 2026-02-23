@@ -1,77 +1,70 @@
 namespace AiDotNet.Kernels;
 
 /// <summary>
-/// Implements the Matérn kernel for measuring similarity between data points.
+/// Implements the Matérn family of kernels with configurable smoothness parameter.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
 /// <para>
-/// The Matérn kernel is a flexible kernel function that generalizes the Radial Basis Function (RBF) kernel
-/// by introducing a parameter that controls the smoothness of the resulting function.
+/// <b>For Beginners:</b> The Matérn kernel is one of the most important kernels in GP practice.
+/// It provides a middle ground between the very smooth RBF kernel and rougher kernels.
+///
+/// The smoothness parameter ν controls how "wiggly" the functions can be:
+/// - ν = 1/2: Exponential kernel (functions are continuous but not differentiable)
+/// - ν = 3/2: Once differentiable (good for many real-world applications)
+/// - ν = 5/2: Twice differentiable (often used as default)
+/// - ν → ∞: RBF/Gaussian kernel (infinitely differentiable)
+///
+/// In mathematical terms:
+/// k(r) = (2^(1-ν)/Γ(ν)) × (√(2ν)×r/l)^ν × K_ν(√(2ν)×r/l)
+///
+/// Where:
+/// - r = |x - x'| is the distance
+/// - l is the length scale
+/// - ν is the smoothness parameter
+/// - K_ν is the modified Bessel function
 /// </para>
 /// <para>
-/// <b>For Beginners:</b> A kernel function is a mathematical tool that measures how similar two data points are.
-/// The Matérn kernel is particularly useful because it lets you control exactly how "smooth" your model's
-/// predictions will be.
-/// </para>
-/// <para>
-/// Think of the Matérn kernel as a "similarity detector" with an adjustable sensitivity. When two points
-/// are close together, the kernel gives a high similarity score. As the points get farther apart, the
-/// similarity decreases. The special thing about the Matérn kernel is that you can control exactly how
-/// quickly this similarity drops off and how smooth the transition is.
-/// </para>
-/// <para>
-/// This kernel has two important parameters:
-/// - The nu (?) parameter controls the smoothness of the function
-/// - The length parameter controls how quickly the similarity decreases with distance
-/// </para>
-/// <para>
-/// Common values for nu include 0.5 (which gives an exponential kernel), 1.5 (which is once differentiable),
-/// and 2.5 (which is twice differentiable). The default value is 1.5, which works well for many applications.
-/// </para>
-/// <para>
-/// The Matérn kernel is particularly useful for modeling physical processes, spatial data, and any application
-/// where you need precise control over the smoothness assumptions in your model.
+/// Why use Matérn over RBF?
+///
+/// 1. **More realistic**: Real-world functions are rarely infinitely smooth
+/// 2. **Better extrapolation**: RBF can be overly smooth for extrapolation
+/// 3. **Physical motivation**: Many physical processes have finite smoothness
+/// 4. **Computational**: ν = 1/2, 3/2, 5/2 have simple closed forms
+///
+/// Rule of thumb:
+/// - If you're unsure, start with ν = 5/2 (Matérn 5/2)
+/// - For rough data, try ν = 3/2
+/// - For very noisy data, ν = 1/2 might help
 /// </para>
 /// </remarks>
 public class MaternKernel<T> : IKernelFunction<T>
 {
     /// <summary>
-    /// Controls the smoothness of the kernel function.
+    /// The smoothness parameter (ν).
     /// </summary>
     /// <remarks>
-    /// <b>For Beginners:</b> The '_nu' parameter determines how smooth your model's predictions will be.
-    /// 
-    /// Think of it as a "smoothness knob":
-    /// - Lower values (like 0.5) create rougher, less smooth predictions that can change quickly
-    /// - Higher values (like 2.5 or higher) create very smooth predictions that change gradually
-    /// 
-    /// Common values and what they mean:
-    /// - 0.5: Creates an exponential kernel (predictions can change direction suddenly)
-    /// - 1.5: Creates a kernel that's once differentiable (predictions change direction smoothly)
-    /// - 2.5: Creates a kernel that's twice differentiable (predictions change direction very smoothly)
-    /// 
-    /// The default value is 1.5, which provides a good balance between flexibility and smoothness
-    /// for many applications.
+    /// <para>
+    /// <b>For Beginners:</b> This controls how "smooth" or "wiggly" the GP functions are.
+    ///
+    /// Common values:
+    /// - 0.5: Ornstein-Uhlenbeck process (rough, only continuous)
+    /// - 1.5: Once differentiable (moderate smoothness)
+    /// - 2.5: Twice differentiable (fairly smooth, popular default)
+    /// - Higher values approach RBF behavior
+    /// </para>
     /// </remarks>
-    private readonly T _nu;
+    private readonly double _nu;
 
     /// <summary>
-    /// Controls how quickly the similarity decreases with distance between points.
+    /// The length scale parameter.
     /// </summary>
-    /// <remarks>
-    /// <b>For Beginners:</b> The '_length' parameter (also called the length scale) controls how far apart
-    /// two points can be while still being considered similar.
-    /// 
-    /// Think of it as a "distance vision" parameter:
-    /// - A smaller value means only very close points are considered similar (near-sighted)
-    /// - A larger value means even distant points can be considered similar (far-sighted)
-    /// 
-    /// The default value is 1.0, which works well as a starting point for many applications.
-    /// You might want to increase this if your data points are spread far apart, or decrease it
-    /// if your data points are densely packed and local patterns are important.
-    /// </remarks>
-    private readonly T _length;
+    private readonly double _lengthScale;
+
+    /// <summary>
+    /// The signal variance (kernel scale).
+    /// </summary>
+    private readonly double _variance;
 
     /// <summary>
     /// Operations for performing numeric calculations with type T.
@@ -79,211 +72,359 @@ public class MaternKernel<T> : IKernelFunction<T>
     private readonly INumericOperations<T> _numOps;
 
     /// <summary>
-    /// Initializes a new instance of the Matérn kernel with optional parameters.
+    /// Initializes a new Matérn kernel.
     /// </summary>
-    /// <param name="nu">Controls the smoothness of the kernel function. Default is 1.5.</param>
-    /// <param name="length">Controls how quickly similarity decreases with distance. Default is 1.0.</param>
+    /// <param name="nu">The smoothness parameter. Common values: 0.5, 1.5, 2.5.</param>
+    /// <param name="lengthScale">The length scale parameter. Default is 1.0.</param>
+    /// <param name="variance">The signal variance. Default is 1.0.</param>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> This constructor sets up the Matérn kernel for use. You can optionally
-    /// provide values for the two parameters that control how the kernel behaves.
-    /// </para>
-    /// <para>
-    /// If you don't specify values, the defaults are:
-    /// - nu = 1.5: Creates a kernel that produces smooth predictions (once differentiable)
-    /// - length = 1.0: A standard value for how quickly similarity decreases with distance
-    /// </para>
-    /// <para>
-    /// When might you want to change these parameters?
-    /// - Change nu if you want to control how smooth your model's predictions will be
-    /// - Change length if you want to control how far the influence of each data point extends
-    /// </para>
-    /// <para>
-    /// The best values for these parameters often depend on your specific dataset and problem,
-    /// so you might need to experiment with different values to find what works best.
+    /// <b>For Beginners:</b> Creates a Matérn kernel with specified smoothness.
+    ///
+    /// Recommended starting points:
+    /// - nu=2.5 is a good default for most problems
+    /// - lengthScale: Set based on the scale of your input data
+    /// - variance: Set based on the variance of your output data
+    ///
+    /// Example:
+    /// var kernel = new MaternKernel&lt;double&gt;(nu: 2.5, lengthScale: 1.0);
     /// </para>
     /// </remarks>
-    public MaternKernel(T? nu = default, T? length = default)
+    public MaternKernel(double nu = 2.5, double lengthScale = 1.0, double variance = 1.0)
     {
+        if (nu <= 0)
+            throw new ArgumentException("Smoothness parameter nu must be positive.", nameof(nu));
+        if (lengthScale <= 0)
+            throw new ArgumentException("Length scale must be positive.", nameof(lengthScale));
+        if (variance <= 0)
+            throw new ArgumentException("Variance must be positive.", nameof(variance));
+
+        _nu = nu;
+        _lengthScale = lengthScale;
+        _variance = variance;
         _numOps = MathHelper.GetNumericOperations<T>();
-        _nu = nu ?? _numOps.FromDouble(1.5);
-        _length = length ?? _numOps.One;
     }
+
+    /// <summary>
+    /// Gets the smoothness parameter (ν).
+    /// </summary>
+    public double Nu => _nu;
+
+    /// <summary>
+    /// Gets the length scale.
+    /// </summary>
+    public double LengthScale => _lengthScale;
+
+    /// <summary>
+    /// Gets the signal variance.
+    /// </summary>
+    public double Variance => _variance;
 
     /// <summary>
     /// Calculates the Matérn kernel value between two vectors.
     /// </summary>
     /// <param name="x1">The first vector.</param>
     /// <param name="x2">The second vector.</param>
-    /// <returns>The kernel value representing the similarity between the two vectors.</returns>
+    /// <returns>The kernel value.</returns>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> This method takes two data points (represented as vectors) and calculates
-    /// how similar they are to each other using the Matérn kernel formula.
-    /// </para>
-    /// <para>
-    /// The calculation works by:
-    /// 1. Finding the Euclidean distance (straight-line distance) between the two points
-    /// 2. Scaling this distance based on the length parameter and nu parameter
-    /// 3. Using special mathematical functions (Bessel functions and Gamma functions) to calculate
-    ///    the final similarity value
-    /// </para>
-    /// <para>
-    /// The result is a similarity measure where:
-    /// - A value close to 1 means the points are very similar
-    /// - A value close to 0 means the points are very different
-    /// </para>
-    /// <para>
-    /// Don't worry about the complex math happening inside this method - the important thing to understand
-    /// is that it measures similarity in a way that gives you control over the smoothness of your model's
-    /// predictions through the nu parameter.
+    /// <b>For Beginners:</b> Computes the covariance between two points using the Matérn function.
+    ///
+    /// For common values of ν, we use closed-form expressions:
+    /// - ν = 1/2: k(r) = σ² × exp(-r/l)
+    /// - ν = 3/2: k(r) = σ² × (1 + √3×r/l) × exp(-√3×r/l)
+    /// - ν = 5/2: k(r) = σ² × (1 + √5×r/l + 5r²/(3l²)) × exp(-√5×r/l)
+    ///
+    /// These closed forms are much faster than the general Bessel function formulation.
     /// </para>
     /// </remarks>
     public T Calculate(Vector<T> x1, Vector<T> x2)
     {
-        T distance = _numOps.Sqrt(x1.Subtract(x2).DotProduct(x1.Subtract(x2)));
-        T scaledDistance = _numOps.Multiply(_numOps.Sqrt(_numOps.Multiply(_numOps.FromDouble(2), _nu)),
-                                            _numOps.Divide(distance, _length));
+        if (x1.Length != x2.Length)
+            throw new ArgumentException("Vectors must have the same length.");
 
-        T besselTerm = ModifiedBesselFunction(_nu, scaledDistance);
+        // Compute Euclidean distance
+        double r = 0;
+        for (int i = 0; i < x1.Length; i++)
+        {
+            double diff = _numOps.ToDouble(x1[i]) - _numOps.ToDouble(x2[i]);
+            r += diff * diff;
+        }
+        r = Math.Sqrt(r);
 
-        T powerTerm = _numOps.Power(_numOps.FromDouble(2), _numOps.Subtract(_numOps.One, _nu));
-        T gammaTerm = StatisticsHelper<T>.Gamma(_nu);
-
-        return _numOps.Multiply(_numOps.Multiply(powerTerm, _numOps.Divide(_numOps.One, gammaTerm)),
-                                _numOps.Multiply(besselTerm, _numOps.Power(scaledDistance, _nu)));
+        double result = ComputeMatern(r);
+        return _numOps.FromDouble(result);
     }
 
     /// <summary>
-    /// Calculates the modified Bessel function of the second kind.
+    /// Computes the Matérn function value for a given distance.
     /// </summary>
-    /// <param name="order">The order of the Bessel function.</param>
-    /// <param name="x">The input value.</param>
-    /// <returns>The value of the modified Bessel function.</returns>
-    /// <remarks>
-    /// <b>For Beginners:</b> This is a helper method that implements a special mathematical function
-    /// needed for the Matérn kernel calculation. You don't need to understand the details of this
-    /// function to use the Matérn kernel effectively.
-    /// </remarks>
-    private T ModifiedBesselFunction(T order, T x)
+    /// <param name="r">The Euclidean distance.</param>
+    /// <returns>The kernel value.</returns>
+    private double ComputeMatern(double r)
     {
-        double nu = Convert.ToDouble(order);
-        double xDouble = Convert.ToDouble(x);
-
-        if (xDouble < 0)
+        if (r < 1e-10)
         {
-            throw new ArgumentException("x must be non-negative for modified Bessel function");
+            return _variance;
         }
 
-        if (xDouble == 0)
-        {
-            return nu == 0 ? _numOps.FromDouble(double.PositiveInfinity) : _numOps.FromDouble(double.PositiveInfinity);
-        }
+        // Use closed-form expressions for common values of nu
+        double scaledR = r / _lengthScale;
 
-        if (xDouble <= 2)
+        // Check for special cases (within tolerance)
+        if (Math.Abs(_nu - 0.5) < 0.01)
         {
-            // Use series expansion for small x
-            return ModifiedBesselFunctionSeries(order, x);
+            // Matérn 1/2 (exponential)
+            return _variance * Math.Exp(-scaledR);
+        }
+        else if (Math.Abs(_nu - 1.5) < 0.01)
+        {
+            // Matérn 3/2
+            double sqrt3R = Math.Sqrt(3.0) * scaledR;
+            return _variance * (1.0 + sqrt3R) * Math.Exp(-sqrt3R);
+        }
+        else if (Math.Abs(_nu - 2.5) < 0.01)
+        {
+            // Matérn 5/2
+            double sqrt5R = Math.Sqrt(5.0) * scaledR;
+            return _variance * (1.0 + sqrt5R + sqrt5R * sqrt5R / 3.0) * Math.Exp(-sqrt5R);
         }
         else
         {
-            // Use asymptotic expansion for large x
-            return ModifiedBesselFunctionAsymptotic(order, x);
+            // General case using Bessel function approximation
+            return ComputeGeneralMatern(scaledR);
         }
     }
 
     /// <summary>
-    /// Calculates the modified Bessel function using a series expansion for small input values.
+    /// Computes the general Matérn function using Bessel function approximation.
     /// </summary>
-    /// <param name="order">The order of the Bessel function.</param>
-    /// <param name="x">The input value.</param>
-    /// <returns>The value of the modified Bessel function.</returns>
-    /// <remarks>
-    /// <b>For Beginners:</b> This is a specialized mathematical helper method used internally by the kernel.
-    /// It uses a mathematical technique called "series expansion" to calculate the Bessel function
-    /// when the input value is small.
-    /// </remarks>
-    private T ModifiedBesselFunctionSeries(T order, T x)
+    private double ComputeGeneralMatern(double scaledR)
     {
-        T sum = _numOps.Zero;
-        T term = _numOps.One;
-        int k = 0;
-        T xOver2 = _numOps.Divide(x, _numOps.FromDouble(2));
+        double sqrt2NuR = Math.Sqrt(2.0 * _nu) * scaledR;
 
-        while (true)
+        if (sqrt2NuR < 1e-10)
         {
-            T a = _numOps.Power(xOver2, _numOps.Add(order, _numOps.FromDouble(2 * k)));
-            T b = StatisticsHelper<T>.Gamma(_numOps.Add(order, _numOps.FromDouble(k + 1)));
-            T c = StatisticsHelper<T>.Gamma(_numOps.FromDouble(k + 1));
-            term = _numOps.Divide(a, _numOps.Multiply(b, c));
-
-            if (_numOps.LessThan(_numOps.Abs(term), _numOps.FromDouble(1e-15)))
-            {
-                break;
-            }
-
-            sum = _numOps.Add(sum, term);
-            k++;
+            return _variance;
         }
 
-        return sum;
+        // Use asymptotic expansion for modified Bessel function K_nu
+        // For moderate arguments, use polynomial approximation
+        double besselK = ApproximateBesselK(_nu, sqrt2NuR);
+        double factor = Math.Pow(2.0, 1.0 - _nu) / GammaFunction(_nu);
+        double powerTerm = Math.Pow(sqrt2NuR, _nu);
+
+        return _variance * factor * powerTerm * besselK;
     }
 
     /// <summary>
-    /// Calculates the modified Bessel function using an asymptotic expansion for large input values.
+    /// Approximates the modified Bessel function K_nu(x).
     /// </summary>
-    /// <param name="order">The order of the Bessel function.</param>
-    /// <param name="x">The input value.</param>
-    /// <returns>The value of the modified Bessel function using an asymptotic approximation.</returns>
+    private static double ApproximateBesselK(double nu, double x)
+    {
+        if (x < 0.01)
+        {
+            // Small x approximation
+            if (Math.Abs(nu) < 0.01)
+            {
+                return -Math.Log(x / 2) - 0.5772156649; // Euler-Mascheroni
+            }
+            else
+            {
+                return 0.5 * GammaFunction(nu) * Math.Pow(x / 2, -nu);
+            }
+        }
+        else if (x > 10)
+        {
+            // Large x asymptotic expansion
+            return Math.Sqrt(Math.PI / (2 * x)) * Math.Exp(-x) *
+                   (1 + (4 * nu * nu - 1) / (8 * x));
+        }
+        else
+        {
+            // Intermediate: use Miller's algorithm or series
+            return BesselKMiller(nu, x);
+        }
+    }
+
+    /// <summary>
+    /// Miller's algorithm for modified Bessel function K_nu.
+    /// </summary>
+    private static double BesselKMiller(double nu, double x)
+    {
+        // For non-integer nu, use relation between K_nu and K_{-nu}
+        // K_nu = K_{-nu} (symmetry)
+
+        // Guard against integer nu which causes sin(π*nu) = 0
+        double nuRounded = Math.Round(nu);
+        if (Math.Abs(nu - nuRounded) < 1e-10)
+        {
+            // For integer nu, fall back to asymptotic expansion (always valid for moderate x)
+            // This avoids the sin(π*nu) = 0 singularity
+            return Math.Sqrt(Math.PI / (2 * x)) * Math.Exp(-x) *
+                   (1 + (4 * nu * nu - 1) / (8 * x));
+        }
+
+        // Use recurrence relation and continued fraction
+        // This is a simplified implementation
+
+        // For half-integer nu, there are closed forms
+        double halfNu = nu - Math.Floor(nu);
+        if (Math.Abs(halfNu - 0.5) < 0.01)
+        {
+            int n = (int)Math.Floor(nu);
+            return BesselKHalfInteger(n, x);
+        }
+
+        // General approximation using series
+        double sum = 0;
+        double term = 1;
+        double gamma0 = GammaFunction(nu);
+        double gamma1 = GammaFunction(-nu);
+        double x2 = x * x / 4;
+
+        for (int k = 0; k < 50; k++)
+        {
+            if (k > 0)
+            {
+                term *= x2 / (k * (k + nu)) * (k - 1 + nu > 0 ? 1 : -1);
+            }
+            sum += term;
+            if (Math.Abs(term) < 1e-15 * Math.Abs(sum))
+                break;
+        }
+
+        return Math.PI / (2 * Math.Sin(Math.PI * nu)) *
+               (Math.Pow(x / 2, -nu) * gamma0 - Math.Pow(x / 2, nu) / gamma1) * sum;
+    }
+
+    /// <summary>
+    /// Computes K_{n+1/2} using closed form for half-integer orders.
+    /// </summary>
+    private static double BesselKHalfInteger(int n, double x)
+    {
+        // K_{1/2}(x) = sqrt(pi/(2x)) * exp(-x)
+        double k0 = Math.Sqrt(Math.PI / (2 * x)) * Math.Exp(-x);
+
+        if (n == 0)
+            return k0;
+
+        // K_{3/2}(x) = sqrt(pi/(2x)) * exp(-x) * (1 + 1/x)
+        double k1 = k0 * (1 + 1 / x);
+
+        if (n == 1)
+            return k1;
+
+        // Use recurrence: K_{n+1}(x) = K_{n-1}(x) + (2n/x) * K_n(x)
+        double kPrev = k0;
+        double kCurr = k1;
+
+        for (int i = 1; i < n; i++)
+        {
+            double kNext = kPrev + (2.0 * (i + 0.5) / x) * kCurr;
+            kPrev = kCurr;
+            kCurr = kNext;
+        }
+
+        return kCurr;
+    }
+
+    /// <summary>
+    /// Approximates the Gamma function.
+    /// </summary>
+    private static double GammaFunction(double z)
+    {
+        if (z <= 0)
+        {
+            // Use reflection formula for negative values
+            return Math.PI / (Math.Sin(Math.PI * z) * GammaFunction(1 - z));
+        }
+
+        // Use Stirling's approximation for large z
+        if (z > 10)
+        {
+            return Math.Sqrt(2 * Math.PI / z) * Math.Pow(z / Math.E, z) *
+                   (1 + 1 / (12 * z) + 1 / (288 * z * z));
+        }
+
+        // Use Lanczos approximation for small z
+        double[] g = { 1.000000000000000174663, 5716.400188274341379136,
+            -14815.30426768413909044, 14291.49277657478554025,
+            -6348.160217641458813289, 1301.608286058321874105,
+            -108.1767053514369634679, 2.605696505611755827729,
+            -0.7423452510201416151527e-2, 0.5384136432509564062961e-7,
+            -0.4023533141268236372067e-8 };
+
+        if (z < 0.5)
+        {
+            return Math.PI / (Math.Sin(Math.PI * z) * GammaFunction(1 - z));
+        }
+
+        z -= 1;
+        double x = g[0];
+        for (int i = 1; i < 11; i++)
+        {
+            x += g[i] / (z + i);
+        }
+
+        double t = z + 10.5;
+        return Math.Sqrt(2 * Math.PI) * Math.Pow(t, z + 0.5) * Math.Exp(-t) * x;
+    }
+
+    /// <summary>
+    /// Creates a Matérn 1/2 (exponential) kernel.
+    /// </summary>
+    /// <param name="lengthScale">The length scale.</param>
+    /// <param name="variance">The signal variance.</param>
+    /// <returns>A Matérn kernel with ν = 1/2.</returns>
     /// <remarks>
     /// <para>
-    /// This method implements an asymptotic expansion of the modified Bessel function of the second kind,
-    /// which is more efficient and numerically stable for large input values.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> This is a specialized mathematical helper method used internally by the kernel.
-    /// It uses a mathematical technique called "asymptotic expansion" to calculate the Bessel function
-    /// when the input value is large.
-    /// </para>
-    /// <para>
-    /// Think of this method as a mathematical shortcut that gives a good approximation when the
-    /// input number is large. Instead of doing many calculations in a series (which could be slow
-    /// or inaccurate for large numbers), this method uses a formula that works well specifically
-    /// for large values.
-    /// </para>
-    /// <para>
-    /// The formula uses:
-    /// - A square root term (sqrtPiOver2x) that scales the result based on the input value
-    /// - An exponential term (exp_x) that decreases rapidly as x increases
-    /// - Correction terms (p and q) that improve the accuracy of the approximation
-    /// </para>
-    /// <para>
-    /// You don't need to understand the mathematical details to use the Matérn kernel effectively.
-    /// This method is just part of the internal machinery that makes the kernel work correctly.
+    /// <b>For Beginners:</b> The Matérn 1/2 is equivalent to the exponential kernel.
+    /// It produces continuous but non-differentiable functions (rough/jagged).
+    ///
+    /// Use when: Your data has abrupt changes or you model an Ornstein-Uhlenbeck process.
     /// </para>
     /// </remarks>
-    private T ModifiedBesselFunctionAsymptotic(T order, T x)
+    public static MaternKernel<T> Matern12(double lengthScale = 1.0, double variance = 1.0)
     {
-        /// <summary>
-        /// Calculates the square root of p/(2x) term used in the asymptotic expansion.
-        /// </summary>
-        T sqrtPiOver2x = _numOps.Divide(_numOps.Sqrt(_numOps.FromDouble(Math.PI / 2)), _numOps.Sqrt(x));
+        return new MaternKernel<T>(nu: 0.5, lengthScale: lengthScale, variance: variance);
+    }
 
-        /// <summary>
-        /// Calculates the exponential decay term e^(-x) used in the asymptotic expansion.
-        /// </summary>
-        T exp_x = _numOps.Exp(_numOps.Negate(x));
+    /// <summary>
+    /// Creates a Matérn 3/2 kernel.
+    /// </summary>
+    /// <param name="lengthScale">The length scale.</param>
+    /// <param name="variance">The signal variance.</param>
+    /// <returns>A Matérn kernel with ν = 3/2.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> The Matérn 3/2 produces once-differentiable functions.
+    /// This is a good choice for moderately smooth data.
+    ///
+    /// Use when: Your data is fairly smooth but not extremely so.
+    /// </para>
+    /// </remarks>
+    public static MaternKernel<T> Matern32(double lengthScale = 1.0, double variance = 1.0)
+    {
+        return new MaternKernel<T>(nu: 1.5, lengthScale: lengthScale, variance: variance);
+    }
 
-        /// <summary>
-        /// The first term in the asymptotic series expansion.
-        /// </summary>
-        T p = _numOps.One;
-
-        /// <summary>
-        /// The second term in the asymptotic series expansion, which improves accuracy.
-        /// </summary>
-        T q = _numOps.Divide(_numOps.Multiply(_numOps.Multiply(_numOps.FromDouble(4), order), _numOps.Subtract(order, _numOps.One)), _numOps.Multiply(_numOps.FromDouble(8), x));
-
-        return _numOps.Multiply(sqrtPiOver2x, _numOps.Multiply(exp_x, _numOps.Add(p, q)));
+    /// <summary>
+    /// Creates a Matérn 5/2 kernel.
+    /// </summary>
+    /// <param name="lengthScale">The length scale.</param>
+    /// <param name="variance">The signal variance.</param>
+    /// <returns>A Matérn kernel with ν = 5/2.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> The Matérn 5/2 produces twice-differentiable functions.
+    /// This is often the recommended default for GP regression.
+    ///
+    /// Use when: You're not sure which kernel to use - this is a good starting point.
+    /// </para>
+    /// </remarks>
+    public static MaternKernel<T> Matern52(double lengthScale = 1.0, double variance = 1.0)
+    {
+        return new MaternKernel<T>(nu: 2.5, lengthScale: lengthScale, variance: variance);
     }
 }

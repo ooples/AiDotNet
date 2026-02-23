@@ -8,6 +8,7 @@ using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Optimizers;
 using AiDotNet.PhysicsInformed;
+using AiDotNet.PhysicsInformed.Options;
 using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.PhysicsInformed.NeuralOperators
@@ -86,6 +87,11 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
     /// </remarks>
     public class FourierNeuralOperator<T> : NeuralNetworkBase<T>
     {
+        private readonly FourierNeuralOperatorOptions _options;
+
+        /// <inheritdoc/>
+        public override ModelOptions GetOptions() => _options;
+
         private readonly int _modes; // Number of Fourier modes to keep
         private readonly int _width; // Channel width of the network
         private readonly int[] _spatialDimensions;
@@ -133,9 +139,13 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             int width = 64,
             int[]? spatialDimensions = null,
             int numLayers = 4,
-            IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
+            IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+            FourierNeuralOperatorOptions? options = null)
             : base(architecture, NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), 1.0)
         {
+            _options = options ?? new FourierNeuralOperatorOptions();
+            Options = _options;
+
             _modes = modes;
             _width = width;
             _spatialDimensions = spatialDimensions ?? new int[] { 64, 64 }; // Default 2D

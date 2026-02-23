@@ -48,6 +48,9 @@ public class MultinomialLogisticRegression<T> : RegressionBase<T>
     /// </remarks>
     private readonly MultinomialLogisticRegressionOptions<T> _options;
 
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// The coefficients matrix, where each row corresponds to a class and each column to a feature (plus intercept).
     /// </summary>

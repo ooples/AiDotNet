@@ -31,6 +31,7 @@ namespace AiDotNet.Interfaces;
 /// - Beat phase: Where in the beat cycle we are
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("BeatTracker")]
 public interface IBeatTracker<T>
 {
     /// <summary>

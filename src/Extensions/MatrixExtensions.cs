@@ -4201,4 +4201,223 @@ public static class MatrixExtensions
 
         return result;
     }
+
+    /// <summary>
+    /// Computes the trace of a square matrix (sum of diagonal elements).
+    /// </summary>
+    /// <typeparam name="T">The numeric type of the matrix elements.</typeparam>
+    /// <param name="matrix">The square matrix.</param>
+    /// <returns>The trace (sum of diagonal elements).</returns>
+    /// <exception cref="ArgumentException">Thrown when the matrix is not square.</exception>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> The trace of a matrix is simply the sum of all the numbers
+    /// on the main diagonal (top-left to bottom-right). For a 3x3 matrix, it would be
+    /// matrix[0,0] + matrix[1,1] + matrix[2,2].
+    /// </para>
+    /// <para>
+    /// The trace is used in the NOTEARS acyclicity constraint: h(W) = tr(e^(W∘W)) - d.
+    /// </para>
+    /// </remarks>
+    public static T Trace<T>(this Matrix<T> matrix)
+    {
+        if (matrix.Rows != matrix.Columns)
+        {
+            throw new ArgumentException("Trace is only defined for square matrices.", nameof(matrix));
+        }
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        T sum = numOps.Zero;
+
+        for (int i = 0; i < matrix.Rows; i++)
+        {
+            sum = numOps.Add(sum, matrix[i, i]);
+        }
+
+        return sum;
+    }
+
+    /// <summary>
+    /// Computes the matrix exponential e^A using a truncated Taylor series.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of the matrix elements.</typeparam>
+    /// <param name="matrix">The square matrix A.</param>
+    /// <param name="order">Number of Taylor series terms (default: 8, sufficient for most applications).</param>
+    /// <returns>The matrix exponential e^A.</returns>
+    /// <exception cref="ArgumentException">Thrown when the matrix is not square.</exception>
+    /// <remarks>
+    /// <para>
+    /// Computes e^A = I + A + A²/2! + A³/3! + ... + A^order/order! using the truncated Taylor series.
+    /// This is the standard approach used in the NOTEARS algorithm for the acyclicity constraint
+    /// h(W) = tr(e^(W∘W)) - d.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> The matrix exponential is similar to the regular exponential function (e^x)
+    /// but applied to matrices instead of numbers. It is computed as an infinite sum of matrix powers
+    /// divided by factorials, just like the regular exponential: e^x = 1 + x + x²/2 + x³/6 + ...
+    /// We truncate this series after a fixed number of terms for computational efficiency.
+    /// </para>
+    /// <para>
+    /// Reference: Zheng et al. (2018), "DAGs with NO TEARS: Continuous Optimization for Structure Learning"
+    /// </para>
+    /// </remarks>
+    public static Matrix<T> MatrixExponential<T>(this Matrix<T> matrix, int order = 8)
+    {
+        if (matrix.Rows != matrix.Columns)
+        {
+            throw new ArgumentException("Matrix exponential is only defined for square matrices.", nameof(matrix));
+        }
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int d = matrix.Rows;
+
+        // Result starts as identity matrix: e^0 = I
+        var result = new Matrix<T>(d, d);
+        for (int i = 0; i < d; i++)
+        {
+            result[i, i] = numOps.One;
+        }
+
+        // power tracks A^k at each iteration
+        var power = new Matrix<T>(d, d);
+        for (int i = 0; i < d; i++)
+        {
+            for (int j = 0; j < d; j++)
+            {
+                power[i, j] = matrix[i, j];
+            }
+        }
+
+        double factorial = 1.0;
+
+        for (int k = 1; k <= order; k++)
+        {
+            factorial *= k;
+            T invFactorial = numOps.FromDouble(1.0 / factorial);
+
+            // result += power / k!
+            for (int i = 0; i < d; i++)
+            {
+                for (int j = 0; j < d; j++)
+                {
+                    result[i, j] = numOps.Add(result[i, j], numOps.Multiply(power[i, j], invFactorial));
+                }
+            }
+
+            // power = power * matrix (for next iteration)
+            if (k < order)
+            {
+                var nextPower = new Matrix<T>(d, d);
+                for (int i = 0; i < d; i++)
+                {
+                    for (int j = 0; j < d; j++)
+                    {
+                        T sum = numOps.Zero;
+                        for (int m = 0; m < d; m++)
+                        {
+                            sum = numOps.Add(sum, numOps.Multiply(power[i, m], matrix[m, j]));
+                        }
+
+                        nextPower[i, j] = sum;
+                    }
+                }
+
+                power = nextPower;
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Computes the matrix power A^k by repeated multiplication.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of the matrix elements.</typeparam>
+    /// <param name="matrix">The square matrix A.</param>
+    /// <param name="power">The non-negative integer exponent k.</param>
+    /// <returns>The matrix A raised to the power k.</returns>
+    /// <exception cref="ArgumentException">Thrown when the matrix is not square or power is negative.</exception>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Just like multiplying a number by itself k times (e.g., 3^4 = 3×3×3×3),
+    /// matrix power multiplies a matrix by itself k times. A^0 = I (identity), A^1 = A, A^2 = A×A, etc.
+    /// </para>
+    /// </remarks>
+    public static Matrix<T> MatrixPower<T>(this Matrix<T> matrix, int power)
+    {
+        if (matrix.Rows != matrix.Columns)
+        {
+            throw new ArgumentException("Matrix power is only defined for square matrices.", nameof(matrix));
+        }
+
+        if (power < 0)
+        {
+            throw new ArgumentException("Power must be non-negative.", nameof(power));
+        }
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int d = matrix.Rows;
+
+        // A^0 = I
+        if (power == 0)
+        {
+            var identity = new Matrix<T>(d, d);
+            for (int i = 0; i < d; i++)
+            {
+                identity[i, i] = numOps.One;
+            }
+
+            return identity;
+        }
+
+        // Binary exponentiation for efficiency
+        var result = new Matrix<T>(d, d);
+        for (int i = 0; i < d; i++)
+        {
+            result[i, i] = numOps.One;
+        }
+
+        var baseMatrix = new Matrix<T>(d, d);
+        for (int i = 0; i < d; i++)
+        {
+            for (int j = 0; j < d; j++)
+            {
+                baseMatrix[i, j] = matrix[i, j];
+            }
+        }
+
+        int exp = power;
+        while (exp > 0)
+        {
+            if ((exp & 1) == 1)
+            {
+                result = MultiplyMatrices(result, baseMatrix, numOps, d);
+            }
+
+            baseMatrix = MultiplyMatrices(baseMatrix, baseMatrix, numOps, d);
+            exp >>= 1;
+        }
+
+        return result;
+    }
+
+    private static Matrix<T> MultiplyMatrices<T>(Matrix<T> a, Matrix<T> b, INumericOperations<T> numOps, int d)
+    {
+        var result = new Matrix<T>(d, d);
+        for (int i = 0; i < d; i++)
+        {
+            for (int j = 0; j < d; j++)
+            {
+                T sum = numOps.Zero;
+                for (int k = 0; k < d; k++)
+                {
+                    sum = numOps.Add(sum, numOps.Multiply(a[i, k], b[k, j]));
+                }
+
+                result[i, j] = sum;
+            }
+        }
+
+        return result;
+    }
 }

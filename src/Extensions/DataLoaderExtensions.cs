@@ -1,4 +1,5 @@
 using AiDotNet.Interfaces;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Extensions;
 
@@ -122,7 +123,8 @@ public class BatchConfigurationBuilder<TBatch> : IEnumerable<TBatch>
     /// <param name="batchSize">Optional batch size override.</param>
     public BatchConfigurationBuilder(IBatchIterable<TBatch> source, int? batchSize)
     {
-        _source = source ?? throw new ArgumentNullException(nameof(source));
+        Guard.NotNull(source);
+        _source = source;
         _batchSize = batchSize;
     }
 
@@ -238,7 +240,8 @@ public class AsyncBatchConfigurationBuilder<TBatch> : IAsyncEnumerable<TBatch>
     /// <param name="prefetchCount">Number of batches to prefetch.</param>
     public AsyncBatchConfigurationBuilder(IBatchIterable<TBatch> source, int? batchSize, int prefetchCount)
     {
-        _source = source ?? throw new ArgumentNullException(nameof(source));
+        Guard.NotNull(source);
+        _source = source;
         _batchSize = batchSize;
         _prefetchCount = prefetchCount;
     }

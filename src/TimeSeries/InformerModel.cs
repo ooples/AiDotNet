@@ -65,6 +65,7 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
         : base(options)
     {
         _options = options;
+        Options = _options;
 
         // Validate options
         if (_options.EmbeddingDim <= 0)
@@ -214,14 +215,34 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
     protected override void TrainCore(Matrix<T> x, Vector<T> y)
     {
         T learningRate = _numOps.FromDouble(_options.LearningRate);
+        int lookback = _options.LookbackWindow;
+
+        // Build training samples from y: input = y[i-lookback : i], target = y[i]
+        var validIndices = new List<int>();
+        for (int i = lookback; i < y.Length; i++)
+        {
+            validIndices.Add(i);
+        }
+
+        if (validIndices.Count == 0)
+        {
+            throw new ArgumentException(
+                $"Not enough data to build a single training sample. " +
+                $"Require at least {lookback + 1} points, got {y.Length}.",
+                nameof(y));
+        }
+
+        double prevLoss = double.MaxValue;
 
         for (int epoch = 0; epoch < _options.Epochs; epoch++)
         {
-            var indices = Enumerable.Range(0, x.Rows).OrderBy(_ => _random.Next()).ToList();
+            var shuffled = validIndices.OrderBy(_ => _random.Next()).ToList();
+            double epochLoss = 0;
+            int sampleCount = 0;
 
-            for (int batchStart = 0; batchStart < x.Rows; batchStart += _options.BatchSize)
+            for (int batchStart = 0; batchStart < shuffled.Count; batchStart += _options.BatchSize)
             {
-                int batchEnd = Math.Min(batchStart + _options.BatchSize, x.Rows);
+                int batchEnd = Math.Min(batchStart + _options.BatchSize, shuffled.Count);
                 int batchSize = batchEnd - batchStart;
 
                 // Reset gradient accumulators
@@ -230,18 +251,35 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
                 // Accumulate gradients for batch using backpropagation
                 for (int idx = batchStart; idx < batchEnd; idx++)
                 {
-                    int i = indices[idx];
-                    Vector<T> input = x.GetRow(i);
+                    int i = shuffled[idx];
+
+                    // Extract lookback window from y as input
+                    var input = new Vector<T>(lookback);
+                    for (int j = 0; j < lookback; j++)
+                    {
+                        input[j] = y[i - lookback + j];
+                    }
+
                     T target = y[i];
 
                     // Compute gradients via backpropagation and accumulate
-                    var gradients = ComputeGradients(input, target);
+                    var (gradients, prediction) = ComputeGradients(input, target);
                     AccumulateGradients(gradients);
+
+                    double error = _numOps.ToDouble(_numOps.Subtract(target, prediction));
+                    epochLoss += error * error;
+                    sampleCount++;
                 }
 
                 // Apply accumulated gradients
                 ApplyGradients(learningRate, batchSize);
             }
+
+            // Early termination if loss converges
+            double avgLoss = sampleCount > 0 ? epochLoss / sampleCount : 0;
+            if (Math.Abs(prevLoss - avgLoss) < 1e-8)
+                break;
+            prevLoss = avgLoss;
         }
     }
 
@@ -256,7 +294,7 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
         }
     }
 
-    private Dictionary<string, Tensor<T>> ComputeGradients(Vector<T> input, T target)
+    private (Dictionary<string, Tensor<T>> gradients, T prediction) ComputeGradients(Vector<T> input, T target)
     {
         var gradients = new Dictionary<string, Tensor<T>>();
 
@@ -363,7 +401,7 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
         }
         gradients["inputProjection"] = dInputProj;
 
-        return gradients;
+        return (gradients, prediction);
     }
 
     private void AccumulateGradients(Dictionary<string, Tensor<T>> gradients)
@@ -941,7 +979,7 @@ internal class InformerEncoderLayerTensor<T>
                 double score = 0;
                 for (int d = 0; d < _embeddingDim && d < queries[q].Length && d < keys[k].Length; d++)
                 {
-                    score += Convert.ToDouble(_numOps.Multiply(queries[q][d], keys[k][d]));
+                    score += _numOps.ToDouble(_numOps.Multiply(queries[q][d], keys[k][d]));
                 }
                 score /= Math.Sqrt(_headDim);
                 attnWeights[k] = score;
@@ -1008,7 +1046,7 @@ internal class InformerEncoderLayerTensor<T>
 
     private T GELU(T x)
     {
-        double xd = Convert.ToDouble(x);
+        double xd = _numOps.ToDouble(x);
         double result = 0.5 * xd * (1 + Math.Tanh(Math.Sqrt(2 / Math.PI) * (xd + 0.044715 * Math.Pow(xd, 3))));
         return _numOps.FromDouble(result);
     }
@@ -1018,13 +1056,13 @@ internal class InformerEncoderLayerTensor<T>
         int n = Math.Min(input.Length, gamma.Length);
         double mean = 0;
         for (int i = 0; i < n; i++)
-            mean += Convert.ToDouble(input[i]);
+            mean += _numOps.ToDouble(input[i]);
         mean /= n;
 
         double variance = 0;
         for (int i = 0; i < n; i++)
         {
-            double diff = Convert.ToDouble(input[i]) - mean;
+            double diff = _numOps.ToDouble(input[i]) - mean;
             variance += diff * diff;
         }
         variance /= n;
@@ -1033,7 +1071,7 @@ internal class InformerEncoderLayerTensor<T>
         var output = new Tensor<T>(new[] { n });
         for (int i = 0; i < n; i++)
         {
-            double norm = (Convert.ToDouble(input[i]) - mean) / stddev;
+            double norm = (_numOps.ToDouble(input[i]) - mean) / stddev;
             output[i] = _numOps.Add(
                 _numOps.Multiply(gamma[i], _numOps.FromDouble(norm)),
                 beta[i]);
@@ -1250,7 +1288,7 @@ internal class DistillingConvTensor<T>
                     conv = ELU(conv);
 
                     // Max pooling
-                    if (Convert.ToDouble(conv) > Convert.ToDouble(maxVal))
+                    if (_numOps.ToDouble(conv) > _numOps.ToDouble(maxVal))
                     {
                         maxVal = conv;
                     }
@@ -1267,7 +1305,7 @@ internal class DistillingConvTensor<T>
 
     private T ELU(T x)
     {
-        double xd = Convert.ToDouble(x);
+        double xd = _numOps.ToDouble(x);
         if (xd >= 0) return x;
         return _numOps.FromDouble(Math.Exp(xd) - 1);
     }
@@ -1564,7 +1602,7 @@ internal class InformerDecoderLayerTensor<T>
                 double score = 0;
                 for (int d = 0; d < _embeddingDim && d < queries[q].Length && d < keys[k].Length; d++)
                 {
-                    score += Convert.ToDouble(_numOps.Multiply(queries[q][d], keys[k][d]));
+                    score += _numOps.ToDouble(_numOps.Multiply(queries[q][d], keys[k][d]));
                 }
                 score /= Math.Sqrt(_headDim);
                 attnWeights[k] = score;
@@ -1616,7 +1654,7 @@ internal class InformerDecoderLayerTensor<T>
                 double score = 0;
                 for (int d = 0; d < _embeddingDim && d < query.Length && d < keys[k].Length; d++)
                 {
-                    score += Convert.ToDouble(_numOps.Multiply(query[d], keys[k][d]));
+                    score += _numOps.ToDouble(_numOps.Multiply(query[d], keys[k][d]));
                 }
                 score /= Math.Sqrt(_headDim);
                 attnWeights[k] = score;
@@ -1679,7 +1717,7 @@ internal class InformerDecoderLayerTensor<T>
 
     private T GELU(T x)
     {
-        double xd = Convert.ToDouble(x);
+        double xd = _numOps.ToDouble(x);
         double result = 0.5 * xd * (1 + Math.Tanh(Math.Sqrt(2 / Math.PI) * (xd + 0.044715 * Math.Pow(xd, 3))));
         return _numOps.FromDouble(result);
     }
@@ -1700,13 +1738,13 @@ internal class InformerDecoderLayerTensor<T>
         int n = Math.Min(input.Length, gamma.Length);
         double mean = 0;
         for (int i = 0; i < n; i++)
-            mean += Convert.ToDouble(input[i]);
+            mean += _numOps.ToDouble(input[i]);
         mean /= n;
 
         double variance = 0;
         for (int i = 0; i < n; i++)
         {
-            double diff = Convert.ToDouble(input[i]) - mean;
+            double diff = _numOps.ToDouble(input[i]) - mean;
             variance += diff * diff;
         }
         variance /= n;
@@ -1715,7 +1753,7 @@ internal class InformerDecoderLayerTensor<T>
         var output = new Tensor<T>(new[] { n });
         for (int i = 0; i < n; i++)
         {
-            double norm = (Convert.ToDouble(input[i]) - mean) / stddev;
+            double norm = (_numOps.ToDouble(input[i]) - mean) / stddev;
             output[i] = _numOps.Add(
                 _numOps.Multiply(gamma[i], _numOps.FromDouble(norm)),
                 beta[i]);

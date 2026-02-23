@@ -52,8 +52,12 @@ public class Wav2Vec2LanguageIdentifier<T> : AudioNeuralNetworkBase<T>, ILanguag
 
     private readonly INumericOperations<T> _numOps;
     private readonly Wav2Vec2LidOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     private readonly ILossFunction<T> _lossFunction;
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
 
     // Feature encoder (CNN layers)
     private readonly List<ILayer<T>> _featureEncoder = [];
@@ -109,6 +113,7 @@ public class Wav2Vec2LanguageIdentifier<T> : AudioNeuralNetworkBase<T>, ILanguag
 
         _numOps = MathHelper.GetNumericOperations<T>();
         _options = options ?? new Wav2Vec2LidOptions();
+        Options = _options;
         _options.ModelPath = modelPath;
 
         SampleRate = _options.SampleRate;
@@ -121,8 +126,6 @@ public class Wav2Vec2LanguageIdentifier<T> : AudioNeuralNetworkBase<T>, ILanguag
         // Load ONNX model
         OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
 
-        // Initialize optimizer (not used in ONNX mode but required for readonly field)
-        _optimizer = new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
     }
 
     /// <summary>
@@ -148,6 +151,7 @@ public class Wav2Vec2LanguageIdentifier<T> : AudioNeuralNetworkBase<T>, ILanguag
 
         _numOps = MathHelper.GetNumericOperations<T>();
         _options = options ?? new Wav2Vec2LidOptions();
+        Options = _options;
 
         SampleRate = _options.SampleRate;
 
@@ -401,7 +405,7 @@ public class Wav2Vec2LanguageIdentifier<T> : AudioNeuralNetworkBase<T>, ILanguag
         var gradientTensor = Tensor<T>.FromVector(gradientVector, predicted.Shape);
 
         BackwardNative(gradientTensor);
-        _optimizer.UpdateParameters(Layers);
+        _optimizer?.UpdateParameters(Layers);
 
         SetTrainingMode(false);
     }

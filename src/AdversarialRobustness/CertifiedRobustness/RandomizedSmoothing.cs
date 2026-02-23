@@ -7,6 +7,7 @@ using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using Newtonsoft.Json;
+using AiDotNet.Validation;
 
 namespace AiDotNet.AdversarialRobustness.CertifiedRobustness;
 
@@ -55,7 +56,8 @@ public class RandomizedSmoothing<T, TInput, TOutput> : ICertifiedDefense<T, TInp
     /// </remarks>
     public RandomizedSmoothing(CertifiedDefenseOptions<T> options)
     {
-        this.options = options ?? throw new ArgumentNullException(nameof(options));
+        Guard.NotNull(options);
+        this.options = options;
 
         // Use the configured seed if provided, otherwise use non-deterministic random
         // for proper statistical validity of the certification

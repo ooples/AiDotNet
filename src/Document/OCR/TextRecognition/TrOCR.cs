@@ -1,4 +1,5 @@
 using AiDotNet.Document.Interfaces;
+using AiDotNet.Document.Options;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -10,6 +11,7 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tokenization;
 using AiDotNet.Tokenization.Interfaces;
 using Microsoft.ML.OnnxRuntime;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Document.OCR.TextRecognition;
 
@@ -42,6 +44,11 @@ namespace AiDotNet.Document.OCR.TextRecognition;
 /// </remarks>
 public class TrOCR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
 {
+    private readonly TrOCROptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     #region Fields
 
     private readonly bool _useNativeMode;
@@ -138,9 +145,13 @@ public class TrOCR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         int patchSize = 16,
         int vocabSize = 50265,
         IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        TrOCROptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyLoss<T>(), 1.0)
     {
+        _options = options ?? new TrOCROptions();
+        Options = _options;
+
         if (string.IsNullOrWhiteSpace(encoderPath))
             throw new ArgumentNullException(nameof(encoderPath));
         if (string.IsNullOrWhiteSpace(decoderPath))
@@ -150,7 +161,8 @@ public class TrOCR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         if (!File.Exists(decoderPath))
             throw new FileNotFoundException($"Decoder model not found: {decoderPath}", decoderPath);
 
-        _tokenizer = tokenizer ?? throw new ArgumentNullException(nameof(tokenizer));
+        Guard.NotNull(tokenizer);
+        _tokenizer = tokenizer;
         _useNativeMode = false;
         _encoderHiddenDim = encoderHiddenDim;
         _decoderHiddenDim = decoderHiddenDim;
@@ -215,9 +227,13 @@ public class TrOCR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         int patchSize = 16,
         int vocabSize = 50265,
         IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        TrOCROptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyLoss<T>(), 1.0)
     {
+        _options = options ?? new TrOCROptions();
+        Options = _options;
+
         _useNativeMode = true;
         _encoderHiddenDim = encoderHiddenDim;
         _decoderHiddenDim = decoderHiddenDim;

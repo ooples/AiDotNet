@@ -1,6 +1,7 @@
 using AiDotNet.Document.Interfaces;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
+using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.Postprocessing;
@@ -120,6 +121,7 @@ public abstract class DocumentNeuralNetworkBase<T> : NeuralNetworkBase<T>
         double maxGradNorm = 1.0)
         : base(architecture, lossFunction ?? new CrossEntropyLoss<T>(), maxGradNorm)
     {
+        Options = new DocumentNeuralNetworkOptions();
     }
 
     #endregion

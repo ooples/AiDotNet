@@ -504,6 +504,10 @@ public class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         int numNodes;
         int inputFeatures;
 
+        // Support any rank >= 2: last 2 dims are [nodes, features], earlier dims are batch-like
+        if (inputShape.Length < 2)
+            throw new ArgumentException($"DirectionalGraph layer requires at least 2D tensor [nodes, features]. Got rank {inputShape.Length}.");
+
         if (inputShape.Length == 2)
         {
             batchSize = 1;
@@ -518,7 +522,12 @@ public class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         }
         else
         {
-            throw new ArgumentException($"Input must be 2D [nodes, features] or 3D [batch, nodes, features], got {inputShape.Length}D");
+            // Higher rank: flatten leading dimensions into batch
+            batchSize = 1;
+            for (int d = 0; d < inputShape.Length - 2; d++)
+                batchSize *= inputShape[d];
+            numNodes = inputShape[inputShape.Length - 2];
+            inputFeatures = inputShape[inputShape.Length - 1];
         }
 
         // Upload weight matrices to GPU
@@ -705,10 +714,24 @@ public class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         gateWeightsBuffer?.Dispose();
         gateBiasBuffer?.Dispose();
 
-        // Return GPU tensor with appropriate shape
-        int[] outputShape = batchSize == 1
-            ? new[] { numNodes, _outputFeatures }
-            : new[] { batchSize, numNodes, _outputFeatures };
+        // Return GPU tensor with appropriate shape — restore original leading dims for higher-rank input
+        int[] outputShape;
+        if (inputShape.Length > 3)
+        {
+            outputShape = new int[inputShape.Length];
+            for (int d = 0; d < inputShape.Length - 2; d++)
+                outputShape[d] = inputShape[d];
+            outputShape[inputShape.Length - 2] = numNodes;
+            outputShape[inputShape.Length - 1] = _outputFeatures;
+        }
+        else if (inputShape.Length == 2)
+        {
+            outputShape = new[] { numNodes, _outputFeatures };
+        }
+        else
+        {
+            outputShape = new[] { batchSize, numNodes, _outputFeatures };
+        }
 
         return new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
     }

@@ -40,7 +40,7 @@ namespace AiDotNet.Models.Options;
 /// </list>
 /// </para>
 /// </remarks>
-public class NASOptions<T>
+public class NASOptions<T> : ModelOptions
 {
     /// <summary>
     /// Gets or sets the NAS strategy to use.

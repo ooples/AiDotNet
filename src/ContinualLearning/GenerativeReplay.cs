@@ -1,6 +1,7 @@
 using AiDotNet.ActiveLearning.Interfaces;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Validation;
 
 namespace AiDotNet.ContinualLearning;
 
@@ -99,22 +100,23 @@ public class GenerativeReplay<T> : IContinualLearningStrategy<T>
     /// <param name="generator">The generative model (VAE, GAN, etc.).</param>
     public void SetGenerator(IGenerativeModel<T> generator)
     {
-        _generator = generator ?? throw new ArgumentNullException(nameof(generator));
+        Guard.NotNull(generator);
+        _generator = generator;
     }
 
     /// <inheritdoc />
     public void BeforeTask(INeuralNetwork<T> network, int taskId)
     {
-        _ = network ?? throw new ArgumentNullException(nameof(network));
+        Guard.NotNull(network);
         // Generative replay doesn't need special setup before a task
     }
 
     /// <inheritdoc />
     public void AfterTask(INeuralNetwork<T> network, (Tensor<T> inputs, Tensor<T> targets) taskData, int taskId)
     {
-        _ = network ?? throw new ArgumentNullException(nameof(network));
-        _ = taskData.inputs ?? throw new ArgumentNullException(nameof(taskData));
-        _ = taskData.targets ?? throw new ArgumentNullException(nameof(taskData));
+        Guard.NotNull(network);
+        Guard.NotNull(taskData.inputs);
+        Guard.NotNull(taskData.targets);
 
         // Update the generator with task data (if generator is set)
         // In practice, the generator should be trained alongside the solver
@@ -125,7 +127,7 @@ public class GenerativeReplay<T> : IContinualLearningStrategy<T>
     /// <inheritdoc />
     public T ComputeLoss(INeuralNetwork<T> network)
     {
-        _ = network ?? throw new ArgumentNullException(nameof(network));
+        Guard.NotNull(network);
 
         if (_generator == null || _taskCount == 0)
         {
@@ -164,8 +166,8 @@ public class GenerativeReplay<T> : IContinualLearningStrategy<T>
     public Vector<T> ModifyGradients(INeuralNetwork<T> network, Vector<T> gradients)
     {
         // Generative replay works through loss computation, not gradient modification
-        _ = network ?? throw new ArgumentNullException(nameof(network));
-        _ = gradients ?? throw new ArgumentNullException(nameof(gradients));
+        Guard.NotNull(network);
+        Guard.NotNull(gradients);
         return gradients;
     }
 
@@ -202,8 +204,8 @@ public class GenerativeReplay<T> : IContinualLearningStrategy<T>
         Tensor<T> currentTargets,
         int batchSize)
     {
-        _ = currentInputs ?? throw new ArgumentNullException(nameof(currentInputs));
-        _ = currentTargets ?? throw new ArgumentNullException(nameof(currentTargets));
+        Guard.NotNull(currentInputs);
+        Guard.NotNull(currentTargets);
 
         if (_generator == null || _taskCount == 0)
         {
@@ -346,6 +348,7 @@ public class GenerativeReplay<T> : IContinualLearningStrategy<T>
 /// Interface for generative models used with GenerativeReplay.
 /// </summary>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("GenerativeModel")]
 public interface IGenerativeModel<T>
 {
     /// <summary>

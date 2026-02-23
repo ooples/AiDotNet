@@ -41,6 +41,9 @@ namespace AiDotNet.Clustering.Subspace;
 public class SUBCLU<T> : ClusteringBase<T>
 {
     private readonly SUBCLUOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
     private List<SubspaceClusterInfo>? _subspaceClusterInfos;
     private Matrix<T>? _trainingData;
 
@@ -76,7 +79,7 @@ public class SUBCLU<T> : ClusteringBase<T>
         {
             MaxIterations = _options.MaxIterations,
             Tolerance = _options.Tolerance,
-            RandomState = _options.RandomState,
+            Seed = _options.Seed,
             Epsilon = _options.Epsilon,
             MinPoints = _options.MinPoints,
             MaxSubspaceDimensions = _options.MaxSubspaceDimensions,

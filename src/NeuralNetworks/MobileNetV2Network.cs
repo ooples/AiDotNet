@@ -5,6 +5,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Optimizers;
 using AiDotNet.Validation;
 
@@ -60,6 +61,11 @@ namespace AiDotNet.NeuralNetworks;
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 public class MobileNetV2Network<T> : NeuralNetworkBase<T>
 {
+    private readonly MobileNetV2Options _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     private readonly ILossFunction<T> _lossFunction;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly MobileNetV2Configuration _configuration;
@@ -87,10 +93,14 @@ public class MobileNetV2Network<T> : NeuralNetworkBase<T>
         MobileNetV2Configuration configuration,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
-        double maxGradNorm = 1.0)
+        double maxGradNorm = 1.0,
+        MobileNetV2Options? options = null)
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), maxGradNorm)
     {
-        _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
+        _options = options ?? new MobileNetV2Options();
+        Options = _options;
+        Guard.NotNull(configuration);
+        _configuration = configuration;
 
         ArchitectureValidator.ValidateInputType(
             architecture,

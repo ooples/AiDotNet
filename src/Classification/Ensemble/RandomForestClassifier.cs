@@ -102,8 +102,8 @@ public class RandomForestClassifier<T> : EnsembleClassifierBase<T>, ITreeBasedCl
         TaskType = InferTaskType(y);
 
         // Initialize random number generator
-        _random = Options.RandomState.HasValue
-            ? RandomHelper.CreateSeededRandom(Options.RandomState.Value)
+        _random = Options.Seed.HasValue
+            ? RandomHelper.CreateSeededRandom(Options.Seed.Value)
             : RandomHelper.CreateSeededRandom(42);
 
         // Clear existing estimators and OOB indices
@@ -128,7 +128,7 @@ public class RandomForestClassifier<T> : EnsembleClassifierBase<T>, ITreeBasedCl
                 MinSamplesLeaf = Options.MinSamplesLeaf,
                 MaxFeatures = maxFeatures,
                 Criterion = Options.Criterion,
-                RandomState = _random.Next(),
+                Seed = _random.Next(),
                 MinImpurityDecrease = Options.MinImpurityDecrease
             };
 
@@ -346,7 +346,7 @@ public class RandomForestClassifier<T> : EnsembleClassifierBase<T>, ITreeBasedCl
             Bootstrap = Options.Bootstrap,
             OobScore = Options.OobScore,
             NJobs = Options.NJobs,
-            RandomState = Options.RandomState,
+            Seed = Options.Seed,
             MinImpurityDecrease = Options.MinImpurityDecrease
         });
     }
@@ -365,7 +365,7 @@ public class RandomForestClassifier<T> : EnsembleClassifierBase<T>, ITreeBasedCl
             Bootstrap = Options.Bootstrap,
             OobScore = Options.OobScore,
             NJobs = Options.NJobs,
-            RandomState = Options.RandomState,
+            Seed = Options.Seed,
             MinImpurityDecrease = Options.MinImpurityDecrease
         });
 

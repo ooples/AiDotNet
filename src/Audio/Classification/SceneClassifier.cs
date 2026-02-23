@@ -46,9 +46,13 @@ public class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifier<T>
     #region Fields
 
     private readonly SceneClassifierOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     private readonly MelSpectrogram<T> _melSpectrogram;
     private readonly MfccExtractor<T> _mfccExtractor;
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
 
@@ -113,7 +117,7 @@ public class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifier<T>
     {
         _options = options ?? new SceneClassifierOptions();
         _useNativeMode = false;
-        _optimizer = new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _options.ModelPath = modelPath;
 
         // Set base class properties
         base.SampleRate = _options.SampleRate;
@@ -164,7 +168,6 @@ public class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifier<T>
     {
         _options = options ?? new SceneClassifierOptions();
         _useNativeMode = false;
-        _optimizer = new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         // Set base class properties
         base.SampleRate = _options.SampleRate;
@@ -221,7 +224,7 @@ public class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifier<T>
     /// <summary>
     /// Creates a SceneClassifier asynchronously with model download.
     /// </summary>
-    public static async Task<SceneClassifier<T>> CreateAsync(
+    internal static async Task<SceneClassifier<T>> CreateAsync(
         SceneClassifierOptions? options = null,
         IProgress<double>? progress = null,
         CancellationToken cancellationToken = default)
@@ -562,7 +565,7 @@ public class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifier<T>
         }
 
         // Update parameters
-        _optimizer.UpdateParameters(Layers);
+        _optimizer?.UpdateParameters(Layers);
 
         SetTrainingMode(false);
     }

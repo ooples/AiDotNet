@@ -1,3 +1,5 @@
+using AiDotNet.NeuralNetworks.Options;
+
 namespace AiDotNet.NeuralNetworks;
 
 /// <summary>
@@ -33,6 +35,11 @@ namespace AiDotNet.NeuralNetworks;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 public class LiquidStateMachine<T> : NeuralNetworkBase<T>
 {
+    private readonly LiquidStateMachineOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// Gets the size of the reservoir (number of neurons).
     /// </summary>
@@ -211,8 +218,11 @@ public class LiquidStateMachine<T> : NeuralNetworkBase<T>
         double spectralRadius = 0.9,
         double inputScaling = 1.0,
         double leakingRate = 1.0,
-        ILossFunction<T>? lossFunction = null) : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
+        ILossFunction<T>? lossFunction = null,
+        LiquidStateMachineOptions? options = null) : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
+        _options = options ?? new LiquidStateMachineOptions();
+        Options = _options;
         _leakingRate = leakingRate;
         _inputScaling = inputScaling;
         _spectralRadius = spectralRadius;

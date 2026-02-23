@@ -43,6 +43,9 @@ namespace AiDotNet.Clustering.AutoK;
 public class XMeans<T> : ClusteringBase<T>
 {
     private readonly XMeansOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
     private double _bic;
 
     /// <summary>
@@ -100,7 +103,7 @@ public class XMeans<T> : ClusteringBase<T>
         {
             NumClusters = currentK,
             MaxIterations = Options.MaxIterations,
-            RandomState = Options.RandomState
+            Seed = Options.Seed
         });
 
         kmeans.Train(x);
@@ -159,7 +162,7 @@ public class XMeans<T> : ClusteringBase<T>
                 {
                     NumClusters = 2,
                     MaxIterations = Options.MaxIterations,
-                    RandomState = Options.RandomState
+                    Seed = Options.Seed
                 });
 
                 subKMeans.Train(subMatrix);

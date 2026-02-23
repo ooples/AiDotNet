@@ -1,4 +1,5 @@
 using AiDotNet.Interfaces;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Data.Sampling;
 
@@ -67,7 +68,8 @@ public class StratifiedSampler : DataSamplerBase, IStratifiedSampler
         get => _labels;
         set
         {
-            _labels = value?.ToArray() ?? throw new ArgumentNullException(nameof(value));
+            Guard.NotNull(value);
+            _labels = value.ToArray();
             BuildClassIndices();
         }
     }
@@ -245,7 +247,8 @@ public class StratifiedBatchSampler : DataSamplerBase, IBatchSampler, IStratifie
         get => _labels;
         set
         {
-            _labels = value?.ToArray() ?? throw new ArgumentNullException(nameof(value));
+            Guard.NotNull(value);
+            _labels = value.ToArray();
             BuildClassIndices();
         }
     }

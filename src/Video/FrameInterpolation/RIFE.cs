@@ -3,6 +3,7 @@ using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Video.Options;
 
 namespace AiDotNet.Video.FrameInterpolation;
 
@@ -34,8 +35,13 @@ namespace AiDotNet.Video.FrameInterpolation;
 /// ECCV 2022.
 /// </para>
 /// </remarks>
-public class RIFE<T> : NeuralNetworkBase<T>
+public class RIFE<T> : FrameInterpolationBase<T>
 {
+    private readonly RIFEOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     #region Fields
 
     private int _height;
@@ -115,9 +121,13 @@ public class RIFE<T> : NeuralNetworkBase<T>
     public RIFE(
         NeuralNetworkArchitecture<T> architecture,
         int numFeatures = DefaultNumFeatures,
-        int numFlowBlocks = DefaultNumFlowBlocks)
+        int numFlowBlocks = DefaultNumFlowBlocks,
+        RIFEOptions? options = null)
         : base(architecture, new CharbonnierLoss<T>())
     {
+        _options = options ?? new RIFEOptions();
+        Options = _options;
+
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 480;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 640;
         _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
@@ -150,7 +160,7 @@ public class RIFE<T> : NeuralNetworkBase<T>
     /// <param name="frame2">The second frame tensor [C, H, W] or [B, C, H, W].</param>
     /// <param name="timestep">The interpolation position (0.0 = frame1, 1.0 = frame2, 0.5 = midpoint).</param>
     /// <returns>The interpolated frame.</returns>
-    public Tensor<T> Interpolate(Tensor<T> frame1, Tensor<T> frame2, double timestep = 0.5)
+    public override Tensor<T> Interpolate(Tensor<T> frame1, Tensor<T> frame2, double timestep = 0.5)
     {
         timestep = Math.Max(0.0, Math.Min(1.0, timestep));
 
@@ -1143,4 +1153,21 @@ public class RIFE<T> : NeuralNetworkBase<T>
     }
 
     #endregion
+
+    #region Base Class Abstract Methods
+
+    /// <inheritdoc/>
+    protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames)
+    {
+        return NormalizeFrames(rawFrames);
+    }
+
+    /// <inheritdoc/>
+    protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput)
+    {
+        return DenormalizeFrames(modelOutput);
+    }
+
+    #endregion
+
 }

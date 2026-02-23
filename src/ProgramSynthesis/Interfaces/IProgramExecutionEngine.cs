@@ -18,6 +18,7 @@ namespace AiDotNet.ProgramSynthesis.Interfaces;
 /// an isolated process, or a remote service) without embedding unsafe execution inside the library.
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("ProgramExecutionEngine")]
 public interface IProgramExecutionEngine
 {
     /// <summary>

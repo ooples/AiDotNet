@@ -26,7 +26,7 @@ namespace AiDotNet.Regression;
 /// straight line.
 /// </para>
 /// </remarks>
-public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
+public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>, IConfigurableModel<T>
 {
     /// <summary>
     /// Gets the numeric operations provider for the specified type T.
@@ -64,6 +64,9 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>
     /// </para>
     /// </remarks>
     protected NonLinearRegressionOptions Options { get; private set; }
+
+    /// <inheritdoc/>
+    public virtual ModelOptions GetOptions() => Options;
 
     /// <summary>
     /// Gets the regularization method used to prevent overfitting.

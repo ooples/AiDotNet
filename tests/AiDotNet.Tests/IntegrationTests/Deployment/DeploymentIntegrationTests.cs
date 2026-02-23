@@ -1,3 +1,4 @@
+#nullable disable
 using AiDotNet.Deployment.Configuration;
 using AiDotNet.Deployment.Edge;
 using AiDotNet.Deployment.Export;
@@ -590,7 +591,7 @@ public class DeploymentIntegrationTests
 
         Assert.Equal(QuantizationMode.Int8, config.Mode);
         Assert.Equal(CalibrationMethod.MinMax, config.CalibrationMethod);
-        Assert.Equal(8, config.BitWidth);
+        Assert.Equal(8, config.EffectiveBitWidth);
     }
 
     [Fact]
@@ -599,7 +600,7 @@ public class DeploymentIntegrationTests
         var config = QuantizationConfiguration.ForFloat16();
 
         Assert.Equal(QuantizationMode.Float16, config.Mode);
-        Assert.Equal(16, config.BitWidth);
+        Assert.Equal(16, config.EffectiveBitWidth);
     }
 
     #endregion

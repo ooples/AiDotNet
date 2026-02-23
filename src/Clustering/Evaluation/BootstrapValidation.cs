@@ -97,7 +97,7 @@ public class BootstrapValidation<T>
                 NumClusters = numClusters,
                 MaxIterations = 100,
                 NumInitializations = 3,
-                RandomState = _randomState.HasValue ? _randomState.Value + b : null
+                Seed = _randomState.HasValue ? _randomState.Value + b : null
             });
 
             try
@@ -239,7 +239,7 @@ public class BootstrapValidation<T>
                 NumClusters = numClusters,
                 MaxIterations = 100,
                 NumInitializations = 3,
-                RandomState = _randomState.HasValue ? _randomState.Value + b : null
+                Seed = _randomState.HasValue ? _randomState.Value + b : null
             });
 
             try

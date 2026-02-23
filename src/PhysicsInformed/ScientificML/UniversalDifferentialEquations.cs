@@ -7,6 +7,7 @@ using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
+using AiDotNet.PhysicsInformed.Options;
 
 namespace AiDotNet.PhysicsInformed.ScientificML
 {
@@ -60,6 +61,11 @@ namespace AiDotNet.PhysicsInformed.ScientificML
     /// </remarks>
     public class UniversalDifferentialEquation<T> : NeuralNetworkBase<T>
     {
+        private readonly UniversalDifferentialEquationsOptions _options;
+
+        /// <inheritdoc/>
+        public override ModelOptions GetOptions() => _options;
+
         private readonly Func<T[], T, T[]> _knownDynamics;
         private readonly int _stateDim;
         private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
@@ -68,10 +74,14 @@ namespace AiDotNet.PhysicsInformed.ScientificML
             NeuralNetworkArchitecture<T> architecture,
             int stateDim,
             Func<T[], T, T[]>? knownDynamics = null,
-            IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
+            IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+            UniversalDifferentialEquationsOptions? options = null)
             : base(architecture ?? throw new ArgumentNullException(nameof(architecture)),
                 NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), 1.0)
         {
+            _options = options ?? new UniversalDifferentialEquationsOptions();
+            Options = _options;
+
             if (stateDim <= 0)
             {
                 throw new ArgumentOutOfRangeException(nameof(stateDim), "State dimension must be positive.");

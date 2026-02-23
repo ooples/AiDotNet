@@ -1,3 +1,4 @@
+#nullable disable
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Tensors.LinearAlgebra;

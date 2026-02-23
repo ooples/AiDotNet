@@ -131,6 +131,32 @@ public class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
     private Vector<T> _initialValues;
 
     /// <summary>
+    /// The level value at the end of training, used as the starting point for forecasting.
+    /// </summary>
+    private T _trainedLevel;
+
+    /// <summary>
+    /// The trend value at the end of training, used as the starting point for forecasting.
+    /// </summary>
+    private T _trainedTrend;
+
+    /// <summary>
+    /// The seasonal factors at the end of training, used as the starting point for forecasting.
+    /// </summary>
+    private Vector<T> _trainedSeasonalFactors;
+
+    /// <summary>
+    /// The number of observations seen during training, used to correctly align
+    /// the seasonal index when forecasting.
+    /// </summary>
+    private int _trainingLength;
+
+    /// <summary>
+    /// Gets the typed options for this model, providing access to ExponentialSmoothing-specific settings.
+    /// </summary>
+    private ExponentialSmoothingOptions<T> EsOptions => (ExponentialSmoothingOptions<T>)Options;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="ExponentialSmoothingModel{T}"/> class with the specified options.
     /// </summary>
     /// <param name="options">The configuration options for the exponential smoothing model.</param>
@@ -159,6 +185,10 @@ public class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
         _beta = options.UseTrend ? NumOps.FromDouble(options.InitialBeta) : NumOps.Zero;
         _gamma = options.UseSeasonal ? NumOps.FromDouble(options.InitialGamma) : NumOps.Zero;
         _initialValues = Vector<T>.Empty();
+        _trainedLevel = NumOps.Zero;
+        _trainedTrend = NumOps.Zero;
+        _trainedSeasonalFactors = Vector<T>.Empty();
+        _trainingLength = 0;
     }
 
     /// <summary>
@@ -279,7 +309,7 @@ public class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
     {
         Vector<T> forecasts = new(y.Length);
         T level = y[0];
-        T trend = Options.IncludeTrend ? NumOps.Subtract(y[1], y[0]) : NumOps.Zero;
+        T trend = EsOptions.UseTrend ? NumOps.Subtract(y[1], y[0]) : NumOps.Zero;
         Vector<T> seasonalFactors = Options.SeasonalPeriod > 0 ? EstimateInitialSeasonalFactors(y) : Vector<T>.Empty();
 
         for (int i = 0; i < y.Length; i++)
@@ -308,7 +338,7 @@ public class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
                 );
 
                 // Update trend
-                if (Options.IncludeTrend)
+                if (EsOptions.UseTrend)
                 {
                     trend = NumOps.Add(
                         NumOps.Multiply(beta, NumOps.Subtract(level, oldLevel)),
@@ -364,7 +394,7 @@ public class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
         initialValues[0] = y[0];
 
         // Initial trend
-        if (Options.IncludeTrend)
+        if (EsOptions.UseTrend)
         {
             initialValues[1] = NumOps.Subtract(y[1], y[0]);
         }
@@ -474,7 +504,7 @@ public class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
     {
         Vector<T> predictions = new Vector<T>(input.Rows);
         T level = _initialValues[0];
-        T trend = Options.IncludeTrend ? _initialValues[1] : NumOps.Zero;
+        T trend = EsOptions.UseTrend ? _initialValues[1] : NumOps.Zero;
         Vector<T> seasonalFactors = Options.SeasonalPeriod > 0 ? new Vector<T>([.. _initialValues.Skip(2)]) : Vector<T>.Empty();
 
         for (int i = 0; i < predictions.Length; i++)
@@ -495,7 +525,7 @@ public class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
             T oldLevel = level;
             level = NumOps.Add(NumOps.Multiply(_alpha, prediction), NumOps.Multiply(NumOps.Subtract(NumOps.One, _alpha), NumOps.Add(oldLevel, trend)));
 
-            if (Options.IncludeTrend)
+            if (EsOptions.UseTrend)
             {
                 trend = NumOps.Add(NumOps.Multiply(_beta, NumOps.Subtract(level, oldLevel)), NumOps.Multiply(NumOps.Subtract(NumOps.One, _beta), trend));
             }
@@ -580,8 +610,13 @@ public class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
     /// having to start from scratch.
     /// </para>
     /// </remarks>
+    private const byte SerializationVersion = 2;
+
     protected override void SerializeCore(BinaryWriter writer)
     {
+        // Version marker for forward-compatible deserialization
+        writer.Write(SerializationVersion);
+
         writer.Write(Convert.ToDouble(_alpha));
         writer.Write(Convert.ToDouble(_beta));
         writer.Write(Convert.ToDouble(_gamma));
@@ -591,6 +626,16 @@ public class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
         {
             writer.Write(Convert.ToDouble(value));
         }
+
+        // Trained state fields (added in version 2)
+        writer.Write(Convert.ToDouble(_trainedLevel));
+        writer.Write(Convert.ToDouble(_trainedTrend));
+        writer.Write(_trainedSeasonalFactors.Length);
+        foreach (var value in _trainedSeasonalFactors)
+        {
+            writer.Write(Convert.ToDouble(value));
+        }
+        writer.Write(_trainingLength);
     }
 
     /// <summary>
@@ -616,6 +661,20 @@ public class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     protected override void DeserializeCore(BinaryReader reader)
     {
+        // Peek at the first byte to detect version marker vs legacy format.
+        // Version 2+ writes a byte marker first; legacy (version 1) starts with a double (alpha).
+        // A double's first byte is extremely unlikely to be exactly 0x02 for typical alpha values,
+        // but we use stream position to disambiguate: if the first byte matches a known version
+        // AND there's enough remaining data for the versioned format, treat it as versioned.
+        byte firstByte = reader.ReadByte();
+        bool isVersioned = firstByte >= 2 && firstByte <= 10; // Reserve versions 2-10
+
+        if (!isVersioned)
+        {
+            // Legacy format: first byte was part of the alpha double. Seek back and read normally.
+            reader.BaseStream.Position -= 1;
+        }
+
         _alpha = NumOps.FromDouble(reader.ReadDouble());
         _beta = NumOps.FromDouble(reader.ReadDouble());
         _gamma = NumOps.FromDouble(reader.ReadDouble());
@@ -625,6 +684,39 @@ public class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
         for (int i = 0; i < initialValuesLength; i++)
         {
             _initialValues[i] = NumOps.FromDouble(reader.ReadDouble());
+        }
+
+        // Trained state fields (version 2+, or legacy with remaining data)
+        if (isVersioned || reader.BaseStream.Position < reader.BaseStream.Length)
+        {
+            _trainedLevel = NumOps.FromDouble(reader.ReadDouble());
+            _trainedTrend = NumOps.FromDouble(reader.ReadDouble());
+            int seasonalLength = reader.ReadInt32();
+            _trainedSeasonalFactors = new Vector<T>(seasonalLength);
+            for (int i = 0; i < seasonalLength; i++)
+            {
+                _trainedSeasonalFactors[i] = NumOps.FromDouble(reader.ReadDouble());
+            }
+            _trainingLength = reader.ReadInt32();
+        }
+        else
+        {
+            // Seed trained state from initial values so legacy models still forecast correctly
+            _trainedLevel = _initialValues.Length > 0 ? _initialValues[0] : NumOps.Zero;
+            _trainedTrend = _initialValues.Length > 1 ? _initialValues[1] : NumOps.Zero;
+            if (Options.SeasonalPeriod > 0 && _initialValues.Length >= Options.SeasonalPeriod + 2)
+            {
+                _trainedSeasonalFactors = new Vector<T>(Options.SeasonalPeriod);
+                for (int i = 0; i < Options.SeasonalPeriod; i++)
+                {
+                    _trainedSeasonalFactors[i] = _initialValues[i + 2];
+                }
+            }
+            else
+            {
+                _trainedSeasonalFactors = Vector<T>.Empty();
+            }
+            _trainingLength = 0;
         }
     }
 
@@ -708,7 +800,6 @@ public class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     public override ModelMetadata<T> GetModelMetadata()
     {
-        var esOptions = (ExponentialSmoothingOptions<T>)Options;
         var metadata = new ModelMetadata<T>
         {
             ModelType = ModelType.ExponentialSmoothingModel,
@@ -719,14 +810,14 @@ public class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
                 { "Beta", Convert.ToDouble(_beta) },
                 { "Gamma", Convert.ToDouble(_gamma) },
                 { "InitialValues", _initialValues },
-            
+
                 // Include model configuration as well
-                { "InitialAlpha", esOptions.InitialAlpha },
-                { "InitialBeta", esOptions.InitialBeta },
-                { "InitialGamma", esOptions.InitialGamma },
-                { "UseTrend", esOptions.UseTrend },
-                { "UseSeasonal", esOptions.UseSeasonal },
-                { "SeasonalPeriod", esOptions.SeasonalPeriod }
+                { "InitialAlpha", EsOptions.InitialAlpha },
+                { "InitialBeta", EsOptions.InitialBeta },
+                { "InitialGamma", EsOptions.InitialGamma },
+                { "UseTrend", EsOptions.UseTrend },
+                { "UseSeasonal", EsOptions.UseSeasonal },
+                { "SeasonalPeriod", EsOptions.SeasonalPeriod }
             },
             ModelData = this.Serialize()
         };
@@ -777,6 +868,71 @@ public class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
                 _initialValues[i + 2] = seasonalFactors[i];
             }
         }
+
+        // Run through the training data to compute the final level/trend/seasonal state
+        SaveTrainedState(y);
+    }
+
+    /// <summary>
+    /// Runs through the training data with the optimized parameters to compute
+    /// the final level, trend, and seasonal state for use in forecasting.
+    /// </summary>
+    private void SaveTrainedState(Vector<T> y)
+    {
+        T level = _initialValues[0];
+        T trend = EsOptions.UseTrend ? _initialValues[1] : NumOps.Zero;
+        Vector<T> seasonalFactors = Options.SeasonalPeriod > 0
+            ? new Vector<T>([.. _initialValues.Skip(2)])
+            : Vector<T>.Empty();
+
+        for (int i = 0; i < y.Length; i++)
+        {
+            T observation = y[i];
+            T oldLevel = level;
+
+            // Update level using actual observation
+            if (Options.SeasonalPeriod > 0)
+            {
+                T seasonFactor = seasonalFactors[i % Options.SeasonalPeriod];
+                T deseasonalized = NumOps.Divide(observation, seasonFactor);
+                level = NumOps.Add(
+                    NumOps.Multiply(_alpha, deseasonalized),
+                    NumOps.Multiply(NumOps.Subtract(NumOps.One, _alpha), NumOps.Add(oldLevel, trend))
+                );
+            }
+            else
+            {
+                level = NumOps.Add(
+                    NumOps.Multiply(_alpha, observation),
+                    NumOps.Multiply(NumOps.Subtract(NumOps.One, _alpha), NumOps.Add(oldLevel, trend))
+                );
+            }
+
+            // Update trend
+            if (EsOptions.UseTrend)
+            {
+                trend = NumOps.Add(
+                    NumOps.Multiply(_beta, NumOps.Subtract(level, oldLevel)),
+                    NumOps.Multiply(NumOps.Subtract(NumOps.One, _beta), trend)
+                );
+            }
+
+            // Update seasonal factors
+            if (Options.SeasonalPeriod > 0)
+            {
+                int seasonIndex = i % Options.SeasonalPeriod;
+                seasonalFactors[seasonIndex] = NumOps.Add(
+                    NumOps.Multiply(_gamma, NumOps.Divide(observation, level)),
+                    NumOps.Multiply(NumOps.Subtract(NumOps.One, _gamma), seasonalFactors[seasonIndex])
+                );
+            }
+        }
+
+        // Save the final state
+        _trainedLevel = level;
+        _trainedTrend = trend;
+        _trainedSeasonalFactors = seasonalFactors.Length > 0 ? seasonalFactors.Clone() : Vector<T>.Empty();
+        _trainingLength = y.Length;
     }
 
     /// <summary>
@@ -823,5 +979,138 @@ public class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
         // If for some reason we couldn't make a prediction, return a default value
         // This should never happen in normal operation, but provides a fallback
         return NumOps.Zero;
+    }
+
+    /// <summary>
+    /// Forecasts future values by first replaying smoothing updates over the provided
+    /// history to align state, then projecting forward for the requested number of steps.
+    /// </summary>
+    /// <param name="history">The historical time series values to align state from.</param>
+    /// <param name="steps">The number of future steps to forecast.</param>
+    /// <returns>A vector of forecasted values.</returns>
+    public override Vector<T> Forecast(Vector<T> history, int steps)
+    {
+        if (!IsTrained)
+        {
+            throw new InvalidOperationException("The model must be trained before forecasting.");
+        }
+
+        if (history == null)
+        {
+            throw new ArgumentNullException(nameof(history), "History cannot be null.");
+        }
+
+        if (steps <= 0)
+        {
+            throw new ArgumentException("Number of forecast steps must be positive.", nameof(steps));
+        }
+
+        // Compute state purely from the provided history using initial values.
+        // This avoids double-counting if history overlaps with training data.
+        T level = _initialValues.Length > 0 ? _initialValues[0] : history[0];
+        T trend = EsOptions.UseTrend && _initialValues.Length > 1 ? _initialValues[1] : NumOps.Zero;
+        Vector<T> seasonalFactors = Options.SeasonalPeriod > 0 && _initialValues.Length > 2
+            ? new Vector<T>([.. _initialValues.Skip(2)])
+            : Vector<T>.Empty();
+
+        // Replay smoothing updates over the provided history to compute state
+        for (int i = 0; i < history.Length; i++)
+        {
+            T observation = history[i];
+            T oldLevel = level;
+
+            if (Options.SeasonalPeriod > 0 && seasonalFactors.Length > 0)
+            {
+                int seasonIdx = i % Options.SeasonalPeriod;
+                T seasonFactor = seasonalFactors[seasonIdx];
+                T deseasonalized = NumOps.Divide(observation, seasonFactor);
+                level = NumOps.Add(
+                    NumOps.Multiply(_alpha, deseasonalized),
+                    NumOps.Multiply(NumOps.Subtract(NumOps.One, _alpha), NumOps.Add(oldLevel, trend))
+                );
+            }
+            else
+            {
+                level = NumOps.Add(
+                    NumOps.Multiply(_alpha, observation),
+                    NumOps.Multiply(NumOps.Subtract(NumOps.One, _alpha), NumOps.Add(oldLevel, trend))
+                );
+            }
+
+            if (EsOptions.UseTrend)
+            {
+                trend = NumOps.Add(
+                    NumOps.Multiply(_beta, NumOps.Subtract(level, oldLevel)),
+                    NumOps.Multiply(NumOps.Subtract(NumOps.One, _beta), trend)
+                );
+            }
+
+            if (Options.SeasonalPeriod > 0 && seasonalFactors.Length > 0)
+            {
+                int seasonIdx = i % Options.SeasonalPeriod;
+                seasonalFactors[seasonIdx] = NumOps.Add(
+                    NumOps.Multiply(_gamma, NumOps.Divide(observation, level)),
+                    NumOps.Multiply(NumOps.Subtract(NumOps.One, _gamma), seasonalFactors[seasonIdx])
+                );
+            }
+        }
+
+        // Now forecast forward from the history-derived state
+        int forecastSeasonStart = history.Length;
+        Vector<T> forecasts = new Vector<T>(steps);
+        for (int i = 0; i < steps; i++)
+        {
+            T forecast;
+            if (Options.SeasonalPeriod > 0 && seasonalFactors.Length > 0)
+            {
+                int seasonIdx = (forecastSeasonStart + i) % Options.SeasonalPeriod;
+                forecast = NumOps.Multiply(NumOps.Add(level, trend), seasonalFactors[seasonIdx]);
+            }
+            else
+            {
+                forecast = NumOps.Add(level, trend);
+            }
+
+            forecasts[i] = forecast;
+
+            // Update level and trend for the next step using the forecast value
+            T oldLevel = level;
+            if (Options.SeasonalPeriod > 0 && seasonalFactors.Length > 0)
+            {
+                int seasonIdx = (forecastSeasonStart + i) % Options.SeasonalPeriod;
+                T deseasonalized = NumOps.Divide(forecast, seasonalFactors[seasonIdx]);
+                level = NumOps.Add(
+                    NumOps.Multiply(_alpha, deseasonalized),
+                    NumOps.Multiply(NumOps.Subtract(NumOps.One, _alpha), NumOps.Add(oldLevel, trend))
+                );
+            }
+            else
+            {
+                level = NumOps.Add(
+                    NumOps.Multiply(_alpha, forecast),
+                    NumOps.Multiply(NumOps.Subtract(NumOps.One, _alpha), NumOps.Add(oldLevel, trend))
+                );
+            }
+
+            if (EsOptions.UseTrend)
+            {
+                trend = NumOps.Add(
+                    NumOps.Multiply(_beta, NumOps.Subtract(level, oldLevel)),
+                    NumOps.Multiply(NumOps.Subtract(NumOps.One, _beta), trend)
+                );
+            }
+
+            if (Options.SeasonalPeriod > 0 && seasonalFactors.Length > 0)
+            {
+                int seasonIdx = (forecastSeasonStart + i) % Options.SeasonalPeriod;
+                // Use forecast/level consistent with training update (observation/level)
+                seasonalFactors[seasonIdx] = NumOps.Add(
+                    NumOps.Multiply(_gamma, NumOps.Divide(forecast, level)),
+                    NumOps.Multiply(NumOps.Subtract(NumOps.One, _gamma), seasonalFactors[seasonIdx])
+                );
+            }
+        }
+
+        return forecasts;
     }
 }

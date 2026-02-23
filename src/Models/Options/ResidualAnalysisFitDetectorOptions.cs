@@ -1,3 +1,5 @@
+using AiDotNet.Models.Options;
+
 namespace AiDotNet.Models;
 
 /// <summary>
@@ -36,7 +38,7 @@ namespace AiDotNet.Models;
 /// considered reliable for making predictions.
 /// </para>
 /// </remarks>
-public class ResidualAnalysisFitDetectorOptions
+public class ResidualAnalysisFitDetectorOptions : ModelOptions
 {
     /// <summary>
     /// Gets or sets the threshold for the mean (average) of residuals.

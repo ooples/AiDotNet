@@ -3,6 +3,7 @@ using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Video.Options;
 
 namespace AiDotNet.Video.Inpainting;
 
@@ -35,8 +36,13 @@ namespace AiDotNet.Video.Inpainting;
 /// ICCV 2023.
 /// </para>
 /// </remarks>
-public class ProPainter<T> : NeuralNetworkBase<T>
+public class ProPainter<T> : VideoInpaintingBase<T>
 {
+    private readonly ProPainterOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     #region Fields
 
     private readonly int _height;
@@ -98,9 +104,13 @@ public class ProPainter<T> : NeuralNetworkBase<T>
     /// <param name="numFeatures">The number of features in intermediate layers.</param>
     public ProPainter(
         NeuralNetworkArchitecture<T> architecture,
-        int numFeatures = 128)
+        int numFeatures = 128,
+        ProPainterOptions? options = null)
         : base(architecture, new CharbonnierLoss<T>())
     {
+        _options = options ?? new ProPainterOptions();
+        Options = _options;
+
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 480;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 640;
         _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
@@ -947,4 +957,28 @@ public class ProPainter<T> : NeuralNetworkBase<T>
     }
 
     #endregion
+
+    #region Base Class Abstract Methods
+
+    /// <inheritdoc/>
+    public override Tensor<T> Inpaint(Tensor<T> frames, Tensor<T> masks)
+    {
+        var stacked = ConcatenateFeatures(frames, masks);
+        return Forward(stacked);
+    }
+
+    /// <inheritdoc/>
+    protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames)
+    {
+        return NormalizeFrames(rawFrames);
+    }
+
+    /// <inheritdoc/>
+    protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput)
+    {
+        return DenormalizeFrames(modelOutput);
+    }
+
+    #endregion
+
 }

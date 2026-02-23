@@ -1,3 +1,4 @@
+using AiDotNet.Models.Options;
 using AiDotNet.Onnx;
 
 namespace AiDotNet.Audio.Whisper;
@@ -21,8 +22,36 @@ namespace AiDotNet.Audio.Whisper;
 /// </list>
 /// </para>
 /// </remarks>
-public class WhisperOptions
+public class WhisperOptions : ModelOptions
 {
+    /// <summary>Initializes a new instance with default values.</summary>
+    public WhisperOptions() { }
+
+    /// <summary>Initializes a new instance by copying from another instance.</summary>
+    /// <param name="other">The options instance to copy from.</param>
+    /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
+    public WhisperOptions(WhisperOptions other)
+    {
+        if (other == null)
+            throw new ArgumentNullException(nameof(other));
+
+        Seed = other.Seed;
+        ModelSize = other.ModelSize;
+        Language = other.Language;
+        Translate = other.Translate;
+        SampleRate = other.SampleRate;
+        NumMels = other.NumMels;
+        MaxAudioLengthSeconds = other.MaxAudioLengthSeconds;
+        OnnxOptions = other.OnnxOptions;
+        EncoderModelPath = other.EncoderModelPath;
+        DecoderModelPath = other.DecoderModelPath;
+        MaxTokens = other.MaxTokens;
+        BeamSize = other.BeamSize;
+        Temperature = other.Temperature;
+        ReturnTimestamps = other.ReturnTimestamps;
+        WordTimestamps = other.WordTimestamps;
+    }
+
     /// <summary>
     /// Gets or sets the model size to use.
     /// </summary>

@@ -5,6 +5,7 @@ using AiDotNet.MetaLearning.Data;
 using AiDotNet.MetaLearning.Options;
 using AiDotNet.Models;
 using AiDotNet.Tensors;
+using AiDotNet.Validation;
 
 namespace AiDotNet.MetaLearning.Algorithms;
 
@@ -76,6 +77,9 @@ namespace AiDotNet.MetaLearning.Algorithms;
 public class MatchingNetworksAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private readonly MatchingNetworksOptions<T, TInput, TOutput> _matchingOptions;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _matchingOptions;
 
     /// <summary>
     /// Initializes a new instance of the MatchingNetworksAlgorithm class.
@@ -675,9 +679,12 @@ public class MatchingNetworksModel<T, TInput, TOutput> : IModel<TInput, TOutput,
         MatchingNetworksOptions<T, TInput, TOutput> options,
         INumericOperations<T> numOps)
     {
-        _encoder = encoder ?? throw new ArgumentNullException(nameof(encoder));
-        _options = options ?? throw new ArgumentNullException(nameof(options));
-        _numOps = numOps ?? throw new ArgumentNullException(nameof(numOps));
+        Guard.NotNull(encoder);
+        _encoder = encoder;
+        Guard.NotNull(options);
+        _options = options;
+        Guard.NotNull(numOps);
+        _numOps = numOps;
 
         // Pre-compute support embeddings
         var encodedOutput = _encoder.Predict(supportInputs);

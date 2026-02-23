@@ -12,7 +12,7 @@ namespace AiDotNet.Models.Options;
 /// You can adjust how the defense is applied, how strong it should be, and what techniques to use.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for calculations (e.g., float, double).</typeparam>
-public class AdversarialDefenseOptions<T>
+public class AdversarialDefenseOptions<T> : ModelOptions
 {
     /// <summary>
     /// Gets or sets the ratio of adversarial examples to include in training.

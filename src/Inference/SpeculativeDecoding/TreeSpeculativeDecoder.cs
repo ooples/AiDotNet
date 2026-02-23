@@ -1,5 +1,6 @@
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Inference.SpeculativeDecoding;
 
@@ -65,8 +66,10 @@ internal class TreeSpeculativeDecoder<T>
         Func<List<Vector<int>>, List<Matrix<T>>> batchTargetForward,
         TreeSpeculativeConfig? config = null)
     {
-        _draftModel = draftModel ?? throw new ArgumentNullException(nameof(draftModel));
-        _batchTargetForward = batchTargetForward ?? throw new ArgumentNullException(nameof(batchTargetForward));
+        Guard.NotNull(draftModel);
+        _draftModel = draftModel;
+        Guard.NotNull(batchTargetForward);
+        _batchTargetForward = batchTargetForward;
         _config = config ?? new TreeSpeculativeConfig();
         _random = _config.Seed.HasValue
             ? RandomHelper.CreateSeededRandom(_config.Seed.Value)

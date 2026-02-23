@@ -49,6 +49,9 @@ public class M5ModelTree<T> : AsyncDecisionTreeRegressionBase<T>
     /// </remarks>
     private readonly M5ModelTreeOptions _options;
 
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="M5ModelTree{T}"/> class with optional custom options and regularization.
     /// </summary>

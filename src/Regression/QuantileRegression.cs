@@ -33,6 +33,9 @@ public class QuantileRegression<T> : RegressionBase<T>
     /// </value>
     private readonly QuantileRegressionOptions<T> _options;
 
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// Initializes a new instance of the QuantileRegression class with the specified options and regularization.
     /// </summary>

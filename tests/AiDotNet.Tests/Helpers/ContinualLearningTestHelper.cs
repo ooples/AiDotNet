@@ -105,6 +105,116 @@ public class MockNeuralNetwork<T> : INeuralNetwork<T>
 
     public IReadOnlyList<ILayer<T>> Layers => _layers;
 
+    // ILayeredModel<T> implementation
+    public int LayerCount => _layers.Count;
+
+    public LayerInfo<T> GetLayerInfo(int layerIndex)
+    {
+        if (layerIndex < 0 || layerIndex >= _layers.Count)
+        {
+            throw new ArgumentOutOfRangeException(nameof(layerIndex));
+        }
+
+        var allInfo = GetAllLayerInfo();
+        return allInfo[layerIndex];
+    }
+
+    public IReadOnlyList<LayerInfo<T>> GetAllLayerInfo()
+    {
+        var result = new List<LayerInfo<T>>(_layers.Count);
+        int parameterOffset = 0;
+
+        for (int i = 0; i < _layers.Count; i++)
+        {
+            var layer = _layers[i];
+            result.Add(new LayerInfo<T>
+            {
+                Index = i,
+                Name = layer.LayerName,
+                Category = LayerCategory.Dense,
+                Layer = layer,
+                ParameterOffset = parameterOffset,
+                ParameterCount = layer.ParameterCount,
+                InputShape = layer.GetInputShape(),
+                OutputShape = layer.GetOutputShape(),
+                IsTrainable = layer.SupportsTraining,
+                EstimatedFlops = 2L * layer.ParameterCount,
+                EstimatedActivationMemory = layer.GetOutputShape().Aggregate(1L, (a, b) => a * b) * 8
+            });
+            parameterOffset += layer.ParameterCount;
+        }
+        return result;
+    }
+
+    public bool ValidatePartitionPoint(int afterLayerIndex)
+    {
+        if (afterLayerIndex < 0 || afterLayerIndex >= _layers.Count - 1)
+        {
+            return false;
+        }
+
+        var currentOutput = _layers[afterLayerIndex].GetOutputShape();
+        var nextInput = _layers[afterLayerIndex + 1].GetInputShape();
+
+        if (currentOutput.Length != nextInput.Length)
+        {
+            return false;
+        }
+
+        for (int i = 0; i < currentOutput.Length; i++)
+        {
+            if (currentOutput[i] != nextInput[i])
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    public SubModel<T> ExtractSubModel(int startLayer, int endLayer)
+    {
+        if (startLayer < 0 || startLayer >= _layers.Count)
+        {
+            throw new ArgumentOutOfRangeException(nameof(startLayer));
+        }
+        if (endLayer < 0 || endLayer >= _layers.Count)
+        {
+            throw new ArgumentOutOfRangeException(nameof(endLayer));
+        }
+        if (startLayer > endLayer)
+        {
+            throw new ArgumentOutOfRangeException(nameof(startLayer));
+        }
+
+        var subLayers = new List<ILayer<T>>();
+        var subInfos = new List<LayerInfo<T>>();
+        int localOffset = 0;
+
+        for (int i = startLayer; i <= endLayer; i++)
+        {
+            var layer = _layers[i];
+            subLayers.Add(layer);
+            subInfos.Add(new LayerInfo<T>
+            {
+                Index = i - startLayer,
+                Name = layer.LayerName,
+                Category = LayerCategory.Dense,
+                Layer = layer,
+                ParameterOffset = localOffset,
+                ParameterCount = layer.ParameterCount,
+                InputShape = layer.GetInputShape(),
+                OutputShape = layer.GetOutputShape(),
+                IsTrainable = layer.SupportsTraining,
+                EstimatedFlops = 2L * layer.ParameterCount,
+                EstimatedActivationMemory = layer.GetOutputShape().Aggregate(1L, (a, b) => a * b) * 8
+            });
+            localOffset += layer.ParameterCount;
+        }
+
+        return new SubModel<T>(subLayers, subInfos, startLayer, endLayer);
+    }
+
     // INeuralNetwork<T> specific members
     public void UpdateParameters(Vector<T> parameters)
     {
@@ -352,6 +462,14 @@ public class MockLayer<T> : ILayer<T>
     {
         return input; // Identity for testing
     }
+
+    public Tensor<T> ForwardWithPrecisionCheck(Tensor<T> input)
+    {
+        // For testing, just delegate to Forward
+        return Forward(input);
+    }
+
+    public string LayerName => "MockLayer";
 
     public Tensor<T> Backward(Tensor<T> outputGradient)
     {

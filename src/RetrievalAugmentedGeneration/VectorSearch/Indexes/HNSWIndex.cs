@@ -4,6 +4,7 @@ using System.Linq;
 using AiDotNet.Helpers;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Validation;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
 {
@@ -57,7 +58,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
         /// <param name="seed">Random seed for reproducibility. Default: 42.</param>
         public HNSWIndex(ISimilarityMetric<T> metric, int maxConnections = 16, int efConstruction = 200, int efSearch = 50, int seed = 42)
         {
-            _metric = metric ?? throw new ArgumentNullException(nameof(metric));
+            Guard.NotNull(metric);
+            _metric = metric;
             if (maxConnections < 2)
                 throw new ArgumentException("Max connections (M) must be at least 2", nameof(maxConnections));
             if (efConstruction <= 0)

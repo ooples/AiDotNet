@@ -1,5 +1,6 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Validation;
 
 namespace AiDotNet.SelfSupervisedLearning.Evaluation;
 
@@ -65,7 +66,8 @@ public class LinearEvaluator<T>
         double learningRate = 0.1,
         int epochs = 90)
     {
-        _encoder = encoder ?? throw new ArgumentNullException(nameof(encoder));
+        Guard.NotNull(encoder);
+        _encoder = encoder;
         _inputDim = inputDim;
         _numClasses = numClasses;
         _learningRate = learningRate;

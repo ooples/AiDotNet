@@ -1,3 +1,5 @@
+using AiDotNet.Models.Options;
+
 namespace AiDotNet.Models;
 
 /// <summary>
@@ -38,7 +40,7 @@ namespace AiDotNet.Models;
 /// many more examples of one category than another).
 /// </para>
 /// </remarks>
-public class ROCCurveFitDetectorOptions
+public class ROCCurveFitDetectorOptions : ModelOptions
 {
     /// <summary>
     /// Gets or sets the AUC threshold for considering a model to have good fit.

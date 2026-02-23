@@ -1,6 +1,7 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Reasoning.Models;
 using AiDotNet.Reasoning.Strategies;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Reasoning;
 
@@ -69,7 +70,8 @@ internal class Reasoner<T> : IReasoner<T>
     /// </remarks>
     public Reasoner(IChatModel<T> chatModel, IEnumerable<ITool>? tools = null)
     {
-        _chatModel = chatModel ?? throw new ArgumentNullException(nameof(chatModel));
+        Guard.NotNull(chatModel);
+        _chatModel = chatModel;
         _tools = tools;
     }
 

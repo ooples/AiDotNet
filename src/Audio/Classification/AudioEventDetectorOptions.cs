@@ -1,3 +1,4 @@
+using AiDotNet.Models.Options;
 using AiDotNet.Onnx;
 
 namespace AiDotNet.Audio.Classification;
@@ -5,8 +6,37 @@ namespace AiDotNet.Audio.Classification;
 /// <summary>
 /// Options for audio event detection.
 /// </summary>
-public class AudioEventDetectorOptions
+/// <remarks>
+/// <para><b>For Beginners:</b> These options configure the AudioEventDetector model. Default values follow the original paper settings.</para>
+/// </remarks>
+public class AudioEventDetectorOptions : ModelOptions
 {
+    /// <summary>Initializes a new instance with default values.</summary>
+    public AudioEventDetectorOptions() { }
+
+    /// <summary>Initializes a new instance by copying from another instance.</summary>
+    /// <param name="other">The options instance to copy from.</param>
+    /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
+    public AudioEventDetectorOptions(AudioEventDetectorOptions other)
+    {
+        if (other == null)
+            throw new ArgumentNullException(nameof(other));
+
+        Seed = other.Seed;
+        SampleRate = other.SampleRate;
+        FftSize = other.FftSize;
+        HopLength = other.HopLength;
+        NumMels = other.NumMels;
+        FMin = other.FMin;
+        FMax = other.FMax;
+        WindowSize = other.WindowSize;
+        WindowOverlap = other.WindowOverlap;
+        Threshold = other.Threshold;
+        CustomLabels = other.CustomLabels;
+        ModelPath = other.ModelPath;
+        OnnxOptions = other.OnnxOptions;
+    }
+
     /// <summary>Audio sample rate. Default: 16000.</summary>
     public int SampleRate { get; set; } = 16000;
 

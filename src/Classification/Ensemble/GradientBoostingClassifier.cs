@@ -97,8 +97,8 @@ public class GradientBoostingClassifier<T> : EnsembleClassifierBase<T>, ITreeBas
         NumClasses = ClassLabels.Length;
         TaskType = InferTaskType(y);
 
-        _random = Options.RandomState.HasValue
-            ? RandomHelper.CreateSeededRandom(Options.RandomState.Value)
+        _random = Options.Seed.HasValue
+            ? RandomHelper.CreateSeededRandom(Options.Seed.Value)
             : RandomHelper.CreateSeededRandom(42);
 
         // Clear existing estimators and residual means
@@ -179,7 +179,7 @@ public class GradientBoostingClassifier<T> : EnsembleClassifierBase<T>, ITreeBas
                 MaxDepth = Options.MaxDepth,
                 MinSamplesSplit = Options.MinSamplesSplit,
                 MinSamplesLeaf = Options.MinSamplesLeaf,
-                RandomState = _random.Next(),
+                Seed = _random.Next(),
                 MinImpurityDecrease = Options.MinImpurityDecrease
             };
 
@@ -419,7 +419,7 @@ public class GradientBoostingClassifier<T> : EnsembleClassifierBase<T>, ITreeBas
             Subsample = Options.Subsample,
             MaxFeatures = Options.MaxFeatures,
             Loss = Options.Loss,
-            RandomState = Options.RandomState,
+            Seed = Options.Seed,
             MinImpurityDecrease = Options.MinImpurityDecrease
         });
     }
@@ -437,7 +437,7 @@ public class GradientBoostingClassifier<T> : EnsembleClassifierBase<T>, ITreeBas
             Subsample = Options.Subsample,
             MaxFeatures = Options.MaxFeatures,
             Loss = Options.Loss,
-            RandomState = Options.RandomState,
+            Seed = Options.Seed,
             MinImpurityDecrease = Options.MinImpurityDecrease
         });
 

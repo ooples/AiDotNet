@@ -6,6 +6,7 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.PointCloud.Interfaces;
 using AiDotNet.PointCloud.Layers;
+using PointNetModelOptions = AiDotNet.PointCloud.Options.PointNetOptions;
 
 namespace AiDotNet.PointCloud.Models;
 
@@ -48,6 +49,11 @@ namespace AiDotNet.PointCloud.Models;
 /// </remarks>
 public class PointNet<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPointCloudClassification<T>
 {
+    private readonly PointNetModelOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     private int _numClasses;
     private int _inputFeatureDim;
     private int _inputTransformDim;
@@ -79,9 +85,12 @@ public class PointNet<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPointClou
     /// </summary>
     /// <param name="options">Configuration options for the PointNet model.</param>
     /// <param name="lossFunction">Optional loss function for training.</param>
-    public PointNet(PointNetOptions options, ILossFunction<T>? lossFunction = null)
+    public PointNet(PointNetOptions options, ILossFunction<T>? lossFunction = null, PointNetModelOptions? modelOptions = null)
         : base(CreateArchitecture(options.NumClasses, options.InputFeatureDim), lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.MultiClassClassification))
     {
+        _options = modelOptions ?? new PointNetModelOptions();
+        Options = _options;
+
         if (options == null)
         {
             throw new ArgumentNullException(nameof(options));

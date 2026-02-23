@@ -28,6 +28,7 @@ using AiDotNet.Tensors.LinearAlgebra;
 /// <typeparam name="T">The numeric data type used for calculations (e.g., float, double).</typeparam>
 /// <typeparam name="TInput">The input data type for the model (e.g., Vector&lt;T&gt;, string).</typeparam>
 /// <typeparam name="TOutput">The output data type for the model (e.g., Vector&lt;T&gt;, int).</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("CertifiedDefense")]
 public interface ICertifiedDefense<T, TInput, TOutput> : IModelSerializer
 {
     /// <summary>

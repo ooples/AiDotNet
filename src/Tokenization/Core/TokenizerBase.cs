@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using AiDotNet.Tokenization.Interfaces;
 using AiDotNet.Tokenization.Models;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Tokenization.Core
 {
@@ -31,8 +32,10 @@ namespace AiDotNet.Tokenization.Core
         /// </summary>
         protected TokenizerBase(IVocabulary vocabulary, SpecialTokens specialTokens)
         {
-            Vocabulary = vocabulary ?? throw new ArgumentNullException(nameof(vocabulary));
-            SpecialTokens = specialTokens ?? throw new ArgumentNullException(nameof(specialTokens));
+            Guard.NotNull(vocabulary);
+            Vocabulary = vocabulary;
+            Guard.NotNull(specialTokens);
+            SpecialTokens = specialTokens;
         }
 
         /// <summary>

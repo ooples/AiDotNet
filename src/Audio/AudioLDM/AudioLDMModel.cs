@@ -10,6 +10,7 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tokenization.Interfaces;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Audio.AudioLDM;
 
@@ -62,9 +63,13 @@ public class AudioLDMModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
     #region Fields
 
     private readonly AudioLDMOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     private readonly ITokenizer _tokenizer;
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
-    private readonly ILossFunction<T> _lossFunction;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    private ILossFunction<T> _lossFunction;
     private readonly Random _random;
 
     // Model dimensions based on size
@@ -173,8 +178,9 @@ public class AudioLDMModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
             throw new FileNotFoundException($"Vocoder not found: {vocoderPath}");
 
         _options = options ?? new AudioLDMOptions();
-        _tokenizer = tokenizer ?? throw new ArgumentNullException(nameof(tokenizer),
-            "Tokenizer is required. Use CLAP tokenizer or compatible tokenizer.");
+        Options = _options;
+        Guard.NotNull(tokenizer);
+        _tokenizer = tokenizer;
         _useNativeMode = false;
 
         // Set dimensions based on model size
@@ -210,7 +216,7 @@ public class AudioLDMModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
             throw;
         }
 
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer;
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         _random = _options.Seed.HasValue
             ? RandomHelper.CreateSeededRandom(_options.Seed.Value)
@@ -247,6 +253,7 @@ public class AudioLDMModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
     {
         _options = options ?? new AudioLDMOptions();
+        Options = _options;
         _useNativeMode = true;
 
         // Set dimensions based on model size
@@ -1322,7 +1329,7 @@ public class AudioLDMModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
 
         Backpropagate(Tensor<T>.FromVector(lossGradient));
 
-        _optimizer.UpdateParameters(Layers);
+        _optimizer?.UpdateParameters(Layers);
 
         SetTrainingMode(false);
     }

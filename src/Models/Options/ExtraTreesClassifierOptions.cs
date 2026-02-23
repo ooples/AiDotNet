@@ -91,14 +91,6 @@ public class ExtraTreesClassifierOptions<T> : ClassifierOptions<T>
     public bool Bootstrap { get; set; } = false;
 
     /// <summary>
-    /// Gets or sets the random state for reproducibility.
-    /// </summary>
-    /// <value>
-    /// The random seed, or null for non-deterministic. Default is null.
-    /// </value>
-    public int? RandomState { get; set; } = null;
-
-    /// <summary>
     /// Gets or sets the minimum impurity decrease for splitting.
     /// </summary>
     /// <value>

@@ -134,6 +134,16 @@ public class ARMAModel<T> : TimeSeriesModelBase<T>
     private readonly double _tolerance;
 
     /// <summary>
+    /// The time series values used during training. Stored for producing in-sample predictions.
+    /// </summary>
+    private Vector<T> _trainedSeries;
+
+    /// <summary>
+    /// The residuals (prediction errors) from training. Stored for the MA component during prediction.
+    /// </summary>
+    private Vector<T> _trainedResiduals;
+
+    /// <summary>
     /// Creates a new ARMA model with the specified options.
     /// </summary>
     /// <param name="options">Options for the ARMA model, including AR order, MA order, and training parameters.</param>
@@ -158,6 +168,8 @@ public class ARMAModel<T> : TimeSeriesModelBase<T>
         _tolerance = options.Tolerance;
         _arCoefficients = Vector<T>.Empty();
         _maCoefficients = Vector<T>.Empty();
+        _trainedSeries = Vector<T>.Empty();
+        _trainedResiduals = Vector<T>.Empty();
     }
 
     /// <summary>
@@ -289,10 +301,57 @@ public class ARMAModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     public override Vector<T> Predict(Matrix<T> input)
     {
-        Vector<T> predictions = new Vector<T>(input.Rows);
-        for (int t = 0; t < input.Rows; t++)
+        if (_trainedSeries.Length == 0)
         {
-            predictions[t] = Predict(input.GetRow(t), t);
+            throw new InvalidOperationException(
+                "Model has not been trained. Call Train() before Predict().");
+        }
+
+        // Use the stored training series and residuals for in-sample predictions.
+        var series = _trainedSeries;
+        var residuals = _trainedResiduals.Length > 0
+            ? _trainedResiduals
+            : new Vector<T>(series.Length);
+        int horizon = input.Rows;
+        Vector<T> predictions = new Vector<T>(horizon);
+
+        for (int t = 0; t < horizon; t++)
+        {
+            T prediction = NumOps.Zero;
+
+            if (t < series.Length)
+            {
+                // In-sample: use stored series and stored residuals (no recursion)
+                for (int i = 0; i < _arOrder && t - i - 1 >= 0; i++)
+                {
+                    prediction = NumOps.Add(prediction, NumOps.Multiply(_arCoefficients[i], series[t - i - 1]));
+                }
+                for (int i = 0; i < _maOrder && t - i - 1 >= 0; i++)
+                {
+                    prediction = NumOps.Add(prediction, NumOps.Multiply(_maCoefficients[i], residuals[t - i - 1]));
+                }
+            }
+            else
+            {
+                // Out-of-sample: use recursive predictions for lag values beyond series
+                for (int i = 0; i < _arOrder; i++)
+                {
+                    int lagIdx = t - i - 1;
+                    T lagValue;
+                    if (lagIdx < series.Length)
+                    {
+                        lagValue = lagIdx >= 0 ? series[lagIdx] : NumOps.Zero;
+                    }
+                    else
+                    {
+                        lagValue = predictions[lagIdx];
+                    }
+                    prediction = NumOps.Add(prediction, NumOps.Multiply(_arCoefficients[i], lagValue));
+                }
+                // MA residuals are assumed 0 for out-of-sample (no actual observations)
+            }
+
+            predictions[t] = prediction;
         }
 
         return predictions;
@@ -425,6 +484,19 @@ public class ARMAModel<T> : TimeSeriesModelBase<T>
         {
             writer.Write(Convert.ToDouble(_maCoefficients[i]));
         }
+
+        // Serialize training state for in-sample prediction support
+        writer.Write(_trainedSeries.Length);
+        for (int i = 0; i < _trainedSeries.Length; i++)
+        {
+            writer.Write(Convert.ToDouble(_trainedSeries[i]));
+        }
+
+        writer.Write(_trainedResiduals.Length);
+        for (int i = 0; i < _trainedResiduals.Length; i++)
+        {
+            writer.Write(Convert.ToDouble(_trainedResiduals[i]));
+        }
     }
 
     /// <summary>
@@ -460,6 +532,36 @@ public class ARMAModel<T> : TimeSeriesModelBase<T>
         for (int i = 0; i < _maOrder; i++)
         {
             _maCoefficients[i] = NumOps.FromDouble(reader.ReadDouble());
+        }
+
+        // Deserialize training state if available (backward-compatible)
+        _trainedSeries = Vector<T>.Empty();
+        _trainedResiduals = Vector<T>.Empty();
+        try
+        {
+            int seriesLength = reader.ReadInt32();
+            if (seriesLength > 0)
+            {
+                _trainedSeries = new Vector<T>(seriesLength);
+                for (int i = 0; i < seriesLength; i++)
+                {
+                    _trainedSeries[i] = NumOps.FromDouble(reader.ReadDouble());
+                }
+            }
+
+            int residualsLength = reader.ReadInt32();
+            if (residualsLength > 0)
+            {
+                _trainedResiduals = new Vector<T>(residualsLength);
+                for (int i = 0; i < residualsLength; i++)
+                {
+                    _trainedResiduals[i] = NumOps.FromDouble(reader.ReadDouble());
+                }
+            }
+        }
+        catch (EndOfStreamException)
+        {
+            // Older serialized models don't include training state — leave empty
         }
     }
 
@@ -576,17 +678,37 @@ public class ARMAModel<T> : TimeSeriesModelBase<T>
             throw new InvalidOperationException("Model must be trained before making forecasts.");
         }
 
-        // Create an extended history that will include predictions
+        // Use stored residuals for initial MA values, assume 0 for future residuals
+        var storedResiduals = _trainedResiduals;
+
         Vector<T> extendedHistory = new Vector<T>(history.Length + horizon);
+        Vector<T> extendedResiduals = new Vector<T>(history.Length + horizon);
+
         for (int i = 0; i < history.Length; i++)
         {
             extendedHistory[i] = history[i];
+            if (i < storedResiduals.Length)
+            {
+                extendedResiduals[i] = storedResiduals[i];
+            }
         }
 
-        // Generate predictions one by one
+        // Generate forecasts iteratively
         for (int t = history.Length; t < extendedHistory.Length; t++)
         {
-            extendedHistory[t] = Predict(extendedHistory, t);
+            T prediction = NumOps.Zero;
+            // AR component
+            for (int i = 0; i < _arOrder && t - i - 1 >= 0; i++)
+            {
+                prediction = NumOps.Add(prediction, NumOps.Multiply(_arCoefficients[i], extendedHistory[t - i - 1]));
+            }
+            // MA component (future residuals are 0, only stored residuals contribute)
+            for (int i = 0; i < _maOrder && t - i - 1 >= 0; i++)
+            {
+                prediction = NumOps.Add(prediction, NumOps.Multiply(_maCoefficients[i], extendedResiduals[t - i - 1]));
+            }
+            extendedHistory[t] = prediction;
+            // Future residuals remain 0 (already initialized)
         }
 
         // Extract just the forecasted values
@@ -691,6 +813,25 @@ public class ARMAModel<T> : TimeSeriesModelBase<T>
             }
         }
 
+        // Deep copy training state
+        if (_trainedSeries.Length > 0)
+        {
+            clone._trainedSeries = new Vector<T>(_trainedSeries.Length);
+            for (int i = 0; i < _trainedSeries.Length; i++)
+            {
+                clone._trainedSeries[i] = _trainedSeries[i];
+            }
+        }
+
+        if (_trainedResiduals.Length > 0)
+        {
+            clone._trainedResiduals = new Vector<T>(_trainedResiduals.Length);
+            for (int i = 0; i < _trainedResiduals.Length; i++)
+            {
+                clone._trainedResiduals[i] = _trainedResiduals[i];
+            }
+        }
+
         return clone;
     }
 
@@ -718,30 +859,90 @@ public class ARMAModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     protected override void TrainCore(Matrix<T> x, Vector<T> y)
     {
-        // Initialize coefficients
+        // Store a defensive copy of the training series for in-sample predictions
+        _trainedSeries = new Vector<T>(y.Length);
+        for (int i = 0; i < y.Length; i++)
+        {
+            _trainedSeries[i] = y[i];
+        }
+
+        int startIdx = Math.Max(_arOrder, _maOrder);
+        if (y.Length <= startIdx)
+        {
+            throw new ArgumentException(
+                $"Time series length ({y.Length}) must be greater than max(AROrder, MAOrder) = {startIdx}.",
+                nameof(y));
+        }
+
+        // Initialize coefficients (after validation to avoid unnecessary allocations)
         _arCoefficients = new Vector<T>(_arOrder);
         _maCoefficients = new Vector<T>(_maOrder);
+
+        int nSamples = y.Length - startIdx;
 
         Vector<T> prevGradAR = new Vector<T>(_arOrder);
         Vector<T> prevGradMA = new Vector<T>(_maOrder);
 
         for (int iter = 0; iter < _maxIterations; iter++)
         {
-            Vector<T> residuals = CalculateResiduals(y);
-            (Vector<T> gradAR, Vector<T> gradMA) = CalculateGradients(y, residuals);
+            // Compute residuals iteratively (not recursively) to avoid exponential blow-up
+            Vector<T> residuals = new Vector<T>(y.Length);
+            for (int t = startIdx; t < y.Length; t++)
+            {
+                T prediction = NumOps.Zero;
+                // AR component
+                for (int i = 0; i < _arOrder && t - i - 1 >= 0; i++)
+                {
+                    prediction = NumOps.Add(prediction, NumOps.Multiply(_arCoefficients[i], y[t - i - 1]));
+                }
+                // MA component using previously computed residuals (iterative, stable)
+                for (int i = 0; i < _maOrder && t - i - 1 >= 0; i++)
+                {
+                    prediction = NumOps.Add(prediction, NumOps.Multiply(_maCoefficients[i], residuals[t - i - 1]));
+                }
+                residuals[t] = NumOps.Subtract(y[t], prediction);
+            }
 
-            // Update coefficients using gradient descent - vectorized with Engine operations
-            var lrScalarAR = NumOps.FromDouble(_learningRate);
-            var lrVecAR = new Vector<T>(_arOrder);
-            for (int i = 0; i < _arOrder; i++) lrVecAR[i] = lrScalarAR;
-            var gradScaledAR = (Vector<T>)Engine.Multiply(gradAR, lrVecAR);
-            _arCoefficients = (Vector<T>)Engine.Subtract(_arCoefficients, gradScaledAR);
+            // Compute gradients
+            Vector<T> gradAR = new Vector<T>(_arOrder);
+            Vector<T> gradMA = new Vector<T>(_maOrder);
+            for (int t = startIdx; t < y.Length; t++)
+            {
+                for (int i = 0; i < _arOrder && t - i - 1 >= 0; i++)
+                {
+                    gradAR[i] = NumOps.Add(gradAR[i], NumOps.Multiply(residuals[t], y[t - i - 1]));
+                }
+                for (int i = 0; i < _maOrder && t - i - 1 >= 0; i++)
+                {
+                    gradMA[i] = NumOps.Add(gradMA[i], NumOps.Multiply(residuals[t], residuals[t - i - 1]));
+                }
+            }
 
-            var lrScalarMA = NumOps.FromDouble(_learningRate);
-            var lrVecMA = new Vector<T>(_maOrder);
-            for (int i = 0; i < _maOrder; i++) lrVecMA[i] = lrScalarMA;
-            var gradScaledMA = (Vector<T>)Engine.Multiply(gradMA, lrVecMA);
-            _maCoefficients = (Vector<T>)Engine.Subtract(_maCoefficients, gradScaledMA);
+            // Normalize gradients by number of samples
+            if (nSamples > 0)
+            {
+                T invN = NumOps.FromDouble(1.0 / nSamples);
+                for (int i = 0; i < _arOrder; i++)
+                {
+                    gradAR[i] = NumOps.Multiply(gradAR[i], invN);
+                }
+                for (int i = 0; i < _maOrder; i++)
+                {
+                    gradMA[i] = NumOps.Multiply(gradMA[i], invN);
+                }
+            }
+
+            // Gradient descent update: θ := θ - α * ∂L/∂θ.
+            // Gradients are pre-negated (grad = -∂L/∂φ) during computation above, so we ADD here.
+            T lr = NumOps.FromDouble(_learningRate);
+            for (int i = 0; i < _arOrder; i++)
+            {
+                _arCoefficients[i] = NumOps.Add(_arCoefficients[i], NumOps.Multiply(lr, gradAR[i]));
+            }
+            for (int i = 0; i < _maOrder; i++)
+            {
+                _maCoefficients[i] = NumOps.Add(_maCoefficients[i], NumOps.Multiply(lr, gradMA[i]));
+            }
 
             // Check for convergence
             if (CheckConvergence(gradAR, gradMA, prevGradAR, prevGradMA))
@@ -751,6 +952,22 @@ public class ARMAModel<T> : TimeSeriesModelBase<T>
 
             prevGradAR = gradAR;
             prevGradMA = gradMA;
+        }
+
+        // Store final training residuals for use during prediction
+        _trainedResiduals = new Vector<T>(y.Length);
+        for (int t = startIdx; t < y.Length; t++)
+        {
+            T prediction = NumOps.Zero;
+            for (int i = 0; i < _arOrder && t - i - 1 >= 0; i++)
+            {
+                prediction = NumOps.Add(prediction, NumOps.Multiply(_arCoefficients[i], y[t - i - 1]));
+            }
+            for (int i = 0; i < _maOrder && t - i - 1 >= 0; i++)
+            {
+                prediction = NumOps.Add(prediction, NumOps.Multiply(_maCoefficients[i], _trainedResiduals[t - i - 1]));
+            }
+            _trainedResiduals[t] = NumOps.Subtract(y[t], prediction);
         }
     }
 

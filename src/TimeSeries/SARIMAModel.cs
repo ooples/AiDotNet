@@ -92,6 +92,16 @@ public class SARIMAModel<T> : TimeSeriesModelBase<T>
     private readonly int _D;
 
     /// <summary>
+    /// Stored differenced training values for initializing Predict(Matrix) state.
+    /// </summary>
+    private Vector<T> _lastTrainDiffValues;
+
+    /// <summary>
+    /// Stored AR+SAR residuals from training for initializing Predict(Matrix) state.
+    /// </summary>
+    private Vector<T> _lastTrainResiduals;
+
+    /// <summary>
     /// Initializes a new instance of the SARIMAModel class with the specified options.
     /// </summary>
     /// <param name="options">The configuration options for the SARIMA model.</param>
@@ -103,6 +113,8 @@ public class SARIMAModel<T> : TimeSeriesModelBase<T>
         _maCoefficients = Vector<T>.Empty();
         _sarCoefficients = Vector<T>.Empty();
         _smaCoefficients = Vector<T>.Empty();
+        _lastTrainDiffValues = Vector<T>.Empty();
+        _lastTrainResiduals = Vector<T>.Empty();
         _p = _sarimaOptions.P;
         _q = _sarimaOptions.Q;
         _d = _sarimaOptions.D;
@@ -405,7 +417,22 @@ public class SARIMAModel<T> : TimeSeriesModelBase<T>
         Vector<T> predictions = new(input.Rows);
         int maxLag = Math.Max(_p, _P * _m);
         Vector<T> lastObservedValues = new(maxLag);
-        Vector<T> lastErrors = new(Math.Max(_q, _Q * _m));
+        // Initialize from stored training state instead of zeros
+        if (_lastTrainDiffValues.Length > 0)
+        {
+            int copyLen = Math.Min(_lastTrainDiffValues.Length, lastObservedValues.Length);
+            for (int j = 0; j < copyLen; j++)
+                lastObservedValues[j] = _lastTrainDiffValues[j];
+        }
+
+        int maxErrLag = Math.Max(_q, _Q * _m);
+        Vector<T> lastErrors = new(maxErrLag);
+        if (_lastTrainResiduals.Length > 0)
+        {
+            int copyLen = Math.Min(_lastTrainResiduals.Length, lastErrors.Length);
+            for (int j = 0; j < copyLen; j++)
+                lastErrors[j] = _lastTrainResiduals[j];
+        }
 
         for (int i = 0; i < predictions.Length; i++)
         {
@@ -446,17 +473,23 @@ public class SARIMAModel<T> : TimeSeriesModelBase<T>
             predictions[i] = prediction;
 
             // Update last observed values and errors for next prediction
-            for (int j = lastObservedValues.Length - 1; j > 0; j--)
+            if (lastObservedValues.Length > 0)
             {
-                lastObservedValues[j] = lastObservedValues[j - 1];
+                for (int j = lastObservedValues.Length - 1; j > 0; j--)
+                {
+                    lastObservedValues[j] = lastObservedValues[j - 1];
+                }
+                lastObservedValues[0] = prediction;
             }
-            lastObservedValues[0] = prediction;
 
-            for (int j = lastErrors.Length - 1; j > 0; j--)
+            if (lastErrors.Length > 0)
             {
-                lastErrors[j] = lastErrors[j - 1];
+                for (int j = lastErrors.Length - 1; j > 0; j--)
+                {
+                    lastErrors[j] = lastErrors[j - 1];
+                }
+                lastErrors[0] = NumOps.Zero; // Assume zero error for future predictions
             }
-            lastErrors[0] = NumOps.Zero; // Assume zero error for future predictions
         }
 
         return predictions;
@@ -613,6 +646,21 @@ public class SARIMAModel<T> : TimeSeriesModelBase<T>
 
         // Step 7: Estimate constant term
         _constant = EstimateConstant(diffY);
+
+        // Step 8: Store last training state for Predict(Matrix) initialization
+        int maxLag = Math.Max(_p, _P * _m);
+        int maxErrLag = Math.Max(_q, _Q * _m);
+        _lastTrainDiffValues = new Vector<T>(maxLag);
+        for (int i = 0; i < Math.Min(maxLag, diffY.Length); i++)
+        {
+            _lastTrainDiffValues[i] = diffY[diffY.Length - 1 - i];
+        }
+
+        _lastTrainResiduals = new Vector<T>(maxErrLag);
+        for (int i = 0; i < Math.Min(maxErrLag, arResiduals.Length); i++)
+        {
+            _lastTrainResiduals[i] = arResiduals[arResiduals.Length - 1 - i];
+        }
     }
 
     /// <summary>
@@ -694,6 +742,174 @@ public class SARIMAModel<T> : TimeSeriesModelBase<T>
         }
 
         return prediction;
+    }
+
+    /// <summary>
+    /// Forecasts future values using the trained SARIMA model, properly handling both
+    /// regular and seasonal differencing.
+    /// </summary>
+    /// <param name="history">The historical time series values.</param>
+    /// <param name="steps">The number of future steps to forecast.</param>
+    /// <returns>A vector of forecasted values in the original (undifferenced) scale.</returns>
+    public override Vector<T> Forecast(Vector<T> history, int steps)
+    {
+        if (!IsTrained)
+        {
+            throw new InvalidOperationException("The model must be trained before forecasting.");
+        }
+
+        if (history == null)
+        {
+            throw new ArgumentNullException(nameof(history), "History cannot be null.");
+        }
+
+        if (steps <= 0)
+        {
+            throw new ArgumentException("Number of forecast steps must be positive.", nameof(steps));
+        }
+
+        int minRequiredLength = Math.Max(_p, _P * _m) + _d + _D * _m;
+        if (history.Length < minRequiredLength)
+        {
+            throw new ArgumentException(
+                $"History length ({history.Length}) is too short for the configured SARIMA parameters. " +
+                $"Minimum required length: {minRequiredLength}.",
+                nameof(history));
+        }
+
+        // Apply the same differencing as in TrainCore
+        Vector<T> diffHistory = ApplyDifferencing(history);
+
+        // Build a working list of differenced values
+        List<T> extendedDiff = new List<T>(diffHistory.Length + steps);
+        for (int i = 0; i < diffHistory.Length; i++)
+        {
+            extendedDiff.Add(diffHistory[i]);
+        }
+
+        // Generate forecasts on the differenced scale
+        Vector<T> diffForecasts = new Vector<T>(steps);
+        for (int step = 0; step < steps; step++)
+        {
+            T prediction = _constant;
+
+            // Non-seasonal AR component
+            for (int j = 0; j < _p && j < extendedDiff.Count; j++)
+            {
+                prediction = NumOps.Add(prediction, NumOps.Multiply(
+                    _arCoefficients[j], extendedDiff[extendedDiff.Count - 1 - j]));
+            }
+
+            // Seasonal AR component
+            for (int j = 0; j < _P; j++)
+            {
+                int lagIdx = extendedDiff.Count - (j + 1) * _m;
+                if (lagIdx >= 0)
+                {
+                    prediction = NumOps.Add(prediction, NumOps.Multiply(
+                        _sarCoefficients[j], extendedDiff[lagIdx]));
+                }
+            }
+
+            // MA/SMA components are assumed zero for future predictions
+
+            diffForecasts[step] = prediction;
+            extendedDiff.Add(prediction);
+        }
+
+        // Undifference: first undo regular differencing, then seasonal differencing
+        // (reverse order of ApplyDifferencing which does seasonal first, then regular)
+        var currentForecasts = new List<T>(steps);
+        for (int i = 0; i < steps; i++)
+        {
+            currentForecasts.Add(diffForecasts[i]);
+        }
+
+        UndoRegularDifferencing(currentForecasts, history);
+        UndoSeasonalDifferencing(currentForecasts, history);
+
+        Vector<T> result = new Vector<T>(steps);
+        for (int i = 0; i < steps; i++)
+        {
+            result[i] = currentForecasts[i];
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Undoes regular (non-seasonal) differencing by computing tail values at each
+    /// integration level and cumulatively summing in reverse order.
+    /// </summary>
+    private void UndoRegularDifferencing(List<T> forecasts, Vector<T> history)
+    {
+        // Compute the series after seasonal differencing but before regular differencing
+        Vector<T> afterSeasonalDiff = history;
+        for (int i = 0; i < _D; i++)
+        {
+            afterSeasonalDiff = SeasonalDifference(afterSeasonalDiff, _m);
+        }
+
+        // Compute tail value at each regular differencing level
+        Vector<T> tempSeries = afterSeasonalDiff;
+        var regularTailValues = new T[_d];
+        for (int level = 0; level < _d; level++)
+        {
+            regularTailValues[level] = tempSeries[tempSeries.Length - 1];
+            Vector<T> nextLevel = new Vector<T>(tempSeries.Length - 1);
+            for (int i = 1; i < tempSeries.Length; i++)
+            {
+                nextLevel[i - 1] = NumOps.Subtract(tempSeries[i], tempSeries[i - 1]);
+            }
+            tempSeries = nextLevel;
+        }
+
+        // Undo regular differencing in reverse
+        for (int level = _d - 1; level >= 0; level--)
+        {
+            T lastVal = regularTailValues[level];
+            for (int i = 0; i < forecasts.Count; i++)
+            {
+                T undiff = NumOps.Add(forecasts[i], lastVal);
+                forecasts[i] = undiff;
+                lastVal = undiff;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Undoes seasonal differencing D times by reconstructing original-scale values
+    /// from the seasonal tail of the history at each level.
+    /// </summary>
+    private void UndoSeasonalDifferencing(List<T> forecasts, Vector<T> history)
+    {
+        for (int level = 0; level < _D; level++)
+        {
+            // Compute the series at this seasonal differencing level
+            Vector<T> seriesAtLevel = history;
+            for (int d2 = 0; d2 < _D - 1 - level; d2++)
+            {
+                seriesAtLevel = SeasonalDifference(seriesAtLevel, _m);
+            }
+
+            // Get the last m values from this series
+            var seasonalTail = new List<T>();
+            for (int i = Math.Max(0, seriesAtLevel.Length - _m); i < seriesAtLevel.Length; i++)
+            {
+                seasonalTail.Add(seriesAtLevel[i]);
+            }
+
+            // Undo seasonal differencing: forecast[i] = diffForecast[i] + value[i - m]
+            var combined = new List<T>(seasonalTail);
+            for (int i = 0; i < forecasts.Count; i++)
+            {
+                int refIdx = combined.Count - _m;
+                T refVal = refIdx >= 0 ? combined[refIdx] : NumOps.Zero;
+                T undiff = NumOps.Add(forecasts[i], refVal);
+                forecasts[i] = undiff;
+                combined.Add(undiff);
+            }
+        }
     }
 
     /// <summary>

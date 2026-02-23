@@ -385,7 +385,7 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
 
                 // Add bias using broadcasting and set in output
                 var biasBroadcast = _bias.Reshape([1, _outputFeatures]);
-                var biasedOutput = Engine.TensorAdd(batchOutput, biasBroadcast);
+                var biasedOutput = Engine.TensorBroadcastAdd(batchOutput, biasBroadcast);
                 output.SetSlice(b, biasedOutput);
             }
 
@@ -508,9 +508,9 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         T numHeadsT = NumOps.FromDouble(_numHeads);
         var avgOverHeads = Engine.TensorDivideScalar(sumOverHeads, numHeadsT);
 
-        // Add bias with broadcasting: bias [outputFeatures] -> [1, 1, outputFeatures]
+        // Add bias: reshape to [1, 1, outputFeatures] and let Engine broadcast to [batchSize, numNodes, outputFeatures]
         var biasExpanded = _bias.Reshape([1, 1, _outputFeatures]);
-        output = Engine.TensorAdd(avgOverHeads, biasExpanded);
+        output = Engine.TensorBroadcastAdd(avgOverHeads, biasExpanded);
 
         activatedOutput = ApplyActivation(output);
 
@@ -1073,7 +1073,7 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
 
         // Add bias (broadcast [outputFeatures] to [batchSize, numNodes, outputFeatures])
         var biasExpanded = _bias.Reshape([1, 1, _outputFeatures]);
-        var outputTensor = Engine.TensorAdd(avgOverHeads, biasExpanded);
+        var outputTensor = Engine.TensorBroadcastAdd(avgOverHeads, biasExpanded);
 
         var outputNode = Autodiff.TensorOperations<T>.Variable(outputTensor, "output", requiresGradient: true);
         allNodes.Add(outputNode);

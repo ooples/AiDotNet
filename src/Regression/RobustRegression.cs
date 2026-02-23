@@ -43,6 +43,9 @@ public class RobustRegression<T> : RegressionBase<T>
     /// </remarks>
     private readonly RobustRegressionOptions<T> _options;
 
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="RobustRegression{T}"/> class with the specified options 
     /// and regularization method.

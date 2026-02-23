@@ -29,7 +29,7 @@ namespace AiDotNet.Models.Options;
 /// This class lets you configure how the detector decides when that plateau has been reached,
 /// allowing you to automatically stop training at the right time.</para>
 /// </remarks>
-public class LearningCurveFitDetectorOptions
+public class LearningCurveFitDetectorOptions : ModelOptions
 {
     /// <summary>
     /// Gets or sets the threshold that determines when the model is considered to have converged.

@@ -107,6 +107,7 @@ public class AutoformerModel<T> : TimeSeriesModelBase<T>
         : base(options)
     {
         _options = options;
+        Options = _options;
 
         // Validate options
         if (_options.EmbeddingDim <= 0)
@@ -342,9 +343,8 @@ public class AutoformerModel<T> : TimeSeriesModelBase<T>
 
     /// <summary>
     /// Trains the model using backpropagation through the Autoformer architecture.
-    /// For multi-step forecasting, the input should contain lookback + forecastHorizon values.
-    /// The first lookback values are used as input, and the last forecastHorizon values
-    /// from the sequence are used as multi-step targets.
+    /// Constructs proper lookback windows from the target vector y rather than using
+    /// x.GetRow(i), which may return only 1 value for univariate time series.
     /// </summary>
     protected override void TrainCore(Matrix<T> x, Vector<T> y)
     {
@@ -352,52 +352,48 @@ public class AutoformerModel<T> : TimeSeriesModelBase<T>
         int forecastHorizon = _options.ForecastHorizon;
         int lookback = _options.LookbackWindow;
 
+        // Build training samples from y: for each valid index i,
+        // input = y[i-lookback : i], target = y[i : i+forecastHorizon]
+        int startIdx = lookback;
+        int endIdx = y.Length - forecastHorizon;
+
+        if (endIdx < startIdx)
+        {
+            throw new ArgumentException(
+                $"Not enough data to build a single training sample. " +
+                $"Require at least {lookback + forecastHorizon + 1} points, got {y.Length}.",
+                nameof(y));
+        }
+
+        var sampleIndices = Enumerable.Range(startIdx, endIdx - startIdx + 1).ToList();
+
         for (int epoch = 0; epoch < _options.Epochs; epoch++)
         {
-            var indices = Enumerable.Range(0, x.Rows).OrderBy(_ => _random.Next()).ToList();
+            var shuffled = sampleIndices.OrderBy(_ => _random.Next()).ToList();
 
-            for (int batchStart = 0; batchStart < x.Rows; batchStart += _options.BatchSize)
+            for (int batchStart = 0; batchStart < shuffled.Count; batchStart += _options.BatchSize)
             {
-                int batchEnd = Math.Min(batchStart + _options.BatchSize, x.Rows);
+                int batchEnd = Math.Min(batchStart + _options.BatchSize, shuffled.Count);
                 int batchSize = batchEnd - batchStart;
 
                 ResetGradientAccumulators();
 
                 for (int idx = batchStart; idx < batchEnd; idx++)
                 {
-                    int i = indices[idx];
-                    Vector<T> fullSequence = x.GetRow(i);
+                    int i = shuffled[idx];
 
-                    // Extract multi-step targets from the input sequence
-                    // If input contains lookback + forecastHorizon values, use the last forecastHorizon as targets
-                    // Otherwise, construct targets from available data
+                    // Extract lookback window from y
+                    var input = new Vector<T>(lookback);
+                    for (int t = 0; t < lookback; t++)
+                    {
+                        input[t] = y[i - lookback + t];
+                    }
+
+                    // Extract multi-step targets from y
                     var targets = new Vector<T>(forecastHorizon);
-                    int inputLen = Math.Min(fullSequence.Length, lookback);
-
-                    if (fullSequence.Length >= lookback + forecastHorizon)
+                    for (int h = 0; h < forecastHorizon; h++)
                     {
-                        // Full sequence available: use last forecastHorizon values as multi-step targets
-                        for (int h = 0; h < forecastHorizon; h++)
-                        {
-                            targets[h] = fullSequence[lookback + h];
-                        }
-                    }
-                    else
-                    {
-                        // Fallback: use y[i] for first target, pad with last known value
-                        targets[0] = y[i];
-                        T lastValue = y[i];
-                        for (int h = 1; h < forecastHorizon; h++)
-                        {
-                            targets[h] = lastValue;
-                        }
-                    }
-
-                    // Extract input portion (first lookback values)
-                    var input = new Vector<T>(inputLen);
-                    for (int t = 0; t < inputLen; t++)
-                    {
-                        input[t] = fullSequence[t];
+                        targets[h] = y[i + h];
                     }
 
                     var gradients = ComputeGradientsMultiStep(input, targets);
@@ -679,9 +675,11 @@ public class AutoformerModel<T> : TimeSeriesModelBase<T>
         var ff2B = TensorOperations<T>.Variable(layer.GetFF2Bias(), $"{prefix}ff2Bias", requiresGradient: true);
         paramNodes.AddRange(new[] { ff1W, ff1B, ff2W, ff2B });
 
-        var ffHidden = TensorOperations<T>.Add(TensorOperations<T>.MatrixMultiply(normalized, ff1W), ff1B);
+        // ff1Weight is [ffDim, embDim], need transpose for [seqLen, embDim] @ [embDim, ffDim]
+        var ffHidden = TensorOperations<T>.Add(TensorOperations<T>.MatrixMultiply(normalized, TensorOperations<T>.Transpose(ff1W)), ff1B);
         var ffActivated = TensorOperations<T>.ReLU(ffHidden);
-        var ffOutput = TensorOperations<T>.Add(TensorOperations<T>.MatrixMultiply(ffActivated, ff2W), ff2B);
+        // ff2Weight is [embDim, ffDim], need transpose for [seqLen, ffDim] @ [ffDim, embDim]
+        var ffOutput = TensorOperations<T>.Add(TensorOperations<T>.MatrixMultiply(ffActivated, TensorOperations<T>.Transpose(ff2W)), ff2B);
 
         // Residual + LayerNorm
         var ffResidual = TensorOperations<T>.Add(normalized, ffOutput);
@@ -756,9 +754,11 @@ public class AutoformerModel<T> : TimeSeriesModelBase<T>
         var ff2B = TensorOperations<T>.Variable(layer.GetFF2Bias(), $"{prefix}ff2Bias", requiresGradient: true);
         paramNodes.AddRange(new[] { ff1W, ff1B, ff2W, ff2B });
 
-        var ffHidden = TensorOperations<T>.Add(TensorOperations<T>.MatrixMultiply(normalized2, ff1W), ff1B);
+        // ff1Weight is [ffDim, embDim], need transpose for [seqLen, embDim] @ [embDim, ffDim]
+        var ffHidden = TensorOperations<T>.Add(TensorOperations<T>.MatrixMultiply(normalized2, TensorOperations<T>.Transpose(ff1W)), ff1B);
         var ffActivated = TensorOperations<T>.ReLU(ffHidden);
-        var ffOutput = TensorOperations<T>.Add(TensorOperations<T>.MatrixMultiply(ffActivated, ff2W), ff2B);
+        // ff2Weight is [embDim, ffDim], need transpose for [seqLen, ffDim] @ [ffDim, embDim]
+        var ffOutput = TensorOperations<T>.Add(TensorOperations<T>.MatrixMultiply(ffActivated, TensorOperations<T>.Transpose(ff2W)), ff2B);
 
         // Residual + LayerNorm
         var ffResidual = TensorOperations<T>.Add(normalized2, ffOutput);

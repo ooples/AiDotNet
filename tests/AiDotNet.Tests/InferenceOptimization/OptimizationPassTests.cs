@@ -1,3 +1,4 @@
+#nullable disable
 using AiDotNet.Enums;
 using AiDotNet.InferenceOptimization.Core;
 using AiDotNet.InferenceOptimization.Passes;

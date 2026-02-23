@@ -18,6 +18,7 @@ namespace AiDotNet.Interfaces
     /// type safety. T is typically a numeric type (like double or float) used for calculations, while TInput
     /// and TOutput define what types of data the step accepts and produces.</para>
     /// </remarks>
+    [AiDotNet.Configuration.YamlConfigurable("PipelineStep")]
     public interface IPipelineStep<T, TInput, TOutput>
     {
         /// <summary>

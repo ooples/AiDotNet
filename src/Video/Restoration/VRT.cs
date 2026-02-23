@@ -3,6 +3,7 @@ using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Video.Options;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
 
@@ -48,8 +49,13 @@ namespace AiDotNet.Video.Restoration;
 /// https://arxiv.org/abs/2201.12288
 /// </para>
 /// </remarks>
-public class VRT<T> : NeuralNetworkBase<T>
+public class VRT<T> : VideoSuperResolutionBase<T>
 {
+    private readonly VRTOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     #region Execution Mode
 
     /// <summary>
@@ -129,15 +135,6 @@ public class VRT<T> : NeuralNetworkBase<T>
     /// </summary>
     public override bool SupportsTraining => _useNativeMode;
 
-    /// <summary>
-    /// Gets the scale factor for super-resolution.
-    /// </summary>
-    internal int ScaleFactor => _scaleFactor;
-
-    /// <summary>
-    /// Gets the number of frames processed.
-    /// </summary>
-    internal int NumFrames => _numFrames;
 
     #endregion
 
@@ -171,9 +168,12 @@ public class VRT<T> : NeuralNetworkBase<T>
         int embedDim = 120,
         int numFrames = 6,
         int numBlocks = 8,
-        int scaleFactor = 4)
+        int scaleFactor = 4,
+        VRTOptions? options = null)
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>())
     {
+        _options = options ?? new VRTOptions();
+        Options = _options;
         if (embedDim < 1)
             throw new ArgumentOutOfRangeException(nameof(embedDim), embedDim, "Embedding dimension must be at least 1.");
         if (numFrames < 1)
@@ -184,8 +184,10 @@ public class VRT<T> : NeuralNetworkBase<T>
         _useNativeMode = true;
         _embedDim = embedDim;
         _numFrames = numFrames;
+        NumFrames = numFrames;
         _numBlocks = numBlocks;
         _scaleFactor = scaleFactor;
+        ScaleFactor = scaleFactor;
         _inputHeight = architecture.InputHeight > 0 ? architecture.InputHeight : 64;
         _inputWidth = architecture.InputWidth > 0 ? architecture.InputWidth : 64;
 
@@ -218,9 +220,12 @@ public class VRT<T> : NeuralNetworkBase<T>
     public VRT(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
-        int scaleFactor = 4)
+        int scaleFactor = 4,
+        VRTOptions? options = null)
         : base(architecture, new MeanSquaredErrorLoss<T>())
     {
+        _options = options ?? new VRTOptions();
+        Options = _options;
         if (string.IsNullOrWhiteSpace(onnxModelPath))
             throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
         if (!File.Exists(onnxModelPath))
@@ -230,8 +235,10 @@ public class VRT<T> : NeuralNetworkBase<T>
         _onnxModelPath = onnxModelPath;
         _embedDim = 120;
         _numFrames = 6;
+        NumFrames = 6;
         _numBlocks = 8;
         _scaleFactor = scaleFactor;
+        ScaleFactor = scaleFactor;
         _inputHeight = architecture.InputHeight > 0 ? architecture.InputHeight : 64;
         _inputWidth = architecture.InputWidth > 0 ? architecture.InputWidth : 64;
         _lossFunction = new MeanSquaredErrorLoss<T>();
@@ -317,7 +324,7 @@ public class VRT<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Performs a forward pass through the network.
     /// </summary>
-    private Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> Forward(Tensor<T> input)
     {
         var result = input;
         foreach (var layer in Layers)
@@ -518,4 +525,27 @@ public class VRT<T> : NeuralNetworkBase<T>
     }
 
     #endregion
+
+    #region Base Class Abstract Methods
+
+    /// <inheritdoc/>
+    public override Tensor<T> Upscale(Tensor<T> lowResFrames)
+    {
+        return Forward(lowResFrames);
+    }
+
+    /// <inheritdoc/>
+    protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames)
+    {
+        return NormalizeFrames(rawFrames);
+    }
+
+    /// <inheritdoc/>
+    protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput)
+    {
+        return DenormalizeFrames(modelOutput);
+    }
+
+    #endregion
+
 }

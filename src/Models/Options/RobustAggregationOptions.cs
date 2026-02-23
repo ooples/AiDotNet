@@ -15,7 +15,7 @@ namespace AiDotNet.Models.Options;
 /// - Krum/Multi-Krum: chooses the most "central" client updates by distance.
 /// - Bulyan: combines Multi-Krum selection with trimming for stronger robustness.
 /// </remarks>
-public class RobustAggregationOptions
+public class RobustAggregationOptions : ModelOptions
 {
     /// <summary>
     /// Gets or sets the trimming fraction for trimmed-mean based aggregations (0.0 to &lt; 0.5).

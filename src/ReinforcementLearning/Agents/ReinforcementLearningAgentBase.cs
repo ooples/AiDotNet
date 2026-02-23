@@ -2,7 +2,9 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
+using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.Validation;
 
 namespace AiDotNet.ReinforcementLearning.Agents;
 
@@ -30,7 +32,7 @@ namespace AiDotNet.ReinforcementLearning.Agents;
 /// their own unique learning logic while sharing common functionality.
 /// </para>
 /// </remarks>
-public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IDisposable
+public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IConfigurableModel<T>, IDisposable
 {
     /// <summary>
     /// Numeric operations provider for type T.
@@ -80,7 +82,10 @@ public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IDisposab
     /// <summary>
     /// Configuration options for this agent.
     /// </summary>
-    protected readonly ReinforcementLearningOptions<T> Options;
+    protected ReinforcementLearningOptions<T> Options;
+
+    /// <inheritdoc/>
+    public virtual ModelOptions GetOptions() => Options;
 
     /// <summary>
     /// Initializes a new instance of the ReinforcementLearningAgentBase class.
@@ -88,7 +93,8 @@ public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IDisposab
     /// <param name="options">Configuration options for the agent.</param>
     protected ReinforcementLearningAgentBase(ReinforcementLearningOptions<T> options)
     {
-        Options = options ?? throw new ArgumentNullException(nameof(options));
+        Guard.NotNull(options);
+        Options = options;
         NumOps = MathHelper.GetNumericOperations<T>();
         Random = options.Seed.HasValue ? RandomHelper.CreateSeededRandom(options.Seed.Value) : RandomHelper.CreateSecureRandom();
 
@@ -523,7 +529,7 @@ public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IDisposab
 /// Configuration options for reinforcement learning agents.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public class ReinforcementLearningOptions<T>
+public class ReinforcementLearningOptions<T> : ModelOptions
 {
     /// <summary>
     /// Learning rate for gradient updates.
@@ -540,10 +546,7 @@ public class ReinforcementLearningOptions<T>
     /// </summary>
     public ILossFunction<T>? LossFunction { get; init; }
 
-    /// <summary>
-    /// Random seed for reproducibility (optional).
-    /// </summary>
-    public int? Seed { get; init; }
+    // Note: Seed property is inherited from ModelOptions.
 
     /// <summary>
     /// Batch size for training updates.

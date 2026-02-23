@@ -9,6 +9,7 @@ using AiDotNet.Serving.Services;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using Microsoft.Extensions.Logging;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Serving.Services.Federated;
 
@@ -42,15 +43,24 @@ public sealed class FederatedCoordinatorService : IFederatedCoordinatorService
         IModelArtifactProtector artifactProtector,
         IModelArtifactStore artifactStore)
     {
-        _runStore = runStore ?? throw new ArgumentNullException(nameof(runStore));
-        _modelRepository = modelRepository ?? throw new ArgumentNullException(nameof(modelRepository));
-        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        _tierResolver = tierResolver ?? throw new ArgumentNullException(nameof(tierResolver));
-        _tierPolicyProvider = tierPolicyProvider ?? throw new ArgumentNullException(nameof(tierPolicyProvider));
-        _attestationVerifier = attestationVerifier ?? throw new ArgumentNullException(nameof(attestationVerifier));
-        _httpContextAccessor = httpContextAccessor ?? throw new ArgumentNullException(nameof(httpContextAccessor));
-        _artifactProtector = artifactProtector ?? throw new ArgumentNullException(nameof(artifactProtector));
-        _artifactStore = artifactStore ?? throw new ArgumentNullException(nameof(artifactStore));
+        Guard.NotNull(runStore);
+        _runStore = runStore;
+        Guard.NotNull(modelRepository);
+        _modelRepository = modelRepository;
+        Guard.NotNull(logger);
+        _logger = logger;
+        Guard.NotNull(tierResolver);
+        _tierResolver = tierResolver;
+        Guard.NotNull(tierPolicyProvider);
+        _tierPolicyProvider = tierPolicyProvider;
+        Guard.NotNull(attestationVerifier);
+        _attestationVerifier = attestationVerifier;
+        Guard.NotNull(httpContextAccessor);
+        _httpContextAccessor = httpContextAccessor;
+        Guard.NotNull(artifactProtector);
+        _artifactProtector = artifactProtector;
+        Guard.NotNull(artifactStore);
+        _artifactStore = artifactStore;
     }
 
     public CreateFederatedRunResponse CreateRun(CreateFederatedRunRequest request)

@@ -1,4 +1,5 @@
 using AiDotNet.Document.Interfaces;
+using AiDotNet.Document.Options;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -46,6 +47,11 @@ namespace AiDotNet.Document.GraphBased;
 /// </remarks>
 public class DocGCN<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>
 {
+    private readonly DocGCNOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     #region Fields
 
     private readonly bool _useNativeMode;
@@ -123,9 +129,13 @@ public class DocGCN<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>
         int numClasses = 9,
         int maxNodes = 512,
         IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        DocGCNOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyLoss<T>(), 1.0)
     {
+        _options = options ?? new DocGCNOptions();
+        Options = _options;
+
         if (string.IsNullOrWhiteSpace(onnxModelPath))
             throw new ArgumentNullException(nameof(onnxModelPath));
         if (!File.Exists(onnxModelPath))
@@ -164,9 +174,13 @@ public class DocGCN<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>
         int numClasses = 9,
         int maxNodes = 512,
         IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        DocGCNOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyLoss<T>(), 1.0)
     {
+        _options = options ?? new DocGCNOptions();
+        Options = _options;
+
         _useNativeMode = true;
         _nodeDim = nodeDim;
         _edgeDim = edgeDim;

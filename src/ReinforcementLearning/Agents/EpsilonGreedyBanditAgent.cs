@@ -3,6 +3,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using Newtonsoft.Json;
+using AiDotNet.Validation;
 
 namespace AiDotNet.ReinforcementLearning.Agents.Bandits;
 
@@ -13,13 +14,17 @@ namespace AiDotNet.ReinforcementLearning.Agents.Bandits;
 public class EpsilonGreedyBanditAgent<T> : ReinforcementLearningAgentBase<T>
 {
     private EpsilonGreedyBanditOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
     private Random _random;
     private Vector<T> _qValues;
     private Vector<int> _actionCounts;
 
     public EpsilonGreedyBanditAgent(EpsilonGreedyBanditOptions<T> options) : base(options)
     {
-        _options = options ?? throw new ArgumentNullException(nameof(options));
+        Guard.NotNull(options);
+        _options = options;
         _random = RandomHelper.CreateSecureRandom();
         _qValues = new Vector<T>(_options.NumArms);
         _actionCounts = new Vector<int>(_options.NumArms);

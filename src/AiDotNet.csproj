@@ -58,22 +58,29 @@
 
 	<ItemGroup>
 	  <PackageReference Include="Azure.Search.Documents" Version="11.7.0" />
-	  <PackageReference Include="Elastic.Clients.Elasticsearch" Version="9.2.2" />
-	  <PackageReference Include="Google.Protobuf" Version="3.33.2" />
+	  <PackageReference Include="Elastic.Clients.Elasticsearch" Version="9.3.0" />
+	  <PackageReference Include="Google.Protobuf" Version="3.33.5" />
 	  <PackageReference Include="Microsoft.CSharp" Version="4.7.0" />
-	  <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.22" />
-	  <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.23.2" />
+	  <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.24" />
+	  <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.24.2" />
 	  <PackageReference Include="Microsoft.Research.SEALNet" Version="4.1.1" />
 	  <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
 	  <PackageReference Include="Pinecone.Client" Version="4.0.2" />
-	  <PackageReference Include="StackExchange.Redis" Version="2.10.1" />
+	  <PackageReference Include="StackExchange.Redis" Version="2.11.3" />
 	  <PackageReference Include="System.Numerics.Tensors" Version="10.0.1" />
 	  <PackageReference Include="System.ValueTuple" Version="4.6.1" />
 	  <PackageReference Include="TreeSitter.DotNet" Version="1.2.0" />
 	  <PackageReference Include="FftSharp" Version="2.2.0" />
+	  <PackageReference Include="Parquet.Net" Version="4.25.0" />
+	  <PackageReference Include="YamlDotNet" Version="16.3.0" />
 	</ItemGroup>
 
-	<!-- PostgreSQL package only for .NET 10.0+ -->
+	<!-- ImageSharp for PNG/JPEG/GIF/TIFF support (requires .NET 6+) -->
+	<ItemGroup Condition="'$(TargetFramework)' != 'net471'">
+	  <PackageReference Include="SixLabors.ImageSharp" Version="3.1.12" />
+	</ItemGroup>
+
+	<!-- Npgsql EF Core requires .NET 10+ -->
 	<ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
 	  <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.0" />
 	</ItemGroup>
@@ -119,9 +126,34 @@
 	  <Compile Remove="Polyfills\LanguageFeaturePolyfills.cs" />
 	</ItemGroup>
 
+	<!-- Source generator for auto-generating YAML configuration mappings -->
+	<ItemGroup>
+	  <ProjectReference Include="AiDotNet.Generators\AiDotNet.Generators.csproj"
+	                     OutputItemType="Analyzer"
+	                     ReferenceOutputAssembly="false" />
+	</ItemGroup>
+
+	<!-- Exclude the source generator project files from this project's compilation -->
+	<ItemGroup>
+	  <Compile Remove="AiDotNet.Generators\**\*.cs" />
+	  <EmbeddedResource Remove="AiDotNet.Generators\**\*" />
+	  <None Remove="AiDotNet.Generators\**\*" />
+	</ItemGroup>
+
+	<!-- Emit generated source files to disk for inspection/debugging (Debug only) -->
+	<PropertyGroup Condition="'$(Configuration)'=='Debug'">
+	  <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
+	  <CompilerGeneratedFilesOutputPath>Generated</CompilerGeneratedFilesOutputPath>
+	</PropertyGroup>
+
+	<!-- Exclude emitted generated files from compilation (they're already in-memory from the generator) -->
+	<ItemGroup>
+	  <Compile Remove="Generated\**\*.cs" />
+	</ItemGroup>
+
 	<!-- AiDotNet.Tensors NuGet package (spun out to separate repo) -->
 	<ItemGroup>
-	  <PackageReference Include="AiDotNet.Tensors" Version="0.4.0" />
+	  <PackageReference Include="AiDotNet.Tensors" Version="0.7.0" />
 	</ItemGroup>
 
 	<!--
@@ -131,11 +163,11 @@
 	-->
 	<ItemGroup>
 	  <!-- CPU acceleration via OpenBLAS -->
-	  <PackageReference Include="AiDotNet.Native.OpenBLAS" Version="0.4.0" />
+	  <PackageReference Include="AiDotNet.Native.OpenBLAS" Version="0.7.0" />
 	  <!-- GPU acceleration via CLBlast (OpenCL-based) -->
-	  <PackageReference Include="AiDotNet.Native.CLBlast" Version="0.4.0" />
+	  <PackageReference Include="AiDotNet.Native.CLBlast" Version="0.7.0" />
 	  <!-- CPU acceleration via Intel OneDNN -->
-	  <PackageReference Include="AiDotNet.Native.OneDNN" Version="0.4.0" />
+	  <PackageReference Include="AiDotNet.Native.OneDNN" Version="0.7.0" />
 	</ItemGroup>
 
 	<!-- Global usings for AiDotNet.Tensors namespaces -->

@@ -13,7 +13,7 @@ namespace AiDotNet.Models.Options;
 /// classification and segmentation tasks.
 /// </para>
 /// </remarks>
-public class MeshCNNOptions
+public class MeshCNNOptions : NeuralNetworkOptions
 {
     /// <summary>
     /// Gets or sets the number of output classes for classification.

@@ -50,6 +50,11 @@ namespace AiDotNet.Audio.Enhancement;
 /// </remarks>
 public class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 {
+    private readonly ConvTasNetOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     private readonly INumericOperations<T> _numOps;
 
     // Encoder parameters
@@ -88,8 +93,8 @@ public class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 #pragma warning restore CS0414
     private int _bufferPosition;
 
-    // Optimizer for training
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    // Optimizer for training (used in native training mode)
+    internal IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? Optimizer { get; set; }
 
     // IAudioEnhancer properties
     /// <inheritdoc/>
@@ -134,9 +139,12 @@ public class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         int encoderDim = 512,
         int kernelSize = 16,
         int numSources = 2,
-        OnnxModelOptions? onnxOptions = null)
+        OnnxModelOptions? onnxOptions = null,
+        ConvTasNetOptions? options = null)
         : base(architecture)
     {
+        _options = options ?? new ConvTasNetOptions();
+        Options = _options;
         _numOps = MathHelper.GetNumericOperations<T>();
 
         if (string.IsNullOrWhiteSpace(modelPath))
@@ -178,8 +186,6 @@ public class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         _numRepeats = 3;
         _tcnKernelSize = 3;
 
-        // Initialize optimizer (not used in ONNX mode but required for readonly field)
-        _optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
     }
 
     /// <summary>
@@ -209,9 +215,12 @@ public class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         int tcnKernelSize = 3,
         int numSources = 2,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        ConvTasNetOptions? options = null)
         : base(architecture, lossFunction)
     {
+        _options = options ?? new ConvTasNetOptions();
+        Options = _options;
         _numOps = MathHelper.GetNumericOperations<T>();
 
         SampleRate = sampleRate;
@@ -261,7 +270,7 @@ public class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         _decoderWeight = InitializeWeights(_encoderDim * _kernelSize);
 
         // Initialize optimizer (Adam by default)
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        Optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         InitializeLayers();
     }

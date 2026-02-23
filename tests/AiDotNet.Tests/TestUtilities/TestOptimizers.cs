@@ -38,6 +38,11 @@ internal sealed class PassthroughOptimizer<T, TInput, TOutput> : IOptimizer<T, T
     {
     }
 
+    public void SetModel(IFullModel<T, TInput, TOutput> model)
+    {
+        // No-op for test optimizer
+    }
+
     public byte[] Serialize()
     {
         return [];
@@ -85,6 +90,11 @@ internal sealed class SingleStepTrainOptimizer<T, TInput, TOutput> : IOptimizer<
 
     public void Reset()
     {
+    }
+
+    public void SetModel(IFullModel<T, TInput, TOutput> model)
+    {
+        // No-op for test optimizer
     }
 
     public byte[] Serialize()
@@ -144,6 +154,11 @@ internal sealed class DeterministicNeuralNetworkParameterOptimizer<TInput, TOutp
 
     public void Reset()
     {
+    }
+
+    public void SetModel(IFullModel<double, TInput, TOutput> model)
+    {
+        // No-op for test optimizer
     }
 
     public byte[] Serialize()

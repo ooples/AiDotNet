@@ -1,3 +1,5 @@
+using AiDotNet.NeuralNetworks.Options;
+
 namespace AiDotNet.NeuralNetworks;
 
 /// <summary>
@@ -35,6 +37,11 @@ namespace AiDotNet.NeuralNetworks;
 /// <typeparam name="T">The numeric type used for calculations (typically float or double).</typeparam>
 public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
 {
+    private readonly LSTMOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// The activation function to apply to cell state outputs. Default is tanh.
     /// </summary>
@@ -139,9 +146,13 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
         IActivationFunction<T>? forgetGateActivation = null,
         IActivationFunction<T>? inputGateActivation = null,
         IActivationFunction<T>? cellGateActivation = null,
-        IActivationFunction<T>? outputGateActivation = null) :
+        IActivationFunction<T>? outputGateActivation = null,
+        LSTMOptions? options = null) :
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
+        _options = options ?? new LSTMOptions();
+        Options = _options;
+
         // Set activation functions (or defaults)
         ScalarActivation = outputActivation ?? new TanhActivation<T>();
 
@@ -208,9 +219,13 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
         IVectorActivationFunction<T>? forgetGateVectorActivation = null,
         IVectorActivationFunction<T>? inputGateVectorActivation = null,
         IVectorActivationFunction<T>? cellGateVectorActivation = null,
-        IVectorActivationFunction<T>? outputGateVectorActivation = null) :
+        IVectorActivationFunction<T>? outputGateVectorActivation = null,
+        LSTMOptions? options = null) :
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
+        _options = options ?? new LSTMOptions();
+        Options = _options;
+
         // Set activation functions (or defaults)
         VectorActivation = outputVectorActivation ?? new TanhActivation<T>();
 

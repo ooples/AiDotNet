@@ -1,4 +1,4 @@
-using AiDotNet.NeuralNetworks.Diffusion.Schedulers;
+using AiDotNet.Diffusion.Schedulers;
 
 namespace AiDotNet.Interfaces;
 
@@ -35,6 +35,7 @@ namespace AiDotNet.Interfaces;
 /// - Step function: Takes a noisy sample and model prediction, returns a slightly less noisy sample
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("NoiseScheduler")]
 public interface INoiseScheduler<T>
 {
     /// <summary>

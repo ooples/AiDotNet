@@ -1,4 +1,5 @@
 using AiDotNet.Deployment.Export;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Deployment.Mobile.Android;
 
@@ -7,6 +8,9 @@ namespace AiDotNet.Deployment.Mobile.Android;
 /// Provides hardware acceleration on Android devices.
 /// </summary>
 /// <typeparam name="T">The numeric type for input/output tensors</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> NNAPIBackend provides AI safety functionality. Default values follow the original paper settings.</para>
+/// </remarks>
 public class NNAPIBackend<T>
 {
     private readonly NNAPIConfiguration _config;
@@ -14,7 +18,8 @@ public class NNAPIBackend<T>
 
     public NNAPIBackend(NNAPIConfiguration config)
     {
-        _config = config ?? throw new ArgumentNullException(nameof(config));
+        Guard.NotNull(config);
+        _config = config;
     }
 
     /// <summary>

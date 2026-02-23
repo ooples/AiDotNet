@@ -7,7 +7,7 @@ namespace AiDotNet.Models.Options;
 /// <b>For Beginners:</b> Homomorphic encryption lets the server combine encrypted client updates without seeing them in plaintext.
 /// This can enable stronger privacy guarantees, at the cost of compute and bandwidth.
 /// </remarks>
-public class HomomorphicEncryptionOptions
+public class HomomorphicEncryptionOptions : ModelOptions
 {
     /// <summary>
     /// Gets or sets whether homomorphic encryption is enabled.

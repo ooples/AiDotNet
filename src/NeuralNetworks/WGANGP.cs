@@ -1,5 +1,6 @@
 using System.IO;
 using AiDotNet.Helpers;
+using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.NeuralNetworks;
@@ -35,6 +36,11 @@ namespace AiDotNet.NeuralNetworks;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 public class WGANGP<T> : NeuralNetworkBase<T>
 {
+    private readonly WGANGPOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     private readonly List<T> _criticLosses = new List<T>();
     private readonly List<T> _generatorLosses = new List<T>();
 
@@ -159,10 +165,14 @@ public class WGANGP<T> : NeuralNetworkBase<T>
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? criticOptimizer = null,
         ILossFunction<T>? lossFunction = null,
         double gradientPenaltyCoefficient = 10.0,
-        int criticIterations = 5)
+        int criticIterations = 5,
+        WGANGPOptions? options = null)
         : base(CreateWGANGPArchitecture(generatorArchitecture, criticArchitecture, inputType),
                lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(generatorArchitecture.TaskType))
     {
+        _options = options ?? new WGANGPOptions();
+        Options = _options;
+
         // Input validation
         if (generatorArchitecture is null)
         {

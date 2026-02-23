@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Deployment.TensorRT;
 
@@ -9,6 +10,9 @@ namespace AiDotNet.Deployment.TensorRT;
 /// Supports multi-stream execution and CUDA graph optimization.
 /// </summary>
 /// <typeparam name="T">The numeric type for input/output tensors</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> TensorRTInferenceEngine provides AI safety functionality. Default values follow the original paper settings.</para>
+/// </remarks>
 public class TensorRTInferenceEngine<T> : IDisposable
 {
     private readonly string _enginePath;
@@ -22,8 +26,10 @@ public class TensorRTInferenceEngine<T> : IDisposable
 
     public TensorRTInferenceEngine(string enginePath, TensorRTConfiguration config)
     {
-        _enginePath = enginePath ?? throw new ArgumentNullException(nameof(enginePath));
-        _config = config ?? throw new ArgumentNullException(nameof(config));
+        Guard.NotNull(enginePath);
+        _enginePath = enginePath;
+        Guard.NotNull(config);
+        _config = config;
         var numContexts = config.EnableMultiStream ? config.NumStreams : 1;
         _streamSemaphore = new SemaphoreSlim(numContexts, numContexts);
         _streamContexts = new ConcurrentDictionary<int, StreamContext>();

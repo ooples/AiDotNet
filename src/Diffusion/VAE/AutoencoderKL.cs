@@ -1,6 +1,5 @@
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
-using AiDotNet.NeuralNetworks.Diffusion;
 
 namespace AiDotNet.Diffusion.VAE;
 

@@ -52,7 +52,7 @@ public class NeuralNetworkArchitecture<T>
     /// the overall building design.
     /// </para>
     /// </remarks>
-    public List<ILayer<T>>? Layers { get; }
+    public List<ILayer<T>> Layers { get; } = new List<ILayer<T>>();
 
     /// <summary>
     /// Gets the type of input the neural network is designed to handle.
@@ -455,7 +455,10 @@ public class NeuralNetworkArchitecture<T>
         InputWidth = inputWidth;
         InputDepth = inputDepth;
         ShouldReturnFullSequence = shouldReturnFullSequence;
-        Layers = layers;
+        if (layers != null)
+        {
+            Layers.AddRange(layers);
+        }
         ImageEmbeddingDim = imageEmbeddingDim;
         TextEmbeddingDim = textEmbeddingDim;
         OutputSize = outputSize;

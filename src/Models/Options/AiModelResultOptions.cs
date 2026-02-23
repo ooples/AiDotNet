@@ -80,7 +80,7 @@ namespace AiDotNet.Models.Options;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 /// <typeparam name="TInput">The type of input data (e.g., Matrix&lt;T&gt;, Vector&lt;T&gt;).</typeparam>
 /// <typeparam name="TOutput">The type of output predictions (e.g., Vector&lt;T&gt;).</typeparam>
-public class AiModelResultOptions<T, TInput, TOutput>
+public class AiModelResultOptions<T, TInput, TOutput> : ModelOptions
 {
     // ============================================================================
     // Core Model Properties
@@ -113,23 +113,6 @@ public class AiModelResultOptions<T, TInput, TOutput>
     /// </para>
     /// </remarks>
     public OptimizationResult<T, TInput, TOutput>? OptimizationResult { get; set; }
-
-    /// <summary>
-    /// Gets or sets the normalization information for preprocessing and postprocessing data.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Stores the normalization parameters used during training so that new input data
-    /// can be normalized the same way, and predictions can be denormalized to original scale.
-    /// </para>
-    /// <para><b>For Beginners:</b> This remembers how your training data was scaled.
-    /// When you make predictions on new data, it applies the same scaling so the model
-    /// understands the input correctly.
-    /// </para>
-    /// <para><b>Note:</b> This is the legacy normalization system. For new code, prefer using
-    /// <see cref="PreprocessingInfo"/> which provides a more flexible pipeline-based approach.</para>
-    /// </remarks>
-    public NormalizationInfo<T, TInput, TOutput>? NormalizationInfo { get; set; }
 
     /// <summary>
     /// Gets or sets the preprocessing pipeline information for data transformation.
@@ -197,6 +180,21 @@ public class AiModelResultOptions<T, TInput, TOutput>
     /// </para>
     /// </remarks>
     public IFairnessEvaluator<T>? FairnessEvaluator { get; set; }
+
+    /// <summary>
+    /// Gets or sets the interpretability options for model explanation methods.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Configures which interpretability methods (SHAP, LIME, Permutation Importance, Global Surrogate)
+    /// are available and their parameters for explaining model predictions.
+    /// </para>
+    /// <para><b>For Beginners:</b> This controls how your model explains its predictions.
+    /// When configured, you can ask the model "why did you make this prediction?" and get
+    /// answers like "Age increased the prediction by +5000, Income decreased it by -2000."
+    /// </para>
+    /// </remarks>
+    public InterpretabilityOptions? InterpretabilityOptions { get; set; }
 
     // ============================================================================
     // RAG (Retrieval-Augmented Generation) Properties
@@ -548,6 +546,20 @@ public class AiModelResultOptions<T, TInput, TOutput>
     /// </para>
     /// </remarks>
     public DeploymentConfiguration? DeploymentConfiguration { get; set; }
+
+    /// <summary>
+    /// Gets or sets information about model quantization.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Contains quantization details such as strategy (GPTQ, AWQ, SmoothQuant), bit width,
+    /// compression ratio, and per-layer quantization statistics.
+    /// </para>
+    /// <para><b>For Beginners:</b> Quantization makes your model smaller and faster by using
+    /// fewer bits per weight. This property tells you what quantization was applied.
+    /// </para>
+    /// </remarks>
+    public QuantizationInfo? QuantizationInfo { get; set; }
 
     // ============================================================================
     // Inference Optimization Properties

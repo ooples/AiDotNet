@@ -1,3 +1,4 @@
+using AiDotNet.Models.Options;
 using AiDotNet.Onnx;
 
 namespace AiDotNet.Audio.Classification;
@@ -5,8 +6,34 @@ namespace AiDotNet.Audio.Classification;
 /// <summary>
 /// Options for acoustic scene classification.
 /// </summary>
-public class SceneClassifierOptions
+/// <remarks>
+/// <para><b>For Beginners:</b> These options configure the SceneClassifier model. Default values follow the original paper settings.</para>
+/// </remarks>
+public class SceneClassifierOptions : ModelOptions
 {
+    /// <summary>Initializes a new instance with default values.</summary>
+    public SceneClassifierOptions() { }
+
+    /// <summary>Initializes a new instance by copying from another instance.</summary>
+    /// <param name="other">The options instance to copy from.</param>
+    /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
+    public SceneClassifierOptions(SceneClassifierOptions other)
+    {
+        if (other == null)
+            throw new ArgumentNullException(nameof(other));
+
+        Seed = other.Seed;
+        SampleRate = other.SampleRate;
+        FftSize = other.FftSize;
+        HopLength = other.HopLength;
+        NumMels = other.NumMels;
+        NumMfccs = other.NumMfccs;
+        TopK = other.TopK;
+        CustomScenes = other.CustomScenes;
+        ModelPath = other.ModelPath;
+        OnnxOptions = other.OnnxOptions;
+    }
+
     /// <summary>Audio sample rate. Default: 22050.</summary>
     public int SampleRate { get; set; } = 22050;
 

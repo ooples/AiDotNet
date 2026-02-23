@@ -9,6 +9,7 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tokenization.Interfaces;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Audio.MusicGen;
 
@@ -59,9 +60,13 @@ public class MusicGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
     #region Fields
 
     private readonly MusicGenOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     private readonly ITokenizer _tokenizer;
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
-    private readonly ILossFunction<T> _lossFunction;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    private ILossFunction<T> _lossFunction;
     private readonly Random _random;
 
     // Model dimensions based on size
@@ -156,8 +161,9 @@ public class MusicGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
             throw new FileNotFoundException($"EnCodec decoder not found: {encodecDecoderPath}");
 
         _options = options ?? new MusicGenOptions();
-        _tokenizer = tokenizer ?? throw new ArgumentNullException(nameof(tokenizer),
-            "Tokenizer is required. Use T5Tokenizer or compatible tokenizer.");
+        Options = _options;
+        Guard.NotNull(tokenizer);
+        _tokenizer = tokenizer;
         _useNativeMode = false;
 
         // Set dimensions based on model size
@@ -189,7 +195,7 @@ public class MusicGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
             throw;
         }
 
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer;
         _lossFunction = lossFunction ?? new CrossEntropyLoss<T>();
         _random = _options.Seed.HasValue
             ? RandomHelper.CreateSeededRandom(_options.Seed.Value)
@@ -226,6 +232,7 @@ public class MusicGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         : base(architecture, lossFunction ?? new CrossEntropyLoss<T>(), 1.0)
     {
         _options = options ?? new MusicGenOptions();
+        Options = _options;
         _useNativeMode = true;
 
         // Set dimensions based on model size
@@ -992,7 +999,7 @@ public class MusicGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
 
         Backpropagate(Tensor<T>.FromVector(lossGradient));
 
-        _optimizer.UpdateParameters(Layers);
+        _optimizer?.UpdateParameters(Layers);
 
         SetTrainingMode(false);
     }

@@ -23,7 +23,7 @@ namespace AiDotNet.Models.Options;
 /// helps identify when your model is "memorizing" rather than "learning," which would make it perform poorly
 /// on new data in real-world applications.</para>
 /// </remarks>
-public class GradientBoostingFitDetectorOptions
+public class GradientBoostingFitDetectorOptions : ModelOptions
 {
     /// <summary>
     /// Gets or sets the threshold for detecting overfitting based on the difference between training and validation performance.

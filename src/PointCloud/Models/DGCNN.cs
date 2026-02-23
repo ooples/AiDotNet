@@ -77,6 +77,11 @@ namespace AiDotNet.PointCloud.Models;
 /// </remarks>
 public class DGCNN<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPointCloudClassification<T>, IPointCloudSegmentation<T>
 {
+    private readonly DGCNNOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     private int _numClasses;
     private int _inputFeatureDim;
     private int _knnK; // Number of nearest neighbors
@@ -103,9 +108,12 @@ public class DGCNN<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPointCloudCl
     /// </summary>
     /// <param name="options">Configuration options for the DGCNN model.</param>
     /// <param name="lossFunction">Optional loss function for training.</param>
-    public DGCNN(DGCNNOptions options, ILossFunction<T>? lossFunction = null)
+    public DGCNN(DGCNNOptions options, ILossFunction<T>? lossFunction = null, DGCNNOptions? modelOptions = null)
         : base(CreateArchitecture(options.NumClasses, options.InputFeatureDim), lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.MultiClassClassification))
     {
+        _options = modelOptions ?? new DGCNNOptions();
+        Options = _options;
+
         if (options == null)
         {
             throw new ArgumentNullException(nameof(options));
