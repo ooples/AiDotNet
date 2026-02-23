@@ -1149,11 +1149,8 @@ public class LayoutLMv3<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
             foreach (var l in _textEmbeddingLayers) excludedLayers.Add(l);
             foreach (var l in _transformerLayers) excludedLayers.Add(l);
 
-            foreach (var layer in Layers)
-            {
-                if (!excludedLayers.Contains(layer))
-                    output = layer.Forward(output);
-            }
+            foreach (var layer in Layers.Where(l => !excludedLayers.Contains(l)))
+                output = layer.Forward(output);
 
             return output;
         }

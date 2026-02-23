@@ -44,7 +44,7 @@ public class BeveridgeNelsonDecomposition<T> : TimeSeriesDecompositionBase<T>
         _arimaOptions = arimaOptions ?? new ARIMAOptions<T> { P = 1, D = 1, Q = 1 };
         _forecastHorizon = forecastHorizon;
         _multivariateSeries = multivariateSeries ?? new Matrix<T>(TimeSeries.Length, 1);
-        Decompose();
+        DecomposeInternal();
     }
 
     /// <summary>
@@ -53,7 +53,9 @@ public class BeveridgeNelsonDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// <remarks>
     /// This method selects and executes the appropriate decomposition algorithm.
     /// </remarks>
-    protected override void Decompose()
+    protected override void Decompose() => DecomposeInternal();
+
+    private void DecomposeInternal()
     {
         switch (_algorithm)
         {
