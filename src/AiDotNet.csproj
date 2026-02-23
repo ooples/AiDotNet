@@ -68,7 +68,7 @@
 	  <PackageReference Include="Pinecone.Client" Version="4.0.2" />
 	  <PackageReference Include="StackExchange.Redis" Version="2.11.3" />
 	  <PackageReference Include="System.Numerics.Tensors" Version="10.0.1" />
-	  <PackageReference Include="System.ValueTuple" Version="4.6.1" />
+	  <PackageReference Include="System.ValueTuple" Version="4.6.2" />
 	  <PackageReference Include="TreeSitter.DotNet" Version="1.2.0" />
 	  <PackageReference Include="FftSharp" Version="2.2.0" />
 	  <PackageReference Include="Parquet.Net" Version="4.25.0" />
