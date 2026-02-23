@@ -593,8 +593,10 @@ public class SeparableConvolutionalLayer<T> : LayerBase<T>
 
         // Step 2: Pointwise convolution (1x1 conv) with fused bias using Engine
         // Note: Can't fuse activation because it's applied after NCHW->NHWC transpose
+        // Reshape bias from [outputDepth] to [1, outputDepth, 1, 1] for NCHW broadcast
+        var biasReshaped4D = _biases.Reshape([1, _outputDepth, 1, 1]);
         var pointwiseOutputNCHW = Engine.FusedConv2D(
-            depthwiseOutputNCHW, pointwiseKernelNCHW, _biases,
+            depthwiseOutputNCHW, pointwiseKernelNCHW, biasReshaped4D,
             1, 1,   // stride
             0, 0,   // padding
             1, 1,   // dilation

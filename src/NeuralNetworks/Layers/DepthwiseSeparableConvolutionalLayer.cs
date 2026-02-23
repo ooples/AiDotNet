@@ -789,8 +789,10 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
         if (fusedActivation != FusedActivationType.None)
         {
             // Use FusedConv2D for pointwise (1x1) conv + bias + activation
+            // Reshape bias from [outputDepth] to [1, outputDepth, 1, 1] for NCHW broadcast
+            var biasReshaped4D = _biases.Reshape([1, _outputDepth, 1, 1]);
             activated = Engine.FusedConv2D(
-                depthwiseOutputNCHW, _pointwiseKernels, _biases,
+                depthwiseOutputNCHW, _pointwiseKernels, biasReshaped4D,
                 1, 1,   // stride
                 0, 0,   // padding
                 1, 1,   // dilation
