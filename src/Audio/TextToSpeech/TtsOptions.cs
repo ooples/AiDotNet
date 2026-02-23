@@ -20,6 +20,34 @@ namespace AiDotNet.Audio.TextToSpeech;
 /// </remarks>
 public class TtsOptions : ModelOptions
 {
+    /// <summary>Initializes a new instance with default values.</summary>
+    public TtsOptions() { }
+
+    /// <summary>Initializes a new instance by copying from another instance.</summary>
+    /// <param name="other">The options instance to copy from.</param>
+    /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
+    public TtsOptions(TtsOptions other)
+    {
+        if (other == null)
+            throw new ArgumentNullException(nameof(other));
+
+        Seed = other.Seed;
+        SampleRate = other.SampleRate;
+        SpeakingRate = other.SpeakingRate;
+        PitchShift = other.PitchShift;
+        Energy = other.Energy;
+        SpeakerId = other.SpeakerId;
+        Language = other.Language;
+        AcousticModelPath = other.AcousticModelPath;
+        VocoderModelPath = other.VocoderModelPath;
+        UseGriffinLimFallback = other.UseGriffinLimFallback;
+        GriffinLimIterations = other.GriffinLimIterations;
+        OnnxOptions = other.OnnxOptions;
+        NumMels = other.NumMels;
+        FftSize = other.FftSize;
+        HopLength = other.HopLength;
+    }
+
     /// <summary>
     /// Gets or sets the output sample rate.
     /// </summary>

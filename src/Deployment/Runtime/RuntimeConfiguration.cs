@@ -3,6 +3,9 @@ namespace AiDotNet.Deployment.Runtime;
 /// <summary>
 /// Configuration for the deployment runtime environment.
 /// </summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> RuntimeConfiguration provides AI safety functionality. Default values follow the original paper settings.</para>
+/// </remarks>
 public class RuntimeConfiguration
 {
     /// <summary>

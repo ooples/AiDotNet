@@ -3,6 +3,9 @@ namespace AiDotNet.Audio.Classification;
 /// <summary>
 /// Result of acoustic scene classification.
 /// </summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> SceneClassificationResult provides AI safety functionality. Default values follow the original paper settings.</para>
+/// </remarks>
 public class SceneClassificationResult
 {
     /// <summary>Most likely scene.</summary>

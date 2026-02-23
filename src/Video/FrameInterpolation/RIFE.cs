@@ -35,7 +35,7 @@ namespace AiDotNet.Video.FrameInterpolation;
 /// ECCV 2022.
 /// </para>
 /// </remarks>
-public class RIFE<T> : NeuralNetworkBase<T>
+public class RIFE<T> : FrameInterpolationBase<T>
 {
     private readonly RIFEOptions _options;
 
@@ -160,7 +160,7 @@ public class RIFE<T> : NeuralNetworkBase<T>
     /// <param name="frame2">The second frame tensor [C, H, W] or [B, C, H, W].</param>
     /// <param name="timestep">The interpolation position (0.0 = frame1, 1.0 = frame2, 0.5 = midpoint).</param>
     /// <returns>The interpolated frame.</returns>
-    public Tensor<T> Interpolate(Tensor<T> frame1, Tensor<T> frame2, double timestep = 0.5)
+    public override Tensor<T> Interpolate(Tensor<T> frame1, Tensor<T> frame2, double timestep = 0.5)
     {
         timestep = Math.Max(0.0, Math.Min(1.0, timestep));
 
@@ -1153,4 +1153,21 @@ public class RIFE<T> : NeuralNetworkBase<T>
     }
 
     #endregion
+
+    #region Base Class Abstract Methods
+
+    /// <inheritdoc/>
+    protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames)
+    {
+        return NormalizeFrames(rawFrames);
+    }
+
+    /// <inheritdoc/>
+    protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput)
+    {
+        return DenormalizeFrames(modelOutput);
+    }
+
+    #endregion
+
 }

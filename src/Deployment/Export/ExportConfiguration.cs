@@ -6,6 +6,9 @@ namespace AiDotNet.Deployment.Export;
 /// <summary>
 /// Configuration options for model export operations.
 /// </summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> ExportConfiguration provides AI safety functionality. Default values follow the original paper settings.</para>
+/// </remarks>
 public class ExportConfiguration
 {
     /// <summary>

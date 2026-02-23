@@ -92,6 +92,16 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
     private T _residualMean;
 
     /// <summary>
+    /// Stored differenced training series values (last P values) for initializing Predict(Matrix).
+    /// </summary>
+    private Vector<T> _lastTrainDiffValues;
+
+    /// <summary>
+    /// Stored AR residuals from training (last Q values) for initializing Predict(Matrix).
+    /// </summary>
+    private Vector<T> _lastTrainResiduals;
+
+    /// <summary>
     /// Creates a new ARIMA model with the specified options.
     /// </summary>
     /// <param name="options">Options for the ARIMA model, including p, d, and q parameters. If null, default options are used.</param>
@@ -115,6 +125,8 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
         _anomalyThreshold = NumOps.Zero;
         _residualStdDev = NumOps.Zero;
         _residualMean = NumOps.Zero;
+        _lastTrainDiffValues = Vector<T>.Empty();
+        _lastTrainResiduals = Vector<T>.Empty();
     }
 
     /// <summary>
@@ -161,10 +173,22 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
     public override Vector<T> Predict(Matrix<T> input)
     {
         Vector<T> predictions = new(input.Rows);
-        // Use _arCoefficients.Length (which is P) for the AR component, not LagOrder
-        // This ensures the dot product vectors have matching lengths
+        // Initialize from stored training state instead of zeros
         Vector<T> lastObservedValues = new(_arCoefficients.Length);
+        if (_lastTrainDiffValues.Length > 0)
+        {
+            int copyLen = Math.Min(_lastTrainDiffValues.Length, lastObservedValues.Length);
+            for (int j = 0; j < copyLen; j++)
+                lastObservedValues[j] = _lastTrainDiffValues[j];
+        }
+
         Vector<T> lastErrors = new(_maCoefficients.Length);
+        if (_lastTrainResiduals.Length > 0)
+        {
+            int copyLen = Math.Min(_lastTrainResiduals.Length, lastErrors.Length);
+            for (int j = 0; j < copyLen; j++)
+                lastErrors[j] = _lastTrainResiduals[j];
+        }
 
         for (int i = 0; i < predictions.Length; i++)
         {
@@ -382,7 +406,22 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
         // Step 4: Estimate constant term for the model
         _constant = EstimateConstant(diffY, _arCoefficients, _maCoefficients);
 
-        // Step 5: If anomaly detection is enabled, compute threshold from residuals
+        // Step 5: Store last P differenced values and last Q residuals for Predict(Matrix) initialization
+        int pLen = Math.Min(p, diffY.Length);
+        _lastTrainDiffValues = new Vector<T>(p);
+        for (int i = 0; i < pLen; i++)
+        {
+            _lastTrainDiffValues[i] = diffY[diffY.Length - 1 - i];
+        }
+
+        int qLen = Math.Min(q, arResiduals.Length);
+        _lastTrainResiduals = new Vector<T>(q);
+        for (int i = 0; i < qLen; i++)
+        {
+            _lastTrainResiduals[i] = arResiduals[arResiduals.Length - 1 - i];
+        }
+
+        // Step 6: If anomaly detection is enabled, compute threshold from residuals
         if (_arimaOptions.EnableAnomalyDetection)
         {
             ComputeAnomalyThreshold(arResiduals);

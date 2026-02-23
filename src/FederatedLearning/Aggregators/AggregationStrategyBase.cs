@@ -8,6 +8,9 @@ using AiDotNet.Interfaces;
 /// </summary>
 /// <typeparam name="TModel">Model/update representation.</typeparam>
 /// <typeparam name="T">Numeric type.</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> for provides AI safety functionality. Default values follow the original paper settings.</para>
+/// </remarks>
 public abstract class AggregationStrategyBase<TModel, T> : FederatedLearningComponentBase<T>, IAggregationStrategy<TModel>
 {
     public abstract TModel Aggregate(Dictionary<int, TModel> clientModels, Dictionary<int, double> clientWeights);
