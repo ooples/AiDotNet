@@ -6,6 +6,9 @@ namespace AiDotNet.FederatedLearning.Aggregators;
 /// <summary>
 /// FedAvg aggregation for <see cref="IFullModel{T,TInput,TOutput}"/> using vector-based parameters.
 /// </summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> FedAvgFullModelAggregationStrategy provides AI safety functionality. Default values follow the original paper settings.</para>
+/// </remarks>
 public sealed class FedAvgFullModelAggregationStrategy<T, TInput, TOutput> :
     AggregationStrategyBase<IFullModel<T, TInput, TOutput>, T>
 {

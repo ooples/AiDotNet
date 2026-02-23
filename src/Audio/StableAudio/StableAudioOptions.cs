@@ -27,6 +27,39 @@ namespace AiDotNet.Audio.StableAudio;
 /// </remarks>
 public class StableAudioOptions : AiDotNet.Models.Options.ModelOptions
 {
+    /// <summary>Initializes a new instance with default values.</summary>
+    public StableAudioOptions() { }
+
+    /// <summary>Initializes a new instance by copying from another instance.</summary>
+    /// <param name="other">The options instance to copy from.</param>
+    /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
+    public StableAudioOptions(StableAudioOptions other)
+    {
+        if (other == null)
+            throw new ArgumentNullException(nameof(other));
+
+        ModelSize = other.ModelSize;
+        SampleRate = other.SampleRate;
+        DurationSeconds = other.DurationSeconds;
+        MaxDurationSeconds = other.MaxDurationSeconds;
+        NumInferenceSteps = other.NumInferenceSteps;
+        GuidanceScale = other.GuidanceScale;
+        Stereo = other.Stereo;
+        LatentDimension = other.LatentDimension;
+        DitHiddenDim = other.DitHiddenDim;
+        NumDitBlocks = other.NumDitBlocks;
+        NumAttentionHeads = other.NumAttentionHeads;
+        TextEncoderPath = other.TextEncoderPath;
+        VaePath = other.VaePath;
+        DitPath = other.DitPath;
+        OnnxOptions = other.OnnxOptions;
+        DropoutRate = other.DropoutRate;
+        MaxTextLength = other.MaxTextLength;
+        MaxAudioLength = other.MaxAudioLength;
+        TextEmbeddingDim = other.TextEmbeddingDim;
+        TimingConditioningScale = other.TimingConditioningScale;
+    }
+
     /// <summary>
     /// Gets or sets the model size variant.
     /// </summary>

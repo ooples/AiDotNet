@@ -16,6 +16,7 @@ namespace AiDotNet.Audio.Enhancement;
 /// <item><description>STFT-based analysis/synthesis</description></item>
 /// </list>
 /// </para>
+/// <para><b>For Beginners:</b> for provides AI safety functionality. Default values follow the original paper settings.</para>
 /// </remarks>
 public abstract class AudioEnhancerBase<T> : IAudioEnhancer<T>
 {

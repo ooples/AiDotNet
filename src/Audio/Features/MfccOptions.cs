@@ -3,8 +3,31 @@ namespace AiDotNet.Audio.Features;
 /// <summary>
 /// Options for MFCC extraction.
 /// </summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> These options configure the Mfcc model. Default values follow the original paper settings.</para>
+/// </remarks>
 public class MfccOptions : AudioFeatureOptions
 {
+    /// <summary>Initializes a new instance with default values.</summary>
+    public MfccOptions() { }
+
+    /// <summary>Initializes a new instance by copying from another instance.</summary>
+    /// <param name="other">The options instance to copy from.</param>
+    /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
+    public MfccOptions(MfccOptions other)
+    {
+        if (other == null)
+            throw new ArgumentNullException(nameof(other));
+
+        NumCoefficients = other.NumCoefficients;
+        NumMels = other.NumMels;
+        IncludeEnergy = other.IncludeEnergy;
+        AppendDelta = other.AppendDelta;
+        AppendDeltaDelta = other.AppendDeltaDelta;
+        FMin = other.FMin;
+        FMax = other.FMax;
+    }
+
     /// <summary>
     /// Gets or sets the number of MFCC coefficients to compute.
     /// Default is 13 (standard for speech recognition).

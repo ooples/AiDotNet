@@ -3,6 +3,9 @@ namespace AiDotNet.Deployment.TensorRT;
 /// <summary>
 /// Configuration for a single optimization profile (for dynamic shapes).
 /// </summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> OptimizationProfileConfig provides AI safety functionality. Default values follow the original paper settings.</para>
+/// </remarks>
 public class OptimizationProfileConfig
 {
     /// <summary>

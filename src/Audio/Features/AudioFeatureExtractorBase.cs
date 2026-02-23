@@ -18,6 +18,7 @@ namespace AiDotNet.Audio.Features;
 /// <item>Sample rate and FFT configuration</item>
 /// </list>
 /// </para>
+/// <para><b>For Beginners:</b> for provides AI safety functionality. Default values follow the original paper settings.</para>
 /// </remarks>
 public abstract class AudioFeatureExtractorBase<T> : IAudioFeatureExtractor<T>
 {

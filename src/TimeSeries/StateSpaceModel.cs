@@ -97,6 +97,11 @@ public class StateSpaceModel<T> : TimeSeriesModelBase<T>
     private double _convergenceThreshold = 1e-6;
 
     /// <summary>
+    /// The smoothed states from training, used for in-sample predictions.
+    /// </summary>
+    private List<Vector<T>> _smoothedStates;
+
+    /// <summary>
     /// Initializes a new instance of the StateSpaceModel class with the specified options.
     /// </summary>
     /// <param name="options">The configuration options for the state space model.</param>
@@ -114,6 +119,7 @@ public class StateSpaceModel<T> : TimeSeriesModelBase<T>
         _initialState = new Vector<T>(_stateSize);
         _previousTransitionMatrix = Matrix<T>.CreateIdentity(_stateSize);
         _previousObservationMatrix = Matrix<T>.CreateIdentity(_observationSize);
+        _smoothedStates = new List<Vector<T>>();
     }
 
     /// <summary>
@@ -134,10 +140,13 @@ public class StateSpaceModel<T> : TimeSeriesModelBase<T>
     /// The result is our best guess of where the object was at each moment, based only on observations up to that point.
     /// </para>
     /// </remarks>
-    private (List<Vector<T>>, List<Vector<T>>) KalmanFilter(Matrix<T> observations)
+    private (List<Vector<T>> filteredStates, List<Vector<T>> predictedStates,
+            List<Matrix<T>> filteredCovariances, List<Matrix<T>> predictedCovariances) KalmanFilter(Matrix<T> observations)
     {
         var filteredStates = new List<Vector<T>>();
         var predictedStates = new List<Vector<T>>();
+        var filteredCovariances = new List<Matrix<T>>();
+        var predictedCovariances = new List<Matrix<T>>();
 
         var currentState = _initialState;
         var currentCovariance = Matrix<T>.CreateIdentity(_stateSize);
@@ -149,6 +158,7 @@ public class StateSpaceModel<T> : TimeSeriesModelBase<T>
             var predictedCovariance = _transitionMatrix.Multiply(currentCovariance).Multiply(_transitionMatrix.Transpose()).Add(_processNoise);
 
             predictedStates.Add(predictedState);
+            predictedCovariances.Add(predictedCovariance);
 
             // Update
             var observationVector = observations.GetRow(t);
@@ -161,9 +171,10 @@ public class StateSpaceModel<T> : TimeSeriesModelBase<T>
             currentCovariance = predictedCovariance.Subtract(kalmanGain.Multiply(_observationMatrix).Multiply(predictedCovariance));
 
             filteredStates.Add(currentState);
+            filteredCovariances.Add(currentCovariance);
         }
 
-        return (filteredStates, predictedStates);
+        return (filteredStates, predictedStates, filteredCovariances, predictedCovariances);
     }
 
     /// <summary>
@@ -186,37 +197,36 @@ public class StateSpaceModel<T> : TimeSeriesModelBase<T>
     /// This method works backward in time, refining each state estimate using information from future observations.
     /// </para>
     /// </remarks>
-    private (List<Vector<T>>, List<Matrix<T>>) KalmanSmoother(List<Vector<T>> filteredStates, List<Vector<T>> predictedStates)
+    private (List<Vector<T>>, List<Matrix<T>>) KalmanSmoother(
+        List<Vector<T>> filteredStates, List<Vector<T>> predictedStates,
+        List<Matrix<T>> filteredCovariances, List<Matrix<T>> predictedCovariances)
     {
+        int n = filteredStates.Count;
         var smoothedStates = new List<Vector<T>>(filteredStates);
-        var smoothedCovariances = new List<Matrix<T>>(filteredStates.Count);
+        var smoothedCovariances = new List<Matrix<T>>(filteredCovariances);
 
-        var currentSmoothedState = filteredStates[filteredStates.Count - 1];
-        var finalCovariance = Matrix<T>.CreateIdentity(_stateSize);
-        var currentSmoothedCovariance = finalCovariance;
-
-        for (int t = filteredStates.Count - 2; t >= 0; t--)
+        // The last smoothed state/covariance equals the last filtered state/covariance
+        // Cache F^T to avoid recomputing per iteration
+        var fTranspose = _transitionMatrix.Transpose();
+        for (int t = n - 2; t >= 0; t--)
         {
-            var predictedCovariance = _transitionMatrix.Multiply(currentSmoothedCovariance).Multiply(_transitionMatrix.Transpose()).Add(_processNoise);
+            // Rauch-Tung-Striebel smoother gain: L_t = P_t|t * F^T * (P_{t+1|t})^(-1)
+            var predictedCovInverse = predictedCovariances[t + 1].Inverse();
+            var smoothingGain = filteredCovariances[t]
+                .Multiply(fTranspose)
+                .Multiply(predictedCovInverse);
 
-            var smoothingGain = filteredStates[t].OuterProduct(filteredStates[t])
-                .Multiply(_transitionMatrix.Transpose())
-                .Multiply(predictedCovariance.Inverse());
+            // Smoothed state: x_t|T = x_t|t + L_t * (x_{t+1|T} - x_{t+1|t})
+            smoothedStates[t] = filteredStates[t].Add(
+                smoothingGain.Multiply(smoothedStates[t + 1].Subtract(predictedStates[t + 1])));
 
-            currentSmoothedState = filteredStates[t].Add(smoothingGain.Multiply(currentSmoothedState.Subtract(predictedStates[t + 1]))
-            );
-
-            currentSmoothedCovariance = filteredStates[t].OuterProduct(filteredStates[t]).Add(
+            // Smoothed covariance: P_t|T = P_t|t + L_t * (P_{t+1|T} - P_{t+1|t}) * L_t^T
+            smoothedCovariances[t] = filteredCovariances[t].Add(
                 smoothingGain.Multiply(
-                    currentSmoothedCovariance.Subtract(predictedCovariance)
-                ).Multiply(smoothingGain.Transpose())
-            );
-
-            smoothedStates[t] = currentSmoothedState;
-            smoothedCovariances.Insert(0, currentSmoothedCovariance);
+                    smoothedCovariances[t + 1].Subtract(predictedCovariances[t + 1])
+                ).Multiply(smoothingGain.Transpose()));
         }
 
-        smoothedCovariances.Add(finalCovariance);
         return (smoothedStates, smoothedCovariances);
     }
 
@@ -311,12 +321,36 @@ public class StateSpaceModel<T> : TimeSeriesModelBase<T>
     public override Vector<T> Predict(Matrix<T> input)
     {
         Vector<T> predictions = new Vector<T>(input.Rows);
-        Vector<T> currentState = _initialState;
 
-        for (int t = 0; t < input.Rows; t++)
+        if (_smoothedStates != null && _smoothedStates.Count > 0)
         {
-            currentState = _transitionMatrix.Multiply(currentState);
-            predictions[t] = _observationMatrix.Multiply(currentState)[0];
+            // Use smoothed states for in-sample predictions
+            int inSampleCount = Math.Min(input.Rows, _smoothedStates.Count);
+            for (int t = 0; t < inSampleCount; t++)
+            {
+                predictions[t] = _observationMatrix.Multiply(_smoothedStates[t])[0];
+            }
+
+            // O(N) out-of-sample: propagate rolling state forward from last smoothed state
+            if (input.Rows > _smoothedStates.Count)
+            {
+                Vector<T> state = _smoothedStates[_smoothedStates.Count - 1];
+                for (int t = _smoothedStates.Count; t < input.Rows; t++)
+                {
+                    state = _transitionMatrix.Multiply(state);
+                    predictions[t] = _observationMatrix.Multiply(state)[0];
+                }
+            }
+        }
+        else
+        {
+            // Fallback: propagate from initial state
+            Vector<T> currentState = _initialState;
+            for (int t = 0; t < input.Rows; t++)
+            {
+                currentState = _transitionMatrix.Multiply(currentState);
+                predictions[t] = _observationMatrix.Multiply(currentState)[0];
+            }
         }
 
         return predictions;
@@ -451,6 +485,22 @@ public class StateSpaceModel<T> : TimeSeriesModelBase<T>
         writer.Write(_maxIterations);
         writer.Write(_tolerance);
         writer.Write(_convergenceThreshold);
+
+        // Serialize last smoothed state for prediction support
+        if (_smoothedStates != null && _smoothedStates.Count > 0)
+        {
+            writer.Write(_smoothedStates.Count);
+            var lastState = _smoothedStates[_smoothedStates.Count - 1];
+            writer.Write(lastState.Length);
+            for (int i = 0; i < lastState.Length; i++)
+            {
+                writer.Write(Convert.ToDouble(lastState[i]));
+            }
+        }
+        else
+        {
+            writer.Write(0);
+        }
     }
 
     /// <summary>
@@ -489,6 +539,29 @@ public class StateSpaceModel<T> : TimeSeriesModelBase<T>
         _maxIterations = reader.ReadInt32();
         _tolerance = reader.ReadDouble();
         _convergenceThreshold = reader.ReadDouble();
+
+        // Deserialize smoothed states if available (backward-compatible)
+        _smoothedStates = new List<Vector<T>>();
+        try
+        {
+            int smoothedCount = reader.ReadInt32();
+            if (smoothedCount > 0)
+            {
+                int stateLen = reader.ReadInt32();
+                var lastState = new Vector<T>(stateLen);
+                for (int i = 0; i < stateLen; i++)
+                {
+                    lastState[i] = NumOps.FromDouble(reader.ReadDouble());
+                }
+                // Only the last state is serialized; after deserialization, in-sample predictions
+                // beyond index 0 will fall through to forecast mode using this single state.
+                _smoothedStates.Add(lastState);
+            }
+        }
+        catch (EndOfStreamException)
+        {
+            // Older serialized models don't include smoothed states — leave empty
+        }
     }
 
     /// <summary>
@@ -555,11 +628,13 @@ public class StateSpaceModel<T> : TimeSeriesModelBase<T>
         _previousObservationMatrix = _observationMatrix.Clone();
 
         // Run the EM algorithm
+        List<Vector<T>> lastSmoothedStates = new List<Vector<T>>();
         for (int iter = 0; iter < _maxIterations; iter++)
         {
             // E-step: Estimate hidden states
-            var (filteredStates, predictedStates) = KalmanFilter(observations);
-            var (smoothedStates, smoothedCovariances) = KalmanSmoother(filteredStates, predictedStates);
+            var (filteredStates, predictedStates, filteredCovariances, predictedCovariances) = KalmanFilter(observations);
+            var (smoothedStates, smoothedCovariances) = KalmanSmoother(filteredStates, predictedStates, filteredCovariances, predictedCovariances);
+            lastSmoothedStates = smoothedStates;
 
             // M-step: Update parameters
             UpdateParameters(observations, smoothedStates, smoothedCovariances);
@@ -570,6 +645,9 @@ public class StateSpaceModel<T> : TimeSeriesModelBase<T>
                 break;
             }
         }
+
+        // Store smoothed states for use in Predict
+        _smoothedStates = lastSmoothedStates;
     }
 
     /// <summary>
@@ -604,23 +682,14 @@ public class StateSpaceModel<T> : TimeSeriesModelBase<T>
             throw new InvalidOperationException("Model has not been properly initialized. Please train the model before prediction.");
         }
 
-        // Create a single-row matrix from the input vector
+        // Delegate to Predict(Matrix) to use trained smoothed states consistently
         Matrix<T> inputMatrix = new Matrix<T>(1, input.Length);
         for (int i = 0; i < input.Length; i++)
         {
             inputMatrix[0, i] = input[i];
         }
 
-        // Use the current state to make a prediction
-        Vector<T> currentState = _initialState;
-        currentState = _transitionMatrix.Multiply(currentState);
-
-        // Transform the state to the observation space
-        Vector<T> observation = _observationMatrix.Multiply(currentState);
-
-        // Return the first element of the observation vector
-        // (assuming the target variable is the first or only element)
-        return observation[0];
+        return Predict(inputMatrix)[0];
     }
 
     /// <summary>

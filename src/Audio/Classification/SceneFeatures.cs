@@ -3,6 +3,9 @@ namespace AiDotNet.Audio.Classification;
 /// <summary>
 /// Features extracted for scene classification.
 /// </summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> SceneFeatures provides AI safety functionality. Default values follow the original paper settings.</para>
+/// </remarks>
 public class SceneFeatures
 {
     public required double[] MfccMean { get; init; }
