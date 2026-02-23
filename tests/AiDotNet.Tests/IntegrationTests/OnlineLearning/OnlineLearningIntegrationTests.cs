@@ -191,6 +191,91 @@ public class OnlineLearningIntegrationTests
         Assert.True(reg.IsTrained);
     }
 
+    [Fact]
+    public void OnlinePARegressor_LinearData_LearnsApproximately()
+    {
+        var reg = new OnlinePassiveAggressiveRegressor<double>(c: 1.0, epsilon: 0.1);
+
+        // Simple linear data: y = 2*x
+        var X = new Matrix<double>(new double[,]
+        {
+            { 1.0 },
+            { 2.0 },
+            { 3.0 },
+            { 4.0 },
+        });
+        var y = new Vector<double>(new[] { 2.0, 4.0, 6.0, 8.0 });
+
+        for (int epoch = 0; epoch < 100; epoch++)
+            reg.PartialFit(X, y);
+
+        Assert.True(reg.IsTrained);
+
+        // Verify regression learned approximately y = 2*x
+        var predictions = reg.Predict(X);
+        Assert.Equal(4, predictions.Length);
+        for (int i = 0; i < predictions.Length; i++)
+            Assert.True(Math.Abs(predictions[i] - y[i]) < 2.0,
+                $"Prediction {predictions[i]} should be close to {y[i]}");
+    }
+
+    [Fact]
+    public void OnlinePARegressor_EpsilonInsensitiveLoss_DecreasesWithTraining()
+    {
+        var reg = new OnlinePassiveAggressiveRegressor<double>(c: 1.0, epsilon: 0.1);
+
+        var X = new Matrix<double>(new double[,]
+        {
+            { 1.0 },
+            { 2.0 },
+            { 3.0 },
+        });
+        var y = new Vector<double>(new[] { 1.0, 2.0, 3.0 });
+
+        // Train a bit
+        for (int epoch = 0; epoch < 10; epoch++)
+            reg.PartialFit(X, y);
+
+        double earlyLoss = reg.GetEpsilonInsensitiveLoss(X, y);
+
+        // Train more
+        for (int epoch = 0; epoch < 100; epoch++)
+            reg.PartialFit(X, y);
+
+        double lateLoss = reg.GetEpsilonInsensitiveLoss(X, y);
+
+        // Loss should decrease (or at least not increase significantly) with more training
+        Assert.True(lateLoss <= earlyLoss + 0.1,
+            $"Loss after more training ({lateLoss}) should not be much greater than earlier loss ({earlyLoss})");
+    }
+
+    [Fact]
+    public void OnlinePARegressor_Reset_ClearsWeights()
+    {
+        var reg = new OnlinePassiveAggressiveRegressor<double>();
+        var x = new Vector<double>(new[] { 1.0, 2.0 });
+        reg.PartialFit(x, 3.0);
+        Assert.True(reg.IsTrained);
+
+        reg.Reset();
+        Assert.Null(reg.GetWeights());
+    }
+
+    [Fact]
+    public void OnlinePARegressor_GetWeightsAndBias_ReturnsValues()
+    {
+        var reg = new OnlinePassiveAggressiveRegressor<double>();
+        var x = new Vector<double>(new[] { 1.0, 2.0 });
+        reg.PartialFit(x, 5.0);
+
+        var weights = reg.GetWeights();
+        Assert.NotNull(weights);
+        Assert.Equal(2, weights.Length);
+
+        var bias = reg.GetBias();
+        Assert.False(double.IsNaN(bias), "Bias should not be NaN");
+    }
+
     #endregion
 
     #region ADWINDriftDetector Tests
