@@ -80,10 +80,20 @@ public class ContextNet<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         return new TranscriptionResult<T> { Text = text, Language = language ?? _options.Language, Confidence = NumOps.FromDouble(confidence), DurationSeconds = duration, Segments = includeTimestamps ? ExtractSegments(text, duration, confidence) : Array.Empty<TranscriptionSegment<T>>() };
     }
 
-    public Task<TranscriptionResult<T>> TranscribeAsync(Tensor<T> audio, string? language = null, bool includeTimestamps = false, CancellationToken cancellationToken = default) => Task.Run(() => Transcribe(audio, language, includeTimestamps), cancellationToken);
-    public string DetectLanguage(Tensor<T> audio) { var features = PreprocessAudio(audio); Tensor<T> logits; if (IsOnnxMode && OnnxEncoder is not null) logits = OnnxEncoder.Run(features); else { logits = features; foreach (var l in Layers) logits = l.Forward(logits); } var (tokens, _) = CTCGreedyDecodeWithConfidence(logits); return ClassifyLanguageFromTokens(tokens); }
+    public Task<TranscriptionResult<T>> TranscribeAsync(Tensor<T> audio, string? language = null, bool includeTimestamps = false, CancellationToken cancellationToken = default) => Task.Run(() => { cancellationToken.ThrowIfCancellationRequested(); return Transcribe(audio, language, includeTimestamps); }, cancellationToken);
+    public string DetectLanguage(Tensor<T> audio)
+    {
+        ThrowIfDisposed();
+        var features = PreprocessAudio(audio);
+        Tensor<T> logits;
+        if (IsOnnxMode && OnnxEncoder is not null) logits = OnnxEncoder.Run(features);
+        else { logits = features; foreach (var l in Layers) logits = l.Forward(logits); }
+        var (tokens, _) = CTCGreedyDecodeWithConfidence(logits);
+        return ClassifyLanguageFromTokens(tokens);
+    }
     public IReadOnlyDictionary<string, T> DetectLanguageProbabilities(Tensor<T> audio)
     {
+        ThrowIfDisposed();
         // ContextNet is monolingual; return full confidence for the configured language.
         var result = new Dictionary<string, T>();
         foreach (var lang in SupportedLanguages)
@@ -130,28 +140,37 @@ public class ContextNet<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 
         public TranscriptionResult<T> GetPartialResult()
         {
+            List<Tensor<T>> snapshot;
             lock (_lock)
             {
                 if (_disposed) throw new ObjectDisposedException(nameof(ContextNetStreamingSession));
                 if (_chunks.Count == 0) return new TranscriptionResult<T> { Language = _language };
-                int totalLen = 0;
-                foreach (var ch in _chunks) totalLen += ch.Length;
-                var combined = new Tensor<T>(new[] { totalLen });
-                int offset = 0;
-                foreach (var ch in _chunks) { for (int i = 0; i < ch.Length; i++) combined[offset + i] = ch[i]; offset += ch.Length; }
-                return _model.Transcribe(combined, _language);
+                snapshot = new List<Tensor<T>>(_chunks);
             }
+            return TranscribeSnapshot(snapshot);
         }
 
         public TranscriptionResult<T> Finalize()
         {
+            List<Tensor<T>> snapshot;
             lock (_lock)
             {
                 if (_disposed) throw new ObjectDisposedException(nameof(ContextNetStreamingSession));
-                var result = GetPartialResult();
+                snapshot = new List<Tensor<T>>(_chunks);
                 _disposed = true;
-                return result;
             }
+            if (snapshot.Count == 0) return new TranscriptionResult<T> { Language = _language };
+            return TranscribeSnapshot(snapshot);
+        }
+
+        private TranscriptionResult<T> TranscribeSnapshot(List<Tensor<T>> snapshot)
+        {
+            int totalLen = 0;
+            foreach (var ch in snapshot) totalLen += ch.Length;
+            var combined = new Tensor<T>(new[] { totalLen });
+            int offset = 0;
+            foreach (var ch in snapshot) { for (int i = 0; i < ch.Length; i++) combined[offset + i] = ch[i]; offset += ch.Length; }
+            return _model.Transcribe(combined, _language);
         }
 
         public void Dispose() { lock (_lock) { _disposed = true; } }

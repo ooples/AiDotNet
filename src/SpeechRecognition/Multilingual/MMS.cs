@@ -75,6 +75,10 @@ public class MMS<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     public string DetectLanguage(Tensor<T> audio) { var features = PreprocessAudio(audio); Tensor<T> logits; if (IsOnnxMode && OnnxEncoder is not null) logits = OnnxEncoder.Run(features); else { logits = features; foreach (var l in Layers) logits = l.Forward(logits); } var (tokens, _) = CTCGreedyDecodeWithConfidence(logits); return ClassifyLanguageFromTokens(tokens); }
     public IReadOnlyDictionary<string, T> DetectLanguageProbabilities(Tensor<T> audio)
     {
+        // MMS uses language-specific adapter weights rather than a separate LID head.
+        // Without the model's language identification logits, we return the detected
+        // language with full confidence. A proper implementation requires exposing the
+        // adapter activation scores from the ONNX model.
         var detected = DetectLanguage(audio);
         var result = new Dictionary<string, T>();
         foreach (var lang in SupportedLanguages)

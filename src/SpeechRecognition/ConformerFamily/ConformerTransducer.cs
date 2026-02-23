@@ -30,7 +30,7 @@ public class ConformerTransducer<T> : AudioNeuralNetworkBase<T>, ISpeechRecogniz
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
     public IReadOnlyList<string> SupportedLanguages { get; }
     public bool SupportsStreaming => true;
-    public bool SupportsWordTimestamps => true;
+    public bool SupportsWordTimestamps => false;
 
     public ConformerTransducer(NeuralNetworkArchitecture<T> architecture, string modelPath, ConformerTransducerOptions? options = null) : base(architecture) { _options = options ?? new ConformerTransducerOptions(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { _options.Language }; InitializeLayers(); }
     public ConformerTransducer(NeuralNetworkArchitecture<T> architecture, ConformerTransducerOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new ConformerTransducerOptions(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { _options.Language }; InitializeLayers(); }
@@ -87,6 +87,11 @@ public class ConformerTransducer<T> : AudioNeuralNetworkBase<T>, ISpeechRecogniz
     protected override void SerializeNetworkSpecificData(BinaryWriter w) { w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty); w.Write(_options.SampleRate); w.Write(_options.MaxAudioLengthSeconds); w.Write(_options.EncoderDim); w.Write(_options.NumEncoderLayers); w.Write(_options.NumAttentionHeads); w.Write(_options.FeedForwardExpansionFactor); w.Write(_options.PredictionDim); w.Write(_options.JointDim); w.Write(_options.NumMels); w.Write(_options.VocabSize); w.Write(_options.DropoutRate); w.Write(_options.Language); }
     protected override void DeserializeNetworkSpecificData(BinaryReader r) { _useNativeMode = r.ReadBoolean(); string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp; _options.SampleRate = r.ReadInt32(); _options.MaxAudioLengthSeconds = r.ReadInt32(); _options.EncoderDim = r.ReadInt32(); _options.NumEncoderLayers = r.ReadInt32(); _options.NumAttentionHeads = r.ReadInt32(); _options.FeedForwardExpansionFactor = r.ReadInt32(); _options.PredictionDim = r.ReadInt32(); _options.JointDim = r.ReadInt32(); _options.NumMels = r.ReadInt32(); _options.VocabSize = r.ReadInt32(); _options.DropoutRate = r.ReadDouble(); _options.Language = r.ReadString(); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions); }
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp)) return new ConformerTransducer<T>(Architecture, mp, _options); return new ConformerTransducer<T>(Architecture, _options); }
+    /// <summary>
+    /// Greedy decoding on output logits. For ONNX models the prediction+joint networks are
+    /// internal to the ONNX graph, so the output is already joint logits. For native mode,
+    /// the layer stack includes prediction and joint layers.
+    /// </summary>
     private (List<int> tokens, double confidence) GreedyDecodeWithConfidence(Tensor<T> logits) { var tokens = new List<int>(); double totalConf = 0; int confCount = 0; int prevToken = -1; int numFrames = logits.Rank >= 2 ? logits.Shape[0] : 1; int vocabSize = logits.Rank >= 2 ? logits.Shape[^1] : logits.Shape[0]; for (int t = 0; t < numFrames; t++) { int maxIdx = 0; double maxVal = double.NegativeInfinity; for (int v = 0; v < vocabSize; v++) { double val = logits.Rank >= 2 ? NumOps.ToDouble(logits[t, v]) : NumOps.ToDouble(logits[v]); if (val > maxVal) { maxVal = val; maxIdx = v; } } double sumExp = 0; for (int v = 0; v < vocabSize; v++) { double val = logits.Rank >= 2 ? NumOps.ToDouble(logits[t, v]) : NumOps.ToDouble(logits[v]); sumExp += Math.Exp(val - maxVal); } double frameConf = 1.0 / sumExp; if (maxIdx != prevToken && maxIdx > 0) { tokens.Add(maxIdx); totalConf += frameConf; confCount++; } prevToken = maxIdx; } return (tokens, confCount > 0 ? totalConf / confCount : 0.0); }
     private static string TokensToText(List<int> tokens) { var sb = new System.Text.StringBuilder(); foreach (var t in tokens) { if (t > 0 && t <= char.MaxValue) sb.Append((char)t); else if (t > char.MaxValue && t <= 0x10FFFF) sb.Append(char.ConvertFromUtf32(t)); } return sb.ToString().Trim(); }
     private IReadOnlyList<TranscriptionSegment<T>> ExtractSegments(string text, double duration, double confidence) { if (string.IsNullOrWhiteSpace(text)) return Array.Empty<TranscriptionSegment<T>>(); return new[] { new TranscriptionSegment<T> { Text = text, StartTime = 0.0, EndTime = duration, Confidence = NumOps.FromDouble(confidence) } }; }
@@ -96,11 +101,58 @@ public class ConformerTransducer<T> : AudioNeuralNetworkBase<T>, ISpeechRecogniz
 
     private sealed class TransducerStreamingSession : IStreamingTranscriptionSession<T>
     {
-        private readonly ConformerTransducer<T> _model; private readonly string _language; private readonly List<Tensor<T>> _chunks = new(); private bool _disposed;
+        private readonly ConformerTransducer<T> _model;
+        private readonly string _language;
+        private readonly List<Tensor<T>> _chunks = new();
+        private readonly object _lock = new();
+        private bool _disposed;
+
         public TransducerStreamingSession(ConformerTransducer<T> model, string language) { _model = model; _language = language; }
-        public void FeedAudio(Tensor<T> audioChunk) { if (_disposed) throw new ObjectDisposedException(nameof(TransducerStreamingSession)); _chunks.Add(audioChunk); }
-        public TranscriptionResult<T> GetPartialResult() { if (_disposed) throw new ObjectDisposedException(nameof(TransducerStreamingSession)); if (_chunks.Count == 0) return new TranscriptionResult<T> { Language = _language }; int totalLen = 0; foreach (var ch in _chunks) totalLen += ch.Length; var combined = new Tensor<T>(new[] { totalLen }); int offset = 0; foreach (var ch in _chunks) { for (int i = 0; i < ch.Length; i++) combined[offset + i] = ch[i]; offset += ch.Length; } return _model.Transcribe(combined, _language); }
-        public TranscriptionResult<T> Finalize() { if (_disposed) throw new ObjectDisposedException(nameof(TransducerStreamingSession)); var result = GetPartialResult(); _disposed = true; return result; }
-        public void Dispose() { _disposed = true; }
+
+        public void FeedAudio(Tensor<T> audioChunk)
+        {
+            lock (_lock)
+            {
+                if (_disposed) throw new ObjectDisposedException(nameof(TransducerStreamingSession));
+                _chunks.Add(audioChunk);
+            }
+        }
+
+        public TranscriptionResult<T> GetPartialResult()
+        {
+            List<Tensor<T>> snapshot;
+            lock (_lock)
+            {
+                if (_disposed) throw new ObjectDisposedException(nameof(TransducerStreamingSession));
+                if (_chunks.Count == 0) return new TranscriptionResult<T> { Language = _language };
+                snapshot = new List<Tensor<T>>(_chunks);
+            }
+            return TranscribeSnapshot(snapshot);
+        }
+
+        public TranscriptionResult<T> Finalize()
+        {
+            List<Tensor<T>> snapshot;
+            lock (_lock)
+            {
+                if (_disposed) throw new ObjectDisposedException(nameof(TransducerStreamingSession));
+                snapshot = new List<Tensor<T>>(_chunks);
+                _disposed = true;
+            }
+            if (snapshot.Count == 0) return new TranscriptionResult<T> { Language = _language };
+            return TranscribeSnapshot(snapshot);
+        }
+
+        public void Dispose() { lock (_lock) { _disposed = true; } }
+
+        private TranscriptionResult<T> TranscribeSnapshot(List<Tensor<T>> snapshot)
+        {
+            int totalLen = 0;
+            foreach (var ch in snapshot) totalLen += ch.Length;
+            var combined = new Tensor<T>(new[] { totalLen });
+            int offset = 0;
+            foreach (var ch in snapshot) { for (int i = 0; i < ch.Length; i++) combined[offset + i] = ch[i]; offset += ch.Length; }
+            return _model.Transcribe(combined, _language);
+        }
     }
 }

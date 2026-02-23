@@ -3,19 +3,19 @@ using AiDotNet.Onnx;
 
 namespace AiDotNet.SpeechRecognition.CTCVariants;
 
-/// <summary>Options for E-Branchformer: enhanced Branchformer with improved merging.</summary>
+/// <summary>Options for E-Branchformer CTC variant: enhanced Branchformer with CTC decoder.</summary>
 /// <remarks>
-/// <para><b>For Beginners:</b> These options configure the EBranchformer model. Default values follow the original paper's recommended settings for optimal speech recognition accuracy.</para>
+/// <para><b>For Beginners:</b> These options configure the CTC E-Branchformer model. Default values follow the original paper's recommended settings for optimal speech recognition accuracy.</para>
 /// </remarks>
-public class EBranchformerOptions : ModelOptions
+public class CTCEBranchformerOptions : ModelOptions
 {
     /// <summary>Initializes a new instance with default values.</summary>
-    public EBranchformerOptions() { }
+    public CTCEBranchformerOptions() { }
 
     /// <summary>Initializes a new instance by copying from another instance.</summary>
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
-    public EBranchformerOptions(EBranchformerOptions other)
+    public CTCEBranchformerOptions(CTCEBranchformerOptions other)
     {
         if (other == null)
             throw new ArgumentNullException(nameof(other));

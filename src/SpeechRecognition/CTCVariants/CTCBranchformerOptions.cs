@@ -3,19 +3,19 @@ using AiDotNet.Onnx;
 
 namespace AiDotNet.SpeechRecognition.CTCVariants;
 
-/// <summary>Options for Branchformer: parallel attention and convolution branches.</summary>
+/// <summary>Options for Branchformer CTC variant: parallel attention and convolution branches with CTC decoder.</summary>
 /// <remarks>
-/// <para><b>For Beginners:</b> These options configure the Branchformer model. Default values follow the original paper's recommended settings for optimal speech recognition accuracy.</para>
+/// <para><b>For Beginners:</b> These options configure the CTC Branchformer model. Default values follow the original paper's recommended settings for optimal speech recognition accuracy.</para>
 /// </remarks>
-public class BranchformerOptions : ModelOptions
+public class CTCBranchformerOptions : ModelOptions
 {
     /// <summary>Initializes a new instance with default values.</summary>
-    public BranchformerOptions() { }
+    public CTCBranchformerOptions() { }
 
     /// <summary>Initializes a new instance by copying from another instance.</summary>
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
-    public BranchformerOptions(BranchformerOptions other)
+    public CTCBranchformerOptions(CTCBranchformerOptions other)
     {
         if (other == null)
             throw new ArgumentNullException(nameof(other));

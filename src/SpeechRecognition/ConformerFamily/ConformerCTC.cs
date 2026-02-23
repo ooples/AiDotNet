@@ -29,7 +29,7 @@ public class ConformerCTC<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
     public IReadOnlyList<string> SupportedLanguages { get; }
     public bool SupportsStreaming => true;
-    public bool SupportsWordTimestamps => true;
+    public bool SupportsWordTimestamps => false;
 
     public ConformerCTC(NeuralNetworkArchitecture<T> architecture, string modelPath, ConformerCTCOptions? options = null) : base(architecture) { _options = options ?? new ConformerCTCOptions(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { _options.Language }; InitializeLayers(); }
     public ConformerCTC(NeuralNetworkArchitecture<T> architecture, ConformerCTCOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new ConformerCTCOptions(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { _options.Language }; InitializeLayers(); }
@@ -99,28 +99,37 @@ public class ConformerCTC<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 
         public TranscriptionResult<T> GetPartialResult()
         {
+            List<Tensor<T>> snapshot;
             lock (_lock)
             {
                 if (_disposed) throw new ObjectDisposedException(nameof(CTCStreamingSession));
                 if (_chunks.Count == 0) return new TranscriptionResult<T> { Language = _language };
-                int totalLen = 0;
-                foreach (var ch in _chunks) totalLen += ch.Length;
-                var combined = new Tensor<T>(new[] { totalLen });
-                int offset = 0;
-                foreach (var ch in _chunks) { for (int i = 0; i < ch.Length; i++) combined[offset + i] = ch[i]; offset += ch.Length; }
-                return _model.Transcribe(combined, _language);
+                snapshot = new List<Tensor<T>>(_chunks);
             }
+            return TranscribeSnapshot(snapshot);
         }
 
         public TranscriptionResult<T> Finalize()
         {
+            List<Tensor<T>> snapshot;
             lock (_lock)
             {
                 if (_disposed) throw new ObjectDisposedException(nameof(CTCStreamingSession));
-                var result = GetPartialResult();
+                snapshot = new List<Tensor<T>>(_chunks);
                 _disposed = true;
-                return result;
             }
+            if (snapshot.Count == 0) return new TranscriptionResult<T> { Language = _language };
+            return TranscribeSnapshot(snapshot);
+        }
+
+        private TranscriptionResult<T> TranscribeSnapshot(List<Tensor<T>> snapshot)
+        {
+            int totalLen = 0;
+            foreach (var ch in snapshot) totalLen += ch.Length;
+            var combined = new Tensor<T>(new[] { totalLen });
+            int offset = 0;
+            foreach (var ch in snapshot) { for (int i = 0; i < ch.Length; i++) combined[offset + i] = ch[i]; offset += ch.Length; }
+            return _model.Transcribe(combined, _language);
         }
 
         public void Dispose() { lock (_lock) { _disposed = true; } }
