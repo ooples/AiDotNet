@@ -23,8 +23,12 @@ namespace AiDotNet.SpeechRecognition.Multilingual;
 /// </remarks>
 public class MMS<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
-    private readonly MMSOptions _options; public override ModelOptions GetOptions() => _options;
-    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
+    private readonly MMSOptions _options;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    private bool _useNativeMode;
+    private bool _disposed;
+
+    public override ModelOptions GetOptions() => _options;
     public IReadOnlyList<string> SupportedLanguages { get; }
     public bool SupportsStreaming => false;
     public bool SupportsWordTimestamps => false;
@@ -55,7 +59,7 @@ public class MMS<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 
         var (tokens, confidence) = CTCGreedyDecodeWithConfidence(logits);
         var text = TokensToText(tokens);
-        double duration = audio.Length > 0 ? (double)audio.Shape[0] / SampleRate : 0;
+        double duration = audio.Shape.Length > 0 ? (double)audio.Shape[^1] / SampleRate : 0;
 
         return new TranscriptionResult<T>
         {
@@ -69,7 +73,14 @@ public class MMS<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 
     public Task<TranscriptionResult<T>> TranscribeAsync(Tensor<T> audio, string? language = null, bool includeTimestamps = false, CancellationToken cancellationToken = default) => Task.Run(() => Transcribe(audio, language, includeTimestamps), cancellationToken);
     public string DetectLanguage(Tensor<T> audio) { var features = PreprocessAudio(audio); Tensor<T> logits; if (IsOnnxMode && OnnxEncoder is not null) logits = OnnxEncoder.Run(features); else { logits = features; foreach (var l in Layers) logits = l.Forward(logits); } var (tokens, _) = CTCGreedyDecodeWithConfidence(logits); return ClassifyLanguageFromTokens(tokens); }
-    public IReadOnlyDictionary<string, T> DetectLanguageProbabilities(Tensor<T> audio) { var detected = DetectLanguage(audio); var result = new Dictionary<string, T>(); double primaryProb = 0.85; double otherProb = SupportedLanguages.Count > 1 ? (1.0 - primaryProb) / (SupportedLanguages.Count - 1) : 0.0; foreach (var lang in SupportedLanguages) result[lang] = NumOps.FromDouble(lang == detected ? primaryProb : otherProb); return result; }
+    public IReadOnlyDictionary<string, T> DetectLanguageProbabilities(Tensor<T> audio)
+    {
+        var detected = DetectLanguage(audio);
+        var result = new Dictionary<string, T>();
+        foreach (var lang in SupportedLanguages)
+            result[lang] = NumOps.FromDouble(lang == detected ? 1.0 : 0.0);
+        return result;
+    }
     public IStreamingTranscriptionSession<T> StartStreamingSession(string? language = null) => throw new NotSupportedException("MMS does not support streaming.");
 
     protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers); else Layers.AddRange(LayerHelper<T>.CreateDefaultFoundationASRLayers(encoderDim: _options.EncoderDim, numLayers: _options.NumEncoderLayers, numAttentionHeads: _options.NumAttentionHeads, featureDim: _options.NumMels, vocabSize: _options.VocabSize, dropoutRate: _options.DropoutRate)); }

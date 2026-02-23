@@ -16,9 +16,9 @@ namespace AiDotNet.SpeechRecognition.Multilingual;
 /// <remarks>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Model: "Chirp 3" (Google Cloud, 2025)</item></list></para>
-/// <para><b>For Beginners:</b> Chirp 3 is Google's latest production ASR model with state-of-the-art accuracy across 125+ languages. It features improved long-form transcription, better punctuation restoration, and enhanced speaker diarization integration. The model uses an upd...</para>
+/// <para><b>For Beginners:</b> Chirp 3 is Google's latest production ASR model with state-of-the-art accuracy across many languages. It features improved long-form transcription, better punctuation restoration, and enhanced speaker diarization integration. The model uses an upd...</para>
 /// <para>
-/// Chirp 3 is Google's latest production ASR model with state-of-the-art accuracy across 125+ languages. It features improved long-form transcription, better punctuation restoration, and enhanced speaker diarization integration. The model uses an updated architecture with flash attention and improved multilingual vocabulary.
+/// Chirp 3 is Google's latest production ASR model with state-of-the-art accuracy across many languages. It features improved long-form transcription, better punctuation restoration, and enhanced speaker diarization integration. The model uses an updated architecture with flash attention and improved multilingual vocabulary.
 /// </para>
 /// </remarks>
 public class Chirp3<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
@@ -35,7 +35,7 @@ public class Chirp3<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     /// <summary>
     /// Transcribes audio using Chirp 3's latest-generation encoder.
     /// Per Google (2025): the updated architecture with flash attention provides
-    /// state-of-the-art accuracy for 125+ languages.
+    /// state-of-the-art accuracy for many languages.
     /// </summary>
     public TranscriptionResult<T> Transcribe(Tensor<T> audio, string? language = null, bool includeTimestamps = false)
     {

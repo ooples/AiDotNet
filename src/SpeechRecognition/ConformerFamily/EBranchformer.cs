@@ -87,7 +87,14 @@ public class EBranchformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         bool includeTimestamps = false, CancellationToken cancellationToken = default)
         => Task.Run(() => Transcribe(audio, language, includeTimestamps), cancellationToken);
     public string DetectLanguage(Tensor<T> audio) { var features = PreprocessAudio(audio); Tensor<T> logits; if (IsOnnxMode && OnnxEncoder is not null) logits = OnnxEncoder.Run(features); else { logits = features; foreach (var l in Layers) logits = l.Forward(logits); } var (tokens, _) = CTCGreedyDecodeWithConfidence(logits); return ClassifyLanguageFromTokens(tokens); }
-    public IReadOnlyDictionary<string, T> DetectLanguageProbabilities(Tensor<T> audio) { var detected = DetectLanguage(audio); var result = new Dictionary<string, T>(); double primaryProb = 0.85; double otherProb = SupportedLanguages.Count > 1 ? (1.0 - primaryProb) / (SupportedLanguages.Count - 1) : 0.0; foreach (var lang in SupportedLanguages) result[lang] = NumOps.FromDouble(lang == detected ? primaryProb : otherProb); return result; }
+    public IReadOnlyDictionary<string, T> DetectLanguageProbabilities(Tensor<T> audio)
+    {
+        var detected = DetectLanguage(audio);
+        var result = new Dictionary<string, T>();
+        foreach (var lang in SupportedLanguages)
+            result[lang] = NumOps.FromDouble(lang == detected ? 1.0 : 0.0);
+        return result;
+    }
     public IStreamingTranscriptionSession<T> StartStreamingSession(string? language = null) => throw new NotSupportedException("E-Branchformer does not support streaming.");
 
     protected override void InitializeLayers()

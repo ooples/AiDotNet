@@ -51,7 +51,14 @@ public class ConformerCTC<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 
     public Task<TranscriptionResult<T>> TranscribeAsync(Tensor<T> audio, string? language = null, bool includeTimestamps = false, CancellationToken cancellationToken = default) => Task.Run(() => Transcribe(audio, language, includeTimestamps), cancellationToken);
     public string DetectLanguage(Tensor<T> audio) { var features = PreprocessAudio(audio); Tensor<T> logits; if (IsOnnxMode && OnnxEncoder is not null) logits = OnnxEncoder.Run(features); else { logits = features; foreach (var l in Layers) logits = l.Forward(logits); } var (tokens, _) = CTCGreedyDecodeWithConfidence(logits); return ClassifyLanguageFromTokens(tokens); }
-    public IReadOnlyDictionary<string, T> DetectLanguageProbabilities(Tensor<T> audio) { var detected = DetectLanguage(audio); var result = new Dictionary<string, T>(); double primaryProb = 0.85; double otherProb = SupportedLanguages.Count > 1 ? (1.0 - primaryProb) / (SupportedLanguages.Count - 1) : 0.0; foreach (var lang in SupportedLanguages) result[lang] = NumOps.FromDouble(lang == detected ? primaryProb : otherProb); return result; }
+    public IReadOnlyDictionary<string, T> DetectLanguageProbabilities(Tensor<T> audio)
+    {
+        var detected = DetectLanguage(audio);
+        var result = new Dictionary<string, T>();
+        foreach (var lang in SupportedLanguages)
+            result[lang] = NumOps.FromDouble(lang == detected ? 1.0 : 0.0);
+        return result;
+    }
     public IStreamingTranscriptionSession<T> StartStreamingSession(string? language = null) => new CTCStreamingSession(this, language ?? _options.Language);
 
     protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers); else Layers.AddRange(LayerHelper<T>.CreateDefaultConformerLayers(encoderDim: _options.EncoderDim, numLayers: _options.NumEncoderLayers, numAttentionHeads: _options.NumAttentionHeads, feedForwardExpansionFactor: _options.FeedForwardExpansionFactor, numMels: _options.NumMels, vocabSize: _options.VocabSize, dropoutRate: _options.DropoutRate)); }
@@ -73,11 +80,49 @@ public class ConformerCTC<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 
     private sealed class CTCStreamingSession : IStreamingTranscriptionSession<T>
     {
-        private readonly ConformerCTC<T> _model; private readonly string _language; private readonly List<Tensor<T>> _chunks = new(); private bool _disposed;
+        private readonly ConformerCTC<T> _model;
+        private readonly string _language;
+        private readonly List<Tensor<T>> _chunks = new();
+        private readonly object _lock = new();
+        private bool _disposed;
+
         public CTCStreamingSession(ConformerCTC<T> model, string language) { _model = model; _language = language; }
-        public void FeedAudio(Tensor<T> audioChunk) { if (_disposed) throw new ObjectDisposedException(nameof(CTCStreamingSession)); _chunks.Add(audioChunk); }
-        public TranscriptionResult<T> GetPartialResult() { if (_disposed) throw new ObjectDisposedException(nameof(CTCStreamingSession)); if (_chunks.Count == 0) return new TranscriptionResult<T> { Language = _language }; int totalLen = 0; foreach (var ch in _chunks) totalLen += ch.Length; var combined = new Tensor<T>(new[] { totalLen }); int offset = 0; foreach (var ch in _chunks) { for (int i = 0; i < ch.Length; i++) combined[offset + i] = ch[i]; offset += ch.Length; } return _model.Transcribe(combined, _language); }
-        public TranscriptionResult<T> Finalize() { if (_disposed) throw new ObjectDisposedException(nameof(CTCStreamingSession)); var result = GetPartialResult(); _disposed = true; return result; }
-        public void Dispose() { _disposed = true; }
+
+        public void FeedAudio(Tensor<T> audioChunk)
+        {
+            lock (_lock)
+            {
+                if (_disposed) throw new ObjectDisposedException(nameof(CTCStreamingSession));
+                _chunks.Add(audioChunk);
+            }
+        }
+
+        public TranscriptionResult<T> GetPartialResult()
+        {
+            lock (_lock)
+            {
+                if (_disposed) throw new ObjectDisposedException(nameof(CTCStreamingSession));
+                if (_chunks.Count == 0) return new TranscriptionResult<T> { Language = _language };
+                int totalLen = 0;
+                foreach (var ch in _chunks) totalLen += ch.Length;
+                var combined = new Tensor<T>(new[] { totalLen });
+                int offset = 0;
+                foreach (var ch in _chunks) { for (int i = 0; i < ch.Length; i++) combined[offset + i] = ch[i]; offset += ch.Length; }
+                return _model.Transcribe(combined, _language);
+            }
+        }
+
+        public TranscriptionResult<T> Finalize()
+        {
+            lock (_lock)
+            {
+                if (_disposed) throw new ObjectDisposedException(nameof(CTCStreamingSession));
+                var result = GetPartialResult();
+                _disposed = true;
+                return result;
+            }
+        }
+
+        public void Dispose() { lock (_lock) { _disposed = true; } }
     }
 }

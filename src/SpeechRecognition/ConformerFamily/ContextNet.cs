@@ -26,14 +26,43 @@ namespace AiDotNet.SpeechRecognition.ConformerFamily;
 /// </remarks>
 public class ContextNet<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
-    private readonly ContextNetOptions _options; public override ModelOptions GetOptions() => _options;
-    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
+    private readonly ContextNetOptions _options;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    private bool _useNativeMode;
+    private bool _disposed;
+
+    public override ModelOptions GetOptions() => _options;
     public IReadOnlyList<string> SupportedLanguages { get; }
     public bool SupportsStreaming => true;
-    public bool SupportsWordTimestamps => true;
+    public bool SupportsWordTimestamps => false;
 
-    public ContextNet(NeuralNetworkArchitecture<T> architecture, string modelPath, ContextNetOptions? options = null) : base(architecture) { _options = options ?? new ContextNetOptions(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { _options.Language }; InitializeLayers(); }
-    public ContextNet(NeuralNetworkArchitecture<T> architecture, ContextNetOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new ContextNetOptions(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { _options.Language }; InitializeLayers(); }
+    public ContextNet(NeuralNetworkArchitecture<T> architecture, string modelPath, ContextNetOptions? options = null)
+        : base(architecture)
+    {
+        _options = options ?? new ContextNetOptions();
+        _useNativeMode = false;
+        base.SampleRate = _options.SampleRate;
+        base.NumMels = _options.NumMels;
+        if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath));
+        if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
+        _options.ModelPath = modelPath;
+        OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions);
+        SupportedLanguages = new[] { _options.Language };
+        InitializeLayers();
+    }
+
+    public ContextNet(NeuralNetworkArchitecture<T> architecture, ContextNetOptions? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
+        : base(architecture)
+    {
+        _options = options ?? new ContextNetOptions();
+        _useNativeMode = true;
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        base.SampleRate = _options.SampleRate;
+        base.NumMels = _options.NumMels;
+        SupportedLanguages = new[] { _options.Language };
+        InitializeLayers();
+    }
 
     /// <summary>
     /// Transcribes audio using ContextNet's CNN encoder with squeeze-and-excitation.
@@ -53,7 +82,14 @@ public class ContextNet<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 
     public Task<TranscriptionResult<T>> TranscribeAsync(Tensor<T> audio, string? language = null, bool includeTimestamps = false, CancellationToken cancellationToken = default) => Task.Run(() => Transcribe(audio, language, includeTimestamps), cancellationToken);
     public string DetectLanguage(Tensor<T> audio) { var features = PreprocessAudio(audio); Tensor<T> logits; if (IsOnnxMode && OnnxEncoder is not null) logits = OnnxEncoder.Run(features); else { logits = features; foreach (var l in Layers) logits = l.Forward(logits); } var (tokens, _) = CTCGreedyDecodeWithConfidence(logits); return ClassifyLanguageFromTokens(tokens); }
-    public IReadOnlyDictionary<string, T> DetectLanguageProbabilities(Tensor<T> audio) { var detected = DetectLanguage(audio); var result = new Dictionary<string, T>(); double primaryProb = 0.85; double otherProb = SupportedLanguages.Count > 1 ? (1.0 - primaryProb) / (SupportedLanguages.Count - 1) : 0.0; foreach (var lang in SupportedLanguages) result[lang] = NumOps.FromDouble(lang == detected ? primaryProb : otherProb); return result; }
+    public IReadOnlyDictionary<string, T> DetectLanguageProbabilities(Tensor<T> audio)
+    {
+        // ContextNet is monolingual; return full confidence for the configured language.
+        var result = new Dictionary<string, T>();
+        foreach (var lang in SupportedLanguages)
+            result[lang] = NumOps.FromDouble(lang == _options.Language ? 1.0 : 0.0);
+        return result;
+    }
     public IStreamingTranscriptionSession<T> StartStreamingSession(string? language = null) => new ContextNetStreamingSession(this, language ?? _options.Language);
 
     protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers); else Layers.AddRange(LayerHelper<T>.CreateDefaultDeepCNNCTCLayers(encoderDim: _options.EncoderDim, numBlocks: _options.NumBlocks, numSubBlocks: 5, numMels: _options.NumMels, vocabSize: _options.VocabSize, dropoutRate: _options.DropoutRate)); }
@@ -75,11 +111,49 @@ public class ContextNet<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 
     private sealed class ContextNetStreamingSession : IStreamingTranscriptionSession<T>
     {
-        private readonly ContextNet<T> _model; private readonly string _language; private readonly List<Tensor<T>> _chunks = new(); private bool _disposed;
+        private readonly ContextNet<T> _model;
+        private readonly string _language;
+        private readonly List<Tensor<T>> _chunks = new();
+        private readonly object _lock = new();
+        private bool _disposed;
+
         public ContextNetStreamingSession(ContextNet<T> model, string language) { _model = model; _language = language; }
-        public void FeedAudio(Tensor<T> audioChunk) { if (_disposed) throw new ObjectDisposedException(nameof(ContextNetStreamingSession)); _chunks.Add(audioChunk); }
-        public TranscriptionResult<T> GetPartialResult() { if (_disposed) throw new ObjectDisposedException(nameof(ContextNetStreamingSession)); if (_chunks.Count == 0) return new TranscriptionResult<T> { Language = _language }; int totalLen = 0; foreach (var ch in _chunks) totalLen += ch.Length; var combined = new Tensor<T>(new[] { totalLen }); int offset = 0; foreach (var ch in _chunks) { for (int i = 0; i < ch.Length; i++) combined[offset + i] = ch[i]; offset += ch.Length; } return _model.Transcribe(combined, _language); }
-        public TranscriptionResult<T> Finalize() { if (_disposed) throw new ObjectDisposedException(nameof(ContextNetStreamingSession)); var result = GetPartialResult(); _disposed = true; return result; }
-        public void Dispose() { _disposed = true; }
+
+        public void FeedAudio(Tensor<T> audioChunk)
+        {
+            lock (_lock)
+            {
+                if (_disposed) throw new ObjectDisposedException(nameof(ContextNetStreamingSession));
+                _chunks.Add(audioChunk);
+            }
+        }
+
+        public TranscriptionResult<T> GetPartialResult()
+        {
+            lock (_lock)
+            {
+                if (_disposed) throw new ObjectDisposedException(nameof(ContextNetStreamingSession));
+                if (_chunks.Count == 0) return new TranscriptionResult<T> { Language = _language };
+                int totalLen = 0;
+                foreach (var ch in _chunks) totalLen += ch.Length;
+                var combined = new Tensor<T>(new[] { totalLen });
+                int offset = 0;
+                foreach (var ch in _chunks) { for (int i = 0; i < ch.Length; i++) combined[offset + i] = ch[i]; offset += ch.Length; }
+                return _model.Transcribe(combined, _language);
+            }
+        }
+
+        public TranscriptionResult<T> Finalize()
+        {
+            lock (_lock)
+            {
+                if (_disposed) throw new ObjectDisposedException(nameof(ContextNetStreamingSession));
+                var result = GetPartialResult();
+                _disposed = true;
+                return result;
+            }
+        }
+
+        public void Dispose() { lock (_lock) { _disposed = true; } }
     }
 }
