@@ -45,14 +45,14 @@ public class YOLOv8Seg<T> : NeuralNetworkBase<T>, IInstanceSegmentation<T>
     public override ModelOptions GetOptions() => _options;
 
     #region Fields
-    private readonly int _height, _width, _channels, _numClasses;
-    private readonly YOLOv8SegModelSize _modelSize;
-    private readonly int[] _channelDims;
-    private readonly int _decoderDim;
-    private readonly int[] _depths;
-    private readonly double _dropRate;
-    private readonly bool _useNativeMode;
-    private readonly string? _onnxModelPath;
+    private int _height, _width, _channels, _numClasses;
+    private YOLOv8SegModelSize _modelSize;
+    private int[] _channelDims;
+    private int _decoderDim;
+    private int[] _depths;
+    private double _dropRate;
+    private bool _useNativeMode;
+    private string? _onnxModelPath;
     private InferenceSession? _onnxSession;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _disposed;
@@ -321,7 +321,7 @@ public class YOLOv8Seg<T> : NeuralNetworkBase<T>, IInstanceSegmentation<T>
     /// </summary>
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
-        ModelType = ModelType.SemanticSegmentation,
+        ModelType = ModelType.InstanceSegmentation,
         AdditionalInfo = new Dictionary<string, object>
         {
             { "ModelName", "YOLOv8Seg" },
@@ -361,20 +361,22 @@ public class YOLOv8Seg<T> : NeuralNetworkBase<T>, IInstanceSegmentation<T>
     /// </summary>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadDouble();
-        _ = reader.ReadBoolean();
-        _ = reader.ReadString();
-        _ = reader.ReadInt32();
+        _height = reader.ReadInt32();
+        _width = reader.ReadInt32();
+        _channels = reader.ReadInt32();
+        _numClasses = reader.ReadInt32();
+        _modelSize = (YOLOv8SegModelSize)reader.ReadInt32();
+        _decoderDim = reader.ReadInt32();
+        _dropRate = reader.ReadDouble();
+        _useNativeMode = reader.ReadBoolean();
+        _onnxModelPath = reader.ReadString();
+        _encoderLayerEnd = reader.ReadInt32();
         int dc = reader.ReadInt32();
-        for (int i = 0; i < dc; i++) _ = reader.ReadInt32();
+        _channelDims = new int[dc];
+        for (int i = 0; i < dc; i++) _channelDims[i] = reader.ReadInt32();
         int dd = reader.ReadInt32();
-        for (int i = 0; i < dd; i++) _ = reader.ReadInt32();
+        _depths = new int[dd];
+        for (int i = 0; i < dd; i++) _depths[i] = reader.ReadInt32();
     }
 
     /// <summary>

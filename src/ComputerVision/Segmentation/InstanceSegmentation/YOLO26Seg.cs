@@ -171,7 +171,8 @@ public class YOLO26Seg<T> : NeuralNetworkBase<T>, IInstanceSegmentation<T>
     {
         if (!_useNativeMode) throw new InvalidOperationException("Training is not supported in ONNX mode. Use the native mode constructor for training.");
         var predicted = Forward(input);
-        var lossGradient = predicted.Transform((v, idx) => NumOps.Subtract(v, expectedOutput.Data.Span[idx]));
+        var gradVec = LossFunction.CalculateDerivative(predicted.ToVector(), expectedOutput.ToVector());
+        var lossGradient = Tensor<T>.FromVector(gradVec);
         BackwardPass(lossGradient); _optimizer?.UpdateParameters(Layers);
     }
     #endregion
@@ -258,7 +259,7 @@ public class YOLO26Seg<T> : NeuralNetworkBase<T>, IInstanceSegmentation<T>
     /// </para>
     /// </remarks>
     public override void UpdateParameters(Vector<T> parameters)
-    { int o = 0; foreach (var l in Layers) { var p = l.GetParameters(); int c = p.Length; if (o + c <= parameters.Length) { var n = new Vector<T>(c); for (int i = 0; i < c; i++) n[i] = parameters[o + i]; l.UpdateParameters(n); o += c; } } }
+    { int o = 0; foreach (var l in Layers) { int c = l.ParameterCount; if (o + c > parameters.Length) throw new ArgumentException($"Parameter vector too short: need {o + c} but got {parameters.Length}"); l.UpdateParameters(parameters.Slice(o, c)); o += c; } }
 
     /// <summary>
     /// Collects metadata describing this model's configuration.

@@ -384,6 +384,11 @@ public partial class YamlModelConfig
     public YamlTypeSection? KnowledgeDistillation { get; set; }
 
     /// <summary>
+    /// YAML configuration for ConfigureSafety().
+    /// </summary>
+    public YamlPipelineSection? Safety { get; set; }
+
+    /// <summary>
     /// YAML configuration for ConfigureExperimentTracker().
     /// </summary>
     public YamlTypeSection? ExperimentTracker { get; set; }

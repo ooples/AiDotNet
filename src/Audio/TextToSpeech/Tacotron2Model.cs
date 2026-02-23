@@ -550,6 +550,7 @@ public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
             {
                 _embedding = emb;
                 layers.RemoveAt(0);
+                Layers.Add(_embedding);
             }
         }
         else

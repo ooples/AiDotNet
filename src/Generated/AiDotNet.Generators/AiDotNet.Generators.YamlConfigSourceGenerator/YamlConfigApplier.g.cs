@@ -505,6 +505,8 @@ internal static partial class YamlConfigApplier<T, TInput, TOutput>
             builder.ConfigureKnowledgeDistillation(instance);
         }
 
+        // TODO: ConfigureSafety uses Action<> builder pattern — requires pipeline step factories.
+
         if (config.ExperimentTracker is not null && !string.IsNullOrWhiteSpace(config.ExperimentTracker.Type))
         {
             var instance = YamlTypeRegistry<T, TInput, TOutput>.CreateInstance<global::AiDotNet.Interfaces.IExperimentTracker<T>>(

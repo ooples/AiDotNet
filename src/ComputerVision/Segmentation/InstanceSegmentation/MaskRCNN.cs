@@ -158,7 +158,7 @@ public class MaskRCNN<T> : InstanceSegmenterBase<T>
 
         // RPN.Forward returns objectness as [B, N, 2] and bboxDeltas as [B, N, 4]
         // where N = H * W * numAnchorsPerLocation
-        int totalPositions = objectness.Rank >= 2 ? objectness.Shape[1] : objectness.Length / 2;
+        int totalPositions = objectness.Rank == 3 ? objectness.Shape[1] : objectness.Rank == 2 ? objectness.Shape[0] : objectness.Length / 2;
 
         for (int i = 0; i < numAnchors && i < totalPositions; i++)
         {
