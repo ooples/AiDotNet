@@ -7583,6 +7583,105 @@ public static class LayerHelper<T>
     }
 
     /// <summary>
+    /// Creates layers for a video denoising model (U-Net style temporal denoiser).
+    /// </summary>
+    /// <param name="inputChannels">Number of input channels (default: 3 for RGB).</param>
+    /// <param name="inputHeight">Input frame height.</param>
+    /// <param name="inputWidth">Input frame width.</param>
+    /// <param name="numFeatures">Base feature dimension (default: 64).</param>
+    /// <param name="temporalFrames">Number of temporal frames (default: 5).</param>
+    /// <returns>A collection of layers for video denoising.</returns>
+    /// <remarks>
+    /// <para>
+    /// Architecture: Multi-frame U-Net encoder-decoder with residual learning.
+    /// Input: concatenated temporal frames (inputChannels * temporalFrames).
+    /// Output: single denoised frame (inputChannels) at 1/4 resolution due to two stride-2 encoder layers.
+    /// The caller is responsible for upsampling to full resolution if needed.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultVideoDenoisingLayers(
+        int inputChannels = 3,
+        int inputHeight = 128,
+        int inputWidth = 128,
+        int numFeatures = 64,
+        int temporalFrames = 5)
+    {
+        int h = inputHeight;
+        int w = inputWidth;
+        int inCh = inputChannels * temporalFrames;
+
+        // Encoder
+        yield return new ConvolutionalLayer<T>(inCh, h, w, numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        h /= 2; w /= 2;
+
+        yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures * 2, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures * 2, h, w, numFeatures * 2, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        h /= 2; w /= 2;
+
+        // Bottleneck
+        yield return new ConvolutionalLayer<T>(numFeatures * 2, h, w, numFeatures * 4, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures * 4, h, w, numFeatures * 2, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+
+        // Decoder with upsampling to restore original resolution
+        yield return new DeconvolutionalLayer<T>([1, numFeatures * 2, h, w], numFeatures, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        h *= 2; w *= 2;
+        yield return new DeconvolutionalLayer<T>([1, numFeatures, h, w], numFeatures, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        h *= 2; w *= 2;
+
+        // Output head (residual prediction at original resolution)
+        yield return new ConvolutionalLayer<T>(numFeatures, h, w, inputChannels, 3, 1, 1);
+    }
+
+    /// <summary>
+    /// Creates layers for a video inpainting model (encoder-transformer-decoder).
+    /// </summary>
+    /// <param name="inputChannels">Number of input channels (default: 3 for RGB).</param>
+    /// <param name="inputHeight">Input frame height.</param>
+    /// <param name="inputWidth">Input frame width.</param>
+    /// <param name="numFeatures">Base feature dimension (default: 64).</param>
+    /// <returns>A collection of layers for video inpainting.</returns>
+    /// <remarks>
+    /// <para>
+    /// Architecture: Encoder processes masked input, attention-based completion,
+    /// decoder generates inpainted output. Input includes mask channel (+1).
+    /// Output is at 1/4 resolution due to two stride-2 encoder layers.
+    /// The caller is responsible for upsampling to full resolution if needed.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultVideoInpaintingLayers(
+        int inputChannels = 3,
+        int inputHeight = 128,
+        int inputWidth = 128,
+        int numFeatures = 64)
+    {
+        int h = inputHeight;
+        int w = inputWidth;
+        int inCh = inputChannels + 1; // image + mask
+
+        // Encoder
+        yield return new ConvolutionalLayer<T>(inCh, h, w, numFeatures, 5, 1, 2, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        h /= 2; w /= 2;
+
+        yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures * 2, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures * 2, h, w, numFeatures * 2, 3, 2, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        h /= 2; w /= 2;
+
+        // Bottleneck with attention-like processing
+        yield return new ConvolutionalLayer<T>(numFeatures * 2, h, w, numFeatures * 4, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures * 4, h, w, numFeatures * 4, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures * 4, h, w, numFeatures * 2, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+
+        // Decoder
+        yield return new ConvolutionalLayer<T>(numFeatures * 2, h, w, numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new ConvolutionalLayer<T>(numFeatures, h, w, numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
+
+        // Output head
+        yield return new ConvolutionalLayer<T>(numFeatures, h, w, inputChannels, 3, 1, 1);
+    }
+
+    /// <summary>
     /// Creates layers for a video stabilization model (StabNet-style).
     /// </summary>
     /// <param name="inputChannels">Number of input channels (default: 3 for RGB).</param>
