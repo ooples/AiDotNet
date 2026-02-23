@@ -126,6 +126,11 @@ public class LaplacianKernel<T> : IKernelFunction<T>
         var diff = x1.Subtract(x2);
         var distance = diff.Transform(_numOps.Abs).Sum();
 
+        // Guard: when points are identical (or nearly so), the kernel value is 1.
+        // This avoids potential NaN from Exp chain on zero values.
+        if (_numOps.LessThanOrEquals(distance, _numOps.Zero))
+            return _numOps.One;
+
         return _numOps.Exp(_numOps.Negate(_numOps.Divide(distance, _sigma)));
     }
 }
