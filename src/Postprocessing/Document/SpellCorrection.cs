@@ -71,6 +71,8 @@ public class SpellCorrection<T> : PostprocessorBase<T, string, string>, IDisposa
         "during", "before", "after", "above", "below", "between", "under", "over",
         // Common conjunctions
         "and", "or", "but", "if", "when", "because", "while", "although", "though",
+        // Common greetings and interjections
+        "hello", "hi", "hey", "goodbye", "bye", "thanks", "thank", "please", "sorry", "okay",
         // Document-specific words
         "document", "page", "section", "chapter", "paragraph", "table", "figure", "image",
         "date", "name", "address", "phone", "email", "signature", "form", "report",

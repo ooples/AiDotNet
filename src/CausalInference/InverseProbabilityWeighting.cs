@@ -193,11 +193,11 @@ public class InverseProbabilityWeighting<T> : CausalModelBase<T>
                 nameof(outcome));
         }
 
-        // Cache outcome for predictions
-        _cachedOutcome = outcome;
-
-        // Call the original fit method
+        // Call the original fit method first (this clears _cachedOutcome for fresh fits)
         Fit(features, treatmentInt);
+
+        // Cache outcome AFTER the base Fit call, since Fit(x, treatment) nulls _cachedOutcome
+        _cachedOutcome = outcome;
     }
 
     /// <summary>
