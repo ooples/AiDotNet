@@ -514,14 +514,23 @@ public class IcaDecomposition<T> : MatrixDecompositionBase<T>
             var lu = new LuDecomposition<T>(WK);
             return lu.Invert();
         }
-        else
+        else if (WK.Rows < WK.Columns)
         {
-            // Non-square case: use pseudo-inverse pinv(WK) = WK^T * (WK * WK^T)^{-1}
+            // Wide case (more columns than rows): pinv(WK) = WK^T * (WK * WK^T)^{-1}
             Matrix<T> WKT = WK.Transpose();
             Matrix<T> WKWKt = WK.Multiply(WKT);
             var lu = new LuDecomposition<T>(WKWKt);
             Matrix<T> WKWKtInv = lu.Invert();
             return WKT.Multiply(WKWKtInv);
+        }
+        else
+        {
+            // Tall case (more rows than columns): pinv(WK) = (WK^T * WK)^{-1} * WK^T
+            Matrix<T> WKT = WK.Transpose();
+            Matrix<T> WKtWK = WKT.Multiply(WK);
+            var lu = new LuDecomposition<T>(WKtWK);
+            Matrix<T> WKtWKInv = lu.Invert();
+            return WKtWKInv.Multiply(WKT);
         }
     }
 
