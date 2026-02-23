@@ -650,6 +650,39 @@ public class EAST<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
         return result;
     }
 
+    private static Tensor<T> SliceChannels(Tensor<T> tensor, int startChannel, int channelCount)
+    {
+        if (tensor.Shape.Length != 4)
+            return tensor; // fallback for non-4D
+
+        int batch = tensor.Shape[0];
+        int h = tensor.Shape[2];
+        int w = tensor.Shape[3];
+        int planeSize = h * w;
+
+        var result = new Tensor<T>([batch, channelCount, h, w]);
+        for (int n = 0; n < batch; n++)
+        {
+            int srcBatchOffset = n * tensor.Shape[1] * planeSize;
+            int dstBatchOffset = n * channelCount * planeSize;
+            for (int c = 0; c < channelCount; c++)
+            {
+                tensor.Data.Span.Slice(srcBatchOffset + (startChannel + c) * planeSize, planeSize)
+                    .CopyTo(result.Data.Span.Slice(dstBatchOffset + c * planeSize, planeSize));
+            }
+        }
+
+        return result;
+    }
+
+    private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
+    {
+        var result = new Tensor<T>(a.Shape);
+        for (int i = 0; i < a.Data.Length; i++)
+            result.Data.Span[i] = NumOps.Add(a.Data.Span[i], b.Data.Span[i]);
+        return result;
+    }
+
     /// <inheritdoc/>
     public override Tensor<T> Predict(Tensor<T> input)
     {
@@ -670,8 +703,35 @@ public class EAST<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
         var gradient = Tensor<T>.FromVector(
             LossFunction.CalculateDerivative(output.ToVector(), expectedOutput.ToVector()));
 
-        for (int i = Layers.Count - 1; i >= 0; i--)
-            gradient = Layers[i].Backward(gradient);
+        if (Layers.Count >= 3)
+        {
+            // Split gradient by channels for parallel score/geometry heads
+            var scoreHead = Layers[^2];
+            var geometryHead = Layers[^1];
+            int scoreChannels = 1; // score map is single channel
+            int totalChannels = gradient.Shape.Length >= 2 ? gradient.Shape[1] : 1;
+            int geoChannels = totalChannels - scoreChannels;
+
+            var scoreGrad = SliceChannels(gradient, 0, scoreChannels);
+            var geoGrad = SliceChannels(gradient, scoreChannels, geoChannels);
+
+            // Backprop through both heads independently
+            var scoreFeatureGrad = scoreHead.Backward(scoreGrad);
+            var geoFeatureGrad = geometryHead.Backward(geoGrad);
+
+            // Sum gradients from both heads for the shared feature map
+            var featureGrad = AddTensors(scoreFeatureGrad, geoFeatureGrad);
+
+            // Continue backprop through shared backbone
+            for (int i = Layers.Count - 3; i >= 0; i--)
+                featureGrad = Layers[i].Backward(featureGrad);
+        }
+        else
+        {
+            // Fallback: sequential backprop for simple architectures
+            for (int i = Layers.Count - 1; i >= 0; i--)
+                gradient = Layers[i].Backward(gradient);
+        }
 
         UpdateParameters(CollectGradients());
         SetTrainingMode(false);
