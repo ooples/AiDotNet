@@ -22,7 +22,7 @@ namespace AiDotNet.Diffusion.Acceleration;
 /// - Conditional anchor frames: use last frames of previous window as conditioning
 /// </para>
 /// </remarks>
-public class SlidingWindowVideoGen<T>
+internal class SlidingWindowVideoGen<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
@@ -209,6 +209,6 @@ public enum BlendingMode
     /// <summary>Use the latest window's frames (hard cut).</summary>
     HardCut,
 
-    /// <summary>SLERP (spherical linear interpolation) in latent space.</summary>
+    /// <summary>Smooth ease-in/ease-out (S-curve) blending in latent space.</summary>
     SlerpBlend
 }

@@ -142,11 +142,11 @@ public class MotionModule<T> : LayerBase<T>
         return AddTensors(afterAttnGrad, norm1Grad);
     }
 
-    private static new readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+    private static readonly INumericOperations<T> StaticNumOps = MathHelper.GetNumericOperations<T>();
 
     private static Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
-        return a.Transform((v, idx) => NumOps.Add(v, b.Data.Span[idx]));
+        return a.Transform((v, idx) => StaticNumOps.Add(v, b.Data.Span[idx]));
     }
 
     /// <inheritdoc />
@@ -188,6 +188,7 @@ public class MotionModule<T> : LayerBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
+        // GetParameters() concatenates sublayer params; allocates once for validation.
         int expected = GetParameters().Length;
         if (parameters.Length != expected)
             throw new ArgumentException($"Expected {expected} parameters, got {parameters.Length}.", nameof(parameters));

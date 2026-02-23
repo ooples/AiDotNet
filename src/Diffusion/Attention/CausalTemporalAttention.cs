@@ -36,7 +36,7 @@ public class CausalTemporalAttention<T> : LayerBase<T>
     private readonly int _numHeads;
     private readonly int _numFrames;
     private readonly FlashAttentionLayer<T> _causalAttention;
-    private Tensor<T>? _lastInput;
+    private bool _hasForwardRun;
 
     /// <inheritdoc />
     public override bool SupportsTraining => true;
@@ -88,11 +88,14 @@ public class CausalTemporalAttention<T> : LayerBase<T>
         _numHeads = numHeads;
         _numFrames = numFrames;
 
+        // Default block sizes for FlashAttention tiling — 64 matches the paper's recommended tile size.
+        const int DefaultBlockSize = 64;
+
         var config = new FlashAttentionConfig
         {
             UseCausalMask = true,
-            BlockSizeQ = 64,
-            BlockSizeKV = 64,
+            BlockSizeQ = DefaultBlockSize,
+            BlockSizeKV = DefaultBlockSize,
             RecomputeInBackward = true,
             ReturnAttentionWeights = false,
             Precision = FlashAttentionPrecision.Float32
@@ -110,14 +113,14 @@ public class CausalTemporalAttention<T> : LayerBase<T>
     /// </summary>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _lastInput = input;
+        _hasForwardRun = true;
         return _causalAttention.Forward(input);
     }
 
     /// <inheritdoc />
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
-        if (_lastInput == null)
+        if (!_hasForwardRun)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
         return _causalAttention.Backward(outputGradient);
@@ -144,7 +147,7 @@ public class CausalTemporalAttention<T> : LayerBase<T>
     /// <inheritdoc />
     public override void ResetState()
     {
-        _lastInput = null;
+        _hasForwardRun = false;
         _causalAttention.ResetState();
     }
 

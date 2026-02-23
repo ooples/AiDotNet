@@ -61,7 +61,11 @@ public class TemporalInterpolationVAE<T> : VAEModelBase<T>
     public override double LatentScaleFactor => _latentScaleFactor;
 
     /// <inheritdoc />
-    public override int ParameterCount => GetParameters().Length;
+    public override int ParameterCount =>
+        _encoderIn.ParameterCount + _encoderOut.ParameterCount +
+        _decoderIn.ParameterCount + _decoderOut.ParameterCount +
+        _interpIn.ParameterCount + _interpOut.ParameterCount +
+        _encoderNorm.ParameterCount + _decoderNorm.ParameterCount;
 
     /// <summary>
     /// Gets the temporal interpolation factor.

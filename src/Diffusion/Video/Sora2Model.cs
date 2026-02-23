@@ -135,7 +135,7 @@ public class Sora2Model<T> : VideoDiffusionModelBase<T>
     public override void SetParameters(Vector<T> parameters)
     {
         var predCount = _predictor.ParameterCount;
-        var vaeCount = _temporalVAE.GetParameters().Length;
+        var vaeCount = _temporalVAE.ParameterCount;
         if (parameters.Length != predCount + vaeCount)
             throw new ArgumentException($"Expected {predCount + vaeCount} parameters, got {parameters.Length}.", nameof(parameters));
         var predParams = new Vector<T>(predCount);
