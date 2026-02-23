@@ -99,6 +99,8 @@ public class DAGMANonlinear<T> : ContinuousOptimizationBase<T>
     /// <inheritdoc/>
     protected override Matrix<T> DiscoverStructureCore(Matrix<T> data)
     {
+        // Standardize data to prevent sigmoid saturation and ensure stable gradients.
+        data = StandardizeData(data);
         int n = data.Rows;
         int d = data.Columns;
         int h = _hiddenSize;

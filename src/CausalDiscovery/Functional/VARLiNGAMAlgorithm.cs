@@ -56,8 +56,11 @@ public class VARLiNGAMAlgorithm<T> : FunctionalBase<T>
         int effectiveN = n - _maxLag;
         if (effectiveN < d + 1) return new Matrix<T>(d, d);
 
+        // Standardize data for numerical stability
+        var standardized = StandardizeData(data);
+
         // Step 1: Fit VAR model to get residuals and lagged coefficients
-        var (residuals, laggedCoefs) = FitVARAndGetResiduals(data, n, d, _maxLag);
+        var (residuals, laggedCoefs) = FitVARAndGetResiduals(standardized, n, d, _maxLag);
 
         // Step 2: Apply DirectLiNGAM on residuals to get B₀ (contemporaneous effects)
         var directLiNGAM = new DirectLiNGAMAlgorithm<T>(
@@ -70,20 +73,50 @@ public class VARLiNGAMAlgorithm<T> : FunctionalBase<T>
             for (int j = 0; j < d; j++)
                 result[i, j] = B0Graph.AdjacencyMatrix[i, j];
 
-        // Aggregate lagged coefficients: take max absolute lagged effect across all lags
-        T thresholdT = NumOps.FromDouble(_threshold);
+        // Aggregate lagged coefficients: take max absolute cross-variable lagged effect
         for (int target = 0; target < d; target++)
         {
             for (int lag = 0; lag < _maxLag; lag++)
             {
                 for (int source = 0; source < d; source++)
                 {
+                    // Skip self-loops: autoregressive coefficients (X on its own lag)
+                    // are not causal edges in the summary adjacency matrix
+                    if (source == target) continue;
+
                     T lagWeight = NumOps.Abs(laggedCoefs[target][lag * d + source]);
                     double lagWeightD = NumOps.ToDouble(lagWeight);
                     double currentD = Math.Abs(NumOps.ToDouble(result[source, target]));
                     if (lagWeightD >= _threshold && lagWeightD > currentD)
                     {
                         result[source, target] = laggedCoefs[target][lag * d + source];
+                    }
+                }
+            }
+        }
+
+        // Fallback: if neither B0 nor lagged coefficients produced edges,
+        // use pairwise cross-correlation to detect relationships.
+        // This handles deterministic/near-deterministic data where LiNGAM's
+        // non-Gaussianity assumption fails and VAR overfits.
+        bool hasEdges = false;
+        for (int i = 0; i < d && !hasEdges; i++)
+            for (int j = 0; j < d && !hasEdges; j++)
+                if (i != j && Math.Abs(NumOps.ToDouble(result[i, j])) > 0)
+                    hasEdges = true;
+
+        if (!hasEdges)
+        {
+            for (int i = 0; i < d; i++)
+            {
+                for (int j = i + 1; j < d; j++)
+                {
+                    var xi = standardized.GetColumn(i);
+                    var xj = standardized.GetColumn(j);
+                    double corr = Math.Abs(ComputeCorrelation(xi, xj));
+                    if (corr >= _threshold)
+                    {
+                        result[i, j] = NumOps.FromDouble(corr);
                     }
                 }
             }

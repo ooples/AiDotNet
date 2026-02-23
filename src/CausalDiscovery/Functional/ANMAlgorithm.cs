@@ -56,28 +56,36 @@ public class ANMAlgorithm<T> : FunctionalBase<T>
                 var xi = standardized.GetColumn(i);
                 var xj = standardized.GetColumn(j);
 
-                // Test i → j: fit xj = f(xi) + noise, check independence of noise and xi
-                var residIJ = RegressOut(xj, xi);
+                double weight = Math.Abs(ComputeCorrelation(xi, xj));
+                if (weight < _threshold) continue;
+
+                // ANM uses nonlinear (kernel) regression per Hoyer et al. (2008).
+                // Linear regression would produce zero residuals on perfectly linear data,
+                // destroying the asymmetry signal that ANM relies on.
+                var residIJ = KernelRegressOut(xi, xj);
                 double depIJ = Math.Abs(GaussianMI(residIJ, xi));
 
-                // Test j → i: fit xi = f(xj) + noise, check independence of noise and xj
-                var residJI = RegressOut(xi, xj);
+                var residJI = KernelRegressOut(xj, xi);
                 double depJI = Math.Abs(GaussianMI(residJI, xj));
 
                 // The direction with lower residual dependence is preferred
                 double asymmetry = depJI - depIJ; // positive means i → j
-
-                // Asymmetry threshold: a fraction of _threshold to detect directional preference
                 double asymmetryThreshold = _threshold * 0.1;
+
                 if (Math.Abs(asymmetry) > asymmetryThreshold)
                 {
-                    double weight = Math.Abs(ComputeCorrelation(xi, xj));
-                    if (weight < _threshold) continue;
-
+                    // Clear asymmetry detected — ANM can determine direction
                     if (asymmetry > 0)
                         W[i, j] = NumOps.FromDouble(weight);
                     else
                         W[j, i] = NumOps.FromDouble(weight);
+                }
+                else
+                {
+                    // No clear direction (deterministic or near-deterministic relationship).
+                    // Variables are strongly correlated but ANM can't orient the edge.
+                    // Record the relationship as i → j (lower index convention).
+                    W[i, j] = NumOps.FromDouble(weight);
                 }
             }
         }

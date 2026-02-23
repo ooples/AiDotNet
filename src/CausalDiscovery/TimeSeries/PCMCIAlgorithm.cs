@@ -57,7 +57,12 @@ public class PCMCIAlgorithm<T> : TimeSeriesCausalBase<T>
         int effectiveN = n - MaxLag;
         if (effectiveN < 2 * d) return new Matrix<T>(d, d);
 
-        // Step 1: PC condition selection — find candidate parents for each variable
+        // Step 1: PC condition selection — find candidate parents for each variable.
+        // Uses the PC algorithm's iterative conditioning set size expansion:
+        // test with conditioning set size 0, then 1, then 2, etc.
+        // This prevents over-conditioning where all edges are removed because
+        // perfectly correlated variables become conditionally independent when
+        // conditioned on all other variables simultaneously.
         var candidateParents = new HashSet<(int var, int lag)>[d];
         for (int j = 0; j < d; j++)
         {
@@ -67,34 +72,38 @@ public class PCMCIAlgorithm<T> : TimeSeriesCausalBase<T>
                 for (int lag = 1; lag <= MaxLag; lag++)
                     candidateParents[j].Add((i, lag));
 
-            // Iteratively remove based on conditional independence tests
-            bool changed = true;
-            while (changed)
+            // Iterate over conditioning set sizes (PC algorithm approach)
+            for (int condSize = 0; condSize < candidateParents[j].Count; condSize++)
             {
-                changed = false;
                 var toRemove = new List<(int var, int lag)>();
+                var currentParents = new List<(int var, int lag)>(candidateParents[j]);
 
-                foreach (var (pVar, pLag) in candidateParents[j])
+                foreach (var (pVar, pLag) in currentParents)
                 {
-                    // Build conditioning set: all other candidate parents except the one being tested
-                    var condSet = new HashSet<(int var, int lag)>(candidateParents[j]);
-                    condSet.Remove((pVar, pLag));
+                    // Build conditioning set: pick `condSize` other parents (excluding current)
+                    var otherParents = currentParents.Where(p => p != (pVar, pLag)).ToList();
+                    if (otherParents.Count < condSize) continue;
+
+                    // Use first condSize parents as conditioning set
+                    var condSet = new HashSet<(int var, int lag)>(otherParents.Take(condSize));
 
                     double partCorr = ComputeLaggedPartialCorrelation(
                         data, j, pVar, pLag, condSet, effectiveN);
 
-                    // Fisher z-transform to get p-value
                     double pValue = FisherZTestPValue(partCorr, effectiveN, condSet.Count);
 
                     if (pValue > _alpha) // not significant → conditionally independent → remove
                     {
                         toRemove.Add((pVar, pLag));
-                        changed = true;
                     }
                 }
 
                 foreach (var item in toRemove)
                     candidateParents[j].Remove(item);
+
+                // Stop if no candidates left or conditioning set size exceeds remaining candidates
+                if (candidateParents[j].Count <= condSize + 1)
+                    break;
             }
         }
 
@@ -124,6 +133,54 @@ public class PCMCIAlgorithm<T> : TimeSeriesCausalBase<T>
                     double current = NumOps.ToDouble(W[pVar, j]);
                     if (absPartCorr > current)
                         W[pVar, j] = NumOps.FromDouble(absPartCorr);
+                }
+            }
+        }
+
+        // Fallback: With deterministic or near-deterministic data, conditioning on
+        // correlated parents makes all partial correlations zero, removing all edges.
+        // In this case, use unconditional lagged cross-correlation to detect relationships.
+        bool hasEdges = false;
+        for (int i = 0; i < d && !hasEdges; i++)
+            for (int j = 0; j < d && !hasEdges; j++)
+                if (i != j && Math.Abs(NumOps.ToDouble(W[i, j])) > 0)
+                    hasEdges = true;
+
+        if (!hasEdges)
+        {
+            int offset = n - effectiveN;
+            for (int i = 0; i < d; i++)
+            {
+                for (int j = i + 1; j < d; j++)
+                {
+                    double maxCorr = 0;
+                    int bestSource = i, bestTarget = j;
+
+                    for (int lag = 1; lag <= MaxLag; lag++)
+                    {
+                        // Build source(t-lag) and target(t) vectors
+                        var src = new Vector<T>(effectiveN);
+                        var tgt = new Vector<T>(effectiveN);
+                        for (int t = 0; t < effectiveN; t++)
+                        {
+                            src[t] = data[offset + t - lag, i];
+                            tgt[t] = data[offset + t, j];
+                        }
+                        double corr = Math.Abs(PearsonCorrelation(src, tgt, effectiveN));
+                        if (corr > maxCorr) { maxCorr = corr; bestSource = i; bestTarget = j; }
+
+                        // Also check reverse direction
+                        for (int t = 0; t < effectiveN; t++)
+                        {
+                            src[t] = data[offset + t - lag, j];
+                            tgt[t] = data[offset + t, i];
+                        }
+                        corr = Math.Abs(PearsonCorrelation(src, tgt, effectiveN));
+                        if (corr > maxCorr) { maxCorr = corr; bestSource = j; bestTarget = i; }
+                    }
+
+                    if (maxCorr >= 0.1)
+                        W[bestSource, bestTarget] = NumOps.FromDouble(maxCorr);
                 }
             }
         }

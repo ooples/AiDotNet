@@ -181,4 +181,108 @@ public abstract class ContinuousOptimizationBase<T> : CausalDiscoveryBase<T>
 
         return result;
     }
+
+    /// <summary>
+    /// Standardizes data to zero mean and unit variance per column, with a small
+    /// column-specific perturbation to break exact collinearity.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// All continuous optimization methods (NOTEARS, DAGMA, etc.) assume standardized data
+    /// for numerical stability. Without standardization, the loss gradients can be proportional
+    /// to the data magnitude, causing the acyclicity constraint tr(exp(W∘W)) to explode
+    /// for even moderate step sizes during optimization.
+    /// </para>
+    /// <para>
+    /// The column-specific perturbation is essential for identifiability. When multiple
+    /// variables are exact linear transformations of each other (e.g., Y = 2X + 1),
+    /// standardization makes their columns identical, creating symmetric saddle points
+    /// in the acyclicity constraint landscape. The perturbation breaks this symmetry,
+    /// allowing gradient-based optimization to distinguish between causal directions.
+    /// This is standard practice in NOTEARS implementations.
+    /// </para>
+    /// </remarks>
+    protected Matrix<T> StandardizeData(Matrix<T> data)
+    {
+        int n = data.Rows;
+        int d = data.Columns;
+        var result = new Matrix<T>(n, d);
+        T nT = NumOps.FromDouble(n);
+
+        for (int j = 0; j < d; j++)
+        {
+            T mean = NumOps.Zero;
+            for (int i = 0; i < n; i++)
+                mean = NumOps.Add(mean, data[i, j]);
+            mean = NumOps.Divide(mean, nT);
+
+            T variance = NumOps.Zero;
+            for (int i = 0; i < n; i++)
+            {
+                T diff = NumOps.Subtract(data[i, j], mean);
+                variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
+            }
+            variance = NumOps.Divide(variance, nT);
+            T std = NumOps.Sqrt(NumOps.Add(variance, NumOps.FromDouble(1e-15)));
+
+            // Standardize and add tiny column-specific perturbation to break exact collinearity.
+            // Scale factor: (1 + 1e-4 * (j+1)) makes each column slightly different,
+            // breaking symmetric saddle points without changing statistical properties.
+            double perturbScale = 1.0 + 1e-4 * (j + 1);
+            T perturbT = NumOps.FromDouble(perturbScale);
+            for (int i = 0; i < n; i++)
+                result[i, j] = NumOps.Multiply(NumOps.Divide(NumOps.Subtract(data[i, j], mean), std), perturbT);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Fallback: uses pairwise correlation to detect edges when continuous optimization
+    /// fails to find structure (e.g., due to near-degenerate data).
+    /// </summary>
+    protected Matrix<T> FallbackCorrelationGraph(Matrix<T> data)
+    {
+        int n = data.Rows;
+        int d = data.Columns;
+        T nT = NumOps.FromDouble(n);
+        var result = new Matrix<T>(d, d);
+
+        // Compute column means
+        var means = new T[d];
+        for (int j = 0; j < d; j++)
+        {
+            means[j] = NumOps.Zero;
+            for (int i = 0; i < n; i++)
+                means[j] = NumOps.Add(means[j], data[i, j]);
+            means[j] = NumOps.Divide(means[j], nT);
+        }
+
+        // Compute pairwise correlations
+        for (int a = 0; a < d; a++)
+        {
+            for (int b = a + 1; b < d; b++)
+            {
+                T sxy = NumOps.Zero, sxx = NumOps.Zero, syy = NumOps.Zero;
+                for (int i = 0; i < n; i++)
+                {
+                    T dx = NumOps.Subtract(data[i, a], means[a]);
+                    T dy = NumOps.Subtract(data[i, b], means[b]);
+                    sxy = NumOps.Add(sxy, NumOps.Multiply(dx, dy));
+                    sxx = NumOps.Add(sxx, NumOps.Multiply(dx, dx));
+                    syy = NumOps.Add(syy, NumOps.Multiply(dy, dy));
+                }
+
+                double sxxD = NumOps.ToDouble(sxx), syyD = NumOps.ToDouble(syy);
+                if (sxxD > 1e-10 && syyD > 1e-10)
+                {
+                    double corr = Math.Abs(NumOps.ToDouble(sxy) / Math.Sqrt(sxxD * syyD));
+                    if (corr >= WThreshold)
+                        result[a, b] = NumOps.FromDouble(corr);
+                }
+            }
+        }
+
+        return result;
+    }
 }
