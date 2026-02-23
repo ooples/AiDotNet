@@ -179,6 +179,7 @@ public class LayoutLMv3<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
         _patchSize = 16; // Default patch size for LayoutLMv3
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
+        Guard.Positive(imageSize, nameof(imageSize));
         ImageSize = imageSize;
         MaxSequenceLength = maxSequenceLength;
 
@@ -240,6 +241,7 @@ public class LayoutLMv3<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
         _vocabSize = vocabSize;
         _patchSize = patchSize;
 
+        Guard.Positive(imageSize, nameof(imageSize));
         ImageSize = imageSize;
         MaxSequenceLength = maxSequenceLength;
 
@@ -1141,10 +1143,10 @@ public class LayoutLMv3<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
             foreach (var layer in _transformerLayers)
                 output = layer.Forward(output);
 
-            // Route through classification head (DenseLayers at the end)
+            // Route through classification head layers (all layers not in embedding/transformer groups)
             foreach (var layer in Layers)
             {
-                if (layer is DenseLayer<T>)
+                if (!_imageEmbeddingLayers.Contains(layer) && !_transformerLayers.Contains(layer))
                     output = layer.Forward(output);
             }
 

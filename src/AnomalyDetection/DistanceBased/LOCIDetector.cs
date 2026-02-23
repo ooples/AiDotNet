@@ -194,10 +194,10 @@ public class LOCIDetector<T> : AnomalyDetectorBase<T>
             }
 
             // If the point had no neighbors at ANY tested radius, it is an extreme isolate.
-            // Assign the highest possible anomaly score.
+            // Use a large but finite score (avoids overflow to Infinity for float/half T).
             if (!hadNeighbors)
             {
-                maxMdef = double.MaxValue;
+                maxMdef = 1e10;
             }
 
             scores[i] = NumOps.FromDouble(maxMdef);
