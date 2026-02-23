@@ -31,11 +31,12 @@ public class MatrixDecompositionIntegrationTests
 
     private static Matrix<double> CreateGeneralMatrix()
     {
+        // Intentionally asymmetric to test non-symmetric code paths
         return new Matrix<double>(new double[,]
         {
             { 4.0, 1.0, 2.0 },
-            { 1.0, 5.0, 3.0 },
-            { 2.0, 3.0, 6.0 },
+            { 3.0, 5.0, 1.0 },
+            { 1.0, 4.0, 6.0 },
         });
     }
 
