@@ -32,7 +32,7 @@ public abstract class AcousticModelBase<T> : TtsModelBase<T>, IAcousticModel<T>
     /// <summary>Gets the mel hop size.</summary>
     int IAcousticModel<T>.HopSize => HopSize;
 
-    /// <summary>Gets the FFT window size.</summary>
+    /// <summary>Gets the FFT window size. Derived models should override or hide this with their option-driven value.</summary>
     public virtual int FftSize => 1024;
 
     /// <summary>Gets the sample rate.</summary>
