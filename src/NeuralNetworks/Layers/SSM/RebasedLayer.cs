@@ -613,23 +613,49 @@ public class RebasedLayer<T> : LayerBase<T>
                         }
                     }
 
-                    // Propagate through squared ReLU feature map:
-                    // phi(x) = ReLU(x)^2 / norm, so dphi/dx = 2*ReLU(x) / norm (for x > 0)
-                    // Simplified gradient: skip normalization gradient for stability
+                    // Propagate through squared ReLU feature map with L2 normalization:
+                    // phi(x) = ReLU(x)^2 / ||ReLU(x)^2||
+                    // Let u = ReLU(x)^2, n = ||u||, phi = u/n
+                    // dphi/du = (I - phi*phi^T) / n  (Jacobian of L2 normalization)
+                    // du/dx = 2*ReLU(x) for x > 0, 0 otherwise
+                    // Chain: dphi/dx = dphi/du * du/dx
+
+                    // Query normalization gradient
+                    T qNorm = _lastPhiQNorm![new[] { bi, t, hi }];
+                    T qNormInv = NumOps.Divide(NumOps.One, qNorm);
+
+                    // Compute dot(dPhiQ, phiQ) for the normalization correction
+                    T dotQ = NumOps.Zero;
+                    for (int d = 0; d < _headDimension; d++)
+                        dotQ = NumOps.Add(dotQ, NumOps.Multiply(dPhiQ[d], _lastPhiQ![new[] { bi, t, hi, d }]));
+
+                    // Key normalization gradient
+                    T kNorm = _lastPhiKNorm![new[] { bi, t, hi }];
+                    T kNormInv = NumOps.Divide(NumOps.One, kNorm);
+
+                    T dotK = NumOps.Zero;
+                    for (int d = 0; d < _headDimension; d++)
+                        dotK = NumOps.Add(dotK, NumOps.Multiply(dPhiK[d], _lastPhiK![new[] { bi, t, hi, d }]));
+
                     for (int d = 0; d < _headDimension; d++)
                     {
                         int flatD = dimStart + d;
                         T qVal = _lastQuery![new[] { bi, t, flatD }];
                         T kVal = _lastKey![new[] { bi, t, flatD }];
 
-                        // d(ReLU(x)^2)/dx = 2*ReLU(x) for x > 0, 0 otherwise
+                        // dphi/du = (dPhiQ - phiQ * dot(dPhiQ, phiQ)) / norm
+                        T phiQd = _lastPhiQ![new[] { bi, t, hi, d }];
+                        T dU_Q = NumOps.Multiply(NumOps.Subtract(dPhiQ[d], NumOps.Multiply(phiQd, dotQ)), qNormInv);
+
+                        T phiKd = _lastPhiK![new[] { bi, t, hi, d }];
+                        T dU_K = NumOps.Multiply(NumOps.Subtract(dPhiK[d], NumOps.Multiply(phiKd, dotK)), kNormInv);
+
+                        // du/dx = 2*ReLU(x) for x > 0, 0 otherwise
                         T qRelu = NumOps.ToDouble(qVal) > 0.0 ? qVal : NumOps.Zero;
                         T kRelu = NumOps.ToDouble(kVal) > 0.0 ? kVal : NumOps.Zero;
 
-                        T dQ_d = NumOps.Multiply(dPhiQ[d],
-                            NumOps.Multiply(NumOps.FromDouble(2.0), qRelu));
-                        T dK_d = NumOps.Multiply(dPhiK[d],
-                            NumOps.Multiply(NumOps.FromDouble(2.0), kRelu));
+                        T dQ_d = NumOps.Multiply(dU_Q, NumOps.Multiply(NumOps.FromDouble(2.0), qRelu));
+                        T dK_d = NumOps.Multiply(dU_K, NumOps.Multiply(NumOps.FromDouble(2.0), kRelu));
 
                         dQ[new[] { bi, t, flatD }] = NumOps.Add(
                             dQ[new[] { bi, t, flatD }], dQ_d);

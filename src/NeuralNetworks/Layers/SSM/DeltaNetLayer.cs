@@ -551,11 +551,12 @@ public class DeltaNetLayer<T> : LayerBase<T>
                         }
                     }
 
-                    // Apply the correction to dState for the S_{t-1} dependency through delta
+                    // Apply corrections for the S_{t-1} dependency through delta = v - S_{t-1}*k
                     // For each di: let c[di] = sum_ki(dS_t[di,ki] * k_scaled[ki])
-                    //   then dS_{t-1}[di,ki'] -= beta * c[di] * k_scaled[ki']
-                    // Combined with the direct dS_t carry-forward (alpha=1):
-                    //   dS_{t-1}[di,ki'] = dS_t[di,ki'] - beta * c[di] * k_scaled[ki']
+                    //
+                    // dState correction: dS_{t-1}[di,ki'] -= beta * c[di] * k_scaled[ki']
+                    // dK correction: dK[ki'] -= beta * sum_di(c[di] * S_{t-1}[di,ki'])
+                    //   This is the missing "-beta * S_{t-1}^T * ..." term from delta's k dependency.
                     for (int di = 0; di < _headDimension; di++)
                     {
                         // Compute c[di] = sum_ki(dS[di,ki] * k_scaled[ki])
@@ -568,15 +569,22 @@ public class DeltaNetLayer<T> : LayerBase<T>
                                 NumOps.Multiply(dState[new[] { bi, hi, di, ki }], kVal));
                         }
 
-                        // Now adjust dState: dS_{t-1}[di,ki'] = dS_t[di,ki'] - beta * c[di] * k_scaled[ki']
-                        // Since dState currently holds dS_t, we subtract the correction
                         for (int ki = 0; ki < _headDimension; ki++)
                         {
                             int flatKi = dimStart + ki;
                             T kVal = NumOps.Multiply(_lastKey[new[] { bi, t, flatKi }], keyScale);
+
+                            // dState correction: dS_{t-1}[di,ki'] -= beta * c[di] * k_scaled[ki']
                             T correction = NumOps.Multiply(betaVal, NumOps.Multiply(cDi, kVal));
                             dState[new[] { bi, hi, di, ki }] = NumOps.Subtract(
                                 dState[new[] { bi, hi, di, ki }], correction);
+
+                            // dK correction: dK[ki'] -= beta * c[di] * S_{t-1}[di,ki']
+                            // This accounts for k appearing inside delta = v - S_{t-1}*k
+                            T sPrevDiKi = _lastStates[new[] { bi, t, hi, di, ki }];
+                            dK[new[] { bi, t, flatKi }] = NumOps.Subtract(
+                                dK[new[] { bi, t, flatKi }],
+                                NumOps.Multiply(betaVal, NumOps.Multiply(cDi, sPrevDiKi)));
                         }
                     }
                 }
