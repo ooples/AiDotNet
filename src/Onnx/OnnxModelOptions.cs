@@ -126,7 +126,9 @@ public class OnnxModelOptions
             throw new ArgumentNullException(nameof(other));
 
         ExecutionProvider = other.ExecutionProvider;
-        FallbackProviders = new List<OnnxExecutionProvider>(other.FallbackProviders);
+        FallbackProviders = other.FallbackProviders is null
+            ? new List<OnnxExecutionProvider>()
+            : new List<OnnxExecutionProvider>(other.FallbackProviders);
         GpuDeviceId = other.GpuDeviceId;
         EnableMemoryPattern = other.EnableMemoryPattern;
         EnableMemoryArena = other.EnableMemoryArena;
@@ -135,7 +137,9 @@ public class OnnxModelOptions
         OptimizationLevel = other.OptimizationLevel;
         EnableProfiling = other.EnableProfiling;
         ProfileOutputPath = other.ProfileOutputPath;
-        CustomOptions = new Dictionary<string, string>(other.CustomOptions);
+        CustomOptions = other.CustomOptions is null
+            ? new Dictionary<string, string>()
+            : new Dictionary<string, string>(other.CustomOptions);
         LogLevel = other.LogLevel;
         AutoWarmUp = other.AutoWarmUp;
         CudaMemoryLimit = other.CudaMemoryLimit;
