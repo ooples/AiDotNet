@@ -6,12 +6,13 @@ namespace AiDotNet.Tests.IntegrationTests.CausalDiscovery;
 
 /// <summary>
 /// Integration tests for deep learning causal discovery algorithms.
+/// Verifies each algorithm finds meaningful causal structure in strongly correlated data.
 /// </summary>
 public class DeepLearningCausalDiscoveryTests
 {
     private static Matrix<double> CreateSyntheticData()
     {
-        int n = 30;
+        int n = 50;
         var data = new double[n, 3];
         for (int i = 0; i < n; i++)
         {
@@ -27,112 +28,92 @@ public class DeepLearningCausalDiscoveryTests
     private static readonly string[] FeatureNames = ["X0", "X1", "X2"];
 
     [Fact]
-    public void DAGGNN_Construction_And_Discover()
+    public void DAGGNN_FindsCausalStructure()
     {
         var algo = new DAGGNNAlgorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
-        Assert.NotNull(graph);
-        Assert.Equal(3, graph.FeatureNames.Length);
-        Assert.Equal(3, graph.AdjacencyMatrix.Rows);
-        Assert.Equal(3, graph.AdjacencyMatrix.Columns);
+        CausalDiscoveryTestHelper.AssertMeaningfulGraph(graph);
+        CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }
 
     [Fact]
-    public void GAE_Construction_And_Discover()
+    public void GAE_FindsCausalStructure()
     {
         var algo = new GAEAlgorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
-        Assert.NotNull(graph);
-        Assert.Equal(3, graph.FeatureNames.Length);
-        Assert.Equal(3, graph.AdjacencyMatrix.Rows);
-        Assert.Equal(3, graph.AdjacencyMatrix.Columns);
+        CausalDiscoveryTestHelper.AssertMeaningfulGraph(graph);
+        CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }
 
     [Fact]
-    public void GraNDAG_Construction_And_Discover()
+    public void GraNDAG_FindsCausalStructure()
     {
         var algo = new GraNDAGAlgorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
-        Assert.NotNull(graph);
-        Assert.Equal(3, graph.FeatureNames.Length);
-        Assert.Equal(3, graph.AdjacencyMatrix.Rows);
-        Assert.Equal(3, graph.AdjacencyMatrix.Columns);
+        CausalDiscoveryTestHelper.AssertMeaningfulGraph(graph);
+        CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }
 
     [Fact]
-    public void CGNN_Construction_And_Discover()
+    public void CGNN_FindsCausalStructure()
     {
         var algo = new CGNNAlgorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
-        Assert.NotNull(graph);
-        Assert.Equal(3, graph.FeatureNames.Length);
-        Assert.Equal(3, graph.AdjacencyMatrix.Rows);
-        Assert.Equal(3, graph.AdjacencyMatrix.Columns);
+        CausalDiscoveryTestHelper.AssertMeaningfulGraph(graph);
+        CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }
 
     [Fact]
-    public void CASTLE_Construction_And_Discover()
+    public void CASTLE_FindsCausalStructure()
     {
         var algo = new CASTLEAlgorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
-        Assert.NotNull(graph);
-        Assert.Equal(3, graph.FeatureNames.Length);
-        Assert.Equal(3, graph.AdjacencyMatrix.Rows);
-        Assert.Equal(3, graph.AdjacencyMatrix.Columns);
+        CausalDiscoveryTestHelper.AssertMeaningfulGraph(graph);
+        CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }
 
     [Fact]
-    public void DECI_Construction_And_Discover()
+    public void DECI_FindsCausalStructure()
     {
         var algo = new DECIAlgorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
-        Assert.NotNull(graph);
-        Assert.Equal(3, graph.FeatureNames.Length);
-        Assert.Equal(3, graph.AdjacencyMatrix.Rows);
-        Assert.Equal(3, graph.AdjacencyMatrix.Columns);
+        CausalDiscoveryTestHelper.AssertMeaningfulGraph(graph);
+        CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }
 
     [Fact]
-    public void AVICI_Construction_And_Discover()
+    public void AVICI_FindsCausalStructure()
     {
         var algo = new AVICIAlgorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
-        Assert.NotNull(graph);
-        Assert.Equal(3, graph.FeatureNames.Length);
-        Assert.Equal(3, graph.AdjacencyMatrix.Rows);
-        Assert.Equal(3, graph.AdjacencyMatrix.Columns);
+        CausalDiscoveryTestHelper.AssertMeaningfulGraph(graph);
+        CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }
 
     [Fact]
-    public void AmortizedCD_Construction_And_Discover()
+    public void AmortizedCD_FindsCausalStructure()
     {
         var algo = new AmortizedCDAlgorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
-        Assert.NotNull(graph);
-        Assert.Equal(3, graph.FeatureNames.Length);
-        Assert.Equal(3, graph.AdjacencyMatrix.Rows);
-        Assert.Equal(3, graph.AdjacencyMatrix.Columns);
+        CausalDiscoveryTestHelper.AssertMeaningfulGraph(graph);
+        CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }
 
     [Fact]
-    public void CausalVAE_Construction_And_Discover()
+    public void CausalVAE_FindsCausalStructure()
     {
         var algo = new CausalVAEAlgorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
-        Assert.NotNull(graph);
-        Assert.Equal(3, graph.FeatureNames.Length);
-        Assert.Equal(3, graph.AdjacencyMatrix.Rows);
-        Assert.Equal(3, graph.AdjacencyMatrix.Columns);
+        CausalDiscoveryTestHelper.AssertMeaningfulGraph(graph);
+        CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }
 
     [Fact]
-    public void TCDF_Construction_And_Discover()
+    public void TCDF_FindsCausalStructure()
     {
         var algo = new TCDFAlgorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
-        Assert.NotNull(graph);
-        Assert.Equal(3, graph.FeatureNames.Length);
-        Assert.Equal(3, graph.AdjacencyMatrix.Rows);
-        Assert.Equal(3, graph.AdjacencyMatrix.Columns);
+        CausalDiscoveryTestHelper.AssertMeaningfulGraph(graph);
+        CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }
 }

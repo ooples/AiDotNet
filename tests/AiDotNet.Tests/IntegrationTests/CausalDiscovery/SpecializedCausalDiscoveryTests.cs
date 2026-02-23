@@ -6,12 +6,13 @@ namespace AiDotNet.Tests.IntegrationTests.CausalDiscovery;
 
 /// <summary>
 /// Integration tests for specialized causal discovery algorithms.
+/// Verifies each algorithm finds meaningful causal structure in strongly correlated data.
 /// </summary>
 public class SpecializedCausalDiscoveryTests
 {
     private static Matrix<double> CreateSyntheticData()
     {
-        int n = 30;
+        int n = 50;
         var data = new double[n, 3];
         for (int i = 0; i < n; i++)
         {
@@ -27,13 +28,11 @@ public class SpecializedCausalDiscoveryTests
     private static readonly string[] FeatureNames = ["X0", "X1", "X2"];
 
     [Fact]
-    public void GOBNILP_Construction_And_Discover()
+    public void GOBNILP_FindsCausalStructure()
     {
         var algo = new GOBNILPAlgorithm<double>();
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
-        Assert.NotNull(graph);
-        Assert.Equal(3, graph.FeatureNames.Length);
-        Assert.Equal(3, graph.AdjacencyMatrix.Rows);
-        Assert.Equal(3, graph.AdjacencyMatrix.Columns);
+        CausalDiscoveryTestHelper.AssertMeaningfulGraph(graph);
+        CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }
 }
