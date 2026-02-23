@@ -68,7 +68,7 @@ public class EBranchformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     }
 
     public Task<TranscriptionResult<T>> TranscribeAsync(Tensor<T> audio, string? language = null, bool includeTimestamps = false, CancellationToken cancellationToken = default) => Task.Run(() => { cancellationToken.ThrowIfCancellationRequested(); return Transcribe(audio, language, includeTimestamps); }, cancellationToken);
-    public string DetectLanguage(Tensor<T> audio) { var features = PreprocessAudio(audio); Tensor<T> logits; if (IsOnnxMode && OnnxEncoder is not null) logits = OnnxEncoder.Run(features); else { logits = features; foreach (var l in Layers) logits = l.Forward(logits); } var (tokens, _) = CTCGreedyDecodeWithConfidence(logits); return ClassifyLanguageFromTokens(tokens); }
+    public string DetectLanguage(Tensor<T> audio) => _options.Language; // Monolingual model - returns configured language
     public IReadOnlyDictionary<string, T> DetectLanguageProbabilities(Tensor<T> audio)
     {
         var detected = DetectLanguage(audio);
@@ -96,7 +96,7 @@ public class EBranchformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     /// as a best-effort fallback for models with Unicode-based token vocabularies.
     /// ONNX models typically include their own tokenizer; this path is for native mode.
     /// </summary>
-    private static string TokensToText(List<int> tokens) { var sb = new System.Text.StringBuilder(); foreach (var t in tokens) { if (t > 0 && t <= char.MaxValue) sb.Append((char)t); else if (t > char.MaxValue && t <= 0x10FFFF) sb.Append(char.ConvertFromUtf32(t)); } return sb.ToString().Trim(); }
+    private string TokensToText(List<int> tokens) { var vocab = _options.Vocabulary; if (vocab is not null && vocab.Length > 0) { var sb = new System.Text.StringBuilder(); foreach (var t in tokens) { if (t > 0 && t < vocab.Length) sb.Append(vocab[t]); } return sb.ToString().Trim(); } var fb = new System.Text.StringBuilder(); foreach (var t in tokens) { if (t > 0 && t <= char.MaxValue) fb.Append((char)t); else if (t > char.MaxValue && t <= 0x10FFFF) fb.Append(char.ConvertFromUtf32(t)); } return fb.ToString().Trim(); }
     private IReadOnlyList<TranscriptionSegment<T>> ExtractSegments(string text, double duration, double confidence) { if (string.IsNullOrWhiteSpace(text)) return Array.Empty<TranscriptionSegment<T>>(); return new[] { new TranscriptionSegment<T> { Text = text, StartTime = 0.0, EndTime = duration, Confidence = NumOps.FromDouble(confidence) } }; }
     private string ClassifyLanguageFromTokens(List<int> _) => _options.Language;
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(EBranchformer<T>)); }

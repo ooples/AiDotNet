@@ -92,20 +92,29 @@ public class Paraformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp)) return new Paraformer<T>(Architecture, mp, _options); return new Paraformer<T>(Architecture, _options); }
 
     private (List<int> tokens, double confidence) GreedyDecodeWithConfidence(Tensor<T> logits) { var tokens = new List<int>(); double totalConf = 0; int confCount = 0; int prevToken = -1; int numFrames = logits.Rank >= 2 ? logits.Shape[0] : 1; int vocabSize = logits.Rank >= 2 ? logits.Shape[^1] : logits.Shape[0]; for (int t = 0; t < numFrames && tokens.Count < _options.MaxTextLength; t++) { int maxIdx = 0; double maxVal = double.NegativeInfinity; for (int v = 0; v < vocabSize; v++) { double val = logits.Rank >= 2 ? NumOps.ToDouble(logits[t, v]) : NumOps.ToDouble(logits[v]); if (val > maxVal) { maxVal = val; maxIdx = v; } } double sumExp = 0; for (int v = 0; v < vocabSize; v++) { double val = logits.Rank >= 2 ? NumOps.ToDouble(logits[t, v]) : NumOps.ToDouble(logits[v]); sumExp += Math.Exp(val - maxVal); } double frameConf = 1.0 / sumExp; if (maxIdx != prevToken && maxIdx > 0) { tokens.Add(maxIdx); totalConf += frameConf; confCount++; } prevToken = maxIdx; } return (tokens, confCount > 0 ? totalConf / confCount : 0.0); }
-    private static string TokensToText(List<int> tokens)
+    private string TokensToText(List<int> tokens)
     {
-        // Paraformer uses a SentencePiece vocabulary. Without a loaded vocab, map token IDs
-        // to Unicode codepoints as a best-effort fallback for models that use Unicode-based tokens.
-        var sb = new System.Text.StringBuilder();
+        var vocab = _options.Vocabulary;
+        if (vocab is not null && vocab.Length > 0)
+        {
+            var sb = new System.Text.StringBuilder();
+            foreach (var t in tokens)
+            {
+                if (t > 0 && t < vocab.Length) sb.Append(vocab[t]);
+            }
+            return sb.ToString().Trim();
+        }
+        // Fallback: Unicode codepoint mapping for models that use Unicode-based tokens
+        var fb = new System.Text.StringBuilder();
         foreach (var t in tokens)
         {
-            if (t > 0 && t <= char.MaxValue) sb.Append((char)t);
-            else if (t > char.MaxValue && t <= 0x10FFFF) sb.Append(char.ConvertFromUtf32(t));
+            if (t > 0 && t <= char.MaxValue) fb.Append((char)t);
+            else if (t > char.MaxValue && t <= 0x10FFFF) fb.Append(char.ConvertFromUtf32(t));
         }
-        return sb.ToString().Trim();
+        return fb.ToString().Trim();
     }
     private IReadOnlyList<TranscriptionSegment<T>> ExtractSegments(string text, double duration, double confidence) { if (string.IsNullOrWhiteSpace(text)) return Array.Empty<TranscriptionSegment<T>>(); return new[] { new TranscriptionSegment<T> { Text = text, StartTime = 0.0, EndTime = duration, Confidence = NumOps.FromDouble(confidence) } }; }
-    private string ClassifyLanguageFromTokens(List<int> tokens) { if (tokens.Count == 0) return _options.Language; int cjkCount = 0, latinCount = 0; foreach (var t in tokens) { if (t >= 0x4E00 && t <= 0x9FFF) cjkCount++; else if (t >= 0x41 && t <= 0x7A) latinCount++; } if (cjkCount > latinCount && SupportedLanguages.Contains("zh")) return "zh"; return _options.Language; }
+    private string ClassifyLanguageFromTokens(List<int> _) => _options.Language;
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(Paraformer<T>)); }
     protected override void Dispose(bool disposing) { if (_disposed) return; if (disposing) OnnxEncoder?.Dispose(); _disposed = true; base.Dispose(disposing); }
 }

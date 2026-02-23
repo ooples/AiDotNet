@@ -85,7 +85,7 @@ public class EBranchformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 
     public Task<TranscriptionResult<T>> TranscribeAsync(Tensor<T> audio, string? language = null,
         bool includeTimestamps = false, CancellationToken cancellationToken = default)
-        => Task.Run(() => Transcribe(audio, language, includeTimestamps), cancellationToken);
+        => Task.Run(() => { cancellationToken.ThrowIfCancellationRequested(); return Transcribe(audio, language, includeTimestamps); }, cancellationToken);
     public string DetectLanguage(Tensor<T> audio)
     {
         ThrowIfDisposed();

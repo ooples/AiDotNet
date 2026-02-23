@@ -29,7 +29,7 @@ public class ParaformerOptions : ModelOptions
         VocabSize = other.VocabSize;
         MaxTextLength = other.MaxTextLength;
         ModelPath = other.ModelPath;
-        OnnxOptions = other.OnnxOptions;
+        OnnxOptions = new OnnxModelOptions(other.OnnxOptions);
         DropoutRate = other.DropoutRate;
         Language = other.Language;
     }
@@ -46,4 +46,6 @@ public class ParaformerOptions : ModelOptions
     public OnnxModelOptions OnnxOptions { get; set; } = new();
     public double DropoutRate { get; set; } = 0.1;
     public string Language { get; set; } = "en";
+    /// <summary>Optional vocabulary mapping token IDs to text tokens (e.g., SentencePiece vocabulary).</summary>
+    public string[]? Vocabulary { get; set; }
 }

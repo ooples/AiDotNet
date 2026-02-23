@@ -36,7 +36,7 @@ public class EBranchformerOptions : ModelOptions
         NumMels = other.NumMels;
         VocabSize = other.VocabSize;
         ModelPath = other.ModelPath;
-        OnnxOptions = other.OnnxOptions;
+        OnnxOptions = new OnnxModelOptions(other.OnnxOptions);
         DropoutRate = other.DropoutRate;
         Language = other.Language;
         Vocabulary = other.Vocabulary;

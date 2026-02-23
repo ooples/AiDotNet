@@ -31,7 +31,7 @@ public class FasterWhisperOptions : ModelOptions
         VocabSize = other.VocabSize;
         MaxTextLength = other.MaxTextLength;
         ModelPath = other.ModelPath;
-        OnnxOptions = other.OnnxOptions;
+        OnnxOptions = new OnnxModelOptions(other.OnnxOptions);
         DropoutRate = other.DropoutRate;
         Language = other.Language;
         ComputeType = other.ComputeType;

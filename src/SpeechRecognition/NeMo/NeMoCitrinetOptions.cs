@@ -28,7 +28,7 @@ public class NeMoCitrinetOptions : ModelOptions
         VocabSize = other.VocabSize;
         MaxTextLength = other.MaxTextLength;
         ModelPath = other.ModelPath;
-        OnnxOptions = other.OnnxOptions;
+        OnnxOptions = new OnnxModelOptions(other.OnnxOptions);
         DropoutRate = other.DropoutRate;
         Language = other.Language;
         SqueezeExcitationRatio = other.SqueezeExcitationRatio;
