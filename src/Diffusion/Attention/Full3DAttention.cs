@@ -27,7 +27,7 @@ namespace AiDotNet.Diffusion.Attention;
 /// - Flattens all frames and spatial positions into a single sequence
 /// - Applies multi-head self-attention across the entire video volume
 /// - Uses Flash Attention for memory efficiency
-/// - Optionally uses shifted window attention for efficiency
+/// - Uses Flash Attention implementation for O(N) memory
 /// </para>
 /// </remarks>
 public class Full3DAttention<T> : LayerBase<T>

@@ -87,9 +87,10 @@ public class TemporalConvolution<T> : LayerBase<T>
         _causal = causal;
 
         // Approximates temporal 1D convolution via dense projection across channels per frame.
-        // A full implementation would use depthwise 1D convolution along the time axis with
-        // the specified kernel size. This dense approximation captures per-frame channel mixing
-        // and serves as a placeholder for models that primarily use ONNX inference.
+        // TODO: Replace with depthwise 1D convolution that uses kernelSize along the time axis
+        // and applies causal masking when _causal is true (zero-pad left, no right context).
+        // The current dense layer captures per-frame channel mixing but does not model
+        // cross-frame temporal dependencies. This serves as a placeholder for ONNX inference.
         _conv = new DenseLayer<T>(channels, channels, (IActivationFunction<T>)new GELUActivation<T>());
 
         _norm = new LayerNormalizationLayer<T>(channels);
