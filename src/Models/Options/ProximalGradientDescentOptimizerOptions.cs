@@ -44,6 +44,14 @@ namespace AiDotNet.Models.Options;
 public class ProximalGradientDescentOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOptions<T, TInput, TOutput>
 {
     /// <summary>
+    /// Initializes a new instance of the ProximalGradientDescentOptimizerOptions class with appropriate defaults.
+    /// </summary>
+    public ProximalGradientDescentOptimizerOptions()
+    {
+        MaxIterations = 1000;
+    }
+
+    /// <summary>
     /// Gets or sets the batch size for mini-batch gradient descent.
     /// </summary>
     /// <value>A positive integer, defaulting to 32.</value>
@@ -219,11 +227,10 @@ public class ProximalGradientDescentOptimizerOptions<T, TInput, TOutput> : Gradi
     /// - When running many experimental models where time is limited
     /// - When you find that the model converges well before reaching the limit
     /// 
-    /// Note: This setting overrides the MaxIterations from the parent class to provide a default
+    /// Note: The default value for MaxIterations is set to 1000 via the constructor, which is
     /// specifically calibrated for proximal gradient descent.
     /// </para>
     /// </remarks>
-    public new int MaxIterations { get; set; } = 1000;
 
     /// <summary>
     /// Gets or sets the multiplicative factor for increasing the learning rate during adaptive optimization.

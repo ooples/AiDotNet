@@ -834,6 +834,23 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// </remarks>
     protected void UpdateBestSolution(OptimizationStepData<T, TInput, TOutput> currentStepData, ref OptimizationStepData<T, TInput, TOutput> bestStepData)
     {
+        // If bestStepData has never been set by a real evaluation (empty SelectedFeatures
+        // and default fitness), always accept the first real result. This prevents a bug
+        // where the default FitnessScore of 0 is considered "better" than real evaluations
+        // by fitness calculators that treat lower scores as better.
+        bool bestIsUninitialized = bestStepData.SelectedFeatures.Count == 0
+            && NumOps.Equals(bestStepData.FitnessScore, NumOps.Zero);
+
+        if (bestIsUninitialized)
+        {
+            bestStepData.Solution = currentStepData.Solution;
+            bestStepData.FitnessScore = currentStepData.FitnessScore;
+            bestStepData.FitDetectionResult = currentStepData.FitDetectionResult;
+            bestStepData.EvaluationData = currentStepData.EvaluationData;
+            bestStepData.SelectedFeatures = currentStepData.SelectedFeatures;
+            return;
+        }
+
         var currentResult = new ModelResult<T, TInput, TOutput>
         {
             Solution = currentStepData.Solution,
