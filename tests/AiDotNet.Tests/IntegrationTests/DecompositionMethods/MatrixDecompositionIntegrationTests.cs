@@ -911,9 +911,10 @@ public class MatrixDecompositionIntegrationTests
             }
 
         double relativeError = Math.Sqrt(errorNorm / Math.Max(originalNorm, 1e-10));
-        // ICA uses non-deterministic SecureRandom, so reconstruction quality varies.
-        Assert.True(relativeError < 1.0,
-            $"ICA reconstruction relative error {relativeError:F4} should be < 1.0");
+        // ICA uses non-deterministic SecureRandom, so some variance is expected,
+        // but reconstruction should still be reasonably close to the original.
+        Assert.True(relativeError < 0.3,
+            $"ICA reconstruction relative error {relativeError:F4} should be < 0.3");
     }
 
     #endregion
@@ -1000,7 +1001,7 @@ public class MatrixDecompositionIntegrationTests
     #region TakagiDecomposition Tests
 
     [Fact]
-    public void Takagi_SigmaMatrix_IsReal()
+    public void Takagi_SigmaMatrix_IsDiagonalWithRealNonNegativeValues()
     {
         var matrix = CreateSPDMatrix();
         var takagi = new TakagiDecomposition<double>(matrix);
@@ -1008,6 +1009,18 @@ public class MatrixDecompositionIntegrationTests
 
         Assert.True(sigma.Rows > 0, "Sigma matrix should have rows");
         Assert.True(sigma.Columns > 0, "Sigma matrix should have columns");
+
+        // Verify sigma is diagonal: off-diagonal elements must be zero
+        for (int i = 0; i < sigma.Rows; i++)
+            for (int j = 0; j < sigma.Columns; j++)
+            {
+                if (i != j)
+                    Assert.True(Math.Abs(sigma[i, j]) < Tolerance,
+                        $"Off-diagonal Sigma[{i},{j}] = {sigma[i, j]} should be zero");
+                else
+                    Assert.True(sigma[i, j] >= -Tolerance,
+                        $"Diagonal Sigma[{i},{i}] = {sigma[i, j]} should be non-negative");
+            }
     }
 
     [Fact]
