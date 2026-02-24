@@ -21,6 +21,7 @@ namespace AiDotNet.Evaluation.Metrics.Classification;
 public class FalseOmissionRateMetric<T> : IClassificationMetric<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+    private readonly T _positiveLabel;
 
     public string Name => "FalseOmissionRate";
     public string Category => "Classification";
@@ -31,20 +32,29 @@ public class FalseOmissionRateMetric<T> : IClassificationMetric<T>
     public bool RequiresProbabilities => false;
     public bool SupportsMultiClass => false;
 
+    public FalseOmissionRateMetric(T? positiveLabel = default)
+    {
+        _positiveLabel = positiveLabel ?? NumOps.One;
+    }
+
     public T Compute(ReadOnlySpan<T> predictions, ReadOnlySpan<T> actuals)
     {
         if (predictions.Length != actuals.Length)
             throw new ArgumentException("Predictions and actuals must have the same length.");
         if (predictions.Length == 0) return NumOps.Zero;
 
+        double positiveLabelValue = NumOps.ToDouble(_positiveLabel);
         int tn = 0, fn = 0;
         for (int i = 0; i < predictions.Length; i++)
         {
-            bool pred = NumOps.ToDouble(predictions[i]) >= 0.5;
-            bool actual = NumOps.ToDouble(actuals[i]) >= 0.5;
+            bool isActualPositive = Math.Abs(NumOps.ToDouble(actuals[i]) - positiveLabelValue) < 1e-10;
+            bool isPredictedPositive = Math.Abs(NumOps.ToDouble(predictions[i]) - positiveLabelValue) < 1e-10;
 
-            if (!pred && !actual) tn++;
-            else if (!pred && actual) fn++;
+            if (!isPredictedPositive)
+            {
+                if (!isActualPositive) tn++;
+                else fn++;
+            }
         }
 
         int negatives = tn + fn;
