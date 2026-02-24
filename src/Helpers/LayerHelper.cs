@@ -14840,6 +14840,73 @@ public static class LayerHelper<T>
     }
 
     /// <summary>
+    /// Creates default layers for the RWKV-7 "Goose" language model.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="vocabSize">Size of the token vocabulary (default: 65536).</param>
+    /// <param name="modelDim">The model dimension d_model (default: 768).</param>
+    /// <param name="numHeads">Number of heads per block (default: 12). Must divide modelDim.</param>
+    /// <param name="numLayers">Number of RWKV-7 blocks (default: 12).</param>
+    /// <param name="ffnMultiplier">FFN expansion multiplier (default: 3.5).</param>
+    /// <param name="maxSeqLength">Maximum sequence length for parallel mode (default: 4096).</param>
+    /// <returns>An enumerable collection of layers for the RWKV-7 language model.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> RWKV-7 "Goose" is a linear-time language model that replaces
+    /// the fixed exponential decay of earlier RWKV versions with learnable, data-dependent
+    /// transition matrices for dynamic state evolution.
+    ///
+    /// <b>Layer Structure:</b>
+    /// 1. Token embedding: DenseLayer(vocabSize → modelDim) with GELU
+    /// 2. N x RWKV7Block: WKV-7 time mixing + SiLU channel mixing
+    /// 3. LM head: DenseLayer(modelDim → vocabSize)
+    ///
+    /// <b>Key Innovation (WKV-7):</b>
+    /// S_t = diag(sigmoid(a_t)) * S_{t-1} + sigmoid(b_t) * outer(k_t, v_t)
+    /// where a_t and b_t are learned data-dependent transition vectors.
+    /// </para>
+    /// <para>
+    /// <b>Reference:</b> Peng et al., "RWKV-7 Goose with Expressive Dynamic State Evolution", 2025.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultRWKV7LanguageModelLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int vocabSize = 65536,
+        int modelDim = 768,
+        int numHeads = 12,
+        int numLayers = 12,
+        double ffnMultiplier = 3.5,
+        int maxSeqLength = 4096)
+    {
+        // === Token Embedding ===
+        // Projects one-hot token indices from vocabSize to modelDim.
+        yield return new DenseLayer<T>(
+            inputSize: vocabSize,
+            outputSize: modelDim,
+            activationFunction: new GELUActivation<T>());
+
+        // === RWKV-7 Blocks ===
+        // Each block contains:
+        //   - Time mixing: token shift → project r,k,v,a,b → WKV-7 state update → group norm → output projection
+        //   - Channel mixing: token shift → SiLU gating → receptance gate → output
+        // With layer normalization and residual connections.
+        for (int layer = 0; layer < numLayers; layer++)
+        {
+            yield return new RWKV7Block<T>(
+                sequenceLength: maxSeqLength,
+                modelDimension: modelDim,
+                numHeads: numHeads,
+                ffnMultiplier: ffnMultiplier);
+        }
+
+        // === LM Head ===
+        // Projects from modelDim back to vocabSize for next-token prediction logits.
+        yield return new DenseLayer<T>(
+            inputSize: modelDim,
+            outputSize: vocabSize,
+            activationFunction: null);
+    }
+
+    /// <summary>
     /// Creates default layers for the S4 (Structured State Space Sequence) model.
     /// </summary>
     /// <param name="architecture">The neural network architecture configuration.</param>
@@ -22445,6 +22512,495 @@ public static class LayerHelper<T>
         yield return new DenseLayer<T>(encoderDim, intermediateSize, geluActivation);
         yield return new LayerNormalizationLayer<T>(intermediateSize);
         yield return new DenseLayer<T>(intermediateSize, rirLength, (IActivationFunction<T>?)null);
+    }
+
+    #endregion
+
+    #region ASR LayerHelper Methods
+
+    /// <summary>
+    /// Creates default layers for a Branchformer encoder with parallel attention + cgMLP branches.
+    /// Architecture: Conv subsampling → N Branchformer blocks (parallel MHA + cgMLP, concat merge) → CTC head.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultBranchformerLayers(
+        int encoderDim = 512,
+        int numLayers = 12,
+        int numAttentionHeads = 8,
+        int cgmlpDim = 3072,
+        int numMels = 80,
+        int vocabSize = 5000,
+        double dropoutRate = 0.1,
+        int maxSequenceLength = 750)
+    {
+        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
+        var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
+        var reluActivation = (IActivationFunction<T>)new ReLUActivation<T>();
+
+        // Conv subsampling (stride 4)
+        yield return new DenseLayer<T>(numMels, encoderDim, reluActivation);
+        yield return new BatchNormalizationLayer<T>(encoderDim);
+        yield return new DenseLayer<T>(encoderDim, encoderDim, reluActivation);
+        yield return new BatchNormalizationLayer<T>(encoderDim);
+        if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+
+        // Branchformer blocks: parallel self-attention + cgMLP branches, then concat-merge
+        for (int i = 0; i < numLayers; i++)
+        {
+            // Branch 1: Multi-head self-attention
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: maxSequenceLength,
+                embeddingDimension: encoderDim,
+                headCount: numAttentionHeads);
+            yield return new LayerNormalizationLayer<T>(encoderDim);
+
+            // Branch 2: Convolutional Gating MLP (cgMLP)
+            yield return new DenseLayer<T>(encoderDim, cgmlpDim, geluActivation);
+            yield return new DenseLayer<T>(cgmlpDim, encoderDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(encoderDim);
+
+            // Concat merge projection (2*dim -> dim)
+            yield return new DenseLayer<T>(encoderDim * 2, encoderDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(encoderDim);
+
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // CTC output head
+        yield return new LayerNormalizationLayer<T>(encoderDim);
+        yield return new DenseLayer<T>(encoderDim, vocabSize, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates default layers for a Squeezeformer encoder with temporal U-Net structure.
+    /// Architecture: Conv subsampling → N Squeezeformer blocks (MHA + Conv + depthwise downsampling) → CTC head.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultSqueezeformerLayers(
+        int encoderDim = 512,
+        int numLayers = 16,
+        int numAttentionHeads = 8,
+        int feedForwardExpansionFactor = 4,
+        int numMels = 80,
+        int vocabSize = 5000,
+        double dropoutRate = 0.1,
+        int maxSequenceLength = 750)
+    {
+        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
+        var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
+        var reluActivation = (IActivationFunction<T>)new ReLUActivation<T>();
+        int ffDim = encoderDim * feedForwardExpansionFactor;
+
+        // Conv subsampling
+        yield return new DenseLayer<T>(numMels, encoderDim, reluActivation);
+        yield return new BatchNormalizationLayer<T>(encoderDim);
+        yield return new DenseLayer<T>(encoderDim, encoderDim, reluActivation);
+        yield return new BatchNormalizationLayer<T>(encoderDim);
+        if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+
+        // Squeezeformer blocks with temporal U-Net (micro-macro structure)
+        for (int i = 0; i < numLayers; i++)
+        {
+            // Pre-norm MHA
+            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: maxSequenceLength,
+                embeddingDimension: encoderDim,
+                headCount: numAttentionHeads);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+
+            // Depthwise separable convolution module
+            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new DenseLayer<T>(encoderDim, encoderDim * 2, geluActivation);
+            yield return new BatchNormalizationLayer<T>(encoderDim * 2);
+            yield return new DenseLayer<T>(encoderDim * 2, encoderDim, identityActivation);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+
+            // Feed-forward
+            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new DenseLayer<T>(encoderDim, ffDim, geluActivation);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            yield return new DenseLayer<T>(ffDim, encoderDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(encoderDim);
+        }
+
+        // CTC output head
+        yield return new LayerNormalizationLayer<T>(encoderDim);
+        yield return new DenseLayer<T>(encoderDim, vocabSize, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates default layers for a Conformer with RNN-T (Transducer) decoder.
+    /// Architecture: Conformer encoder → prediction network (LSTM-like) → joint network → vocab.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultConformerTransducerLayers(
+        int encoderDim = 512,
+        int numEncoderLayers = 18,
+        int numAttentionHeads = 8,
+        int feedForwardExpansionFactor = 4,
+        int predictionDim = 640,
+        int jointDim = 640,
+        int numMels = 80,
+        int vocabSize = 5000,
+        double dropoutRate = 0.1,
+        int maxSequenceLength = 750)
+    {
+        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
+        var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
+        var reluActivation = (IActivationFunction<T>)new ReLUActivation<T>();
+        int ffDim = encoderDim * feedForwardExpansionFactor;
+
+        // Conv subsampling
+        yield return new DenseLayer<T>(numMels, encoderDim, reluActivation);
+        yield return new BatchNormalizationLayer<T>(encoderDim);
+        yield return new DenseLayer<T>(encoderDim, encoderDim, reluActivation);
+        yield return new BatchNormalizationLayer<T>(encoderDim);
+        if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+
+        // Conformer encoder blocks
+        for (int i = 0; i < numEncoderLayers; i++)
+        {
+            yield return new DenseLayer<T>(encoderDim, ffDim, geluActivation);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            yield return new DenseLayer<T>(ffDim, encoderDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new MultiHeadAttentionLayer<T>(maxSequenceLength, encoderDim, numAttentionHeads);
+            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new DenseLayer<T>(encoderDim, encoderDim * 2, geluActivation);
+            yield return new BatchNormalizationLayer<T>(encoderDim * 2);
+            yield return new DenseLayer<T>(encoderDim * 2, encoderDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new DenseLayer<T>(encoderDim, ffDim, geluActivation);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            yield return new DenseLayer<T>(ffDim, encoderDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(encoderDim);
+        }
+
+        // Prediction network (label predictor, LSTM-like)
+        yield return new DenseLayer<T>(vocabSize, predictionDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>(predictionDim);
+        yield return new DenseLayer<T>(predictionDim, predictionDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>(predictionDim);
+
+        // Joint network (combines encoder + prediction)
+        yield return new DenseLayer<T>(encoderDim + predictionDim, jointDim, reluActivation);
+        yield return new DenseLayer<T>(jointDim, vocabSize, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates default layers for a Whisper-style encoder-decoder ASR.
+    /// Architecture: Conv subsampling → N Transformer encoder layers → N Transformer decoder layers → vocab projection.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultWhisperEncoderDecoderLayers(
+        int encoderDim = 512,
+        int decoderDim = 512,
+        int numEncoderLayers = 12,
+        int numDecoderLayers = 12,
+        int numAttentionHeads = 8,
+        int feedForwardDim = 2048,
+        int numMels = 80,
+        int vocabSize = 51865,
+        double dropoutRate = 0.0,
+        int maxSequenceLength = 1500)
+    {
+        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
+        var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
+
+        // Conv subsampling (2 conv layers with GELU)
+        yield return new DenseLayer<T>(numMels, encoderDim, geluActivation);
+        yield return new DenseLayer<T>(encoderDim, encoderDim, geluActivation);
+
+        // Transformer encoder
+        for (int i = 0; i < numEncoderLayers; i++)
+        {
+            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new MultiHeadAttentionLayer<T>(maxSequenceLength, encoderDim, numAttentionHeads);
+            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new DenseLayer<T>(encoderDim, feedForwardDim, geluActivation);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            yield return new DenseLayer<T>(feedForwardDim, encoderDim, identityActivation);
+        }
+        yield return new LayerNormalizationLayer<T>(encoderDim);
+
+        // Encoder-to-decoder projection (if dims differ)
+        if (encoderDim != decoderDim)
+            yield return new DenseLayer<T>(encoderDim, decoderDim, identityActivation);
+
+        // Transformer decoder with cross-attention
+        for (int i = 0; i < numDecoderLayers; i++)
+        {
+            // Self-attention
+            yield return new LayerNormalizationLayer<T>(decoderDim);
+            yield return new MultiHeadAttentionLayer<T>(maxSequenceLength, decoderDim, numAttentionHeads);
+            // Cross-attention
+            yield return new LayerNormalizationLayer<T>(decoderDim);
+            yield return new MultiHeadAttentionLayer<T>(maxSequenceLength, decoderDim, numAttentionHeads);
+            // Feed-forward
+            yield return new LayerNormalizationLayer<T>(decoderDim);
+            yield return new DenseLayer<T>(decoderDim, feedForwardDim, geluActivation);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            yield return new DenseLayer<T>(feedForwardDim, decoderDim, identityActivation);
+        }
+        yield return new LayerNormalizationLayer<T>(decoderDim);
+
+        // Vocabulary projection
+        yield return new DenseLayer<T>(decoderDim, vocabSize, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates default layers for a streaming Conformer with chunked attention.
+    /// Architecture: Conv subsampling → N Conformer blocks (causal/chunked attention) → CTC head.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultStreamingConformerLayers(
+        int encoderDim = 512,
+        int numLayers = 16,
+        int numAttentionHeads = 8,
+        int feedForwardExpansionFactor = 4,
+        int numMels = 80,
+        int vocabSize = 5000,
+        double dropoutRate = 0.1,
+        int maxSequenceLength = 750)
+    {
+        // Same structure as Conformer but with causal constraints implied
+        return CreateDefaultConformerLayers(
+            encoderDim, numLayers, numAttentionHeads, feedForwardExpansionFactor,
+            numMels, vocabSize, dropoutRate, maxSequenceLength);
+    }
+
+    /// <summary>
+    /// Creates default layers for an LLM-integrated ASR model.
+    /// Architecture: Audio encoder → adapter MLP → LLM decoder → vocab head.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultLLMASRLayers(
+        int encoderDim = 512,
+        int adapterDim = 1024,
+        int llmDim = 4096,
+        int numEncoderLayers = 12,
+        int numAdapterLayers = 2,
+        int numLLMLayers = 4,
+        int numAttentionHeads = 8,
+        int numMels = 80,
+        int vocabSize = 32000,
+        double dropoutRate = 0.1,
+        int maxSequenceLength = 1500)
+    {
+        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
+        var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
+        var reluActivation = (IActivationFunction<T>)new ReLUActivation<T>();
+
+        // Audio encoder (Conformer-style)
+        yield return new DenseLayer<T>(numMels, encoderDim, reluActivation);
+        yield return new BatchNormalizationLayer<T>(encoderDim);
+        yield return new DenseLayer<T>(encoderDim, encoderDim, reluActivation);
+        yield return new BatchNormalizationLayer<T>(encoderDim);
+        if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+
+        for (int i = 0; i < numEncoderLayers; i++)
+        {
+            yield return new DenseLayer<T>(encoderDim, encoderDim * 4, geluActivation);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            yield return new DenseLayer<T>(encoderDim * 4, encoderDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new MultiHeadAttentionLayer<T>(maxSequenceLength, encoderDim, numAttentionHeads);
+            yield return new LayerNormalizationLayer<T>(encoderDim);
+        }
+        yield return new LayerNormalizationLayer<T>(encoderDim);
+
+        // Adapter MLP (projects audio features to LLM embedding space)
+        for (int i = 0; i < numAdapterLayers; i++)
+        {
+            int inDim = i == 0 ? encoderDim : adapterDim;
+            yield return new DenseLayer<T>(inDim, adapterDim, geluActivation);
+            yield return new LayerNormalizationLayer<T>(adapterDim);
+        }
+        yield return new DenseLayer<T>(adapterDim, llmDim, identityActivation);
+        yield return new LayerNormalizationLayer<T>(llmDim);
+
+        // LLM decoder (lightweight Transformer decoder)
+        int llmHeads = Math.Max(1, llmDim / 128);
+        for (int i = 0; i < numLLMLayers; i++)
+        {
+            yield return new LayerNormalizationLayer<T>(llmDim);
+            yield return new MultiHeadAttentionLayer<T>(maxSequenceLength, llmDim, llmHeads);
+            yield return new LayerNormalizationLayer<T>(llmDim);
+            yield return new DenseLayer<T>(llmDim, llmDim * 4, geluActivation);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            yield return new DenseLayer<T>(llmDim * 4, llmDim, identityActivation);
+        }
+        yield return new LayerNormalizationLayer<T>(llmDim);
+        yield return new DenseLayer<T>(llmDim, vocabSize, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates default layers for a foundation model (wav2vec2/HuBERT/WavLM) fine-tuned for ASR.
+    /// Architecture: Conv feature extractor → N Transformer layers → CTC head.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultFoundationASRLayers(
+        int featureDim = 512,
+        int encoderDim = 768,
+        int numLayers = 12,
+        int numAttentionHeads = 12,
+        int feedForwardDim = 3072,
+        int vocabSize = 32,
+        double dropoutRate = 0.1,
+        int maxSequenceLength = 1500)
+    {
+        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
+        var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
+
+        // Conv feature extractor (7 conv layers for raw waveform, approximated with dense)
+        yield return new DenseLayer<T>(featureDim, encoderDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>(encoderDim);
+        if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+
+        // Transformer encoder
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new MultiHeadAttentionLayer<T>(maxSequenceLength, encoderDim, numAttentionHeads);
+            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new DenseLayer<T>(encoderDim, feedForwardDim, geluActivation);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            yield return new DenseLayer<T>(feedForwardDim, encoderDim, identityActivation);
+        }
+        yield return new LayerNormalizationLayer<T>(encoderDim);
+
+        // CTC fine-tuning head
+        yield return new DenseLayer<T>(encoderDim, vocabSize, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates default layers for a Paraformer non-autoregressive ASR model.
+    /// Architecture: Conv subsampling → Conformer encoder → CIF alignment → Transformer decoder → vocab.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultParaformerLayers(
+        int encoderDim = 512,
+        int decoderDim = 512,
+        int numEncoderLayers = 12,
+        int numDecoderLayers = 6,
+        int numAttentionHeads = 8,
+        int feedForwardDim = 2048,
+        int numMels = 80,
+        int vocabSize = 8404,
+        double dropoutRate = 0.1,
+        int maxSequenceLength = 750)
+    {
+        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
+        var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
+        var reluActivation = (IActivationFunction<T>)new ReLUActivation<T>();
+
+        // Conv subsampling
+        yield return new DenseLayer<T>(numMels, encoderDim, reluActivation);
+        yield return new BatchNormalizationLayer<T>(encoderDim);
+        yield return new DenseLayer<T>(encoderDim, encoderDim, reluActivation);
+        yield return new BatchNormalizationLayer<T>(encoderDim);
+        if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+
+        // Conformer encoder
+        for (int i = 0; i < numEncoderLayers; i++)
+        {
+            yield return new DenseLayer<T>(encoderDim, feedForwardDim, geluActivation);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            yield return new DenseLayer<T>(feedForwardDim, encoderDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new MultiHeadAttentionLayer<T>(maxSequenceLength, encoderDim, numAttentionHeads);
+            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new DenseLayer<T>(encoderDim, encoderDim * 2, geluActivation);
+            yield return new BatchNormalizationLayer<T>(encoderDim * 2);
+            yield return new DenseLayer<T>(encoderDim * 2, encoderDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(encoderDim);
+        }
+        yield return new LayerNormalizationLayer<T>(encoderDim);
+
+        // CIF (Continuous Integrate-and-Fire) alignment module
+        yield return new DenseLayer<T>(encoderDim, 1, identityActivation);
+        yield return new LayerNormalizationLayer<T>(1);
+
+        // Paraformer decoder (non-autoregressive)
+        if (encoderDim != decoderDim)
+            yield return new DenseLayer<T>(encoderDim, decoderDim, identityActivation);
+
+        for (int i = 0; i < numDecoderLayers; i++)
+        {
+            yield return new LayerNormalizationLayer<T>(decoderDim);
+            yield return new MultiHeadAttentionLayer<T>(maxSequenceLength, decoderDim, numAttentionHeads);
+            yield return new LayerNormalizationLayer<T>(decoderDim);
+            yield return new MultiHeadAttentionLayer<T>(maxSequenceLength, decoderDim, numAttentionHeads);
+            yield return new LayerNormalizationLayer<T>(decoderDim);
+            yield return new DenseLayer<T>(decoderDim, feedForwardDim, geluActivation);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            yield return new DenseLayer<T>(feedForwardDim, decoderDim, identityActivation);
+        }
+        yield return new LayerNormalizationLayer<T>(decoderDim);
+        yield return new DenseLayer<T>(decoderDim, vocabSize, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates default layers for a proprietary API wrapper ASR model.
+    /// Architecture: Lightweight mel projection → small encoder → CTC head.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultProprietaryASRLayers(
+        int encoderDim = 256,
+        int numLayers = 4,
+        int numAttentionHeads = 4,
+        int feedForwardDim = 1024,
+        int numMels = 80,
+        int vocabSize = 5000,
+        double dropoutRate = 0.1,
+        int maxSequenceLength = 750)
+    {
+        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
+        var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
+
+        yield return new DenseLayer<T>(numMels, encoderDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>(encoderDim);
+
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(maxSequenceLength, encoderDim, numAttentionHeads);
+            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new DenseLayer<T>(encoderDim, feedForwardDim, geluActivation);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            yield return new DenseLayer<T>(feedForwardDim, encoderDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(encoderDim);
+        }
+
+        yield return new DenseLayer<T>(encoderDim, vocabSize, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates default layers for a deep 1D-CNN based CTC model (Jasper/QuartzNet style).
+    /// Architecture: N residual CNN blocks → CTC head.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultDeepCNNCTCLayers(
+        int encoderDim = 512,
+        int numBlocks = 10,
+        int numSubBlocks = 5,
+        int numMels = 80,
+        int vocabSize = 5000,
+        double dropoutRate = 0.1)
+    {
+        var reluActivation = (IActivationFunction<T>)new ReLUActivation<T>();
+        var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
+
+        // Input projection
+        yield return new DenseLayer<T>(numMels, encoderDim, reluActivation);
+        yield return new BatchNormalizationLayer<T>(encoderDim);
+        if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+
+        // Residual CNN blocks (each with sub-blocks of Conv + BN + ReLU)
+        for (int b = 0; b < numBlocks; b++)
+        {
+            for (int s = 0; s < numSubBlocks; s++)
+            {
+                yield return new DenseLayer<T>(encoderDim, encoderDim, reluActivation);
+                yield return new BatchNormalizationLayer<T>(encoderDim);
+                if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            }
+        }
+
+        // CTC head
+        yield return new DenseLayer<T>(encoderDim, encoderDim, reluActivation);
+        yield return new BatchNormalizationLayer<T>(encoderDim);
+        yield return new DenseLayer<T>(encoderDim, vocabSize, identityActivation);
     }
 
     #endregion
@@ -30963,6 +31519,79 @@ public static class LayerHelper<T>
 
     #endregion
 
+    #region Mamba2 Forecasting Layers
+
+    /// <summary>
+    /// Creates default layers for the Mamba-2 time series forecasting model.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="contextLength">Input sequence length (default: 512).</param>
+    /// <param name="forecastHorizon">Number of future steps to predict (default: 96).</param>
+    /// <param name="numFeatures">Number of input features per timestep (default: 1).</param>
+    /// <param name="modelDim">Model dimension d_model (default: 256).</param>
+    /// <param name="stateDim">State dimension per head (default: 64).</param>
+    /// <param name="numHeads">Number of heads for multi-head SSD (default: 8).</param>
+    /// <param name="expandFactor">Expansion factor for inner dimension (default: 2).</param>
+    /// <param name="numLayers">Number of Mamba2Block layers (default: 4).</param>
+    /// <param name="dropout">Dropout rate (default: 0.1).</param>
+    /// <param name="convKernelSize">Convolution kernel size (default: 4).</param>
+    /// <param name="chunkSize">Chunk size for SSD computation (default: 64).</param>
+    /// <returns>An enumerable collection of layers for the Mamba-2 forecasting model.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Mamba-2 uses the State Space Duality (SSD) algorithm
+    /// with multi-head structure for faster and more expressive sequence modeling.
+    /// </para>
+    /// <para>
+    /// <b>Reference:</b> Dao and Gu, "Transformers are SSMs", 2024.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultMamba2Layers(
+        NeuralNetworkArchitecture<T> architecture,
+        int contextLength = 512,
+        int forecastHorizon = 96,
+        int numFeatures = 1,
+        int modelDim = 256,
+        int stateDim = 64,
+        int numHeads = 8,
+        int expandFactor = 2,
+        int numLayers = 4,
+        double dropout = 0.1,
+        int convKernelSize = 4,
+        int chunkSize = 64)
+    {
+        // === Input Embedding ===
+        yield return new DenseLayer<T>(
+            inputSize: numFeatures,
+            outputSize: modelDim,
+            activationFunction: new GELUActivation<T>());
+
+        // === Mamba-2 Blocks ===
+        for (int layer = 0; layer < numLayers; layer++)
+        {
+            yield return new Mamba2Block<T>(
+                sequenceLength: contextLength,
+                modelDimension: modelDim,
+                stateDimension: stateDim,
+                numHeads: numHeads,
+                expandFactor: expandFactor,
+                convKernelSize: convKernelSize,
+                chunkSize: chunkSize);
+        }
+
+        // === Output Projection ===
+        yield return new DenseLayer<T>(
+            inputSize: modelDim * contextLength,
+            outputSize: modelDim * forecastHorizon / 4,
+            activationFunction: new GELUActivation<T>());
+
+        yield return new DenseLayer<T>(
+            inputSize: modelDim * forecastHorizon / 4,
+            outputSize: forecastHorizon,
+            activationFunction: null);
+    }
+
+    #endregion
+
     #region SAM21 Layers
 
     /// <summary>
@@ -31063,6 +31692,67 @@ public static class LayerHelper<T>
         yield return new ConvolutionalLayer<T>(encoderOutputChannels, featureHeight, featureWidth, decoderDim, 1, 1, 0, relu);
         yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, decoderDim, 3, 1, 1, relu);
         yield return new ConvolutionalLayer<T>(decoderDim, featureHeight, featureWidth, numClasses, 1, 1, 0, identity);
+    }
+
+    #endregion
+
+    #region RWKV Forecasting Layers
+
+    /// <summary>
+    /// Creates default layers for the RWKV time series forecasting model.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="contextLength">Input sequence length (default: 512).</param>
+    /// <param name="forecastHorizon">Number of future steps to predict (default: 96).</param>
+    /// <param name="numFeatures">Number of input features per timestep (default: 1).</param>
+    /// <param name="modelDim">Model dimension d_model (default: 256).</param>
+    /// <param name="numHeads">Number of RWKV heads (default: 8).</param>
+    /// <param name="numLayers">Number of RWKV layers (default: 4).</param>
+    /// <param name="dropout">Dropout rate (default: 0.1).</param>
+    /// <returns>An enumerable collection of layers for the RWKV forecasting model.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> RWKV combines Transformer-like parallel training with
+    /// RNN-like constant-memory inference for efficient sequence modeling.
+    /// </para>
+    /// <para>
+    /// <b>Reference:</b> Peng et al., "RWKV: Reinventing RNNs for the Transformer Era", 2023.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultRWKVForecastingLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int contextLength = 512,
+        int forecastHorizon = 96,
+        int numFeatures = 1,
+        int modelDim = 256,
+        int numHeads = 8,
+        int numLayers = 4,
+        double dropout = 0.1)
+    {
+        // === Input Embedding ===
+        yield return new DenseLayer<T>(
+            inputSize: numFeatures,
+            outputSize: modelDim,
+            activationFunction: new GELUActivation<T>());
+
+        // === RWKV Layers ===
+        for (int layer = 0; layer < numLayers; layer++)
+        {
+            yield return new RWKVLayer<T>(
+                sequenceLength: contextLength,
+                modelDimension: modelDim,
+                numHeads: numHeads);
+        }
+
+        // === Output Projection ===
+        yield return new DenseLayer<T>(
+            inputSize: modelDim * contextLength,
+            outputSize: modelDim * forecastHorizon / 4,
+            activationFunction: new GELUActivation<T>());
+
+        yield return new DenseLayer<T>(
+            inputSize: modelDim * forecastHorizon / 4,
+            outputSize: forecastHorizon,
+            activationFunction: null);
     }
 
     #endregion

@@ -21,6 +21,9 @@ namespace AiDotNet.Onnx;
 /// </remarks>
 public class OnnxModelOptions
 {
+    /// <summary>Initializes a new instance with default values.</summary>
+    public OnnxModelOptions() { }
+
     /// <summary>
     /// Gets or sets the preferred execution provider.
     /// Default is Auto, which selects the best available provider.
@@ -111,6 +114,37 @@ public class OnnxModelOptions
     /// Gets or sets whether to use CUDA memory arena for better performance.
     /// </summary>
     public bool CudaUseArena { get; set; } = true;
+
+    /// <summary>
+    /// Initializes a new instance by copying from another instance.
+    /// </summary>
+    /// <param name="other">The options instance to copy from.</param>
+    /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
+    public OnnxModelOptions(OnnxModelOptions other)
+    {
+        if (other == null)
+            throw new ArgumentNullException(nameof(other));
+
+        ExecutionProvider = other.ExecutionProvider;
+        FallbackProviders = other.FallbackProviders is null
+            ? new List<OnnxExecutionProvider>()
+            : new List<OnnxExecutionProvider>(other.FallbackProviders);
+        GpuDeviceId = other.GpuDeviceId;
+        EnableMemoryPattern = other.EnableMemoryPattern;
+        EnableMemoryArena = other.EnableMemoryArena;
+        IntraOpNumThreads = other.IntraOpNumThreads;
+        InterOpNumThreads = other.InterOpNumThreads;
+        OptimizationLevel = other.OptimizationLevel;
+        EnableProfiling = other.EnableProfiling;
+        ProfileOutputPath = other.ProfileOutputPath;
+        CustomOptions = other.CustomOptions is null
+            ? new Dictionary<string, string>()
+            : new Dictionary<string, string>(other.CustomOptions);
+        LogLevel = other.LogLevel;
+        AutoWarmUp = other.AutoWarmUp;
+        CudaMemoryLimit = other.CudaMemoryLimit;
+        CudaUseArena = other.CudaUseArena;
+    }
 
     /// <summary>
     /// Creates default options for CPU execution.
