@@ -463,7 +463,7 @@ public class LayoutLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>
                 { "num_classes", _numClasses },
                 { "use_native_mode", _useNativeMode }
             },
-            ModelData = this.Serialize()
+            ModelData = SafeSerialize()
         };
     }
 

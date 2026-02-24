@@ -499,7 +499,7 @@ public class DiT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocumen
                 { "model_size", _modelSize },
                 { "use_native_mode", _useNativeMode }
             },
-            ModelData = this.Serialize()
+            ModelData = SafeSerialize()
         };
     }
 

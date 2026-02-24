@@ -301,6 +301,7 @@ public abstract class DocumentNeuralNetworkBase<T> : NeuralNetworkBase<T>
     protected virtual Tensor<T> Forward(Tensor<T> input)
     {
         Tensor<T> output = input;
+        Tensor<T>? encoderOutput = null;
         bool hasReshapedToSequence = false;
         bool hasPassedConvLayer = false;
         foreach (var layer in Layers)
@@ -326,7 +327,17 @@ public abstract class DocumentNeuralNetworkBase<T> : NeuralNetworkBase<T>
                 output = new Tensor<T>(output.Data.ToArray(), [numPatches, channels]);
                 hasReshapedToSequence = true;
             }
-            output = layer.Forward(output);
+
+            // TransformerDecoderLayer requires encoder output as cross-attention context
+            if (layer is TransformerDecoderLayer<T> decoderLayer)
+            {
+                encoderOutput ??= output;
+                output = decoderLayer.Forward(output, encoderOutput);
+            }
+            else
+            {
+                output = layer.Forward(output);
+            }
         }
         return output;
     }

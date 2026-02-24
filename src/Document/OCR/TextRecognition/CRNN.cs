@@ -517,7 +517,7 @@ public class CRNN<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
                 { "image_width", ImageSize },
                 { "use_native_mode", _useNativeMode }
             },
-            ModelData = this.Serialize()
+            ModelData = SafeSerialize()
         };
     }
 

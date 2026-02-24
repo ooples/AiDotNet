@@ -440,7 +440,7 @@ public class CRAFT<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
                 { "character_detection", true },
                 { "use_native_mode", _useNativeMode }
             },
-            ModelData = this.Serialize()
+            ModelData = SafeSerialize()
         };
     }
 
