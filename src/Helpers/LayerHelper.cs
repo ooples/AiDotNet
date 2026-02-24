@@ -14839,6 +14839,73 @@ public static class LayerHelper<T>
     }
 
     /// <summary>
+    /// Creates default layers for the RWKV-7 "Goose" language model.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="vocabSize">Size of the token vocabulary (default: 65536).</param>
+    /// <param name="modelDim">The model dimension d_model (default: 768).</param>
+    /// <param name="numHeads">Number of heads per block (default: 12). Must divide modelDim.</param>
+    /// <param name="numLayers">Number of RWKV-7 blocks (default: 12).</param>
+    /// <param name="ffnMultiplier">FFN expansion multiplier (default: 3.5).</param>
+    /// <param name="maxSeqLength">Maximum sequence length for parallel mode (default: 4096).</param>
+    /// <returns>An enumerable collection of layers for the RWKV-7 language model.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> RWKV-7 "Goose" is a linear-time language model that replaces
+    /// the fixed exponential decay of earlier RWKV versions with learnable, data-dependent
+    /// transition matrices for dynamic state evolution.
+    ///
+    /// <b>Layer Structure:</b>
+    /// 1. Token embedding: DenseLayer(vocabSize → modelDim) with GELU
+    /// 2. N x RWKV7Block: WKV-7 time mixing + SiLU channel mixing
+    /// 3. LM head: DenseLayer(modelDim → vocabSize)
+    ///
+    /// <b>Key Innovation (WKV-7):</b>
+    /// S_t = diag(sigmoid(a_t)) * S_{t-1} + sigmoid(b_t) * outer(k_t, v_t)
+    /// where a_t and b_t are learned data-dependent transition vectors.
+    /// </para>
+    /// <para>
+    /// <b>Reference:</b> Peng et al., "RWKV-7 Goose with Expressive Dynamic State Evolution", 2025.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultRWKV7LanguageModelLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int vocabSize = 65536,
+        int modelDim = 768,
+        int numHeads = 12,
+        int numLayers = 12,
+        double ffnMultiplier = 3.5,
+        int maxSeqLength = 4096)
+    {
+        // === Token Embedding ===
+        // Projects one-hot token indices from vocabSize to modelDim.
+        yield return new DenseLayer<T>(
+            inputSize: vocabSize,
+            outputSize: modelDim,
+            activationFunction: new GELUActivation<T>());
+
+        // === RWKV-7 Blocks ===
+        // Each block contains:
+        //   - Time mixing: token shift → project r,k,v,a,b → WKV-7 state update → group norm → output projection
+        //   - Channel mixing: token shift → SiLU gating → receptance gate → output
+        // With layer normalization and residual connections.
+        for (int layer = 0; layer < numLayers; layer++)
+        {
+            yield return new RWKV7Block<T>(
+                sequenceLength: maxSeqLength,
+                modelDimension: modelDim,
+                numHeads: numHeads,
+                ffnMultiplier: ffnMultiplier);
+        }
+
+        // === LM Head ===
+        // Projects from modelDim back to vocabSize for next-token prediction logits.
+        yield return new DenseLayer<T>(
+            inputSize: modelDim,
+            outputSize: vocabSize,
+            activationFunction: null);
+    }
+
+    /// <summary>
     /// Creates default layers for the S4 (Structured State Space Sequence) model.
     /// </summary>
     /// <param name="architecture">The neural network architecture configuration.</param>
@@ -24831,6 +24898,140 @@ public static class LayerHelper<T>
             yield return new LayerNormalizationLayer<T>(decoderDim);
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
+    }
+
+    #endregion
+
+    #region Mamba2 Forecasting Layers
+
+    /// <summary>
+    /// Creates default layers for the Mamba-2 time series forecasting model.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="contextLength">Input sequence length (default: 512).</param>
+    /// <param name="forecastHorizon">Number of future steps to predict (default: 96).</param>
+    /// <param name="numFeatures">Number of input features per timestep (default: 1).</param>
+    /// <param name="modelDim">Model dimension d_model (default: 256).</param>
+    /// <param name="stateDim">State dimension per head (default: 64).</param>
+    /// <param name="numHeads">Number of heads for multi-head SSD (default: 8).</param>
+    /// <param name="expandFactor">Expansion factor for inner dimension (default: 2).</param>
+    /// <param name="numLayers">Number of Mamba2Block layers (default: 4).</param>
+    /// <param name="dropout">Dropout rate (default: 0.1).</param>
+    /// <param name="convKernelSize">Convolution kernel size (default: 4).</param>
+    /// <param name="chunkSize">Chunk size for SSD computation (default: 64).</param>
+    /// <returns>An enumerable collection of layers for the Mamba-2 forecasting model.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Mamba-2 uses the State Space Duality (SSD) algorithm
+    /// with multi-head structure for faster and more expressive sequence modeling.
+    /// </para>
+    /// <para>
+    /// <b>Reference:</b> Dao and Gu, "Transformers are SSMs", 2024.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultMamba2Layers(
+        NeuralNetworkArchitecture<T> architecture,
+        int contextLength = 512,
+        int forecastHorizon = 96,
+        int numFeatures = 1,
+        int modelDim = 256,
+        int stateDim = 64,
+        int numHeads = 8,
+        int expandFactor = 2,
+        int numLayers = 4,
+        double dropout = 0.1,
+        int convKernelSize = 4,
+        int chunkSize = 64)
+    {
+        // === Input Embedding ===
+        yield return new DenseLayer<T>(
+            inputSize: numFeatures,
+            outputSize: modelDim,
+            activationFunction: new GELUActivation<T>());
+
+        // === Mamba-2 Blocks ===
+        for (int layer = 0; layer < numLayers; layer++)
+        {
+            yield return new Mamba2Block<T>(
+                sequenceLength: contextLength,
+                modelDimension: modelDim,
+                stateDimension: stateDim,
+                numHeads: numHeads,
+                expandFactor: expandFactor,
+                convKernelSize: convKernelSize,
+                chunkSize: chunkSize);
+        }
+
+        // === Output Projection ===
+        yield return new DenseLayer<T>(
+            inputSize: modelDim * contextLength,
+            outputSize: modelDim * forecastHorizon / 4,
+            activationFunction: new GELUActivation<T>());
+
+        yield return new DenseLayer<T>(
+            inputSize: modelDim * forecastHorizon / 4,
+            outputSize: forecastHorizon,
+            activationFunction: null);
+    }
+
+    #endregion
+
+    #region RWKV Forecasting Layers
+
+    /// <summary>
+    /// Creates default layers for the RWKV time series forecasting model.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="contextLength">Input sequence length (default: 512).</param>
+    /// <param name="forecastHorizon">Number of future steps to predict (default: 96).</param>
+    /// <param name="numFeatures">Number of input features per timestep (default: 1).</param>
+    /// <param name="modelDim">Model dimension d_model (default: 256).</param>
+    /// <param name="numHeads">Number of RWKV heads (default: 8).</param>
+    /// <param name="numLayers">Number of RWKV layers (default: 4).</param>
+    /// <param name="dropout">Dropout rate (default: 0.1).</param>
+    /// <returns>An enumerable collection of layers for the RWKV forecasting model.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> RWKV combines Transformer-like parallel training with
+    /// RNN-like constant-memory inference for efficient sequence modeling.
+    /// </para>
+    /// <para>
+    /// <b>Reference:</b> Peng et al., "RWKV: Reinventing RNNs for the Transformer Era", 2023.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultRWKVForecastingLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int contextLength = 512,
+        int forecastHorizon = 96,
+        int numFeatures = 1,
+        int modelDim = 256,
+        int numHeads = 8,
+        int numLayers = 4,
+        double dropout = 0.1)
+    {
+        // === Input Embedding ===
+        yield return new DenseLayer<T>(
+            inputSize: numFeatures,
+            outputSize: modelDim,
+            activationFunction: new GELUActivation<T>());
+
+        // === RWKV Layers ===
+        for (int layer = 0; layer < numLayers; layer++)
+        {
+            yield return new RWKVLayer<T>(
+                sequenceLength: contextLength,
+                modelDimension: modelDim,
+                numHeads: numHeads);
+        }
+
+        // === Output Projection ===
+        yield return new DenseLayer<T>(
+            inputSize: modelDim * contextLength,
+            outputSize: modelDim * forecastHorizon / 4,
+            activationFunction: new GELUActivation<T>());
+
+        yield return new DenseLayer<T>(
+            inputSize: modelDim * forecastHorizon / 4,
+            outputSize: forecastHorizon,
+            activationFunction: null);
     }
 
     #endregion
