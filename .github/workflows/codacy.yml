@@ -49,7 +49,7 @@ jobs:
       - name: Trivy filesystem scan (SARIF)
         # Must match checkout condition - only run if checkout happened
         if: github.event_name != 'pull_request' || github.event.pull_request.changed_files <= 150
-        uses: aquasecurity/trivy-action@c1824fd6edce30d7ab345a9989de00bbd46ef284 # v0.34.0
+        uses: aquasecurity/trivy-action@e368e328979b113139d6f9068e03accaed98a518 # v0.34.1
         with:
           scan-type: fs
           scan-ref: ${{ github.workspace }}/src
@@ -61,7 +61,7 @@ jobs:
       - name: Upload Trivy SARIF to GitHub Code Scanning
         # Must match checkout/Trivy conditions - only run if both checkout and Trivy scan happened
         if: (github.event_name != 'pull_request' || github.event.pull_request.changed_files <= 150) && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork != true)
-        uses: github/codeql-action/upload-sarif@9e907b5e64f6b83e7804b09294d44122997950d6 # v3
+        uses: github/codeql-action/upload-sarif@89a39a4e59826350b863aa6b6252a07ad50cf83e # v3
         with:
           sarif_file: trivy-results.sarif
           category: trivy-fs
