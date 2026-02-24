@@ -207,7 +207,8 @@ public abstract class SegmentationModelBase<T> : NeuralNetworkBase<T>, ISegmenta
         }
 
         var predicted = Forward(input);
-        var lossGradient = LossFunction.ComputeGradient(predicted, expectedOutput);
+        var gradVec = LossFunction.CalculateDerivative(predicted.ToVector(), expectedOutput.ToVector());
+        var lossGradient = Tensor<T>.FromVector(gradVec);
 
         BackwardPass(lossGradient);
 

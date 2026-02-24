@@ -259,7 +259,20 @@ public class YOLO26Seg<T> : NeuralNetworkBase<T>, IInstanceSegmentation<T>
     /// </para>
     /// </remarks>
     public override void UpdateParameters(Vector<T> parameters)
-    { int o = 0; foreach (var l in Layers) { int c = l.ParameterCount; if (o + c > parameters.Length) throw new ArgumentException($"Parameter vector too short: need {o + c} but got {parameters.Length}"); l.UpdateParameters(parameters.Slice(o, c)); o += c; } }
+    {
+        int o = 0;
+
+        foreach (var l in Layers)
+        {
+            int c = l.ParameterCount;
+
+            if (o + c > parameters.Length)
+                throw new ArgumentException($"Parameter vector too short: need {o + c} but got {parameters.Length}");
+
+            l.UpdateParameters(parameters.Slice(o, c));
+            o += c;
+        }
+    }
 
     /// <summary>
     /// Collects metadata describing this model's configuration.

@@ -171,7 +171,8 @@ public class YOLOv12Seg<T> : NeuralNetworkBase<T>, IInstanceSegmentation<T>
     {
         if (!_useNativeMode) throw new InvalidOperationException("Training is not supported in ONNX mode. Use the native mode constructor for training.");
         var predicted = Forward(input);
-        var lossGradient = predicted.Transform((v, idx) => NumOps.Subtract(v, expectedOutput.Data.Span[idx]));
+        var gradVec = LossFunction.CalculateDerivative(predicted.ToVector(), expectedOutput.ToVector());
+        var lossGradient = Tensor<T>.FromVector(gradVec);
         BackwardPass(lossGradient); _optimizer?.UpdateParameters(Layers);
     }
     #endregion
