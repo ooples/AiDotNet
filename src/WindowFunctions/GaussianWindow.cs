@@ -117,11 +117,19 @@ public class GaussianWindow<T> : IWindowFunction<T>
     public Vector<T> Create(int windowSize)
     {
         Vector<T> window = new Vector<T>(windowSize);
-        T center = _numOps.Divide(_numOps.FromDouble(windowSize - 1), _numOps.FromDouble(2.0));
+
+        if (windowSize == 1)
+        {
+            window[0] = _numOps.One;
+            return window;
+        }
+
+        T halfN = _numOps.FromDouble((windowSize - 1) / 2.0);
         for (int n = 0; n < windowSize; n++)
         {
-            T x = _numOps.Divide(_numOps.Subtract(_numOps.FromDouble(n), center), _numOps.Multiply(_sigma, _numOps.FromDouble(2.0)));
-            window[n] = _numOps.Exp(_numOps.Negate(_numOps.Multiply(x, x)));
+            // Standard Gaussian window: w(n) = exp(-0.5 * ((n - (N-1)/2) / (sigma * (N-1)/2))^2)
+            T x = _numOps.Divide(_numOps.Subtract(_numOps.FromDouble(n), halfN), _numOps.Multiply(_sigma, halfN));
+            window[n] = _numOps.Exp(_numOps.Negate(_numOps.Multiply(_numOps.FromDouble(0.5), _numOps.Multiply(x, x))));
         }
 
         return window;
