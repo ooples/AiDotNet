@@ -398,8 +398,20 @@ public class TrOCR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
     private Tensor<T> RunEncoder(Tensor<T> input)
     {
         var output = input;
+        bool hasReshapedToSequence = false;
         foreach (var layer in _encoderLayers)
         {
+            // Auto-reshape once when transitioning from spatial (CNN) to sequence (Transformer/Norm) layers
+            if (!hasReshapedToSequence && output.Shape.Length >= 3 &&
+                layer is TransformerEncoderLayer<T> or LayerNormalizationLayer<T>)
+            {
+                int channels = output.Shape.Length == 4 ? output.Shape[1] : output.Shape[0];
+                int spatialH = output.Shape.Length == 4 ? output.Shape[2] : output.Shape[1];
+                int spatialW = output.Shape.Length == 4 ? output.Shape[3] : output.Shape[2];
+                int numPatches = spatialH * spatialW;
+                output = new Tensor<T>(output.Data.ToArray(), [numPatches, channels]);
+                hasReshapedToSequence = true;
+            }
             output = layer.Forward(output);
         }
         return output;

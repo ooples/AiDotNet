@@ -3,6 +3,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Onnx;
 using AiDotNet.Postprocessing;
 using AiDotNet.Preprocessing;
@@ -300,8 +301,22 @@ public abstract class DocumentNeuralNetworkBase<T> : NeuralNetworkBase<T>
     protected virtual Tensor<T> Forward(Tensor<T> input)
     {
         Tensor<T> output = input;
+        bool hasReshapedToSequence = false;
         foreach (var layer in Layers)
         {
+            // Auto-reshape once when transitioning from spatial (CNN) to sequence (Transformer/Norm) layers
+            // CNN outputs [B, C, H, W] or [C, H, W]; Transformer/Norm expects [SeqLen, EmbDim]
+            if (!hasReshapedToSequence && output.Shape.Length >= 3 &&
+                layer is TransformerEncoderLayer<T> or TransformerDecoderLayer<T>
+                     or MultiHeadAttentionLayer<T> or LayerNormalizationLayer<T>)
+            {
+                int channels = output.Shape.Length == 4 ? output.Shape[1] : output.Shape[0];
+                int spatialH = output.Shape.Length == 4 ? output.Shape[2] : output.Shape[1];
+                int spatialW = output.Shape.Length == 4 ? output.Shape[3] : output.Shape[2];
+                int numPatches = spatialH * spatialW;
+                output = new Tensor<T>(output.Data.ToArray(), [numPatches, channels]);
+                hasReshapedToSequence = true;
+            }
             output = layer.Forward(output);
         }
         return output;
