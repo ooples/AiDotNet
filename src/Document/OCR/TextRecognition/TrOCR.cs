@@ -399,11 +399,19 @@ public class TrOCR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
     {
         var output = input;
         bool hasReshapedToSequence = false;
+        bool hasPassedConvLayer = false;
         foreach (var layer in _encoderLayers)
         {
-            // Auto-reshape once when transitioning from spatial (CNN) to sequence (Transformer/Norm) layers
-            if (!hasReshapedToSequence && output.Shape.Length >= 3 &&
-                layer is TransformerEncoderLayer<T> or LayerNormalizationLayer<T>)
+            if (layer is ConvolutionalLayer<T> or BatchNormalizationLayer<T>
+                     or PoolingLayer<T> or MaxPoolingLayer<T> or AveragePoolingLayer<T>)
+            {
+                hasPassedConvLayer = true;
+            }
+
+            // Auto-reshape once when transitioning from spatial (CNN) to non-spatial layers
+            bool isNonSpatialLayer = layer is not (ConvolutionalLayer<T> or BatchNormalizationLayer<T>
+                or PoolingLayer<T> or MaxPoolingLayer<T> or AveragePoolingLayer<T>);
+            if (!hasReshapedToSequence && hasPassedConvLayer && output.Shape.Length >= 3 && isNonSpatialLayer)
             {
                 int channels = output.Shape.Length == 4 ? output.Shape[1] : output.Shape[0];
                 int spatialH = output.Shape.Length == 4 ? output.Shape[2] : output.Shape[1];

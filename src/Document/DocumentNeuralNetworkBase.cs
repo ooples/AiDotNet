@@ -302,13 +302,22 @@ public abstract class DocumentNeuralNetworkBase<T> : NeuralNetworkBase<T>
     {
         Tensor<T> output = input;
         bool hasReshapedToSequence = false;
+        bool hasPassedConvLayer = false;
         foreach (var layer in Layers)
         {
-            // Auto-reshape once when transitioning from spatial (CNN) to sequence (Transformer/Norm) layers
-            // CNN outputs [B, C, H, W] or [C, H, W]; Transformer/Norm expects [SeqLen, EmbDim]
-            if (!hasReshapedToSequence && output.Shape.Length >= 3 &&
-                layer is TransformerEncoderLayer<T> or TransformerDecoderLayer<T>
-                     or MultiHeadAttentionLayer<T> or LayerNormalizationLayer<T>)
+            // Track whether we've passed through any convolutional/pooling layer
+            if (layer is ConvolutionalLayer<T> or BatchNormalizationLayer<T>
+                     or PoolingLayer<T> or MaxPoolingLayer<T> or AveragePoolingLayer<T>)
+            {
+                hasPassedConvLayer = true;
+            }
+
+            // Auto-reshape once when transitioning from spatial (CNN) to non-spatial layers
+            // Only reshape if we actually went through conv layers (not raw image input)
+            // CNN outputs [B, C, H, W] or [C, H, W]; non-spatial layers expect [SeqLen, EmbDim]
+            bool isNonSpatialLayer = layer is not (ConvolutionalLayer<T> or BatchNormalizationLayer<T>
+                or PoolingLayer<T> or MaxPoolingLayer<T> or AveragePoolingLayer<T>);
+            if (!hasReshapedToSequence && hasPassedConvLayer && output.Shape.Length >= 3 && isNonSpatialLayer)
             {
                 int channels = output.Shape.Length == 4 ? output.Shape[1] : output.Shape[0];
                 int spatialH = output.Shape.Length == 4 ? output.Shape[2] : output.Shape[1];

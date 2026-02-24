@@ -10651,8 +10651,8 @@ public static class LayerHelper<T>
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
 
-        // Multi-scale vision encoder
-        yield return new ConvolutionalLayer<T>(3, imageSize / 16, imageSize / 16, visionDim, 16, 16, 0);
+        // Patch embedding: conv with kernel=16, stride=16 on full image → (imageSize/16)^2 patches
+        yield return new ConvolutionalLayer<T>(3, imageSize, imageSize, visionDim, 16, 16, 0);
         yield return new LayerNormalizationLayer<T>(visionDim);
 
         for (int i = 0; i < Math.Min(visionLayers, 6); i++)
