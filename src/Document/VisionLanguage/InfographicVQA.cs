@@ -489,7 +489,7 @@ public class InfographicVQA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
                 { "image_size", ImageSize },
                 { "use_native_mode", _useNativeMode }
             },
-            ModelData = this.Serialize()
+            ModelData = SafeSerialize()
         };
     }
 

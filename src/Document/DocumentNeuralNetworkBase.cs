@@ -337,6 +337,21 @@ public abstract class DocumentNeuralNetworkBase<T> : NeuralNetworkBase<T>
     /// <param name="image">The tensor to validate.</param>
     /// <exception cref="ArgumentNullException">If image is null.</exception>
     /// <exception cref="ArgumentException">If the tensor shape is invalid.</exception>
+    /// <summary>
+    /// Safely serializes the model, returning an empty array if the model is too large.
+    /// </summary>
+    protected byte[] SafeSerialize()
+    {
+        try
+        {
+            return this.Serialize();
+        }
+        catch (OutOfMemoryException)
+        {
+            return Array.Empty<byte>();
+        }
+    }
+
     protected void ValidateImageShape(Tensor<T> image)
     {
         if (image is null)
