@@ -874,7 +874,7 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     /// The name is matched against patterns in <see cref="MixedPrecision.LayerPrecisionPolicy"/>.
     /// </para>
     /// </remarks>
-    public virtual string LayerName => $"{GetType().Name}_{_instanceId}";
+    public virtual string LayerName => GetType().Name;
 
     /// <summary>
     /// Gets the category classification for this layer, used by automated per-layer tools

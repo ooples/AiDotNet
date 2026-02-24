@@ -10237,7 +10237,8 @@ public static class LayerHelper<T>
         int cnnChannels = 512,
         int rnnHiddenSize = 256,
         int rnnLayers = 2,
-        int charsetSize = 95)
+        int charsetSize = 95,
+        int inputDepth = 1)
     {
         IActivationFunction<T> reluActivation = new ReLUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
@@ -10247,7 +10248,7 @@ public static class LayerHelper<T>
 
         // CNN feature extractor (VGG-style)
         int[] channels = [64, 128, 256, 256, 512, 512, 512];
-        int inputChannels = 1; // Grayscale
+        int inputChannels = inputDepth;
 
         for (int i = 0; i < channels.Length; i++)
         {

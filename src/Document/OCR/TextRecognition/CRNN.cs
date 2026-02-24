@@ -215,7 +215,8 @@ public class CRNN<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
             cnnChannels: _cnnChannels,
             rnnHiddenSize: _rnnHiddenSize,
             rnnLayers: _rnnLayers,
-            charsetSize: _charset.Length + 1)); // +1 for CTC blank
+            charsetSize: _charset.Length + 1, // +1 for CTC blank
+            inputDepth: Architecture.InputDepth));
     }
 
     #endregion

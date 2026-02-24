@@ -434,6 +434,45 @@ public static class DeserializationHelper
         {
             instance = CreateLSTMLayer<T>(type, inputShape, outputShape, additionalParams);
         }
+        else if (openGenericType.FullName != null && openGenericType.FullName.Contains("MambaBlock"))
+        {
+            // MambaBlock(int sequenceLength, int modelDimension, int stateDimension, int expandFactor, int convKernelSize, int dtRank)
+            int sequenceLength = inputShape.Length > 0 ? inputShape[0] : 1;
+            int modelDimension = inputShape.Length > 1 ? inputShape[1] : 256;
+            int stateDimension = TryGetInt(additionalParams, "StateDimension") ?? 16;
+            int expandFactor = TryGetInt(additionalParams, "ExpandFactor") ?? 2;
+            int convKernelSize = TryGetInt(additionalParams, "ConvKernelSize") ?? 4;
+
+            // MambaBlock has a constructor with all optional params after the first:
+            // (int sequenceLength, int modelDimension = 256, int stateDimension = 16, int expandFactor = 2, int convKernelSize = 4, int dtRank = -1, IActivationFunction<T>? activationFunction = null)
+            // Use reflection to find the constructor and call it with named parameter matching
+            var ctors = type.GetConstructors();
+            var ctor = ctors.FirstOrDefault(c =>
+            {
+                var p = c.GetParameters();
+                return p.Length >= 1 && p[0].ParameterType == typeof(int);
+            });
+            if (ctor is not null)
+            {
+                var parameters = ctor.GetParameters();
+                var args = new object?[parameters.Length];
+                args[0] = sequenceLength;
+                for (int pi = 1; pi < parameters.Length; pi++)
+                {
+                    if (parameters[pi].Name == "modelDimension") args[pi] = modelDimension;
+                    else if (parameters[pi].Name == "stateDimension") args[pi] = stateDimension;
+                    else if (parameters[pi].Name == "expandFactor") args[pi] = expandFactor;
+                    else if (parameters[pi].Name == "convKernelSize") args[pi] = convKernelSize;
+                    else if (parameters[pi].HasDefaultValue) args[pi] = parameters[pi].DefaultValue;
+                    else args[pi] = null;
+                }
+                instance = ctor.Invoke(args);
+            }
+            else
+            {
+                throw new NotSupportedException($"Cannot find MambaBlock constructor for deserialization.");
+            }
+        }
         else
         {
             // Default: pass inputShape as first parameter

@@ -91,10 +91,12 @@ public class RandomSampling<T> : IActiveLearningStrategy<T>
         var numSamples = unlabeledPool.Shape[0];
         var scores = new Vector<T>(numSamples);
 
-        // Random sampling assigns uniform random scores (all samples are equally informative)
+        // Random sampling assigns uniform scores (all samples are equally informative)
+        // The randomness comes from the shuffle in SelectSamples, not from the scores
+        var uniformScore = _numOps.FromDouble(1.0 / numSamples);
         for (int i = 0; i < numSamples; i++)
         {
-            scores[i] = _numOps.FromDouble(_random.NextDouble());
+            scores[i] = uniformScore;
         }
 
         UpdateStatistics(scores);
