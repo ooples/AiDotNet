@@ -96,7 +96,8 @@ public class SORT<T> : ObjectTrackerBase<T>
                 var newTrack = new KalmanTrack<T>(
                     NextTrackId++,
                     filteredDetections[i],
-                    NumOps);
+                    NumOps,
+                    Options.MinHits);
                 _kalmanTracks.Add(newTrack);
             }
         }
@@ -116,7 +117,7 @@ public class SORT<T> : ObjectTrackerBase<T>
 
         return new TrackingResult<T>
         {
-            Tracks = GetConfirmedTracks(),
+            Tracks = new List<Track<T>>(Tracks),
             FrameNumber = FrameCount,
             TrackingTime = DateTime.UtcNow - startTime
         };
@@ -169,6 +170,7 @@ internal class KalmanTrack<T>
 {
     private readonly INumericOperations<T> _numOps;
     private readonly int _trackId;
+    private readonly int _minHits;
     private int _classId;
     private T _confidence;
 
@@ -200,10 +202,11 @@ internal class KalmanTrack<T>
     public int Age { get; private set; }
     public TrackState State { get; private set; }
 
-    public KalmanTrack(int trackId, Detection<T> detection, INumericOperations<T> numOps)
+    public KalmanTrack(int trackId, Detection<T> detection, INumericOperations<T> numOps, int minHits = 3)
     {
         _trackId = trackId;
         _numOps = numOps;
+        _minHits = minHits;
         _classId = detection.ClassId;
         _confidence = detection.Confidence;
 
@@ -418,7 +421,7 @@ internal class KalmanTrack<T>
         TimeSinceUpdate = 0;
         Hits++;
 
-        if (State == TrackState.Tentative && Hits >= 3)
+        if (State == TrackState.Tentative && Hits >= _minHits)
         {
             State = TrackState.Confirmed;
         }
