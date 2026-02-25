@@ -43,51 +43,16 @@ public class EDDMDriftDetector<T> : DriftDetectorBase<T>
 {
     private readonly double _warningThreshold;
     private readonly double _driftThreshold;
+    private readonly int _minimumErrors;
 
-    /// <summary>
-    /// Count of samples since the last error.
-    /// </summary>
-    private int _distanceSinceLastError;
-
-    /// <summary>
-    /// Number of errors observed.
-    /// </summary>
+    private int _lastErrorPosition;
     private int _errorCount;
-
-    /// <summary>
-    /// Running sum of distances between errors.
-    /// </summary>
-    private double _distanceSum;
-
-    /// <summary>
-    /// Running sum of squared distances (for variance calculation).
-    /// </summary>
-    private double _distanceSumSquared;
-
-    /// <summary>
-    /// Maximum value of p' + 2s' observed.
-    /// </summary>
-    private double _maxPPrime2S;
-
-    /// <summary>
-    /// Mean distance at maximum.
-    /// </summary>
-    private double _pPrimeAtMax;
-
-    /// <summary>
-    /// Standard deviation at maximum.
-    /// </summary>
-    private double _sPrimeAtMax;
-
-    /// <summary>
-    /// Observation count when warning was first triggered.
-    /// </summary>
-    private int _warningStartCount;
-
-    /// <summary>
-    /// Gets whether the detector is in the warning zone.
-    /// </summary>
-    public new bool IsInWarning { get; private set; }
+    private double _distanceMean;
+    private double _distanceM2;  // For Welford's algorithm
+    private double _maxDistancePsi;
+    private double _maxDistanceMean;
+    private double _maxDistanceStd;
+    private int _sinceLastError;
 
     /// <summary>
     /// Creates a new EDDM drift detector.
@@ -95,23 +60,43 @@ public class EDDMDriftDetector<T> : DriftDetectorBase<T>
     /// <param name="warningThreshold">Ratio threshold for warning (default: 0.95).</param>
     /// <param name="driftThreshold">Ratio threshold for drift (default: 0.90).</param>
     /// <param name="minimumObservations">Minimum samples before detection starts (default: 30).</param>
+    /// <param name="minimumErrors">Minimum errors needed before detection starts (default: 30).</param>
     /// <remarks>
     /// <para><b>For Beginners:</b> These thresholds are ratios (0-1). When the current metric
     /// falls below these fractions of the best observed metric, warnings/drift are triggered.
     /// Lower thresholds mean more tolerance for degradation.</para>
     /// </remarks>
-    public EDDMDriftDetector(double warningThreshold = 0.95, double driftThreshold = 0.90, int minimumObservations = 30)
+    public EDDMDriftDetector(double warningThreshold = 0.95, double driftThreshold = 0.90, int minimumObservations = 30, int minimumErrors = 30)
     {
-        if (warningThreshold <= driftThreshold)
+        if (warningThreshold <= 0 || warningThreshold >= 1)
         {
-            throw new ArgumentException("Warning threshold must be greater than drift threshold.");
+            throw new ArgumentOutOfRangeException(nameof(warningThreshold),
+                "Warning threshold must be in range (0, 1).");
+        }
+
+        if (driftThreshold <= 0 || driftThreshold >= warningThreshold)
+        {
+            throw new ArgumentOutOfRangeException(nameof(driftThreshold),
+                "Drift threshold must be in range (0, warningThreshold).");
+        }
+
+        if (minimumErrors < 2)
+        {
+            throw new ArgumentOutOfRangeException(nameof(minimumErrors),
+                "Minimum errors must be at least 2 (to compute distances).");
         }
 
         _warningThreshold = warningThreshold;
         _driftThreshold = driftThreshold;
+        _minimumErrors = minimumErrors;
         MinimumObservations = minimumObservations;
         Reset();
     }
+
+    /// <summary>
+    /// Gets the minimum number of errors required before detection starts.
+    /// </summary>
+    public int MinimumErrors => _minimumErrors;
 
     /// <summary>
     /// Adds a new observation (typically a prediction error: 1 for wrong, 0 for correct).
@@ -124,99 +109,80 @@ public class EDDMDriftDetector<T> : DriftDetectorBase<T>
     /// </remarks>
     public override bool AddObservation(T value)
     {
-        double x = ToDouble(value);
+        double val = ToDouble(value);
         ObservationCount++;
-        _distanceSinceLastError++;
+        _sinceLastError++;
 
-        // Check if this is an error (value > 0.5 for binary, or > threshold)
-        bool isError = x > 0.5;
+        bool isError = val > 0.5;
 
-        if (!isError)
+        if (isError)
         {
-            // Not an error, just update observation count
-            return false;
-        }
+            _errorCount++;
 
-        // This is an error - record the distance
-        _errorCount++;
-
-        // Need at least 2 errors to measure distance
-        if (_errorCount < 2)
-        {
-            _distanceSinceLastError = 0;
-            return false;
-        }
-
-        // Update running statistics for distance
-        double distance = _distanceSinceLastError;
-        _distanceSum += distance;
-        _distanceSumSquared += distance * distance;
-
-        // Reset distance counter
-        _distanceSinceLastError = 0;
-
-        // Calculate mean and standard deviation of distances
-        int distanceCount = _errorCount - 1; // Number of distance measurements
-        double pPrime = _distanceSum / distanceCount;
-        double variance = (_distanceSumSquared / distanceCount) - (pPrime * pPrime);
-        double sPrime = Math.Sqrt(Math.Max(0, variance));
-
-        EstimatedMean = 1.0 / pPrime; // Convert to error rate
-
-        // Calculate p' + 2s'
-        double pPrime2S = pPrime + 2 * sPrime;
-
-        // Only check for drift after minimum observations
-        if (_errorCount < MinimumObservations)
-        {
-            if (pPrime2S > _maxPPrime2S)
+            if (_lastErrorPosition > 0)
             {
-                _maxPPrime2S = pPrime2S;
-                _pPrimeAtMax = pPrime;
-                _sPrimeAtMax = sPrime;
+                // Calculate distance since last error
+                int distance = ObservationCount - _lastErrorPosition;
+
+                // Update running statistics using Welford's algorithm
+                double delta = distance - _distanceMean;
+                _distanceMean += delta / (_errorCount - 1);
+                double delta2 = distance - _distanceMean;
+                _distanceM2 += delta * delta2;
             }
+
+            _lastErrorPosition = ObservationCount;
+            _sinceLastError = 0;
+        }
+
+        // Need at least minimum errors to compute distance statistics
+        if (_errorCount < _minimumErrors || ObservationCount < MinimumObservations)
+        {
             return false;
         }
 
-        // Update maximum if we found a better state
-        if (pPrime2S > _maxPPrime2S)
+        // Calculate current statistics
+        double variance = _errorCount > 2 ? _distanceM2 / (_errorCount - 2) : 0;
+        double std = Math.Sqrt(Math.Max(0, variance));
+        double psi = _distanceMean + 2 * std;
+
+        EstimatedMean = 1.0 / Math.Max(1, _distanceMean);  // Convert to error rate approximation
+
+        // Update maximum if new best
+        if (psi > _maxDistancePsi)
         {
-            _maxPPrime2S = pPrime2S;
-            _pPrimeAtMax = pPrime;
-            _sPrimeAtMax = sPrime;
-            IsInWarning = false;
-            _warningStartCount = 0;
+            _maxDistancePsi = psi;
+            _maxDistanceMean = _distanceMean;
+            _maxDistanceStd = std;
         }
 
-        // Calculate ratio (current / maximum)
-        double ratio = _maxPPrime2S > 0 ? pPrime2S / _maxPPrime2S : 1.0;
+        // Calculate ratio to maximum
+        double ratio = _maxDistancePsi > 0 ? psi / _maxDistancePsi : 1.0;
 
-        // Update drift probability
-        DriftProbability = Math.Min(1.0, Math.Max(0.0, 1.0 - (ratio - _driftThreshold) / (_warningThreshold - _driftThreshold)));
-
-        // Check for drift
+        // Check for drift (ratio dropping means distances are shrinking = more errors)
         if (ratio < _driftThreshold)
         {
             IsInDrift = true;
             IsInWarning = false;
+            DriftProbability = 1.0;
             return true;
         }
 
         // Check for warning
         if (ratio < _warningThreshold)
         {
-            if (!IsInWarning)
-            {
-                IsInWarning = true;
-                _warningStartCount = ObservationCount;
-            }
+            IsInWarning = true;
+            // Estimate drift probability
+            double range = _warningThreshold - _driftThreshold;
+            DriftProbability = range > 0 ? (_warningThreshold - ratio) / range : 0.5;
         }
         else
         {
             IsInWarning = false;
-            _warningStartCount = 0;
+            DriftProbability = 0;
         }
 
+        IsInDrift = false;
         return false;
     }
 
@@ -226,15 +192,14 @@ public class EDDMDriftDetector<T> : DriftDetectorBase<T>
     public override void Reset()
     {
         base.Reset();
-        _distanceSinceLastError = 0;
+        _lastErrorPosition = 0;
         _errorCount = 0;
-        _distanceSum = 0;
-        _distanceSumSquared = 0;
-        _maxPPrime2S = 0;
-        _pPrimeAtMax = 0;
-        _sPrimeAtMax = 0;
-        IsInWarning = false;
-        _warningStartCount = 0;
+        _distanceMean = 0;
+        _distanceM2 = 0;
+        _maxDistancePsi = 0;
+        _maxDistanceMean = 0;
+        _maxDistanceStd = 0;
+        _sinceLastError = 0;
     }
 
     /// <summary>
@@ -245,12 +210,12 @@ public class EDDMDriftDetector<T> : DriftDetectorBase<T>
     /// <summary>
     /// Gets the average distance between errors.
     /// </summary>
-    public double AverageErrorDistance => _errorCount > 1 ? _distanceSum / (_errorCount - 1) : double.PositiveInfinity;
+    public double AverageErrorDistance => _errorCount > 1 ? _distanceMean : double.PositiveInfinity;
 
     /// <summary>
     /// Gets the maximum p' + 2s' observed.
     /// </summary>
-    public double MaximumPPrime2S => _maxPPrime2S;
+    public double MaximumPPrime2S => _maxDistancePsi;
 
     /// <summary>
     /// Gets the current ratio (lower means closer to drift).
@@ -259,20 +224,13 @@ public class EDDMDriftDetector<T> : DriftDetectorBase<T>
     {
         get
         {
-            if (_errorCount < 2 || _maxPPrime2S <= 0) return 1.0;
+            if (_errorCount < 2 || _maxDistancePsi <= 0) return 1.0;
 
-            int distanceCount = _errorCount - 1;
-            double pPrime = _distanceSum / distanceCount;
-            double variance = (_distanceSumSquared / distanceCount) - (pPrime * pPrime);
-            double sPrime = Math.Sqrt(Math.Max(0, variance));
-            double pPrime2S = pPrime + 2 * sPrime;
+            double variance = _errorCount > 2 ? _distanceM2 / (_errorCount - 2) : 0;
+            double std = Math.Sqrt(Math.Max(0, variance));
+            double psi = _distanceMean + 2 * std;
 
-            return pPrime2S / _maxPPrime2S;
+            return psi / _maxDistancePsi;
         }
     }
-
-    /// <summary>
-    /// Gets the number of samples since entering warning zone.
-    /// </summary>
-    public int SamplesInWarning => IsInWarning ? ObservationCount - _warningStartCount : 0;
 }
