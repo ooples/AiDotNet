@@ -289,6 +289,22 @@ public static class PointCloudSampling<T>
                 nameof(pointCloud));
         }
 
+        // Compute bounding box minimum for origin-relative voxel indexing
+        // This is the standard approach (used by Open3D, PCL, etc.) and ensures
+        // consistent voxelization regardless of point cloud position
+        double minX = NumOps.ToDouble(pointCloud.Points[0, 0]);
+        double minY = NumOps.ToDouble(pointCloud.Points[0, 1]);
+        double minZ = NumOps.ToDouble(pointCloud.Points[0, 2]);
+        for (int i = 1; i < numPoints; i++)
+        {
+            double px = NumOps.ToDouble(pointCloud.Points[i, 0]);
+            double py = NumOps.ToDouble(pointCloud.Points[i, 1]);
+            double pz = NumOps.ToDouble(pointCloud.Points[i, 2]);
+            if (px < minX) minX = px;
+            if (py < minY) minY = py;
+            if (pz < minZ) minZ = pz;
+        }
+
         var voxelMap = new Dictionary<(int, int, int), List<int>>();
 
         for (int i = 0; i < numPoints; i++)
@@ -297,9 +313,9 @@ public static class PointCloudSampling<T>
             double y = NumOps.ToDouble(pointCloud.Points[i, 1]);
             double z = NumOps.ToDouble(pointCloud.Points[i, 2]);
 
-            int vx = (int)Math.Floor(x / voxelSize);
-            int vy = (int)Math.Floor(y / voxelSize);
-            int vz = (int)Math.Floor(z / voxelSize);
+            int vx = (int)Math.Floor((x - minX) / voxelSize);
+            int vy = (int)Math.Floor((y - minY) / voxelSize);
+            int vz = (int)Math.Floor((z - minZ) / voxelSize);
 
             var key = (vx, vy, vz);
             if (!voxelMap.TryGetValue(key, out var indices))
