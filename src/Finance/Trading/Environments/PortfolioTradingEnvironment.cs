@@ -96,8 +96,7 @@ public sealed class PortfolioTradingEnvironment<T> : TradingEnvironment<T>
             deltas[asset] = NumOps.Subtract(desiredPositions[asset], _positions[asset]);
         }
 
-        ScaleBuysToCash(deltas, prices);
-
+        // Clamp deltas for short selling constraints before executing any trades
         for (int asset = 0; asset < NumAssets; asset++)
         {
             if (!AllowShortSelling)
@@ -108,8 +107,24 @@ public sealed class PortfolioTradingEnvironment<T> : TradingEnvironment<T>
                     deltas[asset] = NumOps.Negate(_positions[asset]);
                 }
             }
+        }
 
-            if (NumOps.Compare(deltas[asset], NumOps.Zero) != 0)
+        // Execute sells first to free up cash before buying
+        for (int asset = 0; asset < NumAssets; asset++)
+        {
+            if (NumOps.Compare(deltas[asset], NumOps.Zero) < 0)
+            {
+                ExecuteTrade(asset, deltas[asset], prices[asset]);
+            }
+        }
+
+        // Now scale buys against the updated cash (includes sell proceeds)
+        ScaleBuysToCash(deltas, prices);
+
+        // Execute buys with the freed-up cash
+        for (int asset = 0; asset < NumAssets; asset++)
+        {
+            if (NumOps.Compare(deltas[asset], NumOps.Zero) > 0)
             {
                 ExecuteTrade(asset, deltas[asset], prices[asset]);
             }
