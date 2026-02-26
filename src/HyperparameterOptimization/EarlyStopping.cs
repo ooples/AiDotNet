@@ -168,9 +168,15 @@ public class EarlyStopping<T>
         if (double.IsInfinity(_bestValue))
             return true;
 
+        // Use absolute value of bestValue for relative delta to handle negative values correctly.
+        // Without Math.Abs, negative bestValue * (1 + delta) moves threshold in the wrong direction.
+        // Example: bestValue=-10, delta=0.1, maximize=true:
+        //   Wrong: threshold = -10 * 1.1 = -11 (more negative, accepts worse values)
+        //   Correct: threshold = -10 + |-10| * 0.1 = -9 (requires actual improvement)
+        double absDelta = Math.Abs(_bestValue) * _minDelta;
         double threshold = _maximize
-            ? _bestValue * (1 + _minDelta)
-            : _bestValue * (1 - _minDelta);
+            ? _bestValue + absDelta
+            : _bestValue - absDelta;
 
         return _maximize ? value > threshold : value < threshold;
     }
