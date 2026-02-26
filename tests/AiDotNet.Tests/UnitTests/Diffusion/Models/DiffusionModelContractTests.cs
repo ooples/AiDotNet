@@ -390,7 +390,7 @@ public class DiffusionModelContractTests
     [Fact]
     public void LuminaT2XModel_DefaultConstructor_CreatesValidModel()
     {
-        var model = new LuminaT2XModel<double>();
+        var model = new AiDotNet.Diffusion.TextToImage.LuminaT2XModel<double>();
 
         Assert.NotNull(model);
         Assert.NotNull(model.NoisePredictor);
