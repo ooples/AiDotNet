@@ -649,4 +649,112 @@ public class FastGenContractTests
     }
 
     #endregion
+
+    #region Gap Analysis — OSDS Model
+
+    [Fact]
+    public void OSDSModel_DefaultConstructor_CreatesValidModel()
+    {
+        var model = new OSDSModel<double>();
+
+        Assert.NotNull(model);
+        Assert.NotNull(model.NoisePredictor);
+        Assert.NotNull(model.VAE);
+        Assert.True(model.ParameterCount > 0);
+    }
+
+    #endregion
+
+    #region Gap Analysis — 3D Score Distillation Methods
+
+    [Fact]
+    public void ScoreDistillationSampling_Constructor_CreatesValid()
+    {
+        var teacher = new StableDiffusion15Model<double>();
+        var sds = new AiDotNet.Diffusion.Distillation.ScoreDistillationSampling<double>(teacher);
+
+        Assert.NotNull(sds);
+        Assert.Equal(100.0, sds.GuidanceScale);
+    }
+
+    [Fact]
+    public void VariationalScoreDistillation_Constructor_CreatesValid()
+    {
+        var teacher = new StableDiffusion15Model<double>();
+        var vsd = new AiDotNet.Diffusion.Distillation.VariationalScoreDistillation<double>(teacher);
+
+        Assert.NotNull(vsd);
+        Assert.Equal(7.5, vsd.GuidanceScale);
+        Assert.Equal(4, vsd.LoRARank);
+    }
+
+    [Fact]
+    public void ConsistencyDistillationSampling_Constructor_CreatesValid()
+    {
+        var teacher = new StableDiffusion15Model<double>();
+        var csd = new AiDotNet.Diffusion.Distillation.ConsistencyDistillationSampling<double>(teacher);
+
+        Assert.NotNull(csd);
+        Assert.Equal(50.0, csd.GuidanceScale);
+        Assert.Equal(1.0, csd.ConsistencyWeight);
+    }
+
+    [Fact]
+    public void IntervalScoreMatching_Constructor_CreatesValid()
+    {
+        var teacher = new StableDiffusion15Model<double>();
+        var ism = new AiDotNet.Diffusion.Distillation.IntervalScoreMatching<double>(teacher);
+
+        Assert.NotNull(ism);
+        Assert.Equal(7.5, ism.GuidanceScale);
+        Assert.Equal(1, ism.IntervalSteps);
+    }
+
+    [Fact]
+    public void DenoisedScoreDistillation_Constructor_CreatesValid()
+    {
+        var teacher = new StableDiffusion15Model<double>();
+        var dsd = new AiDotNet.Diffusion.Distillation.DenoisedScoreDistillation<double>(teacher);
+
+        Assert.NotNull(dsd);
+        Assert.Equal(7.5, dsd.GuidanceScale);
+        Assert.Equal(50, dsd.DenoisingSteps);
+    }
+
+    [Fact]
+    public void UnifiedDistillationSampling_Constructor_CreatesValid()
+    {
+        var teacher = new StableDiffusion15Model<double>();
+        var uds = new AiDotNet.Diffusion.Distillation.UnifiedDistillationSampling<double>(teacher);
+
+        Assert.NotNull(uds);
+        Assert.Equal(1.0, uds.PretrainedWeight);
+        Assert.Equal(0.0, uds.ParticleWeight);
+        Assert.Equal(1.0, uds.NoiseWeight);
+    }
+
+    [Fact]
+    public void RewardScoreDistillation_Constructor_CreatesValid()
+    {
+        var teacher = new StableDiffusion15Model<double>();
+        var rsd = new AiDotNet.Diffusion.Distillation.RewardScoreDistillation<double>(teacher);
+
+        Assert.NotNull(rsd);
+        Assert.Equal(100.0, rsd.GuidanceScale);
+        Assert.Equal(10.0, rsd.RewardWeight);
+    }
+
+    [Fact]
+    public void SemanticScoreDistillation_Constructor_CreatesValid()
+    {
+        var teacher = new StableDiffusion15Model<double>();
+        var ssd = new AiDotNet.Diffusion.Distillation.SemanticScoreDistillation<double>(teacher);
+
+        Assert.NotNull(ssd);
+        Assert.Equal(100.0, ssd.GuidanceScale);
+        Assert.Equal(1.0, ssd.SemanticWeight);
+        Assert.Equal(1.0, ssd.AppearanceWeight);
+    }
+
+    #endregion
 }

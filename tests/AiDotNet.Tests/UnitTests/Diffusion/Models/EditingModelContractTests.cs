@@ -576,4 +576,152 @@ public class EditingModelContractTests
     }
 
     #endregion
+
+    #region Gap Analysis — Additional Panorama Models
+
+    [Fact]
+    public void DiffPanoModel_DefaultConstructor_CreatesValidModel()
+    {
+        var model = new DiffPanoModel<double>();
+
+        Assert.NotNull(model);
+        Assert.NotNull(model.NoisePredictor);
+        Assert.NotNull(model.VAE);
+        Assert.True(model.ParameterCount > 0);
+    }
+
+    #endregion
+
+    #region Gap Analysis — Alignment Variants
+
+    [Fact]
+    public void D3PO_Constructor_CreatesValid()
+    {
+        var model = new AiDotNet.Diffusion.TextToImage.StableDiffusion15Model<double>();
+        var refModel = new AiDotNet.Diffusion.TextToImage.StableDiffusion15Model<double>();
+        var d3po = new D3PO<double>(model, refModel);
+
+        Assert.NotNull(d3po);
+        Assert.Equal(5000.0, d3po.Beta);
+    }
+
+    [Fact]
+    public void AsyncOnlineDPO_Constructor_CreatesValid()
+    {
+        var model = new AiDotNet.Diffusion.TextToImage.StableDiffusion15Model<double>();
+        var refModel = new AiDotNet.Diffusion.TextToImage.StableDiffusion15Model<double>();
+        var trainer = new AsyncOnlineDPO<double>(model, refModel);
+
+        Assert.NotNull(trainer);
+        Assert.Equal(5000.0, trainer.Beta);
+        Assert.Equal(0.5, trainer.OnlineMixingRatio);
+        Assert.Equal(0, trainer.TotalUpdates);
+    }
+
+    [Fact]
+    public void RefinerStage_Constructor_CreatesValid()
+    {
+        var model = new AiDotNet.Diffusion.TextToImage.StableDiffusion15Model<double>();
+        var refiner = new RefinerStage<double>(model);
+
+        Assert.NotNull(refiner);
+        Assert.Equal(0.3, refiner.Strength);
+        Assert.Equal(7.5, refiner.GuidanceScale);
+        Assert.Equal(20, refiner.RefinerSteps);
+    }
+
+    #endregion
+
+    #region Gap Analysis — Distillation Infrastructure
+
+    [Fact]
+    public void StudentTeacherFramework_Constructor_CreatesValid()
+    {
+        var teacher = new AiDotNet.Diffusion.TextToImage.StableDiffusion15Model<double>();
+        var student = new AiDotNet.Diffusion.TextToImage.StableDiffusion15Model<double>();
+        var framework = new StudentTeacherFramework<double>(teacher, student);
+
+        Assert.NotNull(framework);
+        Assert.NotNull(framework.Teacher);
+        Assert.NotNull(framework.Student);
+        Assert.Equal(0.9999, framework.EMADecay);
+    }
+
+    [Fact]
+    public void ConsistencyTrainingTrainer_Constructor_CreatesValid()
+    {
+        var trainer = new ConsistencyTrainingTrainer<double>();
+
+        Assert.NotNull(trainer);
+        Assert.Equal(2, trainer.InitialDiscretizationSteps);
+        Assert.Equal(0, trainer.CurrentStep);
+    }
+
+    [Fact]
+    public void DistributionMatchingDistiller_Constructor_CreatesValid()
+    {
+        var teacher = new AiDotNet.Diffusion.TextToImage.StableDiffusion15Model<double>();
+        var distiller = new DistributionMatchingDistiller<double>(teacher);
+
+        Assert.NotNull(distiller);
+        Assert.Equal(1.0, distiller.RegressionWeight);
+        Assert.Equal(1.0, distiller.DistributionWeight);
+    }
+
+    #endregion
+
+    #region Gap Analysis — Mask Utilities (Internal Components)
+
+    [Fact]
+    public void LatentMaskBlender_DefaultConstructor_CreatesValid()
+    {
+        var blender = new LatentMaskBlender<double>();
+
+        Assert.NotNull(blender);
+        Assert.Equal(1.0, blender.BlendSharpness);
+    }
+
+    [Fact]
+    public void AlphaCompositor_DefaultConstructor_CreatesValid()
+    {
+        var compositor = new AlphaCompositor<double>();
+
+        Assert.NotNull(compositor);
+        Assert.False(compositor.PremultipliedAlpha);
+    }
+
+    [Fact]
+    public void SeamlessBlender_DefaultConstructor_CreatesValid()
+    {
+        var blender = new SeamlessBlender<double>();
+
+        Assert.NotNull(blender);
+        Assert.Equal(BlendProfile.Cosine, blender.Profile);
+        Assert.Equal(32, blender.OverlapSize);
+    }
+
+    #endregion
+
+    #region Gap Analysis — Scheduler Utilities (Internal Components)
+
+    [Fact]
+    public void LatentInitializer_DefaultConstructor_CreatesValid()
+    {
+        var initializer = new AiDotNet.Diffusion.Schedulers.LatentInitializer<double>();
+
+        Assert.NotNull(initializer);
+        Assert.Equal(1.0, initializer.InitNoiseSigma);
+    }
+
+    [Fact]
+    public void StrengthBasedScheduling_DefaultConstructor_CreatesValid()
+    {
+        var scheduling = new AiDotNet.Diffusion.Schedulers.StrengthBasedScheduling<double>();
+
+        Assert.NotNull(scheduling);
+        Assert.Equal(1000, scheduling.TotalTimesteps);
+        Assert.Equal(0.8, scheduling.DefaultStrength);
+    }
+
+    #endregion
 }
