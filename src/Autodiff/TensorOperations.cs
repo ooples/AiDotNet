@@ -2594,12 +2594,14 @@ public static class TensorOperations<T>
         {
             if (a.RequiresGradient)
             {
-                // d(ScaledTanh)/dx = β * (1 - f(x)²)
+                // ScaledTanh(x) = (1 - exp(-βx)) / (1 + exp(-βx)) = tanh(βx/2)
+                // d(ScaledTanh)/dx = β/2 * (1 - f(x)²)
+                var halfBeta = numOps.Divide(betaT, numOps.FromDouble(2.0));
                 var derivative = result.Transform((fx, idx) =>
                 {
                     var fxSquared = numOps.Multiply(fx, fx);
                     var oneMinusFxSquared = numOps.Subtract(numOps.One, fxSquared);
-                    return numOps.Multiply(betaT, oneMinusFxSquared);
+                    return numOps.Multiply(halfBeta, oneMinusFxSquared);
                 });
                 var gradA = engine.TensorMultiply(gradient, derivative);
                 var existingGrad = a.Gradient;
