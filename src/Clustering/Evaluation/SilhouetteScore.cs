@@ -117,10 +117,16 @@ public class SilhouetteScore<T> : IClusterMetric<T>
                 clusterDistances[labelJ].Add(dist);
             }
 
+            // Singleton cluster: point is the only one in its cluster
+            // Per sklearn convention, silhouette coefficient = 0 for singletons
+            if (clusterDistances[labelI].Count == 0)
+            {
+                silhouetteScores[i] = 0;
+                continue;
+            }
+
             // a(i) = mean distance to same cluster
-            double a = clusterDistances[labelI].Count > 0
-                ? clusterDistances[labelI].Average()
-                : 0;
+            double a = clusterDistances[labelI].Average();
 
             // b(i) = min mean distance to other clusters
             double b = double.MaxValue;
@@ -209,9 +215,14 @@ public class SilhouetteScore<T> : IClusterMetric<T>
                 clusterDistances[labelJ].Add(dist);
             }
 
-            double a = clusterDistances[labelI].Count > 0
-                ? clusterDistances[labelI].Average()
-                : 0;
+            // Singleton cluster: silhouette = 0 per sklearn convention
+            if (clusterDistances[labelI].Count == 0)
+            {
+                scores[i] = 0;
+                continue;
+            }
+
+            double a = clusterDistances[labelI].Average();
 
             double b = double.MaxValue;
             foreach (var kvp in clusterDistances)
