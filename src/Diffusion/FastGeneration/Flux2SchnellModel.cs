@@ -1,0 +1,119 @@
+using System.Diagnostics.CodeAnalysis;
+using AiDotNet.Diffusion.NoisePredictors;
+using AiDotNet.Diffusion.VAE;
+using AiDotNet.Enums;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.Models;
+using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Diffusion.Schedulers;
+
+namespace AiDotNet.Diffusion.FastGeneration;
+
+/// <summary>
+/// FLUX.2 Schnell for next-generation ultra-fast 1-4 step image generation.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para>
+/// FLUX.2 Schnell is the speed-optimized variant of FLUX.2, featuring improved
+/// distillation from the enhanced FLUX.2 architecture. Produces higher quality
+/// images than FLUX.1 Schnell at the same 1-4 step count due to the improved
+/// teacher model and refined distillation process.
+/// </para>
+/// <para>
+/// <b>For Beginners:</b> Just as FLUX.1 Schnell was the fast version of FLUX.1,
+/// FLUX.2 Schnell is the fast version of FLUX.2. It benefits from all FLUX.2
+/// improvements (better anatomy, text rendering, composition) while still generating
+/// images in just 1-4 steps.
+/// </para>
+/// </remarks>
+public class Flux2SchnellModel<T> : LatentDiffusionModelBase<T>
+{
+    private const int LATENT_CHANNELS = 16;
+    private const double DEFAULT_GUIDANCE = 0.0;
+
+    private FluxDoubleStreamPredictor<T> _predictor;
+    private StandardVAE<T> _vae;
+    private readonly IConditioningModule<T>? _conditioner;
+
+    /// <inheritdoc />
+    public override INoisePredictor<T> NoisePredictor => _predictor;
+    /// <inheritdoc />
+    public override IVAEModel<T> VAE => _vae;
+    /// <inheritdoc />
+    public override IConditioningModule<T>? Conditioner => _conditioner;
+    /// <inheritdoc />
+    public override int LatentChannels => LATENT_CHANNELS;
+    /// <inheritdoc />
+    public override int ParameterCount => _predictor.ParameterCount;
+
+    public Flux2SchnellModel(
+        NeuralNetworkArchitecture<T>? architecture = null,
+        DiffusionModelOptions<T>? options = null,
+        INoiseScheduler<T>? scheduler = null,
+        FluxDoubleStreamPredictor<T>? predictor = null,
+        StandardVAE<T>? vae = null,
+        IConditioningModule<T>? conditioner = null,
+        int? seed = null)
+        : base(
+            options ?? new DiffusionModelOptions<T>
+            {
+                TrainTimesteps = 1000, BetaStart = 0.0001,
+                BetaEnd = 0.02, BetaSchedule = BetaSchedule.Linear
+            },
+            scheduler ?? new FlowMatchingScheduler<T>(SchedulerConfig<T>.CreateRectifiedFlow()),
+            architecture)
+    {
+        _conditioner = conditioner;
+        InitializeLayers(predictor, vae, seed);
+        SetGuidanceScale(DEFAULT_GUIDANCE);
+    }
+
+    [MemberNotNull(nameof(_predictor), nameof(_vae))]
+    private void InitializeLayers(FluxDoubleStreamPredictor<T>? predictor, StandardVAE<T>? vae, int? seed)
+    {
+        _predictor = predictor ?? new FluxDoubleStreamPredictor<T>(
+            variant: FluxPredictorVariant.Schnell,
+            inputChannels: LATENT_CHANNELS,
+            contextDim: 4096,
+            seed: seed);
+
+        _vae = vae ?? new StandardVAE<T>(
+            inputChannels: 3, latentChannels: LATENT_CHANNELS,
+            baseChannels: 128, channelMultipliers: [1, 2, 4, 4],
+            numResBlocksPerLevel: 2, latentScaleFactor: 0.3611, seed: seed);
+    }
+
+    /// <inheritdoc />
+    public override Vector<T> GetParameters() => _predictor.GetParameters();
+    /// <inheritdoc />
+    public override void SetParameters(Vector<T> parameters) => _predictor.SetParameters(parameters);
+    /// <inheritdoc />
+    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
+
+    /// <inheritdoc />
+    public override IDiffusionModel<T> Clone()
+    {
+        var clone = new Flux2SchnellModel<T>(conditioner: _conditioner, seed: RandomGenerator.Next());
+        clone.SetParameters(GetParameters());
+        return clone;
+    }
+
+    /// <inheritdoc />
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        var m = new ModelMetadata<T>
+        {
+            Name = "FLUX.2 Schnell", Version = "2.0", ModelType = ModelType.NeuralNetwork,
+            Description = "Next-gen ultra-fast FLUX generation in 1-4 steps with improved quality",
+            FeatureCount = ParameterCount, Complexity = ParameterCount
+        };
+        m.SetProperty("architecture", "flux2-double-stream-distilled");
+        m.SetProperty("optimal_steps", 4);
+        m.SetProperty("guidance_scale", DEFAULT_GUIDANCE);
+        m.SetProperty("latent_channels", LATENT_CHANNELS);
+        return m;
+    }
+}
