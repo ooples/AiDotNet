@@ -67,7 +67,7 @@ public class StableVideoDiffusion<T> : NeuralNetworkBase<T>
 
     // 3D UNet components
     private readonly List<ConvolutionalLayer<T>> _downBlocks;
-    private readonly ConvolutionalLayer<T> _middleBlock;
+    private ConvolutionalLayer<T>? _middleBlock;
     private readonly List<ConvolutionalLayer<T>> _upBlocks;
 
     // Temporal attention layers
@@ -79,22 +79,33 @@ public class StableVideoDiffusion<T> : NeuralNetworkBase<T>
     private readonly List<ConvolutionalLayer<T>> _textEncoderAttnProj; // Attention output projections
     private readonly List<ConvolutionalLayer<T>> _textEncoderFFN1;     // FFN expand layers
     private readonly List<ConvolutionalLayer<T>> _textEncoderFFN2;     // FFN contract layers
-    private readonly ConvolutionalLayer<T> _textEmbedProjection;       // Initial embedding projection
-    private readonly ConvolutionalLayer<T> _textFinalProjection;       // Final projection to UNet conditioning dim
+    private ConvolutionalLayer<T>? _textEmbedProjection;       // Initial embedding projection
+    private ConvolutionalLayer<T>? _textFinalProjection;       // Final projection to UNet conditioning dim
     private readonly int _textEncoderDim;                              // Hidden dimension (768 for ViT-H)
     private readonly int _textEncoderLayers;                           // Number of transformer layers (12 for ViT-H)
     private readonly int _textEncoderHeads;                            // Number of attention heads (12 for ViT-H)
 
     // Conditioning layers
-    private readonly ConvolutionalLayer<T> _imageConditioner;
-    private readonly ConvolutionalLayer<T> _timeEmbedding;
+    private ConvolutionalLayer<T>? _imageConditioner;
+    private ConvolutionalLayer<T>? _timeEmbedding;
 
     // Noise predictor output
-    private readonly ConvolutionalLayer<T> _noisePredictor;
+    private ConvolutionalLayer<T>? _noisePredictor;
 
     // Noise schedule
     private readonly double[] _alphasCumprod;
     private readonly double[] _betas;
+
+    #endregion
+
+    #region Non-Null Accessors
+
+    private ConvolutionalLayer<T> MiddleBlock => _middleBlock ?? throw new InvalidOperationException("Middle block not initialized.");
+    private ConvolutionalLayer<T> TextEmbedProjection => _textEmbedProjection ?? throw new InvalidOperationException("Text embed projection not initialized.");
+    private ConvolutionalLayer<T> TextFinalProjection => _textFinalProjection ?? throw new InvalidOperationException("Text final projection not initialized.");
+    private ConvolutionalLayer<T> ImageConditioner => _imageConditioner ?? throw new InvalidOperationException("Image conditioner not initialized.");
+    private ConvolutionalLayer<T> TimeEmbedding => _timeEmbedding ?? throw new InvalidOperationException("Time embedding not initialized.");
+    private ConvolutionalLayer<T> NoisePredictor => _noisePredictor ?? throw new InvalidOperationException("Noise predictor not initialized.");
 
     #endregion
 
@@ -142,12 +153,20 @@ public class StableVideoDiffusion<T> : NeuralNetworkBase<T>
     /// <param name="numFrames">Number of frames to generate.</param>
     /// <param name="numInferenceSteps">Number of denoising steps.</param>
     /// <param name="guidanceScale">Classifier-free guidance scale.</param>
+    /// <param name="vaeChannels">Number of VAE encoder/decoder base channels. Default: 128.</param>
+    /// <param name="textEncoderDim">Hidden dimension for text encoder. Default: 768 (ViT-H).</param>
+    /// <param name="textEncoderLayers">Number of text encoder transformer layers. Default: 12 (ViT-H).</param>
+    /// <param name="textEncoderHeads">Number of text encoder attention heads. Default: 12 (ViT-H).</param>
     public StableVideoDiffusion(
         NeuralNetworkArchitecture<T> architecture,
         SVDModelVariant variant = SVDModelVariant.SVD,
         int numFrames = 14,
         int numInferenceSteps = 25,
         double guidanceScale = 7.5,
+        int vaeChannels = 128,
+        int textEncoderDim = 768,
+        int textEncoderLayers = 12,
+        int textEncoderHeads = 12,
         StableVideoDiffusionOptions? options = null)
         : base(architecture, new MeanSquaredErrorLoss<T>())
     {
@@ -172,115 +191,90 @@ public class StableVideoDiffusion<T> : NeuralNetworkBase<T>
             _ => 4
         };
 
+        _textEncoderDim = textEncoderDim;
+        _textEncoderLayers = textEncoderLayers;
+        _textEncoderHeads = textEncoderHeads;
+
         _vaeEncoder = [];
         _vaeDecoder = [];
         _downBlocks = [];
         _upBlocks = [];
         _temporalAttention = [];
-
-        // Initialize noise schedule (cosine schedule)
-        (_betas, _alphasCumprod) = InitializeNoiseSchedule(_numInferenceSteps);
-
-        int latentH = _height / 8;
-        int latentW = _width / 8;
-
-        // VAE Encoder: image -> latent
-        int vaeChannels = 128;
-        _vaeEncoder.Add(new ConvolutionalLayer<T>(_channels, _height, _width, vaeChannels, 3, 2, 1));
-        _vaeEncoder.Add(new ConvolutionalLayer<T>(vaeChannels, _height / 2, _width / 2, vaeChannels * 2, 3, 2, 1));
-        _vaeEncoder.Add(new ConvolutionalLayer<T>(vaeChannels * 2, _height / 4, _width / 4, vaeChannels * 4, 3, 2, 1));
-        _vaeEncoder.Add(new ConvolutionalLayer<T>(vaeChannels * 4, latentH, latentW, _latentDim, 3, 1, 1));
-
-        // VAE Decoder: latent -> image
-        _vaeDecoder.Add(new ConvolutionalLayer<T>(_latentDim, latentH, latentW, vaeChannels * 4, 3, 1, 1));
-        _vaeDecoder.Add(new ConvolutionalLayer<T>(vaeChannels * 4, latentH, latentW, vaeChannels * 2, 3, 1, 1));
-        _vaeDecoder.Add(new ConvolutionalLayer<T>(vaeChannels * 2, latentH, latentW, vaeChannels, 3, 1, 1));
-        _vaeDecoder.Add(new ConvolutionalLayer<T>(vaeChannels, latentH, latentW, _channels, 3, 1, 1));
-
-        // 3D UNet blocks with progressively increasing channels
-        int[] channelMult = [320, 640, 1280, 1280];
-
-        // Down blocks
-        _downBlocks.Add(new ConvolutionalLayer<T>(_latentDim, latentH, latentW, channelMult[0], 3, 1, 1));
-        _downBlocks.Add(new ConvolutionalLayer<T>(channelMult[0], latentH, latentW, channelMult[1], 3, 2, 1));
-        _downBlocks.Add(new ConvolutionalLayer<T>(channelMult[1], latentH / 2, latentW / 2, channelMult[2], 3, 2, 1));
-        _downBlocks.Add(new ConvolutionalLayer<T>(channelMult[2], latentH / 4, latentW / 4, channelMult[3], 3, 2, 1));
-
-        // Middle block
-        _middleBlock = new ConvolutionalLayer<T>(channelMult[3], latentH / 8, latentW / 8, channelMult[3], 3, 1, 1);
-
-        // Up blocks
-        _upBlocks.Add(new ConvolutionalLayer<T>(channelMult[3] * 2, latentH / 8, latentW / 8, channelMult[2], 3, 1, 1));
-        _upBlocks.Add(new ConvolutionalLayer<T>(channelMult[2] * 2, latentH / 4, latentW / 4, channelMult[1], 3, 1, 1));
-        _upBlocks.Add(new ConvolutionalLayer<T>(channelMult[1] * 2, latentH / 2, latentW / 2, channelMult[0], 3, 1, 1));
-        _upBlocks.Add(new ConvolutionalLayer<T>(channelMult[0] * 2, latentH, latentW, _latentDim, 3, 1, 1));
-
-        // Temporal attention layers
-        for (int i = 0; i < 4; i++)
-        {
-            _temporalAttention.Add(new ConvolutionalLayer<T>(
-                channelMult[Math.Min(i, 3)], 1, _numFrames, channelMult[Math.Min(i, 3)], 1, 1, 0));
-        }
-
-        // CLIP-like Text Encoder (OpenCLIP ViT-H/14 architecture)
-        // Following the Transformer architecture from "Learning Transferable Visual Models From Natural Language Supervision"
-        _textEncoderDim = 768;      // Hidden dimension for ViT-H text encoder
-        _textEncoderLayers = 12;    // Number of transformer layers
-        _textEncoderHeads = 12;     // Number of attention heads
-        int textFFNDim = _textEncoderDim * 4;  // FFN expansion ratio of 4
-
         _textEncoderQKV = [];
         _textEncoderAttnProj = [];
         _textEncoderFFN1 = [];
         _textEncoderFFN2 = [];
 
-        // Initial embedding projection (input dim 768 -> hidden dim)
-        _textEmbedProjection = new ConvolutionalLayer<T>(_textEncoderDim, 1, 1, _textEncoderDim, 1, 1, 0);
+        // Initialize noise schedule (cosine schedule)
+        (_betas, _alphasCumprod) = InitializeNoiseSchedule(_numInferenceSteps);
 
-        // Transformer layers
-        for (int i = 0; i < _textEncoderLayers; i++)
+        InitializeNativeLayers(vaeChannels);
+    }
+
+    private void InitializeNativeLayers(int vaeChannels)
+    {
+        if (Architecture.Layers != null && Architecture.Layers.Count > 0)
         {
-            // QKV projection (projects to 3x hidden_dim for Q, K, V)
-            _textEncoderQKV.Add(new ConvolutionalLayer<T>(_textEncoderDim, 1, 1, _textEncoderDim * 3, 1, 1, 0));
-            // Attention output projection
-            _textEncoderAttnProj.Add(new ConvolutionalLayer<T>(_textEncoderDim, 1, 1, _textEncoderDim, 1, 1, 0));
-            // FFN expand (hidden -> 4*hidden)
-            _textEncoderFFN1.Add(new ConvolutionalLayer<T>(_textEncoderDim, 1, 1, textFFNDim, 1, 1, 0));
-            // FFN contract (4*hidden -> hidden)
-            _textEncoderFFN2.Add(new ConvolutionalLayer<T>(textFFNDim, 1, 1, _textEncoderDim, 1, 1, 0));
+            Layers.AddRange(Architecture.Layers);
+        }
+        else
+        {
+            var layers = LayerHelper<T>.CreateStableVideoDiffusionLayers(
+                _channels, _height, _width,
+                _latentDim, _numFrames,
+                vaeChannels, _textEncoderDim, _textEncoderLayers).ToList();
+            Layers.AddRange(layers);
         }
 
-        // Final projection to UNet conditioning dimension
-        _textFinalProjection = new ConvolutionalLayer<T>(_textEncoderDim, 1, 1, channelMult[3], 1, 1, 0);
+        // Distribute layers to sub-lists for forward pass
+        int idx = 0;
+
+        // VAE Encoder (4 layers)
+        for (int i = 0; i < 4; i++)
+            _vaeEncoder.Add((ConvolutionalLayer<T>)Layers[idx++]);
+
+        // VAE Decoder (4 layers)
+        for (int i = 0; i < 4; i++)
+            _vaeDecoder.Add((ConvolutionalLayer<T>)Layers[idx++]);
+
+        // Down blocks (4 layers)
+        for (int i = 0; i < 4; i++)
+            _downBlocks.Add((ConvolutionalLayer<T>)Layers[idx++]);
+
+        // Middle block
+        _middleBlock = (ConvolutionalLayer<T>)Layers[idx++];
+
+        // Up blocks (4 layers)
+        for (int i = 0; i < 4; i++)
+            _upBlocks.Add((ConvolutionalLayer<T>)Layers[idx++]);
+
+        // Temporal attention (4 layers)
+        for (int i = 0; i < 4; i++)
+            _temporalAttention.Add((ConvolutionalLayer<T>)Layers[idx++]);
+
+        // Text encoder: embed projection
+        _textEmbedProjection = (ConvolutionalLayer<T>)Layers[idx++];
+
+        // Text encoder transformer layers: QKV, AttnProj, FFN1, FFN2 per layer
+        for (int i = 0; i < _textEncoderLayers; i++)
+        {
+            _textEncoderQKV.Add((ConvolutionalLayer<T>)Layers[idx++]);
+            _textEncoderAttnProj.Add((ConvolutionalLayer<T>)Layers[idx++]);
+            _textEncoderFFN1.Add((ConvolutionalLayer<T>)Layers[idx++]);
+            _textEncoderFFN2.Add((ConvolutionalLayer<T>)Layers[idx++]);
+        }
+
+        // Text final projection
+        _textFinalProjection = (ConvolutionalLayer<T>)Layers[idx++];
 
         // Image conditioner
-        _imageConditioner = new ConvolutionalLayer<T>(_latentDim, latentH, latentW, channelMult[0], 3, 1, 1);
+        _imageConditioner = (ConvolutionalLayer<T>)Layers[idx++];
 
         // Time embedding
-        _timeEmbedding = new ConvolutionalLayer<T>(1, 1, 1, channelMult[0], 1, 1, 0);
+        _timeEmbedding = (ConvolutionalLayer<T>)Layers[idx++];
 
         // Noise predictor
-        _noisePredictor = new ConvolutionalLayer<T>(channelMult[0], latentH, latentW, _latentDim, 3, 1, 1);
-
-        // Register layers
-        foreach (var layer in _vaeEncoder) Layers.Add(layer);
-        foreach (var layer in _vaeDecoder) Layers.Add(layer);
-        foreach (var layer in _downBlocks) Layers.Add(layer);
-        Layers.Add(_middleBlock);
-        foreach (var layer in _upBlocks) Layers.Add(layer);
-        foreach (var layer in _temporalAttention) Layers.Add(layer);
-
-        // Text encoder layers
-        Layers.Add(_textEmbedProjection);
-        foreach (var layer in _textEncoderQKV) Layers.Add(layer);
-        foreach (var layer in _textEncoderAttnProj) Layers.Add(layer);
-        foreach (var layer in _textEncoderFFN1) Layers.Add(layer);
-        foreach (var layer in _textEncoderFFN2) Layers.Add(layer);
-        Layers.Add(_textFinalProjection);
-
-        Layers.Add(_imageConditioner);
-        Layers.Add(_timeEmbedding);
-        Layers.Add(_noisePredictor);
+        _noisePredictor = (ConvolutionalLayer<T>)Layers[idx++];
     }
 
     #endregion
@@ -323,7 +317,7 @@ public class StableVideoDiffusion<T> : NeuralNetworkBase<T>
         var latents = InitializeLatents(imageLatent.Shape, random);
 
         // Condition on input image
-        var imageCondition = _imageConditioner.Forward(imageLatent);
+        var imageCondition = ImageConditioner.Forward(imageLatent);
 
         // Add motion bucket conditioning
         var motionCondition = CreateMotionCondition(motionBucketId, fps);
@@ -714,7 +708,7 @@ public class StableVideoDiffusion<T> : NeuralNetworkBase<T>
         }
 
         // Middle
-        features = _middleBlock.Forward(features);
+        features = MiddleBlock.Forward(features);
         features = ApplySiLU(features);
 
         // Add conditioning
@@ -747,7 +741,7 @@ public class StableVideoDiffusion<T> : NeuralNetworkBase<T>
         }
 
         // Final noise prediction
-        var noise = _noisePredictor.Forward(features);
+        var noise = NoisePredictor.Forward(features);
 
         return noise;
     }
@@ -802,7 +796,7 @@ public class StableVideoDiffusion<T> : NeuralNetworkBase<T>
         // Sinusoidal time embedding
         var embedding = new Tensor<T>([1, 1, 1, 1]);
         embedding[0, 0, 0, 0] = NumOps.FromDouble(t);
-        return _timeEmbedding.Forward(embedding);
+        return TimeEmbedding.Forward(embedding);
     }
 
     private Tensor<T> CreateMotionCondition(int motionBucketId, int fps)
@@ -827,7 +821,7 @@ public class StableVideoDiffusion<T> : NeuralNetworkBase<T>
         }
 
         // Initial embedding projection
-        var hidden = _textEmbedProjection.Forward(textEmbedding);
+        var hidden = TextEmbedProjection.Forward(textEmbedding);
 
         // Process through transformer layers (CLIP text encoder architecture)
         for (int layer = 0; layer < _textEncoderLayers; layer++)
@@ -853,7 +847,7 @@ public class StableVideoDiffusion<T> : NeuralNetworkBase<T>
         hidden = TextEncoderLayerNorm(hidden);
 
         // Project to UNet conditioning dimension
-        return _textFinalProjection.Forward(hidden);
+        return TextFinalProjection.Forward(hidden);
     }
 
     /// <summary>
@@ -1183,7 +1177,7 @@ public class StableVideoDiffusion<T> : NeuralNetworkBase<T>
     private void BackwardPass(Tensor<T> gradient)
     {
         // Backpropagate through noise predictor
-        gradient = _noisePredictor.Backward(gradient);
+        gradient = NoisePredictor.Backward(gradient);
 
         // Backpropagate through up blocks (decoder path)
         for (int i = _upBlocks.Count - 1; i >= 0; i--)
@@ -1192,7 +1186,7 @@ public class StableVideoDiffusion<T> : NeuralNetworkBase<T>
         }
 
         // Backpropagate through middle block
-        gradient = _middleBlock.Backward(gradient);
+        gradient = MiddleBlock.Backward(gradient);
 
         // Backpropagate through down blocks (encoder path)
         for (int i = _downBlocks.Count - 1; i >= 0; i--)
@@ -1215,12 +1209,12 @@ public class StableVideoDiffusion<T> : NeuralNetworkBase<T>
         // Backpropagate through conditioning components
         // Note: These create auxiliary gradients for their respective inputs
         // In a full implementation, gradients would be accumulated for each conditioning path
-        _timeEmbedding.Backward(gradient);
-        _imageConditioner.Backward(gradient);
+        TimeEmbedding.Backward(gradient);
+        ImageConditioner.Backward(gradient);
 
         // Backpropagate through text encoder layers (in reverse order)
         // Final projection
-        _textFinalProjection.Backward(gradient);
+        TextFinalProjection.Backward(gradient);
 
         // Transformer layers in reverse
         for (int layer = _textEncoderLayers - 1; layer >= 0; layer--)
@@ -1235,7 +1229,7 @@ public class StableVideoDiffusion<T> : NeuralNetworkBase<T>
         }
 
         // Initial embedding projection
-        _textEmbedProjection.Backward(gradient);
+        TextEmbedProjection.Backward(gradient);
     }
 
     #endregion
@@ -1323,7 +1317,9 @@ public class StableVideoDiffusion<T> : NeuralNetworkBase<T>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
         return new StableVideoDiffusion<T>(
-            Architecture, _variant, _numFrames, _numInferenceSteps, _guidanceScale);
+            Architecture, _variant, _numFrames, _numInferenceSteps, _guidanceScale,
+            textEncoderDim: _textEncoderDim, textEncoderLayers: _textEncoderLayers,
+            textEncoderHeads: _textEncoderHeads);
     }
 
     #endregion

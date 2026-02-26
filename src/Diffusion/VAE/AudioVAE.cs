@@ -204,13 +204,16 @@ public class AudioVAE<T> : VAEModelBase<T>
     /// </summary>
     private void InitializeLayers()
     {
-        var hiddenDim = _baseChannels * _channelMultipliers[_channelMultipliers.Length - 1];
+        // Encoder projections from LayerHelper
+        var encoderLayers = LayerHelper<T>.CreateAudioVAEEncoderLayers(
+            _melChannels, _latentChannels, _baseChannels, _channelMultipliers).ToList();
+        _muProjection = (DenseLayer<T>)encoderLayers[0];
+        _logVarProjection = (DenseLayer<T>)encoderLayers[1];
 
-        // Mu and LogVar projections
-        // For simplicity, using dense layers (in practice, would use 1D convolutions)
-        _muProjection = new DenseLayer<T>(hiddenDim, _latentChannels, activationFunction: null);
-        _logVarProjection = new DenseLayer<T>(hiddenDim, _latentChannels, activationFunction: null);
-        _latentToDecoder = new DenseLayer<T>(_latentChannels, hiddenDim, activationFunction: null);
+        // Decoder projection from LayerHelper
+        var decoderLayers = LayerHelper<T>.CreateAudioVAEDecoderLayers(
+            _melChannels, _latentChannels, _baseChannels, _channelMultipliers).ToList();
+        _latentToDecoder = (DenseLayer<T>)decoderLayers[0];
     }
 
     /// <inheritdoc />

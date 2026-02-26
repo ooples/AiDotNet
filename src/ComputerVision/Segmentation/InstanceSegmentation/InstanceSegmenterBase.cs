@@ -200,6 +200,9 @@ public enum InstanceSegmentationArchitecture
 /// <summary>
 /// Base class for instance segmentation models.
 /// </summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> This base class provides the common functionality for all instance segmentation models, which detect and mask individual objects in images.</para>
+/// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 public abstract class InstanceSegmenterBase<T>
 {

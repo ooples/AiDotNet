@@ -179,6 +179,13 @@ public class PointNet<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPointClou
         ClearLayers();
         _classificationHeadLayers.Clear();
 
+        if (Architecture.Layers != null && Architecture.Layers.Count > 0)
+        {
+            foreach (var layer in Architecture.Layers)
+                AddLayerToCollection(layer);
+            return;
+        }
+
         int inputChannels = _inputFeatureDim;
 
         if (_useInputTransform)

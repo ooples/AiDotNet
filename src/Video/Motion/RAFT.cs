@@ -235,63 +235,39 @@ public class RAFT<T> : OpticalFlowBase<T>
 
     private void InitializeNativeLayers()
     {
-        int featHeight = _height / 8;
-        int featWidth = _width / 8;
+        // Check for user-provided custom layers
+        if (Architecture.Layers != null && Architecture.Layers.Count > 0)
+        {
+            Layers.AddRange(Architecture.Layers);
+        }
+        else
+        {
+            var layers = LayerHelper<T>.CreateRAFTLayers(
+                channels: _channels, height: _height, width: _width,
+                numFeatures: _numFeatures, correlationLevels: _correlationLevels,
+                correlationRadius: _correlationRadius).ToList();
+            Layers.AddRange(layers);
+        }
 
-        // Feature encoder
-        _featureEncoder.Add(new ConvolutionalLayer<T>(
-            _channels, _height, _width, 64, 7, 2, 3));
-        _featureEncoder.Add(new ConvolutionalLayer<T>(
-            64, _height / 2, _width / 2, 64, 3, 1, 1));
-        _featureEncoder.Add(new ConvolutionalLayer<T>(
-            64, _height / 2, _width / 2, 96, 3, 2, 1));
-        _featureEncoder.Add(new ConvolutionalLayer<T>(
-            96, _height / 4, _width / 4, 128, 3, 2, 1));
-        _featureEncoder.Add(new ConvolutionalLayer<T>(
-            128, featHeight, featWidth, _numFeatures, 3, 1, 1));
-
-        // Context encoder
-        _contextEncoder.Add(new ConvolutionalLayer<T>(
-            _channels, _height, _width, 64, 7, 2, 3));
-        _contextEncoder.Add(new ConvolutionalLayer<T>(
-            64, _height / 2, _width / 2, 64, 3, 1, 1));
-        _contextEncoder.Add(new ConvolutionalLayer<T>(
-            64, _height / 2, _width / 2, 96, 3, 2, 1));
-        _contextEncoder.Add(new ConvolutionalLayer<T>(
-            96, _height / 4, _width / 4, 128, 3, 2, 1));
-        _contextEncoder.Add(new ConvolutionalLayer<T>(
-            128, featHeight, featWidth, _numFeatures, 3, 1, 1));
-
-        int corrDim = _correlationLevels * (2 * _correlationRadius + 1) * (2 * _correlationRadius + 1);
-        _correlationConv = new ConvolutionalLayer<T>(
-            corrDim, featHeight, featWidth, _numFeatures, 1, 1, 0);
-
-        int gruInputDim = _numFeatures + _numFeatures + 2;
-        _gruConvZ = new ConvolutionalLayer<T>(
-            gruInputDim, featHeight, featWidth, _numFeatures, 3, 1, 1);
-        _gruConvR = new ConvolutionalLayer<T>(
-            gruInputDim, featHeight, featWidth, _numFeatures, 3, 1, 1);
-        _gruConvH = new ConvolutionalLayer<T>(
-            gruInputDim, featHeight, featWidth, _numFeatures, 3, 1, 1);
-
-        _flowHead = new ConvolutionalLayer<T>(
-            _numFeatures, featHeight, featWidth, _numFeatures / 2, 3, 1, 1);
-        _deltaFlowHead = new ConvolutionalLayer<T>(
-            _numFeatures / 2, featHeight, featWidth, 2, 3, 1, 1);
-
-        _upsampleConv = new ConvolutionalLayer<T>(
-            _numFeatures, featHeight, featWidth, 64 * 9, 3, 1, 1);
-
-        // Register layers
-        foreach (var layer in _featureEncoder) Layers.Add(layer);
-        foreach (var layer in _contextEncoder) Layers.Add(layer);
-        Layers.Add(_correlationConv);
-        Layers.Add(_gruConvZ);
-        Layers.Add(_gruConvR);
-        Layers.Add(_gruConvH);
-        Layers.Add(_flowHead);
-        Layers.Add(_deltaFlowHead);
-        Layers.Add(_upsampleConv);
+        // Distribute layers to sub-lists for forward pass
+        int idx = 0;
+        // Feature encoder (5 layers)
+        for (int i = 0; i < 5; i++)
+            _featureEncoder.Add((ConvolutionalLayer<T>)Layers[idx++]);
+        // Context encoder (5 layers)
+        for (int i = 0; i < 5; i++)
+            _contextEncoder.Add((ConvolutionalLayer<T>)Layers[idx++]);
+        // Correlation conv
+        _correlationConv = (ConvolutionalLayer<T>)Layers[idx++];
+        // GRU update block
+        _gruConvZ = (ConvolutionalLayer<T>)Layers[idx++];
+        _gruConvR = (ConvolutionalLayer<T>)Layers[idx++];
+        _gruConvH = (ConvolutionalLayer<T>)Layers[idx++];
+        // Flow heads
+        _flowHead = (ConvolutionalLayer<T>)Layers[idx++];
+        _deltaFlowHead = (ConvolutionalLayer<T>)Layers[idx++];
+        // Upsample conv
+        _upsampleConv = (ConvolutionalLayer<T>)Layers[idx++];
     }
 
     private List<Tensor<T>> ForwardIterative(Tensor<T> frame1, Tensor<T> frame2)

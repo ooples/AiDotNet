@@ -47,6 +47,11 @@ public class UViTNoisePredictor<T> : NoisePredictorBase<T>
     private readonly int _patchSize;
     private readonly int _contextDim;
 
+    /// <summary>
+    /// Maximum number of patches (computed from latent size and patch size).
+    /// </summary>
+    private readonly int _maxPatches;
+
     // Patch embedding
     private DenseLayer<T> _patchEmbed;
 
@@ -110,6 +115,7 @@ public class UViTNoisePredictor<T> : NoisePredictorBase<T>
     /// <param name="numHeads">Number of attention heads (default: 8).</param>
     /// <param name="patchSize">Patch size for spatial tokenization (default: 2).</param>
     /// <param name="contextDim">Cross-attention context dimension (0 = no cross-attention).</param>
+    /// <param name="latentSpatialSize">Latent spatial size per dimension (default: 32 for 256/8).</param>
     /// <param name="seed">Optional random seed for weight initialization.</param>
     public UViTNoisePredictor(
         int inputChannels = 4,
@@ -118,6 +124,7 @@ public class UViTNoisePredictor<T> : NoisePredictorBase<T>
         int numHeads = 8,
         int patchSize = 2,
         int contextDim = 0,
+        int latentSpatialSize = 32,
         int? seed = null)
         : base(seed: seed)
     {
@@ -129,6 +136,7 @@ public class UViTNoisePredictor<T> : NoisePredictorBase<T>
         _numHeads = numHeads;
         _patchSize = patchSize;
         _contextDim = contextDim;
+        _maxPatches = (latentSpatialSize / patchSize) * (latentSpatialSize / patchSize);
 
         _encoderBlocks = [];
         _decoderBlocks = [];
@@ -176,9 +184,8 @@ public class UViTNoisePredictor<T> : NoisePredictorBase<T>
         int outPatchDim = _inputChannels * _patchSize * _patchSize;
         _outputProj = new DenseLayer<T>(_hiddenSize, outPatchDim, activationFunction: null);
 
-        // Position embeddings
-        int maxPatches = 256; // 32x32 latent / patch_size=2 → 16x16 = 256
-        var posEmbData = new T[maxPatches * _hiddenSize];
+        // Position embeddings (computed from latent spatial size and patch size)
+        var posEmbData = new T[_maxPatches * _hiddenSize];
         for (int i = 0; i < posEmbData.Length; i++)
         {
             double u1 = 1.0 - RandomGenerator.NextDouble();
@@ -186,7 +193,7 @@ public class UViTNoisePredictor<T> : NoisePredictorBase<T>
             double normal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
             posEmbData[i] = NumOps.FromDouble(normal * 0.02);
         }
-        _posEmbed = new Tensor<T>(new[] { 1, maxPatches, _hiddenSize }, new Vector<T>(posEmbData));
+        _posEmbed = new Tensor<T>(new[] { 1, _maxPatches, _hiddenSize }, new Vector<T>(posEmbData));
     }
 
     private UViTBlock CreateBlock()
@@ -194,7 +201,7 @@ public class UViTNoisePredictor<T> : NoisePredictorBase<T>
         return new UViTBlock
         {
             Norm1 = new LayerNormalizationLayer<T>(_hiddenSize),
-            Attention = new SelfAttentionLayer<T>(256, _hiddenSize, _numHeads, activationFunction: null),
+            Attention = new SelfAttentionLayer<T>(_maxPatches, _hiddenSize, _numHeads, activationFunction: null),
             Norm2 = new LayerNormalizationLayer<T>(_hiddenSize),
             MLP1 = new DenseLayer<T>(_hiddenSize, _hiddenSize * 4, (IActivationFunction<T>)new GELUActivation<T>()),
             MLP2 = new DenseLayer<T>(_hiddenSize * 4, _hiddenSize, activationFunction: null)

@@ -1,6 +1,7 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Diffusion.Audio;
 using AiDotNet.Enums;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
@@ -60,6 +61,12 @@ public class VITSModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
+
+    /// <summary>Default phoneme vocabulary size for character-level models.</summary>
+    private const int DefaultPhonemeVocabSize = 128;
+
+    /// <summary>Default HiFi-GAN upsample rates producing 256x upsampling (8*8*2*2).</summary>
+    private static readonly int[] DefaultUpsampleRates = [8, 8, 2, 2];
 
     #region Execution Mode
 
@@ -183,6 +190,16 @@ public class VITSModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
     /// Maximum phoneme sequence length.
     /// </summary>
     private int _maxPhonemeLength;
+
+    /// <summary>
+    /// Phoneme vocabulary size.
+    /// </summary>
+    private int _phonemeVocabSize;
+
+    /// <summary>
+    /// HiFi-GAN upsampling rates for the decoder.
+    /// </summary>
+    private int[] _upsampleRates;
 
     /// <summary>
     /// FFT size for audio generation.
@@ -319,6 +336,8 @@ public class VITSModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         _speakerEmbeddingDim = 256;
         _numSpeakers = 1;
         _maxPhonemeLength = 256;
+        _phonemeVocabSize = DefaultPhonemeVocabSize;
+        _upsampleRates = (int[])DefaultUpsampleRates.Clone();
 
         // Initialize preprocessor
         _preprocessor = new TtsPreprocessor();
@@ -366,6 +385,8 @@ public class VITSModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
     /// <param name="speakerEmbeddingDim">Speaker embedding dimension. Default is 256.</param>
     /// <param name="numSpeakers">Number of speakers for multi-speaker model. Default is 1.</param>
     /// <param name="maxPhonemeLength">Maximum phoneme sequence length. Default is 256.</param>
+    /// <param name="phonemeVocabSize">Phoneme vocabulary size. Default is 128.</param>
+    /// <param name="upsampleRates">HiFi-GAN upsampling rates. Default is [8, 8, 2, 2].</param>
     /// <param name="fftSize">FFT size for audio generation. Default is 1024.</param>
     /// <param name="hopLength">Hop length for audio generation. Default is 256.</param>
     /// <param name="optimizer">Optimizer for training. If null, uses Adam.</param>
@@ -404,6 +425,8 @@ public class VITSModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         int speakerEmbeddingDim = 256,
         int numSpeakers = 1,
         int maxPhonemeLength = 256,
+        int phonemeVocabSize = 128,
+        int[]? upsampleRates = null,
         int fftSize = 1024,
         int hopLength = 256,
         IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
@@ -431,6 +454,14 @@ public class VITSModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         _speakerEmbeddingDim = speakerEmbeddingDim;
         _numSpeakers = numSpeakers;
         _maxPhonemeLength = maxPhonemeLength;
+        Guard.Positive(phonemeVocabSize);
+        _phonemeVocabSize = phonemeVocabSize;
+        var rates = (upsampleRates ?? DefaultUpsampleRates).ToArray();
+        if (rates.Length == 0)
+            throw new ArgumentException("Upsample rates must not be empty.", nameof(upsampleRates));
+        if (rates.Any(r => r <= 0))
+            throw new ArgumentException("All upsample rates must be positive.", nameof(upsampleRates));
+        _upsampleRates = rates;
         _fftSize = fftSize;
         _hopLength = hopLength;
 
@@ -473,73 +504,39 @@ public class VITSModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
     /// </summary>
     private void InitializeNativeLayers()
     {
-        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
-        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+        var layers = (Architecture.Layers != null && Architecture.Layers.Count > 0)
+            ? Architecture.Layers.ToList()
+            : LayerHelper<T>.CreateVITSLayers(
+                hiddenDim: _hiddenDim, numEncoderLayers: _numEncoderLayers,
+                numHeads: _numHeads, maxPhonemeLength: _maxPhonemeLength,
+                numFlowLayers: _numFlowLayers, phonemeVocabSize: _phonemeVocabSize,
+                upsampleRates: _upsampleRates).ToList();
 
-        int phonemeVocabSize = 128;
+        Layers.Clear();
+        _textEncoderLayers.Clear();
+        _durationPredictorLayers.Clear();
+        _flowLayers.Clear();
+        _decoderLayers.Clear();
+        Layers.AddRange(layers);
 
-        // Text Encoder (Transformer-based)
-        var phonemeEmbed = new DenseLayer<T>(phonemeVocabSize, _hiddenDim, reluActivation);
-        _textEncoderLayers.Add(phonemeEmbed);
+        // Distribute to internal sub-lists for forward pass
+        int idx = 0;
+        int textEncoderCount = 1 + _numEncoderLayers * 3;
+        for (int i = 0; i < textEncoderCount && idx < layers.Count; i++)
+            _textEncoderLayers.Add(layers[idx++]);
+        for (int i = 0; i < 3 && idx < layers.Count; i++)
+            _durationPredictorLayers.Add(layers[idx++]);
+        for (int i = 0; i < _numFlowLayers && idx < layers.Count; i++)
+            _flowLayers.Add(layers[idx++]);
+        while (idx < layers.Count)
+            _decoderLayers.Add(layers[idx++]);
 
-        for (int i = 0; i < _numEncoderLayers; i++)
-        {
-            var selfAttn = new MultiHeadAttentionLayer<T>(_maxPhonemeLength, _hiddenDim, _numHeads, identityActivation);
-            var ff = new DenseLayer<T>(_hiddenDim, _hiddenDim * 4, reluActivation);
-            var ffOut = new DenseLayer<T>(_hiddenDim * 4, _hiddenDim, identityActivation);
-            _textEncoderLayers.Add(selfAttn);
-            _textEncoderLayers.Add(ff);
-            _textEncoderLayers.Add(ffOut);
-        }
-
-        // Duration Predictor
-        var durConv1 = new DenseLayer<T>(_hiddenDim, _hiddenDim, reluActivation);
-        var durConv2 = new DenseLayer<T>(_hiddenDim, _hiddenDim, reluActivation);
-        var durOut = new DenseLayer<T>(_hiddenDim, 1, identityActivation);
-        _durationPredictorLayers.Add(durConv1);
-        _durationPredictorLayers.Add(durConv2);
-        _durationPredictorLayers.Add(durOut);
-
-        // Flow layers (simplified affine coupling)
-        for (int i = 0; i < _numFlowLayers; i++)
-        {
-            var flowTransform = new DenseLayer<T>(_hiddenDim, _hiddenDim * 2, reluActivation);
-            _flowLayers.Add(flowTransform);
-        }
-
-        // Decoder (HiFi-GAN style generator)
-        int[] upsampleRates = [8, 8, 2, 2];
-        int currentDim = _hiddenDim;
-
-        foreach (int rate in upsampleRates)
-        {
-            var upsample = new DenseLayer<T>(currentDim, currentDim * rate, reluActivation);
-            var conv = new DenseLayer<T>(currentDim * rate, currentDim, reluActivation);
-            _decoderLayers.Add(upsample);
-            _decoderLayers.Add(conv);
-        }
-
-        // Output projection
-        var outputProj = new DenseLayer<T>(currentDim, 1, identityActivation);
-        _decoderLayers.Add(outputProj);
-
-        // Speaker embedding (if multi-speaker)
+        // Speaker embedding (if multi-speaker) - separate from LayerHelper
         if (_numSpeakers > 1)
         {
             _speakerEmbedding = new EmbeddingLayer<T>(_numSpeakers, _speakerEmbeddingDim);
-        }
-
-        // Register all layers
-        foreach (var layer in _textEncoderLayers)
-            Layers.Add(layer);
-        foreach (var layer in _durationPredictorLayers)
-            Layers.Add(layer);
-        foreach (var layer in _flowLayers)
-            Layers.Add(layer);
-        foreach (var layer in _decoderLayers)
-            Layers.Add(layer);
-        if (_speakerEmbedding is not null)
             Layers.Add(_speakerEmbedding);
+        }
     }
 
     private IReadOnlyList<VoiceInfo<T>> GetDefaultVoices()
@@ -857,6 +854,12 @@ public class VITSModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         writer.Write(_maxPhonemeLength);
         writer.Write(_fftSize);
         writer.Write(_hopLength);
+        writer.Write(_phonemeVocabSize);
+        writer.Write(_upsampleRates.Length);
+        foreach (var rate in _upsampleRates)
+        {
+            writer.Write(rate);
+        }
     }
 
     /// <summary>
@@ -879,6 +882,29 @@ public class VITSModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         _maxPhonemeLength = reader.ReadInt32();
         _fftSize = reader.ReadInt32();
         _hopLength = reader.ReadInt32();
+        if (reader.BaseStream.Position < reader.BaseStream.Length)
+        {
+            _phonemeVocabSize = reader.ReadInt32();
+            if (_phonemeVocabSize <= 0)
+                throw new InvalidDataException($"Invalid phonemeVocabSize: {_phonemeVocabSize}. Must be positive.");
+            // Maximum expected upsample rate entries (typical VITS uses 4-5 rates)
+            const int MaxUpsampleRatesLength = 64;
+            int ratesLen = reader.ReadInt32();
+            if (ratesLen <= 0 || ratesLen > MaxUpsampleRatesLength)
+                throw new InvalidDataException($"Invalid upsample rates length: {ratesLen}. Expected 1-{MaxUpsampleRatesLength}.");
+            _upsampleRates = new int[ratesLen];
+            for (int i = 0; i < ratesLen; i++)
+            {
+                _upsampleRates[i] = reader.ReadInt32();
+                if (_upsampleRates[i] <= 0)
+                    throw new InvalidDataException($"Invalid upsample rate at index {i}: {_upsampleRates[i]}. Must be positive.");
+            }
+        }
+        else
+        {
+            _phonemeVocabSize = 128;
+            _upsampleRates = [8, 8, 2, 2];
+        }
     }
 
     /// <summary>
@@ -916,6 +942,8 @@ public class VITSModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
                 _speakerEmbeddingDim,
                 _numSpeakers,
                 _maxPhonemeLength,
+                _phonemeVocabSize,
+                _upsampleRates,
                 _fftSize,
                 _hopLength,
                 lossFunction: _lossFunction);

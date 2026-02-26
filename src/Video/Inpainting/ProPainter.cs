@@ -63,6 +63,7 @@ public class ProPainter<T> : VideoInpaintingBase<T>
     private readonly List<ConvolutionalLayer<T>> _transformerQKV;  // Q, K, V projections
     private readonly List<ConvolutionalLayer<T>> _transformerProj; // Output projections
     private readonly List<ConvolutionalLayer<T>> _transformerFFN;  // Feed-forward networks
+    private readonly int _numTransformerBlocks;
     private readonly int _numHeads;
     private readonly int _headDim;
 
@@ -102,9 +103,13 @@ public class ProPainter<T> : VideoInpaintingBase<T>
     /// </summary>
     /// <param name="architecture">The neural network architecture configuration.</param>
     /// <param name="numFeatures">The number of features in intermediate layers.</param>
+    /// <param name="numTransformerBlocks">Number of transformer blocks for global attention. Default: 6 (paper standard).</param>
+    /// <param name="numHeads">Number of attention heads per transformer block. Default: 8 (paper standard).</param>
     public ProPainter(
         NeuralNetworkArchitecture<T> architecture,
         int numFeatures = 128,
+        int numTransformerBlocks = 6,
+        int numHeads = 8,
         ProPainterOptions? options = null)
         : base(architecture, new CharbonnierLoss<T>())
     {
@@ -115,8 +120,9 @@ public class ProPainter<T> : VideoInpaintingBase<T>
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 640;
         _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
         _numFeatures = numFeatures;
-        _numHeads = 8; // Standard number of heads for transformer
-        _headDim = (_numFeatures * 4) / _numHeads; // Each head dimension
+        _numTransformerBlocks = numTransformerBlocks;
+        _numHeads = numHeads;
+        _headDim = (_numFeatures * 4) / _numHeads;
 
         _flowEncoder = [];
         _flowDecoder = [];
@@ -234,74 +240,48 @@ public class ProPainter<T> : VideoInpaintingBase<T>
 
     private void InitializeNativeLayers()
     {
-        // Flow completion encoder
-        _flowEncoder.Add(new ConvolutionalLayer<T>(
-            4, _height, _width, _numFeatures, 3, 2, 1)); // 4 = 2 + 2 (flow + mask)
-        _flowEncoder.Add(new ConvolutionalLayer<T>(
-            _numFeatures, _height / 2, _width / 2, _numFeatures * 2, 3, 2, 1));
-        _flowEncoder.Add(new ConvolutionalLayer<T>(
-            _numFeatures * 2, _height / 4, _width / 4, _numFeatures * 4, 3, 2, 1));
-
-        // Flow completion decoder
-        _flowDecoder.Add(new ConvolutionalLayer<T>(
-            _numFeatures * 4, _height / 8, _width / 8, _numFeatures * 2, 3, 1, 1));
-        _flowDecoder.Add(new ConvolutionalLayer<T>(
-            _numFeatures * 2, _height / 4, _width / 4, _numFeatures, 3, 1, 1));
-        _flowDecoder.Add(new ConvolutionalLayer<T>(
-            _numFeatures, _height / 2, _width / 2, 2, 3, 1, 1)); // Output: 2-channel flow
-
-        // Image propagation encoder
-        _imageEncoder.Add(new ConvolutionalLayer<T>(
-            _channels + 1, _height, _width, _numFeatures, 3, 2, 1)); // image + mask
-        _imageEncoder.Add(new ConvolutionalLayer<T>(
-            _numFeatures, _height / 2, _width / 2, _numFeatures * 2, 3, 2, 1));
-        _imageEncoder.Add(new ConvolutionalLayer<T>(
-            _numFeatures * 2, _height / 4, _width / 4, _numFeatures * 4, 3, 2, 1));
-
-        // Transformer blocks for global attention (Temporal Focal Transformer)
-        // Each block has: QKV projection, attention, output projection, FFN
-        int featH = _height / 8;
-        int featW = _width / 8;
-        int featChannels = _numFeatures * 4;
-
-        for (int i = 0; i < 6; i++)
+        if (Architecture.Layers != null && Architecture.Layers.Count > 0)
         {
-            // Q, K, V projection (combined into one conv that outputs 3x channels for Q, K, V)
-            _transformerQKV.Add(new ConvolutionalLayer<T>(
-                featChannels, featH, featW, featChannels * 3, 1, 1, 0));
-
-            // Output projection after attention
-            _transformerProj.Add(new ConvolutionalLayer<T>(
-                featChannels, featH, featW, featChannels, 1, 1, 0));
-
-            // Feed-forward network (expand then contract)
-            _transformerFFN.Add(new ConvolutionalLayer<T>(
-                featChannels, featH, featW, featChannels * 4, 1, 1, 0)); // Expand
-            _transformerFFN.Add(new ConvolutionalLayer<T>(
-                featChannels * 4, featH, featW, featChannels, 1, 1, 0)); // Contract
+            Layers.AddRange(Architecture.Layers);
+        }
+        else
+        {
+            var layers = LayerHelper<T>.CreateProPainterLayers(
+                _channels, _height, _width,
+                _numFeatures, _numTransformerBlocks, _numHeads).ToList();
+            Layers.AddRange(layers);
         }
 
-        // Image decoder
-        _imageDecoder.Add(new ConvolutionalLayer<T>(
-            _numFeatures * 4, featH, featW, _numFeatures * 2, 3, 1, 1));
-        _imageDecoder.Add(new ConvolutionalLayer<T>(
-            _numFeatures * 2, _height / 4, _width / 4, _numFeatures, 3, 1, 1));
-        _imageDecoder.Add(new ConvolutionalLayer<T>(
-            _numFeatures, _height / 2, _width / 2, _numFeatures, 3, 1, 1));
+        // Distribute layers to sub-lists for forward pass
+        int idx = 0;
+
+        // Flow encoder (3 layers)
+        for (int i = 0; i < 3; i++)
+            _flowEncoder.Add((ConvolutionalLayer<T>)Layers[idx++]);
+
+        // Flow decoder (3 layers)
+        for (int i = 0; i < 3; i++)
+            _flowDecoder.Add((ConvolutionalLayer<T>)Layers[idx++]);
+
+        // Image encoder (3 layers)
+        for (int i = 0; i < 3; i++)
+            _imageEncoder.Add((ConvolutionalLayer<T>)Layers[idx++]);
+
+        // Transformer blocks: QKV, Proj, FFN expand, FFN contract per block
+        for (int i = 0; i < _numTransformerBlocks; i++)
+        {
+            _transformerQKV.Add((ConvolutionalLayer<T>)Layers[idx++]);
+            _transformerProj.Add((ConvolutionalLayer<T>)Layers[idx++]);
+            _transformerFFN.Add((ConvolutionalLayer<T>)Layers[idx++]); // expand
+            _transformerFFN.Add((ConvolutionalLayer<T>)Layers[idx++]); // contract
+        }
+
+        // Image decoder (3 layers)
+        for (int i = 0; i < 3; i++)
+            _imageDecoder.Add((ConvolutionalLayer<T>)Layers[idx++]);
 
         // Output convolution
-        _outputConv = new ConvolutionalLayer<T>(
-            _numFeatures, _height, _width, _channels, 3, 1, 1);
-
-        // Register all layers
-        foreach (var layer in _flowEncoder) Layers.Add(layer);
-        foreach (var layer in _flowDecoder) Layers.Add(layer);
-        foreach (var layer in _imageEncoder) Layers.Add(layer);
-        foreach (var layer in _transformerQKV) Layers.Add(layer);
-        foreach (var layer in _transformerProj) Layers.Add(layer);
-        foreach (var layer in _transformerFFN) Layers.Add(layer);
-        foreach (var layer in _imageDecoder) Layers.Add(layer);
-        Layers.Add(_outputConv);
+        _outputConv = (ConvolutionalLayer<T>)Layers[idx++];
     }
 
     private Tensor<T> InpaintFrame(
@@ -332,7 +312,7 @@ public class ProPainter<T> : VideoInpaintingBase<T>
 
         // Step 4: Apply transformer blocks for global context (Multi-Head Self-Attention)
         var transformedFeatures = imageFeatures;
-        for (int i = 0; i < 6; i++)
+        for (int i = 0; i < _numTransformerBlocks; i++)
         {
             // Pre-norm (layer normalization approximation via standardization)
             var normed = LayerNorm(transformedFeatures);
@@ -862,7 +842,7 @@ public class ProPainter<T> : VideoInpaintingBase<T>
         }
 
         // Backward through transformer blocks (in reverse order)
-        for (int i = 5; i >= 0; i--)
+        for (int i = _numTransformerBlocks - 1; i >= 0; i--)
         {
             // Backward through FFN (contract then expand)
             gradient = _transformerFFN[i * 2 + 1].Backward(gradient);
@@ -953,7 +933,7 @@ public class ProPainter<T> : VideoInpaintingBase<T>
     /// <inheritdoc/>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        return new ProPainter<T>(Architecture, _numFeatures);
+        return new ProPainter<T>(Architecture, _numFeatures, _numTransformerBlocks, _numHeads);
     }
 
     #endregion

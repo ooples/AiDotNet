@@ -1,5 +1,6 @@
 using System.IO;
 using AiDotNet.Enums;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
@@ -270,37 +271,39 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
     {
         int numPatches = (_imageSize / _patchSize) * (_imageSize / _patchSize);
 
-        _patchEmbedding = new PatchEmbeddingLayer<T>(
-            _imageSize, _imageSize, channels, _patchSize, _visionHiddenDim);
+        if (Architecture.Layers != null && Architecture.Layers.Count > 0)
+        {
+            Layers.AddRange(Architecture.Layers);
+        }
+        else
+        {
+            Layers.AddRange(LayerHelper<T>.CreateLLaVALayers(
+                _imageSize, channels, _patchSize, _visionHiddenDim, _lmHiddenDim,
+                _numVisionLayers, _numLmLayers, _numHeads, _vocabularySize, _maxSequenceLength));
+        }
 
+        // Distribute layers to internal sub-lists
+        int idx = 0;
+        _patchEmbedding = Layers[idx++];
+
+        for (int i = 0; i < _numVisionLayers; i++)
+            _visionEncoderLayers.Add(Layers[idx++]);
+
+        _projectionLayers.Add(Layers[idx++]); // GELU projection
+        _projectionLayers.Add(Layers[idx++]); // Linear projection
+
+        _textTokenEmbedding = Layers[idx++];
+
+        for (int i = 0; i < _numLmLayers; i++)
+            _languageModelLayers.Add(Layers[idx++]);
+
+        _outputProjection = Layers[idx++];
+        _groundingHead = Layers[idx++];
+
+        // Initialize positional embeddings
         _visionClsToken = Matrix<T>.CreateDefault(1, _visionHiddenDim, NumOps.Zero);
         _visionPositionalEmbeddings = Matrix<T>.CreateDefault(numPatches + 1, _visionHiddenDim, NumOps.Zero);
-
-        int visionFfnDim = _visionHiddenDim * 4;
-        for (int i = 0; i < _numVisionLayers; i++)
-        {
-            _visionEncoderLayers.Add(new TransformerEncoderLayer<T>(
-                _visionHiddenDim, _numHeads, visionFfnDim));
-        }
-
-        // Projection layers (2-layer MLP) - explicit cast to avoid ambiguity
-        _projectionLayers.Add(new DenseLayer<T>(_visionHiddenDim, _lmHiddenDim,
-            (IActivationFunction<T>)new GELUActivation<T>()));
-        _projectionLayers.Add(new DenseLayer<T>(_lmHiddenDim, _lmHiddenDim,
-            (IActivationFunction<T>?)null));
-
-        _textTokenEmbedding = new EmbeddingLayer<T>(_vocabularySize, _lmHiddenDim);
         _textPositionalEmbeddings = Matrix<T>.CreateDefault(_maxSequenceLength, _lmHiddenDim, NumOps.Zero);
-
-        int lmFfnDim = _lmHiddenDim * 4;
-        for (int i = 0; i < _numLmLayers; i++)
-        {
-            _languageModelLayers.Add(new TransformerEncoderLayer<T>(
-                _lmHiddenDim, _numHeads, lmFfnDim));
-        }
-
-        _outputProjection = new DenseLayer<T>(_lmHiddenDim, _vocabularySize, (IActivationFunction<T>?)null);
-        _groundingHead = new DenseLayer<T>(_lmHiddenDim, 4, (IActivationFunction<T>)new SigmoidActivation<T>());
 
         InitializeWeights();
     }

@@ -1,6 +1,7 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Diffusion.Audio;
 using AiDotNet.Enums;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
@@ -416,6 +417,7 @@ public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
     /// <param name="encoderDim">Encoder hidden dimension. Default is 512.</param>
     /// <param name="decoderDim">Decoder hidden dimension. Default is 1024.</param>
     /// <param name="attentionDim">Attention dimension. Default is 128.</param>
+    /// <param name="attentionFilters">Number of attention location filters. Default is 32.</param>
     /// <param name="prenetDim">Pre-net dimension. Default is 256.</param>
     /// <param name="postnetEmbeddingDim">Post-net embedding dimension. Default is 512.</param>
     /// <param name="numEncoderConvLayers">Number of encoder conv layers. Default is 3.</param>
@@ -459,6 +461,7 @@ public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         int encoderDim = 512,
         int decoderDim = 1024,
         int attentionDim = 128,
+        int attentionFilters = 32,
         int prenetDim = 256,
         int postnetEmbeddingDim = 512,
         int numEncoderConvLayers = 3,
@@ -490,7 +493,7 @@ public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         _encoderDim = encoderDim;
         _decoderDim = decoderDim;
         _attentionDim = attentionDim;
-        _attentionFilters = 32;
+        _attentionFilters = attentionFilters;
         _prenetDim = prenetDim;
         _postnetEmbeddingDim = postnetEmbeddingDim;
         _numEncoderConvLayers = numEncoderConvLayers;
@@ -538,82 +541,53 @@ public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
     /// </summary>
     private void InitializeNativeLayers()
     {
-        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
-        IActivationFunction<T> tanhActivation = new TanhActivation<T>();
-        IActivationFunction<T> sigmoidActivation = new SigmoidActivation<T>();
-        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
-
-        // Character/phoneme embedding
-        _embedding = new EmbeddingLayer<T>(_vocabSize, _embeddingDim);
-
-        // Encoder convolutional layers
-        for (int i = 0; i < _numEncoderConvLayers; i++)
+        List<ILayer<T>> layers;
+        if (Architecture.Layers != null && Architecture.Layers.Count > 0)
         {
-            var conv = new DenseLayer<T>(_embeddingDim, _embeddingDim, reluActivation);
-            _encoderConvLayers.Add(conv);
+            layers = Architecture.Layers.ToList();
+            // First layer should be embedding if present
+            if (layers.Count > 0 && layers[0] is EmbeddingLayer<T> emb)
+            {
+                _embedding = emb;
+                layers.RemoveAt(0);
+                Layers.Add(_embedding);
+            }
         }
-
-        // Encoder bidirectional LSTM (approximated with dense layers)
-        _encoderLstm = new DenseLayer<T>(_embeddingDim, _encoderDim * 2, tanhActivation);
-
-        // Attention layers
-        // Location-sensitive attention components
-        var attentionQuery = new DenseLayer<T>(_decoderDim, _attentionDim, identityActivation);
-        var attentionKey = new DenseLayer<T>(_encoderDim * 2, _attentionDim, identityActivation);
-        var attentionLocation = new DenseLayer<T>(_attentionFilters, _attentionDim, identityActivation);
-        var attentionValue = new DenseLayer<T>(_attentionDim, 1, identityActivation);
-        _attentionLayers.Add(attentionQuery);
-        _attentionLayers.Add(attentionKey);
-        _attentionLayers.Add(attentionLocation);
-        _attentionLayers.Add(attentionValue);
-
-        // Decoder LSTM layers (2 layers)
-        // Pre-net
-        var prenet1 = new DenseLayer<T>(NumMels, _prenetDim, reluActivation);
-        var prenet2 = new DenseLayer<T>(_prenetDim, _prenetDim, reluActivation);
-        _decoderLstmLayers.Add(prenet1);
-        _decoderLstmLayers.Add(prenet2);
-
-        // LSTM layers (approximated)
-        var lstm1 = new DenseLayer<T>(_prenetDim + _encoderDim * 2, _decoderDim, tanhActivation);
-        var lstm2 = new DenseLayer<T>(_decoderDim + _encoderDim * 2, _decoderDim, tanhActivation);
-        _decoderLstmLayers.Add(lstm1);
-        _decoderLstmLayers.Add(lstm2);
-
-        // Mel output projection
-        var melOutput = new DenseLayer<T>(_decoderDim + _encoderDim * 2, NumMels * _numMelsPerFrame, identityActivation);
-        _decoderLstmLayers.Add(melOutput);
-
-        // Stop token prediction
-        _stopTokenLayer = new DenseLayer<T>(_decoderDim + _encoderDim * 2, 1, sigmoidActivation);
-
-        // Post-net (convolutional layers for mel refinement)
-        for (int i = 0; i < _numPostnetConvLayers; i++)
+        else
         {
-            var isLast = i == _numPostnetConvLayers - 1;
-            var activation = isLast ? identityActivation : tanhActivation;
-            var postConv = new DenseLayer<T>(
-                i == 0 ? NumMels : _postnetEmbeddingDim,
-                isLast ? NumMels : _postnetEmbeddingDim,
-                activation);
-            _postNetLayers.Add(postConv);
-        }
-
-        // Register all layers
-        if (_embedding is not null)
+            _embedding = new EmbeddingLayer<T>(_vocabSize, _embeddingDim);
             Layers.Add(_embedding);
-        foreach (var layer in _encoderConvLayers)
-            Layers.Add(layer);
-        if (_encoderLstm is not null)
-            Layers.Add(_encoderLstm);
-        foreach (var layer in _attentionLayers)
-            Layers.Add(layer);
-        foreach (var layer in _decoderLstmLayers)
-            Layers.Add(layer);
-        if (_stopTokenLayer is not null)
-            Layers.Add(_stopTokenLayer);
-        foreach (var layer in _postNetLayers)
-            Layers.Add(layer);
+
+            layers = LayerHelper<T>.CreateTacotron2Layers(
+                vocabSize: _vocabSize, embeddingDim: _embeddingDim, encoderDim: _encoderDim,
+                decoderDim: _decoderDim, attentionDim: _attentionDim,
+                attentionFilters: _attentionFilters, prenetDim: _prenetDim,
+                numMels: NumMels, numMelsPerFrame: _numMelsPerFrame,
+                numEncoderConvLayers: _numEncoderConvLayers,
+                numPostnetConvLayers: _numPostnetConvLayers,
+                postnetEmbeddingDim: _postnetEmbeddingDim).ToList();
+        }
+
+        _encoderConvLayers.Clear();
+        _attentionLayers.Clear();
+        _decoderLstmLayers.Clear();
+        _postNetLayers.Clear();
+        Layers.AddRange(layers);
+
+        // Distribute to internal sub-lists for forward pass
+        int idx = 0;
+        for (int i = 0; i < _numEncoderConvLayers && idx < layers.Count; i++)
+            _encoderConvLayers.Add(layers[idx++]);
+        if (idx < layers.Count)
+            _encoderLstm = layers[idx++];
+        for (int i = 0; i < 4 && idx < layers.Count; i++)
+            _attentionLayers.Add(layers[idx++]);
+        for (int i = 0; i < 5 && idx < layers.Count; i++) // prenet(2) + lstm(2) + mel(1)
+            _decoderLstmLayers.Add(layers[idx++]);
+        if (idx < layers.Count)
+            _stopTokenLayer = layers[idx++];
+        while (idx < layers.Count)
+            _postNetLayers.Add(layers[idx++]);
     }
 
     private static IReadOnlyList<VoiceInfo<T>> GetDefaultVoices()
@@ -959,6 +933,7 @@ public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
                 _encoderDim,
                 _decoderDim,
                 _attentionDim,
+                _attentionFilters,
                 _prenetDim,
                 _postnetEmbeddingDim,
                 _numEncoderConvLayers,

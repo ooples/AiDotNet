@@ -1,5 +1,6 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Enums;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
@@ -332,61 +333,30 @@ public class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
     {
         if (!_useNativeMode) return;
 
-        int freqBins = _fftSize / 2 + 1;
+        var layers = (Architecture.Layers != null && Architecture.Layers.Count > 0)
+            ? Architecture.Layers.ToList()
+            : LayerHelper<T>.CreateNeuralNoiseReducerLayers(
+                fftSize: _fftSize, baseFilters: _baseFilters, numStages: _numStages,
+                bottleneckDim: _bottleneckDim).ToList();
 
-        // Build U-Net style encoder-decoder architecture
-        // Encoder path: progressively downsample and increase channels
-        int currentFilters = _baseFilters;
-        int currentFreqDim = freqBins;
+        Layers.Clear();
+        _encoderLayers.Clear();
+        Layers.AddRange(layers);
 
-        for (int stage = 0; stage < _numStages; stage++)
+        // Assign internal references for forward pass
+        int expectedCount = _numStages + 2; // encoder stages + bottleneck + output
+        if (layers.Count < expectedCount)
         {
-            int inputFilters = stage == 0 ? 1 : currentFilters / 2;
-
-            // Conv layer with stride 2 for downsampling
-            var convLayer = new ConvolutionalLayer<T>(
-                inputDepth: inputFilters,
-                inputHeight: currentFreqDim,
-                inputWidth: 1,
-                outputDepth: currentFilters,
-                kernelSize: 4,
-                stride: 2,
-                padding: 1,
-                activationFunction: new LeakyReLUActivation<T>());
-
-            _encoderLayers.Add(convLayer);
-            Layers.Add(convLayer);
-
-            currentFreqDim = (currentFreqDim + 2 - 4) / 2 + 1;
-            if (stage < _numStages - 1)
-                currentFilters *= 2;
+            throw new ArgumentException(
+                $"Custom architecture must have at least {expectedCount} layers " +
+                $"({_numStages} encoder stages + bottleneck + output).",
+                nameof(Architecture));
         }
 
-        // Bottleneck: dense layer for learning global context
-        int bottleneckInputSize = currentFilters * currentFreqDim;
-        _bottleneckLayer = new DenseLayer<T>(
-            inputSize: bottleneckInputSize,
-            outputSize: _bottleneckDim,
-            activationFunction: new ReLUActivation<T>());
-        Layers.Add(_bottleneckLayer);
-
-        // Decoder path: direct bottleneck-to-output projection
-        // TODO: Implement proper U-Net decoder with:
-        //   - Transposed convolutions or upsampling layers
-        //   - Skip connections from encoder stages
-        //   - Progressive channel reduction mirroring encoder
-        //   - Proper frequency resolution restoration
-        // Current implementation uses a simplified dense decoder that works
-        // but has reduced capacity compared to a true U-Net architecture.
-        int decoderInputSize = _bottleneckDim;
-        int targetFreqDim = freqBins;
-
-        // Final output projection (simplified decoder)
-        _outputLayer = new DenseLayer<T>(
-            inputSize: decoderInputSize,
-            outputSize: targetFreqDim,
-            activationFunction: new SigmoidActivation<T>()); // Mask output 0-1
-        Layers.Add(_outputLayer);
+        for (int i = 0; i < _numStages; i++)
+            _encoderLayers.Add(layers[i]);
+        _bottleneckLayer = layers[_numStages];
+        _outputLayer = layers[_numStages + 1];
     }
 
     #endregion

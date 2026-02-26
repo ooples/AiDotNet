@@ -4,6 +4,7 @@ using System.Text.RegularExpressions;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
+using AiDotNet.Helpers;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Tokenization.Interfaces;
@@ -267,45 +268,55 @@ public class Gpt4VisionNeuralNetwork<T> : NeuralNetworkBase<T>, IGpt4VisionModel
     private void InitializeNativeLayers()
     {
         int numPatches = (_imageSize / _patchSize) * (_imageSize / _patchSize);
-        int ffnDim = _hiddenDim * 4;
 
-        // Vision encoder: Patch embedding
-        _visionPatchEmbedding = new PatchEmbeddingLayer<T>(
-            _imageSize, _imageSize, 3, _patchSize, _visionEmbeddingDim);
+        Layers.Clear();
+
+        if (Architecture.Layers != null && Architecture.Layers.Count > 0)
+        {
+            Layers.AddRange(Architecture.Layers);
+        }
+        else
+        {
+            Layers.AddRange(LayerHelper<T>.CreateGpt4VisionLayers(
+                _imageSize, _patchSize, _visionEmbeddingDim, _embeddingDimension,
+                _hiddenDim, _numVisionLayers, _numLanguageLayers, _numHeads, _vocabularySize));
+        }
+
+        // Distribute layers to internal fields
+        int idx = 0;
+
+        // Vision encoder: PatchEmbed + TransformerEncoder × numVisionLayers + LayerNorm
+        _visionPatchEmbedding = Layers[idx++];
+        _visionEncoderLayers.Clear();
+        for (int i = 0; i < _numVisionLayers; i++)
+            _visionEncoderLayers.Add(Layers[idx++]);
+        _visionLayerNorm = Layers[idx++];
+
+        // Vision projectors (2-layer MLP)
+        _visionProjector1 = Layers[idx++];
+        _visionProjector2 = Layers[idx++];
+
+        // Text token embedding
+        _tokenEmbedding = Layers[idx++];
+
+        // Language model transformer layers + cross-attention layers
+        _languageModelLayers.Clear();
+        _crossAttentionLayers.Clear();
+        for (int i = 0; i < _numLanguageLayers; i++)
+        {
+            _languageModelLayers.Add(Layers[idx++]);
+            if (i % 4 == 0)
+                _crossAttentionLayers.Add(Layers[idx++]);
+        }
+
+        // Final layer norm + LM head
+        _finalLayerNorm = Layers[idx++];
+        _lmHead = Layers[idx++];
 
         // Vision CLS token and positional embeddings
         _visionClsToken = Matrix<T>.CreateDefault(1, _visionEmbeddingDim, NumOps.Zero);
         _visionPositionalEmbeddings = Matrix<T>.CreateDefault(numPatches + 1, _visionEmbeddingDim, NumOps.Zero);
-
-        // Vision transformer layers
-        for (int i = 0; i < _numVisionLayers; i++)
-        {
-            _visionEncoderLayers.Add(new TransformerEncoderLayer<T>(_visionEmbeddingDim, _numHeads, ffnDim));
-        }
-        _visionLayerNorm = new LayerNormalizationLayer<T>(_visionEmbeddingDim);
-
-        // Vision-Language Projector (MLP to map vision features to language space)
-        _visionProjector1 = new DenseLayer<T>(_visionEmbeddingDim, _embeddingDimension, (IActivationFunction<T>?)null);
-        _visionProjector2 = new DenseLayer<T>(_embeddingDimension, _embeddingDimension, (IActivationFunction<T>?)null);
-
-        // Language model: Token embedding
-        _tokenEmbedding = new EmbeddingLayer<T>(_vocabularySize, _embeddingDimension);
         _textPositionalEmbeddings = Matrix<T>.CreateDefault(_maxSequenceLength, _embeddingDimension, NumOps.Zero);
-
-        // Language model transformer layers with causal masking
-        for (int i = 0; i < _numLanguageLayers; i++)
-        {
-            _languageModelLayers.Add(new TransformerEncoderLayer<T>(_embeddingDimension, _numHeads, ffnDim));
-
-            // Add cross-attention layer every 4 layers for vision-language fusion
-            if (i % 4 == 0)
-            {
-                _crossAttentionLayers.Add(new TransformerEncoderLayer<T>(_embeddingDimension, _numHeads, ffnDim));
-            }
-        }
-
-        _finalLayerNorm = new LayerNormalizationLayer<T>(_embeddingDimension);
-        _lmHead = new DenseLayer<T>(_embeddingDimension, _vocabularySize, (IActivationFunction<T>?)null);
     }
 
     #endregion

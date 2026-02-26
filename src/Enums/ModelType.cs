@@ -3079,7 +3079,35 @@ public enum ModelType
     /// Essential when you need reliable probability estimates for decision making.
     /// </para>
     /// </remarks>
-    CalibratedClassifier
+    CalibratedClassifier,
+
+    /// <summary>
+    /// Semantic Segmentation model for dense per-pixel classification.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Semantic Segmentation models classify every pixel in an image into
+    /// a category (e.g., road, sky, person, car). Unlike object detection which draws boxes,
+    /// semantic segmentation produces a full pixel-level map of what's in the scene.
+    ///
+    /// Examples: SegFormer, Mask2Former, DeepLabV3+, PSPNet
+    /// </para>
+    /// </remarks>
+    SemanticSegmentation,
+
+    /// <summary>
+    /// Instance Segmentation model for detecting and segmenting individual object instances.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Instance Segmentation models detect individual objects and produce
+    /// a pixel-level mask for each one. Unlike semantic segmentation which only labels pixels
+    /// by category, instance segmentation distinguishes between separate objects of the same class.
+    ///
+    /// Examples: Mask R-CNN, YOLOv8-Seg, YOLO26-Seg
+    /// </para>
+    /// </remarks>
+    InstanceSegmentation
 }
 
 
