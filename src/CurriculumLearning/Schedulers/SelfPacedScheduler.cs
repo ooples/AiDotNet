@@ -115,9 +115,9 @@ public class SelfPacedScheduler<T> : CurriculumSchedulerBase<T>, ISelfPacedSched
         SelfPaceRegularizer regularizer = SelfPaceRegularizer.Hard)
         : base(totalEpochs)
     {
-        _initialLambda = initialLambda ?? NumOps.FromDouble(0.1);
-        _lambdaGrowthRate = lambdaGrowthRate ?? NumOps.FromDouble(0.1);
-        _maxLambda = maxLambda ?? NumOps.FromDouble(10.0);
+        _initialLambda = ResolveDefault(initialLambda, 0.1);
+        _lambdaGrowthRate = ResolveDefault(lambdaGrowthRate, 0.1);
+        _maxLambda = ResolveDefault(maxLambda, 10.0);
         _currentLambda = _initialLambda;
         _regularizer = regularizer;
 
@@ -241,6 +241,17 @@ public class SelfPacedScheduler<T> : CurriculumSchedulerBase<T>, ISelfPacedSched
         }
 
         return phaseAdvanced;
+    }
+
+    /// <summary>
+    /// Resolves a nullable generic parameter, returning the fallback if the value is null or default(T).
+    /// For value types like double, T? with default gives 0.0, not null.
+    /// </summary>
+    private static T ResolveDefault(T? value, double fallback)
+    {
+        if (value is null || EqualityComparer<T>.Default.Equals(value, default))
+            return NumOps.FromDouble(fallback);
+        return value;
     }
 
     /// <summary>

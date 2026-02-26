@@ -113,11 +113,11 @@ public class CompetenceBasedScheduler<T> : CurriculumSchedulerBase<T>, ICompeten
                 "Patience epochs must be positive.");
         }
 
-        _competenceThreshold = competenceThreshold ?? NumOps.FromDouble(0.9);
+        _competenceThreshold = ResolveDefault(competenceThreshold, 0.9);
         _metricType = metricType;
         _patienceEpochs = patienceEpochs;
-        _minImprovement = minImprovement ?? NumOps.FromDouble(0.001);
-        _smoothingFactor = smoothingFactor ?? NumOps.FromDouble(0.3);
+        _minImprovement = ResolveDefault(minImprovement, 0.001);
+        _smoothingFactor = ResolveDefault(smoothingFactor, 0.3);
 
         _currentCompetence = NumOps.Zero;
         _bestLoss = NumOps.FromDouble(double.MaxValue);
@@ -392,6 +392,17 @@ public class CompetenceBasedScheduler<T> : CurriculumSchedulerBase<T>, ICompeten
         _currentCompetence = NumOps.Multiply(_currentCompetence, NumOps.FromDouble(0.5));
         _epochsWithoutImprovement = 0;
         // Don't reset best loss - harder samples will naturally have higher loss
+    }
+
+    /// <summary>
+    /// Resolves a nullable generic parameter, returning the fallback if the value is null or default(T).
+    /// For value types like double, T? with default gives 0.0, not null.
+    /// </summary>
+    private static T ResolveDefault(T? value, double fallback)
+    {
+        if (value is null || EqualityComparer<T>.Default.Equals(value, default))
+            return NumOps.FromDouble(fallback);
+        return value;
     }
 
     /// <summary>
