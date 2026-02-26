@@ -84,7 +84,7 @@ public class ConfusionMatrix<T> : MatrixBase<T>
     /// when it was actually negative. This is also called a "Type I error". For example, if your model
     /// is detecting spam emails, a false positive is when it incorrectly marks a legitimate email as spam.
     /// </remarks>
-    public T FalsePositives => this[1, 0];
+    public T FalsePositives => this[0, 1];
 
     /// <summary>
     /// Gets the number of false negative predictions (incorrectly predicted negative cases).
@@ -94,7 +94,7 @@ public class ConfusionMatrix<T> : MatrixBase<T>
     /// when it was actually positive. This is also called a "Type II error". For example, if your model
     /// is detecting spam emails, a false negative is when it incorrectly lets a spam email into your inbox.
     /// </remarks>
-    public T FalseNegatives => this[0, 1];
+    public T FalseNegatives => this[1, 0];
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ConfusionMatrix{T}"/> class with the specified dimension.
@@ -138,8 +138,8 @@ public class ConfusionMatrix<T> : MatrixBase<T>
     {
         this[0, 0] = truePositives;
         this[1, 1] = trueNegatives;
-        this[1, 0] = falsePositives;
-        this[0, 1] = falseNegatives;
+        this[0, 1] = falsePositives;
+        this[1, 0] = falseNegatives;
     }
 
     /// <summary>
