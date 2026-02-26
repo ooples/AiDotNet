@@ -214,14 +214,32 @@ public static class StatisticsHelper<T>
     /// </remarks>
     public static T CalculateVarianceReduction(Vector<T> y, List<int> leftIndices, List<int> rightIndices)
     {
-        T totalVariance = StatisticsHelper<T>.CalculateVariance(y);
-        T leftVariance = StatisticsHelper<T>.CalculateVariance(leftIndices.Select(i => y[i]));
-        T rightVariance = StatisticsHelper<T>.CalculateVariance(rightIndices.Select(i => y[i]));
+        // Use population variance (n denominator) for variance reduction decomposition.
+        // Sample variance (n-1 denominator) breaks the decomposition identity and can produce negative results.
+        T totalVariance = CalculatePopulationVariance(y.Select(x => x));
+        T leftVariance = CalculatePopulationVariance(leftIndices.Select(i => y[i]));
+        T rightVariance = CalculatePopulationVariance(rightIndices.Select(i => y[i]));
 
         T leftWeight = _numOps.Divide(_numOps.FromDouble(leftIndices.Count), _numOps.FromDouble(y.Length));
         T rightWeight = _numOps.Divide(_numOps.FromDouble(rightIndices.Count), _numOps.FromDouble(y.Length));
 
         return _numOps.Subtract(totalVariance, _numOps.Add(_numOps.Multiply(leftWeight, leftVariance), _numOps.Multiply(rightWeight, rightVariance)));
+    }
+
+    private static T CalculatePopulationVariance(IEnumerable<T> values)
+    {
+        var list = values.ToList();
+        int count = list.Count;
+        if (count < 1) return _numOps.Zero;
+
+        T sum = list.Aggregate(_numOps.Zero, (acc, val) => _numOps.Add(acc, val));
+        T mean = _numOps.Divide(sum, _numOps.FromDouble(count));
+
+        T sumOfSquaredDifferences = list
+            .Select(x => _numOps.Square(_numOps.Subtract(x, mean)))
+            .Aggregate(_numOps.Zero, (acc, val) => _numOps.Add(acc, val));
+
+        return _numOps.Divide(sumOfSquaredDifferences, _numOps.FromDouble(count));
     }
 
     /// <summary>
@@ -388,7 +406,9 @@ public static class StatisticsHelper<T>
         // Calculate p-value using normal approximation
         T mean = _numOps.Divide(_numOps.Multiply(_numOps.FromDouble(leftY.Length), _numOps.FromDouble(rightY.Length)), _numOps.FromDouble(2));
         T standardDeviation = _numOps.Sqrt(_numOps.Divide(
-            _numOps.Multiply(_numOps.FromDouble(leftY.Length), _numOps.FromDouble(rightY.Length)),
+            _numOps.Multiply(
+                _numOps.Multiply(_numOps.FromDouble(leftY.Length), _numOps.FromDouble(rightY.Length)),
+                _numOps.FromDouble(leftY.Length + rightY.Length + 1)),
             _numOps.FromDouble(12)
         ));
 
@@ -1376,11 +1396,8 @@ public static class StatisticsHelper<T>
         T _a = _numOps.Divide(_numOps.FromDouble(degreesOfFreedom), _numOps.FromDouble(2));
         T _b = _numOps.FromDouble(0.5);
 
-        // Calculate the cumulative distribution function (CDF) of the t-distribution
-        T _cdf = RegularizedIncompleteBetaFunction(_x, _a, _b);
-
-        // The p-value is twice the area in the tail
-        return _numOps.Multiply(_numOps.FromDouble(2), _numOps.LessThan(_cdf, _numOps.FromDouble(0.5)) ? _cdf : _numOps.Subtract(_numOps.FromDouble(1), _cdf));
+        // I_x(df/2, 1/2) with x = df/(t²+df) directly gives the two-tailed p-value P(|T| > |t|)
+        return RegularizedIncompleteBetaFunction(_x, _a, _b);
     }
 
     /// <summary>
@@ -5685,7 +5702,7 @@ public static class StatisticsHelper<T>
             while (i < sortedValues.Count - 1 && _numOps.Equals(sortedValues[i].Value, sortedValues[i + 1].Value))
                 i++;
 
-            T rank = _numOps.Divide(_numOps.FromDouble(start + i + 1), _numOps.FromDouble(2));
+            T rank = _numOps.Divide(_numOps.FromDouble(start + i + 2), _numOps.FromDouble(2));
 
             for (int j = start; j <= i; j++)
                 ranks[sortedValues[j].Index] = rank;
