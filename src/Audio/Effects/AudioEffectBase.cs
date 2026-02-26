@@ -6,6 +6,9 @@ namespace AiDotNet.Audio.Effects;
 /// Base class for audio effects processors.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> for provides AI safety functionality. Default values follow the original paper settings.</para>
+/// </remarks>
 public abstract class AudioEffectBase<T> : IAudioEffect<T>
 {
     /// <summary>

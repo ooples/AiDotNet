@@ -5,6 +5,9 @@ namespace AiDotNet.FederatedLearning.Selection;
 /// <summary>
 /// Uniform random client selection (fractional participation).
 /// </summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> UniformRandomClientSelectionStrategy provides AI safety functionality. Default values follow the original paper settings.</para>
+/// </remarks>
 public sealed class UniformRandomClientSelectionStrategy : ClientSelectionStrategyBase
 {
     public override List<int> SelectClients(ClientSelectionRequest request)

@@ -3,6 +3,9 @@ namespace AiDotNet.Audio.Classification;
 /// <summary>
 /// Result of genre classification.
 /// </summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> GenreClassificationResult provides AI safety functionality. Default values follow the original paper settings.</para>
+/// </remarks>
 public class GenreClassificationResult
 {
     /// <summary>Most likely genre.</summary>

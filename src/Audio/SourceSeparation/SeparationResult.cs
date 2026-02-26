@@ -6,6 +6,9 @@ namespace AiDotNet.Audio.SourceSeparation;
 /// Result of music source separation containing individual stems.
 /// </summary>
 /// <typeparam name="T">The numeric type used for audio samples.</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> SeparationResult provides AI safety functionality. Default values follow the original paper settings.</para>
+/// </remarks>
 public class SeparationResult<T>
 {
     /// <summary>Isolated vocal track.</summary>

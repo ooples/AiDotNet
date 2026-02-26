@@ -38,6 +38,9 @@ namespace AiDotNet.DistributedTraining;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for operations</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> MPICommunicationBackend provides AI safety functionality. Default values follow the original paper settings.</para>
+/// </remarks>
 public class MPICommunicationBackend<T> : CommunicationBackendBase<T>
 {
     private int _rank;

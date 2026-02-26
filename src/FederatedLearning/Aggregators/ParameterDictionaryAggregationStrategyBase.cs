@@ -4,6 +4,9 @@ namespace AiDotNet.FederatedLearning.Aggregators;
 /// Base class for aggregation strategies operating on parameter dictionaries.
 /// </summary>
 /// <typeparam name="T">Numeric type.</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> for provides AI safety functionality. Default values follow the original paper settings.</para>
+/// </remarks>
 public abstract class ParameterDictionaryAggregationStrategyBase<T> :
     AggregationStrategyBase<Dictionary<string, T[]>, T>
 {

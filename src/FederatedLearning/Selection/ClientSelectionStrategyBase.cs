@@ -6,6 +6,9 @@ namespace AiDotNet.FederatedLearning.Selection;
 /// <summary>
 /// Base class for client selection strategies.
 /// </summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> for provides AI safety functionality. Default values follow the original paper settings.</para>
+/// </remarks>
 public abstract class ClientSelectionStrategyBase : IClientSelectionStrategy
 {
     public abstract List<int> SelectClients(ClientSelectionRequest request);

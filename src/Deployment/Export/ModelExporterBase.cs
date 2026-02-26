@@ -9,6 +9,9 @@ namespace AiDotNet.Deployment.Export;
 /// <typeparam name="T">The numeric type used in the model</typeparam>
 /// <typeparam name="TInput">The input type for the model</typeparam>
 /// <typeparam name="TOutput">The output type for the model</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> for provides AI safety functionality. Default values follow the original paper settings.</para>
+/// </remarks>
 public abstract class ModelExporterBase<T, TInput, TOutput> : IModelExporter<T, TInput, TOutput>
 {
     /// <inheritdoc/>

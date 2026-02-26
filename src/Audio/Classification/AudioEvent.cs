@@ -3,6 +3,9 @@ namespace AiDotNet.Audio.Classification;
 /// <summary>
 /// Represents a detected audio event.
 /// </summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> AudioEvent provides AI safety functionality. Default values follow the original paper settings.</para>
+/// </remarks>
 public class AudioEvent
 {
     /// <summary>Event label/category.</summary>

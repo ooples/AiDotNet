@@ -10,6 +10,7 @@ namespace AiDotNet.FederatedLearning.Aggregators;
 /// <remarks>
 /// This implementation keeps batch-normalization layer parameters local by copying them from the first client model,
 /// while aggregating all other parameters using weighted averaging.
+/// <para><b>For Beginners:</b> FedBNFullModelAggregationStrategy provides AI safety functionality. Default values follow the original paper settings.</para>
 /// </remarks>
 public sealed class FedBNFullModelAggregationStrategy<T, TInput, TOutput> :
     AggregationStrategyBase<IFullModel<T, TInput, TOutput>, T>

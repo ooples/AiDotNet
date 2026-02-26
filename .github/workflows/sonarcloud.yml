@@ -70,7 +70,7 @@ jobs:
         run: dotnet restore src/AiDotNet.csproj
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@9e907b5e64f6b83e7804b09294d44122997950d6 # v4
+        uses: github/codeql-action/init@89a39a4e59826350b863aa6b6252a07ad50cf83e # v4
         with:
           languages: csharp
           config-file: ./.github/codeql/codeql-config.yml
@@ -83,14 +83,14 @@ jobs:
 
       - name: Perform CodeQL Analysis (no SARIF upload for huge PRs)
         if: github.event_name == 'pull_request' && github.event.pull_request.changed_files > 250
-        uses: github/codeql-action/analyze@9e907b5e64f6b83e7804b09294d44122997950d6 # v4
+        uses: github/codeql-action/analyze@89a39a4e59826350b863aa6b6252a07ad50cf83e # v4
         with:
           category: "/language:csharp"
           upload: never
 
       - name: Perform CodeQL Analysis
         if: github.event_name != 'pull_request' || github.event.pull_request.changed_files <= 250
-        uses: github/codeql-action/analyze@9e907b5e64f6b83e7804b09294d44122997950d6 # v4
+        uses: github/codeql-action/analyze@89a39a4e59826350b863aa6b6252a07ad50cf83e # v4
         with:
           category: "/language:csharp"
           upload: always

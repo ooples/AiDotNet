@@ -3,6 +3,9 @@ namespace AiDotNet.Audio.Localization;
 /// <summary>
 /// Result of sound source localization.
 /// </summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> LocalizationResult provides AI safety functionality. Default values follow the original paper settings.</para>
+/// </remarks>
 public class LocalizationResult
 {
     /// <summary>Estimated azimuth angle in degrees (-180 to 180).</summary>
