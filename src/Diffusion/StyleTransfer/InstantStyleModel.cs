@@ -104,8 +104,11 @@ public class InstantStyleModel<T> : LatentDiffusionModelBase<T>
             Description = "Zero-shot IP-Adapter style transfer with content-style separation",
             FeatureCount = ParameterCount, Complexity = ParameterCount };
         m.SetProperty("architecture", "ip-adapter-style-injection");
+        m.SetProperty("base_model", "Stable Diffusion XL");
+        m.SetProperty("text_encoder", "CLIP ViT-L/14 + OpenCLIP ViT-bigG/14");
+        m.SetProperty("context_dim", 2048);
         m.SetProperty("latent_channels", LATENT_CHANNELS);
-        m.SetProperty("default_guidance_scale", DEFAULT_GUIDANCE);
+        m.SetProperty("guidance_scale", DEFAULT_GUIDANCE);
         return m;
     }
 }

@@ -104,8 +104,11 @@ public class CatVTONModel<T> : LatentDiffusionModelBase<T>
             Description = "Concatenation-based virtual try-on without explicit warping",
             FeatureCount = ParameterCount, Complexity = ParameterCount };
         m.SetProperty("architecture", "concat-diffusion-tryon");
+        m.SetProperty("base_model", "Stable Diffusion 1.5");
+        m.SetProperty("text_encoder", "CLIP ViT-L/14");
+        m.SetProperty("context_dim", 768);
         m.SetProperty("latent_channels", LATENT_CHANNELS);
-        m.SetProperty("default_guidance_scale", DEFAULT_GUIDANCE);
+        m.SetProperty("guidance_scale", DEFAULT_GUIDANCE);
         return m;
     }
 }

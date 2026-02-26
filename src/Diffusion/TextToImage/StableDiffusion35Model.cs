@@ -362,6 +362,7 @@ public class StableDiffusion35Model<T> : LatentDiffusionModelBase<T>
         };
 
         metadata.SetProperty("architecture", "mmdit-x-rectified-flow");
+        metadata.SetProperty("base_model", "Stable Diffusion 3.5");
         metadata.SetProperty("text_encoder_1", "CLIP ViT-L/14");
         metadata.SetProperty("text_encoder_2", "OpenCLIP ViT-bigG");
         metadata.SetProperty("text_encoder_3", "T5-XXL");

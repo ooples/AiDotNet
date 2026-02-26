@@ -738,6 +738,25 @@ public class ControlNetModel<T> : LatentDiffusionModelBase<T>
 
         return clone;
     }
+
+    /// <inheritdoc />
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        var m = new ModelMetadata<T>
+        {
+            Name = "ControlNet", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Description = "Spatial conditioning for diffusion models via trainable encoder copy",
+            FeatureCount = ParameterCount, Complexity = ParameterCount
+        };
+        m.SetProperty("architecture", "unet-controlnet");
+        m.SetProperty("base_model", "Stable Diffusion 1.5");
+        m.SetProperty("text_encoder", "CLIP ViT-L/14");
+        m.SetProperty("context_dim", 768);
+        m.SetProperty("control_type", _controlType.ToString());
+        m.SetProperty("conditioning_strength", _conditioningStrength);
+        m.SetProperty("latent_channels", CN_LATENT_CHANNELS);
+        return m;
+    }
 }
 
 /// <summary>

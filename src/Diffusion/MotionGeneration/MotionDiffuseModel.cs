@@ -101,8 +101,9 @@ public class MotionDiffuseModel<T> : LatentDiffusionModelBase<T>
             Description = "Fine-grained body part text-driven motion generation",
             FeatureCount = ParameterCount, Complexity = ParameterCount };
         m.SetProperty("architecture", "part-aware-motion-diffusion");
+        m.SetProperty("text_encoder", "CLIP ViT-L/14");
         m.SetProperty("motion_dimensions", LATENT_CHANNELS);
-        m.SetProperty("default_guidance_scale", DEFAULT_GUIDANCE);
+        m.SetProperty("guidance_scale", DEFAULT_GUIDANCE);
         return m;
     }
 }

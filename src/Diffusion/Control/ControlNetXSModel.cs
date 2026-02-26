@@ -228,8 +228,12 @@ public class ControlNetXSModel<T> : LatentDiffusionModelBase<T>
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };
         m.SetProperty("architecture", "controlnet-xs");
+        m.SetProperty("base_model", "Stable Diffusion 1.5");
+        m.SetProperty("text_encoder", "CLIP ViT-L/14");
+        m.SetProperty("context_dim", CROSS_ATTENTION_DIM);
         m.SetProperty("control_encoder_ratio", 0.01);
         m.SetProperty("latent_channels", LATENT_CHANNELS);
+        m.SetProperty("guidance_scale", DEFAULT_GUIDANCE_SCALE);
         m.SetProperty("default_resolution", DefaultWidth);
         return m;
     }

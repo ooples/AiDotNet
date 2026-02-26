@@ -621,7 +621,10 @@ public class PixArtModel<T> : LatentDiffusionModelBase<T>
             Complexity = ParameterCount
         };
 
-        // Add custom properties using the Properties dictionary
+        metadata.SetProperty("architecture", "dit-xl-2");
+        metadata.SetProperty("base_model", "PixArt-alpha");
+        metadata.SetProperty("text_encoder", "T5-XXL");
+        metadata.SetProperty("context_dim", 4096);
         metadata.SetProperty("hidden_dim", _hiddenDim);
         metadata.SetProperty("num_heads", _numHeads);
         metadata.SetProperty("num_layers", _numLayers);

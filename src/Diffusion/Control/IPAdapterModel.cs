@@ -584,6 +584,25 @@ public class IPAdapterModel<T> : LatentDiffusionModelBase<T>
 
         return clone;
     }
+
+    /// <inheritdoc />
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        var m = new ModelMetadata<T>
+        {
+            Name = "IP-Adapter", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Description = "Image prompt adapter for reference image-guided diffusion generation",
+            FeatureCount = ParameterCount, Complexity = ParameterCount
+        };
+        m.SetProperty("architecture", "unet-decoupled-cross-attention");
+        m.SetProperty("base_model", "Stable Diffusion 1.5");
+        m.SetProperty("text_encoder", "CLIP ViT-L/14");
+        m.SetProperty("image_encoder", "CLIP ViT-H/14");
+        m.SetProperty("context_dim", 768);
+        m.SetProperty("image_prompt_weight", _imagePromptWeight);
+        m.SetProperty("latent_channels", IPA_LATENT_CHANNELS);
+        return m;
+    }
 }
 
 /// <summary>

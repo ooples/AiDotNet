@@ -336,6 +336,7 @@ public class Ideogram3Model<T> : LatentDiffusionModelBase<T>
         };
 
         metadata.SetProperty("architecture", "sit-text-layout-prediction");
+        metadata.SetProperty("base_model", "Ideogram 3");
         metadata.SetProperty("hidden_size", IDEOGRAM_HIDDEN_SIZE);
         metadata.SetProperty("num_layers", IDEOGRAM_NUM_LAYERS);
         metadata.SetProperty("context_dim", IDEOGRAM_CONTEXT_DIM);

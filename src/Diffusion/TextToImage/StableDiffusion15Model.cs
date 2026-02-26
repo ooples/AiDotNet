@@ -629,6 +629,7 @@ public class StableDiffusion15Model<T> : LatentDiffusionModelBase<T>
         };
 
         metadata.SetProperty("architecture", "latent-diffusion");
+        metadata.SetProperty("base_model", "Stable Diffusion 1.5");
         metadata.SetProperty("text_encoder", "CLIP ViT-L/14");
         metadata.SetProperty("cross_attention_dim", SD15_CROSS_ATTENTION_DIM);
         metadata.SetProperty("latent_channels", SD15_LATENT_CHANNELS);

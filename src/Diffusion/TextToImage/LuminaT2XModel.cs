@@ -217,6 +217,7 @@ public class LuminaT2XModel<T> : LatentDiffusionModelBase<T>
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };
         m.SetProperty("architecture", "flag-dit-unified-multimodal");
+        m.SetProperty("base_model", "Lumina-T2X");
         m.SetProperty("text_encoder", "Gemma 2B");
         m.SetProperty("context_dim", T2X_CONTEXT_DIM);
         m.SetProperty("hidden_size", T2X_HIDDEN_SIZE);

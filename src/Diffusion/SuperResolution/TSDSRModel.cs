@@ -28,11 +28,23 @@ namespace AiDotNet.Diffusion.SuperResolution;
 /// little noise and removes it in fewer steps, making SR 5-10x faster than using a
 /// standard diffusion model for upscaling.
 /// </para>
+/// <para>
+/// Technical specifications:
+/// - Architecture: SD2.1 U-Net with timestep-shifted schedule
+/// - Text encoder: OpenCLIP ViT-H/14 (1024-dim)
+/// - Timestep shifting: Starts from lower noise levels (t_max ~ 200-400 vs 1000)
+/// - Optimal steps: 4-10 (vs 50+ for standard diffusion SR)
+/// - Speed improvement: 5-10x faster than standard diffusion SR
+/// - Scale factor: 4x upscaling
+/// </para>
 /// </remarks>
 public class TSDSRModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;
+    private const int TSDSR_CONTEXT_DIM = 1024;
     private const double DEFAULT_GUIDANCE = 4.0;
+    private const int OPTIMAL_STEPS = 4;
+    private const int SCALE_FACTOR = 4;
 
     private UNetNoisePredictor<T> _predictor;
     private StandardVAE<T> _vae;
@@ -78,7 +90,7 @@ public class TSDSRModel<T> : LatentDiffusionModelBase<T>
             inputChannels: LATENT_CHANNELS + 4, outputChannels: LATENT_CHANNELS,
             baseChannels: 320, channelMultipliers: [1, 2, 4, 4],
             numResBlocks: 2, attentionResolutions: [4, 2, 1],
-            contextDim: 768, architecture: Architecture, seed: seed);
+            contextDim: TSDSR_CONTEXT_DIM, architecture: Architecture, seed: seed);
 
         _vae = vae ?? new StandardVAE<T>(
             inputChannels: 3, latentChannels: LATENT_CHANNELS,
@@ -131,10 +143,15 @@ public class TSDSRModel<T> : LatentDiffusionModelBase<T>
             Description = "Timestep-shifted diffusion for fast 4-10 step super-resolution",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };
-        m.SetProperty("architecture", "timestep-shifted-sr-unet");
-        m.SetProperty("optimal_steps", 4);
-        m.SetProperty("guidance_scale", DEFAULT_GUIDANCE);
+        m.SetProperty("architecture", "timestep-shifted-sd21-sr-unet");
+        m.SetProperty("base_model", "Stable Diffusion 2.1");
+        m.SetProperty("text_encoder", "OpenCLIP ViT-H/14");
+        m.SetProperty("context_dim", TSDSR_CONTEXT_DIM);
+        m.SetProperty("optimal_steps", OPTIMAL_STEPS);
+        m.SetProperty("scale_factor", SCALE_FACTOR);
         m.SetProperty("latent_channels", LATENT_CHANNELS);
+        m.SetProperty("guidance_scale", DEFAULT_GUIDANCE);
+        m.SetProperty("speedup", "5-10x vs standard diffusion SR");
         return m;
     }
 }

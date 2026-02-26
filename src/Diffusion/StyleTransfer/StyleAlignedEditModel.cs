@@ -104,8 +104,11 @@ public class StyleAlignedEditModel<T> : LatentDiffusionModelBase<T>
             Description = "Consistent multi-image editing via shared self-attention alignment",
             FeatureCount = ParameterCount, Complexity = ParameterCount };
         m.SetProperty("architecture", "shared-attention-style-editing");
+        m.SetProperty("base_model", "Stable Diffusion XL");
+        m.SetProperty("text_encoder", "CLIP ViT-L/14 + OpenCLIP ViT-bigG/14");
+        m.SetProperty("context_dim", 2048);
         m.SetProperty("latent_channels", LATENT_CHANNELS);
-        m.SetProperty("default_guidance_scale", DEFAULT_GUIDANCE);
+        m.SetProperty("guidance_scale", DEFAULT_GUIDANCE);
         return m;
     }
 }

@@ -174,6 +174,9 @@ public class ImprovedConsistencyModel<T> : LatentDiffusionModelBase<T>
             Complexity = ParameterCount
         };
         m.SetProperty("architecture", "consistency-model-unet");
+        m.SetProperty("training_method", "improved-consistency-training");
+        m.SetProperty("loss_function", "pseudo-Huber");
+        m.SetProperty("noise_schedule", "lognormal");
         m.SetProperty("optimal_steps", 1);
         m.SetProperty("max_recommended_steps", 2);
         m.SetProperty("guidance_scale", ICT_DEFAULT_GUIDANCE);

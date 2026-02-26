@@ -386,6 +386,7 @@ public class Flux1Model<T> : LatentDiffusionModelBase<T>
         };
 
         metadata.SetProperty("architecture", "hybrid-mmdit-rectified-flow");
+        metadata.SetProperty("base_model", "FLUX.1");
         metadata.SetProperty("text_encoder_1", "CLIP ViT-L/14");
         metadata.SetProperty("text_encoder_2", "T5-XXL");
         metadata.SetProperty("context_dim", FLUX_CONTEXT_DIM);

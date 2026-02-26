@@ -101,8 +101,9 @@ public class MotionDiffusionModel<T> : LatentDiffusionModelBase<T>
             Description = "Text-to-motion generation for human body animation sequences",
             FeatureCount = ParameterCount, Complexity = ParameterCount };
         m.SetProperty("architecture", "transformer-motion-diffusion");
+        m.SetProperty("text_encoder", "CLIP ViT-L/14");
         m.SetProperty("motion_dimensions", LATENT_CHANNELS);
-        m.SetProperty("default_guidance_scale", DEFAULT_GUIDANCE);
+        m.SetProperty("guidance_scale", DEFAULT_GUIDANCE);
         return m;
     }
 }

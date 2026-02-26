@@ -33,7 +33,9 @@ namespace AiDotNet.Diffusion.FastGeneration;
 public class SDXLTurboModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;
+    private const int SDXL_CONTEXT_DIM = 2048;
     private const double DEFAULT_GUIDANCE = 0.0;
+    private const int DEFAULT_STEPS = 1;
 
     private UNetNoisePredictor<T> _predictor;
     private StandardVAE<T> _vae;
@@ -67,7 +69,7 @@ public class SDXLTurboModel<T> : LatentDiffusionModelBase<T>
                 TrainTimesteps = 1000, BetaStart = 0.00085,
                 BetaEnd = 0.012, BetaSchedule = BetaSchedule.ScaledLinear
             },
-            scheduler ?? new DDIMScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()),
+            scheduler ?? new EulerDiscreteScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()),
             architecture)
     {
         _conditioner = conditioner;
@@ -136,7 +138,13 @@ public class SDXLTurboModel<T> : LatentDiffusionModelBase<T>
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };
         m.SetProperty("architecture", "sdxl-add-distilled");
-        m.SetProperty("optimal_steps", 1);
+        m.SetProperty("base_model", "Stable Diffusion XL");
+        m.SetProperty("text_encoder", "CLIP ViT-L/14 + OpenCLIP ViT-bigG/14");
+        m.SetProperty("context_dim", SDXL_CONTEXT_DIM);
+        m.SetProperty("distillation_method", "Adversarial Diffusion Distillation (ADD)");
+        m.SetProperty("optimal_steps", DEFAULT_STEPS);
+        m.SetProperty("max_recommended_steps", 4);
+        m.SetProperty("default_resolution", 512);
         m.SetProperty("guidance_scale", DEFAULT_GUIDANCE);
         m.SetProperty("latent_channels", LATENT_CHANNELS);
         return m;

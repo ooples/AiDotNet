@@ -139,6 +139,7 @@ public class SiDDiTModel<T> : LatentDiffusionModelBase<T>
         };
         m.SetProperty("architecture", "score-identity-dit");
         m.SetProperty("backbone", "DiT-XL/2");
+        m.SetProperty("distillation_method", "score-identity");
         m.SetProperty("optimal_steps", 1);
         m.SetProperty("guidance_scale", DEFAULT_GUIDANCE);
         m.SetProperty("latent_channels", LATENT_CHANNELS);

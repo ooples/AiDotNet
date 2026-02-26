@@ -138,6 +138,10 @@ public class InstaFlowModel<T> : LatentDiffusionModelBase<T>
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };
         m.SetProperty("architecture", "rectified-flow-unet");
+        m.SetProperty("base_model", "Stable Diffusion 1.5");
+        m.SetProperty("text_encoder", "CLIP ViT-L/14");
+        m.SetProperty("context_dim", 768);
+        m.SetProperty("distillation_method", "rectified-flow-reflow");
         m.SetProperty("optimal_steps", 1);
         m.SetProperty("guidance_scale", DEFAULT_GUIDANCE);
         m.SetProperty("latent_channels", LATENT_CHANNELS);

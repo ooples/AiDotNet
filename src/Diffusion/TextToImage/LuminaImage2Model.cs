@@ -211,6 +211,7 @@ public class LuminaImage2Model<T> : LatentDiffusionModelBase<T>
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };
         m.SetProperty("architecture", "flag-dit-flow-matching");
+        m.SetProperty("base_model", "Lumina-Image 2.0");
         m.SetProperty("text_encoder", "Gemma 2B");
         m.SetProperty("context_dim", LUMINA_CONTEXT_DIM);
         m.SetProperty("hidden_size", LUMINA_HIDDEN_SIZE);

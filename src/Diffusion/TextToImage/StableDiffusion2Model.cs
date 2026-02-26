@@ -395,6 +395,7 @@ public class StableDiffusion2Model<T> : LatentDiffusionModelBase<T>
         };
 
         metadata.SetProperty("architecture", "latent-diffusion");
+        metadata.SetProperty("base_model", "Stable Diffusion 2.1");
         metadata.SetProperty("text_encoder", "OpenCLIP ViT-H/14");
         metadata.SetProperty("cross_attention_dim", SD2_CROSS_ATTENTION_DIM);
         metadata.SetProperty("latent_channels", SD2_LATENT_CHANNELS);

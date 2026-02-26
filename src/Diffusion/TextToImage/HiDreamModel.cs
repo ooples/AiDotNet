@@ -365,6 +365,7 @@ public class HiDreamModel<T> : LatentDiffusionModelBase<T>
         };
 
         metadata.SetProperty("architecture", "mmdit-x-llama-conditioning");
+        metadata.SetProperty("base_model", "HiDream");
         metadata.SetProperty("text_encoder_1", "CLIP ViT-L/14");
         metadata.SetProperty("text_encoder_2", "Llama-3.1-8B");
         metadata.SetProperty("context_dim", HIDREAM_CONTEXT_DIM);

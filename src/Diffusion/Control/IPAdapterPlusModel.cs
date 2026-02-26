@@ -163,10 +163,14 @@ public class IPAdapterPlusModel<T> : LatentDiffusionModelBase<T>
         };
 
         metadata.SetProperty("architecture", "unet-decoupled-cross-attention");
+        metadata.SetProperty("base_model", "Stable Diffusion 1.5");
+        metadata.SetProperty("text_encoder", "CLIP ViT-L/14");
+        metadata.SetProperty("image_encoder", "CLIP ViT-H/14");
+        metadata.SetProperty("context_dim", 768);
         metadata.SetProperty("image_embed_dim", IMAGE_EMBED_DIM);
         metadata.SetProperty("ip_adapter_scale", _ipAdapterScale);
         metadata.SetProperty("latent_channels", LATENT_CHANNELS);
-        metadata.SetProperty("default_guidance_scale", DEFAULT_GUIDANCE);
+        metadata.SetProperty("guidance_scale", DEFAULT_GUIDANCE);
 
         return metadata;
     }

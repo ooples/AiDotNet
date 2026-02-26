@@ -114,7 +114,12 @@ public class StyleAlignedModel<T> : LatentDiffusionModelBase<T>
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };
         metadata.SetProperty("architecture", "unet-shared-attention");
+        metadata.SetProperty("base_model", "Stable Diffusion 1.5");
+        metadata.SetProperty("text_encoder", "CLIP ViT-L/14");
+        metadata.SetProperty("context_dim", 768);
         metadata.SetProperty("style_alignment_strength", _styleAlignmentStrength);
+        metadata.SetProperty("latent_channels", LATENT_CHANNELS);
+        metadata.SetProperty("guidance_scale", 7.5);
         return metadata;
     }
 }

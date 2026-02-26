@@ -256,6 +256,7 @@ public class PixArtDeltaModel<T> : LatentDiffusionModelBase<T>
         };
 
         metadata.SetProperty("architecture", "dit-xl-2-lcm");
+        metadata.SetProperty("base_model", "PixArt-delta");
         metadata.SetProperty("distillation_method", "LCM");
         metadata.SetProperty("text_encoder", "T5-XXL");
         metadata.SetProperty("optimal_steps", 4);

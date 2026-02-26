@@ -149,6 +149,9 @@ public class PeRFlowModel<T> : LatentDiffusionModelBase<T>
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };
         m.SetProperty("architecture", "piecewise-rectified-flow-unet");
+        m.SetProperty("base_model", "Stable Diffusion 1.5");
+        m.SetProperty("text_encoder", "CLIP ViT-L/14");
+        m.SetProperty("context_dim", 768);
         m.SetProperty("num_segments", _numSegments);
         m.SetProperty("optimal_steps", _numSegments);
         m.SetProperty("max_recommended_steps", _numSegments * 2);

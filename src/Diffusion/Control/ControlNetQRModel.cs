@@ -124,8 +124,12 @@ public class ControlNetQRModel<T> : LatentDiffusionModelBase<T>
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };
         metadata.SetProperty("architecture", "unet-controlnet-qr");
+        metadata.SetProperty("base_model", "Stable Diffusion 1.5");
+        metadata.SetProperty("text_encoder", "CLIP ViT-L/14");
+        metadata.SetProperty("context_dim", 768);
         metadata.SetProperty("control_type", ControlType.QR.ToString());
-        metadata.SetProperty("default_guidance_scale", DEFAULT_GUIDANCE);
+        metadata.SetProperty("latent_channels", LATENT_CHANNELS);
+        metadata.SetProperty("guidance_scale", DEFAULT_GUIDANCE);
         return metadata;
     }
 }

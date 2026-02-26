@@ -336,6 +336,7 @@ public class RecraftV3Model<T> : LatentDiffusionModelBase<T>
         };
 
         metadata.SetProperty("architecture", "mmdit-x-professional-style-aware");
+        metadata.SetProperty("base_model", "Recraft V3");
         metadata.SetProperty("hidden_size", RECRAFT_HIDDEN_SIZE);
         metadata.SetProperty("num_layers", RECRAFT_NUM_LAYERS);
         metadata.SetProperty("context_dim", RECRAFT_CONTEXT_DIM);

@@ -30,7 +30,9 @@ namespace AiDotNet.Diffusion.FastGeneration;
 public class SD3TurboModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 16;
+    private const int SD3_CONTEXT_DIM = 4096;
     private const double DEFAULT_GUIDANCE = 0.0;
+    private const int DEFAULT_STEPS = 4;
 
     private MMDiTXNoisePredictor<T> _predictor;
     private StandardVAE<T> _vae;
@@ -131,7 +133,12 @@ public class SD3TurboModel<T> : LatentDiffusionModelBase<T>
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };
         m.SetProperty("architecture", "distilled-mmdit");
-        m.SetProperty("optimal_steps", 4);
+        m.SetProperty("base_model", "Stable Diffusion 3");
+        m.SetProperty("text_encoder", "CLIP-L + CLIP-G + T5-XXL");
+        m.SetProperty("context_dim", SD3_CONTEXT_DIM);
+        m.SetProperty("distillation_method", "flow-matching-aware-distillation");
+        m.SetProperty("optimal_steps", DEFAULT_STEPS);
+        m.SetProperty("max_recommended_steps", 8);
         m.SetProperty("guidance_scale", DEFAULT_GUIDANCE);
         m.SetProperty("latent_channels", LATENT_CHANNELS);
         return m;

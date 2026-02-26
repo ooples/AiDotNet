@@ -137,6 +137,10 @@ public class SenseFlowModel<T> : LatentDiffusionModelBase<T>
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };
         m.SetProperty("architecture", "distilled-flux-flow-matching");
+        m.SetProperty("base_model", "FLUX.1");
+        m.SetProperty("text_encoder", "CLIP-L + T5-XXL");
+        m.SetProperty("context_dim", 4096);
+        m.SetProperty("distillation_method", "progressive-flow-matching");
         m.SetProperty("optimal_steps", 4);
         m.SetProperty("max_recommended_steps", 8);
         m.SetProperty("guidance_scale", DEFAULT_GUIDANCE);

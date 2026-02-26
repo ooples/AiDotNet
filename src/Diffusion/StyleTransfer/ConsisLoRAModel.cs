@@ -101,8 +101,11 @@ public class ConsisLoRAModel<T> : LatentDiffusionModelBase<T>
             Description = "Consistent LoRA-based style transfer with content-style disentanglement",
             FeatureCount = ParameterCount, Complexity = ParameterCount };
         m.SetProperty("architecture", "consistency-lora-style");
+        m.SetProperty("base_model", "Stable Diffusion 1.5");
+        m.SetProperty("text_encoder", "CLIP ViT-L/14");
+        m.SetProperty("context_dim", 768);
         m.SetProperty("latent_channels", LATENT_CHANNELS);
-        m.SetProperty("default_guidance_scale", DEFAULT_GUIDANCE);
+        m.SetProperty("guidance_scale", DEFAULT_GUIDANCE);
         return m;
     }
 }

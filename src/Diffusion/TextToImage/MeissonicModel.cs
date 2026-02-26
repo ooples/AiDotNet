@@ -341,6 +341,7 @@ public class MeissonicModel<T> : LatentDiffusionModelBase<T>
         };
 
         metadata.SetProperty("architecture", "masked-image-modeling-emmdit");
+        metadata.SetProperty("base_model", "Meissonic");
         metadata.SetProperty("text_encoder", "CLIP");
         metadata.SetProperty("context_dim", MEISSONIC_CONTEXT_DIM);
         metadata.SetProperty("hidden_size", MEISSONIC_HIDDEN_SIZE);

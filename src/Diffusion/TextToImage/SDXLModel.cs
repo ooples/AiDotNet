@@ -732,6 +732,37 @@ public class SDXLModel<T> : LatentDiffusionModelBase<T>
     }
 
     #endregion
+
+    #region Metadata
+
+    /// <inheritdoc />
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        var metadata = new ModelMetadata<T>
+        {
+            Name = "Stable Diffusion XL",
+            Version = "1.0",
+            ModelType = ModelType.NeuralNetwork,
+            Description = "SDXL base model with dual text encoders and 1024px native resolution",
+            FeatureCount = ParameterCount,
+            Complexity = ParameterCount
+        };
+
+        metadata.SetProperty("architecture", "sdxl-unet-latent-diffusion");
+        metadata.SetProperty("base_model", "Stable Diffusion XL");
+        metadata.SetProperty("text_encoder_1", "CLIP ViT-L/14");
+        metadata.SetProperty("text_encoder_2", "OpenCLIP ViT-bigG/14");
+        metadata.SetProperty("cross_attention_dim", _crossAttentionDim);
+        metadata.SetProperty("latent_channels", SDXL_LATENT_CHANNELS);
+        metadata.SetProperty("default_resolution", DefaultWidth);
+        metadata.SetProperty("latent_scale", 0.13025);
+        metadata.SetProperty("has_refiner", _refiner != null);
+        metadata.SetProperty("dual_encoder", _useDualEncoder);
+
+        return metadata;
+    }
+
+    #endregion
 }
 
 /// <summary>

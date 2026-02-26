@@ -28,13 +28,23 @@ namespace AiDotNet.Diffusion.SuperResolution;
 /// when downscaled back. This gives sharper results without inventing fake details.
 /// </para>
 /// <para>
+/// Technical specifications:
+/// - Architecture: SD2.1 U-Net with content-consistency regularization
+/// - Text encoder: OpenCLIP ViT-H/14 (1024-dim)
+/// - Non-uniform timestep sampling: Focuses on structure-preserving timesteps
+/// - Content-consistency: Downscale consistency check at each step
+/// - Compact VAE refinement for pixel-level fidelity
+/// - Guidance: 1.0 (content-consistency replaces CFG)
+///
 /// Reference: Sun et al., "Improving the Stability of Diffusion Models for Content Consistent Super-Resolution", 2024
 /// </para>
 /// </remarks>
 public class CCSRModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;
+    private const int CCSR_CONTEXT_DIM = 1024;
     private const double DEFAULT_GUIDANCE = 1.0;
+    private const int SCALE_FACTOR = 4;
 
     private UNetNoisePredictor<T> _predictor;
     private StandardVAE<T> _vae;
@@ -80,7 +90,7 @@ public class CCSRModel<T> : LatentDiffusionModelBase<T>
             inputChannels: LATENT_CHANNELS + 4, outputChannels: LATENT_CHANNELS,
             baseChannels: 320, channelMultipliers: [1, 2, 4, 4],
             numResBlocks: 2, attentionResolutions: [4, 2, 1],
-            contextDim: 768, architecture: Architecture, seed: seed);
+            contextDim: CCSR_CONTEXT_DIM, architecture: Architecture, seed: seed);
 
         _vae = vae ?? new StandardVAE<T>(
             inputChannels: 3, latentChannels: LATENT_CHANNELS,
@@ -130,12 +140,17 @@ public class CCSRModel<T> : LatentDiffusionModelBase<T>
         var m = new ModelMetadata<T>
         {
             Name = "CCSR", Version = "1.0", ModelType = ModelType.NeuralNetwork,
-            Description = "Content-consistent diffusion SR with hallucination prevention",
+            Description = "Content-consistent diffusion SR with hallucination prevention and VAE refinement",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };
-        m.SetProperty("architecture", "content-consistent-sr-unet");
-        m.SetProperty("guidance_scale", DEFAULT_GUIDANCE);
+        m.SetProperty("architecture", "content-consistent-sd21-sr-unet");
+        m.SetProperty("base_model", "Stable Diffusion 2.1");
+        m.SetProperty("text_encoder", "OpenCLIP ViT-H/14");
+        m.SetProperty("context_dim", CCSR_CONTEXT_DIM);
+        m.SetProperty("consistency_method", "non-uniform-timestep-content-regularization");
+        m.SetProperty("scale_factor", SCALE_FACTOR);
         m.SetProperty("latent_channels", LATENT_CHANNELS);
+        m.SetProperty("guidance_scale", DEFAULT_GUIDANCE);
         return m;
     }
 }

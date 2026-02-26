@@ -34,7 +34,9 @@ namespace AiDotNet.Diffusion.FastGeneration;
 public class FluxSchnellModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 16;
+    private const int FLUX_CONTEXT_DIM = 4096;
     private const double DEFAULT_GUIDANCE = 0.0;
+    private const int DEFAULT_STEPS = 4;
 
     private FluxDoubleStreamPredictor<T> _predictor;
     private StandardVAE<T> _vae;
@@ -134,7 +136,12 @@ public class FluxSchnellModel<T> : LatentDiffusionModelBase<T>
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };
         m.SetProperty("architecture", "flux-double-stream-distilled");
-        m.SetProperty("optimal_steps", 4);
+        m.SetProperty("base_model", "FLUX.1");
+        m.SetProperty("text_encoder", "CLIP-L + T5-XXL");
+        m.SetProperty("context_dim", FLUX_CONTEXT_DIM);
+        m.SetProperty("distillation_method", "guidance-distillation");
+        m.SetProperty("optimal_steps", DEFAULT_STEPS);
+        m.SetProperty("license", "Apache 2.0");
         m.SetProperty("guidance_scale", DEFAULT_GUIDANCE);
         m.SetProperty("latent_channels", LATENT_CHANNELS);
         return m;

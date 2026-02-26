@@ -125,8 +125,12 @@ public class ControlARModel<T> : LatentDiffusionModelBase<T>
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };
         metadata.SetProperty("architecture", "ar-controlnet");
+        metadata.SetProperty("base_model", "Autoregressive Image Generator");
+        metadata.SetProperty("context_dim", 4096);
         metadata.SetProperty("control_type", _controlType.ToString());
         metadata.SetProperty("ar_vocab_size", AR_VOCAB_SIZE);
+        metadata.SetProperty("latent_channels", LATENT_CHANNELS);
+        metadata.SetProperty("guidance_scale", 7.5);
         return metadata;
     }
 }

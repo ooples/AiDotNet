@@ -153,8 +153,15 @@ public class IPAdapterFaceIDPlusModel<T> : LatentDiffusionModelBase<T>
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };
         metadata.SetProperty("architecture", "unet-faceid-ip-adapter");
+        metadata.SetProperty("base_model", "Stable Diffusion 1.5");
+        metadata.SetProperty("text_encoder", "CLIP ViT-L/14");
+        metadata.SetProperty("face_encoder", "InsightFace (ArcFace)");
+        metadata.SetProperty("image_encoder", "CLIP ViT-H/14");
+        metadata.SetProperty("context_dim", 768);
         metadata.SetProperty("face_embed_dim", FACE_EMBED_DIM);
         metadata.SetProperty("face_id_scale", _faceIdScale);
+        metadata.SetProperty("latent_channels", LATENT_CHANNELS);
+        metadata.SetProperty("guidance_scale", 7.5);
         return metadata;
     }
 }

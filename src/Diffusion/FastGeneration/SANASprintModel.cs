@@ -138,6 +138,8 @@ public class SANASprintModel<T> : LatentDiffusionModelBase<T>
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };
         m.SetProperty("architecture", "sana-distilled-linear-dit");
+        m.SetProperty("base_model", "SANA");
+        m.SetProperty("text_encoder", "Gemma-2B");
         m.SetProperty("distillation_method", "hybrid-consistency-adversarial");
         m.SetProperty("optimal_steps", 1);
         m.SetProperty("max_recommended_steps", 4);

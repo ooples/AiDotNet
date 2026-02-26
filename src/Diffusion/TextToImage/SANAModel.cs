@@ -364,6 +364,7 @@ public class SANAModel<T> : LatentDiffusionModelBase<T>
         };
 
         metadata.SetProperty("architecture", "linear-dit-dc-ae-flow-matching");
+        metadata.SetProperty("base_model", "SANA");
         metadata.SetProperty("text_encoder", "Gemma 2B");
         metadata.SetProperty("context_dim", SANA_CONTEXT_DIM);
         metadata.SetProperty("hidden_size", isLarge ? SANA_LARGE_HIDDEN_SIZE : SANA_HIDDEN_SIZE);

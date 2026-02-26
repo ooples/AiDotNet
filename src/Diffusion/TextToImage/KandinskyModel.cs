@@ -452,6 +452,7 @@ public class KandinskyModel<T> : LatentDiffusionModelBase<T>
         };
 
         metadata.SetProperty("architecture", "prior-latent-diffusion");
+        metadata.SetProperty("base_model", "Kandinsky 2.2");
         metadata.SetProperty("text_encoder", "CLIP ViT-G/14");
         metadata.SetProperty("cross_attention_dim", KANDINSKY_CROSS_ATTENTION_DIM);
         metadata.SetProperty("image_embedding_dim", KANDINSKY_IMAGE_EMBEDDING_DIM);

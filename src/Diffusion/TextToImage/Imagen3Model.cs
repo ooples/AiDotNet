@@ -329,6 +329,7 @@ public class Imagen3Model<T> : LatentDiffusionModelBase<T>
         };
 
         metadata.SetProperty("architecture", "cascaded-sit-diffusion");
+        metadata.SetProperty("base_model", "Imagen 3");
         metadata.SetProperty("text_encoder", "Gemma");
         metadata.SetProperty("context_dim", IMAGEN3_CONTEXT_DIM);
         metadata.SetProperty("base_hidden_size", IMAGEN3_BASE_HIDDEN_SIZE);

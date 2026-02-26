@@ -101,8 +101,11 @@ public class StitchDiffusionModel<T> : LatentDiffusionModelBase<T>
             Description = "360-degree panorama with circular padding and wrap-around consistency",
             FeatureCount = ParameterCount, Complexity = ParameterCount };
         m.SetProperty("architecture", "circular-padding-panorama");
+        m.SetProperty("base_model", "Stable Diffusion 1.5");
+        m.SetProperty("text_encoder", "CLIP ViT-L/14");
+        m.SetProperty("context_dim", 768);
         m.SetProperty("latent_channels", LATENT_CHANNELS);
-        m.SetProperty("default_guidance_scale", DEFAULT_GUIDANCE);
+        m.SetProperty("guidance_scale", DEFAULT_GUIDANCE);
         return m;
     }
 }

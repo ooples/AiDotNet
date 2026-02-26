@@ -240,6 +240,7 @@ public class MidJourneyV7Model<T> : LatentDiffusionModelBase<T>
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };
         m.SetProperty("architecture", "multi-scale-mmdit-x-aesthetic");
+        m.SetProperty("base_model", "Midjourney V7");
         m.SetProperty("hidden_size", MJ7_HIDDEN_SIZE);
         m.SetProperty("num_layers", MJ7_NUM_LAYERS);
         m.SetProperty("latent_channels", MJ7_LATENT_CHANNELS);

@@ -3,6 +3,7 @@ using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Diffusion.VAE;
 using AiDotNet.Diffusion.Schedulers;
 using AiDotNet.Enums;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
@@ -29,6 +30,7 @@ namespace AiDotNet.Diffusion.Control;
 public class ControlNetSD3Model<T> : LatentDiffusionModelBase<T>
 {
     private const int SD3_LATENT_CHANNELS = 16;
+    private const int SD3_CONTEXT_DIM = 4096;
     private const double DEFAULT_GUIDANCE = 7.0;
 
     private MMDiTXNoisePredictor<T> _predictor;
@@ -64,16 +66,17 @@ public class ControlNetSD3Model<T> : LatentDiffusionModelBase<T>
             options ?? new DiffusionModelOptions<T>
             {
                 TrainTimesteps = 1000,
-                BetaStart = 0.00085,
-                BetaEnd = 0.012,
-                BetaSchedule = BetaSchedule.ScaledLinear
+                BetaStart = 0.0001,
+                BetaEnd = 1.0,
+                BetaSchedule = BetaSchedule.Linear
             },
-            scheduler ?? new DDIMScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()),
+            scheduler ?? new FlowMatchingScheduler<T>(SchedulerConfig<T>.CreateRectifiedFlow()),
             architecture)
     {
         _controlType = controlType;
         _conditioner = conditioner;
         InitializeLayers(predictor, vae, seed);
+        SetGuidanceScale(DEFAULT_GUIDANCE);
     }
 
     [MemberNotNull(nameof(_predictor), nameof(_vae), nameof(_controlEncoder))]
@@ -151,9 +154,12 @@ public class ControlNetSD3Model<T> : LatentDiffusionModelBase<T>
         };
 
         metadata.SetProperty("architecture", "mmdit-x-controlnet");
+        metadata.SetProperty("base_model", "Stable Diffusion 3");
+        metadata.SetProperty("text_encoder", "CLIP-L + CLIP-G + T5-XXL");
+        metadata.SetProperty("context_dim", SD3_CONTEXT_DIM);
         metadata.SetProperty("control_type", _controlType.ToString());
         metadata.SetProperty("latent_channels", SD3_LATENT_CHANNELS);
-        metadata.SetProperty("default_guidance_scale", DEFAULT_GUIDANCE);
+        metadata.SetProperty("guidance_scale", DEFAULT_GUIDANCE);
 
         return metadata;
     }

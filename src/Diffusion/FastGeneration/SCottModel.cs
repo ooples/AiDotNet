@@ -138,6 +138,10 @@ public class SCottModel<T> : LatentDiffusionModelBase<T>
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };
         m.SetProperty("architecture", "score-ot-consistency-unet");
+        m.SetProperty("base_model", "Stable Diffusion 1.5");
+        m.SetProperty("text_encoder", "CLIP ViT-L/14");
+        m.SetProperty("context_dim", 768);
+        m.SetProperty("distillation_method", "score-OT-consistency");
         m.SetProperty("optimal_steps", 2);
         m.SetProperty("max_recommended_steps", 4);
         m.SetProperty("guidance_scale", DEFAULT_GUIDANCE);

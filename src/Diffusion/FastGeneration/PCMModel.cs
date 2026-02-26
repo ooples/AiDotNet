@@ -148,6 +148,10 @@ public class PCMModel<T> : LatentDiffusionModelBase<T>
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };
         m.SetProperty("architecture", "phased-consistency-unet");
+        m.SetProperty("base_model", _isXLVariant ? "Stable Diffusion XL" : "Stable Diffusion 1.5");
+        m.SetProperty("text_encoder", _isXLVariant ? "CLIP ViT-L/14 + OpenCLIP ViT-bigG/14" : "CLIP ViT-L/14");
+        m.SetProperty("context_dim", _isXLVariant ? 2048 : 768);
+        m.SetProperty("distillation_method", "phased-consistency");
         m.SetProperty("optimal_steps", 4);
         m.SetProperty("max_recommended_steps", 16);
         m.SetProperty("is_xl_variant", _isXLVariant);

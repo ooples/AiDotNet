@@ -28,13 +28,23 @@ namespace AiDotNet.Diffusion.SuperResolution;
 /// texture, a building gets brick patterns, etc.
 /// </para>
 /// <para>
+/// Technical specifications:
+/// - Architecture: SD2.1 U-Net with semantic tag extraction module
+/// - Text encoder: OpenCLIP ViT-H/14 (1024-dim) for tag conditioning
+/// - Input: 8 channels (4 latent + 4 LR image latent)
+/// - Semantic tags: DAPE (Degradation-Aware Prompt Extractor)
+/// - Training: SD2.1 backbone + semantic consistency loss
+/// - Scale factor: 4x upscaling
+///
 /// Reference: Wu et al., "SeeSR: Towards Semantics-Aware Real-World Image Super-Resolution", CVPR 2024
 /// </para>
 /// </remarks>
 public class SeeSRModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;
+    private const int SEESR_CONTEXT_DIM = 1024;
     private const double DEFAULT_GUIDANCE = 5.5;
+    private const int SCALE_FACTOR = 4;
 
     private UNetNoisePredictor<T> _predictor;
     private StandardVAE<T> _vae;
@@ -80,7 +90,7 @@ public class SeeSRModel<T> : LatentDiffusionModelBase<T>
             inputChannels: LATENT_CHANNELS + 4, outputChannels: LATENT_CHANNELS,
             baseChannels: 320, channelMultipliers: [1, 2, 4, 4],
             numResBlocks: 2, attentionResolutions: [4, 2, 1],
-            contextDim: 768, architecture: Architecture, seed: seed);
+            contextDim: SEESR_CONTEXT_DIM, architecture: Architecture, seed: seed);
 
         _vae = vae ?? new StandardVAE<T>(
             inputChannels: 3, latentChannels: LATENT_CHANNELS,
@@ -133,9 +143,14 @@ public class SeeSRModel<T> : LatentDiffusionModelBase<T>
             Description = "Semantics-aware diffusion super-resolution with tag-guided detail generation",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };
-        m.SetProperty("architecture", "semantic-sr-unet");
-        m.SetProperty("guidance_scale", DEFAULT_GUIDANCE);
+        m.SetProperty("architecture", "semantic-sr-sd21-unet");
+        m.SetProperty("base_model", "Stable Diffusion 2.1");
+        m.SetProperty("text_encoder", "OpenCLIP ViT-H/14");
+        m.SetProperty("context_dim", SEESR_CONTEXT_DIM);
+        m.SetProperty("semantic_module", "DAPE (Degradation-Aware Prompt Extractor)");
+        m.SetProperty("scale_factor", SCALE_FACTOR);
         m.SetProperty("latent_channels", LATENT_CHANNELS);
+        m.SetProperty("guidance_scale", DEFAULT_GUIDANCE);
         return m;
     }
 }

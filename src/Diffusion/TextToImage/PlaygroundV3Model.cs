@@ -338,6 +338,7 @@ public class PlaygroundV3Model<T> : LatentDiffusionModelBase<T>
         };
 
         metadata.SetProperty("architecture", "mmdit-x-aesthetic-dpo");
+        metadata.SetProperty("base_model", "Playground v3");
         metadata.SetProperty("text_encoder_1", "CLIP ViT-L/14");
         metadata.SetProperty("text_encoder_2", "OpenCLIP ViT-bigG");
         metadata.SetProperty("text_encoder_3", "T5-XXL");

@@ -34,7 +34,9 @@ namespace AiDotNet.Diffusion.FastGeneration;
 public class SDXLLightningModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;
+    private const int SDXL_CONTEXT_DIM = 2048;
     private const double DEFAULT_GUIDANCE = 0.0;
+    private const int DEFAULT_STEPS = 4;
 
     private UNetNoisePredictor<T> _predictor;
     private StandardVAE<T> _vae;
@@ -137,8 +139,14 @@ public class SDXLLightningModel<T> : LatentDiffusionModelBase<T>
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };
         m.SetProperty("architecture", "sdxl-progressive-distilled");
-        m.SetProperty("optimal_steps", 4);
+        m.SetProperty("base_model", "Stable Diffusion XL");
+        m.SetProperty("text_encoder", "CLIP ViT-L/14 + OpenCLIP ViT-bigG/14");
+        m.SetProperty("context_dim", SDXL_CONTEXT_DIM);
+        m.SetProperty("distillation_method", "progressive-adversarial");
+        m.SetProperty("optimal_steps", DEFAULT_STEPS);
         m.SetProperty("max_recommended_steps", 8);
+        m.SetProperty("default_resolution", 1024);
+        m.SetProperty("lora_available", true);
         m.SetProperty("guidance_scale", DEFAULT_GUIDANCE);
         m.SetProperty("latent_channels", LATENT_CHANNELS);
         return m;

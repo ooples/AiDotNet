@@ -438,6 +438,7 @@ public class DallE2Model<T> : LatentDiffusionModelBase<T>
         };
 
         metadata.SetProperty("architecture", "unclip-diffusion");
+        metadata.SetProperty("base_model", "DALL-E 2");
         metadata.SetProperty("text_encoder", "CLIP ViT-L/14");
         metadata.SetProperty("clip_dim", DALLE2_CLIP_DIM);
         metadata.SetProperty("base_resolution", 64);

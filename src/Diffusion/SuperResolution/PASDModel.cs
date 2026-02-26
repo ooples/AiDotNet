@@ -28,13 +28,22 @@ namespace AiDotNet.Diffusion.SuperResolution;
 /// the input's structure perfectly while adding sharp, realistic details.
 /// </para>
 /// <para>
+/// Technical specifications:
+/// - Architecture: SD2.1 U-Net with pixel-aware cross-attention
+/// - Text encoder: OpenCLIP ViT-H/14 (1024-dim) — uses image captions for guidance
+/// - Pixel-aware attention: LR features injected into cross-attention at every layer
+/// - Scale factor: 4x upscaling
+/// - Personalized stylization also supported
+///
 /// Reference: Yang et al., "Pixel-Aware Stable Diffusion for Realistic Image Super-resolution and Personalized Stylization", 2024
 /// </para>
 /// </remarks>
 public class PASDModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;
+    private const int PASD_CONTEXT_DIM = 1024;
     private const double DEFAULT_GUIDANCE = 7.5;
+    private const int SCALE_FACTOR = 4;
 
     private UNetNoisePredictor<T> _predictor;
     private StandardVAE<T> _vae;
@@ -80,7 +89,7 @@ public class PASDModel<T> : LatentDiffusionModelBase<T>
             inputChannels: LATENT_CHANNELS + 4, outputChannels: LATENT_CHANNELS,
             baseChannels: 320, channelMultipliers: [1, 2, 4, 4],
             numResBlocks: 2, attentionResolutions: [4, 2, 1],
-            contextDim: 768, architecture: Architecture, seed: seed);
+            contextDim: PASD_CONTEXT_DIM, architecture: Architecture, seed: seed);
 
         _vae = vae ?? new StandardVAE<T>(
             inputChannels: 3, latentChannels: LATENT_CHANNELS,
@@ -133,9 +142,14 @@ public class PASDModel<T> : LatentDiffusionModelBase<T>
             Description = "Pixel-aware stable diffusion for structure-preserving real-world super-resolution",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };
-        m.SetProperty("architecture", "pixel-aware-sr-unet");
-        m.SetProperty("guidance_scale", DEFAULT_GUIDANCE);
+        m.SetProperty("architecture", "pixel-aware-sd21-sr-unet");
+        m.SetProperty("base_model", "Stable Diffusion 2.1");
+        m.SetProperty("text_encoder", "OpenCLIP ViT-H/14");
+        m.SetProperty("context_dim", PASD_CONTEXT_DIM);
+        m.SetProperty("attention_method", "pixel-aware-cross-attention");
+        m.SetProperty("scale_factor", SCALE_FACTOR);
         m.SetProperty("latent_channels", LATENT_CHANNELS);
+        m.SetProperty("guidance_scale", DEFAULT_GUIDANCE);
         return m;
     }
 }

@@ -129,8 +129,11 @@ public class DiffPanoModel<T> : LatentDiffusionModelBase<T>
             Description = "Spherical epipolar-aware diffusion for consistent 360-degree panorama generation",
             FeatureCount = ParameterCount, Complexity = ParameterCount };
         m.SetProperty("architecture", "spherical-epipolar-unet");
+        m.SetProperty("base_model", "Stable Diffusion 1.5");
+        m.SetProperty("text_encoder", "CLIP ViT-L/14");
+        m.SetProperty("context_dim", 768);
         m.SetProperty("latent_channels", LATENT_CHANNELS);
-        m.SetProperty("default_guidance_scale", DEFAULT_GUIDANCE);
+        m.SetProperty("guidance_scale", DEFAULT_GUIDANCE);
         m.SetProperty("default_panorama_width", DEFAULT_PANORAMA_WIDTH);
         m.SetProperty("default_panorama_height", DEFAULT_PANORAMA_HEIGHT);
         return m;

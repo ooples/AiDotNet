@@ -175,6 +175,9 @@ public class MultiStepConsistencyModel<T> : LatentDiffusionModelBase<T>
             Complexity = ParameterCount
         };
         m.SetProperty("architecture", "multi-step-consistency-unet");
+        m.SetProperty("base_model", "Stable Diffusion 1.5");
+        m.SetProperty("text_encoder", "CLIP ViT-L/14");
+        m.SetProperty("context_dim", 768);
         m.SetProperty("optimal_steps", 2);
         m.SetProperty("max_recommended_steps", 8);
         m.SetProperty("guidance_scale", MSCM_DEFAULT_GUIDANCE);

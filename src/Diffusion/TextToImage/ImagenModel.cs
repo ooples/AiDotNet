@@ -458,6 +458,7 @@ public class ImagenModel<T> : LatentDiffusionModelBase<T>
         };
 
         metadata.SetProperty("architecture", "cascaded-pixel-diffusion");
+        metadata.SetProperty("base_model", "Imagen");
         metadata.SetProperty("text_encoder", "T5-XXL");
         metadata.SetProperty("cross_attention_dim", IMAGEN_CROSS_ATTENTION_DIM);
         metadata.SetProperty("base_resolution", 64);

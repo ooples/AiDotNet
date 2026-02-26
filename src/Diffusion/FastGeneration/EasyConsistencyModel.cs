@@ -175,6 +175,9 @@ public class EasyConsistencyModel<T> : LatentDiffusionModelBase<T>
             Complexity = ParameterCount
         };
         m.SetProperty("architecture", "consistency-model-unet");
+        m.SetProperty("base_model", "Stable Diffusion 1.5");
+        m.SetProperty("text_encoder", "CLIP ViT-L/14");
+        m.SetProperty("context_dim", 768);
         m.SetProperty("training_method", "progressive-curriculum");
         m.SetProperty("optimal_steps", 1);
         m.SetProperty("max_recommended_steps", 4);

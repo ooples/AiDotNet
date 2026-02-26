@@ -260,6 +260,7 @@ public class KolorsModel<T> : LatentDiffusionModelBase<T>
         };
 
         metadata.SetProperty("architecture", "sdxl-unet-chatglm3");
+        metadata.SetProperty("base_model", "Kolors");
         metadata.SetProperty("text_encoder", "ChatGLM3-6B");
         metadata.SetProperty("bilingual", true);
         metadata.SetProperty("cross_attention_dim", CROSS_ATTENTION_DIM);

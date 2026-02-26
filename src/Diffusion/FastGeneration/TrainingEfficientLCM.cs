@@ -186,6 +186,9 @@ public class TrainingEfficientLCM<T> : LatentDiffusionModelBase<T>
             Complexity = ParameterCount
         };
         m.SetProperty("architecture", "lcm-lora-unet");
+        m.SetProperty("base_model", "Stable Diffusion 1.5");
+        m.SetProperty("text_encoder", "CLIP ViT-L/14");
+        m.SetProperty("context_dim", 768);
         m.SetProperty("distillation_method", "lcm-lora");
         m.SetProperty("lora_rank", _loraRank);
         m.SetProperty("optimal_steps", 4);

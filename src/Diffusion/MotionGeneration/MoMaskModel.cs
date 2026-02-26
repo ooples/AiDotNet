@@ -101,8 +101,9 @@ public class MoMaskModel<T> : LatentDiffusionModelBase<T>
             Description = "Masked generative modeling for fast parallel 3D motion generation",
             FeatureCount = ParameterCount, Complexity = ParameterCount };
         m.SetProperty("architecture", "masked-token-motion-generation");
+        m.SetProperty("text_encoder", "CLIP ViT-L/14");
         m.SetProperty("motion_dimensions", LATENT_CHANNELS);
-        m.SetProperty("default_guidance_scale", DEFAULT_GUIDANCE);
+        m.SetProperty("guidance_scale", DEFAULT_GUIDANCE);
         return m;
     }
 }

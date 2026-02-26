@@ -257,6 +257,7 @@ public class HunyuanDiTModel<T> : LatentDiffusionModelBase<T>
         };
 
         metadata.SetProperty("architecture", "dit-xl-dual-encoder");
+        metadata.SetProperty("base_model", "Hunyuan-DiT");
         metadata.SetProperty("text_encoders", "CLIP-L+mT5-XL");
         metadata.SetProperty("bilingual", true);
         metadata.SetProperty("cross_attention_dim", CROSS_ATTENTION_DIM);

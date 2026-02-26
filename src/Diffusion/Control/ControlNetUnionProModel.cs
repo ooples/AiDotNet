@@ -186,10 +186,13 @@ public class ControlNetUnionProModel<T> : LatentDiffusionModelBase<T>
         };
 
         metadata.SetProperty("architecture", "unet-multi-type-controlnet");
+        metadata.SetProperty("base_model", "Stable Diffusion 1.5");
+        metadata.SetProperty("text_encoder", "CLIP ViT-L/14");
+        metadata.SetProperty("context_dim", 768);
         metadata.SetProperty("supported_types", string.Join(", ", _supportedTypes.Select(t => t.ToString())));
         metadata.SetProperty("num_types", _supportedTypes.Length);
         metadata.SetProperty("latent_channels", LATENT_CHANNELS);
-        metadata.SetProperty("default_guidance_scale", DEFAULT_GUIDANCE);
+        metadata.SetProperty("guidance_scale", DEFAULT_GUIDANCE);
 
         return metadata;
     }

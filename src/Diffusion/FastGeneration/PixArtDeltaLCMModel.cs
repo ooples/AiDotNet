@@ -136,6 +136,10 @@ public class PixArtDeltaLCMModel<T> : LatentDiffusionModelBase<T>
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };
         m.SetProperty("architecture", "pixart-delta-lcm-dit");
+        m.SetProperty("base_model", "PixArt-delta");
+        m.SetProperty("text_encoder", "T5-XXL");
+        m.SetProperty("context_dim", 4096);
+        m.SetProperty("distillation_method", "latent-consistency");
         m.SetProperty("optimal_steps", 4);
         m.SetProperty("max_recommended_steps", 8);
         m.SetProperty("guidance_scale", DEFAULT_GUIDANCE);

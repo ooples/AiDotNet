@@ -332,6 +332,7 @@ public class CogView4Model<T> : LatentDiffusionModelBase<T>
         };
 
         metadata.SetProperty("architecture", "sit-relay-diffusion");
+        metadata.SetProperty("base_model", "CogView-4");
         metadata.SetProperty("text_encoder", "GLM (bilingual)");
         metadata.SetProperty("context_dim", COGVIEW_CONTEXT_DIM);
         metadata.SetProperty("hidden_size", COGVIEW_HIDDEN_SIZE);
