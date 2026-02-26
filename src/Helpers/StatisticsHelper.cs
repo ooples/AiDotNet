@@ -104,6 +104,11 @@ public static class StatisticsHelper<T>
     /// </remarks>
     public static T CalculateVariance(Vector<T> values, T mean)
     {
+        if (values.Length < 2)
+        {
+            return _numOps.Zero;
+        }
+
         T sumOfSquares = values.Select(x => _numOps.Square(_numOps.Subtract(x, mean))).Aggregate(_numOps.Zero, _numOps.Add);
         return _numOps.Divide(sumOfSquares, _numOps.FromDouble(values.Length - 1));
     }
