@@ -98,13 +98,17 @@ public class CosineSimilarityLoss<T> : LossFunctionBase<T>
         Vector<T> derivative = new Vector<T>(predicted.Length);
         for (int i = 0; i < predicted.Length; i++)
         {
-            // ?(cos similarity)/?p_i = (a_i*||p||^2 - p_i*(p²a)) / (||p||^3 * ||a||)
+            // ?(cos similarity)/?p_i = (a_i*||p||^2 - p_i*(p·a)) / (||p||^3 * ||a||)
             T numerator = NumOps.Subtract(
                 NumOps.Multiply(actual[i], normPredicted),
                 NumOps.Multiply(predicted[i], dotProduct)
             );
 
-            T denominator = NumOps.Multiply(normProduct, normPredSqrt);
+            // ||p||^3 * ||a|| = ||p|| * ||p||^2 * ||a|| / ||p|| ...
+            // normPredSqrt = ||p||, normPredicted = ||p||^2
+            // normPredSqrt * normPredicted = ||p||^3
+            T normPredCubed = NumOps.Multiply(normPredSqrt, normPredicted);
+            T denominator = NumOps.Multiply(normPredCubed, NumOps.Sqrt(normActual));
 
             // Derivative of the loss is negative of the derivative of cosine similarity
             derivative[i] = NumOps.Negate(NumericalStabilityHelper.SafeDiv(numerator, denominator, NumericalStabilityHelper.SmallEpsilon));
