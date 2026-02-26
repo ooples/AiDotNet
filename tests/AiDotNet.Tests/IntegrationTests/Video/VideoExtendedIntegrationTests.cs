@@ -336,7 +336,7 @@ public class VideoExtendedIntegrationTests
     public void FLAVR_Construction()
     {
         var arch = CreateArch();
-        var model = new FLAVR<double>(arch, numFeatures: 32);
+        var model = new FLAVR<double>(arch);
         Assert.True(model.SupportsTraining);
     }
 
