@@ -1,0 +1,126 @@
+using System.Diagnostics.CodeAnalysis;
+using AiDotNet.Diffusion.NoisePredictors;
+using AiDotNet.Diffusion.VAE;
+using AiDotNet.Enums;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.Models;
+using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Diffusion.Schedulers;
+
+namespace AiDotNet.Diffusion.FastGeneration;
+
+/// <summary>
+/// SiD-DiT: Score Identity Distillation applied to Diffusion Transformer (DiT) architectures.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para>
+/// Extends SiD to work with DiT-based architectures, enabling single-step generation from
+/// transformer-based diffusion models. Uses the same score identity principle but adapted
+/// for the DiT's class-conditional generation with adaptive layer norm (adaLN) conditioning.
+/// </para>
+/// <para>
+/// <b>For Beginners:</b> SiD-DiT is the transformer version of SiD. While SiD works with
+/// U-Net models (like Stable Diffusion), SiD-DiT works with Diffusion Transformers (DiT)
+/// — the architecture used by newer models. It enables single-step generation from these
+/// powerful transformer-based generators.
+/// </para>
+/// <para>
+/// Reference: Extended from "Score Identity Distillation" (Zhou et al., 2024) to DiT architectures
+/// </para>
+/// </remarks>
+public class SiDDiTModel<T> : LatentDiffusionModelBase<T>
+{
+    private const int LATENT_CHANNELS = 4;
+    private const double DEFAULT_GUIDANCE = 0.0;
+
+    private SiTPredictor<T> _predictor;
+    private StandardVAE<T> _vae;
+    private readonly IConditioningModule<T>? _conditioner;
+
+    /// <inheritdoc />
+    public override INoisePredictor<T> NoisePredictor => _predictor;
+    /// <inheritdoc />
+    public override IVAEModel<T> VAE => _vae;
+    /// <inheritdoc />
+    public override IConditioningModule<T>? Conditioner => _conditioner;
+    /// <inheritdoc />
+    public override int LatentChannels => LATENT_CHANNELS;
+    /// <inheritdoc />
+    public override int ParameterCount => _predictor.ParameterCount;
+
+    /// <summary>
+    /// Initializes a new SiD-DiT model.
+    /// </summary>
+    public SiDDiTModel(
+        NeuralNetworkArchitecture<T>? architecture = null,
+        DiffusionModelOptions<T>? options = null,
+        INoiseScheduler<T>? scheduler = null,
+        SiTPredictor<T>? predictor = null,
+        StandardVAE<T>? vae = null,
+        IConditioningModule<T>? conditioner = null,
+        int? seed = null)
+        : base(
+            options ?? new DiffusionModelOptions<T>
+            {
+                TrainTimesteps = 1000, BetaStart = 0.0001,
+                BetaEnd = 0.02, BetaSchedule = BetaSchedule.Linear
+            },
+            scheduler ?? new DDIMScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()),
+            architecture)
+    {
+        _conditioner = conditioner;
+        InitializeLayers(predictor, vae, seed);
+        SetGuidanceScale(DEFAULT_GUIDANCE);
+    }
+
+    [MemberNotNull(nameof(_predictor), nameof(_vae))]
+    private void InitializeLayers(SiTPredictor<T>? predictor, StandardVAE<T>? vae, int? seed)
+    {
+        _predictor = predictor ?? new SiTPredictor<T>(
+            inputChannels: LATENT_CHANNELS,
+            hiddenSize: 1152,
+            numLayers: 28,
+            numHeads: 16,
+            seed: seed);
+
+        _vae = vae ?? new StandardVAE<T>(
+            inputChannels: 3, latentChannels: LATENT_CHANNELS,
+            baseChannels: 128, channelMultipliers: [1, 2, 4, 4],
+            numResBlocksPerLevel: 2, latentScaleFactor: 0.18215, seed: seed);
+    }
+
+    /// <inheritdoc />
+    public override Vector<T> GetParameters() => _predictor.GetParameters();
+    /// <inheritdoc />
+    public override void SetParameters(Vector<T> parameters) => _predictor.SetParameters(parameters);
+    /// <inheritdoc />
+    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
+
+    /// <inheritdoc />
+    public override IDiffusionModel<T> Clone()
+    {
+        var clone = new SiDDiTModel<T>(conditioner: _conditioner, seed: RandomGenerator.Next());
+        clone.SetParameters(GetParameters());
+        return clone;
+    }
+
+    /// <inheritdoc />
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        var m = new ModelMetadata<T>
+        {
+            Name = "SiD-DiT", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Description = "Score Identity Distillation for Diffusion Transformer architectures enabling single-step generation",
+            FeatureCount = ParameterCount, Complexity = ParameterCount
+        };
+        m.SetProperty("architecture", "score-identity-dit");
+        m.SetProperty("backbone", "DiT-XL/2");
+        m.SetProperty("optimal_steps", 1);
+        m.SetProperty("guidance_scale", DEFAULT_GUIDANCE);
+        m.SetProperty("latent_channels", LATENT_CHANNELS);
+        return m;
+    }
+}
