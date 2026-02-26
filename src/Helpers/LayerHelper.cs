@@ -25521,4 +25521,153 @@ public static class LayerHelper<T>
     }
 
     #endregion
+
+    #region NER Sequence Labeling
+
+    /// <summary>
+    /// Creates the default layer stack for a BiLSTM-CRF sequence labeling NER model.
+    /// </summary>
+    /// <param name="embeddingDimension">Dimension of input token embeddings (e.g., 100 for GloVe-100d, 300 for GloVe-300d).</param>
+    /// <param name="hiddenDimension">LSTM hidden state dimension per direction. The full BiLSTM output is 2x this value
+    /// because forward and backward hidden states are concatenated.</param>
+    /// <param name="numLabels">Number of output label classes in the BIO tagging scheme
+    /// (e.g., 9 for CoNLL-2003: O, B-PER, I-PER, B-ORG, I-ORG, B-LOC, I-LOC, B-MISC, I-MISC).</param>
+    /// <param name="numLSTMLayers">Number of stacked BiLSTM layers. The original Lample et al. (2016) paper uses 1 layer.
+    /// Deeper stacks (2-3) can improve accuracy on complex datasets but increase training time.</param>
+    /// <param name="maxSequenceLength">Maximum number of tokens in a single input sequence. Sequences longer than this
+    /// will be truncated. The CRF layer uses this to define its sequence dimension.</param>
+    /// <param name="dropoutRate">Probability of dropping activations during training (0.0 to 1.0).
+    /// The original paper uses 0.5 dropout between LSTM layers and before the projection layer.
+    /// Set to 0 to disable dropout entirely.</param>
+    /// <returns>A collection of layers implementing the BiLSTM-CRF architecture from Lample et al. (NAACL 2016).</returns>
+    /// <remarks>
+    /// <para>
+    /// This method implements the architecture from "Neural Architectures for Named Entity Recognition"
+    /// (Lample et al., NAACL 2016), which established BiLSTM-CRF as the standard neural NER architecture.
+    ///
+    /// The layer stack follows the original paper's design:
+    /// 1. <b>BiLSTM layers:</b> Process token embeddings bidirectionally. The forward LSTM reads
+    ///    left-to-right capturing preceding context ("John works at ..."), while the backward LSTM
+    ///    reads right-to-left capturing following context ("... at Google Inc."). Their hidden states
+    ///    are concatenated to form a rich representation of each token in its full sentential context.
+    ///
+    /// 2. <b>Dropout regularization:</b> Applied between stacked LSTM layers and before the
+    ///    projection layer to prevent overfitting. The paper uses 0.5 dropout rate.
+    ///
+    /// 3. <b>Linear projection:</b> A dense layer that maps the concatenated BiLSTM hidden states
+    ///    (dimension = 2 * hiddenDimension) down to emission scores for each label class.
+    ///    These scores represent how likely each token is to receive each label, based purely
+    ///    on the token's contextual features.
+    ///
+    /// 4. <b>CRF layer:</b> Models label-level transition dependencies to produce globally optimal
+    ///    label sequences. The CRF learns a transition matrix where entry (i,j) represents how
+    ///    likely label j is to follow label i. During inference, the Viterbi algorithm finds the
+    ///    highest-scoring label path through the entire sequence. This enforces structural constraints
+    ///    like "I-PER must follow B-PER or I-PER" and "I-ORG cannot follow B-LOC".
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This creates the neural network layers for a Named Entity Recognition
+    /// model. The model reads text forward and backward simultaneously (BiLSTM), then uses a
+    /// special layer (CRF) to pick the best sequence of entity labels for the entire sentence.
+    ///
+    /// For example, given "John Smith works at Google":
+    /// - The BiLSTM reads the sentence in both directions to understand each word in context
+    /// - The projection layer scores how likely each word is to be each entity type
+    /// - The CRF layer considers that "Smith" following "John" is likely part of the same person name,
+    ///   and picks the globally best labels: B-PER, I-PER, O, O, B-ORG
+    ///
+    /// Default values follow the original research paper (Lample et al., NAACL 2016):
+    /// - 100-dimensional GloVe word embeddings
+    /// - 100 hidden units per LSTM direction (200 total after concatenation)
+    /// - Single BiLSTM layer
+    /// - 50% dropout for regularization
+    /// - CRF decoding with 9 labels (CoNLL-2003 BIO scheme)
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultBiLSTMCRFLayers(
+        int embeddingDimension = 100,
+        int hiddenDimension = 100,
+        int numLabels = 9,
+        int numLSTMLayers = 1,
+        int maxSequenceLength = 256,
+        double dropoutRate = 0.5)
+    {
+        if (embeddingDimension <= 0)
+            throw new ArgumentOutOfRangeException(nameof(embeddingDimension),
+                $"Embedding dimension must be positive. Got: {embeddingDimension}");
+        if (hiddenDimension <= 0)
+            throw new ArgumentOutOfRangeException(nameof(hiddenDimension),
+                $"Hidden dimension must be positive. Got: {hiddenDimension}");
+        if (numLabels <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numLabels),
+                $"Number of labels must be positive. Got: {numLabels}");
+        if (numLSTMLayers <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numLSTMLayers),
+                $"Number of LSTM layers must be positive. Got: {numLSTMLayers}");
+
+        var tanhActivation = new TanhActivation<T>() as IActivationFunction<T>;
+        var sigmoidActivation = new SigmoidActivation<T>() as IActivationFunction<T>;
+        var identityActivation = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        int currentInputSize = embeddingDimension;
+
+        // === Stacked BiLSTM layers ===
+        // Each LSTM layer processes the sequence and produces hidden states.
+        // In a full BiLSTM, forward and backward LSTMs run independently and their
+        // outputs are concatenated, doubling the output dimension.
+        // The original paper (Lample et al., 2016) uses a single BiLSTM layer with
+        // 100 hidden units per direction (200 total output).
+        for (int layer = 0; layer < numLSTMLayers; layer++)
+        {
+            // Forward LSTM: reads tokens left-to-right
+            // Captures preceding context for each token position
+            yield return new LSTMLayer<T>(
+                inputSize: currentInputSize,
+                hiddenSize: hiddenDimension,
+                inputShape: [currentInputSize],
+                activation: tanhActivation,
+                recurrentActivation: sigmoidActivation);
+
+            // After LSTM, output dimension is hiddenDimension
+            currentInputSize = hiddenDimension;
+
+            // Variational dropout between stacked LSTM layers (Gal & Ghahramani, 2016)
+            // The same dropout mask is applied at each timestep for temporal consistency
+            if (dropoutRate > 0 && layer < numLSTMLayers - 1)
+            {
+                yield return new DropoutLayer<T>(dropoutRate);
+            }
+        }
+
+        // === Pre-projection dropout ===
+        // Applied before the linear projection to prevent co-adaptation of features
+        // The original paper uses 0.5 dropout rate
+        if (dropoutRate > 0)
+        {
+            yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // === Linear projection: hidden states -> emission scores ===
+        // Maps LSTM hidden states to per-label scores (emission potentials)
+        // Input: [sequenceLength, hiddenDimension]
+        // Output: [sequenceLength, numLabels]
+        // Uses identity activation because the CRF layer operates on raw scores
+        yield return new DenseLayer<T>(
+            inputSize: currentInputSize,
+            outputSize: numLabels,
+            activationFunction: identityActivation);
+
+        // === CRF decoding layer ===
+        // Models label-level transition dependencies using a learned transition matrix.
+        // During training: computes the negative log-likelihood of the correct label sequence.
+        // During inference: uses the Viterbi algorithm to find the globally optimal label path.
+        // This is what makes BiLSTM-CRF superior to independent per-token classification:
+        // it considers the entire label sequence jointly rather than making independent decisions.
+        yield return new ConditionalRandomFieldLayer<T>(
+            numClasses: numLabels,
+            sequenceLength: maxSequenceLength,
+            scalarActivation: identityActivation);
+    }
+
+    #endregion
 }
