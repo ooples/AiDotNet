@@ -221,7 +221,15 @@ public class YOLO26Seg<T> : NeuralNetworkBase<T>, IInstanceSegmentation<T>
     { var result = new Tensor<T>([1, tensor.Shape[0], tensor.Shape[1], tensor.Shape[2]]); tensor.Data.Span.CopyTo(result.Data.Span); return result; }
 
     private Tensor<T> RemoveBatchDimension(Tensor<T> tensor)
-    { int[] s = new int[tensor.Shape.Length - 1]; for (int i = 0; i < s.Length; i++) s[i] = tensor.Shape[i + 1]; var r = new Tensor<T>(s); tensor.Data.Span.CopyTo(r.Data.Span); return r; }
+    {
+        int[] s = new int[tensor.Shape.Length - 1];
+        for (int i = 0; i < s.Length; i++)
+            s[i] = tensor.Shape[i + 1];
+
+        var r = new Tensor<T>(s);
+        tensor.Data.Span.CopyTo(r.Data.Span);
+        return r;
+    }
     #endregion
 
     #region Abstract Implementation

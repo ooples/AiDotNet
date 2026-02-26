@@ -209,7 +209,15 @@ public class ODISESegmentation<T> : NeuralNetworkBase<T>, IPanopticSegmentation<
     { var result = new Tensor<T>([1, tensor.Shape[0], tensor.Shape[1], tensor.Shape[2]]); tensor.Data.Span.CopyTo(result.Data.Span); return result; }
 
     private Tensor<T> RemoveBatchDimension(Tensor<T> tensor)
-    { int[] s = new int[tensor.Shape.Length - 1]; for (int i = 0; i < s.Length; i++) s[i] = tensor.Shape[i + 1]; var r = new Tensor<T>(s); tensor.Data.Span.CopyTo(r.Data.Span); return r; }
+    {
+        int[] s = new int[tensor.Shape.Length - 1];
+        for (int i = 0; i < s.Length; i++)
+            s[i] = tensor.Shape[i + 1];
+
+        var r = new Tensor<T>(s);
+        tensor.Data.Span.CopyTo(r.Data.Span);
+        return r;
+    }
     #endregion
 
     #region Abstract Implementation
@@ -247,7 +255,23 @@ public class ODISESegmentation<T> : NeuralNetworkBase<T>, IPanopticSegmentation<
     /// </para>
     /// </remarks>
     public override void UpdateParameters(Vector<T> parameters)
-    { int o = 0; foreach (var l in Layers) { var p = l.GetParameters(); int c = p.Length; if (o + c <= parameters.Length) { var n = new Vector<T>(c); for (int i = 0; i < c; i++) n[i] = parameters[o + i]; l.UpdateParameters(n); o += c; } } }
+    {
+        int offset = 0;
+        foreach (var layer in Layers)
+        {
+            var p = layer.GetParameters();
+            int count = p.Length;
+            if (offset + count <= parameters.Length)
+            {
+                var slice = new Vector<T>(count);
+                for (int i = 0; i < count; i++)
+                    slice[i] = parameters[offset + i];
+
+                layer.UpdateParameters(slice);
+                offset += count;
+            }
+        }
+    }
 
     /// <summary>
     /// Collects metadata describing this model's configuration.
