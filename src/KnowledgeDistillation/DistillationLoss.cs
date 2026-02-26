@@ -140,7 +140,8 @@ public class DistillationLoss<T> : DistillationStrategyBase<T>
     /// to reduce the loss. It points in the direction that increases loss, so we subtract it
     /// (gradient descent) to improve the model.</para>
     ///
-    /// <para>The soft gradient: (student_soft - teacher_soft) × T²
+    /// <para>The soft gradient: (student_soft - teacher_soft) × T
+    /// (The T² from the loss scaling cancels with the 1/T from the softmax chain rule)
     /// The hard gradient: (student_probs - true_labels)
     /// Combined gradient: α × hard_grad + (1 - α) × soft_grad</para>
     /// </remarks>
@@ -154,18 +155,19 @@ public class DistillationLoss<T> : DistillationStrategyBase<T>
 
         Matrix<T> gradient = new Matrix<T>(batchSize, numClasses);
 
-        // Soft gradient: ∂L_soft/∂logits = (student_soft - teacher_soft) × T²
+        // Soft gradient: ∂L_soft/∂logits = (student_soft - teacher_soft) × T
+        // The T² loss scaling combined with 1/T from the softmax chain rule gives net factor of T
         Matrix<T> studentSoft = Softmax(studentBatchOutput, Temperature);
         Matrix<T> teacherSoft = Softmax(teacherBatchOutput, Temperature);
 
-        T tSquared = NumOps.FromDouble(Temperature * Temperature);
+        T tFactor = NumOps.FromDouble(Temperature);
 
         for (int r = 0; r < batchSize; r++)
         {
             for (int c = 0; c < numClasses; c++)
             {
                 T diff = NumOps.Subtract(studentSoft[r, c], teacherSoft[r, c]);
-                gradient[r, c] = NumOps.Multiply(diff, tSquared);
+                gradient[r, c] = NumOps.Multiply(diff, tFactor);
             }
         }
 
