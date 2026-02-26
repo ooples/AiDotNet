@@ -741,10 +741,33 @@ public class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     public override void Reset()
     {
+        base.Reset();
         _alpha = NumOps.Zero;
         _beta = NumOps.Zero;
         _gamma = NumOps.Zero;
         _initialValues = Vector<T>.Empty();
+        _trainedLevel = NumOps.Zero;
+        _trainedTrend = NumOps.Zero;
+        _trainedSeasonalFactors = Vector<T>.Empty();
+        _trainingLength = 0;
+    }
+
+    /// <summary>
+    /// Creates a deep copy of the current exponential smoothing model, including all trained state.
+    /// </summary>
+    /// <returns>A new instance with the same trained state.</returns>
+    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
+    {
+        var clone = (ExponentialSmoothingModel<T>)base.Clone();
+        clone._alpha = _alpha;
+        clone._beta = _beta;
+        clone._gamma = _gamma;
+        clone._initialValues = _initialValues.Length > 0 ? _initialValues.Clone() : Vector<T>.Empty();
+        clone._trainedLevel = _trainedLevel;
+        clone._trainedTrend = _trainedTrend;
+        clone._trainedSeasonalFactors = _trainedSeasonalFactors.Length > 0 ? _trainedSeasonalFactors.Clone() : Vector<T>.Empty();
+        clone._trainingLength = _trainingLength;
+        return clone;
     }
 
     /// <summary>
@@ -757,12 +780,12 @@ public class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
     /// options as the current instance. This is useful for creating copies or clones of the model.
     /// </para>
     /// <para><b>For Beginners:</b> This creates a new copy of the model with the same settings.
-    /// 
+    ///
     /// Creating a new instance:
     /// - Makes a fresh copy of the model with the same configuration
     /// - The new copy hasn't been trained yet
     /// - You can train and use the copy independently from the original
-    /// 
+    ///
     /// This is helpful when you want to experiment with different training data
     /// while preserving your original model.
     /// </para>
