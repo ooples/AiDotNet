@@ -33,9 +33,14 @@ public class FalsePositiveRateMetric<T> : IClassificationMetric<T>
     public bool RequiresProbabilities => false;
     public bool SupportsMultiClass => false;
 
-    public FalsePositiveRateMetric(T? positiveLabel = default)
+    public FalsePositiveRateMetric()
     {
-        _positiveLabel = positiveLabel ?? NumOps.One;
+        _positiveLabel = NumOps.One;
+    }
+
+    public FalsePositiveRateMetric(T positiveLabel)
+    {
+        _positiveLabel = positiveLabel;
     }
 
     public T Compute(ReadOnlySpan<T> predictions, ReadOnlySpan<T> actuals)

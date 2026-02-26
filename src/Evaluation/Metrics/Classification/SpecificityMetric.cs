@@ -33,9 +33,14 @@ public class SpecificityMetric<T> : IClassificationMetric<T>
     public bool RequiresProbabilities => false;
     public bool SupportsMultiClass => false;
 
-    public SpecificityMetric(T? positiveLabel = default)
+    public SpecificityMetric()
     {
-        _positiveLabel = positiveLabel ?? NumOps.One;
+        _positiveLabel = NumOps.One;
+    }
+
+    public SpecificityMetric(T positiveLabel)
+    {
+        _positiveLabel = positiveLabel;
     }
 
     public T Compute(ReadOnlySpan<T> predictions, ReadOnlySpan<T> actuals)

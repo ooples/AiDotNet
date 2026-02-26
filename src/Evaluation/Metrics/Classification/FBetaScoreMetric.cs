@@ -37,12 +37,21 @@ public class FBetaScoreMetric<T> : IClassificationMetric<T>
     public bool RequiresProbabilities => false;
     public bool SupportsMultiClass => true;
 
-    public FBetaScoreMetric(double beta = 1.0, T? positiveLabel = default, AveragingMethod averaging = AveragingMethod.Binary)
+    public FBetaScoreMetric(double beta = 1.0, AveragingMethod averaging = AveragingMethod.Binary)
     {
         if (double.IsNaN(beta) || double.IsInfinity(beta) || beta <= 0)
             throw new ArgumentOutOfRangeException(nameof(beta), "Beta must be a finite positive value.");
         _beta = beta;
-        _positiveLabel = positiveLabel ?? NumOps.One;
+        _positiveLabel = NumOps.One;
+        _averaging = averaging;
+    }
+
+    public FBetaScoreMetric(double beta, T positiveLabel, AveragingMethod averaging = AveragingMethod.Binary)
+    {
+        if (double.IsNaN(beta) || double.IsInfinity(beta) || beta <= 0)
+            throw new ArgumentOutOfRangeException(nameof(beta), "Beta must be a finite positive value.");
+        _beta = beta;
+        _positiveLabel = positiveLabel;
         _averaging = averaging;
     }
 

@@ -32,9 +32,14 @@ public class NPVMetric<T> : IClassificationMetric<T>
     public bool RequiresProbabilities => false;
     public bool SupportsMultiClass => false;
 
-    public NPVMetric(T? positiveLabel = default)
+    public NPVMetric()
     {
-        _positiveLabel = positiveLabel ?? NumOps.One;
+        _positiveLabel = NumOps.One;
+    }
+
+    public NPVMetric(T positiveLabel)
+    {
+        _positiveLabel = positiveLabel;
     }
 
     public T Compute(ReadOnlySpan<T> predictions, ReadOnlySpan<T> actuals)
