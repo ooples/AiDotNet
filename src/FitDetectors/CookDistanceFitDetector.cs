@@ -226,7 +226,7 @@ public class CookDistanceFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TI
             var hii = hatMatrix[i, i];
             var ri = residuals[i];
             var di = NumOps.Divide(NumOps.Multiply(ri, ri), NumOps.Multiply(NumOps.FromDouble(p), mse));
-            di = NumOps.Multiply(di, NumOps.Divide(NumOps.Multiply(hii, hii), NumOps.Multiply(NumOps.Subtract(NumOps.One, hii), NumOps.Subtract(NumOps.One, hii))));
+            di = NumOps.Multiply(di, NumOps.Divide(hii, NumOps.Multiply(NumOps.Subtract(NumOps.One, hii), NumOps.Subtract(NumOps.One, hii))));
             cookDistances[i] = di;
         }
 
