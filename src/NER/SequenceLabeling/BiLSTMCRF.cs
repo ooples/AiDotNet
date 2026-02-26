@@ -24,7 +24,7 @@ namespace AiDotNet.NER.SequenceLabeling;
 /// A pair of Long Short-Term Memory networks that process the token sequence in both directions simultaneously.
 /// The forward LSTM reads left-to-right (e.g., "Barack" -> "Obama" -> "was" -> "born" -> "in" -> "Honolulu"),
 /// capturing preceding context for each token. The backward LSTM reads right-to-left, capturing following
-/// context. Their hidden states are concatenated at each position, giving the model a complete view of the
+/// context. Their hidden states are merged at each position, giving the model a complete view of the
 /// entire sentence context around every token. This bidirectional context is crucial for NER because entity
 /// recognition often depends on both left and right context (e.g., "Washington" could be a person, location,
 /// or organization depending on surrounding words).
@@ -152,9 +152,8 @@ public class BiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
     /// AdamW combines adaptive learning rates (different for each parameter) with proper L2
     /// regularization, preventing the model from overfitting to the training data.
     ///
-    /// The original Lample et al. (2016) paper used SGD with momentum, but AdamW has since
-    /// become the preferred optimizer due to faster convergence and less sensitivity to
-    /// learning rate selection.
+    /// The learning rate is configured via <see cref="BiLSTMCRFOptions.LearningRate"/> and passed
+    /// to the optimizer during construction.
     /// </para>
     /// <para>
     /// <b>For Beginners:</b> The optimizer is what adjusts the model's internal numbers (weights)
@@ -169,9 +168,9 @@ public class BiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// In native mode, the model uses AiDotNet's built-in layers (LSTM, Dense, CRF) and supports
-    /// both training and inference. In ONNX mode, the model loads a pre-trained ONNX file and
-    /// only supports inference (no training or gradient computation).
+    /// In native mode, the model uses AiDotNet's built-in layers (BidirectionalLayer wrapping LSTM,
+    /// Dense, CRF) and supports both training and inference. In ONNX mode, the model loads a
+    /// pre-trained ONNX file and only supports inference (no training or gradient computation).
     ///
     /// Use native mode when you want to train a model from scratch or fine-tune on your data.
     /// Use ONNX mode when you have a pre-trained model (e.g., from PyTorch/TensorFlow) and
@@ -221,7 +220,7 @@ public class BiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
     /// This must match the dimensionality of the word embeddings used as input. The original
     /// Lample et al. (2016) paper uses 100-dimensional GloVe embeddings. Other common choices
     /// include 300d GloVe, 768d BERT, or 1024d RoBERTa embeddings. The embedding dimension
-    /// determines the input size of the first LSTM layer.
+    /// determines the input size of the first BiLSTM layer.
     /// </para>
     /// <para>
     /// <b>For Beginners:</b> Each word in the input text must be converted to a list of numbers
@@ -241,15 +240,13 @@ public class BiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
     /// of tokens) and the second dimension is the embedding size. For batch processing, a 3D tensor
     /// with shape [batchSize, sequenceLength, embeddingDimension] is accepted.
     ///
-    /// Sequences shorter than maxSequenceLength should be padded; sequences longer should be truncated
-    /// or split. The CRF layer's transition matrix and Viterbi decoding buffer are pre-allocated
-    /// based on maxSequenceLength.
+    /// Sequences shorter than maxSequenceLength are automatically padded with zeros during
+    /// preprocessing. Sequences longer than maxSequenceLength are truncated to fit.
     /// </para>
     /// <para>
     /// <b>For Beginners:</b> This tells you the shape of data the model expects. The first number is
     /// the maximum number of words in a sentence, and the second is the size of each word's embedding.
-    /// If your sentence has fewer words, pad the rest with zeros. If it has more words, you'll need to
-    /// split the sentence into smaller chunks.
+    /// You don't need to pad your input manually - the model handles this automatically.
     /// </para>
     /// </remarks>
     public int[] ExpectedInputShape => [_options.MaxSequenceLength, _options.EmbeddingDimension];
@@ -292,6 +289,7 @@ public class BiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
         if (string.IsNullOrWhiteSpace(modelPath))
             throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
         _options = options ?? new BiLSTMCRFOptions();
+        ValidateOptions();
         _useNativeMode = false;
         NumLabels = _options.NumLabels;
         EmbeddingDimension = _options.EmbeddingDimension;
@@ -313,8 +311,9 @@ public class BiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
     /// <param name="options">Optional configuration. If null, defaults to the Lample et al. (2016)
     /// configuration: 100d embeddings, 100 hidden units, CRF enabled, 9 CoNLL-2003 labels.</param>
     /// <param name="optimizer">Optional gradient-based optimizer for training. If null, defaults to
-    /// AdamW (Adam with decoupled weight decay), which provides faster convergence than the SGD
-    /// used in the original paper while maintaining strong generalization.</param>
+    /// AdamW (Adam with decoupled weight decay) with the learning rate from options, which provides
+    /// faster convergence than the SGD used in the original paper while maintaining strong
+    /// generalization.</param>
     /// <remarks>
     /// <para>
     /// Native mode builds the full BiLSTM-CRF architecture using AiDotNet's built-in layers and
@@ -324,7 +323,7 @@ public class BiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
     ///
     /// The default layer stack follows Lample et al. (2016):
     /// <list type="number">
-    /// <item>BiLSTM layer(s): contextualized encoding with tanh/sigmoid activations</item>
+    /// <item>BidirectionalLayer wrapping LSTM: processes tokens in both directions with tanh/sigmoid activations</item>
     /// <item>Dropout: 50% regularization between layers and before projection</item>
     /// <item>Dense projection: maps hidden states to emission scores (identity activation)</item>
     /// <item>CRF layer: Viterbi decoding with learned transition matrix</item>
@@ -352,14 +351,36 @@ public class BiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
         : base(architecture)
     {
         _options = options ?? new BiLSTMCRFOptions();
+        ValidateOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate
+            });
         NumLabels = _options.NumLabels;
         EmbeddingDimension = _options.EmbeddingDimension;
         MaxSequenceLength = _options.MaxSequenceLength;
         UseCRF = _options.UseCRF;
         LabelNames = _options.LabelNames;
         InitializeLayers();
+    }
+
+    /// <summary>
+    /// Validates the options for consistency and supported feature combinations.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Checks that NumLabels matches LabelNames length. Additional dimension and rate
+    /// validations are handled by property setters in <see cref="BiLSTMCRFOptions"/>.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentException">Thrown when options are inconsistent.</exception>
+    private void ValidateOptions()
+    {
+        if (_options.LabelNames.Length != _options.NumLabels)
+            throw new ArgumentException(
+                $"LabelNames length ({_options.LabelNames.Length}) must match NumLabels ({_options.NumLabels}).");
     }
 
     #endregion
@@ -372,7 +393,8 @@ public class BiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
     /// </summary>
     /// <param name="tokenEmbeddings">Token embeddings with shape [sequenceLength, embeddingDim]
     /// for a single sentence. Each row is one token's embedding vector (e.g., 100d GloVe).
-    /// The sequence length can vary but should not exceed <see cref="BiLSTMCRFOptions.MaxSequenceLength"/>.</param>
+    /// Sequences shorter than MaxSequenceLength are automatically padded; longer sequences
+    /// are truncated.</param>
     /// <returns>Predicted label indices with shape [sequenceLength], where each integer value is an
     /// index into <see cref="SequenceLabelingNERBase{T}.LabelNames"/>. Use
     /// <see cref="SequenceLabelingNERBase{T}.DecodeLabels"/> to convert to human-readable strings.</returns>
@@ -380,15 +402,16 @@ public class BiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
     /// <para>
     /// The prediction pipeline is:
     /// <list type="number">
-    /// <item><see cref="PreprocessTokens"/>: optional normalization or augmentation of embeddings</item>
+    /// <item><see cref="PreprocessTokens"/>: pads/truncates embeddings to MaxSequenceLength</item>
     /// <item><see cref="NERNeuralNetworkBase{T}.Forward"/> or <see cref="NERNeuralNetworkBase{T}.RunOnnxInference"/>:
     /// run the BiLSTM + projection + CRF forward pass</item>
-    /// <item><see cref="PostprocessOutput"/>: if CRF is disabled, apply argmax decoding on emission scores</item>
+    /// <item><see cref="PostprocessOutput"/>: applies argmax decoding to convert CRF one-hot output
+    /// or raw emission scores into label indices</item>
     /// </list>
     ///
-    /// When CRF is enabled (default), the CRF layer's Viterbi algorithm produces the globally optimal
-    /// label sequence in O(n * L^2) time, where n is the sequence length and L is the number of labels.
-    /// This guarantees structurally valid output (no invalid transitions like I-PER after B-ORG).
+    /// When CRF is enabled (default), the CRF layer's Viterbi algorithm produces a one-hot encoded
+    /// label sequence, which is then argmax-decoded to produce label indices. This guarantees
+    /// structurally valid output (no invalid transitions like I-PER after B-ORG).
     /// </para>
     /// <para>
     /// <b>For Beginners:</b> Give this method the numerical representations of your words, and it
@@ -483,7 +506,7 @@ public class BiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
     /// <item>CRF negative log-likelihood loss computation</item>
     /// <item>Backward pass to compute gradients for all parameters</item>
     /// <item>AdamW optimizer updates all model weights</item>
-    /// <item>Progress reporting with current loss</item>
+    /// <item>Progress reporting with current loss (computed efficiently during the forward pass)</item>
     /// </list>
     ///
     /// Training tips from the literature:
@@ -512,6 +535,15 @@ public class BiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
             for (int epoch = 1; epoch <= epochs; epoch++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
+
+                // Forward pass for loss computation (before weight update)
+                SetTrainingMode(true);
+                var output = Forward(PreprocessTokens(tokenEmbeddings));
+                double loss = NumOps.ToDouble(LossFunction.CalculateLoss(
+                    output.ToVector(), labels.ToVector()));
+                SetTrainingMode(false);
+
+                // Train step (forward + backward + update)
                 Train(tokenEmbeddings, labels);
 
                 progress?.Report(new NERTrainingProgress
@@ -520,8 +552,7 @@ public class BiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
                     TotalEpochs = epochs,
                     CurrentBatch = 1,
                     TotalBatches = 1,
-                    Loss = NumOps.ToDouble(LossFunction.CalculateLoss(
-                        Predict(tokenEmbeddings).ToVector(), labels.ToVector()))
+                    Loss = loss
                 });
             }
         }, cancellationToken);
@@ -558,7 +589,8 @@ public class BiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
     }
 
     /// <summary>
-    /// Validates that an input tensor has the correct shape and embedding dimension for this model.
+    /// Validates that an input tensor has the correct shape, embedding dimension, and sequence
+    /// length for this model.
     /// </summary>
     /// <param name="input">The input tensor to validate.</param>
     /// <remarks>
@@ -567,11 +599,11 @@ public class BiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
     /// <list type="bullet">
     /// <item>Rank must be 2 (single sequence) or 3 (batch of sequences)</item>
     /// <item>Last dimension must match the model's embedding dimension</item>
+    /// <item>Sequence length must not exceed MaxSequenceLength</item>
     /// </list>
     ///
-    /// This method is useful for catching shape mismatches early, before they cause cryptic
-    /// errors deep inside the LSTM layers. For example, if you trained with 100d GloVe embeddings
-    /// but accidentally feed 300d embeddings at inference time, this method will give a clear error.
+    /// Note: sequences shorter than MaxSequenceLength are valid and will be automatically
+    /// padded during preprocessing. Only sequences exceeding MaxSequenceLength trigger an error.
     /// </para>
     /// <para>
     /// <b>For Beginners:</b> Call this before PredictLabels to make sure your input data has
@@ -579,8 +611,8 @@ public class BiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
     /// better to check first than to find out something's wrong halfway through.
     /// </para>
     /// </remarks>
-    /// <exception cref="ArgumentException">Thrown when input rank is not 2 or 3, or when the
-    /// embedding dimension doesn't match the model's expected dimension.</exception>
+    /// <exception cref="ArgumentException">Thrown when input rank is not 2 or 3, when the
+    /// embedding dimension doesn't match, or when sequence length exceeds MaxSequenceLength.</exception>
     void INERModel<T>.ValidateInputShape(Tensor<T> input)
     {
         if (input.Rank < 2 || input.Rank > 3)
@@ -591,6 +623,12 @@ public class BiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
         if (embDim != _options.EmbeddingDimension)
             throw new ArgumentException(
                 $"Embedding dimension mismatch. Expected {_options.EmbeddingDimension}, got {embDim}.");
+
+        int seqDim = input.Rank == 2 ? input.Shape[0] : input.Shape[1];
+        if (seqDim > _options.MaxSequenceLength)
+            throw new ArgumentException(
+                $"Sequence length ({seqDim}) exceeds MaxSequenceLength ({_options.MaxSequenceLength}). " +
+                "Truncate input or increase MaxSequenceLength in options.");
     }
 
     /// <summary>
@@ -604,10 +642,9 @@ public class BiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
     /// <list type="bullet">
     /// <item>Model variant (Tiny/Small/Base/Large/XLarge) and execution mode (Native/ONNX)</item>
     /// <item>Embedding dimension (input size to the BiLSTM)</item>
-    /// <item>Hidden dimension and effective BiLSTM output size (2x for bidirectional)</item>
-    /// <item>Number of stacked LSTM layers</item>
+    /// <item>Hidden dimension per direction</item>
+    /// <item>Number of stacked BiLSTM layers</item>
     /// <item>Number of output labels and CRF enablement status</item>
-    /// <item>Character embedding configuration</item>
     /// <item>Dropout rate and total trainable parameter count</item>
     /// </list>
     ///
@@ -626,12 +663,12 @@ public class BiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
         sb.AppendLine($"BiLSTM-CRF ({_options.Variant})");
         sb.AppendLine($"  Mode: {(_useNativeMode ? "Native" : "ONNX")}");
         sb.AppendLine($"  Embedding Dim: {_options.EmbeddingDimension}");
-        sb.AppendLine($"  Hidden Dim: {_options.HiddenDimension} (x2 bidirectional = {_options.HiddenDimension * 2})");
+        sb.AppendLine($"  Hidden Dim: {_options.HiddenDimension} per direction");
         sb.AppendLine($"  LSTM Layers: {_options.NumLSTMLayers}");
         sb.AppendLine($"  Num Labels: {_options.NumLabels}");
         sb.AppendLine($"  CRF: {(_options.UseCRF ? "Enabled" : "Disabled")}");
-        sb.AppendLine($"  Char Embeddings: {(_options.UseCharEmbeddings ? "Enabled" : "Disabled")}");
         sb.AppendLine($"  Dropout: {_options.DropoutRate:P0}");
+        sb.AppendLine($"  Learning Rate: {_options.LearningRate}");
         sb.AppendLine($"  Total Parameters: {Layers.Sum(l => l.ParameterCount)}");
         return sb.ToString();
     }
@@ -652,9 +689,10 @@ public class BiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
     /// pattern to lazily produce the following layers:
     ///
     /// <list type="number">
-    /// <item><b>BiLSTM Layers:</b> One or more LSTM layers with tanh/sigmoid activations that
-    /// process token embeddings bidirectionally, producing contextualized hidden states.</item>
-    /// <item><b>Inter-layer Dropout:</b> Variational dropout between stacked LSTM layers to
+    /// <item><b>BidirectionalLayer wrapping LSTM:</b> Processes tokens in both forward and backward
+    /// directions using <see cref="BidirectionalLayer{T}"/> which wraps an LSTM layer, clones it for
+    /// the backward pass, and merges (element-wise adds) the outputs from both directions.</item>
+    /// <item><b>Inter-layer Dropout:</b> Variational dropout between stacked BiLSTM layers to
     /// prevent co-adaptation of features across layers (only when numLSTMLayers > 1).</item>
     /// <item><b>Pre-projection Dropout:</b> Dropout before the linear projection, with the
     /// paper's recommended 0.5 rate, to regularize the emission score computation.</item>
@@ -692,34 +730,11 @@ public class BiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
                 numLabels: _options.NumLabels,
                 numLSTMLayers: _options.NumLSTMLayers,
                 maxSequenceLength: _options.MaxSequenceLength,
-                dropoutRate: _options.DropoutRate));
+                dropoutRate: _options.DropoutRate,
+                useCharEmbeddings: _options.UseCharEmbeddings,
+                charEmbeddingDimension: _options.CharEmbeddingDimension,
+                charHiddenDimension: _options.CharHiddenDimension));
         }
-    }
-
-    /// <summary>
-    /// Runs inference on input token embeddings, returning raw model output.
-    /// </summary>
-    /// <param name="input">Token embeddings with shape [sequenceLength, embeddingDim].</param>
-    /// <returns>Model output tensor. In native mode with CRF, returns decoded label indices
-    /// with shape [sequenceLength]. Without CRF, returns emission scores with shape
-    /// [sequenceLength, numLabels]. In ONNX mode, returns whatever the ONNX model outputs.</returns>
-    /// <remarks>
-    /// <para>
-    /// This is the low-level prediction method that runs the forward pass without any pre/post
-    /// processing. For most use cases, prefer <see cref="PredictLabels"/> which includes
-    /// preprocessing and postprocessing (e.g., argmax decoding when CRF is disabled).
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> This method runs the model on raw input data. Most users should use
-    /// <see cref="PredictLabels"/> instead, which adds helpful pre/post-processing steps.
-    /// </para>
-    /// </remarks>
-    /// <exception cref="ObjectDisposedException">Thrown if the model has been disposed.</exception>
-    public override Tensor<T> Predict(Tensor<T> input)
-    {
-        ThrowIfDisposed();
-        if (IsOnnxMode) return RunOnnxInference(input);
-        return Forward(input);
     }
 
     /// <summary>
@@ -732,6 +747,7 @@ public class BiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
     /// <para>
     /// A single training step consists of:
     /// <list type="number">
+    /// <item><b>Preprocessing:</b> Pad/truncate input to MaxSequenceLength</item>
     /// <item><b>Forward pass:</b> Compute emission scores through BiLSTM and projection layers,
     /// then CRF decoding produces the predicted label sequence</item>
     /// <item><b>Loss computation:</b> Cross-entropy loss between predicted and expected labels
@@ -761,7 +777,8 @@ public class BiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
         SetTrainingMode(true);
         try
         {
-            var output = Predict(input);
+            var preprocessed = PreprocessTokens(input);
+            var output = Forward(preprocessed);
             var grad = LossFunction.CalculateDerivative(output.ToVector(), expected.ToVector());
             var gt = Tensor<T>.FromVector(grad);
             for (int i = Layers.Count - 1; i >= 0; i--) gt = Layers[i].Backward(gt);
@@ -786,7 +803,7 @@ public class BiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
     /// - Implementing custom optimization algorithms
     /// - Parameter averaging across multiple model checkpoints
     ///
-    /// Parameters are applied in the same order as layers: LSTM weights, dropout (no params),
+    /// Parameters are applied in the same order as layers: BiLSTM weights, dropout (no params),
     /// Dense weights/biases, CRF transition matrix.
     /// </para>
     /// <para>
@@ -810,57 +827,96 @@ public class BiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
     }
 
     /// <summary>
-    /// Preprocesses token embeddings before feeding them to the BiLSTM.
+    /// Preprocesses token embeddings by padding or truncating to MaxSequenceLength before
+    /// feeding them to the BiLSTM.
     /// </summary>
-    /// <param name="rawEmbeddings">Raw token embeddings from an embedding layer or pre-trained vectors.</param>
-    /// <returns>The same embeddings, unmodified. Override in derived classes for custom preprocessing
-    /// such as embedding normalization, concatenation with character-level embeddings, or positional
-    /// encoding injection.</returns>
+    /// <param name="rawEmbeddings">Raw token embeddings with shape [sequenceLength, embeddingDim].
+    /// Sequence length may be shorter or longer than MaxSequenceLength.</param>
+    /// <returns>Token embeddings padded with zeros or truncated to shape
+    /// [MaxSequenceLength, embeddingDim].</returns>
     /// <remarks>
     /// <para>
-    /// The base BiLSTM-CRF passes embeddings through unchanged because the original Lample et al.
-    /// (2016) architecture feeds GloVe embeddings directly to the BiLSTM without additional
-    /// preprocessing. More advanced models (e.g., with character CNN or ELMo embeddings) would
-    /// override this to concatenate additional embedding sources.
+    /// The CRF layer requires a fixed sequence length (MaxSequenceLength) because its transition
+    /// matrix and Viterbi decoding buffers are pre-allocated at construction time. This method
+    /// ensures all inputs conform to that fixed length:
+    /// - Shorter sequences are right-padded with zero vectors
+    /// - Longer sequences are truncated (excess tokens are dropped from the end)
+    /// - Sequences already at MaxSequenceLength pass through unchanged
+    ///
+    /// For 2D inputs [seqLen, embDim], the output is [MaxSequenceLength, embDim].
     /// </para>
     /// <para>
-    /// <b>For Beginners:</b> This is a placeholder for custom input processing. The default does
-    /// nothing because the basic BiLSTM-CRF just passes word embeddings straight to the model.
+    /// <b>For Beginners:</b> Not all sentences have the same number of words. This method ensures
+    /// they all have the same length by adding "blank" words (zeros) at the end of short sentences
+    /// and cutting off extra words from long sentences. This is necessary because the CRF layer
+    /// needs to know the sequence length in advance.
     /// </para>
     /// </remarks>
-    protected override Tensor<T> PreprocessTokens(Tensor<T> rawEmbeddings) => rawEmbeddings;
+    protected override Tensor<T> PreprocessTokens(Tensor<T> rawEmbeddings)
+    {
+        int maxLen = _options.MaxSequenceLength;
+        int embDim = _options.EmbeddingDimension;
+
+        if (rawEmbeddings.Rank < 2)
+            return rawEmbeddings;
+
+        int seqLen = rawEmbeddings.Shape[0];
+
+        // Already the right length
+        if (seqLen == maxLen)
+            return rawEmbeddings;
+
+        // Create output tensor with the target sequence length
+        var padded = new Tensor<T>([maxLen, embDim]);
+        int copyLen = Math.Min(seqLen, maxLen);
+
+        // Copy existing data (truncating if necessary)
+        for (int s = 0; s < copyLen; s++)
+        {
+            for (int d = 0; d < embDim; d++)
+            {
+                padded[s, d] = rawEmbeddings[s, d];
+            }
+        }
+        // Remaining positions are already zero-initialized by the Tensor constructor
+
+        return padded;
+    }
 
     /// <summary>
-    /// Postprocesses the model output, applying argmax decoding when CRF is disabled.
+    /// Postprocesses the model output by applying argmax decoding to produce label indices.
     /// </summary>
-    /// <param name="modelOutput">Raw model output from the forward pass.</param>
-    /// <returns>When CRF is enabled, returns the output unchanged (CRF already produces decoded labels).
-    /// When CRF is disabled and the output contains emission scores (2D with numLabels columns),
-    /// applies argmax decoding to select the highest-scoring label at each position.</returns>
+    /// <param name="modelOutput">Raw model output from the forward pass. When CRF is enabled,
+    /// this is a one-hot encoded tensor from the CRF's Viterbi decoding. When CRF is disabled,
+    /// this is raw emission scores.</param>
+    /// <returns>Label indices with shape [sequenceLength], where each value is the index of
+    /// the predicted label at that token position.</returns>
     /// <remarks>
     /// <para>
-    /// The CRF layer produces decoded label indices directly via Viterbi decoding, so no
-    /// postprocessing is needed. However, when CRF is disabled (for speed or experimentation),
-    /// the model output is raw emission scores that need to be converted to label indices via
-    /// independent argmax at each token position.
+    /// Both CRF and non-CRF modes require argmax decoding:
+    /// - <b>CRF enabled:</b> The CRF layer's Forward method returns a one-hot encoded tensor
+    ///   (same shape as emission scores), not raw label indices. Argmax decoding converts this
+    ///   one-hot encoding to integer label indices.
+    /// - <b>CRF disabled:</b> The model output is raw emission scores where argmax selects the
+    ///   highest-scoring label independently at each token position.
     ///
-    /// Note that argmax decoding can produce invalid label sequences (e.g., I-PER after B-ORG),
-    /// which is why CRF decoding is recommended for production use.
+    /// The argmax is always applied when the output has a label dimension (last dim == numLabels),
+    /// ensuring consistent label-index output regardless of CRF configuration.
     /// </para>
     /// <para>
-    /// <b>For Beginners:</b> When the CRF is off, the model gives you raw scores for each label
-    /// at each word position. This method picks the highest-scoring label for each word. When the
-    /// CRF is on, the model already gives you the final labels, so this method just passes them through.
+    /// <b>For Beginners:</b> The model's raw output is a grid of scores (one score per label per
+    /// word). This method picks the highest-scoring label for each word, converting scores into
+    /// simple label numbers like 0=O, 1=B-PER, 2=I-PER, etc.
     /// </para>
     /// </remarks>
     protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput)
     {
-        // If CRF is disabled, apply argmax decoding on emission scores
-        if (!_options.UseCRF && modelOutput.Rank >= 2 && modelOutput.Shape[^1] == _options.NumLabels)
+        // Always argmax-decode when the output has a label dimension
+        if (modelOutput.Rank >= 2 && modelOutput.Shape[^1] == _options.NumLabels)
         {
             return ArgmaxDecode(modelOutput);
         }
-        // CRF layer already produces decoded label indices
+        // Otherwise, assume the model already produced label indices
         return modelOutput;
     }
 
@@ -914,20 +970,8 @@ public class BiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
     /// <remarks>
     /// <para>
     /// Persists all configuration options needed to reconstruct this exact model instance:
-    /// execution mode, model path (ONNX), variant, all architecture dimensions, CRF/character
-    /// embedding settings, dropout rate, and the full label name list.
-    ///
-    /// The serialization format is:
-    /// <list type="number">
-    /// <item>bool: _useNativeMode</item>
-    /// <item>string: ModelPath (empty if native)</item>
-    /// <item>int: Variant enum value</item>
-    /// <item>int: EmbeddingDimension, HiddenDimension, NumLSTMLayers, NumLabels, MaxSequenceLength</item>
-    /// <item>bool: UseCRF, UseCharEmbeddings</item>
-    /// <item>int: CharEmbeddingDimension, CharHiddenDimension</item>
-    /// <item>double: DropoutRate</item>
-    /// <item>int + string[]: LabelNames count followed by each label name</item>
-    /// </list>
+    /// execution mode, model path (ONNX), variant, all architecture dimensions, CRF setting,
+    /// dropout rate, learning rate, and the full label name list.
     ///
     /// Layer weights are serialized by the base class; this method only handles the configuration.
     /// </para>
@@ -952,6 +996,7 @@ public class BiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
         w.Write(_options.CharEmbeddingDimension);
         w.Write(_options.CharHiddenDimension);
         w.Write(_options.DropoutRate);
+        w.Write(_options.LearningRate);
 
         // Serialize label names
         w.Write(_options.LabelNames.Length);
@@ -1000,6 +1045,7 @@ public class BiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
         _options.CharEmbeddingDimension = r.ReadInt32();
         _options.CharHiddenDimension = r.ReadInt32();
         _options.DropoutRate = r.ReadDouble();
+        _options.LearningRate = r.ReadDouble();
 
         // Deserialize label names
         int labelCount = r.ReadInt32();
@@ -1038,8 +1084,8 @@ public class BiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
     /// ensemble creation, and cross-validation.</returns>
     /// <remarks>
     /// <para>
-    /// The new instance shares the same <see cref="BiLSTMCRFOptions"/> configuration but has
-    /// independently initialized layer weights. In ONNX mode, the new instance loads the same
+    /// The new instance receives a deep copy of the options via the copy constructor to prevent
+    /// mutation leaking between instances. In ONNX mode, the new instance loads the same
     /// ONNX model file. In native mode, the new instance gets freshly initialized layers via
     /// <see cref="InitializeLayers"/>.
     /// </para>
@@ -1052,9 +1098,10 @@ public class BiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
     /// </remarks>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            return new BiLSTMCRF<T>(Architecture, p, _options);
-        return new BiLSTMCRF<T>(Architecture, _options);
+        var optionsCopy = new BiLSTMCRFOptions(_options);
+        if (!_useNativeMode && optionsCopy.ModelPath is { } p && !string.IsNullOrEmpty(p))
+            return new BiLSTMCRF<T>(Architecture, p, optionsCopy);
+        return new BiLSTMCRF<T>(Architecture, optionsCopy);
     }
 
     #endregion
@@ -1064,13 +1111,6 @@ public class BiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
     /// <summary>
     /// Throws <see cref="ObjectDisposedException"/> if this model has been disposed.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Called at the beginning of every public method that accesses model state to ensure
-    /// disposed models fail fast with a clear error message rather than producing undefined
-    /// behavior or cryptic null reference exceptions.
-    /// </para>
-    /// </remarks>
     /// <exception cref="ObjectDisposedException">Thrown when the model has been disposed.</exception>
     private void ThrowIfDisposed()
     {

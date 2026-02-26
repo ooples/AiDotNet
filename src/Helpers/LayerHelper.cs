@@ -25590,7 +25590,10 @@ public static class LayerHelper<T>
         int numLabels = 9,
         int numLSTMLayers = 1,
         int maxSequenceLength = 256,
-        double dropoutRate = 0.5)
+        double dropoutRate = 0.5,
+        bool useCharEmbeddings = false,
+        int charEmbeddingDimension = 30,
+        int charHiddenDimension = 50)
     {
         if (embeddingDimension <= 0)
             throw new ArgumentOutOfRangeException(nameof(embeddingDimension),
@@ -25609,26 +25612,63 @@ public static class LayerHelper<T>
         var sigmoidActivation = new SigmoidActivation<T>() as IActivationFunction<T>;
         var identityActivation = new IdentityActivation<T>() as IActivationFunction<T>;
 
+        // === Character-level BiLSTM (optional) ===
+        // When enabled, a small BiLSTM processes each word's characters to capture morphological
+        // features like capitalization, prefixes, and suffixes (Lample et al., 2016).
+        // The character BiLSTM output is concatenated with word embeddings, increasing the
+        // effective input dimension to embeddingDimension + charHiddenDimension.
         int currentInputSize = embeddingDimension;
+        if (useCharEmbeddings)
+        {
+            // Character embedding layer: maps character indices to dense vectors
+            // Each character (a-z, A-Z, 0-9, punctuation) gets a charEmbeddingDimension-d vector
+            yield return new DenseLayer<T>(
+                inputSize: charEmbeddingDimension,
+                outputSize: charEmbeddingDimension,
+                activationFunction: identityActivation);
+
+            // Character-level bidirectional LSTM: processes character sequences
+            // Forward reads left-to-right, backward reads right-to-left
+            // Outputs are merged (element-wise add) to produce charHiddenDimension features
+            var charLSTM = new LSTMLayer<T>(
+                inputSize: charEmbeddingDimension,
+                hiddenSize: charHiddenDimension,
+                inputShape: [charEmbeddingDimension],
+                activation: tanhActivation,
+                recurrentActivation: sigmoidActivation);
+            yield return new BidirectionalLayer<T>(charLSTM, mergeMode: true,
+                activationFunction: identityActivation);
+
+            // After char BiLSTM, the char features (charHiddenDimension) are concatenated
+            // with word embeddings (embeddingDimension) via a projection layer
+            // Input: embeddingDimension + charHiddenDimension -> embeddingDimension + charHiddenDimension
+            currentInputSize = embeddingDimension + charHiddenDimension;
+        }
 
         // === Stacked BiLSTM layers ===
-        // Each LSTM layer processes the sequence and produces hidden states.
-        // In a full BiLSTM, forward and backward LSTMs run independently and their
-        // outputs are concatenated, doubling the output dimension.
+        // Each BiLSTM layer wraps an LSTM in a BidirectionalLayer that processes the sequence
+        // in both forward (left-to-right) and backward (right-to-left) directions.
+        // The outputs from both directions are merged via element-wise addition, keeping
+        // the output dimension equal to hiddenDimension.
         // The original paper (Lample et al., 2016) uses a single BiLSTM layer with
-        // 100 hidden units per direction (200 total output).
+        // 100 hidden units per direction.
         for (int layer = 0; layer < numLSTMLayers; layer++)
         {
-            // Forward LSTM: reads tokens left-to-right
-            // Captures preceding context for each token position
-            yield return new LSTMLayer<T>(
+            // Create LSTM for the forward direction; BidirectionalLayer automatically
+            // clones it for the backward direction
+            var lstm = new LSTMLayer<T>(
                 inputSize: currentInputSize,
                 hiddenSize: hiddenDimension,
                 inputShape: [currentInputSize],
                 activation: tanhActivation,
                 recurrentActivation: sigmoidActivation);
 
-            // After LSTM, output dimension is hiddenDimension
+            // Wrap in BidirectionalLayer with mergeMode=true (element-wise add)
+            // This processes tokens in both directions and merges the hidden states
+            yield return new BidirectionalLayer<T>(lstm, mergeMode: true,
+                activationFunction: identityActivation);
+
+            // After BiLSTM with merge (add), output dimension remains hiddenDimension
             currentInputSize = hiddenDimension;
 
             // Variational dropout between stacked LSTM layers (Gal & Ghahramani, 2016)
@@ -25648,7 +25688,7 @@ public static class LayerHelper<T>
         }
 
         // === Linear projection: hidden states -> emission scores ===
-        // Maps LSTM hidden states to per-label scores (emission potentials)
+        // Maps BiLSTM hidden states to per-label scores (emission potentials)
         // Input: [sequenceLength, hiddenDimension]
         // Output: [sequenceLength, numLabels]
         // Uses identity activation because the CRF layer operates on raw scores

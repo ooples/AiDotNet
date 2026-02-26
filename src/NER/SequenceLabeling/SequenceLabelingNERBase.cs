@@ -196,17 +196,24 @@ public abstract class SequenceLabelingNERBase<T> : NERNeuralNetworkBase<T>
 
     /// <summary>
     /// Performs independent argmax decoding on emission scores to get label predictions.
+    /// Supports both single-sequence (2D) and batched (3D) inputs.
     /// </summary>
-    /// <param name="emissionScores">Emission score matrix with shape [sequenceLength, numLabels].</param>
-    /// <returns>Label indices with shape [sequenceLength], where each value is the index of the
+    /// <param name="emissionScores">Emission score tensor with shape [sequenceLength, numLabels]
+    /// for a single sequence, or [batch, sequenceLength, numLabels] for batched input.</param>
+    /// <returns>Label indices with shape [sequenceLength] for single-sequence input, or
+    /// [batch, sequenceLength] for batched input. Each value is the index of the
     /// highest-scoring label at that position.</returns>
     /// <remarks>
     /// <para>
     /// Argmax decoding selects the highest-scoring label independently at each token position.
-    /// This is used as a fallback when CRF decoding is disabled. While simpler and faster than
-    /// Viterbi decoding, it can produce invalid label sequences because it doesn't consider
-    /// label transition dependencies.
+    /// This is used as a fallback when CRF decoding is disabled and also for converting the
+    /// CRF layer's one-hot output to integer label indices.
     ///
+    /// For rank-3 (batched) input, each batch element is decoded independently. The output
+    /// has one fewer dimension than the input (the label dimension is collapsed to indices).
+    ///
+    /// While simpler and faster than Viterbi decoding, independent argmax can produce invalid
+    /// label sequences because it doesn't consider label transition dependencies.
     /// For example, argmax might produce: B-PER, I-ORG, O - which is invalid because I-ORG
     /// cannot follow B-PER in the BIO scheme. CRF decoding would correct this.
     /// </para>
@@ -219,18 +226,52 @@ public abstract class SequenceLabelingNERBase<T> : NERNeuralNetworkBase<T>
     /// </remarks>
     protected Tensor<T> ArgmaxDecode(Tensor<T> emissionScores)
     {
-        int seqLen = emissionScores.Shape[0];
-        int numLabels = emissionScores.Shape[1];
-        var labels = new Tensor<T>([seqLen]);
+        // Handle batched 3D input [batch, seqLen, numLabels]
+        if (emissionScores.Rank == 3)
+        {
+            int batchSize = emissionScores.Shape[0];
+            int seqLen = emissionScores.Shape[1];
+            int numLabels = emissionScores.Shape[2];
+            var batchLabels = new Tensor<T>([batchSize, seqLen]);
 
-        for (int s = 0; s < seqLen; s++)
+            for (int b = 0; b < batchSize; b++)
+            {
+                for (int s = 0; s < seqLen; s++)
+                {
+                    int bestLabel = 0;
+                    double bestScore = double.NegativeInfinity;
+                    int baseIdx = (b * seqLen + s) * numLabels;
+
+                    for (int l = 0; l < numLabels; l++)
+                    {
+                        double score = NumOps.ToDouble(emissionScores.Data.Span[baseIdx + l]);
+                        if (score > bestScore)
+                        {
+                            bestScore = score;
+                            bestLabel = l;
+                        }
+                    }
+
+                    batchLabels.Data.Span[b * seqLen + s] = NumOps.FromDouble(bestLabel);
+                }
+            }
+
+            return batchLabels;
+        }
+
+        // Handle single-sequence 2D input [seqLen, numLabels]
+        int seq = emissionScores.Shape[0];
+        int labels2d = emissionScores.Shape[1];
+        var result = new Tensor<T>([seq]);
+
+        for (int s = 0; s < seq; s++)
         {
             int bestLabel = 0;
             double bestScore = double.NegativeInfinity;
 
-            for (int l = 0; l < numLabels; l++)
+            for (int l = 0; l < labels2d; l++)
             {
-                double score = NumOps.ToDouble(emissionScores.Data.Span[s * numLabels + l]);
+                double score = NumOps.ToDouble(emissionScores.Data.Span[s * labels2d + l]);
                 if (score > bestScore)
                 {
                     bestScore = score;
@@ -238,23 +279,29 @@ public abstract class SequenceLabelingNERBase<T> : NERNeuralNetworkBase<T>
                 }
             }
 
-            labels.Data.Span[s] = NumOps.FromDouble(bestLabel);
+            result.Data.Span[s] = NumOps.FromDouble(bestLabel);
         }
 
-        return labels;
+        return result;
     }
 
     /// <summary>
     /// Converts predicted label indices to human-readable BIO label name strings.
+    /// Supports single-sequence (1D) input only. For batched output, decode each
+    /// sequence individually.
     /// </summary>
     /// <param name="labelIndices">Label index tensor with shape [sequenceLength]. Each value is
-    /// an integer index into <see cref="LabelNames"/>.</param>
+    /// an integer index into <see cref="LabelNames"/>. For batched output (2D), extract
+    /// individual sequences first and decode each one separately.</param>
     /// <returns>Array of label name strings (e.g., ["B-PER", "I-PER", "O", "O", "B-ORG"]).</returns>
     /// <remarks>
     /// <para>
     /// This utility method converts the numerical predictions from <see cref="PredictLabels"/>
     /// into readable label strings. Out-of-range indices are mapped to "O" (Outside) as a
     /// safe fallback.
+    ///
+    /// For batched predictions (rank-2 tensor [batch, seqLen]), use <see cref="DecodeLabelsBatch"/>
+    /// which returns a list of string arrays, one per batch element.
     /// </para>
     /// <para>
     /// <b>For Beginners:</b> After calling PredictLabels, you get numbers like [1, 2, 0, 0, 3].
@@ -262,8 +309,14 @@ public abstract class SequenceLabelingNERBase<T> : NERNeuralNetworkBase<T>
     /// so you can easily see which words are people, organizations, locations, etc.
     /// </para>
     /// </remarks>
+    /// <exception cref="ArgumentException">Thrown when labelIndices is not rank-1.</exception>
     public string[] DecodeLabels(Tensor<T> labelIndices)
     {
+        if (labelIndices.Rank != 1)
+            throw new ArgumentException(
+                $"DecodeLabels expects a 1D tensor [sequenceLength]. Got rank {labelIndices.Rank}. " +
+                "For batched predictions, use DecodeLabelsBatch instead.");
+
         int seqLen = labelIndices.Shape[0];
         var result = new string[seqLen];
 
@@ -274,6 +327,51 @@ public abstract class SequenceLabelingNERBase<T> : NERNeuralNetworkBase<T>
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Converts batched predicted label indices to human-readable BIO label name strings.
+    /// </summary>
+    /// <param name="batchLabelIndices">Label index tensor with shape [batch, sequenceLength].
+    /// Each value is an integer index into <see cref="LabelNames"/>.</param>
+    /// <returns>A list of string arrays, one per batch element, each containing the label names
+    /// for that sequence.</returns>
+    /// <remarks>
+    /// <para>
+    /// This is the batched version of <see cref="DecodeLabels"/>. For each sequence in the batch,
+    /// it converts numerical label indices to readable label strings. Out-of-range indices are
+    /// mapped to "O" (Outside) as a safe fallback.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> If you predicted labels for multiple sentences at once (batch mode),
+    /// use this method instead of DecodeLabels. It returns a list where each element is the labels
+    /// for one sentence.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentException">Thrown when batchLabelIndices is not rank-2.</exception>
+    public IReadOnlyList<string[]> DecodeLabelsBatch(Tensor<T> batchLabelIndices)
+    {
+        if (batchLabelIndices.Rank != 2)
+            throw new ArgumentException(
+                $"DecodeLabelsBatch expects a 2D tensor [batch, sequenceLength]. Got rank {batchLabelIndices.Rank}. " +
+                "For single sequences, use DecodeLabels instead.");
+
+        int batchSize = batchLabelIndices.Shape[0];
+        int seqLen = batchLabelIndices.Shape[1];
+        var results = new List<string[]>(batchSize);
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            var labels = new string[seqLen];
+            for (int i = 0; i < seqLen; i++)
+            {
+                int idx = (int)NumOps.ToDouble(batchLabelIndices.Data.Span[b * seqLen + i]);
+                labels[i] = idx >= 0 && idx < LabelNames.Length ? LabelNames[idx] : "O";
+            }
+            results.Add(labels);
+        }
+
+        return results;
     }
 
     /// <inheritdoc />

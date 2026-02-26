@@ -15,22 +15,17 @@ namespace AiDotNet.NER.Options;
 /// 1. <b>Word embeddings:</b> Pre-trained vectors (GloVe, Word2Vec) map words to dense vectors
 ///    that capture semantic meaning. Words with similar meanings have similar vectors.
 ///
-/// 2. <b>Character embeddings (optional):</b> A small character-level LSTM processes each word's
-///    characters to capture morphological features like capitalization (uppercase = likely entity),
-///    prefixes (anti-, un-), and suffixes (-tion, -ing). This helps recognize unseen words.
+/// 2. <b>BiLSTM encoder:</b> Processes the word embeddings in both forward and backward directions.
+///    The forward LSTM reads left-to-right (capturing "John works at ...") while the backward LSTM
+///    reads right-to-left (capturing "... at Google Inc."). Their outputs are merged to give each
+///    token a representation informed by its full sentence context.
 ///
-/// 3. <b>BiLSTM encoder:</b> Processes the concatenated word+character embeddings in both forward
-///    and backward directions. The forward LSTM reads left-to-right (capturing "John works at ...")
-///    while the backward LSTM reads right-to-left (capturing "... at Google Inc."). Their outputs
-///    are concatenated to give each token a representation informed by its full sentence context.
-///
-/// 4. <b>CRF decoder:</b> Models label transition dependencies. Instead of classifying each token
+/// 3. <b>CRF decoder:</b> Models label transition dependencies. Instead of classifying each token
 ///    independently, the CRF finds the globally optimal label sequence using the Viterbi algorithm.
 ///    This ensures valid BIO transitions (e.g., I-PER can only follow B-PER or I-PER).
 ///
 /// Default values follow the original paper (Lample et al., NAACL 2016):
 /// - 100-dimensional GloVe word embeddings
-/// - 25-dimensional character embeddings with 25-unit char LSTM
 /// - Single BiLSTM layer with 100 hidden units per direction
 /// - 50% dropout rate
 /// - 9 CoNLL-2003 BIO labels
@@ -55,14 +50,18 @@ public class BiLSTMCRFOptions : NeuralNetworkOptions
     }
 
     /// <summary>
-    /// Initializes a new instance by copying all settings from another instance.
+    /// Initializes a new instance by deep-copying all settings from another instance.
     /// </summary>
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> This creates a copy of an existing options object. Useful when you
-    /// want to create a variation of an existing configuration without modifying the original.
+    /// All mutable state is deep-copied to prevent mutations on one instance from affecting
+    /// the other. This includes the LabelNames array and OnnxOptions object.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This creates an independent copy of an existing options object.
+    /// Changing the copy won't affect the original, and vice versa.
     /// </para>
     /// </remarks>
     public BiLSTMCRFOptions(BiLSTMCRFOptions other)
@@ -81,10 +80,10 @@ public class BiLSTMCRFOptions : NeuralNetworkOptions
         CharEmbeddingDimension = other.CharEmbeddingDimension;
         CharHiddenDimension = other.CharHiddenDimension;
         ModelPath = other.ModelPath;
-        OnnxOptions = other.OnnxOptions;
+        OnnxOptions = new OnnxModelOptions(other.OnnxOptions);
         LearningRate = other.LearningRate;
         DropoutRate = other.DropoutRate;
-        LabelNames = other.LabelNames;
+        LabelNames = [.. other.LabelNames];
     }
 
     #region Architecture
@@ -132,7 +131,19 @@ public class BiLSTMCRFOptions : NeuralNetworkOptions
     /// set it to 300. The number must match exactly or the model will crash.
     /// </para>
     /// </remarks>
-    public int EmbeddingDimension { get; set; } = 100;
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when value is not positive.</exception>
+    public int EmbeddingDimension
+    {
+        get => _embeddingDimension;
+        set
+        {
+            if (value <= 0)
+                throw new ArgumentOutOfRangeException(nameof(EmbeddingDimension),
+                    $"Embedding dimension must be positive. Got: {value}");
+            _embeddingDimension = value;
+        }
+    }
+    private int _embeddingDimension = 100;
 
     /// <summary>
     /// Gets or sets the LSTM hidden state dimension per direction.
@@ -140,8 +151,8 @@ public class BiLSTMCRFOptions : NeuralNetworkOptions
     /// <remarks>
     /// <para>
     /// This is the number of hidden units in each LSTM direction. Since BiLSTM-CRF uses
-    /// bidirectional processing, the total output dimension after concatenation is
-    /// 2 * HiddenDimension. The original paper uses 100 hidden units per direction (200 total).
+    /// bidirectional processing, the effective output captures context from both directions.
+    /// The original paper uses 100 hidden units per direction.
     ///
     /// Recommended values:
     /// - <b>100:</b> Original paper default, good for CoNLL-2003 (F1 ~91%)
@@ -158,7 +169,19 @@ public class BiLSTMCRFOptions : NeuralNetworkOptions
     /// have a large dataset and want better accuracy.
     /// </para>
     /// </remarks>
-    public int HiddenDimension { get; set; } = 100;
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when value is not positive.</exception>
+    public int HiddenDimension
+    {
+        get => _hiddenDimension;
+        set
+        {
+            if (value <= 0)
+                throw new ArgumentOutOfRangeException(nameof(HiddenDimension),
+                    $"Hidden dimension must be positive. Got: {value}");
+            _hiddenDimension = value;
+        }
+    }
+    private int _hiddenDimension = 100;
 
     /// <summary>
     /// Gets or sets the number of stacked BiLSTM layers.
@@ -179,7 +202,19 @@ public class BiLSTMCRFOptions : NeuralNetworkOptions
     /// increase if you have a large dataset and the model seems to underfit.
     /// </para>
     /// </remarks>
-    public int NumLSTMLayers { get; set; } = 1;
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when value is not positive.</exception>
+    public int NumLSTMLayers
+    {
+        get => _numLSTMLayers;
+        set
+        {
+            if (value <= 0)
+                throw new ArgumentOutOfRangeException(nameof(NumLSTMLayers),
+                    $"Number of LSTM layers must be positive. Got: {value}");
+            _numLSTMLayers = value;
+        }
+    }
+    private int _numLSTMLayers = 1;
 
     /// <summary>
     /// Gets or sets the number of entity label classes in the BIO tagging scheme.
@@ -200,7 +235,19 @@ public class BiLSTMCRFOptions : NeuralNetworkOptions
     /// your label set.
     /// </para>
     /// </remarks>
-    public int NumLabels { get; set; } = 9;
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when value is not positive.</exception>
+    public int NumLabels
+    {
+        get => _numLabels;
+        set
+        {
+            if (value <= 0)
+                throw new ArgumentOutOfRangeException(nameof(NumLabels),
+                    $"Number of labels must be positive. Got: {value}");
+            _numLabels = value;
+        }
+    }
+    private int _numLabels = 9;
 
     /// <summary>
     /// Gets or sets the maximum input sequence length in tokens.
@@ -221,7 +268,19 @@ public class BiLSTMCRFOptions : NeuralNetworkOptions
     /// this if you're processing very long paragraphs.
     /// </para>
     /// </remarks>
-    public int MaxSequenceLength { get; set; } = 256;
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when value is not positive.</exception>
+    public int MaxSequenceLength
+    {
+        get => _maxSequenceLength;
+        set
+        {
+            if (value <= 0)
+                throw new ArgumentOutOfRangeException(nameof(MaxSequenceLength),
+                    $"Maximum sequence length must be positive. Got: {value}");
+            _maxSequenceLength = value;
+        }
+    }
+    private int _maxSequenceLength = 256;
 
     /// <summary>
     /// Gets or sets whether to use CRF (Conditional Random Field) decoding.
@@ -255,11 +314,10 @@ public class BiLSTMCRFOptions : NeuralNetworkOptions
     /// - <b>Out-of-vocabulary words:</b> Rare names like "Krzyzewski" can be recognized by
     ///   character patterns even if they don't appear in the word embedding vocabulary
     ///
-    /// A small character-level LSTM processes each word's characters and produces a fixed-size
-    /// vector that is concatenated with the word embedding before feeding into the main BiLSTM.
-    ///
-    /// Note: Character embedding support is a configuration flag; the actual character-level
-    /// LSTM layers are added during model initialization when this is enabled.
+    /// When enabled, a small character-level bidirectional LSTM processes each word's characters
+    /// and produces a fixed-size vector that is concatenated with the word embedding before
+    /// feeding into the main BiLSTM. This increases the effective input dimension to
+    /// EmbeddingDimension + CharHiddenDimension.
     /// </para>
     /// <para>
     /// <b>For Beginners:</b> Character embeddings help the model understand words it has never
@@ -276,8 +334,8 @@ public class BiLSTMCRFOptions : NeuralNetworkOptions
     /// <remarks>
     /// <para>
     /// Each character (a-z, A-Z, 0-9, punctuation) is mapped to a dense vector of this dimension.
-    /// The original paper uses 25-dimensional character embeddings, which is sufficient to capture
-    /// character-level patterns. Larger values provide diminishing returns for NER.
+    /// The original Lample et al. (2016) paper uses 25-dimensional character embeddings. A value
+    /// of 30 provides slightly more capacity and is commonly used in practice.
     /// </para>
     /// <para>
     /// <b>For Beginners:</b> Just like word embeddings represent words as numbers, character
@@ -285,18 +343,31 @@ public class BiLSTMCRFOptions : NeuralNetworkOptions
     /// numbers represent each character. The default of 30 works well; you rarely need to change this.
     /// </para>
     /// </remarks>
-    public int CharEmbeddingDimension { get; set; } = 30;
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when value is not positive.</exception>
+    public int CharEmbeddingDimension
+    {
+        get => _charEmbeddingDimension;
+        set
+        {
+            if (value <= 0)
+                throw new ArgumentOutOfRangeException(nameof(CharEmbeddingDimension),
+                    $"Character embedding dimension must be positive. Got: {value}");
+            _charEmbeddingDimension = value;
+        }
+    }
+    private int _charEmbeddingDimension = 30;
 
     /// <summary>
     /// Gets or sets the hidden dimension of the character-level LSTM.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This controls the capacity of the small LSTM that processes each word's characters.
-    /// The character LSTM output (size = 2 * CharHiddenDimension for bidirectional) is
-    /// concatenated with the word embedding to form the input to the main BiLSTM.
+    /// This controls the capacity of the small bidirectional LSTM that processes each word's
+    /// characters. The character BiLSTM output (size = CharHiddenDimension with element-wise
+    /// merge) is concatenated with the word embedding to form the input to the main BiLSTM.
     ///
-    /// The original paper uses 25 hidden units per direction (50 total after concatenation).
+    /// The original Lample et al. (2016) paper uses 25 hidden units per direction. A value of
+    /// 50 provides more capacity for capturing character-level patterns and is commonly used.
     /// </para>
     /// <para>
     /// <b>For Beginners:</b> This controls how much information the character-level model can
@@ -304,7 +375,19 @@ public class BiLSTMCRFOptions : NeuralNetworkOptions
     /// won't help much because character patterns are relatively simple.
     /// </para>
     /// </remarks>
-    public int CharHiddenDimension { get; set; } = 50;
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when value is not positive.</exception>
+    public int CharHiddenDimension
+    {
+        get => _charHiddenDimension;
+        set
+        {
+            if (value <= 0)
+                throw new ArgumentOutOfRangeException(nameof(CharHiddenDimension),
+                    $"Character hidden dimension must be positive. Got: {value}");
+            _charHiddenDimension = value;
+        }
+    }
+    private int _charHiddenDimension = 50;
 
     /// <summary>
     /// Gets or sets the BIO label names for the tagging scheme.
@@ -327,7 +410,18 @@ public class BiLSTMCRFOptions : NeuralNetworkOptions
     /// you can customize this list.
     /// </para>
     /// </remarks>
-    public string[] LabelNames { get; set; } =
+    /// <exception cref="ArgumentException">Thrown when value is null or empty.</exception>
+    public string[] LabelNames
+    {
+        get => _labelNames;
+        set
+        {
+            if (value is null || value.Length == 0)
+                throw new ArgumentException("Label names array cannot be null or empty.", nameof(LabelNames));
+            _labelNames = value;
+        }
+    }
+    private string[] _labelNames =
     [
         "O", "B-PER", "I-PER", "B-ORG", "I-ORG", "B-LOC", "I-LOC", "B-MISC", "I-MISC"
     ];
@@ -398,7 +492,19 @@ public class BiLSTMCRFOptions : NeuralNetworkOptions
     /// (loss jumping up and down), try halving it.
     /// </para>
     /// </remarks>
-    public double LearningRate { get; set; } = 1e-3;
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when value is not positive.</exception>
+    public double LearningRate
+    {
+        get => _learningRate;
+        set
+        {
+            if (value <= 0)
+                throw new ArgumentOutOfRangeException(nameof(LearningRate),
+                    $"Learning rate must be positive. Got: {value}");
+            _learningRate = value;
+        }
+    }
+    private double _learningRate = 1e-3;
 
     /// <summary>
     /// Gets or sets the dropout rate for regularization during training.
@@ -415,6 +521,7 @@ public class BiLSTMCRFOptions : NeuralNetworkOptions
     /// - On word embeddings
     ///
     /// Higher dropout rates provide stronger regularization but may underfit on large datasets.
+    /// Must be between 0.0 (no dropout) and 1.0 (drop everything).
     /// </para>
     /// <para>
     /// <b>For Beginners:</b> Dropout prevents the model from "memorizing" the training data
@@ -424,7 +531,19 @@ public class BiLSTMCRFOptions : NeuralNetworkOptions
     /// paper and works well for most NER tasks.
     /// </para>
     /// </remarks>
-    public double DropoutRate { get; set; } = 0.5;
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when value is outside [0, 1].</exception>
+    public double DropoutRate
+    {
+        get => _dropoutRate;
+        set
+        {
+            if (value < 0 || value > 1)
+                throw new ArgumentOutOfRangeException(nameof(DropoutRate),
+                    $"Dropout rate must be between 0.0 and 1.0. Got: {value}");
+            _dropoutRate = value;
+        }
+    }
+    private double _dropoutRate = 0.5;
 
     #endregion
 }
