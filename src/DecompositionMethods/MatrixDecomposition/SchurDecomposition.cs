@@ -209,25 +209,22 @@ public class SchurDecomposition<T> : MatrixDecompositionBase<T>
             q--;
         }
 
-        // Work only on the active submatrix from q to p
-        // Use Wilkinson shift for better convergence
-        T s = NumOps.Add(H[p - 1, p - 1], H[p, p]);
-        T prod = NumOps.Subtract(
-            NumOps.Multiply(H[p - 1, p - 1], H[p, p]),
-            NumOps.Multiply(H[p - 1, p], H[p, p - 1]));
+        // Use Wilkinson single shift for better convergence
+        // Compute shift as the eigenvalue of the trailing 2x2 block closest to H[p,p]
+        T d = NumOps.Divide(NumOps.Subtract(H[p - 1, p - 1], H[p, p]), NumOps.FromDouble(2.0));
+        T offDiag = H[p, p - 1];
+        T sign = NumOps.LessThan(d, NumOps.Zero) ? NumOps.FromDouble(-1.0) : NumOps.One;
+        T dSq = NumOps.Multiply(d, d);
+        T offSq = NumOps.Multiply(offDiag, offDiag);
+        T shift = NumOps.Subtract(H[p, p],
+            NumOps.Divide(offSq,
+                NumOps.Add(d, NumOps.Multiply(sign, NumOps.Sqrt(NumOps.Add(dSq, offSq))))));
 
-        // First column of (H - s1*I)(H - s2*I) = H^2 - s*H + p*I
-        T h_q_q = H[q, q];
-        T h_q_q1 = q + 1 < n ? H[q, q + 1] : NumOps.Zero;
-        T h_q1_q = q + 1 < n ? H[q + 1, q] : NumOps.Zero;
-        T h_q1_q1 = q + 1 < n ? H[q + 1, q + 1] : NumOps.Zero;
+        // Apply shifted QR step: factor (H - shift*I) = Q*R, then H = R*Q + shift*I
+        // Do this implicitly with Givens rotations (bulge chasing)
+        T x = NumOps.Subtract(H[q, q], shift);
+        T y = H[q + 1, q];
 
-        T x = NumOps.Add(
-            NumOps.Subtract(NumOps.Multiply(h_q_q, h_q_q), NumOps.Multiply(s, h_q_q)),
-            NumOps.Add(prod, NumOps.Multiply(h_q_q1, h_q1_q)));
-        T y = NumOps.Multiply(h_q1_q, NumOps.Subtract(NumOps.Add(h_q_q, h_q1_q1), s));
-
-        // Apply Givens rotations to chase the bulge within active submatrix
         for (int k = q; k < p; k++)
         {
             // Compute Givens rotation to zero out y
