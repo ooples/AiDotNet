@@ -83,7 +83,10 @@ public class LaplacianKernel<T> : IKernelFunction<T>
     public LaplacianKernel(T? sigma = default)
     {
         _numOps = MathHelper.GetNumericOperations<T>();
-        _sigma = sigma ?? _numOps.FromDouble(1.0);
+        // For value types (e.g., double), T? is just T, and default(T) = 0, not null.
+        // The ?? operator never triggers. Use explicit check for the intended default.
+        bool sigmaIsDefault = sigma is null || EqualityComparer<T>.Default.Equals(sigma, default);
+        _sigma = sigmaIsDefault ? _numOps.FromDouble(1.0) : (sigma ?? _numOps.FromDouble(1.0));
     }
 
     /// <summary>
