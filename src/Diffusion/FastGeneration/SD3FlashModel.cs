@@ -45,7 +45,7 @@ public class SD3FlashModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override int LatentChannels => LATENT_CHANNELS;
     /// <inheritdoc />
-    public override int ParameterCount => _predictor.ParameterCount;
+    public override int ParameterCount => _predictor.ParameterCount + _vae.ParameterCount;
 
     public SD3FlashModel(
         NeuralNetworkArchitecture<T>? architecture = null,
@@ -86,9 +86,30 @@ public class SD3FlashModel<T> : LatentDiffusionModelBase<T>
     }
 
     /// <inheritdoc />
-    public override Vector<T> GetParameters() => _predictor.GetParameters();
+    public override Vector<T> GetParameters()
+    {
+        var pp = _predictor.GetParameters();
+        var vp = _vae.GetParameters();
+        var combined = new Vector<T>(pp.Length + vp.Length);
+        for (int i = 0; i < pp.Length; i++) combined[i] = pp[i];
+        for (int i = 0; i < vp.Length; i++) combined[pp.Length + i] = vp[i];
+        return combined;
+    }
+
     /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters) => _predictor.SetParameters(parameters);
+    public override void SetParameters(Vector<T> parameters)
+    {
+        var pc = _predictor.ParameterCount;
+        var vc = _vae.ParameterCount;
+        if (parameters.Length != pc + vc)
+            throw new ArgumentException($"Expected {pc + vc} parameters, got {parameters.Length}.", nameof(parameters));
+        var pp = new Vector<T>(pc);
+        var vp = new Vector<T>(vc);
+        for (int i = 0; i < pc; i++) pp[i] = parameters[i];
+        for (int i = 0; i < vc; i++) vp[i] = parameters[pc + i];
+        _predictor.SetParameters(pp);
+        _vae.SetParameters(vp);
+    }
     /// <inheritdoc />
     public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
 
