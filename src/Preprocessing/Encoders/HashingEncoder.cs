@@ -164,13 +164,23 @@ public class HashingEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
     private int ComputeHash(int columnIndex, double value)
     {
-        // Combine column index and value for unique hash
+        // Combine column index and value using MurmurHash3 finalizer for uniform distribution.
+        // The original multiply-add hash (17*31+x) never overflows for typical positive double
+        // hash codes (~1 billion), so the sign bit is never set, making alternateSign ineffective.
+        // IMPORTANT: Must use logical (unsigned) right shift, not arithmetic right shift.
+        // Arithmetic right shift (>>) sign-extends, corrupting the bit mixing and causing bias.
         unchecked
         {
-            int hash = 17;
-            hash = hash * 31 + columnIndex;
-            hash = hash * 31 + value.GetHashCode();
-            return hash;
+            int h = value.GetHashCode();
+            // Mix column index using golden ratio constant for better separation
+            h ^= columnIndex * (int)0x9e3779b9;
+            // MurmurHash3 32-bit finalizer (logical right shift via uint cast)
+            h ^= (int)((uint)h >> 16);
+            h *= (int)0x85ebca6b;
+            h ^= (int)((uint)h >> 13);
+            h *= (int)0xc2b2ae35;
+            h ^= (int)((uint)h >> 16);
+            return h;
         }
     }
 
