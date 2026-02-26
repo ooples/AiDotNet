@@ -310,6 +310,11 @@ public class FullyConnectedLayer<T> : LayerBase<T>
     }
 
     /// <summary>
+    /// Gets the total number of trainable parameters (weights + biases).
+    /// </summary>
+    public override int ParameterCount => _weights.Shape[0] * _weights.Shape[1] + _biases.Shape[0];
+
+    /// <summary>
     /// Initializes the weights and biases with appropriate values for effective training.
     /// </summary>
     /// <remarks>
