@@ -11,7 +11,11 @@ namespace AiDotNet.FederatedLearning.Aggregators;
 /// global model.</para>
 ///
 /// <para>Local training objective:</para>
-/// <code>L = L_CE + β * KL(softmax(z_global / τ) || softmax(z_local / τ)) [non-true classes only]</code>
+/// <code>L = L_CE + beta * KL(softmax(z_global / tau)[not-true] || softmax(z_local / tau)[not-true])</code>
+///
+/// <para>The key innovation is masking out the true class before computing the KL divergence,
+/// so the local model can freely adapt its prediction for the correct class while maintaining
+/// the global model's knowledge about other classes.</para>
 ///
 /// <para>Reference: Lee, G., Shin, M., and Hwang, S. J. (2022). "Preservation of the Global Knowledge
 /// by Not-True Distillation in Federated Learning." NeurIPS 2022.</para>
@@ -52,15 +56,158 @@ public class FedNtdAggregationStrategy<T> : ParameterDictionaryAggregationStrate
     }
 
     /// <summary>
-    /// Gets the not-true distillation weight (beta).
+    /// Computes the Not-True Distillation loss for a single sample during local training.
     /// </summary>
-    public double DistillationWeight => _distillationWeight;
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method computes KL divergence between the global model's
+    /// soft predictions and the local model's soft predictions, but ONLY for the non-true classes.
+    /// The true class is masked out so the local model can freely learn from its local data
+    /// for that class, while still preserving global knowledge about all other classes.</para>
+    /// </remarks>
+    /// <param name="localLogits">Raw logits from the local model for a single sample.</param>
+    /// <param name="globalLogits">Raw logits from the global model for the same sample.</param>
+    /// <param name="trueClassIndex">Index of the true (correct) class to mask out.</param>
+    /// <returns>The NTD loss value: beta * KL(q_global_NT || p_local_NT) * tau^2.</returns>
+    public T ComputeNTDLoss(Vector<T> localLogits, Vector<T> globalLogits, int trueClassIndex)
+    {
+        int numClasses = localLogits.Length;
+
+        if (globalLogits.Length != numClasses)
+        {
+            throw new ArgumentException("Local and global logits must have the same number of classes.");
+        }
+
+        if (trueClassIndex < 0 || trueClassIndex >= numClasses)
+        {
+            throw new ArgumentOutOfRangeException(nameof(trueClassIndex),
+                $"True class index must be in [0, {numClasses}).");
+        }
+
+        if (numClasses <= 1)
+        {
+            return NumOps.Zero;
+        }
+
+        // Step 1: Extract non-true class logits and apply temperature scaling.
+        int ntCount = numClasses - 1;
+        var localNT = new double[ntCount];
+        var globalNT = new double[ntCount];
+        int idx = 0;
+
+        for (int c = 0; c < numClasses; c++)
+        {
+            if (c == trueClassIndex)
+            {
+                continue;
+            }
+
+            localNT[idx] = NumOps.ToDouble(localLogits[c]) / _temperature;
+            globalNT[idx] = NumOps.ToDouble(globalLogits[c]) / _temperature;
+            idx++;
+        }
+
+        // Step 2: Compute softmax for both (numerically stable).
+        var pLocal = SoftmaxInPlace(localNT);
+        var qGlobal = SoftmaxInPlace(globalNT);
+
+        // Step 3: KL divergence: KL(q || p) = sum(q * log(q / p))
+        double kl = 0;
+        for (int i = 0; i < ntCount; i++)
+        {
+            if (qGlobal[i] > 1e-10)
+            {
+                double pClamped = Math.Max(pLocal[i], 1e-10);
+                kl += qGlobal[i] * Math.Log(qGlobal[i] / pClamped);
+            }
+        }
+
+        // Step 4: Scale by beta * tau^2 (standard KD scaling).
+        double loss = _distillationWeight * _temperature * _temperature * kl;
+        return NumOps.FromDouble(loss);
+    }
 
     /// <summary>
-    /// Gets the softmax temperature for distillation.
+    /// Computes the complete local training loss including task loss and NTD loss.
     /// </summary>
+    /// <param name="taskLoss">The base task loss (e.g., cross-entropy).</param>
+    /// <param name="localLogits">Raw logits from the local model.</param>
+    /// <param name="globalLogits">Raw logits from the cached global model.</param>
+    /// <param name="trueClassIndex">Index of the true class.</param>
+    /// <returns>L_total = L_CE + beta * NTD_loss.</returns>
+    public T ComputeTotalLoss(T taskLoss, Vector<T> localLogits, Vector<T> globalLogits, int trueClassIndex)
+    {
+        var ntdLoss = ComputeNTDLoss(localLogits, globalLogits, trueClassIndex);
+        return NumOps.Add(taskLoss, ntdLoss);
+    }
+
+    /// <summary>
+    /// Computes the batch-averaged NTD loss across multiple samples.
+    /// </summary>
+    /// <param name="localLogitsBatch">Local logits per sample (rows = samples, columns = classes).</param>
+    /// <param name="globalLogitsBatch">Global logits per sample.</param>
+    /// <param name="trueClassIndices">True class index per sample.</param>
+    /// <returns>Average NTD loss across the batch.</returns>
+    public T ComputeBatchNTDLoss(
+        Matrix<T> localLogitsBatch,
+        Matrix<T> globalLogitsBatch,
+        int[] trueClassIndices)
+    {
+        int batchSize = localLogitsBatch.Rows;
+
+        if (globalLogitsBatch.Rows != batchSize)
+        {
+            throw new ArgumentException("Batch sizes must match between local and global logits.");
+        }
+
+        if (trueClassIndices.Length != batchSize)
+        {
+            throw new ArgumentException("Must provide one true class index per sample.");
+        }
+
+        double totalLoss = 0;
+
+        for (int s = 0; s < batchSize; s++)
+        {
+            var localRow = localLogitsBatch.GetRow(s);
+            var globalRow = globalLogitsBatch.GetRow(s);
+            totalLoss += NumOps.ToDouble(ComputeNTDLoss(localRow, globalRow, trueClassIndices[s]));
+        }
+
+        return NumOps.FromDouble(totalLoss / batchSize);
+    }
+
+    private static double[] SoftmaxInPlace(double[] logits)
+    {
+        double max = double.NegativeInfinity;
+        for (int i = 0; i < logits.Length; i++)
+        {
+            if (logits[i] > max)
+            {
+                max = logits[i];
+            }
+        }
+
+        double sum = 0;
+        for (int i = 0; i < logits.Length; i++)
+        {
+            logits[i] = Math.Exp(logits[i] - max);
+            sum += logits[i];
+        }
+
+        for (int i = 0; i < logits.Length; i++)
+        {
+            logits[i] /= sum;
+        }
+
+        return logits;
+    }
+
+    /// <summary>Gets the not-true distillation weight (beta).</summary>
+    public double DistillationWeight => _distillationWeight;
+
+    /// <summary>Gets the softmax temperature for distillation.</summary>
     public double Temperature => _temperature;
 
     /// <inheritdoc/>
-    public override string GetStrategyName() => $"FedNTD(β={_distillationWeight},τ={_temperature})";
+    public override string GetStrategyName() => $"FedNTD(\u03b2={_distillationWeight},\u03c4={_temperature})";
 }
