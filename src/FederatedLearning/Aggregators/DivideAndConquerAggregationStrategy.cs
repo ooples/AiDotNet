@@ -7,16 +7,16 @@ namespace AiDotNet.FederatedLearning.Aggregators;
 /// <para><b>For Beginners:</b> Some poisoning attacks are hard to detect when you look at the
 /// full high-dimensional update vectors — the malicious signal hides in the noise.
 /// DnC projects client updates into random low-dimensional subspaces, then uses spectral
-/// analysis (outlier detection via singular values) to identify attackers that might evade
+/// analysis (top singular vector projection) to identify attackers that might evade
 /// simpler coordinate-wise defenses like median or trimmed mean.</para>
 ///
 /// <para>Algorithm:</para>
 /// <list type="number">
 /// <item>Flatten all client updates into vectors</item>
-/// <item>Project into a random subspace of dimension <c>SubspaceDimension</c></item>
-/// <item>Compute centered second-moment matrix and its top singular vector</item>
-/// <item>Score each client by its projection onto this vector</item>
-/// <item>Remove top <c>NumByzantine</c> outliers</item>
+/// <item>Project into a random orthogonal subspace of dimension <c>SubspaceDimension</c></item>
+/// <item>Compute centered second-moment matrix and its top right singular vector via power iteration</item>
+/// <item>Score each client by squared projection onto this singular vector</item>
+/// <item>Iteratively remove the top outlier, recompute, repeat for <c>NumByzantine</c> rounds</item>
 /// <item>Average the remaining (trusted) updates</item>
 /// </list>
 ///
@@ -30,6 +30,7 @@ public class DivideAndConquerAggregationStrategy<T> : ParameterDictionaryAggrega
     private readonly int _numByzantine;
     private readonly int _subspaceDimension;
     private readonly int _seed;
+    private int _roundCounter;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="DivideAndConquerAggregationStrategy{T}"/> class.
@@ -92,109 +93,110 @@ public class DivideAndConquerAggregationStrategy<T> : ParameterDictionaryAggrega
             }
         }
 
-        // Compute mean.
-        var mean = new double[totalParams];
-        for (int c = 0; c < n; c++)
-        {
-            for (int i = 0; i < totalParams; i++)
-            {
-                mean[i] += flatVectors[c][i] / n;
-            }
-        }
+        // Use round-varying seed for fresh randomness each aggregation.
+        var rng = new Random(_seed + _roundCounter++);
 
-        // Center the vectors.
-        var centered = new double[n][];
-        for (int c = 0; c < n; c++)
-        {
-            centered[c] = new double[totalParams];
-            for (int i = 0; i < totalParams; i++)
-            {
-                centered[c][i] = flatVectors[c][i] - mean[i];
-            }
-        }
-
-        // Random projection to subspace.
+        // Generate random orthogonal projection matrix via QR decomposition of Gaussian matrix.
         int dim = Math.Min(_subspaceDimension, totalParams);
-        var rng = new Random(_seed);
-        var projected = new double[n][];
-        var projectionMatrix = new double[dim][];
+        var projectionMatrix = GenerateOrthogonalProjection(rng, totalParams, dim);
 
-        for (int d = 0; d < dim; d++)
+        // Iterative spectral filtering: remove one outlier per iteration.
+        var activeIndices = new List<int>(Enumerable.Range(0, n));
+        int numToRemove = Math.Min(_numByzantine, n - 1);
+
+        for (int iter = 0; iter < numToRemove; iter++)
         {
-            projectionMatrix[d] = new double[totalParams];
-            for (int i = 0; i < totalParams; i++)
+            if (activeIndices.Count <= 1)
             {
-                // Gaussian random projection.
-                double u1 = 1.0 - rng.NextDouble();
-                double u2 = 1.0 - rng.NextDouble();
-                projectionMatrix[d][i] = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
+                break;
             }
-        }
 
-        for (int c = 0; c < n; c++)
-        {
-            projected[c] = new double[dim];
-            for (int d = 0; d < dim; d++)
+            // Compute mean of active clients.
+            var mean = new double[totalParams];
+            foreach (int c in activeIndices)
             {
-                double sum = 0;
                 for (int i = 0; i < totalParams; i++)
                 {
-                    sum += centered[c][i] * projectionMatrix[d][i];
+                    mean[i] += flatVectors[c][i] / activeIndices.Count;
+                }
+            }
+
+            // Center active vectors.
+            var centered = new double[activeIndices.Count][];
+            for (int idx = 0; idx < activeIndices.Count; idx++)
+            {
+                int c = activeIndices[idx];
+                centered[idx] = new double[totalParams];
+                for (int i = 0; i < totalParams; i++)
+                {
+                    centered[idx][i] = flatVectors[c][i] - mean[i];
+                }
+            }
+
+            // Project into random subspace.
+            var projected = new double[activeIndices.Count][];
+            for (int idx = 0; idx < activeIndices.Count; idx++)
+            {
+                projected[idx] = new double[dim];
+                for (int d = 0; d < dim; d++)
+                {
+                    double sum = 0;
+                    for (int i = 0; i < totalParams; i++)
+                    {
+                        sum += centered[idx][i] * projectionMatrix[d][i];
+                    }
+
+                    projected[idx][d] = sum;
+                }
+            }
+
+            // Find top right singular vector of projected matrix via power iteration.
+            var topSingularVector = ComputeTopRightSingularVector(projected, activeIndices.Count, dim, rng);
+
+            // Score each client by squared projection onto the top singular vector.
+            double maxScore = double.NegativeInfinity;
+            int maxIdx = 0;
+
+            for (int idx = 0; idx < activeIndices.Count; idx++)
+            {
+                double projection = 0;
+                for (int d = 0; d < dim; d++)
+                {
+                    projection += projected[idx][d] * topSingularVector[d];
                 }
 
-                projected[c][d] = sum;
-            }
-        }
-
-        // Compute outlier scores via squared L2 norm of projected vectors.
-        var scores = new double[n];
-        for (int c = 0; c < n; c++)
-        {
-            double norm2 = 0;
-            for (int d = 0; d < dim; d++)
-            {
-                norm2 += projected[c][d] * projected[c][d];
+                double score = projection * projection;
+                if (score > maxScore)
+                {
+                    maxScore = score;
+                    maxIdx = idx;
+                }
             }
 
-            scores[c] = norm2;
+            // Remove the top outlier.
+            activeIndices.RemoveAt(maxIdx);
         }
 
-        // Remove top numByzantine outliers.
-        int numToRemove = Math.Min(_numByzantine, n - 1);
-        var sortedIndices = Enumerable.Range(0, n).OrderByDescending(i => scores[i]).ToArray();
-        var removedSet = new HashSet<int>();
-        for (int i = 0; i < numToRemove; i++)
-        {
-            removedSet.Add(sortedIndices[i]);
-        }
-
-        // Aggregate remaining clients.
+        // Aggregate remaining (trusted) clients.
         var result = new Dictionary<string, T[]>(referenceModel.Count, referenceModel.Comparer);
         foreach (var layerName in layerNames)
         {
             result[layerName] = CreateZeroInitializedLayer(referenceModel[layerName].Length);
         }
 
-        var trustedIds = new List<int>();
         double trustedTotalWeight = 0;
-        for (int c = 0; c < n; c++)
+        foreach (int c in activeIndices)
         {
-            if (removedSet.Contains(c))
-            {
-                continue;
-            }
-
-            trustedIds.Add(c);
             if (clientWeights.TryGetValue(clientIds[c], out var w))
             {
                 trustedTotalWeight += w;
             }
         }
 
-        foreach (int c in trustedIds)
+        foreach (int c in activeIndices)
         {
             double w = clientWeights.TryGetValue(clientIds[c], out var cw) ? cw : 1.0;
-            double normalizedWeight = trustedTotalWeight > 0 ? w / trustedTotalWeight : 1.0 / trustedIds.Count;
+            double normalizedWeight = trustedTotalWeight > 0 ? w / trustedTotalWeight : 1.0 / activeIndices.Count;
             var nw = NumOps.FromDouble(normalizedWeight);
             var clientModel = clientModels[clientIds[c]];
 
@@ -210,6 +212,142 @@ public class DivideAndConquerAggregationStrategy<T> : ParameterDictionaryAggrega
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Generates an orthogonal projection matrix via modified Gram-Schmidt on Gaussian vectors.
+    /// </summary>
+    private static double[][] GenerateOrthogonalProjection(Random rng, int totalParams, int dim)
+    {
+        var basis = new double[dim][];
+
+        for (int d = 0; d < dim; d++)
+        {
+            // Generate random Gaussian vector.
+            basis[d] = new double[totalParams];
+            for (int i = 0; i < totalParams; i++)
+            {
+                double u1 = 1.0 - rng.NextDouble();
+                double u2 = 1.0 - rng.NextDouble();
+                basis[d][i] = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
+            }
+
+            // Gram-Schmidt orthogonalization against previous basis vectors.
+            for (int prev = 0; prev < d; prev++)
+            {
+                double dot = 0;
+                for (int i = 0; i < totalParams; i++)
+                {
+                    dot += basis[d][i] * basis[prev][i];
+                }
+
+                for (int i = 0; i < totalParams; i++)
+                {
+                    basis[d][i] -= dot * basis[prev][i];
+                }
+            }
+
+            // Normalize.
+            double norm = 0;
+            for (int i = 0; i < totalParams; i++)
+            {
+                norm += basis[d][i] * basis[d][i];
+            }
+
+            norm = Math.Sqrt(norm);
+            if (norm > 1e-12)
+            {
+                for (int i = 0; i < totalParams; i++)
+                {
+                    basis[d][i] /= norm;
+                }
+            }
+        }
+
+        return basis;
+    }
+
+    /// <summary>
+    /// Computes the top right singular vector of the data matrix via power iteration.
+    /// data is [numSamples x dim], we want the top right singular vector of A^T A.
+    /// </summary>
+    private static double[] ComputeTopRightSingularVector(double[][] data, int numSamples, int dim, Random rng)
+    {
+        const int maxIterations = 50;
+        const double tolerance = 1e-8;
+
+        // Initialize random vector.
+        var v = new double[dim];
+        for (int d = 0; d < dim; d++)
+        {
+            v[d] = rng.NextDouble() - 0.5;
+        }
+
+        NormalizeVector(v);
+
+        double prevEigenvalue = 0;
+
+        for (int iter = 0; iter < maxIterations; iter++)
+        {
+            // Compute A^T A v: first compute u = A v, then result = A^T u.
+            // u = data * v  (u is [numSamples])
+            var u = new double[numSamples];
+            for (int i = 0; i < numSamples; i++)
+            {
+                double sum = 0;
+                for (int d = 0; d < dim; d++)
+                {
+                    sum += data[i][d] * v[d];
+                }
+
+                u[i] = sum;
+            }
+
+            // v_new = A^T u  (v_new is [dim])
+            var vNew = new double[dim];
+            for (int d = 0; d < dim; d++)
+            {
+                double sum = 0;
+                for (int i = 0; i < numSamples; i++)
+                {
+                    sum += data[i][d] * u[i];
+                }
+
+                vNew[d] = sum;
+            }
+
+            double eigenvalue = NormalizeVector(vNew);
+
+            if (Math.Abs(eigenvalue - prevEigenvalue) < tolerance * Math.Max(prevEigenvalue, 1e-10))
+            {
+                return vNew;
+            }
+
+            prevEigenvalue = eigenvalue;
+            v = vNew;
+        }
+
+        return v;
+    }
+
+    private static double NormalizeVector(double[] vec)
+    {
+        double norm = 0;
+        for (int i = 0; i < vec.Length; i++)
+        {
+            norm += vec[i] * vec[i];
+        }
+
+        norm = Math.Sqrt(norm);
+        if (norm > 1e-15)
+        {
+            for (int i = 0; i < vec.Length; i++)
+            {
+                vec[i] /= norm;
+            }
+        }
+
+        return norm;
     }
 
     /// <summary>Gets the expected number of Byzantine clients.</summary>
