@@ -400,7 +400,7 @@ public class CompetenceBasedScheduler<T> : CurriculumSchedulerBase<T>, ICompeten
     /// </summary>
     private static T ResolveDefault(T? value, double fallback)
     {
-        if (value is null || EqualityComparer<T>.Default.Equals(value, default))
+        if (value is null || object.Equals(value, default(T)))
             return NumOps.FromDouble(fallback);
         return value;
     }

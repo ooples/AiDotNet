@@ -85,7 +85,7 @@ public class LaplacianKernel<T> : IKernelFunction<T>
         _numOps = MathHelper.GetNumericOperations<T>();
         // For value types (e.g., double), T? is just T, and default(T) = 0, not null.
         // The ?? operator never triggers. Use explicit check for the intended default.
-        bool sigmaIsDefault = sigma is null || EqualityComparer<T>.Default.Equals(sigma, default);
+        bool sigmaIsDefault = sigma is null || object.Equals(sigma, default(T));
         _sigma = sigmaIsDefault ? _numOps.FromDouble(1.0) : (sigma ?? _numOps.FromDouble(1.0));
     }
 

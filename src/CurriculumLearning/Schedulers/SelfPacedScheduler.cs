@@ -249,7 +249,7 @@ public class SelfPacedScheduler<T> : CurriculumSchedulerBase<T>, ISelfPacedSched
     /// </summary>
     private static T ResolveDefault(T? value, double fallback)
     {
-        if (value is null || EqualityComparer<T>.Default.Equals(value, default))
+        if (value is null || object.Equals(value, default(T)))
             return NumOps.FromDouble(fallback);
         return value;
     }
