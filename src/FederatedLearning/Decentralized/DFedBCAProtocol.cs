@@ -28,6 +28,7 @@ public class DFedBCAProtocol<T> : Infrastructure.FederatedLearningComponentBase<
     private readonly int _numBlocks;
     private readonly BlockSelectionStrategy _selectionStrategy;
     private int _currentBlock;
+    private double[]? _blockImportanceScores;
 
     /// <summary>
     /// Creates a new DFedBCA protocol.
@@ -62,11 +63,86 @@ public class DFedBCAProtocol<T> : Infrastructure.FederatedLearningComponentBase<
             BlockSelectionStrategy.Random => seed.HasValue
                 ? new Random(seed.Value + round).Next(_numBlocks)
                 : new Random(round).Next(_numBlocks),
-            BlockSelectionStrategy.ImportanceBased => round % _numBlocks, // requires importance scores
+            BlockSelectionStrategy.ImportanceBased => SelectByImportance(round),
             _ => round % _numBlocks
         };
 
         return _currentBlock;
+    }
+
+    /// <summary>
+    /// Determines which block to synchronize using importance-based selection.
+    /// Selects the block with the highest accumulated change since its last synchronization.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Instead of blindly cycling through blocks, importance-based
+    /// selection picks the block that has changed the most since it was last synchronized.
+    /// This is measured by the accumulated "staleness" (L2 norm of gradient updates) for each
+    /// block. Blocks with large unsynced changes are prioritized to reduce convergence error.</para>
+    /// </remarks>
+    /// <param name="round">The current round number.</param>
+    /// <returns>Block index with the highest importance.</returns>
+    private int SelectByImportance(int round)
+    {
+        if (_blockImportanceScores == null || _blockImportanceScores.Length != _numBlocks)
+        {
+            // No importance scores yet — fall back to cyclic until scores are available.
+            return round % _numBlocks;
+        }
+
+        // Select the block with the highest importance score.
+        int bestBlock = 0;
+        double bestScore = _blockImportanceScores[0];
+        for (int b = 1; b < _numBlocks; b++)
+        {
+            if (_blockImportanceScores[b] > bestScore)
+            {
+                bestScore = _blockImportanceScores[b];
+                bestBlock = b;
+            }
+        }
+
+        // After selecting, decay this block's importance (it's being synced now).
+        _blockImportanceScores[bestBlock] = 0;
+
+        return bestBlock;
+    }
+
+    /// <summary>
+    /// Updates importance scores for all blocks based on gradient magnitudes per block.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> After each local training step, the gradient magnitudes per
+    /// block tell us how much that block needs to be synchronized. We accumulate these scores
+    /// across rounds. When a block is finally synchronized, its score resets to zero. This
+    /// creates a "staleness-aware" selection that prioritizes the most out-of-date blocks.</para>
+    /// </remarks>
+    /// <param name="gradient">Full model gradient dictionary after local training.</param>
+    public void UpdateBlockImportanceScores(Dictionary<string, T[]> gradient)
+    {
+        _blockImportanceScores ??= new double[_numBlocks];
+
+        var layerNames = gradient.Keys.ToList();
+        int layersPerBlock = Math.Max(1, (layerNames.Count + _numBlocks - 1) / _numBlocks);
+
+        for (int b = 0; b < _numBlocks; b++)
+        {
+            int start = b * layersPerBlock;
+            int end = Math.Min(start + layersPerBlock, layerNames.Count);
+
+            double blockNorm = 0;
+            for (int i = start; i < end; i++)
+            {
+                var layerGrad = gradient[layerNames[i]];
+                for (int j = 0; j < layerGrad.Length; j++)
+                {
+                    double v = NumOps.ToDouble(layerGrad[j]);
+                    blockNorm += v * v;
+                }
+            }
+
+            _blockImportanceScores[b] += Math.Sqrt(blockNorm); // Accumulate L2 norm.
+        }
     }
 
     /// <summary>

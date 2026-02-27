@@ -46,36 +46,79 @@ public class FedAGCContinualLearning<T> : Infrastructure.FederatedLearningCompon
     /// <inheritdoc/>
     public Vector<T> ComputeImportance(Vector<T> modelParameters, Matrix<T> taskData)
     {
-        // Approximate Fisher information: squared gradient magnitude per parameter.
+        // Approximate Fisher information: E[∇logp(y|x,θ)²] ≈ (1/N) Σ (∂L/∂θ)² for N samples.
+        // We use finite differences with the task data to estimate squared gradients per parameter.
         int d = modelParameters.Length;
-        var importance = new T[d];
+        int numSamples = taskData.Rows;
+        var importance = new double[d];
 
-        // Use parameter magnitude as proxy for importance (simplified).
-        for (int i = 0; i < d; i++)
+        // For each data sample, approximate the gradient via finite differences
+        // on a subset of parameters (full sweep too expensive for large models).
+        double epsilon = 1e-5;
+        int paramSubsample = Math.Min(d, 200); // Subsample parameters for efficiency.
+        var rng = new Random(42);
+
+        for (int s = 0; s < numSamples; s++)
         {
-            double v = NumOps.ToDouble(modelParameters[i]);
-            importance[i] = NumOps.FromDouble(v * v);
+            // Extract sample features as a proxy "loss" input.
+            // Use the dot product of parameters with the sample as a surrogate loss.
+            double baseLoss = 0;
+            int featureDim = Math.Min(d, taskData.Columns);
+            for (int i = 0; i < featureDim; i++)
+            {
+                baseLoss += NumOps.ToDouble(modelParameters[i]) * NumOps.ToDouble(taskData[s, i]);
+            }
+
+            baseLoss = baseLoss * baseLoss; // Squared loss surrogate.
+
+            for (int p = 0; p < paramSubsample; p++)
+            {
+                int idx = rng.Next(d);
+                double origVal = NumOps.ToDouble(modelParameters[idx]);
+
+                // Forward difference: (L(θ+ε) - L(θ)) / ε
+                double perturbedLoss = 0;
+                for (int i = 0; i < featureDim; i++)
+                {
+                    double paramVal = i == idx ? origVal + epsilon : NumOps.ToDouble(modelParameters[i]);
+                    perturbedLoss += paramVal * NumOps.ToDouble(taskData[s, i]);
+                }
+
+                perturbedLoss = perturbedLoss * perturbedLoss;
+                double grad = (perturbedLoss - baseLoss) / epsilon;
+
+                // Fisher ≈ gradient squared (diagonal approximation).
+                importance[idx] += grad * grad;
+            }
         }
 
-        var result = new Vector<T>(importance);
+        // Normalize by number of samples.
+        double invSamples = numSamples > 0 ? 1.0 / numSamples : 0;
+        var result = new T[d];
+        for (int i = 0; i < d; i++)
+        {
+            result[i] = NumOps.FromDouble(importance[i] * invSamples);
+        }
 
-        // Accumulate importance across tasks.
+        var resultVec = new Vector<T>(result);
+
+        // Accumulate importance across tasks (EWC-style online accumulation).
         if (_accumulatedImportance == null)
         {
-            _accumulatedImportance = result;
+            _accumulatedImportance = resultVec;
         }
         else
         {
             var acc = new T[d];
             for (int i = 0; i < d; i++)
             {
-                acc[i] = NumOps.Add(_accumulatedImportance[i], result[i]);
+                acc[i] = NumOps.Add(_accumulatedImportance[i], resultVec[i]);
             }
 
             _accumulatedImportance = new Vector<T>(acc);
         }
 
-        return result;
+        return resultVec;
     }
 
     /// <inheritdoc/>
@@ -154,6 +197,105 @@ public class FedAGCContinualLearning<T> : Infrastructure.FederatedLearningCompon
 
         return new Vector<T>(aggregated);
     }
+
+    /// <summary>
+    /// Computes adaptive per-parameter correction strength based on how important each parameter
+    /// is for old tasks vs how much the new task gradient wants to change it.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Not all parameters need the same amount of correction. Parameters
+    /// that are very important for old tasks (high Fisher information) and face large conflicting
+    /// gradients should be corrected more aggressively. Parameters that aren't important for old
+    /// tasks can change freely. This adaptive approach balances plasticity (learning new tasks)
+    /// with stability (remembering old tasks) at the per-parameter level.</para>
+    /// </remarks>
+    /// <param name="gradient">New task gradient.</param>
+    /// <param name="importanceWeights">Accumulated importance from old tasks.</param>
+    /// <returns>Per-parameter correction strength in [0, correctionStrength].</returns>
+    public Vector<T> ComputeAdaptiveCorrectionStrength(Vector<T> gradient, Vector<T> importanceWeights)
+    {
+        int d = gradient.Length;
+        var strength = new T[d];
+
+        // Find max importance for normalization.
+        double maxImportance = 0;
+        for (int i = 0; i < d; i++)
+        {
+            double imp = Math.Abs(NumOps.ToDouble(importanceWeights[i]));
+            if (imp > maxImportance) maxImportance = imp;
+        }
+
+        if (maxImportance <= 0)
+        {
+            // No importance data — use uniform base strength.
+            for (int i = 0; i < d; i++)
+            {
+                strength[i] = NumOps.FromDouble(_correctionStrength);
+            }
+
+            return new Vector<T>(strength);
+        }
+
+        for (int i = 0; i < d; i++)
+        {
+            double g = NumOps.ToDouble(gradient[i]);
+            double imp = NumOps.ToDouble(importanceWeights[i]);
+            double normalizedImp = Math.Abs(imp) / maxImportance;
+
+            // Conflict indicator: negative means gradient opposes importance direction.
+            double conflict = g * imp < 0 ? 1.0 : 0.0;
+
+            // Adaptive strength = base * normalizedImportance * conflictIndicator
+            strength[i] = NumOps.FromDouble(_correctionStrength * normalizedImp * conflict);
+        }
+
+        return new Vector<T>(strength);
+    }
+
+    /// <summary>
+    /// Projects gradient using adaptive per-parameter correction strengths.
+    /// </summary>
+    /// <param name="gradient">New task gradient.</param>
+    /// <param name="importanceWeights">Accumulated importance from old tasks.</param>
+    /// <param name="adaptiveStrengths">Per-parameter correction strengths from ComputeAdaptiveCorrectionStrength.</param>
+    /// <returns>Corrected gradient.</returns>
+    public Vector<T> ProjectGradientAdaptive(
+        Vector<T> gradient, Vector<T> importanceWeights, Vector<T> adaptiveStrengths)
+    {
+        int d = gradient.Length;
+        var corrected = new T[d];
+
+        for (int i = 0; i < d; i++)
+        {
+            double g = NumOps.ToDouble(gradient[i]);
+            double imp = NumOps.ToDouble(importanceWeights[i]);
+            double alpha = NumOps.ToDouble(adaptiveStrengths[i]);
+
+            if (g * imp < 0 && alpha > 0)
+            {
+                // Reduce conflicting component proportionally to adaptive strength.
+                double impNorm2 = imp * imp;
+                if (impNorm2 > 1e-10)
+                {
+                    double projection = g * imp / impNorm2;
+                    corrected[i] = NumOps.FromDouble(g - alpha * projection * imp);
+                }
+                else
+                {
+                    corrected[i] = NumOps.FromDouble(g);
+                }
+            }
+            else
+            {
+                corrected[i] = NumOps.FromDouble(g);
+            }
+        }
+
+        return new Vector<T>(corrected);
+    }
+
+    /// <summary>Gets the accumulated importance from all previous tasks.</summary>
+    public Vector<T>? AccumulatedImportance => _accumulatedImportance;
 
     /// <summary>Gets the correction strength.</summary>
     public double CorrectionStrength => _correctionStrength;
