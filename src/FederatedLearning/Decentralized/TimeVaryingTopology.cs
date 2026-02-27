@@ -54,6 +54,7 @@ public class TimeVaryingTopology<T> : Infrastructure.FederatedLearningComponentB
     /// <returns>Dictionary of clientId to their neighbor set for this round.</returns>
     public Dictionary<int, List<int>> GenerateTopology(IReadOnlyList<int> clientIds)
     {
+        Guard.NotNull(clientIds);
         var topology = new Dictionary<int, List<int>>();
         foreach (var id in clientIds)
         {
@@ -87,14 +88,22 @@ public class TimeVaryingTopology<T> : Infrastructure.FederatedLearningComponentB
                 for (int i = 0; i < n; i++)
                 {
                     int neighbor = (i + shift) % n;
-                    topology[clientIds[i]].Add(clientIds[neighbor]);
-                    topology[clientIds[neighbor]].Add(clientIds[i]);
+                    if (!topology[clientIds[i]].Contains(clientIds[neighbor]))
+                    {
+                        topology[clientIds[i]].Add(clientIds[neighbor]);
+                    }
+
+                    if (!topology[clientIds[neighbor]].Contains(clientIds[i]))
+                    {
+                        topology[clientIds[neighbor]].Add(clientIds[i]);
+                    }
                 }
 
                 break;
             }
             case TopologyStrategy.Exponential:
             {
+                // Make symmetric: if i connects to j, j also connects to i.
                 for (int i = 0; i < n; i++)
                 {
                     for (int k = 0; (1 << k) < n; k++)
@@ -104,6 +113,11 @@ public class TimeVaryingTopology<T> : Infrastructure.FederatedLearningComponentB
                         {
                             topology[clientIds[i]].Add(clientIds[neighbor]);
                         }
+
+                        if (!topology[clientIds[neighbor]].Contains(clientIds[i]))
+                        {
+                            topology[clientIds[neighbor]].Add(clientIds[i]);
+                        }
                     }
                 }
 
@@ -111,7 +125,7 @@ public class TimeVaryingTopology<T> : Infrastructure.FederatedLearningComponentB
             }
         }
 
-        _roundCounter++;
+        Interlocked.Increment(ref _roundCounter);
         return topology;
     }
 

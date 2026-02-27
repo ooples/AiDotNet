@@ -45,6 +45,7 @@ public class QFairFederatedLearning<T> : Infrastructure.FederatedLearningCompone
     /// <returns>Fairness-adjusted weights proportional to L^q.</returns>
     public Dictionary<int, double> ComputeWeights(Dictionary<int, double> clientLosses)
     {
+        Guard.NotNull(clientLosses);
         if (clientLosses.Count == 0)
         {
             throw new ArgumentException("Client losses cannot be empty.", nameof(clientLosses));
@@ -55,6 +56,11 @@ public class QFairFederatedLearning<T> : Infrastructure.FederatedLearningCompone
 
         foreach (var (clientId, loss) in clientLosses)
         {
+            if (loss < 0 || double.IsNaN(loss) || double.IsInfinity(loss))
+            {
+                throw new ArgumentException($"Client {clientId} has invalid loss: {loss}. Must be non-negative and finite.");
+            }
+
             double w = Math.Pow(Math.Max(loss, 1e-10), _q);
             weights[clientId] = w;
             total += w;
@@ -78,6 +84,12 @@ public class QFairFederatedLearning<T> : Infrastructure.FederatedLearningCompone
     /// <returns>q-fair objective value.</returns>
     public double ComputeObjective(Dictionary<int, double> clientLosses)
     {
+        Guard.NotNull(clientLosses);
+        if (clientLosses.Count == 0)
+        {
+            throw new ArgumentException("Client losses cannot be empty.", nameof(clientLosses));
+        }
+
         double sum = 0;
         foreach (var loss in clientLosses.Values)
         {

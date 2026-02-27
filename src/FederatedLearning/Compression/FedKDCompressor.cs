@@ -58,6 +58,8 @@ public class FedKDCompressor<T> : Infrastructure.FederatedLearningComponentBase<
         Dictionary<int, T[][]> clientLogits,
         Dictionary<int, double> clientWeights)
     {
+        Guard.NotNull(clientLogits);
+        Guard.NotNull(clientWeights);
         if (clientLogits.Count == 0)
         {
             throw new ArgumentException("No client logits provided.", nameof(clientLogits));
@@ -102,6 +104,14 @@ public class FedKDCompressor<T> : Infrastructure.FederatedLearningComponentBase<
     /// <returns>KL divergence loss scaled by T².</returns>
     public T ComputeKDLoss(T[] studentLogits, T[] teacherLogits)
     {
+        Guard.NotNull(studentLogits);
+        Guard.NotNull(teacherLogits);
+        if (studentLogits.Length != teacherLogits.Length)
+        {
+            throw new ArgumentException(
+                $"Logit arrays must have equal length. Got student={studentLogits.Length}, teacher={teacherLogits.Length}.");
+        }
+
         int n = studentLogits.Length;
         var studentSoft = Softmax(studentLogits, _temperature);
         var teacherSoft = Softmax(teacherLogits, _temperature);

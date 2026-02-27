@@ -175,6 +175,12 @@ public class FetchSGDCompressor<T> : Infrastructure.FederatedLearningComponentBa
     /// </summary>
     public double[,] MergeSketches(IReadOnlyList<double[,]> sketches)
     {
+        Guard.NotNull(sketches);
+        if (sketches.Count == 0)
+        {
+            return new double[_sketchRows, _sketchCols];
+        }
+
         var merged = new double[_sketchRows, _sketchCols];
         foreach (var sketch in sketches)
         {

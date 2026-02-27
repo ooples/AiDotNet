@@ -31,6 +31,11 @@ public class TiltedERMFairness<T> : Infrastructure.FederatedLearningComponentBas
     /// <param name="tilt">Tilt parameter. Positive = fairness, negative = robustness. Default: 1.0.</param>
     public TiltedERMFairness(double tilt = 1.0)
     {
+        if (double.IsNaN(tilt) || double.IsInfinity(tilt))
+        {
+            throw new ArgumentOutOfRangeException(nameof(tilt), "Tilt must be a finite value.");
+        }
+
         _tilt = tilt;
     }
 
@@ -41,6 +46,7 @@ public class TiltedERMFairness<T> : Infrastructure.FederatedLearningComponentBas
     /// <returns>TERM-adjusted weights.</returns>
     public Dictionary<int, double> ComputeWeights(Dictionary<int, double> clientLosses)
     {
+        Guard.NotNull(clientLosses);
         if (clientLosses.Count == 0)
         {
             throw new ArgumentException("Client losses cannot be empty.", nameof(clientLosses));
@@ -82,6 +88,12 @@ public class TiltedERMFairness<T> : Infrastructure.FederatedLearningComponentBas
     /// <returns>TERM objective value.</returns>
     public double ComputeObjective(Dictionary<int, double> clientLosses)
     {
+        Guard.NotNull(clientLosses);
+        if (clientLosses.Count == 0)
+        {
+            throw new ArgumentException("Client losses cannot be empty.", nameof(clientLosses));
+        }
+
         if (Math.Abs(_tilt) < 1e-10)
         {
             return clientLosses.Values.Average();

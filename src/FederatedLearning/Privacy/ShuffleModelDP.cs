@@ -65,6 +65,17 @@ public class ShuffleModelDP<T> : PrivacyMechanismBase<Dictionary<string, T[]>, T
     public override Dictionary<string, T[]> ApplyPrivacy(
         Dictionary<string, T[]> model, double epsilon, double delta)
     {
+        Guard.NotNull(model);
+        if (epsilon <= 0 || double.IsNaN(epsilon) || double.IsInfinity(epsilon))
+        {
+            throw new ArgumentOutOfRangeException(nameof(epsilon), "Epsilon must be a positive finite value.");
+        }
+
+        if (delta < 0 || delta >= 1 || double.IsNaN(delta))
+        {
+            throw new ArgumentOutOfRangeException(nameof(delta), "Delta must be in [0, 1).");
+        }
+
         var rng = new Random(_seed + _roundCounter++);
         double effectiveEpsilon = Math.Min(epsilon, _localEpsilon);
 
@@ -160,6 +171,17 @@ public class ShuffleModelDP<T> : PrivacyMechanismBase<Dictionary<string, T[]>, T
         Dictionary<int, Dictionary<string, T[]>> clientUpdates,
         double delta = 1e-5)
     {
+        Guard.NotNull(clientUpdates);
+        if (clientUpdates.Count == 0)
+        {
+            throw new ArgumentException("Client updates cannot be empty.", nameof(clientUpdates));
+        }
+
+        if (delta < 0 || delta >= 1 || double.IsNaN(delta))
+        {
+            throw new ArgumentOutOfRangeException(nameof(delta), "Delta must be in [0, 1).");
+        }
+
         // Step 1: Apply local DP noise to each client's update independently.
         var noisedUpdates = new Dictionary<int, Dictionary<string, T[]>>(clientUpdates.Count);
         foreach (var (clientId, update) in clientUpdates)
@@ -204,8 +226,12 @@ public class ShuffleModelDP<T> : PrivacyMechanismBase<Dictionary<string, T[]>, T
 
             foreach (var update in shuffledUpdates)
             {
-                var layerData = update[layerName];
-                for (int i = 0; i < layerLen; i++)
+                if (!update.TryGetValue(layerName, out var layerData))
+                {
+                    continue;
+                }
+
+                for (int i = 0; i < Math.Min(layerLen, layerData.Length); i++)
                 {
                     aggregated[i] = NumOps.Add(aggregated[i], NumOps.Multiply(layerData[i], weight));
                 }
@@ -235,6 +261,16 @@ public class ShuffleModelDP<T> : PrivacyMechanismBase<Dictionary<string, T[]>, T
     /// <returns>Effective central epsilon after shuffling.</returns>
     public double ComputeEffectiveEpsilon(int numClients, double delta)
     {
+        if (numClients < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(numClients), "Must have at least 1 client.");
+        }
+
+        if (delta < 0 || delta >= 1 || double.IsNaN(delta))
+        {
+            throw new ArgumentOutOfRangeException(nameof(delta), "Delta must be in [0, 1).");
+        }
+
         if (numClients <= 1)
         {
             return _localEpsilon;
@@ -263,6 +299,16 @@ public class ShuffleModelDP<T> : PrivacyMechanismBase<Dictionary<string, T[]>, T
     /// <returns>Minimum number of clients required.</returns>
     public int ComputeMinClientsNeeded(double targetEpsilon, double delta)
     {
+        if (targetEpsilon <= 0 || double.IsNaN(targetEpsilon) || double.IsInfinity(targetEpsilon))
+        {
+            throw new ArgumentOutOfRangeException(nameof(targetEpsilon), "Target epsilon must be positive and finite.");
+        }
+
+        if (delta <= 0 || delta >= 1 || double.IsNaN(delta))
+        {
+            throw new ArgumentOutOfRangeException(nameof(delta), "Delta must be in (0, 1).");
+        }
+
         if (targetEpsilon >= _localEpsilon)
         {
             return 1;
