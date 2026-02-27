@@ -20,9 +20,28 @@ namespace AiDotNet.Diffusion.MaskUtilities;
 /// use opposite conventions for what "masked" means.
 /// </para>
 /// </remarks>
-public class MaskInverter<T>
+public class MaskInverter<T> : IDataTransformer<T, Tensor<T>, Tensor<T>>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
+    /// <inheritdoc />
+    public bool IsFitted => true;
+    /// <inheritdoc />
+    public int[]? ColumnIndices => null;
+    /// <inheritdoc />
+    public bool SupportsInverseTransform => true;
+
+    /// <inheritdoc />
+    public void Fit(Tensor<T> data) { }
+    /// <inheritdoc />
+    public Tensor<T> Transform(Tensor<T> data) => Apply(data);
+    /// <inheritdoc />
+    public Tensor<T> FitTransform(Tensor<T> data) => Apply(data);
+    /// <inheritdoc />
+    public Tensor<T> InverseTransform(Tensor<T> data) => Apply(data);
+    /// <inheritdoc />
+    public string[] GetFeatureNamesOut(string[]? inputFeatureNames = null) =>
+        new[] { "inverted_mask" };
 
     /// <summary>
     /// Inverts a mask tensor by computing (1 - value) for each pixel.

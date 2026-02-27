@@ -20,22 +20,80 @@ namespace AiDotNet.Diffusion.MaskUtilities;
 /// and which parts need to be generated (extend). The feathering option makes the
 /// transition smoother.
 /// </para>
+/// <para>
+/// When used as an <see cref="IDataTransformer{T, TInput, TOutput}"/>, the Transform method
+/// takes the original image tensor and generates an outpainting mask based on the padding
+/// configured in the constructor.
+/// </para>
 /// </remarks>
-public class OutpaintingMaskGenerator<T>
+public class OutpaintingMaskGenerator<T> : IDataTransformer<T, Tensor<T>, Tensor<T>>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     private readonly int _featherRadius;
+    private readonly int _padTop;
+    private readonly int _padRight;
+    private readonly int _padBottom;
+    private readonly int _padLeft;
+
+    /// <inheritdoc />
+    public bool IsFitted => true;
+    /// <inheritdoc />
+    public int[]? ColumnIndices => null;
+    /// <inheritdoc />
+    public bool SupportsInverseTransform => false;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="OutpaintingMaskGenerator{T}"/> class.
     /// </summary>
     /// <param name="featherRadius">Feathering radius at the boundary. 0 for hard edges.</param>
-    public OutpaintingMaskGenerator(int featherRadius = 8)
+    /// <param name="padTop">Pixels to extend above the image. Default: 0.</param>
+    /// <param name="padRight">Pixels to extend to the right. Default: 0.</param>
+    /// <param name="padBottom">Pixels to extend below the image. Default: 0.</param>
+    /// <param name="padLeft">Pixels to extend to the left. Default: 0.</param>
+    public OutpaintingMaskGenerator(int featherRadius = 8,
+        int padTop = 0, int padRight = 0, int padBottom = 0, int padLeft = 0)
     {
         Guard.NonNegative(featherRadius);
+        Guard.NonNegative(padTop);
+        Guard.NonNegative(padRight);
+        Guard.NonNegative(padBottom);
+        Guard.NonNegative(padLeft);
         _featherRadius = featherRadius;
+        _padTop = padTop;
+        _padRight = padRight;
+        _padBottom = padBottom;
+        _padLeft = padLeft;
     }
+
+    /// <inheritdoc />
+    public void Fit(Tensor<T> data) { }
+
+    /// <summary>
+    /// Generates an outpainting mask from the input image tensor's dimensions.
+    /// The mask covers the extended canvas, with 0 for the original image region
+    /// and 1 for the padded regions that need generation.
+    /// </summary>
+    /// <inheritdoc />
+    public Tensor<T> Transform(Tensor<T> data)
+    {
+        var shape = data.Shape;
+        int imageHeight = shape[0];
+        int imageWidth = shape.Length > 1 ? shape[1] : 1;
+        return Generate(
+            imageHeight + _padTop + _padBottom,
+            imageWidth + _padLeft + _padRight,
+            _padTop, _padLeft, imageHeight, imageWidth);
+    }
+
+    /// <inheritdoc />
+    public Tensor<T> FitTransform(Tensor<T> data) => Transform(data);
+    /// <inheritdoc />
+    public Tensor<T> InverseTransform(Tensor<T> data) =>
+        throw new NotSupportedException("Outpainting mask generation is not reversible.");
+    /// <inheritdoc />
+    public string[] GetFeatureNamesOut(string[]? inputFeatureNames = null) =>
+        new[] { "outpainting_mask" };
 
     /// <summary>
     /// Generates an outpainting mask for the given canvas and image bounds.

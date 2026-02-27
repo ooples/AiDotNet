@@ -20,11 +20,18 @@ namespace AiDotNet.Diffusion.MaskUtilities;
 /// could select "sky" to create a mask that covers only the sky region for replacement.
 /// </para>
 /// </remarks>
-public class MaskFromSegmentation<T>
+public class MaskFromSegmentation<T> : IDataTransformer<T, Tensor<T>, Tensor<T>>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     private readonly HashSet<int> _selectedLabels;
+
+    /// <inheritdoc />
+    public bool IsFitted => true;
+    /// <inheritdoc />
+    public int[]? ColumnIndices => null;
+    /// <inheritdoc />
+    public bool SupportsInverseTransform => false;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MaskFromSegmentation{T}"/> class.
@@ -34,6 +41,19 @@ public class MaskFromSegmentation<T>
     {
         _selectedLabels = new HashSet<int>(selectedLabels);
     }
+
+    /// <inheritdoc />
+    public void Fit(Tensor<T> data) { }
+    /// <inheritdoc />
+    public Tensor<T> Transform(Tensor<T> data) => Apply(data);
+    /// <inheritdoc />
+    public Tensor<T> FitTransform(Tensor<T> data) => Apply(data);
+    /// <inheritdoc />
+    public Tensor<T> InverseTransform(Tensor<T> data) =>
+        throw new NotSupportedException("Segmentation to mask conversion is not reversible.");
+    /// <inheritdoc />
+    public string[] GetFeatureNamesOut(string[]? inputFeatureNames = null) =>
+        new[] { "segmentation_mask" };
 
     /// <summary>
     /// Generates a binary mask from a segmentation map.

@@ -20,11 +20,18 @@ namespace AiDotNet.Diffusion.MaskUtilities;
 /// so the transition is gradual, producing more natural-looking inpainting results.
 /// </para>
 /// </remarks>
-public class MaskFeatherer<T>
+public class MaskFeatherer<T> : IDataTransformer<T, Tensor<T>, Tensor<T>>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     private readonly int _radius;
+
+    /// <inheritdoc />
+    public bool IsFitted => true;
+    /// <inheritdoc />
+    public int[]? ColumnIndices => null;
+    /// <inheritdoc />
+    public bool SupportsInverseTransform => false;
 
     /// <summary>
     /// Gets the feathering radius in pixels.
@@ -40,6 +47,19 @@ public class MaskFeatherer<T>
         Guard.Positive(radius);
         _radius = radius;
     }
+
+    /// <inheritdoc />
+    public void Fit(Tensor<T> data) { }
+    /// <inheritdoc />
+    public Tensor<T> Transform(Tensor<T> data) => Apply(data);
+    /// <inheritdoc />
+    public Tensor<T> FitTransform(Tensor<T> data) => Apply(data);
+    /// <inheritdoc />
+    public Tensor<T> InverseTransform(Tensor<T> data) =>
+        throw new NotSupportedException("Mask feathering is not reversible.");
+    /// <inheritdoc />
+    public string[] GetFeatureNamesOut(string[]? inputFeatureNames = null) =>
+        new[] { "feathered_mask" };
 
     /// <summary>
     /// Applies feathering to a single-channel mask tensor.

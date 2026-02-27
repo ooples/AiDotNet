@@ -16,34 +16,6 @@ internal static partial class YamlConfigApplier<T, TInput, TOutput>
     {
         // TODO: ConfigureCausalDiscovery uses Action<> builder pattern — requires pipeline step factories.
 
-        if (config.ObjectDetector is not null && !string.IsNullOrWhiteSpace(config.ObjectDetector.Type))
-        {
-            var instance = YamlTypeRegistry<T, TInput, TOutput>.CreateInstance<global::AiDotNet.ComputerVision.Detection.ObjectDetection.ObjectDetectorBase<T>>(
-                "ObjectDetector", config.ObjectDetector.Type, config.ObjectDetector.Params);
-            builder.ConfigureObjectDetector(instance);
-        }
-
-        if (config.InstanceSegmenter is not null && !string.IsNullOrWhiteSpace(config.InstanceSegmenter.Type))
-        {
-            var instance = YamlTypeRegistry<T, TInput, TOutput>.CreateInstance<global::AiDotNet.ComputerVision.Segmentation.InstanceSegmentation.InstanceSegmenterBase<T>>(
-                "InstanceSegmenter", config.InstanceSegmenter.Type, config.InstanceSegmenter.Params);
-            builder.ConfigureInstanceSegmenter(instance);
-        }
-
-        // TODO: ConfigureSceneTextReader requires constructor parameters — manual YAML wiring needed.
-
-        if (config.ObjectTracker is not null && !string.IsNullOrWhiteSpace(config.ObjectTracker.Type))
-        {
-            var instance = YamlTypeRegistry<T, TInput, TOutput>.CreateInstance<global::AiDotNet.ComputerVision.Tracking.ObjectTrackerBase<T>>(
-                "ObjectTracker", config.ObjectTracker.Type, config.ObjectTracker.Params);
-            builder.ConfigureObjectTracker(instance);
-        }
-
-        if (config.Visualization is not null)
-        {
-            builder.ConfigureVisualization(config.Visualization);
-        }
-
         if (config.LossFunction is not null && !string.IsNullOrWhiteSpace(config.LossFunction.Type))
         {
             var instance = YamlTypeRegistry<T, TInput, TOutput>.CreateInstance<global::AiDotNet.Interfaces.ILossFunction<T>>(
@@ -556,13 +528,6 @@ internal static partial class YamlConfigApplier<T, TInput, TOutput>
 
         // TODO: ConfigureSelfSupervisedLearning uses Action<> builder pattern — requires pipeline step factories.
 
-        if (config.Tokenizer is not null && !string.IsNullOrWhiteSpace(config.Tokenizer.Type))
-        {
-            var instance = YamlTypeRegistry<T, TInput, TOutput>.CreateInstance<global::AiDotNet.Tokenization.Interfaces.ITokenizer>(
-                "Tokenizer", config.Tokenizer.Type, config.Tokenizer.Params);
-            builder.ConfigureTokenizer(instance);
-        }
-
         if (config.ProgramSynthesis is not null)
         {
             builder.ConfigureProgramSynthesis(config.ProgramSynthesis);
@@ -571,50 +536,6 @@ internal static partial class YamlConfigApplier<T, TInput, TOutput>
         if (config.ProgramSynthesisServing is not null)
         {
             builder.ConfigureProgramSynthesisServing(config.ProgramSynthesisServing);
-        }
-
-        // TODO: ConfigureTokenizerFromPretrained — unsupported parameter category.
-
-        if (config.PromptTemplate is not null && !string.IsNullOrWhiteSpace(config.PromptTemplate.Type))
-        {
-            var instance = YamlTypeRegistry<T, TInput, TOutput>.CreateInstance<global::AiDotNet.Interfaces.IPromptTemplate>(
-                "PromptTemplate", config.PromptTemplate.Type, config.PromptTemplate.Params);
-            builder.ConfigurePromptTemplate(instance);
-        }
-
-        if (config.PromptChain is not null && !string.IsNullOrWhiteSpace(config.PromptChain.Type))
-        {
-            var instance = YamlTypeRegistry<T, TInput, TOutput>.CreateInstance<global::AiDotNet.Interfaces.IChain<string, string>>(
-                "PromptChain", config.PromptChain.Type, config.PromptChain.Params);
-            builder.ConfigurePromptChain(instance);
-        }
-
-        if (config.PromptOptimizer is not null && !string.IsNullOrWhiteSpace(config.PromptOptimizer.Type))
-        {
-            var instance = YamlTypeRegistry<T, TInput, TOutput>.CreateInstance<global::AiDotNet.Interfaces.IPromptOptimizer<T>>(
-                "PromptOptimizer", config.PromptOptimizer.Type, config.PromptOptimizer.Params);
-            builder.ConfigurePromptOptimizer(instance);
-        }
-
-        if (config.FewShotExampleSelector is not null && !string.IsNullOrWhiteSpace(config.FewShotExampleSelector.Type))
-        {
-            var instance = YamlTypeRegistry<T, TInput, TOutput>.CreateInstance<global::AiDotNet.Interfaces.IFewShotExampleSelector<T>>(
-                "FewShotExampleSelector", config.FewShotExampleSelector.Type, config.FewShotExampleSelector.Params);
-            builder.ConfigureFewShotExampleSelector(instance);
-        }
-
-        if (config.PromptAnalyzer is not null && !string.IsNullOrWhiteSpace(config.PromptAnalyzer.Type))
-        {
-            var instance = YamlTypeRegistry<T, TInput, TOutput>.CreateInstance<global::AiDotNet.Interfaces.IPromptAnalyzer>(
-                "PromptAnalyzer", config.PromptAnalyzer.Type, config.PromptAnalyzer.Params);
-            builder.ConfigurePromptAnalyzer(instance);
-        }
-
-        if (config.PromptCompressor is not null && !string.IsNullOrWhiteSpace(config.PromptCompressor.Type))
-        {
-            var instance = YamlTypeRegistry<T, TInput, TOutput>.CreateInstance<global::AiDotNet.Interfaces.IPromptCompressor>(
-                "PromptCompressor", config.PromptCompressor.Type, config.PromptCompressor.Params);
-            builder.ConfigurePromptCompressor(instance);
         }
 
         if (config.AudioEffect is not null && !string.IsNullOrWhiteSpace(config.AudioEffect.Type))
@@ -755,11 +676,6 @@ internal static partial class YamlConfigApplier<T, TInput, TOutput>
             var instance = YamlTypeRegistry<T, TInput, TOutput>.CreateInstance<global::AiDotNet.Interfaces.IAgent<T>>(
                 "RLAgent", config.RLAgent.Type, config.RLAgent.Params);
             builder.ConfigureRLAgent(instance);
-        }
-
-        if (config.TimeSeriesFeatures is not null)
-        {
-            builder.ConfigureTimeSeriesFeatures(config.TimeSeriesFeatures);
         }
 
         if (config.UncertaintyQuantification is not null)

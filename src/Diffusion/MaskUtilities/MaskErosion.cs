@@ -20,11 +20,18 @@ namespace AiDotNet.Diffusion.MaskUtilities;
 /// "peeling" a layer off the edge of the masked region.
 /// </para>
 /// </remarks>
-public class MaskErosion<T>
+public class MaskErosion<T> : IDataTransformer<T, Tensor<T>, Tensor<T>>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     private readonly int _kernelSize;
+
+    /// <inheritdoc />
+    public bool IsFitted => true;
+    /// <inheritdoc />
+    public int[]? ColumnIndices => null;
+    /// <inheritdoc />
+    public bool SupportsInverseTransform => false;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MaskErosion{T}"/> class.
@@ -35,6 +42,19 @@ public class MaskErosion<T>
         Guard.Positive(kernelSize);
         _kernelSize = kernelSize | 1; // Ensure odd
     }
+
+    /// <inheritdoc />
+    public void Fit(Tensor<T> data) { }
+    /// <inheritdoc />
+    public Tensor<T> Transform(Tensor<T> data) => Apply(data);
+    /// <inheritdoc />
+    public Tensor<T> FitTransform(Tensor<T> data) => Apply(data);
+    /// <inheritdoc />
+    public Tensor<T> InverseTransform(Tensor<T> data) =>
+        throw new NotSupportedException("Mask erosion is not reversible.");
+    /// <inheritdoc />
+    public string[] GetFeatureNamesOut(string[]? inputFeatureNames = null) =>
+        new[] { "eroded_mask" };
 
     /// <summary>
     /// Applies morphological erosion to a mask tensor.

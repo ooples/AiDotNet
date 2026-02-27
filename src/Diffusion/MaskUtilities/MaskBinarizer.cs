@@ -20,11 +20,18 @@ namespace AiDotNet.Diffusion.MaskUtilities;
 /// below to 0 (unmasked), creating a clean on/off mask.
 /// </para>
 /// </remarks>
-public class MaskBinarizer<T>
+public class MaskBinarizer<T> : IDataTransformer<T, Tensor<T>, Tensor<T>>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     private readonly T _threshold;
+
+    /// <inheritdoc />
+    public bool IsFitted => true;
+    /// <inheritdoc />
+    public int[]? ColumnIndices => null;
+    /// <inheritdoc />
+    public bool SupportsInverseTransform => false;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MaskBinarizer{T}"/> class.
@@ -34,6 +41,19 @@ public class MaskBinarizer<T>
     {
         _threshold = NumOps.FromDouble(threshold);
     }
+
+    /// <inheritdoc />
+    public void Fit(Tensor<T> data) { }
+    /// <inheritdoc />
+    public Tensor<T> Transform(Tensor<T> data) => Apply(data);
+    /// <inheritdoc />
+    public Tensor<T> FitTransform(Tensor<T> data) => Apply(data);
+    /// <inheritdoc />
+    public Tensor<T> InverseTransform(Tensor<T> data) =>
+        throw new NotSupportedException("Mask binarization is not reversible.");
+    /// <inheritdoc />
+    public string[] GetFeatureNamesOut(string[]? inputFeatureNames = null) =>
+        new[] { "binary_mask" };
 
     /// <summary>
     /// Binarizes a mask tensor.

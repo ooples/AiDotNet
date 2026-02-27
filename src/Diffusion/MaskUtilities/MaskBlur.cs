@@ -20,12 +20,19 @@ namespace AiDotNet.Diffusion.MaskUtilities;
 /// Use this when you want an overall softer mask with gradual transitions everywhere.
 /// </para>
 /// </remarks>
-public class MaskBlur<T>
+public class MaskBlur<T> : IDataTransformer<T, Tensor<T>, Tensor<T>>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     private readonly double _sigma;
     private readonly int _kernelSize;
+
+    /// <inheritdoc />
+    public bool IsFitted => true;
+    /// <inheritdoc />
+    public int[]? ColumnIndices => null;
+    /// <inheritdoc />
+    public bool SupportsInverseTransform => false;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MaskBlur{T}"/> class.
@@ -37,6 +44,19 @@ public class MaskBlur<T>
         _sigma = sigma;
         _kernelSize = (int)Math.Ceiling(sigma * 3) * 2 + 1;
     }
+
+    /// <inheritdoc />
+    public void Fit(Tensor<T> data) { }
+    /// <inheritdoc />
+    public Tensor<T> Transform(Tensor<T> data) => Apply(data);
+    /// <inheritdoc />
+    public Tensor<T> FitTransform(Tensor<T> data) => Apply(data);
+    /// <inheritdoc />
+    public Tensor<T> InverseTransform(Tensor<T> data) =>
+        throw new NotSupportedException("Mask blur is not reversible.");
+    /// <inheritdoc />
+    public string[] GetFeatureNamesOut(string[]? inputFeatureNames = null) =>
+        new[] { "blurred_mask" };
 
     /// <summary>
     /// Applies Gaussian blur to a mask tensor.

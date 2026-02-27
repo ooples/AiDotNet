@@ -15,36 +15,6 @@ namespace AiDotNet.Configuration;
 /// </summary>
 internal static class YamlTypeRegistry<T, TInput, TOutput>
 {
-    /// <summary>Registered implementations for ObjectDetector.</summary>
-    private static readonly Dictionary<string, Type> _objectDetectorTypes = new Dictionary<string, Type>(StringComparer.OrdinalIgnoreCase)
-    {
-        { "DETR", typeof(AiDotNet.ComputerVision.Detection.ObjectDetection.DETR.DETR<T>) },
-        { "DINO", typeof(AiDotNet.ComputerVision.Detection.ObjectDetection.DETR.DINO<T>) },
-        { "RTDETR", typeof(AiDotNet.ComputerVision.Detection.ObjectDetection.DETR.RTDETR<T>) },
-        { "CascadeRCNN", typeof(AiDotNet.ComputerVision.Detection.ObjectDetection.RCNN.CascadeRCNN<T>) },
-        { "FasterRCNN", typeof(AiDotNet.ComputerVision.Detection.ObjectDetection.RCNN.FasterRCNN<T>) },
-        { "YOLOv10", typeof(AiDotNet.ComputerVision.Detection.ObjectDetection.YOLO.YOLOv10<T>) },
-        { "YOLOv11", typeof(AiDotNet.ComputerVision.Detection.ObjectDetection.YOLO.YOLOv11<T>) },
-        { "YOLOv8", typeof(AiDotNet.ComputerVision.Detection.ObjectDetection.YOLO.YOLOv8<T>) },
-        { "YOLOv9", typeof(AiDotNet.ComputerVision.Detection.ObjectDetection.YOLO.YOLOv9<T>) },
-    };
-
-    /// <summary>Registered implementations for InstanceSegmenter.</summary>
-    private static readonly Dictionary<string, Type> _instanceSegmenterTypes = new Dictionary<string, Type>(StringComparer.OrdinalIgnoreCase)
-    {
-        { "MaskRCNN", typeof(AiDotNet.ComputerVision.Segmentation.InstanceSegmentation.MaskRCNN<T>) },
-        { "SOLOv2", typeof(AiDotNet.ComputerVision.Segmentation.InstanceSegmentation.SOLOv2<T>) },
-        { "YOLOSeg", typeof(AiDotNet.ComputerVision.Segmentation.InstanceSegmentation.YOLOSeg<T>) },
-    };
-
-    /// <summary>Registered implementations for ObjectTracker.</summary>
-    private static readonly Dictionary<string, Type> _objectTrackerTypes = new Dictionary<string, Type>(StringComparer.OrdinalIgnoreCase)
-    {
-        { "ByteTrack", typeof(AiDotNet.ComputerVision.Tracking.ByteTrack<T>) },
-        { "DeepSORT", typeof(AiDotNet.ComputerVision.Tracking.DeepSORT<T>) },
-        { "SORT", typeof(AiDotNet.ComputerVision.Tracking.SORT<T>) },
-    };
-
     /// <summary>Registered implementations for LossFunction.</summary>
     private static readonly Dictionary<string, Type> _lossFunctionTypes = new Dictionary<string, Type>(StringComparer.OrdinalIgnoreCase)
     {
@@ -2048,6 +2018,14 @@ internal static class YamlTypeRegistry<T, TInput, TOutput>
     private static readonly Dictionary<string, Type> _dataTransformerTypes = new Dictionary<string, Type>(StringComparer.OrdinalIgnoreCase)
     {
         { "CausalDiscoverySelector", typeof(AiDotNet.CausalDiscovery.CausalDiscoverySelector<T>) },
+        { "MaskBinarizer", typeof(AiDotNet.Diffusion.MaskUtilities.MaskBinarizer<T>) },
+        { "MaskBlur", typeof(AiDotNet.Diffusion.MaskUtilities.MaskBlur<T>) },
+        { "MaskDilation", typeof(AiDotNet.Diffusion.MaskUtilities.MaskDilation<T>) },
+        { "MaskErosion", typeof(AiDotNet.Diffusion.MaskUtilities.MaskErosion<T>) },
+        { "MaskFeatherer", typeof(AiDotNet.Diffusion.MaskUtilities.MaskFeatherer<T>) },
+        { "MaskFromSegmentation", typeof(AiDotNet.Diffusion.MaskUtilities.MaskFromSegmentation<T>) },
+        { "MaskInverter", typeof(AiDotNet.Diffusion.MaskUtilities.MaskInverter<T>) },
+        { "OutpaintingMaskGenerator", typeof(AiDotNet.Diffusion.MaskUtilities.OutpaintingMaskGenerator<T>) },
         { "CannyEdgePreprocessor", typeof(AiDotNet.Diffusion.Preprocessing.CannyEdgePreprocessor<T>) },
         { "ColorPalettePreprocessor", typeof(AiDotNet.Diffusion.Preprocessing.ColorPalettePreprocessor<T>) },
         { "ContentShufflePreprocessor", typeof(AiDotNet.Diffusion.Preprocessing.ContentShufflePreprocessor<T>) },
@@ -4743,85 +4721,6 @@ internal static class YamlTypeRegistry<T, TInput, TOutput>
         { "HyperbandOptimizer", typeof(AiDotNet.HyperparameterOptimization.HyperbandOptimizer<T, TInput, TOutput>) },
         { "PopulationBasedTrainingOptimizer", typeof(AiDotNet.HyperparameterOptimization.PopulationBasedTrainingOptimizer<T, TInput, TOutput>) },
         { "RandomSearchOptimizer", typeof(AiDotNet.HyperparameterOptimization.RandomSearchOptimizer<T, TInput, TOutput>) },
-    };
-
-    /// <summary>Registered implementations for Tokenizer.</summary>
-    private static readonly Dictionary<string, Type> _tokenizerTypes = new Dictionary<string, Type>(StringComparer.OrdinalIgnoreCase)
-    {
-        { "BpeTokenizer", typeof(AiDotNet.Tokenization.Algorithms.BpeTokenizer) },
-        { "CharacterTokenizer", typeof(AiDotNet.Tokenization.Algorithms.CharacterTokenizer) },
-        { "SentencePieceTokenizer", typeof(AiDotNet.Tokenization.Algorithms.SentencePieceTokenizer) },
-        { "UnigramTokenizer", typeof(AiDotNet.Tokenization.Algorithms.UnigramTokenizer) },
-        { "WordPieceTokenizer", typeof(AiDotNet.Tokenization.Algorithms.WordPieceTokenizer) },
-        { "CodeTokenizer", typeof(AiDotNet.Tokenization.CodeTokenization.CodeTokenizer) },
-        { "TreeSitterTokenizer", typeof(AiDotNet.Tokenization.CodeTokenization.TreeSitterTokenizer) },
-        { "MidiTokenizer", typeof(AiDotNet.Tokenization.Specialized.MidiTokenizer) },
-        { "PhonemeTokenizer", typeof(AiDotNet.Tokenization.Specialized.PhonemeTokenizer) },
-    };
-
-    /// <summary>Registered implementations for PromptTemplate.</summary>
-    private static readonly Dictionary<string, Type> _promptTemplateTypes = new Dictionary<string, Type>(StringComparer.OrdinalIgnoreCase)
-    {
-        { "ChainOfThoughtTemplate", typeof(AiDotNet.PromptEngineering.Templates.ChainOfThoughtTemplate) },
-        { "ChatPromptTemplate", typeof(AiDotNet.PromptEngineering.Templates.ChatPromptTemplate) },
-        { "CompositePromptTemplate", typeof(AiDotNet.PromptEngineering.Templates.CompositePromptTemplate) },
-        { "ConditionalPromptTemplate", typeof(AiDotNet.PromptEngineering.Templates.ConditionalPromptTemplate) },
-        { "FewShotPromptTemplate", typeof(AiDotNet.PromptEngineering.Templates.FewShotPromptTemplate<T>) },
-        { "InstructionFollowingTemplate", typeof(AiDotNet.PromptEngineering.Templates.InstructionFollowingTemplate) },
-        { "RolePlayingTemplate", typeof(AiDotNet.PromptEngineering.Templates.RolePlayingTemplate) },
-        { "SimplePromptTemplate", typeof(AiDotNet.PromptEngineering.Templates.SimplePromptTemplate) },
-        { "StructuredOutputTemplate", typeof(AiDotNet.PromptEngineering.Templates.StructuredOutputTemplate) },
-    };
-
-    /// <summary>Registered implementations for PromptChain.</summary>
-    private static readonly Dictionary<string, Type> _promptChainTypes = new Dictionary<string, Type>(StringComparer.OrdinalIgnoreCase)
-    {
-        { "ConditionalChain", typeof(AiDotNet.PromptEngineering.Chains.ConditionalChain<TInput, TOutput>) },
-        { "LoopChain", typeof(AiDotNet.PromptEngineering.Chains.LoopChain<TInput, TOutput>) },
-        { "ParallelChain", typeof(AiDotNet.PromptEngineering.Chains.ParallelChain<TInput, TOutput>) },
-        { "RouterChain", typeof(AiDotNet.PromptEngineering.Chains.RouterChain<TInput, TOutput>) },
-        { "SequentialChain", typeof(AiDotNet.PromptEngineering.Chains.SequentialChain<TInput, TOutput>) },
-    };
-
-    /// <summary>Registered implementations for PromptOptimizer.</summary>
-    private static readonly Dictionary<string, Type> _promptOptimizerTypes = new Dictionary<string, Type>(StringComparer.OrdinalIgnoreCase)
-    {
-        { "BeamSearchOptimizer", typeof(AiDotNet.PromptEngineering.Optimization.BeamSearchOptimizer<T>) },
-        { "DiscreteSearchOptimizer", typeof(AiDotNet.PromptEngineering.Optimization.DiscreteSearchOptimizer<T>) },
-        { "EnsembleOptimizer", typeof(AiDotNet.PromptEngineering.Optimization.EnsembleOptimizer<T>) },
-        { "GeneticOptimizer", typeof(AiDotNet.PromptEngineering.Optimization.GeneticOptimizer<T>) },
-        { "GreedyHillClimbingOptimizer", typeof(AiDotNet.PromptEngineering.Optimization.GreedyHillClimbingOptimizer<T>) },
-        { "SimulatedAnnealingOptimizer", typeof(AiDotNet.PromptEngineering.Optimization.SimulatedAnnealingOptimizer<T>) },
-    };
-
-    /// <summary>Registered implementations for FewShotExampleSelector.</summary>
-    private static readonly Dictionary<string, Type> _fewShotExampleSelectorTypes = new Dictionary<string, Type>(StringComparer.OrdinalIgnoreCase)
-    {
-        { "ClusterBasedExampleSelector", typeof(AiDotNet.PromptEngineering.FewShot.ClusterBasedExampleSelector<T>) },
-        { "DiversityExampleSelector", typeof(AiDotNet.PromptEngineering.FewShot.DiversityExampleSelector<T>) },
-        { "FixedExampleSelector", typeof(AiDotNet.PromptEngineering.FewShot.FixedExampleSelector<T>) },
-        { "MMRExampleSelector", typeof(AiDotNet.PromptEngineering.FewShot.MMRExampleSelector<T>) },
-        { "RandomExampleSelector", typeof(AiDotNet.PromptEngineering.FewShot.RandomExampleSelector<T>) },
-        { "SemanticSimilarityExampleSelector", typeof(AiDotNet.PromptEngineering.FewShot.SemanticSimilarityExampleSelector<T>) },
-    };
-
-    /// <summary>Registered implementations for PromptAnalyzer.</summary>
-    private static readonly Dictionary<string, Type> _promptAnalyzerTypes = new Dictionary<string, Type>(StringComparer.OrdinalIgnoreCase)
-    {
-        { "ComplexityAnalyzer", typeof(AiDotNet.PromptEngineering.Analysis.ComplexityAnalyzer) },
-        { "PatternDetectionAnalyzer", typeof(AiDotNet.PromptEngineering.Analysis.PatternDetectionAnalyzer) },
-        { "TokenCountAnalyzer", typeof(AiDotNet.PromptEngineering.Analysis.TokenCountAnalyzer) },
-    };
-
-    /// <summary>Registered implementations for PromptCompressor.</summary>
-    private static readonly Dictionary<string, Type> _promptCompressorTypes = new Dictionary<string, Type>(StringComparer.OrdinalIgnoreCase)
-    {
-        { "CachingCompressor", typeof(AiDotNet.PromptEngineering.Compression.CachingCompressor) },
-        { "CompositeCompressor", typeof(AiDotNet.PromptEngineering.Compression.CompositeCompressor) },
-        { "LLMSummarizationCompressor", typeof(AiDotNet.PromptEngineering.Compression.LLMSummarizationCompressor) },
-        { "RedundancyRemovalCompressor", typeof(AiDotNet.PromptEngineering.Compression.RedundancyRemovalCompressor) },
-        { "SentenceCompressor", typeof(AiDotNet.PromptEngineering.Compression.SentenceCompressor) },
-        { "StopWordRemovalCompressor", typeof(AiDotNet.PromptEngineering.Compression.StopWordRemovalCompressor) },
     };
 
     /// <summary>Registered implementations for AudioEffect.</summary>
@@ -17317,9 +17216,6 @@ internal static class YamlTypeRegistry<T, TInput, TOutput>
 
     private static readonly Dictionary<string, Dictionary<string, Type>> _sectionRegistries = new Dictionary<string, Dictionary<string, Type>>(StringComparer.OrdinalIgnoreCase)
     {
-        { "ObjectDetector", _objectDetectorTypes },
-        { "InstanceSegmenter", _instanceSegmenterTypes },
-        { "ObjectTracker", _objectTrackerTypes },
         { "LossFunction", _lossFunctionTypes },
         { "ActivationFunction", _activationFunctionTypes },
         { "KernelFunction", _kernelFunctionTypes },
@@ -17385,13 +17281,6 @@ internal static class YamlTypeRegistry<T, TInput, TOutput>
         { "ModelRegistry", _modelRegistryTypes },
         { "DataVersionControl", _dataVersionControlTypes },
         { "HyperparameterOptimizer", _hyperparameterOptimizerTypes },
-        { "Tokenizer", _tokenizerTypes },
-        { "PromptTemplate", _promptTemplateTypes },
-        { "PromptChain", _promptChainTypes },
-        { "PromptOptimizer", _promptOptimizerTypes },
-        { "FewShotExampleSelector", _fewShotExampleSelectorTypes },
-        { "PromptAnalyzer", _promptAnalyzerTypes },
-        { "PromptCompressor", _promptCompressorTypes },
         { "AudioEffect", _audioEffectTypes },
         { "SpeechRecognizer", _speechRecognizerTypes },
         { "TextToSpeech", _textToSpeechTypes },
