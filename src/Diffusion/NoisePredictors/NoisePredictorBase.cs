@@ -1,3 +1,4 @@
+using AiDotNet.Engines;
 using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
@@ -28,6 +29,11 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>
     /// Provides numeric operations for the specific type T.
     /// </summary>
     protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
+    /// <summary>
+    /// Gets the current hardware-accelerated engine for tensor operations.
+    /// </summary>
+    protected IEngine Engine => AiDotNetEngine.Current;
 
     /// <summary>
     /// Random number generator for initialization and stochastic operations.

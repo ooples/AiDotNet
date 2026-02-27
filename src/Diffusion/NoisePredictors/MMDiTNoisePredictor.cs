@@ -488,7 +488,7 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
         }
 
         // Position embedding is [1, numPatches, hiddenSize] - broadcasts over batch
-        return AiDotNetEngine.Current.TensorBroadcastAdd<T>(x, _posEmbed);
+        return Engine.TensorBroadcastAdd<T>(x, _posEmbed);
     }
 
     private Tensor<T> CreateSinusoidalPositionEmbedding(int numPatches)
@@ -737,7 +737,6 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
 
     private Tensor<T> ApplyAdaLN(Tensor<T> x, T[] scale, T[] shift)
     {
-        var engine = AiDotNetEngine.Current;
         var hidden = x.Shape[^1];
 
         // Create broadcastable tensors: [1, 1, hidden]
@@ -752,13 +751,12 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
             shiftSpan[h] = shift[h % shift.Length];
         }
 
-        var scaled = engine.TensorMultiply<T>(x, scaleTensor);
-        return engine.TensorAdd<T>(scaled, shiftTensor);
+        var scaled = Engine.TensorMultiply<T>(x, scaleTensor);
+        return Engine.TensorAdd<T>(scaled, shiftTensor);
     }
 
     private Tensor<T> AddWithGate(Tensor<T> x, Tensor<T> residual, T[] gate)
     {
-        var engine = AiDotNetEngine.Current;
         var hidden = x.Shape[^1];
 
         var gateTensor = new Tensor<T>(new[] { 1, 1, hidden });
@@ -768,18 +766,18 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
             gateSpan[h] = gate[h % gate.Length];
         }
 
-        var gated = engine.TensorMultiply<T>(residual, gateTensor);
-        return engine.TensorAdd<T>(x, gated);
+        var gated = Engine.TensorMultiply<T>(residual, gateTensor);
+        return Engine.TensorAdd<T>(x, gated);
     }
 
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
-        return AiDotNetEngine.Current.TensorAdd<T>(a, b);
+        return Engine.TensorAdd<T>(a, b);
     }
 
     private Tensor<T> ConcatenateSequences(Tensor<T> a, Tensor<T> b)
     {
-        return AiDotNetEngine.Current.TensorConcatenate<T>(new[] { a, b }, axis: 1);
+        return Engine.TensorConcatenate<T>(new[] { a, b }, axis: 1);
     }
 
     private Tensor<T> ExtractImageTokens(Tensor<T> combined, int textLen, int imageLen)
@@ -808,26 +806,23 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
         Tensor<T> q, Tensor<T> k, Tensor<T> v,
         double scale, int batch, int queryLen, int keyLen, int headDim)
     {
-        var engine = AiDotNetEngine.Current;
-        var hidden = _hiddenSize;
-
         // Reshape Q, K, V for multi-head: [batch, seq, hidden] -> [batch*heads, seq, headDim]
         var qReshaped = ReshapeForHeads(q, batch, queryLen, _numHeads, headDim);
         var kReshaped = ReshapeForHeads(k, batch, keyLen, _numHeads, headDim);
         var vReshaped = ReshapeForHeads(v, batch, keyLen, _numHeads, headDim);
 
         // Attention scores: Q * K^T using batched matmul
-        var kTransposed = engine.TensorTranspose<T>(kReshaped);
-        var scores = engine.TensorBatchMatMul<T>(qReshaped, kTransposed);
+        var kTransposed = Engine.TensorTranspose<T>(kReshaped);
+        var scores = Engine.TensorBatchMatMul<T>(qReshaped, kTransposed);
 
         // Scale
-        scores = engine.TensorMultiplyScalar<T>(scores, NumOps.FromDouble(scale));
+        scores = Engine.TensorMultiplyScalar<T>(scores, NumOps.FromDouble(scale));
 
         // Softmax over last axis
-        var attnWeights = engine.Softmax<T>(scores, axis: -1);
+        var attnWeights = Engine.Softmax<T>(scores, axis: -1);
 
         // Apply attention to values
-        var attnOutput = engine.TensorBatchMatMul<T>(attnWeights, vReshaped);
+        var attnOutput = Engine.TensorBatchMatMul<T>(attnWeights, vReshaped);
 
         // Reshape back: [batch*heads, seq, headDim] -> [batch, seq, hidden]
         return ReshapeFromHeads(attnOutput, batch, queryLen, _numHeads, headDim);

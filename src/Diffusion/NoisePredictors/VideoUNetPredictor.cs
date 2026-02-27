@@ -613,11 +613,9 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
         int width = shape[4];
         int spatialSize = height * width;
 
-        var engine = AiDotNetEngine.Current;
-
         // Step 1: Permute from NCFHW to NHWFC using GPU-accelerated permute
         // [batch, channels, frames, height, width] -> [batch, height, width, frames, channels]
-        var permuted = engine.TensorPermute(video, new[] { 0, 3, 4, 2, 1 });
+        var permuted = Engine.TensorPermute(video, new[] { 0, 3, 4, 2, 1 });
 
         // Step 2: Reshape to [batch * height * width, frames, channels] for attention
         // Each spatial position becomes a batch element, frames become the sequence dimension
@@ -639,7 +637,7 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
 
         // Step 5: Permute back from NHWFC to NCFHW
         // [batch, height, width, frames, channels] -> [batch, channels, frames, height, width]
-        var result = engine.TensorPermute(reshapedBack, new[] { 0, 4, 3, 1, 2 });
+        var result = Engine.TensorPermute(reshapedBack, new[] { 0, 4, 3, 1, 2 });
 
         return result;
     }
@@ -711,11 +709,9 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
     /// </summary>
     private Tensor<T> ConcatenateChannels(Tensor<T> a, Tensor<T> b, bool isVideo)
     {
-        var engine = AiDotNetEngine.Current;
-
         // Concatenate along axis 1 (channel dimension) for both NCFHW (5D) and NCHW (4D)
         // The engine handles proper interleaving of data along the specified axis
-        return engine.TensorConcatenate(new[] { a, b }, axis: 1);
+        return Engine.TensorConcatenate(new[] { a, b }, axis: 1);
     }
 
     /// <summary>
