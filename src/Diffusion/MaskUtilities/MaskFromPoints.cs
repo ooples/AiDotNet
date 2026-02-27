@@ -19,22 +19,67 @@ namespace AiDotNet.Diffusion.MaskUtilities;
 /// in an image. Each click creates a circular masked area. You can also use negative
 /// points to "un-mask" areas within a masked region.
 /// </para>
+/// <para>
+/// When used as an <see cref="IDataTransformer{T, TInput, TOutput}"/>, the Transform method
+/// takes an image tensor, uses its dimensions for height/width, and generates a mask from
+/// the points configured in the constructor.
+/// </para>
 /// </remarks>
-public class MaskFromPoints<T>
+public class MaskFromPoints<T> : IDataTransformer<T, Tensor<T>, Tensor<T>>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     private readonly int _pointRadius;
+    private readonly (int y, int x)[] _positivePoints;
+    private readonly (int y, int x)[]? _negativePoints;
+
+    /// <inheritdoc />
+    public bool IsFitted => true;
+    /// <inheritdoc />
+    public int[]? ColumnIndices => null;
+    /// <inheritdoc />
+    public bool SupportsInverseTransform => false;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MaskFromPoints{T}"/> class.
     /// </summary>
+    /// <param name="positivePoints">Points to add to the mask (y, x).</param>
+    /// <param name="negativePoints">Points to remove from the mask (y, x). Can be null.</param>
     /// <param name="pointRadius">Radius of each point's circular mask region. Default: 10.</param>
-    public MaskFromPoints(int pointRadius = 10)
+    public MaskFromPoints((int y, int x)[] positivePoints,
+        (int y, int x)[]? negativePoints = null,
+        int pointRadius = 10)
     {
         Guard.Positive(pointRadius);
+        _positivePoints = positivePoints;
+        _negativePoints = negativePoints;
         _pointRadius = pointRadius;
     }
+
+    /// <inheritdoc />
+    public void Fit(Tensor<T> data) { }
+
+    /// <summary>
+    /// Generates a point mask using the input tensor's dimensions and the points
+    /// configured in the constructor.
+    /// </summary>
+    /// <inheritdoc />
+    public Tensor<T> Transform(Tensor<T> data)
+    {
+        var shape = data.Shape;
+        int height = shape[0];
+        int width = shape.Length > 1 ? shape[1] : 1;
+        return Generate(height, width, _positivePoints, _negativePoints);
+    }
+
+    /// <inheritdoc />
+    public Tensor<T> FitTransform(Tensor<T> data) => Transform(data);
+    /// <inheritdoc />
+    public Tensor<T> InverseTransform(Tensor<T> data) =>
+        throw new NotSupportedException("Point mask generation is not reversible.");
+    /// <inheritdoc />
+    public string[] GetFeatureNamesOut(string[]? inputFeatureNames = null) =>
+        new[] { "point_mask" };
 
     /// <summary>
     /// Generates a mask from positive and negative point prompts.
