@@ -326,7 +326,7 @@ public class BiLSTMCRFOptions : NeuralNetworkOptions
     /// is especially useful for names from different languages or technical terms.
     /// </para>
     /// </remarks>
-    public bool UseCharEmbeddings { get; set; } = true;
+    public bool UseCharEmbeddings { get; set; } = false;
 
     /// <summary>
     /// Gets or sets the character embedding vector dimension.
@@ -418,7 +418,7 @@ public class BiLSTMCRFOptions : NeuralNetworkOptions
         {
             if (value is null || value.Length == 0)
                 throw new ArgumentException("Label names array cannot be null or empty.", nameof(LabelNames));
-            _labelNames = value;
+            _labelNames = (string[])value.Clone();
         }
     }
     private string[] _labelNames =
@@ -464,7 +464,12 @@ public class BiLSTMCRFOptions : NeuralNetworkOptions
     /// for faster inference.
     /// </para>
     /// </remarks>
-    public OnnxModelOptions OnnxOptions { get; set; } = new();
+    public OnnxModelOptions OnnxOptions
+    {
+        get => _onnxOptions;
+        set => _onnxOptions = value ?? throw new ArgumentNullException(nameof(value), "OnnxOptions cannot be null.");
+    }
+    private OnnxModelOptions _onnxOptions = new();
 
     #endregion
 

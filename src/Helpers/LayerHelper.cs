@@ -25593,7 +25593,8 @@ public static class LayerHelper<T>
         double dropoutRate = 0.5,
         bool useCharEmbeddings = false,
         int charEmbeddingDimension = 30,
-        int charHiddenDimension = 50)
+        int charHiddenDimension = 50,
+        bool useCRF = true)
     {
         if (embeddingDimension <= 0)
             throw new ArgumentOutOfRangeException(nameof(embeddingDimension),
@@ -25615,8 +25616,9 @@ public static class LayerHelper<T>
         // === Character-level BiLSTM (optional) ===
         // When enabled, a small BiLSTM processes each word's characters to capture morphological
         // features like capitalization, prefixes, and suffixes (Lample et al., 2016).
-        // The character BiLSTM output is concatenated with word embeddings, increasing the
-        // effective input dimension to embeddingDimension + charHiddenDimension.
+        // The char features are fused with word embeddings via a projection layer that maps
+        // the combined representation (embeddingDimension + charHiddenDimension) down to
+        // embeddingDimension, keeping the downstream layer sizes consistent.
         int currentInputSize = embeddingDimension;
         if (useCharEmbeddings)
         {
@@ -25639,17 +25641,22 @@ public static class LayerHelper<T>
             yield return new BidirectionalLayer<T>(charLSTM, mergeMode: true,
                 activationFunction: identityActivation);
 
-            // After char BiLSTM, the char features (charHiddenDimension) are concatenated
-            // with word embeddings (embeddingDimension) via a projection layer
-            // Input: embeddingDimension + charHiddenDimension -> embeddingDimension + charHiddenDimension
+            // Fusion projection layer: combines the concatenated char features (charHiddenDimension)
+            // with word embeddings (embeddingDimension) into a unified representation.
+            // This linear layer maps [embDim + charHiddenDim] -> [embDim + charHiddenDim],
+            // keeping the fused representation at the combined dimension for downstream layers.
             currentInputSize = embeddingDimension + charHiddenDimension;
+            yield return new DenseLayer<T>(
+                inputSize: currentInputSize,
+                outputSize: currentInputSize,
+                activationFunction: tanhActivation);
         }
 
         // === Stacked BiLSTM layers ===
         // Each BiLSTM layer wraps an LSTM in a BidirectionalLayer that processes the sequence
         // in both forward (left-to-right) and backward (right-to-left) directions.
-        // The outputs from both directions are merged via element-wise addition, keeping
-        // the output dimension equal to hiddenDimension.
+        // With mergeMode=true, the forward and backward hidden states are element-wise added,
+        // keeping the output dimension equal to hiddenDimension (not 2x hiddenDimension).
         // The original paper (Lample et al., 2016) uses a single BiLSTM layer with
         // 100 hidden units per direction.
         for (int layer = 0; layer < numLSTMLayers; layer++)
@@ -25697,16 +25704,19 @@ public static class LayerHelper<T>
             outputSize: numLabels,
             activationFunction: identityActivation);
 
-        // === CRF decoding layer ===
+        // === CRF decoding layer (optional) ===
         // Models label-level transition dependencies using a learned transition matrix.
         // During training: computes the negative log-likelihood of the correct label sequence.
         // During inference: uses the Viterbi algorithm to find the globally optimal label path.
         // This is what makes BiLSTM-CRF superior to independent per-token classification:
         // it considers the entire label sequence jointly rather than making independent decisions.
-        yield return new ConditionalRandomFieldLayer<T>(
-            numClasses: numLabels,
-            sequenceLength: maxSequenceLength,
-            scalarActivation: identityActivation);
+        if (useCRF)
+        {
+            yield return new ConditionalRandomFieldLayer<T>(
+                numClasses: numLabels,
+                sequenceLength: maxSequenceLength,
+                scalarActivation: identityActivation);
+        }
     }
 
     /// <summary>
