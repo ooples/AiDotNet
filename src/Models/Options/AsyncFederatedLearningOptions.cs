@@ -46,7 +46,7 @@ public class AsyncFederatedLearningOptions : ModelOptions
     /// <summary>
     /// Gets or sets the buffer size for FedBuff (number of updates to accumulate before applying a server update).
     /// </summary>
-    public int FedBuffBufferSize { get; set; } = 5;
+    public int FedBuffBufferSize { get; set; } = 10;
 
     /// <summary>
     /// Gets or sets the maximum staleness allowed before rejecting an update.

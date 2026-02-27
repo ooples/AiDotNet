@@ -29,5 +29,13 @@ public enum ContributionMethod
     /// Each client's prototypes (class centroids) are compared against a validation set.
     /// Constant cost per round, suitable for large federations.
     /// </summary>
-    Prototypical
+    Prototypical,
+
+    /// <summary>
+    /// Lightweight Shapley: efficient approximation using gradient similarity instead of
+    /// full retraining. Computes contribution via cosine similarity between each client's
+    /// update and the aggregate update. O(N*d) per round where d = parameter dimension.
+    /// Suitable for large-scale federations where exact Shapley is infeasible.
+    /// </summary>
+    LightweightShapley
 }

@@ -19,7 +19,7 @@ namespace AiDotNet.FederatedLearning.Decentralized;
 /// <para>Reference: Time-Varying Communication Topologies for Decentralized FL (2024).</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters.</typeparam>
-public class TimeVaryingTopology<T> : Infrastructure.FederatedLearningComponentBase<T>
+public class TimeVaryingTopology<T> : Infrastructure.FederatedLearningComponentBase<T>, IDecentralizedTopology
 {
     /// <summary>Topology generation strategy.</summary>
     public enum TopologyStrategy
@@ -120,4 +120,45 @@ public class TimeVaryingTopology<T> : Infrastructure.FederatedLearningComponentB
 
     /// <summary>Gets the current round.</summary>
     public int RoundCounter => _roundCounter;
+
+    /// <inheritdoc/>
+    public int[] GetPeers(int nodeId, int totalNodes, int round)
+    {
+        var clientIds = Enumerable.Range(0, totalNodes).ToList();
+        // Temporarily set round counter for topology generation.
+        int savedRound = _roundCounter;
+        _roundCounter = round;
+        var topology = GenerateTopology(clientIds);
+        _roundCounter = savedRound;
+
+        if (topology.TryGetValue(nodeId, out var peers))
+        {
+            return peers.Where(p => p != nodeId).ToArray();
+        }
+
+        return Array.Empty<int>();
+    }
+
+    /// <inheritdoc/>
+    public double GetMixingWeight(int nodeId, int peerId, int totalNodes)
+    {
+        // Metropolis-Hastings weights for doubly stochastic mixing.
+        // For uniform degree d: w_ij = 1/(max(d_i, d_j) + 1), w_ii = 1 - sum(w_ij).
+        // Simplified: equal weight for all neighbors.
+        var clientIds = Enumerable.Range(0, totalNodes).ToList();
+        var topology = GenerateTopology(clientIds);
+        // Restore round counter (GenerateTopology increments it).
+        _roundCounter--;
+
+        if (!topology.TryGetValue(nodeId, out var peers))
+        {
+            return 0;
+        }
+
+        int degree = peers.Count; // includes self
+        return peers.Contains(peerId) ? 1.0 / degree : 0;
+    }
+
+    /// <inheritdoc/>
+    public string TopologyName => $"TimeVarying({_strategy})";
 }

@@ -129,11 +129,11 @@ public class PersonalizedFederatedLearning<T>
     /// - Late layers learn high-level, task-specific features → can be personalized
     /// </remarks>
     /// <param name="modelStructure">The model structure with layer names.</param>
-    /// <param name="strategy">The strategy for selecting personalized layers ("last_n", "by_pattern").</param>
-    /// <param name="customPatterns">Optional patterns for "by_pattern" strategy.</param>
+    /// <param name="strategy">The strategy for selecting personalized layers.</param>
+    /// <param name="customPatterns">Optional patterns for ByPattern strategy.</param>
     public void IdentifyPersonalizedLayers(
         Dictionary<string, T[]> modelStructure,
-        string strategy = "last_n",
+        PersonalizedLayerSelectionStrategy strategy = PersonalizedLayerSelectionStrategy.LastN,
         HashSet<string>? customPatterns = null)
     {
         if (modelStructure == null || modelStructure.Count == 0)
@@ -143,34 +143,48 @@ public class PersonalizedFederatedLearning<T>
 
         _personalizedLayers.Clear();
 
-        if (strategy == "last_n")
+        switch (strategy)
         {
-            // Personalize the last N% of layers
-            int totalLayers = modelStructure.Count;
-            int personalizedCount = (int)Math.Ceiling(totalLayers * _personalizationFraction);
-
-            var layerNames = modelStructure.Keys
-                .OrderBy(name => name, StringComparer.Ordinal)
-                .ToList();
-
-            // Take the last personalizedCount layers
-            for (int i = totalLayers - personalizedCount; i < totalLayers; i++)
+            case PersonalizedLayerSelectionStrategy.LastN:
             {
-                _personalizedLayers.Add(layerNames[i]);
+                // Personalize the last N% of layers
+                int totalLayers = modelStructure.Count;
+                int personalizedCount = (int)Math.Ceiling(totalLayers * _personalizationFraction);
+
+                var layerNames = modelStructure.Keys
+                    .OrderBy(name => name, StringComparer.Ordinal)
+                    .ToList();
+
+                // Take the last personalizedCount layers
+                for (int i = totalLayers - personalizedCount; i < totalLayers; i++)
+                {
+                    _personalizedLayers.Add(layerNames[i]);
+                }
+
+                break;
             }
-        }
-        else if (strategy == "by_pattern" && customPatterns != null)
-        {
-            // Personalize layers matching specific patterns
-            foreach (var layerName in modelStructure.Keys
-                .Where(name => customPatterns.Any(pattern => name.Contains(pattern, StringComparison.OrdinalIgnoreCase))))
+
+            case PersonalizedLayerSelectionStrategy.ByPattern:
             {
-                _personalizedLayers.Add(layerName);
+                if (customPatterns == null || customPatterns.Count == 0)
+                {
+                    throw new ArgumentException(
+                        "Custom patterns are required for ByPattern strategy.", nameof(customPatterns));
+                }
+
+                // Personalize layers matching specific patterns
+                foreach (var layerName in modelStructure.Keys
+                    .Where(name => customPatterns.Any(pattern =>
+                        name.Contains(pattern, StringComparison.OrdinalIgnoreCase))))
+                {
+                    _personalizedLayers.Add(layerName);
+                }
+
+                break;
             }
-        }
-        else
-        {
-            throw new ArgumentException($"Unknown strategy: {strategy}. Use 'last_n' or 'by_pattern'.", nameof(strategy));
+
+            default:
+                throw new ArgumentOutOfRangeException(nameof(strategy), strategy, "Unknown personalization strategy.");
         }
     }
 
@@ -363,4 +377,22 @@ public class PersonalizedFederatedLearning<T>
             ["communication_reduction"] = totalParams > 0 ? (double)personalizedParams / totalParams : 0
         };
     }
+}
+
+/// <summary>
+/// Strategy for selecting which layers to personalize in federated learning.
+/// </summary>
+public enum PersonalizedLayerSelectionStrategy
+{
+    /// <summary>
+    /// Personalize the last N% of layers (sorted by name). Default and most common approach.
+    /// Early layers learn general features and are shared; late layers are task-specific and personalized.
+    /// </summary>
+    LastN = 0,
+
+    /// <summary>
+    /// Personalize layers matching user-provided name patterns (e.g., "batch_norm", "classifier").
+    /// Requires customPatterns to be provided.
+    /// </summary>
+    ByPattern = 1
 }
