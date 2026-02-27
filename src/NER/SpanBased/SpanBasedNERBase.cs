@@ -168,6 +168,9 @@ public abstract class SpanBasedNERBase<T> : SequenceLabeling.SequenceLabelingNER
         IProgress<NERTrainingProgress>? progress,
         CancellationToken cancellationToken)
     {
+        if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
+        if (_optimizer is null) throw new InvalidOperationException("Optimizer is not initialized.");
+
         return Task.Run(() =>
         {
             for (int epoch = 1; epoch <= epochs; epoch++)
@@ -175,21 +178,31 @@ public abstract class SpanBasedNERBase<T> : SequenceLabeling.SequenceLabelingNER
                 cancellationToken.ThrowIfCancellationRequested();
 
                 SetTrainingMode(true);
-                var output = Forward(PreprocessTokens(tokenEmbeddings));
-                double loss = NumOps.ToDouble(LossFunction.CalculateLoss(
-                    output.ToVector(), labels.ToVector()));
-                SetTrainingMode(false);
-
-                Train(tokenEmbeddings, labels);
-
-                progress?.Report(new NERTrainingProgress
+                try
                 {
-                    CurrentEpoch = epoch,
-                    TotalEpochs = epochs,
-                    CurrentBatch = 1,
-                    TotalBatches = 1,
-                    Loss = loss
-                });
+                    var preprocessed = PreprocessTokens(tokenEmbeddings);
+                    var preprocessedLabels = PreprocessLabels(labels, preprocessed.Shape[0]);
+                    var output = Forward(preprocessed);
+                    double loss = NumOps.ToDouble(LossFunction.CalculateLoss(
+                        output.ToVector(), preprocessedLabels.ToVector()));
+                    var grad = LossFunction.CalculateDerivative(output.ToVector(), preprocessedLabels.ToVector());
+                    var gt = Tensor<T>.FromVector(grad);
+                    for (int i = Layers.Count - 1; i >= 0; i--) gt = Layers[i].Backward(gt);
+                    _optimizer.UpdateParameters(Layers);
+
+                    progress?.Report(new NERTrainingProgress
+                    {
+                        CurrentEpoch = epoch,
+                        TotalEpochs = epochs,
+                        CurrentBatch = 1,
+                        TotalBatches = 1,
+                        Loss = loss
+                    });
+                }
+                finally
+                {
+                    SetTrainingMode(false);
+                }
             }
         }, cancellationToken);
     }
@@ -282,8 +295,9 @@ public abstract class SpanBasedNERBase<T> : SequenceLabeling.SequenceLabelingNER
         try
         {
             var preprocessed = PreprocessTokens(input);
+            var preprocessedLabels = PreprocessLabels(expected, preprocessed.Shape[0]);
             var output = Forward(preprocessed);
-            var grad = LossFunction.CalculateDerivative(output.ToVector(), expected.ToVector());
+            var grad = LossFunction.CalculateDerivative(output.ToVector(), preprocessedLabels.ToVector());
             var gt = Tensor<T>.FromVector(grad);
             for (int i = Layers.Count - 1; i >= 0; i--) gt = Layers[i].Backward(gt);
             _optimizer.UpdateParameters(Layers);
@@ -315,6 +329,23 @@ public abstract class SpanBasedNERBase<T> : SequenceLabeling.SequenceLabelingNER
 
         if (rawEmbeddings.Rank < 2) return rawEmbeddings;
 
+        // Handle rank-3 [batch, seqLen, hidDim]
+        if (rawEmbeddings.Rank == 3)
+        {
+            int batch = rawEmbeddings.Shape[0];
+            int seqLen3 = rawEmbeddings.Shape[1];
+            if (seqLen3 == maxLen) return rawEmbeddings;
+
+            var padded3 = new Tensor<T>([batch, maxLen, hidDim]);
+            int copyLen3 = Math.Min(seqLen3, maxLen);
+            for (int b = 0; b < batch; b++)
+                for (int s = 0; s < copyLen3; s++)
+                    for (int d = 0; d < hidDim; d++)
+                        padded3[b, s, d] = rawEmbeddings[b, s, d];
+            return padded3;
+        }
+
+        // Rank-2 [seqLen, hidDim]
         int seqLen = rawEmbeddings.Shape[0];
         if (seqLen == maxLen) return rawEmbeddings;
 
@@ -442,11 +473,40 @@ public abstract class SpanBasedNERBase<T> : SequenceLabeling.SequenceLabelingNER
         if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? _modelName);
     }
 
+    private Tensor<T> PreprocessLabels(Tensor<T> labels, int targetSeqLen)
+    {
+        if (labels.Rank < 1) return labels;
+
+        int labelLen = labels.Shape[0];
+        if (labelLen == targetSeqLen) return labels;
+
+        if (labels.Rank == 1)
+        {
+            var padded = new Tensor<T>([targetSeqLen]);
+            int copyLen = Math.Min(labelLen, targetSeqLen);
+            for (int i = 0; i < copyLen; i++)
+                padded[i] = labels[i];
+            return padded;
+        }
+
+        int cols = labels.Shape[1];
+        var padded2 = new Tensor<T>([targetSeqLen, cols]);
+        int copyLen2 = Math.Min(labelLen, targetSeqLen);
+        for (int s = 0; s < copyLen2; s++)
+            for (int c = 0; c < cols; c++)
+                padded2[s, c] = labels[s, c];
+        return padded2;
+    }
+
     private void ValidateOptions()
     {
         if (_options.NumLabels != _options.LabelNames.Length)
             throw new ArgumentException(
                 $"NumLabels ({_options.NumLabels}) must match LabelNames length ({_options.LabelNames.Length}).");
+
+        if (_options.NumAttentionHeads <= 0)
+            throw new ArgumentException(
+                $"NumAttentionHeads must be positive. Got: {_options.NumAttentionHeads}.");
 
         if (_options.HiddenDimension % _options.NumAttentionHeads != 0)
             throw new ArgumentException(

@@ -53,7 +53,7 @@ namespace AiDotNet.NER.SequenceLabeling;
 /// - "Google" -> B-ORG (Beginning of an Organization name)
 ///
 /// The key advantage of this approach is that it naturally handles multi-word entities
-/// like "New York City" (B-LOC, I-LOC, I-LOC) and nested entities.
+/// like "New York City" (B-LOC, I-LOC, I-LOC).
 /// </para>
 /// </remarks>
 public abstract class SequenceLabelingNERBase<T> : NERNeuralNetworkBase<T>

@@ -149,7 +149,7 @@ public class SpanBasedNEROptions
         get => _dropoutRate;
         set
         {
-            if (value < 0 || value >= 1) throw new ArgumentOutOfRangeException(nameof(value), "DropoutRate must be in [0, 1).");
+            if (value < 0 || value > 1) throw new ArgumentOutOfRangeException(nameof(value), "DropoutRate must be in [0, 1].");
             _dropoutRate = value;
         }
     }
@@ -198,7 +198,12 @@ public class SpanBasedNEROptions
     /// <summary>
     /// Gets or sets ONNX runtime inference options.
     /// </summary>
-    public OnnxModelOptions OnnxOptions { get; set; } = new();
+    public OnnxModelOptions OnnxOptions
+    {
+        get => _onnxOptions;
+        set => _onnxOptions = value ?? throw new ArgumentNullException(nameof(value), "OnnxOptions cannot be null.");
+    }
+    private OnnxModelOptions _onnxOptions = new();
 
     /// <summary>
     /// Gets or sets the label names for the NER tags.
@@ -232,7 +237,7 @@ public class SpanBasedNEROptions
         _negativeSpanSampleRatio = other._negativeSpanSampleRatio;
         Variant = other.Variant;
         ModelPath = other.ModelPath;
-        OnnxOptions = other.OnnxOptions;
+        OnnxOptions = new OnnxModelOptions(other.OnnxOptions);
         LabelNames = (string[])other.LabelNames.Clone();
     }
 
