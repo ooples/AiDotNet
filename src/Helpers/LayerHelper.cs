@@ -25919,5 +25919,88 @@ public static class LayerHelper<T>
             scalarActivation: identityActivation);
     }
 
+    /// <summary>
+    /// Creates the default layer stack for a transformer-based NER model (BERT-NER, RoBERTa-NER, etc.).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Builds the standard transformer NER architecture: stacked TransformerEncoderLayers
+    /// followed by dropout, a linear projection to label scores, and an optional CRF layer.
+    /// This architecture is shared by BERT-NER, RoBERTa-NER, DeBERTa-NER, ELECTRA-NER, etc.
+    /// The differences between these models are in pre-training, not in the NER fine-tuning head.
+    /// </para>
+    /// </remarks>
+    /// <param name="hiddenDimension">Transformer hidden dimension (default: 768 for BERT-base).</param>
+    /// <param name="numAttentionHeads">Number of self-attention heads (default: 12).</param>
+    /// <param name="numTransformerLayers">Number of transformer encoder layers (default: 12).</param>
+    /// <param name="intermediateDimension">Feed-forward intermediate dimension (default: 3072).</param>
+    /// <param name="numLabels">Number of BIO labels (default: 9).</param>
+    /// <param name="maxSequenceLength">Maximum sequence length (default: 256).</param>
+    /// <param name="dropoutRate">Dropout probability (default: 0.1).</param>
+    /// <param name="useCRF">Whether to add CRF layer on top (default: false).</param>
+    /// <returns>Ordered sequence of layers for a transformer NER model.</returns>
+    public static IEnumerable<ILayer<T>> CreateDefaultTransformerNERLayers(
+        int hiddenDimension = 768,
+        int numAttentionHeads = 12,
+        int numTransformerLayers = 12,
+        int intermediateDimension = 3072,
+        int numLabels = 9,
+        int maxSequenceLength = 256,
+        double dropoutRate = 0.1,
+        bool useCRF = false)
+    {
+        if (hiddenDimension <= 0)
+            throw new ArgumentOutOfRangeException(nameof(hiddenDimension),
+                $"Hidden dimension must be positive. Got: {hiddenDimension}");
+        if (numAttentionHeads <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numAttentionHeads),
+                $"Number of attention heads must be positive. Got: {numAttentionHeads}");
+        if (numTransformerLayers <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numTransformerLayers),
+                $"Number of transformer layers must be positive. Got: {numTransformerLayers}");
+        if (numLabels <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numLabels),
+                $"Number of labels must be positive. Got: {numLabels}");
+
+        var identityActivation = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        // === Stacked Transformer Encoder layers ===
+        // Each layer has multi-head self-attention + feed-forward network with residual connections
+        for (int layer = 0; layer < numTransformerLayers; layer++)
+        {
+            yield return new TransformerEncoderLayer<T>(
+                embeddingSize: hiddenDimension,
+                numHeads: numAttentionHeads,
+                feedForwardDim: intermediateDimension);
+
+            // Dropout between transformer layers for regularization
+            if (dropoutRate > 0 && layer < numTransformerLayers - 1)
+            {
+                yield return new DropoutLayer<T>(dropoutRate);
+            }
+        }
+
+        // === Pre-classification dropout ===
+        if (dropoutRate > 0)
+        {
+            yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // === Token classification head: hidden states -> label scores ===
+        yield return new DenseLayer<T>(
+            inputSize: hiddenDimension,
+            outputSize: numLabels,
+            activationFunction: identityActivation);
+
+        // === Optional CRF layer ===
+        if (useCRF)
+        {
+            yield return new ConditionalRandomFieldLayer<T>(
+                numClasses: numLabels,
+                sequenceLength: maxSequenceLength,
+                scalarActivation: identityActivation);
+        }
+    }
+
     #endregion
 }
