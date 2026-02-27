@@ -518,44 +518,8 @@ public class SDXLModel<T> : LatentDiffusionModelBase<T>
     /// </summary>
     private Tensor<T> ConcatenateEmbeddings(Tensor<T> embedding1, Tensor<T> embedding2)
     {
-        var shape1 = embedding1.Shape;
-        var shape2 = embedding2.Shape;
-
-        // Concatenate along the embedding dimension
-        var batch = shape1[0];
-        var seqLen = shape1[1];
-        var dim1 = shape1[2];
-        var dim2 = shape2[2];
-        var totalDim = dim1 + dim2;
-
-        var result = new Tensor<T>(new[] { batch, seqLen, totalDim });
-        var resultSpan = result.AsWritableSpan();
-        var span1 = embedding1.AsSpan();
-        var span2 = embedding2.AsSpan();
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int s = 0; s < seqLen; s++)
-            {
-                // Copy from first embedding
-                for (int d = 0; d < dim1; d++)
-                {
-                    var srcIdx = b * seqLen * dim1 + s * dim1 + d;
-                    var dstIdx = b * seqLen * totalDim + s * totalDim + d;
-                    resultSpan[dstIdx] = span1[srcIdx];
-                }
-
-                // Copy from second embedding
-                for (int d = 0; d < dim2; d++)
-                {
-                    var srcIdx = b * seqLen * dim2 + s * dim2 + d;
-                    var dstIdx = b * seqLen * totalDim + s * totalDim + dim1 + d;
-                    resultSpan[dstIdx] = span2[srcIdx];
-                }
-            }
-        }
-
-        return result;
+        // Concatenate along embedding dimension (last axis) using hardware-accelerated engine
+        return Engine.TensorConcatenate<T>(new[] { embedding1, embedding2 }, axis: -1);
     }
 
     /// <summary>

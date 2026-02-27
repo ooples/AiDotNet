@@ -35,9 +35,9 @@ public class TemporalConvolution<T> : LayerBase<T>
     private static new readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private Tensor<T>? _lastInput;
 
-    private static Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
+    private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
-        return a.Transform((v, idx) => NumOps.Add(v, b.Data.Span[idx]));
+        return Engine.TensorAdd<T>(a, b);
     }
 
     /// <inheritdoc />

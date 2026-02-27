@@ -55,9 +55,9 @@ public class STDiTBlock<T> : LayerBase<T>
     /// <inheritdoc />
     public override bool SupportsTraining => true;
 
-    private static Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
+    private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
-        return a.Transform((v, idx) => NumOps.Add(v, b.Data.Span[idx]));
+        return Engine.TensorAdd<T>(a, b);
     }
 
     /// <summary>
