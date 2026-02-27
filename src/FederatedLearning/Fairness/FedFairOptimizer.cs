@@ -88,7 +88,9 @@ public class FedFairOptimizer<T> : Infrastructure.FederatedLearningComponentBase
         int n = clientIds.Count;
 
         // Accuracy weights: proportional to sample count (standard FedAvg).
-        double totalSamples = clientSampleCounts.Values.Sum();
+        // Compute totalSamples from clientIds (with same default=1 logic) to stay consistent
+        // when clientSampleCounts is missing entries for some clients.
+        double totalSamples = clientIds.Sum(id => (double)clientSampleCounts.GetValueOrDefault(id, 1));
         var accWeights = clientIds.ToDictionary(
             id => id,
             id => totalSamples > 0 ? clientSampleCounts.GetValueOrDefault(id, 1) / totalSamples : 1.0 / n);

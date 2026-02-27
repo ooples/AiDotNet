@@ -107,6 +107,18 @@ public class BufferedAsyncFederatedTrainer<T> : Infrastructure.FederatedLearning
             totalWeight += weights[i];
         }
 
+        // Guard against totalWeight underflowing to 0 (e.g., 0.9^large → 0).
+        if (totalWeight <= 0)
+        {
+            // Fall back to uniform weights.
+            for (int i = 0; i < weights.Length; i++)
+            {
+                weights[i] = 1.0;
+            }
+
+            totalWeight = weights.Length;
+        }
+
         var result = new Dictionary<string, T[]>(reference.Count);
         foreach (var layerName in layerNames)
         {

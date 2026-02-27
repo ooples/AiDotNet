@@ -151,10 +151,11 @@ public class PersonalizedFederatedLearning<T>
                 int totalLayers = modelStructure.Count;
                 int personalizedCount = (int)Math.Ceiling(totalLayers * _personalizationFraction);
 
-                // Sort layer names preserving insertion order (dictionary enumeration order).
-                // Using ToList() directly maintains the model's layer ordering, which is typically
-                // sequential. Ordinal sort would mis-order names like "layer1", "layer10", "layer2".
-                var layerNames = modelStructure.Keys.ToList();
+                // Sort layer names deterministically. Dictionary enumeration order is not guaranteed
+                // across .NET runtimes (especially net471 vs modern .NET). Using ordinal sort ensures
+                // reproducible results. Callers should use layer naming that sorts naturally
+                // (e.g., "layer_00", "layer_01") if ordering matters.
+                var layerNames = modelStructure.Keys.OrderBy(k => k, StringComparer.Ordinal).ToList();
 
                 // Take the last personalizedCount layers
                 for (int i = totalLayers - personalizedCount; i < totalLayers; i++)
@@ -386,8 +387,9 @@ public class PersonalizedFederatedLearning<T>
 public enum PersonalizedLayerSelectionStrategy
 {
     /// <summary>
-    /// Personalize the last N% of layers (sorted by name). Default and most common approach.
+    /// Personalize the last N% of layers (sorted by ordinal name). Default and most common approach.
     /// Early layers learn general features and are shared; late layers are task-specific and personalized.
+    /// Use zero-padded names (e.g., "layer_00", "layer_01") for natural ordering.
     /// </summary>
     LastN = 0,
 

@@ -35,6 +35,8 @@ public class TimeVaryingTopology<T> : Infrastructure.FederatedLearningComponentB
     private readonly TopologyStrategy _strategy;
     private readonly int _seed;
     private int _roundCounter;
+    private int _lastQueriedRound = -1;
+    private Dictionary<int, List<int>>? _cachedTopology;
 
     /// <summary>
     /// Creates a new time-varying topology.
@@ -138,12 +140,7 @@ public class TimeVaryingTopology<T> : Infrastructure.FederatedLearningComponentB
     /// <inheritdoc/>
     public int[] GetPeers(int nodeId, int totalNodes, int round)
     {
-        var clientIds = Enumerable.Range(0, totalNodes).ToList();
-        // Temporarily set round counter for topology generation.
-        int savedRound = _roundCounter;
-        _roundCounter = round;
-        var topology = GenerateTopology(clientIds);
-        _roundCounter = savedRound;
+        var topology = GetOrGenerateTopologyForRound(totalNodes, round);
 
         if (topology.TryGetValue(nodeId, out var peers))
         {
@@ -159,10 +156,8 @@ public class TimeVaryingTopology<T> : Infrastructure.FederatedLearningComponentB
         // Metropolis-Hastings weights for doubly stochastic mixing.
         // For uniform degree d: w_ij = 1/(max(d_i, d_j) + 1), w_ii = 1 - sum(w_ij).
         // Simplified: equal weight for all neighbors.
-        var clientIds = Enumerable.Range(0, totalNodes).ToList();
-        var topology = GenerateTopology(clientIds);
-        // Restore round counter (GenerateTopology increments it).
-        _roundCounter--;
+        // Use the cached topology from the last GetPeers call to ensure consistency.
+        var topology = _cachedTopology ?? GetOrGenerateTopologyForRound(totalNodes, _roundCounter);
 
         if (!topology.TryGetValue(nodeId, out var peers))
         {
@@ -171,6 +166,31 @@ public class TimeVaryingTopology<T> : Infrastructure.FederatedLearningComponentB
 
         int degree = peers.Count; // includes self
         return peers.Contains(peerId) ? 1.0 / degree : 0;
+    }
+
+    /// <summary>
+    /// Gets or generates the topology for a specific round without mutating _roundCounter.
+    /// Caches the result so GetMixingWeight uses the same topology as GetPeers.
+    /// </summary>
+    private Dictionary<int, List<int>> GetOrGenerateTopologyForRound(int totalNodes, int round)
+    {
+        if (_cachedTopology != null && _lastQueriedRound == round)
+        {
+            return _cachedTopology;
+        }
+
+        var clientIds = Enumerable.Range(0, totalNodes).ToList();
+        // Save and restore _roundCounter to avoid side effects.
+        int savedRound = _roundCounter;
+        _roundCounter = round;
+        var topology = GenerateTopology(clientIds);
+        // GenerateTopology increments _roundCounter; restore the saved value
+        // so this method is effectively pure for a given round.
+        _roundCounter = savedRound;
+
+        _lastQueriedRound = round;
+        _cachedTopology = topology;
+        return topology;
     }
 
     /// <inheritdoc/>
