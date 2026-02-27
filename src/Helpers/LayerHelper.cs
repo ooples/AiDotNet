@@ -26002,5 +26002,74 @@ public static class LayerHelper<T>
         }
     }
 
+    /// <summary>
+    /// Creates the default layer stack for a span-based NER model (SpERT, BiaffineNER, PURE).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Builds the span-based NER architecture: stacked TransformerEncoderLayers for contextual
+    /// encoding, followed by a span representation module (Dense layers that project
+    /// boundary + content features), and a span classifier (Dense to label scores).
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultSpanBasedNERLayers(
+        int hiddenDimension = 768,
+        int numAttentionHeads = 12,
+        int numTransformerLayers = 12,
+        int intermediateDimension = 3072,
+        int spanEmbeddingDimension = 256,
+        int numLabels = 9,
+        double dropoutRate = 0.1)
+    {
+        if (hiddenDimension <= 0)
+            throw new ArgumentOutOfRangeException(nameof(hiddenDimension),
+                $"Hidden dimension must be positive. Got: {hiddenDimension}");
+        if (numAttentionHeads <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numAttentionHeads),
+                $"Number of attention heads must be positive. Got: {numAttentionHeads}");
+        if (numTransformerLayers <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numTransformerLayers),
+                $"Number of transformer layers must be positive. Got: {numTransformerLayers}");
+        if (numLabels <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numLabels),
+                $"Number of labels must be positive. Got: {numLabels}");
+
+        var identityActivation = new IdentityActivation<T>() as IActivationFunction<T>;
+        var reluActivation = new ReLUActivation<T>() as IActivationFunction<T>;
+
+        // === Stacked Transformer Encoder layers for contextual token representations ===
+        for (int layer = 0; layer < numTransformerLayers; layer++)
+        {
+            yield return new TransformerEncoderLayer<T>(
+                embeddingSize: hiddenDimension,
+                numHeads: numAttentionHeads,
+                feedForwardDim: intermediateDimension);
+
+            if (dropoutRate > 0 && layer < numTransformerLayers - 1)
+            {
+                yield return new DropoutLayer<T>(dropoutRate);
+            }
+        }
+
+        // === Span representation: project concatenated boundary features ===
+        // In span-based models, span representation typically combines:
+        // start token (hiddenDim) + end token (hiddenDim) = 2 * hiddenDim -> spanEmbeddingDim
+        yield return new DenseLayer<T>(
+            inputSize: hiddenDimension * 2,
+            outputSize: spanEmbeddingDimension,
+            activationFunction: reluActivation);
+
+        if (dropoutRate > 0)
+        {
+            yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // === Span classifier: spanEmbeddingDim -> numLabels ===
+        yield return new DenseLayer<T>(
+            inputSize: spanEmbeddingDimension,
+            outputSize: numLabels,
+            activationFunction: identityActivation);
+    }
+
     #endregion
 }
