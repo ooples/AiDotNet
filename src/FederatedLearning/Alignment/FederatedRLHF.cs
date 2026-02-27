@@ -45,15 +45,21 @@ public class FederatedRLHF<T> : Infrastructure.FederatedLearningComponentBase<T>
         Dictionary<int, Dictionary<string, T[]>> clientRewardModels,
         Dictionary<int, double> clientWeights)
     {
-        if (clientRewardModels == null || clientRewardModels.Count == 0)
+        Guard.NotNull(clientRewardModels);
+        Guard.NotNull(clientWeights);
+        if (clientRewardModels.Count == 0)
         {
-            throw new ArgumentException("Client reward models cannot be null or empty.", nameof(clientRewardModels));
+            throw new ArgumentException("Client reward models cannot be empty.", nameof(clientRewardModels));
         }
 
         // Weighted average of reward model parameters.
         var referenceModel = clientRewardModels.First().Value;
         var layerNames = referenceModel.Keys.ToArray();
         double totalWeight = clientWeights.Values.Sum();
+        if (totalWeight <= 0)
+        {
+            totalWeight = clientRewardModels.Count;
+        }
 
         var aggregated = new Dictionary<string, T[]>(referenceModel.Count, referenceModel.Comparer);
         foreach (var layerName in layerNames)
@@ -94,6 +100,13 @@ public class FederatedRLHF<T> : Infrastructure.FederatedLearningComponentBase<T>
     /// <returns>KL divergence penalty value.</returns>
     public double ComputeKLPenalty(double[] policyLogProbs, double[] referenceLogProbs)
     {
+        Guard.NotNull(policyLogProbs);
+        Guard.NotNull(referenceLogProbs);
+        if (policyLogProbs.Length == 0)
+        {
+            return 0;
+        }
+
         if (policyLogProbs.Length != referenceLogProbs.Length)
         {
             throw new ArgumentException("Log probability arrays must have the same length.");

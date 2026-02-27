@@ -55,6 +55,8 @@ public class KNNPersonalization<T> : Infrastructure.FederatedLearningComponentBa
     /// <param name="labels">Corresponding labels.</param>
     public void BuildCache(T[][] features, int[] labels)
     {
+        Guard.NotNull(features);
+        Guard.NotNull(labels);
         if (features.Length != labels.Length)
         {
             throw new ArgumentException("Features and labels must have the same count.");
@@ -83,6 +85,12 @@ public class KNNPersonalization<T> : Infrastructure.FederatedLearningComponentBa
     /// <returns>Probability distribution over classes from distance-weighted kNN.</returns>
     public double[] KNNPredict(T[] queryFeatures, int numClasses)
     {
+        Guard.NotNull(queryFeatures);
+        if (numClasses < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(numClasses), "Must have at least 1 class.");
+        }
+
         if (_cache == null || _cache.Count == 0)
         {
             throw new InvalidOperationException("Cache not built. Call BuildCache first.");
@@ -165,6 +173,8 @@ public class KNNPersonalization<T> : Infrastructure.FederatedLearningComponentBa
     /// <returns>Combined prediction: lambda * p_kNN + (1 - lambda) * p_global.</returns>
     public double[] CombinedPredict(T[] queryFeatures, double[] globalPrediction, int numClasses)
     {
+        Guard.NotNull(queryFeatures);
+        Guard.NotNull(globalPrediction);
         var knnPred = KNNPredict(queryFeatures, numClasses);
         var combined = new double[numClasses];
 

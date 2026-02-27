@@ -47,6 +47,8 @@ public class FederatedDPO<T> : Infrastructure.FederatedLearningComponentBase<T>
         double[] referenceChosenLogProbs,
         double[] referenceRejectedLogProbs)
     {
+        ValidateLogProbArrays(policyChosenLogProbs, policyRejectedLogProbs,
+            referenceChosenLogProbs, referenceRejectedLogProbs);
         int batchSize = policyChosenLogProbs.Length;
         if (batchSize == 0)
         {
@@ -79,14 +81,20 @@ public class FederatedDPO<T> : Infrastructure.FederatedLearningComponentBase<T>
         Dictionary<int, Dictionary<string, T[]>> clientModels,
         Dictionary<int, double> clientWeights)
     {
-        if (clientModels == null || clientModels.Count == 0)
+        Guard.NotNull(clientModels);
+        Guard.NotNull(clientWeights);
+        if (clientModels.Count == 0)
         {
-            throw new ArgumentException("Client models cannot be null or empty.", nameof(clientModels));
+            throw new ArgumentException("Client models cannot be empty.", nameof(clientModels));
         }
 
         var referenceModel = clientModels.First().Value;
         var layerNames = referenceModel.Keys.ToArray();
         double totalWeight = clientWeights.Values.Sum();
+        if (totalWeight <= 0)
+        {
+            totalWeight = clientModels.Count;
+        }
 
         var aggregated = new Dictionary<string, T[]>(referenceModel.Count, referenceModel.Comparer);
         foreach (var layerName in layerNames)
@@ -140,6 +148,8 @@ public class FederatedDPO<T> : Infrastructure.FederatedLearningComponentBase<T>
         double[] referenceChosenLogProbs,
         double[] referenceRejectedLogProbs)
     {
+        ValidateLogProbArrays(policyChosenLogProbs, policyRejectedLogProbs,
+            referenceChosenLogProbs, referenceRejectedLogProbs);
         int batchSize = policyChosenLogProbs.Length;
         var weights = new double[batchSize];
 
@@ -176,6 +186,8 @@ public class FederatedDPO<T> : Infrastructure.FederatedLearningComponentBase<T>
         double[] referenceChosenLogProbs,
         double[] referenceRejectedLogProbs)
     {
+        ValidateLogProbArrays(policyChosenLogProbs, policyRejectedLogProbs,
+            referenceChosenLogProbs, referenceRejectedLogProbs);
         int batchSize = policyChosenLogProbs.Length;
         var margins = new double[batchSize];
 
@@ -222,6 +234,25 @@ public class FederatedDPO<T> : Infrastructure.FederatedLearningComponentBase<T>
 
     /// <summary>Gets the DPO configuration options.</summary>
     public FederatedDPOOptions Options => _options;
+
+    private static void ValidateLogProbArrays(
+        double[] policyChosen, double[] policyRejected,
+        double[] referenceChosen, double[] referenceRejected)
+    {
+        Guard.NotNull(policyChosen);
+        Guard.NotNull(policyRejected);
+        Guard.NotNull(referenceChosen);
+        Guard.NotNull(referenceRejected);
+
+        if (policyChosen.Length != policyRejected.Length ||
+            policyChosen.Length != referenceChosen.Length ||
+            policyChosen.Length != referenceRejected.Length)
+        {
+            throw new ArgumentException(
+                $"All log probability arrays must have equal length. Got chosen={policyChosen.Length}, " +
+                $"rejected={policyRejected.Length}, refChosen={referenceChosen.Length}, refRejected={referenceRejected.Length}.");
+        }
+    }
 }
 
 /// <summary>
@@ -233,17 +264,37 @@ public class FederatedDPOOptions
     /// Gets or sets the DPO temperature (beta). Higher values = sharper preference.
     /// Default: 0.1 per Rafailov et al.
     /// </summary>
-    public double Beta { get; set; } = 0.1;
+    private double _beta = 0.1;
+    private double _learningRate = 5e-7;
+    private int _localEpochs = 1;
+    private int _loraRank = 8;
 
     /// <summary>
-    /// Gets or sets the learning rate for DPO training. Default: 5e-7.
+    /// Gets or sets the DPO temperature (beta). Must be positive. Default: 0.1.
     /// </summary>
-    public double LearningRate { get; set; } = 5e-7;
+    public double Beta
+    {
+        get => _beta;
+        set => _beta = value > 0 ? value : throw new ArgumentOutOfRangeException(nameof(value), "Beta must be positive.");
+    }
 
     /// <summary>
-    /// Gets or sets the number of local DPO epochs per round. Default: 1.
+    /// Gets or sets the learning rate for DPO training. Must be positive. Default: 5e-7.
     /// </summary>
-    public int LocalEpochs { get; set; } = 1;
+    public double LearningRate
+    {
+        get => _learningRate;
+        set => _learningRate = value > 0 ? value : throw new ArgumentOutOfRangeException(nameof(value), "Learning rate must be positive.");
+    }
+
+    /// <summary>
+    /// Gets or sets the number of local DPO epochs per round. Must be at least 1. Default: 1.
+    /// </summary>
+    public int LocalEpochs
+    {
+        get => _localEpochs;
+        set => _localEpochs = value >= 1 ? value : throw new ArgumentOutOfRangeException(nameof(value), "LocalEpochs must be at least 1.");
+    }
 
     /// <summary>
     /// Gets or sets whether to use LoRA for DPO training. Default: true.
@@ -251,7 +302,11 @@ public class FederatedDPOOptions
     public bool UseLoRA { get; set; } = true;
 
     /// <summary>
-    /// Gets or sets the LoRA rank if UseLoRA is true. Default: 8.
+    /// Gets or sets the LoRA rank if UseLoRA is true. Must be at least 1. Default: 8.
     /// </summary>
-    public int LoRARank { get; set; } = 8;
+    public int LoRARank
+    {
+        get => _loraRank;
+        set => _loraRank = value >= 1 ? value : throw new ArgumentOutOfRangeException(nameof(value), "LoRA rank must be at least 1.");
+    }
 }

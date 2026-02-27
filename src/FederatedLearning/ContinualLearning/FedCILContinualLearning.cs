@@ -54,6 +54,12 @@ public class FedCILContinualLearning<T> : Infrastructure.FederatedLearningCompon
     /// <param name="newPrototype">Newly computed prototype from client data.</param>
     public void UpdatePrototype(int classLabel, T[] newPrototype)
     {
+        Guard.NotNull(newPrototype);
+        if (newPrototype.Length == 0)
+        {
+            throw new ArgumentException("Prototype cannot be empty.", nameof(newPrototype));
+        }
+
         if (_globalPrototypes.TryGetValue(classLabel, out var existing))
         {
             // EMA update.
@@ -108,8 +114,15 @@ public class FedCILContinualLearning<T> : Infrastructure.FederatedLearningCompon
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// FedCIL uses prototype-based replay rather than parameter importance weighting.
+    /// Returns uniform importance (1.0) for all parameters. The <paramref name="taskData"/>
+    /// is intentionally unused because class prototypes are maintained separately via
+    /// <see cref="UpdatePrototype"/>.
+    /// </remarks>
     public Vector<T> ComputeImportance(Vector<T> modelParameters, Matrix<T> taskData)
     {
+        Guard.NotNull(modelParameters);
         var importance = new T[modelParameters.Length];
         for (int i = 0; i < importance.Length; i++)
         {
@@ -120,12 +133,22 @@ public class FedCILContinualLearning<T> : Infrastructure.FederatedLearningCompon
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// FedCIL uses prototype replay for anti-forgetting. The <paramref name="importanceWeights"/>
+    /// are applied as uniform weights, making this a simple L2 penalty rather than
+    /// importance-weighted like EWC.
+    /// </remarks>
     public T ComputeRegularizationPenalty(
         Vector<T> currentParameters, Vector<T> referenceParameters,
         Vector<T> importanceWeights, double regularizationStrength)
     {
+        Guard.NotNull(currentParameters);
+        Guard.NotNull(referenceParameters);
+        Guard.NotNull(importanceWeights);
+
         T penalty = NumOps.Zero;
-        for (int i = 0; i < currentParameters.Length; i++)
+        int len = Math.Min(currentParameters.Length, referenceParameters.Length);
+        for (int i = 0; i < len; i++)
         {
             var diff = NumOps.Subtract(currentParameters[i], referenceParameters[i]);
             penalty = NumOps.Add(penalty, NumOps.Multiply(diff, diff));
@@ -135,9 +158,14 @@ public class FedCILContinualLearning<T> : Infrastructure.FederatedLearningCompon
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// FedCIL uses prototype-based synthetic replay for anti-forgetting, not gradient projection.
+    /// The gradient is passed through unchanged. Use <see cref="GenerateSyntheticFeatures"/>
+    /// to create replay data from class prototypes.
+    /// </remarks>
     public Vector<T> ProjectGradient(Vector<T> gradient, Vector<T> importanceWeights)
     {
-        return gradient; // FedCIL uses prototype-based replay, not gradient projection.
+        return gradient;
     }
 
     /// <inheritdoc/>
@@ -145,9 +173,19 @@ public class FedCILContinualLearning<T> : Infrastructure.FederatedLearningCompon
         Dictionary<int, Vector<T>> clientImportances,
         Dictionary<int, double>? clientWeights)
     {
+        Guard.NotNull(clientImportances);
+        if (clientImportances.Count == 0)
+        {
+            throw new ArgumentException("Client importances cannot be empty.", nameof(clientImportances));
+        }
+
         int d = clientImportances.Values.First().Length;
         var aggregated = new T[d];
         double totalWeight = clientWeights?.Values.Sum() ?? clientImportances.Count;
+        if (totalWeight <= 0)
+        {
+            totalWeight = clientImportances.Count;
+        }
 
         foreach (var (clientId, importance) in clientImportances)
         {
@@ -162,8 +200,8 @@ public class FedCILContinualLearning<T> : Infrastructure.FederatedLearningCompon
         return new Vector<T>(aggregated);
     }
 
-    /// <summary>Gets the known classes.</summary>
-    public IReadOnlyCollection<int> KnownClasses => _globalPrototypes.Keys;
+    /// <summary>Gets the known classes as a snapshot (not a live view).</summary>
+    public IReadOnlyCollection<int> KnownClasses => _globalPrototypes.Keys.ToList().AsReadOnly();
 
     /// <summary>Gets the prototype decay rate.</summary>
     public double PrototypeDecay => _prototypeDecay;

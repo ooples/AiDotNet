@@ -51,8 +51,22 @@ public class SegmentedGossipProtocol<T> : Infrastructure.FederatedLearningCompon
         Dictionary<string, T[]> myModel,
         Dictionary<string, T[]> peerModel)
     {
-        var layerNames = myModel.Keys.ToArray();
+        Guard.NotNull(myModel);
+        Guard.NotNull(peerModel);
+        if (myModel.Count == 0)
+        {
+            throw new ArgumentException("Model cannot be empty.", nameof(myModel));
+        }
+
+        // Use sorted keys for deterministic segment partitioning across peers.
+        var layerNames = myModel.Keys.OrderBy(k => k, StringComparer.Ordinal).ToArray();
         int totalParams = layerNames.Sum(ln => myModel[ln].Length);
+        if (totalParams == 0)
+        {
+            _currentRound++;
+            return new Dictionary<string, T[]>(myModel);
+        }
+
         int segmentSize = (totalParams + _numSegments - 1) / _numSegments;
         int activeSegment = _currentRound % _numSegments;
         int segmentStart = activeSegment * segmentSize;
@@ -64,29 +78,37 @@ public class SegmentedGossipProtocol<T> : Infrastructure.FederatedLearningCompon
         foreach (var layerName in layerNames)
         {
             var myParams = myModel[layerName];
-            var peerParams = peerModel[layerName];
             var updated = new T[myParams.Length];
 
-            for (int i = 0; i < myParams.Length; i++)
+            if (peerModel.TryGetValue(layerName, out var peerParams))
             {
-                if (globalIdx >= segmentStart && globalIdx < segmentEnd)
+                for (int i = 0; i < myParams.Length; i++)
                 {
-                    // Average this segment.
-                    updated[i] = NumOps.FromDouble(
-                        (NumOps.ToDouble(myParams[i]) + NumOps.ToDouble(peerParams[i])) / 2.0);
-                }
-                else
-                {
-                    updated[i] = myParams[i];
-                }
+                    if (globalIdx >= segmentStart && globalIdx < segmentEnd && i < peerParams.Length)
+                    {
+                        // Average this segment.
+                        updated[i] = NumOps.FromDouble(
+                            (NumOps.ToDouble(myParams[i]) + NumOps.ToDouble(peerParams[i])) / 2.0);
+                    }
+                    else
+                    {
+                        updated[i] = myParams[i];
+                    }
 
-                globalIdx++;
+                    globalIdx++;
+                }
+            }
+            else
+            {
+                // Peer missing this layer — keep local values.
+                Array.Copy(myParams, updated, myParams.Length);
+                globalIdx += myParams.Length;
             }
 
             result[layerName] = updated;
         }
 
-        _currentRound++;
+        Interlocked.Increment(ref _currentRound);
         return result;
     }
 

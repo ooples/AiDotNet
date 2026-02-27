@@ -59,6 +59,7 @@ public class FederatedExperienceReplay<T> : Infrastructure.FederatedLearningComp
     /// </summary>
     public void AddToBuffer(T[] features, int label)
     {
+        Guard.NotNull(features);
         _totalSeen++;
         if (_buffer.Count < _bufferCapacity)
         {
@@ -128,9 +129,19 @@ public class FederatedExperienceReplay<T> : Infrastructure.FederatedLearningComp
         Dictionary<int, Vector<T>> clientImportances,
         Dictionary<int, double>? clientWeights)
     {
+        Guard.NotNull(clientImportances);
+        if (clientImportances.Count == 0)
+        {
+            throw new ArgumentException("Client importances cannot be empty.", nameof(clientImportances));
+        }
+
         int d = clientImportances.Values.First().Length;
         var aggregated = new T[d];
         double totalWeight = clientWeights?.Values.Sum() ?? clientImportances.Count;
+        if (totalWeight <= 0)
+        {
+            totalWeight = clientImportances.Count;
+        }
 
         foreach (var (clientId, importance) in clientImportances)
         {

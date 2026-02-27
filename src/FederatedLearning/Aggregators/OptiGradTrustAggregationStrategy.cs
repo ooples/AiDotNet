@@ -61,18 +61,9 @@ public class OptiGradTrustAggregationStrategy<T> : ParameterDictionaryAggregatio
             throw new ArgumentException("Client models cannot be null or empty.", nameof(clientModels));
         }
 
-        if (clientModels.Count == 1)
-        {
-            return clientModels.First().Value;
-        }
-
-        var referenceModel = clientModels.First().Value;
-        var layerNames = referenceModel.Keys.ToArray();
-        var clientIds = clientModels.Keys.ToList();
-        int n = clientIds.Count;
-
-        // Initialize reputations for new clients.
+        // Initialize reputations for participating clients.
         _reputations ??= new Dictionary<int, double>();
+        var clientIds = clientModels.Keys.ToList();
         foreach (var clientId in clientIds)
         {
             if (!_reputations.ContainsKey(clientId))
@@ -80,6 +71,22 @@ public class OptiGradTrustAggregationStrategy<T> : ParameterDictionaryAggregatio
                 _reputations[clientId] = 1.0; // Start with full trust.
             }
         }
+
+        // Prune departed clients to prevent unbounded memory growth.
+        var departedIds = _reputations.Keys.Except(clientIds).ToList();
+        foreach (var id in departedIds)
+        {
+            _reputations.Remove(id);
+        }
+
+        if (clientModels.Count == 1)
+        {
+            return new Dictionary<string, T[]>(clientModels.First().Value);
+        }
+
+        var referenceModel = clientModels.First().Value;
+        var layerNames = referenceModel.Keys.ToArray();
+        int n = clientIds.Count;
 
         // Compute the weighted mean update as reference direction.
         double totalWeight = GetTotalWeightOrThrow(clientWeights, clientModels.Keys, nameof(clientWeights));

@@ -46,6 +46,18 @@ public class FedAGCContinualLearning<T> : Infrastructure.FederatedLearningCompon
     /// <inheritdoc/>
     public Vector<T> ComputeImportance(Vector<T> modelParameters, Matrix<T> taskData)
     {
+        Guard.NotNull(modelParameters);
+        Guard.NotNull(taskData);
+        if (modelParameters.Length == 0)
+        {
+            throw new ArgumentException("Model parameters cannot be empty.", nameof(modelParameters));
+        }
+
+        if (taskData.Rows == 0 || taskData.Columns == 0)
+        {
+            throw new ArgumentException("Task data cannot be empty.", nameof(taskData));
+        }
+
         // Approximate Fisher information: E[∇logp(y|x,θ)²] ≈ (1/N) Σ (∂L/∂θ)² for N samples.
         // We use finite differences with the task data to estimate squared gradients per parameter.
         int d = modelParameters.Length;
@@ -126,6 +138,18 @@ public class FedAGCContinualLearning<T> : Infrastructure.FederatedLearningCompon
         Vector<T> currentParameters, Vector<T> referenceParameters,
         Vector<T> importanceWeights, double regularizationStrength)
     {
+        Guard.NotNull(currentParameters);
+        Guard.NotNull(referenceParameters);
+        Guard.NotNull(importanceWeights);
+
+        if (currentParameters.Length != referenceParameters.Length ||
+            currentParameters.Length != importanceWeights.Length)
+        {
+            throw new ArgumentException(
+                $"Parameter vectors must have equal length. Got current={currentParameters.Length}, " +
+                $"reference={referenceParameters.Length}, importance={importanceWeights.Length}.");
+        }
+
         T penalty = NumOps.Zero;
         for (int i = 0; i < currentParameters.Length; i++)
         {
@@ -181,9 +205,19 @@ public class FedAGCContinualLearning<T> : Infrastructure.FederatedLearningCompon
         Dictionary<int, Vector<T>> clientImportances,
         Dictionary<int, double>? clientWeights)
     {
+        Guard.NotNull(clientImportances);
+        if (clientImportances.Count == 0)
+        {
+            throw new ArgumentException("Client importances cannot be empty.", nameof(clientImportances));
+        }
+
         int d = clientImportances.Values.First().Length;
         var aggregated = new T[d];
         double totalWeight = clientWeights?.Values.Sum() ?? clientImportances.Count;
+        if (totalWeight <= 0)
+        {
+            totalWeight = clientImportances.Count;
+        }
 
         foreach (var (clientId, importance) in clientImportances)
         {
