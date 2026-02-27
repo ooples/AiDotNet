@@ -10,7 +10,15 @@ public enum FederatedContinualLearningStrategy
     /// <summary>Federated EWC — Fisher-information-based importance weighting aggregated across clients.</summary>
     FederatedEWC,
     /// <summary>Federated Orthogonal Projection — projects gradients orthogonal to important directions.</summary>
-    OrthogonalProjection
+    OrthogonalProjection,
+    /// <summary>FedAGC — Adaptive Gradient Correction balancing plasticity and stability. (2024)</summary>
+    FedAGC,
+    /// <summary>Experience Replay — reservoir sampling buffer of representative old samples per client. (2023)</summary>
+    ExperienceReplay,
+    /// <summary>Data-Free FCL — prevents forgetting using synthetic data from teacher model, no real data storage. (2024)</summary>
+    DataFreeFCL,
+    /// <summary>FedCIL — class-incremental learning with prototype-based knowledge consolidation. (Qi et al., CVPR 2023)</summary>
+    FedCIL
 }
 
 /// <summary>

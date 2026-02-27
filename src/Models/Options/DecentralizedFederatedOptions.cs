@@ -8,7 +8,17 @@ public enum DecentralizedTopologyType
     /// <summary>Gossip — randomized peer selection each round.</summary>
     Gossip,
     /// <summary>Ring AllReduce — bandwidth-optimal ring-based averaging.</summary>
-    RingAllReduce
+    RingAllReduce,
+    /// <summary>DFedAvgM — decentralized averaging with momentum for faster convergence. (Sun et al., TMLR 2023)</summary>
+    DFedAvgM,
+    /// <summary>DFedBCA — block coordinate ascent with partial model sharing per round. (2024)</summary>
+    DFedBCA,
+    /// <summary>DeTAG — gradient tracking for exact convergence in decentralized non-convex optimization. (Li et al., 2023)</summary>
+    DeTAG,
+    /// <summary>Segmented gossip — exchange only model segments per round for bandwidth efficiency. (Bellet et al., 2024)</summary>
+    SegmentedGossip,
+    /// <summary>Time-varying topology — dynamic graph that changes each round for better mixing. (2024)</summary>
+    TimeVarying
 }
 
 /// <summary>

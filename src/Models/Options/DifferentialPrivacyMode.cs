@@ -29,6 +29,12 @@ public enum DifferentialPrivacyMode
     /// <summary>
     /// Apply both local and central differential privacy.
     /// </summary>
-    LocalAndCentral = 3
+    LocalAndCentral = 3,
+
+    /// <summary>
+    /// Shuffle model DP: clients add local noise, a shuffler permutes updates before the server
+    /// sees them, achieving central-DP-level accuracy with local-DP trust. (Balle et al., 2019)
+    /// </summary>
+    Shuffle = 4
 }
 

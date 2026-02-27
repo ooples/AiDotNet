@@ -135,6 +135,12 @@ public enum FederatedAggregationStrategy
     /// BOBA — Bayesian Optimal Byzantine-robust Aggregation with posterior inference
     /// over honest/malicious client labels. (2024)
     /// </summary>
-    Boba = 22
+    Boba = 22,
+
+    /// <summary>
+    /// OptiGradTrust — Optimized gradient trust scoring with EMA-based historical reputation
+    /// tracking. Clients build trust over time via consistent aligned updates. (2024)
+    /// </summary>
+    OptiGradTrust = 23
 }
 
