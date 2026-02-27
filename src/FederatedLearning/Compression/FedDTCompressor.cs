@@ -102,40 +102,69 @@ public class FedDTCompressor<T> : Infrastructure.FederatedLearningComponentBase<
     {
         int count = end - start;
 
-        // Leaf conditions: max depth, min size, or variance below threshold.
-        if (depth >= _maxTreeDepth || count <= _minLeafSize)
+        // Compute variance to decide whether to split further.
+        double sum = 0, sumSq = 0;
+        for (int i = start; i < end; i++)
         {
-            double sum = 0;
-            for (int i = start; i < end; i++)
-            {
-                sum += values[i];
-            }
+            sum += values[i];
+            sumSq += values[i] * values[i];
+        }
 
-            double avg = count > 0 ? sum / count : 0;
+        double mean = count > 0 ? sum / count : 0;
+        double variance = count > 1 ? (sumSq / count - mean * mean) : 0;
 
+        // Leaf conditions: max depth, min size, or variance below threshold.
+        if (depth >= _maxTreeDepth || count <= _minLeafSize || variance < _pruningThreshold * _pruningThreshold)
+        {
             // Prune near-zero leaves.
-            if (Math.Abs(avg) < _pruningThreshold)
+            if (Math.Abs(mean) < _pruningThreshold)
             {
-                avg = 0;
+                mean = 0;
             }
 
-            leafValues.Add(avg);
+            leafValues.Add(mean);
             leafCounts.Add(count);
             return;
         }
 
-        // Split at median value to create balanced tree.
-        int mid = start + count / 2;
-
-        // Find split threshold: median of values in the range.
+        // Find the best split point that minimizes variance in both children.
+        // Use the median value as the split threshold for balanced partitions.
         var sorted = new double[count];
         Array.Copy(values, start, sorted, 0, count);
         Array.Sort(sorted);
         double splitVal = sorted[count / 2];
         splits.Add(splitVal);
 
-        // Partition: values <= split go left, > split go right.
-        // For simplicity, split by index (spatial partition of parameter vector).
+        // Value-based partition: values <= split go left, > split go right.
+        // Rearrange the values array in-place to group left and right.
+        int left = start;
+        int right = end - 1;
+        while (left <= right)
+        {
+            if (values[left] <= splitVal)
+            {
+                left++;
+            }
+            else
+            {
+                // Swap with right.
+                (values[left], values[right]) = (values[right], values[left]);
+                right--;
+            }
+        }
+
+        int mid = left; // First element of the right partition.
+
+        // Ensure we don't create empty partitions (can happen with many equal values).
+        if (mid == start)
+        {
+            mid = start + 1;
+        }
+        else if (mid == end)
+        {
+            mid = end - 1;
+        }
+
         BuildTree(values, start, mid, depth + 1, splits, leafValues, leafCounts);
         BuildTree(values, mid, end, depth + 1, splits, leafValues, leafCounts);
     }

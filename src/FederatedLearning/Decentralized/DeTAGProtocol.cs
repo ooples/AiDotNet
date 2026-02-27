@@ -40,14 +40,28 @@ public class DeTAGProtocol<T> : Infrastructure.FederatedLearningComponentBase<T>
     }
 
     /// <summary>
-    /// Performs one DeTAG update step for a client.
+    /// Performs one DeTAG update step for a client, including neighbor-averaged gradient tracking.
     /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Each client maintains a "gradient tracker" that estimates
+    /// the global gradient. The tracker is updated by: (1) averaging with neighbors' trackers
+    /// (consensus step), then (2) correcting with the local gradient change (tracking step).
+    /// This two-step process ensures that the tracker converges to the true global gradient,
+    /// enabling exact convergence even with decentralized heterogeneous data.</para>
+    ///
+    /// <para>Update rules:</para>
+    /// <code>
+    /// y_k = sum(W_kj * y_j) + grad_new_k - grad_old_k  // tracker: consensus + correction
+    /// x_k = sum(W_kj * x_j) - lr * y_k                  // params: consensus - lr * tracker
+    /// </code>
+    /// </remarks>
     /// <param name="clientId">This client's ID.</param>
     /// <param name="currentParams">Current model parameters (flattened).</param>
     /// <param name="newGradient">Gradient computed on current data.</param>
     /// <param name="previousGradient">Gradient from previous round.</param>
     /// <param name="neighborParams">Neighboring clients' parameters.</param>
-    /// <param name="mixingWeights">Mixing weights for neighbors.</param>
+    /// <param name="neighborTrackers">Neighboring clients' gradient trackers (from their last step).</param>
+    /// <param name="mixingWeights">Mixing weights for neighbors (doubly-stochastic matrix row).</param>
     /// <returns>Updated parameters.</returns>
     public T[] Step(
         int clientId,
@@ -55,6 +69,7 @@ public class DeTAGProtocol<T> : Infrastructure.FederatedLearningComponentBase<T>
         T[] newGradient,
         T[] previousGradient,
         Dictionary<int, T[]> neighborParams,
+        Dictionary<int, double[]>? neighborTrackers,
         Dictionary<int, double> mixingWeights)
     {
         int d = currentParams.Length;
@@ -71,33 +86,95 @@ public class DeTAGProtocol<T> : Infrastructure.FederatedLearningComponentBase<T>
 
         var tracker = _gradientTrackers[clientId];
 
-        // Update gradient tracker: y_k = sum(W_kj * y_j) + grad_new - grad_old
-        // For simplicity, we use the local tracker only (single-node view).
-        for (int i = 0; i < d; i++)
+        // Step 1: Gradient tracker update — y_k = sum(W_kj * y_j) + grad_new - grad_old.
+        // First compute the consensus average of neighbor trackers.
+        double totalWeight = 0;
+        foreach (var w in mixingWeights.Values)
         {
-            tracker[i] += NumOps.ToDouble(newGradient[i]) - NumOps.ToDouble(previousGradient[i]);
+            totalWeight += w;
         }
 
-        // Consensus averaging with neighbors.
-        double totalWeight = mixingWeights.Values.Sum();
-        var result = new T[d];
+        var newTracker = new double[d];
 
+        if (neighborTrackers != null && neighborTrackers.Count > 0)
+        {
+            // Average neighbors' gradient trackers: sum(W_kj * y_j).
+            for (int i = 0; i < d; i++)
+            {
+                double trackerAvg = 0;
+                double trackerWeightSum = 0;
+
+                foreach (var (neighborId, w) in mixingWeights)
+                {
+                    if (neighborTrackers.TryGetValue(neighborId, out var nt) && i < nt.Length)
+                    {
+                        trackerAvg += (w / totalWeight) * nt[i];
+                        trackerWeightSum += w;
+                    }
+                }
+
+                // Include self-weight for the consensus (if not in neighbor list).
+                double selfWeight = 1.0 - (trackerWeightSum / totalWeight);
+                trackerAvg += selfWeight * tracker[i];
+
+                // Add gradient correction: + grad_new - grad_old.
+                newTracker[i] = trackerAvg + NumOps.ToDouble(newGradient[i]) - NumOps.ToDouble(previousGradient[i]);
+            }
+        }
+        else
+        {
+            // Fallback: no neighbor trackers available, use local correction only.
+            for (int i = 0; i < d; i++)
+            {
+                newTracker[i] = tracker[i] + NumOps.ToDouble(newGradient[i]) - NumOps.ToDouble(previousGradient[i]);
+            }
+        }
+
+        // Store updated tracker.
+        _gradientTrackers[clientId] = newTracker;
+
+        // Step 2: Parameter update — x_k = sum(W_kj * x_j) - lr * y_k.
+        var result = new T[d];
         for (int i = 0; i < d; i++)
         {
-            double avg = 0;
+            double paramAvg = 0;
             foreach (var (neighborId, w) in mixingWeights)
             {
-                if (neighborParams.TryGetValue(neighborId, out var np))
+                if (neighborParams.TryGetValue(neighborId, out var np) && i < np.Length)
                 {
-                    avg += (w / totalWeight) * NumOps.ToDouble(np[i]);
+                    paramAvg += (w / totalWeight) * NumOps.ToDouble(np[i]);
                 }
             }
 
-            // x_k = averaged_x - lr * y_k
-            result[i] = NumOps.FromDouble(avg - _learningRate * tracker[i]);
+            // Include self-weight for consensus.
+            double selfW = 0;
+            foreach (var w in mixingWeights.Values)
+            {
+                selfW += w;
+            }
+
+            selfW = 1.0 - (selfW / totalWeight);
+            paramAvg += selfW * NumOps.ToDouble(currentParams[i]);
+
+            result[i] = NumOps.FromDouble(paramAvg - _learningRate * newTracker[i]);
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Gets the current gradient tracker for a client (for sharing with neighbors).
+    /// </summary>
+    /// <param name="clientId">The client ID.</param>
+    /// <returns>The gradient tracker array, or null if not initialized.</returns>
+    public double[]? GetTracker(int clientId)
+    {
+        if (_gradientTrackers != null && _gradientTrackers.TryGetValue(clientId, out var tracker))
+        {
+            return (double[])tracker.Clone();
+        }
+
+        return null;
     }
 
     /// <summary>Gets the learning rate.</summary>

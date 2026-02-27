@@ -140,13 +140,10 @@ public class OneShotFederatedTrainer<T> : Infrastructure.FederatedLearningCompon
         Dictionary<int, Dictionary<string, T[]>> clientModels,
         Dictionary<int, int> clientSampleCounts)
     {
-        // Ensemble distillation: first compute weighted average as initialization,
-        // then refine with soft-label distillation from the ensemble.
-        // In practice, distillation requires unlabeled data; here we initialize with
-        // the weighted average and record the ensemble disagreement for downstream use.
+        // Ensemble distillation initialization: weighted average as starting point.
         var initial = AggregateWeightedAverage(clientModels, clientSampleCounts);
 
-        // Compute ensemble diversity metric (useful for clients).
+        // Compute ensemble diversity metric.
         double totalDiversity = 0;
         int layerCount = 0;
 
@@ -178,6 +175,144 @@ public class OneShotFederatedTrainer<T> : Infrastructure.FederatedLearningCompon
         LastEnsembleDiversity = layerCount > 0 ? totalDiversity / layerCount : 0;
 
         return initial;
+    }
+
+    /// <summary>
+    /// Computes the soft-label ensemble prediction by averaging softmax outputs from all client models.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Each client model produces a set of "logits" (raw prediction scores)
+    /// for a given input. By softening these with temperature and averaging across all client models,
+    /// we get a "soft label" that captures the collective knowledge of the entire ensemble. A student
+    /// model can then be trained to match these soft labels, effectively distilling the ensemble's
+    /// knowledge into a single model.</para>
+    /// </remarks>
+    /// <param name="clientLogits">Dictionary of client ID to logits array for a single sample.</param>
+    /// <param name="clientWeights">Optional per-client weights (by sample count).</param>
+    /// <returns>Soft-label probabilities averaged over the ensemble.</returns>
+    public double[] ComputeEnsembleSoftLabels(
+        Dictionary<int, double[]> clientLogits,
+        Dictionary<int, double>? clientWeights = null)
+    {
+        if (clientLogits.Count == 0)
+        {
+            throw new ArgumentException("Client logits cannot be empty.", nameof(clientLogits));
+        }
+
+        int numClasses = clientLogits.Values.First().Length;
+        var ensembleProbs = new double[numClasses];
+        double totalWeight = 0;
+
+        foreach (var (clientId, logits) in clientLogits)
+        {
+            double w = clientWeights?.GetValueOrDefault(clientId, 1.0) ?? 1.0;
+            totalWeight += w;
+
+            // Compute temperature-scaled softmax for this client.
+            double maxLogit = double.NegativeInfinity;
+            for (int i = 0; i < logits.Length; i++)
+            {
+                double scaled = logits[i] / _distillationTemperature;
+                if (scaled > maxLogit) maxLogit = scaled;
+            }
+
+            double expSum = 0;
+            var probs = new double[numClasses];
+            for (int i = 0; i < numClasses; i++)
+            {
+                probs[i] = Math.Exp(logits[i] / _distillationTemperature - maxLogit);
+                expSum += probs[i];
+            }
+
+            for (int i = 0; i < numClasses; i++)
+            {
+                ensembleProbs[i] += w * (probs[i] / expSum);
+            }
+        }
+
+        // Normalize by total weight.
+        if (totalWeight > 0)
+        {
+            for (int i = 0; i < numClasses; i++)
+            {
+                ensembleProbs[i] /= totalWeight;
+            }
+        }
+
+        return ensembleProbs;
+    }
+
+    /// <summary>
+    /// Computes the knowledge distillation loss: KL divergence between ensemble soft labels
+    /// and student soft predictions, scaled by temperature squared.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> The distillation loss measures how well the student model
+    /// matches the ensemble's predictions. Temperature scaling makes the distributions softer,
+    /// revealing more information about inter-class relationships. The T² scaling ensures the
+    /// gradient magnitude is independent of temperature.</para>
+    /// </remarks>
+    /// <param name="ensembleSoftLabels">Soft labels from the ensemble (probabilities).</param>
+    /// <param name="studentLogits">Raw logits from the student model.</param>
+    /// <returns>Distillation loss: T² * KL(ensemble || student).</returns>
+    public double ComputeDistillationLoss(double[] ensembleSoftLabels, double[] studentLogits)
+    {
+        int n = ensembleSoftLabels.Length;
+        if (n != studentLogits.Length)
+        {
+            throw new ArgumentException("Ensemble and student must have same number of classes.");
+        }
+
+        // Compute temperature-scaled softmax for student.
+        double maxLogit = double.NegativeInfinity;
+        for (int i = 0; i < n; i++)
+        {
+            double scaled = studentLogits[i] / _distillationTemperature;
+            if (scaled > maxLogit) maxLogit = scaled;
+        }
+
+        double expSum = 0;
+        var studentProbs = new double[n];
+        for (int i = 0; i < n; i++)
+        {
+            studentProbs[i] = Math.Exp(studentLogits[i] / _distillationTemperature - maxLogit);
+            expSum += studentProbs[i];
+        }
+
+        for (int i = 0; i < n; i++)
+        {
+            studentProbs[i] /= expSum;
+        }
+
+        // KL(ensemble || student).
+        double kl = 0;
+        for (int i = 0; i < n; i++)
+        {
+            if (ensembleSoftLabels[i] > 1e-10)
+            {
+                kl += ensembleSoftLabels[i] * Math.Log(ensembleSoftLabels[i] / Math.Max(studentProbs[i], 1e-10));
+            }
+        }
+
+        return kl * _distillationTemperature * _distillationTemperature;
+    }
+
+    /// <summary>
+    /// Computes the combined one-shot distillation loss: alpha * KD_loss + (1-alpha) * task_loss.
+    /// </summary>
+    /// <param name="taskLoss">Hard-label task loss (cross-entropy on real data).</param>
+    /// <param name="ensembleSoftLabels">Soft labels from ensemble.</param>
+    /// <param name="studentLogits">Student model logits.</param>
+    /// <param name="alpha">Interpolation weight between task and distillation loss. Default: 0.7.</param>
+    /// <returns>Combined loss for the distillation step.</returns>
+    public double ComputeCombinedLoss(
+        double taskLoss,
+        double[] ensembleSoftLabels,
+        double[] studentLogits,
+        double alpha = 0.7)
+    {
+        double kdLoss = ComputeDistillationLoss(ensembleSoftLabels, studentLogits);
+        return alpha * kdLoss + (1.0 - alpha) * taskLoss;
     }
 
     /// <summary>
