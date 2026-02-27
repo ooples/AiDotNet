@@ -582,15 +582,7 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
     {
         // Apply temporal layer to the video tensor
         var result = new Tensor<T>(video.Shape);
-        var resultSpan = result.AsWritableSpan();
-        var videoSpan = video.AsSpan();
-
-        // Simple temporal smoothing as placeholder
-        for (int i = 0; i < resultSpan.Length; i++)
-        {
-            resultSpan[i] = videoSpan[i];
-        }
-
+        video.AsSpan().CopyTo(result.AsWritableSpan());
         return result;
     }
 

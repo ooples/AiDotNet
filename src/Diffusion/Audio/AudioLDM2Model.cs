@@ -807,17 +807,13 @@ public class AudioLDM2Model<T> : AudioDiffusionModelBase<T>
         for (int step = 0; step <= numSteps; step++)
         {
             var t = (double)step / numSteps;
-            var interpolated = new Tensor<T>(latent1.Shape);
-            var interpSpan = interpolated.AsWritableSpan();
-            var span1 = latent1.AsSpan();
-            var span2 = latent2.AsSpan();
 
-            for (int i = 0; i < interpSpan.Length; i++)
-            {
-                var v1 = NumOps.ToDouble(span1[i]);
-                var v2 = NumOps.ToDouble(span2[i]);
-                interpSpan[i] = NumOps.FromDouble(v1 * (1 - t) + v2 * t);
-            }
+            // interpolated = (1 - t) * latent1 + t * latent2
+            var oneMinusT = NumOps.FromDouble(1.0 - t);
+            var tScalar = NumOps.FromDouble(t);
+            var scaledL1 = Engine.TensorMultiplyScalar<T>(latent1, oneMinusT);
+            var scaledL2 = Engine.TensorMultiplyScalar<T>(latent2, tScalar);
+            var interpolated = Engine.TensorAdd<T>(scaledL1, scaledL2);
 
             // Decode
             var unscaled = _audioVAE.UnscaleLatent(interpolated);

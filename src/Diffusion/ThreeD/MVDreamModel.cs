@@ -580,21 +580,10 @@ public class MVDreamModel<T> : ThreeDDiffusionModelBase<T>
         var condNoisePred = _multiViewUNet.PredictNoiseMultiView(noisyLatentsTensor, timestep, combinedCondCond);
         var uncondNoisePred = _multiViewUNet.PredictNoiseMultiView(noisyLatentsTensor, timestep, combinedUncondCond);
 
-        // Compute SDS gradient
-        var gradient = new Tensor<T>(condNoisePred.Shape);
-        var gradSpan = gradient.AsWritableSpan();
-        var condSpan = condNoisePred.AsSpan();
-        var uncondSpan = uncondNoisePred.AsSpan();
-
-        var scale = NumOps.FromDouble(guidanceScale);
-
-        for (int i = 0; i < gradSpan.Length; i++)
-        {
-            var diff = NumOps.Subtract(condSpan[i], uncondSpan[i]);
-            gradSpan[i] = NumOps.Multiply(scale, diff);
-        }
-
-        return gradient;
+        // Compute SDS gradient: scale * (cond - uncond)
+        var scaleT = NumOps.FromDouble(guidanceScale);
+        var diff = Engine.TensorSubtract<T>(condNoisePred, uncondNoisePred);
+        return Engine.TensorMultiplyScalar<T>(diff, scaleT);
     }
 
     #endregion

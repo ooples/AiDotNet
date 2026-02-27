@@ -707,34 +707,8 @@ public abstract class AudioDiffusionModelBase<T> : LatentDiffusionModelBase<T>, 
     /// </summary>
     protected virtual Tensor<T> CombineTextAndSpeakerEmbeddings(Tensor<T> textEmbedding, Tensor<T> speakerEmbedding)
     {
-        var textShape = textEmbedding.Shape;
-        var speakerShape = speakerEmbedding.Shape;
-
         // Concatenate along feature dimension
-        var combinedDim = textShape[^1] + speakerShape[^1];
-        var combinedShape = new int[textShape.Length];
-        Array.Copy(textShape, combinedShape, textShape.Length);
-        combinedShape[^1] = combinedDim;
-
-        var combined = new Tensor<T>(combinedShape);
-        var combinedSpan = combined.AsWritableSpan();
-        var textSpan = textEmbedding.AsSpan();
-        var speakerSpan = speakerEmbedding.AsSpan();
-
-        // Copy text embedding
-        for (int i = 0; i < textSpan.Length; i++)
-        {
-            combinedSpan[i] = textSpan[i];
-        }
-
-        // Append speaker embedding (broadcast across sequence if needed)
-        var speakerLen = speakerSpan.Length;
-        for (int i = 0; i < speakerLen; i++)
-        {
-            combinedSpan[textSpan.Length + i] = speakerSpan[i];
-        }
-
-        return combined;
+        return Engine.TensorConcatenate<T>(new[] { textEmbedding, speakerEmbedding }, axis: -1);
     }
 
     /// <summary>
@@ -805,31 +779,7 @@ public abstract class AudioDiffusionModelBase<T> : LatentDiffusionModelBase<T>, 
     /// </summary>
     protected virtual Tensor<T> ConcatenateLatents(Tensor<T> a, Tensor<T> b)
     {
-        var aShape = a.Shape;
-        var bShape = b.Shape;
-
-        var outputShape = new int[aShape.Length];
-        Array.Copy(aShape, outputShape, aShape.Length);
-        outputShape[^1] = aShape[^1] + bShape[^1];
-
-        var output = new Tensor<T>(outputShape);
-        var outSpan = output.AsWritableSpan();
-        var aSpan = a.AsSpan();
-        var bSpan = b.AsSpan();
-
-        // Copy a
-        for (int i = 0; i < aSpan.Length; i++)
-        {
-            outSpan[i] = aSpan[i];
-        }
-
-        // Copy b
-        for (int i = 0; i < bSpan.Length; i++)
-        {
-            outSpan[aSpan.Length + i] = bSpan[i];
-        }
-
-        return output;
+        return Engine.TensorConcatenate<T>(new[] { a, b }, axis: -1);
     }
 
     /// <summary>
@@ -837,31 +787,7 @@ public abstract class AudioDiffusionModelBase<T> : LatentDiffusionModelBase<T>, 
     /// </summary>
     protected virtual Tensor<T> ConcatenateAudio(Tensor<T> a, Tensor<T> b)
     {
-        var aShape = a.Shape;
-        var bShape = b.Shape;
-
-        var outputShape = new int[aShape.Length];
-        Array.Copy(aShape, outputShape, aShape.Length);
-        outputShape[^1] = aShape[^1] + bShape[^1];
-
-        var output = new Tensor<T>(outputShape);
-        var outSpan = output.AsWritableSpan();
-        var aSpan = a.AsSpan();
-        var bSpan = b.AsSpan();
-
-        // Copy a
-        for (int i = 0; i < aSpan.Length; i++)
-        {
-            outSpan[i] = aSpan[i];
-        }
-
-        // Copy b
-        for (int i = 0; i < bSpan.Length; i++)
-        {
-            outSpan[aSpan.Length + i] = bSpan[i];
-        }
-
-        return output;
+        return Engine.TensorConcatenate<T>(new[] { a, b }, axis: -1);
     }
 
     #endregion
