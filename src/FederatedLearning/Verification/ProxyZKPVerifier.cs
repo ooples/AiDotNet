@@ -1,3 +1,6 @@
+using System.Security.Cryptography;
+using System.Text;
+
 namespace AiDotNet.FederatedLearning.Verification;
 
 /// <summary>
@@ -12,9 +15,9 @@ namespace AiDotNet.FederatedLearning.Verification;
 ///
 /// <para>Protocol:</para>
 /// <list type="number">
-/// <item>Client computes update and commitment: C = Hash(update || nonce)</item>
-/// <item>Client sends (update, C) to proxy</item>
-/// <item>Proxy verifies: norm check, gradient bounds, consistency with commitment</item>
+/// <item>Client computes update and commitment: C = SHA256(update || nonce)</item>
+/// <item>Client sends (update, C, nonce) to proxy</item>
+/// <item>Proxy verifies: recomputes hash, checks norm bounds, element bounds</item>
 /// <item>Proxy sends (update, certificate) to server (proxy cannot modify update)</item>
 /// </list>
 ///
@@ -48,20 +51,111 @@ public class ProxyZKPVerifier<T> : Infrastructure.FederatedLearningComponentBase
     }
 
     /// <summary>
-    /// Verifies a client update against proxy constraints.
+    /// Computes a commitment hash for a client update: C = SHA256(update_bytes || nonce).
+    /// Clients call this before sending their update to create a binding commitment.
+    /// </summary>
+    /// <param name="update">The model update to commit to.</param>
+    /// <param name="nonce">A random nonce for binding (prevents replay attacks).</param>
+    /// <returns>Hex-encoded SHA-256 commitment hash.</returns>
+    public string ComputeCommitment(Dictionary<string, T[]> update, byte[] nonce)
+    {
+        byte[] updateBytes = SerializeUpdate(update);
+
+        using var sha256 = SHA256.Create();
+        // Hash(update || nonce)
+        sha256.TransformBlock(updateBytes, 0, updateBytes.Length, null, 0);
+        sha256.TransformFinalBlock(nonce, 0, nonce.Length);
+
+        byte[] hash = sha256.Hash!;
+        return BitConverter.ToString(hash).Replace("-", "").ToLowerInvariant();
+    }
+
+    /// <summary>
+    /// Verifies a client update against proxy constraints including commitment hash verification.
     /// </summary>
     /// <param name="update">Client's model update.</param>
-    /// <param name="commitment">Client's commitment hash (hex string).</param>
+    /// <param name="commitment">Client's commitment hash (hex string from ComputeCommitment).</param>
+    /// <param name="nonce">The nonce used when computing the commitment.</param>
     /// <returns>Verification result with pass/fail and reason.</returns>
-    public ProxyVerificationResult Verify(Dictionary<string, T[]> update, string commitment)
+    public ProxyVerificationResult Verify(Dictionary<string, T[]> update, string commitment, byte[] nonce)
     {
-        double totalNorm2 = 0;
+        // Check 1: Commitment must be present.
+        if (string.IsNullOrEmpty(commitment))
+        {
+            return new ProxyVerificationResult(false, "Missing commitment hash.");
+        }
 
+        if (nonce == null || nonce.Length == 0)
+        {
+            return new ProxyVerificationResult(false, "Missing nonce.");
+        }
+
+        // Check 2: Verify commitment hash matches C = SHA256(update || nonce).
+        string recomputedCommitment = ComputeCommitment(update, nonce);
+        if (!string.Equals(commitment, recomputedCommitment, StringComparison.OrdinalIgnoreCase))
+        {
+            return new ProxyVerificationResult(false,
+                "Commitment hash mismatch: update was modified after commitment.");
+        }
+
+        // Check 3: Per-element magnitude bounds.
+        double totalNorm2 = 0;
         foreach (var kvp in update)
         {
             for (int i = 0; i < kvp.Value.Length; i++)
             {
                 double v = NumOps.ToDouble(kvp.Value[i]);
+
+                if (double.IsNaN(v) || double.IsInfinity(v))
+                {
+                    return new ProxyVerificationResult(false,
+                        $"NaN/Infinity detected in layer '{kvp.Key}' at index {i}.");
+                }
+
+                if (Math.Abs(v) > _maxElementMagnitude)
+                {
+                    return new ProxyVerificationResult(false,
+                        $"Element magnitude {Math.Abs(v):F4} exceeds limit {_maxElementMagnitude} in layer '{kvp.Key}'.");
+                }
+
+                totalNorm2 += v * v;
+            }
+        }
+
+        // Check 4: L2 norm bound.
+        double norm = Math.Sqrt(totalNorm2);
+        if (norm > _maxNorm)
+        {
+            return new ProxyVerificationResult(false,
+                $"Update norm {norm:F4} exceeds limit {_maxNorm}.");
+        }
+
+        return new ProxyVerificationResult(true, "Verified.", recomputedCommitment, norm);
+    }
+
+    /// <summary>
+    /// Overload for backward compatibility — verifies without nonce (commitment-only check skipped
+    /// if nonce is unavailable, but norm/element checks still apply).
+    /// </summary>
+    public ProxyVerificationResult Verify(Dictionary<string, T[]> update, string commitment)
+    {
+        if (string.IsNullOrEmpty(commitment))
+        {
+            return new ProxyVerificationResult(false, "Missing commitment hash.");
+        }
+
+        double totalNorm2 = 0;
+        foreach (var kvp in update)
+        {
+            for (int i = 0; i < kvp.Value.Length; i++)
+            {
+                double v = NumOps.ToDouble(kvp.Value[i]);
+
+                if (double.IsNaN(v) || double.IsInfinity(v))
+                {
+                    return new ProxyVerificationResult(false,
+                        $"NaN/Infinity detected in layer '{kvp.Key}' at index {i}.");
+                }
 
                 if (Math.Abs(v) > _maxElementMagnitude)
                 {
@@ -80,12 +174,50 @@ public class ProxyZKPVerifier<T> : Infrastructure.FederatedLearningComponentBase
                 $"Update norm {norm:F4} exceeds limit {_maxNorm}.");
         }
 
-        if (string.IsNullOrEmpty(commitment))
+        return new ProxyVerificationResult(true, "Verified (commitment not re-verified without nonce).", commitment, norm);
+    }
+
+    /// <summary>
+    /// Generates a cryptographically secure random nonce.
+    /// </summary>
+    /// <param name="length">Nonce length in bytes. Default: 32.</param>
+    /// <returns>Random nonce bytes.</returns>
+    public static byte[] GenerateNonce(int length = 32)
+    {
+        var nonce = new byte[length];
+        using var rng = RandomNumberGenerator.Create();
+        rng.GetBytes(nonce);
+        return nonce;
+    }
+
+    private byte[] SerializeUpdate(Dictionary<string, T[]> update)
+    {
+        // Deterministic serialization: sorted layer names, then IEEE 754 doubles.
+        var sortedKeys = update.Keys.OrderBy(k => k, StringComparer.Ordinal).ToList();
+        int totalParams = 0;
+        foreach (var key in sortedKeys)
         {
-            return new ProxyVerificationResult(false, "Missing commitment.");
+            totalParams += update[key].Length;
         }
 
-        return new ProxyVerificationResult(true, "Verified.");
+        // Layer name bytes + param doubles.
+        using var ms = new System.IO.MemoryStream();
+        using var writer = new System.IO.BinaryWriter(ms, Encoding.UTF8);
+
+        writer.Write(sortedKeys.Count);
+        foreach (var key in sortedKeys)
+        {
+            writer.Write(key);
+            var values = update[key];
+            writer.Write(values.Length);
+            for (int i = 0; i < values.Length; i++)
+            {
+                writer.Write(NumOps.ToDouble(values[i]));
+            }
+        }
+
+        writer.Flush();
+        return ms.ToArray();
     }
 
     /// <summary>Gets the maximum allowed norm.</summary>
@@ -101,10 +233,12 @@ public class ProxyZKPVerifier<T> : Infrastructure.FederatedLearningComponentBase
 public class ProxyVerificationResult
 {
     /// <summary>Creates a new verification result.</summary>
-    public ProxyVerificationResult(bool isValid, string reason)
+    public ProxyVerificationResult(bool isValid, string reason, string? commitmentHash = null, double? updateNorm = null)
     {
         IsValid = isValid;
         Reason = reason;
+        CommitmentHash = commitmentHash;
+        UpdateNorm = updateNorm;
     }
 
     /// <summary>Whether the verification passed.</summary>
@@ -112,4 +246,10 @@ public class ProxyVerificationResult
 
     /// <summary>Human-readable reason for the result.</summary>
     public string Reason { get; }
+
+    /// <summary>The verified commitment hash, if available.</summary>
+    public string? CommitmentHash { get; }
+
+    /// <summary>The L2 norm of the update, if computed.</summary>
+    public double? UpdateNorm { get; }
 }

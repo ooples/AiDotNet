@@ -191,20 +191,49 @@ public class DPFedLoRA<T> : Infrastructure.FederatedLearningComponentBase<T>, IF
             aggregated[i] = NumOps.Multiply(aggregated[i], invTotal);
         }
 
-        // Step 3: Add calibrated Gaussian noise.
+        // Step 3: Add per-layer calibrated Gaussian noise.
+        // Each layer gets noise proportional to its own sensitivity (max gradient norm).
         if (_noiseMultiplier > 0)
         {
-            double noiseStd = _noiseMultiplier * _clipNorm / Math.Sqrt(clientAdapters.Count);
             var rng = new Random(_seed);
-
-            // Per-layer noise calibration: compute per-layer sensitivity.
             int paramsPerLayer = adapterLen / Math.Max(_numAdaptedLayers, 1);
-            for (int i = 0; i < adapterLen; i++)
+
+            for (int layer = 0; layer < _numAdaptedLayers; layer++)
             {
-                double u1 = 1.0 - rng.NextDouble();
-                double u2 = 1.0 - rng.NextDouble();
-                double noise = noiseStd * Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-                aggregated[i] = NumOps.Add(aggregated[i], NumOps.FromDouble(noise));
+                int layerStart = layer * paramsPerLayer;
+                int layerEnd = (layer == _numAdaptedLayers - 1) ? adapterLen : layerStart + paramsPerLayer;
+
+                // Compute per-layer sensitivity: max clipped gradient norm across clients for this layer.
+                double maxLayerNorm = 0;
+                foreach (var (_, adapters) in clipped)
+                {
+                    double layerNorm2 = 0;
+                    for (int i = layerStart; i < layerEnd && i < adapters.Length; i++)
+                    {
+                        double v = NumOps.ToDouble(adapters[i]);
+                        layerNorm2 += v * v;
+                    }
+
+                    double layerNorm = Math.Sqrt(layerNorm2);
+                    if (layerNorm > maxLayerNorm)
+                    {
+                        maxLayerNorm = layerNorm;
+                    }
+                }
+
+                // Calibrate noise to this layer's sensitivity.
+                // Higher sensitivity layers get more noise; lower sensitivity layers get less.
+                double layerSensitivity = Math.Max(maxLayerNorm, 1e-10);
+                double layerNoiseStd = _noiseMultiplier * layerSensitivity / Math.Sqrt(clientAdapters.Count);
+
+                for (int i = layerStart; i < layerEnd && i < adapterLen; i++)
+                {
+                    // Box-Muller transform for Gaussian noise.
+                    double u1 = 1.0 - rng.NextDouble();
+                    double u2 = 1.0 - rng.NextDouble();
+                    double noise = layerNoiseStd * Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
+                    aggregated[i] = NumOps.Add(aggregated[i], NumOps.FromDouble(noise));
+                }
             }
         }
 

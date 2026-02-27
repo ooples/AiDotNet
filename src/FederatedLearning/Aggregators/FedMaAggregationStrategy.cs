@@ -62,58 +62,288 @@ public class FedMaAggregationStrategy<T> : ParameterDictionaryAggregationStrateg
             return clientModels.First().Value;
         }
 
-        // For multi-client scenarios, perform layer-wise matching then weighted average.
-        // The matching step aligns neurons across clients before averaging.
-        // In the current implementation, we use the first client as the reference
-        // and match all other clients to it, then perform weighted averaging.
         var referenceClientId = clientModels.Keys.First();
         var referenceModel = clientModels[referenceClientId];
         var layerNames = referenceModel.Keys.ToArray();
 
         double totalWeight = GetTotalWeightOrThrow(clientWeights, clientModels.Keys, nameof(clientWeights));
 
-        var aggregatedModel = new Dictionary<string, T[]>(referenceModel.Count, referenceModel.Comparer);
-        foreach (var layerName in layerNames)
-        {
-            int layerSize = referenceModel[layerName].Length;
-            var aggregated = CreateZeroInitializedLayer(layerSize);
+        // Step 1: For each non-reference client, compute optimal neuron permutations
+        // using the Hungarian algorithm to align neurons to the reference model.
+        var permutedModels = new Dictionary<int, Dictionary<string, T[]>>();
+        permutedModels[referenceClientId] = referenceModel;
 
+        foreach (var kvp in clientModels)
+        {
+            if (kvp.Key == referenceClientId)
+            {
+                continue;
+            }
+
+            permutedModels[kvp.Key] = MatchAndPermute(referenceModel, kvp.Value, layerNames);
+        }
+
+        // Step 2: Iterate matching refinement — recompute reference as current average, re-match.
+        for (int iter = 1; iter < _matchingIterations; iter++)
+        {
+            // Compute current weighted average as new reference.
+            var currentAvg = WeightedAverage(permutedModels, clientWeights, totalWeight, layerNames, referenceModel);
+
+            // Re-match all clients to the updated reference.
             foreach (var kvp in clientModels)
             {
-                int clientId = kvp.Key;
-                var clientModel = kvp.Value;
+                permutedModels[kvp.Key] = MatchAndPermute(currentAvg, kvp.Value, layerNames);
+            }
+        }
 
-                if (!clientWeights.TryGetValue(clientId, out var weight))
+        // Step 3: Final weighted average of the matched/permuted models.
+        return WeightedAverage(permutedModels, clientWeights, totalWeight, layerNames, referenceModel);
+    }
+
+    private Dictionary<string, T[]> MatchAndPermute(
+        Dictionary<string, T[]> reference,
+        Dictionary<string, T[]> client,
+        string[] layerNames)
+    {
+        var permuted = new Dictionary<string, T[]>(reference.Count);
+
+        foreach (var layerName in layerNames)
+        {
+            if (!client.TryGetValue(layerName, out var clientParams))
+            {
+                throw new ArgumentException($"Client is missing layer '{layerName}'.");
+            }
+
+            var refParams = reference[layerName];
+            int layerSize = refParams.Length;
+
+            if (clientParams.Length != layerSize)
+            {
+                throw new ArgumentException($"Layer '{layerName}' length mismatch.");
+            }
+
+            // Determine neuron count: assume neurons are contiguous blocks.
+            // For a weight matrix of size [out_features x in_features] stored flat,
+            // each neuron (row) has in_features elements.
+            // We use a heuristic: try to find the largest divisor that gives a reasonable neuron size.
+            int neuronCount = EstimateNeuronCount(layerSize);
+            int neuronSize = layerSize / neuronCount;
+
+            if (neuronCount <= 1 || neuronSize <= 0)
+            {
+                // Can't meaningfully permute, just copy.
+                permuted[layerName] = (T[])clientParams.Clone();
+                continue;
+            }
+
+            // Build cost matrix: cost[i][j] = negative cosine similarity between
+            // reference neuron i and client neuron j.
+            var costMatrix = new double[neuronCount, neuronCount];
+            for (int i = 0; i < neuronCount; i++)
+            {
+                for (int j = 0; j < neuronCount; j++)
                 {
-                    throw new ArgumentException($"Missing weight for client {clientId}.", nameof(clientWeights));
+                    costMatrix[i, j] = -CosineSimilarity(refParams, i * neuronSize, clientParams, j * neuronSize, neuronSize);
+                }
+            }
+
+            // Solve assignment using Hungarian algorithm.
+            int[] assignment = HungarianAlgorithm(costMatrix, neuronCount);
+
+            // Apply permutation: neuron assignment[i] of client maps to position i.
+            var permutedParams = new T[layerSize];
+            for (int i = 0; i < neuronCount; i++)
+            {
+                int srcNeuron = assignment[i];
+                double sim = -costMatrix[i, srcNeuron]; // recover similarity
+
+                if (sim < _matchingThreshold)
+                {
+                    // Below threshold: keep original position (no permutation for this neuron).
+                    srcNeuron = i;
                 }
 
-                if (!clientModel.TryGetValue(layerName, out var clientParams))
+                Array.Copy(clientParams, srcNeuron * neuronSize, permutedParams, i * neuronSize, neuronSize);
+            }
+
+            permuted[layerName] = permutedParams;
+        }
+
+        return permuted;
+    }
+
+    private Dictionary<string, T[]> WeightedAverage(
+        Dictionary<int, Dictionary<string, T[]>> models,
+        Dictionary<int, double> weights,
+        double totalWeight,
+        string[] layerNames,
+        Dictionary<string, T[]> template)
+    {
+        var result = new Dictionary<string, T[]>(template.Count, template.Comparer);
+
+        foreach (var layerName in layerNames)
+        {
+            int layerSize = template[layerName].Length;
+            var aggregated = CreateZeroInitializedLayer(layerSize);
+
+            foreach (var (clientId, model) in models)
+            {
+                if (!weights.TryGetValue(clientId, out var w))
                 {
-                    throw new ArgumentException($"Client {clientId} is missing layer '{layerName}'.", nameof(clientModels));
+                    throw new ArgumentException($"Missing weight for client {clientId}.");
                 }
 
-                if (clientParams.Length != layerSize)
-                {
-                    throw new ArgumentException(
-                        $"Layer '{layerName}' length mismatch for client {clientId}.",
-                        nameof(clientModels));
-                }
+                var clientParams = model[layerName];
+                var normalizedWeight = NumOps.FromDouble(w / totalWeight);
 
-                // Apply matching: compute cosine similarity between reference and client
-                // for the layer and permute if beneficial. For now, we perform direct
-                // weighted averaging with similarity-based weighting as the matching proxy.
-                var normalizedWeight = NumOps.FromDouble(weight / totalWeight);
                 for (int i = 0; i < layerSize; i++)
                 {
                     aggregated[i] = NumOps.Add(aggregated[i], NumOps.Multiply(clientParams[i], normalizedWeight));
                 }
             }
 
-            aggregatedModel[layerName] = aggregated;
+            result[layerName] = aggregated;
         }
 
-        return aggregatedModel;
+        return result;
+    }
+
+    private static double CosineSimilarity(T[] a, int offsetA, T[] b, int offsetB, int length)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        double dot = 0, normA = 0, normB = 0;
+
+        for (int i = 0; i < length; i++)
+        {
+            double va = numOps.ToDouble(a[offsetA + i]);
+            double vb = numOps.ToDouble(b[offsetB + i]);
+            dot += va * vb;
+            normA += va * va;
+            normB += vb * vb;
+        }
+
+        double denom = Math.Sqrt(normA) * Math.Sqrt(normB);
+        return denom > 1e-10 ? dot / denom : 0;
+    }
+
+    private static int EstimateNeuronCount(int layerSize)
+    {
+        // Try common neuron counts (powers of 2, typical layer sizes).
+        // Pick the largest divisor <= sqrt(layerSize) that gives blocks >= 4.
+        int bestCount = 1;
+        int sqrtSize = (int)Math.Sqrt(layerSize);
+
+        for (int n = 2; n <= sqrtSize; n++)
+        {
+            if (layerSize % n == 0 && layerSize / n >= 4)
+            {
+                bestCount = n;
+            }
+        }
+
+        // Also check if layerSize / small_number is a good candidate.
+        int[] candidates = [2, 4, 8, 16, 32, 64, 128, 256, 512, 1024];
+        foreach (int c in candidates)
+        {
+            if (c > layerSize)
+            {
+                break;
+            }
+
+            if (layerSize % c == 0 && layerSize / c >= 4)
+            {
+                bestCount = Math.Max(bestCount, c);
+            }
+        }
+
+        return bestCount;
+    }
+
+    /// <summary>
+    /// Hungarian algorithm (Kuhn-Munkres) for optimal assignment.
+    /// Finds a minimum-cost perfect matching in a bipartite graph.
+    /// </summary>
+    private static int[] HungarianAlgorithm(double[,] costMatrix, int n)
+    {
+        // Based on the Jonker-Volgenant algorithm for the linear assignment problem.
+        var u = new double[n + 1]; // potential for rows
+        var v = new double[n + 1]; // potential for columns
+        var assignment = new int[n + 1]; // assignment[j] = row assigned to column j
+        var way = new int[n + 1]; // way[j] = previous column in augmenting path
+
+        for (int i = 1; i <= n; i++)
+        {
+            assignment[0] = i;
+            int j0 = 0;
+            var minv = new double[n + 1];
+            var used = new bool[n + 1];
+
+            for (int j = 0; j <= n; j++)
+            {
+                minv[j] = double.MaxValue;
+                used[j] = false;
+            }
+
+            do
+            {
+                used[j0] = true;
+                int i0 = assignment[j0];
+                double delta = double.MaxValue;
+                int j1 = -1;
+
+                for (int j = 1; j <= n; j++)
+                {
+                    if (!used[j])
+                    {
+                        double cur = costMatrix[i0 - 1, j - 1] - u[i0] - v[j];
+                        if (cur < minv[j])
+                        {
+                            minv[j] = cur;
+                            way[j] = j0;
+                        }
+
+                        if (minv[j] < delta)
+                        {
+                            delta = minv[j];
+                            j1 = j;
+                        }
+                    }
+                }
+
+                for (int j = 0; j <= n; j++)
+                {
+                    if (used[j])
+                    {
+                        u[assignment[j]] += delta;
+                        v[j] -= delta;
+                    }
+                    else
+                    {
+                        minv[j] -= delta;
+                    }
+                }
+
+                j0 = j1;
+            }
+            while (assignment[j0] != 0);
+
+            do
+            {
+                int j1 = way[j0];
+                assignment[j0] = assignment[j1];
+                j0 = j1;
+            }
+            while (j0 != 0);
+        }
+
+        // Convert to 0-indexed: result[row] = assigned column
+        var result = new int[n];
+        for (int j = 1; j <= n; j++)
+        {
+            result[assignment[j] - 1] = j - 1;
+        }
+
+        return result;
     }
 
     /// <summary>

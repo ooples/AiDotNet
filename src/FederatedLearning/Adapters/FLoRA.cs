@@ -124,33 +124,220 @@ public class FLoRA<T> : Infrastructure.FederatedLearningComponentBase<T>, IFeder
             throw new ArgumentException("No client adapters provided.", nameof(clientAdapters));
         }
 
-        // FLoRA stacking: for a true implementation, we would reconstruct ΔW = B*A per client,
-        // sum them (weighted), then re-decompose via SVD. Here we perform the weighted sum of
-        // the flattened adapter parameters, which is equivalent when all clients use the same rank.
-        // For heterogeneous ranks, use HeterogeneousLoRA which has full SVD support.
         int adapterLen = clientAdapters.Values.First().Length;
-        var aggregated = new T[adapterLen];
+        int paramsPerLayer = (_layerOutputDim * _rank) + (_rank * _layerInputDim);
+        int bSize = _layerOutputDim * _rank; // B matrix: [out_dim x rank]
+        int aSize = _rank * _layerInputDim;  // A matrix: [rank x in_dim]
+
         double totalWeight = 0;
-
-        foreach (var (clientId, adapters) in clientAdapters)
+        foreach (var (clientId, _) in clientAdapters)
         {
-            double w = clientWeights?.GetValueOrDefault(clientId, 1.0) ?? 1.0;
-            totalWeight += w;
+            totalWeight += clientWeights?.GetValueOrDefault(clientId, 1.0) ?? 1.0;
+        }
 
-            var wT = NumOps.FromDouble(w);
-            for (int i = 0; i < adapterLen; i++)
+        var aggregated = new T[adapterLen];
+
+        // Process each adapted layer independently.
+        for (int layer = 0; layer < _numAdaptedLayers; layer++)
+        {
+            int layerOffset = layer * paramsPerLayer;
+
+            if (layerOffset + paramsPerLayer > adapterLen)
             {
-                aggregated[i] = NumOps.Add(aggregated[i], NumOps.Multiply(adapters[i], wT));
+                break;
+            }
+
+            // Step 1: Reconstruct weighted sum of ΔW = sum(w_k * B_k * A_k).
+            // ΔW is [out_dim x in_dim].
+            var deltaW = new double[_layerOutputDim * _layerInputDim];
+
+            foreach (var (clientId, adapters) in clientAdapters)
+            {
+                double w = clientWeights?.GetValueOrDefault(clientId, 1.0) ?? 1.0;
+                double normalizedW = w / totalWeight;
+
+                // Extract B_k [out_dim x rank] and A_k [rank x in_dim].
+                // Compute B_k * A_k and add weighted result to deltaW.
+                for (int i = 0; i < _layerOutputDim; i++)
+                {
+                    for (int j = 0; j < _layerInputDim; j++)
+                    {
+                        double sum = 0;
+                        for (int r = 0; r < _rank; r++)
+                        {
+                            double bVal = NumOps.ToDouble(adapters[layerOffset + i * _rank + r]);
+                            double aVal = NumOps.ToDouble(adapters[layerOffset + bSize + r * _layerInputDim + j]);
+                            sum += bVal * aVal;
+                        }
+
+                        deltaW[i * _layerInputDim + j] += normalizedW * sum;
+                    }
+                }
+            }
+
+            // Step 2: SVD of ΔW to re-decompose into rank-r factors.
+            // Use power iteration method for truncated SVD (efficient for low rank).
+            var (newB, newA) = TruncatedSVD(deltaW, _layerOutputDim, _layerInputDim, _rank);
+
+            // Step 3: Write B_new and A_new back to the aggregated adapter vector.
+            for (int i = 0; i < _layerOutputDim; i++)
+            {
+                for (int r = 0; r < _rank; r++)
+                {
+                    aggregated[layerOffset + i * _rank + r] = NumOps.FromDouble(newB[i * _rank + r]);
+                }
+            }
+
+            for (int r = 0; r < _rank; r++)
+            {
+                for (int j = 0; j < _layerInputDim; j++)
+                {
+                    aggregated[layerOffset + bSize + r * _layerInputDim + j] = NumOps.FromDouble(newA[r * _layerInputDim + j]);
+                }
             }
         }
 
-        var invTotal = NumOps.FromDouble(1.0 / totalWeight);
-        for (int i = 0; i < adapterLen; i++)
+        return new Vector<T>(aggregated);
+    }
+
+    /// <summary>
+    /// Truncated SVD via power iteration. Decomposes M [rows x cols] into
+    /// B [rows x rank] and A [rank x cols] such that M ≈ B * A.
+    /// Singular values are split evenly: B absorbs sqrt(sigma), A absorbs sqrt(sigma).
+    /// </summary>
+    private static (double[] B, double[] A) TruncatedSVD(double[] matrix, int rows, int cols, int rank)
+    {
+        const int maxIter = 50;
+        const double tolerance = 1e-8;
+        var rng = new Random(42);
+
+        var B = new double[rows * rank];
+        var A = new double[rank * cols];
+
+        // Compute each singular vector via power iteration.
+        // Work on residual matrix to get successive components.
+        var residual = (double[])matrix.Clone();
+
+        for (int r = 0; r < rank; r++)
         {
-            aggregated[i] = NumOps.Multiply(aggregated[i], invTotal);
+            // Initialize random vector v [cols].
+            var v = new double[cols];
+            for (int j = 0; j < cols; j++)
+            {
+                v[j] = rng.NextDouble() - 0.5;
+            }
+
+            Normalize(v);
+
+            double sigma = 0;
+
+            for (int iter = 0; iter < maxIter; iter++)
+            {
+                // u = M * v (u is [rows])
+                var u = new double[rows];
+                for (int i = 0; i < rows; i++)
+                {
+                    double sum = 0;
+                    for (int j = 0; j < cols; j++)
+                    {
+                        sum += residual[i * cols + j] * v[j];
+                    }
+
+                    u[i] = sum;
+                }
+
+                double newSigma = Normalize(u);
+
+                // v = M^T * u (v is [cols])
+                var vNew = new double[cols];
+                for (int j = 0; j < cols; j++)
+                {
+                    double sum = 0;
+                    for (int i = 0; i < rows; i++)
+                    {
+                        sum += residual[i * cols + j] * u[i];
+                    }
+
+                    vNew[j] = sum;
+                }
+
+                Normalize(vNew);
+
+                if (Math.Abs(newSigma - sigma) < tolerance * Math.Max(sigma, 1e-10))
+                {
+                    sigma = newSigma;
+                    v = vNew;
+                    break;
+                }
+
+                sigma = newSigma;
+                v = vNew;
+            }
+
+            // Split sigma evenly: B gets sqrt(sigma) * u, A gets sqrt(sigma) * v^T.
+            double sqrtSigma = Math.Sqrt(Math.Max(sigma, 0));
+
+            // Recompute u for final sigma.
+            var uFinal = new double[rows];
+            for (int i = 0; i < rows; i++)
+            {
+                double sum = 0;
+                for (int j = 0; j < cols; j++)
+                {
+                    sum += residual[i * cols + j] * v[j];
+                }
+
+                uFinal[i] = sum;
+            }
+
+            double norm = Normalize(uFinal);
+            if (norm < 1e-15)
+            {
+                // Remaining singular values are essentially zero.
+                break;
+            }
+
+            for (int i = 0; i < rows; i++)
+            {
+                B[i * rank + r] = sqrtSigma * uFinal[i];
+            }
+
+            for (int j = 0; j < cols; j++)
+            {
+                A[r * cols + j] = sqrtSigma * v[j];
+            }
+
+            // Deflate: residual -= sigma * u * v^T.
+            for (int i = 0; i < rows; i++)
+            {
+                for (int j = 0; j < cols; j++)
+                {
+                    residual[i * cols + j] -= sigma * uFinal[i] * v[j];
+                }
+            }
         }
 
-        return new Vector<T>(aggregated);
+        return (B, A);
+    }
+
+    private static double Normalize(double[] vec)
+    {
+        double norm = 0;
+        for (int i = 0; i < vec.Length; i++)
+        {
+            norm += vec[i] * vec[i];
+        }
+
+        norm = Math.Sqrt(norm);
+        if (norm > 1e-15)
+        {
+            for (int i = 0; i < vec.Length; i++)
+            {
+                vec[i] /= norm;
+            }
+        }
+
+        return norm;
     }
 
     /// <summary>Gets the target LoRA rank.</summary>
