@@ -117,8 +117,15 @@ public class FederatedLearningInvalidConfigurationTests
         Assert.Contains("Unknown client selection strategy", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
-    // Note: The unknown compression strategy test was removed because FederatedCompressionStrategy
-    // is now a proper enum, preventing invalid values at compile time.
+    [Fact]
+    public async Task BuildAsync_WithUnknownCompressionStrategy_Throws()
+    {
+        var options = CreateBaseOptions();
+        options.Compression = new FederatedCompressionOptions { Strategy = (FederatedCompressionStrategy)999 };
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => BuildAsync(options));
+        Assert.Contains("compression", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
 
     private static FederatedLearningOptions CreateBaseOptions()
     {

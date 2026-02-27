@@ -31,6 +31,7 @@ public class DataFreeFCL<T> : Infrastructure.FederatedLearningComponentBase<T>, 
     private readonly double _distillationWeight;
     private readonly int _syntheticSamplesPerClass;
     private readonly int _generationSteps;
+    private readonly object _importanceLock = new();
     private Vector<T>? _accumulatedImportance;
 
     /// <summary>
@@ -73,6 +74,13 @@ public class DataFreeFCL<T> : Infrastructure.FederatedLearningComponentBase<T>, 
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>The <paramref name="taskData"/> parameter is accepted to satisfy the
+    /// <see cref="IFederatedContinualLearningStrategy{T}"/> contract but is intentionally unused.
+    /// Data-Free FCL estimates importance solely from model parameter magnitudes (a proxy for
+    /// Fisher information) rather than from stored task data — this is the core privacy advantage
+    /// of the data-free approach.</para>
+    /// </remarks>
     public Vector<T> ComputeImportance(Vector<T> modelParameters, Matrix<T> taskData)
     {
         // Data-free approach: importance is estimated from the model's output sensitivity
@@ -101,26 +109,29 @@ public class DataFreeFCL<T> : Infrastructure.FederatedLearningComponentBase<T>, 
 
         var importanceVector = new Vector<T>(importance);
 
-        // Accumulate across tasks.
-        if (_accumulatedImportance == null)
+        // Accumulate across tasks (thread-safe for concurrent client calls).
+        lock (_importanceLock)
         {
-            _accumulatedImportance = importanceVector;
-        }
-        else
-        {
-            var acc = new T[paramCount];
-            int len = Math.Min(paramCount, _accumulatedImportance.Length);
-            for (int i = 0; i < len; i++)
+            if (_accumulatedImportance == null)
             {
-                acc[i] = NumOps.Add(_accumulatedImportance[i], importance[i]);
+                _accumulatedImportance = importanceVector;
             }
-
-            for (int i = len; i < paramCount; i++)
+            else
             {
-                acc[i] = importance[i];
-            }
+                var acc = new T[paramCount];
+                int len = Math.Min(paramCount, _accumulatedImportance.Length);
+                for (int i = 0; i < len; i++)
+                {
+                    acc[i] = NumOps.Add(_accumulatedImportance[i], importance[i]);
+                }
 
-            _accumulatedImportance = new Vector<T>(acc);
+                for (int i = len; i < paramCount; i++)
+                {
+                    acc[i] = importance[i];
+                }
+
+                _accumulatedImportance = new Vector<T>(acc);
+            }
         }
 
         return importanceVector;
@@ -216,12 +227,15 @@ public class DataFreeFCL<T> : Infrastructure.FederatedLearningComponentBase<T>, 
         }
 
         var result = new T[maxLen];
-        if (totalWeight > 0)
+        if (totalWeight <= 0)
         {
-            for (int i = 0; i < maxLen; i++)
-            {
-                result[i] = NumOps.FromDouble(aggregated[i] / totalWeight);
-            }
+            // All weights were zero or negative — fall back to uniform averaging.
+            totalWeight = clientImportances.Count;
+        }
+
+        for (int i = 0; i < maxLen; i++)
+        {
+            result[i] = NumOps.FromDouble(aggregated[i] / totalWeight);
         }
 
         return new Vector<T>(result);

@@ -25,7 +25,7 @@ public class PersonalizedFederatedLearningTests
             ["layer5"] = new[] { 5.0 }
         };
 
-        pfl.IdentifyPersonalizedLayers(structure, strategy: "last_n");
+        pfl.IdentifyPersonalizedLayers(structure, strategy: PersonalizedLayerSelectionStrategy.LastN);
 
         var personalized = pfl.GetPersonalizedLayers();
         Assert.Equal(0.4, pfl.GetPersonalizationFraction(), precision: 10);
@@ -51,7 +51,7 @@ public class PersonalizedFederatedLearningTests
             ["c"] = new[] { 4.0 }
         };
 
-        pfl.IdentifyPersonalizedLayers(fullModel, strategy: "last_n");
+        pfl.IdentifyPersonalizedLayers(fullModel, strategy: PersonalizedLayerSelectionStrategy.LastN);
         pfl.SeparateModel(fullModel, out var globalPart, out var personalizedPart);
 
         Assert.Single(globalPart);
@@ -85,7 +85,7 @@ public class PersonalizedFederatedLearningTests
             ["head_bn"] = new[] { 3.0 }
         };
 
-        pfl.IdentifyPersonalizedLayers(structure, strategy: "by_pattern", customPatterns: new HashSet<string> { "head" });
+        pfl.IdentifyPersonalizedLayers(structure, strategy: PersonalizedLayerSelectionStrategy.ByPattern, customPatterns: new HashSet<string> { "head" });
 
         Assert.True(pfl.IsLayerPersonalized("head_fc"));
         Assert.True(pfl.IsLayerPersonalized("head_bn"));
@@ -97,10 +97,10 @@ public class PersonalizedFederatedLearningTests
     {
         var pfl = new PersonalizedFederatedLearning<double>(personalizationFraction: 0.5);
 
-        Assert.Throws<ArgumentException>(() => pfl.IdentifyPersonalizedLayers(null!, strategy: "last_n"));
-        Assert.Throws<ArgumentException>(() => pfl.IdentifyPersonalizedLayers(new Dictionary<string, double[]>(), strategy: "last_n"));
-        Assert.Throws<ArgumentException>(() => pfl.IdentifyPersonalizedLayers(new Dictionary<string, double[]> { ["a"] = new[] { 1.0 } }, strategy: "bogus"));
-        Assert.Throws<ArgumentException>(() => pfl.IdentifyPersonalizedLayers(new Dictionary<string, double[]> { ["a"] = new[] { 1.0 } }, strategy: "by_pattern", customPatterns: null));
+        Assert.Throws<ArgumentException>(() => pfl.IdentifyPersonalizedLayers(null!, strategy: PersonalizedLayerSelectionStrategy.LastN));
+        Assert.Throws<ArgumentException>(() => pfl.IdentifyPersonalizedLayers(new Dictionary<string, double[]>(), strategy: PersonalizedLayerSelectionStrategy.LastN));
+        Assert.Throws<ArgumentOutOfRangeException>(() => pfl.IdentifyPersonalizedLayers(new Dictionary<string, double[]> { ["a"] = new[] { 1.0 } }, strategy: (PersonalizedLayerSelectionStrategy)999));
+        Assert.Throws<ArgumentException>(() => pfl.IdentifyPersonalizedLayers(new Dictionary<string, double[]> { ["a"] = new[] { 1.0 } }, strategy: PersonalizedLayerSelectionStrategy.ByPattern, customPatterns: null));
     }
 
     [Fact]

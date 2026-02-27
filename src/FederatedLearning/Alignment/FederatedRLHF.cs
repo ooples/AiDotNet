@@ -177,10 +177,19 @@ public class FederatedRLHF<T> : Infrastructure.FederatedLearningComponentBase<T>
     /// <returns>The clipped surrogate loss (to be minimized).</returns>
     public double ComputePPOLoss(double[] logProbsNew, double[] logProbsOld, double[] advantages)
     {
+        Guard.NotNull(logProbsNew);
+        Guard.NotNull(logProbsOld);
+        Guard.NotNull(advantages);
         int n = logProbsNew.Length;
         if (n == 0)
         {
             return 0;
+        }
+
+        if (logProbsOld.Length != n || advantages.Length != n)
+        {
+            throw new ArgumentException(
+                $"All arrays must have the same length. Got logProbsNew={n}, logProbsOld={logProbsOld.Length}, advantages={advantages.Length}.");
         }
 
         double totalLoss = 0;
@@ -219,7 +228,17 @@ public class FederatedRLHF<T> : Infrastructure.FederatedLearningComponentBase<T>
         double[] policyLogProbs,
         double[] referenceLogProbs)
     {
+        Guard.NotNull(rewardModelScores);
+        Guard.NotNull(policyLogProbs);
+        Guard.NotNull(referenceLogProbs);
         int n = rewardModelScores.Length;
+
+        if (policyLogProbs.Length != n || referenceLogProbs.Length != n)
+        {
+            throw new ArgumentException(
+                $"All arrays must have the same length. Got rewardModelScores={n}, policyLogProbs={policyLogProbs.Length}, referenceLogProbs={referenceLogProbs.Length}.");
+        }
+
         var rewards = new double[n];
         double beta = _options.KLCoefficient;
 

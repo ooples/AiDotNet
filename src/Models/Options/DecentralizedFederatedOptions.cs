@@ -57,41 +57,77 @@ public class DecentralizedFederatedOptions : ModelOptions
     // --- DFedAvgM ---
 
     /// <summary>
-    /// Gets or sets the momentum coefficient for DFedAvgM. Default: 0.9.
+    /// Gets or sets the momentum coefficient for DFedAvgM.
     /// </summary>
+    /// <value>The momentum factor applied to decentralized model averaging. Default: 0.9.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> DFedAvgM adds momentum to decentralized averaging, similar
+    /// to how SGD with momentum accelerates training. Higher values (closer to 1.0) give more
+    /// smoothing across rounds, improving convergence speed on non-IID data.</para>
+    /// </remarks>
     public double DFedAvgMMomentum { get; set; } = 0.9;
 
     // --- DFedBCA ---
 
     /// <summary>
-    /// Gets or sets the number of parameter blocks for DFedBCA. Default: 4.
+    /// Gets or sets the number of parameter blocks for DFedBCA.
     /// </summary>
+    /// <value>The number of disjoint blocks the model is partitioned into. Default: 4.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> DFedBCA splits the model into blocks and only exchanges one
+    /// block per round, reducing per-round communication by a factor of NumBlocks. More blocks
+    /// mean less bandwidth per round but slower convergence per round.</para>
+    /// </remarks>
     public int DFedBCANumBlocks { get; set; } = 4;
 
     /// <summary>
-    /// Gets or sets the block selection strategy for DFedBCA. Default: Cyclic.
+    /// Gets or sets the block selection strategy for DFedBCA.
     /// </summary>
+    /// <value>How blocks are chosen each round. Default: <see cref="BlockSelectionMode.Cyclic"/>.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Cyclic rotates through blocks in order (simple, predictable).
+    /// Random picks a block at random each round. ImportanceBased selects the block with the
+    /// largest gradient magnitude, focusing bandwidth on the most-changing parameters.</para>
+    /// </remarks>
     public BlockSelectionMode DFedBCASelectionStrategy { get; set; } = BlockSelectionMode.Cyclic;
 
     // --- DeTAG ---
 
     /// <summary>
-    /// Gets or sets the learning rate for DeTAG gradient tracking. Default: 0.01.
+    /// Gets or sets the learning rate for DeTAG gradient tracking.
     /// </summary>
+    /// <value>The step size for the gradient tracking correction term. Default: 0.01.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> DeTAG uses gradient tracking to correct for the bias introduced
+    /// by decentralized averaging. The learning rate controls how aggressively the tracking variable
+    /// is updated. Too large may cause instability; too small slows convergence.</para>
+    /// </remarks>
     public double DeTAGLearningRate { get; set; } = 0.01;
 
     // --- Segmented Gossip ---
 
     /// <summary>
-    /// Gets or sets the number of model segments for SegmentedGossip. Default: 4.
+    /// Gets or sets the number of model segments for SegmentedGossip.
     /// </summary>
+    /// <value>The number of segments the model is divided into for partial gossip exchanges. Default: 4.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Instead of exchanging the full model with a peer, segmented gossip
+    /// only exchanges one segment per round. This reduces bandwidth by a factor of NumSegments while
+    /// eventually exchanging all parameters over multiple rounds.</para>
+    /// </remarks>
     public int SegmentedGossipNumSegments { get; set; } = 4;
 
     // --- Time-Varying Topology ---
 
     /// <summary>
-    /// Gets or sets the random seed for time-varying topology generation. Default: 42.
+    /// Gets or sets the random seed for time-varying topology generation.
     /// </summary>
+    /// <value>The seed for reproducible random topology generation. Default: 42.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> A time-varying topology changes the communication graph each round
+    /// (which peers talk to which). This improves mixing — information spreads faster across the
+    /// network compared to a fixed topology. The seed ensures reproducibility.</para>
+    /// </remarks>
     public int TimeVaryingSeed { get; set; } = 42;
 }
 

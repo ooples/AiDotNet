@@ -62,6 +62,14 @@ public sealed class FederatedPersonalizationOptions
     /// <summary>
     /// Gets or sets the personalization strategy.
     /// </summary>
+    /// <value>The algorithm used for client-specific model adaptation. Default: <see cref="FederatedPersonalizationStrategy.None"/>.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Each strategy takes a different approach to balancing shared knowledge
+    /// with local adaptation. FedPer/FedRep split layers; Ditto/pFedMe use regularization; FedBABU freezes
+    /// the head; FedRoD trains dual classifiers; kNN-Per adds inference-time personalization at zero training
+    /// cost. Start with <see cref="FederatedPersonalizationStrategy.FedPer"/> for simplicity or
+    /// <see cref="FederatedPersonalizationStrategy.KNNPer"/> for zero-overhead personalization.</para>
+    /// </remarks>
     public FederatedPersonalizationStrategy Strategy { get; set; } = FederatedPersonalizationStrategy.None;
 
     /// <summary>

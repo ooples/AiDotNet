@@ -65,9 +65,29 @@ public class OpenFedLLMPipeline<T> : Infrastructure.FederatedLearningComponentBa
     public int CurrentRound => _currentRound;
 
     /// <summary>
-    /// Gets the last checkpointed model parameters, or null if no checkpoint exists.
+    /// Gets a defensive copy of the last checkpointed model parameters, or null if no checkpoint exists.
     /// </summary>
-    public Dictionary<string, T[]>? LastCheckpoint => _lastCheckpoint;
+    /// <remarks>
+    /// Returns a deep copy to prevent callers from mutating internal checkpoint state.
+    /// </remarks>
+    public Dictionary<string, T[]>? LastCheckpoint
+    {
+        get
+        {
+            if (_lastCheckpoint == null)
+            {
+                return null;
+            }
+
+            var copy = new Dictionary<string, T[]>(_lastCheckpoint.Count);
+            foreach (var (key, value) in _lastCheckpoint)
+            {
+                copy[key] = (T[])value.Clone();
+            }
+
+            return copy;
+        }
+    }
 
     /// <summary>
     /// Advances to the next pipeline stage, resetting the round counter.
@@ -224,7 +244,18 @@ public class OpenFedLLMPipeline<T> : Infrastructure.FederatedLearningComponentBa
 
         var referenceModel = clientModels.First().Value;
         var layerNames = referenceModel.Keys.ToArray();
-        double totalWeight = clientWeights.Values.Sum();
+
+        // Compute totalWeight including default weights for clients missing from clientWeights.
+        double totalWeight = 0;
+        foreach (var clientId in clientModels.Keys)
+        {
+            totalWeight += clientWeights.GetValueOrDefault(clientId, 1.0);
+        }
+
+        if (totalWeight <= 0)
+        {
+            totalWeight = clientModels.Count; // fall back to uniform
+        }
 
         var aggregated = new Dictionary<string, T[]>(referenceModel.Count, referenceModel.Comparer);
         foreach (var layerName in layerNames)
