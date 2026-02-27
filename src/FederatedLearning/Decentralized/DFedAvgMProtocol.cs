@@ -24,7 +24,7 @@ namespace AiDotNet.FederatedLearning.Decentralized;
 public class DFedAvgMProtocol<T> : Infrastructure.FederatedLearningComponentBase<T>
 {
     private readonly double _momentum;
-    private Dictionary<int, Dictionary<string, double[]>>? _momentumBuffers;
+    private Dictionary<int, Dictionary<string, T[]>>? _momentumBuffers;
 
     /// <summary>
     /// Creates a new DFedAvgM protocol.
@@ -54,7 +54,7 @@ public class DFedAvgMProtocol<T> : Infrastructure.FederatedLearningComponentBase
         Dictionary<int, Dictionary<string, T[]>> neighborModels,
         Dictionary<int, double> mixingWeights)
     {
-        _momentumBuffers ??= new Dictionary<int, Dictionary<string, double[]>>();
+        _momentumBuffers ??= new Dictionary<int, Dictionary<string, T[]>>();
 
         var layerNames = currentModel.Keys.ToArray();
 
@@ -91,15 +91,24 @@ public class DFedAvgMProtocol<T> : Infrastructure.FederatedLearningComponentBase
         // Step 2: Momentum update.
         if (!_momentumBuffers.ContainsKey(clientId))
         {
-            _momentumBuffers[clientId] = new Dictionary<string, double[]>();
+            _momentumBuffers[clientId] = new Dictionary<string, T[]>();
         }
 
         var mBuf = _momentumBuffers[clientId];
+        var beta = NumOps.FromDouble(_momentum);
+        var oneMinusBeta = NumOps.FromDouble(1.0 - _momentum);
+
         foreach (var layerName in layerNames)
         {
             if (!mBuf.ContainsKey(layerName))
             {
-                mBuf[layerName] = new double[currentModel[layerName].Length];
+                var init = new T[currentModel[layerName].Length];
+                for (int i = 0; i < init.Length; i++)
+                {
+                    init[i] = NumOps.Zero;
+                }
+
+                mBuf[layerName] = init;
             }
 
             var m = mBuf[layerName];
@@ -108,9 +117,10 @@ public class DFedAvgMProtocol<T> : Infrastructure.FederatedLearningComponentBase
 
             for (int i = 0; i < m.Length; i++)
             {
-                double diff = NumOps.ToDouble(avg[i]) - NumOps.ToDouble(cur[i]);
-                m[i] = _momentum * m[i] + (1.0 - _momentum) * diff;
-                avg[i] = NumOps.Add(avg[i], NumOps.FromDouble(m[i]));
+                // m[i] = beta * m[i] + (1-beta) * (avg[i] - cur[i])
+                var diff = NumOps.Subtract(avg[i], cur[i]);
+                m[i] = NumOps.Add(NumOps.Multiply(beta, m[i]), NumOps.Multiply(oneMinusBeta, diff));
+                avg[i] = NumOps.Add(avg[i], m[i]);
             }
         }
 

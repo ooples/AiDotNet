@@ -27,6 +27,7 @@ public class OptimizedPrivateSetAnalytics<T> : Infrastructure.FederatedLearningC
     private readonly int _hllPrecision;
     private readonly int _hllRegisterCount;
     private readonly int _seed;
+    private int _shareCounter;
 
     /// <summary>
     /// Creates a new OPSA instance.
@@ -273,7 +274,8 @@ public class OptimizedPrivateSetAnalytics<T> : Infrastructure.FederatedLearningC
             throw new ArgumentOutOfRangeException(nameof(numShares), "Must create at least 2 shares.");
         }
 
-        var rng = new Random(_seed);
+        var rng = new Random(_seed + _shareCounter);
+        _shareCounter++;
         var shares = new List<int[,]>();
 
         // Create (numShares - 1) random shares.

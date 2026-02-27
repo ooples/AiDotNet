@@ -30,6 +30,7 @@ public class BucketingAggregationStrategy<T> : ParameterDictionaryAggregationStr
     private readonly ParameterDictionaryAggregationStrategyBase<T> _innerStrategy;
     private readonly int _numBuckets;
     private readonly int _seed;
+    private int _roundCounter;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="BucketingAggregationStrategy{T}"/> class.
@@ -71,9 +72,10 @@ public class BucketingAggregationStrategy<T> : ParameterDictionaryAggregationStr
         var referenceModel = clientModels.First().Value;
         var layerNames = referenceModel.Keys.ToArray();
 
-        // Shuffle client IDs.
+        // Shuffle client IDs with round-varying seed to ensure different permutations each round.
         var clientIds = clientModels.Keys.ToList();
-        var rng = new Random(_seed);
+        var rng = new Random(_seed + _roundCounter);
+        _roundCounter++;
         for (int i = clientIds.Count - 1; i > 0; i--)
         {
             int j = rng.Next(i + 1);

@@ -100,7 +100,7 @@ public class FedKDCompressor<T> : Infrastructure.FederatedLearningComponentBase<
     /// <param name="studentLogits">Student model's logits.</param>
     /// <param name="teacherLogits">Aggregated teacher soft labels.</param>
     /// <returns>KL divergence loss scaled by T².</returns>
-    public double ComputeKDLoss(double[] studentLogits, double[] teacherLogits)
+    public T ComputeKDLoss(T[] studentLogits, T[] teacherLogits)
     {
         int n = studentLogits.Length;
         var studentSoft = Softmax(studentLogits, _temperature);
@@ -115,17 +115,23 @@ public class FedKDCompressor<T> : Infrastructure.FederatedLearningComponentBase<
             }
         }
 
-        return kl * _temperature * _temperature * _kdWeight;
+        return NumOps.FromDouble(kl * _temperature * _temperature * _kdWeight);
     }
 
-    private static double[] Softmax(double[] logits, double temperature)
+    private double[] Softmax(T[] logits, double temperature)
     {
-        double max = logits.Max();
+        double max = double.NegativeInfinity;
+        for (int i = 0; i < logits.Length; i++)
+        {
+            double v = NumOps.ToDouble(logits[i]);
+            if (v > max) max = v;
+        }
+
         var exps = new double[logits.Length];
         double sum = 0;
         for (int i = 0; i < logits.Length; i++)
         {
-            exps[i] = Math.Exp((logits[i] - max) / temperature);
+            exps[i] = Math.Exp((NumOps.ToDouble(logits[i]) - max) / temperature);
             sum += exps[i];
         }
 

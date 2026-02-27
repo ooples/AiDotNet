@@ -23,7 +23,7 @@ namespace AiDotNet.FederatedLearning.Decentralized;
 public class DeTAGProtocol<T> : Infrastructure.FederatedLearningComponentBase<T>
 {
     private readonly double _learningRate;
-    private Dictionary<int, double[]>? _gradientTrackers;
+    private Dictionary<int, T[]>? _gradientTrackers;
 
     /// <summary>
     /// Creates a new DeTAG protocol.
@@ -69,32 +69,33 @@ public class DeTAGProtocol<T> : Infrastructure.FederatedLearningComponentBase<T>
         T[] newGradient,
         T[] previousGradient,
         Dictionary<int, T[]> neighborParams,
-        Dictionary<int, double[]>? neighborTrackers,
+        Dictionary<int, T[]>? neighborTrackers,
         Dictionary<int, double> mixingWeights)
     {
         int d = currentParams.Length;
-        _gradientTrackers ??= new Dictionary<int, double[]>();
+        _gradientTrackers ??= new Dictionary<int, T[]>();
 
         if (!_gradientTrackers.ContainsKey(clientId))
         {
-            _gradientTrackers[clientId] = new double[d];
+            var initTracker = new T[d];
             for (int i = 0; i < d; i++)
             {
-                _gradientTrackers[clientId][i] = NumOps.ToDouble(newGradient[i]);
+                initTracker[i] = newGradient[i];
             }
+
+            _gradientTrackers[clientId] = initTracker;
         }
 
         var tracker = _gradientTrackers[clientId];
 
         // Step 1: Gradient tracker update — y_k = sum(W_kj * y_j) + grad_new - grad_old.
-        // First compute the consensus average of neighbor trackers.
         double totalWeight = 0;
         foreach (var w in mixingWeights.Values)
         {
             totalWeight += w;
         }
 
-        var newTracker = new double[d];
+        var newTracker = new T[d];
 
         if (neighborTrackers != null && neighborTrackers.Count > 0)
         {
@@ -108,17 +109,18 @@ public class DeTAGProtocol<T> : Infrastructure.FederatedLearningComponentBase<T>
                 {
                     if (neighborTrackers.TryGetValue(neighborId, out var nt) && i < nt.Length)
                     {
-                        trackerAvg += (w / totalWeight) * nt[i];
+                        trackerAvg += (w / totalWeight) * NumOps.ToDouble(nt[i]);
                         trackerWeightSum += w;
                     }
                 }
 
                 // Include self-weight for the consensus (if not in neighbor list).
                 double selfWeight = 1.0 - (trackerWeightSum / totalWeight);
-                trackerAvg += selfWeight * tracker[i];
+                trackerAvg += selfWeight * NumOps.ToDouble(tracker[i]);
 
                 // Add gradient correction: + grad_new - grad_old.
-                newTracker[i] = trackerAvg + NumOps.ToDouble(newGradient[i]) - NumOps.ToDouble(previousGradient[i]);
+                newTracker[i] = NumOps.FromDouble(
+                    trackerAvg + NumOps.ToDouble(newGradient[i]) - NumOps.ToDouble(previousGradient[i]));
             }
         }
         else
@@ -126,7 +128,7 @@ public class DeTAGProtocol<T> : Infrastructure.FederatedLearningComponentBase<T>
             // Fallback: no neighbor trackers available, use local correction only.
             for (int i = 0; i < d; i++)
             {
-                newTracker[i] = tracker[i] + NumOps.ToDouble(newGradient[i]) - NumOps.ToDouble(previousGradient[i]);
+                newTracker[i] = NumOps.Add(tracker[i], NumOps.Subtract(newGradient[i], previousGradient[i]));
             }
         }
 
@@ -134,29 +136,28 @@ public class DeTAGProtocol<T> : Infrastructure.FederatedLearningComponentBase<T>
         _gradientTrackers[clientId] = newTracker;
 
         // Step 2: Parameter update — x_k = sum(W_kj * x_j) - lr * y_k.
+        var lrT = NumOps.FromDouble(_learningRate);
         var result = new T[d];
         for (int i = 0; i < d; i++)
         {
             double paramAvg = 0;
+            double paramWeightSum = 0;
             foreach (var (neighborId, w) in mixingWeights)
             {
                 if (neighborParams.TryGetValue(neighborId, out var np) && i < np.Length)
                 {
                     paramAvg += (w / totalWeight) * NumOps.ToDouble(np[i]);
+                    paramWeightSum += w;
                 }
             }
 
             // Include self-weight for consensus.
-            double selfW = 0;
-            foreach (var w in mixingWeights.Values)
-            {
-                selfW += w;
-            }
-
-            selfW = 1.0 - (selfW / totalWeight);
+            double selfW = 1.0 - (paramWeightSum / totalWeight);
             paramAvg += selfW * NumOps.ToDouble(currentParams[i]);
 
-            result[i] = NumOps.FromDouble(paramAvg - _learningRate * newTracker[i]);
+            result[i] = NumOps.Subtract(
+                NumOps.FromDouble(paramAvg),
+                NumOps.Multiply(lrT, newTracker[i]));
         }
 
         return result;
@@ -167,11 +168,13 @@ public class DeTAGProtocol<T> : Infrastructure.FederatedLearningComponentBase<T>
     /// </summary>
     /// <param name="clientId">The client ID.</param>
     /// <returns>The gradient tracker array, or null if not initialized.</returns>
-    public double[]? GetTracker(int clientId)
+    public T[]? GetTracker(int clientId)
     {
         if (_gradientTrackers != null && _gradientTrackers.TryGetValue(clientId, out var tracker))
         {
-            return (double[])tracker.Clone();
+            var clone = new T[tracker.Length];
+            Array.Copy(tracker, clone, tracker.Length);
+            return clone;
         }
 
         return null;

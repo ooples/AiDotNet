@@ -31,6 +31,8 @@ public class DPFedLoRA<T> : Infrastructure.FederatedLearningComponentBase<T>, IF
     private readonly int _layerInputDim;
     private readonly int _layerOutputDim;
     private readonly int _seed;
+    private int _roundCounter;
+    private double _cumulativeRdpEpsilon;
 
     /// <inheritdoc/>
     public int AdapterParameterCount { get; }
@@ -192,19 +194,27 @@ public class DPFedLoRA<T> : Infrastructure.FederatedLearningComponentBase<T>, IF
         }
 
         // Step 3: Add per-layer calibrated Gaussian noise.
-        // Each layer gets noise proportional to its own sensitivity (max gradient norm).
-        if (_noiseMultiplier > 0)
+        // Gaussian mechanism on the average of n clipped vectors:
+        //   sensitivity_l = clipBound_l / n  (L2 sensitivity of the average)
+        //   noise_std = sigma * sensitivity_l
+        // Per-layer clip bound is proportional to each layer's share of the total clip norm.
+        int n = clientAdapters.Count;
+        if (_noiseMultiplier > 0 && n > 0)
         {
-            var rng = new Random(_seed);
+            var rng = new Random(_seed + _roundCounter);
+            _roundCounter++;
             int paramsPerLayer = adapterLen / Math.Max(_numAdaptedLayers, 1);
+
+            // Compute per-layer norms to allocate the total clip budget proportionally.
+            var layerMaxNorms = new double[_numAdaptedLayers];
+            double totalLayerNormSum = 0;
 
             for (int layer = 0; layer < _numAdaptedLayers; layer++)
             {
                 int layerStart = layer * paramsPerLayer;
                 int layerEnd = (layer == _numAdaptedLayers - 1) ? adapterLen : layerStart + paramsPerLayer;
 
-                // Compute per-layer sensitivity: max clipped gradient norm across clients for this layer.
-                double maxLayerNorm = 0;
+                double maxNorm = 0;
                 foreach (var (_, adapters) in clipped)
                 {
                     double layerNorm2 = 0;
@@ -215,16 +225,30 @@ public class DPFedLoRA<T> : Infrastructure.FederatedLearningComponentBase<T>, IF
                     }
 
                     double layerNorm = Math.Sqrt(layerNorm2);
-                    if (layerNorm > maxLayerNorm)
+                    if (layerNorm > maxNorm)
                     {
-                        maxLayerNorm = layerNorm;
+                        maxNorm = layerNorm;
                     }
                 }
 
-                // Calibrate noise to this layer's sensitivity.
-                // Higher sensitivity layers get more noise; lower sensitivity layers get less.
-                double layerSensitivity = Math.Max(maxLayerNorm, 1e-10);
-                double layerNoiseStd = _noiseMultiplier * layerSensitivity / Math.Sqrt(clientAdapters.Count);
+                layerMaxNorms[layer] = maxNorm;
+                totalLayerNormSum += maxNorm;
+            }
+
+            // Add noise per layer with correctly calibrated sensitivity = clipBound_l / n.
+            for (int layer = 0; layer < _numAdaptedLayers; layer++)
+            {
+                int layerStart = layer * paramsPerLayer;
+                int layerEnd = (layer == _numAdaptedLayers - 1) ? adapterLen : layerStart + paramsPerLayer;
+
+                // Per-layer clip bound: proportional share of total clip norm.
+                double layerClipBound = totalLayerNormSum > 0
+                    ? _clipNorm * (layerMaxNorms[layer] / totalLayerNormSum)
+                    : _clipNorm / _numAdaptedLayers;
+
+                // L2 sensitivity of the average = clipBound / n.
+                double layerSensitivity = layerClipBound / n;
+                double layerNoiseStd = _noiseMultiplier * layerSensitivity;
 
                 for (int i = layerStart; i < layerEnd && i < adapterLen; i++)
                 {
@@ -235,9 +259,98 @@ public class DPFedLoRA<T> : Infrastructure.FederatedLearningComponentBase<T>, IF
                     aggregated[i] = NumOps.Add(aggregated[i], NumOps.FromDouble(noise));
                 }
             }
+
+            // Track cumulative privacy cost via Renyi DP accounting.
+            AccumulatePrivacyCost(n);
         }
 
         return new Vector<T>(aggregated);
+    }
+
+    /// <summary>
+    /// Accumulates the privacy cost of one round using Renyi Differential Privacy accounting.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Each time we add noise and release a result, we "spend" some
+    /// privacy budget. The Renyi DP framework tracks this by computing the Renyi divergence
+    /// at order alpha, then converting to (epsilon, delta)-DP. This method uses the analytic
+    /// Gaussian mechanism bound from Balle et al. (2020).</para>
+    ///
+    /// <para>For Gaussian mechanism with noise multiplier sigma on a query with L2 sensitivity S:</para>
+    /// <code>
+    /// RDP at order alpha = alpha * S² / (2 * sigma²)
+    /// Convert to (eps, delta)-DP: eps = rdp - log(delta) / (alpha - 1)
+    /// </code>
+    /// </remarks>
+    /// <param name="numClients">Number of clients in this round.</param>
+    private void AccumulatePrivacyCost(int numClients)
+    {
+        if (_noiseMultiplier <= 0 || numClients <= 0) return;
+
+        // Overall sensitivity for the averaged query: clipNorm / n.
+        double sensitivity = _clipNorm / numClients;
+        double sigma = _noiseMultiplier * sensitivity;
+
+        // Use alpha = 10 (common choice for Renyi DP accounting).
+        const double alpha = 10.0;
+        double rdp = alpha * sensitivity * sensitivity / (2.0 * sigma * sigma);
+
+        // This simplifies to alpha / (2 * noiseMultiplier²) regardless of n
+        // (since sigma = noiseMultiplier * clipNorm/n and sensitivity = clipNorm/n).
+        _cumulativeRdpEpsilon += rdp;
+    }
+
+    /// <summary>
+    /// Computes the cumulative (epsilon, delta)-DP guarantee after all rounds so far.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> After multiple rounds of federated learning with DP noise,
+    /// the total privacy leakage grows. This method converts the accumulated Renyi DP cost
+    /// to a standard (epsilon, delta) guarantee. Smaller epsilon = stronger privacy.
+    /// A typical target is epsilon &lt; 10 for meaningful privacy.</para>
+    /// </remarks>
+    /// <param name="delta">Target failure probability (typically 1e-5 to 1e-7). Default: 1e-5.</param>
+    /// <returns>The cumulative epsilon for the given delta.</returns>
+    public double ComputePrivacySpent(double delta = 1e-5)
+    {
+        if (delta <= 0 || delta >= 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(delta), "Delta must be in (0, 1).");
+        }
+
+        // Convert accumulated RDP to (epsilon, delta)-DP:
+        // epsilon = rdp_epsilon - log(delta) / (alpha - 1)
+        const double alpha = 10.0;
+        double epsilon = _cumulativeRdpEpsilon - Math.Log(delta) / (alpha - 1.0);
+
+        return Math.Max(epsilon, 0);
+    }
+
+    /// <summary>
+    /// Estimates the maximum number of rounds that can be performed while staying
+    /// within a target epsilon budget.
+    /// </summary>
+    /// <param name="targetEpsilon">Target total epsilon. Default: 8.0.</param>
+    /// <param name="delta">Target delta. Default: 1e-5.</param>
+    /// <param name="numClientsPerRound">Expected clients per round. Default: 10.</param>
+    /// <returns>Estimated maximum number of rounds.</returns>
+    public int EstimateMaxRounds(double targetEpsilon = 8.0, double delta = 1e-5, int numClientsPerRound = 10)
+    {
+        if (_noiseMultiplier <= 0) return int.MaxValue;
+
+        const double alpha = 10.0;
+        double logDeltaTerm = -Math.Log(delta) / (alpha - 1.0);
+
+        // Per-round RDP cost: alpha / (2 * sigma²) where sigma = noiseMultiplier.
+        // Since sensitivity cancels out in the ratio.
+        double perRoundRdp = alpha / (2.0 * _noiseMultiplier * _noiseMultiplier);
+
+        // targetEpsilon = T * perRoundRdp + logDeltaTerm
+        // T = (targetEpsilon - logDeltaTerm) / perRoundRdp
+        double availableBudget = targetEpsilon - logDeltaTerm;
+        if (availableBudget <= 0) return 0;
+
+        return (int)(availableBudget / perRoundRdp);
     }
 
     /// <summary>Gets the DP noise multiplier.</summary>
@@ -248,4 +361,10 @@ public class DPFedLoRA<T> : Infrastructure.FederatedLearningComponentBase<T>, IF
 
     /// <summary>Gets the LoRA rank.</summary>
     public int Rank => _rank;
+
+    /// <summary>Gets the current cumulative RDP epsilon (before conversion to (eps,delta)-DP).</summary>
+    public double CumulativeRdpEpsilon => _cumulativeRdpEpsilon;
+
+    /// <summary>Gets the number of aggregation rounds completed so far.</summary>
+    public int RoundsCompleted => _roundCounter;
 }
