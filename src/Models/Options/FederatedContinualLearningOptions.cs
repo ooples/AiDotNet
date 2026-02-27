@@ -58,4 +58,42 @@ public class FederatedContinualLearningOptions : ModelOptions
     /// Directions with importance above this threshold are protected. Lower values protect more directions.
     /// </remarks>
     public double ProjectionThreshold { get; set; } = 0.01;
+
+    // --- Experience Replay ---
+
+    /// <summary>
+    /// Gets or sets the maximum buffer capacity for experience replay per client. Default: 500.
+    /// </summary>
+    public int ExperienceReplayBufferCapacity { get; set; } = 500;
+
+    /// <summary>
+    /// Gets or sets the ratio of replay samples to new samples during training. Default: 0.3.
+    /// </summary>
+    public double ExperienceReplayRatio { get; set; } = 0.3;
+
+    // --- Data-Free FCL ---
+
+    /// <summary>
+    /// Gets or sets the distillation temperature for data-free continual learning. Default: 3.0.
+    /// </summary>
+    public double DataFreeFCLDistillationTemperature { get; set; } = 3.0;
+
+    /// <summary>
+    /// Gets or sets the distillation loss weight for data-free FCL. Default: 0.5.
+    /// </summary>
+    public double DataFreeFCLDistillationWeight { get; set; } = 0.5;
+
+    // --- FedCIL ---
+
+    /// <summary>
+    /// Gets or sets the EMA decay rate for prototype consolidation in FedCIL. Default: 0.99.
+    /// </summary>
+    public double FedCILPrototypeDecay { get; set; } = 0.99;
+
+    // --- FedAGC ---
+
+    /// <summary>
+    /// Gets or sets the correction strength for adaptive gradient correction. Default: 0.5.
+    /// </summary>
+    public double FedAGCCorrectionStrength { get; set; } = 0.5;
 }

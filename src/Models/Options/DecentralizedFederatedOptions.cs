@@ -54,4 +54,56 @@ public class DecentralizedFederatedOptions : ModelOptions
     /// </remarks>
     public int MixingRoundsPerTrainingRound { get; set; } = 3;
 
+    // --- DFedAvgM ---
+
+    /// <summary>
+    /// Gets or sets the momentum coefficient for DFedAvgM. Default: 0.9.
+    /// </summary>
+    public double DFedAvgMMomentum { get; set; } = 0.9;
+
+    // --- DFedBCA ---
+
+    /// <summary>
+    /// Gets or sets the number of parameter blocks for DFedBCA. Default: 4.
+    /// </summary>
+    public int DFedBCANumBlocks { get; set; } = 4;
+
+    /// <summary>
+    /// Gets or sets the block selection strategy for DFedBCA. Default: Cyclic.
+    /// </summary>
+    public BlockSelectionMode DFedBCASelectionStrategy { get; set; } = BlockSelectionMode.Cyclic;
+
+    // --- DeTAG ---
+
+    /// <summary>
+    /// Gets or sets the learning rate for DeTAG gradient tracking. Default: 0.01.
+    /// </summary>
+    public double DeTAGLearningRate { get; set; } = 0.01;
+
+    // --- Segmented Gossip ---
+
+    /// <summary>
+    /// Gets or sets the number of model segments for SegmentedGossip. Default: 4.
+    /// </summary>
+    public int SegmentedGossipNumSegments { get; set; } = 4;
+
+    // --- Time-Varying Topology ---
+
+    /// <summary>
+    /// Gets or sets the random seed for time-varying topology generation. Default: 42.
+    /// </summary>
+    public int TimeVaryingSeed { get; set; } = 42;
+}
+
+/// <summary>
+/// Block selection mode for DFedBCA protocol.
+/// </summary>
+public enum BlockSelectionMode
+{
+    /// <summary>Rotate through blocks in order.</summary>
+    Cyclic = 0,
+    /// <summary>Select blocks randomly each round.</summary>
+    Random = 1,
+    /// <summary>Select blocks based on gradient importance.</summary>
+    ImportanceBased = 2
 }

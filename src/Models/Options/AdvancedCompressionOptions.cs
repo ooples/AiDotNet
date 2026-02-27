@@ -71,4 +71,32 @@ public class AdvancedCompressionOptions
     /// Only used with GradientSketch strategy. Default is 0 (auto, uses global compression ratio).
     /// </summary>
     public int SketchTopK { get; set; } = 0;
+
+    // --- SignSGD ---
+
+    /// <summary>
+    /// Gets or sets the learning rate for SignSGD compression. Default: 0.01.
+    /// </summary>
+    public double SignSGDLearningRate { get; set; } = 0.01;
+
+    // --- FetchSGD ---
+
+    /// <summary>
+    /// Gets or sets the number of top-K heavy hitters to recover from FetchSGD sketches. Default: 100.
+    /// </summary>
+    public int FetchSGDTopK { get; set; } = 100;
+
+    // --- FedKD ---
+
+    /// <summary>
+    /// Gets or sets the knowledge distillation temperature for FedKD compression. Default: 3.0.
+    /// </summary>
+    public double FedKDTemperature { get; set; } = 3.0;
+
+    // --- FedDT ---
+
+    /// <summary>
+    /// Gets or sets the maximum tree depth for FedDT decision-tree compression. Default: 8.
+    /// </summary>
+    public int FedDTMaxDepth { get; set; } = 8;
 }

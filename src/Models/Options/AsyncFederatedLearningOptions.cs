@@ -55,5 +55,24 @@ public class AsyncFederatedLearningOptions : ModelOptions
     /// <b>For Beginners:</b> If this is greater than 0, updates older than this threshold are ignored.
     /// </remarks>
     public int RejectUpdatesWithStalenessGreaterThan { get; set; } = 0;
+
+    // --- Semi-Async ---
+
+    /// <summary>
+    /// Gets or sets the number of async rounds between synchronization barriers (Semi-Async mode). Default: 5.
+    /// </summary>
+    public int SemiAsyncRoundsPerBarrier { get; set; } = 5;
+
+    // --- AsyncFedED ---
+
+    /// <summary>
+    /// Gets or sets the maximum clients to select per round in AsyncFedED. Default: 10.
+    /// </summary>
+    public int AsyncFedEDSelectionBudget { get; set; } = 10;
+
+    /// <summary>
+    /// Gets or sets the exploration bonus for unvisited clients in AsyncFedED scheduling. Default: 0.1.
+    /// </summary>
+    public double AsyncFedEDExplorationBonus { get; set; } = 0.1;
 }
 
