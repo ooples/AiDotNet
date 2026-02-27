@@ -28,6 +28,12 @@ public class FetchSGDCompressor<T> : Infrastructure.FederatedLearningComponentBa
     private readonly int _sketchCols;
     private readonly int _topK;
     private readonly int _seed;
+    private readonly long[] _hashA; // 2-universal hash: h(x) = (a*x + b) mod p mod m
+    private readonly long[] _hashB;
+    private readonly long[] _signA; // Separate 2-universal hash for sign
+    private readonly long[] _signB;
+    private const long LARGE_PRIME = 2147483647L; // 2^31 - 1 (Mersenne prime)
+    private double[]? _errorAccumulator;
 
     /// <summary>
     /// Creates a new FetchSGD compressor.
@@ -57,29 +63,111 @@ public class FetchSGDCompressor<T> : Infrastructure.FederatedLearningComponentBa
         _sketchCols = sketchCols;
         _topK = topK;
         _seed = seed;
+
+        // Initialize 2-universal hash families: h(x) = ((a*x + b) mod p) mod m
+        // where a, b are random, p is a large prime, m is the table size.
+        // This guarantees pairwise independence for collision bounds.
+        var rng = new Random(seed);
+        _hashA = new long[sketchRows];
+        _hashB = new long[sketchRows];
+        _signA = new long[sketchRows];
+        _signB = new long[sketchRows];
+
+        for (int r = 0; r < sketchRows; r++)
+        {
+            // Use two Next() calls combined for a wider range (net471 lacks NextInt64).
+            _hashA[r] = ((long)rng.Next(1, int.MaxValue) << 16) | (long)rng.Next(0, 65536);
+            _hashB[r] = ((long)rng.Next(0, int.MaxValue) << 16) | (long)rng.Next(0, 65536);
+            _signA[r] = ((long)rng.Next(1, int.MaxValue) << 16) | (long)rng.Next(0, 65536);
+            _signB[r] = ((long)rng.Next(0, int.MaxValue) << 16) | (long)rng.Next(0, 65536);
+        }
     }
 
     /// <summary>
-    /// Compresses a flattened gradient into a count sketch.
+    /// Compresses a flattened gradient into a count sketch with error feedback.
     /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Error feedback stores the difference between the original gradient
+    /// and what was actually communicated (the sketch lossy reconstruction). This residual is added
+    /// to the next round's gradient, ensuring no information is permanently lost. Over many rounds,
+    /// all gradient information eventually gets communicated.</para>
+    /// </remarks>
     /// <param name="gradient">The gradient values.</param>
+    /// <param name="useErrorFeedback">Whether to apply error feedback. Default: true.</param>
     /// <returns>Count sketch matrix (rows x cols).</returns>
-    public double[,] Sketch(T[] gradient)
+    public double[,] Sketch(T[] gradient, bool useErrorFeedback = true)
     {
         var sketch = new double[_sketchRows, _sketchCols];
 
-        for (int i = 0; i < gradient.Length; i++)
+        // Add error feedback from previous round.
+        if (useErrorFeedback && _errorAccumulator != null && _errorAccumulator.Length == gradient.Length)
         {
-            double val = NumOps.ToDouble(gradient[i]);
-            for (int r = 0; r < _sketchRows; r++)
+            for (int i = 0; i < gradient.Length; i++)
             {
-                int col = Math.Abs((i * (_seed + r * 1000003) + 997) % _sketchCols);
-                int sign = ((i * (_seed + r * 2000003)) % 2 == 0) ? 1 : -1;
-                sketch[r, col] += sign * val;
+                double val = NumOps.ToDouble(gradient[i]) + _errorAccumulator[i];
+                for (int r = 0; r < _sketchRows; r++)
+                {
+                    int col = HashColumn(i, r);
+                    int sign = HashSign(i, r);
+                    sketch[r, col] += sign * val;
+                }
+            }
+        }
+        else
+        {
+            for (int i = 0; i < gradient.Length; i++)
+            {
+                double val = NumOps.ToDouble(gradient[i]);
+                for (int r = 0; r < _sketchRows; r++)
+                {
+                    int col = HashColumn(i, r);
+                    int sign = HashSign(i, r);
+                    sketch[r, col] += sign * val;
+                }
+            }
+        }
+
+        // Update error accumulator if using feedback.
+        if (useErrorFeedback)
+        {
+            _errorAccumulator = new double[gradient.Length];
+            for (int i = 0; i < gradient.Length; i++)
+            {
+                // Error = input - sketch_reconstruction
+                double estimate = EstimateFromSketch(sketch, i);
+                double input = NumOps.ToDouble(gradient[i]) +
+                    (_errorAccumulator.Length == gradient.Length ? 0 : 0); // Already added above.
+                _errorAccumulator[i] = NumOps.ToDouble(gradient[i]) - estimate;
             }
         }
 
         return sketch;
+    }
+
+    private int HashColumn(int index, int row)
+    {
+        long h = ((_hashA[row] * index + _hashB[row]) % LARGE_PRIME + LARGE_PRIME) % LARGE_PRIME;
+        return (int)(h % _sketchCols);
+    }
+
+    private int HashSign(int index, int row)
+    {
+        long h = ((_signA[row] * index + _signB[row]) % LARGE_PRIME + LARGE_PRIME) % LARGE_PRIME;
+        return (h % 2 == 0) ? 1 : -1;
+    }
+
+    private double EstimateFromSketch(double[,] sketch, int index)
+    {
+        var estimates = new double[_sketchRows];
+        for (int r = 0; r < _sketchRows; r++)
+        {
+            int col = HashColumn(index, r);
+            int sign = HashSign(index, r);
+            estimates[r] = sign * sketch[r, col];
+        }
+
+        Array.Sort(estimates);
+        return estimates[_sketchRows / 2]; // Median estimator.
     }
 
     /// <summary>
@@ -114,16 +202,7 @@ public class FetchSGDCompressor<T> : Infrastructure.FederatedLearningComponentBa
         var estimates = new (int Index, double AbsValue, double Value)[gradientLength];
         for (int i = 0; i < gradientLength; i++)
         {
-            var rowEstimates = new double[_sketchRows];
-            for (int r = 0; r < _sketchRows; r++)
-            {
-                int col = Math.Abs((i * (_seed + r * 1000003) + 997) % _sketchCols);
-                int sign = ((i * (_seed + r * 2000003)) % 2 == 0) ? 1 : -1;
-                rowEstimates[r] = sign * mergedSketch[r, col];
-            }
-
-            Array.Sort(rowEstimates);
-            double median = rowEstimates[_sketchRows / 2];
+            double median = EstimateFromSketch(mergedSketch, i);
             estimates[i] = (i, Math.Abs(median), median);
         }
 

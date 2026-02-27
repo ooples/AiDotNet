@@ -24,38 +24,93 @@ public class SignSGDCompressor<T> : Infrastructure.FederatedLearningComponentBas
 {
     private readonly double _learningRate;
     private readonly bool _useMajorityVote;
+    private readonly double _momentum;
+    private Dictionary<int, Dictionary<string, double[]>>? _errorAccumulators;
+    private Dictionary<int, Dictionary<string, double[]>>? _momentumBuffers;
 
     /// <summary>
     /// Creates a new SignSGD compressor.
     /// </summary>
     /// <param name="learningRate">Server-side learning rate for sign updates. Default: 0.01.</param>
     /// <param name="useMajorityVote">If true, server takes majority vote of signs. Default: true.</param>
-    public SignSGDCompressor(double learningRate = 0.01, bool useMajorityVote = true)
+    /// <param name="momentum">Momentum factor for SIGNUM variant. 0 = no momentum. Default: 0.9.</param>
+    public SignSGDCompressor(double learningRate = 0.01, bool useMajorityVote = true, double momentum = 0.9)
     {
         if (learningRate <= 0)
         {
             throw new ArgumentOutOfRangeException(nameof(learningRate), "Learning rate must be positive.");
         }
 
+        if (momentum < 0 || momentum >= 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(momentum), "Momentum must be in [0, 1).");
+        }
+
         _learningRate = learningRate;
         _useMajorityVote = useMajorityVote;
+        _momentum = momentum;
     }
 
     /// <summary>
-    /// Compresses a gradient to its signs.
+    /// Compresses a gradient to its signs with error feedback and optional momentum (SIGNUM).
     /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Plain SignSGD discards the gradient magnitude, which loses information.
+    /// Error feedback accumulates the discarded residual and adds it to the next gradient, ensuring
+    /// nothing is permanently lost. SIGNUM (momentum variant) applies momentum before taking the sign,
+    /// which smooths noise and improves convergence — it's the equivalent of Adam but for 1-bit compression.</para>
+    /// </remarks>
     /// <param name="gradient">The gradient parameter dictionary.</param>
+    /// <param name="clientId">Client ID for error accumulator tracking. Default: 0.</param>
     /// <returns>Sign-compressed dictionary (values are +1, -1, or 0).</returns>
-    public Dictionary<string, T[]> Compress(Dictionary<string, T[]> gradient)
+    public Dictionary<string, T[]> Compress(Dictionary<string, T[]> gradient, int clientId = 0)
     {
+        _errorAccumulators ??= new Dictionary<int, Dictionary<string, double[]>>();
+        _momentumBuffers ??= new Dictionary<int, Dictionary<string, double[]>>();
+
+        if (!_errorAccumulators.ContainsKey(clientId))
+        {
+            _errorAccumulators[clientId] = new Dictionary<string, double[]>();
+        }
+
+        if (!_momentumBuffers.ContainsKey(clientId))
+        {
+            _momentumBuffers[clientId] = new Dictionary<string, double[]>();
+        }
+
+        var errorAcc = _errorAccumulators[clientId];
+        var momBuf = _momentumBuffers[clientId];
         var compressed = new Dictionary<string, T[]>(gradient.Count);
+
         foreach (var kvp in gradient)
         {
+            if (!errorAcc.ContainsKey(kvp.Key))
+            {
+                errorAcc[kvp.Key] = new double[kvp.Value.Length];
+            }
+
+            if (!momBuf.ContainsKey(kvp.Key))
+            {
+                momBuf[kvp.Key] = new double[kvp.Value.Length];
+            }
+
+            var err = errorAcc[kvp.Key];
+            var mom = momBuf[kvp.Key];
             var signs = new T[kvp.Value.Length];
+
             for (int i = 0; i < signs.Length; i++)
             {
-                double v = NumOps.ToDouble(kvp.Value[i]);
-                signs[i] = NumOps.FromDouble(v > 0 ? 1.0 : v < 0 ? -1.0 : 0.0);
+                double grad = NumOps.ToDouble(kvp.Value[i]) + err[i]; // Add error feedback.
+
+                // SIGNUM: apply momentum before sign.
+                mom[i] = _momentum * mom[i] + (1 - _momentum) * grad;
+                double signInput = _momentum > 0 ? mom[i] : grad;
+
+                double sign = signInput > 0 ? 1.0 : signInput < 0 ? -1.0 : 0.0;
+                signs[i] = NumOps.FromDouble(sign);
+
+                // Error feedback: residual = original - reconstructed
+                err[i] = grad - sign; // sign is the "reconstruction" for sign compression.
             }
 
             compressed[kvp.Key] = signs;
