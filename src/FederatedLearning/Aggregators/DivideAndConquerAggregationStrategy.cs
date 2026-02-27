@@ -65,6 +65,8 @@ public class DivideAndConquerAggregationStrategy<T> : ParameterDictionaryAggrega
             throw new ArgumentException("Client models cannot be null or empty.", nameof(clientModels));
         }
 
+        Guard.NotNull(clientWeights);
+
         if (clientModels.Count == 1)
         {
             var single = clientModels.First().Value;
@@ -73,6 +75,26 @@ public class DivideAndConquerAggregationStrategy<T> : ParameterDictionaryAggrega
 
         var referenceModel = clientModels.First().Value;
         var layerNames = referenceModel.Keys.ToArray();
+
+        // Validate all clients have matching layer structure before flattening.
+        foreach (var (clientId, model) in clientModels)
+        {
+            foreach (var layerName in layerNames)
+            {
+                if (!model.TryGetValue(layerName, out var layer))
+                {
+                    throw new ArgumentException(
+                        $"Client {clientId} missing layer '{layerName}'.", nameof(clientModels));
+                }
+
+                if (layer.Length != referenceModel[layerName].Length)
+                {
+                    throw new ArgumentException(
+                        $"Client {clientId} layer '{layerName}' length mismatch: {layer.Length} != {referenceModel[layerName].Length}.",
+                        nameof(clientModels));
+                }
+            }
+        }
 
         // Flatten all client models into vectors.
         int totalParams = layerNames.Sum(ln => referenceModel[ln].Length);

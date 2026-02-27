@@ -152,19 +152,29 @@ public class FedMaAggregationStrategy<T> : ParameterDictionaryAggregationStrateg
             // Solve assignment using Hungarian algorithm.
             int[] assignment = HungarianAlgorithm(costMatrix, neuronCount);
 
-            // Apply permutation: neuron assignment[i] of client maps to position i.
+            // Compute average matching quality to decide if permutation is worthwhile.
+            // Applying the threshold per-neuron breaks the bijection guarantee of the
+            // Hungarian algorithm, so we evaluate quality holistically per layer.
+            double avgSimilarity = 0;
+            for (int i = 0; i < neuronCount; i++)
+            {
+                avgSimilarity += -costMatrix[i, assignment[i]];
+            }
+
+            avgSimilarity /= neuronCount;
+
+            if (avgSimilarity < _matchingThreshold)
+            {
+                // Poor overall match quality: skip permutation for this layer to preserve bijection.
+                permuted[layerName] = (T[])clientParams.Clone();
+                continue;
+            }
+
+            // Apply full permutation (bijection preserved).
             var permutedParams = new T[layerSize];
             for (int i = 0; i < neuronCount; i++)
             {
                 int srcNeuron = assignment[i];
-                double sim = -costMatrix[i, srcNeuron]; // recover similarity
-
-                if (sim < _matchingThreshold)
-                {
-                    // Below threshold: keep original position (no permutation for this neuron).
-                    srcNeuron = i;
-                }
-
                 Array.Copy(clientParams, srcNeuron * neuronSize, permutedParams, i * neuronSize, neuronSize);
             }
 

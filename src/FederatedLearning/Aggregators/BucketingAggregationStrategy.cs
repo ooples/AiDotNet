@@ -64,13 +64,36 @@ public class BucketingAggregationStrategy<T> : ParameterDictionaryAggregationStr
             throw new ArgumentException("Client models cannot be null or empty.", nameof(clientModels));
         }
 
+        Guard.NotNull(clientWeights);
+
         if (clientModels.Count == 1)
         {
-            return clientModels.First().Value;
+            var single = clientModels.First().Value;
+            return single.ToDictionary(kv => kv.Key, kv => (T[])kv.Value.Clone());
         }
 
         var referenceModel = clientModels.First().Value;
         var layerNames = referenceModel.Keys.ToArray();
+
+        // Validate all clients have matching layer structure before bucketing.
+        foreach (var (clientId, model) in clientModels)
+        {
+            foreach (var layerName in layerNames)
+            {
+                if (!model.TryGetValue(layerName, out var layer))
+                {
+                    throw new ArgumentException(
+                        $"Client {clientId} missing layer '{layerName}'.", nameof(clientModels));
+                }
+
+                if (layer.Length != referenceModel[layerName].Length)
+                {
+                    throw new ArgumentException(
+                        $"Client {clientId} layer '{layerName}' length mismatch: {layer.Length} != {referenceModel[layerName].Length}.",
+                        nameof(clientModels));
+                }
+            }
+        }
 
         // Shuffle client IDs with round-varying seed to ensure different permutations each round.
         var clientIds = clientModels.Keys.ToList();
