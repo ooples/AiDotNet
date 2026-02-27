@@ -57,8 +57,17 @@ public class FedPACPersonalization<T> : Infrastructure.FederatedLearningComponen
     /// <param name="prototypes">Dictionary of class label to prototype feature vector.</param>
     public void RegisterPrototypes(int clientId, Dictionary<int, T[]> prototypes)
     {
+        Guard.NotNull(prototypes);
         _clientPrototypes ??= new Dictionary<int, Dictionary<int, T[]>>();
-        _clientPrototypes[clientId] = prototypes;
+
+        // Defensive copy to prevent external mutation of internal state.
+        var copy = new Dictionary<int, T[]>(prototypes.Count);
+        foreach (var (classLabel, proto) in prototypes)
+        {
+            copy[classLabel] = (T[])proto.Clone();
+        }
+
+        _clientPrototypes[clientId] = copy;
     }
 
     /// <summary>
@@ -113,7 +122,13 @@ public class FedPACPersonalization<T> : Infrastructure.FederatedLearningComponen
         {
             var pA = protosA[classLabel];
             var pB = protosB[classLabel];
-            int len = Math.Min(pA.Length, pB.Length);
+            if (pA.Length != pB.Length)
+            {
+                throw new ArgumentException(
+                    $"Prototype dimension mismatch for class {classLabel}: {pA.Length} != {pB.Length}.");
+            }
+
+            int len = pA.Length;
 
             double dot = 0, normA = 0, normB = 0;
             for (int i = 0; i < len; i++)
@@ -146,6 +161,8 @@ public class FedPACPersonalization<T> : Infrastructure.FederatedLearningComponen
     /// <returns>Dictionary of class label to prototype (mean feature vector).</returns>
     public Dictionary<int, T[]> ComputeClassPrototypes(T[][] features, int[] labels)
     {
+        Guard.NotNull(features);
+        Guard.NotNull(labels);
         if (features.Length != labels.Length)
         {
             throw new ArgumentException("Features and labels must have equal length.");
@@ -200,6 +217,7 @@ public class FedPACPersonalization<T> : Infrastructure.FederatedLearningComponen
         Dictionary<int, Dictionary<int, T[]>> clientPrototypes,
         Dictionary<int, Dictionary<int, int>>? clientSampleCounts = null)
     {
+        Guard.NotNull(clientPrototypes);
         // Collect all class labels.
         var allClasses = new HashSet<int>();
         foreach (var protos in clientPrototypes.Values)
@@ -269,6 +287,8 @@ public class FedPACPersonalization<T> : Infrastructure.FederatedLearningComponen
         Dictionary<int, T[]> localPrototypes,
         Dictionary<int, T[]> globalPrototypes)
     {
+        Guard.NotNull(localPrototypes);
+        Guard.NotNull(globalPrototypes);
         double totalLoss = 0;
         int numClasses = 0;
 

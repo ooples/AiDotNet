@@ -175,13 +175,19 @@ public class KNNPersonalization<T> : Infrastructure.FederatedLearningComponentBa
     {
         Guard.NotNull(queryFeatures);
         Guard.NotNull(globalPrediction);
+        if (globalPrediction.Length != numClasses)
+        {
+            throw new ArgumentException(
+                $"Global prediction length ({globalPrediction.Length}) must match numClasses ({numClasses}).",
+                nameof(globalPrediction));
+        }
+
         var knnPred = KNNPredict(queryFeatures, numClasses);
         var combined = new double[numClasses];
 
         for (int c = 0; c < numClasses; c++)
         {
-            combined[c] = _lambda * knnPred[c] +
-                          (1.0 - _lambda) * (c < globalPrediction.Length ? globalPrediction[c] : 0);
+            combined[c] = _lambda * knnPred[c] + (1.0 - _lambda) * globalPrediction[c];
         }
 
         return combined;

@@ -48,8 +48,12 @@ public class FedAGHNPersonalization<T> : Infrastructure.FederatedLearningCompone
 
     /// <summary>
     /// Projects client parameters from local dimension to shared space for aggregation.
-    /// Uses a simple linear projection (truncation/zero-padding for now).
     /// </summary>
+    /// <remarks>
+    /// <para><b>Implementation Note:</b> This reference implementation uses simple truncation/zero-padding
+    /// as the projection. Production deployments should replace this with a learned linear projection
+    /// (e.g., via <see cref="ProjectWithMatrix"/>) for better information preservation.</para>
+    /// </remarks>
     /// <param name="localParams">Client's local parameter vector.</param>
     /// <returns>Projected parameters in shared space.</returns>
     public T[] ProjectToShared(T[] localParams)
@@ -144,6 +148,8 @@ public class FedAGHNPersonalization<T> : Infrastructure.FederatedLearningCompone
     /// <returns>Cosine similarity in [-1, 1].</returns>
     public double ComputeGradientSimilarity(T[] gradA, T[] gradB)
     {
+        Guard.NotNull(gradA);
+        Guard.NotNull(gradB);
         int len = Math.Min(gradA.Length, gradB.Length);
         double dot = 0, normA = 0, normB = 0;
 
@@ -178,6 +184,8 @@ public class FedAGHNPersonalization<T> : Infrastructure.FederatedLearningCompone
         Dictionary<int, T[]> clientGradients,
         Dictionary<int, double>? previousWeights = null)
     {
+        Guard.NotNull(targetGradient);
+        Guard.NotNull(clientGradients);
         var weights = new Dictionary<int, double>();
         double totalWeight = 0;
 

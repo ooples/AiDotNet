@@ -54,6 +54,7 @@ public class FedSelectPersonalization<T> : Infrastructure.FederatedLearningCompo
     /// <param name="initialBias">Initial bias for mask logits (negative = mostly shared). Default: -2.0.</param>
     public void InitializeMasks(Dictionary<string, T[]> modelStructure, double initialBias = -2.0)
     {
+        Guard.NotNull(modelStructure);
         _maskLogits = new Dictionary<string, double[]>(modelStructure.Count);
         foreach (var kvp in modelStructure)
         {
@@ -72,6 +73,7 @@ public class FedSelectPersonalization<T> : Infrastructure.FederatedLearningCompo
     /// </summary>
     public Dictionary<string, T[]> ExtractSharedParameters(Dictionary<string, T[]> fullParameters)
     {
+        Guard.NotNull(fullParameters);
         if (_maskLogits == null)
         {
             InitializeMasks(fullParameters);
@@ -80,7 +82,11 @@ public class FedSelectPersonalization<T> : Infrastructure.FederatedLearningCompo
         var shared = new Dictionary<string, T[]>(fullParameters.Count);
         foreach (var kvp in fullParameters)
         {
-            var logits = _maskLogits![kvp.Key];
+            if (!_maskLogits!.TryGetValue(kvp.Key, out var logits))
+            {
+                throw new InvalidOperationException(
+                    $"No mask logits found for layer '{kvp.Key}'. Model structure may have changed since InitializeMasks was called.");
+            }
             var result = new T[kvp.Value.Length];
             for (int i = 0; i < result.Length; i++)
             {
@@ -150,18 +156,27 @@ public class FedSelectPersonalization<T> : Infrastructure.FederatedLearningCompo
         T[] sharedValues,
         double learningRate = 0.01)
     {
+        Guard.NotNull(parameterGradients);
+        Guard.NotNull(personalizedValues);
+        Guard.NotNull(sharedValues);
         if (_maskLogits == null)
         {
-            return;
+            throw new InvalidOperationException("Masks not initialized. Call InitializeMasks first.");
         }
 
         if (!_maskLogits.TryGetValue(layerName, out var logits))
         {
-            return;
+            throw new ArgumentException($"Unknown layer '{layerName}'. Not in mask logits.", nameof(layerName));
         }
 
-        int len = Math.Min(logits.Length, parameterGradients.Length);
-        for (int i = 0; i < len; i++)
+        if (parameterGradients.Length != logits.Length)
+        {
+            throw new ArgumentException(
+                $"Gradient length ({parameterGradients.Length}) != mask logit length ({logits.Length}) for layer '{layerName}'.",
+                nameof(parameterGradients));
+        }
+
+        for (int i = 0; i < logits.Length; i++)
         {
             double sigma = 1.0 / (1.0 + Math.Exp(-logits[i])); // sigmoid
 
@@ -171,8 +186,11 @@ public class FedSelectPersonalization<T> : Infrastructure.FederatedLearningCompo
             double sharedVal = i < sharedValues.Length ? NumOps.ToDouble(sharedValues[i]) : 0;
             double maskGrad = paramGrad * (personalVal - sharedVal) * sigma * (1 - sigma);
 
-            // L1 regularization gradient: push towards shared (logit → -∞, sigmoid → 0).
-            double regGrad = _maskRegularization * (sigma > 0.5 ? 1.0 : -1.0);
+            // L1 regularization gradient: always push towards shared (lower sigmoid → logit decreases).
+            // sigma is the soft mask value: 1 = fully personalized, 0 = fully shared.
+            // We want to minimize sigma, so the gradient of L1(sigma) = d(sigma)/d(logit) = sigma*(1-sigma).
+            // This always pushes logits negative (toward shared), which is the desired sparsity behavior.
+            double regGrad = _maskRegularization * sigma * (1 - sigma);
 
             logits[i] -= learningRate * (maskGrad + regGrad);
         }

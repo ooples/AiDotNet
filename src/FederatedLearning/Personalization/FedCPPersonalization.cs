@@ -95,6 +95,7 @@ public class FedCPPersonalization<T> : Infrastructure.FederatedLearningComponent
     /// <returns>Routing weights (softmax probabilities) summing to 1.</returns>
     public double[] ComputeRoutingWeights(T[] policyLogits)
     {
+        Guard.NotNull(policyLogits);
         int k = Math.Min(policyLogits.Length, _numExperts);
         var weights = new double[k];
 
@@ -128,6 +129,8 @@ public class FedCPPersonalization<T> : Infrastructure.FederatedLearningComponent
     /// <returns>Weighted combination of expert outputs.</returns>
     public T[] CombineExpertOutputs(T[][] expertOutputs, double[] routingWeights)
     {
+        Guard.NotNull(expertOutputs);
+        Guard.NotNull(routingWeights);
         if (expertOutputs.Length == 0)
         {
             return [];
@@ -135,6 +138,12 @@ public class FedCPPersonalization<T> : Infrastructure.FederatedLearningComponent
 
         int dim = expertOutputs[0].Length;
         var combined = new T[dim];
+
+        // Explicitly initialize to zero for clarity (default(T) may not be zero for all T).
+        for (int i = 0; i < dim; i++)
+        {
+            combined[i] = NumOps.Zero;
+        }
 
         for (int k = 0; k < expertOutputs.Length && k < routingWeights.Length; k++)
         {
@@ -161,6 +170,7 @@ public class FedCPPersonalization<T> : Infrastructure.FederatedLearningComponent
     /// <returns>Load-balancing loss value (0 = perfectly balanced).</returns>
     public double ComputeLoadBalancingLoss(double[][] routingWeightsBatch)
     {
+        Guard.NotNull(routingWeightsBatch);
         if (routingWeightsBatch.Length == 0)
         {
             return 0;
@@ -172,6 +182,13 @@ public class FedCPPersonalization<T> : Infrastructure.FederatedLearningComponent
 
         for (int b = 0; b < batchSize; b++)
         {
+            if (routingWeightsBatch[b].Length != k)
+            {
+                throw new ArgumentException(
+                    $"Routing weights batch[{b}] has length {routingWeightsBatch[b].Length}, expected {k}.",
+                    nameof(routingWeightsBatch));
+            }
+
             for (int e = 0; e < k; e++)
             {
                 avgLoad[e] += routingWeightsBatch[b][e];

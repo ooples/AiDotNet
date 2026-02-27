@@ -134,6 +134,8 @@ public class FedRoDPersonalization<T> : Infrastructure.FederatedLearningComponen
     /// <returns>Adjusted logits with class-frequency correction.</returns>
     public T[] ComputeBalancedSoftmaxLogits(T[] logits, int[] classFrequencies)
     {
+        Guard.NotNull(logits);
+        Guard.NotNull(classFrequencies);
         int numClasses = logits.Length;
         long totalSamples = 0;
         for (int c = 0; c < classFrequencies.Length; c++)
@@ -168,9 +170,11 @@ public class FedRoDPersonalization<T> : Infrastructure.FederatedLearningComponen
     /// <returns>Generic head parameters.</returns>
     public Dictionary<string, T[]> ExtractGenericHead(Dictionary<string, T[]> fullParameters)
     {
+        Guard.NotNull(fullParameters);
         var layerNames = fullParameters.Keys.ToArray();
         int personalizedCount = (int)(layerNames.Length * _headFraction);
-        int genericStart = layerNames.Length - 2 * personalizedCount;
+        // Clamp to prevent negative index with small models.
+        int genericStart = Math.Max(0, layerNames.Length - 2 * personalizedCount);
         int genericEnd = layerNames.Length - personalizedCount;
 
         var genericHead = new Dictionary<string, T[]>(personalizedCount);

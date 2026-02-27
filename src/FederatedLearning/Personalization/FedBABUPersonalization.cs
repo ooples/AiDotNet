@@ -101,6 +101,7 @@ public class FedBABUPersonalization<T> : Infrastructure.FederatedLearningCompone
     /// <returns>Head-only parameter dictionary.</returns>
     public Dictionary<string, T[]> ExtractHead(Dictionary<string, T[]> fullParameters)
     {
+        Guard.NotNull(fullParameters);
         var layerNames = fullParameters.Keys.ToArray();
         int headStart = (int)(layerNames.Length * (1.0 - _headFraction));
 
@@ -126,6 +127,7 @@ public class FedBABUPersonalization<T> : Infrastructure.FederatedLearningCompone
     /// <returns>Reinitialized head parameters.</returns>
     public Dictionary<string, T[]> InitializeRandomHead(Dictionary<string, T[]> headParams, int seed = 42)
     {
+        Guard.NotNull(headParams);
         var rng = new Random(seed);
         var initialized = new Dictionary<string, T[]>(headParams.Count);
 
@@ -152,6 +154,7 @@ public class FedBABUPersonalization<T> : Infrastructure.FederatedLearningCompone
     /// <returns>Masked gradients with head gradients set to zero.</returns>
     public Dictionary<string, T[]> MaskHeadGradients(Dictionary<string, T[]> gradients)
     {
+        Guard.NotNull(gradients);
         var layerNames = gradients.Keys.ToArray();
         int headStart = (int)(layerNames.Length * (1.0 - _headFraction));
 

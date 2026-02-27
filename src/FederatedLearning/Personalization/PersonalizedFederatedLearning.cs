@@ -151,9 +151,10 @@ public class PersonalizedFederatedLearning<T>
                 int totalLayers = modelStructure.Count;
                 int personalizedCount = (int)Math.Ceiling(totalLayers * _personalizationFraction);
 
-                var layerNames = modelStructure.Keys
-                    .OrderBy(name => name, StringComparer.Ordinal)
-                    .ToList();
+                // Sort layer names preserving insertion order (dictionary enumeration order).
+                // Using ToList() directly maintains the model's layer ordering, which is typically
+                // sequential. Ordinal sort would mis-order names like "layer1", "layer10", "layer2".
+                var layerNames = modelStructure.Keys.ToList();
 
                 // Take the last personalizedCount layers
                 for (int i = totalLayers - personalizedCount; i < totalLayers; i++)
