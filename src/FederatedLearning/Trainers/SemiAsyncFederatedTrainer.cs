@@ -32,6 +32,7 @@ public class SemiAsyncFederatedTrainer<T> : Infrastructure.FederatedLearningComp
     private readonly int _asyncRoundsPerBarrier;
     private readonly double _stalenessDiscount;
     private readonly double _asyncLearningRate;
+    private readonly object _bufferLock = new();
     private readonly List<PendingUpdate> _updateBuffer;
     private int _currentRound;
 
@@ -76,7 +77,16 @@ public class SemiAsyncFederatedTrainer<T> : Infrastructure.FederatedLearningComp
     /// <param name="clientRound">The global round when the client started training.</param>
     public void ReceiveUpdate(int clientId, Dictionary<string, T[]> update, int clientRound)
     {
-        _updateBuffer.Add(new PendingUpdate(clientId, update, clientRound));
+        Guard.NotNull(update);
+        if (clientRound < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(clientRound), "Client round must be non-negative.");
+        }
+
+        lock (_bufferLock)
+        {
+            _updateBuffer.Add(new PendingUpdate(clientId, update, clientRound));
+        }
     }
 
     /// <summary>
@@ -86,9 +96,19 @@ public class SemiAsyncFederatedTrainer<T> : Infrastructure.FederatedLearningComp
     /// <returns>Updated global model after applying async updates.</returns>
     public Dictionary<string, T[]> ApplyAsyncUpdates(Dictionary<string, T[]> globalModel)
     {
-        if (_updateBuffer.Count == 0)
+        Guard.NotNull(globalModel);
+
+        // Snapshot and clear the buffer under lock.
+        List<PendingUpdate> snapshot;
+        lock (_bufferLock)
         {
-            return globalModel;
+            if (_updateBuffer.Count == 0)
+            {
+                return globalModel;
+            }
+
+            snapshot = new List<PendingUpdate>(_updateBuffer);
+            _updateBuffer.Clear();
         }
 
         var result = new Dictionary<string, T[]>();
@@ -102,7 +122,7 @@ public class SemiAsyncFederatedTrainer<T> : Infrastructure.FederatedLearningComp
         }
 
         // Apply each buffered update with staleness discount.
-        foreach (var pending in _updateBuffer)
+        foreach (var pending in snapshot)
         {
             int staleness = _currentRound - pending.ClientRound;
             double discount = Math.Pow(_stalenessDiscount, Math.Max(staleness, 0));
@@ -112,7 +132,13 @@ public class SemiAsyncFederatedTrainer<T> : Infrastructure.FederatedLearningComp
             {
                 if (result.TryGetValue(layerName, out var globalLayer))
                 {
-                    for (int i = 0; i < Math.Min(delta.Length, globalLayer.Length); i++)
+                    if (delta.Length != globalLayer.Length)
+                    {
+                        throw new ArgumentException(
+                            $"Client {pending.ClientId} layer '{layerName}' length {delta.Length} differs from expected {globalLayer.Length}.");
+                    }
+
+                    for (int i = 0; i < delta.Length; i++)
                     {
                         double g = NumOps.ToDouble(globalLayer[i]);
                         double d = NumOps.ToDouble(delta[i]);
@@ -122,7 +148,6 @@ public class SemiAsyncFederatedTrainer<T> : Infrastructure.FederatedLearningComp
             }
         }
 
-        _updateBuffer.Clear();
         return result;
     }
 
@@ -133,11 +158,20 @@ public class SemiAsyncFederatedTrainer<T> : Infrastructure.FederatedLearningComp
     /// <param name="clientModels">Full client models collected at the barrier.</param>
     /// <param name="clientSampleCounts">Sample counts per client.</param>
     /// <returns>Synchronized global model.</returns>
+    /// <remarks>
+    /// Async updates are applied first to the global model, then the result is blended with
+    /// client models via weighted average. The async-updated model is included in the average
+    /// with a weight proportional to the number of async updates that were applied.
+    /// </remarks>
     public Dictionary<string, T[]> SynchronizationBarrier(
         Dictionary<string, T[]> globalModel,
         Dictionary<int, Dictionary<string, T[]>> clientModels,
         Dictionary<int, int> clientSampleCounts)
     {
+        Guard.NotNull(globalModel);
+        Guard.NotNull(clientModels);
+        Guard.NotNull(clientSampleCounts);
+
         // First apply any remaining async updates.
         var updated = ApplyAsyncUpdates(globalModel);
 
@@ -146,33 +180,48 @@ public class SemiAsyncFederatedTrainer<T> : Infrastructure.FederatedLearningComp
             return updated;
         }
 
-        // FedAvg-style weighted average at the barrier.
+        // FedAvg-style weighted average at the barrier, including async-updated global model.
         double totalSamples = clientSampleCounts.Values.Sum();
+        if (totalSamples <= 0) totalSamples = clientModels.Count;
         var result = new Dictionary<string, T[]>();
 
         foreach (var (layerName, layerParams) in updated)
         {
             var merged = new double[layerParams.Length];
 
+            // Include the async-updated global model in the average.
+            for (int i = 0; i < layerParams.Length; i++)
+            {
+                merged[i] = NumOps.ToDouble(layerParams[i]);
+            }
+
+            // Blend with client models: merged = (1/(n+1)) * (updated + sum(w_k * client_k)).
+            int contributorCount = 1; // 1 for the async-updated global model.
+
             foreach (var (clientId, model) in clientModels)
             {
-                double w = totalSamples > 0
-                    ? clientSampleCounts.GetValueOrDefault(clientId, 1) / totalSamples
-                    : 1.0 / clientModels.Count;
-
                 if (model.TryGetValue(layerName, out var clientLayer))
                 {
-                    for (int i = 0; i < Math.Min(clientLayer.Length, merged.Length); i++)
+                    if (clientLayer.Length != layerParams.Length)
                     {
-                        merged[i] += w * NumOps.ToDouble(clientLayer[i]);
+                        throw new ArgumentException(
+                            $"Client {clientId} layer '{layerName}' length {clientLayer.Length} differs from expected {layerParams.Length}.");
                     }
+
+                    for (int i = 0; i < clientLayer.Length; i++)
+                    {
+                        merged[i] += NumOps.ToDouble(clientLayer[i]);
+                    }
+
+                    contributorCount++;
                 }
             }
 
             var mergedT = new T[layerParams.Length];
+            double invCount = 1.0 / contributorCount;
             for (int i = 0; i < mergedT.Length; i++)
             {
-                mergedT[i] = NumOps.FromDouble(merged[i]);
+                mergedT[i] = NumOps.FromDouble(merged[i] * invCount);
             }
 
             result[layerName] = mergedT;
@@ -212,7 +261,16 @@ public class SemiAsyncFederatedTrainer<T> : Infrastructure.FederatedLearningComp
     public int CurrentRound => _currentRound;
 
     /// <summary>Gets the number of pending buffered updates.</summary>
-    public int PendingUpdateCount => _updateBuffer.Count;
+    public int PendingUpdateCount
+    {
+        get
+        {
+            lock (_bufferLock)
+            {
+                return _updateBuffer.Count;
+            }
+        }
+    }
 
     private sealed class PendingUpdate
     {

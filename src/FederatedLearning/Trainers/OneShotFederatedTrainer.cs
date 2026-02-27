@@ -23,7 +23,7 @@ namespace AiDotNet.FederatedLearning.Trainers;
 /// arXiv:1902.11175. Practical variants: Li et al. (2024).</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters.</typeparam>
-public class OneShotFederatedTrainer<T> : Infrastructure.FederatedLearningComponentBase<T>
+internal class OneShotFederatedTrainer<T> : Infrastructure.FederatedLearningComponentBase<T>
 {
     private readonly int _localEpochs;
     private readonly OneShotAggregationMode _aggregationMode;
@@ -74,10 +74,14 @@ public class OneShotFederatedTrainer<T> : Infrastructure.FederatedLearningCompon
         Dictionary<int, Dictionary<string, T[]>> clientModels,
         Dictionary<int, int> clientSampleCounts)
     {
+        Guard.NotNull(clientModels);
+        Guard.NotNull(clientSampleCounts);
         if (clientModels.Count == 0)
         {
             throw new ArgumentException("Client models cannot be empty.", nameof(clientModels));
         }
+
+        LastEnsembleDiversity = 0;
 
         return _aggregationMode switch
         {
@@ -110,7 +114,13 @@ public class OneShotFederatedTrainer<T> : Infrastructure.FederatedLearningCompon
 
                 if (model.TryGetValue(layerName, out var clientLayer))
                 {
-                    for (int i = 0; i < Math.Min(clientLayer.Length, merged.Length); i++)
+                    if (clientLayer.Length != merged.Length)
+                    {
+                        throw new ArgumentException(
+                            $"Client {clientId} layer '{layerName}' length {clientLayer.Length} differs from expected {merged.Length}.");
+                    }
+
+                    for (int i = 0; i < clientLayer.Length; i++)
                     {
                         merged[i] += weight * NumOps.ToDouble(clientLayer[i]);
                     }
@@ -136,6 +146,13 @@ public class OneShotFederatedTrainer<T> : Infrastructure.FederatedLearningCompon
         return AggregateWeightedAverage(clientModels, sampleCounts);
     }
 
+    /// <remarks>
+    /// Returns a weighted average as the initialization point for ensemble distillation.
+    /// The actual distillation loop (using <see cref="ComputeEnsembleSoftLabels"/> and
+    /// <see cref="ComputeDistillationLoss"/>) is performed by the caller, since it
+    /// requires a training dataset and student model that are not available at aggregation time.
+    /// This method also computes ensemble diversity to assess client model disagreement.
+    /// </remarks>
     private Dictionary<string, T[]> AggregateEnsembleDistillation(
         Dictionary<int, Dictionary<string, T[]>> clientModels,
         Dictionary<int, int> clientSampleCounts)
@@ -156,7 +173,8 @@ public class OneShotFederatedTrainer<T> : Infrastructure.FederatedLearningCompon
             {
                 if (model.TryGetValue(layerName, out var clientLayer))
                 {
-                    for (int i = 0; i < Math.Min(clientLayer.Length, globalLayer.Length); i++)
+                    int len = Math.Min(clientLayer.Length, globalLayer.Length);
+                    for (int i = 0; i < len; i++)
                     {
                         double diff = NumOps.ToDouble(clientLayer[i]) - NumOps.ToDouble(globalLayer[i]);
                         layerVariance += diff * diff;
@@ -194,6 +212,7 @@ public class OneShotFederatedTrainer<T> : Infrastructure.FederatedLearningCompon
         Dictionary<int, double[]> clientLogits,
         Dictionary<int, double>? clientWeights = null)
     {
+        Guard.NotNull(clientLogits);
         if (clientLogits.Count == 0)
         {
             throw new ArgumentException("Client logits cannot be empty.", nameof(clientLogits));
@@ -205,6 +224,11 @@ public class OneShotFederatedTrainer<T> : Infrastructure.FederatedLearningCompon
 
         foreach (var (clientId, logits) in clientLogits)
         {
+            if (logits.Length != numClasses)
+            {
+                throw new ArgumentException(
+                    $"Client {clientId} logits length {logits.Length} differs from expected {numClasses}.");
+            }
             double w = clientWeights?.GetValueOrDefault(clientId, 1.0) ?? 1.0;
             totalWeight += w;
 
@@ -311,6 +335,11 @@ public class OneShotFederatedTrainer<T> : Infrastructure.FederatedLearningCompon
         double[] studentLogits,
         double alpha = 0.7)
     {
+        if (alpha < 0 || alpha > 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(alpha), "Alpha must be in [0, 1].");
+        }
+
         double kdLoss = ComputeDistillationLoss(ensembleSoftLabels, studentLogits);
         return alpha * kdLoss + (1.0 - alpha) * taskLoss;
     }

@@ -23,7 +23,7 @@ namespace AiDotNet.FederatedLearning.Decentralized;
 /// <para>Reference: DFedBCA: Block Coordinate Ascent for Decentralized Federated Learning (2024).</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters.</typeparam>
-public class DFedBCAProtocol<T> : Infrastructure.FederatedLearningComponentBase<T>
+internal class DFedBCAProtocol<T> : Infrastructure.FederatedLearningComponentBase<T>
 {
     private readonly int _numBlocks;
     private readonly BlockSelectionStrategy _selectionStrategy;
@@ -120,9 +120,10 @@ public class DFedBCAProtocol<T> : Infrastructure.FederatedLearningComponentBase<
     /// <param name="gradient">Full model gradient dictionary after local training.</param>
     public void UpdateBlockImportanceScores(Dictionary<string, T[]> gradient)
     {
+        Guard.NotNull(gradient);
         _blockImportanceScores ??= new double[_numBlocks];
 
-        var layerNames = gradient.Keys.ToList();
+        var layerNames = gradient.Keys.OrderBy(k => k, StringComparer.Ordinal).ToList();
         int layersPerBlock = Math.Max(1, (layerNames.Count + _numBlocks - 1) / _numBlocks);
 
         for (int b = 0; b < _numBlocks; b++)
@@ -153,7 +154,14 @@ public class DFedBCAProtocol<T> : Infrastructure.FederatedLearningComponentBase<
     /// <returns>The parameter subset for the given block.</returns>
     public Dictionary<string, T[]> ExtractBlock(Dictionary<string, T[]> fullParameters, int blockIndex)
     {
-        var layerNames = fullParameters.Keys.ToList();
+        Guard.NotNull(fullParameters);
+        if (blockIndex < 0 || blockIndex >= _numBlocks)
+        {
+            throw new ArgumentOutOfRangeException(nameof(blockIndex),
+                $"Block index {blockIndex} is out of bounds [0, {_numBlocks}).");
+        }
+
+        var layerNames = fullParameters.Keys.OrderBy(k => k, StringComparer.Ordinal).ToList();
         int layersPerBlock = Math.Max(1, (layerNames.Count + _numBlocks - 1) / _numBlocks);
         int start = blockIndex * layersPerBlock;
         int end = Math.Min(start + layersPerBlock, layerNames.Count);
@@ -177,6 +185,8 @@ public class DFedBCAProtocol<T> : Infrastructure.FederatedLearningComponentBase<
         Dictionary<string, T[]> fullParameters,
         Dictionary<string, T[]> synchronizedBlock)
     {
+        Guard.NotNull(fullParameters);
+        Guard.NotNull(synchronizedBlock);
         var result = new Dictionary<string, T[]>(fullParameters);
 
         foreach (var (layerName, layerParams) in synchronizedBlock)
@@ -197,35 +207,45 @@ public class DFedBCAProtocol<T> : Infrastructure.FederatedLearningComponentBase<
         Dictionary<int, Dictionary<string, T[]>> clientBlocks,
         Dictionary<int, double> mixingWeights)
     {
+        Guard.NotNull(clientBlocks);
+        Guard.NotNull(mixingWeights);
         if (clientBlocks.Count == 0)
         {
             throw new ArgumentException("Client blocks cannot be empty.", nameof(clientBlocks));
         }
 
-        double totalWeight = mixingWeights.Values.Sum();
         var result = new Dictionary<string, T[]>();
         var template = clientBlocks.Values.First();
 
         foreach (var (layerName, layerParams) in template)
         {
             var averaged = new double[layerParams.Length];
+            double layerWeight = 0;
 
             foreach (var (neighborId, block) in clientBlocks)
             {
                 double w = mixingWeights.GetValueOrDefault(neighborId, 0);
                 if (block.TryGetValue(layerName, out var neighborLayer))
                 {
-                    for (int i = 0; i < Math.Min(neighborLayer.Length, averaged.Length); i++)
+                    if (neighborLayer.Length != layerParams.Length)
+                    {
+                        throw new ArgumentException(
+                            $"Neighbor {neighborId} layer '{layerName}' length {neighborLayer.Length} differs from expected {layerParams.Length}.");
+                    }
+
+                    for (int i = 0; i < neighborLayer.Length; i++)
                     {
                         averaged[i] += w * NumOps.ToDouble(neighborLayer[i]);
                     }
+
+                    layerWeight += w;
                 }
             }
 
             var averagedT = new T[layerParams.Length];
             for (int i = 0; i < averagedT.Length; i++)
             {
-                averagedT[i] = NumOps.FromDouble(totalWeight > 0 ? averaged[i] / totalWeight : 0);
+                averagedT[i] = NumOps.FromDouble(layerWeight > 0 ? averaged[i] / layerWeight : 0);
             }
 
             result[layerName] = averagedT;

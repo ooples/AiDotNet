@@ -24,6 +24,7 @@ namespace AiDotNet.FederatedLearning.Trainers;
 /// <typeparam name="T">The numeric type for model parameters.</typeparam>
 public class AsyncFedEDTrainer<T> : Infrastructure.FederatedLearningComponentBase<T>
 {
+    private readonly object _stateLock = new();
     private readonly double _stalenessDecay;
     private readonly double _explorationBonus;
     private readonly int _selectionBudget;
@@ -71,10 +72,20 @@ public class AsyncFedEDTrainer<T> : Infrastructure.FederatedLearningComponentBas
     /// <param name="currentRound">The current communication round.</param>
     public void UpdateClientEntropy(int clientId, double[] classLosses, int currentRound)
     {
+        Guard.NotNull(classLosses);
+        if (currentRound < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(currentRound), "Current round must be non-negative.");
+        }
+
         if (classLosses.Length == 0)
         {
-            _clientEntropies[clientId] = 0;
-            _lastParticipationRound[clientId] = currentRound;
+            lock (_stateLock)
+            {
+                _clientEntropies[clientId] = 0;
+                _lastParticipationRound[clientId] = currentRound;
+            }
+
             return;
         }
 
@@ -100,8 +111,11 @@ public class AsyncFedEDTrainer<T> : Infrastructure.FederatedLearningComponentBas
             }
         }
 
-        _clientEntropies[clientId] = entropy;
-        _lastParticipationRound[clientId] = currentRound;
+        lock (_stateLock)
+        {
+            _clientEntropies[clientId] = entropy;
+            _lastParticipationRound[clientId] = currentRound;
+        }
     }
 
     /// <summary>
@@ -112,6 +126,12 @@ public class AsyncFedEDTrainer<T> : Infrastructure.FederatedLearningComponentBas
     /// <returns>Ordered list of selected client IDs (highest priority first).</returns>
     public List<int> SelectClients(IReadOnlyCollection<int> availableClients, int currentRound)
     {
+        Guard.NotNull(availableClients);
+        if (currentRound < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(currentRound), "Current round must be non-negative.");
+        }
+
         if (availableClients.Count == 0)
         {
             return new List<int>();
@@ -119,19 +139,22 @@ public class AsyncFedEDTrainer<T> : Infrastructure.FederatedLearningComponentBas
 
         var priorities = new Dictionary<int, double>();
 
-        foreach (var clientId in availableClients)
+        lock (_stateLock)
         {
-            double entropy = _clientEntropies.GetValueOrDefault(clientId, 1.0); // default high entropy for new clients
-            int lastRound = _lastParticipationRound.GetValueOrDefault(clientId, -1);
+            foreach (var clientId in availableClients)
+            {
+                double entropy = _clientEntropies.GetValueOrDefault(clientId, 1.0); // default high entropy for new clients
+                int lastRound = _lastParticipationRound.GetValueOrDefault(clientId, -1);
 
-            // Staleness discount: older info → less reliable entropy estimate.
-            int staleness = lastRound >= 0 ? currentRound - lastRound : currentRound;
-            double stalenessDiscount = Math.Pow(_stalenessDecay, staleness);
+                // Staleness discount: older info → less reliable entropy estimate.
+                int staleness = lastRound >= 0 ? currentRound - lastRound : currentRound;
+                double stalenessDiscount = Math.Pow(_stalenessDecay, staleness);
 
-            // Exploration bonus for clients that haven't participated recently.
-            double exploration = _explorationBonus * staleness;
+                // Exploration bonus for clients that haven't participated recently.
+                double exploration = _explorationBonus * staleness;
 
-            priorities[clientId] = entropy * stalenessDiscount + exploration;
+                priorities[clientId] = entropy * stalenessDiscount + exploration;
+            }
         }
 
         // Select top-K by priority.
@@ -153,23 +176,32 @@ public class AsyncFedEDTrainer<T> : Infrastructure.FederatedLearningComponentBas
         Dictionary<int, Dictionary<string, T[]>> clientUpdates,
         int currentRound)
     {
+        Guard.NotNull(clientUpdates);
         if (clientUpdates.Count == 0)
         {
             throw new ArgumentException("Client updates cannot be empty.", nameof(clientUpdates));
+        }
+
+        if (currentRound < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(currentRound), "Current round must be non-negative.");
         }
 
         // Compute entropy-based aggregation weights.
         var weights = new Dictionary<int, double>();
         double totalWeight = 0;
 
-        foreach (var clientId in clientUpdates.Keys)
+        lock (_stateLock)
         {
-            double entropy = _clientEntropies.GetValueOrDefault(clientId, 1.0);
-            int lastRound = _lastParticipationRound.GetValueOrDefault(clientId, currentRound);
-            int staleness = currentRound - lastRound;
-            double w = entropy * Math.Pow(_stalenessDecay, staleness);
-            weights[clientId] = w;
-            totalWeight += w;
+            foreach (var clientId in clientUpdates.Keys)
+            {
+                double entropy = _clientEntropies.GetValueOrDefault(clientId, 1.0);
+                int lastRound = _lastParticipationRound.GetValueOrDefault(clientId, currentRound);
+                int staleness = currentRound - lastRound;
+                double w = entropy * Math.Pow(_stalenessDecay, Math.Max(staleness, 0));
+                weights[clientId] = w;
+                totalWeight += w;
+            }
         }
 
         var result = new Dictionary<string, T[]>();
@@ -178,14 +210,22 @@ public class AsyncFedEDTrainer<T> : Infrastructure.FederatedLearningComponentBas
         foreach (var (layerName, layerParams) in template)
         {
             var merged = new double[layerParams.Length];
+            double layerWeight = 0;
 
             foreach (var (clientId, update) in clientUpdates)
             {
-                double w = totalWeight > 0 ? weights[clientId] / totalWeight : 1.0 / clientUpdates.Count;
-
                 if (update.TryGetValue(layerName, out var clientLayer))
                 {
-                    for (int i = 0; i < Math.Min(clientLayer.Length, merged.Length); i++)
+                    if (clientLayer.Length != layerParams.Length)
+                    {
+                        throw new ArgumentException(
+                            $"Client {clientId} layer '{layerName}' length {clientLayer.Length} differs from expected {layerParams.Length}.");
+                    }
+
+                    double w = weights[clientId];
+                    layerWeight += w;
+
+                    for (int i = 0; i < clientLayer.Length; i++)
                     {
                         merged[i] += w * NumOps.ToDouble(clientLayer[i]);
                     }
@@ -195,7 +235,7 @@ public class AsyncFedEDTrainer<T> : Infrastructure.FederatedLearningComponentBas
             var mergedT = new T[layerParams.Length];
             for (int i = 0; i < mergedT.Length; i++)
             {
-                mergedT[i] = NumOps.FromDouble(merged[i]);
+                mergedT[i] = NumOps.FromDouble(layerWeight > 0 ? merged[i] / layerWeight : 0);
             }
 
             result[layerName] = mergedT;
@@ -213,6 +253,15 @@ public class AsyncFedEDTrainer<T> : Infrastructure.FederatedLearningComponentBas
     /// <summary>Gets the selection budget.</summary>
     public int SelectionBudget => _selectionBudget;
 
-    /// <summary>Gets the current entropy estimates for all tracked clients.</summary>
-    public IReadOnlyDictionary<int, double> ClientEntropies => _clientEntropies;
+    /// <summary>Gets a snapshot of the current entropy estimates for all tracked clients.</summary>
+    public IReadOnlyDictionary<int, double> ClientEntropies
+    {
+        get
+        {
+            lock (_stateLock)
+            {
+                return new Dictionary<int, double>(_clientEntropies);
+            }
+        }
+    }
 }
