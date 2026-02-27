@@ -50,7 +50,14 @@ public class FedAlignAggregationStrategy<T> : ParameterDictionaryAggregationStra
         _distanceMetric = distanceMetric;
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Aggregates client models using standard weighted averaging.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>By design</b>, FedAlign uses standard FedAvg for aggregation. The alignment
+    /// behavior is applied during <em>local training</em> via <see cref="ComputeAlignmentLoss"/>
+    /// and <see cref="ComputeTotalLoss"/>. The aggregation step itself is unchanged from FedAvg.</para>
+    /// </remarks>
     public override Dictionary<string, T[]> Aggregate(
         Dictionary<int, Dictionary<string, T[]>> clientModels,
         Dictionary<int, double> clientWeights)

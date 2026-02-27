@@ -85,6 +85,8 @@ public class ProxyZKPVerifier<T> : Infrastructure.FederatedLearningComponentBase
     /// <returns>Hex-encoded HMAC-SHA256 commitment.</returns>
     public string ComputeCommitment(Dictionary<string, T[]> update, byte[] nonce)
     {
+        Guard.NotNull(update);
+        Guard.NotNull(nonce);
         byte[] updateBytes = SerializeUpdate(update);
 
         using var hmac = new HMACSHA256(_proxyKey);
@@ -115,6 +117,7 @@ public class ProxyZKPVerifier<T> : Infrastructure.FederatedLearningComponentBase
     /// <returns>Verification result with certificate if successful.</returns>
     public ProxyVerificationResult Verify(Dictionary<string, T[]> update, string commitment, byte[] nonce)
     {
+        Guard.NotNull(update);
         if (string.IsNullOrEmpty(commitment))
         {
             return ProxyVerificationResult.Fail("Missing commitment hash.");
@@ -239,6 +242,11 @@ public class ProxyZKPVerifier<T> : Infrastructure.FederatedLearningComponentBase
     /// <returns>Random nonce bytes.</returns>
     public static byte[] GenerateNonce(int length = 32)
     {
+        if (length < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(length), "Nonce length must be at least 1.");
+        }
+
         var nonce = new byte[length];
         using var rng = RandomNumberGenerator.Create();
         rng.GetBytes(nonce);

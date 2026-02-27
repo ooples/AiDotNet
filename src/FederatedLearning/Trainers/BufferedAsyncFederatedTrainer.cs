@@ -30,6 +30,7 @@ public class BufferedAsyncFederatedTrainer<T> : Infrastructure.FederatedLearning
 {
     private readonly int _bufferSize;
     private readonly double _stalenessDiscount;
+    private readonly object _bufferLock = new();
     private readonly List<(int ClientId, Dictionary<string, T[]> Update, int Staleness)> _buffer;
     private int _currentGlobalRound;
 
@@ -63,52 +64,69 @@ public class BufferedAsyncFederatedTrainer<T> : Infrastructure.FederatedLearning
     /// <param name="clientRound">The global round the client's update was based on.</param>
     public void SubmitUpdate(int clientId, Dictionary<string, T[]> update, int clientRound)
     {
+        Guard.NotNull(update);
         int staleness = _currentGlobalRound - clientRound;
-        _buffer.Add((clientId, update, Math.Max(0, staleness)));
+        lock (_bufferLock)
+        {
+            _buffer.Add((clientId, update, Math.Max(0, staleness)));
+        }
     }
 
     /// <summary>
     /// Checks if the buffer is full and ready for aggregation.
     /// </summary>
-    public bool IsBufferReady => _buffer.Count >= _bufferSize;
+    public bool IsBufferReady { get { lock (_bufferLock) { return _buffer.Count >= _bufferSize; } } }
 
     /// <summary>
     /// Aggregates the buffered updates with staleness-weighted averaging.
     /// </summary>
-    /// <returns>Aggregated model update, or null if buffer not ready.</returns>
+    /// <returns>Aggregated model update, or null if buffer is empty.</returns>
     public Dictionary<string, T[]>? AggregateBuffer()
     {
-        if (_buffer.Count == 0)
+        List<(int ClientId, Dictionary<string, T[]> Update, int Staleness)> snapshot;
+        lock (_bufferLock)
         {
-            return null;
+            if (_buffer.Count == 0)
+            {
+                return null;
+            }
+
+            snapshot = new List<(int, Dictionary<string, T[]>, int)>(_buffer);
+            _buffer.Clear();
         }
 
-        var reference = _buffer[0].Update;
+        var reference = snapshot[0].Update;
         var layerNames = reference.Keys.ToArray();
 
         // Compute staleness-discounted weights.
         double totalWeight = 0;
-        var weights = new double[_buffer.Count];
-        for (int i = 0; i < _buffer.Count; i++)
+        var weights = new double[snapshot.Count];
+        for (int i = 0; i < snapshot.Count; i++)
         {
-            weights[i] = Math.Pow(_stalenessDiscount, _buffer[i].Staleness);
+            weights[i] = Math.Pow(_stalenessDiscount, snapshot[i].Staleness);
             totalWeight += weights[i];
         }
 
         var result = new Dictionary<string, T[]>(reference.Count);
         foreach (var layerName in layerNames)
         {
-            var aggregated = new T[reference[layerName].Length];
+            int layerLen = reference[layerName].Length;
+            var aggregated = new T[layerLen];
             for (int j = 0; j < aggregated.Length; j++)
             {
                 aggregated[j] = NumOps.Zero;
             }
 
-            for (int i = 0; i < _buffer.Count; i++)
+            for (int i = 0; i < snapshot.Count; i++)
             {
+                if (!snapshot[i].Update.TryGetValue(layerName, out var cp))
+                {
+                    continue; // Skip clients missing this layer.
+                }
+
                 var nw = NumOps.FromDouble(weights[i] / totalWeight);
-                var cp = _buffer[i].Update[layerName];
-                for (int j = 0; j < aggregated.Length; j++)
+                int len = Math.Min(cp.Length, layerLen);
+                for (int j = 0; j < len; j++)
                 {
                     aggregated[j] = NumOps.Add(aggregated[j], NumOps.Multiply(cp[j], nw));
                 }
@@ -117,8 +135,7 @@ public class BufferedAsyncFederatedTrainer<T> : Infrastructure.FederatedLearning
             result[layerName] = aggregated;
         }
 
-        _buffer.Clear();
-        _currentGlobalRound++;
+        Interlocked.Increment(ref _currentGlobalRound);
         return result;
     }
 
@@ -126,7 +143,7 @@ public class BufferedAsyncFederatedTrainer<T> : Infrastructure.FederatedLearning
     public int BufferSize => _bufferSize;
 
     /// <summary>Gets the current buffer count.</summary>
-    public int CurrentBufferCount => _buffer.Count;
+    public int CurrentBufferCount { get { lock (_bufferLock) { return _buffer.Count; } } }
 
     /// <summary>Gets the current global round.</summary>
     public int CurrentGlobalRound => _currentGlobalRound;

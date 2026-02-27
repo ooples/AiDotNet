@@ -93,7 +93,15 @@ public class FedSamAggregationStrategy<T> : ParameterDictionaryAggregationStrate
         _controlCoeff = controlCoeff;
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Aggregates client models using standard weighted averaging.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>By design</b>, FedSAM uses standard FedAvg for server-side aggregation. The
+    /// sharpness-aware behavior is applied during <em>local training</em> via <see cref="ComputePerturbation"/>,
+    /// <see cref="ApplyPerturbation"/>, and <see cref="ComputeSAMGradient"/>. The server aggregation
+    /// step is unchanged from FedAvg, as described in the FedSAM paper.</para>
+    /// </remarks>
     public override Dictionary<string, T[]> Aggregate(
         Dictionary<int, Dictionary<string, T[]>> clientModels,
         Dictionary<int, double> clientWeights)

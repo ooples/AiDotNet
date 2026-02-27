@@ -21,7 +21,7 @@ namespace AiDotNet.FederatedLearning.Aggregators;
 /// by Not-True Distillation in Federated Learning." NeurIPS 2022.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters.</typeparam>
-public class FedNtdAggregationStrategy<T> : ParameterDictionaryAggregationStrategyBase<T>
+internal class FedNtdAggregationStrategy<T> : ParameterDictionaryAggregationStrategyBase<T>
 {
     private readonly double _distillationWeight;
     private readonly double _temperature;
@@ -47,7 +47,14 @@ public class FedNtdAggregationStrategy<T> : ParameterDictionaryAggregationStrate
         _temperature = temperature;
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Aggregates client models using standard weighted averaging.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>By design</b>, FedNTD uses standard FedAvg for aggregation. The not-true
+    /// distillation behavior is applied during <em>local training</em> via <see cref="ComputeNTDLoss"/>
+    /// and <see cref="ComputeTotalLoss"/>. The aggregation step is unchanged from FedAvg.</para>
+    /// </remarks>
     public override Dictionary<string, T[]> Aggregate(
         Dictionary<int, Dictionary<string, T[]>> clientModels,
         Dictionary<int, double> clientWeights)
@@ -70,6 +77,8 @@ public class FedNtdAggregationStrategy<T> : ParameterDictionaryAggregationStrate
     /// <returns>The NTD loss value: beta * KL(q_global_NT || p_local_NT) * tau^2.</returns>
     public T ComputeNTDLoss(Vector<T> localLogits, Vector<T> globalLogits, int trueClassIndex)
     {
+        Guard.NotNull(localLogits);
+        Guard.NotNull(globalLogits);
         int numClasses = localLogits.Length;
 
         if (globalLogits.Length != numClasses)
@@ -152,7 +161,15 @@ public class FedNtdAggregationStrategy<T> : ParameterDictionaryAggregationStrate
         Matrix<T> globalLogitsBatch,
         int[] trueClassIndices)
     {
+        Guard.NotNull(localLogitsBatch);
+        Guard.NotNull(globalLogitsBatch);
+        Guard.NotNull(trueClassIndices);
         int batchSize = localLogitsBatch.Rows;
+
+        if (batchSize == 0)
+        {
+            return NumOps.Zero;
+        }
 
         if (globalLogitsBatch.Rows != batchSize)
         {

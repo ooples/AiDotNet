@@ -20,7 +20,7 @@ namespace AiDotNet.FederatedLearning.Compression;
 /// Non-Convex Problems." ICML 2018.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters.</typeparam>
-public class SignSGDCompressor<T> : Infrastructure.FederatedLearningComponentBase<T>
+internal class SignSGDCompressor<T> : Infrastructure.FederatedLearningComponentBase<T>
 {
     private readonly double _learningRate;
     private readonly bool _useMajorityVote;
@@ -65,6 +65,12 @@ public class SignSGDCompressor<T> : Infrastructure.FederatedLearningComponentBas
     /// <returns>Sign-compressed dictionary (values are +1, -1, or 0).</returns>
     public Dictionary<string, T[]> Compress(Dictionary<string, T[]> gradient, int clientId = 0)
     {
+        Guard.NotNull(gradient);
+        if (gradient.Count == 0)
+        {
+            return new Dictionary<string, T[]>();
+        }
+
         _errorAccumulators ??= new Dictionary<int, Dictionary<string, double[]>>();
         _momentumBuffers ??= new Dictionary<int, Dictionary<string, double[]>>();
 
@@ -126,6 +132,7 @@ public class SignSGDCompressor<T> : Infrastructure.FederatedLearningComponentBas
     /// <returns>Aggregated sign gradient.</returns>
     public Dictionary<string, T[]> AggregateVote(Dictionary<int, Dictionary<string, T[]>> clientSigns)
     {
+        Guard.NotNull(clientSigns);
         if (clientSigns.Count == 0)
         {
             throw new ArgumentException("No client signs to aggregate.", nameof(clientSigns));
@@ -144,7 +151,18 @@ public class SignSGDCompressor<T> : Infrastructure.FederatedLearningComponentBas
                 double sum = 0;
                 foreach (var client in clientSigns.Values)
                 {
-                    sum += NumOps.ToDouble(client[layerName][i]);
+                    if (!client.TryGetValue(layerName, out var clientLayer))
+                    {
+                        continue; // Skip clients missing this layer.
+                    }
+
+                    if (clientLayer.Length != len)
+                    {
+                        throw new ArgumentException(
+                            $"Client layer '{layerName}' length {clientLayer.Length} does not match reference length {len}.");
+                    }
+
+                    sum += NumOps.ToDouble(clientLayer[i]);
                 }
 
                 if (_useMajorityVote)
@@ -163,8 +181,8 @@ public class SignSGDCompressor<T> : Infrastructure.FederatedLearningComponentBas
         return result;
     }
 
-    /// <summary>Gets the compression ratio (always 32x for float32).</summary>
-    public double CompressionRatio => 32.0;
+    /// <summary>Gets the compression ratio (source bits per element / 1 bit for sign).</summary>
+    public double CompressionRatio => System.Runtime.InteropServices.Marshal.SizeOf<T>() * 8;
 
     /// <summary>Gets the server learning rate.</summary>
     public double LearningRate => _learningRate;
