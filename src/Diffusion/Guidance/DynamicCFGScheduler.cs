@@ -1,3 +1,4 @@
+using AiDotNet.Engines;
 using AiDotNet.Enums;
 using AiDotNet.Models;
 
@@ -46,19 +47,10 @@ public class DynamicCFGScheduler<T> : IGuidanceMethod<T>
         // Linear interpolation: high at t=1 (noisy), low at t=0 (clean)
         double dynamicScale = _minScale + (_maxScale - _minScale) * timestep;
 
-        var result = new Tensor<T>(unconditional.Shape);
-        var uncondSpan = unconditional.AsSpan();
-        var condSpan = conditional.AsSpan();
-        var resultSpan = result.AsWritableSpan();
-
+        var engine = AiDotNetEngine.Current;
         var scaleT = NumOps.FromDouble(dynamicScale);
-
-        for (int i = 0; i < resultSpan.Length; i++)
-        {
-            var diff = NumOps.Subtract(condSpan[i], uncondSpan[i]);
-            resultSpan[i] = NumOps.Add(uncondSpan[i], NumOps.Multiply(scaleT, diff));
-        }
-
-        return result;
+        var diff = engine.TensorSubtract<T>(conditional, unconditional);
+        var scaled = engine.TensorMultiplyScalar<T>(diff, scaleT);
+        return engine.TensorAdd<T>(unconditional, scaled);
     }
 }

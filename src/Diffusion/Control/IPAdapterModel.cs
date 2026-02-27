@@ -465,17 +465,8 @@ public class IPAdapterModel<T> : LatentDiffusionModelBase<T>
     /// </summary>
     private Tensor<T> ScaleTensor(Tensor<T> tensor, double scale)
     {
-        var result = new Tensor<T>(tensor.Shape);
-        var inputSpan = tensor.AsSpan();
-        var resultSpan = result.AsWritableSpan();
         var scaleT = NumOps.FromDouble(scale);
-
-        for (int i = 0; i < resultSpan.Length; i++)
-        {
-            resultSpan[i] = NumOps.Multiply(scaleT, inputSpan[i]);
-        }
-
-        return result;
+        return Engine.TensorMultiplyScalar<T>(tensor, scaleT);
     }
 
     /// <summary>

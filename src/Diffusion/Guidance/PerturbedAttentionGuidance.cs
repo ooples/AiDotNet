@@ -1,3 +1,4 @@
+using AiDotNet.Engines;
 using AiDotNet.Enums;
 using AiDotNet.Models;
 
@@ -43,20 +44,11 @@ public class PerturbedAttentionGuidance<T> : IGuidanceMethod<T>
     /// <inheritdoc />
     public Tensor<T> Apply(Tensor<T> unconditional, Tensor<T> conditional, double scale, double timestep)
     {
-        var result = new Tensor<T>(unconditional.Shape);
-        var uncondSpan = unconditional.AsSpan();
-        var condSpan = conditional.AsSpan();
-        var resultSpan = result.AsWritableSpan();
-
         // PAG: guided = cond + scale * perturbation_scale * (cond - uncond_perturbed)
+        var engine = AiDotNetEngine.Current;
         var scaleT = NumOps.FromDouble(scale * _perturbationScale);
-
-        for (int i = 0; i < resultSpan.Length; i++)
-        {
-            var diff = NumOps.Subtract(condSpan[i], uncondSpan[i]);
-            resultSpan[i] = NumOps.Add(condSpan[i], NumOps.Multiply(scaleT, diff));
-        }
-
-        return result;
+        var diff = engine.TensorSubtract<T>(conditional, unconditional);
+        var scaled = engine.TensorMultiplyScalar<T>(diff, scaleT);
+        return engine.TensorAdd<T>(conditional, scaled);
     }
 }
