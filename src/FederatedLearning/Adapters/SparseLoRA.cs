@@ -166,9 +166,194 @@ public class SparseLoRA<T> : Infrastructure.FederatedLearningComponentBase<T>, I
         return new Vector<T>(aggregated);
     }
 
+    /// <summary>
+    /// Applies top-k sparsification to an adapter update delta, keeping only the largest
+    /// elements by magnitude. This is the core communication reduction step.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> After local training, the adapter parameters have changed.
+    /// But not all changes are equally important. This method keeps only the most significant
+    /// changes (the ones with the largest absolute value) and zeros out the rest. This can
+    /// reduce the amount of data sent by 2-10x with minimal loss of accuracy.</para>
+    /// </remarks>
+    /// <param name="adapterBefore">Adapter parameters before local training.</param>
+    /// <param name="adapterAfter">Adapter parameters after local training.</param>
+    /// <returns>A sparse update containing only the top-k elements by magnitude.</returns>
+    public SparseUpdate<T> SparsifyDelta(Vector<T> adapterBefore, Vector<T> adapterAfter)
+    {
+        int len = adapterAfter.Length;
+        int k = Math.Max(1, (int)(len * _sparsityRatio));
+
+        // Compute the delta.
+        var delta = new double[len];
+        for (int i = 0; i < len; i++)
+        {
+            delta[i] = NumOps.ToDouble(adapterAfter[i]) - NumOps.ToDouble(adapterBefore[i]);
+        }
+
+        // Find the top-k threshold by magnitude using partial sort.
+        var magnitudes = new double[len];
+        for (int i = 0; i < len; i++)
+        {
+            magnitudes[i] = Math.Abs(delta[i]);
+        }
+
+        // Find the k-th largest magnitude.
+        var sorted = (double[])magnitudes.Clone();
+        Array.Sort(sorted);
+        double threshold = sorted[len - k]; // Elements >= this threshold are in top-k.
+
+        // Build sparse representation.
+        var indices = new List<int>(k);
+        var values = new List<T>(k);
+
+        for (int i = 0; i < len; i++)
+        {
+            if (magnitudes[i] >= threshold && indices.Count < k)
+            {
+                indices.Add(i);
+                values.Add(NumOps.FromDouble(delta[i]));
+            }
+        }
+
+        return new SparseUpdate<T>(indices.ToArray(), values.ToArray(), len);
+    }
+
+    /// <summary>
+    /// Converts a sparse update back to a dense vector (filling non-sparse positions with zero).
+    /// </summary>
+    /// <param name="sparse">The sparse update.</param>
+    /// <returns>Dense vector representation.</returns>
+    public static Vector<T> ToDense(SparseUpdate<T> sparse)
+    {
+        var dense = new T[sparse.TotalLength];
+        for (int i = 0; i < sparse.Indices.Length; i++)
+        {
+            dense[sparse.Indices[i]] = sparse.Values[i];
+        }
+
+        return new Vector<T>(dense);
+    }
+
+    /// <summary>
+    /// Applies a sparse update to existing adapter parameters: new = old + sparse_delta.
+    /// </summary>
+    /// <param name="adapter">Current adapter parameters.</param>
+    /// <param name="sparseUpdate">Sparse update delta.</param>
+    /// <returns>Updated adapter parameters.</returns>
+    public static Vector<T> ApplySparseUpdate(Vector<T> adapter, SparseUpdate<T> sparseUpdate)
+    {
+        var result = new T[adapter.Length];
+        for (int i = 0; i < adapter.Length; i++)
+        {
+            result[i] = adapter[i];
+        }
+
+        for (int i = 0; i < sparseUpdate.Indices.Length; i++)
+        {
+            int idx = sparseUpdate.Indices[i];
+            result[idx] = NumOps.Add(result[idx], sparseUpdate.Values[i]);
+        }
+
+        return new Vector<T>(result);
+    }
+
+    /// <summary>
+    /// Aggregates multiple sparse updates from clients. Only non-zero positions are considered,
+    /// and the aggregation averages by the number of clients that contributed to each position.
+    /// </summary>
+    /// <param name="sparseUpdates">Dictionary of client ID to sparse updates.</param>
+    /// <param name="clientWeights">Optional per-client weights.</param>
+    /// <returns>Dense aggregated delta vector.</returns>
+    public Vector<T> AggregateSparseUpdates(
+        Dictionary<int, SparseUpdate<T>> sparseUpdates,
+        Dictionary<int, double>? clientWeights = null)
+    {
+        if (sparseUpdates.Count == 0)
+        {
+            throw new ArgumentException("No sparse updates provided.", nameof(sparseUpdates));
+        }
+
+        int len = sparseUpdates.Values.First().TotalLength;
+        var aggregated = new double[len];
+        var weightSums = new double[len];
+
+        foreach (var (clientId, sparse) in sparseUpdates)
+        {
+            double w = clientWeights?.GetValueOrDefault(clientId, 1.0) ?? 1.0;
+
+            for (int i = 0; i < sparse.Indices.Length; i++)
+            {
+                int idx = sparse.Indices[i];
+                aggregated[idx] += w * NumOps.ToDouble(sparse.Values[i]);
+                weightSums[idx] += w;
+            }
+        }
+
+        var result = new T[len];
+        for (int i = 0; i < len; i++)
+        {
+            if (weightSums[i] > 0)
+            {
+                result[i] = NumOps.FromDouble(aggregated[i] / weightSums[i]);
+            }
+        }
+
+        return new Vector<T>(result);
+    }
+
+    /// <summary>
+    /// Computes the actual communication cost of a sparse update (number of non-zero elements).
+    /// </summary>
+    /// <param name="sparse">The sparse update.</param>
+    /// <returns>Number of values transmitted (each needing an index + value pair).</returns>
+    public static int ComputeCommunicationCost(SparseUpdate<T> sparse)
+    {
+        return sparse.Indices.Length;
+    }
+
     /// <summary>Gets the sparsity ratio (fraction of elements communicated).</summary>
     public double SparsityRatio => _sparsityRatio;
 
     /// <summary>Gets the LoRA rank.</summary>
     public int Rank => _rank;
+}
+
+/// <summary>
+/// Represents a sparse update: only a subset of indices have non-zero values.
+/// This is the communication-efficient representation used by SparseLoRA.
+/// </summary>
+/// <typeparam name="T">The numeric type.</typeparam>
+public class SparseUpdate<T>
+{
+    /// <summary>Creates a new sparse update.</summary>
+    /// <param name="indices">Indices of non-zero elements.</param>
+    /// <param name="values">Values at those indices.</param>
+    /// <param name="totalLength">Total vector length (including zero positions).</param>
+    public SparseUpdate(int[] indices, T[] values, int totalLength)
+    {
+        if (indices.Length != values.Length)
+        {
+            throw new ArgumentException("Indices and values must have the same length.");
+        }
+
+        Indices = indices;
+        Values = values;
+        TotalLength = totalLength;
+    }
+
+    /// <summary>Indices of non-zero elements.</summary>
+    public int[] Indices { get; }
+
+    /// <summary>Values at the non-zero indices.</summary>
+    public T[] Values { get; }
+
+    /// <summary>Total length of the full dense vector.</summary>
+    public int TotalLength { get; }
+
+    /// <summary>Number of non-zero elements.</summary>
+    public int NnzCount => Indices.Length;
+
+    /// <summary>Effective sparsity: fraction of elements that are non-zero.</summary>
+    public double Density => TotalLength > 0 ? (double)NnzCount / TotalLength : 0;
 }
