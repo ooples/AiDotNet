@@ -91,6 +91,85 @@ public class FedBABUPersonalization<T> : Infrastructure.FederatedLearningCompone
         return merged;
     }
 
+    /// <summary>
+    /// Extracts the head parameters (frozen during FL, fine-tuned locally after convergence).
+    /// </summary>
+    /// <param name="fullParameters">Full model parameter dictionary.</param>
+    /// <returns>Head-only parameter dictionary.</returns>
+    public Dictionary<string, T[]> ExtractHead(Dictionary<string, T[]> fullParameters)
+    {
+        var layerNames = fullParameters.Keys.ToArray();
+        int headStart = (int)(layerNames.Length * (1.0 - _headFraction));
+
+        var head = new Dictionary<string, T[]>(layerNames.Length - headStart);
+        for (int i = headStart; i < layerNames.Length; i++)
+        {
+            head[layerNames[i]] = fullParameters[layerNames[i]];
+        }
+
+        return head;
+    }
+
+    /// <summary>
+    /// Initializes the classification head with random values (Kaiming uniform initialization).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> FedBABU starts with a randomly initialized head and keeps it frozen
+    /// during federated training. The head is only fine-tuned locally after the shared body converges.
+    /// Kaiming initialization scales random values based on the layer size to maintain gradient flow.</para>
+    /// </remarks>
+    /// <param name="headParams">Head parameter dictionary to reinitialize.</param>
+    /// <param name="seed">Random seed for reproducibility. Default: 42.</param>
+    /// <returns>Reinitialized head parameters.</returns>
+    public Dictionary<string, T[]> InitializeRandomHead(Dictionary<string, T[]> headParams, int seed = 42)
+    {
+        var rng = new Random(seed);
+        var initialized = new Dictionary<string, T[]>(headParams.Count);
+
+        foreach (var (layerName, values) in headParams)
+        {
+            var result = new T[values.Length];
+            // Kaiming uniform: limit = sqrt(6 / fan_in), assume fan_in ≈ param count
+            double limit = Math.Sqrt(6.0 / Math.Max(1, values.Length));
+            for (int i = 0; i < result.Length; i++)
+            {
+                result[i] = NumOps.FromDouble((rng.NextDouble() * 2 - 1) * limit);
+            }
+
+            initialized[layerName] = result;
+        }
+
+        return initialized;
+    }
+
+    /// <summary>
+    /// Applies a gradient mask that zeros out head gradients during FL body training.
+    /// </summary>
+    /// <param name="gradients">Full model gradient dictionary.</param>
+    /// <returns>Masked gradients with head gradients set to zero.</returns>
+    public Dictionary<string, T[]> MaskHeadGradients(Dictionary<string, T[]> gradients)
+    {
+        var layerNames = gradients.Keys.ToArray();
+        int headStart = (int)(layerNames.Length * (1.0 - _headFraction));
+
+        var masked = new Dictionary<string, T[]>(gradients.Count);
+        for (int i = 0; i < layerNames.Length; i++)
+        {
+            if (i < headStart)
+            {
+                masked[layerNames[i]] = gradients[layerNames[i]]; // Body: keep gradients.
+            }
+            else
+            {
+                // Head: zero gradients (frozen during FL).
+                var zeros = new T[gradients[layerNames[i]].Length];
+                masked[layerNames[i]] = zeros;
+            }
+        }
+
+        return masked;
+    }
+
     /// <summary>Gets the head fraction.</summary>
     public double HeadFraction => _headFraction;
 

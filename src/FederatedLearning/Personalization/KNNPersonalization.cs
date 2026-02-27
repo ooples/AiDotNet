@@ -68,11 +68,19 @@ public class KNNPersonalization<T> : Infrastructure.FederatedLearningComponentBa
     }
 
     /// <summary>
-    /// Performs kNN lookup to find the most common label among nearest neighbors.
+    /// Performs distance-weighted kNN lookup using cosine similarity.
     /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Instead of just counting which class appears most often among
+    /// nearest neighbors (uniform kNN), distance-weighted kNN gives more weight to closer neighbors.
+    /// We use cosine similarity (direction-based) rather than L2 distance (magnitude-based) because
+    /// feature extractor representations in deep learning often have meaningful direction but arbitrary
+    /// magnitude. The weights are proportional to cosine similarity, so very similar examples
+    /// contribute more to the prediction.</para>
+    /// </remarks>
     /// <param name="queryFeatures">Feature vector for the query input.</param>
     /// <param name="numClasses">Number of output classes.</param>
-    /// <returns>Probability distribution over classes from kNN.</returns>
+    /// <returns>Probability distribution over classes from distance-weighted kNN.</returns>
     public double[] KNNPredict(T[] queryFeatures, int numClasses)
     {
         if (_cache == null || _cache.Count == 0)
@@ -80,36 +88,93 @@ public class KNNPersonalization<T> : Infrastructure.FederatedLearningComponentBa
             throw new InvalidOperationException("Cache not built. Call BuildCache first.");
         }
 
-        // Compute distances to all cache entries.
-        var distances = new (double Distance, int Label)[_cache.Count];
-        for (int i = 0; i < _cache.Count; i++)
+        // Compute cosine similarities to all cache entries.
+        double queryNorm = 0;
+        var queryDoubles = new double[queryFeatures.Length];
+        for (int j = 0; j < queryFeatures.Length; j++)
         {
-            double dist = 0;
-            var cached = _cache[i].Features;
-            int len = Math.Min(queryFeatures.Length, cached.Length);
-            for (int j = 0; j < len; j++)
-            {
-                double diff = NumOps.ToDouble(queryFeatures[j]) - NumOps.ToDouble(cached[j]);
-                dist += diff * diff;
-            }
-
-            distances[i] = (dist, _cache[i].Label);
+            queryDoubles[j] = NumOps.ToDouble(queryFeatures[j]);
+            queryNorm += queryDoubles[j] * queryDoubles[j];
         }
 
-        // Sort and take top k.
-        Array.Sort(distances, (a, b) => a.Distance.CompareTo(b.Distance));
-        int effectiveK = Math.Min(_k, distances.Length);
+        queryNorm = Math.Sqrt(queryNorm);
 
+        var similarities = new (double Similarity, int Label)[_cache.Count];
+        for (int i = 0; i < _cache.Count; i++)
+        {
+            var cached = _cache[i].Features;
+            int len = Math.Min(queryFeatures.Length, cached.Length);
+
+            double dot = 0, cachedNorm = 0;
+            for (int j = 0; j < len; j++)
+            {
+                double cv = NumOps.ToDouble(cached[j]);
+                dot += queryDoubles[j] * cv;
+                cachedNorm += cv * cv;
+            }
+
+            cachedNorm = Math.Sqrt(cachedNorm);
+            double denom = queryNorm * cachedNorm;
+            double sim = denom > 1e-10 ? dot / denom : 0;
+
+            similarities[i] = (sim, _cache[i].Label);
+        }
+
+        // Sort by similarity (descending) and take top k.
+        Array.Sort(similarities, (a, b) => b.Similarity.CompareTo(a.Similarity));
+        int effectiveK = Math.Min(_k, similarities.Length);
+
+        // Distance-weighted voting: weight = max(0, similarity).
         var classCounts = new double[numClasses];
+        double totalWeight = 0;
         for (int i = 0; i < effectiveK; i++)
         {
-            if (distances[i].Label >= 0 && distances[i].Label < numClasses)
+            double weight = Math.Max(0, similarities[i].Similarity);
+            if (similarities[i].Label >= 0 && similarities[i].Label < numClasses)
             {
-                classCounts[distances[i].Label] += 1.0 / effectiveK;
+                classCounts[similarities[i].Label] += weight;
+                totalWeight += weight;
+            }
+        }
+
+        // Normalize to probability distribution.
+        if (totalWeight > 0)
+        {
+            for (int c = 0; c < numClasses; c++)
+            {
+                classCounts[c] /= totalWeight;
             }
         }
 
         return classCounts;
+    }
+
+    /// <summary>
+    /// Combines kNN prediction with global model prediction per the kNN-Per formula:
+    /// p_final = lambda * p_kNN + (1 - lambda) * p_global.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This is the core kNN-Per prediction formula. The global model's
+    /// prediction captures general knowledge learned from all clients, while the kNN prediction
+    /// captures local patterns specific to this client's data. Lambda controls the balance:
+    /// higher lambda trusts the local cache more, lower lambda trusts the global model more.</para>
+    /// </remarks>
+    /// <param name="queryFeatures">Feature vector for the query input.</param>
+    /// <param name="globalPrediction">Probability distribution from the global model.</param>
+    /// <param name="numClasses">Number of output classes.</param>
+    /// <returns>Combined prediction: lambda * p_kNN + (1 - lambda) * p_global.</returns>
+    public double[] CombinedPredict(T[] queryFeatures, double[] globalPrediction, int numClasses)
+    {
+        var knnPred = KNNPredict(queryFeatures, numClasses);
+        var combined = new double[numClasses];
+
+        for (int c = 0; c < numClasses; c++)
+        {
+            combined[c] = _lambda * knnPred[c] +
+                          (1.0 - _lambda) * (c < globalPrediction.Length ? globalPrediction[c] : 0);
+        }
+
+        return combined;
     }
 
     /// <summary>Gets the number of neighbors (k).</summary>

@@ -116,9 +116,74 @@ public class PFedGatePersonalization<T> : Infrastructure.FederatedLearningCompon
         }
     }
 
+    /// <summary>
+    /// Updates all gates simultaneously by comparing validation loss with global-only vs local-only parameters.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> For each layer, we compare how well the global model and the
+    /// local model perform. If the local model is better for that layer (lower loss), the gate
+    /// should increase (use more local). If the global model is better, the gate should decrease.
+    /// The gate moves proportionally to the loss difference, clipped to [0, 1].</para>
+    /// </remarks>
+    /// <param name="globalLossPerLayer">Validation loss when using global params for each layer.</param>
+    /// <param name="localLossPerLayer">Validation loss when using local params for each layer.</param>
+    public void UpdateGatesFromLosses(
+        Dictionary<string, double> globalLossPerLayer,
+        Dictionary<string, double> localLossPerLayer)
+    {
+        if (_gates == null)
+        {
+            return;
+        }
+
+        foreach (var layerName in _gates.Keys.ToArray())
+        {
+            if (globalLossPerLayer.TryGetValue(layerName, out double globalLoss) &&
+                localLossPerLayer.TryGetValue(layerName, out double localLoss))
+            {
+                // Gradient: if local is better (lower loss), increase gate towards 1.
+                // Normalized by the mean loss to make gradient scale-invariant.
+                double meanLoss = (globalLoss + localLoss) / 2.0;
+                double normalizedDiff = meanLoss > 1e-10
+                    ? (globalLoss - localLoss) / meanLoss
+                    : 0;
+
+                double newGate = _gates[layerName] + _gateLearningRate * normalizedDiff;
+                _gates[layerName] = Math.Max(0, Math.Min(1, newGate));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Computes the total gate regularization loss (L2 on gates to prevent extreme values).
+    /// </summary>
+    /// <param name="regularizationStrength">L2 penalty coefficient. Default: 0.01.</param>
+    /// <returns>Gate regularization loss.</returns>
+    public double ComputeGateRegularizationLoss(double regularizationStrength = 0.01)
+    {
+        if (_gates == null)
+        {
+            return 0;
+        }
+
+        double loss = 0;
+        foreach (var gate in _gates.Values)
+        {
+            // Penalize deviation from 0.5 (neutral mixing). This prevents gates from collapsing
+            // to 0 (fully global) or 1 (fully local), maintaining the benefit of mixing.
+            double dev = gate - 0.5;
+            loss += dev * dev;
+        }
+
+        return regularizationStrength * loss / Math.Max(1, _gates.Count);
+    }
+
     /// <summary>Gets the gate values for all layers.</summary>
     public IReadOnlyDictionary<string, double>? Gates => _gates;
 
     /// <summary>Gets the initial gate value.</summary>
     public double GateInitValue => _gateInitValue;
+
+    /// <summary>Gets the gate learning rate.</summary>
+    public double GateLearningRate => _gateLearningRate;
 }

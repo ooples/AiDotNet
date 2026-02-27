@@ -83,6 +83,118 @@ public class FedCPPersonalization<T> : Infrastructure.FederatedLearningComponent
         return policy;
     }
 
+    /// <summary>
+    /// Computes routing weights from the policy network output using softmax.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> The policy network takes an input and produces K raw scores
+    /// (one per expert module). Softmax converts these into probabilities that sum to 1. The
+    /// resulting weights determine how much each expert contributes to the final output.</para>
+    /// </remarks>
+    /// <param name="policyLogits">Raw logits from the policy network, one per expert.</param>
+    /// <returns>Routing weights (softmax probabilities) summing to 1.</returns>
+    public double[] ComputeRoutingWeights(T[] policyLogits)
+    {
+        int k = Math.Min(policyLogits.Length, _numExperts);
+        var weights = new double[k];
+
+        double maxLogit = double.NegativeInfinity;
+        for (int i = 0; i < k; i++)
+        {
+            double v = NumOps.ToDouble(policyLogits[i]);
+            if (v > maxLogit) maxLogit = v;
+        }
+
+        double sumExp = 0;
+        for (int i = 0; i < k; i++)
+        {
+            weights[i] = Math.Exp(NumOps.ToDouble(policyLogits[i]) - maxLogit);
+            sumExp += weights[i];
+        }
+
+        for (int i = 0; i < k; i++)
+        {
+            weights[i] /= sumExp;
+        }
+
+        return weights;
+    }
+
+    /// <summary>
+    /// Combines expert outputs using routing weights: output = sum(w_k * expert_k(input)).
+    /// </summary>
+    /// <param name="expertOutputs">Output from each expert module (K arrays of equal length).</param>
+    /// <param name="routingWeights">Routing weights from ComputeRoutingWeights.</param>
+    /// <returns>Weighted combination of expert outputs.</returns>
+    public T[] CombineExpertOutputs(T[][] expertOutputs, double[] routingWeights)
+    {
+        if (expertOutputs.Length == 0)
+        {
+            return [];
+        }
+
+        int dim = expertOutputs[0].Length;
+        var combined = new T[dim];
+
+        for (int k = 0; k < expertOutputs.Length && k < routingWeights.Length; k++)
+        {
+            var wT = NumOps.FromDouble(routingWeights[k]);
+            for (int i = 0; i < dim; i++)
+            {
+                combined[i] = NumOps.Add(combined[i], NumOps.Multiply(expertOutputs[k][i], wT));
+            }
+        }
+
+        return combined;
+    }
+
+    /// <summary>
+    /// Computes the load-balancing loss to prevent expert collapse (all traffic to one expert).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Without regularization, the policy might learn to always route
+    /// everything to one expert (expert collapse). The load-balancing loss penalizes uneven
+    /// expert usage by measuring the deviation from uniform routing. This is the same technique
+    /// used in Mixture-of-Experts models like GShard and Switch Transformer.</para>
+    /// </remarks>
+    /// <param name="routingWeightsBatch">Routing weights for each sample in a batch.</param>
+    /// <returns>Load-balancing loss value (0 = perfectly balanced).</returns>
+    public double ComputeLoadBalancingLoss(double[][] routingWeightsBatch)
+    {
+        if (routingWeightsBatch.Length == 0)
+        {
+            return 0;
+        }
+
+        int k = routingWeightsBatch[0].Length;
+        int batchSize = routingWeightsBatch.Length;
+        var avgLoad = new double[k];
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int e = 0; e < k; e++)
+            {
+                avgLoad[e] += routingWeightsBatch[b][e];
+            }
+        }
+
+        for (int e = 0; e < k; e++)
+        {
+            avgLoad[e] /= batchSize;
+        }
+
+        // Coefficient of variation: penalize deviation from uniform (1/K each).
+        double uniform = 1.0 / k;
+        double loss = 0;
+        for (int e = 0; e < k; e++)
+        {
+            double dev = avgLoad[e] - uniform;
+            loss += dev * dev;
+        }
+
+        return loss * k; // Scale by K so the loss is comparable across different expert counts.
+    }
+
     /// <summary>Gets the number of expert modules.</summary>
     public int NumExperts => _numExperts;
 

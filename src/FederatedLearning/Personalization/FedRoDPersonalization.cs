@@ -105,6 +105,72 @@ public class FedRoDPersonalization<T> : Infrastructure.FederatedLearningComponen
         return result;
     }
 
+    /// <summary>
+    /// Computes the balanced softmax loss, which adjusts for class frequency imbalance.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> When clients have very different class distributions (e.g., one
+    /// client has mostly cats, another mostly dogs), standard softmax biases towards the majority
+    /// class. Balanced softmax adds a correction term log(n_c / N) based on class frequencies,
+    /// so rare classes get higher effective logits. This is applied to the generic head to
+    /// compensate for the class imbalance across all clients.</para>
+    /// </remarks>
+    /// <param name="logits">Raw logits from the model.</param>
+    /// <param name="classFrequencies">Per-class sample counts on the client.</param>
+    /// <returns>Adjusted logits with class-frequency correction.</returns>
+    public T[] ComputeBalancedSoftmaxLogits(T[] logits, int[] classFrequencies)
+    {
+        int numClasses = logits.Length;
+        long totalSamples = 0;
+        for (int c = 0; c < classFrequencies.Length; c++)
+        {
+            totalSamples += classFrequencies[c];
+        }
+
+        var adjusted = new T[numClasses];
+        for (int c = 0; c < numClasses; c++)
+        {
+            double freq = c < classFrequencies.Length && totalSamples > 0
+                ? (double)classFrequencies[c] / totalSamples
+                : 1.0 / numClasses;
+
+            // Balanced softmax: adjusted_logit = logit + log(freq + epsilon)
+            double correction = Math.Log(Math.Max(freq, 1e-10));
+            adjusted[c] = NumOps.Add(logits[c], NumOps.FromDouble(correction));
+        }
+
+        return adjusted;
+    }
+
+    /// <summary>
+    /// Extracts the generic head parameters (aggregated with the body).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> The generic head sits between the body and the personalized head
+    /// in parameter ordering. It is aggregated globally so it captures the "average" classification
+    /// function across all clients.</para>
+    /// </remarks>
+    /// <param name="fullParameters">Full model parameter dictionary.</param>
+    /// <returns>Generic head parameters.</returns>
+    public Dictionary<string, T[]> ExtractGenericHead(Dictionary<string, T[]> fullParameters)
+    {
+        var layerNames = fullParameters.Keys.ToArray();
+        int personalizedCount = (int)(layerNames.Length * _headFraction);
+        int genericStart = layerNames.Length - 2 * personalizedCount;
+        int genericEnd = layerNames.Length - personalizedCount;
+
+        var genericHead = new Dictionary<string, T[]>(personalizedCount);
+        for (int i = genericStart; i < genericEnd; i++)
+        {
+            genericHead[layerNames[i]] = fullParameters[layerNames[i]];
+        }
+
+        return genericHead;
+    }
+
     /// <summary>Gets the mixing weight for generic head.</summary>
     public double MixingAlpha => _mixingAlpha;
+
+    /// <summary>Gets the head fraction.</summary>
+    public double HeadFraction => _headFraction;
 }

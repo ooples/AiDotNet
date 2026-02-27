@@ -128,6 +128,82 @@ public class FedSelectPersonalization<T> : Infrastructure.FederatedLearningCompo
         return total > 0 ? (double)personalized / total : 0;
     }
 
+    /// <summary>
+    /// Updates mask logits using straight-through estimator (STE) gradients.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Binary masks are not differentiable (you can't take the gradient
+    /// of 0 or 1). The STE trick passes gradients straight through the binarization step as if
+    /// it were the identity function. The gradient of the task loss w.r.t. each mask logit tells
+    /// us whether making that parameter more "personalized" or more "shared" would reduce the loss.
+    /// L1 regularization pushes masks towards 0 (shared) to minimize personalization unless needed.</para>
+    /// </remarks>
+    /// <param name="layerName">Layer whose mask to update.</param>
+    /// <param name="parameterGradients">Gradient of the task loss w.r.t. the layer parameters.</param>
+    /// <param name="personalizedValues">Current personalized parameter values.</param>
+    /// <param name="sharedValues">Current shared (aggregated) parameter values.</param>
+    /// <param name="learningRate">Learning rate for mask logit update. Default: 0.01.</param>
+    public void UpdateMask(
+        string layerName,
+        T[] parameterGradients,
+        T[] personalizedValues,
+        T[] sharedValues,
+        double learningRate = 0.01)
+    {
+        if (_maskLogits == null)
+        {
+            return;
+        }
+
+        if (!_maskLogits.TryGetValue(layerName, out var logits))
+        {
+            return;
+        }
+
+        int len = Math.Min(logits.Length, parameterGradients.Length);
+        for (int i = 0; i < len; i++)
+        {
+            double sigma = 1.0 / (1.0 + Math.Exp(-logits[i])); // sigmoid
+
+            // STE gradient: d(loss)/d(logit) = d(loss)/d(param) * (personal - shared) * sigma * (1 - sigma)
+            double paramGrad = NumOps.ToDouble(parameterGradients[i]);
+            double personalVal = i < personalizedValues.Length ? NumOps.ToDouble(personalizedValues[i]) : 0;
+            double sharedVal = i < sharedValues.Length ? NumOps.ToDouble(sharedValues[i]) : 0;
+            double maskGrad = paramGrad * (personalVal - sharedVal) * sigma * (1 - sigma);
+
+            // L1 regularization gradient: push towards shared (logit → -∞, sigmoid → 0).
+            double regGrad = _maskRegularization * (sigma > 0.5 ? 1.0 : -1.0);
+
+            logits[i] -= learningRate * (maskGrad + regGrad);
+        }
+    }
+
+    /// <summary>
+    /// Computes the L1 regularization loss on the mask to encourage sparsity (fewer personalized params).
+    /// </summary>
+    /// <returns>Regularization loss value.</returns>
+    public double ComputeRegularizationLoss()
+    {
+        if (_maskLogits == null)
+        {
+            return 0;
+        }
+
+        double loss = 0;
+        int total = 0;
+        foreach (var logits in _maskLogits.Values)
+        {
+            foreach (double logit in logits)
+            {
+                double sigma = 1.0 / (1.0 + Math.Exp(-logit));
+                loss += sigma; // L1 on the soft mask values.
+                total++;
+            }
+        }
+
+        return total > 0 ? _maskRegularization * loss / total : 0;
+    }
+
     /// <summary>Gets the mask binarization threshold.</summary>
     public double MaskThreshold => _maskThreshold;
 

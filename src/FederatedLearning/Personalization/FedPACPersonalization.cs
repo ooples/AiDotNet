@@ -132,6 +132,168 @@ public class FedPACPersonalization<T> : Infrastructure.FederatedLearningComponen
         return totalSim / commonClasses.Count;
     }
 
+    /// <summary>
+    /// Computes class prototypes from a client's local data: p_c = mean(features where label = c).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> A "prototype" is the average feature vector for all examples
+    /// of a given class. It represents the "center" of that class in feature space. By comparing
+    /// prototypes across clients, we can measure how similar their data distributions are without
+    /// ever sharing the raw data.</para>
+    /// </remarks>
+    /// <param name="features">Feature vectors extracted by the model for each local sample.</param>
+    /// <param name="labels">Class labels for each sample.</param>
+    /// <returns>Dictionary of class label to prototype (mean feature vector).</returns>
+    public Dictionary<int, T[]> ComputeClassPrototypes(T[][] features, int[] labels)
+    {
+        if (features.Length != labels.Length)
+        {
+            throw new ArgumentException("Features and labels must have equal length.");
+        }
+
+        if (features.Length == 0)
+        {
+            return new Dictionary<int, T[]>();
+        }
+
+        int featureDim = features[0].Length;
+        var classSums = new Dictionary<int, (double[] Sum, int Count)>();
+
+        for (int i = 0; i < features.Length; i++)
+        {
+            int label = labels[i];
+            if (!classSums.TryGetValue(label, out var entry))
+            {
+                entry = (new double[featureDim], 0);
+            }
+
+            for (int d = 0; d < Math.Min(featureDim, features[i].Length); d++)
+            {
+                entry.Sum[d] += NumOps.ToDouble(features[i][d]);
+            }
+
+            classSums[label] = (entry.Sum, entry.Count + 1);
+        }
+
+        var prototypes = new Dictionary<int, T[]>(classSums.Count);
+        foreach (var (label, (sum, count)) in classSums)
+        {
+            var proto = new T[featureDim];
+            for (int d = 0; d < featureDim; d++)
+            {
+                proto[d] = NumOps.FromDouble(sum[d] / count);
+            }
+
+            prototypes[label] = proto;
+        }
+
+        return prototypes;
+    }
+
+    /// <summary>
+    /// Computes global prototypes by averaging client prototypes per class (weighted by sample count).
+    /// </summary>
+    /// <param name="clientPrototypes">Per-client prototypes: clientId → (classLabel → prototype).</param>
+    /// <param name="clientSampleCounts">Per-client per-class sample counts for proper weighting.</param>
+    /// <returns>Global prototypes per class.</returns>
+    public Dictionary<int, T[]> ComputeGlobalPrototypes(
+        Dictionary<int, Dictionary<int, T[]>> clientPrototypes,
+        Dictionary<int, Dictionary<int, int>>? clientSampleCounts = null)
+    {
+        // Collect all class labels.
+        var allClasses = new HashSet<int>();
+        foreach (var protos in clientPrototypes.Values)
+        {
+            foreach (var classLabel in protos.Keys)
+            {
+                allClasses.Add(classLabel);
+            }
+        }
+
+        var globalProtos = new Dictionary<int, T[]>();
+        foreach (int classLabel in allClasses)
+        {
+            double[]? sumProto = null;
+            double totalWeight = 0;
+
+            foreach (var (clientId, protos) in clientPrototypes)
+            {
+                if (!protos.TryGetValue(classLabel, out var proto))
+                {
+                    continue;
+                }
+
+                double weight = clientSampleCounts?.GetValueOrDefault(clientId)?.GetValueOrDefault(classLabel, 1) ?? 1.0;
+
+                if (sumProto == null)
+                {
+                    sumProto = new double[proto.Length];
+                }
+
+                for (int d = 0; d < proto.Length; d++)
+                {
+                    sumProto[d] += weight * NumOps.ToDouble(proto[d]);
+                }
+
+                totalWeight += weight;
+            }
+
+            if (sumProto != null && totalWeight > 0)
+            {
+                var globalProto = new T[sumProto.Length];
+                for (int d = 0; d < sumProto.Length; d++)
+                {
+                    globalProto[d] = NumOps.FromDouble(sumProto[d] / totalWeight);
+                }
+
+                globalProtos[classLabel] = globalProto;
+            }
+        }
+
+        return globalProtos;
+    }
+
+    /// <summary>
+    /// Computes the calibration loss that aligns local features to global prototypes.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> After computing global prototypes, we want each client's features
+    /// for class C to be close to the global prototype for class C. The calibration loss penalizes
+    /// the L2 distance between local prototypes and global prototypes, pulling them together.
+    /// This ensures that class C means the same thing across all clients in the shared feature space.</para>
+    /// </remarks>
+    /// <param name="localPrototypes">This client's class prototypes.</param>
+    /// <param name="globalPrototypes">Global prototypes from ComputeGlobalPrototypes.</param>
+    /// <returns>Calibration loss (weighted L2 distance between local and global prototypes).</returns>
+    public double ComputeCalibrationLoss(
+        Dictionary<int, T[]> localPrototypes,
+        Dictionary<int, T[]> globalPrototypes)
+    {
+        double totalLoss = 0;
+        int numClasses = 0;
+
+        foreach (var (classLabel, localProto) in localPrototypes)
+        {
+            if (!globalPrototypes.TryGetValue(classLabel, out var globalProto))
+            {
+                continue;
+            }
+
+            int dim = Math.Min(localProto.Length, globalProto.Length);
+            double l2sq = 0;
+            for (int d = 0; d < dim; d++)
+            {
+                double diff = NumOps.ToDouble(localProto[d]) - NumOps.ToDouble(globalProto[d]);
+                l2sq += diff * diff;
+            }
+
+            totalLoss += l2sq;
+            numClasses++;
+        }
+
+        return numClasses > 0 ? _calibrationWeight * totalLoss / numClasses : 0;
+    }
+
     /// <summary>Gets the similarity threshold for client inclusion.</summary>
     public double SimilarityThreshold => _similarityThreshold;
 
