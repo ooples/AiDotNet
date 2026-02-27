@@ -796,11 +796,6 @@ public class ReasoningIntegrationTests
         var result = aggregator.Aggregate(answers, scores);
 
 
-<<<<<<< TODO: Unmerged change from project 'AiDotNetTests(net471)', Before:
-        Assert.True(result.Equals("Yes", StringComparison.OrdinalIgnoreCase));
-=======
-        Assert.Equal(result, "Yes", ignoreCase: true);
->>>>>>> After
         Assert.Equal(result, "Yes", ignoreCase: true);
     }
 
