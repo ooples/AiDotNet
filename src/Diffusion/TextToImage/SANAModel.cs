@@ -76,7 +76,7 @@ namespace AiDotNet.Diffusion.TextToImage;
 /// var sana = new SANAModel&lt;float&gt;();
 ///
 /// // Create larger 1.6B variant
-/// var sanaLarge = new SANAModel&lt;float&gt;(variant: "1.6B");
+/// var sanaLarge = new SANAModel&lt;float&gt;(variant: SANAVariant.Large);
 ///
 /// // Generate an image
 /// var image = sana.GenerateFromText(
@@ -122,7 +122,7 @@ public class SANAModel<T> : LatentDiffusionModelBase<T>
     private EMMDiTPredictor<T> _predictor;
     private DeepCompressionVAE<T> _vae;
     private readonly IConditioningModule<T>? _conditioner;
-    private readonly string _variant;
+    private readonly SANAVariant _variant;
 
     #endregion
 
@@ -144,9 +144,9 @@ public class SANAModel<T> : LatentDiffusionModelBase<T>
     public override int ParameterCount => _predictor.ParameterCount + _vae.ParameterCount;
 
     /// <summary>
-    /// Gets the model variant ("0.6B" or "1.6B").
+    /// Gets the model variant.
     /// </summary>
-    public string Variant => _variant;
+    public SANAVariant Variant => _variant;
 
     /// <summary>
     /// Gets the spatial compression factor of the DC-AE (32x).
@@ -166,7 +166,7 @@ public class SANAModel<T> : LatentDiffusionModelBase<T>
     /// <param name="predictor">Custom linear DiT noise predictor.</param>
     /// <param name="vae">Custom DC-AE (32x compression). If null, creates default DC-AE.</param>
     /// <param name="conditioner">Text encoder module. If null, no built-in conditioner.</param>
-    /// <param name="variant">Model variant: "0.6B" (default) or "1.6B".</param>
+    /// <param name="variant">Model variant: Small (0.6B, default) or Large (1.6B).</param>
     /// <param name="seed">Optional random seed for reproducibility.</param>
     public SANAModel(
         NeuralNetworkArchitecture<T>? architecture = null,
@@ -175,7 +175,7 @@ public class SANAModel<T> : LatentDiffusionModelBase<T>
         EMMDiTPredictor<T>? predictor = null,
         DeepCompressionVAE<T>? vae = null,
         IConditioningModule<T>? conditioner = null,
-        string variant = "0.6B",
+        SANAVariant variant = SANAVariant.Small,
         int? seed = null)
         : base(
             options ?? new DiffusionModelOptions<T>
@@ -205,7 +205,7 @@ public class SANAModel<T> : LatentDiffusionModelBase<T>
         DeepCompressionVAE<T>? vae,
         int? seed)
     {
-        bool isLarge = _variant == "1.6B";
+        bool isLarge = _variant == SANAVariant.Large;
 
         // Linear DiT with SANA-specific dimensions and Gemma context
         _predictor = predictor ?? new EMMDiTPredictor<T>(
@@ -352,13 +352,14 @@ public class SANAModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
-        bool isLarge = _variant == "1.6B";
+        bool isLarge = _variant == SANAVariant.Large;
+        var variantName = isLarge ? "1.6B" : "0.6B";
         var metadata = new ModelMetadata<T>
         {
-            Name = $"SANA {_variant}",
-            Version = _variant,
+            Name = $"SANA {variantName}",
+            Version = variantName,
             ModelType = ModelType.NeuralNetwork,
-            Description = $"SANA {_variant} linear DiT with DC-AE (32x compression) and Gemma text encoder for efficient high-resolution generation",
+            Description = $"SANA {variantName} linear DiT with DC-AE (32x compression) and Gemma text encoder for efficient high-resolution generation",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount
         };

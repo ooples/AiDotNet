@@ -112,3 +112,66 @@ public enum FluxVariant
     /// <summary>FLUX.1 [pro]: Best quality, API-only.</summary>
     Pro
 }
+
+/// <summary>
+/// Variants for HiDream-I1 model.
+/// </summary>
+public enum HiDreamVariant
+{
+    /// <summary>HiDream-I1 Full: 17B parameters, highest quality.</summary>
+    Full,
+    /// <summary>HiDream-I1 Dev: 12B parameters, good balance of quality and speed.</summary>
+    Dev,
+    /// <summary>HiDream-I1 Fast: 8B parameters, optimized for speed.</summary>
+    Fast
+}
+
+/// <summary>
+/// Versions for the Kandinsky model family.
+/// </summary>
+public enum KandinskyVersion
+{
+    /// <summary>Kandinsky 2.2: 512x512 native resolution, CLIP ViT-G/14 prior.</summary>
+    V2_2,
+    /// <summary>Kandinsky 3.0: 1024x1024 native resolution, improved architecture.</summary>
+    V3_0
+}
+
+/// <summary>
+/// Variants for the PixArt model family.
+/// </summary>
+public enum PixArtVariant
+{
+    /// <summary>PixArt-α: 600M params, 1024px default resolution.</summary>
+    Alpha,
+    /// <summary>PixArt-Σ: Similar to α, 512px default resolution.</summary>
+    Sigma,
+    /// <summary>PixArt-δ: Smaller 256px variant.</summary>
+    Delta,
+    /// <summary>PixArt-XL: Larger variant with more parameters, 1024px.</summary>
+    XL
+}
+
+/// <summary>
+/// Variants for the SANA model family.
+/// </summary>
+public enum SANAVariant
+{
+    /// <summary>SANA 0.6B: Default 600M parameter linear DiT.</summary>
+    Small,
+    /// <summary>SANA 1.6B: Larger 1.6B parameter variant for higher quality.</summary>
+    Large
+}
+
+/// <summary>
+/// Variants for the Stable Diffusion 3 model family.
+/// </summary>
+public enum SD3Variant
+{
+    /// <summary>SD3 Medium: 2B MMDiT parameters, 24 layers.</summary>
+    Medium,
+    /// <summary>SD3.5 Large: 8B MMDiT parameters, 38 layers.</summary>
+    Large,
+    /// <summary>SD3.5 Large Turbo: 8B distilled for 4-step generation.</summary>
+    LargeTurbo
+}

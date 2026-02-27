@@ -757,4 +757,19 @@ public class FastGenContractTests
     }
 
     #endregion
+
+    #region Missing Model Coverage Tests
+
+    [Fact]
+    public void ConsistencyModel_DefaultConstructor_CreatesValidModel()
+    {
+        var model = new ConsistencyModel<double>();
+
+        Assert.NotNull(model);
+        Assert.NotNull(model.NoisePredictor);
+        Assert.NotNull(model.VAE);
+        Assert.True(model.ParameterCount > 0);
+    }
+
+    #endregion
 }

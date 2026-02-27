@@ -74,10 +74,10 @@ namespace AiDotNet.Diffusion.TextToImage;
 /// <example>
 /// <code>
 /// // Create HiDream Full (highest quality)
-/// var hiDream = new HiDreamModel&lt;float&gt;(variant: "full");
+/// var hiDream = new HiDreamModel&lt;float&gt;(variant: HiDreamVariant.Full);
 ///
 /// // Create HiDream Fast for quicker generation
-/// var hiDreamFast = new HiDreamModel&lt;float&gt;(variant: "fast");
+/// var hiDreamFast = new HiDreamModel&lt;float&gt;(variant: HiDreamVariant.Fast);
 ///
 /// // Generate an image
 /// var image = hiDream.GenerateFromText(
@@ -119,7 +119,7 @@ public class HiDreamModel<T> : LatentDiffusionModelBase<T>
     private MMDiTXNoisePredictor<T> _predictor;
     private StandardVAE<T> _vae;
     private readonly IConditioningModule<T>? _conditioner;
-    private readonly string _variant;
+    private readonly HiDreamVariant _variant;
 
     #endregion
 
@@ -141,9 +141,9 @@ public class HiDreamModel<T> : LatentDiffusionModelBase<T>
     public override int ParameterCount => _predictor.ParameterCount + _vae.ParameterCount;
 
     /// <summary>
-    /// Gets the model variant ("full", "dev", or "fast").
+    /// Gets the model variant.
     /// </summary>
-    public string Variant => _variant;
+    public HiDreamVariant Variant => _variant;
 
     #endregion
 
@@ -158,7 +158,7 @@ public class HiDreamModel<T> : LatentDiffusionModelBase<T>
     /// <param name="predictor">Custom MMDiT-X noise predictor.</param>
     /// <param name="vae">Custom 16-channel VAE.</param>
     /// <param name="conditioner">Dual encoder conditioning (CLIP + Llama-3.1).</param>
-    /// <param name="variant">Model variant: "full" (17B), "dev" (12B), or "fast" (8B). Default: "dev".</param>
+    /// <param name="variant">Model variant: Full (17B), Dev (12B), or Fast (8B). Default: Dev.</param>
     /// <param name="seed">Optional random seed for reproducibility.</param>
     public HiDreamModel(
         NeuralNetworkArchitecture<T>? architecture = null,
@@ -167,7 +167,7 @@ public class HiDreamModel<T> : LatentDiffusionModelBase<T>
         MMDiTXNoisePredictor<T>? predictor = null,
         StandardVAE<T>? vae = null,
         IConditioningModule<T>? conditioner = null,
-        string variant = "dev",
+        HiDreamVariant variant = HiDreamVariant.Dev,
         int? seed = null)
         : base(
             options ?? new DiffusionModelOptions<T>
@@ -198,7 +198,7 @@ public class HiDreamModel<T> : LatentDiffusionModelBase<T>
         int? seed)
     {
         // Use Large variant for full/dev, Medium for fast
-        var mmditVariant = _variant == "fast" ? MMDiTXVariant.Medium : MMDiTXVariant.Large;
+        var mmditVariant = _variant == HiDreamVariant.Fast ? MMDiTXVariant.Medium : MMDiTXVariant.Large;
         _predictor = predictor ?? new MMDiTXNoisePredictor<T>(
             variant: mmditVariant,
             seed: seed);
@@ -227,7 +227,7 @@ public class HiDreamModel<T> : LatentDiffusionModelBase<T>
         int? seed = null)
     {
         // Fast variant uses fewer default steps
-        var effectiveSteps = _variant == "fast" && numInferenceSteps == HIDREAM_DEFAULT_STEPS
+        var effectiveSteps = _variant == HiDreamVariant.Fast && numInferenceSteps == HIDREAM_DEFAULT_STEPS
             ? HIDREAM_FAST_STEPS
             : numInferenceSteps;
 
@@ -321,7 +321,7 @@ public class HiDreamModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-        var mmditVariant = _variant == "fast" ? MMDiTXVariant.Medium : MMDiTXVariant.Large;
+        var mmditVariant = _variant == HiDreamVariant.Fast ? MMDiTXVariant.Medium : MMDiTXVariant.Large;
         var clonedPredictor = new MMDiTXNoisePredictor<T>(variant: mmditVariant);
         clonedPredictor.SetParameters(_predictor.GetParameters());
 
@@ -349,17 +349,17 @@ public class HiDreamModel<T> : LatentDiffusionModelBase<T>
     {
         int hiddenSize = _variant switch
         {
-            "full" => HIDREAM_FULL_HIDDEN_SIZE,
-            "fast" => HIDREAM_FAST_HIDDEN_SIZE,
+            HiDreamVariant.Full => HIDREAM_FULL_HIDDEN_SIZE,
+            HiDreamVariant.Fast => HIDREAM_FAST_HIDDEN_SIZE,
             _ => HIDREAM_DEV_HIDDEN_SIZE
         };
 
         var metadata = new ModelMetadata<T>
         {
-            Name = $"HiDream-I1 [{_variant}]",
-            Version = _variant,
+            Name = $"HiDream-I1 [{_variant.ToString().ToLowerInvariant()}]",
+            Version = _variant.ToString(),
             ModelType = ModelType.NeuralNetwork,
-            Description = $"HiDream-I1 [{_variant}] MMDiT-X with Llama-3.1 text encoder for imaginative generation",
+            Description = $"HiDream-I1 [{_variant.ToString().ToLowerInvariant()}] MMDiT-X with Llama-3.1 text encoder for imaginative generation",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount
         };
@@ -373,7 +373,7 @@ public class HiDreamModel<T> : LatentDiffusionModelBase<T>
         metadata.SetProperty("latent_channels", HIDREAM_LATENT_CHANNELS);
         metadata.SetProperty("default_resolution", DefaultWidth);
         metadata.SetProperty("default_guidance_scale", HIDREAM_DEFAULT_GUIDANCE);
-        metadata.SetProperty("default_inference_steps", _variant == "fast" ? HIDREAM_FAST_STEPS : HIDREAM_DEFAULT_STEPS);
+        metadata.SetProperty("default_inference_steps", _variant == HiDreamVariant.Fast ? HIDREAM_FAST_STEPS : HIDREAM_DEFAULT_STEPS);
 
         return metadata;
     }

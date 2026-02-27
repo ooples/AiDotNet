@@ -248,4 +248,19 @@ public class ControlModelContractTests
     }
 
     #endregion
+
+    #region Missing Model Coverage Tests
+
+    [Fact]
+    public void IPAdapterModel_DefaultConstructor_CreatesValidModel()
+    {
+        var model = new IPAdapterModel<double>();
+
+        Assert.NotNull(model);
+        Assert.NotNull(model.NoisePredictor);
+        Assert.NotNull(model.VAE);
+        Assert.True(model.ParameterCount > 0);
+    }
+
+    #endregion
 }

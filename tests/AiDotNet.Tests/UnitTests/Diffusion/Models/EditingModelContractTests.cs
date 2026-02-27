@@ -724,4 +724,195 @@ public class EditingModelContractTests
     }
 
     #endregion
+
+    #region Missing Model Coverage Tests
+
+    [Fact]
+    public void BrushEditModel_DefaultConstructor_CreatesValidModel()
+    {
+        var model = new BrushEditModel<double>();
+
+        Assert.NotNull(model);
+        Assert.NotNull(model.NoisePredictor);
+        Assert.NotNull(model.VAE);
+        Assert.True(model.ParameterCount > 0);
+    }
+
+    [Fact]
+    public void FreeInpaintModel_DefaultConstructor_CreatesValidModel()
+    {
+        var model = new FreeInpaintModel<double>();
+
+        Assert.NotNull(model);
+        Assert.NotNull(model.NoisePredictor);
+        Assert.NotNull(model.VAE);
+        Assert.True(model.ParameterCount > 0);
+    }
+
+    [Fact]
+    public void RADModel_DefaultConstructor_CreatesValidModel()
+    {
+        var model = new RADModel<double>();
+
+        Assert.NotNull(model);
+        Assert.NotNull(model.NoisePredictor);
+        Assert.NotNull(model.VAE);
+        Assert.True(model.ParameterCount > 0);
+    }
+
+    [Fact]
+    public void ReplaceAnythingModel_DefaultConstructor_CreatesValidModel()
+    {
+        var model = new ReplaceAnythingModel<double>();
+
+        Assert.NotNull(model);
+        Assert.NotNull(model.NoisePredictor);
+        Assert.NotNull(model.VAE);
+        Assert.True(model.ParameterCount > 0);
+    }
+
+    [Fact]
+    public void Step1XEditModel_DefaultConstructor_CreatesValidModel()
+    {
+        var model = new Step1XEditModel<double>();
+
+        Assert.NotNull(model);
+        Assert.NotNull(model.NoisePredictor);
+        Assert.NotNull(model.VAE);
+        Assert.True(model.ParameterCount > 0);
+    }
+
+    [Fact]
+    public void SeedEdit3Model_DefaultConstructor_CreatesValidModel()
+    {
+        var model = new SeedEdit3Model<double>();
+
+        Assert.NotNull(model);
+        Assert.NotNull(model.NoisePredictor);
+        Assert.NotNull(model.VAE);
+        Assert.True(model.ParameterCount > 0);
+    }
+
+    [Fact]
+    public void StyleAlignedEditModel_DefaultConstructor_CreatesValidModel()
+    {
+        var model = new StyleAlignedEditModel<double>();
+
+        Assert.NotNull(model);
+        Assert.NotNull(model.NoisePredictor);
+        Assert.NotNull(model.VAE);
+        Assert.True(model.ParameterCount > 0);
+    }
+
+    [Fact]
+    public void CACTIModel_DefaultConstructor_CreatesValidModel()
+    {
+        var model = new CACTIModel<double>();
+
+        Assert.NotNull(model);
+        Assert.NotNull(model.NoisePredictor);
+        Assert.NotNull(model.VAE);
+        Assert.True(model.ParameterCount > 0);
+    }
+
+    [Fact]
+    public void ConsisLoRAModel_DefaultConstructor_CreatesValidModel()
+    {
+        var model = new ConsisLoRAModel<double>();
+
+        Assert.NotNull(model);
+        Assert.NotNull(model.NoisePredictor);
+        Assert.NotNull(model.VAE);
+        Assert.True(model.ParameterCount > 0);
+    }
+
+    [Fact]
+    public void KLoRAStyleModel_DefaultConstructor_CreatesValidModel()
+    {
+        var model = new KLoRAStyleModel<double>();
+
+        Assert.NotNull(model);
+        Assert.NotNull(model.NoisePredictor);
+        Assert.NotNull(model.VAE);
+        Assert.True(model.ParameterCount > 0);
+    }
+
+    [Fact]
+    public void SASTDModel_DefaultConstructor_CreatesValidModel()
+    {
+        var model = new SASTDModel<double>();
+
+        Assert.NotNull(model);
+        Assert.NotNull(model.NoisePredictor);
+        Assert.NotNull(model.VAE);
+        Assert.True(model.ParameterCount > 0);
+    }
+
+    [Fact]
+    public void TLoRAModel_DefaultConstructor_CreatesValidModel()
+    {
+        var model = new TLoRAModel<double>();
+
+        Assert.NotNull(model);
+        Assert.NotNull(model.NoisePredictor);
+        Assert.NotNull(model.VAE);
+        Assert.True(model.ParameterCount > 0);
+    }
+
+    [Fact]
+    public void CATDMModel_DefaultConstructor_CreatesValidModel()
+    {
+        var model = new CATDMModel<double>();
+
+        Assert.NotNull(model);
+        Assert.NotNull(model.NoisePredictor);
+        Assert.NotNull(model.VAE);
+        Assert.True(model.ParameterCount > 0);
+    }
+
+    [Fact]
+    public void FashionVDMModel_DefaultConstructor_CreatesValidModel()
+    {
+        var model = new FashionVDMModel<double>();
+
+        Assert.NotNull(model);
+        Assert.NotNull(model.NoisePredictor);
+        Assert.NotNull(model.VAE);
+        Assert.True(model.ParameterCount > 0);
+    }
+
+    [Fact]
+    public void CubeDiffModel_DefaultConstructor_CreatesValidModel()
+    {
+        var model = new CubeDiffModel<double>();
+
+        Assert.NotNull(model);
+        Assert.NotNull(model.NoisePredictor);
+        Assert.NotNull(model.VAE);
+        Assert.True(model.ParameterCount > 0);
+    }
+
+    [Fact]
+    public void SpotDiffusionModel_DefaultConstructor_CreatesValidModel()
+    {
+        var model = new SpotDiffusionModel<double>();
+
+        Assert.NotNull(model);
+        Assert.NotNull(model.NoisePredictor);
+        Assert.NotNull(model.VAE);
+        Assert.True(model.ParameterCount > 0);
+    }
+
+    [Fact]
+    public void MotionDiffuseModel_DefaultConstructor_CreatesValidModel()
+    {
+        var model = new MotionDiffuseModel<double>();
+
+        Assert.NotNull(model);
+        Assert.NotNull(model.NoisePredictor);
+        Assert.NotNull(model.VAE);
+        Assert.True(model.ParameterCount > 0);
+    }
+
+    #endregion
 }
