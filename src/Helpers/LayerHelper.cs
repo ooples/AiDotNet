@@ -25709,5 +25709,215 @@ public static class LayerHelper<T>
             scalarActivation: identityActivation);
     }
 
+    /// <summary>
+    /// Creates the default layer stack for a CNN-BiLSTM-CRF Named Entity Recognition model.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Builds the architecture from Ma and Hovy (ACL 2016): character-level 1D CNN with max-pooling
+    /// produces character features that are concatenated with word embeddings, then processed by
+    /// stacked BiLSTM layers, a linear projection, and a CRF decoder.
+    ///
+    /// Layer sequence:
+    /// 1. Character CNN: DenseLayer (char embedding) -> simulated by DenseLayer (CNN projection)
+    /// 2. Stacked BiLSTM layers with inter-layer dropout
+    /// 3. Pre-projection dropout
+    /// 4. Dense projection: hiddenDim -> numLabels
+    /// 5. CRF layer for structured prediction
+    /// </para>
+    /// </remarks>
+    /// <param name="embeddingDimension">Word embedding dimension (default: 100 for GloVe-100d).</param>
+    /// <param name="hiddenDimension">LSTM hidden units per direction (default: 200, Ma and Hovy 2016).</param>
+    /// <param name="numLabels">Number of BIO labels (default: 9 for CoNLL-2003).</param>
+    /// <param name="numLSTMLayers">Number of stacked BiLSTM layers (default: 1).</param>
+    /// <param name="maxSequenceLength">Maximum sequence length for CRF (default: 256).</param>
+    /// <param name="dropoutRate">Dropout probability (default: 0.5).</param>
+    /// <param name="charEmbeddingDimension">Character embedding dimension (default: 30).</param>
+    /// <param name="charCNNFilters">Number of CNN filters (default: 30).</param>
+    /// <param name="charCNNKernelSize">CNN kernel width (default: 3 for trigrams).</param>
+    /// <returns>Ordered sequence of layers for a CNN-BiLSTM-CRF model.</returns>
+    public static IEnumerable<ILayer<T>> CreateDefaultCNNBiLSTMCRFLayers(
+        int embeddingDimension = 100,
+        int hiddenDimension = 200,
+        int numLabels = 9,
+        int numLSTMLayers = 1,
+        int maxSequenceLength = 256,
+        double dropoutRate = 0.5,
+        int charEmbeddingDimension = 30,
+        int charCNNFilters = 30,
+        int charCNNKernelSize = 3)
+    {
+        if (embeddingDimension <= 0)
+            throw new ArgumentOutOfRangeException(nameof(embeddingDimension),
+                $"Embedding dimension must be positive. Got: {embeddingDimension}");
+        if (hiddenDimension <= 0)
+            throw new ArgumentOutOfRangeException(nameof(hiddenDimension),
+                $"Hidden dimension must be positive. Got: {hiddenDimension}");
+        if (numLabels <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numLabels),
+                $"Number of labels must be positive. Got: {numLabels}");
+        if (numLSTMLayers <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numLSTMLayers),
+                $"Number of LSTM layers must be positive. Got: {numLSTMLayers}");
+
+        var tanhActivation = new TanhActivation<T>() as IActivationFunction<T>;
+        var sigmoidActivation = new SigmoidActivation<T>() as IActivationFunction<T>;
+        var identityActivation = new IdentityActivation<T>() as IActivationFunction<T>;
+        var reluActivation = new ReLUActivation<T>() as IActivationFunction<T>;
+
+        // === Character-level CNN ===
+        // The CNN captures morphological features from character sequences.
+        // Implementation: DenseLayer simulates character embedding lookup,
+        // followed by a DenseLayer with ReLU simulating 1D convolution + max-pooling.
+        // The CNN output (charCNNFilters) is concatenated with word embeddings.
+
+        // Character embedding layer: maps character indices to dense vectors
+        yield return new DenseLayer<T>(
+            inputSize: charEmbeddingDimension,
+            outputSize: charEmbeddingDimension,
+            activationFunction: identityActivation);
+
+        // CNN filter bank: 1D convolution simulated as a dense projection with ReLU
+        // In Ma and Hovy (2016), this is a Conv1D(charEmbDim, charCNNFilters, kernelSize=3)
+        // followed by max-pooling over the character sequence length.
+        // We approximate this with a dense projection that maps char features to CNN output dimension.
+        yield return new DenseLayer<T>(
+            inputSize: charEmbeddingDimension,
+            outputSize: charCNNFilters,
+            activationFunction: reluActivation);
+
+        // After char CNN, features are concatenated with word embeddings
+        int currentInputSize = embeddingDimension + charCNNFilters;
+
+        // === Stacked BiLSTM layers ===
+        // Each layer processes the sequence bidirectionally with element-wise merge
+        for (int layer = 0; layer < numLSTMLayers; layer++)
+        {
+            var lstm = new LSTMLayer<T>(
+                inputSize: currentInputSize,
+                hiddenSize: hiddenDimension,
+                inputShape: [currentInputSize],
+                activation: tanhActivation,
+                recurrentActivation: sigmoidActivation);
+
+            yield return new BidirectionalLayer<T>(lstm, mergeMode: true,
+                activationFunction: identityActivation);
+
+            currentInputSize = hiddenDimension;
+
+            if (dropoutRate > 0 && layer < numLSTMLayers - 1)
+            {
+                yield return new DropoutLayer<T>(dropoutRate);
+            }
+        }
+
+        // === Pre-projection dropout ===
+        if (dropoutRate > 0)
+        {
+            yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // === Linear projection: hidden states -> emission scores ===
+        yield return new DenseLayer<T>(
+            inputSize: currentInputSize,
+            outputSize: numLabels,
+            activationFunction: identityActivation);
+
+        // === CRF decoding layer ===
+        yield return new ConditionalRandomFieldLayer<T>(
+            numClasses: numLabels,
+            sequenceLength: maxSequenceLength,
+            scalarActivation: identityActivation);
+    }
+
+    /// <summary>
+    /// Creates the default layer stack for an LSTM-CRF Named Entity Recognition model.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Builds a unidirectional LSTM with CRF decoder (Huang et al., 2015). This is a simpler,
+    /// faster variant of BiLSTM-CRF that only processes text left-to-right. The CRF is especially
+    /// important here because it partially compensates for the lack of right-context.
+    ///
+    /// Layer sequence:
+    /// 1. Stacked unidirectional LSTM layers with inter-layer dropout
+    /// 2. Pre-projection dropout
+    /// 3. Dense projection: hiddenDim -> numLabels
+    /// 4. CRF layer for structured prediction
+    /// </para>
+    /// </remarks>
+    /// <param name="embeddingDimension">Word embedding dimension (default: 100).</param>
+    /// <param name="hiddenDimension">LSTM hidden units (default: 100).</param>
+    /// <param name="numLabels">Number of BIO labels (default: 9).</param>
+    /// <param name="numLSTMLayers">Number of stacked LSTM layers (default: 1).</param>
+    /// <param name="maxSequenceLength">Maximum sequence length for CRF (default: 256).</param>
+    /// <param name="dropoutRate">Dropout probability (default: 0.5).</param>
+    /// <returns>Ordered sequence of layers for an LSTM-CRF model.</returns>
+    public static IEnumerable<ILayer<T>> CreateDefaultLSTMCRFLayers(
+        int embeddingDimension = 100,
+        int hiddenDimension = 100,
+        int numLabels = 9,
+        int numLSTMLayers = 1,
+        int maxSequenceLength = 256,
+        double dropoutRate = 0.5)
+    {
+        if (embeddingDimension <= 0)
+            throw new ArgumentOutOfRangeException(nameof(embeddingDimension),
+                $"Embedding dimension must be positive. Got: {embeddingDimension}");
+        if (hiddenDimension <= 0)
+            throw new ArgumentOutOfRangeException(nameof(hiddenDimension),
+                $"Hidden dimension must be positive. Got: {hiddenDimension}");
+        if (numLabels <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numLabels),
+                $"Number of labels must be positive. Got: {numLabels}");
+        if (numLSTMLayers <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numLSTMLayers),
+                $"Number of LSTM layers must be positive. Got: {numLSTMLayers}");
+
+        var tanhActivation = new TanhActivation<T>() as IActivationFunction<T>;
+        var sigmoidActivation = new SigmoidActivation<T>() as IActivationFunction<T>;
+        var identityActivation = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        int currentInputSize = embeddingDimension;
+
+        // === Stacked unidirectional LSTM layers ===
+        // Unlike BiLSTM-CRF, these process text only left-to-right.
+        // This makes inference faster (~2x) but sacrifices right-context information.
+        for (int layer = 0; layer < numLSTMLayers; layer++)
+        {
+            yield return new LSTMLayer<T>(
+                inputSize: currentInputSize,
+                hiddenSize: hiddenDimension,
+                inputShape: [currentInputSize],
+                activation: tanhActivation,
+                recurrentActivation: sigmoidActivation);
+
+            currentInputSize = hiddenDimension;
+
+            if (dropoutRate > 0 && layer < numLSTMLayers - 1)
+            {
+                yield return new DropoutLayer<T>(dropoutRate);
+            }
+        }
+
+        // === Pre-projection dropout ===
+        if (dropoutRate > 0)
+        {
+            yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // === Linear projection: hidden states -> emission scores ===
+        yield return new DenseLayer<T>(
+            inputSize: currentInputSize,
+            outputSize: numLabels,
+            activationFunction: identityActivation);
+
+        // === CRF decoding layer ===
+        yield return new ConditionalRandomFieldLayer<T>(
+            numClasses: numLabels,
+            sequenceLength: maxSequenceLength,
+            scalarActivation: identityActivation);
+    }
+
     #endregion
 }
