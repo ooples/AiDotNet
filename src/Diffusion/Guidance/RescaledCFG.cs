@@ -1,3 +1,4 @@
+using AiDotNet.Engines;
 using AiDotNet.Enums;
 using AiDotNet.Models;
 
@@ -43,46 +44,27 @@ public class RescaledCFG<T> : IGuidanceMethod<T>
     /// <inheritdoc />
     public Tensor<T> Apply(Tensor<T> unconditional, Tensor<T> conditional, double scale, double timestep)
     {
-        var uncondSpan = unconditional.AsSpan();
-        var condSpan = conditional.AsSpan();
+        var engine = AiDotNetEngine.Current;
 
-        // Step 1: Standard CFG
-        var guided = new Tensor<T>(unconditional.Shape);
-        var guidedSpan = guided.AsWritableSpan();
+        // Step 1: Standard CFG: guided = uncond + scale * (cond - uncond)
         var scaleT = NumOps.FromDouble(scale);
-
-        for (int i = 0; i < guidedSpan.Length; i++)
-        {
-            var diff = NumOps.Subtract(condSpan[i], uncondSpan[i]);
-            guidedSpan[i] = NumOps.Add(uncondSpan[i], NumOps.Multiply(scaleT, diff));
-        }
+        var diff = engine.TensorSubtract<T>(conditional, unconditional);
+        var scaled = engine.TensorMultiplyScalar<T>(diff, scaleT);
+        var guided = engine.TensorAdd<T>(unconditional, scaled);
 
         // Step 2: Compute standard deviations
-        double condStd = ComputeStd(condSpan);
+        double condStd = ComputeStd(conditional.AsSpan());
         double guidedStd = ComputeStd(guided.AsSpan());
 
         if (guidedStd < 1e-8) return guided;
 
         // Step 3: Rescale to match conditional std
+        // result = (1 - weight) * guided + weight * (rescaleFactor * guided)
+        // Simplifies to: guided * ((1 - weight) + weight * rescaleFactor)
         double rescaleFactor = condStd / guidedStd;
-        var rescaleT = NumOps.FromDouble(rescaleFactor);
-        var blendT = NumOps.FromDouble(_rescaleWeight);
-        var oneMinusBlend = NumOps.FromDouble(1.0 - _rescaleWeight);
-
-        var result = new Tensor<T>(unconditional.Shape);
-        var resultSpan = result.AsWritableSpan();
-        var guidedReadSpan = guided.AsSpan();
-
-        for (int i = 0; i < resultSpan.Length; i++)
-        {
-            var rescaled = NumOps.Multiply(guidedReadSpan[i], rescaleT);
-            // Blend: result = (1 - weight) * guided + weight * rescaled
-            resultSpan[i] = NumOps.Add(
-                NumOps.Multiply(oneMinusBlend, guidedReadSpan[i]),
-                NumOps.Multiply(blendT, rescaled));
-        }
-
-        return result;
+        double blendedScale = (1.0 - _rescaleWeight) + _rescaleWeight * rescaleFactor;
+        var blendedScaleT = NumOps.FromDouble(blendedScale);
+        return engine.TensorMultiplyScalar<T>(guided, blendedScaleT);
     }
 
     private static double ComputeStd(ReadOnlySpan<T> data)

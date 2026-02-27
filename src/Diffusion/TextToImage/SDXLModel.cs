@@ -1,6 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Diffusion.VAE;
+using AiDotNet.Engines;
 using AiDotNet.Enums;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -917,19 +918,13 @@ public class SDXLRefiner<T>
         var alpha = 1.0 - (timestep / 1000.0);
         var sigma = Math.Sqrt(1.0 - alpha * alpha);
 
-        var result = new Tensor<T>(latent.Shape);
-        var resultSpan = result.AsWritableSpan();
-        var latentSpan = latent.AsSpan();
-        var noiseSpan = noise.AsSpan();
-
-        for (int i = 0; i < resultSpan.Length; i++)
-        {
-            var latentVal = NumOps.ToDouble(latentSpan[i]);
-            var noiseVal = NumOps.ToDouble(noiseSpan[i]);
-            resultSpan[i] = NumOps.FromDouble(alpha * latentVal + sigma * noiseVal);
-        }
-
-        return result;
+        // result = alpha * latent + sigma * noise
+        var engine = AiDotNetEngine.Current;
+        var alphaT = NumOps.FromDouble(alpha);
+        var sigmaT = NumOps.FromDouble(sigma);
+        var scaledLatent = engine.TensorMultiplyScalar<T>(latent, alphaT);
+        var scaledNoise = engine.TensorMultiplyScalar<T>(noise, sigmaT);
+        return engine.TensorAdd<T>(scaledLatent, scaledNoise);
     }
 
     /// <summary>
@@ -937,19 +932,11 @@ public class SDXLRefiner<T>
     /// </summary>
     private Tensor<T> ApplyGuidance(Tensor<T> uncondPred, Tensor<T> condPred, double guidanceScale)
     {
-        var result = new Tensor<T>(condPred.Shape);
-        var resultSpan = result.AsWritableSpan();
-        var uncondSpan = uncondPred.AsSpan();
-        var condSpan = condPred.AsSpan();
-
-        for (int i = 0; i < resultSpan.Length; i++)
-        {
-            var uncondVal = NumOps.ToDouble(uncondSpan[i]);
-            var condVal = NumOps.ToDouble(condSpan[i]);
-            var guided = uncondVal + guidanceScale * (condVal - uncondVal);
-            resultSpan[i] = NumOps.FromDouble(guided);
-        }
-
-        return result;
+        // CFG: guided = uncond + scale * (cond - uncond)
+        var engine = AiDotNetEngine.Current;
+        var scaleT = NumOps.FromDouble(guidanceScale);
+        var diff = engine.TensorSubtract<T>(condPred, uncondPred);
+        var scaled = engine.TensorMultiplyScalar<T>(diff, scaleT);
+        return engine.TensorAdd<T>(uncondPred, scaled);
     }
 }
