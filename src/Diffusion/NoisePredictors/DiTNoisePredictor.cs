@@ -526,7 +526,7 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     }
 
     /// <summary>
-    /// Embeds patches through linear projection.
+    /// Embeds patches through linear projection using batched forward pass.
     /// </summary>
     private Tensor<T> EmbedPatches(Tensor<T> patches)
     {
@@ -538,41 +538,22 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
         var numPatches = shape[1];
         var patchDim = shape[2];
 
+        // Reshape [batch, numPatches, patchDim] -> [batch*numPatches, patchDim] for batched forward
+        var flatPatches = new Tensor<T>(new[] { batch * numPatches, patchDim });
+        patches.AsSpan().CopyTo(flatPatches.AsWritableSpan());
+
+        // Single batched forward pass through the linear layer
+        var projected = _patchEmbed.Forward(flatPatches);
+
+        // Reshape back to [batch, numPatches, hiddenSize]
         var embedded = new Tensor<T>(new[] { batch, numPatches, _hiddenSize });
-        var embSpan = embedded.AsWritableSpan();
-        var patchSpan = patches.AsSpan();
-
-        // Process each patch through linear layer
-        for (int b = 0; b < batch; b++)
-        {
-            for (int p = 0; p < numPatches; p++)
-            {
-                // Extract patch vector
-                var patchVector = new Tensor<T>(new[] { 1, patchDim });
-                var pvSpan = patchVector.AsWritableSpan();
-
-                for (int i = 0; i < patchDim; i++)
-                {
-                    pvSpan[i] = patchSpan[b * numPatches * patchDim + p * patchDim + i];
-                }
-
-                // Project through linear layer
-                var projectedVector = _patchEmbed.Forward(patchVector);
-                var projSpan = projectedVector.AsSpan();
-
-                // Copy to output
-                for (int i = 0; i < _hiddenSize; i++)
-                {
-                    embSpan[b * numPatches * _hiddenSize + p * _hiddenSize + i] = projSpan[i];
-                }
-            }
-        }
+        projected.AsSpan().CopyTo(embedded.AsWritableSpan());
 
         return embedded;
     }
 
     /// <summary>
-    /// Adds learnable position embeddings.
+    /// Adds learnable position embeddings using IEngine broadcast add.
     /// </summary>
     private Tensor<T> AddPositionEmbedding(Tensor<T> x, int numPatches)
     {
@@ -582,26 +563,9 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
             _posEmbed = CreatePositionEmbedding(numPatches);
         }
 
-        var result = new Tensor<T>(x.Shape);
-        var resultSpan = result.AsWritableSpan();
-        var xSpan = x.AsSpan();
-        var posSpan = _posEmbed.AsSpan();
-
-        var batch = x.Shape[0];
-        for (int b = 0; b < batch; b++)
-        {
-            for (int p = 0; p < numPatches; p++)
-            {
-                for (int h = 0; h < _hiddenSize; h++)
-                {
-                    var idx = b * numPatches * _hiddenSize + p * _hiddenSize + h;
-                    var posIdx = p * _hiddenSize + h;
-                    resultSpan[idx] = NumOps.Add(xSpan[idx], posSpan[posIdx]);
-                }
-            }
-        }
-
-        return result;
+        // Position embedding is [1, numPatches, hiddenSize], x is [batch, numPatches, hiddenSize]
+        // TensorBroadcastAdd handles the batch dimension broadcasting
+        return AiDotNetEngine.Current.TensorBroadcastAdd<T>(x, _posEmbed);
     }
 
     /// <summary>
@@ -697,37 +661,31 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     }
 
     /// <summary>
-    /// Applies adaptive layer normalization.
+    /// Applies adaptive layer normalization using IEngine for hardware acceleration.
+    /// y = x * (1 + scale) + shift
     /// </summary>
     private Tensor<T> ApplyAdaLN(Tensor<T> x, T[] scale, T[] shift)
     {
-        var result = new Tensor<T>(x.Shape);
-        var resultSpan = result.AsWritableSpan();
-        var xSpan = x.AsSpan();
+        var engine = AiDotNetEngine.Current;
 
         var shape = x.Shape;
-        var batch = shape[0];
-        var seq = shape[1];
-        var hidden = shape[2];
+        var hidden = shape[^1];
 
-        for (int b = 0; b < batch; b++)
+        // Create broadcastable tensors for scale and shift: [1, 1, hidden]
+        var scaleTensor = new Tensor<T>(new[] { 1, 1, hidden });
+        var shiftTensor = new Tensor<T>(new[] { 1, 1, hidden });
+        var scaleSpan = scaleTensor.AsWritableSpan();
+        var shiftSpan = shiftTensor.AsWritableSpan();
+
+        for (int h = 0; h < hidden; h++)
         {
-            for (int s = 0; s < seq; s++)
-            {
-                for (int h = 0; h < hidden; h++)
-                {
-                    var idx = b * seq * hidden + s * hidden + h;
-                    // y = x * (1 + scale) + shift
-                    var oneVal = NumOps.One;
-                    var scaleFactor = NumOps.Add(oneVal, scale[h % scale.Length]);
-                    resultSpan[idx] = NumOps.Add(
-                        NumOps.Multiply(xSpan[idx], scaleFactor),
-                        shift[h % shift.Length]);
-                }
-            }
+            scaleSpan[h] = NumOps.Add(NumOps.One, scale[h % scale.Length]);
+            shiftSpan[h] = shift[h % shift.Length];
         }
 
-        return result;
+        // y = x * (1 + scale) + shift using engine ops
+        var scaled = engine.TensorMultiply<T>(x, scaleTensor);
+        return engine.TensorAdd<T>(scaled, shiftTensor);
     }
 
     /// <summary>
@@ -742,6 +700,7 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
 
     /// <summary>
     /// Applies cross-attention between query (from x) and key/value (from conditioning).
+    /// Uses IEngine for hardware-accelerated batched matrix operations.
     /// </summary>
     private Tensor<T> ApplyCrossAttention(
         Tensor<T> x,
@@ -753,6 +712,8 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
         {
             return x;
         }
+
+        var engine = AiDotNetEngine.Current;
 
         var shape = x.Shape;
         var batch = shape[0];
@@ -770,113 +731,54 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
         var k = block.CrossAttnK.Forward(conditioning);
         var v = block.CrossAttnV.Forward(conditioning);
 
-        // Scaled dot-product attention
+        // Reshape Q, K, V for multi-head attention: [batch, seq, hidden] -> [batch*heads, seq, headDim]
         var headDim = hidden / _numHeads;
-        var scale = 1.0 / Math.Sqrt(headDim);
+        var scaleFactor = NumOps.FromDouble(1.0 / Math.Sqrt(headDim));
 
-        var attnOutput = new Tensor<T>(new[] { batch, seqLen, hidden });
-        var attnSpan = attnOutput.AsWritableSpan();
-        var qSpan = q.AsSpan();
-        var kSpan = k.AsSpan();
-        var vSpan = v.AsSpan();
+        var qReshaped = ReshapeForHeads(q, batch, seqLen, _numHeads, headDim);
+        var kReshaped = ReshapeForHeads(k, batch, condSeqLen, _numHeads, headDim);
+        var vReshaped = ReshapeForHeads(v, batch, condSeqLen, _numHeads, headDim);
 
-        // Simple multi-head attention implementation
-        for (int b = 0; b < batch; b++)
-        {
-            for (int h = 0; h < _numHeads; h++)
-            {
-                var headOffset = h * headDim;
+        // Compute attention scores: Q * K^T using batched matmul [batch*heads, seqLen, condSeqLen]
+        var kTransposed = engine.TensorTranspose<T>(kReshaped);
+        var scores = engine.TensorBatchMatMul<T>(qReshaped, kTransposed);
 
-                // Compute attention scores for this head
-                for (int i = 0; i < seqLen; i++)
-                {
-                    // Compute softmax over keys
-                    var scores = new double[condSeqLen];
-                    var maxScore = double.NegativeInfinity;
+        // Scale scores
+        scores = engine.TensorMultiplyScalar<T>(scores, scaleFactor);
 
-                    for (int j = 0; j < condSeqLen; j++)
-                    {
-                        double score = 0;
-                        for (int d = 0; d < headDim; d++)
-                        {
-                            var qIdx = b * seqLen * hidden + i * hidden + headOffset + d;
-                            var kIdx = b * condSeqLen * hidden + j * hidden + headOffset + d;
-                            score += NumOps.ToDouble(qSpan[qIdx]) * NumOps.ToDouble(kSpan[kIdx]);
-                        }
-                        score *= scale;
-                        scores[j] = score;
-                        if (score > maxScore) maxScore = score;
-                    }
+        // Softmax over last axis (key dimension)
+        var attnWeights = engine.Softmax<T>(scores, axis: -1);
 
-                    // Softmax
-                    double sumExp = 0;
-                    for (int j = 0; j < condSeqLen; j++)
-                    {
-                        scores[j] = Math.Exp(scores[j] - maxScore);
-                        sumExp += scores[j];
-                    }
-                    for (int j = 0; j < condSeqLen; j++)
-                    {
-                        scores[j] /= sumExp;
-                    }
+        // Apply attention to values: attn_weights * V [batch*heads, seqLen, headDim]
+        var attnOutput = engine.TensorBatchMatMul<T>(attnWeights, vReshaped);
 
-                    // Weighted sum of values
-                    for (int d = 0; d < headDim; d++)
-                    {
-                        double weighted = 0;
-                        for (int j = 0; j < condSeqLen; j++)
-                        {
-                            var vIdx = b * condSeqLen * hidden + j * hidden + headOffset + d;
-                            weighted += scores[j] * NumOps.ToDouble(vSpan[vIdx]);
-                        }
-                        var outIdx = b * seqLen * hidden + i * hidden + headOffset + d;
-                        attnSpan[outIdx] = NumOps.FromDouble(weighted);
-                    }
-                }
-            }
-        }
+        // Reshape back: [batch*heads, seqLen, headDim] -> [batch, seqLen, hidden]
+        attnOutput = ReshapeFromHeads(attnOutput, batch, seqLen, _numHeads, headDim);
 
         // Output projection and residual connection
         var projected = block.CrossAttnOut.Forward(attnOutput);
-        var result = new Tensor<T>(x.Shape);
-        var resultSpan = result.AsWritableSpan();
-        var xSpan = x.AsSpan();
-        var projSpan = projected.AsSpan();
-
-        for (int i = 0; i < resultSpan.Length; i++)
-        {
-            resultSpan[i] = NumOps.Add(xSpan[i], projSpan[i]);
-        }
-
-        return result;
+        return engine.TensorAdd<T>(x, projected);
     }
 
     /// <summary>
-    /// Adds with gating.
+    /// Reshapes tensor from [batch, seq, hidden] to [batch*heads, seq, headDim] for multi-head attention.
     /// </summary>
-    private Tensor<T> AddWithGate(Tensor<T> x, Tensor<T> residual, T[] gate)
+    private static Tensor<T> ReshapeForHeads(Tensor<T> tensor, int batch, int seq, int numHeads, int headDim)
     {
-        var result = new Tensor<T>(x.Shape);
-        var resultSpan = result.AsWritableSpan();
-        var xSpan = x.AsSpan();
-        var resSpan = residual.AsSpan();
-
-        var shape = x.Shape;
-        var batch = shape[0];
-        var seq = shape[1];
-        var hidden = shape[2];
+        var result = new Tensor<T>(new[] { batch * numHeads, seq, headDim });
+        var srcSpan = tensor.AsSpan();
+        var dstSpan = result.AsWritableSpan();
+        var hidden = numHeads * headDim;
 
         for (int b = 0; b < batch; b++)
         {
-            for (int s = 0; s < seq; s++)
+            for (int h = 0; h < numHeads; h++)
             {
-                for (int h = 0; h < hidden; h++)
+                for (int s = 0; s < seq; s++)
                 {
-                    var idx = b * seq * hidden + s * hidden + h;
-                    var gateVal = gate[h % gate.Length];
-                    resultSpan[idx] = NumOps.Add(
-                        xSpan[idx],
-                        NumOps.Multiply(gateVal, resSpan[idx]));
+                    var srcBase = b * seq * hidden + s * hidden + h * headDim;
+                    var dstBase = (b * numHeads + h) * seq * headDim + s * headDim;
+                    srcSpan.Slice(srcBase, headDim).CopyTo(dstSpan.Slice(dstBase, headDim));
                 }
             }
         }
@@ -885,7 +787,55 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     }
 
     /// <summary>
-    /// Final layer with AdaLN zero.
+    /// Reshapes tensor from [batch*heads, seq, headDim] back to [batch, seq, hidden].
+    /// </summary>
+    private static Tensor<T> ReshapeFromHeads(Tensor<T> tensor, int batch, int seq, int numHeads, int headDim)
+    {
+        var result = new Tensor<T>(new[] { batch, seq, numHeads * headDim });
+        var srcSpan = tensor.AsSpan();
+        var dstSpan = result.AsWritableSpan();
+        var hidden = numHeads * headDim;
+
+        for (int b = 0; b < batch; b++)
+        {
+            for (int h = 0; h < numHeads; h++)
+            {
+                for (int s = 0; s < seq; s++)
+                {
+                    var srcBase = (b * numHeads + h) * seq * headDim + s * headDim;
+                    var dstBase = b * seq * hidden + s * hidden + h * headDim;
+                    srcSpan.Slice(srcBase, headDim).CopyTo(dstSpan.Slice(dstBase, headDim));
+                }
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Adds with gating using IEngine for hardware acceleration.
+    /// result = x + gate * residual
+    /// </summary>
+    private Tensor<T> AddWithGate(Tensor<T> x, Tensor<T> residual, T[] gate)
+    {
+        var engine = AiDotNetEngine.Current;
+        var hidden = x.Shape[^1];
+
+        // Create broadcastable gate tensor: [1, 1, hidden]
+        var gateTensor = new Tensor<T>(new[] { 1, 1, hidden });
+        var gateSpan = gateTensor.AsWritableSpan();
+        for (int h = 0; h < hidden; h++)
+        {
+            gateSpan[h] = gate[h % gate.Length];
+        }
+
+        // result = x + gate * residual
+        var gated = engine.TensorMultiply<T>(residual, gateTensor);
+        return engine.TensorAdd<T>(x, gated);
+    }
+
+    /// <summary>
+    /// Final layer with AdaLN zero using batched forward pass.
     /// </summary>
     private Tensor<T> FinalLayerWithAdaLN(Tensor<T> x, Tensor<T> timeEmbed)
     {
@@ -903,40 +853,22 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
         var normed = _finalNorm.Forward(x);
         normed = ApplyAdaLN(normed, scale, shift);
 
-        // Project to output dimension
+        // Project to output dimension using batched forward pass
         var shape = normed.Shape;
         var batch = shape[0];
         var numPatches = shape[1];
         var patchDim = _inputChannels * _patchSize * _patchSize;
 
+        // Reshape [batch, numPatches, hiddenSize] -> [batch*numPatches, hiddenSize]
+        var flatNormed = new Tensor<T>(new[] { batch * numPatches, _hiddenSize });
+        normed.AsSpan().CopyTo(flatNormed.AsWritableSpan());
+
+        // Single batched forward pass
+        var projected = _outputProj.Forward(flatNormed);
+
+        // Reshape back to [batch, numPatches, patchDim]
         var output = new Tensor<T>(new[] { batch, numPatches, patchDim });
-        var outputSpan = output.AsWritableSpan();
-        var normedSpan = normed.AsSpan();
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int p = 0; p < numPatches; p++)
-            {
-                // Extract hidden vector
-                var hiddenVector = new Tensor<T>(new[] { 1, _hiddenSize });
-                var hvSpan = hiddenVector.AsWritableSpan();
-
-                for (int i = 0; i < _hiddenSize; i++)
-                {
-                    hvSpan[i] = normedSpan[b * numPatches * _hiddenSize + p * _hiddenSize + i];
-                }
-
-                // Project
-                var projected = _outputProj.Forward(hiddenVector);
-                var projSpan = projected.AsSpan();
-
-                // Copy to output
-                for (int i = 0; i < patchDim; i++)
-                {
-                    outputSpan[b * numPatches * patchDim + p * patchDim + i] = projSpan[i];
-                }
-            }
-        }
+        projected.AsSpan().CopyTo(output.AsWritableSpan());
 
         return output;
     }
