@@ -143,6 +143,115 @@ public class FedKDCompressor<T> : Infrastructure.FederatedLearningComponentBase<
         return exps;
     }
 
+    /// <summary>
+    /// Performs one server-side distillation step: updates the student model parameters
+    /// to match the aggregated ensemble soft labels via gradient descent on the KD loss.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> After collecting logits from all clients, the server has
+    /// "soft labels" — probability distributions that capture the collective knowledge of all
+    /// client models. The server then trains its own model to match these soft labels using
+    /// gradient descent. This is how the global model learns without ever seeing the raw data.</para>
+    /// </remarks>
+    /// <param name="studentParams">Current student model parameters (will be updated).</param>
+    /// <param name="aggregatedSoftLabels">Soft labels from AggregateLogits.</param>
+    /// <param name="studentLogitsFn">Function that computes student logits from parameters and sample index.</param>
+    /// <param name="learningRate">Server-side learning rate. Default: 0.01.</param>
+    /// <param name="steps">Number of gradient descent steps. Default: 10.</param>
+    /// <returns>Updated student parameters and the final average KD loss.</returns>
+    public (T[] UpdatedParams, double FinalLoss) ServerDistillationStep(
+        T[] studentParams,
+        T[][] aggregatedSoftLabels,
+        Func<T[], int, T[]> studentLogitsFn,
+        double learningRate = 0.01,
+        int steps = 10)
+    {
+        var currentParams = (T[])studentParams.Clone();
+        double lastLoss = 0;
+
+        for (int step = 0; step < steps; step++)
+        {
+            var totalGrad = new double[currentParams.Length];
+            double totalLoss = 0;
+
+            for (int s = 0; s < aggregatedSoftLabels.Length; s++)
+            {
+                var studentLogits = studentLogitsFn(currentParams, s);
+                var loss = ComputeKDLoss(studentLogits, aggregatedSoftLabels[s]);
+                totalLoss += NumOps.ToDouble(loss);
+
+                // Approximate gradient via finite differences on each parameter.
+                // In a real system, this would use backpropagation.
+                double epsilon = 1e-5;
+                int gradSamples = Math.Min(currentParams.Length, 50); // Subsample for efficiency.
+                var rng = new Random(step * aggregatedSoftLabels.Length + s);
+
+                for (int g = 0; g < gradSamples; g++)
+                {
+                    int idx = rng.Next(currentParams.Length);
+                    var saved = currentParams[idx];
+
+                    currentParams[idx] = NumOps.Add(saved, NumOps.FromDouble(epsilon));
+                    var lossPlus = NumOps.ToDouble(ComputeKDLoss(studentLogitsFn(currentParams, s), aggregatedSoftLabels[s]));
+
+                    currentParams[idx] = saved;
+                    totalGrad[idx] += (lossPlus - NumOps.ToDouble(loss)) / epsilon;
+                }
+            }
+
+            // Apply gradient descent.
+            double invSamples = 1.0 / aggregatedSoftLabels.Length;
+            for (int i = 0; i < currentParams.Length; i++)
+            {
+                double grad = totalGrad[i] * invSamples;
+                currentParams[i] = NumOps.Subtract(currentParams[i], NumOps.FromDouble(learningRate * grad));
+            }
+
+            lastLoss = totalLoss / aggregatedSoftLabels.Length;
+        }
+
+        return (currentParams, lastLoss);
+    }
+
+    /// <summary>
+    /// Handles heterogeneous client architectures by padding/truncating logits to a common dimension.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> When clients have different model architectures, they may produce
+    /// different numbers of output classes. This method normalizes all client logits to the same
+    /// dimension by padding smaller outputs with zeros or truncating larger ones.</para>
+    /// </remarks>
+    /// <param name="clientLogits">Raw logits from heterogeneous clients (may have different class counts).</param>
+    /// <param name="targetClasses">Target number of output classes for aggregation.</param>
+    /// <returns>Normalized logits with uniform dimensions.</returns>
+    public Dictionary<int, T[][]> NormalizeHeterogeneousLogits(
+        Dictionary<int, T[][]> clientLogits,
+        int targetClasses)
+    {
+        var normalized = new Dictionary<int, T[][]>();
+
+        foreach (var (clientId, logits) in clientLogits)
+        {
+            var clientNorm = new T[logits.Length][];
+            for (int s = 0; s < logits.Length; s++)
+            {
+                var sample = new T[targetClasses];
+                int copyLen = Math.Min(logits[s].Length, targetClasses);
+                for (int c = 0; c < copyLen; c++)
+                {
+                    sample[c] = logits[s][c];
+                }
+
+                // Remaining positions are zero (default).
+                clientNorm[s] = sample;
+            }
+
+            normalized[clientId] = clientNorm;
+        }
+
+        return normalized;
+    }
+
     /// <summary>Gets the KD temperature.</summary>
     public double Temperature => _temperature;
 
