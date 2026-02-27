@@ -40,6 +40,8 @@ public class OpenFedLLMPipeline<T> : Infrastructure.FederatedLearningComponentBa
 {
     private readonly OpenFedLLMOptions _options;
     private FedLLMStage _currentStage;
+    private int _currentRound;
+    private Dictionary<string, T[]>? _lastCheckpoint;
 
     /// <summary>
     /// Creates a new OpenFedLLM pipeline.
@@ -49,6 +51,7 @@ public class OpenFedLLMPipeline<T> : Infrastructure.FederatedLearningComponentBa
     {
         _options = options ?? new OpenFedLLMOptions();
         _currentStage = FedLLMStage.InstructionTuning;
+        _currentRound = 0;
     }
 
     /// <summary>
@@ -57,7 +60,17 @@ public class OpenFedLLMPipeline<T> : Infrastructure.FederatedLearningComponentBa
     public FedLLMStage CurrentStage => _currentStage;
 
     /// <summary>
-    /// Advances to the next pipeline stage.
+    /// Gets the current round number within the current stage.
+    /// </summary>
+    public int CurrentRound => _currentRound;
+
+    /// <summary>
+    /// Gets the last checkpointed model parameters, or null if no checkpoint exists.
+    /// </summary>
+    public Dictionary<string, T[]>? LastCheckpoint => _lastCheckpoint;
+
+    /// <summary>
+    /// Advances to the next pipeline stage, resetting the round counter.
     /// </summary>
     /// <returns>The new stage after advancement.</returns>
     public FedLLMStage AdvanceStage()
@@ -70,25 +83,72 @@ public class OpenFedLLMPipeline<T> : Infrastructure.FederatedLearningComponentBa
             _ => FedLLMStage.InstructionTuning
         };
 
+        _currentRound = 0;
         return _currentStage;
     }
 
     /// <summary>
-    /// Aggregates instruction-tuned adapter parameters from clients.
+    /// Checks whether the current stage has completed its allocated rounds.
     /// </summary>
+    /// <returns>True if the current stage should advance.</returns>
+    public bool IsStageComplete()
+    {
+        return _currentStage switch
+        {
+            FedLLMStage.InstructionTuning => _currentRound >= _options.InstructionTuningRounds,
+            FedLLMStage.ValueAlignment => _currentRound >= _options.AlignmentRounds,
+            FedLLMStage.Serving => true,
+            _ => false
+        };
+    }
+
+    /// <summary>
+    /// Saves a checkpoint of the current model parameters.
+    /// </summary>
+    /// <param name="modelParams">The model parameters to checkpoint.</param>
+    public void SaveCheckpoint(Dictionary<string, T[]> modelParams)
+    {
+        _lastCheckpoint = new Dictionary<string, T[]>(modelParams.Count);
+        foreach (var (key, value) in modelParams)
+        {
+            _lastCheckpoint[key] = (T[])value.Clone();
+        }
+    }
+
+    /// <summary>
+    /// Aggregates instruction-tuned adapter parameters from clients.
+    /// Only aggregates LoRA/adapter layers (keys containing "lora" or "adapter"), keeping base model frozen.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> During instruction tuning, only the small adapter layers
+    /// (LoRA matrices) are trained and communicated. The base model weights are frozen.
+    /// This method filters for adapter-related parameter keys and only aggregates those,
+    /// then increments the round counter.</para>
+    /// </remarks>
     /// <param name="clientAdapters">Client adapter parameter dictionaries.</param>
     /// <param name="clientWeights">Per-client weights (proportional to instruction count).</param>
-    /// <returns>Aggregated adapter parameters.</returns>
+    /// <returns>Aggregated adapter parameters (adapter keys only).</returns>
     public Dictionary<string, T[]> AggregateInstructionTuning(
         Dictionary<int, Dictionary<string, T[]>> clientAdapters,
         Dictionary<int, double> clientWeights)
     {
-        return AggregateWeightedDict(clientAdapters, clientWeights);
+        // For instruction tuning, filter to adapter-only keys for bandwidth efficiency.
+        var filtered = FilterAdapterKeys(clientAdapters);
+        var result = AggregateWeightedDict(filtered, clientWeights);
+        _currentRound++;
+        return result;
     }
 
     /// <summary>
-    /// Aggregates alignment-stage model parameters.
+    /// Aggregates alignment-stage model parameters, using either DPO or RLHF aggregation
+    /// based on the pipeline configuration.
     /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> During value alignment, the model learns to prefer helpful
+    /// responses over harmful ones. Unlike instruction tuning which only updates adapters,
+    /// alignment may update additional layers (e.g., the value head for RLHF). The aggregation
+    /// strategy depends on whether DPO or RLHF is being used.</para>
+    /// </remarks>
     /// <param name="clientModels">Client model parameter dictionaries after alignment.</param>
     /// <param name="clientWeights">Per-client weights.</param>
     /// <returns>Aggregated model parameters.</returns>
@@ -96,7 +156,61 @@ public class OpenFedLLMPipeline<T> : Infrastructure.FederatedLearningComponentBa
         Dictionary<int, Dictionary<string, T[]>> clientModels,
         Dictionary<int, double> clientWeights)
     {
-        return AggregateWeightedDict(clientModels, clientWeights);
+        var result = AggregateWeightedDict(clientModels, clientWeights);
+        _currentRound++;
+        return result;
+    }
+
+    /// <summary>
+    /// Runs one round of the pipeline, dispatching to the appropriate stage-specific aggregation.
+    /// </summary>
+    /// <param name="clientModels">Client model parameter dictionaries.</param>
+    /// <param name="clientWeights">Per-client weights.</param>
+    /// <returns>Aggregated parameters and whether the stage is now complete.</returns>
+    public (Dictionary<string, T[]> AggregatedParams, bool StageComplete) RunRound(
+        Dictionary<int, Dictionary<string, T[]>> clientModels,
+        Dictionary<int, double> clientWeights)
+    {
+        var aggregated = _currentStage switch
+        {
+            FedLLMStage.InstructionTuning => AggregateInstructionTuning(clientModels, clientWeights),
+            FedLLMStage.ValueAlignment => AggregateAlignment(clientModels, clientWeights),
+            FedLLMStage.Serving => AggregateWeightedDict(clientModels, clientWeights),
+            _ => AggregateWeightedDict(clientModels, clientWeights)
+        };
+
+        // Auto-checkpoint at stage boundaries.
+        if (IsStageComplete())
+        {
+            SaveCheckpoint(aggregated);
+        }
+
+        return (aggregated, IsStageComplete());
+    }
+
+    private static Dictionary<int, Dictionary<string, T[]>> FilterAdapterKeys(
+        Dictionary<int, Dictionary<string, T[]>> clientModels)
+    {
+        var filtered = new Dictionary<int, Dictionary<string, T[]>>();
+        foreach (var (clientId, model) in clientModels)
+        {
+            var adapterOnly = new Dictionary<string, T[]>();
+            foreach (var (key, value) in model)
+            {
+                // Include adapter, lora, or bias-only keys (standard PEFT naming).
+                if (key.Contains("lora", StringComparison.OrdinalIgnoreCase) ||
+                    key.Contains("adapter", StringComparison.OrdinalIgnoreCase) ||
+                    key.Contains("bias", StringComparison.OrdinalIgnoreCase))
+                {
+                    adapterOnly[key] = value;
+                }
+            }
+
+            // If no adapter keys found, include everything (user may not follow naming convention).
+            filtered[clientId] = adapterOnly.Count > 0 ? adapterOnly : model;
+        }
+
+        return filtered;
     }
 
     private Dictionary<string, T[]> AggregateWeightedDict(

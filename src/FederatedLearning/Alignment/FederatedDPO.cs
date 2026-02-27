@@ -119,6 +119,107 @@ public class FederatedDPO<T> : Infrastructure.FederatedLearningComponentBase<T>
         return aggregated;
     }
 
+    /// <summary>
+    /// Computes per-example DPO gradients (as implicit reward margins) for parameter updates.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> The DPO gradient for each preference pair depends on how
+    /// "surprised" the model is by the correct preference ordering. If the model already
+    /// strongly prefers the chosen response, the gradient is small (sigmoid is near 1). If it
+    /// incorrectly prefers the rejected response, the gradient is large. This returns the
+    /// per-example gradient weights that should multiply the log-prob gradients during backprop.</para>
+    /// </remarks>
+    /// <param name="policyChosenLogProbs">Log probs of chosen responses under current policy.</param>
+    /// <param name="policyRejectedLogProbs">Log probs of rejected responses under current policy.</param>
+    /// <param name="referenceChosenLogProbs">Log probs of chosen responses under reference model.</param>
+    /// <param name="referenceRejectedLogProbs">Log probs of rejected responses under reference model.</param>
+    /// <returns>Per-example gradient weights (negative sigmoid values for the loss gradient).</returns>
+    public double[] ComputeDPOGradientWeights(
+        double[] policyChosenLogProbs,
+        double[] policyRejectedLogProbs,
+        double[] referenceChosenLogProbs,
+        double[] referenceRejectedLogProbs)
+    {
+        int batchSize = policyChosenLogProbs.Length;
+        var weights = new double[batchSize];
+
+        for (int i = 0; i < batchSize; i++)
+        {
+            double chosenReward = policyChosenLogProbs[i] - referenceChosenLogProbs[i];
+            double rejectedReward = policyRejectedLogProbs[i] - referenceRejectedLogProbs[i];
+            double logit = _options.Beta * (chosenReward - rejectedReward);
+
+            // Gradient of DPO loss = -beta * sigmoid(-logit)
+            // sigmoid(-x) = 1 / (1 + exp(x)) computed stably
+            double sigmoidNeg = logit >= 0
+                ? Math.Exp(-logit) / (1 + Math.Exp(-logit))
+                : 1.0 / (1 + Math.Exp(logit));
+
+            weights[i] = -_options.Beta * sigmoidNeg;
+        }
+
+        return weights;
+    }
+
+    /// <summary>
+    /// Computes the implicit reward margin for each preference pair. Positive means the model
+    /// correctly prefers the chosen response.
+    /// </summary>
+    /// <param name="policyChosenLogProbs">Log probs of chosen responses under current policy.</param>
+    /// <param name="policyRejectedLogProbs">Log probs of rejected responses under current policy.</param>
+    /// <param name="referenceChosenLogProbs">Log probs of chosen responses under reference model.</param>
+    /// <param name="referenceRejectedLogProbs">Log probs of rejected responses under reference model.</param>
+    /// <returns>Per-example reward margins.</returns>
+    public double[] ComputeRewardMargins(
+        double[] policyChosenLogProbs,
+        double[] policyRejectedLogProbs,
+        double[] referenceChosenLogProbs,
+        double[] referenceRejectedLogProbs)
+    {
+        int batchSize = policyChosenLogProbs.Length;
+        var margins = new double[batchSize];
+
+        for (int i = 0; i < batchSize; i++)
+        {
+            double chosenReward = _options.Beta * (policyChosenLogProbs[i] - referenceChosenLogProbs[i]);
+            double rejectedReward = _options.Beta * (policyRejectedLogProbs[i] - referenceRejectedLogProbs[i]);
+            margins[i] = chosenReward - rejectedReward;
+        }
+
+        return margins;
+    }
+
+    /// <summary>
+    /// Computes the accuracy of the model's implicit preference on a batch.
+    /// Returns the fraction of pairs where the model assigns higher reward to the chosen response.
+    /// </summary>
+    /// <param name="policyChosenLogProbs">Log probs of chosen responses under current policy.</param>
+    /// <param name="policyRejectedLogProbs">Log probs of rejected responses under current policy.</param>
+    /// <param name="referenceChosenLogProbs">Log probs of chosen responses under reference model.</param>
+    /// <param name="referenceRejectedLogProbs">Log probs of rejected responses under reference model.</param>
+    /// <returns>Preference accuracy in [0, 1].</returns>
+    public double ComputePreferenceAccuracy(
+        double[] policyChosenLogProbs,
+        double[] policyRejectedLogProbs,
+        double[] referenceChosenLogProbs,
+        double[] referenceRejectedLogProbs)
+    {
+        var margins = ComputeRewardMargins(
+            policyChosenLogProbs, policyRejectedLogProbs,
+            referenceChosenLogProbs, referenceRejectedLogProbs);
+
+        int correct = 0;
+        for (int i = 0; i < margins.Length; i++)
+        {
+            if (margins[i] > 0)
+            {
+                correct++;
+            }
+        }
+
+        return margins.Length > 0 ? (double)correct / margins.Length : 0;
+    }
+
     /// <summary>Gets the DPO configuration options.</summary>
     public FederatedDPOOptions Options => _options;
 }

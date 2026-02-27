@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+
 namespace AiDotNet.FederatedLearning.PSI;
 
 /// <summary>
@@ -15,6 +17,7 @@ namespace AiDotNet.FederatedLearning.PSI;
 /// <item>Cardinality estimation via HyperLogLog sketches</item>
 /// <item>Frequency estimation via count-min sketches</item>
 /// <item>Threshold queries via additive secret-shared count-min sketches</item>
+/// <item>Intersection cardinality estimation via inclusion-exclusion</item>
 /// </list>
 ///
 /// <para>Reference: Optimized Private Set Analytics for Federated Learning (2025).</para>
@@ -32,15 +35,21 @@ public class OptimizedPrivateSetAnalytics<T> : Infrastructure.FederatedLearningC
     /// <summary>
     /// Creates a new OPSA instance.
     /// </summary>
-    /// <param name="sketchWidth">Width of count-min sketch. Default: 1024.</param>
+    /// <param name="sketchWidth">Width of count-min sketch. Must be a power of 2. Default: 1024.</param>
     /// <param name="sketchDepth">Depth (number of hash functions) of count-min sketch. Default: 5.</param>
     /// <param name="hllPrecision">HyperLogLog precision (p). Uses 2^p registers. Default: 14 (~1.6% error).</param>
-    /// <param name="seed">Random seed. Default: 42.</param>
+    /// <param name="seed">Random seed for deterministic hashing. Default: 42.</param>
     public OptimizedPrivateSetAnalytics(int sketchWidth = 1024, int sketchDepth = 5, int hllPrecision = 14, int seed = 42)
     {
         if (sketchWidth <= 0)
         {
             throw new ArgumentOutOfRangeException(nameof(sketchWidth), "Sketch width must be positive.");
+        }
+
+        if ((sketchWidth & (sketchWidth - 1)) != 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(sketchWidth),
+                $"Sketch width must be a power of 2 (got {sketchWidth}). ComputeBucketIndex uses bitwise AND for modulo.");
         }
 
         if (sketchDepth <= 0)
@@ -258,12 +267,60 @@ public class OptimizedPrivateSetAnalytics<T> : Infrastructure.FederatedLearningC
         return EstimateCardinality(merged);
     }
 
+    /// <summary>
+    /// Estimates intersection cardinality of two parties using inclusion-exclusion:
+    /// |A ∩ B| = |A| + |B| - |A ∪ B|.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> If you know how many unique items each party has and how
+    /// many unique items exist in total (union), you can estimate how many items they share
+    /// (intersection) using the formula: shared = partyA + partyB - total. This avoids
+    /// revealing which specific items are shared.</para>
+    /// </remarks>
+    /// <param name="registersA">HLL registers from party A.</param>
+    /// <param name="registersB">HLL registers from party B.</param>
+    /// <returns>Estimated intersection cardinality (floored at 0 to handle estimation noise).</returns>
+    public double EstimateIntersectionCardinality(byte[] registersA, byte[] registersB)
+    {
+        double cardA = EstimateCardinality(registersA);
+        double cardB = EstimateCardinality(registersB);
+        double cardUnion = EstimateUnionCardinality(new[] { registersA, registersB });
+
+        // Inclusion-exclusion: |A ∩ B| = |A| + |B| - |A ∪ B|
+        // Floor at 0 because estimation noise can make this slightly negative.
+        return Math.Max(0, cardA + cardB - cardUnion);
+    }
+
+    /// <summary>
+    /// Estimates the Jaccard similarity between two parties: |A ∩ B| / |A ∪ B|.
+    /// </summary>
+    /// <param name="registersA">HLL registers from party A.</param>
+    /// <param name="registersB">HLL registers from party B.</param>
+    /// <returns>Estimated Jaccard similarity in [0, 1].</returns>
+    public double EstimateJaccardSimilarity(byte[] registersA, byte[] registersB)
+    {
+        double cardUnion = EstimateUnionCardinality(new[] { registersA, registersB });
+        if (cardUnion < 1.0)
+        {
+            return 0;
+        }
+
+        double cardIntersection = EstimateIntersectionCardinality(registersA, registersB);
+        return cardIntersection / cardUnion;
+    }
+
     // ---- Threshold Queries (Additive Secret-Shared Count-Min Sketch) ----
 
     /// <summary>
     /// Creates additive secret shares of a count-min sketch for threshold queries.
     /// Each party's sketch is split into numShares random shares that sum to the original.
     /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Secret sharing splits a value into random pieces so that
+    /// no single piece reveals anything about the original. Only when all pieces are combined
+    /// can you recover the true sketch. This uses a cryptographic random number generator
+    /// for security — predictable randomness would compromise the privacy guarantee.</para>
+    /// </remarks>
     /// <param name="sketch">The original sketch to share.</param>
     /// <param name="numShares">Number of shares to create. Default: 2.</param>
     /// <returns>List of share sketches that additively reconstruct the original.</returns>
@@ -274,9 +331,14 @@ public class OptimizedPrivateSetAnalytics<T> : Infrastructure.FederatedLearningC
             throw new ArgumentOutOfRangeException(nameof(numShares), "Must create at least 2 shares.");
         }
 
-        var rng = new Random(_seed + _shareCounter);
         _shareCounter++;
         var shares = new List<int[,]>();
+
+        // Use cryptographic RNG — secret shares require unpredictable randomness.
+        // A predictable PRNG (System.Random) would allow an adversary who knows the seed
+        // to recover the original sketch from a single share.
+        using var csprng = RandomNumberGenerator.Create();
+        var buffer = new byte[4];
 
         // Create (numShares - 1) random shares.
         for (int s = 0; s < numShares - 1; s++)
@@ -286,7 +348,8 @@ public class OptimizedPrivateSetAnalytics<T> : Infrastructure.FederatedLearningC
             {
                 for (int w = 0; w < _sketchWidth; w++)
                 {
-                    share[d, w] = rng.Next(-1000, 1001); // random mask
+                    csprng.GetBytes(buffer);
+                    share[d, w] = BitConverter.ToInt32(buffer, 0);
                 }
             }
 
@@ -369,7 +432,8 @@ public class OptimizedPrivateSetAnalytics<T> : Infrastructure.FederatedLearningC
 
     private static uint MurmurHash3(string key)
     {
-        // MurmurHash3 32-bit for HyperLogLog.
+        // MurmurHash3 32-bit (x86) for HyperLogLog.
+        // Processes 4-byte (2-char) blocks per the reference implementation for correct distribution.
         unchecked
         {
             const uint c1 = 0xcc9e2d51;
@@ -378,10 +442,12 @@ public class OptimizedPrivateSetAnalytics<T> : Infrastructure.FederatedLearningC
 
             uint h1 = seed;
             int len = key.Length;
+            int nblocks = len / 2; // 2 chars = 4 bytes per block
 
-            for (int i = 0; i < len; i++)
+            // Body: process 4-byte blocks (2 chars each).
+            for (int i = 0; i < nblocks; i++)
             {
-                uint k1 = key[i];
+                uint k1 = (uint)key[i * 2] | ((uint)key[i * 2 + 1] << 16);
                 k1 *= c1;
                 k1 = RotateLeft(k1, 15);
                 k1 *= c2;
@@ -391,7 +457,18 @@ public class OptimizedPrivateSetAnalytics<T> : Infrastructure.FederatedLearningC
                 h1 = h1 * 5 + 0xe6546b64;
             }
 
-            h1 ^= (uint)len;
+            // Tail: remaining char (if odd length).
+            if (len % 2 != 0)
+            {
+                uint k1 = key[len - 1];
+                k1 *= c1;
+                k1 = RotateLeft(k1, 15);
+                k1 *= c2;
+                h1 ^= k1;
+            }
+
+            // Finalization: mix with byte length (chars * 2).
+            h1 ^= (uint)(len * 2);
             h1 ^= h1 >> 16;
             h1 *= 0x85ebca6b;
             h1 ^= h1 >> 13;
