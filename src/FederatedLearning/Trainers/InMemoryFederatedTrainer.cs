@@ -162,9 +162,9 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
 
         var compressionOptions = ResolveCompressionOptions(flOptions);
         bool useCompression = compressionOptions != null &&
-                              !string.Equals(compressionOptions.Strategy?.Trim() ?? "None", "None", StringComparison.OrdinalIgnoreCase);
+                              compressionOptions.Strategy != FederatedCompressionStrategy.None;
         metadata.CompressionEnabled = useCompression;
-        metadata.CompressionStrategyUsed = useCompression ? (compressionOptions!.Strategy?.Trim() ?? "None") : "None";
+        metadata.CompressionStrategyUsed = useCompression ? compressionOptions!.Strategy.ToString() : "None";
         Dictionary<int, Vector<T>>? compressionResiduals = useCompression && compressionOptions!.UseErrorFeedback
             ? new Dictionary<int, Vector<T>>()
             : null;
@@ -186,20 +186,20 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
         var personalizationOptions = ResolvePersonalizationOptions(flOptions);
         bool usePersonalization = personalizationOptions != null &&
                                   personalizationOptions.Enabled &&
-                                  !string.Equals(personalizationOptions.Strategy?.Trim() ?? "None", "None", StringComparison.OrdinalIgnoreCase);
+                                  personalizationOptions.Strategy != FederatedPersonalizationStrategy.None;
 
         metadata.PersonalizationEnabled = usePersonalization;
-        metadata.PersonalizationStrategyUsed = usePersonalization ? (personalizationOptions!.Strategy?.Trim() ?? "None") : "None";
+        metadata.PersonalizationStrategyUsed = usePersonalization ? personalizationOptions!.Strategy.ToString() : "None";
         metadata.PersonalizedParameterFraction = usePersonalization ? personalizationOptions!.PersonalizedParameterFraction : 0.0;
         metadata.PersonalizationLocalAdaptationEpochs = usePersonalization ? Math.Max(0, personalizationOptions!.LocalAdaptationEpochs) : 0;
 
         var metaLearningOptions = flOptions?.MetaLearning;
         bool useMetaLearning = metaLearningOptions != null &&
                                metaLearningOptions.Enabled &&
-                               !string.Equals(metaLearningOptions.Strategy?.Trim() ?? "None", "None", StringComparison.OrdinalIgnoreCase);
+                               metaLearningOptions.Strategy != FederatedMetaLearningStrategy.None;
 
         metadata.MetaLearningEnabled = useMetaLearning;
-        metadata.MetaLearningStrategyUsed = useMetaLearning ? (metaLearningOptions!.Strategy?.Trim() ?? "None") : "None";
+        metadata.MetaLearningStrategyUsed = useMetaLearning ? metaLearningOptions!.Strategy.ToString() : "None";
         metadata.MetaLearningRateUsed = useMetaLearning ? metaLearningOptions!.MetaLearningRate : 0.0;
         metadata.MetaLearningInnerEpochsUsed = useMetaLearning ? (metaLearningOptions!.InnerEpochs > 0 ? metaLearningOptions.InnerEpochs : localEpochs) : 0;
 
@@ -260,7 +260,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
             return metadata;
         }
 
-        var personalizationStrategy = metadata.PersonalizationStrategyUsed;
+        var personalizationStrategy = usePersonalization ? personalizationOptions!.Strategy : FederatedPersonalizationStrategy.None;
         bool isHeadSplitPersonalization = usePersonalization && IsHeadSplitPersonalization(personalizationStrategy);
         bool isClusteredPersonalization = usePersonalization && IsClusteredPersonalization(personalizationStrategy);
         var personalizedIndices = (isHeadSplitPersonalization || isClusteredPersonalization)
@@ -613,7 +613,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
         int bufferedUpdateKey = 0;
 
         bool useCompression = compressionOptions != null &&
-                              !string.Equals(compressionOptions.Strategy?.Trim() ?? "None", "None", StringComparison.OrdinalIgnoreCase);
+                              compressionOptions.Strategy != FederatedCompressionStrategy.None;
         bool useHomomorphicEncryption = heProvider != null &&
                                         heOptions != null &&
                                         heOptions.Enabled &&
@@ -1200,7 +1200,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
         {
             return new FederatedCompressionOptions
             {
-                Strategy = "TopK",
+                Strategy = FederatedCompressionStrategy.TopK,
                 Ratio = options.CompressionRatio,
                 UseErrorFeedback = true
             };
@@ -1226,7 +1226,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
             return new FederatedPersonalizationOptions
             {
                 Enabled = true,
-                Strategy = "FedPer",
+                Strategy = FederatedPersonalizationStrategy.FedPer,
                 PersonalizedParameterFraction = options.PersonalizationLayerFraction,
                 LocalAdaptationEpochs = 0
             };
@@ -1235,19 +1235,18 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
         return null;
     }
 
-    private static bool IsHeadSplitPersonalization(string strategy) =>
-        string.Equals(strategy, "FedPer", StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(strategy, "FedRep", StringComparison.OrdinalIgnoreCase);
+    private static bool IsHeadSplitPersonalization(FederatedPersonalizationStrategy strategy) =>
+        strategy == FederatedPersonalizationStrategy.FedPer ||
+        strategy == FederatedPersonalizationStrategy.FedRep;
 
-    private static bool IsClusteredPersonalization(string strategy) =>
-        string.Equals(strategy, "Clustered", StringComparison.OrdinalIgnoreCase);
+    private static bool IsClusteredPersonalization(FederatedPersonalizationStrategy strategy) =>
+        strategy == FederatedPersonalizationStrategy.Clustered;
 
-    private static bool IsDittoPersonalization(string strategy) =>
-        string.Equals(strategy, "Ditto", StringComparison.OrdinalIgnoreCase);
+    private static bool IsDittoPersonalization(FederatedPersonalizationStrategy strategy) =>
+        strategy == FederatedPersonalizationStrategy.Ditto;
 
-    private static bool IsPFedMePersonalization(string strategy) =>
-        string.Equals(strategy, "pFedMe", StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(strategy, "PFedMe", StringComparison.OrdinalIgnoreCase);
+    private static bool IsPFedMePersonalization(FederatedPersonalizationStrategy strategy) =>
+        strategy == FederatedPersonalizationStrategy.PFedMe;
 
     private static int[] ResolvePersonalizedIndices(double fraction, int parameterCount)
     {
@@ -1281,7 +1280,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
     }
 
     private IFullModel<T, TInput, TOutput> CreatePersonalizedStartModel(
-        string personalizationStrategy,
+        FederatedPersonalizationStrategy personalizationStrategy,
         FederatedPersonalizationOptions options,
         int clientId,
         IFullModel<T, TInput, TOutput> globalModel,
@@ -1345,7 +1344,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
     }
 
     private Vector<T> ApplyPersonalizationAfterLocalTraining(
-        string personalizationStrategy,
+        FederatedPersonalizationStrategy personalizationStrategy,
         FederatedPersonalizationOptions options,
         int clientId,
         Vector<T> globalBaseline,
@@ -1398,7 +1397,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
     }
 
     private void ApplyPostAggregationPersonalization(
-        string personalizationStrategy,
+        FederatedPersonalizationStrategy personalizationStrategy,
         FederatedPersonalizationOptions options,
         Dictionary<int, FederatedClientDataset<TInput, TOutput>> clientData,
         List<int> selectedClientIds,
@@ -1797,16 +1796,16 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
 
     private Vector<T> CompressDelta(Vector<T> delta, FederatedCompressionOptions options, Random random, out double uploadRatio)
     {
-        string strategy = options.Strategy?.Trim() ?? "None";
+        var strategy = options.Strategy;
         int n = delta.Length;
 
-        if (n == 0 || string.Equals(strategy, "None", StringComparison.OrdinalIgnoreCase))
+        if (n == 0 || strategy == FederatedCompressionStrategy.None)
         {
             uploadRatio = 1.0;
             return delta;
         }
 
-        if (string.Equals(strategy, "TopK", StringComparison.OrdinalIgnoreCase))
+        if (strategy == FederatedCompressionStrategy.TopK)
         {
             double ratio = Math.Max(0.0, Math.Min(1.0, options.Ratio));
             int k = Math.Max(1, (int)Math.Round(ratio * n));
@@ -1833,7 +1832,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
             return result;
         }
 
-        if (string.Equals(strategy, "RandomK", StringComparison.OrdinalIgnoreCase))
+        if (strategy == FederatedCompressionStrategy.RandomK)
         {
             double ratio = Math.Max(0.0, Math.Min(1.0, options.Ratio));
             int k = Math.Max(1, (int)Math.Round(ratio * n));
@@ -1862,7 +1861,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
             return result;
         }
 
-        if (string.Equals(strategy, "Threshold", StringComparison.OrdinalIgnoreCase))
+        if (strategy == FederatedCompressionStrategy.Threshold)
         {
             double threshold = Math.Abs(options.Threshold);
             int kept = 0;
@@ -1881,8 +1880,8 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
             return result;
         }
 
-        if (string.Equals(strategy, "UniformQuantization", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(strategy, "StochasticQuantization", StringComparison.OrdinalIgnoreCase))
+        if (strategy == FederatedCompressionStrategy.UniformQuantization ||
+            strategy == FederatedCompressionStrategy.StochasticQuantization)
         {
             int bits = Math.Max(1, Math.Min(16, options.QuantizationBits));
             int levels = (1 << bits) - 1;
@@ -1908,7 +1907,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                 double qReal = (normalized + 1.0) * 0.5 * levels;
 
                 double q;
-                if (string.Equals(strategy, "StochasticQuantization", StringComparison.OrdinalIgnoreCase))
+                if (strategy == FederatedCompressionStrategy.StochasticQuantization)
                 {
                     double floor = Math.Floor(qReal);
                     double prob = qReal - floor;
@@ -1929,7 +1928,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
             return result;
         }
 
-        throw new InvalidOperationException($"Unknown compression strategy '{strategy}'. Supported values: None, TopK, RandomK, Threshold, UniformQuantization, StochasticQuantization.");
+        throw new InvalidOperationException($"Unknown compression strategy '{strategy}'. Supported values: {string.Join(", ", Enum.GetNames(typeof(FederatedCompressionStrategy)))}.");
     }
 
     private static double ComputeQuantizationRatio(int bits)

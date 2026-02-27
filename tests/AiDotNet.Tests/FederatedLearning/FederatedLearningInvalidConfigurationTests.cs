@@ -12,8 +12,8 @@ public class FederatedLearningInvalidConfigurationTests
     public async Task BuildAsync_WithPersonalizationAndMetaLearning_Throws()
     {
         var options = CreateBaseOptions();
-        options.Personalization = new FederatedPersonalizationOptions { Enabled = true, Strategy = "Ditto" };
-        options.MetaLearning = new FederatedMetaLearningOptions { Enabled = true, Strategy = "Reptile" };
+        options.Personalization = new FederatedPersonalizationOptions { Enabled = true, Strategy = FederatedPersonalizationStrategy.Ditto };
+        options.MetaLearning = new FederatedMetaLearningOptions { Enabled = true, Strategy = FederatedMetaLearningStrategy.Reptile };
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => BuildAsync(options));
         Assert.Contains("Personalization and federated meta-learning", ex.Message, StringComparison.OrdinalIgnoreCase);
@@ -117,15 +117,8 @@ public class FederatedLearningInvalidConfigurationTests
         Assert.Contains("Unknown client selection strategy", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
-    [Fact]
-    public async Task BuildAsync_WithUnknownCompressionStrategy_Throws()
-    {
-        var options = CreateBaseOptions();
-        options.Compression = new FederatedCompressionOptions { Strategy = "Bogus", Ratio = 0.1, UseErrorFeedback = false };
-
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => BuildAsync(options, useDeterministicDeltaOptimizer: true));
-        Assert.Contains("Unknown compression strategy", ex.Message, StringComparison.OrdinalIgnoreCase);
-    }
+    // Note: The unknown compression strategy test was removed because FederatedCompressionStrategy
+    // is now a proper enum, preventing invalid values at compile time.
 
     private static FederatedLearningOptions CreateBaseOptions()
     {

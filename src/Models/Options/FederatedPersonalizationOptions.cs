@@ -1,6 +1,28 @@
 namespace AiDotNet.Models.Options;
 
 /// <summary>
+/// Specifies the personalization strategy for federated learning.
+/// </summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> Each strategy determines how clients adapt the global model to their local data.</para>
+/// </remarks>
+public enum FederatedPersonalizationStrategy
+{
+    /// <summary>No personalization — all parameters are aggregated globally.</summary>
+    None,
+    /// <summary>FedPer — personalize the last (classification head) layers, share the body.</summary>
+    FedPer,
+    /// <summary>FedRep — learn shared representations with personalized heads; alternating optimization.</summary>
+    FedRep,
+    /// <summary>Ditto — train a regularized personalized model alongside the global model.</summary>
+    Ditto,
+    /// <summary>pFedMe — Moreau-envelope-based personalization with proximal local solver.</summary>
+    PFedMe,
+    /// <summary>Clustered — cluster clients by gradient similarity, aggregate within clusters.</summary>
+    Clustered
+}
+
+/// <summary>
 /// Configuration options for personalized federated learning (PFL).
 /// </summary>
 /// <remarks>
@@ -16,23 +38,15 @@ public sealed class FederatedPersonalizationOptions
     /// Gets or sets whether personalization is enabled.
     /// </summary>
     /// <remarks>
-    /// If true and <see cref="Strategy"/> is not "None", the trainer applies a personalization algorithm.
+    /// If true and <see cref="Strategy"/> is not <see cref="FederatedPersonalizationStrategy.None"/>,
+    /// the trainer applies a personalization algorithm.
     /// </remarks>
     public bool Enabled { get; set; } = false;
 
     /// <summary>
-    /// Gets or sets the personalization strategy name.
+    /// Gets or sets the personalization strategy.
     /// </summary>
-    /// <remarks>
-    /// Supported built-ins:
-    /// - "None"
-    /// - "FedPer"
-    /// - "FedRep"
-    /// - "Ditto"
-    /// - "pFedMe"
-    /// - "Clustered"
-    /// </remarks>
-    public string Strategy { get; set; } = "None";
+    public FederatedPersonalizationStrategy Strategy { get; set; } = FederatedPersonalizationStrategy.None;
 
     /// <summary>
     /// Gets or sets the fraction of parameters treated as "personalized" (not aggregated globally).

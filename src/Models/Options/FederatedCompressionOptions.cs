@@ -1,6 +1,31 @@
 namespace AiDotNet.Models.Options;
 
 /// <summary>
+/// Specifies the compression strategy for federated model updates.
+/// </summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> Each strategy determines how client updates are compressed before
+/// sending to the server, trading off accuracy for communication efficiency.</para>
+/// </remarks>
+public enum FederatedCompressionStrategy
+{
+    /// <summary>No compression — send full model updates.</summary>
+    None,
+    /// <summary>Top-K sparsification — send only the K largest gradient elements by magnitude.</summary>
+    TopK,
+    /// <summary>Random-K sparsification — send K randomly selected gradient elements.</summary>
+    RandomK,
+    /// <summary>Threshold sparsification — send only elements exceeding an absolute threshold.</summary>
+    Threshold,
+    /// <summary>Uniform quantization — deterministically reduce precision to fewer bits.</summary>
+    UniformQuantization,
+    /// <summary>Stochastic quantization — probabilistically round to fewer bits (unbiased).</summary>
+    StochasticQuantization,
+    /// <summary>Advanced — use the advanced compression options (PowerSGD, sketching, etc.).</summary>
+    Advanced
+}
+
+/// <summary>
 /// Configuration options for federated update compression (quantization, sparsification, and error feedback).
 /// </summary>
 /// <remarks>
@@ -10,18 +35,9 @@ namespace AiDotNet.Models.Options;
 public class FederatedCompressionOptions : ModelOptions
 {
     /// <summary>
-    /// Gets or sets the compression strategy name.
+    /// Gets or sets the compression strategy.
     /// </summary>
-    /// <remarks>
-    /// Supported built-ins:
-    /// - "None"
-    /// - "TopK"
-    /// - "RandomK"
-    /// - "Threshold"
-    /// - "UniformQuantization"
-    /// - "StochasticQuantization"
-    /// </remarks>
-    public string Strategy { get; set; } = "TopK";
+    public FederatedCompressionStrategy Strategy { get; set; } = FederatedCompressionStrategy.TopK;
 
     /// <summary>
     /// Gets or sets the compression ratio (0.0 to 1.0) for sparsification strategies.
