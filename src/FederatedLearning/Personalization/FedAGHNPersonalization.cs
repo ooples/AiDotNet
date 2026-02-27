@@ -54,6 +54,7 @@ public class FedAGHNPersonalization<T> : Infrastructure.FederatedLearningCompone
     /// <returns>Projected parameters in shared space.</returns>
     public T[] ProjectToShared(T[] localParams)
     {
+        Guard.NotNull(localParams);
         var projected = new T[_sharedDimension];
         int copyLen = Math.Min(localParams.Length, _sharedDimension);
         for (int i = 0; i < copyLen; i++)
@@ -77,6 +78,12 @@ public class FedAGHNPersonalization<T> : Infrastructure.FederatedLearningCompone
     /// <returns>Parameters in local space.</returns>
     public T[] ProjectToLocal(T[] sharedParams, int localDimension)
     {
+        Guard.NotNull(sharedParams);
+        if (localDimension < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(localDimension), "Must be at least 1.");
+        }
+
         var local = new T[localDimension];
         int copyLen = Math.Min(sharedParams.Length, localDimension);
         for (int i = 0; i < copyLen; i++)
@@ -105,6 +112,8 @@ public class FedAGHNPersonalization<T> : Infrastructure.FederatedLearningCompone
     /// <returns>Projected parameters in shared space.</returns>
     public T[] ProjectWithMatrix(T[] localParams, T[] projectionMatrix)
     {
+        Guard.NotNull(localParams);
+        Guard.NotNull(projectionMatrix);
         int localDim = localParams.Length;
         if (projectionMatrix.Length != _sharedDimension * localDim)
         {

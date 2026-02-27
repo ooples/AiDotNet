@@ -55,6 +55,7 @@ public class FedBABUPersonalization<T> : Infrastructure.FederatedLearningCompone
     /// <returns>Body-only parameter dictionary.</returns>
     public Dictionary<string, T[]> ExtractBody(Dictionary<string, T[]> fullParameters)
     {
+        Guard.NotNull(fullParameters);
         var layerNames = fullParameters.Keys.ToArray();
         int headStart = (int)(layerNames.Length * (1.0 - _headFraction));
 
@@ -77,6 +78,8 @@ public class FedBABUPersonalization<T> : Infrastructure.FederatedLearningCompone
         Dictionary<string, T[]> aggregatedBody,
         Dictionary<string, T[]> localHead)
     {
+        Guard.NotNull(aggregatedBody);
+        Guard.NotNull(localHead);
         var merged = new Dictionary<string, T[]>(aggregatedBody.Count + localHead.Count);
         foreach (var kvp in aggregatedBody)
         {

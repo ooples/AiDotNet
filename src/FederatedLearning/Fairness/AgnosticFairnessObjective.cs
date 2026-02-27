@@ -46,6 +46,7 @@ public class AgnosticFairnessObjective<T> : Infrastructure.FederatedLearningComp
     /// <returns>Fairness-adjusted aggregation weights.</returns>
     public Dictionary<int, double> ComputeWeights(Dictionary<int, double> clientLosses)
     {
+        Guard.NotNull(clientLosses);
         if (clientLosses.Count == 0)
         {
             throw new ArgumentException("Client losses cannot be empty.", nameof(clientLosses));
@@ -55,11 +56,15 @@ public class AgnosticFairnessObjective<T> : Infrastructure.FederatedLearningComp
         _lambdas ??= clientLosses.ToDictionary(kvp => kvp.Key, _ => 1.0 / clientLosses.Count);
 
         // Update lambdas: increase for clients with higher loss.
+        // Clamp the exponent to prevent overflow (exp(700) ~ double.MaxValue).
         foreach (var (clientId, loss) in clientLosses)
         {
+            double exponent = _lambdaLearningRate * loss;
+            exponent = Math.Max(-20, Math.Min(20, exponent)); // Prevent overflow.
+
             if (_lambdas.ContainsKey(clientId))
             {
-                _lambdas[clientId] *= Math.Exp(_lambdaLearningRate * loss);
+                _lambdas[clientId] *= Math.Exp(exponent);
             }
             else
             {
@@ -67,12 +72,21 @@ public class AgnosticFairnessObjective<T> : Infrastructure.FederatedLearningComp
             }
         }
 
-        // Project back to simplex (normalize).
-        double total = _lambdas.Values.Sum();
-        var weights = new Dictionary<int, double>();
-        foreach (var (clientId, lambda) in _lambdas)
+        // Project back to simplex (normalize), only for participating clients.
+        double total = 0;
+        foreach (var clientId in clientLosses.Keys)
         {
-            weights[clientId] = total > 0 ? lambda / total : 1.0 / _lambdas.Count;
+            if (_lambdas.TryGetValue(clientId, out var lambda))
+            {
+                total += lambda;
+            }
+        }
+
+        var weights = new Dictionary<int, double>(clientLosses.Count);
+        foreach (var clientId in clientLosses.Keys)
+        {
+            double lambda = _lambdas.GetValueOrDefault(clientId, 1.0);
+            weights[clientId] = total > 0 ? lambda / total : 1.0 / clientLosses.Count;
         }
 
         return weights;

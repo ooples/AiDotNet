@@ -51,6 +51,12 @@ public class PFedGatePersonalization<T> : Infrastructure.FederatedLearningCompon
     /// </summary>
     public void InitializeGates(Dictionary<string, T[]> modelStructure)
     {
+        Guard.NotNull(modelStructure);
+        if (modelStructure.Count == 0)
+        {
+            throw new ArgumentException("Model structure cannot be empty.", nameof(modelStructure));
+        }
+
         _gates = new Dictionary<string, double>(modelStructure.Count);
         foreach (var layerName in modelStructure.Keys)
         {
@@ -68,6 +74,8 @@ public class PFedGatePersonalization<T> : Infrastructure.FederatedLearningCompon
         Dictionary<string, T[]> globalParams,
         Dictionary<string, T[]> localParams)
     {
+        Guard.NotNull(globalParams);
+        Guard.NotNull(localParams);
         if (_gates == null)
         {
             InitializeGates(globalParams);
@@ -106,7 +114,7 @@ public class PFedGatePersonalization<T> : Infrastructure.FederatedLearningCompon
     {
         if (_gates == null)
         {
-            return;
+            throw new InvalidOperationException("Gates not initialized. Call InitializeGates first.");
         }
 
         if (_gates.TryGetValue(layerName, out var currentGate))

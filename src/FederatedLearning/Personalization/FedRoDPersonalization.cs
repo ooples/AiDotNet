@@ -52,6 +52,12 @@ public class FedRoDPersonalization<T> : Infrastructure.FederatedLearningComponen
     /// </summary>
     public Dictionary<string, T[]> ExtractSharedParameters(Dictionary<string, T[]> fullParameters)
     {
+        Guard.NotNull(fullParameters);
+        if (fullParameters.Count == 0)
+        {
+            return new Dictionary<string, T[]>();
+        }
+
         var layerNames = fullParameters.Keys.ToArray();
         int personalizedHeadCount = (int)(layerNames.Length * _headFraction);
         int sharedCount = layerNames.Length - personalizedHeadCount;
@@ -91,6 +97,14 @@ public class FedRoDPersonalization<T> : Infrastructure.FederatedLearningComponen
     /// <returns>Mixed prediction.</returns>
     public T[] CombinePredictions(T[] genericPrediction, T[] personalizedPrediction)
     {
+        Guard.NotNull(genericPrediction);
+        Guard.NotNull(personalizedPrediction);
+        if (genericPrediction.Length != personalizedPrediction.Length)
+        {
+            throw new ArgumentException(
+                $"Predictions must have equal length. Got generic={genericPrediction.Length}, personalized={personalizedPrediction.Length}.");
+        }
+
         var result = new T[genericPrediction.Length];
         var alpha = NumOps.FromDouble(_mixingAlpha);
         var oneMinusAlpha = NumOps.FromDouble(1.0 - _mixingAlpha);

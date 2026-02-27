@@ -30,7 +30,6 @@ public class OptimizedPrivateSetAnalytics<T> : Infrastructure.FederatedLearningC
     private readonly int _hllPrecision;
     private readonly int _hllRegisterCount;
     private readonly int _seed;
-    private int _shareCounter;
 
     /// <summary>
     /// Creates a new OPSA instance.
@@ -148,6 +147,7 @@ public class OptimizedPrivateSetAnalytics<T> : Infrastructure.FederatedLearningC
     /// <returns>HLL register array of length 2^precision.</returns>
     public byte[] CreateHLLRegisters(IEnumerable<string> items)
     {
+        Guard.NotNull(items);
         var registers = new byte[_hllRegisterCount];
 
         foreach (var item in items)
@@ -204,6 +204,12 @@ public class OptimizedPrivateSetAnalytics<T> : Infrastructure.FederatedLearningC
     /// <returns>Estimated cardinality.</returns>
     public double EstimateCardinality(byte[] registers)
     {
+        Guard.NotNull(registers);
+        if (registers.Length == 0)
+        {
+            return 0;
+        }
+
         int m = _hllRegisterCount;
 
         // Compute harmonic mean of 2^(-register[j]).
@@ -326,12 +332,12 @@ public class OptimizedPrivateSetAnalytics<T> : Infrastructure.FederatedLearningC
     /// <returns>List of share sketches that additively reconstruct the original.</returns>
     public List<int[,]> CreateSecretShares(int[,] sketch, int numShares = 2)
     {
+        Guard.NotNull(sketch);
         if (numShares < 2)
         {
             throw new ArgumentOutOfRangeException(nameof(numShares), "Must create at least 2 shares.");
         }
 
-        _shareCounter++;
         var shares = new List<int[,]>();
 
         // Use cryptographic RNG — secret shares require unpredictable randomness.
@@ -386,6 +392,8 @@ public class OptimizedPrivateSetAnalytics<T> : Infrastructure.FederatedLearningC
     /// <returns>Items meeting the threshold with their estimated frequencies.</returns>
     public Dictionary<string, int> ThresholdQuery(int[,] mergedSketch, IEnumerable<string> candidateItems, int threshold)
     {
+        Guard.NotNull(mergedSketch);
+        Guard.NotNull(candidateItems);
         if (threshold <= 0)
         {
             throw new ArgumentOutOfRangeException(nameof(threshold), "Threshold must be positive.");
