@@ -332,7 +332,7 @@ public class ClassificationMetricsDeepMathIntegrationTests
         double[] actuals = { 1, 0 };
 
         double result = metric.Compute(probs, actuals);
-        Assert.True(double.IsFinite(result), "Log loss should be finite due to epsilon clamping");
+        Assert.True((!double.IsNaN(result) && !double.IsInfinity(result)), "Log loss should be finite due to epsilon clamping");
         Assert.True(result > 0, "Log loss should be positive for wrong predictions");
     }
 

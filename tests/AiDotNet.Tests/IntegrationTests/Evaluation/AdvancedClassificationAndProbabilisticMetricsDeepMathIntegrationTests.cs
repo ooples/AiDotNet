@@ -786,7 +786,7 @@ public class AdvancedClassificationAndProbabilisticMetricsDeepMathIntegrationTes
         double[] actual = [0, 1];
         // With epsilon=1e-15: log(1-1e-15) ≈ -1e-15 for both
         double result = metric.Compute(probs, actual);
-        Assert.True(double.IsFinite(result), $"LogLoss ({result}) should be finite with extreme probabilities");
+        Assert.True((!double.IsNaN(result) && !double.IsInfinity(result)), $"LogLoss ({result}) should be finite with extreme probabilities");
         Assert.True(result >= 0, $"LogLoss ({result}) should be non-negative");
     }
 

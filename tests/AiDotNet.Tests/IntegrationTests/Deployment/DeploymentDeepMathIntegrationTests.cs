@@ -161,7 +161,7 @@ public class DeploymentDeepMathIntegrationTests
     {
         // 256 = 2^8 clusters = 8-bit quantization equivalent
         var config = new CompressionConfig();
-        double bitsEquivalent = Math.Log2(config.NumClusters);
+        double bitsEquivalent = (Math.Log(config.NumClusters) / Math.Log(2));
         Assert.Equal(8.0, bitsEquivalent);
     }
 
@@ -170,7 +170,7 @@ public class DeploymentDeepMathIntegrationTests
     {
         // 16 = 2^4 clusters = 4-bit equivalent (aggressive compression)
         var config = new CompressionConfig { NumClusters = 16 };
-        double bitsEquivalent = Math.Log2(config.NumClusters);
+        double bitsEquivalent = (Math.Log(config.NumClusters) / Math.Log(2));
         Assert.Equal(4.0, bitsEquivalent);
     }
 
@@ -179,7 +179,7 @@ public class DeploymentDeepMathIntegrationTests
     {
         // 65536 = 2^16 clusters = 16-bit equivalent (light compression)
         var config = new CompressionConfig { NumClusters = 65536 };
-        double bitsEquivalent = Math.Log2(config.NumClusters);
+        double bitsEquivalent = (Math.Log(config.NumClusters) / Math.Log(2));
         Assert.Equal(16.0, bitsEquivalent);
     }
 
@@ -544,15 +544,15 @@ public class DeploymentDeepMathIntegrationTests
         // Compression ratio = 32 / log2(N)
 
         // 256 clusters = 8 bits → 32/8 = 4x compression
-        double ratio256 = 32.0 / Math.Log2(256);
+        double ratio256 = 32.0 / (Math.Log(256) / Math.Log(2));
         Assert.Equal(4.0, ratio256);
 
         // 16 clusters = 4 bits → 32/4 = 8x compression
-        double ratio16 = 32.0 / Math.Log2(16);
+        double ratio16 = 32.0 / (Math.Log(16) / Math.Log(2));
         Assert.Equal(8.0, ratio16);
 
         // 65536 clusters = 16 bits → 32/16 = 2x compression
-        double ratio65536 = 32.0 / Math.Log2(65536);
+        double ratio65536 = 32.0 / (Math.Log(65536) / Math.Log(2));
         Assert.Equal(2.0, ratio65536);
     }
 
@@ -565,7 +565,7 @@ public class DeploymentDeepMathIntegrationTests
 
         foreach (var clusters in clusterCounts)
         {
-            double bitsPerWeight = Math.Log2(clusters);
+            double bitsPerWeight = (Math.Log(clusters) / Math.Log(2));
             double compressionRatio = 32.0 / bitsPerWeight;
             Assert.True(compressionRatio < prevRatio);
             prevRatio = compressionRatio;

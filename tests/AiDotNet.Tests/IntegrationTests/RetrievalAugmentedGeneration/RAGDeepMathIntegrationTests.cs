@@ -240,7 +240,7 @@ public class RAGDeepMathIntegrationTests
         double dcg = 0;
         for (int i = 0; i < relevanceScores.Length; i++)
         {
-            dcg += relevanceScores[i] / Math.Log2(i + 2); // log2(rank + 1) where rank starts at 1
+            dcg += relevanceScores[i] / (Math.Log(i + 2) / Math.Log(2)); // log2(rank + 1) where rank starts at 1
         }
 
         Assert.True(dcg > 0, "DCG should be positive for non-zero relevance");
@@ -250,7 +250,7 @@ public class RAGDeepMathIntegrationTests
         double idcg = 0;
         for (int i = 0; i < sorted.Length; i++)
         {
-            idcg += sorted[i] / Math.Log2(i + 2);
+            idcg += sorted[i] / (Math.Log(i + 2) / Math.Log(2));
         }
 
         double ndcg = dcg / idcg;
@@ -267,7 +267,7 @@ public class RAGDeepMathIntegrationTests
         double dcg = 0, idcg = 0;
         for (int i = 0; i < relevance.Length; i++)
         {
-            double discount = Math.Log2(i + 2);
+            double discount = (Math.Log(i + 2) / Math.Log(2));
             dcg += relevance[i] / discount;
             idcg += relevance[i] / discount; // Same order
         }

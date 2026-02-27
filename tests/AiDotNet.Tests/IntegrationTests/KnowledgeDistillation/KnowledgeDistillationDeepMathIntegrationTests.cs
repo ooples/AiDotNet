@@ -470,7 +470,7 @@ public class KnowledgeDistillationDeepMathIntegrationTests
 
         double result = loss.ComputeLoss(studentLogits, teacherLogits);
 
-        Assert.True(double.IsFinite(result), $"Loss should be finite with large logits, got {result}");
+        Assert.True((!double.IsNaN(result) && !double.IsInfinity(result)), $"Loss should be finite with large logits, got {result}");
         Assert.True(result >= 0, $"Loss should be non-negative: {result}");
     }
 
@@ -612,7 +612,7 @@ public class KnowledgeDistillationDeepMathIntegrationTests
 
         float result = loss.ComputeLoss(student, teacher, labels);
 
-        Assert.True(float.IsFinite(result), $"Float loss should be finite: {result}");
+        Assert.True((!float.IsNaN(result) && !float.IsInfinity(result)), $"Float loss should be finite: {result}");
         Assert.True(result > 0, $"Loss should be positive: {result}");
     }
 

@@ -377,7 +377,8 @@ public class DataVersionControlDeepMathIntegrationTests
 
     private static string ComputeSHA256(byte[] data)
     {
-        byte[] hash = SHA256.HashData(data);
+        using var sha = SHA256.Create();
+        byte[] hash = sha.ComputeHash(data);
         return BitConverter.ToString(hash).Replace("-", "").ToLowerInvariant();
     }
 

@@ -366,7 +366,7 @@ public class ProgramSynthesisDeepMathIntegrationTests
     [Fact]
     public void SynthesisType_HasSixValues()
     {
-        var values = Enum.GetValues<SynthesisType>();
+        var values = (((SynthesisType[])Enum.GetValues(typeof(SynthesisType))));
         Assert.Equal(6, values.Length);
     }
 
@@ -379,7 +379,7 @@ public class ProgramSynthesisDeepMathIntegrationTests
     [InlineData(SynthesisType.Deductive)]
     public void SynthesisType_AllValuesValid(SynthesisType type)
     {
-        Assert.True(Enum.IsDefined(type));
+        Assert.True(Enum.IsDefined(typeof(SynthesisType), type));
     }
 
     // ============================
@@ -389,7 +389,7 @@ public class ProgramSynthesisDeepMathIntegrationTests
     [Fact]
     public void ProgramLanguage_HasElevenValues()
     {
-        var values = Enum.GetValues<ProgramLanguage>();
+        var values = (((ProgramLanguage[])Enum.GetValues(typeof(ProgramLanguage))));
         Assert.Equal(11, values.Length);
     }
 
@@ -407,7 +407,7 @@ public class ProgramSynthesisDeepMathIntegrationTests
     [InlineData(ProgramLanguage.Generic)]
     public void ProgramLanguage_AllValuesValid(ProgramLanguage lang)
     {
-        Assert.True(Enum.IsDefined(lang));
+        Assert.True(Enum.IsDefined(typeof(ProgramLanguage), lang));
     }
 
     // ============================
@@ -417,7 +417,7 @@ public class ProgramSynthesisDeepMathIntegrationTests
     [Fact]
     public void CodeTask_HasThirteenValues()
     {
-        var values = Enum.GetValues<CodeTask>();
+        var values = (((CodeTask[])Enum.GetValues(typeof(CodeTask))));
         Assert.Equal(13, values.Length);
     }
 
@@ -437,7 +437,7 @@ public class ProgramSynthesisDeepMathIntegrationTests
     [InlineData(CodeTask.CodeReview)]
     public void CodeTask_AllValuesValid(CodeTask task)
     {
-        Assert.True(Enum.IsDefined(task));
+        Assert.True(Enum.IsDefined(typeof(CodeTask), task));
     }
 
     // ============================
@@ -447,7 +447,7 @@ public class ProgramSynthesisDeepMathIntegrationTests
     [Fact]
     public void SqlDialect_HasThreeValues()
     {
-        var values = Enum.GetValues<SqlDialect>();
+        var values = (((SqlDialect[])Enum.GetValues(typeof(SqlDialect))));
         Assert.Equal(3, values.Length);
     }
 
@@ -467,7 +467,7 @@ public class ProgramSynthesisDeepMathIntegrationTests
     [Fact]
     public void CodeCloneType_HasFourValues()
     {
-        var values = Enum.GetValues<CodeCloneType>();
+        var values = (((CodeCloneType[])Enum.GetValues(typeof(CodeCloneType))));
         Assert.Equal(4, values.Length);
     }
 
@@ -478,7 +478,7 @@ public class ProgramSynthesisDeepMathIntegrationTests
     [Fact]
     public void CodeEditOperationType_HasThreeValues()
     {
-        var values = Enum.GetValues<CodeEditOperationType>();
+        var values = (((CodeEditOperationType[])Enum.GetValues(typeof(CodeEditOperationType))));
         Assert.Equal(3, values.Length);
     }
 
@@ -489,7 +489,7 @@ public class ProgramSynthesisDeepMathIntegrationTests
     [Fact]
     public void CodeIssueCategory_HasElevenValues()
     {
-        var values = Enum.GetValues<CodeIssueCategory>();
+        var values = (((CodeIssueCategory[])Enum.GetValues(typeof(CodeIssueCategory))));
         Assert.Equal(11, values.Length);
     }
 
@@ -500,7 +500,7 @@ public class ProgramSynthesisDeepMathIntegrationTests
     [Fact]
     public void CodeIssueSeverity_HasFourValues()
     {
-        var values = Enum.GetValues<CodeIssueSeverity>();
+        var values = (((CodeIssueSeverity[])Enum.GetValues(typeof(CodeIssueSeverity))));
         Assert.Equal(4, values.Length);
     }
 }

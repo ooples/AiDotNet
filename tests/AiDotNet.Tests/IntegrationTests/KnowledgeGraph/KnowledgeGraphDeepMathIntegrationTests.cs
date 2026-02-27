@@ -271,7 +271,7 @@ public class KnowledgeGraphDeepMathIntegrationTests
         int n = 4;
         double damping = 0.85;
         double[] pageRank = new double[n];
-        Array.Fill(pageRank, 1.0 / n);
+        for (int idx = 0; idx < pageRank.Length; idx++) pageRank[idx] = 1.0 / n;
 
         // One iteration of PageRank for complete graph
         double[] newPageRank = new double[n];

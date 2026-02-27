@@ -18,7 +18,7 @@ public class FitDetectorsDeepMathIntegrationTests
     [Fact]
     public void FitType_HasFifteenValues()
     {
-        var values = Enum.GetValues<FitType>();
+        var values = (((FitType[])Enum.GetValues(typeof(FitType))));
         Assert.Equal(15, values.Length);
     }
 
@@ -40,7 +40,7 @@ public class FitDetectorsDeepMathIntegrationTests
     [InlineData(FitType.Moderate)]
     public void FitType_AllValuesValid(FitType type)
     {
-        Assert.True(Enum.IsDefined(type));
+        Assert.True(Enum.IsDefined(typeof(FitType), type));
     }
 
     // ============================

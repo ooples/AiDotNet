@@ -484,13 +484,13 @@ public class JitCompilerDeepMathIntegrationTests
     [InlineData(UnsupportedLayerHandling.Skip)]
     public void UnsupportedLayerHandling_AllValuesValid(UnsupportedLayerHandling handling)
     {
-        Assert.True(Enum.IsDefined(handling));
+        Assert.True(Enum.IsDefined(typeof(UnsupportedLayerHandling), handling));
     }
 
     [Fact]
     public void UnsupportedLayerHandling_HasFourValues()
     {
-        var values = Enum.GetValues<UnsupportedLayerHandling>();
+        var values = (((UnsupportedLayerHandling[])Enum.GetValues(typeof(UnsupportedLayerHandling))));
         Assert.Equal(4, values.Length);
     }
 }

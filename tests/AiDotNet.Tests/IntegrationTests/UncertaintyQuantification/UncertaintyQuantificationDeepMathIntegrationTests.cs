@@ -284,9 +284,9 @@ public class UncertaintyQuantificationDeepMathIntegrationTests
         var logits = new Tensor<double>(new[] { 3 }, new Vector<double>(new double[] { 1000.0, 999.0, 998.0 }));
         var scaled = ts.ScaleLogits(logits);
 
-        Assert.True(double.IsFinite(scaled[0]));
-        Assert.True(double.IsFinite(scaled[1]));
-        Assert.True(double.IsFinite(scaled[2]));
+        Assert.True((!double.IsNaN(scaled[0]) && !double.IsInfinity(scaled[0])));
+        Assert.True((!double.IsNaN(scaled[1]) && !double.IsInfinity(scaled[1])));
+        Assert.True((!double.IsNaN(scaled[2]) && !double.IsInfinity(scaled[2])));
         Assert.Equal(1000.0, scaled[0], Tolerance);
     }
 

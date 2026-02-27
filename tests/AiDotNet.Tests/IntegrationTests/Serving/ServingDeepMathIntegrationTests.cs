@@ -316,7 +316,7 @@ public class ServingDeepMathIntegrationTests
     [Fact]
     public void SchedulingPolicy_HasFourValues()
     {
-        var values = Enum.GetValues<SchedulingPolicy>();
+        var values = (((SchedulingPolicy[])Enum.GetValues(typeof(SchedulingPolicy))));
         Assert.Equal(4, values.Length);
     }
 
@@ -327,7 +327,7 @@ public class ServingDeepMathIntegrationTests
     [InlineData(SchedulingPolicy.Fair)]
     public void SchedulingPolicy_AllValuesValid(SchedulingPolicy policy)
     {
-        Assert.True(Enum.IsDefined(policy));
+        Assert.True(Enum.IsDefined(typeof(SchedulingPolicy), policy));
     }
 
     // ============================
@@ -638,14 +638,14 @@ public class ServingDeepMathIntegrationTests
     [Fact]
     public void SequenceStatus_HasSevenValues()
     {
-        var values = Enum.GetValues<SequenceStatus>();
+        var values = (((SequenceStatus[])Enum.GetValues(typeof(SequenceStatus))));
         Assert.Equal(7, values.Length);
     }
 
     [Fact]
     public void StopReason_HasFiveValues()
     {
-        var values = Enum.GetValues<StopReason>();
+        var values = (((StopReason[])Enum.GetValues(typeof(StopReason))));
         Assert.Equal(5, values.Length);
     }
 }

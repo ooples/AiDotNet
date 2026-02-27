@@ -268,7 +268,7 @@ public class AdvancedClassificationMetricsDeepMathIntegrationTests
         double[] actuals = [1, 0, 1, 0];
         var metric = new DiagnosticOddsRatioMetric<double>();
         double result = metric.Compute(preds, actuals);
-        Assert.True(double.IsFinite(result), "DOR should be finite due to Haldane correction");
+        Assert.True((!double.IsNaN(result) && !double.IsInfinity(result)), "DOR should be finite due to Haldane correction");
     }
 
     [Fact]

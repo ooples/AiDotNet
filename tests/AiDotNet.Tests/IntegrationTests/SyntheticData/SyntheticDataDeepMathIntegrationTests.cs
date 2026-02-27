@@ -19,7 +19,7 @@ public class SyntheticDataDeepMathIntegrationTests
     [Fact]
     public void ColumnDataType_HasExpectedValues()
     {
-        var values = Enum.GetValues<ColumnDataType>();
+        var values = (((ColumnDataType[])Enum.GetValues(typeof(ColumnDataType))));
         Assert.Equal(3, values.Length);
     }
 
@@ -29,7 +29,7 @@ public class SyntheticDataDeepMathIntegrationTests
     [InlineData(ColumnDataType.Categorical)]
     public void ColumnDataType_AllValuesExist(ColumnDataType type)
     {
-        Assert.True(Enum.IsDefined(type));
+        Assert.True(Enum.IsDefined(typeof(ColumnDataType), type));
     }
 
     // ============================

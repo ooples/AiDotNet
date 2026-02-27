@@ -364,7 +364,7 @@ public class InitializationDeepMathIntegrationTests
     [Fact]
     public void InitializationStrategyType_HasFourValues()
     {
-        var values = Enum.GetValues<InitializationStrategyType>();
+        var values = (((InitializationStrategyType[])Enum.GetValues(typeof(InitializationStrategyType))));
         Assert.Equal(4, values.Length);
     }
 
@@ -375,7 +375,7 @@ public class InitializationDeepMathIntegrationTests
     [InlineData(InitializationStrategyType.FromFile)]
     public void InitializationStrategyType_AllValuesValid(InitializationStrategyType type)
     {
-        Assert.True(Enum.IsDefined(type));
+        Assert.True(Enum.IsDefined(typeof(InitializationStrategyType), type));
     }
 
     // ============================

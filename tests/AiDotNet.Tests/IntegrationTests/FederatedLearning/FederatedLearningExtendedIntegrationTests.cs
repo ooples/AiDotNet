@@ -73,7 +73,7 @@ public class FederatedLearningExtendedIntegrationTests
     [Fact]
     public void DriftType_AllValues()
     {
-        var values = Enum.GetValues<DriftType>();
+        var values = (((DriftType[])Enum.GetValues(typeof(DriftType))));
         Assert.Equal(5, values.Length);
         Assert.Contains(DriftType.None, values);
         Assert.Contains(DriftType.Warning, values);
@@ -89,7 +89,7 @@ public class FederatedLearningExtendedIntegrationTests
     [Fact]
     public void DriftAction_AllValues()
     {
-        var values = Enum.GetValues<DriftAction>();
+        var values = (((DriftAction[])Enum.GetValues(typeof(DriftAction))));
         Assert.Equal(5, values.Length);
         Assert.Contains(DriftAction.None, values);
         Assert.Contains(DriftAction.Monitor, values);
@@ -351,7 +351,7 @@ public class FederatedLearningExtendedIntegrationTests
     [Fact]
     public void VerificationConstraintType_AllValues()
     {
-        var values = Enum.GetValues<AiDotNet.FederatedLearning.Verification.ConstraintType>();
+        var values = (((AiDotNet.FederatedLearning.Verification.ConstraintType[])Enum.GetValues(typeof(AiDotNet.FederatedLearning.Verification.ConstraintType))));
         Assert.Equal(4, values.Length);
         Assert.Contains(AiDotNet.FederatedLearning.Verification.ConstraintType.NormBound, values);
         Assert.Contains(AiDotNet.FederatedLearning.Verification.ConstraintType.ElementBound, values);
@@ -589,8 +589,8 @@ public class FederatedLearningExtendedIntegrationTests
         Assert.Equal(result.IntersectionSize, result.RemoteToSharedIndexMap.Count);
 
         // Shared indices should cover 0..N-1
-        var localSharedIndices = result.LocalToSharedIndexMap.Values.Order().ToList();
-        var remoteSharedIndices = result.RemoteToSharedIndexMap.Values.Order().ToList();
+        var localSharedIndices = result.LocalToSharedIndexMap.Values.OrderBy(x => x).ToList();
+        var remoteSharedIndices = result.RemoteToSharedIndexMap.Values.OrderBy(x => x).ToList();
         Assert.Equal(new[] { 0, 1, 2 }, localSharedIndices);
         Assert.Equal(new[] { 0, 1, 2 }, remoteSharedIndices);
     }

@@ -47,7 +47,7 @@ public class TimeSeriesExtendedDeepMathIntegrationTests
         model.Train(x, y);
 
         var prediction = model.PredictSingle(MakeVector(new double[] { data.Length }));
-        Assert.True(double.IsFinite(prediction), $"MA prediction should be finite, got {prediction}");
+        Assert.True((!double.IsNaN(prediction) && !double.IsInfinity(prediction)), $"MA prediction should be finite, got {prediction}");
     }
 
     [Fact]
@@ -223,8 +223,8 @@ public class TimeSeriesExtendedDeepMathIntegrationTests
         double dev3First = Math.Abs(pred3[0] - mean);
 
         // Both should produce finite predictions
-        Assert.True(double.IsFinite(pred1[0]), "MA(1) predictions should be finite");
-        Assert.True(double.IsFinite(pred3[0]), "MA(3) predictions should be finite");
+        Assert.True((!double.IsNaN(pred1[0]) && !double.IsInfinity(pred1[0])), "MA(1) predictions should be finite");
+        Assert.True((!double.IsNaN(pred3[0]) && !double.IsInfinity(pred3[0])), "MA(3) predictions should be finite");
 
         // MA(1) should converge to mean by step 2
         Assert.True(Math.Abs(pred1[2] - mean) < 0.01,
@@ -253,7 +253,7 @@ public class TimeSeriesExtendedDeepMathIntegrationTests
 
         // Verify model trained successfully by getting a prediction
         var prediction = model.PredictSingle(MakeVector(new double[] { data.Length }));
-        Assert.True(double.IsFinite(prediction),
+        Assert.True((!double.IsNaN(prediction) && !double.IsInfinity(prediction)),
             "Model with high-variance data should still produce finite predictions");
     }
 
@@ -278,9 +278,9 @@ public class TimeSeriesExtendedDeepMathIntegrationTests
         // Both should produce finite values
         for (int i = 0; i < horizon; i++)
         {
-            Assert.True(double.IsFinite(forecast[i]),
+            Assert.True((!double.IsNaN(forecast[i]) && !double.IsInfinity(forecast[i])),
                 $"Forecast[{i}]={forecast[i]:F4} should be finite");
-            Assert.True(double.IsFinite(predicted[i]),
+            Assert.True((!double.IsNaN(predicted[i]) && !double.IsInfinity(predicted[i])),
                 $"Predict[{i}]={predicted[i]:F4} should be finite");
         }
     }
@@ -350,7 +350,7 @@ public class TimeSeriesExtendedDeepMathIntegrationTests
 
         // The model should be trained - predict shouldn't throw
         var prediction = model.PredictSingle(MakeVector(new double[] { data.Length }));
-        Assert.True(double.IsFinite(prediction),
+        Assert.True((!double.IsNaN(prediction) && !double.IsInfinity(prediction)),
             $"GARCH prediction should be finite, got {prediction}");
     }
 
@@ -383,7 +383,7 @@ public class TimeSeriesExtendedDeepMathIntegrationTests
         var predictions = model.Predict(xFuture);
         for (int i = 0; i < 10; i++)
         {
-            Assert.True(double.IsFinite(predictions[i]),
+            Assert.True((!double.IsNaN(predictions[i]) && !double.IsInfinity(predictions[i])),
                 $"GARCH forecast at step {i} should be finite, got {predictions[i]}");
         }
     }
@@ -419,7 +419,7 @@ public class TimeSeriesExtendedDeepMathIntegrationTests
 
         // Model should train without exception
         var prediction = model.PredictSingle(MakeVector(new double[] { data.Length }));
-        Assert.True(double.IsFinite(prediction), "GARCH should handle volatility regime changes");
+        Assert.True((!double.IsNaN(prediction) && !double.IsInfinity(prediction)), "GARCH should handle volatility regime changes");
     }
 
     [Fact]
@@ -460,7 +460,7 @@ public class TimeSeriesExtendedDeepMathIntegrationTests
 
         var prediction = model.PredictSingle(MakeVector(new double[] { data.Length }));
         // With near-zero residuals, prediction should be close to mean
-        Assert.True(double.IsFinite(prediction),
+        Assert.True((!double.IsNaN(prediction) && !double.IsInfinity(prediction)),
             "GARCH with near-zero volatility data should produce finite prediction");
     }
 
@@ -489,7 +489,7 @@ public class TimeSeriesExtendedDeepMathIntegrationTests
 
         for (int i = 0; i < horizon; i++)
         {
-            Assert.True(double.IsFinite(forecast[i]),
+            Assert.True((!double.IsNaN(forecast[i]) && !double.IsInfinity(forecast[i])),
                 $"GARCH forecast[{i}] should be finite, got {forecast[i]}");
         }
     }
@@ -529,8 +529,8 @@ public class TimeSeriesExtendedDeepMathIntegrationTests
 
         // GARCH uses random normal generation, so predictions differ
         // But both should be finite
-        Assert.True(double.IsFinite(p1), "Original GARCH prediction should be finite");
-        Assert.True(double.IsFinite(p2), "Deserialized GARCH prediction should be finite");
+        Assert.True((!double.IsNaN(p1) && !double.IsInfinity(p1)), "Original GARCH prediction should be finite");
+        Assert.True((!double.IsNaN(p2) && !double.IsInfinity(p2)), "Deserialized GARCH prediction should be finite");
     }
 
     [Fact]
@@ -569,8 +569,8 @@ public class TimeSeriesExtendedDeepMathIntegrationTests
 
         for (int i = 0; i < 5; i++)
         {
-            Assert.True(double.IsFinite(f11[i]), $"GARCH(1,1) forecast[{i}] should be finite");
-            Assert.True(double.IsFinite(f21[i]), $"GARCH(2,1) forecast[{i}] should be finite");
+            Assert.True((!double.IsNaN(f11[i]) && !double.IsInfinity(f11[i])), $"GARCH(1,1) forecast[{i}] should be finite");
+            Assert.True((!double.IsNaN(f21[i]) && !double.IsInfinity(f21[i])), $"GARCH(2,1) forecast[{i}] should be finite");
         }
     }
 

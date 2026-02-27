@@ -19,7 +19,7 @@ public class TrainingDeepMathIntegrationTests
     [Fact]
     public void LossType_HasExpectedCount()
     {
-        var values = Enum.GetValues<LossType>();
+        var values = (((LossType[])Enum.GetValues(typeof(LossType))));
         // At minimum the factory handles 33 types + a few that require specialized constructors
         Assert.True(values.Length >= 33, $"LossType should have at least 33 values, found {values.Length}");
     }

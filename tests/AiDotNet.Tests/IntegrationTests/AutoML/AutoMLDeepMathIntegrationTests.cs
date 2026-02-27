@@ -503,7 +503,7 @@ public class AutoMLDeepMathIntegrationTests
     [Fact]
     public void ConstraintType_HasFiveValues()
     {
-        var values = Enum.GetValues<ConstraintType>();
+        var values = (((ConstraintType[])Enum.GetValues(typeof(ConstraintType))));
         Assert.Equal(5, values.Length);
     }
 
@@ -515,7 +515,7 @@ public class AutoMLDeepMathIntegrationTests
     [InlineData(ConstraintType.Custom)]
     public void ConstraintType_AllValuesValid(ConstraintType type)
     {
-        Assert.True(Enum.IsDefined(type));
+        Assert.True(Enum.IsDefined(typeof(ConstraintType), type));
     }
 
     // ============================

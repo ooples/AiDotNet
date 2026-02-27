@@ -76,7 +76,7 @@ public class NumericalStabilityAndGradientClippingDeepMathIntegrationTests
         double result = NumericalStabilityHelper.SafeDiv(5.0, 0.0);
         double expected = 5.0 / NumericalStabilityHelper.DefaultEpsilon;
         Assert.Equal(expected, result, Tolerance);
-        Assert.True(double.IsFinite(result), "Result should be finite");
+        Assert.True((!double.IsNaN(result) && !double.IsInfinity(result)), "Result should be finite");
     }
 
     [Fact]

@@ -243,7 +243,7 @@ public class PowerTransformsAndDiscretizersDeepMathIntegrationTests
         // Should not throw and all values should be finite
         for (int i = 0; i < 10; i++)
         {
-            Assert.True(double.IsFinite(result[i, 0]),
+            Assert.True((!double.IsNaN(result[i, 0]) && !double.IsInfinity(result[i, 0])),
                 $"Transformed value at row {i} should be finite, got {result[i, 0]}");
         }
     }

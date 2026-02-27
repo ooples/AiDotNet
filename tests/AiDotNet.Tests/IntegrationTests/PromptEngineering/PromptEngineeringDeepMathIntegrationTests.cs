@@ -69,7 +69,7 @@ public class PromptEngineeringDeepMathIntegrationTests
     {
         // Custom estimator: 1 token per word
         var manager = new ContextWindowManager(100, text =>
-            text.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length);
+            text.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries).Length);
 
         Assert.Equal(3, manager.EstimateTokens("hello world today"));
     }

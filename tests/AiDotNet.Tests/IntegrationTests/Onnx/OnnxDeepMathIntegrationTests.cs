@@ -464,7 +464,7 @@ public class OnnxDeepMathIntegrationTests
     [Fact]
     public void OnnxExecutionProvider_HasNineValues()
     {
-        var values = Enum.GetValues<OnnxExecutionProvider>();
+        var values = (((OnnxExecutionProvider[])Enum.GetValues(typeof(OnnxExecutionProvider))));
         Assert.Equal(9, values.Length);
     }
 
@@ -490,7 +490,7 @@ public class OnnxDeepMathIntegrationTests
     [Fact]
     public void GraphOptimizationLevel_HasFourValues()
     {
-        var values = Enum.GetValues<GraphOptimizationLevel>();
+        var values = (((GraphOptimizationLevel[])Enum.GetValues(typeof(GraphOptimizationLevel))));
         Assert.Equal(4, values.Length);
     }
 
@@ -511,7 +511,7 @@ public class OnnxDeepMathIntegrationTests
     [Fact]
     public void OnnxLogLevel_HasFiveValues()
     {
-        var values = Enum.GetValues<OnnxLogLevel>();
+        var values = (((OnnxLogLevel[])Enum.GetValues(typeof(OnnxLogLevel))));
         Assert.Equal(5, values.Length);
     }
 

@@ -41,7 +41,7 @@ public class TimeSeriesDeepMathIntegrationTests
         var prediction = model.PredictSingle(history);
 
         // The prediction should be finite (coefficient * last_value)
-        Assert.True(double.IsFinite(prediction), "Prediction should be finite");
+        Assert.True((!double.IsNaN(prediction) && !double.IsInfinity(prediction)), "Prediction should be finite");
     }
 
     [Fact]
@@ -66,7 +66,7 @@ public class TimeSeriesDeepMathIntegrationTests
         // All forecasted values should be finite
         for (int i = 0; i < forecast.Length; i++)
         {
-            Assert.True(double.IsFinite(forecast[i]), $"Forecast[{i}] should be finite");
+            Assert.True((!double.IsNaN(forecast[i]) && !double.IsInfinity(forecast[i])), $"Forecast[{i}] should be finite");
         }
     }
 
@@ -197,7 +197,7 @@ public class TimeSeriesDeepMathIntegrationTests
         var predictions = model.Predict(MakeMatrix(trainX));
         for (int i = 0; i < predictions.Length; i++)
         {
-            Assert.True(double.IsFinite(predictions[i]), $"Prediction[{i}] should be finite");
+            Assert.True((!double.IsNaN(predictions[i]) && !double.IsInfinity(predictions[i])), $"Prediction[{i}] should be finite");
         }
     }
 
@@ -248,7 +248,7 @@ public class TimeSeriesDeepMathIntegrationTests
 
         for (int i = 0; i < predictions.Length; i++)
         {
-            Assert.True(double.IsFinite(predictions[i]), $"Prediction[{i}] should be finite");
+            Assert.True((!double.IsNaN(predictions[i]) && !double.IsInfinity(predictions[i])), $"Prediction[{i}] should be finite");
         }
     }
 
@@ -287,7 +287,7 @@ public class TimeSeriesDeepMathIntegrationTests
         Assert.True(forecast[0] > data[^1] * 0.5, "First forecast should be reasonably above zero");
         for (int i = 0; i < forecast.Length; i++)
         {
-            Assert.True(double.IsFinite(forecast[i]), $"Forecast[{i}] should be finite");
+            Assert.True((!double.IsNaN(forecast[i]) && !double.IsInfinity(forecast[i])), $"Forecast[{i}] should be finite");
         }
     }
 
@@ -388,7 +388,7 @@ public class TimeSeriesDeepMathIntegrationTests
         // All predictions should be finite and positive
         for (int i = 0; i < predictions.Length; i++)
         {
-            Assert.True(double.IsFinite(predictions[i]), $"Prediction[{i}] should be finite");
+            Assert.True((!double.IsNaN(predictions[i]) && !double.IsInfinity(predictions[i])), $"Prediction[{i}] should be finite");
             Assert.True(predictions[i] > 0, $"Prediction[{i}] should be positive for positive data");
         }
     }
@@ -420,7 +420,7 @@ public class TimeSeriesDeepMathIntegrationTests
         Assert.Equal(8, forecast.Length);
         for (int i = 0; i < forecast.Length; i++)
         {
-            Assert.True(double.IsFinite(forecast[i]), $"Forecast[{i}] should be finite");
+            Assert.True((!double.IsNaN(forecast[i]) && !double.IsInfinity(forecast[i])), $"Forecast[{i}] should be finite");
             Assert.True(forecast[i] > 0, $"Forecast[{i}] should be positive");
         }
     }
@@ -630,7 +630,7 @@ public class TimeSeriesDeepMathIntegrationTests
         var predictions = model.Predict(MakeMatrix(trainX));
         for (int i = 0; i < predictions.Length; i++)
         {
-            Assert.True(double.IsFinite(predictions[i]), $"Prediction[{i}] should be finite");
+            Assert.True((!double.IsNaN(predictions[i]) && !double.IsInfinity(predictions[i])), $"Prediction[{i}] should be finite");
         }
     }
 }

@@ -214,7 +214,7 @@ public class AudioIntegrationTests
     [Fact]
     public void WindowType_AllValues()
     {
-        var values = Enum.GetValues<WindowType>();
+        var values = (((WindowType[])Enum.GetValues(typeof(WindowType))));
         Assert.Equal(4, values.Length);
         Assert.Contains(WindowType.Rectangular, values);
         Assert.Contains(WindowType.Hann, values);
@@ -681,7 +681,7 @@ public class AudioIntegrationTests
     [Fact]
     public void EqFilterType_AllValues()
     {
-        var values = Enum.GetValues<EqFilterType>();
+        var values = (((EqFilterType[])Enum.GetValues(typeof(EqFilterType))));
         Assert.Equal(7, values.Length);
         Assert.Contains(EqFilterType.Peak, values);
         Assert.Contains(EqFilterType.LowShelf, values);
@@ -913,7 +913,7 @@ public class AudioIntegrationTests
     [Fact]
     public void AudioGenModelSize_AllValues()
     {
-        var values = Enum.GetValues<AudioGenModelSize>();
+        var values = (((AudioGenModelSize[])Enum.GetValues(typeof(AudioGenModelSize))));
         Assert.Equal(3, values.Length);
         Assert.Contains(AudioGenModelSize.Small, values);
         Assert.Contains(AudioGenModelSize.Medium, values);

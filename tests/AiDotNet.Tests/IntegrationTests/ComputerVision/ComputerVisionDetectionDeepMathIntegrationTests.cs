@@ -576,7 +576,7 @@ public class ComputerVisionDetectionDeepMathIntegrationTests
 
         for (int i = 0; i < gradient.Length; i++)
         {
-            Assert.True(double.IsFinite(NumOps<double>.ToDouble(gradient[i])),
+            Assert.True(!double.IsNaN(NumOps<double>.ToDouble(gradient[i])) && !double.IsInfinity(NumOps<double>.ToDouble(gradient[i])),
                 $"Gradient[{i}] should be finite");
         }
     }
@@ -592,7 +592,7 @@ public class ComputerVisionDetectionDeepMathIntegrationTests
 
         for (int i = 0; i < gradient.Length; i++)
         {
-            Assert.True(double.IsFinite(NumOps<double>.ToDouble(gradient[i])),
+            Assert.True(!double.IsNaN(NumOps<double>.ToDouble(gradient[i])) && !double.IsInfinity(NumOps<double>.ToDouble(gradient[i])),
                 $"Gradient[{i}] should be finite");
         }
     }

@@ -134,7 +134,7 @@ public class DistributedTrainingDeepMathIntegrationTests
     [Fact]
     public void RecomputeStrategy_HasThreeValues()
     {
-        var values = Enum.GetValues<RecomputeStrategy>();
+        var values = (((RecomputeStrategy[])Enum.GetValues(typeof(RecomputeStrategy))));
         Assert.Equal(3, values.Length);
     }
 
@@ -144,7 +144,7 @@ public class DistributedTrainingDeepMathIntegrationTests
     [InlineData(RecomputeStrategy.None)]
     public void RecomputeStrategy_AllValuesValid(RecomputeStrategy strategy)
     {
-        Assert.True(Enum.IsDefined(strategy));
+        Assert.True(Enum.IsDefined(typeof(RecomputeStrategy), strategy));
     }
 
     // ============================

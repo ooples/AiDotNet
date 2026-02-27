@@ -615,7 +615,7 @@ public class FinanceDataPreprocessorIntegrationTests
 
         // Should not throw - uses safe denominator
         Assert.Equal(5, tensor.Shape[1]); // 4 OHLC + 1 return
-        Assert.True(double.IsFinite(tensor[1 * 5 + 4]),
+        Assert.True((!double.IsNaN(tensor[1 * 5 + 4]) && !double.IsInfinity(tensor[1 * 5 + 4])),
             "Return should be finite even with zero-close previous bar");
     }
 

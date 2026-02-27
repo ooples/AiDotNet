@@ -108,7 +108,7 @@ public class DiffusionNoiseHelperDeepMathIntegrationTests
 
         Assert.Equal(7, span.Length);
         for (int i = 0; i < span.Length; i++)
-            Assert.True(double.IsFinite(span[i]), $"Sample[{i}] = {span[i]} should be finite");
+            Assert.True((!double.IsNaN(span[i]) && !double.IsInfinity(span[i])), $"Sample[{i}] = {span[i]} should be finite");
     }
 
     [Fact]

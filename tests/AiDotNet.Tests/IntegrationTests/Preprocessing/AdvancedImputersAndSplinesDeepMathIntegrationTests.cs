@@ -202,7 +202,7 @@ public class AdvancedImputersAndSplinesDeepMathIntegrationTests
         var result = imputer.Transform(testMatrix);
 
         // Should produce a finite imputed value
-        Assert.True(double.IsFinite(result[0, 1]),
+        Assert.True((!double.IsNaN(result[0, 1]) && !double.IsInfinity(result[0, 1])),
             $"Imputed value should be finite, got {result[0, 1]}");
     }
 
@@ -330,7 +330,7 @@ public class AdvancedImputersAndSplinesDeepMathIntegrationTests
         {
             for (int j = 0; j < result.Columns; j++)
             {
-                Assert.True(double.IsFinite(result[i, j]),
+                Assert.True((!double.IsNaN(result[i, j]) && !double.IsInfinity(result[i, j])),
                     $"Value at [{i},{j}] should be finite, got {result[i, j]}");
                 Assert.True(result[i, j] >= -Tolerance,
                     $"Value at [{i},{j}] should be non-negative, got {result[i, j]}");
@@ -511,7 +511,7 @@ public class AdvancedImputersAndSplinesDeepMathIntegrationTests
         {
             for (int j = 0; j < result.Columns; j++)
             {
-                Assert.True(double.IsFinite(result[i, j]),
+                Assert.True((!double.IsNaN(result[i, j]) && !double.IsInfinity(result[i, j])),
                     $"Basis value at [{i},{j}] should be finite, got {result[i, j]}");
             }
         }

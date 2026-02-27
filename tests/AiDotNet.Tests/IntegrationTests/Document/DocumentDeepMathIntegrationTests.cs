@@ -20,7 +20,7 @@ public class DocumentDeepMathIntegrationTests
     [Fact]
     public void ConfidenceLevel_HasFiveValues()
     {
-        var values = Enum.GetValues<ConfidenceLevel>();
+        var values = (((ConfidenceLevel[])Enum.GetValues(typeof(ConfidenceLevel))));
         Assert.Equal(5, values.Length);
     }
 
@@ -32,7 +32,7 @@ public class DocumentDeepMathIntegrationTests
     [InlineData(ConfidenceLevel.VeryHigh)]
     public void ConfidenceLevel_AllValuesValid(ConfidenceLevel level)
     {
-        Assert.True(Enum.IsDefined(level));
+        Assert.True(Enum.IsDefined(typeof(ConfidenceLevel), level));
     }
 
     [Theory]
@@ -123,7 +123,7 @@ public class DocumentDeepMathIntegrationTests
     [Fact]
     public void FormFieldType_HasNineValues()
     {
-        var values = Enum.GetValues<FormFieldType>();
+        var values = (((FormFieldType[])Enum.GetValues(typeof(FormFieldType))));
         Assert.Equal(9, values.Length);
     }
 
@@ -139,7 +139,7 @@ public class DocumentDeepMathIntegrationTests
     [InlineData(FormFieldType.Other)]
     public void FormFieldType_AllValuesValid(FormFieldType type)
     {
-        Assert.True(Enum.IsDefined(type));
+        Assert.True(Enum.IsDefined(typeof(FormFieldType), type));
     }
 
     // ============================
@@ -149,7 +149,7 @@ public class DocumentDeepMathIntegrationTests
     [Fact]
     public void LayoutElementType_HasNineteenValues()
     {
-        var values = Enum.GetValues<LayoutElementType>();
+        var values = (((LayoutElementType[])Enum.GetValues(typeof(LayoutElementType))));
         Assert.Equal(19, values.Length);
     }
 
@@ -175,7 +175,7 @@ public class DocumentDeepMathIntegrationTests
     [InlineData(LayoutElementType.Other)]
     public void LayoutElementType_AllValuesValid(LayoutElementType type)
     {
-        Assert.True(Enum.IsDefined(type));
+        Assert.True(Enum.IsDefined(typeof(LayoutElementType), type));
     }
 
     // ============================
@@ -185,7 +185,7 @@ public class DocumentDeepMathIntegrationTests
     [Fact]
     public void TableExportFormat_HasFiveValues()
     {
-        var values = Enum.GetValues<TableExportFormat>();
+        var values = (((TableExportFormat[])Enum.GetValues(typeof(TableExportFormat))));
         Assert.Equal(5, values.Length);
     }
 
@@ -197,7 +197,7 @@ public class DocumentDeepMathIntegrationTests
     [InlineData(TableExportFormat.Excel)]
     public void TableExportFormat_AllValuesValid(TableExportFormat format)
     {
-        Assert.True(Enum.IsDefined(format));
+        Assert.True(Enum.IsDefined(typeof(TableExportFormat), format));
     }
 
     // ============================

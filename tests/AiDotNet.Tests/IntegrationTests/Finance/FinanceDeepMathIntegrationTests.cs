@@ -21,7 +21,7 @@ public class FinanceDeepMathIntegrationTests
     [Fact]
     public void FinancialDomain_HasTwoValues()
     {
-        var values = Enum.GetValues<FinancialDomain>();
+        var values = (((FinancialDomain[])Enum.GetValues(typeof(FinancialDomain))));
         Assert.Equal(2, values.Length);
     }
 
@@ -30,7 +30,7 @@ public class FinanceDeepMathIntegrationTests
     [InlineData(FinancialDomain.Risk)]
     public void FinancialDomain_AllValuesValid(FinancialDomain domain)
     {
-        Assert.True(Enum.IsDefined(domain));
+        Assert.True(Enum.IsDefined(typeof(FinancialDomain), domain));
     }
 
     // ============================
@@ -40,7 +40,7 @@ public class FinanceDeepMathIntegrationTests
     [Fact]
     public void FinancialNLPTaskType_HasSevenValues()
     {
-        var values = Enum.GetValues<FinancialNLPTaskType>();
+        var values = (((FinancialNLPTaskType[])Enum.GetValues(typeof(FinancialNLPTaskType))));
         Assert.Equal(7, values.Length);
     }
 
@@ -54,7 +54,7 @@ public class FinanceDeepMathIntegrationTests
     [InlineData(FinancialNLPTaskType.TokenClassification)]
     public void FinancialNLPTaskType_AllValuesValid(FinancialNLPTaskType type)
     {
-        Assert.True(Enum.IsDefined(type));
+        Assert.True(Enum.IsDefined(typeof(FinancialNLPTaskType), type));
     }
 
     // ============================

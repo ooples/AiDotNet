@@ -21,7 +21,7 @@ public class QuantizationDeepMathIntegrationTests
     [Fact]
     public void QuantizationMode_HasSixValues()
     {
-        var values = Enum.GetValues<QuantizationMode>();
+        var values = (((QuantizationMode[])Enum.GetValues(typeof(QuantizationMode))));
         Assert.Equal(6, values.Length);
     }
 
@@ -34,7 +34,7 @@ public class QuantizationDeepMathIntegrationTests
     [InlineData(QuantizationMode.Mixed)]
     public void QuantizationMode_AllValuesValid(QuantizationMode mode)
     {
-        Assert.True(Enum.IsDefined(mode));
+        Assert.True(Enum.IsDefined(typeof(QuantizationMode), mode));
     }
 
     // ============================
@@ -44,7 +44,7 @@ public class QuantizationDeepMathIntegrationTests
     [Fact]
     public void QuantizationStrategy_HasSevenValues()
     {
-        var values = Enum.GetValues<QuantizationStrategy>();
+        var values = (((QuantizationStrategy[])Enum.GetValues(typeof(QuantizationStrategy))));
         Assert.Equal(7, values.Length);
     }
 
@@ -58,7 +58,7 @@ public class QuantizationDeepMathIntegrationTests
     [InlineData(QuantizationStrategy.MinMax)]
     public void QuantizationStrategy_AllValuesValid(QuantizationStrategy strategy)
     {
-        Assert.True(Enum.IsDefined(strategy));
+        Assert.True(Enum.IsDefined(typeof(QuantizationStrategy), strategy));
     }
 
     // ============================
@@ -68,7 +68,7 @@ public class QuantizationDeepMathIntegrationTests
     [Fact]
     public void QuantizationGranularity_HasFiveValues()
     {
-        var values = Enum.GetValues<QuantizationGranularity>();
+        var values = (((QuantizationGranularity[])Enum.GetValues(typeof(QuantizationGranularity))));
         Assert.Equal(5, values.Length);
     }
 
@@ -80,7 +80,7 @@ public class QuantizationDeepMathIntegrationTests
     [InlineData(QuantizationGranularity.PerRow)]
     public void QuantizationGranularity_AllValuesValid(QuantizationGranularity granularity)
     {
-        Assert.True(Enum.IsDefined(granularity));
+        Assert.True(Enum.IsDefined(typeof(QuantizationGranularity), granularity));
     }
 
     // ============================
@@ -90,7 +90,7 @@ public class QuantizationDeepMathIntegrationTests
     [Fact]
     public void QATMethod_HasFiveValues()
     {
-        var values = Enum.GetValues<QATMethod>();
+        var values = (((QATMethod[])Enum.GetValues(typeof(QATMethod))));
         Assert.Equal(5, values.Length);
     }
 
@@ -102,7 +102,7 @@ public class QuantizationDeepMathIntegrationTests
     [InlineData(QATMethod.QABLoRA)]
     public void QATMethod_AllValuesValid(QATMethod method)
     {
-        Assert.True(Enum.IsDefined(method));
+        Assert.True(Enum.IsDefined(typeof(QATMethod), method));
     }
 
     // ============================

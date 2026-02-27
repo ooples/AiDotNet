@@ -84,7 +84,7 @@ public class AudioExtendedIntegrationTests
     [Fact]
     public void WhisperModelSize_AllValues()
     {
-        var values = Enum.GetValues<WhisperModelSize>();
+        var values = (((WhisperModelSize[])Enum.GetValues(typeof(WhisperModelSize))));
         Assert.Equal(7, values.Length);
         Assert.Contains(WhisperModelSize.Tiny, values);
         Assert.Contains(WhisperModelSize.Base, values);
@@ -604,7 +604,7 @@ public class AudioExtendedIntegrationTests
     [Fact]
     public void LocalizationAlgorithm_AllValues()
     {
-        var values = Enum.GetValues<LocalizationAlgorithm>();
+        var values = (((LocalizationAlgorithm[])Enum.GetValues(typeof(LocalizationAlgorithm))));
         Assert.Equal(3, values.Length);
         Assert.Contains(LocalizationAlgorithm.GCCPHAT, values);
         Assert.Contains(LocalizationAlgorithm.MUSIC, values);
@@ -773,7 +773,7 @@ public class AudioExtendedIntegrationTests
     [Fact]
     public void KeyMode_AllValues()
     {
-        var values = Enum.GetValues<KeyMode>();
+        var values = (((KeyMode[])Enum.GetValues(typeof(KeyMode))));
         Assert.Equal(2, values.Length);
         Assert.Contains(KeyMode.Major, values);
         Assert.Contains(KeyMode.Minor, values);
@@ -937,7 +937,7 @@ public class AudioExtendedIntegrationTests
     [Fact]
     public void TtsModelType_AllValues()
     {
-        var values = Enum.GetValues<TtsModelType>();
+        var values = (((TtsModelType[])Enum.GetValues(typeof(TtsModelType))));
         Assert.Equal(3, values.Length);
         Assert.Contains(TtsModelType.FastSpeech2, values);
         Assert.Contains(TtsModelType.Tacotron2, values);
@@ -951,7 +951,7 @@ public class AudioExtendedIntegrationTests
     [Fact]
     public void VocoderType_AllValues()
     {
-        var values = Enum.GetValues<VocoderType>();
+        var values = (((VocoderType[])Enum.GetValues(typeof(VocoderType))));
         Assert.Equal(3, values.Length);
         Assert.Contains(VocoderType.HiFiGan, values);
         Assert.Contains(VocoderType.WaveGlow, values);

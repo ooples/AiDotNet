@@ -24,13 +24,13 @@ public class ModelRegistryDeepMathIntegrationTests
     [InlineData(ModelStage.Archived)]
     public void ModelStage_AllValuesValid(ModelStage stage)
     {
-        Assert.True(Enum.IsDefined(stage));
+        Assert.True(Enum.IsDefined(typeof(ModelStage), stage));
     }
 
     [Fact]
     public void ModelStage_HasFourValues()
     {
-        var values = Enum.GetValues<ModelStage>();
+        var values = (((ModelStage[])Enum.GetValues(typeof(ModelStage))));
         Assert.Equal(4, values.Length);
     }
 

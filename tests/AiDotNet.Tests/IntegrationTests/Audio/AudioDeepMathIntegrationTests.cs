@@ -446,7 +446,7 @@ public class AudioDeepMathIntegrationTests
     [Fact]
     public void WindowType_HasFourValues()
     {
-        var values = Enum.GetValues<WindowType>();
+        var values = (((WindowType[])Enum.GetValues(typeof(WindowType))));
         Assert.Equal(4, values.Length);
     }
 
@@ -457,7 +457,7 @@ public class AudioDeepMathIntegrationTests
     [InlineData(WindowType.Blackman)]
     public void WindowType_AllValuesValid(WindowType type)
     {
-        Assert.True(Enum.IsDefined(type));
+        Assert.True(Enum.IsDefined(typeof(WindowType), type));
     }
 
     // ============================

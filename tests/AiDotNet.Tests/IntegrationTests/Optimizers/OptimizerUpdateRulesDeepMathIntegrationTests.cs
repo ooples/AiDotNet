@@ -619,8 +619,8 @@ public class OptimizerUpdateRulesDeepMathIntegrationTests
         // Should not crash and should produce a finite result
         var result = optimizer.UpdateParameters(parameters, gradient);
 
-        Assert.True(double.IsFinite(result[0]), $"Result should be finite: {result[0]}");
-        Assert.True(double.IsFinite(result[1]), $"Result should be finite: {result[1]}");
+        Assert.True((!double.IsNaN(result[0]) && !double.IsInfinity(result[0])), $"Result should be finite: {result[0]}");
+        Assert.True((!double.IsNaN(result[1]) && !double.IsInfinity(result[1])), $"Result should be finite: {result[1]}");
     }
 
     [Fact]
@@ -693,8 +693,8 @@ public class OptimizerUpdateRulesDeepMathIntegrationTests
         // Both parameters should shrink toward zero due to weight decay
         // (even though gradient is zero, weight decay still acts)
         // Note: with zero gradient, m=0, v=0, but weight decay term is nonzero
-        Assert.True(double.IsFinite(result[0]), "Result 0 should be finite");
-        Assert.True(double.IsFinite(result[1]), "Result 1 should be finite");
+        Assert.True((!double.IsNaN(result[0]) && !double.IsInfinity(result[0])), "Result 0 should be finite");
+        Assert.True((!double.IsNaN(result[1]) && !double.IsInfinity(result[1])), "Result 1 should be finite");
     }
 
     #endregion
@@ -828,7 +828,7 @@ public class OptimizerUpdateRulesDeepMathIntegrationTests
 
         for (int i = 0; i < result.Length; i++)
         {
-            Assert.True(float.IsFinite(result[i]), $"Result[{i}] should be finite: {result[i]}");
+            Assert.True((!float.IsNaN(result[i]) && !float.IsInfinity(result[i])), $"Result[{i}] should be finite: {result[i]}");
         }
     }
 
@@ -853,7 +853,7 @@ public class OptimizerUpdateRulesDeepMathIntegrationTests
 
         for (int i = 0; i < result.Length; i++)
         {
-            Assert.True(float.IsFinite(result[i]), $"Result[{i}] should be finite: {result[i]}");
+            Assert.True((!float.IsNaN(result[i]) && !float.IsInfinity(result[i])), $"Result[{i}] should be finite: {result[i]}");
         }
     }
 
@@ -879,7 +879,7 @@ public class OptimizerUpdateRulesDeepMathIntegrationTests
 
         var result = optimizer.UpdateParameters(parameters, largeGrad);
 
-        Assert.True(double.IsFinite(result[0]), $"Result should be finite with large gradient: {result[0]}");
+        Assert.True((!double.IsNaN(result[0]) && !double.IsInfinity(result[0])), $"Result should be finite with large gradient: {result[0]}");
     }
 
     [Fact]
@@ -900,7 +900,7 @@ public class OptimizerUpdateRulesDeepMathIntegrationTests
 
         var result = optimizer.UpdateParameters(parameters, tinyGrad);
 
-        Assert.True(double.IsFinite(result[0]), $"Result should be finite with tiny gradient: {result[0]}");
+        Assert.True((!double.IsNaN(result[0]) && !double.IsInfinity(result[0])), $"Result should be finite with tiny gradient: {result[0]}");
         // With tiny gradient, parameter should barely change
         Assert.True(Math.Abs(result[0] - 1.0) < 0.1,
             $"Tiny gradient should cause minimal change: {result[0]}");
@@ -930,9 +930,9 @@ public class OptimizerUpdateRulesDeepMathIntegrationTests
 
             parameters = optimizer.UpdateParameters(parameters, gradient);
 
-            Assert.True(double.IsFinite(parameters[0]),
+            Assert.True((!double.IsNaN(parameters[0]) && !double.IsInfinity(parameters[0])),
                 $"Step {i}: param[0] is {parameters[0]}");
-            Assert.True(double.IsFinite(parameters[1]),
+            Assert.True((!double.IsNaN(parameters[1]) && !double.IsInfinity(parameters[1])),
                 $"Step {i}: param[1] is {parameters[1]}");
         }
     }
@@ -960,7 +960,7 @@ public class OptimizerUpdateRulesDeepMathIntegrationTests
         var result = optimizer.UpdateParameters(p, g);
 
         Assert.True(result[0] < p[0], "Should move opposite to gradient");
-        Assert.True(double.IsFinite(result[0]), "Should be finite");
+        Assert.True((!double.IsNaN(result[0]) && !double.IsInfinity(result[0])), "Should be finite");
     }
 
     [Fact]
@@ -990,7 +990,7 @@ public class OptimizerUpdateRulesDeepMathIntegrationTests
         Assert.Equal(size, result.Length);
         for (int i = 0; i < size; i++)
         {
-            Assert.True(double.IsFinite(result[i]), $"Result[{i}] should be finite");
+            Assert.True((!double.IsNaN(result[i]) && !double.IsInfinity(result[i])), $"Result[{i}] should be finite");
         }
     }
 

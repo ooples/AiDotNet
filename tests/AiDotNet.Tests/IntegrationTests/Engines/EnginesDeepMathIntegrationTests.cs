@@ -265,7 +265,7 @@ public class EnginesDeepMathIntegrationTests
     [Fact]
     public void GpuDeviceType_HasFourValues()
     {
-        var values = Enum.GetValues<GpuDeviceType>();
+        var values = (((GpuDeviceType[])Enum.GetValues(typeof(GpuDeviceType))));
         Assert.Equal(4, values.Length);
     }
 
@@ -276,7 +276,7 @@ public class EnginesDeepMathIntegrationTests
     [Fact]
     public void GpuUsageLevel_HasFiveValues()
     {
-        var values = Enum.GetValues<GpuUsageLevel>();
+        var values = (((GpuUsageLevel[])Enum.GetValues(typeof(GpuUsageLevel))));
         Assert.Equal(5, values.Length);
     }
 
@@ -287,7 +287,7 @@ public class EnginesDeepMathIntegrationTests
     [Fact]
     public void GpuExecutionModeConfig_HasFourValues()
     {
-        var values = Enum.GetValues<GpuExecutionModeConfig>();
+        var values = (((GpuExecutionModeConfig[])Enum.GetValues(typeof(GpuExecutionModeConfig))));
         Assert.Equal(4, values.Length);
     }
 
