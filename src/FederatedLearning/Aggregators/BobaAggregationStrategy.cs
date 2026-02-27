@@ -72,12 +72,23 @@ public class BobaAggregationStrategy<T> : ParameterDictionaryAggregationStrategy
             throw new ArgumentOutOfRangeException(nameof(emConvergenceTol), "Convergence tolerance must be positive.");
         }
 
+        if (minResponsibility <= 0 || minResponsibility >= 0.5)
+        {
+            throw new ArgumentOutOfRangeException(nameof(minResponsibility),
+                "Minimum responsibility must be in (0, 0.5).");
+        }
+
         _priorHonest = priorHonest;
         _emIterations = emIterations;
         _emConvergenceTol = emConvergenceTol;
         _minResponsibility = minResponsibility;
     }
 
+    /// <remarks>
+    /// <para><b>Note:</b> BOBA uses EM-derived honest responsibilities as aggregation weights,
+    /// not <paramref name="clientWeights"/>. This is by design: the Bayesian posterior determines
+    /// each client's contribution, overriding external sample-count weighting.</para>
+    /// </remarks>
     /// <inheritdoc/>
     public override Dictionary<string, T[]> Aggregate(
         Dictionary<int, Dictionary<string, T[]>> clientModels,
@@ -98,6 +109,24 @@ public class BobaAggregationStrategy<T> : ParameterDictionaryAggregationStrategy
         var clientIds = clientModels.Keys.ToList();
         int n = clientIds.Count;
         int totalParams = layerNames.Sum(ln => referenceModel[ln].Length);
+
+        // Validate all clients have matching layer structure.
+        foreach (var (clientId, model) in clientModels)
+        {
+            foreach (var layerName in layerNames)
+            {
+                if (!model.TryGetValue(layerName, out var cp))
+                {
+                    throw new ArgumentException($"Client {clientId} is missing layer '{layerName}'.");
+                }
+
+                if (cp.Length != referenceModel[layerName].Length)
+                {
+                    throw new ArgumentException(
+                        $"Client {clientId} layer '{layerName}' length {cp.Length} differs from expected {referenceModel[layerName].Length}.");
+                }
+            }
+        }
 
         // Flatten all client models into vectors.
         var flatVectors = new double[n][];

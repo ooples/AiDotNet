@@ -27,7 +27,7 @@ namespace AiDotNet.FederatedLearning.Aggregators;
 /// in Heterogeneous Federated Learning." ICML 2023.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters.</typeparam>
-public class FedDecorrAggregationStrategy<T> : ParameterDictionaryAggregationStrategyBase<T>
+internal class FedDecorrAggregationStrategy<T> : ParameterDictionaryAggregationStrategyBase<T>
 {
     private readonly double _decorrelationWeight;
 
@@ -37,9 +37,10 @@ public class FedDecorrAggregationStrategy<T> : ParameterDictionaryAggregationStr
     /// <param name="decorrelationWeight">Weight of the decorrelation loss (lambda). Default: 0.1 per paper.</param>
     public FedDecorrAggregationStrategy(double decorrelationWeight = 0.1)
     {
-        if (decorrelationWeight < 0)
+        if (double.IsNaN(decorrelationWeight) || double.IsInfinity(decorrelationWeight) || decorrelationWeight < 0)
         {
-            throw new ArgumentException("Decorrelation weight must be non-negative.", nameof(decorrelationWeight));
+            throw new ArgumentOutOfRangeException(nameof(decorrelationWeight),
+                "Decorrelation weight must be a finite non-negative number.");
         }
 
         _decorrelationWeight = decorrelationWeight;
@@ -68,6 +69,7 @@ public class FedDecorrAggregationStrategy<T> : ParameterDictionaryAggregationStr
     /// <returns>The decorrelation loss: lambda * ||C - I||_F^2.</returns>
     public T ComputeDecorrelationLoss(Matrix<T> features)
     {
+        Guard.NotNull(features);
         int n = features.Rows;    // batch size
         int d = features.Columns; // feature dimension
 
@@ -154,6 +156,7 @@ public class FedDecorrAggregationStrategy<T> : ParameterDictionaryAggregationStr
     /// <returns>The D x D correlation matrix.</returns>
     public Matrix<T> ComputeCorrelationMatrix(Matrix<T> features)
     {
+        Guard.NotNull(features);
         int n = features.Rows;
         int d = features.Columns;
 

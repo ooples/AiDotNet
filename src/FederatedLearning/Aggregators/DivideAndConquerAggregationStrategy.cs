@@ -67,7 +67,8 @@ public class DivideAndConquerAggregationStrategy<T> : ParameterDictionaryAggrega
 
         if (clientModels.Count == 1)
         {
-            return clientModels.First().Value;
+            var single = clientModels.First().Value;
+            return single.ToDictionary(kv => kv.Key, kv => (T[])kv.Value.Clone());
         }
 
         var referenceModel = clientModels.First().Value;
@@ -187,10 +188,8 @@ public class DivideAndConquerAggregationStrategy<T> : ParameterDictionaryAggrega
         double trustedTotalWeight = 0;
         foreach (int c in activeIndices)
         {
-            if (clientWeights.TryGetValue(clientIds[c], out var w))
-            {
-                trustedTotalWeight += w;
-            }
+            double w = clientWeights.TryGetValue(clientIds[c], out var cw) ? cw : 1.0;
+            trustedTotalWeight += w;
         }
 
         foreach (int c in activeIndices)

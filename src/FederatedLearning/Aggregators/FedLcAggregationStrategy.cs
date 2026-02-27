@@ -21,6 +21,7 @@ namespace AiDotNet.FederatedLearning.Aggregators;
 public class FedLcAggregationStrategy<T> : ParameterDictionaryAggregationStrategyBase<T>
 {
     private readonly double _calibrationTemperature;
+    private readonly object _distributionLock = new();
     private readonly Dictionary<int, Vector<T>> _clientClassDistributions = [];
 
     /// <summary>
@@ -80,7 +81,34 @@ public class FedLcAggregationStrategy<T> : ParameterDictionaryAggregationStrateg
                 nameof(classDistribution));
         }
 
-        _clientClassDistributions[clientId] = classDistribution.Clone();
+        lock (_distributionLock)
+        {
+            _clientClassDistributions[clientId] = classDistribution.Clone();
+        }
+    }
+
+    /// <summary>
+    /// Removes a client's registered class distribution.
+    /// </summary>
+    /// <param name="clientId">The client identifier.</param>
+    /// <returns>True if the client was found and removed; false if not registered.</returns>
+    public bool UnregisterClassDistribution(int clientId)
+    {
+        lock (_distributionLock)
+        {
+            return _clientClassDistributions.Remove(clientId);
+        }
+    }
+
+    /// <summary>
+    /// Clears all registered class distributions.
+    /// </summary>
+    public void ClearAllDistributions()
+    {
+        lock (_distributionLock)
+        {
+            _clientClassDistributions.Clear();
+        }
     }
 
     /// <summary>
@@ -97,10 +125,16 @@ public class FedLcAggregationStrategy<T> : ParameterDictionaryAggregationStrateg
     /// <returns>Calibrated logits: z_cal[c] = z[c] - tau * log(p_local[c]).</returns>
     public Vector<T> CalibrateLogits(Vector<T> logits, int clientId)
     {
-        if (!_clientClassDistributions.TryGetValue(clientId, out var distribution))
+        Vector<T> distribution;
+        lock (_distributionLock)
         {
-            throw new InvalidOperationException(
-                $"No class distribution registered for client {clientId}. Call RegisterClassDistribution first.");
+            if (!_clientClassDistributions.TryGetValue(clientId, out var dist))
+            {
+                throw new InvalidOperationException(
+                    $"No class distribution registered for client {clientId}. Call RegisterClassDistribution first.");
+            }
+
+            distribution = dist;
         }
 
         if (logits.Length != distribution.Length)
@@ -130,10 +164,16 @@ public class FedLcAggregationStrategy<T> : ParameterDictionaryAggregationStrateg
     /// <returns>Calibrated logits matrix.</returns>
     public Matrix<T> CalibrateBatch(Matrix<T> logitsBatch, int clientId)
     {
-        if (!_clientClassDistributions.TryGetValue(clientId, out var distribution))
+        Vector<T> distribution;
+        lock (_distributionLock)
         {
-            throw new InvalidOperationException(
-                $"No class distribution registered for client {clientId}.");
+            if (!_clientClassDistributions.TryGetValue(clientId, out var dist))
+            {
+                throw new InvalidOperationException(
+                    $"No class distribution registered for client {clientId}.");
+            }
+
+            distribution = dist;
         }
 
         if (logitsBatch.Columns != distribution.Length)
@@ -201,7 +241,16 @@ public class FedLcAggregationStrategy<T> : ParameterDictionaryAggregationStrateg
     public double CalibrationTemperature => _calibrationTemperature;
 
     /// <summary>Gets the number of clients with registered distributions.</summary>
-    public int RegisteredClientCount => _clientClassDistributions.Count;
+    public int RegisteredClientCount
+    {
+        get
+        {
+            lock (_distributionLock)
+            {
+                return _clientClassDistributions.Count;
+            }
+        }
+    }
 
     /// <inheritdoc/>
     public override string GetStrategyName() => $"FedLC(\u03c4={_calibrationTemperature})";

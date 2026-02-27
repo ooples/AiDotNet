@@ -78,6 +78,27 @@ public class FlameAggregationStrategy<T> : ParameterDictionaryAggregationStrateg
         var clientIds = clientModels.Keys.ToList();
         int n = clientIds.Count;
 
+        // Validate all clients have identical layer structure before flattening.
+        foreach (var clientId in clientIds)
+        {
+            var model = clientModels[clientId];
+            foreach (var layerName in layerNames)
+            {
+                if (!model.TryGetValue(layerName, out var layer))
+                {
+                    throw new ArgumentException(
+                        $"Client {clientId} missing layer '{layerName}'.", nameof(clientModels));
+                }
+
+                if (layer.Length != referenceModel[layerName].Length)
+                {
+                    throw new ArgumentException(
+                        $"Client {clientId} layer '{layerName}' length mismatch: {layer.Length} != {referenceModel[layerName].Length}.",
+                        nameof(clientModels));
+                }
+            }
+        }
+
         // Flatten to double vectors and compute norms.
         var flatVectors = new double[n][];
         var norms = new double[n];
@@ -125,11 +146,24 @@ public class FlameAggregationStrategy<T> : ParameterDictionaryAggregationStrateg
             result[layerName] = CreateZeroInitializedLayer(referenceModel[layerName].Length);
         }
 
-        double weight = 1.0 / trusted.Count;
+        // Weighted average over trusted clients using clientWeights (default 1.0 if missing).
+        double totalTrustedWeight = 0;
         foreach (int c in trusted)
         {
+            double w = clientWeights.TryGetValue(clientIds[c], out var cw) ? cw : 1.0;
+            totalTrustedWeight += w;
+        }
+
+        if (totalTrustedWeight <= 0)
+        {
+            totalTrustedWeight = trusted.Count;
+        }
+
+        foreach (int c in trusted)
+        {
+            double w = clientWeights.TryGetValue(clientIds[c], out var cw) ? cw : 1.0;
             double scale = norms[c] > clipNorm ? clipNorm / norms[c] : 1.0;
-            double combinedScale = scale * weight;
+            double combinedScale = scale * (w / totalTrustedWeight);
             var csT = NumOps.FromDouble(combinedScale);
             var clientModel = clientModels[clientIds[c]];
 
@@ -398,7 +432,7 @@ public class FlameAggregationStrategy<T> : ParameterDictionaryAggregationStrateg
         return edges;
     }
 
-    /// <summary>Gets the noise multiplier for DP noise injection.</summary>
+    /// <summary>Gets the noise multiplier for backdoor-erasure noise injection (not formal DP).</summary>
     public double NoiseMultiplier => _noiseMultiplier;
 
     /// <summary>Gets the minimum cluster size for HDBSCAN.</summary>

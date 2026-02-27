@@ -59,7 +59,9 @@ public class FedMaAggregationStrategy<T> : ParameterDictionaryAggregationStrateg
 
         if (clientModels.Count == 1)
         {
-            return clientModels.First().Value;
+            // Return a defensive copy to prevent callers from mutating the client's model.
+            var single = clientModels.First().Value;
+            return single.ToDictionary(kv => kv.Key, kv => (T[])kv.Value.Clone());
         }
 
         var referenceClientId = clientModels.Keys.First();
@@ -210,13 +212,12 @@ public class FedMaAggregationStrategy<T> : ParameterDictionaryAggregationStrateg
 
     private static double CosineSimilarity(T[] a, int offsetA, T[] b, int offsetB, int length)
     {
-        var numOps = MathHelper.GetNumericOperations<T>();
         double dot = 0, normA = 0, normB = 0;
 
         for (int i = 0; i < length; i++)
         {
-            double va = numOps.ToDouble(a[offsetA + i]);
-            double vb = numOps.ToDouble(b[offsetB + i]);
+            double va = NumOps.ToDouble(a[offsetA + i]);
+            double vb = NumOps.ToDouble(b[offsetB + i]);
             dot += va * vb;
             normA += va * va;
             normB += vb * vb;
@@ -226,10 +227,16 @@ public class FedMaAggregationStrategy<T> : ParameterDictionaryAggregationStrateg
         return denom > 1e-10 ? dot / denom : 0;
     }
 
+    /// <summary>
+    /// Estimates the number of neurons in a flattened weight layer.
+    /// </summary>
+    /// <remarks>
+    /// Heuristic: finds the largest divisor of <paramref name="layerSize"/> (up to sqrt)
+    /// such that each neuron has at least 4 parameters, then also checks common
+    /// power-of-2 layer widths. Falls back to 1 if no reasonable factorization exists.
+    /// </remarks>
     private static int EstimateNeuronCount(int layerSize)
     {
-        // Try common neuron counts (powers of 2, typical layer sizes).
-        // Pick the largest divisor <= sqrt(layerSize) that gives blocks >= 4.
         int bestCount = 1;
         int sqrtSize = (int)Math.Sqrt(layerSize);
 
@@ -357,5 +364,5 @@ public class FedMaAggregationStrategy<T> : ParameterDictionaryAggregationStrateg
     public double MatchingThreshold => _matchingThreshold;
 
     /// <inheritdoc/>
-    public override string GetStrategyName() => $"FedMA(iters={_matchingIterations},τ={_matchingThreshold})";
+    public override string GetStrategyName() => $"FedMA(iters={_matchingIterations},\u03c4={_matchingThreshold})";
 }

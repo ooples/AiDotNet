@@ -25,6 +25,8 @@ namespace AiDotNet.FederatedLearning.Aggregators;
 /// <typeparam name="T">The numeric type for model parameters.</typeparam>
 public class MoonAggregationStrategy<T> : ParameterDictionaryAggregationStrategyBase<T>
 {
+    private const double CosineDenominatorEpsilon = 1e-10;
+    private readonly object _stateLock = new();
     private readonly double _contrastiveWeight;
     private readonly double _temperature;
     private readonly Dictionary<int, Vector<T>> _previousRepresentations = [];
@@ -84,6 +86,8 @@ public class MoonAggregationStrategy<T> : ParameterDictionaryAggregationStrategy
         Vector<T> globalRepresentation,
         Vector<T>? previousLocalRepresentation)
     {
+        Guard.NotNull(localRepresentation);
+        Guard.NotNull(globalRepresentation);
         double simPositive = CosineSimilarity(localRepresentation, globalRepresentation);
         double logitPositive = simPositive / _temperature;
 
@@ -120,7 +124,11 @@ public class MoonAggregationStrategy<T> : ParameterDictionaryAggregationStrategy
     /// <param name="representation">The client's current local representation vector.</param>
     public void StoreRepresentation(int clientId, Vector<T> representation)
     {
-        _previousRepresentations[clientId] = representation.Clone();
+        Guard.NotNull(representation);
+        lock (_stateLock)
+        {
+            _previousRepresentations[clientId] = representation.Clone();
+        }
     }
 
     /// <summary>
@@ -130,7 +138,10 @@ public class MoonAggregationStrategy<T> : ParameterDictionaryAggregationStrategy
     /// <returns>The stored representation, or null if this is the first round for this client.</returns>
     public Vector<T>? GetPreviousRepresentation(int clientId)
     {
-        return _previousRepresentations.TryGetValue(clientId, out var rep) ? rep : null;
+        lock (_stateLock)
+        {
+            return _previousRepresentations.TryGetValue(clientId, out var rep) ? rep : null;
+        }
     }
 
     /// <summary>
@@ -170,7 +181,7 @@ public class MoonAggregationStrategy<T> : ParameterDictionaryAggregationStrategy
         }
 
         double denom = Math.Sqrt(normA) * Math.Sqrt(normB);
-        return denom > 1e-10 ? dot / denom : 0.0;
+        return denom > CosineDenominatorEpsilon ? dot / denom : 0.0;
     }
 
     /// <summary>Gets the contrastive loss weight (mu).</summary>

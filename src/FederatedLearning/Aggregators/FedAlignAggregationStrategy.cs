@@ -87,7 +87,7 @@ public class FedAlignAggregationStrategy<T> : ParameterDictionaryAggregationStra
     /// <summary>
     /// Gets the registered anchor inputs, or null if none have been set.
     /// </summary>
-    public Matrix<T>? Anchors => _anchorInputs;
+    public Matrix<T>? Anchors => _anchorInputs?.Clone();
 
     /// <summary>
     /// Computes the feature alignment loss between local and global model representations on anchors.
@@ -103,6 +103,8 @@ public class FedAlignAggregationStrategy<T> : ParameterDictionaryAggregationStra
     /// <returns>The alignment loss: alpha * D(f_local, f_global).</returns>
     public T ComputeAlignmentLoss(Matrix<T> localFeatures, Matrix<T> globalFeatures)
     {
+        Guard.NotNull(localFeatures);
+        Guard.NotNull(globalFeatures);
         if (localFeatures.Rows != globalFeatures.Rows || localFeatures.Columns != globalFeatures.Columns)
         {
             throw new ArgumentException(
@@ -110,12 +112,18 @@ public class FedAlignAggregationStrategy<T> : ParameterDictionaryAggregationStra
                 $"Global: [{globalFeatures.Rows}x{globalFeatures.Columns}].");
         }
 
+        if (localFeatures.Rows < 2 || localFeatures.Columns < 1)
+        {
+            return NumOps.Zero;
+        }
+
         double distance = _distanceMetric switch
         {
             AlignmentDistanceMetric.L2 => ComputeL2Distance(localFeatures, globalFeatures),
             AlignmentDistanceMetric.CKA => ComputeCKADistance(localFeatures, globalFeatures),
             AlignmentDistanceMetric.MMD => ComputeMMDDistance(localFeatures, globalFeatures),
-            _ => ComputeL2Distance(localFeatures, globalFeatures)
+            _ => throw new ArgumentOutOfRangeException(nameof(_distanceMetric),
+                $"Unknown alignment distance metric: {_distanceMetric}.")
         };
 
         return NumOps.FromDouble(_alignmentWeight * distance);

@@ -49,7 +49,8 @@ public class FedAaAggregationStrategy<T> : ParameterDictionaryAggregationStrateg
 
         if (clientModels.Count == 1)
         {
-            return clientModels.First().Value;
+            var single = clientModels.First().Value;
+            return single.ToDictionary(kv => kv.Key, kv => (T[])kv.Value.Clone());
         }
 
         double totalWeight = GetTotalWeightOrThrow(clientWeights, clientModels.Keys, nameof(clientWeights));
@@ -80,6 +81,13 @@ public class FedAaAggregationStrategy<T> : ParameterDictionaryAggregationStrateg
                 }
 
                 var avg = naiveAvg[layerName];
+                if (cp.Length != avg.Length)
+                {
+                    throw new ArgumentException(
+                        $"Layer '{layerName}' length mismatch for client {kvp.Key}: client={cp.Length}, expected={avg.Length}.",
+                        nameof(clientModels));
+                }
+
                 for (int i = 0; i < avg.Length; i++)
                 {
                     avg[i] = NumOps.Add(avg[i], NumOps.Multiply(cp[i], nw));
@@ -99,6 +107,13 @@ public class FedAaAggregationStrategy<T> : ParameterDictionaryAggregationStrateg
             {
                 var cp = clientModel[layerName];
                 var ap = naiveAvg[layerName];
+                if (cp.Length != ap.Length)
+                {
+                    throw new ArgumentException(
+                        $"Layer '{layerName}' length mismatch for client {clientIds[c]}: client={cp.Length}, expected={ap.Length}.",
+                        nameof(clientModels));
+                }
+
                 for (int i = 0; i < cp.Length; i++)
                 {
                     double cv = NumOps.ToDouble(cp[i]);
@@ -140,6 +155,13 @@ public class FedAaAggregationStrategy<T> : ParameterDictionaryAggregationStrateg
             {
                 var cp = clientModel[layerName];
                 var rp = result[layerName];
+                if (cp.Length != rp.Length)
+                {
+                    throw new ArgumentException(
+                        $"Layer '{layerName}' length mismatch for client {clientIds[c]}: client={cp.Length}, expected={rp.Length}.",
+                        nameof(clientModels));
+                }
+
                 for (int i = 0; i < rp.Length; i++)
                 {
                     rp[i] = NumOps.Add(rp[i], NumOps.Multiply(cp[i], aw));

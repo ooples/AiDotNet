@@ -123,6 +123,7 @@ public class FedSamAggregationStrategy<T> : ParameterDictionaryAggregationStrate
     /// <returns>Perturbation dictionary: epsilon = rho * g / ||g|| for each layer.</returns>
     public Dictionary<string, T[]> ComputePerturbation(Dictionary<string, T[]> gradient)
     {
+        Guard.NotNull(gradient);
         return _variant switch
         {
             FedSamVariant.Base => ComputeBasePerturbation(gradient),
@@ -130,7 +131,7 @@ public class FedSamAggregationStrategy<T> : ParameterDictionaryAggregationStrate
             FedSamVariant.FedSpeed => ComputeSpeedPerturbation(gradient),
             FedSamVariant.FedLESAM => ComputeLESAMPerturbation(gradient),
             FedSamVariant.FedSCAM => ComputeSCAMPerturbation(gradient),
-            _ => ComputeBasePerturbation(gradient)
+            _ => throw new ArgumentOutOfRangeException(nameof(_variant), $"Unknown FedSAM variant: {_variant}.")
         };
     }
 
@@ -144,6 +145,8 @@ public class FedSamAggregationStrategy<T> : ParameterDictionaryAggregationStrate
         Dictionary<string, T[]> parameters,
         Dictionary<string, T[]> perturbation)
     {
+        Guard.NotNull(parameters);
+        Guard.NotNull(perturbation);
         var perturbed = new Dictionary<string, T[]>(parameters.Count);
         foreach (var (layerName, weights) in parameters)
         {
@@ -151,6 +154,12 @@ public class FedSamAggregationStrategy<T> : ParameterDictionaryAggregationStrate
             {
                 perturbed[layerName] = (T[])weights.Clone();
                 continue;
+            }
+
+            if (eps.Length != weights.Length)
+            {
+                throw new ArgumentException(
+                    $"Perturbation layer '{layerName}' length {eps.Length} differs from parameter length {weights.Length}.");
             }
 
             var result = new T[weights.Length];
@@ -242,11 +251,15 @@ public class FedSamAggregationStrategy<T> : ParameterDictionaryAggregationStrate
         return perturbation;
     }
 
+    /// <remarks>
+    /// Simplified FedSMOO: uses a combined perturbation radius (local + global) on the local
+    /// gradient as a surrogate. Full FedSMOO requires the global gradient, which is unavailable
+    /// at the client during local training. This approximation is valid when local and global
+    /// gradients are well-aligned (early training or IID data).
+    /// </remarks>
     private Dictionary<string, T[]> ComputeSMOOPerturbation(Dictionary<string, T[]> gradient)
     {
-        // FedSMOO: dual perturbation = local_rho * g/||g|| + global_rho * g_global/||g_global||
-        // Since we don't have the global gradient separately, we use the same gradient
-        // with a combined radius: rho_combined = rho_local + rho_global.
+        // Simplified FedSMOO: combined radius on local gradient as surrogate for dual perturbation.
         double globalNorm = ComputeGlobalNorm(gradient);
         double combinedRadius = _perturbationRadius + _globalPerturbationRadius;
         double scale = globalNorm > 1e-12 ? combinedRadius / globalNorm : 0.0;
@@ -293,10 +306,15 @@ public class FedSamAggregationStrategy<T> : ParameterDictionaryAggregationStrate
         return perturbation;
     }
 
+    /// <remarks>
+    /// FedLESAM uses the same gradient-history approximation as FedSpeed. The distinction is
+    /// in how the approximation coefficient is interpreted: FedLESAM treats it as a local
+    /// estimation weight, while FedSpeed treats it as a momentum term. With a shared
+    /// <see cref="_approximationCoeff"/>, both produce identical perturbations. To differentiate,
+    /// configure a different <c>approximationCoeff</c> value for each variant.
+    /// </remarks>
     private Dictionary<string, T[]> ComputeLESAMPerturbation(Dictionary<string, T[]> gradient)
     {
-        // FedLESAM: locally estimated perturbation using gradient momentum.
-        // Same as FedSpeed but with different coefficient weighting.
         return ComputeSpeedPerturbation(gradient);
     }
 

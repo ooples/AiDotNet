@@ -40,7 +40,14 @@ public class FLTrustAggregationStrategy<T> : ParameterDictionaryAggregationStrat
     /// <param name="serverGradient">Parameter dictionary representing the server's gradient.</param>
     public void SetServerGradient(Dictionary<string, T[]> serverGradient)
     {
-        _serverGradient = serverGradient ?? throw new ArgumentNullException(nameof(serverGradient));
+        Guard.NotNull(serverGradient);
+
+        // Defensive copy to prevent external mutation.
+        _serverGradient = new Dictionary<string, T[]>(serverGradient.Count);
+        foreach (var (layerName, layerParams) in serverGradient)
+        {
+            _serverGradient[layerName] = (T[])layerParams.Clone();
+        }
     }
 
     /// <inheritdoc/>
@@ -102,6 +109,12 @@ public class FLTrustAggregationStrategy<T> : ParameterDictionaryAggregationStrat
                 }
 
                 var sg = _serverGradient[layerName];
+                if (cp.Length != sg.Length)
+                {
+                    throw new ArgumentException(
+                        $"Client {clientIds[c]} layer '{layerName}' length {cp.Length} differs from server gradient length {sg.Length}.");
+                }
+
                 for (int i = 0; i < cp.Length; i++)
                 {
                     double cv = NumOps.ToDouble(cp[i]);
@@ -117,6 +130,12 @@ public class FLTrustAggregationStrategy<T> : ParameterDictionaryAggregationStrat
         }
 
         double trustSum = trustScores.Sum();
+
+        // If all trust scores are zero, fall back to weighted average (all clients equally untrusted).
+        if (trustSum <= 0)
+        {
+            return AggregateWeightedAverage(clientModels, clientWeights);
+        }
 
         // Aggregate: normalize each client update to server magnitude, weight by trust score.
         var result = new Dictionary<string, T[]>(referenceModel.Count, referenceModel.Comparer);
