@@ -250,11 +250,22 @@ public class FedMeZO<T> : Infrastructure.FederatedLearningComponentBase<T>, IFed
         Dictionary<int, ZOClientMessage[]> clientMessages,
         Dictionary<int, double>? clientWeights = null)
     {
+        Guard.NotNull(clientMessages);
+        if (clientMessages.Count == 0)
+        {
+            throw new ArgumentException("No client messages provided.", nameof(clientMessages));
+        }
+
         var aggregated = new double[_modelDim];
         double totalWeight = 0;
 
         foreach (var (clientId, messages) in clientMessages)
         {
+            if (messages.Length == 0)
+            {
+                continue; // Skip clients with no perturbation results.
+            }
+
             double w = clientWeights?.GetValueOrDefault(clientId, 1.0) ?? 1.0;
             totalWeight += w;
 
@@ -320,6 +331,7 @@ public class FedMeZO<T> : Infrastructure.FederatedLearningComponentBase<T>, IFed
     /// <inheritdoc/>
     public Vector<T> AggregateAdapters(Dictionary<int, Vector<T>> clientAdapters, Dictionary<int, double>? clientWeights)
     {
+        Guard.NotNull(clientAdapters);
         if (clientAdapters.Count == 0)
         {
             throw new ArgumentException("No client adapters provided.", nameof(clientAdapters));
@@ -327,6 +339,14 @@ public class FedMeZO<T> : Infrastructure.FederatedLearningComponentBase<T>, IFed
 
         // Weighted average of ZO gradient estimates from clients.
         int paramLen = clientAdapters.Values.First().Length;
+        foreach (var (clientId, adapters) in clientAdapters)
+        {
+            if (adapters.Length != paramLen)
+            {
+                throw new ArgumentException(
+                    $"Client {clientId} adapter length {adapters.Length} differs from expected {paramLen}.");
+            }
+        }
         var aggregated = new T[paramLen];
         double totalWeight = 0;
 

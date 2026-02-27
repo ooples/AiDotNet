@@ -83,6 +83,26 @@ public class DPFedLoRA<T> : Infrastructure.FederatedLearningComponentBase<T>, IF
             throw new ArgumentOutOfRangeException(nameof(clipNorm), "Clip norm must be positive.");
         }
 
+        if (alpha <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(alpha), "Alpha must be positive.");
+        }
+
+        if (numAdaptedLayers <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(numAdaptedLayers), "Number of adapted layers must be positive.");
+        }
+
+        if (layerInputDim <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(layerInputDim), "Layer input dimension must be positive.");
+        }
+
+        if (layerOutputDim <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(layerOutputDim), "Layer output dimension must be positive.");
+        }
+
         _rank = rank;
         _alpha = alpha;
         _noiseMultiplier = noiseMultiplier;
@@ -117,8 +137,16 @@ public class DPFedLoRA<T> : Infrastructure.FederatedLearningComponentBase<T>, IF
     /// <inheritdoc/>
     public Vector<T> MergeAdapterParameters(Vector<T> fullModelParameters, Vector<T> aggregatedAdapters)
     {
+        Guard.NotNull(fullModelParameters);
+        Guard.NotNull(aggregatedAdapters);
         int totalParams = fullModelParameters.Length;
         int adapterCount = aggregatedAdapters.Length;
+        if (adapterCount > totalParams)
+        {
+            throw new ArgumentException(
+                $"Adapter length {adapterCount} exceeds model length {totalParams}.");
+        }
+
         int start = totalParams - adapterCount;
 
         var merged = new T[totalParams];
@@ -140,12 +168,21 @@ public class DPFedLoRA<T> : Infrastructure.FederatedLearningComponentBase<T>, IF
     /// <inheritdoc/>
     public Vector<T> AggregateAdapters(Dictionary<int, Vector<T>> clientAdapters, Dictionary<int, double>? clientWeights)
     {
+        Guard.NotNull(clientAdapters);
         if (clientAdapters.Count == 0)
         {
             throw new ArgumentException("No client adapters provided.", nameof(clientAdapters));
         }
 
         int adapterLen = clientAdapters.Values.First().Length;
+        foreach (var (clientId, adapters) in clientAdapters)
+        {
+            if (adapters.Length != adapterLen)
+            {
+                throw new ArgumentException(
+                    $"Client {clientId} adapter length {adapters.Length} differs from expected {adapterLen}.");
+            }
+        }
 
         // Step 1: Clip each client's adapters to clipNorm.
         var clipped = new Dictionary<int, Vector<T>>(clientAdapters.Count);
@@ -185,6 +222,11 @@ public class DPFedLoRA<T> : Infrastructure.FederatedLearningComponentBase<T>, IF
             {
                 aggregated[i] = NumOps.Add(aggregated[i], NumOps.Multiply(adapters[i], wT));
             }
+        }
+
+        if (totalWeight <= 0)
+        {
+            totalWeight = clientAdapters.Count;
         }
 
         var invTotal = NumOps.FromDouble(1.0 / totalWeight);
@@ -336,6 +378,21 @@ public class DPFedLoRA<T> : Infrastructure.FederatedLearningComponentBase<T>, IF
     /// <returns>Estimated maximum number of rounds.</returns>
     public int EstimateMaxRounds(double targetEpsilon = 8.0, double delta = 1e-5, int numClientsPerRound = 10)
     {
+        if (targetEpsilon <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(targetEpsilon), "Target epsilon must be positive.");
+        }
+
+        if (delta <= 0 || delta >= 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(delta), "Delta must be in (0, 1).");
+        }
+
+        if (numClientsPerRound < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(numClientsPerRound), "Number of clients must be at least 1.");
+        }
+
         if (_noiseMultiplier <= 0) return int.MaxValue;
 
         const double alpha = 10.0;

@@ -72,6 +72,26 @@ public class SparseLoRA<T> : Infrastructure.FederatedLearningComponentBase<T>, I
             throw new ArgumentOutOfRangeException(nameof(sparsityRatio), "Sparsity ratio must be in (0, 1].");
         }
 
+        if (alpha <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(alpha), "Alpha must be positive.");
+        }
+
+        if (numAdaptedLayers <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(numAdaptedLayers), "Number of adapted layers must be positive.");
+        }
+
+        if (layerInputDim <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(layerInputDim), "Layer input dimension must be positive.");
+        }
+
+        if (layerOutputDim <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(layerOutputDim), "Layer output dimension must be positive.");
+        }
+
         _rank = rank;
         _alpha = alpha;
         _sparsityRatio = sparsityRatio;
@@ -127,12 +147,21 @@ public class SparseLoRA<T> : Infrastructure.FederatedLearningComponentBase<T>, I
     /// <inheritdoc/>
     public Vector<T> AggregateAdapters(Dictionary<int, Vector<T>> clientAdapters, Dictionary<int, double>? clientWeights)
     {
+        Guard.NotNull(clientAdapters);
         if (clientAdapters.Count == 0)
         {
             throw new ArgumentException("No client adapters provided.", nameof(clientAdapters));
         }
 
         int adapterLen = clientAdapters.Values.First().Length;
+        foreach (var (clientId, adapters) in clientAdapters)
+        {
+            if (adapters.Length != adapterLen)
+            {
+                throw new ArgumentException(
+                    $"Client {clientId} adapter length {adapters.Length} differs from expected {adapterLen}.");
+            }
+        }
         var aggregated = new T[adapterLen];
         var counts = new double[adapterLen]; // Track how many clients contributed to each element.
         double totalWeight = 0;
@@ -181,6 +210,14 @@ public class SparseLoRA<T> : Infrastructure.FederatedLearningComponentBase<T>, I
     /// <returns>A sparse update containing only the top-k elements by magnitude.</returns>
     public SparseUpdate<T> SparsifyDelta(Vector<T> adapterBefore, Vector<T> adapterAfter)
     {
+        Guard.NotNull(adapterBefore);
+        Guard.NotNull(adapterAfter);
+        if (adapterBefore.Length != adapterAfter.Length)
+        {
+            throw new ArgumentException(
+                $"Before ({adapterBefore.Length}) and after ({adapterAfter.Length}) adapter lengths must match.");
+        }
+
         int len = adapterAfter.Length;
         int k = Math.Max(1, (int)(len * _sparsityRatio));
 
@@ -332,9 +369,25 @@ public class SparseUpdate<T>
     /// <param name="totalLength">Total vector length (including zero positions).</param>
     public SparseUpdate(int[] indices, T[] values, int totalLength)
     {
+        Guard.NotNull(indices);
+        Guard.NotNull(values);
         if (indices.Length != values.Length)
         {
             throw new ArgumentException("Indices and values must have the same length.");
+        }
+
+        if (totalLength < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(totalLength), "Total length must be non-negative.");
+        }
+
+        for (int i = 0; i < indices.Length; i++)
+        {
+            if (indices[i] < 0 || indices[i] >= totalLength)
+            {
+                throw new ArgumentOutOfRangeException(nameof(indices),
+                    $"Index {indices[i]} at position {i} is out of bounds [0, {totalLength}).");
+            }
         }
 
         Indices = indices;

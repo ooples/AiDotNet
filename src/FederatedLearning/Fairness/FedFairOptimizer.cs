@@ -45,6 +45,11 @@ public class FedFairOptimizer<T> : Infrastructure.FederatedLearningComponentBase
         }
 
         double total = accuracyWeight + fairnessWeight + efficiencyWeight;
+        if (total <= 0)
+        {
+            throw new ArgumentException("At least one preference weight must be positive.");
+        }
+
         _accuracyWeight = accuracyWeight / total;
         _fairnessWeight = fairnessWeight / total;
         _efficiencyWeight = efficiencyWeight / total;
@@ -62,6 +67,18 @@ public class FedFairOptimizer<T> : Infrastructure.FederatedLearningComponentBase
         Dictionary<int, int> clientSampleCounts,
         Dictionary<int, double>? clientLatencies = null)
     {
+        Guard.NotNull(clientLosses);
+        Guard.NotNull(clientSampleCounts);
+
+        // Validate losses are finite.
+        foreach (var (id, loss) in clientLosses)
+        {
+            if (double.IsNaN(loss) || double.IsInfinity(loss))
+            {
+                throw new ArgumentException($"Client {id} has non-finite loss {loss}.", nameof(clientLosses));
+            }
+        }
+
         if (clientLosses.Count == 0)
         {
             throw new ArgumentException("Client losses cannot be empty.", nameof(clientLosses));

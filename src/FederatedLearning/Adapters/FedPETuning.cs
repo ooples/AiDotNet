@@ -76,6 +76,16 @@ public class FedPETuning<T> : Infrastructure.FederatedLearningComponentBase<T>, 
             throw new ArgumentOutOfRangeException(nameof(bottleneckDim), "Bottleneck dimension must be positive.");
         }
 
+        if (numAdaptedLayers <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(numAdaptedLayers), "Number of adapted layers must be positive.");
+        }
+
+        if (layerDim <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(layerDim), "Layer dimension must be positive.");
+        }
+
         _method = method;
         _modelDim = modelDim;
         _bottleneckDim = bottleneckDim;
@@ -135,12 +145,21 @@ public class FedPETuning<T> : Infrastructure.FederatedLearningComponentBase<T>, 
     /// <inheritdoc/>
     public Vector<T> AggregateAdapters(Dictionary<int, Vector<T>> clientAdapters, Dictionary<int, double>? clientWeights)
     {
+        Guard.NotNull(clientAdapters);
         if (clientAdapters.Count == 0)
         {
             throw new ArgumentException("No client adapters provided.", nameof(clientAdapters));
         }
 
         int adapterLen = clientAdapters.Values.First().Length;
+        foreach (var (clientId, adapters) in clientAdapters)
+        {
+            if (adapters.Length != adapterLen)
+            {
+                throw new ArgumentException(
+                    $"Client {clientId} adapter length {adapters.Length} differs from expected {adapterLen}.");
+            }
+        }
         var aggregated = new T[adapterLen];
         double totalWeight = 0;
 
@@ -195,7 +214,18 @@ public class FedPETuning<T> : Infrastructure.FederatedLearningComponentBase<T>, 
         Dictionary<int, Vector<T>> clientAdapters,
         Dictionary<int, double>? clientWeights)
     {
-        // LoRA adapter layout per layer: [B (layerDim x rank), A (rank x layerDim)]
+        // LoRA adapter layout per layer: [B (layerDim x rank), A (rank x layerDim)].
+        // Validate adapter lengths are uniform.
+        int adapterLenLora = clientAdapters.Values.First().Length;
+        foreach (var (clientId, adapters) in clientAdapters)
+        {
+            if (adapters.Length != adapterLenLora)
+            {
+                throw new ArgumentException(
+                    $"Client {clientId} LoRA adapter length {adapters.Length} differs from expected {adapterLenLora}.");
+            }
+        }
+
         // B and A matrices have different gradient magnitudes and should be weighted
         // proportionally to their Frobenius norms for better aggregation.
         int adapterLen = clientAdapters.Values.First().Length;

@@ -54,12 +54,19 @@ public class DFedAvgMProtocol<T> : Infrastructure.FederatedLearningComponentBase
         Dictionary<int, Dictionary<string, T[]>> neighborModels,
         Dictionary<int, double> mixingWeights)
     {
+        Guard.NotNull(currentModel);
+        Guard.NotNull(neighborModels);
+        Guard.NotNull(mixingWeights);
         _momentumBuffers ??= new Dictionary<int, Dictionary<string, T[]>>();
 
         var layerNames = currentModel.Keys.ToArray();
 
         // Step 1: Weighted average with neighbors.
         double totalWeight = mixingWeights.Values.Sum();
+        if (totalWeight <= 0)
+        {
+            totalWeight = 1.0; // Avoid division by zero.
+        }
         var averaged = new Dictionary<string, T[]>(currentModel.Count);
 
         foreach (var layerName in layerNames)
@@ -100,9 +107,10 @@ public class DFedAvgMProtocol<T> : Infrastructure.FederatedLearningComponentBase
 
         foreach (var layerName in layerNames)
         {
-            if (!mBuf.ContainsKey(layerName))
+            int layerLen = currentModel[layerName].Length;
+            if (!mBuf.TryGetValue(layerName, out var existingMom) || existingMom.Length != layerLen)
             {
-                var init = new T[currentModel[layerName].Length];
+                var init = new T[layerLen];
                 for (int i = 0; i < init.Length; i++)
                 {
                     init[i] = NumOps.Zero;

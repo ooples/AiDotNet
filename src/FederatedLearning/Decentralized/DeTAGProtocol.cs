@@ -72,10 +72,15 @@ public class DeTAGProtocol<T> : Infrastructure.FederatedLearningComponentBase<T>
         Dictionary<int, T[]>? neighborTrackers,
         Dictionary<int, double> mixingWeights)
     {
+        Guard.NotNull(currentParams);
+        Guard.NotNull(newGradient);
+        Guard.NotNull(previousGradient);
+        Guard.NotNull(neighborParams);
+        Guard.NotNull(mixingWeights);
         int d = currentParams.Length;
         _gradientTrackers ??= new Dictionary<int, T[]>();
 
-        if (!_gradientTrackers.ContainsKey(clientId))
+        if (!_gradientTrackers.TryGetValue(clientId, out var existingTracker) || existingTracker.Length != d)
         {
             var initTracker = new T[d];
             for (int i = 0; i < d; i++)
@@ -93,6 +98,11 @@ public class DeTAGProtocol<T> : Infrastructure.FederatedLearningComponentBase<T>
         foreach (var w in mixingWeights.Values)
         {
             totalWeight += w;
+        }
+
+        if (totalWeight <= 0)
+        {
+            totalWeight = 1.0; // Avoid division by zero; fall back to unweighted.
         }
 
         var newTracker = new T[d];

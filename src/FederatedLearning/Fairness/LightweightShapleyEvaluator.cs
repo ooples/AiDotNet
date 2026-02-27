@@ -33,9 +33,9 @@ public class LightweightShapleyEvaluator<T> : Infrastructure.FederatedLearningCo
     /// <param name="freeRiderThreshold">Contribution score below which a client is a free-rider. Default: 0.1.</param>
     public LightweightShapleyEvaluator(double freeRiderThreshold = 0.1)
     {
-        if (freeRiderThreshold < 0)
+        if (freeRiderThreshold < 0 || freeRiderThreshold > 1)
         {
-            throw new ArgumentOutOfRangeException(nameof(freeRiderThreshold), "Threshold must be non-negative.");
+            throw new ArgumentOutOfRangeException(nameof(freeRiderThreshold), "Threshold must be in [0, 1].");
         }
 
         _freeRiderThreshold = freeRiderThreshold;
@@ -47,6 +47,8 @@ public class LightweightShapleyEvaluator<T> : Infrastructure.FederatedLearningCo
         Tensor<T> globalModel,
         Dictionary<int, List<Tensor<T>>> clientHistories)
     {
+        Guard.NotNull(clientModels);
+        Guard.NotNull(globalModel);
         var scores = new Dictionary<int, double>();
         if (clientModels.Count == 0)
         {
@@ -66,7 +68,13 @@ public class LightweightShapleyEvaluator<T> : Infrastructure.FederatedLearningCo
         foreach (var (clientId, clientModel) in clientModels)
         {
             double dot = 0, clientNorm2 = 0;
-            int len = Math.Min(clientModel.Length, globalModel.Length);
+            if (clientModel.Length != globalModel.Length)
+            {
+                throw new ArgumentException(
+                    $"Client {clientId} model length {clientModel.Length} does not match global model length {globalModel.Length}.");
+            }
+
+            int len = clientModel.Length;
 
             for (int i = 0; i < len; i++)
             {
