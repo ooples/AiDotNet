@@ -70,6 +70,7 @@ public class FedDTCompressor<T> : Infrastructure.FederatedLearningComponentBase<
     /// <returns>Compressed tree representation: (splitPoints, leafValues, leafCounts).</returns>
     public CompressedTree Compress(Dictionary<string, T[]> parameterDelta)
     {
+        Guard.NotNull(parameterDelta);
         var allSplits = new Dictionary<string, double[]>();
         var allLeafValues = new Dictionary<string, double[]>();
         var allLeafCounts = new Dictionary<string, int[]>();
@@ -127,43 +128,12 @@ public class FedDTCompressor<T> : Infrastructure.FederatedLearningComponentBase<
             return;
         }
 
-        // Find the best split point that minimizes variance in both children.
-        // Use the median value as the split threshold for balanced partitions.
-        var sorted = new double[count];
-        Array.Copy(values, start, sorted, 0, count);
-        Array.Sort(sorted);
-        double splitVal = sorted[count / 2];
-        splits.Add(splitVal);
-
-        // Value-based partition: values <= split go left, > split go right.
-        // Rearrange the values array in-place to group left and right.
-        int left = start;
-        int right = end - 1;
-        while (left <= right)
-        {
-            if (values[left] <= splitVal)
-            {
-                left++;
-            }
-            else
-            {
-                // Swap with right.
-                (values[left], values[right]) = (values[right], values[left]);
-                right--;
-            }
-        }
-
-        int mid = left; // First element of the right partition.
-
-        // Ensure we don't create empty partitions (can happen with many equal values).
-        if (mid == start)
-        {
-            mid = start + 1;
-        }
-        else if (mid == end)
-        {
-            mid = end - 1;
-        }
+        // Index-based split: always split at the midpoint of the index range.
+        // This preserves the parameter-to-position mapping. Value-based partitioning
+        // would rearrange elements in-place and destroy positional correspondence,
+        // causing decompression to assign leaf means to wrong parameter positions.
+        int mid = start + count / 2;
+        splits.Add(mid);
 
         BuildTree(values, start, mid, depth + 1, splits, leafValues, leafCounts);
         BuildTree(values, mid, end, depth + 1, splits, leafValues, leafCounts);
@@ -177,6 +147,8 @@ public class FedDTCompressor<T> : Infrastructure.FederatedLearningComponentBase<
     /// <returns>Reconstructed parameter update.</returns>
     public Dictionary<string, T[]> Decompress(CompressedTree tree, Dictionary<string, T[]> templateDelta)
     {
+        Guard.NotNull(tree);
+        Guard.NotNull(templateDelta);
         var result = new Dictionary<string, T[]>();
 
         foreach (var (layerName, template) in templateDelta)
@@ -229,18 +201,28 @@ public class FedDTCompressor<T> : Infrastructure.FederatedLearningComponentBase<
         Dictionary<int, double> clientWeights,
         Dictionary<string, T[]> templateDelta)
     {
-        // Decompress each, then weighted average.
+        Guard.NotNull(clientTrees);
+        Guard.NotNull(clientWeights);
+        Guard.NotNull(templateDelta);
+
         var result = new Dictionary<string, T[]>();
         double totalWeight = clientWeights.Values.Sum();
+
+        // Decompress each client tree once for all layers, rather than per-layer.
+        // This avoids L × C redundant decompressions and dictionary allocations.
+        var decompressedClients = new Dictionary<int, Dictionary<string, T[]>>();
+        foreach (var (clientId, tree) in clientTrees)
+        {
+            decompressedClients[clientId] = Decompress(tree, templateDelta);
+        }
 
         foreach (var (layerName, template) in templateDelta)
         {
             var merged = new double[template.Length];
 
-            foreach (var (clientId, tree) in clientTrees)
+            foreach (var (clientId, decompressed) in decompressedClients)
             {
                 double w = clientWeights.GetValueOrDefault(clientId, 1.0);
-                var decompressed = Decompress(tree, new Dictionary<string, T[]> { { layerName, template } });
 
                 if (decompressed.TryGetValue(layerName, out var layerVals))
                 {
@@ -266,11 +248,16 @@ public class FedDTCompressor<T> : Infrastructure.FederatedLearningComponentBase<
     /// <summary>
     /// Estimates the compression ratio achieved by the tree representation.
     /// </summary>
+    /// <remarks>
+    /// The estimate counts all elements equally regardless of type (doubles vs ints),
+    /// which is a reasonable approximation for relative comparisons.
+    /// </remarks>
     /// <param name="originalSize">Number of parameters in the original update.</param>
     /// <param name="tree">The compressed tree.</param>
     /// <returns>Compression ratio (original / compressed). Higher = more compression.</returns>
     public double EstimateCompressionRatio(int originalSize, CompressedTree tree)
     {
+        Guard.NotNull(tree);
         int compressedSize = 0;
         foreach (var leafVals in tree.LeafValues.Values)
         {
@@ -310,6 +297,9 @@ public class FedDTCompressor<T> : Infrastructure.FederatedLearningComponentBase<
             Dictionary<string, double[]> leafValues,
             Dictionary<string, int[]> leafCounts)
         {
+            Guard.NotNull(splitPoints);
+            Guard.NotNull(leafValues);
+            Guard.NotNull(leafCounts);
             SplitPoints = splitPoints;
             LeafValues = leafValues;
             LeafCounts = leafCounts;

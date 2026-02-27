@@ -97,6 +97,7 @@ public class FetchSGDCompressor<T> : Infrastructure.FederatedLearningComponentBa
     /// <returns>Count sketch matrix (rows x cols).</returns>
     public double[,] Sketch(T[] gradient, bool useErrorFeedback = true)
     {
+        Guard.NotNull(gradient);
         var sketch = new double[_sketchRows, _sketchCols];
 
         // Add error feedback from previous round.
@@ -133,10 +134,10 @@ public class FetchSGDCompressor<T> : Infrastructure.FederatedLearningComponentBa
             _errorAccumulator = new double[gradient.Length];
             for (int i = 0; i < gradient.Length; i++)
             {
-                // Error = input - sketch_reconstruction
+                // Error = original gradient - sketch reconstruction.
+                // The error from the previous round was already folded into the sketch above,
+                // so we only track the new residual for the next round.
                 double estimate = EstimateFromSketch(sketch, i);
-                double input = NumOps.ToDouble(gradient[i]) +
-                    (_errorAccumulator.Length == gradient.Length ? 0 : 0); // Already added above.
                 _errorAccumulator[i] = NumOps.ToDouble(gradient[i]) - estimate;
             }
         }

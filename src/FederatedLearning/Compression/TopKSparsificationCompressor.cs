@@ -51,6 +51,7 @@ public class TopKSparsificationCompressor<T> : Infrastructure.FederatedLearningC
     /// <returns>Sparse gradient (non-top-k elements are zero).</returns>
     public Dictionary<string, T[]> Compress(Dictionary<string, T[]> gradient, int clientId)
     {
+        Guard.NotNull(gradient);
         _errorAccumulators ??= new Dictionary<int, Dictionary<string, double[]>>();
         if (!_errorAccumulators.ContainsKey(clientId))
         {
@@ -144,6 +145,7 @@ public class TopKSparsificationCompressor<T> : Infrastructure.FederatedLearningC
     public Dictionary<string, List<(int Index, T Value)>> CompressSparse(
         Dictionary<string, T[]> gradient, int clientId)
     {
+        Guard.NotNull(gradient);
         _errorAccumulators ??= new Dictionary<int, Dictionary<string, double[]>>();
         if (!_errorAccumulators.ContainsKey(clientId))
         {
@@ -228,6 +230,8 @@ public class TopKSparsificationCompressor<T> : Infrastructure.FederatedLearningC
         Dictionary<string, List<(int Index, T Value)>> sparse,
         Dictionary<string, int> layerSizes)
     {
+        Guard.NotNull(sparse);
+        Guard.NotNull(layerSizes);
         var dense = new Dictionary<string, T[]>(layerSizes.Count);
         foreach (var (layerName, size) in layerSizes)
         {
@@ -236,10 +240,13 @@ public class TopKSparsificationCompressor<T> : Infrastructure.FederatedLearningC
             {
                 foreach (var (index, value) in entries)
                 {
-                    if (index < size)
+                    if (index < 0 || index >= size)
                     {
-                        result[index] = value;
+                        throw new ArgumentOutOfRangeException(nameof(sparse),
+                            $"Layer '{layerName}' contains out-of-bounds index {index} (size={size}).");
                     }
+
+                    result[index] = value;
                 }
             }
 
@@ -259,6 +266,8 @@ public class TopKSparsificationCompressor<T> : Infrastructure.FederatedLearningC
         Dictionary<int, Dictionary<string, List<(int Index, T Value)>>> clientSparseGradients,
         Dictionary<string, int> layerSizes)
     {
+        Guard.NotNull(clientSparseGradients);
+        Guard.NotNull(layerSizes);
         int numClients = clientSparseGradients.Count;
         if (numClients == 0)
         {
@@ -271,21 +280,26 @@ public class TopKSparsificationCompressor<T> : Infrastructure.FederatedLearningC
             aggregated[layerName] = new double[size];
         }
 
-        foreach (var (_, sparseGrad) in clientSparseGradients)
+        foreach (var (clientId, sparseGrad) in clientSparseGradients)
         {
             foreach (var (layerName, entries) in sparseGrad)
             {
                 if (!aggregated.TryGetValue(layerName, out var agg))
                 {
-                    continue;
+                    throw new ArgumentException(
+                        $"Client {clientId} sent unknown layer '{layerName}' not present in layerSizes.",
+                        nameof(clientSparseGradients));
                 }
 
                 foreach (var (index, value) in entries)
                 {
-                    if (index < agg.Length)
+                    if (index < 0 || index >= agg.Length)
                     {
-                        agg[index] += NumOps.ToDouble(value);
+                        throw new ArgumentOutOfRangeException(nameof(clientSparseGradients),
+                            $"Client {clientId} layer '{layerName}' contains out-of-bounds index {index} (size={agg.Length}).");
                     }
+
+                    agg[index] += NumOps.ToDouble(value);
                 }
             }
         }

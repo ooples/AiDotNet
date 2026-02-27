@@ -162,6 +162,11 @@ public class FedKDCompressor<T> : Infrastructure.FederatedLearningComponentBase<
     /// "soft labels" — probability distributions that capture the collective knowledge of all
     /// client models. The server then trains its own model to match these soft labels using
     /// gradient descent. This is how the global model learns without ever seeing the raw data.</para>
+    /// <para><b>Implementation Note:</b> Gradients are currently approximated via finite differences
+    /// (perturbing each sampled parameter by epsilon and measuring loss change). This is a
+    /// reference implementation suitable for small models and testing. Production systems should
+    /// replace this with backpropagation through the student model for O(1) gradient computation
+    /// per parameter instead of the current O(n) forward passes per sampled parameter.</para>
     /// </remarks>
     /// <param name="studentParams">Current student model parameters (will be updated).</param>
     /// <param name="aggregatedSoftLabels">Soft labels from AggregateLogits.</param>
@@ -238,6 +243,12 @@ public class FedKDCompressor<T> : Infrastructure.FederatedLearningComponentBase<
         Dictionary<int, T[][]> clientLogits,
         int targetClasses)
     {
+        Guard.NotNull(clientLogits);
+        if (targetClasses <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(targetClasses), "Target classes must be positive.");
+        }
+
         var normalized = new Dictionary<int, T[][]>();
 
         foreach (var (clientId, logits) in clientLogits)
