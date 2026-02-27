@@ -19,7 +19,23 @@ public enum FederatedPersonalizationStrategy
     /// <summary>pFedMe — Moreau-envelope-based personalization with proximal local solver.</summary>
     PFedMe,
     /// <summary>Clustered — cluster clients by gradient similarity, aggregate within clusters.</summary>
-    Clustered
+    Clustered,
+    /// <summary>FedBABU — freeze head during FL, fine-tune body, then locally fine-tune head.</summary>
+    FedBABU,
+    /// <summary>FedRoD — dual classifiers: one aggregated generic + one local personalized.</summary>
+    FedRoD,
+    /// <summary>FedCP — conditional computation policy routing inputs to model subsets.</summary>
+    FedCP,
+    /// <summary>kNN-Per — kNN cache over global features for zero-cost personalization at inference.</summary>
+    KNNPer,
+    /// <summary>FedSelect — learned sparse binary masks determining personalized vs shared params.</summary>
+    FedSelect,
+    /// <summary>pFedGate — gated layer-wise mixture of local and global parameters.</summary>
+    PFedGate,
+    /// <summary>FedAGHN — adaptive gradient-based heterogeneous networks.</summary>
+    FedAGHN,
+    /// <summary>FedPAC — personalization via aggregation and calibration with prototype alignment.</summary>
+    FedPAC
 }
 
 /// <summary>
