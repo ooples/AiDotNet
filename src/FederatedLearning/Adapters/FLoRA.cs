@@ -65,6 +65,21 @@ public class FLoRA<T> : Infrastructure.FederatedLearningComponentBase<T>, IFeder
             throw new ArgumentOutOfRangeException(nameof(rank), "Rank must be positive.");
         }
 
+        if (numAdaptedLayers <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(numAdaptedLayers), "Number of adapted layers must be positive.");
+        }
+
+        if (layerInputDim <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(layerInputDim), "Layer input dimension must be positive.");
+        }
+
+        if (layerOutputDim <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(layerOutputDim), "Layer output dimension must be positive.");
+        }
+
         _rank = rank;
         _alpha = alpha;
         _modelDim = modelDim;
@@ -96,8 +111,18 @@ public class FLoRA<T> : Infrastructure.FederatedLearningComponentBase<T>, IFeder
     /// <inheritdoc/>
     public Vector<T> MergeAdapterParameters(Vector<T> fullModelParameters, Vector<T> aggregatedAdapters)
     {
+        Guard.NotNull(fullModelParameters);
+        Guard.NotNull(aggregatedAdapters);
         int totalParams = fullModelParameters.Length;
         int adapterCount = aggregatedAdapters.Length;
+
+        if (adapterCount > totalParams)
+        {
+            throw new ArgumentException(
+                $"Adapter length ({adapterCount}) exceeds full model length ({totalParams}).",
+                nameof(aggregatedAdapters));
+        }
+
         int start = totalParams - adapterCount;
 
         var merged = new T[totalParams];
@@ -119,12 +144,24 @@ public class FLoRA<T> : Infrastructure.FederatedLearningComponentBase<T>, IFeder
     /// <inheritdoc/>
     public Vector<T> AggregateAdapters(Dictionary<int, Vector<T>> clientAdapters, Dictionary<int, double>? clientWeights)
     {
+        Guard.NotNull(clientAdapters);
         if (clientAdapters.Count == 0)
         {
             throw new ArgumentException("No client adapters provided.", nameof(clientAdapters));
         }
 
         int adapterLen = clientAdapters.Values.First().Length;
+
+        // Validate all clients have matching adapter lengths.
+        foreach (var (clientId, adapter) in clientAdapters)
+        {
+            if (adapter.Length != adapterLen)
+            {
+                throw new ArgumentException(
+                    $"Client {clientId} adapter length {adapter.Length} != expected {adapterLen}.",
+                    nameof(clientAdapters));
+            }
+        }
         int paramsPerLayer = (_layerOutputDim * _rank) + (_rank * _layerInputDim);
         int bSize = _layerOutputDim * _rank; // B matrix: [out_dim x rank]
         int aSize = _rank * _layerInputDim;  // A matrix: [rank x in_dim]
@@ -133,6 +170,11 @@ public class FLoRA<T> : Infrastructure.FederatedLearningComponentBase<T>, IFeder
         foreach (var (clientId, _) in clientAdapters)
         {
             totalWeight += clientWeights?.GetValueOrDefault(clientId, 1.0) ?? 1.0;
+        }
+
+        if (totalWeight <= 0)
+        {
+            throw new InvalidOperationException("Total client weight must be positive.");
         }
 
         var aggregated = new T[adapterLen];

@@ -72,6 +72,16 @@ public class HierarchicalFedLoRA<T> : Infrastructure.FederatedLearningComponentB
             throw new ArgumentOutOfRangeException(nameof(globalRank), "Global rank must be positive and >= local rank.");
         }
 
+        if (numAdaptedLayers <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(numAdaptedLayers), "Number of adapted layers must be positive.");
+        }
+
+        if (layerDim <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(layerDim), "Layer dimension must be positive.");
+        }
+
         _localRank = localRank;
         _globalRank = globalRank;
         _modelDim = modelDim;
@@ -103,8 +113,18 @@ public class HierarchicalFedLoRA<T> : Infrastructure.FederatedLearningComponentB
     /// <inheritdoc/>
     public Vector<T> MergeAdapterParameters(Vector<T> fullModelParameters, Vector<T> aggregatedAdapters)
     {
+        Guard.NotNull(fullModelParameters);
+        Guard.NotNull(aggregatedAdapters);
         int totalParams = fullModelParameters.Length;
         int adapterCount = aggregatedAdapters.Length;
+
+        if (adapterCount > totalParams)
+        {
+            throw new ArgumentException(
+                $"Adapter length ({adapterCount}) exceeds full model length ({totalParams}).",
+                nameof(aggregatedAdapters));
+        }
+
         int start = totalParams - adapterCount;
 
         var merged = new T[totalParams];
@@ -141,12 +161,25 @@ public class HierarchicalFedLoRA<T> : Infrastructure.FederatedLearningComponentB
     /// <returns>Aggregated edge adapter at local rank.</returns>
     public Vector<T> AggregateEdge(Dictionary<int, Vector<T>> clientAdapters, Dictionary<int, double>? clientWeights)
     {
+        Guard.NotNull(clientAdapters);
         if (clientAdapters.Count == 0)
         {
             throw new ArgumentException("No client adapters provided.", nameof(clientAdapters));
         }
 
         int adapterLen = clientAdapters.Values.First().Length;
+
+        // Validate all clients have matching adapter lengths.
+        foreach (var (clientId, adapter) in clientAdapters)
+        {
+            if (adapter.Length != adapterLen)
+            {
+                throw new ArgumentException(
+                    $"Client {clientId} adapter length {adapter.Length} != expected {adapterLen}.",
+                    nameof(clientAdapters));
+            }
+        }
+
         var aggregated = new T[adapterLen];
         double totalWeight = 0;
 
@@ -160,6 +193,11 @@ public class HierarchicalFedLoRA<T> : Infrastructure.FederatedLearningComponentB
             {
                 aggregated[i] = NumOps.Add(aggregated[i], NumOps.Multiply(adapters[i], wT));
             }
+        }
+
+        if (totalWeight <= 0)
+        {
+            throw new InvalidOperationException("Total client weight must be positive.");
         }
 
         var invTotal = NumOps.FromDouble(1.0 / totalWeight);
@@ -244,8 +282,18 @@ public class HierarchicalFedLoRA<T> : Infrastructure.FederatedLearningComponentB
     /// <returns>Adapter parameters truncated to local rank.</returns>
     public Vector<T> DemoteToLocalRank(Vector<T> globalAdapter)
     {
+        Guard.NotNull(globalAdapter);
         int localParamsPerLayer = 2 * _layerDim * _localRank;
         int globalParamsPerLayer = 2 * _layerDim * _globalRank;
+        int expectedGlobalLen = _numAdaptedLayers * globalParamsPerLayer;
+
+        if (globalAdapter.Length < expectedGlobalLen)
+        {
+            throw new ArgumentException(
+                $"Global adapter length ({globalAdapter.Length}) is shorter than expected ({expectedGlobalLen}).",
+                nameof(globalAdapter));
+        }
+
         int localTotalParams = _numAdaptedLayers * localParamsPerLayer;
 
         var demoted = new T[localTotalParams];
@@ -329,6 +377,11 @@ public class HierarchicalFedLoRA<T> : Infrastructure.FederatedLearningComponentB
             {
                 aggregated[i] = NumOps.Add(aggregated[i], NumOps.Multiply(adapter[i], wT));
             }
+        }
+
+        if (totalWeight <= 0)
+        {
+            throw new InvalidOperationException("Total edge weight must be positive.");
         }
 
         var invTotal = NumOps.FromDouble(1.0 / totalWeight);

@@ -56,6 +56,16 @@ public class FederatedAdapterTuning<T> : Infrastructure.FederatedLearningCompone
             throw new ArgumentOutOfRangeException(nameof(bottleneckDim), "Bottleneck dimension must be positive.");
         }
 
+        if (numAdaptedLayers <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(numAdaptedLayers), "Number of adapted layers must be positive.");
+        }
+
+        if (layerDim <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(layerDim), "Layer dimension must be positive.");
+        }
+
         _modelDim = modelDim;
         _bottleneckDim = bottleneckDim;
         _numAdaptedLayers = numAdaptedLayers;
@@ -86,8 +96,18 @@ public class FederatedAdapterTuning<T> : Infrastructure.FederatedLearningCompone
     /// <inheritdoc/>
     public Vector<T> MergeAdapterParameters(Vector<T> fullModelParameters, Vector<T> aggregatedAdapters)
     {
+        Guard.NotNull(fullModelParameters);
+        Guard.NotNull(aggregatedAdapters);
         int totalParams = fullModelParameters.Length;
         int adapterCount = aggregatedAdapters.Length;
+
+        if (adapterCount > totalParams)
+        {
+            throw new ArgumentException(
+                $"Adapter length ({adapterCount}) exceeds full model length ({totalParams}).",
+                nameof(aggregatedAdapters));
+        }
+
         int start = totalParams - adapterCount;
 
         var merged = new T[totalParams];
@@ -107,12 +127,25 @@ public class FederatedAdapterTuning<T> : Infrastructure.FederatedLearningCompone
     /// <inheritdoc/>
     public Vector<T> AggregateAdapters(Dictionary<int, Vector<T>> clientAdapters, Dictionary<int, double>? clientWeights)
     {
+        Guard.NotNull(clientAdapters);
         if (clientAdapters.Count == 0)
         {
             throw new ArgumentException("No client adapters provided.", nameof(clientAdapters));
         }
 
         int adapterLen = clientAdapters.Values.First().Length;
+
+        // Validate all clients have matching adapter lengths.
+        foreach (var (clientId, adapter) in clientAdapters)
+        {
+            if (adapter.Length != adapterLen)
+            {
+                throw new ArgumentException(
+                    $"Client {clientId} adapter length {adapter.Length} != expected {adapterLen}.",
+                    nameof(clientAdapters));
+            }
+        }
+
         var aggregated = new T[adapterLen];
         double totalWeight = 0;
 
@@ -126,6 +159,11 @@ public class FederatedAdapterTuning<T> : Infrastructure.FederatedLearningCompone
             {
                 aggregated[i] = NumOps.Add(aggregated[i], NumOps.Multiply(adapters[i], wT));
             }
+        }
+
+        if (totalWeight <= 0)
+        {
+            throw new InvalidOperationException("Total client weight must be positive.");
         }
 
         var invTotal = NumOps.FromDouble(1.0 / totalWeight);
@@ -153,6 +191,8 @@ public class FederatedAdapterTuning<T> : Infrastructure.FederatedLearningCompone
     /// <returns>Output activations with adapter applied.</returns>
     public T[] ApplyAdapterForward(T[] input, T[] adapterParams, double residualScale = 1.0)
     {
+        Guard.NotNull(input);
+        Guard.NotNull(adapterParams);
         int downSize = _layerDim * _bottleneckDim;
         int upSize = _layerDim * _bottleneckDim;
 
@@ -188,6 +228,13 @@ public class FederatedAdapterTuning<T> : Infrastructure.FederatedLearningCompone
 
         // UpProject: [bottleneck x layerDim]
         var output = new T[input.Length];
+
+        // Preserve residual for dimensions beyond _layerDim (adapter doesn't touch them).
+        for (int d = _layerDim; d < input.Length; d++)
+        {
+            output[d] = input[d];
+        }
+
         var scaleT = NumOps.FromDouble(residualScale);
         for (int d = 0; d < input.Length && d < _layerDim; d++)
         {
@@ -218,6 +265,20 @@ public class FederatedAdapterTuning<T> : Infrastructure.FederatedLearningCompone
     /// <returns>Adapter parameters for the specified position.</returns>
     public T[] GetLayerAdapterParams(Vector<T> allAdapterParams, int layerIndex, int position)
     {
+        Guard.NotNull(allAdapterParams);
+
+        if (layerIndex < 0 || layerIndex >= _numAdaptedLayers)
+        {
+            throw new ArgumentOutOfRangeException(nameof(layerIndex),
+                $"Layer index must be in [0, {_numAdaptedLayers}), got {layerIndex}.");
+        }
+
+        if (position < 0 || position > 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(position),
+                "Position must be 0 (attention) or 1 (FFN).");
+        }
+
         int paramsPerAdapter = 2 * _layerDim * _bottleneckDim + _bottleneckDim;
         int adaptersPerLayer = 2; // attention + FFN
         int offset = (layerIndex * adaptersPerLayer + position) * paramsPerAdapter;
