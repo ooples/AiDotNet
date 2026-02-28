@@ -568,7 +568,7 @@ public class HGRN2Layer<T> : LayerBase<T>
         // SiLU'(x) = sigmoid(x) * (1 + x * (1 - sigmoid(x)))
         var sig = Engine.Sigmoid(x);
         var ones = new Tensor<T>(x.Shape);
-        for (int i = 0; i < ones.Length; i++) ones[i] = NumOps.One;
+        ones.Fill(NumOps.One);
         var oneMinusSig = Engine.TensorSubtract(ones, sig);
         var xTimesOneMinusSig = Engine.TensorMultiply(x, oneMinusSig);
         var onePlusXSig = Engine.TensorAdd(ones, xTimesOneMinusSig);
@@ -578,7 +578,7 @@ public class HGRN2Layer<T> : LayerBase<T>
     private Tensor<T> CreateOnesLike(Tensor<T> template)
     {
         var ones = new Tensor<T>(template.Shape);
-        for (int i = 0; i < ones.Length; i++) ones[i] = NumOps.One;
+        ones.Fill(NumOps.One);
         return ones;
     }
 
