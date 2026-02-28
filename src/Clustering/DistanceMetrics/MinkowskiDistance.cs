@@ -1,3 +1,5 @@
+using AiDotNet.Helpers;
+
 namespace AiDotNet.Clustering.DistanceMetrics;
 
 /// <summary>
@@ -84,23 +86,11 @@ public class MinkowskiDistance<T> : DistanceMetricBase<T>
 
     private T ComputeManhattan(Vector<T> a, Vector<T> b)
     {
-        T sum = NumOps.Zero;
-        for (int i = 0; i < a.Length; i++)
-        {
-            T diff = NumOps.Subtract(a[i], b[i]);
-            sum = NumOps.Add(sum, Abs(diff));
-        }
-        return sum;
+        return VectorHelper.ManhattanDistance(a, b);
     }
 
     private T ComputeEuclidean(Vector<T> a, Vector<T> b)
     {
-        T sumSquared = NumOps.Zero;
-        for (int i = 0; i < a.Length; i++)
-        {
-            T diff = NumOps.Subtract(a[i], b[i]);
-            sumSquared = NumOps.Add(sumSquared, NumOps.Multiply(diff, diff));
-        }
-        return Sqrt(sumSquared);
+        return VectorHelper.EuclideanDistance(a, b);
     }
 }

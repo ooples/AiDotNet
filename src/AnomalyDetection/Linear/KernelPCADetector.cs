@@ -275,28 +275,21 @@ public class KernelPCADetector<T> : AnomalyDetectorBase<T>
 
     private double ComputeKernel(double[] a, double[] b, double gamma)
     {
+        var va = new Vector<double>(a);
+        var vb = new Vector<double>(b);
+
         switch (_kernel)
         {
             case KernelType.RBF:
-                double sqDist = 0;
-                for (int i = 0; i < a.Length; i++)
-                {
-                    double diff = a[i] - b[i];
-                    sqDist += diff * diff;
-                }
-                return Math.Exp(-gamma * sqDist);
+                double dist = VectorHelper.EuclideanDistance(va, vb);
+                return Math.Exp(-gamma * dist * dist);
 
             case KernelType.Polynomial:
-                double dot = 0;
-                for (int i = 0; i < a.Length; i++)
-                    dot += a[i] * b[i];
+                double dot = VectorHelper.DotProduct(va, vb);
                 return Math.Pow(dot + 1, 3); // Degree 3 polynomial
 
             case KernelType.Linear:
-                double linear = 0;
-                for (int i = 0; i < a.Length; i++)
-                    linear += a[i] * b[i];
-                return linear;
+                return VectorHelper.DotProduct(va, vb);
 
             default:
                 return 0;

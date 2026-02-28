@@ -151,10 +151,7 @@ internal class GraFPrint<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
     public double ComputeSimilarity(AudioFingerprint<T> fp1, AudioFingerprint<T> fp2)
     {
         ThrowIfDisposed();
-        double dot = 0;
-        int len = Math.Min(fp1.Data.Length, fp2.Data.Length);
-        for (int i = 0; i < len; i++)
-            dot += NumOps.ToDouble(fp1.Data[i]) * NumOps.ToDouble(fp2.Data[i]);
+        double dot = NumOps.ToDouble(VectorHelper.DotProduct(new Vector<T>(fp1.Data), new Vector<T>(fp2.Data)));
         return Math.Max(0, Math.Min(1, (dot + 1.0) / 2.0));
     }
 
