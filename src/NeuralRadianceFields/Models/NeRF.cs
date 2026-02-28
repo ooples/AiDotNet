@@ -1286,10 +1286,7 @@ public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>
 
         // Apply gradient descent: params = params - learning_rate * gradients
         var currentParams = GetParameters();
-        for (int i = 0; i < currentParams.Length; i++)
-        {
-            currentParams[i] = NumOps.Subtract(currentParams[i], NumOps.Multiply(_learningRate, gradients[i]));
-        }
+        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, _learningRate));
 
         SetParameters(currentParams);
     }
