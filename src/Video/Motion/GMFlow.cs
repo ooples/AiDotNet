@@ -267,8 +267,7 @@ public class GMFlow<T> : OpticalFlowBase<T>
         var prediction = Predict(input);
 
         // Compute loss gradient
-        var lossGradient = prediction.Transform((v, idx) =>
-            NumOps.Subtract(v, expectedOutput.Data.Span[idx]));
+        var lossGradient = Engine.TensorSubtract(prediction, expectedOutput);
 
         // Backward pass through all layers
         var gradient = lossGradient;
@@ -452,7 +451,7 @@ public class GMFlow<T> : OpticalFlowBase<T>
 
     private Tensor<T> DecodeFlow(Tensor<T> feat1, Tensor<T> feat2)
     {
-        var diff = feat1.Transform((v, idx) => NumOps.Subtract(v, feat2.Data.Span[idx]));
+        var diff = Engine.TensorSubtract(feat1, feat2);
 
         foreach (var layer in _flowDecoder)
         {
@@ -596,32 +595,11 @@ public class GMFlow<T> : OpticalFlowBase<T>
 
     private Tensor<T> ConcatenateChannels(Tensor<T> a, Tensor<T> b)
     {
-        int batchSize = a.Shape[0];
-        int channelsA = a.Shape[1];
-        int channelsB = b.Shape[1];
-        int height = a.Shape[2];
-        int width = a.Shape[3];
-
-        var output = new Tensor<T>([batchSize, channelsA + channelsB, height, width]);
-
-        for (int batch = 0; batch < batchSize; batch++)
-        {
-            for (int c = 0; c < channelsA; c++)
-                for (int h = 0; h < height; h++)
-                    for (int w = 0; w < width; w++)
-                        output[batch, c, h, w] = a[batch, c, h, w];
-
-            for (int c = 0; c < channelsB; c++)
-                for (int h = 0; h < height; h++)
-                    for (int w = 0; w < width; w++)
-                        output[batch, channelsA + c, h, w] = b[batch, c, h, w];
-        }
-
-        return output;
+        return Engine.TensorConcatenate([a, b], axis: 1);
     }
 
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b) =>
-        a.Transform((v, idx) => NumOps.Add(v, b.Data.Span[idx]));
+        Engine.TensorAdd(a, b);
 
     private Tensor<T> ApplyReLU(Tensor<T> input) =>
         input.Transform((v, _) => NumOps.FromDouble(Math.Max(0, Convert.ToDouble(v))));
