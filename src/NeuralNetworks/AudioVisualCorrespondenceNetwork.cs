@@ -419,7 +419,7 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
             "background noise"
         };
 
-        var embMagnitude = ComputeVectorMagnitude(visualEmb);
+        var embMagnitude = VectorHelper.L2Norm(visualEmb);
         var magValue = NumOps.ToDouble(embMagnitude);
 
         if (magValue > 0.5)
@@ -526,8 +526,8 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
 
                     // Propagate gradient through embedding layers
                     // For cosine similarity d(sim)/d(a) = (b - sim*a) / (||a|| * ||b||)
-                    var audioNorm = ComputeVectorMagnitude(audioEmb);
-                    var visualNorm = ComputeVectorMagnitude(visualEmb);
+                    var audioNorm = VectorHelper.L2Norm(audioEmb);
+                    var visualNorm = VectorHelper.L2Norm(visualEmb);
                     T normProduct = NumOps.Multiply(audioNorm, visualNorm);
 
                     if (NumOps.ToDouble(normProduct) > 1e-8)
@@ -889,10 +889,6 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
         return embedding;
     }
 
-    private T ComputeVectorMagnitude(Vector<T> vector)
-    {
-        return VectorHelper.L2Norm<T>(vector);
-    }
 
     private Vector<T> ConcatenateVectors(Vector<T> a, Vector<T> b)
     {

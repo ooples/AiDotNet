@@ -267,7 +267,7 @@ public class FactorTransferDistillationStrategy<T> : DistillationStrategyBase<T>
         T cosineLoss = NumOps.Zero;
         for (int i = 0; i < studentFactors.Length; i++)
         {
-            double cosSim = CosineSimilarity(studentFactors[i], teacherFactors[i]);
+            double cosSim = VectorHelper.CosineSimilarity(studentFactors[i], teacherFactors[i]);
             cosineLoss = NumOps.Add(cosineLoss, NumOps.FromDouble(1.0 - cosSim));
         }
         cosineLoss = NumOps.Divide(cosineLoss, NumOps.FromDouble(studentFactors.Length));
@@ -486,19 +486,6 @@ public class FactorTransferDistillationStrategy<T> : DistillationStrategyBase<T>
         return NumOps.Divide(mse, NumOps.FromDouble(totalElements));
     }
 
-    private double CosineSimilarity(Vector<T> v1, Vector<T> v2)
-    {
-        T dot = NumOps.Zero, norm1 = NumOps.Zero, norm2 = NumOps.Zero;
-
-        for (int i = 0; i < v1.Length; i++)
-        {
-            dot = NumOps.Add(dot, NumOps.Multiply(v1[i], v2[i]));
-            norm1 = NumOps.Add(norm1, NumOps.Multiply(v1[i], v1[i]));
-            norm2 = NumOps.Add(norm2, NumOps.Multiply(v2[i], v2[i]));
-        }
-
-        return Convert.ToDouble(dot) / (Math.Sqrt(Convert.ToDouble(norm1)) * Math.Sqrt(Convert.ToDouble(norm2)) + Epsilon);
-    }
 
 
 

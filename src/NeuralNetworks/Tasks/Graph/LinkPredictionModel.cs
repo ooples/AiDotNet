@@ -261,7 +261,7 @@ public class LinkPredictionModel<T> : NeuralNetworkBase<T>
         return _decoderType switch
         {
             LinkPredictionDecoder.DotProduct => DotProduct(sourceEmb, targetEmb),
-            LinkPredictionDecoder.CosineSimilarity => CosineSimilarity(sourceEmb, targetEmb),
+            LinkPredictionDecoder.CosineSimilarity => NumOps.FromDouble(VectorHelper.CosineSimilarity(sourceEmb, targetEmb)),
             LinkPredictionDecoder.Hadamard => Hadamard(sourceEmb, targetEmb),
             LinkPredictionDecoder.Distance => NegativeDistance(sourceEmb, targetEmb),
             _ => DotProduct(sourceEmb, targetEmb)
@@ -289,17 +289,6 @@ public class LinkPredictionModel<T> : NeuralNetworkBase<T>
         return Engine.TensorSum(product);
     }
 
-    private T CosineSimilarity(Vector<T> a, Vector<T> b)
-    {
-        T dot = DotProduct(a, b);
-        T normA = Norm(a);
-        T normB = Norm(b);
-        T denom = NumOps.Multiply(normA, normB);
-
-        return NumOps.Equals(denom, NumOps.Zero)
-            ? NumOps.Zero
-            : NumOps.Divide(dot, denom);
-    }
 
     private T Hadamard(Vector<T> a, Vector<T> b)
     {
@@ -321,14 +310,6 @@ public class LinkPredictionModel<T> : NeuralNetworkBase<T>
         return NumOps.Multiply(NumOps.FromDouble(-1.0), sumSquaredDiff);
     }
 
-    private T Norm(Vector<T> vec)
-    {
-        // Vectorized L2 norm using Engine
-        var tensor = new Tensor<T>(vec.ToArray(), [vec.Length]);
-        var squared = Engine.TensorMultiply(tensor, tensor);
-        T sumSquares = Engine.TensorSum(squared);
-        return NumOps.Sqrt(sumSquares);
-    }
 
     /// <summary>
     /// Performs a backward pass through the network.
