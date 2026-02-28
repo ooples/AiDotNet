@@ -541,8 +541,7 @@ public class SAM2<T> : NeuralNetworkBase<T>
         }
 
         var predicted = Predict(input);
-        var lossGradient = predicted.Transform((v, idx) =>
-            NumOps.Subtract(v, expectedOutput.Data.Span[idx]));
+        var lossGradient = Engine.TensorSubtract(predicted, expectedOutput);
 
         BackwardPass(lossGradient);
 
@@ -957,40 +956,7 @@ public class SAM2<T> : NeuralNetworkBase<T>
 
     private Tensor<T> ConcatenateChannels(Tensor<T> a, Tensor<T> b)
     {
-        int batchSize = a.Shape[0];
-        int channelsA = a.Shape[1];
-        int channelsB = b.Shape[1];
-        int height = a.Shape[2];
-        int width = a.Shape[3];
-
-        var output = new Tensor<T>([batchSize, channelsA + channelsB, height, width]);
-
-        for (int batch = 0; batch < batchSize; batch++)
-        {
-            for (int c = 0; c < channelsA; c++)
-            {
-                for (int h = 0; h < height; h++)
-                {
-                    for (int w = 0; w < width; w++)
-                    {
-                        output[batch, c, h, w] = a[batch, c, h, w];
-                    }
-                }
-            }
-
-            for (int c = 0; c < channelsB; c++)
-            {
-                for (int h = 0; h < height; h++)
-                {
-                    for (int w = 0; w < width; w++)
-                    {
-                        output[batch, channelsA + c, h, w] = b[batch, c, h, w];
-                    }
-                }
-            }
-        }
-
-        return output;
+        return Engine.TensorConcatenate([a, b], axis: 1);
     }
 
     private Tensor<T> ApplyGELU(Tensor<T> input)
@@ -1006,12 +972,7 @@ public class SAM2<T> : NeuralNetworkBase<T>
 
     private Tensor<T> ApplySigmoid(Tensor<T> input)
     {
-        return input.Transform((v, _) =>
-        {
-            double x = Convert.ToDouble(v);
-            double sigmoid = 1.0 / (1.0 + Math.Exp(-x));
-            return NumOps.FromDouble(sigmoid);
-        });
+        return Engine.Sigmoid(input);
     }
 
     private Tensor<T> AddBatchDimension(Tensor<T> tensor)
@@ -1040,7 +1001,7 @@ public class SAM2<T> : NeuralNetworkBase<T>
 
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
-        return a.Transform((v, idx) => NumOps.Add(v, b.Data.Span[idx]));
+        return Engine.TensorAdd(a, b);
     }
 
     private void BackwardPass(Tensor<T> gradient)
