@@ -1,4 +1,7 @@
+using AiDotNet.Autodiff;
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
+using AiDotNet.NeuralNetworks.Layers;
 
 namespace AiDotNet.NeuralNetworks.Tabular;
 
@@ -21,11 +24,8 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public class PiecewiseLinearEncoding<T>
+public class PiecewiseLinearEncoding<T> : LayerBase<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
-    private readonly Random _random;
-
     private readonly int _numFeatures;
     private readonly int _numBins;
 
@@ -42,10 +42,14 @@ public class PiecewiseLinearEncoding<T>
     /// </summary>
     public int OutputDimension => _numFeatures * _numBins;
 
-    /// <summary>
-    /// Gets the number of parameters.
-    /// </summary>
-    public int ParameterCount => _numFeatures * (_numBins - 1);
+    /// <inheritdoc/>
+    public override bool SupportsTraining => true;
+
+    /// <inheritdoc/>
+    public override bool SupportsJitCompilation => false;
+
+    /// <inheritdoc/>
+    public override int ParameterCount => _numFeatures * (_numBins - 1);
 
     /// <summary>
     /// Initializes piecewise linear encoding.
@@ -53,6 +57,7 @@ public class PiecewiseLinearEncoding<T>
     /// <param name="numFeatures">Number of input features.</param>
     /// <param name="numBins">Number of bins per feature.</param>
     public PiecewiseLinearEncoding(int numFeatures, int numBins = 16)
+        : base([numFeatures], [numFeatures * numBins])
     {
         if (numFeatures < 1)
             throw new ArgumentException("Must have at least 1 feature", nameof(numFeatures));
@@ -61,7 +66,6 @@ public class PiecewiseLinearEncoding<T>
 
         _numFeatures = numFeatures;
         _numBins = numBins;
-        _random = RandomHelper.CreateSecureRandom();
 
         // Initialize bin boundaries (numBins - 1 boundaries per feature)
         _binBoundaries = new Tensor<T>([numFeatures, numBins - 1]);
@@ -89,7 +93,7 @@ public class PiecewiseLinearEncoding<T>
     /// </summary>
     /// <param name="input">Input features with shape [batchSize, numFeatures].</param>
     /// <returns>Encoded features with shape [batchSize, numFeatures * numBins].</returns>
-    public Tensor<T> Forward(Tensor<T> input)
+    public override Tensor<T> Forward(Tensor<T> input)
     {
         _inputCache = input;
 
@@ -159,7 +163,7 @@ public class PiecewiseLinearEncoding<T>
     /// </summary>
     /// <param name="gradient">Gradient with respect to output.</param>
     /// <returns>Gradient with respect to input.</returns>
-    public Tensor<T> Backward(Tensor<T> gradient)
+    public override Tensor<T> Backward(Tensor<T> gradient)
     {
         if (_inputCache == null)
             throw new InvalidOperationException("Forward must be called before backward");
@@ -167,11 +171,8 @@ public class PiecewiseLinearEncoding<T>
         int batchSize = gradient.Shape[0];
         var inputGrad = new Tensor<T>([batchSize, _numFeatures]);
 
-        // Reset boundary gradients
-        for (int i = 0; i < _binBoundaryGradients.Length; i++)
-        {
-            _binBoundaryGradients[i] = NumOps.Zero;
-        }
+        // Reset boundary gradients using Engine
+        Engine.TensorFill(_binBoundaryGradients, NumOps.Zero);
 
         // Compute gradients (simplified - full implementation would track bin assignments)
         for (int b = 0; b < batchSize; b++)
@@ -193,31 +194,41 @@ public class PiecewiseLinearEncoding<T>
         return inputGrad;
     }
 
-    /// <summary>
-    /// Updates the bin boundaries.
-    /// </summary>
-    /// <param name="learningRate">The learning rate.</param>
-    public void UpdateParameters(T learningRate)
+    /// <inheritdoc/>
+    public override void UpdateParameters(T learningRate)
     {
-        for (int i = 0; i < _binBoundaries.Length; i++)
-        {
-            _binBoundaries[i] = NumOps.Subtract(
-                _binBoundaries[i],
-                NumOps.Multiply(learningRate, _binBoundaryGradients[i]));
-        }
+        _binBoundaries = Engine.TensorSubtract(_binBoundaries,
+            Engine.TensorMultiplyScalar(_binBoundaryGradients, learningRate));
     }
 
-    /// <summary>
-    /// Resets internal state.
-    /// </summary>
-    public void ResetState()
+    /// <inheritdoc/>
+    public override void ResetState()
     {
         _inputCache = null;
         _outputCache = null;
 
-        for (int i = 0; i < _binBoundaryGradients.Length; i++)
-        {
-            _binBoundaryGradients[i] = NumOps.Zero;
-        }
+        Engine.TensorFill(_binBoundaryGradients, NumOps.Zero);
+    }
+
+    /// <inheritdoc/>
+    public override Vector<T> GetParameters()
+    {
+        var result = new Vector<T>(_binBoundaries.Length);
+        for (int i = 0; i < _binBoundaries.Length; i++)
+            result[i] = _binBoundaries[i];
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
+        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
+        inputNodes.Add(inputNode);
+
+        return inputNode;
     }
 }
