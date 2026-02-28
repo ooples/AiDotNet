@@ -519,32 +519,16 @@ public class MAE<T> : SSLMethodBase<T>
     private void UpdateParameters(T learningRate)
     {
         // Update encoder
-        var encoderGrads = _encoder.GetParameterGradients();
+        var encoderGrads = new Vector<T>(_encoder.GetParameterGradients());
         var encoderParams = _encoder.GetParameters();
-        var newEncoderParams = new T[encoderParams.Length];
-
-        for (int i = 0; i < encoderParams.Length; i++)
-        {
-            newEncoderParams[i] = NumOps.Subtract(
-                encoderParams[i],
-                NumOps.Multiply(learningRate, encoderGrads[i]));
-        }
-        _encoder.UpdateParameters(new Vector<T>(newEncoderParams));
+        _encoder.UpdateParameters(Engine.Subtract(encoderParams, Engine.Multiply(encoderGrads, learningRate)));
 
         // Update decoder if present
         if (_decoder is not null)
         {
-            var decoderGrads = _decoder.GetParameterGradients();
+            var decoderGrads = new Vector<T>(_decoder.GetParameterGradients());
             var decoderParams = _decoder.GetParameters();
-            var newDecoderParams = new T[decoderParams.Length];
-
-            for (int i = 0; i < decoderParams.Length; i++)
-            {
-                newDecoderParams[i] = NumOps.Subtract(
-                    decoderParams[i],
-                    NumOps.Multiply(learningRate, decoderGrads[i]));
-            }
-            _decoder.UpdateParameters(new Vector<T>(newDecoderParams));
+            _decoder.UpdateParameters(Engine.Subtract(decoderParams, Engine.Multiply(decoderGrads, learningRate)));
         }
     }
 
