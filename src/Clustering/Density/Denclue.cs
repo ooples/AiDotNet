@@ -3,7 +3,9 @@ using AiDotNet.Clustering.DistanceMetrics;
 using AiDotNet.Clustering.Interfaces;
 using AiDotNet.Clustering.Options;
 using AiDotNet.Enums;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Clustering.Density;
 
@@ -327,13 +329,7 @@ public class Denclue<T> : ClusteringBase<T>
 
     private double EuclideanDistance(double[] a, double[] b)
     {
-        double sum = 0;
-        for (int i = 0; i < a.Length; i++)
-        {
-            double diff = a[i] - b[i];
-            sum += diff * diff;
-        }
-        return Math.Sqrt(sum);
+        return VectorHelper.EuclideanDistance(new Vector<double>(a), new Vector<double>(b));
     }
 
     /// <summary>

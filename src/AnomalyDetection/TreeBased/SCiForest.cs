@@ -315,12 +315,7 @@ public class SCiForest<T> : AnomalyDetectorBase<T>
 
         private static double DotProduct(double[] a, double[] b)
         {
-            double sum = 0;
-            for (int i = 0; i < a.Length; i++)
-            {
-                sum += a[i] * b[i];
-            }
-            return sum;
+            return VectorHelper.DotProduct(new Vector<double>(a), new Vector<double>(b));
         }
 
         private static double EstimateC(int n)

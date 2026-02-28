@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Helpers;
@@ -1587,10 +1588,7 @@ internal class ChronosTransformerLayerTensor<T>
 
     private T DotProduct(Tensor<T> a, Tensor<T> b)
     {
-        T sum = _numOps.Zero;
-        for (int i = 0; i < Math.Min(a.Length, b.Length); i++)
-            sum = _numOps.Add(sum, _numOps.Multiply(a[i], b[i]));
-        return sum;
+        return VectorHelper.DotProduct(a.ToVector(), b.ToVector());
     }
 
     public void ApplyGradients(Dictionary<string, Tensor<T>> accumulators, int layerIndex,
