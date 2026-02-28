@@ -1,3 +1,4 @@
+using AiDotNet.Engines;
 using AiDotNet.NeuralNetworks.Layers;
 
 namespace AiDotNet.NeuralNetworks.Tabular;
@@ -535,31 +536,24 @@ public class FeatureTokenizer<T>
     /// </summary>
     public void UpdateParameters(T learningRate)
     {
+        var eng = AiDotNetEngine.Current;
+
         if (_numericalWeightsGrad != null)
         {
-            for (int i = 0; i < _numericalWeights.Length; i++)
-            {
-                _numericalWeights[i] = _numOps.Subtract(_numericalWeights[i],
-                    _numOps.Multiply(learningRate, _numericalWeightsGrad[i]));
-            }
+            _numericalWeights = eng.TensorSubtract(_numericalWeights,
+                eng.TensorMultiplyScalar(_numericalWeightsGrad, learningRate));
         }
 
         if (_numericalBias != null && _numericalBiasGrad != null)
         {
-            for (int i = 0; i < _numericalBias.Length; i++)
-            {
-                _numericalBias[i] = _numOps.Subtract(_numericalBias[i],
-                    _numOps.Multiply(learningRate, _numericalBiasGrad[i]));
-            }
+            _numericalBias = eng.TensorSubtract(_numericalBias,
+                eng.TensorMultiplyScalar(_numericalBiasGrad, learningRate));
         }
 
         if (_clsTokenGrad != null)
         {
-            for (int i = 0; i < _clsToken.Length; i++)
-            {
-                _clsToken[i] = _numOps.Subtract(_clsToken[i],
-                    _numOps.Multiply(learningRate, _clsTokenGrad[i]));
-            }
+            _clsToken = eng.TensorSubtract(_clsToken,
+                eng.TensorMultiplyScalar(_clsTokenGrad, learningRate));
         }
 
         for (int c = 0; c < _categoricalEmbeddings.Count; c++)
@@ -567,11 +561,8 @@ public class FeatureTokenizer<T>
             var embGrad = _categoricalEmbeddingsGrad[c];
             if (embGrad != null)
             {
-                var emb = _categoricalEmbeddings[c];
-                for (int i = 0; i < emb.Length; i++)
-                {
-                    emb[i] = _numOps.Subtract(emb[i], _numOps.Multiply(learningRate, embGrad[i]));
-                }
+                _categoricalEmbeddings[c] = eng.TensorSubtract(_categoricalEmbeddings[c],
+                    eng.TensorMultiplyScalar(embGrad, learningRate));
             }
         }
     }

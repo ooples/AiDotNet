@@ -1,4 +1,5 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Engines;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Models.Options;
@@ -34,6 +35,7 @@ public abstract class NODEBase<T>
     protected readonly NODEOptions<T> Options;
     protected readonly int NumFeatures;
     protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+    protected IEngine Engine => AiDotNetEngine.Current;
     private readonly Random _random = RandomHelper.CreateSecureRandom();
 
     // Feature preprocessing (optional)
@@ -166,22 +168,11 @@ public abstract class NODEBase<T>
             var treeOutput = ForwardTree(t, processed, batchSize);
 
             // Aggregate tree outputs (additive ensemble)
-            for (int b = 0; b < batchSize; b++)
-            {
-                for (int d = 0; d < Options.TreeOutputDimension; d++)
-                {
-                    int idx = b * Options.TreeOutputDimension + d;
-                    output[idx] = NumOps.Add(output[idx], treeOutput[idx]);
-                }
-            }
+            output = Engine.TensorAdd(output, treeOutput);
         }
 
         // Average over trees
-        var scale = NumOps.FromDouble(1.0 / Options.NumTrees);
-        for (int i = 0; i < output.Length; i++)
-        {
-            output[i] = NumOps.Multiply(output[i], scale);
-        }
+        output = Engine.TensorMultiplyScalar(output, NumOps.FromDouble(1.0 / Options.NumTrees));
 
         _treeOutputsCache = output;
         return output;
