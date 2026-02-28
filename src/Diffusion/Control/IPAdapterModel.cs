@@ -1,6 +1,7 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Diffusion.VAE;
+using AiDotNet.Engines;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -464,17 +465,8 @@ public class IPAdapterModel<T> : LatentDiffusionModelBase<T>
     /// </summary>
     private Tensor<T> ScaleTensor(Tensor<T> tensor, double scale)
     {
-        var result = new Tensor<T>(tensor.Shape);
-        var inputSpan = tensor.AsSpan();
-        var resultSpan = result.AsWritableSpan();
         var scaleT = NumOps.FromDouble(scale);
-
-        for (int i = 0; i < resultSpan.Length; i++)
-        {
-            resultSpan[i] = NumOps.Multiply(scaleT, inputSpan[i]);
-        }
-
-        return result;
+        return Engine.TensorMultiplyScalar<T>(tensor, scaleT);
     }
 
     /// <summary>
@@ -482,18 +474,7 @@ public class IPAdapterModel<T> : LatentDiffusionModelBase<T>
     /// </summary>
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
-        var result = new Tensor<T>(a.Shape);
-        var aSpan = a.AsSpan();
-        var bSpan = b.AsSpan();
-        var resultSpan = result.AsWritableSpan();
-
-        var minLen = Math.Min(aSpan.Length, bSpan.Length);
-        for (int i = 0; i < minLen; i++)
-        {
-            resultSpan[i] = NumOps.Add(aSpan[i], bSpan[i]);
-        }
-
-        return result;
+        return Engine.TensorAdd<T>(a, b);
     }
 
     /// <inheritdoc />
@@ -583,6 +564,25 @@ public class IPAdapterModel<T> : LatentDiffusionModelBase<T>
         clone.ImagePromptWeight = _imagePromptWeight;
 
         return clone;
+    }
+
+    /// <inheritdoc />
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        var m = new ModelMetadata<T>
+        {
+            Name = "IP-Adapter", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Description = "Image prompt adapter for reference image-guided diffusion generation",
+            FeatureCount = ParameterCount, Complexity = ParameterCount
+        };
+        m.SetProperty("architecture", "unet-decoupled-cross-attention");
+        m.SetProperty("base_model", "Stable Diffusion 1.5");
+        m.SetProperty("text_encoder", "CLIP ViT-L/14");
+        m.SetProperty("image_encoder", "CLIP ViT-H/14");
+        m.SetProperty("context_dim", 768);
+        m.SetProperty("image_prompt_weight", _imagePromptWeight);
+        m.SetProperty("latent_channels", IPA_LATENT_CHANNELS);
+        return m;
     }
 }
 
@@ -693,18 +693,7 @@ public class ImageEncoder<T>
 
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
-        var result = new Tensor<T>(a.Shape);
-        var aSpan = a.AsSpan();
-        var bSpan = b.AsSpan();
-        var resultSpan = result.AsWritableSpan();
-
-        var minLen = Math.Min(aSpan.Length, bSpan.Length);
-        for (int i = 0; i < minLen; i++)
-        {
-            resultSpan[i] = NumOps.Add(aSpan[i], bSpan[i]);
-        }
-
-        return result;
+        return AiDotNetEngine.Current.TensorAdd<T>(a, b);
     }
 
     /// <summary>

@@ -443,6 +443,7 @@ public class StableCascadeModel<T> : LatentDiffusionModelBase<T>
         };
 
         metadata.SetProperty("architecture", "cascaded-latent-diffusion");
+        metadata.SetProperty("base_model", "Stable Cascade");
         metadata.SetProperty("text_encoder", "CLIP ViT-G/14");
         metadata.SetProperty("cross_attention_dim", CASCADE_CROSS_ATTENTION_DIM);
         metadata.SetProperty("prior_latent_channels", CASCADE_LATENT_CHANNELS);

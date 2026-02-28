@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Engines;
 using AiDotNet.Enums;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -535,18 +536,7 @@ public class DiffWaveNetwork<T>
 
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
-        var result = new Tensor<T>(a.Shape);
-        var aSpan = a.AsSpan();
-        var bSpan = b.AsSpan();
-        var resultSpan = result.AsWritableSpan();
-
-        var minLen = Math.Min(aSpan.Length, bSpan.Length);
-        for (int i = 0; i < minLen; i++)
-        {
-            resultSpan[i] = NumOps.Add(aSpan[i], bSpan[i]);
-        }
-
-        return result;
+        return AiDotNetEngine.Current.TensorAdd<T>(a, b);
     }
 
     private Tensor<T> ApplyRelu(Tensor<T> x)
@@ -735,18 +725,7 @@ public class DiffWaveResidualBlock<T>
 
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
-        var result = new Tensor<T>(a.Shape);
-        var aSpan = a.AsSpan();
-        var bSpan = b.AsSpan();
-        var resultSpan = result.AsWritableSpan();
-
-        var minLen = Math.Min(aSpan.Length, bSpan.Length);
-        for (int i = 0; i < minLen; i++)
-        {
-            resultSpan[i] = NumOps.Add(aSpan[i], bSpan[i]);
-        }
-
-        return result;
+        return AiDotNetEngine.Current.TensorAdd<T>(a, b);
     }
 
     private Tensor<T> ApplyGatedActivation(Tensor<T> x)

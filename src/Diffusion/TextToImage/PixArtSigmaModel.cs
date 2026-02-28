@@ -262,6 +262,7 @@ public class PixArtSigmaModel<T> : LatentDiffusionModelBase<T>
         };
 
         metadata.SetProperty("architecture", "dit-xl-2");
+        metadata.SetProperty("base_model", "PixArt-Sigma");
         metadata.SetProperty("text_encoder", "T5-XXL");
         metadata.SetProperty("cross_attention_dim", CROSS_ATTENTION_DIM);
         metadata.SetProperty("latent_channels", LATENT_CHANNELS);

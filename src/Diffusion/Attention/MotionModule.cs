@@ -144,9 +144,9 @@ public class MotionModule<T> : LayerBase<T>
 
     private static readonly INumericOperations<T> StaticNumOps = MathHelper.GetNumericOperations<T>();
 
-    private static Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
+    private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
-        return a.Transform((v, idx) => StaticNumOps.Add(v, b.Data.Span[idx]));
+        return Engine.TensorAdd<T>(a, b);
     }
 
     /// <inheritdoc />

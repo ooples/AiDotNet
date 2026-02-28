@@ -1,6 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Diffusion.VAE;
+using AiDotNet.Engines;
 using AiDotNet.Enums;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -518,44 +519,8 @@ public class SDXLModel<T> : LatentDiffusionModelBase<T>
     /// </summary>
     private Tensor<T> ConcatenateEmbeddings(Tensor<T> embedding1, Tensor<T> embedding2)
     {
-        var shape1 = embedding1.Shape;
-        var shape2 = embedding2.Shape;
-
-        // Concatenate along the embedding dimension
-        var batch = shape1[0];
-        var seqLen = shape1[1];
-        var dim1 = shape1[2];
-        var dim2 = shape2[2];
-        var totalDim = dim1 + dim2;
-
-        var result = new Tensor<T>(new[] { batch, seqLen, totalDim });
-        var resultSpan = result.AsWritableSpan();
-        var span1 = embedding1.AsSpan();
-        var span2 = embedding2.AsSpan();
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int s = 0; s < seqLen; s++)
-            {
-                // Copy from first embedding
-                for (int d = 0; d < dim1; d++)
-                {
-                    var srcIdx = b * seqLen * dim1 + s * dim1 + d;
-                    var dstIdx = b * seqLen * totalDim + s * totalDim + d;
-                    resultSpan[dstIdx] = span1[srcIdx];
-                }
-
-                // Copy from second embedding
-                for (int d = 0; d < dim2; d++)
-                {
-                    var srcIdx = b * seqLen * dim2 + s * dim2 + d;
-                    var dstIdx = b * seqLen * totalDim + s * totalDim + dim1 + d;
-                    resultSpan[dstIdx] = span2[srcIdx];
-                }
-            }
-        }
-
-        return result;
+        // Concatenate along embedding dimension (last axis) using hardware-accelerated engine
+        return Engine.TensorConcatenate<T>(new[] { embedding1, embedding2 }, axis: -1);
     }
 
     /// <summary>
@@ -729,6 +694,37 @@ public class SDXLModel<T> : LatentDiffusionModelBase<T>
             refiner: _refiner,
             useDualEncoder: _useDualEncoder,
             crossAttentionDim: _crossAttentionDim);
+    }
+
+    #endregion
+
+    #region Metadata
+
+    /// <inheritdoc />
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        var metadata = new ModelMetadata<T>
+        {
+            Name = "Stable Diffusion XL",
+            Version = "1.0",
+            ModelType = ModelType.NeuralNetwork,
+            Description = "SDXL base model with dual text encoders and 1024px native resolution",
+            FeatureCount = ParameterCount,
+            Complexity = ParameterCount
+        };
+
+        metadata.SetProperty("architecture", "sdxl-unet-latent-diffusion");
+        metadata.SetProperty("base_model", "Stable Diffusion XL");
+        metadata.SetProperty("text_encoder_1", "CLIP ViT-L/14");
+        metadata.SetProperty("text_encoder_2", "OpenCLIP ViT-bigG/14");
+        metadata.SetProperty("cross_attention_dim", _crossAttentionDim);
+        metadata.SetProperty("latent_channels", SDXL_LATENT_CHANNELS);
+        metadata.SetProperty("default_resolution", DefaultWidth);
+        metadata.SetProperty("latent_scale", 0.13025);
+        metadata.SetProperty("has_refiner", _refiner != null);
+        metadata.SetProperty("dual_encoder", _useDualEncoder);
+
+        return metadata;
     }
 
     #endregion
@@ -922,19 +918,13 @@ public class SDXLRefiner<T>
         var alpha = 1.0 - (timestep / 1000.0);
         var sigma = Math.Sqrt(1.0 - alpha * alpha);
 
-        var result = new Tensor<T>(latent.Shape);
-        var resultSpan = result.AsWritableSpan();
-        var latentSpan = latent.AsSpan();
-        var noiseSpan = noise.AsSpan();
-
-        for (int i = 0; i < resultSpan.Length; i++)
-        {
-            var latentVal = NumOps.ToDouble(latentSpan[i]);
-            var noiseVal = NumOps.ToDouble(noiseSpan[i]);
-            resultSpan[i] = NumOps.FromDouble(alpha * latentVal + sigma * noiseVal);
-        }
-
-        return result;
+        // result = alpha * latent + sigma * noise
+        var engine = AiDotNetEngine.Current;
+        var alphaT = NumOps.FromDouble(alpha);
+        var sigmaT = NumOps.FromDouble(sigma);
+        var scaledLatent = engine.TensorMultiplyScalar<T>(latent, alphaT);
+        var scaledNoise = engine.TensorMultiplyScalar<T>(noise, sigmaT);
+        return engine.TensorAdd<T>(scaledLatent, scaledNoise);
     }
 
     /// <summary>
@@ -942,19 +932,11 @@ public class SDXLRefiner<T>
     /// </summary>
     private Tensor<T> ApplyGuidance(Tensor<T> uncondPred, Tensor<T> condPred, double guidanceScale)
     {
-        var result = new Tensor<T>(condPred.Shape);
-        var resultSpan = result.AsWritableSpan();
-        var uncondSpan = uncondPred.AsSpan();
-        var condSpan = condPred.AsSpan();
-
-        for (int i = 0; i < resultSpan.Length; i++)
-        {
-            var uncondVal = NumOps.ToDouble(uncondSpan[i]);
-            var condVal = NumOps.ToDouble(condSpan[i]);
-            var guided = uncondVal + guidanceScale * (condVal - uncondVal);
-            resultSpan[i] = NumOps.FromDouble(guided);
-        }
-
-        return result;
+        // CFG: guided = uncond + scale * (cond - uncond)
+        var engine = AiDotNetEngine.Current;
+        var scaleT = NumOps.FromDouble(guidanceScale);
+        var diff = engine.TensorSubtract<T>(condPred, uncondPred);
+        var scaled = engine.TensorMultiplyScalar<T>(diff, scaleT);
+        return engine.TensorAdd<T>(uncondPred, scaled);
     }
 }

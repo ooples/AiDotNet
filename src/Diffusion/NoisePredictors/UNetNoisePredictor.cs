@@ -591,48 +591,8 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     /// </summary>
     private Tensor<T> ConcatenateChannels(Tensor<T> a, Tensor<T> b)
     {
-        var aShape = a.Shape;
-        var bShape = b.Shape;
-
-        var outputShape = new[] { aShape[0], aShape[1] + bShape[1], aShape[2], aShape[3] };
-        var output = new Tensor<T>(outputShape);
-        var outSpan = output.AsWritableSpan();
-        var aSpan = a.AsSpan();
-        var bSpan = b.AsSpan();
-
-        var batchSize = aShape[0];
-        var aChannels = aShape[1];
-        var bChannels = bShape[1];
-        var height = aShape[2];
-        var width = aShape[3];
-        var spatialSize = height * width;
-
-        for (int batch = 0; batch < batchSize; batch++)
-        {
-            // Copy a channels
-            for (int c = 0; c < aChannels; c++)
-            {
-                var srcOffset = batch * aChannels * spatialSize + c * spatialSize;
-                var dstOffset = batch * (aChannels + bChannels) * spatialSize + c * spatialSize;
-                for (int i = 0; i < spatialSize; i++)
-                {
-                    outSpan[dstOffset + i] = aSpan[srcOffset + i];
-                }
-            }
-
-            // Copy b channels
-            for (int c = 0; c < bChannels; c++)
-            {
-                var srcOffset = batch * bChannels * spatialSize + c * spatialSize;
-                var dstOffset = batch * (aChannels + bChannels) * spatialSize + (aChannels + c) * spatialSize;
-                for (int i = 0; i < spatialSize; i++)
-                {
-                    outSpan[dstOffset + i] = bSpan[srcOffset + i];
-                }
-            }
-        }
-
-        return output;
+        // Concatenate along channel dimension (axis 1) using hardware-accelerated engine
+        return Engine.TensorConcatenate<T>(new[] { a, b }, axis: 1);
     }
 
     #region Layer Factory Methods

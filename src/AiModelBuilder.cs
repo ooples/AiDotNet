@@ -236,14 +236,6 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     private IProgramSynthesisServingClient? _programSynthesisServingClient;
     private IFullModel<T, Tensor<T>, Tensor<T>>? _programSynthesisModel;
 
-    // Prompt engineering configuration
-    private IPromptTemplate? _promptTemplate;
-    private IChain<string, string>? _promptChain;
-    private IPromptOptimizer<T>? _promptOptimizer;
-    private IFewShotExampleSelector<T>? _fewShotExampleSelector;
-    private IPromptAnalyzer? _promptAnalyzer;
-    private IPromptCompressor? _promptCompressor;
-
     // Training infrastructure configuration
     private IExperimentTracker<T>? _experimentTracker;
     private ICheckpointManager<T, TInput, TOutput>? _checkpointManager;
@@ -1300,12 +1292,12 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             GraphStore = _graphStore,
             HybridGraphRetriever = _hybridGraphRetriever,
             AgentConfig = _agentConfig,
-            PromptTemplate = _promptTemplate,
-            PromptChain = _promptChain,
-            PromptOptimizer = _promptOptimizer,
-            FewShotExampleSelector = _fewShotExampleSelector,
-            PromptAnalyzer = _promptAnalyzer,
-            PromptCompressor = _promptCompressor,
+            PromptTemplate = null,
+            PromptChain = null,
+            PromptOptimizer = null,
+            FewShotExampleSelector = null,
+            PromptAnalyzer = null,
+            PromptCompressor = null,
             MemoryConfig = _memoryConfig
         };
 
@@ -2722,12 +2714,12 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             ProgramSynthesisModel = _programSynthesisModel,
             ProgramSynthesisServingClient = _programSynthesisServingClient,
             ProgramSynthesisServingClientOptions = _programSynthesisServingClientOptions,
-            PromptTemplate = _promptTemplate,
-            PromptChain = _promptChain,
-            PromptOptimizer = _promptOptimizer,
-            FewShotExampleSelector = _fewShotExampleSelector,
-            PromptAnalyzer = _promptAnalyzer,
-            PromptCompressor = _promptCompressor,
+            PromptTemplate = null,
+            PromptChain = null,
+            PromptOptimizer = null,
+            FewShotExampleSelector = null,
+            PromptAnalyzer = null,
+            PromptCompressor = null,
             // Diagnostics Properties
             ProfilingReport = profilerSession?.GetReport(),
 
@@ -2887,12 +2879,12 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             ProgramSynthesisModel = _programSynthesisModel,
             ProgramSynthesisServingClient = _programSynthesisServingClient,
             ProgramSynthesisServingClientOptions = _programSynthesisServingClientOptions,
-            PromptTemplate = _promptTemplate,
-            PromptChain = _promptChain,
-            PromptOptimizer = _promptOptimizer,
-            FewShotExampleSelector = _fewShotExampleSelector,
-            PromptAnalyzer = _promptAnalyzer,
-            PromptCompressor = _promptCompressor,
+            PromptTemplate = null,
+            PromptChain = null,
+            PromptOptimizer = null,
+            FewShotExampleSelector = null,
+            PromptAnalyzer = null,
+            PromptCompressor = null,
             ProfilingReport = profilerSession?.GetReport(),
             MemoryConfig = _memoryConfig
         };
@@ -3209,12 +3201,12 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             ProgramSynthesisModel = _programSynthesisModel,
             ProgramSynthesisServingClient = _programSynthesisServingClient,
             ProgramSynthesisServingClientOptions = _programSynthesisServingClientOptions,
-            PromptTemplate = _promptTemplate,
-            PromptChain = _promptChain,
-            PromptOptimizer = _promptOptimizer,
-            FewShotExampleSelector = _fewShotExampleSelector,
-            PromptAnalyzer = _promptAnalyzer,
-            PromptCompressor = _promptCompressor,
+            PromptTemplate = null,
+            PromptChain = null,
+            PromptOptimizer = null,
+            FewShotExampleSelector = null,
+            PromptAnalyzer = null,
+            PromptCompressor = null,
             ProfilingReport = profilerSession?.GetReport(),
             MemoryConfig = _memoryConfig
         };
@@ -3329,9 +3321,6 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         {
             result.AttachTokenizer(_tokenizer, _tokenizationConfig);
         }
-
-        // Reattach prompt engineering components if configured
-        AttachPromptEngineeringConfiguration(result);
 
         return result;
     }
@@ -4849,47 +4838,6 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     }
 
     /// <summary>
-    /// Configures tokenization for text-based input processing.
-    /// </summary>
-    /// <param name="tokenizer">The tokenizer to use for text processing.</param>
-    /// <param name="config">Optional tokenization configuration. If null, default settings are used.</param>
-    /// <returns>This builder instance for method chaining.</returns>
-    /// <remarks>
-    /// <para>
-    /// Tokenization is the process of breaking text into smaller pieces (tokens) that can be processed
-    /// by machine learning models. This is essential for NLP and text-based models.
-    /// </para>
-    /// <para><b>For Beginners:</b> Tokenization converts human-readable text into numbers that AI models understand.
-    ///
-    /// Different tokenization strategies include:
-    /// - BPE (Byte Pair Encoding): Used by GPT models, learns subword units from data
-    /// - WordPiece: Used by BERT, splits unknown words into known subwords
-    /// - SentencePiece: Language-independent tokenization used by many multilingual models
-    ///
-    /// Example:
-    /// <code>
-    /// // Using BPE tokenizer
-    /// var tokenizer = BpeTokenizer.Train(corpus, vocabSize: 32000);
-    /// var builder = new AiModelBuilder&lt;float, Matrix&lt;float&gt;, Vector&lt;float&gt;&gt;()
-    ///     .ConfigureTokenizer(tokenizer)
-    ///     .ConfigureModel(new TransformerModel())
-    ///     .Build(trainingData);
-    ///
-    /// // Or use AutoTokenizer for HuggingFace models
-    /// var tokenizer = AutoTokenizer.FromPretrained("bert-base-uncased");
-    /// </code>
-    /// </para>
-    /// </remarks>
-    public IAiModelBuilder<T, TInput, TOutput> ConfigureTokenizer(
-        ITokenizer? tokenizer = null,
-        TokenizationConfig? config = null)
-    {
-        _tokenizer = tokenizer;
-        _tokenizationConfig = config ?? new TokenizationConfig();
-        return this;
-    }
-
-    /// <summary>
     /// Configures program synthesis (code generation / repair) settings with sensible defaults.
     /// </summary>
     /// <param name="options">Optional configuration options. If null, safe industry-standard defaults are used.</param>
@@ -5061,365 +5009,6 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
 
         _programSynthesisServingClient = client;
         return this;
-    }
-
-    /// <summary>
-    /// Configures tokenization using a pretrained tokenizer from HuggingFace Hub.
-    /// </summary>
-    /// <param name="model">The pretrained tokenizer model to use. Defaults to BertBaseUncased.</param>
-    /// <param name="config">Optional tokenization configuration.</param>
-    /// <returns>This builder instance for method chaining.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This is the easiest and most type-safe way to use industry-standard tokenizers.
-    /// Using the enum ensures you always specify a valid model name.
-    ///
-    /// Simply call without parameters for sensible defaults:
-    /// <code>
-    /// var builder = new AiModelBuilder&lt;float, Matrix&lt;float&gt;, Vector&lt;float&gt;&gt;()
-    ///     .ConfigureTokenizerFromPretrained()  // Uses BertBaseUncased by default
-    ///     .ConfigureModel(new BertModel())
-    ///     .Build(trainingData);
-    /// </code>
-    ///
-    /// Or specify a model using the enum:
-    /// <code>
-    /// builder.ConfigureTokenizerFromPretrained(PretrainedTokenizerModel.Gpt2)
-    /// </code>
-    ///
-    /// Available models include:
-    /// - BertBaseUncased: BERT tokenizer for English text (default)
-    /// - Gpt2, Gpt2Medium, Gpt2Large: GPT-2 tokenizers for text generation
-    /// - RobertaBase, RobertaLarge: RoBERTa tokenizers (improved BERT)
-    /// - T5Small, T5Base, T5Large: T5 tokenizers for text-to-text tasks
-    /// - DistilBertBaseUncased: Faster, smaller BERT
-    /// - CodeBertBase: For code understanding tasks
-    /// </para>
-    /// </remarks>
-    public IAiModelBuilder<T, TInput, TOutput> ConfigureTokenizerFromPretrained(
-        PretrainedTokenizerModel model = PretrainedTokenizerModel.BertBaseUncased,
-        TokenizationConfig? config = null)
-    {
-        _tokenizer = AutoTokenizer.FromPretrained(model.ToModelId());
-        _tokenizationConfig = config ?? new TokenizationConfig();
-        return this;
-    }
-
-    /// <summary>
-    /// Configures tokenization using a pretrained tokenizer from a custom HuggingFace model name or local path.
-    /// </summary>
-    /// <param name="modelNameOrPath">The HuggingFace model name or local path. Defaults to "bert-base-uncased" if not specified.</param>
-    /// <param name="config">Optional tokenization configuration.</param>
-    /// <returns>This builder instance for method chaining.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Use this overload when you need to specify a custom model name or path
-    /// that isn't in the PretrainedTokenizerModel enum. For common models, prefer the enum-based overload
-    /// for type safety.
-    ///
-    /// Example with custom model:
-    /// <code>
-    /// // Use a custom or community model from HuggingFace
-    /// builder.ConfigureTokenizerFromPretrained("sentence-transformers/all-MiniLM-L6-v2")
-    /// </code>
-    ///
-    /// If null or empty, defaults to "bert-base-uncased".
-    /// </para>
-    /// </remarks>
-    public IAiModelBuilder<T, TInput, TOutput> ConfigureTokenizerFromPretrained(
-        string? modelNameOrPath = null,
-        TokenizationConfig? config = null)
-    {
-        // Default to bert-base-uncased, the most widely-used pretrained tokenizer
-        // Use null-coalescing to ensure a non-null model name
-        string defaultModel = PretrainedTokenizerModel.BertBaseUncased.ToModelId();
-        string modelName = modelNameOrPath is not null && !string.IsNullOrWhiteSpace(modelNameOrPath)
-            ? modelNameOrPath
-            : defaultModel;
-        _tokenizer = AutoTokenizer.FromPretrained(modelName);
-        _tokenizationConfig = config ?? new TokenizationConfig();
-        return this;
-    }
-
-    /// <inheritdoc />
-    /// <summary>
-    /// Asynchronously configures the tokenizer by loading a pretrained model from HuggingFace Hub.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This is the async version of ConfigureTokenizerFromPretrained.
-    /// Use this when you want to avoid blocking the thread while downloading tokenizer files
-    /// from HuggingFace Hub. This is especially important in UI applications or web servers.
-    /// </para>
-    /// <para>
-    /// Example:
-    /// <code>
-    /// await builder.ConfigureTokenizerFromPretrainedAsync(PretrainedTokenizerModel.BertBaseUncased);
-    /// </code>
-    /// </para>
-    /// </remarks>
-    public async Task<IAiModelBuilder<T, TInput, TOutput>> ConfigureTokenizerFromPretrainedAsync(
-        PretrainedTokenizerModel model = PretrainedTokenizerModel.BertBaseUncased,
-        TokenizationConfig? config = null)
-    {
-        _tokenizer = await AutoTokenizer.FromPretrainedAsync(model.ToModelId());
-        _tokenizationConfig = config ?? new TokenizationConfig();
-        return this;
-    }
-
-    /// <inheritdoc />
-    /// <summary>
-    /// Asynchronously configures the tokenizer by loading a pretrained model from HuggingFace Hub using a model name or path.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This is the async version that accepts a custom model name or path.
-    /// Use this when loading custom or community models without blocking the thread.
-    /// </para>
-    /// <para>
-    /// Example:
-    /// <code>
-    /// await builder.ConfigureTokenizerFromPretrainedAsync("sentence-transformers/all-MiniLM-L6-v2");
-    /// </code>
-    /// </para>
-    /// </remarks>
-    public async Task<IAiModelBuilder<T, TInput, TOutput>> ConfigureTokenizerFromPretrainedAsync(
-        string? modelNameOrPath = null,
-        TokenizationConfig? config = null)
-    {
-        // Default to bert-base-uncased, the most widely-used pretrained tokenizer
-        string defaultModel = PretrainedTokenizerModel.BertBaseUncased.ToModelId();
-        string modelName = modelNameOrPath is not null && !string.IsNullOrWhiteSpace(modelNameOrPath)
-            ? modelNameOrPath
-            : defaultModel;
-        _tokenizer = await AutoTokenizer.FromPretrainedAsync(modelName);
-        _tokenizationConfig = config ?? new TokenizationConfig();
-        return this;
-    }
-
-    // ============================================================================
-    // Prompt Engineering Configuration Methods
-    // ============================================================================
-
-    /// <summary>
-    /// Configures the prompt template for language model interactions.
-    /// </summary>
-    /// <param name="template">The prompt template to use.</param>
-    /// <returns>This builder instance for method chaining.</returns>
-    /// <remarks>
-    /// <para>
-    /// A prompt template provides a structured way to create prompts for language models by combining
-    /// a template string with runtime variables.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> A prompt template is like a form with blanks to fill in. You define the
-    /// structure once and fill in different values each time you use it.
-    ///
-    /// Example:
-    /// <code>
-    /// var template = new SimplePromptTemplate("Translate {text} from {source} to {target}");
-    /// var builder = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
-    ///     .ConfigurePromptTemplate(template)
-    ///     .ConfigureModel(model);
-    /// </code>
-    /// </para>
-    /// </remarks>
-    public IAiModelBuilder<T, TInput, TOutput> ConfigurePromptTemplate(IPromptTemplate? template = null)
-    {
-        _promptTemplate = template;
-        return this;
-    }
-
-    /// <summary>
-    /// Configures the prompt chain for composing multiple language model operations.
-    /// </summary>
-    /// <param name="chain">The chain to use for processing prompts.</param>
-    /// <returns>This builder instance for method chaining.</returns>
-    /// <remarks>
-    /// <para>
-    /// A chain orchestrates multiple language model calls, tools, and transformations into a cohesive
-    /// workflow. Chains can be sequential, conditional, or parallel.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> A chain connects multiple steps into a complete workflow, like a recipe
-    /// where each step builds on the previous one.
-    ///
-    /// Example:
-    /// <code>
-    /// var chain = new SequentialChain&lt;string, string&gt;("CustomerSupport")
-    ///     .AddStep("classify", ClassifyEmail)
-    ///     .AddStep("respond", GenerateResponse);
-    ///
-    /// var builder = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
-    ///     .ConfigurePromptChain(chain)
-    ///     .ConfigureModel(model);
-    /// </code>
-    /// </para>
-    /// </remarks>
-    public IAiModelBuilder<T, TInput, TOutput> ConfigurePromptChain(IChain<string, string>? chain = null)
-    {
-        _promptChain = chain;
-        return this;
-    }
-
-    /// <summary>
-    /// Configures the prompt optimizer for automatically improving prompts.
-    /// </summary>
-    /// <param name="optimizer">The prompt optimizer to use.</param>
-    /// <returns>This builder instance for method chaining.</returns>
-    /// <remarks>
-    /// <para>
-    /// A prompt optimizer automatically refines prompts to achieve better performance on a specific task.
-    /// Optimization strategies include discrete search, gradient-based methods, and evolutionary algorithms.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> A prompt optimizer automatically improves your prompts by testing variations
-    /// and keeping the best-performing ones.
-    ///
-    /// Example:
-    /// <code>
-    /// var optimizer = new DiscreteSearchOptimizer&lt;double&gt;();
-    ///
-    /// var builder = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
-    ///     .ConfigurePromptOptimizer(optimizer)
-    ///     .ConfigureModel(model);
-    ///
-    /// // Later, optimize a prompt
-    /// var optimized = optimizer.Optimize(
-    ///     initialPrompt: "Classify sentiment:",
-    ///     evaluationFunction: EvaluatePrompt,
-    ///     maxIterations: 50
-    /// );
-    /// </code>
-    /// </para>
-    /// </remarks>
-    public IAiModelBuilder<T, TInput, TOutput> ConfigurePromptOptimizer(IPromptOptimizer<T>? optimizer = null)
-    {
-        _promptOptimizer = optimizer;
-        return this;
-    }
-
-    /// <summary>
-    /// Configures the few-shot example selector for selecting examples to include in prompts.
-    /// </summary>
-    /// <param name="selector">The few-shot example selector to use.</param>
-    /// <returns>This builder instance for method chaining.</returns>
-    /// <remarks>
-    /// <para>
-    /// A few-shot example selector chooses the most relevant examples to include in prompts based
-    /// on the current query. Different strategies include random selection, fixed order, and
-    /// similarity-based selection.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> Few-shot learning teaches the model by showing it examples. The selector
-    /// picks which examples to show for each new query.
-    ///
-    /// Example:
-    /// <code>
-    /// var selector = new RandomExampleSelector&lt;double&gt;(seed: 42);
-    /// selector.AddExample(new FewShotExample { Input = "Hello", Output = "Hola" });
-    /// selector.AddExample(new FewShotExample { Input = "Goodbye", Output = "Adiós" });
-    ///
-    /// var builder = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
-    ///     .ConfigureFewShotExampleSelector(selector)
-    ///     .ConfigureModel(model);
-    /// </code>
-    /// </para>
-    /// </remarks>
-    public IAiModelBuilder<T, TInput, TOutput> ConfigureFewShotExampleSelector(IFewShotExampleSelector<T>? selector = null)
-    {
-        _fewShotExampleSelector = selector;
-        return this;
-    }
-
-    /// <summary>
-    /// Configures a prompt analyzer for analyzing prompt quality, metrics, and potential issues.
-    /// </summary>
-    /// <param name="analyzer">The prompt analyzer implementation, or null to use default.</param>
-    /// <returns>This builder instance for method chaining.</returns>
-    /// <remarks>
-    /// <para>
-    /// A prompt analyzer examines prompts to provide metrics like token count, estimated cost,
-    /// complexity scores, and can detect potential issues like prompt injection or unclear instructions.
-    /// </para>
-    /// <para><b>For Beginners:</b> The prompt analyzer is like a "spell checker" for your prompts.
-    ///
-    /// It helps you understand:
-    /// - How many tokens your prompt uses (affects cost)
-    /// - How complex your prompt is
-    /// - Whether there might be issues with your prompt
-    ///
-    /// Example:
-    /// <code>
-    /// var analyzer = new PromptAnalyzer();
-    ///
-    /// var builder = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
-    ///     .ConfigurePromptAnalyzer(analyzer)
-    ///     .ConfigureModel(model);
-    ///
-    /// // After building, the trained model can analyze prompts
-    /// var metrics = trainedModel.AnalyzePrompt("Your prompt text...");
-    /// Console.WriteLine($"Token count: {metrics.TokenCount}");
-    /// </code>
-    /// </para>
-    /// </remarks>
-    public IAiModelBuilder<T, TInput, TOutput> ConfigurePromptAnalyzer(IPromptAnalyzer? analyzer = null)
-    {
-        _promptAnalyzer = analyzer;
-        return this;
-    }
-
-    /// <summary>
-    /// Configures a prompt compressor for reducing prompt token counts while preserving meaning.
-    /// </summary>
-    /// <param name="compressor">The prompt compressor implementation, or null to use default.</param>
-    /// <returns>This builder instance for method chaining.</returns>
-    /// <remarks>
-    /// <para>
-    /// A prompt compressor reduces the length of prompts to save on API costs and fit within
-    /// context windows. Different compression strategies include removing redundancy,
-    /// summarizing sections, and caching repeated content.
-    /// </para>
-    /// <para><b>For Beginners:</b> The prompt compressor makes your prompts shorter without losing meaning.
-    ///
-    /// Benefits:
-    /// - Lower API costs (fewer tokens = less money)
-    /// - Faster responses (shorter prompts process faster)
-    /// - Fit within model limits (some models have token limits)
-    ///
-    /// Example:
-    /// <code>
-    /// var compressor = new RedundancyCompressor();
-    ///
-    /// var builder = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
-    ///     .ConfigurePromptCompressor(compressor)
-    ///     .ConfigureModel(model);
-    ///
-    /// // After building, the trained model can compress prompts
-    /// var result = trainedModel.CompressPrompt("Your long verbose prompt...");
-    /// Console.WriteLine($"Original: {result.OriginalTokenCount}, Compressed: {result.CompressedTokenCount}");
-    /// </code>
-    /// </para>
-    /// </remarks>
-    public IAiModelBuilder<T, TInput, TOutput> ConfigurePromptCompressor(IPromptCompressor? compressor = null)
-    {
-        _promptCompressor = compressor;
-        return this;
-    }
-
-    // ============================================================================
-    // Private Prompt Engineering Helper Methods
-    // ============================================================================
-
-    /// <summary>
-    /// Attaches the configured prompt engineering components to a AiModelResult.
-    /// </summary>
-    /// <param name="result">The result to attach configuration to.</param>
-    private void AttachPromptEngineeringConfiguration(AiModelResult<T, TInput, TOutput> result)
-    {
-        result.AttachPromptEngineering(
-            _promptTemplate,
-            _promptChain,
-            _promptOptimizer,
-            _fewShotExampleSelector,
-            _promptAnalyzer,
-            _promptCompressor);
     }
 
     // ============================================================================

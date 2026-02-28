@@ -810,6 +810,9 @@ public class DallE3Model<T> : LatentDiffusionModelBase<T>, IDallE3Model<T>
             Description = "DALL-E 3 style text-to-image generation model",
             AdditionalInfo = new Dictionary<string, object>
             {
+                ["architecture"] = "unclip-diffusion-v3",
+                ["base_model"] = "DALL-E 3",
+                ["text_encoder"] = "T5-XXL + CLIP",
                 ["supported_sizes"] = _supportedSizes.Select(s => s.ToString()).ToList(),
                 ["max_prompt_length"] = MAX_PROMPT_LENGTH,
                 ["supports_editing"] = SupportsEditing,

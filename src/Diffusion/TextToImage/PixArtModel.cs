@@ -96,13 +96,13 @@ public class PixArtModel<T> : LatentDiffusionModelBase<T>
     #region Constants
 
     /// <summary>
-    /// Default model size variant.
+    /// Default model variant.
     /// </summary>
     /// <remarks>
-    /// The "alpha" variant is the standard PixArt model with 600M parameters and 1024px default resolution.
-    /// Other supported variants include "sigma" (512px), "delta" (256px), and "xl" (larger 1024px).
+    /// The Alpha variant is the standard PixArt model with 600M parameters and 1024px default resolution.
+    /// Other supported variants include Sigma (512px), Delta (256px), and XL (larger 1024px).
     /// </remarks>
-    public const string DefaultModelSize = "alpha";
+    public const PixArtVariant DefaultVariant = PixArtVariant.Alpha;
 
     /// <summary>
     /// Standard PixArt latent channels.
@@ -142,9 +142,9 @@ public class PixArtModel<T> : LatentDiffusionModelBase<T>
     private readonly IConditioningModule<T>? _conditioner;
 
     /// <summary>
-    /// Model size variant (alpha, sigma, delta).
+    /// Model variant (Alpha, Sigma, Delta, XL).
     /// </summary>
-    private readonly string _modelSize;
+    private readonly PixArtVariant _modelSize;
 
     /// <summary>
     /// Hidden dimension for the transformer.
@@ -186,9 +186,9 @@ public class PixArtModel<T> : LatentDiffusionModelBase<T>
     public override int ParameterCount => _dit.ParameterCount;
 
     /// <summary>
-    /// Gets the model size variant.
+    /// Gets the model variant.
     /// </summary>
-    public string ModelSize => _modelSize;
+    public PixArtVariant ModelSize => _modelSize;
 
     /// <summary>
     /// Gets the hidden dimension of the transformer.
@@ -232,22 +232,22 @@ public class PixArtModel<T> : LatentDiffusionModelBase<T>
     /// <summary>
     /// Initializes a new instance of PixArtModel with full customization support.
     /// </summary>
-    /// <param name="modelSize">Model variant: "alpha" (1024px), "sigma" (512px), or "delta" (256px).</param>
+    /// <param name="modelSize">Model variant: Alpha (1024px), Sigma (512px), Delta (256px), or XL.</param>
     /// <param name="conditioner">Optional conditioning module for text encoding.</param>
     /// <param name="scheduler">Optional custom scheduler.</param>
     /// <param name="seed">Optional random seed for reproducibility.</param>
     public PixArtModel(
         NeuralNetworkArchitecture<T>? architecture = null,
-        string modelSize = DefaultModelSize,
+        PixArtVariant modelSize = DefaultVariant,
         IConditioningModule<T>? conditioner = null,
         INoiseScheduler<T>? scheduler = null,
         int? seed = null)
         : base(CreateDefaultOptions(), scheduler ?? CreateDefaultScheduler(seed), architecture)
     {
-        _modelSize = modelSize.ToLowerInvariant();
+        _modelSize = modelSize;
         _conditioner = conditioner;
 
-        // Configure based on model size
+        // Configure based on model variant
         var (hiddenDim, numHeads, numLayers, resolution) = GetModelConfiguration(_modelSize);
         _hiddenDim = hiddenDim;
         _numHeads = numHeads;
@@ -316,15 +316,15 @@ public class PixArtModel<T> : LatentDiffusionModelBase<T>
     /// <summary>
     /// Gets model configuration based on size variant.
     /// </summary>
-    private static (int hiddenDim, int numHeads, int numLayers, int resolution) GetModelConfiguration(string modelSize)
+    private static (int hiddenDim, int numHeads, int numLayers, int resolution) GetModelConfiguration(PixArtVariant modelSize)
     {
         return modelSize switch
         {
-            "alpha" => (1152, 16, 28, 1024),  // PixArt-α: 600M params, 1024px
-            "sigma" => (1152, 16, 28, 512),   // PixArt-Σ: Similar to α, 512px
-            "delta" => (768, 12, 12, 256),    // PixArt-δ: Smaller variant
-            "xl" => (1536, 24, 32, 1024),     // PixArt-XL: Larger variant
-            _ => (1152, 16, 28, 1024)         // Default to α configuration
+            PixArtVariant.Alpha => (1152, 16, 28, 1024),  // PixArt-α: 600M params, 1024px
+            PixArtVariant.Sigma => (1152, 16, 28, 512),   // PixArt-Σ: Similar to α, 512px
+            PixArtVariant.Delta => (768, 12, 12, 256),    // PixArt-δ: Smaller variant
+            PixArtVariant.XL => (1536, 24, 32, 1024),     // PixArt-XL: Larger variant
+            _ => (1152, 16, 28, 1024)                     // Default to α configuration
         };
     }
 
@@ -531,10 +531,10 @@ public class PixArtModel<T> : LatentDiffusionModelBase<T>
     {
         return _modelSize switch
         {
-            "alpha" => (20, 4.5, 1024),
-            "sigma" => (20, 4.5, 512),
-            "delta" => (15, 4.0, 256),
-            "xl" => (25, 5.0, 1024),
+            PixArtVariant.Alpha => (20, 4.5, 1024),
+            PixArtVariant.Sigma => (20, 4.5, 512),
+            PixArtVariant.Delta => (15, 4.0, 256),
+            PixArtVariant.XL => (25, 5.0, 1024),
             _ => (20, 4.5, _defaultResolution)
         };
     }
@@ -611,17 +611,21 @@ public class PixArtModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
+        var sizeName = _modelSize.ToString().ToLowerInvariant();
         var metadata = new ModelMetadata<T>
         {
-            Name = $"PixArt-{_modelSize}",
+            Name = $"PixArt-{sizeName}",
             Version = "1.0",
             ModelType = ModelType.NeuralNetwork,
-            Description = $"PixArt-{_modelSize} text-to-image diffusion model using DiT architecture",
+            Description = $"PixArt-{sizeName} text-to-image diffusion model using DiT architecture",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount
         };
 
-        // Add custom properties using the Properties dictionary
+        metadata.SetProperty("architecture", "dit-xl-2");
+        metadata.SetProperty("base_model", "PixArt-alpha");
+        metadata.SetProperty("text_encoder", "T5-XXL");
+        metadata.SetProperty("context_dim", 4096);
         metadata.SetProperty("hidden_dim", _hiddenDim);
         metadata.SetProperty("num_heads", _numHeads);
         metadata.SetProperty("num_layers", _numLayers);
@@ -641,16 +645,16 @@ public class PixArtModel<T> : LatentDiffusionModelBase<T>
 public class PixArtOptions<T> : DiffusionModelOptions<T>
 {
     /// <summary>
-    /// Model size variant. Default: "alpha".
+    /// Model variant. Default: Alpha.
     /// </summary>
     /// <remarks>
     /// Available variants:
-    /// - "alpha": Full 1024px model (600M params)
-    /// - "sigma": 512px variant
-    /// - "delta": Smaller 256px variant
-    /// - "xl": Larger variant with more parameters
+    /// - Alpha: Full 1024px model (600M params)
+    /// - Sigma: 512px variant
+    /// - Delta: Smaller 256px variant
+    /// - XL: Larger variant with more parameters
     /// </remarks>
-    public string ModelSize { get; set; } = PixArtModel<T>.DefaultModelSize;
+    public PixArtVariant ModelSize { get; set; } = PixArtModel<T>.DefaultVariant;
 
     /// <summary>
     /// Whether to use T5-XXL text encoder. Default: true.

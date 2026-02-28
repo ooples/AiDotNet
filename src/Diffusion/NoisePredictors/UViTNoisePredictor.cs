@@ -233,26 +233,14 @@ public class UViTNoisePredictor<T> : NoisePredictorBase<T>
         var patches = Patchify(x);
         patches = _patchEmbed.Forward(patches);
 
-        // Add position embeddings
+        // Add position embeddings using hardware-accelerated broadcast add
         if (_posEmbed != null)
         {
-            var posData = new T[patches.Shape[0] * patches.Shape[1] * patches.Shape[2]];
-            for (int i = 0; i < posData.Length; i++)
+            // Slice position embedding to match actual sequence length if needed
+            if (patches.Shape[1] <= _posEmbed.Shape[1])
             {
-                int seqIdx = (i / patches.Shape[2]) % patches.Shape[1];
-                int dimIdx = i % patches.Shape[2];
-                if (seqIdx < _posEmbed.Shape[1] && dimIdx < _posEmbed.Shape[2])
-                {
-                    posData[i] = NumOps.Add(
-                        patches.AsSpan()[i],
-                        _posEmbed[0, seqIdx, dimIdx]);
-                }
-                else
-                {
-                    posData[i] = patches.AsSpan()[i];
-                }
+                patches = Engine.TensorBroadcastAdd<T>(patches, _posEmbed);
             }
-            patches = new Tensor<T>(patches.Shape, new Vector<T>(posData));
         }
 
         // Add time embedding (broadcast to all tokens)
@@ -393,70 +381,34 @@ public class UViTNoisePredictor<T> : NoisePredictorBase<T>
         return new Tensor<T>(new[] { batch, _inputChannels, height, width }, new Vector<T>(result));
     }
 
-    private static Tensor<T> AddTimeToPatches(Tensor<T> patches, Tensor<T> timeEmbed)
+    private Tensor<T> AddTimeToPatches(Tensor<T> patches, Tensor<T> timeEmbed)
     {
-        var data = new T[patches.AsSpan().Length];
-        var pSpan = patches.AsSpan();
-        var tSpan = timeEmbed.AsSpan();
-
-        for (int i = 0; i < data.Length; i++)
-        {
-            int dimIdx = i % (patches.Shape.Length > 2 ? patches.Shape[2] : patches.Shape[^1]);
-            data[i] = NumOps.Add(pSpan[i], dimIdx < tSpan.Length ? tSpan[dimIdx] : NumOps.Zero);
-        }
-
-        return new Tensor<T>(patches.Shape, new Vector<T>(data));
+        // Reshape time embedding to [1, 1, hiddenSize] for broadcasting across [batch, seqLen, hidden]
+        int hiddenDim = patches.Shape.Length > 2 ? patches.Shape[2] : patches.Shape[^1];
+        int timeLen = Math.Min(timeEmbed.AsSpan().Length, hiddenDim);
+        var timeData = new T[hiddenDim];
+        timeEmbed.AsSpan().Slice(0, timeLen).CopyTo(timeData.AsSpan());
+        var timeBroadcast = new Tensor<T>(new[] { 1, 1, hiddenDim }, new Vector<T>(timeData));
+        return Engine.TensorBroadcastAdd<T>(patches, timeBroadcast);
     }
 
     private static Tensor<T> CloneTensor(Tensor<T> t)
     {
         var span = t.AsSpan();
         var data = new T[span.Length];
-        for (int i = 0; i < span.Length; i++) data[i] = span[i];
+        span.CopyTo(data);
         return new Tensor<T>(t.Shape, new Vector<T>(data));
     }
 
-    private static Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
+    private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
-        var aSpan = a.AsSpan();
-        var bSpan = b.AsSpan();
-        int len = Math.Min(aSpan.Length, bSpan.Length);
-        var data = new T[aSpan.Length];
-        for (int i = 0; i < len; i++) data[i] = NumOps.Add(aSpan[i], bSpan[i]);
-        for (int i = len; i < aSpan.Length; i++) data[i] = aSpan[i];
-        return new Tensor<T>(a.Shape, new Vector<T>(data));
+        return Engine.TensorAdd<T>(a, b);
     }
 
-    private static Tensor<T> ConcatenateTensors(Tensor<T> a, Tensor<T> b)
+    private Tensor<T> ConcatenateTensors(Tensor<T> a, Tensor<T> b)
     {
         // Concatenate along feature dimension (last dim)
-        var aShape = a.Shape;
-        var bShape = b.Shape;
-        int batch = aShape[0];
-        int seqLen = aShape.Length > 1 ? aShape[1] : 1;
-        int dimA = aShape.Length > 2 ? aShape[2] : aShape[^1];
-        int dimB = bShape.Length > 2 ? bShape[2] : bShape[^1];
-        int dimOut = dimA + dimB;
-
-        var data = new T[batch * seqLen * dimOut];
-        var aSpan = a.AsSpan();
-        var bSpan = b.AsSpan();
-
-        for (int n = 0; n < batch * seqLen; n++)
-        {
-            for (int d = 0; d < dimA; d++)
-            {
-                int aIdx = n * dimA + d;
-                data[n * dimOut + d] = aIdx < aSpan.Length ? aSpan[aIdx] : NumOps.Zero;
-            }
-            for (int d = 0; d < dimB; d++)
-            {
-                int bIdx = n * dimB + d;
-                data[n * dimOut + dimA + d] = bIdx < bSpan.Length ? bSpan[bIdx] : NumOps.Zero;
-            }
-        }
-
-        return new Tensor<T>(new[] { batch, seqLen, dimOut }, new Vector<T>(data));
+        return Engine.TensorConcatenate<T>(new[] { a, b }, axis: -1);
     }
 
     #endregion

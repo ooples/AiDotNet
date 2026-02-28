@@ -14,31 +14,6 @@ public partial class YamlModelConfig
     public YamlPipelineSection? CausalDiscovery { get; set; }
 
     /// <summary>
-    /// YAML configuration for ConfigureObjectDetector().
-    /// </summary>
-    public YamlTypeSection? ObjectDetector { get; set; }
-
-    /// <summary>
-    /// YAML configuration for ConfigureInstanceSegmenter().
-    /// </summary>
-    public YamlTypeSection? InstanceSegmenter { get; set; }
-
-    /// <summary>
-    /// YAML configuration for ConfigureSceneTextReader().
-    /// </summary>
-    public YamlTypeSection? SceneTextReader { get; set; }
-
-    /// <summary>
-    /// YAML configuration for ConfigureObjectTracker().
-    /// </summary>
-    public YamlTypeSection? ObjectTracker { get; set; }
-
-    /// <summary>
-    /// YAML configuration for ConfigureVisualization().
-    /// </summary>
-    public AiDotNet.ComputerVision.Visualization.VisualizationOptions? Visualization { get; set; }
-
-    /// <summary>
     /// YAML configuration for ConfigureLossFunction().
     /// </summary>
     public YamlTypeSection? LossFunction { get; set; }
@@ -429,11 +404,6 @@ public partial class YamlModelConfig
     public YamlPipelineSection? SelfSupervisedLearning { get; set; }
 
     /// <summary>
-    /// YAML configuration for ConfigureTokenizer().
-    /// </summary>
-    public YamlTypeSection? Tokenizer { get; set; }
-
-    /// <summary>
     /// YAML configuration for ConfigureProgramSynthesis().
     /// </summary>
     public AiDotNet.ProgramSynthesis.Options.ProgramSynthesisOptions? ProgramSynthesis { get; set; }
@@ -442,41 +412,6 @@ public partial class YamlModelConfig
     /// YAML configuration for ConfigureProgramSynthesisServing().
     /// </summary>
     public AiDotNet.ProgramSynthesis.Serving.ProgramSynthesisServingClientOptions? ProgramSynthesisServing { get; set; }
-
-    /// <summary>
-    /// YAML configuration for ConfigureTokenizerFromPretrained().
-    /// </summary>
-    public YamlTypeSection? TokenizerFromPretrained { get; set; }
-
-    /// <summary>
-    /// YAML configuration for ConfigurePromptTemplate().
-    /// </summary>
-    public YamlTypeSection? PromptTemplate { get; set; }
-
-    /// <summary>
-    /// YAML configuration for ConfigurePromptChain().
-    /// </summary>
-    public YamlTypeSection? PromptChain { get; set; }
-
-    /// <summary>
-    /// YAML configuration for ConfigurePromptOptimizer().
-    /// </summary>
-    public YamlTypeSection? PromptOptimizer { get; set; }
-
-    /// <summary>
-    /// YAML configuration for ConfigureFewShotExampleSelector().
-    /// </summary>
-    public YamlTypeSection? FewShotExampleSelector { get; set; }
-
-    /// <summary>
-    /// YAML configuration for ConfigurePromptAnalyzer().
-    /// </summary>
-    public YamlTypeSection? PromptAnalyzer { get; set; }
-
-    /// <summary>
-    /// YAML configuration for ConfigurePromptCompressor().
-    /// </summary>
-    public YamlTypeSection? PromptCompressor { get; set; }
 
     /// <summary>
     /// YAML configuration for ConfigureAudioEffect().
@@ -577,11 +512,6 @@ public partial class YamlModelConfig
     /// YAML configuration for ConfigureRLAgent().
     /// </summary>
     public YamlTypeSection? RLAgent { get; set; }
-
-    /// <summary>
-    /// YAML configuration for ConfigureTimeSeriesFeatures().
-    /// </summary>
-    public AiDotNet.Models.Options.TimeSeriesFeatureOptions? TimeSeriesFeatures { get; set; }
 
     /// <summary>
     /// YAML configuration for ConfigureUncertaintyQuantification().

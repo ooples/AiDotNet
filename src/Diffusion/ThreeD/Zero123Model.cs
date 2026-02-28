@@ -417,27 +417,8 @@ public class Zero123Model<T> : LatentDiffusionModelBase<T>
     /// </summary>
     private Tensor<T> ConcatenateLatents(Tensor<T> a, Tensor<T> b)
     {
-        // Simplified: create tensor with doubled channels
-        var newShape = new int[a.Shape.Length];
-        Array.Copy(a.Shape, newShape, a.Shape.Length);
-        newShape[1] *= 2; // Double channels
-
-        var result = new Tensor<T>(newShape);
-        var resultSpan = result.AsWritableSpan();
-        var aSpan = a.AsSpan();
-        var bSpan = b.AsSpan();
-
-        // Copy a then b
-        for (int i = 0; i < aSpan.Length; i++)
-        {
-            resultSpan[i] = aSpan[i];
-        }
-        for (int i = 0; i < bSpan.Length && i + aSpan.Length < resultSpan.Length; i++)
-        {
-            resultSpan[aSpan.Length + i] = bSpan[i];
-        }
-
-        return result;
+        // Concatenate along channel dimension (axis 1) using hardware-accelerated engine
+        return Engine.TensorConcatenate<T>(new[] { a, b }, axis: 1);
     }
 
     /// <summary>
@@ -445,18 +426,7 @@ public class Zero123Model<T> : LatentDiffusionModelBase<T>
     /// </summary>
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
-        var result = new Tensor<T>(a.Shape);
-        var aSpan = a.AsSpan();
-        var bSpan = b.AsSpan();
-        var resultSpan = result.AsWritableSpan();
-
-        var minLen = Math.Min(aSpan.Length, bSpan.Length);
-        for (int i = 0; i < minLen; i++)
-        {
-            resultSpan[i] = NumOps.Add(aSpan[i], bSpan[i]);
-        }
-
-        return result;
+        return Engine.TensorAdd<T>(a, b);
     }
 
     #endregion

@@ -284,21 +284,10 @@ public abstract class ThreeDDiffusionModelBase<T> : LatentDiffusionModelBase<T>,
         var condNoisePred = NoisePredictor.PredictNoise(noisyLatentsTensor, timestep, promptEmbedding);
         var uncondNoisePred = NoisePredictor.PredictNoise(noisyLatentsTensor, timestep, uncondEmbedding);
 
-        // Compute SDS gradient: grad = w(t) * (noise_pred_cond - noise_pred_uncond)
-        var gradient = new Tensor<T>(condNoisePred.Shape);
-        var gradSpan = gradient.AsWritableSpan();
-        var condSpan = condNoisePred.AsSpan();
-        var uncondSpan = uncondNoisePred.AsSpan();
-        var scale = NumOps.FromDouble(guidanceScale);
-
-        for (int i = 0; i < gradSpan.Length; i++)
-        {
-            // SDS gradient: scale * (cond - uncond)
-            var diff = NumOps.Subtract(condSpan[i], uncondSpan[i]);
-            gradSpan[i] = NumOps.Multiply(scale, diff);
-        }
-
-        return gradient;
+        // Compute SDS gradient: grad = scale * (cond - uncond)
+        var scaleT = NumOps.FromDouble(guidanceScale);
+        var diff = Engine.TensorSubtract<T>(condNoisePred, uncondNoisePred);
+        return Engine.TensorMultiplyScalar<T>(diff, scaleT);
     }
 
     /// <inheritdoc />

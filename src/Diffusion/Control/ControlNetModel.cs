@@ -604,17 +604,8 @@ public class ControlNetModel<T> : LatentDiffusionModelBase<T>
     /// </summary>
     private Tensor<T> ScaleTensor(Tensor<T> tensor, double scale)
     {
-        var result = new Tensor<T>(tensor.Shape);
-        var inputSpan = tensor.AsSpan();
-        var resultSpan = result.AsWritableSpan();
         var scaleT = NumOps.FromDouble(scale);
-
-        for (int i = 0; i < resultSpan.Length; i++)
-        {
-            resultSpan[i] = NumOps.Multiply(scaleT, inputSpan[i]);
-        }
-
-        return result;
+        return Engine.TensorMultiplyScalar<T>(tensor, scaleT);
     }
 
     /// <summary>
@@ -622,40 +613,7 @@ public class ControlNetModel<T> : LatentDiffusionModelBase<T>
     /// </summary>
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
-        var aSpan = a.AsSpan();
-        var bSpan = b.AsSpan();
-
-        // Use the larger tensor's shape for the result
-        var resultShape = aSpan.Length >= bSpan.Length ? a.Shape : b.Shape;
-        var result = new Tensor<T>(resultShape);
-        var resultSpan = result.AsWritableSpan();
-
-        var minLen = Math.Min(aSpan.Length, bSpan.Length);
-        var maxLen = Math.Max(aSpan.Length, bSpan.Length);
-
-        // Add overlapping elements
-        for (int i = 0; i < minLen; i++)
-        {
-            resultSpan[i] = NumOps.Add(aSpan[i], bSpan[i]);
-        }
-
-        // Copy remaining elements from the larger tensor
-        if (aSpan.Length > minLen)
-        {
-            for (int i = minLen; i < maxLen; i++)
-            {
-                resultSpan[i] = aSpan[i];
-            }
-        }
-        else if (bSpan.Length > minLen)
-        {
-            for (int i = minLen; i < maxLen; i++)
-            {
-                resultSpan[i] = bSpan[i];
-            }
-        }
-
-        return result;
+        return Engine.TensorAdd<T>(a, b);
     }
 
     /// <inheritdoc />
@@ -738,6 +696,25 @@ public class ControlNetModel<T> : LatentDiffusionModelBase<T>
 
         return clone;
     }
+
+    /// <inheritdoc />
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        var m = new ModelMetadata<T>
+        {
+            Name = "ControlNet", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Description = "Spatial conditioning for diffusion models via trainable encoder copy",
+            FeatureCount = ParameterCount, Complexity = ParameterCount
+        };
+        m.SetProperty("architecture", "unet-controlnet");
+        m.SetProperty("base_model", "Stable Diffusion 1.5");
+        m.SetProperty("text_encoder", "CLIP ViT-L/14");
+        m.SetProperty("context_dim", 768);
+        m.SetProperty("control_type", _controlType.ToString());
+        m.SetProperty("conditioning_strength", _conditioningStrength);
+        m.SetProperty("latent_channels", CN_LATENT_CHANNELS);
+        return m;
+    }
 }
 
 /// <summary>
@@ -768,7 +745,33 @@ public enum ControlType
     /// <summary>Shuffle/random structure.</summary>
     Shuffle,
     /// <summary>Inpaint mask.</summary>
-    Inpaint
+    Inpaint,
+    /// <summary>Tile upscaling control for detail preservation.</summary>
+    Tile,
+    /// <summary>QR code pattern control for embedding QR codes in images.</summary>
+    QR,
+    /// <summary>Brightness map control for lighting guidance.</summary>
+    Brightness,
+    /// <summary>Color palette control for color guidance.</summary>
+    Color,
+    /// <summary>Content shuffle for structure-aware style transfer.</summary>
+    ContentShuffle,
+    /// <summary>Recolor control for guided recoloring of images.</summary>
+    Recolor,
+    /// <summary>FaceID control for identity-preserving face generation.</summary>
+    FaceID,
+    /// <summary>Reference-only control using image features without explicit conditioning.</summary>
+    Reference,
+    /// <summary>DWPose whole-body keypoint detection (improved over OpenPose).</summary>
+    DWPose,
+    /// <summary>MediaPipe face mesh landmarks for facial control.</summary>
+    MediaPipeFace,
+    /// <summary>Inpainting mask for region-specific generation.</summary>
+    InpaintMask,
+    /// <summary>SAM (Segment Anything Model) segmentation maps.</summary>
+    SAMSegment,
+    /// <summary>Color palette extraction for palette-guided generation.</summary>
+    ColorPalette
 }
 
 /// <summary>

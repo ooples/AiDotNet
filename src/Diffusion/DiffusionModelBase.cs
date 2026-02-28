@@ -1,5 +1,6 @@
 using System.Linq;
 using AiDotNet.Autodiff;
+using AiDotNet.Engines;
 using AiDotNet.Enums;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -39,6 +40,11 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
     /// Provides numeric operations for the specific type T.
     /// </summary>
     protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
+    /// <summary>
+    /// Gets the current hardware-accelerated engine for tensor operations.
+    /// </summary>
+    protected IEngine Engine => AiDotNetEngine.Current;
 
     /// <summary>
     /// Random number generator for noise sampling.

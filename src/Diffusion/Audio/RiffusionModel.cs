@@ -523,20 +523,12 @@ public class RiffusionModel<T> : LatentDiffusionModelBase<T>
     /// </summary>
     private Tensor<T> InterpolateTensors(Tensor<T> a, Tensor<T> b, double alpha)
     {
-        var result = new Tensor<T>(a.Shape);
-        var aSpan = a.AsSpan();
-        var bSpan = b.AsSpan();
-        var resultSpan = result.AsWritableSpan();
-
-        var minLen = Math.Min(aSpan.Length, bSpan.Length);
-        for (int i = 0; i < minLen; i++)
-        {
-            var valA = NumOps.ToDouble(aSpan[i]);
-            var valB = NumOps.ToDouble(bSpan[i]);
-            resultSpan[i] = NumOps.FromDouble(valA * (1 - alpha) + valB * alpha);
-        }
-
-        return result;
+        // result = (1 - alpha) * a + alpha * b
+        var oneMinusAlphaT = NumOps.FromDouble(1.0 - alpha);
+        var alphaT = NumOps.FromDouble(alpha);
+        var scaledA = Engine.TensorMultiplyScalar<T>(a, oneMinusAlphaT);
+        var scaledB = Engine.TensorMultiplyScalar<T>(b, alphaT);
+        return Engine.TensorAdd<T>(scaledA, scaledB);
     }
 
     #endregion

@@ -778,17 +778,7 @@ public class AnimateDiffModel<T> : VideoDiffusionModelBase<T>
     /// </summary>
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
-        var result = new Tensor<T>(a.Shape);
-        var resultSpan = result.AsWritableSpan();
-        var aSpan = a.AsSpan();
-        var bSpan = b.AsSpan();
-
-        for (int i = 0; i < resultSpan.Length; i++)
-        {
-            resultSpan[i] = NumOps.Add(aSpan[i], bSpan[i]);
-        }
-
-        return result;
+        return Engine.TensorAdd<T>(a, b);
     }
 
     /// <summary>

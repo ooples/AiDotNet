@@ -80,7 +80,7 @@ namespace AiDotNet.Diffusion.TextToImage;
 /// var flux = new Flux1Model&lt;float&gt;();
 ///
 /// // Create FLUX.1 schnell for fast generation
-/// var fluxSchnell = new Flux1Model&lt;float&gt;(variant: "schnell");
+/// var fluxSchnell = new Flux1Model&lt;float&gt;(variant: FluxVariant.Schnell);
 ///
 /// // Generate an image
 /// var image = flux.GenerateFromText(
@@ -122,7 +122,7 @@ public class Flux1Model<T> : LatentDiffusionModelBase<T>
     private MMDiTNoisePredictor<T> _mmdit;
     private StandardVAE<T> _vae;
     private readonly IConditioningModule<T>? _conditioner;
-    private readonly string _variant;
+    private readonly FluxVariant _variant;
 
     #endregion
 
@@ -144,14 +144,14 @@ public class Flux1Model<T> : LatentDiffusionModelBase<T>
     public override int ParameterCount => _mmdit.ParameterCount + _vae.ParameterCount;
 
     /// <summary>
-    /// Gets the model variant ("dev", "schnell", or "pro").
+    /// Gets the model variant.
     /// </summary>
-    public string Variant => _variant;
+    public FluxVariant Variant => _variant;
 
     /// <summary>
     /// Gets whether this variant supports guidance-free generation.
     /// </summary>
-    public bool IsGuidanceFree => _variant == "schnell";
+    public bool IsGuidanceFree => _variant == FluxVariant.Schnell;
 
     #endregion
 
@@ -165,7 +165,7 @@ public class Flux1Model<T> : LatentDiffusionModelBase<T>
     /// <param name="mmdit">Custom MMDiT noise predictor.</param>
     /// <param name="vae">Custom 16-channel VAE.</param>
     /// <param name="conditioner">Dual text encoder conditioning module (CLIP + T5).</param>
-    /// <param name="variant">Model variant: "dev", "schnell", or "pro" (default: "dev").</param>
+    /// <param name="variant">Model variant: Dev, Schnell, or Pro (default: Dev).</param>
     /// <param name="seed">Optional random seed for reproducibility.</param>
     public Flux1Model(
         NeuralNetworkArchitecture<T>? architecture = null,
@@ -174,7 +174,7 @@ public class Flux1Model<T> : LatentDiffusionModelBase<T>
         MMDiTNoisePredictor<T>? mmdit = null,
         StandardVAE<T>? vae = null,
         IConditioningModule<T>? conditioner = null,
-        string variant = "dev",
+        FluxVariant variant = FluxVariant.Dev,
         int? seed = null)
         : base(
             options ?? new DiffusionModelOptions<T>
@@ -192,7 +192,7 @@ public class Flux1Model<T> : LatentDiffusionModelBase<T>
 
         InitializeLayers(mmdit, vae, seed);
 
-        var guidanceScale = variant == "schnell" ? FLUX_SCHNELL_GUIDANCE_SCALE : FLUX_DEV_GUIDANCE_SCALE;
+        var guidanceScale = variant == FluxVariant.Schnell ? FLUX_SCHNELL_GUIDANCE_SCALE : FLUX_DEV_GUIDANCE_SCALE;
         SetGuidanceScale(guidanceScale);
     }
 
@@ -243,12 +243,12 @@ public class Flux1Model<T> : LatentDiffusionModelBase<T>
         int? seed = null)
     {
         // schnell variant uses 4 steps by default, no guidance
-        var effectiveSteps = _variant == "schnell" && numInferenceSteps == 50
+        var effectiveSteps = _variant == FluxVariant.Schnell && numInferenceSteps == 50
             ? 4
             : numInferenceSteps;
 
         var effectiveGuidanceScale = guidanceScale ??
-            (_variant == "schnell" ? FLUX_SCHNELL_GUIDANCE_SCALE : FLUX_DEV_GUIDANCE_SCALE);
+            (_variant == FluxVariant.Schnell ? FLUX_SCHNELL_GUIDANCE_SCALE : FLUX_DEV_GUIDANCE_SCALE);
 
         return base.GenerateFromText(
             prompt,
@@ -271,7 +271,7 @@ public class Flux1Model<T> : LatentDiffusionModelBase<T>
         int? seed = null)
     {
         var effectiveGuidanceScale = guidanceScale ??
-            (_variant == "schnell" ? FLUX_SCHNELL_GUIDANCE_SCALE : FLUX_DEV_GUIDANCE_SCALE);
+            (_variant == FluxVariant.Schnell ? FLUX_SCHNELL_GUIDANCE_SCALE : FLUX_DEV_GUIDANCE_SCALE);
 
         return base.ImageToImage(
             inputImage,
@@ -377,15 +377,16 @@ public class Flux1Model<T> : LatentDiffusionModelBase<T>
     {
         var metadata = new ModelMetadata<T>
         {
-            Name = $"FLUX.1 [{_variant}]",
-            Version = _variant,
+            Name = $"FLUX.1 [{_variant.ToString().ToLowerInvariant()}]",
+            Version = _variant.ToString(),
             ModelType = ModelType.NeuralNetwork,
-            Description = $"FLUX.1 [{_variant}] hybrid MMDiT with {FLUX_JOINT_LAYERS} joint + {FLUX_SINGLE_LAYERS} single blocks and rectified flow",
+            Description = $"FLUX.1 [{_variant.ToString().ToLowerInvariant()}] hybrid MMDiT with {FLUX_JOINT_LAYERS} joint + {FLUX_SINGLE_LAYERS} single blocks and rectified flow",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount
         };
 
         metadata.SetProperty("architecture", "hybrid-mmdit-rectified-flow");
+        metadata.SetProperty("base_model", "FLUX.1");
         metadata.SetProperty("text_encoder_1", "CLIP ViT-L/14");
         metadata.SetProperty("text_encoder_2", "T5-XXL");
         metadata.SetProperty("context_dim", FLUX_CONTEXT_DIM);
@@ -394,7 +395,7 @@ public class Flux1Model<T> : LatentDiffusionModelBase<T>
         metadata.SetProperty("single_layers", FLUX_SINGLE_LAYERS);
         metadata.SetProperty("latent_channels", FLUX_LATENT_CHANNELS);
         metadata.SetProperty("default_resolution", DefaultWidth);
-        metadata.SetProperty("guidance_free", _variant == "schnell");
+        metadata.SetProperty("guidance_free", _variant == FluxVariant.Schnell);
 
         return metadata;
     }

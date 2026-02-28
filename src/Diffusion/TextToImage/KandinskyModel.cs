@@ -114,7 +114,7 @@ public class KandinskyModel<T> : LatentDiffusionModelBase<T>
     private UNetNoisePredictor<T> _decoderUnet;
     private StandardVAE<T> _vae;
     private readonly IConditioningModule<T>? _conditioner;
-    private readonly string _version;
+    private readonly KandinskyVersion _version;
 
     #endregion
 
@@ -141,9 +141,9 @@ public class KandinskyModel<T> : LatentDiffusionModelBase<T>
     public INoisePredictor<T> PriorModel => _priorUnet;
 
     /// <summary>
-    /// Gets the model version ("2.2" or "3.0").
+    /// Gets the model version.
     /// </summary>
-    public string Version => _version;
+    public KandinskyVersion Version => _version;
 
     /// <summary>
     /// Gets the cross-attention dimension (1280 for CLIP ViT-G/14).
@@ -175,7 +175,7 @@ public class KandinskyModel<T> : LatentDiffusionModelBase<T>
     /// <param name="conditioner">
     /// Text encoder conditioning module (typically CLIP ViT-G/14).
     /// </param>
-    /// <param name="version">Model version: "2.2" or "3.0" (default: "3.0").</param>
+    /// <param name="version">Model version: V2_2 or V3_0 (default: V3_0).</param>
     /// <param name="seed">Optional random seed for reproducibility.</param>
     public KandinskyModel(
         NeuralNetworkArchitecture<T>? architecture = null,
@@ -185,7 +185,7 @@ public class KandinskyModel<T> : LatentDiffusionModelBase<T>
         UNetNoisePredictor<T>? decoderUnet = null,
         StandardVAE<T>? vae = null,
         IConditioningModule<T>? conditioner = null,
-        string version = "3.0",
+        KandinskyVersion version = KandinskyVersion.V3_0,
         int? seed = null)
         : base(
             options ?? new DiffusionModelOptions<T>
@@ -441,17 +441,19 @@ public class KandinskyModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
+        var versionName = _version == KandinskyVersion.V2_2 ? "2.2" : "3.0";
         var metadata = new ModelMetadata<T>
         {
-            Name = $"Kandinsky {_version}",
-            Version = _version,
+            Name = $"Kandinsky {versionName}",
+            Version = versionName,
             ModelType = ModelType.NeuralNetwork,
-            Description = $"Kandinsky {_version} two-stage text-to-image model with CLIP prior and latent diffusion decoder",
+            Description = $"Kandinsky {versionName} two-stage text-to-image model with CLIP prior and latent diffusion decoder",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount
         };
 
         metadata.SetProperty("architecture", "prior-latent-diffusion");
+        metadata.SetProperty("base_model", "Kandinsky 2.2");
         metadata.SetProperty("text_encoder", "CLIP ViT-G/14");
         metadata.SetProperty("cross_attention_dim", KANDINSKY_CROSS_ATTENTION_DIM);
         metadata.SetProperty("image_embedding_dim", KANDINSKY_IMAGE_EMBEDDING_DIM);
