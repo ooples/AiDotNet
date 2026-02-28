@@ -267,6 +267,40 @@ public abstract class MetaLearnerBase<T, TInput, TOutput> : IMetaLearner<T, TInp
         );
     }
 
+    /// <summary>
+    /// Performs a single meta-training step using a task sampler.
+    /// This overload allows the new <see cref="ITaskSampler{T, TInput, TOutput}"/>
+    /// infrastructure to be used alongside the existing data-loader-based workflow.
+    /// </summary>
+    /// <param name="sampler">The task sampler to draw a batch from.</param>
+    /// <param name="batchSize">Number of tasks to sample.</param>
+    /// <returns>A result containing the meta-loss and step metadata.</returns>
+    public virtual MetaTrainingStepResult<T> MetaTrainStep(
+        ITaskSampler<T, TInput, TOutput> sampler,
+        int batchSize)
+    {
+        Guard.NotNull(sampler);
+        if (batchSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(batchSize), batchSize, "Batch size must be a positive integer.");
+
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+        var taskBatch = sampler.SampleBatch(batchSize);
+        var metaLoss = MetaTrain(taskBatch);
+        _currentIteration++;
+
+        stopwatch.Stop();
+
+        return new MetaTrainingStepResult<T>(
+            metaLoss: metaLoss,
+            taskLoss: metaLoss,
+            accuracy: NumOps.Zero,
+            numTasks: batchSize,
+            iteration: _currentIteration,
+            timeMs: stopwatch.Elapsed.TotalMilliseconds
+        );
+    }
+
     /// <inheritdoc/>
     public virtual MetaTrainingResult<T> Train()
     {

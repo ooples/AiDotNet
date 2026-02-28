@@ -1,5 +1,6 @@
 using AiDotNet.Prototypes;
 using AiDotNetTestConsole.Examples;
+using AiDotNetTestConsole.Examples.MetaLearning;
 
 namespace AiDotNetTestConsole;
 
@@ -24,11 +25,12 @@ class Program
             Console.WriteLine("3. Time Series Example (Stock Price Forecasting)");
             Console.WriteLine("4. Phase A GPU Acceleration Integration Tests");
             Console.WriteLine("5. DeconvolutionalLayer Test");
+            Console.WriteLine("6. Meta-Learning Examples (MAML, ProtoNets, CNP, Data Infrastructure)");
             // Note: GPU tuning tests have been removed as they require internal Tensors types
             // that are not exposed in the NuGet package. These are developer-only tools.
             Console.WriteLine("0. Exit");
             Console.WriteLine();
-            Console.Write("Select an example to run (0-5): ");
+            Console.Write("Select an example to run (0-6): ");
 
             int.TryParse(Console.ReadLine(), out choice);
         }
@@ -66,8 +68,12 @@ class Program
                 case 5:
                     DeconvTest.Run();
                     break;
+                case 6:
+                    var metaExample = new MetaLearningExample();
+                    metaExample.RunExample();
+                    break;
                 default:
-                    Console.WriteLine("Invalid choice. Please select a number between 0 and 5.");
+                    Console.WriteLine("Invalid choice. Please select a number between 0 and 6.");
                     break;
             }
         }
