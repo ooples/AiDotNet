@@ -226,12 +226,7 @@ public class LinearFeatureMapper<T> : IFeatureMapper<T>
     /// </summary>
     private T DotProduct(Vector<T> a, Vector<T> b)
     {
-        T sum = _numOps.Zero;
-        for (int i = 0; i < a.Length; i++)
-        {
-            sum = _numOps.Add(sum, _numOps.Multiply(a[i], b[i]));
-        }
-        return sum;
+        return AiDotNetEngine.Current.DotProduct(a, b);
     }
 
     /// <summary>
@@ -239,12 +234,7 @@ public class LinearFeatureMapper<T> : IFeatureMapper<T>
     /// </summary>
     private T VectorNorm(Vector<T> vector)
     {
-        T sumSquares = _numOps.Zero;
-        for (int i = 0; i < vector.Length; i++)
-        {
-            sumSquares = _numOps.Add(sumSquares, _numOps.Multiply(vector[i], vector[i]));
-        }
-        return _numOps.Sqrt(sumSquares);
+        return _numOps.Sqrt(AiDotNetEngine.Current.DotProduct(vector, vector));
     }
 
     /// <summary>
@@ -252,12 +242,8 @@ public class LinearFeatureMapper<T> : IFeatureMapper<T>
     /// </summary>
     private Vector<T> SubtractScaled(Vector<T> a, Vector<T> b, T scale)
     {
-        var result = new Vector<T>(a.Length);
-        for (int i = 0; i < a.Length; i++)
-        {
-            result[i] = _numOps.Subtract(a[i], _numOps.Multiply(scale, b[i]));
-        }
-        return result;
+        var engine = AiDotNetEngine.Current;
+        return engine.Subtract(a, engine.Multiply(b, scale));
     }
 
     /// <summary>
@@ -265,12 +251,7 @@ public class LinearFeatureMapper<T> : IFeatureMapper<T>
     /// </summary>
     private Vector<T> ScaleVector(Vector<T> vector, T scale)
     {
-        var result = new Vector<T>(vector.Length);
-        for (int i = 0; i < vector.Length; i++)
-        {
-            result[i] = _numOps.Multiply(vector[i], scale);
-        }
-        return result;
+        return AiDotNetEngine.Current.Multiply(vector, scale);
     }
 
     /// <summary>

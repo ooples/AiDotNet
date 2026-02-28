@@ -293,12 +293,7 @@ public class AveragedGEM<T> : IContinualLearningStrategy<T>
     /// </summary>
     private T DotProduct(Vector<T> a, Vector<T> b)
     {
-        var sum = _numOps.Zero;
-        for (int i = 0; i < a.Length; i++)
-        {
-            sum = _numOps.Add(sum, _numOps.Multiply(a[i], b[i]));
-        }
-        return sum;
+        return AiDotNetEngine.Current.DotProduct(a, b);
     }
 
     /// <summary>

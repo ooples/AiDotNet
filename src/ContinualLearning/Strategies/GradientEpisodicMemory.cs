@@ -583,22 +583,12 @@ public class GradientEpisodicMemory<T, TInput, TOutput>
 
     private Vector<T> ScaleVector(Vector<T> vector, T scale)
     {
-        var scaled = new Vector<T>(vector.Length);
-        for (int i = 0; i < vector.Length; i++)
-        {
-            scaled[i] = NumOps.Multiply(vector[i], scale);
-        }
-        return scaled;
+        return Engine.Multiply(vector, scale);
     }
 
     private Vector<T> SubtractVectors(Vector<T> a, Vector<T> b)
     {
-        var result = new Vector<T>(a.Length);
-        for (int i = 0; i < a.Length; i++)
-        {
-            result[i] = NumOps.Subtract(a[i], b[i]);
-        }
-        return result;
+        return Engine.Subtract(a, b);
     }
 
     #endregion

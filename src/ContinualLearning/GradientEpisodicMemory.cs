@@ -259,11 +259,8 @@ public class GradientEpisodicMemory<T> : IContinualLearningStrategy<T>
             if (_numOps.GreaterThan(refNormSq, _numOps.Zero))
             {
                 var scale = _numOps.Divide(dot, refNormSq);
-                for (int i = 0; i < projected.Length; i++)
-                {
-                    var adjustment = _numOps.Multiply(scale, refGrad[i]);
-                    projected[i] = _numOps.Subtract(projected[i], adjustment);
-                }
+                var engine = AiDotNetEngine.Current;
+                projected = engine.Subtract(projected, engine.Multiply(refGrad, scale));
             }
         }
 
@@ -275,12 +272,7 @@ public class GradientEpisodicMemory<T> : IContinualLearningStrategy<T>
     /// </summary>
     private T DotProduct(Vector<T> a, Vector<T> b)
     {
-        var sum = _numOps.Zero;
-        for (int i = 0; i < a.Length; i++)
-        {
-            sum = _numOps.Add(sum, _numOps.Multiply(a[i], b[i]));
-        }
-        return sum;
+        return AiDotNetEngine.Current.DotProduct(a, b);
     }
 
     /// <summary>

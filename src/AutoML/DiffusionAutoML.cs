@@ -1047,15 +1047,8 @@ namespace AiDotNet.AutoML
         public void ApplyGradients(Vector<T> gradients, T learningRate)
         {
             var parameters = GetParameters();
-            var newParams = new T[parameters.Length];
-
-            for (int i = 0; i < parameters.Length; i++)
-            {
-                var update = NumOps.Multiply(gradients[i], learningRate);
-                newParams[i] = NumOps.Subtract(parameters[i], update);
-            }
-
-            SetParameters(new Vector<T>(newParams));
+            var engine = AiDotNetEngine.Current;
+            SetParameters(engine.Subtract(parameters, engine.Multiply(gradients, learningRate)));
         }
 
         public ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)

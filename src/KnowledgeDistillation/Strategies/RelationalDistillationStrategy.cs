@@ -919,22 +919,12 @@ public class RelationalDistillationStrategy<T> : DistillationStrategyBase<T>
 
     private Vector<T> Subtract(Vector<T> v1, Vector<T> v2)
     {
-        var result = new Vector<T>(v1.Length);
-        for (int i = 0; i < v1.Length; i++)
-        {
-            result[i] = NumOps.Subtract(v1[i], v2[i]);
-        }
-        return result;
+        return AiDotNetEngine.Current.Subtract(v1, v2);
     }
 
     private T DotProduct(Vector<T> v1, Vector<T> v2)
     {
-        T sum = NumOps.Zero;
-        for (int i = 0; i < v1.Length; i++)
-        {
-            sum = NumOps.Add(sum, NumOps.Multiply(v1[i], v2[i]));
-        }
-        return sum;
+        return AiDotNetEngine.Current.DotProduct(v1, v2);
     }
 
     private T Norm(Vector<T> v)

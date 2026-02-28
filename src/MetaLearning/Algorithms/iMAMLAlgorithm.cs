@@ -480,11 +480,6 @@ public class iMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
     /// <returns>The dot product sum(a[i] * b[i]).</returns>
     private T DotProduct(Vector<T> a, Vector<T> b)
     {
-        T sum = NumOps.Zero;
-        for (int i = 0; i < a.Length; i++)
-        {
-            sum = NumOps.Add(sum, NumOps.Multiply(a[i], b[i]));
-        }
-        return sum;
+        return Engine.DotProduct(a, b);
     }
 }

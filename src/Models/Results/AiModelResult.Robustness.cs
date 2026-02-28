@@ -305,12 +305,7 @@ public partial class AiModelResult<T, TInput, TOutput>
 
     private Vector<T> SubtractVectors(Vector<T> a, Vector<T> b)
     {
-        var result = new Vector<T>(a.Length);
-        for (int i = 0; i < a.Length; i++)
-        {
-            result[i] = _robustnessNumOps.Subtract(a[i], b[i]);
-        }
-        return result;
+        return AiDotNetEngine.Current.Subtract(a, b);
     }
 
     private T ComputeL2NormVector(Vector<T> vector)
