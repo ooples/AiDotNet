@@ -1,4 +1,5 @@
 using AiDotNet.Data.Audio;
+using AiDotNet.Data.Audio.Benchmarks;
 using AiDotNet.Data.Formats;
 using AiDotNet.Data.Geometry;
 using AiDotNet.Data.Multimodal;
@@ -1406,6 +1407,130 @@ public static class DataLoaders
     public static FMoWDataLoader<T> FMoW<T>(FMoWDataLoaderOptions? options = null)
     {
         return new FMoWDataLoader<T>(options);
+    }
+
+    // --- Audio Benchmark Loaders ---
+
+    /// <summary>
+    /// Creates a LibriSpeech ASR dataset loader (~1000 hours of 16kHz English speech).
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (subset, sample rate, max duration).</param>
+    /// <returns>A LibriSpeech data loader.</returns>
+    public static LibriSpeechDataLoader<T> LibriSpeech<T>(LibriSpeechDataLoaderOptions? options = null)
+    {
+        return new LibriSpeechDataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates a Mozilla Common Voice multilingual speech dataset loader (19K+ hours, 100+ languages).
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (language, version, sample rate).</param>
+    /// <returns>A Common Voice data loader.</returns>
+    public static CommonVoiceDataLoader<T> CommonVoice<T>(CommonVoiceDataLoaderOptions? options = null)
+    {
+        return new CommonVoiceDataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates a GigaSpeech multi-domain English ASR dataset loader (up to 10K hours).
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (subset, sample rate, max duration).</param>
+    /// <returns>A GigaSpeech data loader.</returns>
+    public static GigaSpeechDataLoader<T> GigaSpeech<T>(GigaSpeechDataLoaderOptions? options = null)
+    {
+        return new GigaSpeechDataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates a VoxPopuli multilingual speech dataset loader (400K+ hours, 23 languages).
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (language, sample rate, max duration).</param>
+    /// <returns>A VoxPopuli data loader.</returns>
+    public static VoxPopuliDataLoader<T> VoxPopuli<T>(VoxPopuliDataLoaderOptions? options = null)
+    {
+        return new VoxPopuliDataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates a FLEURS multilingual speech benchmark loader (102 languages, ~12 hours per language).
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (language, sample rate, max duration).</param>
+    /// <returns>A FLEURS data loader.</returns>
+    public static FleursDataLoader<T> Fleurs<T>(FleursDataLoaderOptions? options = null)
+    {
+        return new FleursDataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates an AudioSet large-scale audio event dataset loader (2M+ clips, 527 categories).
+    /// Requires pre-downloaded audio (YouTube clips converted to WAV).
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (sample rate, clip duration).</param>
+    /// <returns>An AudioSet data loader.</returns>
+    public static AudioSetDataLoader<T> AudioSet<T>(AudioSetDataLoaderOptions? options = null)
+    {
+        return new AudioSetDataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates an ESC-50 environmental sound classification dataset loader (2000 clips, 50 classes).
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (sample rate, test fold).</param>
+    /// <returns>An ESC-50 data loader.</returns>
+    public static Esc50DataLoader<T> Esc50<T>(Esc50DataLoaderOptions? options = null)
+    {
+        return new Esc50DataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates an UrbanSound8K urban sound classification dataset loader (8732 clips, 10 classes).
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (sample rate, max duration, test fold).</param>
+    /// <returns>An UrbanSound8K data loader.</returns>
+    public static UrbanSound8kDataLoader<T> UrbanSound8k<T>(UrbanSound8kDataLoaderOptions? options = null)
+    {
+        return new UrbanSound8kDataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates an FSD50K audio event dataset loader (51,197 clips, 200 sound event classes).
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (sample rate, max duration).</param>
+    /// <returns>An FSD50K data loader.</returns>
+    public static Fsd50kDataLoader<T> Fsd50k<T>(Fsd50kDataLoaderOptions? options = null)
+    {
+        return new Fsd50kDataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates a MUSDB18 music source separation dataset loader (150 tracks, 4 stems).
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (sample rate, segment duration).</param>
+    /// <returns>A MUSDB18 data loader.</returns>
+    public static Musdb18DataLoader<T> Musdb18<T>(Musdb18DataLoaderOptions? options = null)
+    {
+        return new Musdb18DataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates a MAESTRO piano performance dataset loader (~200 hours, aligned MIDI and audio).
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (version, sample rate, max duration).</param>
+    /// <returns>A MAESTRO data loader.</returns>
+    public static MaestroDataLoader<T> Maestro<T>(MaestroDataLoaderOptions? options = null)
+    {
+        return new MaestroDataLoader<T>(options);
     }
 
     #endregion
