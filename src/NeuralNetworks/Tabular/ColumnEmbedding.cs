@@ -1,3 +1,4 @@
+using AiDotNet.Engines;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 
@@ -25,6 +26,7 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 public class ColumnEmbedding<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+    private IEngine Engine => AiDotNetEngine.Current;
     private readonly Random _random;
 
     private readonly int _numColumns;
@@ -240,11 +242,8 @@ public class ColumnEmbedding<T>
     {
         if (!_learnable) return;
 
-        for (int i = 0; i < _embeddings.Length; i++)
-        {
-            _embeddings[i] = NumOps.Subtract(_embeddings[i],
-                NumOps.Multiply(learningRate, _embeddingGradients[i]));
-        }
+        _embeddings = Engine.TensorSubtract(_embeddings,
+            Engine.TensorMultiplyScalar(_embeddingGradients, learningRate));
     }
 
     /// <summary>
@@ -253,9 +252,6 @@ public class ColumnEmbedding<T>
     /// </summary>
     public void ResetGradients()
     {
-        for (int i = 0; i < _embeddingGradients.Length; i++)
-        {
-            _embeddingGradients[i] = NumOps.Zero;
-        }
+        Engine.TensorFill(_embeddingGradients, NumOps.Zero);
     }
 }
