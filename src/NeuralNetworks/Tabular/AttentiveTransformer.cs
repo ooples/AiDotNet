@@ -1,3 +1,4 @@
+using AiDotNet.Autodiff;
 using AiDotNet.NeuralNetworks.Layers;
 
 namespace AiDotNet.NeuralNetworks.Tabular;
@@ -38,9 +39,8 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public class AttentiveTransformer<T>
+public class AttentiveTransformer<T> : LayerBase<T>
 {
-    private readonly INumericOperations<T> _numOps;
     private readonly int _inputDim;
     private readonly int _outputDim;
     private readonly double _relaxationFactor;
@@ -56,10 +56,11 @@ public class AttentiveTransformer<T>
     private Tensor<T>? _attentionMaskCache;
     private Tensor<T>? _sparsemaxInputCache;
 
-    /// <summary>
-    /// Gets whether this layer supports training.
-    /// </summary>
-    public bool SupportsTraining => true;
+    /// <inheritdoc/>
+    public override bool SupportsTraining => true;
+
+    /// <inheritdoc/>
+    public override bool SupportsJitCompilation => false;
 
     /// <summary>
     /// Initializes a new instance of the AttentiveTransformer class.
@@ -92,8 +93,8 @@ public class AttentiveTransformer<T>
         int virtualBatchSize = 128,
         double momentum = 0.02,
         double epsilon = 1e-5)
+        : base([inputDim], [outputDim])
     {
-        _numOps = MathHelper.GetNumericOperations<T>();
         _inputDim = inputDim;
         _outputDim = outputDim;
         _relaxationFactor = relaxationFactor;
@@ -150,7 +151,7 @@ public class AttentiveTransformer<T>
 
         // Step 3: Apply prior scales (element-wise multiplication)
         // This discourages reusing features from previous steps
-        var scaledLogits = MultiplyTensors(normalizedLogits, priorScales);
+        var scaledLogits = Engine.TensorMultiply(normalizedLogits, priorScales);
         _sparsemaxInputCache = scaledLogits;
 
         // Step 4: Apply Sparsemax to get sparse attention
@@ -169,14 +170,10 @@ public class AttentiveTransformer<T>
     /// This method is for ILayer interface compatibility. For actual TabNet usage,
     /// use the overload that accepts both processedFeatures and priorScales.
     /// </remarks>
-    public Tensor<T> Forward(Tensor<T> input)
+    public override Tensor<T> Forward(Tensor<T> input)
     {
         // Create uniform prior scales (all ones)
-        var priorScales = new Tensor<T>([input.Shape[0], _outputDim]);
-        for (int i = 0; i < priorScales.Length; i++)
-        {
-            priorScales[i] = _numOps.One;
-        }
+        var priorScales = Tensor<T>.CreateDefault([input.Shape[0], _outputDim], NumOps.One);
         return Forward(input, priorScales);
     }
 
@@ -210,17 +207,11 @@ public class AttentiveTransformer<T>
     /// </remarks>
     public Tensor<T> UpdatePriorScales(Tensor<T> priorScales, Tensor<T> attentionMask)
     {
-        var newPriorScales = new Tensor<T>(priorScales.Shape);
-        var gamma = _numOps.FromDouble(_relaxationFactor);
-
-        for (int i = 0; i < priorScales.Length; i++)
-        {
-            // prior_new = prior * (gamma - attention)
-            var scaleFactor = _numOps.Subtract(gamma, attentionMask[i]);
-            newPriorScales[i] = _numOps.Multiply(priorScales[i], scaleFactor);
-        }
-
-        return newPriorScales;
+        // prior_new = prior * (gamma - attention)
+        var gamma = NumOps.FromDouble(_relaxationFactor);
+        var gammaFull = Tensor<T>.CreateDefault(priorScales.Shape, gamma);
+        var scaleFactor = Engine.TensorSubtract(gammaFull, attentionMask);
+        return Engine.TensorMultiply(priorScales, scaleFactor);
     }
 
     /// <summary>
@@ -251,39 +242,26 @@ public class AttentiveTransformer<T>
     {
         int batchSize = attentionMask.Shape[0];
         int numFeatures = attentionMask.Shape[1];
-        var totalEntropy = _numOps.Zero;
-        var epsilon = _numOps.FromDouble(1e-15); // For numerical stability
+        var totalEntropy = NumOps.Zero;
+        var epsilon = NumOps.FromDouble(1e-15); // For numerical stability
 
         for (int b = 0; b < batchSize; b++)
         {
-            var entropy = _numOps.Zero;
+            var entropy = NumOps.Zero;
             for (int f = 0; f < numFeatures; f++)
             {
                 var p = attentionMask[b * numFeatures + f];
                 // Add epsilon to avoid log(0)
-                var pSafe = _numOps.Add(p, epsilon);
+                var pSafe = NumOps.Add(p, epsilon);
                 // -p * log(p)
-                var term = _numOps.Multiply(_numOps.Negate(p), _numOps.Log(pSafe));
-                entropy = _numOps.Add(entropy, term);
+                var term = NumOps.Multiply(NumOps.Negate(p), NumOps.Log(pSafe));
+                entropy = NumOps.Add(entropy, term);
             }
-            totalEntropy = _numOps.Add(totalEntropy, entropy);
+            totalEntropy = NumOps.Add(totalEntropy, entropy);
         }
 
         // Average over batch
-        return _numOps.Divide(totalEntropy, _numOps.FromDouble(batchSize));
-    }
-
-    /// <summary>
-    /// Helper method to multiply two tensors element-wise.
-    /// </summary>
-    private Tensor<T> MultiplyTensors(Tensor<T> a, Tensor<T> b)
-    {
-        var result = new Tensor<T>(a.Shape);
-        for (int i = 0; i < a.Length; i++)
-        {
-            result[i] = _numOps.Multiply(a[i], b[i]);
-        }
-        return result;
+        return NumOps.Divide(totalEntropy, NumOps.FromDouble(batchSize));
     }
 
     /// <summary>
@@ -291,7 +269,7 @@ public class AttentiveTransformer<T>
     /// </summary>
     /// <param name="outputGradient">The gradient flowing back.</param>
     /// <returns>The gradient with respect to the input.</returns>
-    public Tensor<T> Backward(Tensor<T> outputGradient)
+    public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
         if (_attentionMaskCache == null || _sparsemaxInputCache == null)
         {
@@ -304,7 +282,7 @@ public class AttentiveTransformer<T>
         // Backward through prior scales multiplication (element-wise)
         // If z = x * y, then dL/dx = dL/dz * y
         var scaledGrad = _priorScalesCache != null
-            ? MultiplyTensors(sparsemaxGrad, _priorScalesCache)
+            ? Engine.TensorMultiply(sparsemaxGrad, _priorScalesCache)
             : sparsemaxGrad;
 
         // Backward through batch normalization
@@ -316,10 +294,8 @@ public class AttentiveTransformer<T>
         return inputGrad;
     }
 
-    /// <summary>
-    /// Gets all trainable parameters.
-    /// </summary>
-    public Vector<T> GetParameters()
+    /// <inheritdoc/>
+    public override Vector<T> GetParameters()
     {
         var fcParams = _fcLayer.GetParameters();
         var bnParams = _bnLayer.GetParameters();
@@ -339,7 +315,7 @@ public class AttentiveTransformer<T>
     /// <summary>
     /// Sets the trainable parameters.
     /// </summary>
-    public void SetParameters(Vector<T> parameters)
+    public override void SetParameters(Vector<T> parameters)
     {
         var fcCount = _fcLayer.ParameterCount;
         var bnCount = _bnLayer.ParameterCount;
@@ -363,7 +339,7 @@ public class AttentiveTransformer<T>
     /// <summary>
     /// Gets the parameter gradients.
     /// </summary>
-    public Vector<T> GetParameterGradients()
+    public override Vector<T> GetParameterGradients()
     {
         var fcGrads = _fcLayer.GetParameterGradients();
         var bnGrads = _bnLayer.GetParameterGradients();
@@ -380,40 +356,27 @@ public class AttentiveTransformer<T>
         return result;
     }
 
-    /// <summary>
-    /// Gets the total number of trainable parameters.
-    /// </summary>
-    public int ParameterCount => _fcLayer.ParameterCount + _bnLayer.ParameterCount;
+    /// <inheritdoc/>
+    public override int ParameterCount => _fcLayer.ParameterCount + _bnLayer.ParameterCount;
 
     /// <summary>
     /// Gets the input shape.
     /// </summary>
-    public int[] GetInputShape() => [_inputDim];
+    public override int[] GetInputShape() => [_inputDim];
 
-    /// <summary>
-    /// Gets the output shape.
-    /// </summary>
-    public int[] GetOutputShape() => [_outputDim];
+    /// <inheritdoc/>
+    public override Tensor<T>? GetWeights() => _fcLayer.GetWeights();
 
-    /// <summary>
-    /// Gets the weights tensor.
-    /// </summary>
-    public Tensor<T>? GetWeights() => _fcLayer.GetWeights();
-
-    /// <summary>
-    /// Gets the biases tensor.
-    /// </summary>
-    public Tensor<T>? GetBiases() => _fcLayer.GetBiases();
+    /// <inheritdoc/>
+    public override Tensor<T>? GetBiases() => _fcLayer.GetBiases();
 
     /// <summary>
     /// Gets the last computed attention mask.
     /// </summary>
     public Tensor<T>? GetAttentionMask() => _attentionMaskCache;
 
-    /// <summary>
-    /// Updates parameters using the specified learning rate.
-    /// </summary>
-    public void UpdateParameters(T learningRate)
+    /// <inheritdoc/>
+    public override void UpdateParameters(T learningRate)
     {
         _fcLayer.UpdateParameters(learningRate);
     }
@@ -421,24 +384,20 @@ public class AttentiveTransformer<T>
     /// <summary>
     /// Updates parameters using the specified parameter values.
     /// </summary>
-    public void UpdateParameters(Vector<T> parameters)
+    public override void UpdateParameters(Vector<T> parameters)
     {
         SetParameters(parameters);
     }
 
-    /// <summary>
-    /// Clears accumulated gradients.
-    /// </summary>
-    public void ClearGradients()
+    /// <inheritdoc/>
+    public override void ClearGradients()
     {
         _fcLayer.ClearGradients();
         _bnLayer.ResetGradients();
     }
 
-    /// <summary>
-    /// Resets the internal state.
-    /// </summary>
-    public void ResetState()
+    /// <inheritdoc/>
+    public override void ResetState()
     {
         _inputCache = null;
         _priorScalesCache = null;
@@ -450,9 +409,21 @@ public class AttentiveTransformer<T>
     /// <summary>
     /// Sets training mode.
     /// </summary>
-    public void SetTrainingMode(bool isTraining)
+    public override void SetTrainingMode(bool isTraining)
     {
         _fcLayer.SetTrainingMode(isTraining);
     }
 
+    /// <inheritdoc/>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
+        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
+        inputNodes.Add(inputNode);
+
+        return inputNode;
+    }
 }
