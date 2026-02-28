@@ -263,45 +263,13 @@ public class PrototypeExplainer<T> : ILocalExplainer<T, PrototypeExplanation<T>>
         if (a.Length != b.Length)
             throw new ArgumentException($"Vector dimensions must match for distance computation. Got {a.Length} and {b.Length}.");
 
-        int n = a.Length;
-
-        switch (_distanceMetric)
+        return _distanceMetric switch
         {
-            case DistanceMetric.Euclidean:
-                double sumSq = 0;
-                for (int i = 0; i < n; i++)
-                {
-                    double diff = NumOps.ToDouble(a[i]) - NumOps.ToDouble(b[i]);
-                    sumSq += diff * diff;
-                }
-                return Math.Sqrt(sumSq);
-
-            case DistanceMetric.Manhattan:
-                double sumAbs = 0;
-                for (int i = 0; i < n; i++)
-                {
-                    sumAbs += Math.Abs(NumOps.ToDouble(a[i]) - NumOps.ToDouble(b[i]));
-                }
-                return sumAbs;
-
-            case DistanceMetric.Cosine:
-                double dotProduct = 0;
-                double normA = 0;
-                double normB = 0;
-                for (int i = 0; i < n; i++)
-                {
-                    double aVal = NumOps.ToDouble(a[i]);
-                    double bVal = NumOps.ToDouble(b[i]);
-                    dotProduct += aVal * bVal;
-                    normA += aVal * aVal;
-                    normB += bVal * bVal;
-                }
-                double cosineSim = dotProduct / (Math.Sqrt(normA) * Math.Sqrt(normB) + 1e-10);
-                return 1.0 - cosineSim; // Convert to distance
-
-            default:
-                goto case DistanceMetric.Euclidean;
-        }
+            DistanceMetric.Euclidean => NumOps.ToDouble(VectorHelper.EuclideanDistance(a, b)),
+            DistanceMetric.Manhattan => NumOps.ToDouble(VectorHelper.ManhattanDistance(a, b)),
+            DistanceMetric.Cosine => 1.0 - VectorHelper.CosineSimilarity(a, b),
+            _ => NumOps.ToDouble(VectorHelper.EuclideanDistance(a, b))
+        };
     }
 
     private Matrix<T> CreateSingleRowMatrix(Vector<T> row)
