@@ -1,0 +1,29 @@
+namespace AiDotNet.Data.Loaders;
+
+/// <summary>
+/// Configuration options for caching data loader.
+/// </summary>
+public sealed class CachingDataLoaderOptions
+{
+    /// <summary>Maximum number of batches to cache in memory. Default is 100.</summary>
+    public int MaxCacheSize { get; set; } = 100;
+    /// <summary>Whether to cache on disk as well (two-level cache). Default is false.</summary>
+    public bool EnableDiskCache { get; set; } = false;
+    /// <summary>Directory for disk cache files. Default is ".cache/dataloader".</summary>
+    public string DiskCacheDirectory { get; set; } = ".cache/dataloader";
+    /// <summary>Cache eviction policy. Default is LRU.</summary>
+    public MemoryCacheEvictionPolicy EvictionPolicy { get; set; } = MemoryCacheEvictionPolicy.LRU;
+}
+
+/// <summary>
+/// Policy for evicting items from the in-memory cache when it's full.
+/// </summary>
+public enum MemoryCacheEvictionPolicy
+{
+    /// <summary>Least Recently Used: evict the item accessed longest ago.</summary>
+    LRU,
+    /// <summary>First In First Out: evict the oldest cached item.</summary>
+    FIFO,
+    /// <summary>Least Frequently Used: evict the item accessed fewest times.</summary>
+    LFU
+}
