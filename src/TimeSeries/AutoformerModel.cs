@@ -1734,13 +1734,7 @@ internal class AutoformerDecoderLayer<T>
 
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
-        var result = new Tensor<T>(a.Shape);
-        int len = Math.Min(a.Length, b.Length);
-        for (int i = 0; i < len; i++)
-        {
-            result[i] = _numOps.Add(a[i], b[i]);
-        }
-        return result;
+        return AiDotNetEngine.Current.TensorAdd(a, b);
     }
 
     private Tensor<T> ApplySelfAutoCorrelation(Tensor<T> x, int topK)

@@ -1724,13 +1724,7 @@ internal class InformerDecoderLayerTensor<T>
 
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
-        int len = Math.Min(a.Length, b.Length);
-        var result = new Tensor<T>(new[] { len });
-        for (int i = 0; i < len; i++)
-        {
-            result[i] = _numOps.Add(a[i], b[i]);
-        }
-        return result;
+        return AiDotNetEngine.Current.TensorAdd(a, b);
     }
 
     private Tensor<T> LayerNorm(Tensor<T> input, Tensor<T> gamma, Tensor<T> beta)
