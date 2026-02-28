@@ -404,22 +404,7 @@ public class InternVideo2<T> : NeuralNetworkBase<T>
     /// </summary>
     private T ComputeCosineSimilarity(Tensor<T> a, Tensor<T> b)
     {
-        double dotProduct = 0;
-        double normA = 0;
-        double normB = 0;
-
-        int minLen = Math.Min(a.Data.Length, b.Data.Length);
-        for (int i = 0; i < minLen; i++)
-        {
-            double valA = NumOps.ToDouble(a.Data.Span[i]);
-            double valB = NumOps.ToDouble(b.Data.Span[i]);
-            dotProduct += valA * valB;
-            normA += valA * valA;
-            normB += valB * valB;
-        }
-
-        double similarity = dotProduct / (Math.Sqrt(normA) * Math.Sqrt(normB) + 1e-8);
-        return NumOps.FromDouble(similarity);
+        return NumOps.FromDouble(VectorHelper.CosineSimilarity(a.ToVector(), b.ToVector()));
     }
 
     #endregion

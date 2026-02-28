@@ -748,21 +748,7 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
 
     private double CosineSimilarity(Tensor<T> a, Tensor<T> b)
     {
-        double dot = 0;
-        double normA = 0;
-        double normB = 0;
-
-        int len = Math.Min(a.Data.Length, b.Data.Length);
-        for (int i = 0; i < len; i++)
-        {
-            double va = Convert.ToDouble(a.Data.Span[i]);
-            double vb = Convert.ToDouble(b.Data.Span[i]);
-            dot += va * vb;
-            normA += va * va;
-            normB += vb * vb;
-        }
-
-        return dot / (Math.Sqrt(normA) * Math.Sqrt(normB) + 1e-8);
+        return VectorHelper.CosineSimilarity(a.ToVector(), b.ToVector());
     }
 
     private List<double> Softmax(List<double> values, double temperature)
