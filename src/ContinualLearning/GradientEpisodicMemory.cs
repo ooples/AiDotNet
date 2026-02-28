@@ -133,7 +133,7 @@ public class GradientEpisodicMemory<T> : IContinualLearningStrategy<T>
         var violations = new List<int>();
         for (int i = 0; i < _referenceGradients.Count; i++)
         {
-            var dotProduct = DotProduct(gradients, _referenceGradients[i]);
+            var dotProduct = VectorHelper.DotProduct(gradients, _referenceGradients[i]);
             var marginT = _numOps.FromDouble(-_margin);
             if (_numOps.LessThan(dotProduct, marginT))
             {
@@ -253,8 +253,8 @@ public class GradientEpisodicMemory<T> : IContinualLearningStrategy<T>
         foreach (var taskIdx in violations)
         {
             var refGrad = _referenceGradients[taskIdx];
-            var dot = DotProduct(projected, refGrad);
-            var refNormSq = DotProduct(refGrad, refGrad);
+            var dot = VectorHelper.DotProduct(projected, refGrad);
+            var refNormSq = VectorHelper.DotProduct(refGrad, refGrad);
 
             // Project out the component that violates the constraint
             if (_numOps.GreaterThan(refNormSq, _numOps.Zero))
@@ -267,13 +267,6 @@ public class GradientEpisodicMemory<T> : IContinualLearningStrategy<T>
         return projected;
     }
 
-    /// <summary>
-    /// Computes the dot product of two vectors.
-    /// </summary>
-    private T DotProduct(Vector<T> a, Vector<T> b)
-    {
-        return Engine.DotProduct(a, b);
-    }
 
     /// <summary>
     /// Computes the gradient of the loss with respect to output.

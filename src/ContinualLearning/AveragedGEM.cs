@@ -122,12 +122,12 @@ public class AveragedGEM<T> : IContinualLearningStrategy<T>
         var refGradient = ComputeReferenceGradient(network, memInputs, memTargets);
 
         // Check if gradient violates constraint
-        var dotProduct = DotProduct(gradients, refGradient);
+        var dotProduct = VectorHelper.DotProduct(gradients, refGradient);
 
         if (_numOps.LessThan(dotProduct, _numOps.Zero))
         {
             // Project gradient: g_proj = g - (g · g_ref / g_ref · g_ref) × g_ref
-            var refNormSq = DotProduct(refGradient, refGradient);
+            var refNormSq = VectorHelper.DotProduct(refGradient, refGradient);
 
             if (_numOps.GreaterThan(refNormSq, _numOps.Zero))
             {
@@ -289,13 +289,6 @@ public class AveragedGEM<T> : IContinualLearningStrategy<T>
         return grads.Clone();
     }
 
-    /// <summary>
-    /// Computes the dot product of two vectors.
-    /// </summary>
-    private T DotProduct(Vector<T> a, Vector<T> b)
-    {
-        return Engine.DotProduct(a, b);
-    }
 
     /// <summary>
     /// Computes the gradient of the loss.

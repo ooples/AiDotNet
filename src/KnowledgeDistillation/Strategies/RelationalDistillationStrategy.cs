@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 
@@ -899,13 +900,13 @@ public class RelationalDistillationStrategy<T> : DistillationStrategyBase<T>
     private T ComputeAngle(Vector<T> vi, Vector<T> vj, Vector<T> vk)
     {
         // Vectors from j to i and j to k
-        var ji = Subtract(vi, vj);
-        var jk = Subtract(vk, vj);
+        var ji = Engine.Subtract(vi, vj);
+        var jk = Engine.Subtract(vk, vj);
 
         // Dot product and norms
-        T dot = DotProduct(ji, jk);
-        T normJi = Norm(ji);
-        T normJk = Norm(jk);
+        T dot = VectorHelper.DotProduct(ji, jk);
+        T normJi = VectorHelper.L2Norm(ji);
+        T normJk = VectorHelper.L2Norm(jk);
 
         // cos(angle) = dot / (norm1 * norm2)
         double cosAngle = Convert.ToDouble(dot) /
@@ -917,25 +918,8 @@ public class RelationalDistillationStrategy<T> : DistillationStrategyBase<T>
         return NumOps.FromDouble(Math.Acos(cosAngle)); // Return angle in radians
     }
 
-    private Vector<T> Subtract(Vector<T> v1, Vector<T> v2)
-    {
-        return Engine.Subtract(v1, v2);
-    }
 
-    private T DotProduct(Vector<T> v1, Vector<T> v2)
-    {
-        return Engine.DotProduct(v1, v2);
-    }
 
-    private T Norm(Vector<T> v)
-    {
-        T sum = NumOps.Zero;
-        for (int i = 0; i < v.Length; i++)
-        {
-            sum = NumOps.Add(sum, NumOps.Multiply(v[i], v[i]));
-        }
-        return NumOps.FromDouble(Math.Sqrt(Convert.ToDouble(sum)));
-    }
 
 
 

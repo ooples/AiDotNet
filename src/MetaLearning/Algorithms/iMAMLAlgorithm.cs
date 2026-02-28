@@ -350,7 +350,7 @@ public class iMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
             p[i] = r[i];
         }
 
-        T rsOld = DotProduct(r, r);
+        T rsOld = VectorHelper.DotProduct(r, r);
         T tolerance = NumOps.FromDouble(_imamlOptions.ConjugateGradientTolerance);
 
         for (int iter = 0; iter < _imamlOptions.ConjugateGradientIterations; iter++)
@@ -364,7 +364,7 @@ public class iMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
             // Compute A * p = (I + lambda * H) * p
             var Ap = ComputeImplicitMatrixVectorProduct(model, task, p);
 
-            T pAp = DotProduct(p, Ap);
+            T pAp = VectorHelper.DotProduct(p, Ap);
 
             // Avoid division by zero
             if (NumOps.ToDouble(pAp) < 1e-12)
@@ -386,7 +386,7 @@ public class iMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
                 r[i] = NumOps.Subtract(r[i], NumOps.Multiply(alpha, Ap[i]));
             }
 
-            T rsNew = DotProduct(r, r);
+            T rsNew = VectorHelper.DotProduct(r, r);
 
             // Avoid division by zero
             if (NumOps.ToDouble(rsOld) < 1e-12)
@@ -472,14 +472,4 @@ public class iMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
         return result;
     }
 
-    /// <summary>
-    /// Computes the dot product of two vectors.
-    /// </summary>
-    /// <param name="a">The first vector.</param>
-    /// <param name="b">The second vector.</param>
-    /// <returns>The dot product sum(a[i] * b[i]).</returns>
-    private T DotProduct(Vector<T> a, Vector<T> b)
-    {
-        return Engine.DotProduct(a, b);
-    }
 }

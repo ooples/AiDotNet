@@ -1,3 +1,5 @@
+using AiDotNet.Helpers;
+
 namespace AiDotNet.TransferLearning.FeatureMapping;
 
 /// <summary>
@@ -201,12 +203,12 @@ public class LinearFeatureMapper<T> : IFeatureMapper<T>
             for (int k = 0; k < j; k++)
             {
                 var prevColumn = result.GetColumn(k);
-                T dotProduct = DotProduct(column, prevColumn);
+                T dotProduct = VectorHelper.DotProduct(column, prevColumn);
                 column = SubtractScaled(column, prevColumn, dotProduct);
             }
 
             // Normalize the column
-            T norm = VectorNorm(column);
+            T norm = VectorHelper.L2Norm(column);
             if (_numOps.GreaterThan(norm, _numOps.FromDouble(1e-10)))
             {
                 column = ScaleVector(column, _numOps.Divide(_numOps.One, norm));
@@ -222,21 +224,7 @@ public class LinearFeatureMapper<T> : IFeatureMapper<T>
         return result;
     }
 
-    /// <summary>
-    /// Computes the dot product of two vectors.
-    /// </summary>
-    private T DotProduct(Vector<T> a, Vector<T> b)
-    {
-        return Engine.DotProduct(a, b);
-    }
 
-    /// <summary>
-    /// Computes the Euclidean norm (length) of a vector.
-    /// </summary>
-    private T VectorNorm(Vector<T> vector)
-    {
-        return _numOps.Sqrt(Engine.DotProduct(vector, vector));
-    }
 
     /// <summary>
     /// Subtracts a scaled vector from another vector.

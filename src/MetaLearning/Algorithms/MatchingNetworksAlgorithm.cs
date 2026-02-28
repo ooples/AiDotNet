@@ -436,7 +436,7 @@ public class MatchingNetworksAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
             T similarity = _matchingOptions.AttentionFunction switch
             {
                 MatchingNetworksAttentionFunction.Cosine => NumOps.FromDouble(VectorHelper.CosineSimilarity(queryEmbedding, supportEmbedding)),
-                MatchingNetworksAttentionFunction.DotProduct => ComputeDotProduct(queryEmbedding, supportEmbedding),
+                MatchingNetworksAttentionFunction.DotProduct => VectorHelper.DotProduct(queryEmbedding, supportEmbedding),
                 MatchingNetworksAttentionFunction.Euclidean => ComputeNegativeEuclideanDistance(queryEmbedding, supportEmbedding),
                 _ => NumOps.FromDouble(VectorHelper.CosineSimilarity(queryEmbedding, supportEmbedding))
             };
@@ -454,22 +454,6 @@ public class MatchingNetworksAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
         return ApplySoftmax(weights);
     }
 
-    /// <summary>
-    /// Computes cosine similarity between two vectors.
-    /// </summary>
-    /// <summary>
-    /// Computes dot product between two vectors.
-    /// </summary>
-    private T ComputeDotProduct(Vector<T> a, Vector<T> b)
-    {
-        T dotProduct = NumOps.Zero;
-        int minLen = Math.Min(a.Length, b.Length);
-        for (int i = 0; i < minLen; i++)
-        {
-            dotProduct = NumOps.Add(dotProduct, NumOps.Multiply(a[i], b[i]));
-        }
-        return dotProduct;
-    }
 
     /// <summary>
     /// Computes negative Euclidean distance (higher = more similar).
@@ -747,7 +731,7 @@ public class MatchingNetworksModel<T, TInput, TOutput> : IModel<TInput, TOutput,
             T similarity = _options.AttentionFunction switch
             {
                 MatchingNetworksAttentionFunction.Cosine => _numOps.FromDouble(VectorHelper.CosineSimilarity(queryEmbedding, supportEmbedding)),
-                MatchingNetworksAttentionFunction.DotProduct => ComputeDotProduct(queryEmbedding, supportEmbedding),
+                MatchingNetworksAttentionFunction.DotProduct => VectorHelper.DotProduct(queryEmbedding, supportEmbedding),
                 MatchingNetworksAttentionFunction.Euclidean => ComputeNegativeEuclideanDistance(queryEmbedding, supportEmbedding),
                 _ => _numOps.FromDouble(VectorHelper.CosineSimilarity(queryEmbedding, supportEmbedding))
             };
@@ -763,16 +747,6 @@ public class MatchingNetworksModel<T, TInput, TOutput> : IModel<TInput, TOutput,
         return ApplySoftmax(weights);
     }
 
-    private T ComputeDotProduct(Vector<T> a, Vector<T> b)
-    {
-        T dotProduct = _numOps.Zero;
-        int minLen = Math.Min(a.Length, b.Length);
-        for (int i = 0; i < minLen; i++)
-        {
-            dotProduct = _numOps.Add(dotProduct, _numOps.Multiply(a[i], b[i]));
-        }
-        return dotProduct;
-    }
 
     private T ComputeNegativeEuclideanDistance(Vector<T> a, Vector<T> b)
     {

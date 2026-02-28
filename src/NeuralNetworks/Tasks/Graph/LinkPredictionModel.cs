@@ -260,11 +260,11 @@ public class LinkPredictionModel<T> : NeuralNetworkBase<T>
 
         return _decoderType switch
         {
-            LinkPredictionDecoder.DotProduct => DotProduct(sourceEmb, targetEmb),
+            LinkPredictionDecoder.DotProduct => VectorHelper.DotProduct(sourceEmb, targetEmb),
             LinkPredictionDecoder.CosineSimilarity => NumOps.FromDouble(VectorHelper.CosineSimilarity(sourceEmb, targetEmb)),
             LinkPredictionDecoder.Hadamard => Hadamard(sourceEmb, targetEmb),
             LinkPredictionDecoder.Distance => NegativeDistance(sourceEmb, targetEmb),
-            _ => DotProduct(sourceEmb, targetEmb)
+            _ => VectorHelper.DotProduct(sourceEmb, targetEmb)
         };
     }
 
@@ -280,14 +280,6 @@ public class LinkPredictionModel<T> : NeuralNetworkBase<T>
         return embedding;
     }
 
-    private T DotProduct(Vector<T> a, Vector<T> b)
-    {
-        // Vectorized dot product using Engine
-        var tensorA = new Tensor<T>(a.ToArray(), [a.Length]);
-        var tensorB = new Tensor<T>(b.ToArray(), [b.Length]);
-        var product = Engine.TensorMultiply(tensorA, tensorB);
-        return Engine.TensorSum(product);
-    }
 
 
     private T Hadamard(Vector<T> a, Vector<T> b)
