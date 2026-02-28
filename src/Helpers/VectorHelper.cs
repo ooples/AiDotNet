@@ -112,4 +112,32 @@ public static class VectorHelper
         double denom = Math.Sqrt(normA * normB);
         return denom > epsilon ? Math.Max(0, dot / denom) : 0;
     }
+
+    /// <summary>
+    /// Computes the dot product of two vectors using hardware-accelerated operations.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of the vector elements.</typeparam>
+    /// <param name="a">First vector.</param>
+    /// <param name="b">Second vector.</param>
+    /// <returns>The dot product as type T.</returns>
+    public static T DotProduct<T>(Vector<T> a, Vector<T> b)
+    {
+        return AiDotNetEngine.Current.DotProduct(a, b);
+    }
+
+    /// <summary>
+    /// Computes the Euclidean distance between two vectors using hardware-accelerated operations.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of the vector elements.</typeparam>
+    /// <param name="a">First vector.</param>
+    /// <param name="b">Second vector.</param>
+    /// <returns>The Euclidean distance as type T.</returns>
+    public static T EuclideanDistance<T>(Vector<T> a, Vector<T> b)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var engine = AiDotNetEngine.Current;
+        var diff = engine.Subtract(a, b);
+        return numOps.FromDouble(Math.Sqrt(
+            Math.Max(0, numOps.ToDouble(engine.DotProduct(diff, diff)))));
+    }
 }
