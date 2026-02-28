@@ -16,6 +16,15 @@ namespace AiDotNet.MetaLearning;
 /// <item><b>Metric-based:</b> ProtoNets, MatchingNetworks, RelationNetwork, TADAM</item>
 /// <item><b>Memory-based:</b> MANN, NTM</item>
 /// <item><b>Hybrid/Advanced:</b> CNAP, SEAL, GNNMeta, MetaOptNet</item>
+/// <item><b>Neural Processes:</b> CNP, NP, ANP, ConvCNP, ConvNP, TNP, SwinTNP, TETNP, EquivCNP, SteerCNP, RCNP, LBANP</item>
+/// <item><b>Foundation Model Era:</b> MetaLoRA, LoRARecycle, ICMFusion, MetaLoRABank, AutoLoRA, MetaDiff, MetaDM, MetaDDPM</item>
+/// <item><b>Bayesian Extensions:</b> PACOH, MetaPACOH, BMAML, BayProNet, FlexPACBayes</item>
+/// <item><b>Cross-Domain:</b> MetaFDMixup, FreqPrior, MetaCollaborative, SDCL, FreqPrompt, OpenMAMLPlus</item>
+/// <item><b>Meta-RL:</b> PEARL, DREAM, DiscoRL, InContextRL, HyperNetMetaRL, ContextMetaRL</item>
+/// <item><b>Continual/Online:</b> ACL, iTAML, MetaContinualAL, MePo, OML, MOCA</item>
+/// <item><b>Task Augmentation:</b> MetaTask, ATAML, MPTS, DynamicTaskSampling, UnsupervisedMetaLearn</item>
+/// <item><b>Transductive:</b> GCDPLNet, BayTransProto, JMP, ETPN, ActiveTransFSL</item>
+/// <item><b>Hypernetwork:</b> TaskCondHyperNet, HyperCLIP, RecurrentHyperNet, HyperNeRFMeta</item>
 /// </list>
 /// </para>
 /// </remarks>
@@ -762,5 +771,652 @@ public enum MetaLearningAlgorithmType
     /// such as fine-grained recognition where spatial structure matters.
     /// </para>
     /// </remarks>
-    ConstellationNet
+    ConstellationNet,
+
+    // ===== Neural Process Family =====
+
+    /// <summary>
+    /// Conditional Neural Process (Garnelo et al., ICML 2018).
+    /// Encodes context (support) points independently and aggregates them to predict target (query) points.
+    /// </summary>
+    /// <remarks>
+    /// <b>Key Idea:</b> Encode each context pair (x,y) independently, aggregate via mean pooling,
+    /// and decode to predict targets. Fast but underfits due to lack of latent variable.
+    /// <para><b>Use When:</b> You need fast amortized inference without gradient-based adaptation.</para>
+    /// </remarks>
+    CNP,
+
+    /// <summary>
+    /// Neural Process (Garnelo et al., 2018).
+    /// Extends CNP with a latent variable for modeling uncertainty and correlations.
+    /// </summary>
+    /// <remarks>
+    /// <b>Key Idea:</b> Adds a global latent z ~ N(mu, sigma) from context encoding.
+    /// Samples from z allow capturing coherent function samples and uncertainty.
+    /// <para><b>Use When:</b> You need uncertainty estimates and coherent predictions across targets.</para>
+    /// </remarks>
+    NP,
+
+    /// <summary>
+    /// Attentive Neural Process (Kim et al., ICLR 2019).
+    /// Adds cross-attention from targets to context for better predictions.
+    /// </summary>
+    /// <remarks>
+    /// <b>Key Idea:</b> Instead of mean-pooling context, use attention so each target attends to relevant
+    /// context points. Combines deterministic attention path with latent variable path.
+    /// <para><b>Use When:</b> You want NP-quality uncertainty with CNP-quality point predictions.</para>
+    /// </remarks>
+    ANP,
+
+    /// <summary>
+    /// Convolutional Conditional Neural Process (Gordon et al., ICLR 2020).
+    /// Places context on a grid and uses convolutions for translation equivariance.
+    /// </summary>
+    /// <remarks>
+    /// <b>Key Idea:</b> Map context to a discrete grid, apply CNN layers, then interpolate for targets.
+    /// Translation equivariance is a powerful inductive bias for spatial/temporal data.
+    /// <para><b>Use When:</b> Data has spatial or temporal structure benefiting from translation equivariance.</para>
+    /// </remarks>
+    ConvCNP,
+
+    /// <summary>
+    /// Convolutional Neural Process (Foong et al., 2020).
+    /// Extends ConvCNP with a latent variable for uncertainty modeling.
+    /// </summary>
+    /// <remarks>
+    /// <b>Key Idea:</b> Combines ConvCNP's grid-based convolutions with NP's latent variable.
+    /// Provides both translation equivariance and coherent uncertainty estimates.
+    /// <para><b>Use When:</b> You need ConvCNP's inductive bias plus NP-style uncertainty.</para>
+    /// </remarks>
+    ConvNP,
+
+    /// <summary>
+    /// Transformer Neural Process (Nguyen &amp; Grover, ICML 2023).
+    /// Uses transformer architecture for neural process encoding and decoding.
+    /// </summary>
+    /// <remarks>
+    /// <b>Key Idea:</b> Replace set encoders with transformer blocks. Self-attention over context
+    /// and cross-attention to targets provides flexible, powerful function approximation.
+    /// <para><b>Use When:</b> You want state-of-the-art NP performance with transformer scalability.</para>
+    /// </remarks>
+    TNP,
+
+    /// <summary>
+    /// Swin Transformer Neural Process (2024).
+    /// Combines Swin Transformer's hierarchical attention with neural processes.
+    /// </summary>
+    /// <remarks>
+    /// <b>Key Idea:</b> Use shifted window attention for efficient multi-scale processing of context sets.
+    /// Hierarchical features capture both local and global context patterns.
+    /// <para><b>Use When:</b> Large context sets where full attention is too expensive.</para>
+    /// </remarks>
+    SwinTNP,
+
+    /// <summary>
+    /// Translation-Equivariant Transformer Neural Process (2024).
+    /// Combines TNP's transformer attention with translation equivariance via relative positional encoding.
+    /// </summary>
+    /// <remarks>
+    /// <b>Key Idea:</b> Standard TNP uses absolute positions in attention. TE-TNP replaces this
+    /// with relative positional encodings so that the prediction function is equivariant to input translations.
+    /// This gives a strong inductive bias for spatial and temporal data.
+    /// <para><b>Use When:</b> Your regression/prediction task has translational symmetry (e.g., spatial processes,
+    /// time series where absolute position is irrelevant).</para>
+    /// </remarks>
+    TETNP,
+
+    /// <summary>
+    /// Equivariant Conditional Neural Process (Kawano et al., 2021).
+    /// Incorporates symmetry equivariance into the CNP architecture.
+    /// </summary>
+    /// <remarks>
+    /// <b>Key Idea:</b> Encoder and decoder respect group symmetries (rotation, reflection).
+    /// Equivariance provides strong inductive bias for data with known symmetries.
+    /// <para><b>Use When:</b> Your data has known symmetries (e.g., physical systems, molecular data).</para>
+    /// </remarks>
+    EquivCNP,
+
+    /// <summary>
+    /// Steerable Conditional Neural Process (Holderrieth et al., 2021).
+    /// Uses steerable kernels for continuous equivariance in neural processes.
+    /// </summary>
+    /// <remarks>
+    /// <b>Key Idea:</b> Steerable convolutions provide continuous rotation equivariance rather than
+    /// discrete group equivariance, giving smoother function predictions.
+    /// <para><b>Use When:</b> You need continuous rotation equivariance (e.g., orientation-sensitive tasks).</para>
+    /// </remarks>
+    SteerCNP,
+
+    /// <summary>
+    /// Recurrent Conditional Neural Process (2024).
+    /// Processes context points sequentially with a recurrent encoder for streaming data.
+    /// </summary>
+    /// <remarks>
+    /// <b>Key Idea:</b> Replace set aggregation with recurrent processing. Enables online updating
+    /// as new context points arrive without reprocessing the entire set.
+    /// <para><b>Use When:</b> Context points arrive in a stream and you need online updates.</para>
+    /// </remarks>
+    RCNP,
+
+    /// <summary>
+    /// Latent Bottleneck Attentive Neural Process (Feng et al., ICML 2023).
+    /// Introduces a small set of latent bottleneck tokens for efficient attention.
+    /// </summary>
+    /// <remarks>
+    /// <b>Key Idea:</b> Instead of O(n*m) cross-attention, use K latent tokens as a bottleneck.
+    /// Context compresses into latent tokens, targets attend to them. O(n*K + m*K) complexity.
+    /// <para><b>Use When:</b> Large context or target sets where full attention is too expensive.</para>
+    /// </remarks>
+    LBANP,
+
+    // ===== Foundation Model Era Methods =====
+
+    /// <summary>
+    /// Meta-LoRA - Meta-learning with Low-Rank Adaptation (2024).
+    /// Learns a meta-initialization for LoRA parameters that adapts quickly to new tasks.
+    /// </summary>
+    /// <remarks>
+    /// <b>Key Idea:</b> Apply MAML-style meta-learning to LoRA adapter parameters instead of full model.
+    /// Much more parameter-efficient than full-model meta-learning.
+    /// <para><b>Use When:</b> You want to meta-learn adaptation of large pretrained models efficiently.</para>
+    /// </remarks>
+    MetaLoRA,
+
+    /// <summary>
+    /// LoRA-Recycle - Recycling LoRA adapters across tasks (2024).
+    /// Reuses and recombines LoRA adapters from previously seen tasks for new tasks.
+    /// </summary>
+    /// <remarks>
+    /// <b>Key Idea:</b> Maintain a library of task-specific LoRA adapters. For new tasks, select and
+    /// combine relevant adapters via learned routing, avoiding training from scratch.
+    /// <para><b>Use When:</b> You have a growing library of task adapters and want to transfer between them.</para>
+    /// </remarks>
+    LoRARecycle,
+
+    /// <summary>
+    /// ICM Fusion - In-Context Model Fusion (2024).
+    /// Merges multiple adapted models in-context without additional training.
+    /// </summary>
+    /// <remarks>
+    /// <b>Key Idea:</b> Fuse predictions from multiple task-specific models by treating their outputs
+    /// as context for a meta-fusion module. No gradient updates needed at fusion time.
+    /// <para><b>Use When:</b> You have multiple expert models and want to combine them for new tasks.</para>
+    /// </remarks>
+    ICMFusion,
+
+    /// <summary>
+    /// Meta-LoRA Bank - Library of meta-learned LoRA modules (2024).
+    /// Maintains a bank of reusable LoRA modules that can be composed for new tasks.
+    /// </summary>
+    /// <remarks>
+    /// <b>Key Idea:</b> Decompose adaptation into modular LoRA components. A routing network selects
+    /// and weights relevant modules from the bank for each new task.
+    /// <para><b>Use When:</b> Tasks share sub-components and modular composition is beneficial.</para>
+    /// </remarks>
+    MetaLoRABank,
+
+    /// <summary>
+    /// AutoLoRA - Automatic LoRA rank and configuration selection (2024).
+    /// Uses meta-learning to automatically determine optimal LoRA hyperparameters per layer.
+    /// </summary>
+    /// <remarks>
+    /// <b>Key Idea:</b> Different layers benefit from different LoRA ranks. AutoLoRA meta-learns
+    /// per-layer rank allocation and initialization for optimal adaptation efficiency.
+    /// <para><b>Use When:</b> You want automated LoRA configuration without manual hyperparameter tuning.</para>
+    /// </remarks>
+    AutoLoRA,
+
+    /// <summary>
+    /// MetaDiff - Meta-learning with Diffusion Models (2024).
+    /// Uses diffusion process for generating task-specific model parameters.
+    /// </summary>
+    /// <remarks>
+    /// <b>Key Idea:</b> Frame parameter generation as a denoising diffusion process. The diffusion model
+    /// learns to generate task-adapted parameters from noise conditioned on the support set.
+    /// <para><b>Use When:</b> You want to model the full distribution of task-optimal parameters.</para>
+    /// </remarks>
+    MetaDiff,
+
+    /// <summary>
+    /// MetaDM - Meta Diffusion Model for few-shot generation (2024).
+    /// Adapts diffusion models to new domains with few examples using meta-learning.
+    /// </summary>
+    /// <remarks>
+    /// <b>Key Idea:</b> Meta-train a diffusion model across diverse domains so it can quickly adapt
+    /// its generation process to new domains with just a few examples.
+    /// <para><b>Use When:</b> You need few-shot generative modeling across diverse domains.</para>
+    /// </remarks>
+    MetaDM,
+
+    /// <summary>
+    /// MetaDDPM - Meta Denoising Diffusion Probabilistic Model (2024).
+    /// Combines DDPM with meta-learning for task-conditional generation.
+    /// </summary>
+    /// <remarks>
+    /// <b>Key Idea:</b> Meta-learn the denoising schedule and noise prediction network so that
+    /// the DDPM can be quickly adapted to generate samples for new task distributions.
+    /// <para><b>Use When:</b> You need task-adaptive generation with principled probabilistic modeling.</para>
+    /// </remarks>
+    MetaDDPM,
+
+    // ===== Bayesian Extensions =====
+
+    /// <summary>
+    /// PACOH - PAC-Bayesian Meta-Learning with Optimal Hyperparameters (Rothfuss et al., ICLR 2021).
+    /// Provides PAC-Bayesian generalization bounds for meta-learning.
+    /// </summary>
+    /// <remarks>
+    /// <b>Key Idea:</b> Use PAC-Bayesian theory to derive principled meta-learning objectives with
+    /// provable generalization guarantees. The meta-learned prior provides tight bounds.
+    /// <para><b>Use When:</b> You need theoretical guarantees on meta-learning generalization.</para>
+    /// </remarks>
+    PACOH,
+
+    /// <summary>
+    /// Meta-PACOH - Extended PACOH with hierarchical Bayesian meta-learning (2023).
+    /// Adds hierarchical structure to PACOH for multi-level meta-learning.
+    /// </summary>
+    /// <remarks>
+    /// <b>Key Idea:</b> Extend PACOH with hierarchical Bayesian structure for learning at multiple
+    /// levels of abstraction, with PAC-Bayesian bounds at each level.
+    /// <para><b>Use When:</b> Tasks have hierarchical structure (e.g., domain -> subdomain -> task).</para>
+    /// </remarks>
+    MetaPACOH,
+
+    /// <summary>
+    /// BMAML - Bayesian MAML (Yoon et al., NeurIPS 2018).
+    /// Combines MAML with Stein Variational Gradient Descent for Bayesian inference.
+    /// </summary>
+    /// <remarks>
+    /// <b>Key Idea:</b> Maintain a particle ensemble of model initializations and use SVGD to
+    /// approximate the posterior over task-adapted parameters, providing uncertainty estimates.
+    /// <para><b>Use When:</b> You need uncertainty-aware MAML with posterior approximation.</para>
+    /// </remarks>
+    BMAML,
+
+    /// <summary>
+    /// BayProNet - Bayesian Prototypical Networks (2024).
+    /// Extends ProtoNets with Bayesian inference over prototypes.
+    /// </summary>
+    /// <remarks>
+    /// <b>Key Idea:</b> Instead of point-estimate prototypes, maintain distributions over prototype
+    /// locations. Classification integrates over prototype uncertainty for robust predictions.
+    /// <para><b>Use When:</b> You want ProtoNets with principled uncertainty over class representations.</para>
+    /// </remarks>
+    BayProNet,
+
+    /// <summary>
+    /// Flex-PAC-Bayes - Flexible PAC-Bayes bounds for meta-learning (2024).
+    /// Provides tighter, more flexible PAC-Bayesian bounds for meta-learners.
+    /// </summary>
+    /// <remarks>
+    /// <b>Key Idea:</b> Use data-dependent priors and flexible divergence measures to derive
+    /// tighter PAC-Bayesian bounds that better reflect actual meta-learning performance.
+    /// <para><b>Use When:</b> You need the tightest available generalization guarantees for meta-learning.</para>
+    /// </remarks>
+    FlexPACBayes,
+
+    // ===== Cross-Domain Few-Shot =====
+
+    /// <summary>
+    /// Meta-FDMixup - Feature Distribution Mixup for cross-domain few-shot learning (2021).
+    /// Mixes feature distributions across domains for better cross-domain transfer.
+    /// </summary>
+    /// <remarks>
+    /// <b>Key Idea:</b> Mix feature statistics (mean, variance) across domains during training.
+    /// This creates interpolated domains that bridge the gap between source and target distributions.
+    /// <para><b>Use When:</b> Source and target domains differ significantly in feature distributions.</para>
+    /// </remarks>
+    MetaFDMixup,
+
+    /// <summary>
+    /// FreqPrior - Frequency-based Prior for cross-domain few-shot learning (2024).
+    /// Decomposes features into frequency components and applies domain-invariant priors.
+    /// </summary>
+    /// <remarks>
+    /// <b>Key Idea:</b> Low-frequency components tend to be domain-invariant while high-frequency
+    /// components are domain-specific. Learn to weight frequency bands appropriately.
+    /// <para><b>Use When:</b> Cross-domain tasks where frequency decomposition reveals transferable patterns.</para>
+    /// </remarks>
+    FreqPrior,
+
+    /// <summary>
+    /// MetaCollaborative - Collaborative meta-learning across multiple source domains (2024).
+    /// Multiple domain-specific meta-learners collaborate for target domain adaptation.
+    /// </summary>
+    /// <remarks>
+    /// <b>Key Idea:</b> Train separate meta-learners on each source domain, then learn to
+    /// collaborate by weighting their contributions based on relevance to the target task.
+    /// <para><b>Use When:</b> Multiple diverse source domains are available for meta-training.</para>
+    /// </remarks>
+    MetaCollaborative,
+
+    /// <summary>
+    /// SDCL - Self-Distillation Contrastive Learning for cross-domain FSL (2024).
+    /// Combines self-distillation with contrastive learning for domain-robust features.
+    /// </summary>
+    /// <remarks>
+    /// <b>Key Idea:</b> Use self-distillation to transfer knowledge between augmented views and
+    /// contrastive learning to ensure features are discriminative across domains.
+    /// <para><b>Use When:</b> You need domain-robust representations for diverse target domains.</para>
+    /// </remarks>
+    SDCL,
+
+    /// <summary>
+    /// FreqPrompt - Frequency-aware Prompt tuning for cross-domain FSL (2024).
+    /// Uses frequency-domain prompts to bridge domain gaps efficiently.
+    /// </summary>
+    /// <remarks>
+    /// <b>Key Idea:</b> Instead of adapting the full model, learn small frequency-domain prompts
+    /// that adjust the model's behavior for different target domains.
+    /// <para><b>Use When:</b> You want parameter-efficient cross-domain adaptation.</para>
+    /// </remarks>
+    FreqPrompt,
+
+    /// <summary>
+    /// Open-MAML++ - Enhanced MAML for open-set cross-domain recognition (2024).
+    /// Extends OpenMAML with cross-domain robustness and improved open-set detection.
+    /// </summary>
+    /// <remarks>
+    /// <b>Key Idea:</b> Combine domain-adaptive features with calibrated confidence scores
+    /// for robust open-set recognition across different domains.
+    /// <para><b>Use When:</b> You face both domain shift and open-set challenges simultaneously.</para>
+    /// </remarks>
+    OpenMAMLPlus,
+
+    // ===== Meta-Reinforcement Learning =====
+
+    /// <summary>
+    /// PEARL - Probabilistic Embeddings for Actor-critic RL (Rakelly et al., ICML 2019).
+    /// Off-policy meta-RL with probabilistic context encoding.
+    /// </summary>
+    /// <remarks>
+    /// <b>Key Idea:</b> Encode task information into a probabilistic latent context from experience.
+    /// The policy conditions on this context for task-specific behavior without gradient updates.
+    /// <para><b>Use When:</b> You need sample-efficient meta-RL with probabilistic task inference.</para>
+    /// </remarks>
+    PEARL,
+
+    /// <summary>
+    /// DREAM - Decoupled Reward-Environment Adaptation Meta-learning (2022).
+    /// Separately adapts to reward and transition dynamics changes.
+    /// </summary>
+    /// <remarks>
+    /// <b>Key Idea:</b> Decouple task variation into reward function changes and dynamics changes.
+    /// Separate encoders for each provide more structured task representations.
+    /// <para><b>Use When:</b> Meta-RL tasks vary in both reward structure and environment dynamics.</para>
+    /// </remarks>
+    DREAM,
+
+    /// <summary>
+    /// DiscoRL - Discovering Meta-RL Objectives (2024).
+    /// Automatically discovers effective meta-RL training objectives.
+    /// </summary>
+    /// <remarks>
+    /// <b>Key Idea:</b> Instead of hand-designing the meta-RL objective, use a learned objective
+    /// that is itself meta-optimized to produce good task adaptation.
+    /// <para><b>Use When:</b> Standard meta-RL objectives underperform and you want automated objective design.</para>
+    /// </remarks>
+    DiscoRL,
+
+    /// <summary>
+    /// In-Context RL - Reinforcement learning through in-context learning (2023).
+    /// Uses transformer-based in-context learning for RL adaptation.
+    /// </summary>
+    /// <remarks>
+    /// <b>Key Idea:</b> Frame RL adaptation as in-context learning: the agent receives prior
+    /// trajectories as context and learns to adapt its policy purely through attention.
+    /// <para><b>Use When:</b> You want gradient-free RL adaptation using powerful sequence models.</para>
+    /// </remarks>
+    InContextRL,
+
+    /// <summary>
+    /// HyperNet Meta-RL - Hypernetwork-based Meta-Reinforcement Learning (2024).
+    /// Uses hypernetworks to generate task-specific RL policies.
+    /// </summary>
+    /// <remarks>
+    /// <b>Key Idea:</b> A hypernetwork generates policy parameters conditioned on the task context,
+    /// enabling instant task-specific policy generation without gradient-based adaptation.
+    /// <para><b>Use When:</b> You need zero-shot policy generation for new RL tasks.</para>
+    /// </remarks>
+    HyperNetMetaRL,
+
+    /// <summary>
+    /// Context Meta-RL - Context-based Meta-Reinforcement Learning (2024).
+    /// Uses explicit context vectors for meta-RL task representation.
+    /// </summary>
+    /// <remarks>
+    /// <b>Key Idea:</b> Learn a structured context space where similar tasks have similar contexts.
+    /// The context vector conditions the policy for task-specific behavior.
+    /// <para><b>Use When:</b> Tasks have interpretable structure that can be captured in a context vector.</para>
+    /// </remarks>
+    ContextMetaRL,
+
+    // ===== Continual / Online Meta-Learning =====
+
+    /// <summary>
+    /// ACL - Adaptive Continual Learning with meta-learning (2024).
+    /// Combines continual learning with meta-learning for non-stationary task distributions.
+    /// </summary>
+    /// <remarks>
+    /// <b>Key Idea:</b> Meta-learn to adapt continually without forgetting. The meta-learner
+    /// discovers update rules that balance plasticity (learning new) and stability (remembering old).
+    /// <para><b>Use When:</b> Task distribution changes over time and you need to avoid catastrophic forgetting.</para>
+    /// </remarks>
+    ACL,
+
+    /// <summary>
+    /// iTAML - Incremental Task-Agnostic Meta-Learning (Rajasegaran et al., 2020).
+    /// Handles incremental class learning through meta-learning without task boundaries.
+    /// </summary>
+    /// <remarks>
+    /// <b>Key Idea:</b> Meta-learn to incorporate new classes without knowing task boundaries.
+    /// A task-agnostic approach that uses meta-optimization for balanced old/new performance.
+    /// <para><b>Use When:</b> New classes arrive incrementally without clear task boundaries.</para>
+    /// </remarks>
+    iTAML,
+
+    /// <summary>
+    /// MetaContinualAL - Meta-learning for Continual Active Learning (2024).
+    /// Combines active learning with continual meta-learning for efficient data selection.
+    /// </summary>
+    /// <remarks>
+    /// <b>Key Idea:</b> Meta-learn an acquisition function that selects the most informative
+    /// examples for continual learning, maximizing learning efficiency over time.
+    /// <para><b>Use When:</b> You have a labeling budget and need to select examples wisely over time.</para>
+    /// </remarks>
+    MetaContinualAL,
+
+    /// <summary>
+    /// MePo - Meta-learning for Policy optimization in continual RL (2024).
+    /// Meta-learns policy optimization strategies for continual reinforcement learning.
+    /// </summary>
+    /// <remarks>
+    /// <b>Key Idea:</b> Learn update rules that enable a policy to adapt to new tasks while
+    /// maintaining performance on previously learned tasks, in an RL setting.
+    /// <para><b>Use When:</b> You need continual RL where new tasks arrive sequentially.</para>
+    /// </remarks>
+    MePo,
+
+    /// <summary>
+    /// OML - Online Meta-Learning (Javed &amp; White, 2019).
+    /// Performs meta-learning in an online streaming setting without episodic boundaries.
+    /// </summary>
+    /// <remarks>
+    /// <b>Key Idea:</b> Learn a representation online that enables fast learning on future data.
+    /// No episodic training needed — continuously meta-learns from a data stream.
+    /// <para><b>Use When:</b> Data arrives in a stream without clear task/episode boundaries.</para>
+    /// </remarks>
+    OML,
+
+    /// <summary>
+    /// MOCA - Meta-learning Online Continual Adaptation (2024).
+    /// Combines online learning with meta-learned adaptation for streaming scenarios.
+    /// </summary>
+    /// <remarks>
+    /// <b>Key Idea:</b> Meta-learn fast online adaptation rules that work for streaming data.
+    /// The meta-learner discovers update strategies that generalize across changing distributions.
+    /// <para><b>Use When:</b> You need robust online adaptation to non-stationary streaming data.</para>
+    /// </remarks>
+    MOCA,
+
+    // ===== Task Augmentation / Sampling =====
+
+    /// <summary>
+    /// MetaTask - Meta-learning task generation for improved generalization (2024).
+    /// Learns to generate synthetic training tasks that improve meta-learner performance.
+    /// </summary>
+    /// <remarks>
+    /// <b>Key Idea:</b> Instead of relying on manually defined task distributions, learn a task
+    /// generator that creates maximally informative tasks for training the meta-learner.
+    /// <para><b>Use When:</b> Your task distribution is limited and you want to augment it effectively.</para>
+    /// </remarks>
+    MetaTask,
+
+    /// <summary>
+    /// ATAML - Adaptive Task Augmentation for Meta-Learning (2024).
+    /// Adaptively augments tasks during meta-training for improved robustness.
+    /// </summary>
+    /// <remarks>
+    /// <b>Key Idea:</b> Apply task-level augmentation (not just data augmentation) such as
+    /// varying N-way, K-shot, adding noise classes, or mixing task domains.
+    /// <para><b>Use When:</b> Meta-training tasks are too easy or lack diversity.</para>
+    /// </remarks>
+    ATAML,
+
+    /// <summary>
+    /// MPTS - Meta-learning with Prioritized Task Sampling (2024).
+    /// Prioritizes informative tasks during meta-training for faster convergence.
+    /// </summary>
+    /// <remarks>
+    /// <b>Key Idea:</b> Not all tasks are equally informative. Prioritize tasks where the
+    /// meta-learner has high loss or high uncertainty for more efficient training.
+    /// <para><b>Use When:</b> You have a large task pool and want to train more efficiently.</para>
+    /// </remarks>
+    MPTS,
+
+    /// <summary>
+    /// Dynamic Task Sampling - Adaptive task distribution during meta-training (2024).
+    /// Dynamically adjusts the task sampling distribution based on meta-learner performance.
+    /// </summary>
+    /// <remarks>
+    /// <b>Key Idea:</b> Continuously adjust which tasks are sampled based on current meta-learner
+    /// capabilities, focusing on tasks at the frontier of the learner's ability.
+    /// <para><b>Use When:</b> You want curriculum-like training without manually defining stages.</para>
+    /// </remarks>
+    DynamicTaskSampling,
+
+    /// <summary>
+    /// Unsupervised Meta-Learning - Meta-learning without task labels (Hsu et al., 2019).
+    /// Generates pseudo-tasks from unlabeled data for meta-training.
+    /// </summary>
+    /// <remarks>
+    /// <b>Key Idea:</b> Use clustering or generative models to create pseudo-tasks from unlabeled
+    /// data, enabling meta-learning without curated task distributions.
+    /// <para><b>Use When:</b> Labeled tasks are scarce but unlabeled data is abundant.</para>
+    /// </remarks>
+    UnsupervisedMetaLearn,
+
+    // ===== Transductive Few-Shot =====
+
+    /// <summary>
+    /// GCDPLNet - Graph-based Class Distribution Propagation and Label Network (2024).
+    /// Uses graph neural networks with class distribution propagation for transductive FSL.
+    /// </summary>
+    /// <remarks>
+    /// <b>Key Idea:</b> Build a graph over all examples and propagate both features and class
+    /// distribution information through message passing for joint classification.
+    /// <para><b>Use When:</b> You want graph-based transductive inference with distribution modeling.</para>
+    /// </remarks>
+    GCDPLNet,
+
+    /// <summary>
+    /// BayTransProto - Bayesian Transductive Prototypical Networks (2024).
+    /// Combines Bayesian prototype estimation with transductive refinement.
+    /// </summary>
+    /// <remarks>
+    /// <b>Key Idea:</b> Start with Bayesian prototypes from the support set, then refine them
+    /// transductively using query examples via iterative Bayesian updates.
+    /// <para><b>Use When:</b> You want principled uncertainty with transductive improvements.</para>
+    /// </remarks>
+    BayTransProto,
+
+    /// <summary>
+    /// JMP - Joint Meta-learning and Propagation for transductive FSL (2024).
+    /// Jointly optimizes meta-learning and label propagation objectives.
+    /// </summary>
+    /// <remarks>
+    /// <b>Key Idea:</b> Instead of treating meta-learning and label propagation as separate stages,
+    /// jointly optimize both objectives end-to-end for better transductive performance.
+    /// <para><b>Use When:</b> You want an end-to-end transductive meta-learning approach.</para>
+    /// </remarks>
+    JMP,
+
+    /// <summary>
+    /// ETPN - Enhanced Transductive Prototypical Networks (2024).
+    /// Iteratively refines prototypes using query set information.
+    /// </summary>
+    /// <remarks>
+    /// <b>Key Idea:</b> Start with standard prototypes, then iteratively update them using
+    /// soft assignments from query examples. Prototypes converge to better estimates.
+    /// <para><b>Use When:</b> You want improved prototypes through transductive refinement.</para>
+    /// </remarks>
+    ETPN,
+
+    /// <summary>
+    /// ActiveTransFSL - Active Transductive Few-Shot Learning (2024).
+    /// Combines active learning with transductive few-shot classification.
+    /// </summary>
+    /// <remarks>
+    /// <b>Key Idea:</b> In the transductive setting, actively select which query examples to
+    /// label first based on expected information gain, then propagate to remaining queries.
+    /// <para><b>Use When:</b> You can label a few query examples and want optimal selection.</para>
+    /// </remarks>
+    ActiveTransFSL,
+
+    // ===== Hypernetwork Methods =====
+
+    /// <summary>
+    /// Task-Conditioned HyperNet - Hypernetwork conditioned on task representations (2024).
+    /// Generates full model parameters from compact task descriptions.
+    /// </summary>
+    /// <remarks>
+    /// <b>Key Idea:</b> Encode the task into a compact representation, then use a hypernetwork to
+    /// generate all model parameters in a single forward pass. Zero inner-loop gradient steps.
+    /// <para><b>Use When:</b> You need instant task-specific model generation without adaptation.</para>
+    /// </remarks>
+    TaskCondHyperNet,
+
+    /// <summary>
+    /// HyperCLIP - Hypernetwork with CLIP-based task encoding (2024).
+    /// Uses CLIP-style encodings to condition hypernetworks on multimodal task descriptions.
+    /// </summary>
+    /// <remarks>
+    /// <b>Key Idea:</b> Encode task descriptions using CLIP embeddings and generate task-specific
+    /// model parameters. Enables natural language task specification.
+    /// <para><b>Use When:</b> Tasks can be described in natural language or with example images.</para>
+    /// </remarks>
+    HyperCLIP,
+
+    /// <summary>
+    /// Recurrent HyperNet - Hypernetwork with recurrent task encoding (2024).
+    /// Uses recurrent processing of support examples to generate model parameters.
+    /// </summary>
+    /// <remarks>
+    /// <b>Key Idea:</b> Process support examples sequentially through a recurrent network, then
+    /// generate model parameters from the final hidden state. Supports variable support set sizes.
+    /// <para><b>Use When:</b> Support set size varies and you need flexible hypernetwork conditioning.</para>
+    /// </remarks>
+    RecurrentHyperNet,
+
+    /// <summary>
+    /// HyperNeRF Meta - Hypernetwork for Meta-learning Neural Radiance Fields (2024).
+    /// Uses hypernetworks to generate NeRF parameters for few-shot 3D reconstruction.
+    /// </summary>
+    /// <remarks>
+    /// <b>Key Idea:</b> Generate NeRF parameters from few input views using a hypernetwork.
+    /// Meta-learning enables rapid 3D scene reconstruction from minimal observations.
+    /// <para><b>Use When:</b> You need few-shot 3D reconstruction with neural radiance fields.</para>
+    /// </remarks>
+    HyperNeRFMeta
 }

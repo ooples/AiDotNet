@@ -349,11 +349,12 @@ public class ProtoNetsAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
 
         if (output is Vector<T> vector)
         {
-            // Single example - create 1-row matrix
-            var result = new Matrix<T>(1, vector.Length);
-            for (int j = 0; j < vector.Length; j++)
+            // N scalar predictions (one per example) - create N-row, 1-column matrix
+            // so each example has a 1-dimensional embedding
+            var result = new Matrix<T>(vector.Length, 1);
+            for (int i = 0; i < vector.Length; i++)
             {
-                result[0, j] = vector[j];
+                result[i, 0] = vector[i];
             }
             return result;
         }
@@ -1075,10 +1076,11 @@ public class PrototypicalModel<T, TInput, TOutput> : IModel<TInput, TOutput, Mod
 
         if (output is Vector<T> vector)
         {
-            var result = new Matrix<T>(1, vector.Length);
-            for (int j = 0; j < vector.Length; j++)
+            // N scalar predictions (one per example) - create N-row, 1-column matrix
+            var result = new Matrix<T>(vector.Length, 1);
+            for (int i = 0; i < vector.Length; i++)
             {
-                result[0, j] = vector[j];
+                result[i, 0] = vector[i];
             }
             return result;
         }
@@ -1345,21 +1347,29 @@ public class PrototypicalModel<T, TInput, TOutput> : IModel<TInput, TOutput, Mod
         }
         else if (typeof(TOutput) == typeof(Vector<T>))
         {
-            // Flatten to vector if single sample
+            // Flatten to vector if single sample (return per-class probabilities)
             if (batchSize == 1)
             {
                 return (TOutput)(object)new Vector<T>(allProbabilities[0].ToArray());
             }
-            // For multiple samples, flatten all probabilities
-            var flattened = new Vector<T>(batchSize * numClasses);
+            // For multiple samples, return argmax class prediction per sample
+            // This matches the input label format (one scalar label per sample)
+            var predictions = new Vector<T>(batchSize);
             for (int i = 0; i < batchSize; i++)
             {
-                for (int j = 0; j < numClasses; j++)
+                int maxIdx = 0;
+                T maxVal = allProbabilities[i][0];
+                for (int j = 1; j < numClasses; j++)
                 {
-                    flattened[i * numClasses + j] = allProbabilities[i][j];
+                    if (_numOps.ToDouble(allProbabilities[i][j]) > _numOps.ToDouble(maxVal))
+                    {
+                        maxVal = allProbabilities[i][j];
+                        maxIdx = j;
+                    }
                 }
+                predictions[i] = _numOps.FromDouble(classLabels[maxIdx]);
             }
-            return (TOutput)(object)flattened;
+            return (TOutput)(object)predictions;
         }
         else
         {
