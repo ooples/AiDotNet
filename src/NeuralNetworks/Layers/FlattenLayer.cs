@@ -275,8 +275,9 @@ public class FlattenLayer<T> : LayerBase<T>
         var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
 
         // Replay forward pass: flatten is just a reshape operation
+        // Must match Forward() logic: rank 1 stays 1D, rank >= 2 becomes [batch, flat]
         int[] flattenedShape;
-        if (_lastInput.Rank <= 3)
+        if (_lastInput.Rank == 1)
         {
             flattenedShape = new[] { _outputSize };
         }
