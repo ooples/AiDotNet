@@ -897,6 +897,7 @@ public class ProtoNetsAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
 /// </remarks>
 public class PrototypicalModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
 {
+    protected static IEngine Engine => AiDotNetEngine.Current;
     private readonly IFullModel<T, TInput, TOutput> _featureEncoder;
     private readonly Dictionary<int, Vector<T>> _classPrototypes;
     private readonly ProtoNetsOptions<T, TInput, TOutput> _options;
@@ -973,7 +974,7 @@ public class PrototypicalModel<T, TInput, TOutput> : IModel<TInput, TOutput, Mod
             // Normalize if configured
             if (_options.NormalizeFeatures)
             {
-                featureVector = NormalizeVector(featureVector);
+                featureVector = VectorHelper.Normalize(featureVector);
             }
 
             // Compute distances to all prototypes
@@ -1143,29 +1144,6 @@ public class PrototypicalModel<T, TInput, TOutput> : IModel<TInput, TOutput, Mod
         }
 
         return null;
-    }
-
-    private Vector<T> NormalizeVector(Vector<T> vector)
-    {
-        T sumSquares = _numOps.Zero;
-        for (int i = 0; i < vector.Length; i++)
-        {
-            sumSquares = _numOps.Add(sumSquares, _numOps.Multiply(vector[i], vector[i]));
-        }
-
-        T norm = _numOps.FromDouble(Math.Sqrt(_numOps.ToDouble(sumSquares)));
-
-        if (_numOps.ToDouble(norm) < 1e-8)
-        {
-            return vector;
-        }
-
-        var normalized = new Vector<T>(vector.Length);
-        for (int i = 0; i < vector.Length; i++)
-        {
-            normalized[i] = _numOps.Divide(vector[i], norm);
-        }
-        return normalized;
     }
 
     private void NormalizeMatrix(Matrix<T> matrix)

@@ -399,41 +399,12 @@ public class MANNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
         for (int i = 0; i < _mannOptions.MemorySize; i++)
         {
             var memoryKey = _memory.GetKey(i);
-            T similarity = ComputeCosineSimilarity(queryKey, memoryKey);
+            T similarity = NumOps.FromDouble(VectorHelper.CosineSimilarity(queryKey, memoryKey));
             weights[i] = similarity;
         }
 
         // Apply softmax
         return ApplySoftmax(weights);
-    }
-
-    /// <summary>
-    /// Computes cosine similarity between two vectors.
-    /// </summary>
-    private T ComputeCosineSimilarity(Vector<T> a, Vector<T> b)
-    {
-        T dotProduct = NumOps.Zero;
-        T normASq = NumOps.Zero;
-        T normBSq = NumOps.Zero;
-
-        int minLen = Math.Min(a.Length, b.Length);
-        for (int i = 0; i < minLen; i++)
-        {
-            dotProduct = NumOps.Add(dotProduct, NumOps.Multiply(a[i], b[i]));
-            normASq = NumOps.Add(normASq, NumOps.Multiply(a[i], a[i]));
-            normBSq = NumOps.Add(normBSq, NumOps.Multiply(b[i], b[i]));
-        }
-
-        T normA = NumOps.FromDouble(Math.Sqrt(NumOps.ToDouble(normASq)));
-        T normB = NumOps.FromDouble(Math.Sqrt(NumOps.ToDouble(normBSq)));
-
-        T denominator = NumOps.Multiply(normA, normB);
-        if (NumOps.ToDouble(denominator) < 1e-8)
-        {
-            return NumOps.Zero;
-        }
-
-        return NumOps.Divide(dotProduct, denominator);
     }
 
     /// <summary>
@@ -1014,6 +985,7 @@ public class MANNMemoryStatistics
 /// <typeparam name="TOutput">The output data type.</typeparam>
 public class MANNModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
 {
+    protected static IEngine Engine => AiDotNetEngine.Current;
     private readonly IFullModel<T, TInput, TOutput> _controller;
     private readonly ExternalMemory<T> _memory;
     private readonly MANNOptions<T, TInput, TOutput> _options;
@@ -1132,37 +1104,11 @@ public class MANNModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetada
         for (int i = 0; i < _options.MemorySize; i++)
         {
             var memoryKey = _memory.GetKey(i);
-            T similarity = ComputeCosineSimilarity(queryKey, memoryKey);
+            T similarity = _numOps.FromDouble(VectorHelper.CosineSimilarity(queryKey, memoryKey));
             weights[i] = similarity;
         }
 
         return ApplySoftmax(weights);
-    }
-
-    private T ComputeCosineSimilarity(Vector<T> a, Vector<T> b)
-    {
-        T dotProduct = _numOps.Zero;
-        T normASq = _numOps.Zero;
-        T normBSq = _numOps.Zero;
-
-        int minLen = Math.Min(a.Length, b.Length);
-        for (int i = 0; i < minLen; i++)
-        {
-            dotProduct = _numOps.Add(dotProduct, _numOps.Multiply(a[i], b[i]));
-            normASq = _numOps.Add(normASq, _numOps.Multiply(a[i], a[i]));
-            normBSq = _numOps.Add(normBSq, _numOps.Multiply(b[i], b[i]));
-        }
-
-        T normA = _numOps.FromDouble(Math.Sqrt(_numOps.ToDouble(normASq)));
-        T normB = _numOps.FromDouble(Math.Sqrt(_numOps.ToDouble(normBSq)));
-
-        T denominator = _numOps.Multiply(normA, normB);
-        if (_numOps.ToDouble(denominator) < 1e-8)
-        {
-            return _numOps.Zero;
-        }
-
-        return _numOps.Divide(dotProduct, denominator);
     }
 
     private Vector<T> ApplySoftmax(Vector<T> values)

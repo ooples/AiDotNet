@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 
@@ -300,7 +301,7 @@ public class FactorTransferDistillationStrategy<T> : DistillationStrategyBase<T>
 
             if (_normalizeFactors)
             {
-                factors[i] = NormalizeVector(factors[i]);
+                factors[i] = VectorHelper.Normalize(factors[i]);
             }
 
             // Deflate: remove this component from covariance matrix
@@ -402,7 +403,7 @@ public class FactorTransferDistillationStrategy<T> : DistillationStrategyBase<T>
         {
             vector[i] = NumOps.FromDouble(random.NextDouble() - 0.5);
         }
-        vector = NormalizeVector(vector);
+        vector = VectorHelper.Normalize(vector);
 
         // Power iteration (10 iterations usually sufficient)
         for (int iter = 0; iter < 10; iter++)
@@ -420,7 +421,7 @@ public class FactorTransferDistillationStrategy<T> : DistillationStrategyBase<T>
                 newVector[i] = NumOps.FromDouble(sum);
             }
 
-            vector = NormalizeVector(newVector);
+            vector = VectorHelper.Normalize(newVector);
         }
 
         return vector;
@@ -464,25 +465,6 @@ public class FactorTransferDistillationStrategy<T> : DistillationStrategyBase<T>
                 matrix[i, j] -= eigenvalue * vi * vj;
             }
         }
-    }
-
-    private Vector<T> NormalizeVector(Vector<T> vector)
-    {
-        double norm = 0;
-        for (int i = 0; i < vector.Length; i++)
-        {
-            double val = Convert.ToDouble(vector[i]);
-            norm += val * val;
-        }
-        norm = Math.Sqrt(norm);
-
-        var normalized = new Vector<T>(vector.Length);
-        for (int i = 0; i < vector.Length; i++)
-        {
-            normalized[i] = NumOps.FromDouble(Convert.ToDouble(vector[i]) / (norm + Epsilon));
-        }
-
-        return normalized;
     }
 
     private T ComputeMSE(Vector<T>[] vectors1, Vector<T>[] vectors2)

@@ -246,11 +246,11 @@ public class CLIPScore<T> where T : struct
         var textDirection = SubtractVectors(editTextEmb, srcTextEmb);
 
         // Normalize direction vectors
-        imgDirection = NormalizeVector(imgDirection);
-        textDirection = NormalizeVector(textDirection);
+        imgDirection = VectorHelper.Normalize(imgDirection);
+        textDirection = VectorHelper.Normalize(textDirection);
 
         // Compute cosine similarity between directions
-        T similarity = ComputeCosineSimilarity(imgDirection, textDirection);
+        T similarity = _numOps.FromDouble(VectorHelper.CosineSimilarity(imgDirection, textDirection));
         double simDouble = _numOps.ToDouble(similarity);
 
         // Scale to 0-100 range
@@ -283,42 +283,6 @@ public class CLIPScore<T> where T : struct
         return Engine.Subtract(a, b);
     }
 
-    /// <summary>
-    /// Normalizes a vector to unit length.
-    /// </summary>
-    private Vector<T> NormalizeVector(Vector<T> v)
-    {
-        T normSq = Engine.DotProduct(v, v);
-
-        double normDouble = Math.Sqrt(_numOps.ToDouble(normSq));
-        if (normDouble < 1e-10)
-        {
-            return v;
-        }
-
-        T normInv = _numOps.FromDouble(1.0 / normDouble);
-        return Engine.Multiply(v, normInv);
-    }
-
-    /// <summary>
-    /// Computes cosine similarity between two vectors.
-    /// </summary>
-    private T ComputeCosineSimilarity(Vector<T> a, Vector<T> b)
-    {
-        T dot = Engine.DotProduct(a, b);
-        T normASq = Engine.DotProduct(a, a);
-        T normBSq = Engine.DotProduct(b, b);
-
-        T denominator = _numOps.Sqrt(_numOps.Multiply(normASq, normBSq));
-
-        double denomDouble = _numOps.ToDouble(denominator);
-        if (denomDouble < 1e-10)
-        {
-            return _numOps.Zero;
-        }
-
-        return _numOps.Divide(dot, denominator);
-    }
 }
 
 /// <summary>

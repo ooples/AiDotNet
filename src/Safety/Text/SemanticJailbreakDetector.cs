@@ -1,4 +1,5 @@
 using AiDotNet.Enums;
+using AiDotNet.Helpers;
 using AiDotNet.Models;
 using AiDotNet.Safety;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -136,7 +137,7 @@ public class SemanticJailbreakDetector<T> : TextSafetyModuleBase<T>
             embedding[idx] = NumOps.Add(embedding[idx], NumOps.Multiply(delta, NumOps.FromDouble(0.5)));
         }
 
-        NormalizeVector(embedding);
+        VectorHelper.NormalizeInPlace(embedding);
         return embedding;
     }
 
@@ -153,7 +154,7 @@ public class SemanticJailbreakDetector<T> : TextSafetyModuleBase<T>
             }
         }
 
-        NormalizeVector(centroid);
+        VectorHelper.NormalizeInPlace(centroid);
         return centroid;
     }
 
@@ -180,24 +181,6 @@ public class SemanticJailbreakDetector<T> : TextSafetyModuleBase<T>
         if (NumOps.LessThan(similarity, NumOps.Zero)) return NumOps.Zero;
         if (NumOps.GreaterThan(similarity, NumOps.One)) return NumOps.One;
         return similarity;
-    }
-
-    private static void NormalizeVector(Vector<T> v)
-    {
-        T sumSq = NumOps.Zero;
-        for (int i = 0; i < v.Length; i++)
-        {
-            sumSq = NumOps.Add(sumSq, NumOps.Multiply(v[i], v[i]));
-        }
-
-        double norm = Math.Sqrt(NumOps.ToDouble(sumSq));
-        if (norm < 1e-10) return;
-
-        T normT = NumOps.FromDouble(norm);
-        for (int i = 0; i < v.Length; i++)
-        {
-            v[i] = NumOps.Divide(v[i], normT);
-        }
     }
 
     private static int HashString(string text)

@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Enums;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
@@ -452,7 +453,7 @@ public class AudioVisualEventLocalizationNetwork<T> : NeuralNetworkBase<T>, IAud
 
             // Compute text-to-feature similarity
             var descriptionEmbedding = EncodeTextDescription(eventDescription);
-            var similarity = ComputeCosineSimilarity(fusedFeatures, descriptionEmbedding);
+            var similarity = _numOps.FromDouble(VectorHelper.CosineSimilarity(fusedFeatures, descriptionEmbedding));
 
             if (_numOps.ToDouble(similarity) > 0.3)
             {
@@ -607,7 +608,7 @@ public class AudioVisualEventLocalizationNetwork<T> : NeuralNetworkBase<T>, IAud
                 audioWaveform, frameList, searchStart, searchEnd, frameRate);
 
             var searchFeatures = FuseFeatures(EncodeAudio(searchAudio), EncodeVisual(searchFrames));
-            var similarity = ComputeCosineSimilarity(referenceFeatures, searchFeatures);
+            var similarity = _numOps.FromDouble(VectorHelper.CosineSimilarity(referenceFeatures, searchFeatures));
 
             if (_numOps.ToDouble(similarity) < 0.5)
             {
@@ -705,9 +706,9 @@ public class AudioVisualEventLocalizationNetwork<T> : NeuralNetworkBase<T>, IAud
 
         for (int i = 1; i < segmentFeatures.Count; i++)
         {
-            var similarity = ComputeCosineSimilarity(
+            var similarity = _numOps.FromDouble(VectorHelper.CosineSimilarity(
                 segmentFeatures[i - 1].Features,
-                segmentFeatures[i].Features);
+                segmentFeatures[i].Features));
 
             if (_numOps.Compare(_numOps.Subtract(_numOps.One, similarity), threshold) > 0)
             {
@@ -1081,7 +1082,7 @@ public class AudioVisualEventLocalizationNetwork<T> : NeuralNetworkBase<T>, IAud
         }
 
         // L2 normalize
-        return NormalizeVector(result);
+        return VectorHelper.Normalize(result);
     }
 
     /// <summary>
@@ -1103,51 +1104,6 @@ public class AudioVisualEventLocalizationNetwork<T> : NeuralNetworkBase<T>, IAud
             }
             return hash;
         }
-    }
-
-    private T ComputeCosineSimilarity(Vector<T> a, Vector<T> b)
-    {
-        int minLen = Math.Min(a.Length, b.Length);
-        T dot = _numOps.Zero;
-        T normA = _numOps.Zero;
-        T normB = _numOps.Zero;
-
-        for (int i = 0; i < minLen; i++)
-        {
-            dot = _numOps.Add(dot, _numOps.Multiply(a[i], b[i]));
-            normA = _numOps.Add(normA, _numOps.Multiply(a[i], a[i]));
-            normB = _numOps.Add(normB, _numOps.Multiply(b[i], b[i]));
-        }
-
-        var denom = _numOps.Multiply(_numOps.Sqrt(normA), _numOps.Sqrt(normB));
-        if (_numOps.ToDouble(denom) < 1e-8)
-        {
-            return _numOps.Zero;
-        }
-
-        return _numOps.Divide(dot, denom);
-    }
-
-    private Vector<T> NormalizeVector(Vector<T> vec)
-    {
-        T norm = _numOps.Zero;
-        for (int i = 0; i < vec.Length; i++)
-        {
-            norm = _numOps.Add(norm, _numOps.Multiply(vec[i], vec[i]));
-        }
-        norm = _numOps.Sqrt(norm);
-
-        if (_numOps.ToDouble(norm) < 1e-8)
-        {
-            return vec;
-        }
-
-        var result = new Vector<T>(vec.Length);
-        for (int i = 0; i < vec.Length; i++)
-        {
-            result[i] = _numOps.Divide(vec[i], norm);
-        }
-        return result;
     }
 
     private T ComputeAverageScore(List<T> scores, int start, int end)
@@ -1196,7 +1152,7 @@ public class AudioVisualEventLocalizationNetwork<T> : NeuralNetworkBase<T>, IAud
 
     private T ComputeSyncQuality(Vector<T> audioFeatures, Vector<T> visualFeatures)
     {
-        return ComputeCosineSimilarity(audioFeatures, visualFeatures);
+        return _numOps.FromDouble(VectorHelper.CosineSimilarity(audioFeatures, visualFeatures));
     }
 
     private string DescribeSyncEvent(Tensor<T> audioSeg, IEnumerable<Tensor<T>> frameSeg)
