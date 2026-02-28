@@ -419,13 +419,10 @@ public class KDTree<T>
 
     private T ComputeSquaredDistance(Vector<T> query, int dataIndex)
     {
-        T sumSquared = _numOps.Zero;
-        for (int i = 0; i < _dimensions; i++)
-        {
-            T diff = _numOps.Subtract(query[i], _data![dataIndex, i]);
-            sumSquared = _numOps.Add(sumSquared, _numOps.Multiply(diff, diff));
-        }
-        return sumSquared;
+        var engine = AiDotNetEngine.Current;
+        var point = GetRow(_data!, dataIndex);
+        var diff = engine.Subtract(query, point);
+        return engine.DotProduct(diff, diff);
     }
 
     private Vector<T> GetRow(Matrix<T> matrix, int rowIndex)

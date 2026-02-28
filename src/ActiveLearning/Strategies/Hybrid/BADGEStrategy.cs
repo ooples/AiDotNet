@@ -332,16 +332,9 @@ public class BADGEStrategy<T, TInput, TOutput> : IQueryStrategy<T, TInput, TOutp
 
     private T ComputeSquaredDistance(Vector<T> a, Vector<T> b)
     {
-        int length = Math.Min(a.Length, b.Length);
-        T sum = NumOps.Zero;
-
-        for (int i = 0; i < length; i++)
-        {
-            var diff = NumOps.Subtract(a[i], b[i]);
-            sum = NumOps.Add(sum, NumOps.Multiply(diff, diff));
-        }
-
-        return sum;
+        var engine = AiDotNetEngine.Current;
+        var diff = engine.Subtract(a, b);
+        return engine.DotProduct(diff, diff);
     }
 
     private int GetArgMax(Vector<T> v)
