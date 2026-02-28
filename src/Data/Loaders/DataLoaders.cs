@@ -2,10 +2,13 @@ using AiDotNet.Data.Audio;
 using AiDotNet.Data.Audio.Benchmarks;
 using AiDotNet.Data.Formats;
 using AiDotNet.Data.Geometry;
+using AiDotNet.Data.Graph;
 using AiDotNet.Data.Multimodal;
+using AiDotNet.Data.Text;
 using AiDotNet.Data.Text.Benchmarks;
 using AiDotNet.Data.Transforms;
 using AiDotNet.Data.Video;
+using AiDotNet.Data.Video.Benchmarks;
 using AiDotNet.Data.Vision;
 using AiDotNet.Data.Vision.Benchmarks;
 using AiDotNet.FederatedLearning.Benchmarks.Leaf;
@@ -1531,6 +1534,258 @@ public static class DataLoaders
     public static MaestroDataLoader<T> Maestro<T>(MaestroDataLoaderOptions? options = null)
     {
         return new MaestroDataLoader<T>(options);
+    }
+
+    // --- Text/NLP Benchmark Loaders ---
+
+    /// <summary>
+    /// Creates a GLUE benchmark data loader (9 NLU tasks for evaluating language understanding).
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (task, max sequence length, vocabulary size).</param>
+    /// <returns>A GLUE data loader.</returns>
+    public static GlueDataLoader<T> Glue<T>(GlueDataLoaderOptions? options = null)
+    {
+        return new GlueDataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates a SuperGLUE benchmark data loader (8 advanced NLU tasks).
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (task, max sequence length, vocabulary size).</param>
+    /// <returns>A SuperGLUE data loader.</returns>
+    public static SuperGlueDataLoader<T> SuperGlue<T>(SuperGlueDataLoaderOptions? options = null)
+    {
+        return new SuperGlueDataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates a SQuAD reading comprehension data loader (100K+ question-answer pairs).
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (context length, question length, version).</param>
+    /// <returns>A SQuAD data loader.</returns>
+    public static SquadDataLoader<T> Squad<T>(SquadDataLoaderOptions? options = null)
+    {
+        return new SquadDataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates a WikiText-103 language modeling data loader (100M+ tokens from Wikipedia).
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (sequence length, vocabulary size).</param>
+    /// <returns>A WikiText-103 data loader.</returns>
+    public static WikiText103DataLoader<T> WikiText103<T>(WikiText103DataLoaderOptions? options = null)
+    {
+        return new WikiText103DataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates a streaming text dataset for LLM pre-training on large text corpora.
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (sequence length, vocabulary size, file pattern).</param>
+    /// <returns>A streaming text dataset loader.</returns>
+    public static StreamingTextDataset<T> StreamingText<T>(StreamingTextDatasetOptions? options = null)
+    {
+        return new StreamingTextDataset<T>(options);
+    }
+
+    // --- Video Benchmark Loaders ---
+
+    /// <summary>
+    /// Creates a Kinetics-400 video action recognition data loader (400 classes, ~300K clips).
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (frames per video, resolution, normalization).</param>
+    /// <returns>A Kinetics-400 data loader.</returns>
+    public static Kinetics400DataLoader<T> Kinetics400<T>(Kinetics400DataLoaderOptions? options = null)
+    {
+        return new Kinetics400DataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates an HMDB-51 video action recognition data loader (51 classes, 6.8K clips).
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (frames per video, resolution, split number).</param>
+    /// <returns>An HMDB-51 data loader.</returns>
+    public static Hmdb51DataLoader<T> Hmdb51<T>(Hmdb51DataLoaderOptions? options = null)
+    {
+        return new Hmdb51DataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates a UCF-101 video action recognition data loader (101 classes, 13.3K clips).
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (frames per video, resolution, split number).</param>
+    /// <returns>A UCF-101 data loader.</returns>
+    public static Ucf101DataLoader<T> Ucf101<T>(Ucf101DataLoaderOptions? options = null)
+    {
+        return new Ucf101DataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates a Something-Something V2 video understanding data loader (174 classes, ~220K clips).
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (frames per video, resolution).</param>
+    /// <returns>A Something-Something V2 data loader.</returns>
+    public static SomethingSomethingV2DataLoader<T> SomethingSomethingV2<T>(SomethingSomethingV2DataLoaderOptions? options = null)
+    {
+        return new SomethingSomethingV2DataLoader<T>(options);
+    }
+
+    // --- 3D Point Cloud Loaders ---
+
+    /// <summary>
+    /// Creates a KITTI 3D object detection data loader (LiDAR point clouds with bounding boxes).
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (points per sample, include reflectance).</param>
+    /// <returns>A KITTI data loader.</returns>
+    public static KittiDataLoader<T> Kitti<T>(KittiDataLoaderOptions? options = null)
+    {
+        return new KittiDataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates a SemanticKITTI per-point semantic segmentation data loader (28 classes).
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (points per sample, num classes).</param>
+    /// <returns>A SemanticKITTI data loader.</returns>
+    public static SemanticKittiDataLoader<T> SemanticKitti<T>(SemanticKittiDataLoaderOptions? options = null)
+    {
+        return new SemanticKittiDataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates a Waymo Open Dataset 3D detection data loader (LiDAR point clouds).
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (points per sample, include intensity).</param>
+    /// <returns>A Waymo data loader.</returns>
+    public static WaymoDataLoader<T> Waymo<T>(WaymoDataLoaderOptions? options = null)
+    {
+        return new WaymoDataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates a nuScenes 3D object detection data loader (LiDAR point clouds, 23 classes).
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (points per sample, include intensity).</param>
+    /// <returns>A nuScenes data loader.</returns>
+    public static NuScenesDataLoader<T> NuScenes<T>(NuScenesDataLoaderOptions? options = null)
+    {
+        return new NuScenesDataLoader<T>(options);
+    }
+
+    // --- Graph Benchmark Loaders ---
+
+    /// <summary>
+    /// Creates a QM9 molecular property prediction data loader (~134K molecules, 19 properties).
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (target property, max samples).</param>
+    /// <returns>A QM9 data loader.</returns>
+    public static Qm9DataLoader<T> Qm9<T>(Qm9DataLoaderOptions? options = null)
+    {
+        return new Qm9DataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates a ZINC molecular dataset data loader (~250K drug-like molecules).
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (use subset, max samples).</param>
+    /// <returns>A ZINC data loader.</returns>
+    public static ZincDataLoader<T> Zinc<T>(ZincDataLoaderOptions? options = null)
+    {
+        return new ZincDataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates a protein structure graph classification data loader.
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (feature dimension, num classes).</param>
+    /// <returns>A protein data loader.</returns>
+    public static ProteinDataLoader<T> Protein<T>(ProteinDataLoaderOptions? options = null)
+    {
+        return new ProteinDataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates a Wikidata5M knowledge graph link prediction data loader (~5M entities, 21M triplets).
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (embedding dimension, max samples).</param>
+    /// <returns>A Wikidata5M data loader.</returns>
+    public static Wikidata5mDataLoader<T> Wikidata5m<T>(Wikidata5mDataLoaderOptions? options = null)
+    {
+        return new Wikidata5mDataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates a temporal graph data loader for dynamic link prediction.
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (feature dimensions, max samples).</param>
+    /// <returns>A temporal graph data loader.</returns>
+    public static TemporalGraphDataLoader<T> TemporalGraph<T>(TemporalGraphDataLoaderOptions? options = null)
+    {
+        return new TemporalGraphDataLoader<T>(options);
+    }
+
+    // --- Document AI Loaders ---
+
+    /// <summary>
+    /// Creates a DocVQA document visual question answering data loader.
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (image size, max question length).</param>
+    /// <returns>A DocVQA data loader.</returns>
+    public static DocVqaDataLoader<T> DocVqa<T>(DocVqaDataLoaderOptions? options = null)
+    {
+        return new DocVqaDataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates a PubLayNet document layout analysis data loader (~360K images, 5 categories).
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (image size, max regions).</param>
+    /// <returns>A PubLayNet data loader.</returns>
+    public static PubLayNetDataLoader<T> PubLayNet<T>(PubLayNetDataLoaderOptions? options = null)
+    {
+        return new PubLayNetDataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates an ADE20K semantic segmentation data loader (~25K images, 150 classes).
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (image size, num classes, normalization).</param>
+    /// <returns>An ADE20K data loader.</returns>
+    public static Ade20kDataLoader<T> Ade20k<T>(Ade20kDataLoaderOptions? options = null)
+    {
+        return new Ade20kDataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates a CelebA face attributes data loader (~200K images, 40 binary attributes).
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (image size, num attributes, normalization).</param>
+    /// <returns>A CelebA data loader.</returns>
+    public static CelebADataLoader<T> CelebA<T>(CelebADataLoaderOptions? options = null)
+    {
+        return new CelebADataLoader<T>(options);
     }
 
     #endregion
