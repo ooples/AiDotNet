@@ -1246,6 +1246,168 @@ public static class DataLoaders
         return new Imdb50kDataLoader<T>(options);
     }
 
+    /// <summary>
+    /// Creates an ImageNet-1K (ILSVRC 2012) dataset loader (~1.28M train / 50K val, 1000 classes).
+    /// Requires manual download from https://image-net.org/.
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (data path, image size, max samples).</param>
+    /// <returns>An ImageNet-1K data loader.</returns>
+    public static ImageNet1kDataLoader<T> ImageNet1k<T>(ImageNet1kDataLoaderOptions? options = null)
+    {
+        return new ImageNet1kDataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates an ImageNet-21K dataset loader (~14.2M images, 21,841 categories).
+    /// Requires manual download from https://image-net.org/.
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (data path, max classes, max samples).</param>
+    /// <returns>An ImageNet-21K data loader.</returns>
+    public static ImageNet21kDataLoader<T> ImageNet21k<T>(ImageNet21kDataLoaderOptions? options = null)
+    {
+        return new ImageNet21kDataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates a Places365 scene recognition dataset loader (1.8M train / 36.5K val, 365 scene categories).
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (data path, image size).</param>
+    /// <returns>A Places365 data loader.</returns>
+    public static Places365DataLoader<T> Places365<T>(Places365DataLoaderOptions? options = null)
+    {
+        return new Places365DataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates an iNaturalist species classification dataset loader (~2.7M images, 10,000 species).
+    /// Requires manual download from https://github.com/visipedia/inat_comp.
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (data path, version year, max samples).</param>
+    /// <returns>An iNaturalist data loader.</returns>
+    public static INaturalistDataLoader<T> INaturalist<T>(INaturalistDataLoaderOptions? options = null)
+    {
+        return new INaturalistDataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates a COCO 2017 object detection dataset loader (118K train / 5K val, 80 categories).
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (data path, max detections, image size).</param>
+    /// <returns>A COCO Detection data loader.</returns>
+    public static CocoDetectionDataLoader<T> CocoDetection<T>(CocoDetectionDataLoaderOptions? options = null)
+    {
+        return new CocoDetectionDataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates a Pascal VOC object detection dataset loader (20 categories, XML annotations).
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (data path, year, max detections).</param>
+    /// <returns>A Pascal VOC data loader.</returns>
+    public static PascalVocDataLoader<T> PascalVoc<T>(PascalVocDataLoaderOptions? options = null)
+    {
+        return new PascalVocDataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates an Open Images V7 object detection dataset loader (~9M images, 600 categories).
+    /// Requires manual download from https://storage.googleapis.com/openimages/web/index.html.
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (data path, max detections).</param>
+    /// <returns>An Open Images data loader.</returns>
+    public static OpenImagesDataLoader<T> OpenImages<T>(OpenImagesDataLoaderOptions? options = null)
+    {
+        return new OpenImagesDataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates a NIH Chest X-ray 14 multi-label classification dataset loader (112K images, 14 diseases).
+    /// Requires manual download from https://nihcc.app.box.com/v/ChestXray-NIHCC.
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (data path, image size).</param>
+    /// <returns>A Chest X-ray 14 data loader.</returns>
+    public static ChestXray14DataLoader<T> ChestXray14<T>(ChestXray14DataLoaderOptions? options = null)
+    {
+        return new ChestXray14DataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates a CheXpert chest radiograph dataset loader (224K images, 14 observations with uncertainty).
+    /// Requires manual download from Stanford AIMI.
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (data path, uncertainty policy).</param>
+    /// <returns>A CheXpert data loader.</returns>
+    public static CheXpertDataLoader<T> CheXpert<T>(CheXpertDataLoaderOptions? options = null)
+    {
+        return new CheXpertDataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates an ISIC Skin Lesion classification dataset loader (~25K images, 8 diagnostic categories).
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (data path, image size).</param>
+    /// <returns>A Skin Lesion data loader.</returns>
+    public static SkinLesionDataLoader<T> SkinLesion<T>(SkinLesionDataLoaderOptions? options = null)
+    {
+        return new SkinLesionDataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates a Retinal Fundus diabetic retinopathy grading dataset loader (5 severity levels).
+    /// Requires manual download from Kaggle.
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (data path, image size).</param>
+    /// <returns>A Retinal Fundus data loader.</returns>
+    public static RetinalFundusDataLoader<T> RetinalFundus<T>(RetinalFundusDataLoaderOptions? options = null)
+    {
+        return new RetinalFundusDataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates a BigEarthNet multi-label remote sensing dataset loader (590K Sentinel-2 patches, 19 or 43 classes).
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (data path, num bands, class scheme).</param>
+    /// <returns>A BigEarthNet data loader.</returns>
+    public static BigEarthNetDataLoader<T> BigEarthNet<T>(BigEarthNetDataLoaderOptions? options = null)
+    {
+        return new BigEarthNetDataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates an EuroSAT land use/land cover classification dataset loader (27K patches, 64x64, 10 classes).
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (data path, normalization).</param>
+    /// <returns>An EuroSAT data loader.</returns>
+    public static EuroSatDataLoader<T> EuroSat<T>(EuroSatDataLoaderOptions? options = null)
+    {
+        return new EuroSatDataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates an fMoW (Functional Map of the World) satellite imagery dataset loader (1M+ images, 62 categories).
+    /// Requires manual download from https://github.com/fMoW/dataset.
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (data path, image size, max samples).</param>
+    /// <returns>An fMoW data loader.</returns>
+    public static FMoWDataLoader<T> FMoW<T>(FMoWDataLoaderOptions? options = null)
+    {
+        return new FMoWDataLoader<T>(options);
+    }
+
     #endregion
 
     #region Format-Specific Loaders
