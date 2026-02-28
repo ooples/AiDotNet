@@ -578,8 +578,8 @@ public class PSENet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
 
         var currentParams = GetParameters();
         T lr = NumOps.FromDouble(0.0001);
-        for (int i = 0; i < currentParams.Length; i++)
-            currentParams[i] = NumOps.Subtract(currentParams[i], NumOps.Multiply(lr, gradients[i]));
+        
+        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, lr));
         SetParameters(currentParams);
     }
 
