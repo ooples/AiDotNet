@@ -5829,14 +5829,7 @@ public static class StatisticsHelper<T>
         if (v1.Length != v2.Length)
             throw new ArgumentException("Vectors must have the same length");
 
-        T sum = _numOps.Zero;
-        for (int i = 0; i < v1.Length; i++)
-        {
-            T diff = _numOps.Subtract(v1[i], v2[i]);
-            sum = _numOps.Add(sum, _numOps.Multiply(diff, diff));
-        }
-
-        return _numOps.Sqrt(sum);
+        return VectorHelper.EuclideanDistance(v1, v2);
     }
 
     /// <summary>

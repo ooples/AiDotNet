@@ -856,20 +856,7 @@ public class RelationalDistillationStrategy<T> : DistillationStrategyBase<T>
 
     private T ComputeCosineDistance(Vector<T> v1, Vector<T> v2)
     {
-        T dot = NumOps.Zero;
-        T norm1 = NumOps.Zero;
-        T norm2 = NumOps.Zero;
-
-        for (int i = 0; i < v1.Length; i++)
-        {
-            dot = NumOps.Add(dot, NumOps.Multiply(v1[i], v2[i]));
-            norm1 = NumOps.Add(norm1, NumOps.Multiply(v1[i], v1[i]));
-            norm2 = NumOps.Add(norm2, NumOps.Multiply(v2[i], v2[i]));
-        }
-
-        double similarity = Convert.ToDouble(dot) /
-            (Math.Sqrt(Convert.ToDouble(norm1)) * Math.Sqrt(Convert.ToDouble(norm2)) + Epsilon);
-
+        double similarity = VectorHelper.CosineSimilarity(v1, v2);
         return NumOps.FromDouble(1.0 - similarity); // Distance = 1 - similarity
     }
 

@@ -31,14 +31,7 @@ public static class NeuralNetworkHelper<T>
     /// </remarks>
     public static T EuclideanDistance(Vector<T> v1, Vector<T> v2)
     {
-        var sum = _numOps.Zero;
-        for (int i = 0; i < v1.Length; i++)
-        {
-            var diff = _numOps.Subtract(v1[i], v2[i]);
-            sum = _numOps.Add(sum, _numOps.Multiply(diff, diff));
-        }
-
-        return _numOps.Sqrt(sum);
+        return VectorHelper.EuclideanDistance(v1, v2);
     }
 
     /// <summary>

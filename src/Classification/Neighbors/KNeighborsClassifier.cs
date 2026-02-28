@@ -263,28 +263,8 @@ public class KNeighborsClassifier<T> : ProbabilisticClassifierBase<T>
     /// </summary>
     private T ComputeCosineDistance(Vector<T> a, Vector<T> b)
     {
-        T dotProduct = NumOps.Zero;
-        T normA = NumOps.Zero;
-        T normB = NumOps.Zero;
-
-        for (int i = 0; i < a.Length; i++)
-        {
-            dotProduct = NumOps.Add(dotProduct, NumOps.Multiply(a[i], b[i]));
-            normA = NumOps.Add(normA, NumOps.Multiply(a[i], a[i]));
-            normB = NumOps.Add(normB, NumOps.Multiply(b[i], b[i]));
-        }
-
-        normA = NumOps.Sqrt(normA);
-        normB = NumOps.Sqrt(normB);
-
-        T epsilon = NumOps.FromDouble(1e-10);
-        if (NumOps.Compare(normA, epsilon) < 0 || NumOps.Compare(normB, epsilon) < 0)
-        {
-            return NumOps.One; // Maximum distance if one vector is zero
-        }
-
-        T cosineSimilarity = NumOps.Divide(dotProduct, NumOps.Multiply(normA, normB));
-        return NumOps.Subtract(NumOps.One, cosineSimilarity);
+        double similarity = VectorHelper.CosineSimilarity(a, b);
+        return NumOps.FromDouble(1.0 - similarity);
     }
 
     /// <summary>
