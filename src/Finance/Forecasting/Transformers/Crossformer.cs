@@ -848,14 +848,7 @@ public class Crossformer<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> AddResidualConnection(Tensor<T> input, Tensor<T> processed)
     {
-        var result = new Tensor<T>(input.Shape);
-
-        for (int i = 0; i < input.Length && i < processed.Length; i++)
-        {
-            result[i] = NumOps.Add(input[i], processed[i]);
-        }
-
-        return result;
+        return Engine.TensorAdd(input, processed);
     }
 
     /// <summary>

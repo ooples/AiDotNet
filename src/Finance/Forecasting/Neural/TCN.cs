@@ -849,24 +849,7 @@ public class TCN<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
-        var result = new Tensor<T>(a.Shape);
-        int length = Math.Min(a.Length, b.Length);
-
-        for (int i = 0; i < length; i++)
-        {
-            result.Data.Span[i] = NumOps.Add(a.Data.Span[i], b.Data.Span[i]);
-        }
-
-        // If tensors have different lengths, copy remaining elements from the longer one
-        if (a.Length > length)
-        {
-            for (int i = length; i < a.Length; i++)
-            {
-                result.Data.Span[i] = a.Data.Span[i];
-            }
-        }
-
-        return result;
+        return Engine.TensorAdd(a, b);
     }
 
     /// <summary>

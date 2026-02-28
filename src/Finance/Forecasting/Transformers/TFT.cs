@@ -895,19 +895,11 @@ public class TFT<T> : ForecastingModelBase<T>
     private Tensor<T> AddGatedConnection(Tensor<T> input, Tensor<T> processed)
     {
         // Simplified gating: element-wise combination
-        var result = new Tensor<T>(input.Shape);
+        // Simple average: (input * 0.5) + (processed * 0.5)
         T half = NumOps.FromDouble(0.5);
-
-        for (int i = 0; i < input.Length && i < processed.Length; i++)
-        {
-            // Simple average for now; full implementation would use learned gates
-            var combined = NumOps.Add(
-                NumOps.Multiply(input[i], half),
-                NumOps.Multiply(processed[i], half));
-            result[i] = combined;
-        }
-
-        return result;
+        var scaledInput = Engine.TensorMultiplyScalar(input, half);
+        var scaledProcessed = Engine.TensorMultiplyScalar(processed, half);
+        return Engine.TensorAdd(scaledInput, scaledProcessed);
     }
 
     /// <summary>
