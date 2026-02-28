@@ -1290,12 +1290,7 @@ public class ImageBindNeuralNetwork<T> : NeuralNetworkBase<T>, IImageBindModel<T
 
     private T ComputeNorm(Vector<T> vector)
     {
-        T sumSquares = NumOps.Zero;
-        for (int i = 0; i < vector.Length; i++)
-        {
-            sumSquares = NumOps.Add(sumSquares, NumOps.Multiply(vector[i], vector[i]));
-        }
-        return NumOps.Sqrt(sumSquares);
+        return NumOps.Sqrt(Engine.DotProduct(vector, vector));
     }
 
     private List<T> Softmax(List<T> values)

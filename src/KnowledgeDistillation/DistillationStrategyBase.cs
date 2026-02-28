@@ -37,6 +37,11 @@ public abstract class DistillationStrategyBase<T> : IDistillationStrategy<T>
     /// </summary>
     protected readonly INumericOperations<T> NumOps;
 
+    /// <summary>
+    /// Hardware-accelerated engine for vector/tensor operations.
+    /// </summary>
+    protected static IEngine Engine => AiDotNetEngine.Current;
+
     private double _temperature;
     private double _alpha;
 

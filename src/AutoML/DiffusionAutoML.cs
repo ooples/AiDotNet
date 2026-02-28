@@ -737,6 +737,7 @@ namespace AiDotNet.AutoML
     internal class DiffusionAutoMLModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
     {
         private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+        private static IEngine Engine => AiDotNetEngine.Current;
         private readonly UNetNoisePredictor<T> _noisePredictor;
         private readonly StandardVAE<T> _vae;
         private readonly INoiseScheduler<T> _scheduler;
@@ -1047,8 +1048,7 @@ namespace AiDotNet.AutoML
         public void ApplyGradients(Vector<T> gradients, T learningRate)
         {
             var parameters = GetParameters();
-            var engine = AiDotNetEngine.Current;
-            SetParameters(engine.Subtract(parameters, engine.Multiply(gradients, learningRate)));
+            SetParameters(Engine.Subtract(parameters, Engine.Multiply(gradients, learningRate)));
         }
 
         public ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)

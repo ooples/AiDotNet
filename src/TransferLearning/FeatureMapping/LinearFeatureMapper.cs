@@ -20,6 +20,7 @@ namespace AiDotNet.TransferLearning.FeatureMapping;
 public class LinearFeatureMapper<T> : IFeatureMapper<T>
 {
     private readonly INumericOperations<T> _numOps;
+    protected static IEngine Engine => Engine;
     private Matrix<T>? _projectionMatrix;
     private Matrix<T>? _reverseProjectionMatrix;
     private T _confidence;
@@ -226,7 +227,7 @@ public class LinearFeatureMapper<T> : IFeatureMapper<T>
     /// </summary>
     private T DotProduct(Vector<T> a, Vector<T> b)
     {
-        return AiDotNetEngine.Current.DotProduct(a, b);
+        return Engine.DotProduct(a, b);
     }
 
     /// <summary>
@@ -234,7 +235,7 @@ public class LinearFeatureMapper<T> : IFeatureMapper<T>
     /// </summary>
     private T VectorNorm(Vector<T> vector)
     {
-        return _numOps.Sqrt(AiDotNetEngine.Current.DotProduct(vector, vector));
+        return _numOps.Sqrt(Engine.DotProduct(vector, vector));
     }
 
     /// <summary>
@@ -242,7 +243,7 @@ public class LinearFeatureMapper<T> : IFeatureMapper<T>
     /// </summary>
     private Vector<T> SubtractScaled(Vector<T> a, Vector<T> b, T scale)
     {
-        var engine = AiDotNetEngine.Current;
+        var engine = Engine;
         return engine.Subtract(a, engine.Multiply(b, scale));
     }
 
@@ -251,7 +252,7 @@ public class LinearFeatureMapper<T> : IFeatureMapper<T>
     /// </summary>
     private Vector<T> ScaleVector(Vector<T> vector, T scale)
     {
-        return AiDotNetEngine.Current.Multiply(vector, scale);
+        return Engine.Multiply(vector, scale);
     }
 
     /// <summary>

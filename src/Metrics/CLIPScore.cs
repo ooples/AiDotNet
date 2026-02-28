@@ -36,6 +36,7 @@ namespace AiDotNet.Metrics;
 public class CLIPScore<T> where T : struct
 {
     private readonly INumericOperations<T> _numOps;
+    protected static IEngine Engine => Engine;
     private readonly IMultimodalEmbedding<T> _clipModel;
 
     /// <summary>
@@ -279,7 +280,7 @@ public class CLIPScore<T> where T : struct
     /// </summary>
     private Vector<T> SubtractVectors(Vector<T> a, Vector<T> b)
     {
-        return AiDotNetEngine.Current.Subtract(a, b);
+        return Engine.Subtract(a, b);
     }
 
     /// <summary>
@@ -287,11 +288,7 @@ public class CLIPScore<T> where T : struct
     /// </summary>
     private Vector<T> NormalizeVector(Vector<T> v)
     {
-        T normSq = _numOps.Zero;
-        for (int i = 0; i < v.Length; i++)
-        {
-            normSq = _numOps.Add(normSq, _numOps.Multiply(v[i], v[i]));
-        }
+        T normSq = Engine.DotProduct(v, v);
 
         double normDouble = Math.Sqrt(_numOps.ToDouble(normSq));
         if (normDouble < 1e-10)
@@ -300,12 +297,7 @@ public class CLIPScore<T> where T : struct
         }
 
         T normInv = _numOps.FromDouble(1.0 / normDouble);
-        var result = new Vector<T>(v.Length);
-        for (int i = 0; i < v.Length; i++)
-        {
-            result[i] = _numOps.Multiply(v[i], normInv);
-        }
-        return result;
+        return Engine.Multiply(v, normInv);
     }
 
     /// <summary>
@@ -313,16 +305,9 @@ public class CLIPScore<T> where T : struct
     /// </summary>
     private T ComputeCosineSimilarity(Vector<T> a, Vector<T> b)
     {
-        T dot = _numOps.Zero;
-        T normASq = _numOps.Zero;
-        T normBSq = _numOps.Zero;
-
-        for (int i = 0; i < a.Length; i++)
-        {
-            dot = _numOps.Add(dot, _numOps.Multiply(a[i], b[i]));
-            normASq = _numOps.Add(normASq, _numOps.Multiply(a[i], a[i]));
-            normBSq = _numOps.Add(normBSq, _numOps.Multiply(b[i], b[i]));
-        }
+        T dot = Engine.DotProduct(a, b);
+        T normASq = Engine.DotProduct(a, a);
+        T normBSq = Engine.DotProduct(b, b);
 
         T denominator = _numOps.Sqrt(_numOps.Multiply(normASq, normBSq));
 

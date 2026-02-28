@@ -919,12 +919,12 @@ public class RelationalDistillationStrategy<T> : DistillationStrategyBase<T>
 
     private Vector<T> Subtract(Vector<T> v1, Vector<T> v2)
     {
-        return AiDotNetEngine.Current.Subtract(v1, v2);
+        return Engine.Subtract(v1, v2);
     }
 
     private T DotProduct(Vector<T> v1, Vector<T> v2)
     {
-        return AiDotNetEngine.Current.DotProduct(v1, v2);
+        return Engine.DotProduct(v1, v2);
     }
 
     private T Norm(Vector<T> v)

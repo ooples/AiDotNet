@@ -32,6 +32,7 @@ namespace AiDotNet.ContinualLearning;
 public class GradientEpisodicMemory<T> : IContinualLearningStrategy<T>
 {
     private readonly INumericOperations<T> _numOps;
+    protected static IEngine Engine => AiDotNetEngine.Current;
     private readonly List<(Tensor<T> inputs, Tensor<T> targets)> _episodicMemory;
     private readonly List<Vector<T>> _referenceGradients;
     private readonly int _memorySize;
@@ -259,8 +260,7 @@ public class GradientEpisodicMemory<T> : IContinualLearningStrategy<T>
             if (_numOps.GreaterThan(refNormSq, _numOps.Zero))
             {
                 var scale = _numOps.Divide(dot, refNormSq);
-                var engine = AiDotNetEngine.Current;
-                projected = engine.Subtract(projected, engine.Multiply(refGrad, scale));
+                projected = Engine.Subtract(projected, Engine.Multiply(refGrad, scale));
             }
         }
 
@@ -272,7 +272,7 @@ public class GradientEpisodicMemory<T> : IContinualLearningStrategy<T>
     /// </summary>
     private T DotProduct(Vector<T> a, Vector<T> b)
     {
-        return AiDotNetEngine.Current.DotProduct(a, b);
+        return Engine.DotProduct(a, b);
     }
 
     /// <summary>

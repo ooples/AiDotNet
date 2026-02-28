@@ -533,12 +533,7 @@ public class LAMBOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// </summary>
     private T ComputeL2Norm(Vector<T> vector)
     {
-        T sumSquared = NumOps.Zero;
-        for (int i = 0; i < vector.Length; i++)
-        {
-            sumSquared = NumOps.Add(sumSquared, NumOps.Multiply(vector[i], vector[i]));
-        }
-        return NumOps.Sqrt(sumSquared);
+        return NumOps.Sqrt(Engine.DotProduct(vector, vector));
     }
 
     /// <summary>

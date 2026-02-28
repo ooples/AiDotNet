@@ -238,12 +238,7 @@ public abstract class ContinualLearningStrategyBase<T, TInput, TOutput> : IConti
     /// <returns>The L2 norm.</returns>
     protected T ComputeL2Norm(Vector<T> vector)
     {
-        T sum = NumOps.Zero;
-        for (int i = 0; i < vector.Length; i++)
-        {
-            sum = NumOps.Add(sum, NumOps.Multiply(vector[i], vector[i]));
-        }
-        return NumOps.FromDouble(Math.Sqrt(Convert.ToDouble(sum)));
+        return NumOps.FromDouble(Math.Sqrt(Convert.ToDouble(Engine.DotProduct(vector, vector))));
     }
 
     /// <summary>

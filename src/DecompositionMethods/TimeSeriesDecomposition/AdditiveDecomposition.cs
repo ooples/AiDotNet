@@ -169,7 +169,7 @@ public class AdditiveDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// <returns>A new vector containing the result of a - b</returns>
     private Vector<T> SubtractVectors(Vector<T> a, Vector<T> b)
     {
-        return AiDotNetEngine.Current.Subtract(a, b);
+        return Engine.Subtract(a, b);
     }
 
     /// <summary>

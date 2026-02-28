@@ -138,6 +138,7 @@ namespace AiDotNet;
 /// </remarks>
 public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TInput, TOutput>
 {
+    private static IEngine Engine => AiDotNetEngine.Current;
     private PreprocessingPipeline<T, TInput, TInput>? _preprocessingPipeline;
     private PostprocessingPipeline<T, TOutput, TOutput>? _postprocessingPipeline;
     private IRegularization<T, TInput, TOutput>? _regularization;
@@ -5676,8 +5677,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                         // This doesn't preserve optimizer state but respects the learning rate
                         var currentParams = nnModel.GetParameters();
                         var learningRate = NumOps.FromDouble(options.LearningRate);
-                        var engine = AiDotNetEngine.Current;
-                        nnModel.UpdateParameters(engine.Subtract(currentParams, engine.Multiply(paramGradients, learningRate)));
+                        nnModel.UpdateParameters(Engine.Subtract(currentParams, Engine.Multiply(paramGradients, learningRate)));
                     }
                 }
                 catch (Exception ex)

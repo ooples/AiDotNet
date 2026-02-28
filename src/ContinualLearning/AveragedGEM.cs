@@ -37,6 +37,7 @@ namespace AiDotNet.ContinualLearning;
 public class AveragedGEM<T> : IContinualLearningStrategy<T>
 {
     private readonly INumericOperations<T> _numOps;
+    protected static IEngine Engine => AiDotNetEngine.Current;
     private readonly List<(Tensor<T> inputs, Tensor<T> targets)> _episodicMemory;
     private readonly int _memorySize;
     private readonly int _sampleSize;
@@ -293,7 +294,7 @@ public class AveragedGEM<T> : IContinualLearningStrategy<T>
     /// </summary>
     private T DotProduct(Vector<T> a, Vector<T> b)
     {
-        return AiDotNetEngine.Current.DotProduct(a, b);
+        return Engine.DotProduct(a, b);
     }
 
     /// <summary>

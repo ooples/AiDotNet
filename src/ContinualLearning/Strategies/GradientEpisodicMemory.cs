@@ -573,12 +573,7 @@ public class GradientEpisodicMemory<T, TInput, TOutput>
         if (Convert.ToDouble(norm) < 1e-10)
             return CloneVector(vector);
 
-        var normalized = new Vector<T>(vector.Length);
-        for (int i = 0; i < vector.Length; i++)
-        {
-            normalized[i] = NumOps.Divide(vector[i], norm);
-        }
-        return normalized;
+        return Engine.Multiply(vector, NumOps.Divide(NumOps.One, norm));
     }
 
     private Vector<T> ScaleVector(Vector<T> vector, T scale)

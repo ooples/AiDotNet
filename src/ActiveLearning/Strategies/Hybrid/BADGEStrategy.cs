@@ -44,6 +44,7 @@ public class BADGEStrategy<T, TInput, TOutput> : IQueryStrategy<T, TInput, TOutp
     private static Random ThreadRandom => _random ??= RandomHelper.CreateSecureRandom();
 
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+    protected static IEngine Engine => AiDotNetEngine.Current;
 
     private readonly int _numClasses;
     private readonly ActiveLearnerConfig<T>? _config;
@@ -345,12 +346,7 @@ public class BADGEStrategy<T, TInput, TOutput> : IQueryStrategy<T, TInput, TOutp
 
     private T ComputeNorm(Vector<T> v)
     {
-        T sum = NumOps.Zero;
-        for (int i = 0; i < v.Length; i++)
-        {
-            sum = NumOps.Add(sum, NumOps.Multiply(v[i], v[i]));
-        }
-        return NumOps.Sqrt(sum);
+        return NumOps.Sqrt(Engine.DotProduct(v, v));
     }
 
     private int GetArgMax(Vector<T> v)

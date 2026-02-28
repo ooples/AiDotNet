@@ -11,6 +11,7 @@ namespace AiDotNet.Models.Results;
 public partial class AiModelResult<T, TInput, TOutput>
 {
     private readonly INumericOperations<T> _robustnessNumOps = MathHelper.GetNumericOperations<T>();
+    private static IEngine RobustnessEngine => AiDotNetEngine.Current;
 
     [JsonProperty]
     internal AdversarialRobustnessOptions<T>? AdversarialRobustnessOptions { get; private set; }
@@ -305,16 +306,11 @@ public partial class AiModelResult<T, TInput, TOutput>
 
     private Vector<T> SubtractVectors(Vector<T> a, Vector<T> b)
     {
-        return AiDotNetEngine.Current.Subtract(a, b);
+        return RobustnessEngine.Subtract(a, b);
     }
 
     private T ComputeL2NormVector(Vector<T> vector)
     {
-        var sumSquares = _robustnessNumOps.Zero;
-        for (int i = 0; i < vector.Length; i++)
-        {
-            sumSquares = _robustnessNumOps.Add(sumSquares, _robustnessNumOps.Multiply(vector[i], vector[i]));
-        }
-        return _robustnessNumOps.Sqrt(sumSquares);
+        return _robustnessNumOps.Sqrt(RobustnessEngine.DotProduct(vector, vector));
     }
 }

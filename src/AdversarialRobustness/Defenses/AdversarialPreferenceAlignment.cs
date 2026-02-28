@@ -38,6 +38,7 @@ namespace AiDotNet.AdversarialRobustness.Defenses;
 public class AdversarialPreferenceAlignment<T> : IAlignmentMethod<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+    protected static IEngine Engine => AiDotNetEngine.Current;
 
     private AlignmentMethodOptions<T> _options;
     private readonly double _adversarialRatio;
@@ -436,25 +437,12 @@ public class AdversarialPreferenceAlignment<T> : IAlignmentMethod<T>
 
     private static Vector<T> ScaleVector(Vector<T> v, double scalar)
     {
-        var result = new T[v.Length];
-        for (int i = 0; i < v.Length; i++)
-        {
-            result[i] = NumOps.FromDouble(NumOps.ToDouble(v[i]) * scalar);
-        }
-
-        return new Vector<T>(result);
+        return Engine.Multiply(v, NumOps.FromDouble(scalar));
     }
 
     private static Vector<T> AddVectors(Vector<T> a, Vector<T> b)
     {
-        int len = Math.Min(a.Length, b.Length);
-        var result = new T[len];
-        for (int i = 0; i < len; i++)
-        {
-            result[i] = NumOps.Add(a[i], b[i]);
-        }
-
-        return new Vector<T>(result);
+        return Engine.Add(a, b);
     }
 
     private Vector<T> ComputeKLPenaltyGradient(Vector<T> currentParams, Vector<T> referenceParams)
