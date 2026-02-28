@@ -120,15 +120,10 @@ public class CelebADataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tenso
         for (int i = 0; i < totalSamples; i++)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            byte[] bytes = await FilePolyfill.ReadAllBytesAsync(imageFiles[i], cancellationToken);
-
-            int pixelsToRead = Math.Min(bytes.Length, featureSize);
+            var pixels = VisionLoaderHelper.LoadAndResizeImage<T>(imageFiles[i], _options.ImageHeight, _options.ImageWidth, 3, _options.Normalize);
             int featOff = i * featureSize;
-            double norm = _options.Normalize ? 255.0 : 1.0;
-            for (int p = 0; p < pixelsToRead; p++)
-            {
-                featuresData[featOff + p] = NumOps.FromDouble(bytes[p] / norm);
-            }
+            int copyLen = Math.Min(pixels.Length, featureSize);
+            Array.Copy(pixels, 0, featuresData, featOff, copyLen);
 
             // Labels from attributes map
             int lblOff = i * numAttrs;

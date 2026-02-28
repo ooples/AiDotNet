@@ -3,12 +3,15 @@ using System.Text;
 namespace AiDotNet.Data.Formats;
 
 /// <summary>
-/// Provides read/write access to datasets in a simplified HDF5-like binary format.
+/// Provides read/write access to datasets in a custom binary format for named multidimensional arrays,
+/// inspired by the HDF5 data model.
 /// </summary>
 /// <remarks>
 /// <para>
-/// This is a pure C# implementation of a simplified HDF5-compatible format for storing
-/// named multidimensional arrays. It does not require any external dependencies.
+/// <b>Important:</b> This is NOT a native HDF5 implementation and is NOT compatible with
+/// HDF5 files created by h5py, HDFView, or other HDF5 tools. It is a custom binary format
+/// designed for storing named tensor datasets within AiDotNet. For native HDF5 interop,
+/// use the PureHDF NuGet package.
 /// </para>
 /// <para>
 /// The on-disk format:

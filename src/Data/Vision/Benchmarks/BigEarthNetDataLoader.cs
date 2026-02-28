@@ -105,15 +105,11 @@ public class BigEarthNetDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, 
                 string bandFile = Path.Combine(patchDir, $"{patchName}_{bandSuffix}.tif");
                 if (File.Exists(bandFile))
                 {
-                    byte[] fileBytes = await FilePolyfill.ReadAllBytesAsync(bandFile, cancellationToken);
-                    int bandPixels = PatchSize * PatchSize;
-                    int copyLen = Math.Min(fileBytes.Length, bandPixels);
-                    for (int p = 0; p < copyLen; p++)
-                    {
-                        double value = fileBytes[p];
-                        if (_options.Normalize) value /= 255.0;
-                        featuresData[featureOffset + bandOffset + p] = NumOps.FromDouble(value);
-                    }
+                    // Load band as single-channel image; VisionLoaderHelper handles fallback for GeoTIFF
+                    var bandPixelsArr = VisionLoaderHelper.LoadAndResizeImage<T>(bandFile, PatchSize, PatchSize, 1, _options.Normalize);
+                    int bandPixelCount = PatchSize * PatchSize;
+                    int copyLen = Math.Min(bandPixelsArr.Length, bandPixelCount);
+                    Array.Copy(bandPixelsArr, 0, featuresData, featureOffset + bandOffset, copyLen);
                 }
 
                 bandOffset += PatchSize * PatchSize;

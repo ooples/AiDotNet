@@ -1,5 +1,6 @@
 using AiDotNet.Data.Geometry;
 using AiDotNet.Data.Loaders;
+using AiDotNet.Helpers;
 using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Data.Vision.Benchmarks;
@@ -82,15 +83,10 @@ public class Ade20kDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tenso
         for (int i = 0; i < totalSamples; i++)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            byte[] bytes = await FilePolyfill.ReadAllBytesAsync(imageFiles[i], cancellationToken);
-
-            int pixelsToRead = Math.Min(bytes.Length, featureSize);
+            var pixels = VisionLoaderHelper.LoadAndResizeImage<T>(imageFiles[i], h, w, 3, _options.Normalize);
             int featOff = i * featureSize;
-            double norm = _options.Normalize ? 255.0 : 1.0;
-            for (int p = 0; p < pixelsToRead; p++)
-            {
-                featuresData[featOff + p] = NumOps.FromDouble(bytes[p] / norm);
-            }
+            int copyLen = Math.Min(pixels.Length, featureSize);
+            Array.Copy(pixels, 0, featuresData, featOff, copyLen);
 
             // Try to find corresponding annotation mask
             string baseName = Path.GetFileNameWithoutExtension(imageFiles[i]);
@@ -98,11 +94,14 @@ public class Ade20kDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tenso
             int lblOff = i * labelSize;
             if (File.Exists(annFile))
             {
-                byte[] annBytes = await FilePolyfill.ReadAllBytesAsync(annFile, cancellationToken);
-                int annToRead = Math.Min(annBytes.Length, labelSize);
+                // Load annotation mask as single-channel image (class indices per pixel)
+                var annPixels = VisionLoaderHelper.LoadAndResizeImage<T>(annFile, h, w, 1, false);
+                int annToRead = Math.Min(annPixels.Length, labelSize);
+                var numOps = MathHelper.GetNumericOperations<T>();
                 for (int p = 0; p < annToRead; p++)
                 {
-                    labelsData[lblOff + p] = NumOps.FromDouble(annBytes[p] % _options.NumClasses);
+                    double classVal = numOps.ToDouble(annPixels[p]);
+                    labelsData[lblOff + p] = numOps.FromDouble(((int)classVal) % _options.NumClasses);
                 }
             }
         }

@@ -76,15 +76,10 @@ public class DocVqaDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tenso
         for (int i = 0; i < totalSamples; i++)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            byte[] bytes = await FilePolyfill.ReadAllBytesAsync(imageFiles[i], cancellationToken);
-
-            // Load raw pixel bytes (simplified: read bytes directly as grayscale/RGB)
-            int pixelsToRead = Math.Min(bytes.Length, featureSize);
+            var pixels = VisionLoaderHelper.LoadAndResizeImage<T>(imageFiles[i], h, w, 3, true);
             int featOff = i * featureSize;
-            for (int p = 0; p < pixelsToRead; p++)
-            {
-                featuresData[featOff + p] = NumOps.FromDouble(bytes[p] / 255.0);
-            }
+            int copyLen = Math.Min(pixels.Length, featureSize);
+            Array.Copy(pixels, 0, featuresData, featOff, copyLen);
 
             labelsData[i] = NumOps.FromDouble(i % 100); // Simplified: QA answer class
         }

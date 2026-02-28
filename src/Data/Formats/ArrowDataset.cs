@@ -3,13 +3,15 @@ using System.Text;
 namespace AiDotNet.Data.Formats;
 
 /// <summary>
-/// Provides read/write access to datasets in a simplified Arrow IPC-like columnar format.
+/// Provides read/write access to datasets in a custom binary columnar format
+/// inspired by Apache Arrow IPC.
 /// </summary>
 /// <remarks>
 /// <para>
-/// This is a pure C# implementation of a simplified columnar format inspired by Apache Arrow.
-/// It stores named columns of data for efficient column-wise access patterns common in ML.
-/// Does not require the Apache.Arrow NuGet package.
+/// <b>Important:</b> This is NOT a native Apache Arrow implementation and is NOT compatible with
+/// Arrow IPC files created by PyArrow, the Arrow C++ library, or other Arrow tools. It is a custom
+/// columnar format designed for efficient column-wise access in AiDotNet ML pipelines.
+/// For native Arrow interop, use the Apache.Arrow NuGet package.
 /// </para>
 /// <para>
 /// The on-disk format:

@@ -171,15 +171,10 @@ public class CocoDetectionDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>
             // Load image
             if (File.Exists(imgPath))
             {
-                byte[] fileBytes = await FilePolyfill.ReadAllBytesAsync(imgPath, cancellationToken);
+                var pixels = VisionLoaderHelper.LoadAndResizeImage<T>(imgPath, _imageSize, _imageSize, 3, _options.Normalize);
                 int featureOffset = i * pixelsPerImage;
-                int copyLen = Math.Min(fileBytes.Length, pixelsPerImage);
-                for (int p = 0; p < copyLen; p++)
-                {
-                    double value = fileBytes[p];
-                    if (_options.Normalize) value /= 255.0;
-                    featuresData[featureOffset + p] = NumOps.FromDouble(value);
-                }
+                int copyLen = Math.Min(pixels.Length, pixelsPerImage);
+                Array.Copy(pixels, 0, featuresData, featureOffset, copyLen);
             }
 
             // Load detections (zero-padded to MaxDetections)

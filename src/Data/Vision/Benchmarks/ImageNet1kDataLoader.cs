@@ -109,15 +109,11 @@ public class ImageNet1kDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, T
             cancellationToken.ThrowIfCancellationRequested();
 
             var (imgPath, label) = imagePaths[i];
-            var pixels = await LoadAndResizeImageAsync(imgPath, _imageSize, cancellationToken);
+            var pixels = LoadAndResizeImage(imgPath, _imageSize, _options.Normalize);
 
             int featureOffset = i * pixelsPerImage;
-            for (int p = 0; p < pixels.Length && p < pixelsPerImage; p++)
-            {
-                double value = pixels[p];
-                if (_options.Normalize) value /= 255.0;
-                featuresData[featureOffset + p] = NumOps.FromDouble(value);
-            }
+            int copyLen = Math.Min(pixels.Length, pixelsPerImage);
+            Array.Copy(pixels, 0, featuresData, featureOffset, copyLen);
 
             if (label >= 0 && label < numClasses)
                 labelsData[i * NumClasses + label] = NumOps.One;
@@ -176,21 +172,9 @@ public class ImageNet1kDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, T
         );
     }
 
-    private static async Task<byte[]> LoadAndResizeImageAsync(string path, int targetSize, CancellationToken cancellationToken)
+    private static T[] LoadAndResizeImage(string path, int targetSize, bool normalize)
     {
-        cancellationToken.ThrowIfCancellationRequested();
-        var fileBytes = await FilePolyfill.ReadAllBytesAsync(path, cancellationToken);
-
-        // Simple image loading: read raw bytes and create placeholder pixel data
-        // For production use, images would be decoded and resized properly
-        int pixelCount = targetSize * targetSize * 3;
-        var pixels = new byte[pixelCount];
-
-        // Fill with available data (simplified - real implementation would decode JPEG/PNG)
-        int copyLen = Math.Min(fileBytes.Length, pixelCount);
-        Array.Copy(fileBytes, 0, pixels, 0, copyLen);
-
-        return pixels;
+        return VisionLoaderHelper.LoadAndResizeImage<T>(path, targetSize, targetSize, 3, normalize);
     }
 
     private static Tensor<T> ExtractTensorBatch(Tensor<T> source, int[] indices)

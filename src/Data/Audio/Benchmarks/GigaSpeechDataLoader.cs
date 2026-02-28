@@ -1,3 +1,4 @@
+using System.Text.Json;
 using AiDotNet.Data.Loaders;
 
 namespace AiDotNet.Data.Audio.Benchmarks;
@@ -62,15 +63,67 @@ public class GigaSpeechDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, T
 
         if (File.Exists(manifestFile))
         {
-            // Parse manifest for segments
-            var lines = await FilePolyfill.ReadAllLinesAsync(manifestFile, cancellationToken);
-            // Simplified: collect WAV files from audio directory
-            foreach (var line in lines)
+            // GigaSpeech manifest is a JSON file with "audios" array, each containing "segments"
+            // Format: { "audios": [ { "aid": "...", "path": "...", "segments": [ { "sid": "...", "begin_time": 0.0, "end_time": 5.0, "text_tn": "..." } ] } ] }
+            using var stream = File.OpenRead(manifestFile);
+            using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+            var root = doc.RootElement;
+
+            string subsetFilter = _options.Subset.ToUpperInvariant();
+            if (root.TryGetProperty("audios", out var audiosElem))
             {
-                // Manifest parsing placeholder - real format would be JSON segments
-                if (line.Contains(".wav") && line.Contains("text"))
+                foreach (var audio in audiosElem.EnumerateArray())
                 {
-                    // Extract path and text from JSON line
+                    cancellationToken.ThrowIfCancellationRequested();
+
+                    // Check subset filter if specified (XS, S, M, L, XL)
+                    if (audio.TryGetProperty("subsets", out var subsetsElem))
+                    {
+                        bool matchesSubset = false;
+                        foreach (var subset in subsetsElem.EnumerateArray())
+                        {
+                            string subsetStr = subset.GetString() ?? string.Empty;
+                            if (subsetStr.Contains(subsetFilter, StringComparison.OrdinalIgnoreCase))
+                            {
+                                matchesSubset = true;
+                                break;
+                            }
+                        }
+                        if (!matchesSubset) continue;
+                    }
+
+                    string audioPath = audio.TryGetProperty("path", out var pathElem)
+                        ? pathElem.GetString() ?? string.Empty
+                        : string.Empty;
+
+                    if (audio.TryGetProperty("segments", out var segmentsElem))
+                    {
+                        foreach (var segment in segmentsElem.EnumerateArray())
+                        {
+                            string text = segment.TryGetProperty("text_tn", out var textElem)
+                                ? textElem.GetString() ?? string.Empty
+                                : string.Empty;
+
+                            string sid = segment.TryGetProperty("sid", out var sidElem)
+                                ? sidElem.GetString() ?? string.Empty
+                                : string.Empty;
+
+                            // Try segment-specific WAV, then audio-level path
+                            string segWav = Path.Combine(audioDir, sid + ".wav");
+                            string fullAudioPath = audioPath.Length > 0
+                                ? Path.Combine(_dataPath, audioPath)
+                                : string.Empty;
+
+                            string resolvedPath = File.Exists(segWav) ? segWav
+                                : fullAudioPath.Length > 0 && File.Exists(fullAudioPath) ? fullAudioPath
+                                : string.Empty;
+
+                            if (resolvedPath.Length > 0)
+                            {
+                                samples.Add((resolvedPath, text));
+                            }
+                        }
+                    }
                 }
             }
         }

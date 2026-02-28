@@ -3,13 +3,15 @@ using System.Text;
 namespace AiDotNet.Data.Formats;
 
 /// <summary>
-/// Provides read-only access to datasets stored in LMDB (Lightning Memory-Mapped Database) format.
+/// Provides read-only access to datasets stored in a custom binary key-value format
+/// inspired by LMDB (Lightning Memory-Mapped Database).
 /// </summary>
 /// <remarks>
 /// <para>
-/// LMDB is a fast, memory-mapped key-value store commonly used for storing large datasets
-/// in machine learning pipelines (e.g., Caffe, MXNet). This implementation reads a simple
-/// custom LMDB-like format using memory-mapped files for efficient random access.
+/// <b>Important:</b> This is NOT a native LMDB implementation and is NOT compatible with
+/// LMDB databases created by other tools. It is a custom binary key-value store format
+/// designed for efficient sequential and random access to ML training data within AiDotNet.
+/// For native LMDB interop, use the LightningDB NuGet package.
 /// </para>
 /// <para>
 /// The on-disk format is a simple binary key-value store:

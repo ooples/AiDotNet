@@ -73,14 +73,10 @@ public class PubLayNetDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Te
         for (int i = 0; i < totalSamples; i++)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            byte[] bytes = await FilePolyfill.ReadAllBytesAsync(imageFiles[i], cancellationToken);
-
-            int pixelsToRead = Math.Min(bytes.Length, featureSize);
+            var pixels = VisionLoaderHelper.LoadAndResizeImage<T>(imageFiles[i], _options.ImageHeight, _options.ImageWidth, 3, true);
             int featOff = i * featureSize;
-            for (int p = 0; p < pixelsToRead; p++)
-            {
-                featuresData[featOff + p] = NumOps.FromDouble(bytes[p] / 255.0);
-            }
+            int copyLen = Math.Min(pixels.Length, featureSize);
+            Array.Copy(pixels, 0, featuresData, featOff, copyLen);
 
             // Simplified: assign a pseudo label based on file index
             int lblOff = i * numClasses;
