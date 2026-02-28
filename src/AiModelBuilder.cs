@@ -5676,16 +5676,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                         // This doesn't preserve optimizer state but respects the learning rate
                         var currentParams = nnModel.GetParameters();
                         var learningRate = NumOps.FromDouble(options.LearningRate);
-                        var newParams = new Vector<T>(currentParams.Length);
-
-                        for (int i = 0; i < currentParams.Length; i++)
-                        {
-                            // Apply gradient descent: params = params - learningRate * gradient
-                            newParams[i] = NumOps.Subtract(currentParams[i],
-                                NumOps.Multiply(learningRate, paramGradients[i]));
-                        }
-
-                        nnModel.UpdateParameters(newParams);
+                        var engine = AiDotNetEngine.Current;
+                        nnModel.UpdateParameters(engine.Subtract(currentParams, engine.Multiply(paramGradients, learningRate)));
                     }
                 }
                 catch (Exception ex)

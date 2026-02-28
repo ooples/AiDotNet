@@ -712,15 +712,7 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
     public override void ApplyGradients(Vector<T> gradients, T learningRate)
     {
         var currentParams = GetParameters();
-        var newParams = new Vector<T>(currentParams.Length);
-
-        for (int i = 0; i < currentParams.Length; i++)
-        {
-            var update = NumOps.Multiply(learningRate, gradients[i]);
-            newParams[i] = NumOps.Subtract(currentParams[i], update);
-        }
-
-        SetParameters(newParams);
+        SetParameters(Engine.Subtract(currentParams, Engine.Multiply(gradients, learningRate)));
     }
 
     public override void SaveModel(string filepath)

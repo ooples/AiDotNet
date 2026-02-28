@@ -33,6 +33,11 @@ public abstract class ContinualLearningStrategyBase<T, TInput, TOutput> : IConti
     protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     /// <summary>
+    /// Gets the global execution engine for hardware-accelerated vector operations.
+    /// </summary>
+    protected static IEngine Engine => AiDotNetEngine.Current;
+
+    /// <summary>
     /// The loss function used for computing task losses.
     /// </summary>
     protected readonly ILossFunction<T> LossFunction;
