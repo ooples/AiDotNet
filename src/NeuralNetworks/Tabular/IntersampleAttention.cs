@@ -1,5 +1,4 @@
-using AiDotNet.ActivationFunctions;
-using AiDotNet.Helpers;
+using AiDotNet.Autodiff;
 using AiDotNet.NeuralNetworks.Layers;
 
 namespace AiDotNet.NeuralNetworks.Tabular;
@@ -24,10 +23,8 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public class IntersampleAttention<T>
+public class IntersampleAttention<T> : LayerBase<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
-
     private readonly int _embeddingDim;
     private readonly int _numHeads;
     private readonly int _headDim;
@@ -47,10 +44,14 @@ public class IntersampleAttention<T>
     private Tensor<T>? _inputCache;
     private Tensor<T>? _normalizedCache;
 
-    /// <summary>
-    /// Gets the total parameter count.
-    /// </summary>
-    public int ParameterCount =>
+    /// <inheritdoc/>
+    public override bool SupportsTraining => true;
+
+    /// <inheritdoc/>
+    public override bool SupportsJitCompilation => false;
+
+    /// <inheritdoc/>
+    public override int ParameterCount =>
         _queryProjection.ParameterCount +
         _keyProjection.ParameterCount +
         _valueProjection.ParameterCount +
@@ -64,6 +65,7 @@ public class IntersampleAttention<T>
     /// <param name="numHeads">Number of attention heads.</param>
     /// <param name="dropoutRate">Dropout rate for attention.</param>
     public IntersampleAttention(int embeddingDim, int numHeads = 8, double dropoutRate = 0.1)
+        : base([embeddingDim], [embeddingDim])
     {
         _embeddingDim = embeddingDim;
         _numHeads = numHeads;
@@ -72,32 +74,25 @@ public class IntersampleAttention<T>
 
         // Initialize attention projections
         _queryProjection = new FullyConnectedLayer<T>(
-            embeddingDim, embeddingDim, (IActivationFunction<T>?)null);
+            embeddingDim, embeddingDim, (Interfaces.IActivationFunction<T>?)null);
         _keyProjection = new FullyConnectedLayer<T>(
-            embeddingDim, embeddingDim, (IActivationFunction<T>?)null);
+            embeddingDim, embeddingDim, (Interfaces.IActivationFunction<T>?)null);
         _valueProjection = new FullyConnectedLayer<T>(
-            embeddingDim, embeddingDim, (IActivationFunction<T>?)null);
+            embeddingDim, embeddingDim, (Interfaces.IActivationFunction<T>?)null);
         _outputProjection = new FullyConnectedLayer<T>(
-            embeddingDim, embeddingDim, (IActivationFunction<T>?)null);
+            embeddingDim, embeddingDim, (Interfaces.IActivationFunction<T>?)null);
 
         // Initialize layer normalization parameters
-        _layerNormGamma = new Tensor<T>([embeddingDim]);
+        _layerNormGamma = Tensor<T>.CreateDefault([embeddingDim], NumOps.One);
         _layerNormBeta = new Tensor<T>([embeddingDim]);
-
-        for (int i = 0; i < embeddingDim; i++)
-        {
-            _layerNormGamma[i] = NumOps.One;
-            _layerNormBeta[i] = NumOps.Zero;
-        }
     }
 
     /// <summary>
     /// Forward pass through intersample attention.
     /// </summary>
     /// <param name="input">Input tensor [batchSize, numFeatures, embeddingDim].</param>
-    /// <param name="training">Whether in training mode (for dropout).</param>
     /// <returns>Output with intersample attention applied [batchSize, numFeatures, embeddingDim].</returns>
-    public Tensor<T> Forward(Tensor<T> input, bool training = true)
+    public override Tensor<T> Forward(Tensor<T> input)
     {
         _inputCache = input;
 
@@ -106,59 +101,19 @@ public class IntersampleAttention<T>
         int embDim = input.Shape[2];
 
         // Transpose to [numFeatures, batchSize, embeddingDim] for intersample attention
-        var transposed = TransposeForIntersample(input, batchSize, numFeatures, embDim);
+        var transposed = input.Transpose(new[] { 1, 0, 2 });
 
         // Apply multi-head self-attention across samples
         var attended = ApplyMultiHeadAttention(transposed, numFeatures, batchSize, embDim);
 
         // Transpose back to [batchSize, numFeatures, embeddingDim]
-        var output = TransposeBack(attended, batchSize, numFeatures, embDim);
+        var output = attended.Transpose(new[] { 1, 0, 2 });
 
         // Residual connection and layer normalization
         output = AddResidualAndNormalize(input, output, batchSize, numFeatures, embDim);
         _normalizedCache = output;
 
         return output;
-    }
-
-    private Tensor<T> TransposeForIntersample(Tensor<T> input, int batchSize, int numFeatures, int embDim)
-    {
-        var transposed = new Tensor<T>([numFeatures, batchSize, embDim]);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int f = 0; f < numFeatures; f++)
-            {
-                for (int d = 0; d < embDim; d++)
-                {
-                    int srcIdx = b * numFeatures * embDim + f * embDim + d;
-                    int dstIdx = f * batchSize * embDim + b * embDim + d;
-                    transposed[dstIdx] = input[srcIdx];
-                }
-            }
-        }
-
-        return transposed;
-    }
-
-    private Tensor<T> TransposeBack(Tensor<T> input, int batchSize, int numFeatures, int embDim)
-    {
-        var transposed = new Tensor<T>([batchSize, numFeatures, embDim]);
-
-        for (int f = 0; f < numFeatures; f++)
-        {
-            for (int b = 0; b < batchSize; b++)
-            {
-                for (int d = 0; d < embDim; d++)
-                {
-                    int srcIdx = f * batchSize * embDim + b * embDim + d;
-                    int dstIdx = b * numFeatures * embDim + f * embDim + d;
-                    transposed[dstIdx] = input[srcIdx];
-                }
-            }
-        }
-
-        return transposed;
     }
 
     private Tensor<T> ApplyMultiHeadAttention(Tensor<T> input, int numFeatures, int batchSize, int embDim)
@@ -171,12 +126,10 @@ public class IntersampleAttention<T>
         {
             // Extract feature slice [batchSize, embDim]
             var featureSlice = new Tensor<T>([batchSize, embDim]);
-            for (int b = 0; b < batchSize; b++)
+            int fOffset = f * batchSize * embDim;
+            for (int i = 0; i < batchSize * embDim; i++)
             {
-                for (int d = 0; d < embDim; d++)
-                {
-                    featureSlice[b * embDim + d] = input[f * batchSize * embDim + b * embDim + d];
-                }
+                featureSlice[i] = input[fOffset + i];
             }
 
             // Project to Q, K, V
@@ -184,60 +137,22 @@ public class IntersampleAttention<T>
             var keys = _keyProjection.Forward(featureSlice);
             var values = _valueProjection.Forward(featureSlice);
 
-            // Compute attention scores [batchSize, batchSize]
-            var scores = new T[batchSize, batchSize];
-            for (int i = 0; i < batchSize; i++)
-            {
-                for (int j = 0; j < batchSize; j++)
-                {
-                    var dot = NumOps.Zero;
-                    for (int d = 0; d < embDim; d++)
-                    {
-                        dot = NumOps.Add(dot, NumOps.Multiply(
-                            queries[i * embDim + d],
-                            keys[j * embDim + d]));
-                    }
-                    scores[i, j] = NumOps.Multiply(dot, scale);
-                }
-            }
+            // Compute attention: Q * K^T -> [batchSize, batchSize]
+            var kT = keys.Transpose(new[] { 1, 0 });
+            var scores = Engine.TensorMatMul(queries, kT);
+            scores = Engine.TensorMultiplyScalar(scores, scale);
 
             // Softmax over samples
-            for (int i = 0; i < batchSize; i++)
+            scores = Engine.Softmax(scores);
+
+            // Apply attention to values: scores * V -> [batchSize, embDim]
+            var attended = Engine.TensorMatMul(scores, values);
+
+            // Store result
+            int outOffset = f * batchSize * embDim;
+            for (int i = 0; i < batchSize * embDim; i++)
             {
-                var maxScore = scores[i, 0];
-                for (int j = 1; j < batchSize; j++)
-                {
-                    if (NumOps.Compare(scores[i, j], maxScore) > 0)
-                        maxScore = scores[i, j];
-                }
-
-                var sumExp = NumOps.Zero;
-                for (int j = 0; j < batchSize; j++)
-                {
-                    scores[i, j] = NumOps.Exp(NumOps.Subtract(scores[i, j], maxScore));
-                    sumExp = NumOps.Add(sumExp, scores[i, j]);
-                }
-
-                for (int j = 0; j < batchSize; j++)
-                {
-                    scores[i, j] = NumOps.Divide(scores[i, j], sumExp);
-                }
-            }
-
-            // Apply attention to values
-            for (int i = 0; i < batchSize; i++)
-            {
-                for (int d = 0; d < embDim; d++)
-                {
-                    var sum = NumOps.Zero;
-                    for (int j = 0; j < batchSize; j++)
-                    {
-                        sum = NumOps.Add(sum, NumOps.Multiply(
-                            scores[i, j],
-                            values[j * embDim + d]));
-                    }
-                    output[f * batchSize * embDim + i * embDim + d] = sum;
-                }
+                output[outOffset + i] = attended[i];
             }
         }
 
@@ -247,20 +162,16 @@ public class IntersampleAttention<T>
     private Tensor<T> AddResidualAndNormalize(Tensor<T> residual, Tensor<T> output,
         int batchSize, int numFeatures, int embDim)
     {
-        var result = new Tensor<T>(output.Shape);
+        // Residual connection
+        var result = Engine.TensorAdd(residual, output);
+
+        // Layer normalization per position
         var epsilon = NumOps.FromDouble(1e-5);
 
         for (int b = 0; b < batchSize; b++)
         {
             for (int f = 0; f < numFeatures; f++)
             {
-                // Add residual
-                for (int d = 0; d < embDim; d++)
-                {
-                    int idx = b * numFeatures * embDim + f * embDim + d;
-                    result[idx] = NumOps.Add(residual[idx], output[idx]);
-                }
-
                 // Compute mean and variance for this position
                 var mean = NumOps.Zero;
                 for (int d = 0; d < embDim; d++)
@@ -300,7 +211,7 @@ public class IntersampleAttention<T>
     /// </summary>
     /// <param name="gradient">Gradient from upstream.</param>
     /// <returns>Gradient with respect to input.</returns>
-    public Tensor<T> Backward(Tensor<T> gradient)
+    public override Tensor<T> Backward(Tensor<T> gradient)
     {
         // Simplified backward - in full implementation would backprop through attention
         var inputGrad = _outputProjection.Backward(gradient);
@@ -310,7 +221,7 @@ public class IntersampleAttention<T>
     /// <summary>
     /// Updates parameters.
     /// </summary>
-    public void UpdateParameters(T learningRate)
+    public override void UpdateParameters(T learningRate)
     {
         _queryProjection.UpdateParameters(learningRate);
         _keyProjection.UpdateParameters(learningRate);
@@ -318,10 +229,43 @@ public class IntersampleAttention<T>
         _outputProjection.UpdateParameters(learningRate);
     }
 
+    /// <inheritdoc/>
+    public override Vector<T> GetParameters()
+    {
+        var qParams = _queryProjection.GetParameters();
+        var kParams = _keyProjection.GetParameters();
+        var vParams = _valueProjection.GetParameters();
+        var oParams = _outputProjection.GetParameters();
+
+        int total = qParams.Length + kParams.Length + vParams.Length + oParams.Length + _embeddingDim * 2;
+        var result = new Vector<T>(total);
+        int offset = 0;
+
+        CopyVectorToVector(qParams, result, ref offset);
+        CopyVectorToVector(kParams, result, ref offset);
+        CopyVectorToVector(vParams, result, ref offset);
+        CopyVectorToVector(oParams, result, ref offset);
+
+        for (int i = 0; i < _embeddingDim; i++)
+            result[offset++] = _layerNormGamma[i];
+        for (int i = 0; i < _embeddingDim; i++)
+            result[offset++] = _layerNormBeta[i];
+
+        return result;
+    }
+
+    private static void CopyVectorToVector(Vector<T> source, Vector<T> target, ref int offset)
+    {
+        for (int i = 0; i < source.Length; i++)
+        {
+            target[offset++] = source[i];
+        }
+    }
+
     /// <summary>
     /// Resets internal state.
     /// </summary>
-    public void ResetState()
+    public override void ResetState()
     {
         _inputCache = null;
         _normalizedCache = null;
@@ -330,5 +274,18 @@ public class IntersampleAttention<T>
         _keyProjection.ResetState();
         _valueProjection.ResetState();
         _outputProjection.ResetState();
+    }
+
+    /// <inheritdoc/>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
+        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
+        inputNodes.Add(inputNode);
+
+        return inputNode;
     }
 }
