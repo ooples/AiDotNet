@@ -732,11 +732,13 @@ public class CrossAttentionLayer<T> : LayerBase<T>
 
     private void UpdateWeight(Tensor<T> weight, Tensor<T> gradient, T learningRate)
     {
+        var scaledGrad = Engine.TensorMultiplyScalar(gradient, learningRate);
+        var updated = Engine.TensorSubtract(weight, scaledGrad);
         var wSpan = weight.AsWritableSpan();
-        var gSpan = gradient.AsSpan();
+        var uSpan = updated.AsSpan();
         for (int i = 0; i < wSpan.Length; i++)
         {
-            wSpan[i] = NumOps.Subtract(wSpan[i], NumOps.Multiply(learningRate, gSpan[i]));
+            wSpan[i] = uSpan[i];
         }
     }
 
