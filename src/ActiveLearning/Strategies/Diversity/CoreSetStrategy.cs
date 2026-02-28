@@ -548,16 +548,7 @@ public class CoreSetStrategy<T, TInput, TOutput> : IDiversityStrategy<T, TInput,
 
     private T ManhattanDistance(Vector<T> a, Vector<T> b)
     {
-        int length = Math.Min(a.Length, b.Length);
-        T sum = NumOps.Zero;
-
-        for (int i = 0; i < length; i++)
-        {
-            var diff = NumOps.Subtract(a[i], b[i]);
-            sum = NumOps.Add(sum, NumOps.Abs(diff));
-        }
-
-        return sum;
+        return VectorHelper.ManhattanDistance(a, b);
     }
 
     private T ConvertToNumeric(TOutput output)

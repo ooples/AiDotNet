@@ -1270,23 +1270,7 @@ public class ImageBindNeuralNetwork<T> : NeuralNetworkBase<T>, IImageBindModel<T
 
     private Vector<T> Normalize(Vector<T> vector)
     {
-        T sumSquares = NumOps.Zero;
-        for (int i = 0; i < vector.Length; i++)
-        {
-            sumSquares = NumOps.Add(sumSquares, NumOps.Multiply(vector[i], vector[i]));
-        }
-
-        T norm = NumOps.Sqrt(sumSquares);
-        if (NumOps.ToDouble(norm) < 1e-12)
-            return vector;
-
-        var result = new Vector<T>(vector.Length);
-        for (int i = 0; i < vector.Length; i++)
-        {
-            result[i] = NumOps.Divide(vector[i], norm);
-        }
-
-        return result;
+        return VectorHelper.Normalize(vector);
     }
 
     private List<T> Softmax(List<T> values)

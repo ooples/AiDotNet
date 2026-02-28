@@ -862,13 +862,7 @@ public class RelationalDistillationStrategy<T> : DistillationStrategyBase<T>
 
     private T ComputeManhattanDistance(Vector<T> v1, Vector<T> v2)
     {
-        T sum = NumOps.Zero;
-        for (int i = 0; i < v1.Length; i++)
-        {
-            var diff = Math.Abs(Convert.ToDouble(NumOps.Subtract(v1[i], v2[i])));
-            sum = NumOps.Add(sum, NumOps.FromDouble(diff));
-        }
-        return sum;
+        return VectorHelper.ManhattanDistance(v1, v2);
     }
 
     /// <summary>

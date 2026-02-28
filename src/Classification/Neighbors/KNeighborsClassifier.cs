@@ -218,13 +218,7 @@ public class KNeighborsClassifier<T> : ProbabilisticClassifierBase<T>
     /// </summary>
     private T ComputeManhattanDistance(Vector<T> a, Vector<T> b)
     {
-        T sum = NumOps.Zero;
-        for (int i = 0; i < a.Length; i++)
-        {
-            T diff = NumOps.Subtract(a[i], b[i]);
-            sum = NumOps.Add(sum, NumOps.Abs(diff));
-        }
-        return sum;
+        return VectorHelper.ManhattanDistance(a, b);
     }
 
     /// <summary>

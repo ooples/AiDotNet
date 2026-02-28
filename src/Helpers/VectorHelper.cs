@@ -140,4 +140,19 @@ public static class VectorHelper
         return numOps.FromDouble(Math.Sqrt(
             Math.Max(0, numOps.ToDouble(engine.DotProduct(diff, diff)))));
     }
+
+    /// <summary>
+    /// Computes the Manhattan (L1) distance between two vectors using hardware-accelerated operations.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of the vector elements.</typeparam>
+    /// <param name="a">First vector.</param>
+    /// <param name="b">Second vector.</param>
+    /// <returns>The Manhattan distance as type T.</returns>
+    public static T ManhattanDistance<T>(Vector<T> a, Vector<T> b)
+    {
+        var engine = AiDotNetEngine.Current;
+        var diff = engine.Subtract(a, b);
+        var absDiff = engine.Abs(diff);
+        return engine.Sum(absDiff);
+    }
 }
