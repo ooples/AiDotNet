@@ -1,5 +1,7 @@
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tokenization.Interfaces;
 
 namespace AiDotNet.Preprocessing.TextVectorizers;
@@ -533,15 +535,8 @@ public class Word2VecVectorizer<T> : TextVectorizerBase<T>
         {
             if (kvp.Key == normalizedWord) continue;
 
-            double dot = 0, normA = 0, normB = 0;
-            for (int i = 0; i < _vectorSize; i++)
-            {
-                dot += targetVector[i] * kvp.Value[i];
-                normA += targetVector[i] * targetVector[i];
-                normB += kvp.Value[i] * kvp.Value[i];
-            }
-
-            double similarity = dot / (Math.Sqrt(normA) * Math.Sqrt(normB) + 1e-10);
+            double similarity = VectorHelper.CosineSimilarity(
+                new Vector<double>(targetVector), new Vector<double>(kvp.Value));
             similarities.Add((kvp.Key, similarity));
         }
 
