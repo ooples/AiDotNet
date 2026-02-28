@@ -67,19 +67,54 @@ public class CalculatorTool : ITool
                     return "Error: Calculation produced no result.";
                 }
 
-                // Format the result appropriately
-                if (result is double doubleResult)
+                // Convert result to double for consistent formatting
+                double doubleResult;
+                if (result is double d)
                 {
-                    // Remove unnecessary decimal places for whole numbers
-                    const double epsilon = 1e-9;
-                    if (Math.Abs(doubleResult - Math.Floor(doubleResult)) < epsilon)
+                    doubleResult = d;
+                }
+                else if (result is decimal dec)
+                {
+                    doubleResult = (double)dec;
+                }
+                else if (result is int i)
+                {
+                    doubleResult = i;
+                }
+                else if (result is long l)
+                {
+                    doubleResult = l;
+                }
+                else
+                {
+                    // Try parsing the string representation as a fallback
+                    string resultStr = result.ToString() ?? string.Empty;
+                    if (!double.TryParse(resultStr, NumberStyles.Any, CultureInfo.InvariantCulture, out doubleResult))
                     {
-                        return ((long)doubleResult).ToString(CultureInfo.InvariantCulture);
+                        return $"Error: Could not interpret result '{resultStr}'.";
                     }
-                    return doubleResult.ToString("G", CultureInfo.InvariantCulture);
                 }
 
-                return result.ToString() ?? "Error: Could not convert result to string.";
+                // Check for infinity (e.g., division by zero)
+                if (double.IsInfinity(doubleResult))
+                {
+                    return "Error: Division by zero is not allowed.";
+                }
+
+                // Check for NaN
+                if (double.IsNaN(doubleResult))
+                {
+                    return "Error: Calculation produced an undefined result.";
+                }
+
+                // Remove unnecessary decimal places for whole numbers
+                const double epsilon = 1e-9;
+                if (Math.Abs(doubleResult - Math.Floor(doubleResult)) < epsilon)
+                {
+                    return ((long)doubleResult).ToString(CultureInfo.InvariantCulture);
+                }
+
+                return doubleResult.ToString("G", CultureInfo.InvariantCulture);
             }
         }
         catch (SyntaxErrorException ex)
@@ -123,13 +158,16 @@ public class CalculatorTool : ITool
         // Trim whitespace
         expression = expression.Trim();
 
-        // Replace common mathematical function notations
-        // Note: DataTable.Compute has limited function support
-        // For more advanced functions (sqrt, sin, cos, etc.), consider using a different parser
-        // or extending this implementation
-
-        // Handle "sqrt(x)" by converting to "x^0.5" equivalent if needed
-        // For now, we'll keep it simple and let unsupported functions error gracefully
+        // Convert large integer literals to decimal format to avoid int overflow in DataTable.Compute.
+        // DataTable.Compute performs integer arithmetic for integer operands, which can overflow
+        // for numbers larger than int.MaxValue (~2.1 billion). By appending ".0" to large numbers,
+        // we force decimal/double arithmetic instead.
+        expression = System.Text.RegularExpressions.Regex.Replace(
+            expression,
+            @"\b(\d{7,})\b",
+            "$1.0",
+            System.Text.RegularExpressions.RegexOptions.None,
+            TimeSpan.FromSeconds(1));
 
         return expression;
     }

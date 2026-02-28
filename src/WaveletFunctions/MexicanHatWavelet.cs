@@ -141,7 +141,7 @@ public class MexicanHatWavelet<T> : WaveletFunctionBase<T>
         var detail = new Vector<T>(size);
         for (int i = 0; i < size; i++)
         {
-            T x = NumOps.FromDouble(i - size / 2.0);
+            T x = NumOps.FromDouble(i - size / 2);
             T waveletValue = Calculate(x);
             T derivativeValue = CalculateDerivative(x);
             approximation[i] = NumOps.Multiply(waveletValue, input[i]);
@@ -179,7 +179,7 @@ public class MexicanHatWavelet<T> : WaveletFunctionBase<T>
         var coefficients = new Vector<T>(size);
         for (int i = 0; i < size; i++)
         {
-            T x = NumOps.Divide(NumOps.FromDouble(i - size / 2.0), NumOps.FromDouble(size / 4.0));
+            T x = NumOps.Divide(NumOps.FromDouble(i - size / 2), NumOps.FromDouble(size / 4.0));
             coefficients[i] = Calculate(x);
         }
 
@@ -214,7 +214,7 @@ public class MexicanHatWavelet<T> : WaveletFunctionBase<T>
         var coefficients = new Vector<T>(size);
         for (int i = 0; i < size; i++)
         {
-            T x = NumOps.Divide(NumOps.FromDouble(i - size / 2.0), NumOps.FromDouble(size / 4.0));
+            T x = NumOps.Divide(NumOps.FromDouble(i - size / 2), NumOps.FromDouble(size / 4.0));
             coefficients[i] = CalculateDerivative(x);
         }
 
@@ -246,13 +246,17 @@ public class MexicanHatWavelet<T> : WaveletFunctionBase<T>
     /// </remarks>
     private T CalculateDerivative(T x)
     {
+        // Derivative of f(x) = (2 - x²/σ²) * exp(-x²/(2σ²))
+        // f'(x) = (x³/σ⁴ - 4x/σ²) * exp(-x²/(2σ²))
         T x2 = NumOps.Square(x);
         T sigma2 = NumOps.Square(_sigma);
-        T term1 = NumOps.Multiply(x, NumOps.Divide(NumOps.FromDouble(3.0), sigma2));
-        T term2 = NumOps.Subtract(NumOps.FromDouble(1.0), NumOps.Divide(x2, sigma2));
-        T term3 = NumOps.Exp(NumOps.Negate(NumOps.Divide(x2, NumOps.Multiply(NumOps.FromDouble(2.0), sigma2))));
+        T sigma4 = NumOps.Square(sigma2);
+        T cubicTerm = NumOps.Divide(NumOps.Multiply(x, x2), sigma4); // x³/σ⁴
+        T linearTerm = NumOps.Divide(NumOps.Multiply(NumOps.FromDouble(4.0), x), sigma2); // 4x/σ²
+        T polynomial = NumOps.Subtract(cubicTerm, linearTerm); // x³/σ⁴ - 4x/σ²
+        T expTerm = NumOps.Exp(NumOps.Negate(NumOps.Divide(x2, NumOps.Multiply(NumOps.FromDouble(2.0), sigma2))));
 
-        return NumOps.Multiply(NumOps.Multiply(term1, term2), term3);
+        return NumOps.Multiply(polynomial, expTerm);
     }
 
     /// <summary>
@@ -281,7 +285,7 @@ public class MexicanHatWavelet<T> : WaveletFunctionBase<T>
 
         for (int i = 0; i < size; i++)
         {
-            T x = NumOps.FromDouble(i - size / 2.0);
+            T x = NumOps.FromDouble(i - size / 2);
             T waveletValue = Calculate(x);
             T derivativeValue = CalculateDerivative(x);
 

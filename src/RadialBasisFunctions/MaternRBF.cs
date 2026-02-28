@@ -226,16 +226,29 @@ public class MaternRBF<T> : IRadialBasisFunction<T>
         // For special case ? = 1.5, the derivative also has a simpler form
         if (Math.Abs(_nu - 1.5) < 1e-10)
         {
-            // For ? = 1.5, we can use a simplified formula
+            // For ? = 1.5: k(r) = (1+x)*exp(-x)
+            // dk/dx = exp(-x) - (1+x)*exp(-x) = -x*exp(-x)
+            // dk/dr = dk/dx * dx/dr = -x*exp(-x) * ?(2?)/l
             T expTerm = _numOps.Exp(_numOps.Negate(x));
             T factor = _numOps.Multiply(
                 _numOps.FromDouble(sqrt2nu / Convert.ToDouble(_lengthScale)),
-                _numOps.Divide(
-                    _numOps.Add(_numOps.One, x),
-                    x
-                )
+                x
             );
             return _numOps.Multiply(_numOps.Negate(factor), expTerm);
+        }
+
+        // For special case ? = 2.5, use closed-form derivative
+        if (Math.Abs(_nu - 2.5) < 1e-10)
+        {
+            // For ? = 2.5: k(r) = (1 + x + x²/3)*exp(-x)
+            // dk/dx = (1 + 2x/3)*exp(-x) - (1 + x + x²/3)*exp(-x)
+            //       = exp(-x)*(-x/3 - x²/3) = -exp(-x)*x*(1+x)/3
+            // dk/dr = dk/dx * dx/dr = -exp(-x)*x*(1+x)/3 * ?(2?)/l
+            T expTerm = _numOps.Exp(_numOps.Negate(x));
+            T xTimesOnePlusX = _numOps.Multiply(x, _numOps.Add(_numOps.One, x));
+            T dkdx = _numOps.Negate(_numOps.Divide(xTimesOnePlusX, _numOps.FromDouble(3.0)));
+            T chainFactor = _numOps.Divide(sqrtTerm, _lengthScale);
+            return _numOps.Multiply(_numOps.Multiply(dkdx, chainFactor), expTerm);
         }
 
         // For general case, we need to use the recurrence relation for Bessel functions
@@ -337,25 +350,22 @@ public class MaternRBF<T> : IRadialBasisFunction<T>
         // For special case ? = 0.5, the width derivative has a simpler form
         if (Math.Abs(_nu - 0.5) < 1e-10)
         {
-            // For ? = 0.5, we can use a simplified formula
+            // For ? = 0.5: k(r) = exp(-x), x = r/l
+            // dk/dl = dk/dx * dx/dl = (-exp(-x)) * (-x/l) = (x/l)*exp(-x)
+            // Since dxdl = -x/l, we have dk/dl = -dxdl * exp(-x)
             T expTerm = _numOps.Exp(_numOps.Negate(x));
-            return _numOps.Multiply(x, _numOps.Multiply(dxdl, expTerm));
+            return _numOps.Multiply(_numOps.Negate(dxdl), expTerm);
         }
 
         // For special case ? = 1.5, the width derivative also has a simpler form
         if (Math.Abs(_nu - 1.5) < 1e-10)
         {
-            // For ? = 1.5, we can use a simplified formula
+            // For ? = 1.5: k(r) = (1+x)*exp(-x)
+            // dk/dx = -x*exp(-x)
+            // dk/dl = dk/dx * dx/dl = (-x*exp(-x)) * (-x/l) = x²/l * exp(-x)
+            // Since dxdl = -x/l, we have dk/dl = x * (-dxdl) * exp(-x)
             T expTerm = _numOps.Exp(_numOps.Negate(x));
-            T factor = _numOps.Multiply(
-                x,
-                _numOps.Divide(
-                    _numOps.Add(_numOps.One, x),
-                    x
-                )
-            );
-
-            return _numOps.Multiply(factor, _numOps.Multiply(dxdl, expTerm));
+            return _numOps.Multiply(x, _numOps.Multiply(_numOps.Negate(dxdl), expTerm));
         }
 
         // For general case, we need to use the recurrence relation for Bessel functions

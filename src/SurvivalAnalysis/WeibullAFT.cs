@@ -133,9 +133,11 @@ public class WeibullAFT<T> : SurvivalModelBase<T>
                     logLik += z - Math.Log(scale) - expZ;
 
                     // Gradients for events
+                    // dlogL/d(eta) = (-1/sigma)(1-exp(z)) → negate to get accumulation direction
+                    // dlogL/d(sigma) = [-z(1-exp(z)) - 1]/sigma
                     double dLogLik_dZ = 1 - expZ;
                     gradIntercept -= dLogLik_dZ / scale;
-                    gradScale -= (z * (1 - expZ) - 1) / scale;
+                    gradScale -= (z * (1 - expZ) + 1) / scale;
 
                     for (int j = 0; j < p; j++)
                         gradBeta[j] -= dLogLik_dZ * NumOps.ToDouble(x[i, j]) / scale;
@@ -159,14 +161,14 @@ public class WeibullAFT<T> : SurvivalModelBase<T>
                 break;
             prevLogLik = logLik;
 
-            // Update parameters
-            Intercept = NumOps.FromDouble(intercept + learningRate * gradIntercept);
-            Scale = NumOps.FromDouble(Math.Max(0.01, scale + learningRate * gradScale));
+            // Update parameters (normalize gradients by sample size for stable convergence)
+            Intercept = NumOps.FromDouble(intercept + learningRate * gradIntercept / n);
+            Scale = NumOps.FromDouble(Math.Max(0.01, scale + learningRate * gradScale / n));
 
             for (int j = 0; j < p; j++)
             {
                 Coefficients[j] = NumOps.FromDouble(
-                    NumOps.ToDouble(Coefficients[j]) + learningRate * gradBeta[j]);
+                    NumOps.ToDouble(Coefficients[j]) + learningRate * gradBeta[j] / n);
             }
         }
 

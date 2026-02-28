@@ -22,6 +22,7 @@ namespace AiDotNet.Evaluation.Metrics.Classification;
 public class FalsePositiveRateMetric<T> : IClassificationMetric<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+    private readonly T _positiveLabel;
 
     public string Name => "FPR";
     public string Category => "Classification";
@@ -32,20 +33,34 @@ public class FalsePositiveRateMetric<T> : IClassificationMetric<T>
     public bool RequiresProbabilities => false;
     public bool SupportsMultiClass => false;
 
+    public FalsePositiveRateMetric()
+    {
+        _positiveLabel = NumOps.One;
+    }
+
+    public FalsePositiveRateMetric(T positiveLabel)
+    {
+        _positiveLabel = positiveLabel;
+    }
+
     public T Compute(ReadOnlySpan<T> predictions, ReadOnlySpan<T> actuals)
     {
         if (predictions.Length != actuals.Length)
             throw new ArgumentException("Predictions and actuals must have the same length.");
         if (predictions.Length == 0) return NumOps.Zero;
 
+        double positiveLabelValue = NumOps.ToDouble(_positiveLabel);
         int fp = 0, tn = 0;
         for (int i = 0; i < predictions.Length; i++)
         {
-            bool pred = NumOps.ToDouble(predictions[i]) >= 0.5;
-            bool actual = NumOps.ToDouble(actuals[i]) >= 0.5;
+            bool isActualPositive = Math.Abs(NumOps.ToDouble(actuals[i]) - positiveLabelValue) < 1e-10;
+            bool isPredictedPositive = Math.Abs(NumOps.ToDouble(predictions[i]) - positiveLabelValue) < 1e-10;
 
-            if (pred && !actual) fp++;
-            else if (!pred && !actual) tn++;
+            if (!isActualPositive)
+            {
+                if (isPredictedPositive) fp++;
+                else tn++;
+            }
         }
 
         int denominator = fp + tn;

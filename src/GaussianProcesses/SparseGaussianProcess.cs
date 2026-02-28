@@ -47,6 +47,11 @@ public class SparseGaussianProcess<T> : IGaussianProcess<T>
     private INumericOperations<T> _numOps;
 
     /// <summary>
+    /// The kernel matrix of inducing points (with jitter), used for prediction.
+    /// </summary>
+    private Matrix<T> _Kuu;
+
+    /// <summary>
     /// The lower triangular matrix from Cholesky decomposition of the kernel matrix.
     /// </summary>
     private Matrix<T> _L;
@@ -95,6 +100,7 @@ public class SparseGaussianProcess<T> : IGaussianProcess<T>
         _kernel = kernel;
         _X = Matrix<T>.Empty();
         _y = Vector<T>.Empty();
+        _Kuu = Matrix<T>.Empty();
         _L = Matrix<T>.Empty();
         _V = Matrix<T>.Empty();
         _D = Vector<T>.Empty();
@@ -135,6 +141,11 @@ public class SparseGaussianProcess<T> : IGaussianProcess<T>
         var Kuf = CalculateKernelMatrix(_inducingPoints, X);
         var Kff_diag = CalculateKernelDiagonal(X);
 
+        // Add jitter to Kuu for numerical stability
+        var jitter = _numOps.FromDouble(1e-4);
+        for (int i = 0; i < Kuu.Rows; i++)
+            Kuu[i, i] = _numOps.Add(Kuu[i, i], jitter);
+
         var choleskyKuu = new CholeskyDecomposition<T>(Kuu);
         var L = choleskyKuu.L;
 
@@ -147,24 +158,44 @@ public class SparseGaussianProcess<T> : IGaussianProcess<T>
             V.SetColumn(i, solvedColumn);
         }
 
-        // Calculate Qff_diag
+        // Calculate Qff_diag = diag(Kfu * Kuu^{-1} * Kuf)
+        // Each diagonal element is the dot product of column i of V with itself
         var Qff_diag = new Vector<T>(Kuf.Columns);
         for (int i = 0; i < Kuf.Columns; i++)
         {
             var column = V.GetColumn(i);
-            Qff_diag[i] = _numOps.Square(column.Sum());
+            Qff_diag[i] = column.DotProduct(column);
         }
 
         var Lambda = Kff_diag.Subtract(Qff_diag);
 
-        var noise = _numOps.FromDouble(1e-6); // Small noise term for numerical stability
+        // Clamp Lambda to be non-negative (numerical errors can make it slightly negative)
+        var noise = _numOps.FromDouble(1e-4);
+        for (int i = 0; i < Lambda.Length; i++)
+        {
+            if (_numOps.LessThan(Lambda[i], _numOps.Zero))
+                Lambda[i] = _numOps.Zero;
+        }
         var D = Lambda.Add(noise).Transform(v => Reciprocal(v));
 
-        var Ky = Kuu.Add(Kuf.Multiply(D.CreateDiagonal()).Multiply(Kuf.Transpose()));
+        var DKuf = Kuf.Multiply(D.CreateDiagonal());
+        var Ky = Kuu.Add(DKuf.Multiply(Kuf.Transpose()));
+
+        // Force symmetry - floating point matrix multiplication can produce
+        // slight asymmetry that causes Cholesky to reject the matrix
+        for (int i = 0; i < Ky.Rows; i++)
+            for (int j = i + 1; j < Ky.Columns; j++)
+            {
+                var avg = _numOps.Divide(_numOps.Add(Ky[i, j], Ky[j, i]), _numOps.FromDouble(2.0));
+                Ky[i, j] = avg;
+                Ky[j, i] = avg;
+            }
+
         var choleskyKy = new CholeskyDecomposition<T>(Ky);
-        var alpha = choleskyKy.Solve(Kuf.Multiply(D.CreateDiagonal()).Multiply(y));
+        var alpha = choleskyKy.Solve(DKuf.Multiply(y));
 
         // Store necessary components for prediction
+        _Kuu = Kuu;
         _L = L;
         _V = V;
         _D = D;
@@ -209,8 +240,10 @@ public class SparseGaussianProcess<T> : IGaussianProcess<T>
 
         var f_mean = Kus.DotProduct(_alpha);
 
-        var v = MatrixSolutionHelper.SolveLinearSystem(_L, Kus, _decompositionType);
-        var f_var = _numOps.Subtract(Kss, v.DotProduct(v));
+        // Solve Kuu * v = Kus to get v = Kuu^{-1} * Kus
+        // Then variance = Kss - Kus^T * Kuu^{-1} * Kus = Kss - Kus^T * v
+        var v = MatrixSolutionHelper.SolveLinearSystem(_Kuu, Kus, _decompositionType);
+        var f_var = _numOps.Subtract(Kss, Kus.DotProduct(v));
 
         return (f_mean, f_var);
     }

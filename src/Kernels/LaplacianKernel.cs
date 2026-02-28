@@ -83,7 +83,10 @@ public class LaplacianKernel<T> : IKernelFunction<T>
     public LaplacianKernel(T? sigma = default)
     {
         _numOps = MathHelper.GetNumericOperations<T>();
-        _sigma = sigma ?? _numOps.FromDouble(1.0);
+        // For value types (e.g., double), T? is just T, and default(T) = 0, not null.
+        // The ?? operator never triggers. Use explicit check for the intended default.
+        bool sigmaIsDefault = sigma is null || object.Equals(sigma, default(T));
+        _sigma = sigmaIsDefault ? _numOps.FromDouble(1.0) : (sigma ?? _numOps.FromDouble(1.0));
     }
 
     /// <summary>
@@ -125,6 +128,11 @@ public class LaplacianKernel<T> : IKernelFunction<T>
     {
         var diff = x1.Subtract(x2);
         var distance = diff.Transform(_numOps.Abs).Sum();
+
+        // Guard: when points are identical (or nearly so), the kernel value is 1.
+        // This avoids potential NaN from Exp chain on zero values.
+        if (_numOps.LessThanOrEquals(distance, _numOps.Zero))
+            return _numOps.One;
 
         return _numOps.Exp(_numOps.Negate(_numOps.Divide(distance, _sigma)));
     }

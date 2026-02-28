@@ -74,30 +74,32 @@ public class SparsemaxActivation<T> : ActivationFunctionBase<T>
     /// </remarks>
     public override Vector<T> Activate(Vector<T> input)
     {
-        int k = 1;
         int d = input.Length;
         var z = input.OrderByDescending(x => x).ToArray();
-        T sum = NumOps.Zero;
-        T threshold = NumOps.Zero;
+
+        // Find k(z) = max{k in [d] : 1 + k * z_(k) > sum_{j<=k} z_(j)}
+        T cumulativeSum = NumOps.Zero;
+        int k = 1;
 
         for (int i = 0; i < d; i++)
         {
-            sum = NumOps.Add(sum, z[i]);
-            T average = NumOps.Divide(sum, NumOps.FromDouble(i + 1));
-            if (NumOps.GreaterThan(average, z[i]))
+            cumulativeSum = NumOps.Add(cumulativeSum, z[i]);
+            T lhs = NumOps.Add(NumOps.One, NumOps.Multiply(NumOps.FromDouble(i + 1), z[i]));
+            if (NumOps.GreaterThan(lhs, cumulativeSum))
             {
-                k = i;
-                threshold = average;
-                break;
+                k = i + 1;
             }
         }
 
-        if (k == d)
+        // Compute threshold tau = (sum_{j=1}^{k} z_(j) - 1) / k
+        T sumK = NumOps.Zero;
+        for (int i = 0; i < k; i++)
         {
-            threshold = NumOps.Divide(sum, NumOps.FromDouble(d));
+            sumK = NumOps.Add(sumK, z[i]);
         }
+        T tau = NumOps.Divide(NumOps.Subtract(sumK, NumOps.One), NumOps.FromDouble(k));
 
-        return input.Transform(x => MathHelper.Max(NumOps.Zero, NumOps.Subtract(x, threshold)));
+        return input.Transform(x => MathHelper.Max(NumOps.Zero, NumOps.Subtract(x, tau)));
     }
 
     /// <summary>

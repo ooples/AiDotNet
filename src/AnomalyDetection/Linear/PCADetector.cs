@@ -36,6 +36,9 @@ namespace AiDotNet.AnomalyDetection.Linear;
 /// </remarks>
 public class PCADetector<T> : AnomalyDetectorBase<T>
 {
+    /// <summary>Eigenvalues below this threshold are treated as zero to avoid division by near-zero values in Mahalanobis distance.</summary>
+    private const double EigenvalueFloor = 1e-10;
+
     private readonly int? _nComponents;
     private readonly double _varianceThreshold;
     private int _fittedComponents;
@@ -192,15 +195,31 @@ public class PCADetector<T> : AnomalyDetectorBase<T>
                 reconstructed[j] = sum;
             }
 
-            // Compute reconstruction error
-            T error = NumOps.Zero;
+            // Compute reconstruction error (residual from unretained components)
+            double reconstructionError = 0;
             for (int j = 0; j < d; j++)
             {
                 T diff = NumOps.Subtract(centered[j], reconstructed[j]);
-                error = NumOps.Add(error, NumOps.Multiply(diff, diff));
+                reconstructionError += NumOps.ToDouble(NumOps.Multiply(diff, diff));
             }
 
-            scores[i] = NumOps.Sqrt(error);
+            // Compute Mahalanobis distance in PCA space (distance along retained components,
+            // weighted by inverse eigenvalues). This catches outliers that lie far from the mean
+            // along principal component directions, even when reconstruction error is low.
+            double mahalanobis = 0;
+            for (int c = 0; c < _fittedComponents; c++)
+            {
+                double eigenvalue = NumOps.ToDouble(_explainedVariance![c]);
+                if (eigenvalue > EigenvalueFloor)
+                {
+                    double proj = NumOps.ToDouble(projected[c]);
+                    mahalanobis += (proj * proj) / eigenvalue;
+                }
+            }
+
+            // Combined score: Hotelling's T² (Mahalanobis in PC space) + SPE/Q (reconstruction error).
+            // Both are kept as squared statistics, consistent with standard MSPC-based PCA anomaly scoring.
+            scores[i] = NumOps.FromDouble(mahalanobis + reconstructionError);
         }
 
         return scores;

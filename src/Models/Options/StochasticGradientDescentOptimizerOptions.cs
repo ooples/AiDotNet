@@ -39,6 +39,14 @@ namespace AiDotNet.Models.Options;
 public class StochasticGradientDescentOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOptions<T, TInput, TOutput>
 {
     /// <summary>
+    /// Initializes a new instance of the StochasticGradientDescentOptimizerOptions class with appropriate defaults.
+    /// </summary>
+    public StochasticGradientDescentOptimizerOptions()
+    {
+        MaxIterations = 1000;
+    }
+
+    /// <summary>
     /// Gets or sets the batch size for stochastic gradient descent.
     /// </summary>
     /// <value>A positive integer, defaulting to 1 for true stochastic behavior.</value>
@@ -102,5 +110,4 @@ public class StochasticGradientDescentOptimizerOptions<T, TInput, TOutput> : Gra
     /// - Monitor validation metrics to determine if more iterations are helpful
     /// </para>
     /// </remarks>
-    public new int MaxIterations { get; set; } = 1000;
 }

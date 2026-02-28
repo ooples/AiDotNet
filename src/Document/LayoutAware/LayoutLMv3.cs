@@ -179,6 +179,7 @@ public class LayoutLMv3<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
         _patchSize = 16; // Default patch size for LayoutLMv3
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
+        Guard.Positive(imageSize, nameof(imageSize));
         ImageSize = imageSize;
         MaxSequenceLength = maxSequenceLength;
 
@@ -240,6 +241,7 @@ public class LayoutLMv3<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
         _vocabSize = vocabSize;
         _patchSize = patchSize;
 
+        Guard.Positive(imageSize, nameof(imageSize));
         ImageSize = imageSize;
         MaxSequenceLength = maxSequenceLength;
 
@@ -864,15 +866,21 @@ public class LayoutLMv3<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
     {
         var image = EnsureBatchDimension(rawImage);
 
-        // Normalize image to [-1, 1] range (standard for vision transformers)
         int batchSize = image.Shape[0];
         int channels = image.Shape[1];
         int height = image.Shape[2];
         int width = image.Shape[3];
 
-        var normalized = new Tensor<T>(image.Shape);
+        // Resize to model's expected ImageSize if needed (bilinear interpolation)
+        if (height != ImageSize || width != ImageSize)
+        {
+            image = ResizeBilinear(image, batchSize, channels, height, width, ImageSize, ImageSize);
+            height = ImageSize;
+            width = ImageSize;
+        }
 
         // ImageNet normalization: (x - mean) / std
+        var normalized = new Tensor<T>(image.Shape);
         double[] means = [0.485, 0.456, 0.406];
         double[] stds = [0.229, 0.224, 0.225];
 
@@ -896,6 +904,52 @@ public class LayoutLMv3<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
         }
 
         return normalized;
+    }
+
+    private Tensor<T> ResizeBilinear(Tensor<T> image, int batchSize, int channels,
+        int srcH, int srcW, int dstH, int dstW)
+    {
+        var resized = new Tensor<T>([batchSize, channels, dstH, dstW]);
+
+        double scaleH = (double)srcH / dstH;
+        double scaleW = (double)srcW / dstW;
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int c = 0; c < channels; c++)
+            {
+                int srcBaseIdx = b * channels * srcH * srcW + c * srcH * srcW;
+                int dstBaseIdx = b * channels * dstH * dstW + c * dstH * dstW;
+
+                for (int h = 0; h < dstH; h++)
+                {
+                    double srcY = (h + 0.5) * scaleH - 0.5;
+                    int y0 = Math.Max(0, (int)Math.Floor(srcY));
+                    int y1 = Math.Min(srcH - 1, y0 + 1);
+                    double fy = srcY - y0;
+
+                    for (int w = 0; w < dstW; w++)
+                    {
+                        double srcX = (w + 0.5) * scaleW - 0.5;
+                        int x0 = Math.Max(0, (int)Math.Floor(srcX));
+                        int x1 = Math.Min(srcW - 1, x0 + 1);
+                        double fx = srcX - x0;
+
+                        double v00 = NumOps.ToDouble(image.Data.Span[srcBaseIdx + y0 * srcW + x0]);
+                        double v01 = NumOps.ToDouble(image.Data.Span[srcBaseIdx + y0 * srcW + x1]);
+                        double v10 = NumOps.ToDouble(image.Data.Span[srcBaseIdx + y1 * srcW + x0]);
+                        double v11 = NumOps.ToDouble(image.Data.Span[srcBaseIdx + y1 * srcW + x1]);
+
+                        double val = v00 * (1 - fy) * (1 - fx) + v01 * (1 - fy) * fx
+                                   + v10 * fy * (1 - fx) + v11 * fy * fx;
+
+                        resized.Data.Span[dstBaseIdx + h * dstW + w] = NumOps.FromDouble(val);
+                    }
+                }
+            }
+        }
+
+        return resized;
     }
 
     /// <summary>
@@ -965,7 +1019,7 @@ public class LayoutLMv3<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
                 { "num_classes", _numClasses },
                 { "use_native_mode", _useNativeMode }
             },
-            ModelData = this.Serialize()
+            ModelData = SafeSerialize()
         };
     }
 
@@ -1069,6 +1123,41 @@ public class LayoutLMv3<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
     #endregion
 
     #region NeuralNetworkBase Implementation
+
+    /// <summary>
+    /// Overrides Forward to handle LayoutLMv3's multimodal architecture.
+    /// Image input is routed through image embedding (skipping text embedding),
+    /// then through transformer layers and classification head.
+    /// </summary>
+    protected override Tensor<T> Forward(Tensor<T> input)
+    {
+        // If layer groups are populated, use modality-aware routing
+        if (_imageEmbeddingLayers.Count > 0 || _transformerLayers.Count > 0)
+        {
+            var output = input;
+
+            // Route through image embedding (skip text embedding for image input)
+            foreach (var layer in _imageEmbeddingLayers)
+                output = layer.Forward(output);
+
+            // Route through transformer layers
+            foreach (var layer in _transformerLayers)
+                output = layer.Forward(output);
+
+            // Route through classification head layers (all layers not in embedding/transformer groups)
+            var excludedLayers = new HashSet<ILayer<T>>(_imageEmbeddingLayers);
+            foreach (var l in _textEmbeddingLayers) excludedLayers.Add(l);
+            foreach (var l in _transformerLayers) excludedLayers.Add(l);
+
+            foreach (var layer in Layers.Where(l => !excludedLayers.Contains(l)))
+                output = layer.Forward(output);
+
+            return output;
+        }
+
+        // Fallback to sequential processing if groups not populated
+        return base.Forward(input);
+    }
 
     /// <inheritdoc/>
     public override Tensor<T> Predict(Tensor<T> input)

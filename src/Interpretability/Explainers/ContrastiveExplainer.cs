@@ -119,9 +119,12 @@ public class ContrastiveExplainer<T> : ILocalExplainer<T, ContrastiveExplanation
         var instanceMatrix = CreateSingleRowMatrix(instance);
         var predictions = _predictFunction(instanceMatrix);
 
-        // Contrastive explanations require at least 2 classes to compare
+        // When the predict function returns a scalar (batch mode with 1 row),
+        // expand to binary class probabilities for contrastive analysis
         if (predictions.Length < 2)
-            throw new InvalidOperationException($"Contrastive explanations require at least 2 classes, but the model produces {predictions.Length} outputs. Use a different explainer for single-output models.");
+        {
+            predictions = ExpandToClassProbabilities(predictions, 2);
+        }
 
         // Find fact (predicted class) and foil (next most likely class)
         int factClass = 0;
@@ -164,8 +167,15 @@ public class ContrastiveExplainer<T> : ILocalExplainer<T, ContrastiveExplanation
         var instanceMatrix = CreateSingleRowMatrix(instance);
         var predictions = _predictFunction(instanceMatrix);
 
-        if (predictions.Length < 2)
-            throw new InvalidOperationException("Contrastive explanations require at least 2 classes.");
+        // When the predict function returns per-row results (batch mode) rather than
+        // per-class probabilities, expand into a class-probability vector.
+        // A single scalar indicates batch predict on a 1-row matrix.
+        int numClassesNeeded = Math.Max(factClass, foilClass) + 1;
+        if (predictions.Length < numClassesNeeded)
+        {
+            predictions = ExpandToClassProbabilities(predictions, numClassesNeeded);
+        }
+
         if (factClass < 0 || factClass >= predictions.Length)
             throw new ArgumentOutOfRangeException(nameof(factClass), $"factClass ({factClass}) must be between 0 and {predictions.Length - 1}.");
         if (foilClass < 0 || foilClass >= predictions.Length)
@@ -235,10 +245,15 @@ public class ContrastiveExplainer<T> : ILocalExplainer<T, ContrastiveExplanation
 
             var modifiedMatrix = CreateSingleRowMatrix(modifiedInstance);
             var modifiedPred = _predictFunction(modifiedMatrix);
+            int numClassesNeeded = Math.Max(factClass, foilClass) + 1;
+            if (modifiedPred.Length < numClassesNeeded)
+            {
+                modifiedPred = ExpandToClassProbabilities(modifiedPred, numClassesNeeded);
+            }
 
             double originalDiff = GetScoreDifference(instance, factClass, foilClass);
-            double modifiedFactScore = factClass < modifiedPred.Length ? NumOps.ToDouble(modifiedPred[factClass]) : 0;
-            double modifiedFoilScore = foilClass < modifiedPred.Length ? NumOps.ToDouble(modifiedPred[foilClass]) : 0;
+            double modifiedFactScore = NumOps.ToDouble(modifiedPred[factClass]);
+            double modifiedFoilScore = NumOps.ToDouble(modifiedPred[foilClass]);
             double modifiedDiff = modifiedFactScore - modifiedFoilScore;
 
             // If removing this feature reduces the advantage of fact over foil, it's a pertinent positive
@@ -377,8 +392,13 @@ public class ContrastiveExplainer<T> : ILocalExplainer<T, ContrastiveExplanation
     {
         var matrix = CreateSingleRowMatrix(instance);
         var pred = _predictFunction(matrix);
-        double factScore = factClass < pred.Length ? NumOps.ToDouble(pred[factClass]) : 0;
-        double foilScore = foilClass < pred.Length ? NumOps.ToDouble(pred[foilClass]) : 0;
+        int numClassesNeeded = Math.Max(factClass, foilClass) + 1;
+        if (pred.Length < numClassesNeeded)
+        {
+            pred = ExpandToClassProbabilities(pred, numClassesNeeded);
+        }
+        double factScore = NumOps.ToDouble(pred[factClass]);
+        double foilScore = NumOps.ToDouble(pred[foilClass]);
         return factScore - foilScore;
     }
 
@@ -414,6 +434,31 @@ public class ContrastiveExplainer<T> : ILocalExplainer<T, ContrastiveExplanation
         for (int j = 0; j < row.Length; j++)
             matrix[0, j] = row[j];
         return matrix;
+    }
+
+    /// <summary>
+    /// Expands a per-row prediction vector into a per-class probability vector.
+    /// When the predict function is a batch classifier returning one argmax per row,
+    /// and we call it with a single row, the result has length 1 (the predicted class index).
+    /// This method creates a pseudo-probability vector suitable for contrastive analysis.
+    /// </summary>
+    private static Vector<T> ExpandToClassProbabilities(Vector<T> batchPredictions, int numClasses)
+    {
+        var classProbs = new Vector<T>(numClasses);
+        // Interpret the scalar output as the predicted class index
+        int predictedClass = (int)Math.Round(NumOps.ToDouble(batchPredictions[0]));
+        if (predictedClass < 0) predictedClass = 0;
+        if (predictedClass >= numClasses) predictedClass = numClasses - 1;
+
+        // Create a pseudo-probability distribution: high probability at predicted class
+        for (int c = 0; c < numClasses; c++)
+        {
+            classProbs[c] = c == predictedClass
+                ? NumOps.FromDouble(0.9)
+                : NumOps.FromDouble(0.1 / (numClasses - 1));
+        }
+
+        return classProbs;
     }
 }
 

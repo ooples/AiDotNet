@@ -201,19 +201,22 @@ public class WendlandRBF<T> : IRadialBasisFunction<T>
                 return _numOps.Multiply(factor, oneMinusR);
 
             case 1:
-                // d/dr[(1-r)^4 * (1+4r)] = (1-r)^3 * (-4-20r)
+                // d/dr[(1-r)^4 * (1+4r)] = (1-r)^3 * (-20r)
+                // Derivation: u=(1-r)^4, u'=-4(1-r)^3, v=(1+4r), v'=4
+                // f'= u'v+uv' = (1-r)^3[-4(1+4r)+4(1-r)] = (1-r)^3[-20r]
                 T term1 = _numOps.Power(oneMinusR, _numOps.FromDouble(3));
-                T term2 = _numOps.FromDouble(-4);
                 T term3 = _numOps.Multiply(_numOps.FromDouble(-20), normalizedR);
-                return _numOps.Multiply(term1, _numOps.Add(term2, term3));
+                return _numOps.Multiply(term1, term3);
 
             case 2:
-                // d/dr[(1-r)^6 * (3+18r+35r^2)] = (1-r)^5 * (-18-180r-210r^2)
+                // d/dr[(1-r)^6 * (3+18r+35r^2)] = (1-r)^5 * (-56r - 280r^2)
+                // Derivation: u=(1-r)^6, u'=-6(1-r)^5, v=(3+18r+35r²), v'=(18+70r)
+                // f'= u'v+uv' = (1-r)^5[-6(3+18r+35r²)+(1-r)(18+70r)]
+                //   = (1-r)^5[-18-108r-210r² + 18+52r-70r²] = (1-r)^5[-56r-280r²]
                 T term1_k2 = _numOps.Power(oneMinusR, _numOps.FromDouble(5));
-                T term2_k2 = _numOps.FromDouble(-18);
-                T term3_k2 = _numOps.Multiply(_numOps.FromDouble(-180), normalizedR);
-                T term4_k2 = _numOps.Multiply(_numOps.FromDouble(-210), _numOps.Power(normalizedR, _numOps.FromDouble(2)));
-                return _numOps.Multiply(term1_k2, _numOps.Add(_numOps.Add(term2_k2, term3_k2), term4_k2));
+                T term3_k2 = _numOps.Multiply(_numOps.FromDouble(-56), normalizedR);
+                T term4_k2 = _numOps.Multiply(_numOps.FromDouble(-280), _numOps.Power(normalizedR, _numOps.FromDouble(2)));
+                return _numOps.Multiply(term1_k2, _numOps.Add(term3_k2, term4_k2));
 
             default:
                 throw new ArgumentException("Unsupported k value. Supported values are 0, 1, and 2.");

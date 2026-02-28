@@ -263,11 +263,12 @@ public class RationalQuadraticKernel<T> : IKernelFunction<T>
             gradients["lengthScale"] = 0;
         }
 
-        // dk/d(alpha) = k * [ r^2/(alpha*l^2*baseTerm) - log(baseTerm) ]
-        // Note: scaledR2 = r^2/(2*alpha*l^2), so r^2/(alpha*l^2) = 2*scaledR2
-        // Fixed: removed extraneous division by alpha
+        // dk/d(alpha) = k * [ scaledR2/baseTerm - log(baseTerm) ]
+        // where scaledR2 = r^2/(2*alpha*l^2) and baseTerm = 1 + scaledR2
+        // Derivation: d/da [(1+s)^{-a}] = (1+s)^{-a} * [s/(1+s) - ln(1+s)]
+        // where ds/da = -s/a, giving the s/(1+s) term from the chain rule
         double logBase = Math.Log(Math.Max(baseTerm, 1e-10));
-        gradients["alpha"] = k * (2.0 * scaledR2 / baseTerm - logBase);
+        gradients["alpha"] = k * (scaledR2 / baseTerm - logBase);
 
         return gradients;
     }

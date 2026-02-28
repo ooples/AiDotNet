@@ -1365,7 +1365,7 @@ public class GPUCodeGenerator
             LiSHTOp lisht => $"    {dataType} {outputName} = {GetTensorName(lisht.InputIds[0])}[idx] * tanh({GetTensorName(lisht.InputIds[0])}[idx]);",
             BentIdentityOp bentid => $"    {dataType} {outputName} = (sqrt({GetTensorName(bentid.InputIds[0])}[idx] * {GetTensorName(bentid.InputIds[0])}[idx] + ({dataType})1) - ({dataType})1) * ({dataType})0.5 + {GetTensorName(bentid.InputIds[0])}[idx];",
             GaussianOp gauss => $"    {dataType} {outputName} = exp(-{GetTensorName(gauss.InputIds[0])}[idx] * {GetTensorName(gauss.InputIds[0])}[idx]);",
-            ScaledTanhOp scaledtanh => $"    {dataType} {outputName} = tanh(({dataType}){scaledtanh.Beta} * {GetTensorName(scaledtanh.InputIds[0])}[idx]);",
+            ScaledTanhOp scaledtanh => $"    {dataType} {outputName} = tanh(({dataType}){scaledtanh.Beta} * ({dataType})0.5 * {GetTensorName(scaledtanh.InputIds[0])}[idx]);",
             ISRUOp isru => $"    {dataType} {outputName} = {GetTensorName(isru.InputIds[0])}[idx] * rsqrt(({dataType})1 + ({dataType}){isru.Alpha} * {GetTensorName(isru.InputIds[0])}[idx] * {GetTensorName(isru.InputIds[0])}[idx]);",
             SignOp sign => $"    {dataType} {outputName} = sign({GetTensorName(sign.InputIds[0])}[idx]);",
             SQRBFOp sqrbf => $"    {dataType} {outputName} = fabs({GetTensorName(sqrbf.InputIds[0])}[idx]) <= ({dataType})1 ? ({dataType})1 - {GetTensorName(sqrbf.InputIds[0])}[idx] * {GetTensorName(sqrbf.InputIds[0])}[idx] : ({dataType})0;",
@@ -1474,7 +1474,7 @@ public class GPUCodeGenerator
             LiSHTOp lisht => $"    {dataType} {outputName} = {GetTensorName(lisht.InputIds[0])}[idx] * tanh({GetTensorName(lisht.InputIds[0])}[idx]);",
             BentIdentityOp bentid => $"    {dataType} {outputName} = (sqrt({GetTensorName(bentid.InputIds[0])}[idx] * {GetTensorName(bentid.InputIds[0])}[idx] + 1.0) - 1.0) * 0.5 + {GetTensorName(bentid.InputIds[0])}[idx];",
             GaussianOp gauss => $"    {dataType} {outputName} = exp(-{GetTensorName(gauss.InputIds[0])}[idx] * {GetTensorName(gauss.InputIds[0])}[idx]);",
-            ScaledTanhOp scaledtanh => $"    {dataType} {outputName} = tanh(({dataType}){scaledtanh.Beta} * {GetTensorName(scaledtanh.InputIds[0])}[idx]);",
+            ScaledTanhOp scaledtanh => $"    {dataType} {outputName} = tanh(({dataType}){scaledtanh.Beta} * 0.5 * {GetTensorName(scaledtanh.InputIds[0])}[idx]);",
             ISRUOp isru => $"    {dataType} {outputName} = {GetTensorName(isru.InputIds[0])}[idx] * rsqrt(1.0 + ({dataType}){isru.Alpha} * {GetTensorName(isru.InputIds[0])}[idx] * {GetTensorName(isru.InputIds[0])}[idx]);",
             SignOp sign => $"    {dataType} {outputName} = sign({GetTensorName(sign.InputIds[0])}[idx]);",
             SQRBFOp sqrbf => $"    {dataType} {outputName} = abs({GetTensorName(sqrbf.InputIds[0])}[idx]) <= 1.0 ? 1.0 - {GetTensorName(sqrbf.InputIds[0])}[idx] * {GetTensorName(sqrbf.InputIds[0])}[idx] : 0.0;",
@@ -1935,7 +1935,7 @@ public class GPUCodeGenerator
             LiSHTOp lisht => $"    {dataType} x = {GetTensorName(lisht.InputIds[0])}[idx]; {dataType} {outputName} = x * tanh(x);",
             BentIdentityOp bentid => $"    {dataType} x = {GetTensorName(bentid.InputIds[0])}[idx]; {dataType} {outputName} = (sqrt(x * x + 1.0) - 1.0) * 0.5 + x;",
             GaussianOp gauss => $"    {dataType} x = {GetTensorName(gauss.InputIds[0])}[idx]; {dataType} {outputName} = exp(-x * x);",
-            ScaledTanhOp scaledtanh => $"    {dataType} {outputName} = tanh({dataType}({scaledtanh.Beta}) * {GetTensorName(scaledtanh.InputIds[0])}[idx]);",
+            ScaledTanhOp scaledtanh => $"    {dataType} {outputName} = tanh({dataType}({scaledtanh.Beta}) * 0.5 * {GetTensorName(scaledtanh.InputIds[0])}[idx]);",
             ISRUOp isru => $"    {dataType} x = {GetTensorName(isru.InputIds[0])}[idx]; {dataType} {outputName} = x * inversesqrt(1.0 + {dataType}({isru.Alpha}) * x * x);",
             SignOp sign => $"    {dataType} {outputName} = sign({GetTensorName(sign.InputIds[0])}[idx]);",
             SQRBFOp sqrbf => $"    {dataType} x = {GetTensorName(sqrbf.InputIds[0])}[idx]; {dataType} {outputName} = abs(x) <= 1.0 ? 1.0 - x * x : 0.0;",
@@ -2252,7 +2252,8 @@ __device__ __forceinline__ {dataType} cuda_gaussian({dataType} x) {{
 }}
 
 __device__ __forceinline__ {dataType} cuda_scaled_tanh({dataType} x, {dataType} beta) {{
-    return tanhf(beta * x);
+    // ScaledTanh(x) = (1 - exp(-beta*x)) / (1 + exp(-beta*x)) = tanh(beta*x/2)
+    return tanhf(beta * x * 0.5f);
 }}
 
 __device__ __forceinline__ {dataType} cuda_isru({dataType} x, {dataType} alpha) {{

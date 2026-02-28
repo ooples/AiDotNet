@@ -145,7 +145,9 @@ public class TemperatureScaling<T>
 
             var probs = Softmax(scaledLogits);
 
-            // Compute gradient: ∂L/∂T = -(1/T²) * (z_y - Σ_k(p_k * z_k))
+            // Compute gradient: ∂NLL/∂T = (1/T²) * (z_y - Σ_k(p_k * z_k))
+            // Derivation: NLL = -log(p_y) = -z_y/T + log(Σ exp(z_k/T))
+            // ∂NLL/∂T = z_y/T² - (1/T²)Σ p_k z_k = (1/T²)(z_y - Σ p_k z_k)
             var trueClassLogit = logit[label];
             var weightedSum = _numOps.Zero;
 
@@ -156,7 +158,7 @@ public class TemperatureScaling<T>
 
             var diff = _numOps.Subtract(trueClassLogit, weightedSum);
             var tempSquared = _numOps.Multiply(_temperature, _temperature);
-            var sampleGrad = _numOps.Divide(_numOps.Negate(diff), tempSquared);
+            var sampleGrad = _numOps.Divide(diff, tempSquared);
 
             gradient = _numOps.Add(gradient, sampleGrad);
         }

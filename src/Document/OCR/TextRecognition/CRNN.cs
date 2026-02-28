@@ -215,7 +215,8 @@ public class CRNN<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
             cnnChannels: _cnnChannels,
             rnnHiddenSize: _rnnHiddenSize,
             rnnLayers: _rnnLayers,
-            charsetSize: _charset.Length + 1)); // +1 for CTC blank
+            charsetSize: _charset.Length + 1, // +1 for CTC blank
+            inputDepth: Architecture.InputDepth));
     }
 
     #endregion
@@ -516,7 +517,7 @@ public class CRNN<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
                 { "image_width", ImageSize },
                 { "use_native_mode", _useNativeMode }
             },
-            ModelData = this.Serialize()
+            ModelData = SafeSerialize()
         };
     }
 

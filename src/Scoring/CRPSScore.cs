@@ -162,8 +162,10 @@ public class CRPSScore<T> : ScoringRuleBase<T>
         // d(CRPS)/d(μ) = -(2Φ(z) - 1)
         double gradMean = -(2 * Phi - 1);
 
-        // d(CRPS)/d(σ²) = [z * (2Φ(z) - 1) + 2φ(z) - 1/√π] / (2σ)
-        double gradVariance = (z * (2 * Phi - 1) + 2 * phi - 1 / Math.Sqrt(Math.PI)) / (2 * sigma);
+        // d(CRPS)/d(σ²) = [2φ(z) - 1/√π] / (2σ)
+        // Derivation: CRPS = σ*f(z), f'(z) = 2Φ(z)-1, chain rule gives
+        // d(CRPS)/dσ = f(z) - z*f'(z) = 2φ(z) - 1/√π, then dσ/d(σ²) = 1/(2σ)
+        double gradVariance = (2 * phi - 1 / Math.Sqrt(Math.PI)) / (2 * sigma);
 
         return new Vector<T>(new[] { NumOps.FromDouble(gradMean), NumOps.FromDouble(gradVariance) });
     }

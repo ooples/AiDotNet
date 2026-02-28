@@ -741,7 +741,7 @@ public class AnomalyTransformerDetector<T> : AnomalyDetectorBase<T>
         }
     }
 
-    private (Matrix<T> output, Matrix<T> attention, Vector<T> assocDisc) Forward(Matrix<T> sequence)
+    private (Matrix<T> output, Matrix<T> attention, Vector<T> assocDisc, Matrix<T> projected) Forward(Matrix<T> sequence)
     {
         // Capture nullable fields for proper null checking
         var inputProj = _inputProj;
@@ -800,7 +800,7 @@ public class AnomalyTransformerDetector<T> : AnomalyDetectorBase<T>
         // Feed-forward
         var output = FeedForward(attnOutput);
 
-        return (output, attention, assocDisc);
+        return (output, attention, assocDisc, projected);
     }
 
     private void AddPositionalEncoding(Matrix<T> x)
@@ -1090,23 +1090,37 @@ public class AnomalyTransformerDetector<T> : AnomalyDetectorBase<T>
                 }
             }
 
-            var (_, _, assocDisc) = Forward(seq);
+            var (output, _, assocDisc, projected) = Forward(seq);
 
-            // Assign scores to each point in the window
+            // Compute per-timestep reconstruction error (MSE between output and projected input).
+            // Per the Anomaly Transformer paper, the anomaly score combines
+            // association discrepancy and reconstruction error.
             for (int t = 0; t < _seqLength; t++)
             {
+                double reconError = 0;
+                for (int j = 0; j < _modelDim; j++)
+                {
+                    double diff = NumOps.ToDouble(NumOps.Subtract(output[t, j], projected[t, j]));
+                    reconError += diff * diff;
+                }
+                reconError = Math.Sqrt(reconError / _modelDim);
+
+                // Combined score: association discrepancy * reconstruction error
+                double disc = NumOps.ToDouble(assocDisc[t]);
+                double combinedScore = disc * reconError + reconError;
+
                 int idx = windowStart + t;
                 if (hasScore[idx])
                 {
                     // Take max of overlapping scores
-                    if (NumOps.ToDouble(assocDisc[t]) > NumOps.ToDouble(scores[idx]))
+                    if (combinedScore > NumOps.ToDouble(scores[idx]))
                     {
-                        scores[idx] = assocDisc[t];
+                        scores[idx] = NumOps.FromDouble(combinedScore);
                     }
                 }
                 else
                 {
-                    scores[idx] = assocDisc[t];
+                    scores[idx] = NumOps.FromDouble(combinedScore);
                     hasScore[idx] = true;
                 }
             }
@@ -1120,13 +1134,37 @@ public class AnomalyTransformerDetector<T> : AnomalyDetectorBase<T>
             if (!hasScore[i])
             {
                 // Use simple distance for points without window coverage
-                T dist = NumOps.Zero;
+                double dist = 0;
                 for (int j = 0; j < _inputDim; j++)
                 {
-                    dist = NumOps.Add(dist, NumOps.Multiply(data[i, j], data[i, j]));
+                    double val = NumOps.ToDouble(data[i, j]);
+                    dist += val * val;
                 }
-                scores[i] = dist;
+                scores[i] = NumOps.FromDouble(Math.Sqrt(dist));
             }
+        }
+
+        // Multiply by value deviation signal: the absolute normalized value of each point.
+        // The association discrepancy and reconstruction error from the transformer
+        // capture temporal pattern anomalies, while value deviation captures
+        // point-level magnitude anomalies. Using multiplicative combination ensures
+        // extreme values get proportionally amplified scores, which is critical
+        // when the model hasn't fully converged (few training epochs).
+        for (int i = 0; i < n; i++)
+        {
+            double valueDev = 0;
+            for (int j = 0; j < _inputDim; j++)
+            {
+                double val = Math.Abs(NumOps.ToDouble(data[i, j]));
+                valueDev += val * val;
+            }
+            valueDev = Math.Sqrt(valueDev);
+
+            double currentScore = NumOps.ToDouble(scores[i]);
+            // Multiplicative: anomaly score * (1 + valueDev)
+            // Normal points (~0 normalized) get multiplied by ~1 (unchanged)
+            // Extreme points (high normalized abs) get multiplied by much more
+            scores[i] = NumOps.FromDouble(currentScore * (1.0 + valueDev));
         }
 
         return scores;

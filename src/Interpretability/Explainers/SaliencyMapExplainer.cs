@@ -96,7 +96,7 @@ public class SaliencyMapExplainer<T> : ILocalExplainer<T, SaliencyMapExplanation
 
         if (numFeatures < 1)
             throw new ArgumentException("Number of features must be at least 1.", nameof(numFeatures));
-        if (smoothGradSamples < 1)
+        if (method == SaliencyMethod.SmoothGrad && smoothGradSamples < 1)
             throw new ArgumentOutOfRangeException(nameof(smoothGradSamples), "SmoothGrad samples must be at least 1.");
         if (smoothGradNoise < 0)
             throw new ArgumentOutOfRangeException(nameof(smoothGradNoise), "SmoothGrad noise must be non-negative.");

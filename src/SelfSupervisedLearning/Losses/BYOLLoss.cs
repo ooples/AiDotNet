@@ -114,17 +114,20 @@ public class BYOLLoss<T>
 
         for (int i = 0; i < batchSize; i++)
         {
-            // Compute cosine similarity
+            // Compute cosine similarity using normalized vectors
             T cosineSim = NumOps.Zero;
-            T pNorm = NumOps.Zero;
-
             for (int d = 0; d < dim; d++)
             {
                 cosineSim = NumOps.Add(cosineSim, NumOps.Multiply(p[i, d], z[i, d]));
-                pNorm = NumOps.Add(pNorm, NumOps.Multiply(p[i, d], p[i, d]));
             }
 
-            pNorm = NumOps.Sqrt(NumOps.Add(pNorm, NumOps.FromDouble(1e-8)));
+            // Compute norm of the ORIGINAL (unnormalized) input for chain rule
+            T origNormSq = NumOps.Zero;
+            for (int d = 0; d < dim; d++)
+            {
+                origNormSq = NumOps.Add(origNormSq, NumOps.Multiply(onlinePrediction[i, d], onlinePrediction[i, d]));
+            }
+            T origNorm = NumOps.Sqrt(NumOps.Add(origNormSq, NumOps.FromDouble(1e-8)));
 
             // Loss = 2 - 2 * cos_sim
             var loss = NumOps.Subtract(
@@ -133,13 +136,17 @@ public class BYOLLoss<T>
 
             totalLoss = NumOps.Add(totalLoss, loss);
 
-            // Gradient: d/dp (-2 * p·z / (||p|| * ||z||))
-            // For normalized vectors: -2 * (z - (p·z) * p)
+            // Gradient w.r.t. unnormalized onlinePrediction:
+            // d/da_d [cos(a,b)] = (z_d - cos_sim * p_d) / ||a||
+            // where p = a/||a||, z = b/||b||
+            // So dL/da_d = -2 * (z_d - cos_sim * p_d) / ||a||
             for (int d = 0; d < dim; d++)
             {
-                var grad = NumOps.Multiply(
-                    NumOps.FromDouble(-2.0),
-                    NumOps.Subtract(z[i, d], NumOps.Multiply(cosineSim, p[i, d])));
+                var grad = NumOps.Divide(
+                    NumOps.Multiply(
+                        NumOps.FromDouble(-2.0),
+                        NumOps.Subtract(z[i, d], NumOps.Multiply(cosineSim, p[i, d]))),
+                    origNorm);
 
                 gradP[i * dim + d] = grad;
             }

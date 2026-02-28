@@ -578,8 +578,10 @@ public class DilatedConvolutionalLayer<T> : LayerBase<T>
         if (fusedActivation != FusedActivationType.None)
         {
             // Use FusedConv2D for optimal GPU kernel fusion (conv + bias + activation)
+            // Reshape bias from [outputDepth] to [1, outputDepth, 1, 1] for NCHW broadcast
+            var biasReshaped4D = _biases.Reshape([1, _outputDepth, 1, 1]);
             outputNCHW = Engine.FusedConv2D(
-                input4D, _kernels, _biases,
+                input4D, _kernels, biasReshaped4D,
                 _stride, _stride,
                 _padding, _padding,
                 _dilation, _dilation,

@@ -78,16 +78,55 @@ public class ProbitLink<T> : ILinkFunction<T>
     }
 
     /// <summary>
-    /// Standard normal CDF using approximation.
+    /// Standard normal CDF using the error function.
     /// </summary>
     private static double NormalCDF(double x)
     {
-        // Abramowitz and Stegun approximation
-        double t = 1 / (1 + 0.2316419 * Math.Abs(x));
-        double d = 0.3989423 * Math.Exp(-x * x / 2);
-        double p = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274))));
+        // Phi(x) = 0.5 * (1 + erf(x / sqrt(2)))
+        // This formulation is continuous everywhere (no branching artifact at x=0).
+        return 0.5 * (1 + Erf(x / Math.Sqrt(2)));
+    }
 
-        return x > 0 ? 1 - p : p;
+    /// <summary>
+    /// Error function using a hybrid approach for full precision.
+    /// For small |x|, uses the Taylor series (avoids catastrophic cancellation).
+    /// For larger |x|, uses Abramowitz and Stegun approximation (7.1.26).
+    /// </summary>
+    private static double Erf(double x)
+    {
+        // erf(-x) = -erf(x), so handle sign separately
+        double sign = x >= 0 ? 1.0 : -1.0;
+        double ax = Math.Abs(x);
+
+        // For small |x|, use Taylor series: erf(x) = (2/sqrt(pi)) * (x - x^3/3 + x^5/10 - x^7/42 + ...)
+        // This avoids catastrophic cancellation in 1 - poly*exp(-x^2) when x is near 0
+        if (ax < 0.5)
+        {
+            double x2 = ax * ax;
+            // erf(x) = (2/sqrt(pi)) * sum_{n=0}^{inf} (-1)^n * x^(2n+1) / (n! * (2n+1))
+            double term = ax; // first term: x
+            double sum = term;
+            for (int n = 1; n <= 15; n++)
+            {
+                term *= -x2 / n;
+                sum += term / (2 * n + 1);
+            }
+            return sign * sum * 2.0 / Math.Sqrt(Math.PI);
+        }
+
+        // Abramowitz and Stegun formula 7.1.26 for |x| >= 0.5
+        const double a1 = 0.254829592;
+        const double a2 = -0.284496736;
+        const double a3 = 1.421413741;
+        const double a4 = -1.453152027;
+        const double a5 = 1.061405429;
+        const double p = 0.3275911;
+
+        double t = 1.0 / (1.0 + p * ax);
+        double poly = t * (a1 + t * (a2 + t * (a3 + t * (a4 + t * a5))));
+        double result = 1.0 - poly * Math.Exp(-ax * ax);
+
+        return sign * result;
     }
 
     /// <summary>

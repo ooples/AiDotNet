@@ -134,8 +134,11 @@ public class RobustPCADetector<T> : AnomalyDetectorBase<T>
         // Run Robust PCA via ADMM
         SolveADMM(data, effectiveLambda);
 
-        // Calculate scores for training data to set threshold
-        var trainingScores = ScoreAnomaliesInternal(X, isTrainingData: true);
+        // Calculate scores for training data to set threshold.
+        // Use isTrainingData: false so that the threshold is calibrated on the same
+        // scoring method that ScoreAnomalies() will use for new data. This ensures
+        // consistent score distributions between Fit and Predict.
+        var trainingScores = ScoreAnomaliesInternal(X, isTrainingData: false);
         SetThresholdFromContamination(trainingScores);
 
         _isFitted = true;

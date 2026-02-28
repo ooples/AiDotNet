@@ -64,6 +64,22 @@ public class SoftPlusActivation<T> : ActivationFunctionBase<T>
     public override T Activate(T input)
     {
         // f(x) = ln(1 + e^x)
+        // Numerically stable version:
+        // - For large positive x: ln(1 + e^x) ≈ x (prevents e^x overflow)
+        // - For large negative x: ln(1 + e^x) ≈ e^x (prevents 1+e^x rounding to 1.0)
+        T threshold = NumOps.FromDouble(20.0);
+        T negThreshold = NumOps.Negate(threshold);
+
+        if (NumOps.GreaterThan(input, threshold))
+        {
+            return input;
+        }
+
+        if (NumOps.LessThan(input, negThreshold))
+        {
+            return NumOps.Exp(input);
+        }
+
         T expInput = NumOps.Exp(input);
         T onePlusExp = NumOps.Add(NumOps.One, expInput);
 

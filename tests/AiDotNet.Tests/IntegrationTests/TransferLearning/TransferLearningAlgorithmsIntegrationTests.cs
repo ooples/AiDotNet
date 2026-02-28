@@ -46,7 +46,13 @@ public class TransferLearningAlgorithmsIntegrationTests
 
         // Assert
         Assert.NotNull(result);
-        Assert.True(sourceModel.TrainCallCount > 0, "Model should have been trained at least once during transfer");
+        // Transfer learning must NOT modify the source model - it deep copies and trains the copy
+        Assert.Equal(0, sourceModel.TrainCallCount);
+        // The returned model should have been trained on target data
+        var resultModel = (MockFullModel<double>)result;
+        Assert.True(resultModel.TrainCallCount > 0, "Returned model should have been trained during transfer");
+        // Returned model should be a different instance from source
+        Assert.NotSame(sourceModel, result);
     }
 
     [Fact]

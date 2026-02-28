@@ -398,8 +398,28 @@ public class TrOCR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
     private Tensor<T> RunEncoder(Tensor<T> input)
     {
         var output = input;
+        bool hasReshapedToSequence = false;
+        bool hasPassedConvLayer = false;
         foreach (var layer in _encoderLayers)
         {
+            if (layer is ConvolutionalLayer<T> or BatchNormalizationLayer<T>
+                     or PoolingLayer<T> or MaxPoolingLayer<T> or AveragePoolingLayer<T>)
+            {
+                hasPassedConvLayer = true;
+            }
+
+            // Auto-reshape once when transitioning from spatial (CNN) to non-spatial layers
+            bool isNonSpatialLayer = layer is not (ConvolutionalLayer<T> or BatchNormalizationLayer<T>
+                or PoolingLayer<T> or MaxPoolingLayer<T> or AveragePoolingLayer<T>);
+            if (!hasReshapedToSequence && hasPassedConvLayer && output.Shape.Length >= 3 && isNonSpatialLayer)
+            {
+                int channels = output.Shape.Length == 4 ? output.Shape[1] : output.Shape[0];
+                int spatialH = output.Shape.Length == 4 ? output.Shape[2] : output.Shape[1];
+                int spatialW = output.Shape.Length == 4 ? output.Shape[3] : output.Shape[2];
+                int numPatches = spatialH * spatialW;
+                output = new Tensor<T>(output.Data.ToArray(), [numPatches, channels]);
+                hasReshapedToSequence = true;
+            }
             output = layer.Forward(output);
         }
         return output;
@@ -717,7 +737,7 @@ public class TrOCR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
                 { "image_size", ImageSize },
                 { "use_native_mode", _useNativeMode }
             },
-            ModelData = this.Serialize()
+            ModelData = SafeSerialize()
         };
     }
 

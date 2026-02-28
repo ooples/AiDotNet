@@ -78,15 +78,31 @@ public class FlatTopWindow<T> : IWindowFunction<T>
     public Vector<T> Create(int windowSize)
     {
         Vector<T> window = new Vector<T>(windowSize);
+
+        if (windowSize == 1)
+        {
+            window[0] = _numOps.One;
+            return window;
+        }
+
+        // Normalized Flat Top coefficients (SciPy-compatible)
+        // Peak value is 1.0 at center
+        const double a0 = 0.21557895;
+        const double a1 = 0.41663158;
+        const double a2 = 0.277263158;
+        const double a3 = 0.083578947;
+        const double a4 = 0.006947368;
+
         for (int n = 0; n < windowSize; n++)
         {
-            T nT = _numOps.FromDouble(n);
-            T term1 = _numOps.Multiply(_numOps.FromDouble(1.0), _numOps.One);
-            T term2 = _numOps.Multiply(_numOps.FromDouble(1.93), MathHelper.Cos(_numOps.Multiply(_numOps.FromDouble(2 * Math.PI * n), _numOps.Divide(_numOps.One, _numOps.FromDouble(windowSize - 1)))));
-            T term3 = _numOps.Multiply(_numOps.FromDouble(1.29), MathHelper.Cos(_numOps.Multiply(_numOps.FromDouble(4 * Math.PI * n), _numOps.Divide(_numOps.One, _numOps.FromDouble(windowSize - 1)))));
-            T term4 = _numOps.Multiply(_numOps.FromDouble(0.388), MathHelper.Cos(_numOps.Multiply(_numOps.FromDouble(6 * Math.PI * n), _numOps.Divide(_numOps.One, _numOps.FromDouble(windowSize - 1)))));
-            T term5 = _numOps.Multiply(_numOps.FromDouble(0.028), MathHelper.Cos(_numOps.Multiply(_numOps.FromDouble(8 * Math.PI * n), _numOps.Divide(_numOps.One, _numOps.FromDouble(windowSize - 1)))));
-            window[n] = _numOps.Subtract(_numOps.Subtract(_numOps.Add(_numOps.Subtract(term1, term2), term3), term4), term5);
+            double angle = 2.0 * Math.PI * n / (windowSize - 1);
+            T term0 = _numOps.FromDouble(a0);
+            T term1 = _numOps.Multiply(_numOps.FromDouble(a1), MathHelper.Cos(_numOps.FromDouble(angle)));
+            T term2 = _numOps.Multiply(_numOps.FromDouble(a2), MathHelper.Cos(_numOps.FromDouble(2.0 * angle)));
+            T term3 = _numOps.Multiply(_numOps.FromDouble(a3), MathHelper.Cos(_numOps.FromDouble(3.0 * angle)));
+            T term4 = _numOps.Multiply(_numOps.FromDouble(a4), MathHelper.Cos(_numOps.FromDouble(4.0 * angle)));
+            // w(n) = a0 - a1*cos(angle) + a2*cos(2*angle) - a3*cos(3*angle) + a4*cos(4*angle)
+            window[n] = _numOps.Add(_numOps.Subtract(_numOps.Add(_numOps.Subtract(term0, term1), term2), term3), term4);
         }
 
         return window;

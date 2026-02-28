@@ -641,6 +641,9 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
             outputGradient = outputGradient.Reshape(1, outputGradient.Length);
         }
 
+        // Save original shape for restoring at the end
+        int[] originalInputShape = _lastInput.Shape;
+
         // Ensure shapes match for backward pass
         var adjustedGradient = outputGradient;
         var adjustedInput = _lastInput;
@@ -650,60 +653,88 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
         // Handle shape mismatches - use gamma shape as the reference
         int numFeatures = _gamma.Length;
 
-        // The Engine.BatchNormBackward expects 2D tensors [batch, features]
-        // Preserve the actual batch size from input
-        int batchSize = _lastInput.Shape.Length > 1 ? _lastInput.Shape[0] : 1;
+        // For CNN inputs with rank > 2 (e.g., [N, C, H, W]), BN normalizes per-channel
+        // across batch and spatial dimensions. Reshape to [N*H*W, C] for backward computation.
+        bool isHigherRank = _lastInput.Shape.Length > 2;
+        int batchSize;
+
+        if (isHigherRank)
+        {
+            // For [N, C, H, W] or higher: flatten batch and spatial dims, keep channels as features
+            // Result shape: [N*H*W, C] where C = numFeatures
+            int n = _lastInput.Shape[0];
+            int spatialSize = 1;
+            for (int d = 2; d < _lastInput.Shape.Length; d++)
+                spatialSize *= _lastInput.Shape[d];
+            batchSize = n * spatialSize;
+
+            // Transpose from [N, C, H, W] to [N, H, W, C] then reshape to [N*H*W, C]
+            // Since we need to group spatial elements per channel for BN backward,
+            // we permute so channels are last, then flatten the leading dims
+            int[] permuteOrder = new int[_lastInput.Shape.Length];
+            permuteOrder[0] = 0; // N stays first
+            for (int d = 2; d < _lastInput.Shape.Length; d++)
+                permuteOrder[d - 1] = d; // spatial dims
+            permuteOrder[_lastInput.Shape.Length - 1] = 1; // C goes last
+
+            adjustedGradient = outputGradient.Transpose(permuteOrder).Reshape(batchSize, numFeatures);
+            adjustedInput = _lastInput.Transpose(permuteOrder).Reshape(batchSize, numFeatures);
+        }
+        else
+        {
+            // The Engine.BatchNormBackward expects 2D tensors [batch, features]
+            batchSize = _lastInput.Shape.Length > 1 ? _lastInput.Shape[0] : 1;
+        }
+
         int[] targetShape2D = new[] { batchSize, numFeatures };
-
-        // Adjust gradient to 2D [batch, features] shape
         int totalElements = batchSize * numFeatures;
-        if (adjustedGradient.Length != totalElements)
-        {
-            var gradData = new T[totalElements];
-            int copyLen = Math.Min(adjustedGradient.Length, totalElements);
-            for (int i = 0; i < copyLen; i++)
-            {
-                gradData[i] = adjustedGradient.Data.Span[i];
-            }
-            // Fill remaining with zeros if gradient is smaller
-            for (int i = copyLen; i < totalElements; i++)
-            {
-                gradData[i] = NumOps.Zero;
-            }
-            adjustedGradient = new Tensor<T>(targetShape2D, new Vector<T>(gradData));
-        }
-        else if (adjustedGradient.Rank != 2 || adjustedGradient.Shape[0] != batchSize || adjustedGradient.Shape[1] != numFeatures)
-        {
-            // Same length but different shape - reshape to 2D [batch, features]
-            adjustedGradient = adjustedGradient.Reshape(targetShape2D);
-        }
 
-        // Adjust input to 2D [batch, features] shape
-        if (adjustedInput.Length != totalElements)
+        // Adjust gradient to 2D [batch, features] shape (only for 2D case; higher rank already handled)
+        if (!isHigherRank)
         {
-            var inputData = new T[totalElements];
-            int copyLen = Math.Min(adjustedInput.Length, totalElements);
-            for (int i = 0; i < copyLen; i++)
+            if (adjustedGradient.Length != totalElements)
             {
-                inputData[i] = adjustedInput.Data.Span[i];
+                var gradData = new T[totalElements];
+                int copyLen = Math.Min(adjustedGradient.Length, totalElements);
+                for (int i = 0; i < copyLen; i++)
+                {
+                    gradData[i] = adjustedGradient.Data.Span[i];
+                }
+                for (int i = copyLen; i < totalElements; i++)
+                {
+                    gradData[i] = NumOps.Zero;
+                }
+                adjustedGradient = new Tensor<T>(targetShape2D, new Vector<T>(gradData));
             }
-            // Fill remaining with mean value if input is smaller
-            T fillValue = copyLen > 0 ? inputData[0] : NumOps.Zero;
-            for (int i = copyLen; i < totalElements; i++)
+            else if (adjustedGradient.Rank != 2 || adjustedGradient.Shape[0] != batchSize || adjustedGradient.Shape[1] != numFeatures)
             {
-                inputData[i] = fillValue;
+                adjustedGradient = adjustedGradient.Reshape(targetShape2D);
             }
-            adjustedInput = new Tensor<T>(targetShape2D, new Vector<T>(inputData));
-        }
-        else if (adjustedInput.Rank != 2 || adjustedInput.Shape[0] != batchSize || adjustedInput.Shape[1] != numFeatures)
-        {
-            // Same length but different shape - reshape to 2D [batch, features]
-            adjustedInput = adjustedInput.Reshape(targetShape2D);
+
+            // Adjust input to 2D [batch, features] shape
+            if (adjustedInput.Length != totalElements)
+            {
+                var inputData = new T[totalElements];
+                int copyLen = Math.Min(adjustedInput.Length, totalElements);
+                for (int i = 0; i < copyLen; i++)
+                {
+                    inputData[i] = adjustedInput.Data.Span[i];
+                }
+                T fillValue = copyLen > 0 ? inputData[0] : NumOps.Zero;
+                for (int i = copyLen; i < totalElements; i++)
+                {
+                    inputData[i] = fillValue;
+                }
+                adjustedInput = new Tensor<T>(targetShape2D, new Vector<T>(inputData));
+            }
+            else if (adjustedInput.Rank != 2 || adjustedInput.Shape[0] != batchSize || adjustedInput.Shape[1] != numFeatures)
+            {
+                adjustedInput = adjustedInput.Reshape(targetShape2D);
+            }
         }
 
         if (adjustedMean.Length != numFeatures)
         {
-            // Adjust mean to match gamma shape
             var meanData = new T[numFeatures];
             T meanFillValue = adjustedMean.Length > 0 ? adjustedMean.Data.Span[0] : NumOps.Zero;
             int copyLen = Math.Min(adjustedMean.Length, numFeatures);
@@ -716,7 +747,6 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
 
         if (adjustedVariance.Length != numFeatures)
         {
-            // Adjust variance to match gamma shape
             var varData = new T[numFeatures];
             T varFillValue = adjustedVariance.Length > 0 ? adjustedVariance.Data.Span[0] : NumOps.One;
             int copyLen = Math.Min(adjustedVariance.Length, numFeatures);
@@ -741,8 +771,28 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
         _gammaGradient = gradGamma;
         _betaGradient = gradBeta;
 
-        // Preserve original rank: if forward input was 1D, return 1D gradient
-        if (_inputWas1D && inputGradient.Shape.Length > 1)
+        // Restore original tensor shape
+        if (isHigherRank)
+        {
+            // Result is [N*H*W, C], need to go back to [N, C, H, W]
+            // First reshape to [N, H, W, C]
+            int n = originalInputShape[0];
+            int[] spatialPlusC = new int[originalInputShape.Length];
+            spatialPlusC[0] = n;
+            for (int d = 2; d < originalInputShape.Length; d++)
+                spatialPlusC[d - 1] = originalInputShape[d];
+            spatialPlusC[originalInputShape.Length - 1] = numFeatures;
+            inputGradient = inputGradient.Reshape(spatialPlusC);
+
+            // Transpose back from [N, H, W, C] to [N, C, H, W]
+            int[] inverseOrder = new int[originalInputShape.Length];
+            inverseOrder[0] = 0; // N
+            inverseOrder[1] = originalInputShape.Length - 1; // C was last, goes to dim 1
+            for (int d = 2; d < originalInputShape.Length; d++)
+                inverseOrder[d] = d - 1; // spatial dims shift right
+            inputGradient = inputGradient.Transpose(inverseOrder);
+        }
+        else if (_inputWas1D && inputGradient.Shape.Length > 1)
         {
             inputGradient = inputGradient.Reshape(inputGradient.Length);
         }

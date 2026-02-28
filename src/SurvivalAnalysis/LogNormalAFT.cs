@@ -146,13 +146,15 @@ public class LogNormalAFT<T> : SurvivalModelBase<T>
                     double survival = 1 - Phi;
                     logLik += Math.Log(Math.Max(1e-300, survival));
 
-                    // Gradients using hazard ratio φ/(1-Φ)
+                    // Gradients using inverse Mills ratio φ/(1-Φ)
+                    // dlogL/dmu = +phi/((1-Phi)*sigma) because dz/dmu = -1/sigma
+                    // and d(log(1-Phi))/dz = -phi/(1-Phi), so product = +phi/((1-Phi)*sigma)
                     double hazardRatio = phi / Math.Max(1e-300, survival);
-                    gradIntercept -= hazardRatio / scale;
-                    gradScale -= z * hazardRatio / scale;
+                    gradIntercept += hazardRatio / scale;
+                    gradScale += z * hazardRatio / scale;
 
                     for (int j = 0; j < p; j++)
-                        gradBeta[j] -= hazardRatio * NumOps.ToDouble(x[i, j]) / scale;
+                        gradBeta[j] += hazardRatio * NumOps.ToDouble(x[i, j]) / scale;
                 }
             }
 

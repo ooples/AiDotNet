@@ -38,6 +38,8 @@ public class KMeansDetector<T> : AnomalyDetectorBase<T>
     private readonly int _k;
     private readonly int _maxIterations;
     private Matrix<T>? _centroids;
+    private int[]? _clusterSizes;
+    private int _totalSamples;
 
     /// <summary>
     /// Gets the number of clusters.
@@ -87,8 +89,9 @@ public class KMeansDetector<T> : AnomalyDetectorBase<T>
                 nameof(X));
         }
 
-        // Run K-Means clustering
-        _centroids = RunKMeans(X);
+        // Run K-Means clustering and compute cluster sizes
+        _totalSamples = X.Rows;
+        _centroids = RunKMeans(X, out _clusterSizes);
 
         // Calculate scores for training data to set threshold
         var trainingScores = ScoreAnomaliesInternal(X);
@@ -112,8 +115,9 @@ public class KMeansDetector<T> : AnomalyDetectorBase<T>
 
         for (int i = 0; i < X.Rows; i++)
         {
-            // Find distance to nearest centroid
+            // Find distance to nearest centroid and which cluster it belongs to
             double minDist = double.MaxValue;
+            int nearestCluster = 0;
 
             var point = new Vector<T>(X.Columns);
             for (int j = 0; j < X.Columns; j++)
@@ -139,16 +143,30 @@ public class KMeansDetector<T> : AnomalyDetectorBase<T>
                 if (dist < minDist)
                 {
                     minDist = dist;
+                    nearestCluster = c;
                 }
             }
 
-            scores[i] = NumOps.FromDouble(minDist);
+            // Weight the distance by inverse cluster size fraction.
+            // Points in small clusters (e.g., a singleton outlier that became its own centroid)
+            // get amplified scores. A point with distance 0 in a singleton cluster gets
+            // a high score because being in a tiny cluster is itself anomalous.
+            double clusterFraction = _clusterSizes != null && _clusterSizes[nearestCluster] > 0
+                ? (double)_clusterSizes[nearestCluster] / _totalSamples
+                : 1.0;
+
+            // Score = distance + penalty for small clusters
+            // The penalty term ensures singleton cluster members get high scores even with distance 0
+            double smallClusterPenalty = 1.0 - clusterFraction;
+            double score = minDist + smallClusterPenalty;
+
+            scores[i] = NumOps.FromDouble(score);
         }
 
         return scores;
     }
 
-    private Matrix<T> RunKMeans(Matrix<T> X)
+    private Matrix<T> RunKMeans(Matrix<T> X, out int[] clusterSizes)
     {
         var random = new Random(_randomSeed);
         int n = X.Rows;
@@ -235,6 +253,13 @@ public class KMeansDetector<T> : AnomalyDetectorBase<T>
             }
 
             centroids = newCentroids;
+        }
+
+        // Compute final cluster sizes for anomaly scoring
+        clusterSizes = new int[_k];
+        for (int i = 0; i < n; i++)
+        {
+            clusterSizes[assignments[i]]++;
         }
 
         return centroids;

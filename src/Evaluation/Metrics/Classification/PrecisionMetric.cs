@@ -62,13 +62,23 @@ public class PrecisionMetric<T> : IClassificationMetric<T>
     public bool SupportsMultiClass => true;
 
     /// <summary>
-    /// Initializes a new precision metric.
+    /// Initializes a new precision metric with default positive label (1).
+    /// </summary>
+    /// <param name="averaging">Averaging method for multi-class.</param>
+    public PrecisionMetric(AveragingMethod averaging = AveragingMethod.Binary)
+    {
+        _positiveLabel = NumOps.One;
+        _averaging = averaging;
+    }
+
+    /// <summary>
+    /// Initializes a new precision metric with an explicit positive label.
     /// </summary>
     /// <param name="positiveLabel">The label considered positive for binary classification.</param>
     /// <param name="averaging">Averaging method for multi-class.</param>
-    public PrecisionMetric(T? positiveLabel = default, AveragingMethod averaging = AveragingMethod.Binary)
+    public PrecisionMetric(T positiveLabel, AveragingMethod averaging = AveragingMethod.Binary)
     {
-        _positiveLabel = positiveLabel ?? NumOps.One;
+        _positiveLabel = positiveLabel;
         _averaging = averaging;
     }
 

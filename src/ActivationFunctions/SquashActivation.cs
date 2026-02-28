@@ -47,7 +47,16 @@ public class SquashActivation<T> : ActivationFunctionBase<T>
     /// </remarks>
     public override T Activate(T input)
     {
-        throw new NotSupportedException("SquashActivation does not support scalar operations.");
+        // Scalar squash: sign(x) * x² / (1 + x²)
+        // Equivalently: x * |x| / (1 + x²)
+        T absInput = NumOps.Abs(input);
+        if (NumOps.Equals(absInput, NumOps.Zero))
+        {
+            return NumOps.Zero;
+        }
+        T inputSquared = NumOps.Multiply(input, input);
+        T denominator = NumOps.Add(NumOps.One, inputSquared);
+        return NumOps.Divide(NumOps.Multiply(input, absInput), denominator);
     }
 
     /// <summary>
@@ -62,7 +71,12 @@ public class SquashActivation<T> : ActivationFunctionBase<T>
     /// </remarks>
     public override T Derivative(T input)
     {
-        throw new NotSupportedException("SquashActivation does not support scalar operations.");
+        // Derivative of scalar squash: 2|x| / (1 + x²)²
+        T absInput = NumOps.Abs(input);
+        T inputSquared = NumOps.Multiply(input, input);
+        T onePlusXSq = NumOps.Add(NumOps.One, inputSquared);
+        T denominator = NumOps.Multiply(onePlusXSq, onePlusXSq);
+        return NumOps.Divide(NumOps.Multiply(NumOps.FromDouble(2.0), absInput), denominator);
     }
 
     /// <summary>

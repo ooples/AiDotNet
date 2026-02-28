@@ -210,12 +210,20 @@ public class HodrickPrescottDecomposition<T> : TimeSeriesDecompositionBase<T>
             int levelSize = n >> level;
             int halfSize = levelSize >> 1;
 
+            // Use temporary arrays to avoid in-place overwrite corruption
+            T[] approx = new T[halfSize];
+            T[] detail = new T[halfSize];
             for (int i = 0; i < halfSize; i++)
             {
                 T sum = NumOps.Add(coeffs[i * 2], coeffs[i * 2 + 1]);
                 T difference = NumOps.Subtract(coeffs[i * 2], coeffs[i * 2 + 1]);
-                coeffs[i] = NumOps.Multiply(sum, NumOps.FromDouble(0.5));
-                coeffs[halfSize + i] = NumOps.Multiply(difference, NumOps.FromDouble(0.5));
+                approx[i] = NumOps.Multiply(sum, NumOps.FromDouble(0.5));
+                detail[i] = NumOps.Multiply(difference, NumOps.FromDouble(0.5));
+            }
+            for (int i = 0; i < halfSize; i++)
+            {
+                coeffs[i] = approx[i];
+                coeffs[halfSize + i] = detail[i];
             }
         }
 
@@ -243,12 +251,20 @@ public class HodrickPrescottDecomposition<T> : TimeSeriesDecompositionBase<T>
             int levelSize = n >> level;
             int halfSize = levelSize >> 1;
 
+            // Use temporary array to avoid in-place overwrite corruption
+            // Inverse of DWT: approx = (a+b)/2, detail = (a-b)/2
+            // => a = approx + detail, b = approx - detail (no factor of 2)
+            T[] expanded = new T[levelSize];
             for (int i = 0; i < halfSize; i++)
             {
-                T sum = NumOps.Multiply(data[i], NumOps.FromDouble(2));
-                T difference = NumOps.Multiply(data[halfSize + i], NumOps.FromDouble(2));
-                data[i * 2] = NumOps.Add(sum, difference);
-                data[i * 2 + 1] = NumOps.Subtract(sum, difference);
+                T approx = data[i];
+                T detail = data[halfSize + i];
+                expanded[i * 2] = NumOps.Add(approx, detail);
+                expanded[i * 2 + 1] = NumOps.Subtract(approx, detail);
+            }
+            for (int i = 0; i < levelSize; i++)
+            {
+                data[i] = expanded[i];
             }
         }
 
@@ -269,28 +285,39 @@ public class HodrickPrescottDecomposition<T> : TimeSeriesDecompositionBase<T>
     {
         int n = TimeSeries.Length;
 
-        // Perform FFT
+        // Zero-pad to next power of 2 (FFT requires power-of-2 length)
+        int nPadded = 1;
+        while (nPadded < n) nPadded <<= 1;
+
+        Vector<T> padded = new Vector<T>(nPadded);
+        for (int i = 0; i < n; i++)
+        {
+            padded[i] = TimeSeries[i];
+        }
+
+        // Perform FFT on zero-padded data
         FastFourierTransform<T> fft = new();
-        Vector<Complex<T>> frequencyDomain = fft.Forward(TimeSeries);
+        Vector<Complex<T>> frequencyDomain = fft.Forward(padded);
 
         // Apply low-pass filter in frequency domain
         T cutoffFrequency = NumOps.FromDouble(0.1);  // Adjust as needed
-        for (int i = 0; i < n; i++)
+        for (int i = 0; i < nPadded; i++)
         {
-            T frequency = NumOps.Divide(NumOps.FromDouble(i), NumOps.FromDouble(n));
+            T frequency = NumOps.Divide(NumOps.FromDouble(i), NumOps.FromDouble(nPadded));
             if (NumOps.GreaterThan(frequency, cutoffFrequency) && NumOps.LessThan(frequency, NumOps.Subtract(NumOps.One, cutoffFrequency)))
             {
                 frequencyDomain[i] = new Complex<T>(NumOps.Zero, NumOps.Zero);
             }
         }
 
-        // Inverse FFT to get trend
-        Vector<T> trend = fft.Inverse(frequencyDomain);
+        // Inverse FFT to get trend, then truncate to original length
+        Vector<T> paddedTrend = fft.Inverse(frequencyDomain);
 
-        // Calculate cycle
+        Vector<T> trend = new Vector<T>(n);
         Vector<T> cycle = new Vector<T>(n);
         for (int i = 0; i < n; i++)
         {
+            trend[i] = paddedTrend[i];
             cycle[i] = NumOps.Subtract(TimeSeries[i], trend[i]);
         }
 
@@ -332,7 +359,7 @@ public class HodrickPrescottDecomposition<T> : TimeSeriesDecompositionBase<T>
             c = NumOps.Multiply(rho, NumOps.Subtract(TimeSeries[i], mu));
 
             trend[i] = mu;
-            cycle[i] = c;
+            cycle[i] = NumOps.Subtract(TimeSeries[i], mu);
         }
 
         AddComponent(DecompositionComponentType.Trend, trend);
@@ -381,17 +408,22 @@ public class HodrickPrescottDecomposition<T> : TimeSeriesDecompositionBase<T>
         Vector<T> trend = new Vector<T>(TimeSeries);
         Vector<T> cycle = new Vector<T>(n);
 
-        T two = NumOps.FromDouble(2);
-        T lambda2 = NumOps.Multiply(_lambda, two);
-        T lambda22 = NumOps.Multiply(lambda2, two);
+        // Gauss-Seidel iteration for (I + λD^TD)τ = y
+        // D^TD has pentadiagonal structure with coefficients [1, -4, 6, -4, 1] for interior rows
+        // So: (1 + 6λ)τ[i] = y[i] + λ(4τ[i-1] - τ[i-2] + 4τ[i+1] - τ[i+2])
+        T fourLambda = NumOps.Multiply(NumOps.FromDouble(4), _lambda);
+        T denominator = NumOps.Add(NumOps.One, NumOps.Multiply(NumOps.FromDouble(6), _lambda));
 
         for (int iteration = 0; iteration < 100; iteration++)
         {
             for (int i = 2; i < n - 2; i++)
             {
-                T numerator = NumOps.Multiply(lambda2, NumOps.Add(NumOps.Add(trend[i - 1], trend[i + 1]),
-                              NumOps.Multiply(lambda22, NumOps.Add(NumOps.Add(trend[i - 2], trend[i + 2]), TimeSeries[i]))));
-                T denominator = NumOps.Add(NumOps.One, NumOps.Multiply(NumOps.FromDouble(6), _lambda));
+                // numerator = y[i] + λ*(4*τ[i-1] + 4*τ[i+1] - τ[i-2] - τ[i+2])
+                T neighbors = NumOps.Subtract(
+                    NumOps.Multiply(fourLambda, NumOps.Add(trend[i - 1], trend[i + 1])),
+                    NumOps.Multiply(_lambda, NumOps.Add(trend[i - 2], trend[i + 2]))
+                );
+                T numerator = NumOps.Add(TimeSeries[i], neighbors);
                 trend[i] = NumOps.Divide(numerator, denominator);
             }
 

@@ -41,6 +41,7 @@ public class GMMDetector<T> : AnomalyDetectorBase<T>
     private Matrix<T>[]? _covariances;
     private Vector<T>? _weights;
     private int _nFeatures;
+    private double[]? _globalVariance;
 
     /// <summary>
     /// Gets the number of Gaussian components.
@@ -146,6 +147,27 @@ public class GMMDetector<T> : AnomalyDetectorBase<T>
         int n = X.Rows;
         int d = X.Columns;
         var random = new Random(_randomSeed);
+
+        // Compute global variance per feature for use as a covariance floor.
+        // This prevents components with very few points (e.g., a singleton outlier)
+        // from collapsing to a tiny covariance that produces astronomically high density.
+        _globalVariance = new double[d];
+        var featureMeans = new double[d];
+        for (int j = 0; j < d; j++)
+        {
+            for (int i = 0; i < n; i++)
+            {
+                featureMeans[j] += NumOps.ToDouble(X[i, j]);
+            }
+            featureMeans[j] /= n;
+
+            for (int i = 0; i < n; i++)
+            {
+                double diff = NumOps.ToDouble(X[i, j]) - featureMeans[j];
+                _globalVariance[j] += diff * diff;
+            }
+            _globalVariance[j] = Math.Max(_globalVariance[j] / n, 1e-6);
+        }
 
         // Initialize means using k-means++ style
         _means = new Vector<T>[_nComponents];
@@ -266,8 +288,7 @@ public class GMMDetector<T> : AnomalyDetectorBase<T>
                 }
 
                 // Normalize covariance first, then apply regularization
-                double epsilon = 1e-6;
-                if (Nc > epsilon)
+                if (Nc > 1e-6)
                 {
                     for (int j1 = 0; j1 < d; j1++)
                     {
@@ -277,10 +298,17 @@ public class GMMDetector<T> : AnomalyDetectorBase<T>
                         }
                     }
 
-                    // Apply regularization AFTER normalization
+                    // Apply regularization: floor the diagonal at a fraction of the global variance.
+                    // This prevents components with very few points from having extremely small
+                    // variance, which would cause astronomically high density and break anomaly scoring.
                     for (int j = 0; j < d; j++)
                     {
-                        _covariances![c][j, j] = NumOps.Add(_covariances[c][j, j], NumOps.FromDouble(epsilon));
+                        double currentVar = NumOps.ToDouble(_covariances![c][j, j]);
+                        double minVar = Math.Max(_globalVariance![j] * 0.01, 1e-6);
+                        if (currentVar < minVar)
+                        {
+                            _covariances[c][j, j] = NumOps.FromDouble(minVar);
+                        }
                     }
                 }
             }
@@ -319,7 +347,9 @@ public class GMMDetector<T> : AnomalyDetectorBase<T>
         for (int i = 0; i < d; i++)
         {
             double variance = NumOps.ToDouble(covariance[i, i]);
-            variance = Math.Max(variance, 1e-6);
+            // Use global variance floor to prevent density explosion for singleton components
+            double minVar = _globalVariance != null ? _globalVariance[i] * 0.01 : 1e-6;
+            variance = Math.Max(variance, minVar);
             mahalanobis += diff[i] * diff[i] / variance;
             logDet += Math.Log(variance);
         }

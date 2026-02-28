@@ -70,12 +70,20 @@ public class MatthewsCorrelationCoefficientMetric<T> : IClassificationMetric<T>
     public bool SupportsMultiClass => true;
 
     /// <summary>
-    /// Initializes a new MCC metric.
+    /// Initializes a new MCC metric with default positive label (1).
+    /// </summary>
+    public MatthewsCorrelationCoefficientMetric()
+    {
+        _positiveLabel = NumOps.One;
+    }
+
+    /// <summary>
+    /// Initializes a new MCC metric with an explicit positive label.
     /// </summary>
     /// <param name="positiveLabel">The label considered positive for binary classification.</param>
-    public MatthewsCorrelationCoefficientMetric(T? positiveLabel = default)
+    public MatthewsCorrelationCoefficientMetric(T positiveLabel)
     {
-        _positiveLabel = positiveLabel ?? NumOps.One;
+        _positiveLabel = positiveLabel;
     }
 
     /// <inheritdoc/>

@@ -44,6 +44,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
         private readonly Dictionary<string, int> _nodeMaxLayer;  // Maximum layer for each node
         private string? _entryPoint;
         private int _maxLevel;
+        private readonly object _graphLock = new();
 
         /// <inheritdoc/>
         public int Count => _vectors.Count;
@@ -90,34 +91,37 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
             if (vector == null)
                 throw new ArgumentNullException(nameof(vector));
 
-            // If updating existing vector, remove it first
-            if (_vectors.ContainsKey(id))
+            lock (_graphLock)
             {
-                Remove(id);
-            }
+                // If updating existing vector, remove it first
+                if (_vectors.ContainsKey(id))
+                {
+                    Remove(id);
+                }
 
-            _vectors[id] = vector;
+                _vectors[id] = vector;
 
-            // Initialize node in the graph
-            int nodeLevel = InitializeNode(id);
+                // Initialize node in the graph
+                int nodeLevel = InitializeNode(id);
 
-            // If this is the first node, set it as entry point
-            if (_entryPoint == null)
-            {
-                _entryPoint = id;
-                _maxLevel = nodeLevel;
-                return;
-            }
+                // If this is the first node, set it as entry point
+                if (_entryPoint == null)
+                {
+                    _entryPoint = id;
+                    _maxLevel = nodeLevel;
+                    return;
+                }
 
-            // Find entry point for insertion and connect at each level
-            string currentNode = FindInsertionEntryPoint(vector, nodeLevel);
-            ConnectNodeAtAllLevels(id, vector, nodeLevel, currentNode);
+                // Find entry point for insertion and connect at each level
+                string currentNode = FindInsertionEntryPoint(vector, nodeLevel);
+                ConnectNodeAtAllLevels(id, vector, nodeLevel, currentNode);
 
-            // Update entry point if new node has higher level
-            if (nodeLevel > _maxLevel)
-            {
-                _entryPoint = id;
-                _maxLevel = nodeLevel;
+                // Update entry point if new node has higher level
+                if (nodeLevel > _maxLevel)
+                {
+                    _entryPoint = id;
+                    _maxLevel = nodeLevel;
+                }
             }
         }
 
@@ -238,24 +242,27 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
             if (k <= 0)
                 throw new ArgumentException("k must be positive", nameof(k));
 
-            if (_vectors.Count == 0 || _entryPoint == null)
-                return new List<(string Id, T Score)>();
-
-            // Start from entry point at top level
-            string currentNode = _entryPoint;
-
-            // Traverse from top level down to level 1, finding closest node
-            for (int level = _maxLevel; level > 0; level--)
+            lock (_graphLock)
             {
-                currentNode = GreedySearchClosest(query, currentNode, level);
+                if (_vectors.Count == 0 || _entryPoint == null)
+                    return new List<(string Id, T Score)>();
+
+                // Start from entry point at top level
+                string currentNode = _entryPoint;
+
+                // Traverse from top level down to level 1, finding closest node
+                for (int level = _maxLevel; level > 0; level--)
+                {
+                    currentNode = GreedySearchClosest(query, currentNode, level);
+                }
+
+                // Search at level 0 with efSearch candidates
+                int ef = Math.Max(_efSearch, k);
+                var candidates = SearchLayer(query, currentNode, ef, 0);
+
+                // Return top k results
+                return candidates.Take(k).ToList();
             }
-
-            // Search at level 0 with efSearch candidates
-            int ef = Math.Max(_efSearch, k);
-            var candidates = SearchLayer(query, currentNode, ef, 0);
-
-            // Return top k results
-            return candidates.Take(k).ToList();
         }
 
         /// <inheritdoc/>

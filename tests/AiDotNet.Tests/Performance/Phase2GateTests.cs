@@ -285,10 +285,10 @@ public class Phase2GateTests
 
         strategy.InitializeWeights(weights, 100, 100);
 
-        // Xavier initialization should produce values roughly in range [-sqrt(2/(in+out)), sqrt(2/(in+out))]
-        // For 100+100=200, scale = sqrt(2/200) = sqrt(0.01) = 0.1
+        // Xavier truncated normal produces values in range [-2*stddev, 2*stddev]
+        // For 100+100=200, stddev = sqrt(2/200) = sqrt(0.01) = 0.1, so max = 0.2
         var scale = Math.Sqrt(2.0 / (100 + 100));
-        var maxExpected = scale * 1.5; // Some margin
+        var maxExpected = scale * 2.0; // Truncated normal clips at 2*stddev
 
         bool hasNonZero = false;
         for (int i = 0; i < weights.Length; i++)

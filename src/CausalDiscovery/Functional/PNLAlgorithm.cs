@@ -73,7 +73,17 @@ public class PNLAlgorithm<T> : FunctionalBase<T>
                 double depJI = PNLResidualDependence(xj, xi);
 
                 double asymmetry = depJI - depIJ;
-                if (Math.Abs(asymmetry) > _threshold * 0.1)
+
+                // When both dependencies are near zero (deterministic relationship),
+                // the PNL model can't determine direction from residuals alone.
+                // Fall back to placing edge i → j since we know a strong relationship exists.
+                bool nearZeroDeps = depIJ < 1e-6 && depJI < 1e-6;
+
+                if (nearZeroDeps)
+                {
+                    W[i, j] = NumOps.FromDouble(weight);
+                }
+                else if (Math.Abs(asymmetry) > _threshold * 0.1)
                 {
                     if (asymmetry > 0)
                         W[i, j] = NumOps.FromDouble(weight);

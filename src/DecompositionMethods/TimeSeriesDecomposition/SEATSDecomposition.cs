@@ -17,7 +17,6 @@ namespace AiDotNet.DecompositionMethods.TimeSeriesDecomposition;
 public class SEATSDecomposition<T> : TimeSeriesDecompositionBase<T>
 {
     private readonly SARIMAOptions<T> _sarimaOptions;
-    private readonly int _forecastHorizon;
     private readonly SEATSAlgorithmType _algorithm;
 
     /// <summary>
@@ -25,20 +24,19 @@ public class SEATSDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// </summary>
     /// <param name="timeSeries">The time series data to decompose.</param>
     /// <param name="sarimaOptions">Options for the SARIMA model. If null, default options will be used.</param>
-    /// <param name="forecastHorizon">The number of periods to forecast.</param>
     /// <param name="algorithm">The algorithm variant to use for decomposition.</param>
+    /// <param name="forecastHorizon">Kept for backward compatibility; this parameter is not used.</param>
     /// <remarks>
     /// <b>For Beginners:</b> When creating a SEATS decomposition:
     /// - timeSeries: Your data points arranged in time order
     /// - sarimaOptions: Settings for the statistical model (you can use default settings)
-    /// - forecastHorizon: How many future periods you want to predict (e.g., 12 for a year of monthly data)
     /// - algorithm: Which calculation method to use (Standard is a good default)
     /// </remarks>
-    public SEATSDecomposition(Vector<T> timeSeries, SARIMAOptions<T>? sarimaOptions = null, int forecastHorizon = 12, SEATSAlgorithmType algorithm = SEATSAlgorithmType.Standard)
+    public SEATSDecomposition(Vector<T> timeSeries, SARIMAOptions<T>? sarimaOptions = null, SEATSAlgorithmType algorithm = SEATSAlgorithmType.Standard, int forecastHorizon = 10)
         : base(timeSeries)
     {
+        _ = forecastHorizon; // kept for API compatibility
         _sarimaOptions = sarimaOptions ?? new();
-        _forecastHorizon = forecastHorizon;
         _algorithm = algorithm;
         Decompose();
     }
@@ -647,7 +645,7 @@ public class SEATSDecomposition<T> : TimeSeriesDecompositionBase<T>
         var _trendModel = new SARIMAModel<T>(_trendOptions);
         _trendModel.Train(new Matrix<T>(TimeSeries.Length, 1), TimeSeries);
 
-        return _trendModel.Predict(new Matrix<T>(_forecastHorizon, 1));
+        return _trendModel.Predict(new Matrix<T>(TimeSeries.Length, 1));
     }
 
     /// <summary>
@@ -655,8 +653,8 @@ public class SEATSDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> The seasonal component represents repeating patterns in your data that occur at 
-    /// regular intervals (like sales increasing during holidays every year). This method isolates these 
+    /// <b>For Beginners:</b> The seasonal component represents repeating patterns in your data that occur at
+    /// regular intervals (like sales increasing during holidays every year). This method isolates these
     /// recurring patterns from your data, similar to identifying which notes repeat in a musical composition.
     /// </para>
     /// <para>
@@ -683,7 +681,7 @@ public class SEATSDecomposition<T> : TimeSeriesDecompositionBase<T>
         var _seasonalModel = new SARIMAModel<T>(_seasonalOptions);
         _seasonalModel.Train(new Matrix<T>(TimeSeries.Length, 1), TimeSeries);
 
-        return _seasonalModel.Predict(new Matrix<T>(_forecastHorizon, 1));
+        return _seasonalModel.Predict(new Matrix<T>(TimeSeries.Length, 1));
     }
 
     /// <summary>
