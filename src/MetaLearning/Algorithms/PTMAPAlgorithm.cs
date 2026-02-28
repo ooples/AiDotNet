@@ -121,27 +121,17 @@ public class PTMAPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
     /// </summary>
     private Vector<T> CenterAndNormalize(Vector<T> features)
     {
-        // Center
-        T mean = NumOps.Zero;
-        for (int i = 0; i < features.Length; i++)
-            mean = NumOps.Add(mean, features[i]);
-        mean = NumOps.Divide(mean, NumOps.FromDouble(Math.Max(1, features.Length)));
+        var engine = AiDotNetEngine.Current;
 
-        var centered = new Vector<T>(features.Length);
-        double norm = 0;
+        // Center: subtract mean
+        T mean = NumOps.Divide(engine.Sum(features), NumOps.FromDouble(Math.Max(1, features.Length)));
+        var meanVec = new Vector<T>(features.Length);
         for (int i = 0; i < features.Length; i++)
-        {
-            centered[i] = NumOps.Subtract(features[i], mean);
-            double v = NumOps.ToDouble(centered[i]);
-            norm += v * v;
-        }
+            meanVec[i] = mean;
+        var centered = (Vector<T>)engine.Subtract(features, meanVec);
 
         // L2 normalize
-        norm = Math.Sqrt(norm + 1e-10);
-        for (int i = 0; i < centered.Length; i++)
-            centered[i] = NumOps.Divide(centered[i], NumOps.FromDouble(norm));
-
-        return centered;
+        return VectorHelper.Normalize(centered);
     }
 
     /// <inheritdoc/>
