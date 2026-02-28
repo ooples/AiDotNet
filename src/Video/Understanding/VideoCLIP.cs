@@ -559,8 +559,7 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
         var textEmbed = EncodeText(expectedOutput);
 
         // Compute loss gradient (push matching pairs together, non-matching apart)
-        var lossGradient = videoEmbed.Transform((v, idx) =>
-            NumOps.Subtract(v, textEmbed.Data.Span[idx]));
+        var lossGradient = Engine.TensorSubtract(videoEmbed, textEmbed);
 
         BackwardPass(lossGradient);
 
@@ -1062,7 +1061,7 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
     /// </summary>
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
-        return a.Transform((v, idx) => NumOps.Add(v, b.Data.Span[idx]));
+        return Engine.TensorAdd(a, b);
     }
 
     private Tensor<T> AddBatchDimension5D(Tensor<T> tensor)
