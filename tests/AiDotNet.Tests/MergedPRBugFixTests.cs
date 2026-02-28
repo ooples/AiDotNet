@@ -359,7 +359,7 @@ public class MergedPRBugFixTests
         // ASSERT
         Assert.Null(caughtException);
         Assert.NotNull(sftInstance);
-        Assert.IsAssignableFrom(typeof(FineTuning.FineTuningBase<double, double[], double[]>), sftInstance);
+        Assert.IsAssignableFrom<FineTuning.FineTuningBase<double, double[], double[]>>(sftInstance);
     }
 
     [Fact]

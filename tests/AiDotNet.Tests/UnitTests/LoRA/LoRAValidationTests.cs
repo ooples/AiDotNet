@@ -1,8 +1,8 @@
+using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LoRA;
 using AiDotNet.LoRA.Adapters;
 using AiDotNet.NeuralNetworks.Layers;
-using AiDotNet.Interfaces;
 using Xunit;
 
 namespace AiDotNetTests.UnitTests.LoRA;

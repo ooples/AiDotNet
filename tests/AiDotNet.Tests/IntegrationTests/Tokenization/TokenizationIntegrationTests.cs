@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Xunit;
 using AiDotNet.Tokenization.Algorithms;
 using AiDotNet.Tokenization.Configuration;
 using AiDotNet.Tokenization.Core;
@@ -9,6 +8,7 @@ using AiDotNet.Tokenization.Interfaces;
 using AiDotNet.Tokenization.Models;
 using AiDotNet.Tokenization.Specialized;
 using AiDotNet.Tokenization.Vocabulary;
+using Xunit;
 
 namespace AiDotNet.Tests.IntegrationTests.Tokenization;
 

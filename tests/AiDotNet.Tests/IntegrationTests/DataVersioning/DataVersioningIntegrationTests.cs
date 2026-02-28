@@ -250,7 +250,7 @@ public class DataVersioningIntegrationTests : IDisposable
         Assert.Contains("train.csv", filePaths);
         Assert.Contains("test.csv", filePaths);
         // Nested file path includes subdirectory
-        Assert.True(filePaths.Any(p => p.Contains("labels.txt")));
+        Assert.Contains(filePaths, p => p.Contains("labels.txt"));
     }
 
     [Fact]
