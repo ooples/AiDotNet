@@ -34,5 +34,29 @@ public enum FairnessConstraintType
     /// <summary>
     /// Minimax fairness: minimize the worst-case performance across all client groups.
     /// </summary>
-    MinimaxFairness
+    MinimaxFairness,
+
+    /// <summary>
+    /// AFL (Agnostic FL): minimax optimization that is agnostic to test distribution.
+    /// Dynamically upweights worst-performing clients. (Mohri et al., ICML 2019)
+    /// </summary>
+    AgnosticFairness,
+
+    /// <summary>
+    /// q-FFL: parameterized fairness via power-mean. q=0 is FedAvg, q→∞ is minimax.
+    /// (Li et al., ICLR 2020)
+    /// </summary>
+    QFairFederatedLearning,
+
+    /// <summary>
+    /// TERM (Tilted ERM): smooth interpolation between average and worst-case optimization
+    /// using a tilt parameter. (Li et al., ICLR 2021)
+    /// </summary>
+    TiltedERM,
+
+    /// <summary>
+    /// FedFair: multi-objective optimization balancing accuracy, fairness, and efficiency
+    /// via Pareto scalarization. (2024)
+    /// </summary>
+    FedFair
 }

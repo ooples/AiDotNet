@@ -33,5 +33,29 @@ public enum AdvancedCompressionStrategy
     /// Adaptive compression: dynamically adjusts compression ratio per client based on
     /// estimated bandwidth, gradient importance, and staleness.
     /// </summary>
-    Adaptive
+    Adaptive,
+
+    /// <summary>
+    /// SignSGD: transmit only the sign of each gradient element (1-bit per parameter).
+    /// Server aggregates via majority vote. 32x compression. (Bernstein et al., ICML 2018)
+    /// </summary>
+    SignSGD,
+
+    /// <summary>
+    /// FetchSGD: Count-sketch + top-k hybrid compression for massive models.
+    /// Combines sketching with heavy-hitter recovery. (Rothchild et al., ICML 2020)
+    /// </summary>
+    FetchSGD,
+
+    /// <summary>
+    /// FedKD: Knowledge-distillation-based compression. Clients send soft predictions
+    /// instead of model parameters. (Wu et al., NeurIPS 2022)
+    /// </summary>
+    FedKD,
+
+    /// <summary>
+    /// FedDT: Decision-tree-based compression for heterogeneous architectures.
+    /// Compresses updates into lightweight tree representations. (2024)
+    /// </summary>
+    FedDT
 }

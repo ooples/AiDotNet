@@ -1,6 +1,25 @@
 namespace AiDotNet.Models.Options;
 
 /// <summary>
+/// Specifies the federated meta-learning strategy.
+/// </summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> Each strategy determines how the server uses client adaptation results
+/// to update the global initialization for better per-client fine-tuning.</para>
+/// </remarks>
+public enum FederatedMetaLearningStrategy
+{
+    /// <summary>No meta-learning — standard aggregation of client updates.</summary>
+    None,
+    /// <summary>Reptile — first-order meta-update based on post-adaptation parameters.</summary>
+    Reptile,
+    /// <summary>PerFedAvg — per-client FedAvg treated as a Reptile-style first-order update.</summary>
+    PerFedAvg,
+    /// <summary>FedMAML — first-order MAML approximation; full second-order requires explicit gradient support.</summary>
+    FedMAML
+}
+
+/// <summary>
 /// Configuration options for federated meta-learning.
 /// </summary>
 /// <remarks>
@@ -18,16 +37,9 @@ public sealed class FederatedMetaLearningOptions
     public bool Enabled { get; set; } = false;
 
     /// <summary>
-    /// Gets or sets the federated meta-learning strategy name.
+    /// Gets or sets the federated meta-learning strategy.
     /// </summary>
-    /// <remarks>
-    /// Supported built-ins:
-    /// - "None"
-    /// - "Reptile" (first-order meta-update based on post-adaptation parameters)
-    /// - "PerFedAvg" (treated as a Reptile-style first-order update in v1)
-    /// - "FedMAML" (first-order approximation in v1; full second-order requires explicit gradient support)
-    /// </remarks>
-    public string Strategy { get; set; } = "None";
+    public FederatedMetaLearningStrategy Strategy { get; set; } = FederatedMetaLearningStrategy.None;
 
     /// <summary>
     /// Gets or sets the server meta learning rate applied to the average adaptation delta.

@@ -22,6 +22,16 @@ public enum FederatedAsyncMode
     /// <summary>
     /// FedBuff-style buffered aggregation.
     /// </summary>
-    FedBuff = 2
+    FedBuff = 2,
+
+    /// <summary>
+    /// AsyncFedED: entropy-driven client scheduling prioritizing most informative clients. (2024)
+    /// </summary>
+    AsyncFedED = 3,
+
+    /// <summary>
+    /// Semi-Async: hybrid sync/async with periodic barriers every K rounds. (Wu et al., IEEE TPDS 2023)
+    /// </summary>
+    SemiAsync = 4
 }
 
