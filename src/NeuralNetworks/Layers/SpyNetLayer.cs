@@ -408,12 +408,7 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
 
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
-        var result = new Tensor<T>(a.Shape);
-        for (int i = 0; i < a.Length; i++)
-        {
-            result.Data.Span[i] = NumOps.Add(a.Data.Span[i], b.Data.Span[i]);
-        }
-        return result;
+        return Engine.TensorAdd(a, b);
     }
 
     private void AccumulatePyramidGradient(Tensor<T> target, Tensor<T> gradient, int level, bool hasBatch)
@@ -425,9 +420,12 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         // Simple bilinear upsampling to target resolution
         var upsampled = UpsampleGradient(gradient, targetH, targetW, hasBatch);
 
-        for (int i = 0; i < target.Length; i++)
+        var accumulated = Engine.TensorAdd(target, upsampled);
+        var tSpan = target.AsWritableSpan();
+        var aSpan = accumulated.AsSpan();
+        for (int i = 0; i < tSpan.Length; i++)
         {
-            target.Data.Span[i] = NumOps.Add(target.Data.Span[i], upsampled.Data.Span[i]);
+            tSpan[i] = aSpan[i];
         }
     }
 
