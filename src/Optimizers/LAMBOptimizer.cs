@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using Newtonsoft.Json;
 
@@ -320,10 +321,10 @@ public class LAMBOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
             else
             {
                 // Compute parameter norm ||w||
-                T paramNorm = ComputeL2Norm(layerParams);
+                T paramNorm = VectorHelper.L2Norm(layerParams);
 
                 // Compute update norm ||r||
-                T updateNorm = ComputeL2Norm(fullUpdate);
+                T updateNorm = VectorHelper.L2Norm(fullUpdate);
 
                 // Trust ratio: ||w|| / ||r||
                 T zero = NumOps.Zero;
@@ -455,8 +456,8 @@ public class LAMBOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         var fullUpdate = (Vector<T>)Engine.Add(adamUpdate, weightDecayTerm);
 
         // Compute trust ratio
-        T paramNorm = ComputeL2Norm(parameters);
-        T updateNorm = ComputeL2Norm(fullUpdate);
+        T paramNorm = VectorHelper.L2Norm(parameters);
+        T updateNorm = VectorHelper.L2Norm(fullUpdate);
 
         T trustRatio;
         bool paramNormZero = NumOps.LessThan(paramNorm, epsilon);
@@ -526,14 +527,6 @@ public class LAMBOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         }
 
         return updatedMatrix;
-    }
-
-    /// <summary>
-    /// Computes the L2 norm of a vector.
-    /// </summary>
-    private T ComputeL2Norm(Vector<T> vector)
-    {
-        return NumOps.Sqrt(Engine.DotProduct(vector, vector));
     }
 
     /// <summary>

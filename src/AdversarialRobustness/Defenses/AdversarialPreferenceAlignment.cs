@@ -1,4 +1,5 @@
 using System.Text;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
@@ -119,7 +120,7 @@ public class AdversarialPreferenceAlignment<T> : IAlignmentMethod<T>
             var expectedOutput = evaluationData.ExpectedOutputs.GetRow(i);
             var output = model.Predict(input);
 
-            double similarity = ComputeCosineSimilarity(output, expectedOutput);
+            double similarity = VectorHelper.CosineSimilarity(output, expectedOutput);
             totalPreferenceMatch += similarity;
 
             if (similarity > 0.6) helpfulCount++;
@@ -129,7 +130,7 @@ public class AdversarialPreferenceAlignment<T> : IAlignmentMethod<T>
             // Test adversarial robustness: perturb input and check alignment is maintained
             var perturbedInput = AdversariallyPerturb(input, random);
             var perturbedOutput = model.Predict(perturbedInput);
-            double perturbedSimilarity = ComputeCosineSimilarity(perturbedOutput, expectedOutput);
+            double perturbedSimilarity = VectorHelper.CosineSimilarity(perturbedOutput, expectedOutput);
 
             if (perturbedSimilarity > 0.4) adversarialRobustCount++;
         }
@@ -308,7 +309,7 @@ public class AdversarialPreferenceAlignment<T> : IAlignmentMethod<T>
 
         return (input, output) =>
         {
-            return ComputeCosineSimilarity(output, centroidVec);
+            return VectorHelper.CosineSimilarity(output, centroidVec);
         };
     }
 
@@ -404,24 +405,6 @@ public class AdversarialPreferenceAlignment<T> : IAlignmentMethod<T>
         }
 
         return new Vector<T>(result);
-    }
-
-    private static double ComputeCosineSimilarity(Vector<T> a, Vector<T> b)
-    {
-        int len = Math.Min(a.Length, b.Length);
-        double dot = 0, normA = 0, normB = 0;
-
-        for (int i = 0; i < len; i++)
-        {
-            double va = NumOps.ToDouble(a[i]);
-            double vb = NumOps.ToDouble(b[i]);
-            dot += va * vb;
-            normA += va * va;
-            normB += vb * vb;
-        }
-
-        double denom = Math.Sqrt(normA) * Math.Sqrt(normB);
-        return denom > 1e-10 ? dot / denom : 0;
     }
 
     private static Vector<T> CopyVector(Vector<T> source)

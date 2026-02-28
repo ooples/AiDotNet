@@ -1,4 +1,5 @@
 using System.IO;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
@@ -671,8 +672,8 @@ public class ImageBindNeuralNetwork<T> : NeuralNetworkBase<T>, IImageBindModel<T
         var alignmentScore = ComputeCrossModalSimilarity(embedding1, embedding2);
 
         // Compute additional metrics
-        T norm1 = ComputeNorm(embedding1);
-        T norm2 = ComputeNorm(embedding2);
+        T norm1 = VectorHelper.L2Norm(embedding1);
+        T norm2 = VectorHelper.L2Norm(embedding2);
 
         var details = new Dictionary<string, object>
         {
@@ -1288,11 +1289,6 @@ public class ImageBindNeuralNetwork<T> : NeuralNetworkBase<T>, IImageBindModel<T
         return result;
     }
 
-    private T ComputeNorm(Vector<T> vector)
-    {
-        return NumOps.Sqrt(Engine.DotProduct(vector, vector));
-    }
-
     private List<T> Softmax(List<T> values)
     {
         double maxVal = values.Max(v => NumOps.ToDouble(v));
@@ -1344,7 +1340,7 @@ public class ImageBindNeuralNetwork<T> : NeuralNetworkBase<T>, IImageBindModel<T
         var weights = new List<T>();
         foreach (var emb in embeddings)
         {
-            weights.Add(ComputeNorm(emb));
+            weights.Add(VectorHelper.L2Norm(emb));
         }
 
         var softmaxWeights = Softmax(weights);

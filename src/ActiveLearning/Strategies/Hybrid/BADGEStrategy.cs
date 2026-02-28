@@ -88,7 +88,7 @@ public class BADGEStrategy<T, TInput, TOutput> : IQueryStrategy<T, TInput, TOutp
         {
             var input = unlabeledPool.GetInput(i);
             var gradientEmbedding = ComputeGradientEmbedding(model, input);
-            scores[i] = ComputeNorm(gradientEmbedding);
+            scores[i] = VectorHelper.L2Norm(gradientEmbedding);
         }
 
         return new Vector<T>(scores);
@@ -262,7 +262,7 @@ public class BADGEStrategy<T, TInput, TOutput> : IQueryStrategy<T, TInput, TOutp
 
         for (int i = 0; i < embeddings.Count; i++)
         {
-            magnitudes[i] = NumOps.ToDouble(ComputeNorm(embeddings[i]));
+            magnitudes[i] = NumOps.ToDouble(VectorHelper.L2Norm(embeddings[i]));
             totalMag += magnitudes[i];
         }
 
@@ -342,11 +342,6 @@ public class BADGEStrategy<T, TInput, TOutput> : IQueryStrategy<T, TInput, TOutp
         }
 
         return sum;
-    }
-
-    private T ComputeNorm(Vector<T> v)
-    {
-        return NumOps.Sqrt(Engine.DotProduct(v, v));
     }
 
     private int GetArgMax(Vector<T> v)

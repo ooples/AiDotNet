@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.NeuralNetworks.Options;
 
 namespace AiDotNet.NeuralNetworks;
@@ -677,13 +678,13 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
         }
 
         // Normalize
-        x = NormalizeVector(x);
+        x = VectorHelper.Normalize(x);
 
         // Iterate using power method (typically 100 iterations is sufficient)
         for (int iter = 0; iter < 100; iter++)
         {
             Vector<T> y = matrix.Multiply(x);
-            x = NormalizeVector(y);
+            x = VectorHelper.Normalize(y);
         }
 
         // Calculate Rayleigh quotient
@@ -699,25 +700,6 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
 
     /// <summary>
     /// Normalizes a vector to unit length.
-    /// </summary>
-    /// <param name="vector">The vector to normalize.</param>
-    /// <returns>The normalized vector.</returns>
-    private Vector<T> NormalizeVector(Vector<T> vector)
-    {
-        // Compute L2 norm using vectorized dot product: sqrt(sum(vector^2))
-        T normSquared = Engine.DotProduct(vector, vector);
-        T norm = NumOps.Sqrt(normSquared);
-
-        // Avoid division by zero
-        if (MathHelper.AlmostEqual(norm, NumOps.Zero))
-        {
-            return new Vector<T>(vector.Length); // Return zero vector
-        }
-
-        // Vectorized normalization: vector / norm
-        return (Vector<T>)Engine.Divide(vector, norm);
-    }
-
     /// <summary>
     /// Updates the reservoir state based on the input.
     /// </summary>
