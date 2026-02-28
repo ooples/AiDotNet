@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.LossFunctions;
@@ -71,8 +72,8 @@ public class TripletLoss<T> : LossFunctionBase<T>
             var positiveSample = positive.GetRow(i);
             var negativeSample = negative.GetRow(i);
 
-            var positiveDistance = EuclideanDistance(anchorSample, positiveSample);
-            var negativeDistance = EuclideanDistance(anchorSample, negativeSample);
+            var positiveDistance = VectorHelper.EuclideanDistance(anchorSample, positiveSample);
+            var negativeDistance = VectorHelper.EuclideanDistance(anchorSample, negativeSample);
 
             // max(0, positive_distance - negative_distance + margin)
             var loss = MathHelper.Max(
@@ -119,8 +120,8 @@ public class TripletLoss<T> : LossFunctionBase<T>
             var positiveSample = positive.GetRow(i);
             var negativeSample = negative.GetRow(i);
 
-            var positiveDistance = EuclideanDistance(anchorSample, positiveSample);
-            var negativeDistance = EuclideanDistance(anchorSample, negativeSample);
+            var positiveDistance = VectorHelper.EuclideanDistance(anchorSample, positiveSample);
+            var negativeDistance = VectorHelper.EuclideanDistance(anchorSample, negativeSample);
 
             var loss = NumOps.Subtract(
                 NumOps.Add(positiveDistance, _margin),
@@ -199,23 +200,6 @@ public class TripletLoss<T> : LossFunctionBase<T>
         );
     }
 
-    /// <summary>
-    /// Calculates the Euclidean distance between two vectors.
-    /// </summary>
-    /// <param name="v1">The first vector.</param>
-    /// <param name="v2">The second vector.</param>
-    /// <returns>A scalar value representing the Euclidean distance.</returns>
-    private T EuclideanDistance(Vector<T> v1, Vector<T> v2)
-    {
-        T sum = NumOps.Zero;
-        for (int i = 0; i < v1.Length; i++)
-        {
-            T diff = NumOps.Subtract(v1[i], v2[i]);
-            sum = NumOps.Add(sum, NumOps.Multiply(diff, diff));
-        }
-
-        return NumOps.Sqrt(sum);
-    }
 
     /// <summary>
     /// Calculates Triplet Loss on GPU for batched input tensors.

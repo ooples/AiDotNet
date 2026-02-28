@@ -862,7 +862,7 @@ public class AudioVisualEventLocalizationNetwork<T> : NeuralNetworkBase<T>, IAud
         // Find anomalies based on distance from mean
         for (int i = 0; i < allFeatures.Count; i++)
         {
-            var distance = ComputeEuclideanDistance(allFeatures[i], meanFeatures);
+            var distance = VectorHelper.EuclideanDistance(allFeatures[i], meanFeatures);
 
             // Apply anomaly detection head
             var featureTensor = Tensor<T>.FromVector(allFeatures[i]);
@@ -1238,19 +1238,6 @@ public class AudioVisualEventLocalizationNetwork<T> : NeuralNetworkBase<T>, IAud
         return result;
     }
 
-    private T ComputeEuclideanDistance(Vector<T> a, Vector<T> b)
-    {
-        T sum = _numOps.Zero;
-        int minLen = Math.Min(a.Length, b.Length);
-
-        for (int i = 0; i < minLen; i++)
-        {
-            var diff = _numOps.Subtract(a[i], b[i]);
-            sum = _numOps.Add(sum, _numOps.Multiply(diff, diff));
-        }
-
-        return _numOps.Sqrt(sum);
-    }
 
     private string DescribeAnomaly(Vector<T> features, Vector<T> mean)
     {

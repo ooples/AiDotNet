@@ -437,7 +437,7 @@ public class MatchingNetworksAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
             {
                 MatchingNetworksAttentionFunction.Cosine => NumOps.FromDouble(VectorHelper.CosineSimilarity(queryEmbedding, supportEmbedding)),
                 MatchingNetworksAttentionFunction.DotProduct => VectorHelper.DotProduct(queryEmbedding, supportEmbedding),
-                MatchingNetworksAttentionFunction.Euclidean => ComputeNegativeEuclideanDistance(queryEmbedding, supportEmbedding),
+                MatchingNetworksAttentionFunction.Euclidean => NumOps.Negate(VectorHelper.EuclideanDistance(queryEmbedding, supportEmbedding)),
                 _ => NumOps.FromDouble(VectorHelper.CosineSimilarity(queryEmbedding, supportEmbedding))
             };
 
@@ -458,19 +458,6 @@ public class MatchingNetworksAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
     /// <summary>
     /// Computes negative Euclidean distance (higher = more similar).
     /// </summary>
-    private T ComputeNegativeEuclideanDistance(Vector<T> a, Vector<T> b)
-    {
-        T sumSquares = NumOps.Zero;
-        int minLen = Math.Min(a.Length, b.Length);
-        for (int i = 0; i < minLen; i++)
-        {
-            T diff = NumOps.Subtract(a[i], b[i]);
-            sumSquares = NumOps.Add(sumSquares, NumOps.Multiply(diff, diff));
-        }
-        T distance = NumOps.FromDouble(Math.Sqrt(NumOps.ToDouble(sumSquares)));
-        return NumOps.Negate(distance);
-    }
-
     /// <summary>
     /// Applies softmax to a vector.
     /// </summary>
@@ -732,7 +719,7 @@ public class MatchingNetworksModel<T, TInput, TOutput> : IModel<TInput, TOutput,
             {
                 MatchingNetworksAttentionFunction.Cosine => _numOps.FromDouble(VectorHelper.CosineSimilarity(queryEmbedding, supportEmbedding)),
                 MatchingNetworksAttentionFunction.DotProduct => VectorHelper.DotProduct(queryEmbedding, supportEmbedding),
-                MatchingNetworksAttentionFunction.Euclidean => ComputeNegativeEuclideanDistance(queryEmbedding, supportEmbedding),
+                MatchingNetworksAttentionFunction.Euclidean => _numOps.Negate(VectorHelper.EuclideanDistance(queryEmbedding, supportEmbedding)),
                 _ => _numOps.FromDouble(VectorHelper.CosineSimilarity(queryEmbedding, supportEmbedding))
             };
 
@@ -747,19 +734,6 @@ public class MatchingNetworksModel<T, TInput, TOutput> : IModel<TInput, TOutput,
         return ApplySoftmax(weights);
     }
 
-
-    private T ComputeNegativeEuclideanDistance(Vector<T> a, Vector<T> b)
-    {
-        T sumSq = _numOps.Zero;
-        int minLen = Math.Min(a.Length, b.Length);
-        for (int i = 0; i < minLen; i++)
-        {
-            T diff = _numOps.Subtract(a[i], b[i]);
-            sumSq = _numOps.Add(sumSq, _numOps.Multiply(diff, diff));
-        }
-        // Return negative distance so larger (less negative) = more similar
-        return _numOps.Negate(_numOps.Sqrt(sumSq));
-    }
 
     private Vector<T> ApplySoftmax(Vector<T> values)
     {

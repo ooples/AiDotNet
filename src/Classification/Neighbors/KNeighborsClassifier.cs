@@ -1,4 +1,5 @@
 using AiDotNet.Classification;
+using AiDotNet.Helpers;
 using AiDotNet.Models.Options;
 
 namespace AiDotNet.Classification.Neighbors;
@@ -202,28 +203,15 @@ public class KNeighborsClassifier<T> : ProbabilisticClassifierBase<T>
     {
         return Options.Metric switch
         {
-            DistanceMetric.Euclidean => ComputeEuclideanDistance(a, b),
+            DistanceMetric.Euclidean => VectorHelper.EuclideanDistance(a, b),
             DistanceMetric.Manhattan => ComputeManhattanDistance(a, b),
             DistanceMetric.Minkowski => ComputeMinkowskiDistance(a, b, Options.P),
             DistanceMetric.Chebyshev => ComputeChebyshevDistance(a, b),
             DistanceMetric.Cosine => ComputeCosineDistance(a, b),
-            _ => ComputeEuclideanDistance(a, b)
+            _ => VectorHelper.EuclideanDistance(a, b)
         };
     }
 
-    /// <summary>
-    /// Computes Euclidean (L2) distance.
-    /// </summary>
-    private T ComputeEuclideanDistance(Vector<T> a, Vector<T> b)
-    {
-        T sumSquared = NumOps.Zero;
-        for (int i = 0; i < a.Length; i++)
-        {
-            T diff = NumOps.Subtract(a[i], b[i]);
-            sumSquared = NumOps.Add(sumSquared, NumOps.Multiply(diff, diff));
-        }
-        return NumOps.Sqrt(sumSquared);
-    }
 
     /// <summary>
     /// Computes Manhattan (L1) distance.

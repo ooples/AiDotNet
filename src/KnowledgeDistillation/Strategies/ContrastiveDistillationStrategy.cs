@@ -419,8 +419,8 @@ public class ContrastiveDistillationStrategy<T> : DistillationStrategyBase<T>, I
             // Positive distance: student to its corresponding teacher
             // Negative distance: student to teacher of different class
             // This ensures student embeddings align with teacher's embedding space
-            double posDist = EuclideanDistance(studentEmbs[i], teacherEmbs[i]);
-            double negDist = EuclideanDistance(studentEmbs[i], teacherEmbs[negativeIdx]);
+            double posDist = NumOps.ToDouble(VectorHelper.EuclideanDistance(studentEmbs[i], teacherEmbs[i]));
+            double negDist = NumOps.ToDouble(VectorHelper.EuclideanDistance(studentEmbs[i], teacherEmbs[negativeIdx]));
             double loss = Math.Max(0, posDist - negDist + margin);
 
             totalLoss = NumOps.Add(totalLoss, NumOps.FromDouble(loss));
@@ -465,16 +465,6 @@ public class ContrastiveDistillationStrategy<T> : DistillationStrategyBase<T>, I
     }
 
 
-    private double EuclideanDistance(Vector<T> v1, Vector<T> v2)
-    {
-        T sumSq = NumOps.Zero;
-        for (int i = 0; i < v1.Length; i++)
-        {
-            var diff = NumOps.Subtract(v1[i], v2[i]);
-            sumSq = NumOps.Add(sumSq, NumOps.Multiply(diff, diff));
-        }
-        return Math.Sqrt(Convert.ToDouble(sumSq));
-    }
 
     /// <summary>
     /// Computes gradients of intermediate activation loss with respect to student embeddings.

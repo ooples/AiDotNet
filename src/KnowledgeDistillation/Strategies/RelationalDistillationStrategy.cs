@@ -840,7 +840,7 @@ public class RelationalDistillationStrategy<T> : DistillationStrategyBase<T>
         switch (_distanceMetric)
         {
             case RelationalDistanceMetric.Euclidean:
-                return ComputeEuclideanDistance(v1, v2);
+                return VectorHelper.EuclideanDistance(v1, v2);
 
             case RelationalDistanceMetric.Cosine:
                 return ComputeCosineDistance(v1, v2);
@@ -853,16 +853,6 @@ public class RelationalDistillationStrategy<T> : DistillationStrategyBase<T>
         }
     }
 
-    private T ComputeEuclideanDistance(Vector<T> v1, Vector<T> v2)
-    {
-        T sum = NumOps.Zero;
-        for (int i = 0; i < v1.Length; i++)
-        {
-            var diff = NumOps.Subtract(v1[i], v2[i]);
-            sum = NumOps.Add(sum, NumOps.Multiply(diff, diff));
-        }
-        return NumOps.FromDouble(Math.Sqrt(Convert.ToDouble(sum)));
-    }
 
     private T ComputeCosineDistance(Vector<T> v1, Vector<T> v2)
     {

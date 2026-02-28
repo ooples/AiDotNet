@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors.Helpers;
@@ -184,7 +185,7 @@ public class TomekLinks<T> : IResamplingStrategy<T>
         {
             if (i == sampleIndex) continue;
 
-            T distance = EuclideanDistance(sample, x.GetRow(i));
+            T distance = VectorHelper.EuclideanDistance(sample, x.GetRow(i));
             if (NumOps.Compare(distance, minDistance) < 0)
             {
                 minDistance = distance;
@@ -195,19 +196,6 @@ public class TomekLinks<T> : IResamplingStrategy<T>
         return nearestIdx;
     }
 
-    /// <summary>
-    /// Computes the Euclidean distance between two vectors.
-    /// </summary>
-    private T EuclideanDistance(Vector<T> a, Vector<T> b)
-    {
-        T sum = NumOps.Zero;
-        for (int i = 0; i < a.Length; i++)
-        {
-            T diff = NumOps.Subtract(a[i], b[i]);
-            sum = NumOps.Add(sum, NumOps.Multiply(diff, diff));
-        }
-        return NumOps.Sqrt(sum);
-    }
 
     /// <summary>
     /// Gets the count of samples per class.

@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.LossFunctions;
@@ -54,7 +55,7 @@ public class ContrastiveLoss<T> : LossFunctionBase<T>
     public T CalculateLoss(Vector<T> output1, Vector<T> output2, T similarityLabel)
     {
         // Calculate the Euclidean distance between the vectors
-        T distance = EuclideanDistance(output1, output2);
+        T distance = VectorHelper.EuclideanDistance(output1, output2);
 
         // Calculate the loss for similar pairs: y * distance²
         T similarTerm = NumOps.Multiply(
@@ -84,7 +85,7 @@ public class ContrastiveLoss<T> : LossFunctionBase<T>
     /// <returns>A tuple containing the gradients for both output vectors.</returns>
     public (Vector<T>, Vector<T>) CalculateDerivative(Vector<T> output1, Vector<T> output2, T similarityLabel)
     {
-        T distance = EuclideanDistance(output1, output2);
+        T distance = VectorHelper.EuclideanDistance(output1, output2);
         Vector<T> grad1 = new Vector<T>(output1.Length);
         Vector<T> grad2 = new Vector<T>(output2.Length);
 
@@ -157,23 +158,6 @@ public class ContrastiveLoss<T> : LossFunctionBase<T>
         );
     }
 
-    /// <summary>
-    /// Calculates the Euclidean distance between two vectors.
-    /// </summary>
-    /// <param name="v1">The first vector.</param>
-    /// <param name="v2">The second vector.</param>
-    /// <returns>A scalar value representing the Euclidean distance.</returns>
-    private T EuclideanDistance(Vector<T> v1, Vector<T> v2)
-    {
-        T sum = NumOps.Zero;
-        for (int i = 0; i < v1.Length; i++)
-        {
-            T diff = NumOps.Subtract(v1[i], v2[i]);
-            sum = NumOps.Add(sum, NumOps.Multiply(diff, diff));
-        }
-
-        return NumOps.Sqrt(sum);
-    }
 
     /// <summary>
     /// Calculates Contrastive Loss on GPU for batched input tensors.

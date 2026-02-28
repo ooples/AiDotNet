@@ -532,26 +532,13 @@ public class CoreSetStrategy<T, TInput, TOutput> : IDiversityStrategy<T, TInput,
     {
         return _distanceMetric switch
         {
-            DistanceMetric.Euclidean => EuclideanDistance(a, b),
+            DistanceMetric.Euclidean => VectorHelper.EuclideanDistance(a, b),
             DistanceMetric.Cosine => CosineDistance(a, b),
             DistanceMetric.Manhattan => ManhattanDistance(a, b),
-            _ => EuclideanDistance(a, b)
+            _ => VectorHelper.EuclideanDistance(a, b)
         };
     }
 
-    private T EuclideanDistance(Vector<T> a, Vector<T> b)
-    {
-        int length = Math.Min(a.Length, b.Length);
-        T sumSquared = NumOps.Zero;
-
-        for (int i = 0; i < length; i++)
-        {
-            var diff = NumOps.Subtract(a[i], b[i]);
-            sumSquared = NumOps.Add(sumSquared, NumOps.Multiply(diff, diff));
-        }
-
-        return NumOps.Sqrt(sumSquared);
-    }
 
     private T CosineDistance(Vector<T> a, Vector<T> b)
     {

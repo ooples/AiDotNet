@@ -497,10 +497,10 @@ public class ProtoNetsAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
 
                 T distance = _protoNetsOptions.DistanceFunction switch
                 {
-                    ProtoNetsDistanceFunction.Euclidean => ComputeEuclideanDistance(queryFeature, prototype),
+                    ProtoNetsDistanceFunction.Euclidean => VectorHelper.EuclideanDistance(queryFeature, prototype),
                     ProtoNetsDistanceFunction.Cosine => ComputeCosineDistance(queryFeature, prototype),
                     ProtoNetsDistanceFunction.Mahalanobis => ComputeMahalanobisDistance(queryFeature, prototype),
-                    _ => ComputeEuclideanDistance(queryFeature, prototype)
+                    _ => VectorHelper.EuclideanDistance(queryFeature, prototype)
                 };
 
                 // Apply class-specific scaling if enabled
@@ -617,27 +617,6 @@ public class ProtoNetsAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
         }
 
         return NumOps.Divide(totalLoss, NumOps.FromDouble(numExamples));
-    }
-
-    /// <summary>
-    /// Computes Euclidean distance between two feature vectors using IEngine for vectorization.
-    /// </summary>
-    private T ComputeEuclideanDistance(Vector<T> a, Vector<T> b)
-    {
-        // diff = a - b
-        var diff = Engine.Subtract(a, b);
-
-        // squared = diff * diff (element-wise)
-        var squared = Engine.Multiply(diff, diff);
-
-        // Sum all squared elements
-        T sumSquares = NumOps.Zero;
-        for (int i = 0; i < squared.Length; i++)
-        {
-            sumSquares = NumOps.Add(sumSquares, squared[i]);
-        }
-
-        return NumOps.FromDouble(Math.Sqrt(NumOps.ToDouble(sumSquares)));
     }
 
     /// <summary>
@@ -1172,22 +1151,11 @@ public class PrototypicalModel<T, TInput, TOutput> : IModel<TInput, TOutput, Mod
     {
         return _options.DistanceFunction switch
         {
-            ProtoNetsDistanceFunction.Euclidean => ComputeEuclideanDistance(a, b),
+            ProtoNetsDistanceFunction.Euclidean => VectorHelper.EuclideanDistance(a, b),
             ProtoNetsDistanceFunction.Cosine => ComputeCosineDistance(a, b),
             ProtoNetsDistanceFunction.Mahalanobis => ComputeMahalanobisDistance(a, b),
-            _ => ComputeEuclideanDistance(a, b)
+            _ => VectorHelper.EuclideanDistance(a, b)
         };
-    }
-
-    private T ComputeEuclideanDistance(Vector<T> a, Vector<T> b)
-    {
-        T sumSquares = _numOps.Zero;
-        for (int i = 0; i < a.Length; i++)
-        {
-            T diff = _numOps.Subtract(a[i], b[i]);
-            sumSquares = _numOps.Add(sumSquares, _numOps.Multiply(diff, diff));
-        }
-        return _numOps.FromDouble(Math.Sqrt(_numOps.ToDouble(sumSquares)));
     }
 
     private T ComputeCosineDistance(Vector<T> a, Vector<T> b)
