@@ -872,10 +872,7 @@ public class LSTNet<T> : ForecastingModelBase<T>
 
         if (highwayOutput is not null && highwayOutput.Length == output.Length)
         {
-            for (int i = 0; i < output.Length; i++)
-            {
-                output.Data.Span[i] = NumOps.Add(output.Data.Span[i], highwayOutput.Data.Span[i]);
-            }
+            output = Engine.TensorAdd(output, highwayOutput);
         }
 
         return output;
