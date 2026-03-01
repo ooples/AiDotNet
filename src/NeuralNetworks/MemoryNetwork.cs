@@ -149,6 +149,12 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
     /// and sets up the layers needed for processing inputs and interacting with memory.
     /// </para>
     /// </remarks>
+    public MemoryNetwork()
+        : this(new NeuralNetworkArchitecture<T>(InputType.OneDimensional, NeuralNetworkTaskType.Regression, inputSize: 128, outputSize: 128),
+               memorySize: 128, embeddingSize: 64)
+    {
+    }
+
     public MemoryNetwork(NeuralNetworkArchitecture<T> architecture, int memorySize, int embeddingSize, ILossFunction<T>? lossFunction = null, MemoryNetworkOptions? options = null) :
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {

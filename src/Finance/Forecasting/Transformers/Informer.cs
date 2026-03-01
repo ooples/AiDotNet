@@ -150,6 +150,18 @@ public class Informer<T> : ForecastingModelBase<T>
     #region Constructors
 
     /// <summary>
+    /// Creates an Informer model with default configuration for native training.
+    /// </summary>
+    public Informer()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            inputSize: 1,
+            outputSize: 1))
+    {
+    }
+
+    /// <summary>
     /// Creates an Informer network using a pretrained ONNX model.
     /// </summary>
     /// <param name="architecture">The neural network architecture configuration.</param>

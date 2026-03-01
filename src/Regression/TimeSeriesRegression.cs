@@ -105,6 +105,11 @@ public class TimeSeriesRegression<T> : RegressionBase<T>
     /// you choose will affect how well it works for your specific type of data.
     /// </para>
     /// </remarks>
+    public TimeSeriesRegression()
+        : this(new TimeSeriesRegressionOptions<T>())
+    {
+    }
+
     public TimeSeriesRegression(TimeSeriesRegressionOptions<T> options, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
         : base(options, regularization)
     {

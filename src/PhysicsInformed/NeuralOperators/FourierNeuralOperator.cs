@@ -100,6 +100,18 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
         private readonly bool _usesDefaultOptimizer;
 
         /// <summary>
+        /// Initializes a new instance of the Fourier Neural Operator with default configuration.
+        /// </summary>
+        public FourierNeuralOperator()
+            : this(new NeuralNetworkArchitecture<T>(
+                inputType: InputType.OneDimensional,
+                taskType: NeuralNetworkTaskType.Regression,
+                inputSize: 64,
+                outputSize: 64))
+        {
+        }
+
+        /// <summary>
         /// Initializes a new instance of the Fourier Neural Operator.
         /// </summary>
         /// <param name="architecture">The network architecture.</param>

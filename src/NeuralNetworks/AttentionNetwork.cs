@@ -149,6 +149,12 @@ public class AttentionNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     /// Cross-Entropy Loss is used by default because it works well for many language-related tasks.
     /// </para>
     /// </remarks>
+    public AttentionNetwork()
+        : this(new NeuralNetworkArchitecture<T>(InputType.OneDimensional, NeuralNetworkTaskType.Regression, inputSize: 128, outputSize: 128),
+               sequenceLength: 32, embeddingSize: 64)
+    {
+    }
+
     public AttentionNetwork(NeuralNetworkArchitecture<T> architecture, int sequenceLength, int embeddingSize, ILossFunction<T>? lossFunction = null, AttentionNetworkOptions? options = null) :
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {

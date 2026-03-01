@@ -224,6 +224,16 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
     /// <exception cref="ArgumentOutOfRangeException">
     /// Thrown when cycleConsistencyLambda or identityLambda is negative.
     /// </exception>
+    public CycleGAN()
+        : this(
+            new NeuralNetworkArchitecture<T>(InputType.OneDimensional, NeuralNetworkTaskType.Generative, inputSize: 784, outputSize: 784),
+            new NeuralNetworkArchitecture<T>(InputType.OneDimensional, NeuralNetworkTaskType.Generative, inputSize: 784, outputSize: 784),
+            new NeuralNetworkArchitecture<T>(InputType.OneDimensional, NeuralNetworkTaskType.BinaryClassification, inputSize: 784, outputSize: 1),
+            new NeuralNetworkArchitecture<T>(InputType.OneDimensional, NeuralNetworkTaskType.BinaryClassification, inputSize: 784, outputSize: 1),
+            inputType: InputType.OneDimensional)
+    {
+    }
+
     public CycleGAN(
         NeuralNetworkArchitecture<T> generatorAtoB,
         NeuralNetworkArchitecture<T> generatorBtoA,

@@ -55,6 +55,8 @@ public class REINFORCEAgent<T> : DeepReinforcementLearningAgentBase<T>
     /// <inheritdoc/>
     public override int FeatureCount => _reinforceOptions.StateSize;
 
+    public REINFORCEAgent() : this(new REINFORCEOptions<T>()) { }
+
     public REINFORCEAgent(REINFORCEOptions<T> options)
         : base(new ReinforcementLearningOptions<T>
         {

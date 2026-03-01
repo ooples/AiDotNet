@@ -104,6 +104,18 @@ public class SVTR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
     #region Constructors
 
     /// <summary>
+    /// Creates an SVTR model with default configuration for native training.
+    /// </summary>
+    public SVTR()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: InputType.TwoDimensional,
+            taskType: NeuralNetworkTaskType.MultiClassClassification,
+            inputHeight: 32, inputWidth: 256,
+            outputSize: 37))
+    {
+    }
+
+    /// <summary>
     /// Creates an SVTR model using a pre-trained ONNX model for inference.
     /// </summary>
     public SVTR(

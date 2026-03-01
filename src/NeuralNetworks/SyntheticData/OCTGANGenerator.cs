@@ -108,6 +108,14 @@ public class OCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
     public bool IsFitted { get; private set; }
 
     /// <summary>
+    /// Initializes a new OCT-GAN generator with default configuration.
+    /// </summary>
+    public OCTGANGenerator()
+        : this(new NeuralNetworkArchitecture<T>(InputType.OneDimensional, NeuralNetworkTaskType.Generative, inputSize: 128, outputSize: 128))
+    {
+    }
+
+    /// <summary>
     /// Initializes a new OCT-GAN generator with the specified architecture.
     /// </summary>
     public OCTGANGenerator(

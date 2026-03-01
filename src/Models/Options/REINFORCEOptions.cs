@@ -24,8 +24,8 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class REINFORCEOptions<T> : ModelOptions
 {
-    public int StateSize { get; set; }
-    public int ActionSize { get; set; }
+    public int StateSize { get; set; } = 16;
+    public int ActionSize { get; set; } = 4;
     public bool IsContinuous { get; set; } = false;
     public T LearningRate { get; set; }
     public T DiscountFactor { get; set; }

@@ -133,6 +133,18 @@ public class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDocumentQA<
     #region Constructors
 
     /// <summary>
+    /// Creates a Donut model with default configuration for native training.
+    /// </summary>
+    public Donut()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: InputType.TwoDimensional,
+            taskType: NeuralNetworkTaskType.MultiClassClassification,
+            inputHeight: 1920, inputWidth: 2560,
+            outputSize: 57522))
+    {
+    }
+
+    /// <summary>
     /// Creates a Donut model using pre-trained ONNX models for inference.
     /// </summary>
     /// <param name="architecture">The neural network architecture.</param>
