@@ -536,8 +536,8 @@ public class LayoutGraph<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, 
             throw new NotSupportedException("Parameter updates not supported in ONNX mode.");
 
         var currentParams = GetParameters();
-        T lr = NumOps.FromDouble(0.001);
-        
+        T lr = NumOps.FromDouble(_options.LearningRate);
+
         currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, lr));
         SetParameters(currentParams);
     }

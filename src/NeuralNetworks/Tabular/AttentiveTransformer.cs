@@ -379,6 +379,16 @@ public class AttentiveTransformer<T> : LayerBase<T>
     public override void UpdateParameters(T learningRate)
     {
         _fcLayer.UpdateParameters(learningRate);
+
+        // Update BN parameters via gradient descent
+        var bnGrads = _bnLayer.GetParameterGradients();
+        var bnParams = _bnLayer.GetParameters();
+        if (bnGrads.Length > 0 && bnGrads.Length == bnParams.Length)
+        {
+            var updated = AiDotNetEngine.Current.Subtract(
+                bnParams, AiDotNetEngine.Current.Multiply(bnGrads, learningRate));
+            _bnLayer.SetParameters(updated);
+        }
     }
 
     /// <summary>
@@ -412,6 +422,7 @@ public class AttentiveTransformer<T> : LayerBase<T>
     public override void SetTrainingMode(bool isTraining)
     {
         _fcLayer.SetTrainingMode(isTraining);
+        // GhostBatchNormalization uses Forward (training) vs ForwardInference (eval) internally
     }
 
     /// <inheritdoc/>

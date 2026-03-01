@@ -865,11 +865,12 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>, ICon
             throw new ArgumentException($"Expected {expectedParamCount} parameters, but got {parameters.Length}", nameof(parameters));
         }
 
+        // Match GetParameters order: bias first, then alphas
+        B = parameters[0];
         for (int i = 0; i < Alphas.Length; i++)
         {
-            Alphas[i] = parameters[i];
+            Alphas[i] = parameters[i + 1];
         }
-        B = parameters[Alphas.Length];
     }
 
     /// <summary>

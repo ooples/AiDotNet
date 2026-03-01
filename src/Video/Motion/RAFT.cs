@@ -418,11 +418,6 @@ public class RAFT<T> : OpticalFlowBase<T>
         return Engine.TensorAdd(term1, term2);
     }
 
-    private Tensor<T> ApplySigmoid(Tensor<T> input)
-    {
-        return Engine.Sigmoid(input);
-    }
-
     private Tensor<T> ApplyTanh(Tensor<T> input)
     {
         return input.Transform((v, _) =>

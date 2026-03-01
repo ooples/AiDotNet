@@ -1048,6 +1048,13 @@ namespace AiDotNet.AutoML
         public void ApplyGradients(Vector<T> gradients, T learningRate)
         {
             var parameters = GetParameters();
+            if (gradients.Length != parameters.Length)
+            {
+                throw new ArgumentException(
+                    $"Gradient vector length ({gradients.Length}) must match parameter count ({parameters.Length}).",
+                    nameof(gradients));
+            }
+
             SetParameters(Engine.Subtract(parameters, Engine.Multiply(gradients, learningRate)));
         }
 

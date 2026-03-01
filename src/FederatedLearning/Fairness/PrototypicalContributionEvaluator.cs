@@ -1,6 +1,5 @@
 using AiDotNet.FederatedLearning.Infrastructure;
 using AiDotNet.Helpers;
-using AiDotNet.Models.Options;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.LinearAlgebra;
 
@@ -106,7 +105,7 @@ public class PrototypicalContributionEvaluator<T> : FederatedLearningComponentBa
         // Score each client
         foreach (int clientId in clientIds)
         {
-            double alignment = ComputeAlignment(prototypes[clientId], globalDirection);
+            double alignment = CosineSimilarity(prototypes[clientId], globalDirection);
             double diversity = ComputeDiversity(clientId, prototypes, clientIds);
             double magnitude = ComputeMagnitude(prototypes[clientId]);
 
@@ -146,11 +145,6 @@ public class PrototypicalContributionEvaluator<T> : FederatedLearningComponentBa
         }
 
         return freeRiders;
-    }
-
-    private static double ComputeAlignment(double[] prototype, double[] globalDirection)
-    {
-        return VectorHelper.CosineSimilarity(new Vector<double>(prototype), new Vector<double>(globalDirection));
     }
 
     private static double ComputeDiversity(int clientId, Dictionary<int, double[]> prototypes, List<int> clientIds)

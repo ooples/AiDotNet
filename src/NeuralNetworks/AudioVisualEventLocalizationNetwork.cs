@@ -1315,7 +1315,7 @@ public class AudioVisualEventLocalizationNetwork<T> : NeuralNetworkBase<T>, IAud
         var currentParams = GetParameters();
 
         // Apply gradient descent update: params = params - learning_rate * gradients
-        T learningRate = NumOps.FromDouble(0.001); // Default learning rate
+        T learningRate = NumOps.FromDouble(_options.LearningRate);
         currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, learningRate));
 
         // Set the updated parameters

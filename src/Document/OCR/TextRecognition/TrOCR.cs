@@ -807,7 +807,7 @@ public class TrOCR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         }
 
         var currentParams = GetParameters();
-        T learningRate = NumOps.FromDouble(0.0001);
+        T learningRate = NumOps.FromDouble(_options.LearningRate);
 
         currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, learningRate));
 

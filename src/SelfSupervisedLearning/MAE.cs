@@ -521,6 +521,12 @@ public class MAE<T> : SSLMethodBase<T>
         // Update encoder
         var encoderGrads = new Vector<T>(_encoder.GetParameterGradients());
         var encoderParams = _encoder.GetParameters();
+        if (encoderGrads.Length != encoderParams.Length)
+        {
+            throw new InvalidOperationException(
+                $"Encoder gradient length ({encoderGrads.Length}) must match parameter count ({encoderParams.Length}).");
+        }
+
         _encoder.UpdateParameters(Engine.Subtract(encoderParams, Engine.Multiply(encoderGrads, learningRate)));
 
         // Update decoder if present
@@ -528,6 +534,12 @@ public class MAE<T> : SSLMethodBase<T>
         {
             var decoderGrads = new Vector<T>(_decoder.GetParameterGradients());
             var decoderParams = _decoder.GetParameters();
+            if (decoderGrads.Length != decoderParams.Length)
+            {
+                throw new InvalidOperationException(
+                    $"Decoder gradient length ({decoderGrads.Length}) must match parameter count ({decoderParams.Length}).");
+            }
+
             _decoder.UpdateParameters(Engine.Subtract(decoderParams, Engine.Multiply(decoderGrads, learningRate)));
         }
     }

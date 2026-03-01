@@ -93,8 +93,4 @@ public class StubEmbeddingModel<T> : EmbeddingModelBase<T>
         // Normalize the vector to unit length for cosine similarity
         return VectorHelper.Normalize(vector);
     }
-
-    /// <summary>
-    /// Normalizes a vector to unit length.
-    /// </summary>
 }

@@ -712,6 +712,13 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
     public override void ApplyGradients(Vector<T> gradients, T learningRate)
     {
         var currentParams = GetParameters();
+        if (gradients.Length != currentParams.Length)
+        {
+            throw new ArgumentException(
+                $"Gradient vector length ({gradients.Length}) must match parameter count ({currentParams.Length}).",
+                nameof(gradients));
+        }
+
         SetParameters(Engine.Subtract(currentParams, Engine.Multiply(gradients, learningRate)));
     }
 
