@@ -294,13 +294,7 @@ public class CounterfactualExplainer<T> : ILocalExplainer<T, CounterfactualExpla
     /// </summary>
     private double ComputeDistance(Vector<T> original, Vector<T> counterfactual)
     {
-        double sumSq = 0;
-        for (int i = 0; i < original.Length; i++)
-        {
-            double diff = NumOps.ToDouble(original[i]) - NumOps.ToDouble(counterfactual[i]);
-            sumSq += diff * diff;
-        }
-        return Math.Sqrt(sumSq);
+        return NumOps.ToDouble(VectorHelper.EuclideanDistance(original, counterfactual));
     }
 
     /// <summary>

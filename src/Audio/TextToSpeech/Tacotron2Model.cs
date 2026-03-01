@@ -803,10 +803,7 @@ public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         {
             // Fallback: manual SGD if optimizer doesn't support gradient-based updates
             T learningRate = NumOps.FromDouble(0.001);
-            for (int i = 0; i < currentParams.Length; i++)
-            {
-                currentParams[i] = NumOps.Subtract(currentParams[i], NumOps.Multiply(learningRate, gradients[i]));
-            }
+            currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, learningRate));
             SetParameters(currentParams);
         }
     }

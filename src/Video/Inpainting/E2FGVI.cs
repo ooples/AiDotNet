@@ -712,35 +712,14 @@ public class E2FGVI<T> : VideoInpaintingBase<T>
     private Tensor<T> ZeroTensor(int[] shape) => new Tensor<T>(shape);
 
     private Tensor<T> ScaleTensor(Tensor<T> tensor, double scale) =>
-        tensor.Transform((v, _) => NumOps.FromDouble(Convert.ToDouble(v) * scale));
+        Engine.TensorMultiplyScalar(tensor, NumOps.FromDouble(scale));
 
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b) =>
-        a.Transform((v, idx) => NumOps.Add(v, b.Data.Span[idx]));
+        Engine.TensorAdd(a, b);
 
     private Tensor<T> ConcatenateChannels(Tensor<T> a, Tensor<T> b)
     {
-        int batchSize = a.Shape[0];
-        int channelsA = a.Shape[1];
-        int channelsB = b.Shape[1];
-        int height = a.Shape[2];
-        int width = a.Shape[3];
-
-        var output = new Tensor<T>([batchSize, channelsA + channelsB, height, width]);
-
-        for (int batch = 0; batch < batchSize; batch++)
-        {
-            for (int c = 0; c < channelsA; c++)
-                for (int h = 0; h < height; h++)
-                    for (int w = 0; w < width; w++)
-                        output[batch, c, h, w] = a[batch, c, h, w];
-
-            for (int c = 0; c < channelsB; c++)
-                for (int h = 0; h < height; h++)
-                    for (int w = 0; w < width; w++)
-                        output[batch, channelsA + c, h, w] = b[batch, c, h, w];
-        }
-
-        return output;
+        return Engine.TensorConcatenate([a, b], axis: 1);
     }
 
     private Tensor<T> Upsample2x(Tensor<T> input)
@@ -771,7 +750,7 @@ public class E2FGVI<T> : VideoInpaintingBase<T>
         input.Transform((v, _) => NumOps.FromDouble(Math.Max(0, Convert.ToDouble(v))));
 
     private Tensor<T> ApplySigmoid(Tensor<T> input) =>
-        input.Transform((v, _) => NumOps.FromDouble(1.0 / (1.0 + Math.Exp(-Convert.ToDouble(v)))));
+        Engine.Sigmoid(input);
 
     private Tensor<T> AddBatchDimension(Tensor<T> tensor)
     {

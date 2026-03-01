@@ -168,48 +168,24 @@ public class MoCoV3<T> : SSLMethodBase<T>
     private void UpdateParameters(T learningRate)
     {
         // Update encoder
-        var encoderGrads = _encoder.GetParameterGradients();
+        var encoderGrads = new Vector<T>(_encoder.GetParameterGradients());
         var encoderParams = _encoder.GetParameters();
-        var newEncoderParams = new T[encoderParams.Length];
-
-        for (int i = 0; i < encoderParams.Length; i++)
-        {
-            newEncoderParams[i] = NumOps.Subtract(
-                encoderParams[i],
-                NumOps.Multiply(learningRate, encoderGrads[i]));
-        }
-        _encoder.UpdateParameters(new Vector<T>(newEncoderParams));
+        _encoder.UpdateParameters(Engine.Subtract(encoderParams, Engine.Multiply(encoderGrads, learningRate)));
 
         // Update projector
         if (_projector is not null)
         {
-            var projGrads = _projector.GetParameterGradients();
+            var projGrads = new Vector<T>(_projector.GetParameterGradients());
             var projParams = _projector.GetParameters();
-            var newProjParams = new T[projParams.Length];
-
-            for (int i = 0; i < projParams.Length; i++)
-            {
-                newProjParams[i] = NumOps.Subtract(
-                    projParams[i],
-                    NumOps.Multiply(learningRate, projGrads[i]));
-            }
-            _projector.SetParameters(new Vector<T>(newProjParams));
+            _projector.SetParameters(Engine.Subtract(projParams, Engine.Multiply(projGrads, learningRate)));
         }
 
         // Update predictor
         if (_predictor is not null)
         {
-            var predGrads = _predictor.GetParameterGradients();
+            var predGrads = new Vector<T>(_predictor.GetParameterGradients());
             var predParams = _predictor.GetParameters();
-            var newPredParams = new T[predParams.Length];
-
-            for (int i = 0; i < predParams.Length; i++)
-            {
-                newPredParams[i] = NumOps.Subtract(
-                    predParams[i],
-                    NumOps.Multiply(learningRate, predGrads[i]));
-            }
-            _predictor.SetParameters(new Vector<T>(newPredParams));
+            _predictor.SetParameters(Engine.Subtract(predParams, Engine.Multiply(predGrads, learningRate)));
         }
     }
 

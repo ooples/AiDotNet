@@ -1,3 +1,5 @@
+using AiDotNet.Helpers;
+
 namespace AiDotNet.GaussianProcesses;
 
 /// <summary>
@@ -215,13 +217,9 @@ public class VariationalStrategies<T>
     /// </summary>
     private double ComputeSquaredDistance(Matrix<T> X, int dataIdx, Matrix<T> centers, int centerIdx)
     {
-        double dist = 0;
-        for (int j = 0; j < X.Columns; j++)
-        {
-            double diff = _numOps.ToDouble(X[dataIdx, j]) - _numOps.ToDouble(centers[centerIdx, j]);
-            dist += diff * diff;
-        }
-        return dist;
+        var engine = AiDotNetEngine.Current;
+        var diff = engine.Subtract(X.GetRow(dataIdx), centers.GetRow(centerIdx));
+        return _numOps.ToDouble(engine.DotProduct(diff, diff));
     }
 
     /// <summary>

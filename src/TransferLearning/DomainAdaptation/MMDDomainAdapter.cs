@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Kernels;
 
@@ -207,7 +208,7 @@ public class MMDDomainAdapter<T> : IDomainAdapter<T>
             var x1 = data1.GetRow(idx1);
             var x2 = data2.GetRow(idx2);
 
-            T distance = ComputeEuclideanDistance(x1, x2);
+            T distance = VectorHelper.EuclideanDistance(x1, x2);
             distances.Add(distance);
         }
 
@@ -220,17 +221,4 @@ public class MMDDomainAdapter<T> : IDomainAdapter<T>
         return median / Math.Sqrt(2.0);
     }
 
-    /// <summary>
-    /// Computes the Euclidean distance between two vectors.
-    /// </summary>
-    private T ComputeEuclideanDistance(Vector<T> x1, Vector<T> x2)
-    {
-        T sumSquares = _numOps.Zero;
-        for (int i = 0; i < x1.Length; i++)
-        {
-            T diff = _numOps.Subtract(x1[i], x2[i]);
-            sumSquares = _numOps.Add(sumSquares, _numOps.Multiply(diff, diff));
-        }
-        return _numOps.Sqrt(sumSquares);
-    }
 }

@@ -464,31 +464,7 @@ public class ACGAN<T> : NeuralNetworkBase<T>
     /// </summary>
     private Tensor<T> ConcatenateTensors(Tensor<T> noise, Tensor<T> labels)
     {
-        if (noise.Shape.Length != 2 || labels.Shape.Length != 2)
-            throw new ArgumentException("noise and labels must be rank-2 tensors [batch, features].");
-
-        int batchSize = noise.Shape[0];
-        if (labels.Shape[0] != batchSize)
-            throw new ArgumentException($"noise and labels must have the same batch size. noise: {batchSize}, labels: {labels.Shape[0]}");
-
-        int noiseSize = noise.Shape[1];
-        int labelSize = labels.Shape[1];
-
-        var result = new Tensor<T>(new int[] { batchSize, noiseSize + labelSize });
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int i = 0; i < noiseSize; i++)
-            {
-                result[b, i] = noise[b, i];
-            }
-            for (int i = 0; i < labelSize; i++)
-            {
-                result[b, noiseSize + i] = labels[b, i];
-            }
-        }
-
-        return result;
+        return Engine.TensorConcatenate([noise, labels], axis: 1);
     }
 
     /// <summary>

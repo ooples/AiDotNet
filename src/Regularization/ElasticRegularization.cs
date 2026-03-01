@@ -122,24 +122,22 @@ public class ElasticNetRegularization<T, TInput, TOutput> : RegularizationBase<T
         var l2Ratio = NumOps.FromDouble(1 - Options.L1Ratio);
         var result = new Matrix<T>(data.Rows, data.Columns);
 
+        var l2ShrinkageFactor = NumOps.Subtract(NumOps.One, NumOps.Multiply(regularizationStrength, l2Ratio));
+
         for (int i = 0; i < data.Rows; i++)
         {
             for (int j = 0; j < data.Columns; j++)
             {
                 var value = data[i, j];
+                // Step 1: L1 soft thresholding
                 var subPart = NumOps.Subtract(NumOps.Abs(value), NumOps.Multiply(regularizationStrength, l1Ratio));
-
-                var l1Part = NumOps.Multiply(
+                var l1Result = NumOps.Multiply(
                     NumOps.SignOrZero(value),
                     NumOps.GreaterThan(subPart, NumOps.Zero) ? subPart : NumOps.Zero
                 );
 
-                var l2Part = NumOps.Multiply(
-                    value,
-                    NumOps.Subtract(NumOps.One, NumOps.Multiply(regularizationStrength, l2Ratio))
-                );
-
-                result[i, j] = NumOps.Add(l1Part, l2Part);
+                // Step 2: L2 shrinkage applied to the L1 result
+                result[i, j] = NumOps.Multiply(l1Result, l2ShrinkageFactor);
             }
         }
 
@@ -165,22 +163,20 @@ public class ElasticNetRegularization<T, TInput, TOutput> : RegularizationBase<T
         var l2Ratio = NumOps.FromDouble(1 - Options.L1Ratio);
         var result = new Vector<T>(data.Length);
 
+        var l2ShrinkageFactor = NumOps.Subtract(NumOps.One, NumOps.Multiply(regularizationStrength, l2Ratio));
+
         for (int i = 0; i < data.Length; i++)
         {
             var value = data[i];
+            // Step 1: L1 soft thresholding
             var subPart = NumOps.Subtract(NumOps.Abs(value), NumOps.Multiply(regularizationStrength, l1Ratio));
-
-            var l1Part = NumOps.Multiply(
+            var l1Result = NumOps.Multiply(
                 NumOps.SignOrZero(value),
                 NumOps.GreaterThan(subPart, NumOps.Zero) ? subPart : NumOps.Zero
             );
 
-            var l2Part = NumOps.Multiply(
-                value,
-                NumOps.Subtract(NumOps.One, NumOps.Multiply(regularizationStrength, l2Ratio))
-            );
-
-            result[i] = NumOps.Add(l1Part, l2Part);
+            // Step 2: L2 shrinkage applied to the L1 result
+            result[i] = NumOps.Multiply(l1Result, l2ShrinkageFactor);
         }
 
         return result;

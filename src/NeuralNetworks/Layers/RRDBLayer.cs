@@ -352,15 +352,9 @@ public class RRDBLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
     /// </summary>
     private Tensor<T> AddResidual(Tensor<T> a, Tensor<T> b, double scale)
     {
-        var output = new Tensor<T>(a.Shape);
         var scaleT = NumOps.FromDouble(scale);
-        for (int i = 0; i < a.Length; i++)
-        {
-            output.Data.Span[i] = NumOps.Add(
-                NumOps.Multiply(a.Data.Span[i], scaleT),
-                b.Data.Span[i]);
-        }
-        return output;
+        var scaled = Engine.TensorMultiplyScalar(a, scaleT);
+        return Engine.TensorAdd(scaled, b);
     }
 
     /// <summary>
@@ -368,13 +362,8 @@ public class RRDBLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
     /// </summary>
     private Tensor<T> ScaleGradient(Tensor<T> gradient, double scale)
     {
-        var output = new Tensor<T>(gradient.Shape);
         var scaleT = NumOps.FromDouble(scale);
-        for (int i = 0; i < gradient.Length; i++)
-        {
-            output.Data.Span[i] = NumOps.Multiply(gradient.Data.Span[i], scaleT);
-        }
-        return output;
+        return Engine.TensorMultiplyScalar(gradient, scaleT);
     }
 
     /// <summary>
@@ -382,12 +371,7 @@ public class RRDBLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
     /// </summary>
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
-        var output = new Tensor<T>(a.Shape);
-        for (int i = 0; i < a.Length; i++)
-        {
-            output.Data.Span[i] = NumOps.Add(a.Data.Span[i], b.Data.Span[i]);
-        }
-        return output;
+        return Engine.TensorAdd(a, b);
     }
 
     #endregion

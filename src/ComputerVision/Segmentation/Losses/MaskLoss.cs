@@ -150,8 +150,9 @@ public class MaskDiceLoss<T>
             double p = _numOps.ToDouble(predicted[i]);
             double t = _numOps.ToDouble(target[i]);
 
-            // d/dp Dice = 2 * (t * denom - numerator * 2p) / denom^2
-            double grad = 2 * (t * denominator - numerator * 2 * p) / (denominator * denominator);
+            // Quotient rule: d(Dice)/dp = (N' * D - N * D') / D^2
+            // where N' = 2*t, D' = 2*p
+            double grad = (2 * t * denominator - numerator * 2 * p) / (denominator * denominator);
             gradient[i] = _numOps.FromDouble(-grad); // Negative because loss = 1 - Dice
         }
 
@@ -225,9 +226,12 @@ public class MaskFocalLoss<T>
             double pt = t * p + (1 - t) * (1 - p);
             double alphaT = t * _alpha + (1 - t) * (1 - _alpha);
 
-            // Gradient of focal loss (simplified)
+            // Product rule: d/dp [(1-pt)^g * log(pt)]
+            // = d[(1-pt)^g]/dp * log(pt) + (1-pt)^g * d[log(pt)]/dp
+            // d[(1-pt)^g]/dp = g*(1-pt)^(g-1)*(-dpt/dp)  ← note negative sign
+            // d[log(pt)]/dp = (1/pt)*dpt/dp
             double dpt_dp = 2 * t - 1;
-            double term1 = _gamma * Math.Pow(1 - pt, _gamma - 1) * Math.Log(pt) * dpt_dp;
+            double term1 = -_gamma * Math.Pow(1 - pt, _gamma - 1) * Math.Log(pt) * dpt_dp;
             double term2 = Math.Pow(1 - pt, _gamma) * (1 / pt) * dpt_dp;
 
             double grad = -alphaT * (term1 + term2);

@@ -421,34 +421,7 @@ internal class SPPFBlock<T>
 
     private Tensor<T> ConcatenateChannels(params Tensor<T>[] tensors)
     {
-        int batch = tensors[0].Shape[0];
-        int height = tensors[0].Shape[2];
-        int width = tensors[0].Shape[3];
-        int totalChannels = tensors.Sum(t => t.Shape[1]);
-
-        var result = new Tensor<T>(new[] { batch, totalChannels, height, width });
-
-        int channelOffset = 0;
-        foreach (var tensor in tensors)
-        {
-            int channels = tensor.Shape[1];
-            for (int n = 0; n < batch; n++)
-            {
-                for (int c = 0; c < channels; c++)
-                {
-                    for (int h = 0; h < height; h++)
-                    {
-                        for (int w = 0; w < width; w++)
-                        {
-                            result[n, channelOffset + c, h, w] = tensor[n, c, h, w];
-                        }
-                    }
-                }
-            }
-            channelOffset += channels;
-        }
-
-        return result;
+        return AiDotNetEngine.Current.TensorConcatenate(tensors, axis: 1);
     }
 
     private Tensor<T> ApplySiLU(Tensor<T> x)

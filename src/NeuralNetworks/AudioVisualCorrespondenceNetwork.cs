@@ -245,7 +245,7 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
 
         // Global average pooling
         var embedding = GlobalAveragePool(projected);
-        return NormalizeVector(embedding);
+        return VectorHelper.Normalize(embedding);
     }
 
     /// <inheritdoc/>
@@ -278,7 +278,7 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
             aggregatedEmbedding[i] = NumOps.Multiply(aggregatedEmbedding[i], scale);
         }
 
-        return NormalizeVector(aggregatedEmbedding);
+        return VectorHelper.Normalize(aggregatedEmbedding);
     }
 
     /// <inheritdoc/>
@@ -287,7 +287,7 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
         var audioEmb = GetAudioEmbedding(audioWaveform, _audioSampleRate);
         var visualEmb = GetVisualEmbedding(frames);
 
-        return ComputeCosineSimilarity(audioEmb, visualEmb);
+        return NumOps.FromDouble(VectorHelper.CosineSimilarity(audioEmb, visualEmb));
     }
 
     /// <inheritdoc/>
@@ -343,7 +343,7 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
 
         foreach (var visualEmb in visualDatabase)
         {
-            var score = ComputeCosineSimilarity(audioEmb, visualEmb);
+            var score = NumOps.FromDouble(VectorHelper.CosineSimilarity(audioEmb, visualEmb));
             scores.Add((index, score));
             index++;
         }
@@ -365,7 +365,7 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
 
         foreach (var audioEmb in audioDatabase)
         {
-            var score = ComputeCosineSimilarity(visualEmb, audioEmb);
+            var score = NumOps.FromDouble(VectorHelper.CosineSimilarity(visualEmb, audioEmb));
             scores.Add((index, score));
             index++;
         }
@@ -419,7 +419,7 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
             "background noise"
         };
 
-        var embMagnitude = ComputeVectorMagnitude(visualEmb);
+        var embMagnitude = VectorHelper.L2Norm(visualEmb);
         var magValue = NumOps.ToDouble(embMagnitude);
 
         if (magValue > 0.5)
@@ -526,8 +526,8 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
 
                     // Propagate gradient through embedding layers
                     // For cosine similarity d(sim)/d(a) = (b - sim*a) / (||a|| * ||b||)
-                    var audioNorm = ComputeVectorMagnitude(audioEmb);
-                    var visualNorm = ComputeVectorMagnitude(visualEmb);
+                    var audioNorm = VectorHelper.L2Norm(audioEmb);
+                    var visualNorm = VectorHelper.L2Norm(visualEmb);
                     T normProduct = NumOps.Multiply(audioNorm, visualNorm);
 
                     if (NumOps.ToDouble(normProduct) > 1e-8)
@@ -825,7 +825,7 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
                 }
             }
 
-            var score = ComputeCosineSimilarity(audioEmbedding, spatialVec);
+            var score = NumOps.FromDouble(VectorHelper.CosineSimilarity(audioEmbedding, spatialVec));
             attentionScores.Data.Span[pos] = score;
         }
 
@@ -889,28 +889,6 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
         return embedding;
     }
 
-    private Vector<T> NormalizeVector(Vector<T> vector)
-    {
-        return vector.SafeNormalize();
-    }
-
-    private T ComputeVectorMagnitude(Vector<T> vector)
-    {
-        // Use IEngine vectorized dot product for sum of squares
-        T sumSq = Engine.DotProduct(vector, vector);
-        return NumOps.FromDouble(Math.Sqrt(NumOps.ToDouble(sumSq)));
-    }
-
-    private T ComputeCosineSimilarity(Vector<T> a, Vector<T> b)
-    {
-        if (a.Length != b.Length)
-        {
-            return NumOps.Zero;
-        }
-
-        // Use IEngine vectorized cosine similarity
-        return Engine.CosineSimilarity(a, b);
-    }
 
     private Vector<T> ConcatenateVectors(Vector<T> a, Vector<T> b)
     {
@@ -1083,10 +1061,7 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
 
         // Apply gradient descent update: params = params - learning_rate * gradients
         T learningRate = NumOps.FromDouble(0.001); // Default learning rate
-        for (int i = 0; i < currentParams.Length; i++)
-        {
-            currentParams[i] = NumOps.Subtract(currentParams[i], NumOps.Multiply(learningRate, gradients[i]));
-        }
+        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, learningRate));
 
         // Set the updated parameters
         SetParameters(currentParams);

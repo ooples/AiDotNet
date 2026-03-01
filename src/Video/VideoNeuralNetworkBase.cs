@@ -205,13 +205,7 @@ public abstract class VideoNeuralNetworkBase<T> : NeuralNetworkBase<T>
     /// <returns>Normalized frames tensor.</returns>
     protected Tensor<T> NormalizeFrames(Tensor<T> frames)
     {
-        var normalized = new Tensor<T>(frames.Shape);
-        for (int i = 0; i < frames.Length; i++)
-        {
-            double val = NumOps.ToDouble(frames.Data.Span[i]);
-            normalized.Data.Span[i] = NumOps.FromDouble(val / 255.0);
-        }
-        return normalized;
+        return Engine.TensorDivideScalar(frames, NumOps.FromDouble(255.0));
     }
 
     /// <summary>
@@ -221,14 +215,8 @@ public abstract class VideoNeuralNetworkBase<T> : NeuralNetworkBase<T>
     /// <returns>Denormalized frames tensor with values clipped to [0, 255].</returns>
     protected Tensor<T> DenormalizeFrames(Tensor<T> frames)
     {
-        var denormalized = new Tensor<T>(frames.Shape);
-        for (int i = 0; i < frames.Length; i++)
-        {
-            double val = NumOps.ToDouble(frames.Data.Span[i]) * 255.0;
-            val = Math.Max(0.0, Math.Min(255.0, val));
-            denormalized.Data.Span[i] = NumOps.FromDouble(val);
-        }
-        return denormalized;
+        var scaled = Engine.TensorMultiplyScalar(frames, NumOps.FromDouble(255.0));
+        return Engine.TensorClamp(scaled, NumOps.Zero, NumOps.FromDouble(255.0));
     }
 
     /// <summary>
@@ -385,46 +373,20 @@ public abstract class VideoNeuralNetworkBase<T> : NeuralNetworkBase<T>
     /// <returns>Concatenated tensor with combined channels.</returns>
     protected Tensor<T> ConcatenateFeatures(Tensor<T> feat1, Tensor<T> feat2)
     {
-        bool hasBatch = feat1.Rank == 4;
-        int batch = hasBatch ? feat1.Shape[0] : 1;
-        int c1 = hasBatch ? feat1.Shape[1] : feat1.Shape[0];
-        int c2 = hasBatch ? feat2.Shape[1] : feat2.Shape[0];
-        int height = hasBatch ? feat1.Shape[2] : feat1.Shape[1];
-        int width = hasBatch ? feat1.Shape[3] : feat1.Shape[2];
-
-        var outShape = hasBatch
-            ? new[] { batch, c1 + c2, height, width }
-            : new[] { c1 + c2, height, width };
-        var output = new Tensor<T>(outShape);
-
-        int pixelsPerChannel = height * width;
-
-        for (int b = 0; b < batch; b++)
+        if (feat1.Rank < 1 || feat2.Rank < 1)
         {
-            for (int c = 0; c < c1; c++)
-            {
-                int srcOffset = hasBatch ? b * c1 * pixelsPerChannel + c * pixelsPerChannel : c * pixelsPerChannel;
-                int dstOffset = hasBatch ? b * (c1 + c2) * pixelsPerChannel + c * pixelsPerChannel : c * pixelsPerChannel;
-
-                for (int i = 0; i < pixelsPerChannel; i++)
-                {
-                    output.Data.Span[dstOffset + i] = feat1.Data.Span[srcOffset + i];
-                }
-            }
-
-            for (int c = 0; c < c2; c++)
-            {
-                int srcOffset = hasBatch ? b * c2 * pixelsPerChannel + c * pixelsPerChannel : c * pixelsPerChannel;
-                int dstOffset = hasBatch ? b * (c1 + c2) * pixelsPerChannel + (c1 + c) * pixelsPerChannel : (c1 + c) * pixelsPerChannel;
-
-                for (int i = 0; i < pixelsPerChannel; i++)
-                {
-                    output.Data.Span[dstOffset + i] = feat2.Data.Span[srcOffset + i];
-                }
-            }
+            throw new ArgumentException("Feature tensors must have at least 1 dimension for concatenation.");
         }
 
-        return output;
+        if (feat1.Rank != feat2.Rank)
+        {
+            throw new ArgumentException(
+                $"Feature tensors must have the same rank for concatenation (got {feat1.Rank} and {feat2.Rank}).");
+        }
+
+        // Concatenate along the channel dimension (axis 1 for 4D, axis 0 for 3D)
+        int channelAxis = feat1.Rank == 4 ? 1 : 0;
+        return Engine.TensorConcatenate([feat1, feat2], channelAxis);
     }
 
     /// <summary>

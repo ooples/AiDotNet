@@ -1133,30 +1133,20 @@ public class DCRNN<T> : ForecastingModelBase<T>
             {
                 var backwardResult = ApplyMatrixToTensor(_backwardPowers[k], input, n, featuresPerNode);
 
-                // Average forward and backward
-                for (int i = 0; i < result.Data.Length; i++)
-                {
-                    var combined = NumOps.Multiply(
-                        NumOps.FromDouble(0.5),
-                        NumOps.Add(forwardResult.Data.Span[i], backwardResult.Data.Span[i]));
-                    result.Data.Span[i] = NumOps.Add(result.Data.Span[i], combined);
-                }
+                // Average forward and backward: combined = 0.5 * (forward + backward)
+                var sum = Engine.TensorAdd(forwardResult, backwardResult);
+                var combined = Engine.TensorMultiplyScalar(sum, NumOps.FromDouble(0.5));
+                result = Engine.TensorAdd(result, combined);
             }
             else
             {
-                for (int i = 0; i < result.Data.Length; i++)
-                {
-                    result.Data.Span[i] = NumOps.Add(result.Data.Span[i], forwardResult.Data.Span[i]);
-                }
+                result = Engine.TensorAdd(result, forwardResult);
             }
         }
 
         // Normalize
         T scale = NumOps.FromDouble(1.0 / (_diffusionSteps + 1));
-        for (int i = 0; i < result.Data.Length; i++)
-        {
-            result.Data.Span[i] = NumOps.Multiply(result.Data.Span[i], scale);
-        }
+        result = Engine.TensorMultiplyScalar(result, scale);
 
         return result;
     }

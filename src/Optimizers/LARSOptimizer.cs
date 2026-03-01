@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using Newtonsoft.Json;
 
@@ -258,10 +259,10 @@ public class LARSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
             else
             {
                 // Compute parameter norm ||w||
-                T paramNorm = ComputeL2Norm(layerParams);
+                T paramNorm = VectorHelper.L2Norm(layerParams);
 
                 // Compute gradient norm ||g||
-                T gradNorm = ComputeL2Norm(layerGrad);
+                T gradNorm = VectorHelper.L2Norm(layerGrad);
 
                 // LARS scaling: trust_coeff * ||w|| / (||g|| + weight_decay * ||w|| + epsilon)
                 T denominator = NumOps.Add(gradNorm,
@@ -377,8 +378,8 @@ public class LARSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         T baseLr = NumOps.FromDouble(effectiveLr);
 
         // Compute norms
-        T paramNorm = ComputeL2Norm(parameters);
-        T gradNorm = ComputeL2Norm(gradient);
+        T paramNorm = VectorHelper.L2Norm(parameters);
+        T gradNorm = VectorHelper.L2Norm(gradient);
 
         // LARS scaling
         T denominator = NumOps.Add(gradNorm,
@@ -457,19 +458,6 @@ public class LARSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         }
 
         return updatedMatrix;
-    }
-
-    /// <summary>
-    /// Computes the L2 norm of a vector.
-    /// </summary>
-    private T ComputeL2Norm(Vector<T> vector)
-    {
-        T sumSquared = NumOps.Zero;
-        for (int i = 0; i < vector.Length; i++)
-        {
-            sumSquared = NumOps.Add(sumSquared, NumOps.Multiply(vector[i], vector[i]));
-        }
-        return NumOps.Sqrt(sumSquared);
     }
 
     /// <summary>

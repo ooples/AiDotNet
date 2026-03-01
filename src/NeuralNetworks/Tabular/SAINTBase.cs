@@ -1,4 +1,5 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Engines;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Models.Options;
@@ -34,6 +35,7 @@ public abstract class SAINTBase<T>
     protected readonly int NumCategoricalFeatures;
     protected readonly int TotalEmbeddedFeatures;
     protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+    protected IEngine Engine => AiDotNetEngine.Current;
     private readonly Random _random = RandomHelper.CreateSecureRandom();
 
     // Feature embeddings
@@ -487,12 +489,7 @@ public abstract class SAINTBase<T>
 
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
-        var result = new Tensor<T>(a.Shape);
-        for (int i = 0; i < a.Length; i++)
-        {
-            result[i] = NumOps.Add(a[i], b[i]);
-        }
-        return result;
+        return Engine.TensorAdd(a, b);
     }
 
     /// <summary>

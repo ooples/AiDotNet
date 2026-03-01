@@ -418,13 +418,7 @@ public class UViTNoisePredictor<T> : NoisePredictorBase<T>
 
     private static Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
-        var aSpan = a.AsSpan();
-        var bSpan = b.AsSpan();
-        int len = Math.Min(aSpan.Length, bSpan.Length);
-        var data = new T[aSpan.Length];
-        for (int i = 0; i < len; i++) data[i] = NumOps.Add(aSpan[i], bSpan[i]);
-        for (int i = len; i < aSpan.Length; i++) data[i] = aSpan[i];
-        return new Tensor<T>(a.Shape, new Vector<T>(data));
+        return AiDotNetEngine.Current.TensorBroadcastAdd(a, b);
     }
 
     private static Tensor<T> ConcatenateTensors(Tensor<T> a, Tensor<T> b)

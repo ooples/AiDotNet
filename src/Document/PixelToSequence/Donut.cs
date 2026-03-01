@@ -1072,7 +1072,7 @@ public class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDocumentQA<
                 { "use_native_mode", _useNativeMode },
                 { "ocr_free", IsOCRFree }
             },
-            ModelData = this.Serialize()
+            ModelData = SafeSerialize()
         };
     }
 
@@ -1333,10 +1333,7 @@ public class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDocumentQA<
 
         var options = _optimizer?.GetOptions();
         T learningRate = NumOps.FromDouble(options?.InitialLearningRate ?? 0.001);
-        for (int i = 0; i < currentParams.Length; i++)
-        {
-            currentParams[i] = NumOps.Subtract(currentParams[i], NumOps.Multiply(learningRate, gradients[i]));
-        }
+        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, learningRate));
 
         SetParameters(currentParams);
     }

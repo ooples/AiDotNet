@@ -1032,28 +1032,13 @@ public class CausalGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGene
     private static void ApplySoftmaxBlock(Tensor<T> input, Tensor<T> output, ref int idx, int count)
     {
         if (count <= 0) return;
-
-        var numOps = MathHelper.GetNumericOperations<T>();
-
-        double maxVal = double.MinValue;
-        for (int m = 0; m < count && (idx + m) < input.Length; m++)
-        {
-            double v = numOps.ToDouble(input[idx + m]);
-            if (v > maxVal) maxVal = v;
-        }
-
-        double sumExp = 0;
-        for (int m = 0; m < count && (idx + m) < input.Length; m++)
-        {
-            sumExp += Math.Exp(numOps.ToDouble(input[idx + m]) - maxVal);
-        }
-
-        for (int m = 0; m < count && idx < input.Length; m++)
-        {
-            double expVal = Math.Exp(numOps.ToDouble(input[idx]) - maxVal);
-            output[idx] = numOps.FromDouble(expVal / Math.Max(sumExp, 1e-10));
-            idx++;
-        }
+        int actualCount = Math.Min(count, input.Length - idx);
+        if (actualCount <= 0) return;
+        var slice = new Tensor<T>([actualCount]);
+        input.Data.Span.Slice(idx, actualCount).CopyTo(slice.Data.Span);
+        var result = AiDotNetEngine.Current.Softmax(slice, -1);
+        result.Data.Span.CopyTo(output.Data.Span.Slice(idx, actualCount));
+        idx += actualCount;
     }
 
     #endregion

@@ -594,7 +594,7 @@ public class DBNet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
                 { "min_text_area", _minTextArea },
                 { "use_native_mode", _useNativeMode }
             },
-            ModelData = this.Serialize()
+            ModelData = SafeSerialize()
         };
     }
 
@@ -686,10 +686,7 @@ public class DBNet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
         var currentParams = GetParameters();
         T learningRate = NumOps.FromDouble(0.001);
 
-        for (int i = 0; i < currentParams.Length; i++)
-        {
-            currentParams[i] = NumOps.Subtract(currentParams[i], NumOps.Multiply(learningRate, gradients[i]));
-        }
+        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, learningRate));
 
         SetParameters(currentParams);
     }

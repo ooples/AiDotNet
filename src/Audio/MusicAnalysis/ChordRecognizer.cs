@@ -1,5 +1,5 @@
 using AiDotNet.Audio.Features;
-using AiDotNet.Tensors.Helpers;
+using AiDotNet.Helpers;
 using AiDotNet.Tensors.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
 
@@ -221,21 +221,7 @@ public class ChordRecognizer<T> : MusicAnalysisBase<T>
 
     private static double CosineSimilarity(double[] a, double[] b)
     {
-        double dotProduct = 0;
-        double normA = 0;
-        double normB = 0;
-
-        for (int i = 0; i < a.Length; i++)
-        {
-            dotProduct += a[i] * b[i];
-            normA += a[i] * a[i];
-            normB += b[i] * b[i];
-        }
-
-        double denominator = Math.Sqrt(normA) * Math.Sqrt(normB);
-        if (denominator < 1e-10) return 0;
-
-        return dotProduct / denominator;
+        return VectorHelper.CosineSimilarity(new Vector<double>(a), new Vector<double>(b));
     }
 
     private List<ChordSegment> MergeIntoSegments(List<(string chord, double confidence)> frameChords)

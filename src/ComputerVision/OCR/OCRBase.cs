@@ -199,6 +199,11 @@ public enum TextRecognitionModel
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 public abstract class OCRBase<T>
 {
+    /// <summary>
+    /// Provides access to the hardware-accelerated tensor engine.
+    /// </summary>
+    protected IEngine Engine => AiDotNetEngine.Current;
+
     protected readonly INumericOperations<T> NumOps;
     protected readonly OCROptions<T> Options;
 

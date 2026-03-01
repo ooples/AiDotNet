@@ -382,7 +382,7 @@ public static class MatrixHelper<T>
             var temp1 = H[i, k];
             var temp2 = H[j, k];
             H[i, k] = _numOps.Add(_numOps.Multiply(c, temp1), _numOps.Multiply(s, temp2));
-            H[j, k] = _numOps.Subtract(_numOps.Multiply(_numOps.Negate(s), temp1), _numOps.Multiply(c, temp2));
+            H[j, k] = _numOps.Add(_numOps.Multiply(_numOps.Negate(s), temp1), _numOps.Multiply(c, temp2));
         }
     }
 
@@ -548,6 +548,14 @@ public static class MatrixHelper<T>
                 }
             }
 
+            // Estimate the eigenvalue using Rayleigh quotient: b^T * Ab / (b^T * b)
+            // Since bVector is normalized (b^T * b = 1), this simplifies to b^T * Ab
+            T newEigenvalue = _numOps.Zero;
+            for (int i = 0; i < rows; i++)
+            {
+                newEigenvalue = _numOps.Add(newEigenvalue, _numOps.Multiply(bVector[i], b2Vector[i]));
+            }
+
             // Normalize the vector
             T norm = _numOps.Zero;
             for (int i = 0; i < rows; i++)
@@ -558,13 +566,6 @@ public static class MatrixHelper<T>
             for (int i = 0; i < rows; i++)
             {
                 b2Vector[i] = _numOps.Divide(b2Vector[i], norm);
-            }
-
-            // Estimate the eigenvalue
-            T newEigenvalue = _numOps.Zero;
-            for (int i = 0; i < rows; i++)
-            {
-                newEigenvalue = _numOps.Add(newEigenvalue, _numOps.Multiply(b2Vector[i], b2Vector[i]));
             }
 
             // Check for convergence

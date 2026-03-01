@@ -1,4 +1,5 @@
 using System.IO;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
@@ -866,7 +867,7 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
         }
 
         // L2 normalize
-        return NormalizeVector(new Vector<T>(clsEmbedding));
+        return VectorHelper.Normalize(new Vector<T>(clsEmbedding));
     }
 
     /// <summary>
@@ -922,7 +923,7 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
             clsEmbedding[i] = hidden.Shape.Length == 3 ? hidden[0, 0, i] : hidden[0, i];
         }
 
-        return NormalizeVector(new Vector<T>(clsEmbedding));
+        return VectorHelper.Normalize(new Vector<T>(clsEmbedding));
     }
 
     /// <summary>
@@ -1370,41 +1371,12 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
             data[i] = NumOps.FromDouble(value);
         }
 
-        return NormalizeVector(new Vector<T>(data));
+        return VectorHelper.Normalize(new Vector<T>(data));
     }
 
     #endregion
 
     #region Helper Methods
-
-    /// <summary>
-    /// L2 normalizes a vector.
-    /// </summary>
-    private Vector<T> NormalizeVector(Vector<T> vector)
-    {
-        T sumSquared = NumOps.Zero;
-
-        for (int i = 0; i < vector.Length; i++)
-        {
-            sumSquared = NumOps.Add(sumSquared, NumOps.Multiply(vector[i], vector[i]));
-        }
-
-        T norm = NumOps.Sqrt(sumSquared);
-        T epsilon = NumOps.FromDouble(1e-12);
-
-        if (NumOps.ToDouble(norm) < NumOps.ToDouble(epsilon))
-        {
-            return vector;
-        }
-
-        var normalized = new T[vector.Length];
-        for (int i = 0; i < vector.Length; i++)
-        {
-            normalized[i] = NumOps.Divide(vector[i], norm);
-        }
-
-        return new Vector<T>(normalized);
-    }
 
     /// <summary>
     /// Gets the BOS token ID.

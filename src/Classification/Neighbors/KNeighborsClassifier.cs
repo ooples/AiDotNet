@@ -1,4 +1,5 @@
 using AiDotNet.Classification;
+using AiDotNet.Helpers;
 using AiDotNet.Models.Options;
 
 namespace AiDotNet.Classification.Neighbors;
@@ -202,41 +203,22 @@ public class KNeighborsClassifier<T> : ProbabilisticClassifierBase<T>
     {
         return Options.Metric switch
         {
-            DistanceMetric.Euclidean => ComputeEuclideanDistance(a, b),
+            DistanceMetric.Euclidean => VectorHelper.EuclideanDistance(a, b),
             DistanceMetric.Manhattan => ComputeManhattanDistance(a, b),
             DistanceMetric.Minkowski => ComputeMinkowskiDistance(a, b, Options.P),
             DistanceMetric.Chebyshev => ComputeChebyshevDistance(a, b),
             DistanceMetric.Cosine => ComputeCosineDistance(a, b),
-            _ => ComputeEuclideanDistance(a, b)
+            _ => VectorHelper.EuclideanDistance(a, b)
         };
     }
 
-    /// <summary>
-    /// Computes Euclidean (L2) distance.
-    /// </summary>
-    private T ComputeEuclideanDistance(Vector<T> a, Vector<T> b)
-    {
-        T sumSquared = NumOps.Zero;
-        for (int i = 0; i < a.Length; i++)
-        {
-            T diff = NumOps.Subtract(a[i], b[i]);
-            sumSquared = NumOps.Add(sumSquared, NumOps.Multiply(diff, diff));
-        }
-        return NumOps.Sqrt(sumSquared);
-    }
 
     /// <summary>
     /// Computes Manhattan (L1) distance.
     /// </summary>
     private T ComputeManhattanDistance(Vector<T> a, Vector<T> b)
     {
-        T sum = NumOps.Zero;
-        for (int i = 0; i < a.Length; i++)
-        {
-            T diff = NumOps.Subtract(a[i], b[i]);
-            sum = NumOps.Add(sum, NumOps.Abs(diff));
-        }
-        return sum;
+        return VectorHelper.ManhattanDistance(a, b);
     }
 
     /// <summary>
@@ -275,28 +257,8 @@ public class KNeighborsClassifier<T> : ProbabilisticClassifierBase<T>
     /// </summary>
     private T ComputeCosineDistance(Vector<T> a, Vector<T> b)
     {
-        T dotProduct = NumOps.Zero;
-        T normA = NumOps.Zero;
-        T normB = NumOps.Zero;
-
-        for (int i = 0; i < a.Length; i++)
-        {
-            dotProduct = NumOps.Add(dotProduct, NumOps.Multiply(a[i], b[i]));
-            normA = NumOps.Add(normA, NumOps.Multiply(a[i], a[i]));
-            normB = NumOps.Add(normB, NumOps.Multiply(b[i], b[i]));
-        }
-
-        normA = NumOps.Sqrt(normA);
-        normB = NumOps.Sqrt(normB);
-
-        T epsilon = NumOps.FromDouble(1e-10);
-        if (NumOps.Compare(normA, epsilon) < 0 || NumOps.Compare(normB, epsilon) < 0)
-        {
-            return NumOps.One; // Maximum distance if one vector is zero
-        }
-
-        T cosineSimilarity = NumOps.Divide(dotProduct, NumOps.Multiply(normA, normB));
-        return NumOps.Subtract(NumOps.One, cosineSimilarity);
+        double similarity = VectorHelper.CosineSimilarity(a, b);
+        return NumOps.FromDouble(1.0 - similarity);
     }
 
     /// <summary>

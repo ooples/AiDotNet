@@ -1,3 +1,5 @@
+using AiDotNet.Helpers;
+
 namespace AiDotNet.Clustering.DistanceMetrics;
 
 /// <summary>
@@ -39,13 +41,6 @@ public class ManhattanDistance<T> : DistanceMetricBase<T>
                 $"Vectors must have the same length. Got {a.Length} and {b.Length}.");
         }
 
-        T sum = NumOps.Zero;
-        for (int i = 0; i < a.Length; i++)
-        {
-            T diff = NumOps.Subtract(a[i], b[i]);
-            sum = NumOps.Add(sum, Abs(diff));
-        }
-
-        return sum;
+        return VectorHelper.ManhattanDistance(a, b);
     }
 }

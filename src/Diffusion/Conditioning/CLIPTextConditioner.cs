@@ -309,10 +309,7 @@ public class CLIPTextConditioner<T> : TextConditioningBase<T>
 
     private static Vector<T> AddVectors(Vector<T> a, Vector<T> b)
     {
-        var result = new Vector<T>(a.Length);
-        for (int i = 0; i < a.Length; i++)
-            result[i] = NumOps.Add(a[i], b[i]);
-        return result;
+        return Engine.Add(a, b);
     }
 
     #region Variant Configuration

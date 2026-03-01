@@ -556,8 +556,8 @@ public class InfluenceFunctionExplainer<T> : IGPUAcceleratedExplainer<T>
             }
 
             // Compute step size
-            double rDotR = DotProduct(r, r);
-            double pDotAp = DotProduct(p, Ap);
+            double rDotR = NumOps.ToDouble(VectorHelper.DotProduct(r, r));
+            double pDotAp = NumOps.ToDouble(VectorHelper.DotProduct(p, Ap));
 
             if (Math.Abs(pDotAp) < 1e-10) break;
 
@@ -576,7 +576,7 @@ public class InfluenceFunctionExplainer<T> : IGPUAcceleratedExplainer<T>
                 rNew[i] = NumOps.Subtract(r[i], NumOps.Multiply(NumOps.FromDouble(alpha), Ap[i]));
             }
 
-            double rNewDotRNew = DotProduct(rNew, rNew);
+            double rNewDotRNew = NumOps.ToDouble(VectorHelper.DotProduct(rNew, rNew));
             if (rNewDotRNew < 1e-10) break;
 
             // Update search direction
@@ -761,19 +761,6 @@ public class InfluenceFunctionExplainer<T> : IGPUAcceleratedExplainer<T>
         }
     }
 
-    /// <summary>
-    /// Computes dot product of two vectors.
-    /// </summary>
-    private double DotProduct(Vector<T> a, Vector<T> b)
-    {
-        double sum = 0;
-        int len = Math.Min(a.Length, b.Length);
-        for (int i = 0; i < len; i++)
-        {
-            sum += NumOps.ToDouble(a[i]) * NumOps.ToDouble(b[i]);
-        }
-        return sum;
-    }
 
     /// <summary>
     /// Solves a positive definite system using Cholesky decomposition.

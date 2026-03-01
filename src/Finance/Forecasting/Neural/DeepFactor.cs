@@ -840,19 +840,7 @@ public class DeepFactor<T> : ForecastingModelBase<T>
     /// </remarks>
     private static Tensor<T> ConcatenateTensors(Tensor<T> a, Tensor<T> b)
     {
-        var result = new Tensor<T>(new[] { a.Length + b.Length });
-
-        for (int i = 0; i < a.Length; i++)
-        {
-            result.Data.Span[i] = a.Data.Span[i];
-        }
-
-        for (int i = 0; i < b.Length; i++)
-        {
-            result.Data.Span[a.Length + i] = b.Data.Span[i];
-        }
-
-        return result;
+        return AiDotNetEngine.Current.TensorConcatenate([a, b], axis: 0);
     }
 
     /// <summary>
@@ -922,22 +910,7 @@ public class DeepFactor<T> : ForecastingModelBase<T>
 
         // Combine input gradients from both paths
         // Both paths receive the same input, so gradients should be summed
-        int maxLen = Math.Max(factorCurrent.Length, localCurrent.Length);
-        var combined = new Tensor<T>(new[] { maxLen });
-
-        // Add factor path gradients
-        for (int i = 0; i < factorCurrent.Length && i < maxLen; i++)
-        {
-            combined.Data.Span[i] = factorCurrent.Data.Span[i];
-        }
-
-        // Add local path gradients (summed with factor gradients)
-        for (int i = 0; i < localCurrent.Length && i < maxLen; i++)
-        {
-            combined.Data.Span[i] = NumOps.Add(combined.Data.Span[i], localCurrent.Data.Span[i]);
-        }
-
-        return combined;
+        return Engine.TensorBroadcastAdd(factorCurrent, localCurrent);
     }
 
     #endregion

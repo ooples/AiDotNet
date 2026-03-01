@@ -1,4 +1,5 @@
 using AiDotNet.Enums;
+using AiDotNet.Helpers;
 using AiDotNet.Models;
 using AiDotNet.Safety;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -156,7 +157,7 @@ public class SelfConsistencyHallucinationDetector<T> : TextSafetyModuleBase<T>
 
         // 1. Check for negation-based contradictions
         // If sentences are semantically similar but one has negation the other doesn't
-        double embSimilarity = ComputeCosineSimilarity(emb1, emb2);
+        double embSimilarity = VectorHelper.CosineSimilarity(emb1, emb2);
 
         bool sent1HasNegation = HasNegation(lower1);
         bool sent2HasNegation = HasNegation(lower2);
@@ -315,23 +316,6 @@ public class SelfConsistencyHallucinationDetector<T> : TextSafetyModuleBase<T>
         return embedding;
     }
 
-    private static double ComputeCosineSimilarity(Vector<T> a, Vector<T> b)
-    {
-        double dot = 0, normA = 0, normB = 0;
-        int len = Math.Min(a.Length, b.Length);
-
-        for (int i = 0; i < len; i++)
-        {
-            double ai = NumOps.ToDouble(a[i]);
-            double bi = NumOps.ToDouble(b[i]);
-            dot += ai * bi;
-            normA += ai * ai;
-            normB += bi * bi;
-        }
-
-        double denom = Math.Sqrt(normA * normB);
-        return denom > 1e-10 ? Math.Max(0, dot / denom) : 0;
-    }
 
     private static string[] SplitIntoSentences(string text)
     {

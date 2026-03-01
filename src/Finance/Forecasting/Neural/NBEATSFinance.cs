@@ -989,12 +989,7 @@ public class NBEATSFinance<T> : ForecastingModelBase<T>
                 "This may indicate a bug in the N-BEATS block architecture.");
         }
 
-        var result = new Tensor<T>(a.Shape);
-        for (int i = 0; i < a.Length; i++)
-        {
-            result.Data.Span[i] = NumOps.Subtract(a.Data.Span[i], b.Data.Span[i]);
-        }
-        return result;
+        return Engine.TensorSubtract(a, b);
     }
 
     /// <summary>
@@ -1019,12 +1014,7 @@ public class NBEATSFinance<T> : ForecastingModelBase<T>
                 "This may indicate a bug in the N-BEATS block architecture.");
         }
 
-        var result = new Tensor<T>(a.Shape);
-        for (int i = 0; i < a.Length; i++)
-        {
-            result.Data.Span[i] = NumOps.Add(a.Data.Span[i], b.Data.Span[i]);
-        }
-        return result;
+        return Engine.TensorAdd(a, b);
     }
 
     /// <summary>

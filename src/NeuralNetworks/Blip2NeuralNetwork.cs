@@ -1,5 +1,6 @@
 using System.IO;
 using AiDotNet.Enums;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
@@ -676,7 +677,7 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
             embedding[i] = NumOps.Divide(sum, NumOps.FromDouble(_numQueryTokens));
         }
 
-        return NormalizeVector(embedding);
+        return VectorHelper.Normalize(embedding);
     }
 
     /// <inheritdoc/>
@@ -944,7 +945,7 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
                 }
                 embedding[j] = NumOps.Divide(sum, NumOps.FromDouble(_numQueryTokens));
             }
-            embedding = NormalizeVector(embedding);
+            embedding = VectorHelper.Normalize(embedding);
 
             var score = ComputeSimilarity(textEmbedding, embedding);
             candidates.Add((i, score));
@@ -1006,10 +1007,10 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
             {
                 result[i] = projected[i];
             }
-            return NormalizeVector(result);
+            return VectorHelper.Normalize(result);
         }
 
-        return NormalizeVector(clsEmbedding);
+        return VectorHelper.Normalize(clsEmbedding);
     }
 
     /// <summary>
@@ -1329,7 +1330,7 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
                 $"Unexpected Q-Former output rank: {output.Rank}. Expected 2 or 3 dimensions.");
         }
 
-        return NormalizeVector(embedding);
+        return VectorHelper.Normalize(embedding);
     }
 
     /// <summary>
@@ -1706,7 +1707,7 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
             queryMean[d] = NumOps.Divide(sum, NumOps.FromDouble(_numQueryTokens));
         }
 
-        queryMean = NormalizeVector(queryMean);
+        queryMean = VectorHelper.Normalize(queryMean);
         return ComputeSimilarity(textEmbedding, queryMean);
     }
 
@@ -1797,30 +1798,6 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
             throw new ArgumentException($"Image must have 3 channels (RGB), got {channels}.");
         if (height != _imageSize || width != _imageSize)
             throw new ArgumentException($"Image must be {_imageSize}x{_imageSize}, got {height}x{width}.");
-    }
-
-    /// <summary>
-    /// Normalizes a vector to unit length.
-    /// </summary>
-    private Vector<T> NormalizeVector(Vector<T> vector)
-    {
-        T sumSquares = NumOps.Zero;
-        for (int i = 0; i < vector.Length; i++)
-        {
-            sumSquares = NumOps.Add(sumSquares, NumOps.Multiply(vector[i], vector[i]));
-        }
-
-        T norm = NumOps.FromDouble(Math.Sqrt(NumOps.ToDouble(sumSquares)));
-        if (NumOps.ToDouble(norm) < 1e-10)
-            return vector;
-
-        var normalized = new Vector<T>(vector.Length);
-        for (int i = 0; i < vector.Length; i++)
-        {
-            normalized[i] = NumOps.Divide(vector[i], norm);
-        }
-
-        return normalized;
     }
 
     /// <summary>
@@ -1969,10 +1946,7 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
 
         // Apply gradient descent update: params = params - learning_rate * gradients
         T learningRate = NumOps.FromDouble(0.001); // Default learning rate
-        for (int i = 0; i < currentParams.Length; i++)
-        {
-            currentParams[i] = NumOps.Subtract(currentParams[i], NumOps.Multiply(learningRate, gradients[i]));
-        }
+        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, learningRate));
 
         // Set the updated parameters
         SetParameters(currentParams);

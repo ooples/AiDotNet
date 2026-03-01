@@ -419,47 +419,9 @@ public class VAEEncoder<T> : LayerBase<T>
 
     private Tensor<T> ConcatenateChannels(Tensor<T> a, Tensor<T> b)
     {
-        // Assuming shape [batch, channels, H, W]
-        var shape = a.Shape;
-        int batch = shape.Length > 3 ? shape[0] : 1;
-        int channelsA = shape.Length > 3 ? shape[1] : shape[0];
-        int channelsB = b.Shape.Length > 3 ? b.Shape[1] : b.Shape[0];
-        int height = shape.Length > 3 ? shape[2] : shape[1];
-        int width = shape.Length > 3 ? shape[3] : shape[2];
-
-        var result = new Tensor<T>(new[] { batch, channelsA + channelsB, height, width });
-        var aSpan = a.AsSpan();
-        var bSpan = b.AsSpan();
-        var resultSpan = result.AsWritableSpan();
-
-        int spatialSize = height * width;
-
-        for (int n = 0; n < batch; n++)
-        {
-            // Copy channels from a
-            for (int c = 0; c < channelsA; c++)
-            {
-                int srcOffset = n * channelsA * spatialSize + c * spatialSize;
-                int dstOffset = n * (channelsA + channelsB) * spatialSize + c * spatialSize;
-                for (int s = 0; s < spatialSize; s++)
-                {
-                    resultSpan[dstOffset + s] = aSpan[srcOffset + s];
-                }
-            }
-
-            // Copy channels from b
-            for (int c = 0; c < channelsB; c++)
-            {
-                int srcOffset = n * channelsB * spatialSize + c * spatialSize;
-                int dstOffset = n * (channelsA + channelsB) * spatialSize + (channelsA + c) * spatialSize;
-                for (int s = 0; s < spatialSize; s++)
-                {
-                    resultSpan[dstOffset + s] = bSpan[srcOffset + s];
-                }
-            }
-        }
-
-        return result;
+        // Channel axis is 0 for 3D [C, H, W] and 1 for 4D [N, C, H, W]
+        int channelAxis = a.Shape.Length == 4 ? 1 : 0;
+        return Engine.TensorConcatenate([a, b], axis: channelAxis);
     }
 
     private (Tensor<T> First, Tensor<T> Second) SplitChannels(Tensor<T> combined, int splitChannels)
