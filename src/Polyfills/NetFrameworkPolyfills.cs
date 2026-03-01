@@ -349,6 +349,38 @@ namespace System.IO
         }
 
         /// <summary>
+        /// Asynchronously reads all bytes from a file.
+        /// </summary>
+        /// <param name="path">The path to the file.</param>
+        /// <param name="cancellationToken">A cancellation token.</param>
+        /// <returns>A task that represents the asynchronous read operation, containing all bytes.</returns>
+        public static async Threading.Tasks.Task<byte[]> ReadAllBytesAsync(
+            string path,
+            Threading.CancellationToken cancellationToken = default)
+        {
+#if NET5_0_OR_GREATER
+            return await File.ReadAllBytesAsync(path, cancellationToken);
+#else
+            cancellationToken.ThrowIfCancellationRequested();
+            using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, true))
+            {
+                var bytes = new byte[stream.Length];
+                int offset = 0;
+                int remaining = bytes.Length;
+                while (remaining > 0)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    int read = await stream.ReadAsync(bytes, offset, remaining);
+                    if (read == 0) break;
+                    offset += read;
+                    remaining -= read;
+                }
+                return bytes;
+            }
+#endif
+        }
+
+        /// <summary>
         /// Asynchronously writes lines to a file, creating the file if it doesn't exist or overwriting it if it does.
         /// </summary>
         /// <param name="path">The path to the file.</param>
