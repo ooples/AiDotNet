@@ -17,11 +17,14 @@ public class SteerCNPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput
     public override MetaLearningAlgorithmType AlgorithmType => MetaLearningAlgorithmType.SteerCNP;
 
     public SteerCNPAlgorithm(SteerCNPOptions<T, TInput, TOutput> options)
-        : base(options.MetaModel,
+        : base((options ?? throw new ArgumentNullException(nameof(options))).MetaModel,
                options.LossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.Regression),
                options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer,
                options.RepresentationDim)
     {
+        if (options.RepresentationDim <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "RepresentationDim must be positive.");
+
         _algoOptions = options;
     }
 

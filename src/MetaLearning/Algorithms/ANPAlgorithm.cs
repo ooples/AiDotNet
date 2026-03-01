@@ -22,11 +22,16 @@ public class ANPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput, TOu
     public override MetaLearningAlgorithmType AlgorithmType => MetaLearningAlgorithmType.ANP;
 
     public ANPAlgorithm(ANPOptions<T, TInput, TOutput> options)
-        : base(options.MetaModel,
+        : base((options ?? throw new ArgumentNullException(nameof(options))).MetaModel,
                options.LossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.Regression),
                options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer,
                options.RepresentationDim)
     {
+        if (options.RepresentationDim <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "RepresentationDim must be positive.");
+        if (options.LatentDim <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "LatentDim must be positive.");
+
         _anpOptions = options;
         _latentEncoderParams = InitializeParams(options.LatentDim * 4);
         _attentionParams = InitializeParams(options.RepresentationDim * 2);
@@ -106,9 +111,9 @@ public class ANPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput, TOu
     private List<Vector<T>> EncodeContextReps(Vector<T>? features, Vector<T>? labels)
     {
         var reps = new List<Vector<T>>();
-        if (features == null || labels == null || features.Length == 0) return reps;
+        if (features == null || labels == null || features.Length == 0 || labels.Length == 0) return reps;
 
-        int numExamples = Math.Max(1, labels.Length);
+        int numExamples = labels.Length;
         int featureDim = Math.Max(1, features.Length / numExamples);
 
         for (int i = 0; i < numExamples; i++)

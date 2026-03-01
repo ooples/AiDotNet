@@ -56,10 +56,13 @@ public class InContextRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
     public override MetaLearningAlgorithmType AlgorithmType => MetaLearningAlgorithmType.InContextRL;
 
     public InContextRLAlgorithm(InContextRLOptions<T, TInput, TOutput> options)
-        : base(options.MetaModel,
+        : base((options ?? throw new ArgumentNullException(nameof(options))).MetaModel,
                options.LossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.Regression),
                options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer)
     {
+        if (options.ContextEmbeddingDim <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "ContextEmbeddingDim must be positive.");
+
         _algoOptions = options;
         _paramDim = options.MetaModel.GetParameters().Length;
         _contextDim = options.ContextEmbeddingDim;

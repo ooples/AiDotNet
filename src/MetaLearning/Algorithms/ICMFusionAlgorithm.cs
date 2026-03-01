@@ -63,13 +63,16 @@ public class ICMFusionAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
     public override MetaLearningAlgorithmType AlgorithmType => MetaLearningAlgorithmType.ICMFusion;
 
     public ICMFusionAlgorithm(ICMFusionOptions<T, TInput, TOutput> options)
-        : base(options.MetaModel,
+        : base((options ?? throw new ArgumentNullException(nameof(options))).MetaModel,
                options.LossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.MultiClassClassification),
                options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer)
     {
+        if (options.LatentDim <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "LatentDim must be positive.");
+
         _algoOptions = options;
         _paramDim = options.MetaModel.GetParameters().Length;
-        _latentDim = Math.Max(1, options.LatentDim);
+        _latentDim = options.LatentDim;
 
         // Compress param space for the VAE to keep encoder/decoder tractable
         _compressedDim = Math.Min(_paramDim, MaxCompressedDim);

@@ -50,10 +50,13 @@ public class DREAMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
     public override MetaLearningAlgorithmType AlgorithmType => MetaLearningAlgorithmType.DREAM;
 
     public DREAMAlgorithm(DREAMOptions<T, TInput, TOutput> options)
-        : base(options.MetaModel,
+        : base((options ?? throw new ArgumentNullException(nameof(options))).MetaModel,
                options.LossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.Regression),
                options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer)
     {
+        if (options.RewardShaperHiddenDim <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "RewardShaperHiddenDim must be positive.");
+
         _algoOptions = options;
         _paramDim = options.MetaModel.GetParameters().Length;
         _hiddenDim = options.RewardShaperHiddenDim;

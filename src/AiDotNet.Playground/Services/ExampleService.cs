@@ -7092,6 +7092,7 @@ Console.WriteLine(""  Answer: Yes"");
 using AiDotNet.MetaLearning;
 using AiDotNet.MetaLearning.Algorithms;
 using AiDotNet.MetaLearning.Data;
+using AiDotNet.MetaLearning.Models;
 using AiDotNet.MetaLearning.Options;
 using AiDotNet.Data.Structures;
 using AiDotNet.LinearAlgebra;
@@ -7158,9 +7159,11 @@ Console.WriteLine(""ProtoNets classification complete!"");
                     Tags = ["meta-learning", "maml", "gradient-based", "few-shot"],
                     Code = @"// MAML — Model-Agnostic Meta-Learning (Finn et al., 2017)
 // Learns a parameter initialization that can be quickly fine-tuned to new tasks
+using AiDotNet.Interfaces;
 using AiDotNet.MetaLearning;
 using AiDotNet.MetaLearning.Algorithms;
 using AiDotNet.MetaLearning.Data;
+using AiDotNet.MetaLearning.Models;
 using AiDotNet.MetaLearning.Options;
 using AiDotNet.Data.Structures;
 using AiDotNet.LinearAlgebra;
@@ -7236,6 +7239,7 @@ Console.WriteLine(""MAML adaptation complete!"");
 using AiDotNet.MetaLearning;
 using AiDotNet.MetaLearning.Algorithms;
 using AiDotNet.MetaLearning.Data;
+using AiDotNet.MetaLearning.Models;
 using AiDotNet.MetaLearning.Options;
 using AiDotNet.Data.Structures;
 using AiDotNet.LinearAlgebra;
@@ -7361,9 +7365,11 @@ Console.WriteLine(""\nEpisodic data pipeline demo complete!"");
                     Tags = ["meta-learning", "cross-domain", "frequency", "few-shot", "transfer"],
                     Code = @"// Cross-Domain Few-Shot Learning with FreqPrior
 // Separates domain-specific (high-freq) from shared (low-freq) features
+using AiDotNet.Interfaces;
 using AiDotNet.MetaLearning;
 using AiDotNet.MetaLearning.Algorithms;
 using AiDotNet.MetaLearning.Data;
+using AiDotNet.MetaLearning.Models;
 using AiDotNet.MetaLearning.Options;
 using AiDotNet.Data.Structures;
 using AiDotNet.LinearAlgebra;
@@ -7375,9 +7381,8 @@ var options = new FreqPriorOptions<double, Matrix<double>, Vector<double>>(model
 {
     InnerLearningRate = 0.01,
     OuterLearningRate = 0.001,
-    LowPassCutoff = 0.3,       // Low-frequency = domain-invariant features
-    HighPassCutoff = 0.7,       // High-frequency = domain-specific features
-    FreqRegWeight = 0.01        // Regularize frequency separation
+    LowFreqFraction = 0.3,     // Fraction of params treated as low-frequency (domain-invariant)
+    LowFreqRegWeight = 0.01    // Regularize low-frequency components toward meta-prior
 };
 
 var freqPrior = new FreqPriorAlgorithm<double, Matrix<double>, Vector<double>>(options);

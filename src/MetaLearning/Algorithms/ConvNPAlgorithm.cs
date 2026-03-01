@@ -17,7 +17,7 @@ public class ConvNPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput, 
     public override MetaLearningAlgorithmType AlgorithmType => MetaLearningAlgorithmType.ConvNP;
 
     public ConvNPAlgorithm(ConvNPOptions<T, TInput, TOutput> options)
-        : base(options.MetaModel,
+        : base((options ?? throw new ArgumentNullException(nameof(options))).MetaModel,
                options.LossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.Regression),
                options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer,
                options.RepresentationDim)

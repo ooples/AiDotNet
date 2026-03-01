@@ -49,10 +49,13 @@ public class iTAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
     public override MetaLearningAlgorithmType AlgorithmType => MetaLearningAlgorithmType.iTAML;
 
     public iTAMLAlgorithm(iTAMLOptions<T, TInput, TOutput> options)
-        : base(options.MetaModel,
+        : base((options ?? throw new ArgumentNullException(nameof(options))).MetaModel,
                options.LossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.MultiClassClassification),
                options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer)
     {
+        if (options.DistillationTemperature <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "DistillationTemperature must be positive.");
+
         _algoOptions = options;
         _paramDim = options.MetaModel.GetParameters().Length;
 

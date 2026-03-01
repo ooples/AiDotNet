@@ -75,15 +75,22 @@ public class MetaDDPMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
     public override MetaLearningAlgorithmType AlgorithmType => MetaLearningAlgorithmType.MetaDDPM;
 
     public MetaDDPMAlgorithm(MetaDDPMOptions<T, TInput, TOutput> options)
-        : base(options.MetaModel,
+        : base((options ?? throw new ArgumentNullException(nameof(options))).MetaModel,
                options.LossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.Regression),
                options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer)
     {
+        if (options.NumTimesteps <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "NumTimesteps must be positive.");
+        if (options.TaskConditionDim <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "TaskConditionDim must be positive.");
+        if (options.BetaStart <= 0 || options.BetaEnd <= 0 || options.BetaStart >= options.BetaEnd)
+            throw new ArgumentOutOfRangeException(nameof(options), "BetaStart and BetaEnd must be positive with BetaStart < BetaEnd.");
+
         _algoOptions = options;
         _paramDim = options.MetaModel.GetParameters().Length;
-        _condDim = Math.Max(1, options.TaskConditionDim);
+        _condDim = options.TaskConditionDim;
         _compressedDim = Math.Min(_paramDim, 128);
-        _numTimesteps = Math.Max(1, options.NumTimesteps);
+        _numTimesteps = options.NumTimesteps;
 
         // Precompute DDPM noise schedule quantities
         _betas = new double[_numTimesteps];

@@ -58,6 +58,9 @@ public abstract class NeuralProcessBase<T, TInput, TOutput> : MetaLearnerBase<T,
         int representationDim = 128)
         : base(metaModel, lossFunction, options, dataLoader, metaOptimizer, innerOptimizer)
     {
+        if (representationDim <= 0)
+            throw new ArgumentOutOfRangeException(nameof(representationDim), "Representation dimension must be positive.");
+
         RepresentationDim = representationDim;
         EncoderParams = InitializeParams(representationDim * 2);
         DecoderParams = InitializeParams(representationDim * 2);

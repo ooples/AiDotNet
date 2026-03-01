@@ -73,7 +73,7 @@ public class LoRARecycleAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
     public override MetaLearningAlgorithmType AlgorithmType => MetaLearningAlgorithmType.LoRARecycle;
 
     public LoRARecycleAlgorithm(LoRARecycleOptions<T, TInput, TOutput> options)
-        : base(options.MetaModel,
+        : base((options ?? throw new ArgumentNullException(nameof(options))).MetaModel,
                options.LossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.MultiClassClassification),
                options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer)
     {

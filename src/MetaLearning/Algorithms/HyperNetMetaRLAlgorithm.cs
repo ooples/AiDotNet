@@ -51,10 +51,15 @@ public class HyperNetMetaRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TI
     public override MetaLearningAlgorithmType AlgorithmType => MetaLearningAlgorithmType.HyperNetMetaRL;
 
     public HyperNetMetaRLAlgorithm(HyperNetMetaRLOptions<T, TInput, TOutput> options)
-        : base(options.MetaModel,
+        : base((options ?? throw new ArgumentNullException(nameof(options))).MetaModel,
                options.LossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.Regression),
                options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer)
     {
+        if (options.TaskEmbeddingDim <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "TaskEmbeddingDim must be positive.");
+        if (options.HyperNetHiddenDim <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "HyperNetHiddenDim must be positive.");
+
         _algoOptions = options;
         _paramDim = options.MetaModel.GetParameters().Length;
         _embDim = options.TaskEmbeddingDim;

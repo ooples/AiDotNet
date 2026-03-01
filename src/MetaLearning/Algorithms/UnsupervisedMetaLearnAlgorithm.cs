@@ -53,10 +53,15 @@ public class UnsupervisedMetaLearnAlgorithm<T, TInput, TOutput> : MetaLearnerBas
     public override MetaLearningAlgorithmType AlgorithmType => MetaLearningAlgorithmType.UnsupervisedMetaLearn;
 
     public UnsupervisedMetaLearnAlgorithm(UnsupervisedMetaLearnOptions<T, TInput, TOutput> options)
-        : base(options.MetaModel,
+        : base((options ?? throw new ArgumentNullException(nameof(options))).MetaModel,
                options.LossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.MultiClassClassification),
                options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer)
     {
+        if (options.NumClusters <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "NumClusters must be positive.");
+        if (options.ClusteringDim <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "ClusteringDim must be positive.");
+
         _algoOptions = options;
         _paramDim = options.MetaModel.GetParameters().Length;
         _clusterDim = options.ClusteringDim;

@@ -38,7 +38,7 @@ public class TETNPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput, T
     public override MetaLearningAlgorithmType AlgorithmType => MetaLearningAlgorithmType.TETNP;
 
     public TETNPAlgorithm(TETNPOptions<T, TInput, TOutput> options)
-        : base(options.MetaModel,
+        : base((options ?? throw new ArgumentNullException(nameof(options))).MetaModel,
                options.LossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.Regression),
                options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer,
                options.RepresentationDim)

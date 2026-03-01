@@ -49,10 +49,13 @@ public class GCDPLNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
     public override MetaLearningAlgorithmType AlgorithmType => MetaLearningAlgorithmType.GCDPLNet;
 
     public GCDPLNetAlgorithm(GCDPLNetOptions<T, TInput, TOutput> options)
-        : base(options.MetaModel,
+        : base((options ?? throw new ArgumentNullException(nameof(options))).MetaModel,
                options.LossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.MultiClassClassification),
                options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer)
     {
+        if (options.NumGraphNodes <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "NumGraphNodes must be positive.");
+
         _algoOptions = options;
         _paramDim = options.MetaModel.GetParameters().Length;
         _numNodes = Math.Max(1, options.NumGraphNodes);

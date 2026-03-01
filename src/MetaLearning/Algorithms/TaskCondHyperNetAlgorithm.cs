@@ -48,10 +48,17 @@ public class TaskCondHyperNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
     public override MetaLearningAlgorithmType AlgorithmType => MetaLearningAlgorithmType.TaskCondHyperNet;
 
     public TaskCondHyperNetAlgorithm(TaskCondHyperNetOptions<T, TInput, TOutput> options)
-        : base(options.MetaModel,
+        : base((options ?? throw new ArgumentNullException(nameof(options))).MetaModel,
                options.LossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.MultiClassClassification),
                options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer)
     {
+        if (options.EmbeddingDim <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "EmbeddingDim must be positive.");
+        if (options.HyperHiddenDim <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "HyperHiddenDim must be positive.");
+        if (options.ChunkSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "ChunkSize must be positive.");
+
         _algoOptions = options;
         _paramDim = options.MetaModel.GetParameters().Length;
         _numChunks = (_paramDim + options.ChunkSize - 1) / options.ChunkSize;

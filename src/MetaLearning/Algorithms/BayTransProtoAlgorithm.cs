@@ -48,7 +48,7 @@ public class BayTransProtoAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
     public override MetaLearningAlgorithmType AlgorithmType => MetaLearningAlgorithmType.BayTransProto;
 
     public BayTransProtoAlgorithm(BayTransProtoOptions<T, TInput, TOutput> options)
-        : base(options.MetaModel,
+        : base((options ?? throw new ArgumentNullException(nameof(options))).MetaModel,
                options.LossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.MultiClassClassification),
                options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer)
     {

@@ -49,7 +49,7 @@ public class ETPNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
     public override MetaLearningAlgorithmType AlgorithmType => MetaLearningAlgorithmType.ETPN;
 
     public ETPNAlgorithm(ETPNOptions<T, TInput, TOutput> options)
-        : base(options.MetaModel,
+        : base((options ?? throw new ArgumentNullException(nameof(options))).MetaModel,
                options.LossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.MultiClassClassification),
                options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer)
     {

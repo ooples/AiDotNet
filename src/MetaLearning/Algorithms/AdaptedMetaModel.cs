@@ -35,8 +35,8 @@ internal class AdaptedMetaModel<T, TInput, TOutput> : IModel<TInput, TOutput, Mo
         Vector<T>? supportFeatures = null,
         double[]? modulationFactors = null)
     {
-        _model = model;
-        _adaptedParams = adaptedParams;
+        _model = model ?? throw new ArgumentNullException(nameof(model));
+        _adaptedParams = adaptedParams ?? throw new ArgumentNullException(nameof(adaptedParams));
         _supportFeatures = supportFeatures;
         _modulationFactors = modulationFactors;
     }

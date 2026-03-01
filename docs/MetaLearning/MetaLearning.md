@@ -50,7 +50,7 @@ var options = new MAMLOptions<double, Matrix<double>, Vector<double>>(model)
 {
     InnerLearningRate = 0.01,
     OuterLearningRate = 0.001,
-    InnerSteps = 5
+    AdaptationSteps = 5
 };
 
 // 3. Create the algorithm
@@ -472,7 +472,7 @@ var options = new ANPOptions<double, Matrix<double>, Vector<double>>(model)
     // Standard meta-learning parameters
     InnerLearningRate = 0.01,
     OuterLearningRate = 0.001,
-    InnerSteps = 5,
+    AdaptationSteps = 5,
 
     // ANP-specific parameters
     NumHeads = 4,

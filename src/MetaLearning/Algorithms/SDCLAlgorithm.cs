@@ -52,10 +52,15 @@ public class SDCLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
     public override MetaLearningAlgorithmType AlgorithmType => MetaLearningAlgorithmType.SDCL;
 
     public SDCLAlgorithm(SDCLOptions<T, TInput, TOutput> options)
-        : base(options.MetaModel,
+        : base((options ?? throw new ArgumentNullException(nameof(options))).MetaModel,
                options.LossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.MultiClassClassification),
                options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer)
     {
+        if (options.DistillationTemperature <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "DistillationTemperature must be positive.");
+        if (options.DistillationWeight < 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "DistillationWeight must be non-negative.");
+
         _algoOptions = options;
         _paramDim = options.MetaModel.GetParameters().Length;
 

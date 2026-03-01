@@ -60,10 +60,15 @@ public class FreqPromptAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput
     public override MetaLearningAlgorithmType AlgorithmType => MetaLearningAlgorithmType.FreqPrompt;
 
     public FreqPromptAlgorithm(FreqPromptOptions<T, TInput, TOutput> options)
-        : base(options.MetaModel,
+        : base((options ?? throw new ArgumentNullException(nameof(options))).MetaModel,
                options.LossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.MultiClassClassification),
                options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer)
     {
+        if (options.NumFreqComponents <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "NumFreqComponents must be positive.");
+        if (options.PromptInitScale <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "PromptInitScale must be positive.");
+
         _algoOptions = options;
         _paramDim = options.MetaModel.GetParameters().Length;
         _numComponents = options.NumFreqComponents;

@@ -38,7 +38,7 @@ public class MetaBaselineAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
 
     /// <summary>Initializes a new Meta-Baseline meta-learner.</summary>
     public MetaBaselineAlgorithm(MetaBaselineOptions<T, TInput, TOutput> options)
-        : base(options.MetaModel,
+        : base((options ?? throw new ArgumentNullException(nameof(options))).MetaModel,
             options.LossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.MultiClassClassification),
             options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer)
     { _metaBaselineOptions = options; }

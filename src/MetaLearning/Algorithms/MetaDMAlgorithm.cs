@@ -64,7 +64,7 @@ public class MetaDMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TO
     public override MetaLearningAlgorithmType AlgorithmType => MetaLearningAlgorithmType.MetaDM;
 
     public MetaDMAlgorithm(MetaDMOptions<T, TInput, TOutput> options)
-        : base(options.MetaModel,
+        : base((options ?? throw new ArgumentNullException(nameof(options))).MetaModel,
                options.LossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.Regression),
                options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer)
     {

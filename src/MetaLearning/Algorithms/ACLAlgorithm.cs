@@ -50,7 +50,7 @@ public class ACLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
     public override MetaLearningAlgorithmType AlgorithmType => MetaLearningAlgorithmType.ACL;
 
     public ACLAlgorithm(ACLOptions<T, TInput, TOutput> options)
-        : base(options.MetaModel,
+        : base((options ?? throw new ArgumentNullException(nameof(options))).MetaModel,
                options.LossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.MultiClassClassification),
                options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer)
     {

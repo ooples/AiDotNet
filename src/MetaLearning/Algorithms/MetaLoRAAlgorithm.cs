@@ -68,7 +68,7 @@ public class MetaLoRAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
     public override MetaLearningAlgorithmType AlgorithmType => MetaLearningAlgorithmType.MetaLoRA;
 
     public MetaLoRAAlgorithm(MetaLoRAOptions<T, TInput, TOutput> options)
-        : base(options.MetaModel,
+        : base((options ?? throw new ArgumentNullException(nameof(options))).MetaModel,
                options.LossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.MultiClassClassification),
                options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer)
     {

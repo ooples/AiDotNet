@@ -36,11 +36,14 @@ public class NPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput, TOut
     public override MetaLearningAlgorithmType AlgorithmType => MetaLearningAlgorithmType.NP;
 
     public NPAlgorithm(NPOptions<T, TInput, TOutput> options)
-        : base(options.MetaModel,
+        : base((options ?? throw new ArgumentNullException(nameof(options))).MetaModel,
                options.LossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.Regression),
                options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer,
                options.RepresentationDim)
     {
+        if (options.LatentDim <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "LatentDim must be positive.");
+
         _npOptions = options;
         _latentEncoderParams = InitializeParams(options.LatentDim * 4);
     }

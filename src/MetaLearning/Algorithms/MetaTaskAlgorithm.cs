@@ -42,7 +42,7 @@ public class MetaTaskAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
     public override MetaLearningAlgorithmType AlgorithmType => MetaLearningAlgorithmType.MetaTask;
 
     public MetaTaskAlgorithm(MetaTaskOptions<T, TInput, TOutput> options)
-        : base(options.MetaModel,
+        : base((options ?? throw new ArgumentNullException(nameof(options))).MetaModel,
                options.LossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.MultiClassClassification),
                options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer)
     {

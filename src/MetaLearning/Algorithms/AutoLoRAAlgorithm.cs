@@ -66,10 +66,15 @@ public class AutoLoRAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
     public override MetaLearningAlgorithmType AlgorithmType => MetaLearningAlgorithmType.AutoLoRA;
 
     public AutoLoRAAlgorithm(AutoLoRAOptions<T, TInput, TOutput> options)
-        : base(options.MetaModel,
+        : base((options ?? throw new ArgumentNullException(nameof(options))).MetaModel,
                options.LossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.MultiClassClassification),
                options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer)
     {
+        if (options.NumRankGroups <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "NumRankGroups must be positive.");
+        if (options.MaxRank <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "MaxRank must be positive.");
+
         _algoOptions = options;
         _paramDim = options.MetaModel.GetParameters().Length;
         _numGroups = Math.Max(1, options.NumRankGroups);

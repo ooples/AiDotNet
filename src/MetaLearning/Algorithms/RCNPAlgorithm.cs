@@ -17,11 +17,14 @@ public class RCNPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput, TO
     public override MetaLearningAlgorithmType AlgorithmType => MetaLearningAlgorithmType.RCNP;
 
     public RCNPAlgorithm(RCNPOptions<T, TInput, TOutput> options)
-        : base(options.MetaModel,
+        : base((options ?? throw new ArgumentNullException(nameof(options))).MetaModel,
                options.LossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.Regression),
                options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer,
                options.RepresentationDim)
     {
+        if (options.RepresentationDim <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "RepresentationDim must be positive.");
+
         _algoOptions = options;
     }
 

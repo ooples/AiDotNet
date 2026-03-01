@@ -48,7 +48,7 @@ public class FreqPriorAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
     public override MetaLearningAlgorithmType AlgorithmType => MetaLearningAlgorithmType.FreqPrior;
 
     public FreqPriorAlgorithm(FreqPriorOptions<T, TInput, TOutput> options)
-        : base(options.MetaModel,
+        : base((options ?? throw new ArgumentNullException(nameof(options))).MetaModel,
                options.LossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.MultiClassClassification),
                options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer)
     {

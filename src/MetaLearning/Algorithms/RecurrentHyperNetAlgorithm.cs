@@ -49,10 +49,15 @@ public class RecurrentHyperNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
     public override MetaLearningAlgorithmType AlgorithmType => MetaLearningAlgorithmType.RecurrentHyperNet;
 
     public RecurrentHyperNetAlgorithm(RecurrentHyperNetOptions<T, TInput, TOutput> options)
-        : base(options.MetaModel,
+        : base((options ?? throw new ArgumentNullException(nameof(options))).MetaModel,
                options.LossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.MultiClassClassification),
                options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer)
     {
+        if (options.HiddenStateDim <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "HiddenStateDim must be positive.");
+        if (options.InputDim <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "InputDim must be positive.");
+
         _algoOptions = options;
         _paramDim = options.MetaModel.GetParameters().Length;
 

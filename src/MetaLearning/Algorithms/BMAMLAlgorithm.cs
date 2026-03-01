@@ -52,7 +52,7 @@ public class BMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
     public override MetaLearningAlgorithmType AlgorithmType => MetaLearningAlgorithmType.BMAML;
 
     public BMAMLAlgorithm(BMAMLOptions<T, TInput, TOutput> options)
-        : base(options.MetaModel,
+        : base((options ?? throw new ArgumentNullException(nameof(options))).MetaModel,
                options.LossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.MultiClassClassification),
                options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer)
     {

@@ -48,10 +48,13 @@ public class MetaCollaborativeAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
     public override MetaLearningAlgorithmType AlgorithmType => MetaLearningAlgorithmType.MetaCollaborative;
 
     public MetaCollaborativeAlgorithm(MetaCollaborativeOptions<T, TInput, TOutput> options)
-        : base(options.MetaModel,
+        : base((options ?? throw new ArgumentNullException(nameof(options))).MetaModel,
                options.LossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.MultiClassClassification),
                options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer)
     {
+        if (options.NumDomainSlots <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "NumDomainSlots must be positive.");
+
         _algoOptions = options;
         _paramDim = options.MetaModel.GetParameters().Length;
 

@@ -52,10 +52,15 @@ public class DiscoRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
     public override MetaLearningAlgorithmType AlgorithmType => MetaLearningAlgorithmType.DiscoRL;
 
     public DiscoRLAlgorithm(DiscoRLOptions<T, TInput, TOutput> options)
-        : base(options.MetaModel,
+        : base((options ?? throw new ArgumentNullException(nameof(options))).MetaModel,
                options.LossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.Regression),
                options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer)
     {
+        if (options.NumSkills <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "NumSkills must be positive.");
+        if (options.SkillRank <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "SkillRank must be positive.");
+
         _algoOptions = options;
         _paramDim = options.MetaModel.GetParameters().Length;
         _numSkills = options.NumSkills;
