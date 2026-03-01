@@ -13,7 +13,7 @@ public sealed class ElasticDistributedSamplerOptions
     public int Rank { get; set; } = 0;
     /// <summary>Whether to shuffle indices each epoch. Default is true.</summary>
     public bool Shuffle { get; set; } = true;
-    /// <summary>Whether to pad the last batch so all replicas get the same number of samples. Default is true.</summary>
+    /// <summary>Whether to drop the remainder so all replicas get exactly DatasetSize/NumReplicas samples. Default is true.</summary>
     public bool DropLast { get; set; } = true;
     /// <summary>Random seed for reproducibility. Default is null (random).</summary>
     public int? Seed { get; set; }

@@ -50,6 +50,6 @@ public enum UncertaintyPolicy
     Zeros,
     /// <summary>Treat uncertain labels as positive (1). Most sensitive.</summary>
     Ones,
-    /// <summary>Ignore uncertain labels by setting them to 0.</summary>
+    /// <summary>Exclude samples with uncertain labels from training entirely.</summary>
     Ignore
 }

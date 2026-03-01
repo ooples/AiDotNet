@@ -67,7 +67,7 @@ public class ArrowDataset<T> : IDisposable
             if (files.Length > 0)
                 filePath = files[0];
             else
-                return;
+                throw new FileNotFoundException($"No .arrow files found in directory: {_options.DataPath}");
         }
 
         if (File.Exists(filePath))

@@ -46,21 +46,16 @@ public class SequencePackingCollateFunction<T> : ICollateFunction<Tensor<T>, (Te
     {
         // Flatten all tokens into a single stream
         var allTokens = new List<T>();
-        var sequenceBoundaries = new List<int>();
-        int pos = 0;
 
         foreach (var sample in samples)
         {
             int seqLen = sample.Shape.Length > 1 ? sample.Shape[1] : sample.Shape[0];
-            sequenceBoundaries.Add(pos);
 
             for (int j = 0; j < seqLen; j++)
             {
                 T token = sample.Shape.Length > 1 ? sample[0, j] : sample[j];
                 allTokens.Add(token);
             }
-
-            pos += seqLen;
         }
 
         // Pack into blocks

@@ -109,8 +109,11 @@ public class ImageQualityFilter
     /// <returns>Set of indices that fail quality checks (should be removed).</returns>
     public HashSet<int> FilterByDimensions(IReadOnlyList<int> widths, IReadOnlyList<int> heights)
     {
+        if (widths.Count != heights.Count)
+            throw new ArgumentException($"Widths count ({widths.Count}) must match heights count ({heights.Count}).");
+
         var filtered = new HashSet<int>();
-        int count = Math.Min(widths.Count, heights.Count);
+        int count = widths.Count;
 
         for (int i = 0; i < count; i++)
         {

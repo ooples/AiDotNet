@@ -13,6 +13,7 @@ namespace AiDotNet.Data.Sampling;
 public class DomainMixingSampler : DataSamplerBase
 {
     private readonly double[] _domainWeights;
+    private readonly double[] _cumulativeWeights;
     private readonly int[] _domainSizes;
     private readonly int[] _domainOffsets;
     private readonly int _totalSize;
@@ -26,14 +27,34 @@ public class DomainMixingSampler : DataSamplerBase
     public DomainMixingSampler(int[] domainSizes, double[] domainWeights, int? seed = null)
         : base(seed)
     {
+        if (domainSizes == null || domainSizes.Length == 0)
+            throw new ArgumentException("domainSizes must not be null or empty.", nameof(domainSizes));
+        if (domainWeights == null || domainWeights.Length == 0)
+            throw new ArgumentException("domainWeights must not be null or empty.", nameof(domainWeights));
         if (domainSizes.Length != domainWeights.Length)
             throw new ArgumentException("domainSizes and domainWeights must have the same length.");
+        for (int i = 0; i < domainSizes.Length; i++)
+        {
+            if (domainSizes[i] <= 0)
+                throw new ArgumentOutOfRangeException(nameof(domainSizes), $"Domain size at index {i} must be positive.");
+            if (domainWeights[i] < 0)
+                throw new ArgumentOutOfRangeException(nameof(domainWeights), $"Domain weight at index {i} must be non-negative.");
+        }
 
         _domainSizes = domainSizes;
 
         // Normalize weights
         double weightSum = domainWeights.Sum();
+        if (weightSum <= 0)
+            throw new ArgumentException("domainWeights must sum to a positive value.", nameof(domainWeights));
         _domainWeights = domainWeights.Select(w => w / weightSum).ToArray();
+
+        // Pre-compute cumulative distribution for domain selection
+        _cumulativeWeights = new double[_domainWeights.Length];
+        _cumulativeWeights[0] = _domainWeights[0];
+        for (int i = 1; i < _domainWeights.Length; i++)
+            _cumulativeWeights[i] = _cumulativeWeights[i - 1] + _domainWeights[i];
+        _cumulativeWeights[_domainWeights.Length - 1] = 1.0; // Ensure no floating-point gap
 
         // Compute cumulative offsets
         _domainOffsets = new int[domainSizes.Length];
@@ -57,20 +78,14 @@ public class DomainMixingSampler : DataSamplerBase
     {
         var indices = new int[_totalSize];
 
-        // Build cumulative distribution for domain selection
-        var cumulativeWeights = new double[_domainWeights.Length];
-        cumulativeWeights[0] = _domainWeights[0];
-        for (int i = 1; i < _domainWeights.Length; i++)
-            cumulativeWeights[i] = cumulativeWeights[i - 1] + _domainWeights[i];
-
         for (int i = 0; i < _totalSize; i++)
         {
-            // Select domain based on weights
+            // Select domain based on pre-computed cumulative weights
             double r = Random.NextDouble();
-            int domain = 0;
-            for (int d = 0; d < cumulativeWeights.Length; d++)
+            int domain = _domainWeights.Length - 1; // default to last domain (handles floating-point edge)
+            for (int d = 0; d < _cumulativeWeights.Length; d++)
             {
-                if (r <= cumulativeWeights[d])
+                if (r <= _cumulativeWeights[d])
                 {
                     domain = d;
                     break;

@@ -33,6 +33,11 @@ public class CoresetSelector
     public List<int> Select(double[,] distances)
     {
         int n = distances.GetLength(0);
+        if (n == 0)
+            throw new ArgumentException("Distance matrix must not be empty.", nameof(distances));
+        if (distances.GetLength(1) != n)
+            throw new ArgumentException($"Distance matrix must be square (got {n}x{distances.GetLength(1)}).", nameof(distances));
+
         int targetSize = Math.Max(1, (int)(n * _options.SelectionRatio));
 
         return _options.Strategy switch
@@ -196,9 +201,11 @@ public class CoresetSelector
 
     private static double EuclideanDistance(double[] a, double[] b)
     {
+        if (a.Length != b.Length)
+            throw new ArgumentException($"Embedding dimensions must match (got {a.Length} and {b.Length}).");
+
         double sum = 0;
-        int len = Math.Min(a.Length, b.Length);
-        for (int i = 0; i < len; i++)
+        for (int i = 0; i < a.Length; i++)
         {
             double diff = a[i] - b[i];
             sum += diff * diff;

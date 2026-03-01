@@ -37,7 +37,15 @@ public class CachingDataLoader<TKey, TValue> where TKey : notnull
     /// <summary>
     /// Gets the cache hit ratio (hits / total requests).
     /// </summary>
-    public double HitRatio => _totalRequests > 0 ? (double)_hits / _totalRequests : 0;
+    public double HitRatio
+    {
+        get
+        {
+            long total = Interlocked.Read(ref _totalRequests);
+            long hits = Interlocked.Read(ref _hits);
+            return total > 0 ? (double)hits / total : 0;
+        }
+    }
 
     private long _hits;
     private long _totalRequests;
@@ -63,15 +71,15 @@ public class CachingDataLoader<TKey, TValue> where TKey : notnull
     {
         lock (_lock)
         {
-            _totalRequests++;
+            Interlocked.Increment(ref _totalRequests);
 
             if (_cache.TryGetValue(key, out var entry))
             {
-                _hits++;
+                Interlocked.Increment(ref _hits);
                 entry.AccessCount++;
 
-                // Move to front for LRU
-                if (entry.OrderNode != null)
+                // Move to front for LRU (but not FIFO - FIFO preserves insertion order)
+                if (_options.EvictionPolicy != MemoryCacheEvictionPolicy.FIFO && entry.OrderNode != null)
                 {
                     _accessOrder.Remove(entry.OrderNode);
                     _accessOrder.AddFirst(entry.OrderNode);
@@ -86,6 +94,10 @@ public class CachingDataLoader<TKey, TValue> where TKey : notnull
 
         lock (_lock)
         {
+            // Double-check: another thread may have loaded same key
+            if (_cache.TryGetValue(key, out var existing))
+                return existing.Value;
+
             // Evict if needed
             while (_cache.Count >= _options.MaxCacheSize && _cache.Count > 0)
             {
@@ -164,7 +176,8 @@ public class CachingDataLoader<TKey, TValue> where TKey : notnull
                 break;
 
             case MemoryCacheEvictionPolicy.FIFO:
-                // Same as LRU for simplicity (oldest = tail)
+                // FIFO evicts the oldest inserted item (tail of list).
+                // Unlike LRU, FIFO does not move items to front on access.
                 var fifoNode = _accessOrder.Last;
                 if (fifoNode == null) return;
                 evictKey = fifoNode.Value;

@@ -33,6 +33,13 @@ public class DatasetDistiller
     /// <returns>Tuple of (distilled features, distilled labels).</returns>
     public (double[][] Features, int[] Labels) Distill(double[][] features, int[] labels)
     {
+        if (features == null || features.Length == 0)
+            throw new ArgumentException("Features must not be null or empty.", nameof(features));
+        if (labels == null || labels.Length == 0)
+            throw new ArgumentException("Labels must not be null or empty.", nameof(labels));
+        if (features.Length != labels.Length)
+            throw new ArgumentException($"Features length ({features.Length}) must match labels length ({labels.Length}).");
+
         // Group samples by class
         var classSamples = new Dictionary<int, List<int>>();
         for (int i = 0; i < labels.Length; i++)

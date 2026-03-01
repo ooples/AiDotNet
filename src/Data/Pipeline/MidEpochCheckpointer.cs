@@ -23,11 +23,17 @@ public class MidEpochCheckpointer
     /// <param name="options">Configuration options.</param>
     public MidEpochCheckpointer(MidEpochCheckpointerOptions options)
     {
-        _options = options;
-        _batchesSinceLastSave = 0;
+        _options = options ?? throw new ArgumentNullException(nameof(options));
 
-        if (!string.IsNullOrEmpty(_options.CheckpointDirectory))
-            Directory.CreateDirectory(_options.CheckpointDirectory);
+        if (string.IsNullOrWhiteSpace(options.CheckpointDirectory))
+            throw new ArgumentException("CheckpointDirectory must not be null or empty.", nameof(options));
+        if (options.SaveEveryNBatches <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "SaveEveryNBatches must be positive.");
+        if (options.MaxCheckpoints <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "MaxCheckpoints must be positive.");
+
+        _batchesSinceLastSave = 0;
+        Directory.CreateDirectory(_options.CheckpointDirectory);
     }
 
     /// <summary>
@@ -127,7 +133,17 @@ public class MidEpochCheckpointer
         long timestamp = reader.ReadInt64();
 
         int stateLength = reader.ReadInt32();
-        byte[]? customState = stateLength > 0 ? reader.ReadBytes(stateLength) : null;
+        if (stateLength < 0)
+            throw new InvalidDataException($"Invalid custom state length: {stateLength}");
+
+        byte[]? customState = null;
+        if (stateLength > 0)
+        {
+            customState = reader.ReadBytes(stateLength);
+            if (customState.Length != stateLength)
+                throw new InvalidDataException(
+                    $"Expected {stateLength} bytes of custom state but read only {customState.Length}.");
+        }
 
         return new CheckpointData
         {
@@ -151,7 +167,8 @@ public class MidEpochCheckpointer
         for (int i = _options.MaxCheckpoints; i < checkpointFiles.Length; i++)
         {
             try { File.Delete(checkpointFiles[i]); }
-            catch { /* Best effort cleanup */ }
+            catch (IOException) { /* File in use - skip */ }
+            catch (UnauthorizedAccessException) { /* Permissions issue - skip */ }
         }
     }
 }

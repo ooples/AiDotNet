@@ -89,7 +89,9 @@ public class StreamingTextDataset<T> : InputOutputDataLoaderBase<T, Tensor<T>, T
             totalSeqs = _options.MaxSamples.Value;
 
         if (totalSeqs == 0)
-            totalSeqs = 1; // At least one sample
+            throw new InvalidOperationException(
+                $"Text corpus is too small to produce any sequences of length {seqLen + 1}. " +
+                $"Total tokens: {allTokenIds.Count}, required: {seqLen + 1}.");
 
         _sampleCount = totalSeqs;
         var featuresData = new T[totalSeqs * seqLen];

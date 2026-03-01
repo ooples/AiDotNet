@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace AiDotNet.Data.Quality;
 
@@ -14,6 +15,7 @@ namespace AiDotNet.Data.Quality;
 /// </remarks>
 public class ExactHashDeduplicator
 {
+    private static readonly Regex WhitespaceRegex = new Regex(@"\s+", RegexOptions.Compiled);
     private readonly ExactHashDeduplicatorOptions _options;
 
     public ExactHashDeduplicator(ExactHashDeduplicatorOptions? options = null)
@@ -30,7 +32,7 @@ public class ExactHashDeduplicator
         if (_options.CaseInsensitive)
             normalized = normalized.ToLowerInvariant();
         if (_options.NormalizeWhitespace)
-            normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\s+", " ").Trim();
+            normalized = WhitespaceRegex.Replace(normalized, " ").Trim();
 
         using var sha = SHA256.Create();
         byte[] hashBytes = sha.ComputeHash(Encoding.UTF8.GetBytes(normalized));

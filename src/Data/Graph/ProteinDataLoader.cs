@@ -113,7 +113,7 @@ public class ProteinDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tens
             string proteinId = Path.GetFileNameWithoutExtension(csvFiles[i]);
             labelsData[i] = labelMap.TryGetValue(proteinId, out int label)
                 ? NumOps.FromDouble(label % _options.NumClasses)
-                : NumOps.FromDouble(i % _options.NumClasses);
+                : NumOps.FromDouble(-1); // -1 sentinel: no label found
         }
 
         LoadedFeatures = new Tensor<T>(featuresData, new[] { totalSamples, featDim });

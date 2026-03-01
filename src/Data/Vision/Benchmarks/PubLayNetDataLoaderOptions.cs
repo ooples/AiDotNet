@@ -29,4 +29,15 @@ public sealed class PubLayNetDataLoaderOptions
     public int MaxRegions { get; set; } = 50;
     /// <summary>Number of layout classes (text, title, list, table, figure). Default is 5.</summary>
     public int NumClasses { get; set; } = 5;
+
+    /// <summary>Validates that all option values are within acceptable ranges.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when any option is invalid.</exception>
+    public void Validate()
+    {
+        if (ImageWidth <= 0) throw new ArgumentOutOfRangeException(nameof(ImageWidth), "ImageWidth must be positive.");
+        if (ImageHeight <= 0) throw new ArgumentOutOfRangeException(nameof(ImageHeight), "ImageHeight must be positive.");
+        if (MaxRegions <= 0) throw new ArgumentOutOfRangeException(nameof(MaxRegions), "MaxRegions must be positive.");
+        if (NumClasses <= 0) throw new ArgumentOutOfRangeException(nameof(NumClasses), "NumClasses must be positive.");
+        if (MaxSamples is <= 0) throw new ArgumentOutOfRangeException(nameof(MaxSamples), "MaxSamples must be positive when specified.");
+    }
 }

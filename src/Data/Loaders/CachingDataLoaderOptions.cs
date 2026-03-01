@@ -9,8 +9,11 @@ public sealed class CachingDataLoaderOptions
     public int MaxCacheSize { get; set; } = 100;
     /// <summary>Whether to cache on disk as well (two-level cache). Default is false.</summary>
     public bool EnableDiskCache { get; set; } = false;
-    /// <summary>Directory for disk cache files. Default is ".cache/dataloader".</summary>
-    public string DiskCacheDirectory { get; set; } = ".cache/dataloader";
+    /// <summary>
+    /// Directory for disk cache files.
+    /// Default is "{TEMP}/aidotnet/dataloader_cache". Relative paths are resolved against the current directory.
+    /// </summary>
+    public string DiskCacheDirectory { get; set; } = Path.Combine(Path.GetTempPath(), "aidotnet", "dataloader_cache");
     /// <summary>Cache eviction policy. Default is LRU.</summary>
     public MemoryCacheEvictionPolicy EvictionPolicy { get; set; } = MemoryCacheEvictionPolicy.LRU;
 

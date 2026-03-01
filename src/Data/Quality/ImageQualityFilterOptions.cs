@@ -22,4 +22,17 @@ public sealed class ImageQualityFilterOptions
     public int MinUniqueColors { get; set; } = 10;
     /// <summary>Minimum file size in bytes (filters corrupt/tiny files). Default is 1024.</summary>
     public long MinFileSize { get; set; } = 1024;
+
+    /// <summary>Validates that all option values are within acceptable ranges.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when any option is invalid.</exception>
+    public void Validate()
+    {
+        if (MinWidth <= 0) throw new ArgumentOutOfRangeException(nameof(MinWidth), "MinWidth must be positive.");
+        if (MinHeight <= 0) throw new ArgumentOutOfRangeException(nameof(MinHeight), "MinHeight must be positive.");
+        if (MaxAspectRatio <= 0) throw new ArgumentOutOfRangeException(nameof(MaxAspectRatio), "MaxAspectRatio must be positive.");
+        if (MinPixelStdDev < 0) throw new ArgumentOutOfRangeException(nameof(MinPixelStdDev), "MinPixelStdDev must be non-negative.");
+        if (MaxDominantColorRatio < 0 || MaxDominantColorRatio > 1) throw new ArgumentOutOfRangeException(nameof(MaxDominantColorRatio), "MaxDominantColorRatio must be between 0 and 1.");
+        if (MinUniqueColors < 0) throw new ArgumentOutOfRangeException(nameof(MinUniqueColors), "MinUniqueColors must be non-negative.");
+        if (MinFileSize < 0) throw new ArgumentOutOfRangeException(nameof(MinFileSize), "MinFileSize must be non-negative.");
+    }
 }

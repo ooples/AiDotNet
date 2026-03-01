@@ -81,6 +81,7 @@ public class DataPruner
         return _options.Strategy switch
         {
             PruneStrategy.HighConfidence => PruneByConfidence(scores),
+            PruneStrategy.NeverForgotten => PruneByForgetting(scores.Select(s => (int)s).ToArray()),
             PruneStrategy.LowEL2N => PruneByEL2N(scores),
             PruneStrategy.LowGraNd => PruneByGraNd(scores),
             _ => PruneByConfidence(scores)

@@ -49,12 +49,34 @@ public class SomethingSomethingV2DataLoader<T> : InputOutputDataLoaderBase<T, Te
 
         var samples = new List<(string VideoDir, int ClassIndex)>();
 
+        // Build label template -> class index mapping from label file
+        var labelToIndex = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
         if (File.Exists(labelFile))
         {
+            // First pass: collect unique labels to build class mapping
             var lines = await FilePolyfill.ReadAllLinesAsync(labelFile, cancellationToken);
+
+            // Also check for a separate labels.json with template->index mapping
+            string labelsMapFile = Path.Combine(_dataPath, "something-something-v2-labels.json");
+            if (File.Exists(labelsMapFile))
+            {
+                var labelLines = await FilePolyfill.ReadAllLinesAsync(labelsMapFile, cancellationToken);
+                foreach (var ll in labelLines)
+                {
+                    // {"label_template": index} or "label_template": index
+                    int colonIdx2 = ll.IndexOf(':');
+                    if (colonIdx2 < 0) continue;
+                    string key = ll.Substring(0, colonIdx2).Trim().Trim('"', '{', ' ');
+                    string val = ll.Substring(colonIdx2 + 1).Trim().Trim(',', '}', ' ');
+                    if (int.TryParse(val, out int idx))
+                        labelToIndex[key] = idx;
+                }
+            }
+
             foreach (var line in lines)
             {
-                // Simplified JSON: {"id": "12345", "label": "Pushing something..."}
+                // Parse: {"id": "12345", "label": "Pushing something..."}
                 int idIdx = line.IndexOf("\"id\"", StringComparison.Ordinal);
                 if (idIdx < 0) continue;
                 int colonIdx = line.IndexOf(':', idIdx);
@@ -64,19 +86,52 @@ public class SomethingSomethingV2DataLoader<T> : InputOutputDataLoaderBase<T, Te
                 if (quoteStart < 0 || quoteEnd < 0) continue;
                 string videoId = line.Substring(quoteStart + 1, quoteEnd - quoteStart - 1);
 
+                // Parse actual label
+                int labelIdx = line.IndexOf("\"label\"", StringComparison.Ordinal);
+                int classIndex = -1;
+                if (labelIdx >= 0)
+                {
+                    int lColon = line.IndexOf(':', labelIdx);
+                    if (lColon >= 0)
+                    {
+                        int lqStart = line.IndexOf('"', lColon + 1);
+                        int lqEnd = lqStart >= 0 ? line.IndexOf('"', lqStart + 1) : -1;
+                        if (lqStart >= 0 && lqEnd > lqStart)
+                        {
+                            string labelText = line.Substring(lqStart + 1, lqEnd - lqStart - 1);
+                            if (!labelToIndex.TryGetValue(labelText, out classIndex))
+                            {
+                                classIndex = labelToIndex.Count % NumClasses;
+                                labelToIndex[labelText] = classIndex;
+                            }
+                        }
+                    }
+                }
+
+                if (classIndex < 0) classIndex = 0; // fallback for test split (no labels)
+
                 string videoDir = Path.Combine(framesDir, videoId);
                 if (Directory.Exists(videoDir))
-                    samples.Add((videoDir, samples.Count % NumClasses));
+                    samples.Add((videoDir, classIndex % NumClasses));
             }
         }
 
         if (samples.Count == 0)
         {
-            // Fallback: collect frame directories
+            // Fallback: collect frame directories with folder-based class assignment
             string searchDir = Directory.Exists(framesDir) ? framesDir : _dataPath;
             var dirs = Directory.GetDirectories(searchDir);
+            Array.Sort(dirs, StringComparer.OrdinalIgnoreCase);
             foreach (var dir in dirs)
-                samples.Add((dir, samples.Count % NumClasses));
+            {
+                string dirName = Path.GetFileName(dir);
+                if (!labelToIndex.TryGetValue(dirName, out int classIdx))
+                {
+                    classIdx = labelToIndex.Count % NumClasses;
+                    labelToIndex[dirName] = classIdx;
+                }
+                samples.Add((dir, classIdx));
+            }
         }
 
         int totalSamples = samples.Count;

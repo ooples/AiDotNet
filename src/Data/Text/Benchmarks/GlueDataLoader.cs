@@ -43,7 +43,12 @@ public class GlueDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor<
     {
         _options = options ?? new GlueDataLoaderOptions();
         _dataPath = _options.DataPath ?? DatasetDownloader.GetDefaultDataPath("glue");
-        _numClasses = _options.Task == GlueTask.MNLI ? 3 : 2;
+        _numClasses = _options.Task switch
+        {
+            GlueTask.MNLI => 3,
+            GlueTask.STSB => 1, // STS-B is a regression task (score 0-5)
+            _ => 2
+        };
     }
 
     /// <inheritdoc/>
@@ -70,7 +75,8 @@ public class GlueDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor<
 
         var lines = await FilePolyfill.ReadAllLinesAsync(tsvFile, cancellationToken);
         var texts = new List<string>();
-        var labelValues = new List<int>();
+        var labelValues = new List<double>();
+        bool isRegression = _options.Task == GlueTask.STSB;
 
         // Parse TSV (skip header). Column layout depends on task.
         for (int i = 1; i < lines.Length; i++)
@@ -103,9 +109,18 @@ public class GlueDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor<
             for (int j = 0; j < seqLen; j++)
                 featuresData[featureOffset + j] = NumOps.FromDouble(tokenIds[j]);
 
-            int label = Math.Min(labelValues[i], _numClasses - 1);
-            if (label >= 0)
-                labelsData[i * _numClasses + label] = NumOps.One;
+            if (isRegression)
+            {
+                // STS-B: store regression score directly (0-5 range)
+                labelsData[i] = NumOps.FromDouble(labelValues[i]);
+            }
+            else
+            {
+                // Classification: one-hot encoding
+                int label = Math.Min((int)labelValues[i], _numClasses - 1);
+                if (label >= 0)
+                    labelsData[i * _numClasses + label] = NumOps.One;
+            }
         }
 
         LoadedFeatures = new Tensor<T>(featuresData, new[] { totalSamples, seqLen });
@@ -161,7 +176,7 @@ public class GlueDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor<
         _ => task.ToString()
     };
 
-    private static (string Text, int Label) ExtractTextAndLabel(string[] parts, GlueTask task)
+    private static (string Text, double Label) ExtractTextAndLabel(string[] parts, GlueTask task)
     {
         // Column layouts vary by task
         return task switch
@@ -170,7 +185,10 @@ public class GlueDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor<
             GlueTask.SST2 when parts.Length >= 2 => (parts[0].Trim(), int.TryParse(parts[1].Trim(), out int l) ? l : 0),
             GlueTask.MRPC when parts.Length >= 5 => (parts[3].Trim() + " [SEP] " + parts[4].Trim(), int.TryParse(parts[0].Trim(), out int l) ? l : 0),
             GlueTask.QQP when parts.Length >= 6 => (parts[3].Trim() + " [SEP] " + parts[4].Trim(), int.TryParse(parts[5].Trim(), out int l) ? l : 0),
-            GlueTask.STSB when parts.Length >= 8 => (parts[7].Trim() + " [SEP] " + (parts.Length > 8 ? parts[8].Trim() : ""), 0),
+            // STS-B: regression label (float 0.0-5.0) in last column
+            GlueTask.STSB when parts.Length >= 10 => (parts[7].Trim() + " [SEP] " + parts[8].Trim(),
+                double.TryParse(parts[9].Trim(), System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out double score) ? score : 0.0),
             GlueTask.MNLI when parts.Length >= 10 => (parts[8].Trim() + " [SEP] " + parts[9].Trim(), ParseMnliLabel(parts.Length > 10 ? parts[10].Trim() : "")),
             GlueTask.QNLI when parts.Length >= 4 => (parts[1].Trim() + " [SEP] " + parts[2].Trim(), parts[3].Trim() == "entailment" ? 1 : 0),
             GlueTask.RTE when parts.Length >= 4 => (parts[1].Trim() + " [SEP] " + parts[2].Trim(), parts[3].Trim() == "entailment" ? 1 : 0),

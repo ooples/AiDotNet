@@ -28,9 +28,9 @@ namespace AiDotNet.Data.Vision.Benchmarks;
 /// </remarks>
 public class CocoDetectionDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor<T>>
 {
-    private static readonly string TrainImagesUrl = "http://images.cocodataset.org/zips/train2017.zip";
-    private static readonly string ValImagesUrl = "http://images.cocodataset.org/zips/val2017.zip";
-    private static readonly string AnnotationsUrl = "http://images.cocodataset.org/annotations/annotations_trainval2017.zip";
+    private static readonly string TrainImagesUrl = "https://images.cocodataset.org/zips/train2017.zip";
+    private static readonly string ValImagesUrl = "https://images.cocodataset.org/zips/val2017.zip";
+    private static readonly string AnnotationsUrl = "https://images.cocodataset.org/annotations/annotations_trainval2017.zip";
 
     private const int NumClasses = 80;
 

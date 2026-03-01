@@ -86,8 +86,8 @@ public class PascalVocDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Te
         if (vocDir.Length == 0 && _options.AutoDownload)
         {
             string url = _options.Year == "2007"
-                ? "http://host.robots.ox.ac.uk/pascal/VOC/voc2007/VOCtrainval_06-Nov-2007.tar"
-                : "http://host.robots.ox.ac.uk/pascal/VOC/voc2012/VOCtrainval_11-May-2012.tar";
+                ? "https://host.robots.ox.ac.uk/pascal/VOC/voc2007/VOCtrainval_06-Nov-2007.tar"
+                : "https://host.robots.ox.ac.uk/pascal/VOC/voc2012/VOCtrainval_11-May-2012.tar";
             await DatasetDownloader.DownloadAndExtractTarGzAsync(url, _dataPath, cancellationToken);
             vocDir = FindVocDirectory(_dataPath, _options.Year);
         }

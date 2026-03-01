@@ -100,9 +100,12 @@ public class SquadDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor
             for (int j = 0; j < _options.MaxQuestionLength; j++)
                 featuresData[featureOffset + _options.MaxContextLength + j] = NumOps.FromDouble(questionTokens[j]);
 
-            // Store answer start and end token positions (character-to-token approximation)
-            labelsData[i * 2] = NumOps.FromDouble(Math.Min(ansStart, _options.MaxContextLength - 1));
-            labelsData[i * 2 + 1] = NumOps.FromDouble(Math.Min(ansStart + ansLen, _options.MaxContextLength - 1));
+            // Convert character-level positions to approximate token positions
+            // by counting word boundaries in the context up to the character offset
+            int tokenStart = CharOffsetToTokenIndex(context, ansStart);
+            int tokenEnd = CharOffsetToTokenIndex(context, ansStart + ansLen);
+            labelsData[i * 2] = NumOps.FromDouble(Math.Min(tokenStart, _options.MaxContextLength - 1));
+            labelsData[i * 2 + 1] = NumOps.FromDouble(Math.Min(tokenEnd, _options.MaxContextLength - 1));
         }
 
         LoadedFeatures = new Tensor<T>(featuresData, new[] { totalSamples, _totalSeqLen });
@@ -216,6 +219,26 @@ public class SquadDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor
             end++;
         }
         return json.Substring(startPos + 1, end - startPos - 1);
+    }
+
+    /// <summary>
+    /// Converts a character offset in text to an approximate token index
+    /// by counting word boundaries (whitespace-separated tokens).
+    /// </summary>
+    private static int CharOffsetToTokenIndex(string text, int charOffset)
+    {
+        if (charOffset <= 0 || text.Length == 0) return 0;
+        int clampedOffset = Math.Min(charOffset, text.Length);
+        int tokenIndex = 0;
+        bool inWord = false;
+        for (int i = 0; i < clampedOffset; i++)
+        {
+            bool isAlpha = char.IsLetterOrDigit(text[i]);
+            if (isAlpha && !inWord)
+                tokenIndex++;
+            inWord = isAlpha;
+        }
+        return Math.Max(0, tokenIndex - 1); // -1 because tokenIndex counts starts, we want 0-based
     }
 
     private static string ExtractJsonValue(string json, int startPos)

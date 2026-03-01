@@ -28,6 +28,11 @@ public class LanguageIdFilter
     /// <param name="referenceTexts">Representative text samples in the language.</param>
     public void AddLanguageProfile(string languageCode, IReadOnlyList<string> referenceTexts)
     {
+        if (string.IsNullOrWhiteSpace(languageCode))
+            throw new ArgumentException("Language code must not be null or empty.", nameof(languageCode));
+        if (referenceTexts == null || referenceTexts.Count == 0)
+            throw new ArgumentException("Reference texts must not be null or empty.", nameof(referenceTexts));
+
         var ngramFreqs = new Dictionary<string, int>();
 
         foreach (string text in referenceTexts)
@@ -119,6 +124,9 @@ public class LanguageIdFilter
     /// <returns>Set of indices that are not in the target language(s) (should be removed).</returns>
     public HashSet<int> Filter(IReadOnlyList<string> documents)
     {
+        if (_languageProfiles.Count == 0)
+            throw new InvalidOperationException("No language profiles loaded. Call AddLanguageProfile() before filtering.");
+
         var filtered = new HashSet<int>();
         var targetSet = new HashSet<string>(_options.TargetLanguages, StringComparer.OrdinalIgnoreCase);
 

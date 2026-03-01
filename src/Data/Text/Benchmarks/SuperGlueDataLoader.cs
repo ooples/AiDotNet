@@ -90,6 +90,15 @@ public class SuperGlueDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Te
                 label = parsedLabel;
             else if (labelStr.Equals("true", StringComparison.OrdinalIgnoreCase))
                 label = 1;
+            else if (labelStr.Equals("false", StringComparison.OrdinalIgnoreCase))
+                label = 0;
+            // CB task has string labels: entailment=0, contradiction=1, neutral=2
+            else if (labelStr.Equals("entailment", StringComparison.OrdinalIgnoreCase))
+                label = 0;
+            else if (labelStr.Equals("contradiction", StringComparison.OrdinalIgnoreCase))
+                label = 1;
+            else if (labelStr.Equals("neutral", StringComparison.OrdinalIgnoreCase))
+                label = 2;
 
             if (text.Length > 7)
             {

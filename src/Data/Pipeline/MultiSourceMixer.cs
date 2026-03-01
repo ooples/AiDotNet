@@ -27,6 +27,9 @@ public class MultiSourceMixer<TItem>
     /// <param name="options">Configuration options.</param>
     public MultiSourceMixer(int numSources, MultiSourceMixerOptions? options = null)
     {
+        if (numSources <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numSources), "Number of sources must be positive.");
+
         _options = options ?? new MultiSourceMixerOptions();
         _random = _options.Seed.HasValue
             ? RandomHelper.CreateSeededRandom(_options.Seed.Value)
@@ -88,6 +91,11 @@ public class MultiSourceMixer<TItem>
     /// <returns>Interleaved items from the sources.</returns>
     public IEnumerable<TItem> Mix(IReadOnlyList<IEnumerator<TItem>> sources, int totalItems)
     {
+        if (sources == null || sources.Count == 0)
+            throw new ArgumentException("Sources must not be null or empty.", nameof(sources));
+        if (totalItems < 0)
+            throw new ArgumentOutOfRangeException(nameof(totalItems), "Total items must be non-negative.");
+
         var active = new bool[sources.Count];
         for (int i = 0; i < sources.Count; i++)
             active[i] = true;

@@ -13,4 +13,13 @@ public sealed class MidEpochCheckpointerOptions
     public int MaxCheckpoints { get; set; } = 3;
     /// <summary>Prefix for checkpoint file names. Default is "checkpoint".</summary>
     public string FilePrefix { get; set; } = "checkpoint";
+
+    /// <summary>Validates that all option values are within acceptable ranges.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when any option is invalid.</exception>
+    public void Validate()
+    {
+        if (string.IsNullOrWhiteSpace(CheckpointDirectory)) throw new ArgumentException("CheckpointDirectory must not be empty.", nameof(CheckpointDirectory));
+        if (SaveEveryNBatches <= 0) throw new ArgumentOutOfRangeException(nameof(SaveEveryNBatches), "SaveEveryNBatches must be positive.");
+        if (MaxCheckpoints <= 0) throw new ArgumentOutOfRangeException(nameof(MaxCheckpoints), "MaxCheckpoints must be positive.");
+    }
 }
