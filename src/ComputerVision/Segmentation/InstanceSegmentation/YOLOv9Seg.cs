@@ -176,8 +176,9 @@ public class YOLOv9Seg<T> : NeuralNetworkBase<T>, IInstanceSegmentation<T>
     {
         if (!_useNativeMode) throw new InvalidOperationException("Training is not supported in ONNX mode. Use the native mode constructor for training.");
         var predicted = Forward(input);
-        var lossGradient = predicted.Transform((v, idx) => NumOps.Subtract(v, expectedOutput.Data.Span[idx]));
-        BackwardPass(lossGradient); _optimizer?.UpdateParameters(Layers);
+        var lossGradient = LossFunction.ComputeGradient(predicted, expectedOutput);
+        BackwardPass(lossGradient);
+        _optimizer?.UpdateParameters(Layers);
     }
     #endregion
 
@@ -260,7 +261,20 @@ public class YOLOv9Seg<T> : NeuralNetworkBase<T>, IInstanceSegmentation<T>
     /// </para>
     /// </remarks>
     public override void UpdateParameters(Vector<T> parameters)
-    { int o = 0; foreach (var l in Layers) { var p = l.GetParameters(); int c = p.Length; if (o + c <= parameters.Length) { var n = new Vector<T>(c); for (int i = 0; i < c; i++) n[i] = parameters[o + i]; l.UpdateParameters(n); o += c; } } }
+    {
+        int o = 0;
+        foreach (var l in Layers)
+        {
+            var p = l.GetParameters();
+            int c = p.Length;
+            if (o + c > parameters.Length)
+                throw new ArgumentException($"Parameter vector too short: need at least {o + c} but got {parameters.Length}.", nameof(parameters));
+            var n = new Vector<T>(c);
+            for (int i = 0; i < c; i++) n[i] = parameters[o + i];
+            l.UpdateParameters(n);
+            o += c;
+        }
+    }
 
     /// <summary>
     /// Collects metadata describing this model's configuration.
@@ -273,7 +287,7 @@ public class YOLOv9Seg<T> : NeuralNetworkBase<T>, IInstanceSegmentation<T>
     /// </remarks>
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
-        ModelType = ModelType.SemanticSegmentation,
+        ModelType = ModelType.InstanceSegmentation,
         AdditionalInfo = new Dictionary<string, object> { { "ModelName", "YOLOv9Seg" }, { "InputHeight", _height }, { "InputWidth", _width }, { "NumClasses", _numClasses }, { "ModelSize", _modelSize.ToString() }, { "UseNativeMode", _useNativeMode }, { "NumLayers", Layers.Count } },
         ModelData = this.Serialize()
     };
