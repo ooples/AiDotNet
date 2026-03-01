@@ -396,12 +396,21 @@ public class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         // Distribute to internal sub-lists for forward pass
         // Feature encoder: 7 conv layers + 1 projection = 8
         int featureEncoderCount = 8;
+        // Transformer layers: numTransformerLayers * 3 (selfAttn + ff + ffOut) + 1 CTC projection
+        int transformerCount = _numTransformerLayers * 3;
+        int expectedTotal = featureEncoderCount + transformerCount + 1;
+
+        if (Architecture.Layers != null && layers.Count != expectedTotal)
+        {
+            System.Diagnostics.Debug.WriteLine(
+                $"[Wav2Vec2] Warning: Expected {expectedTotal} layers (8 encoder + {transformerCount} transformer + 1 CTC), " +
+                $"but got {layers.Count}. Layer distribution may be incorrect.");
+        }
+
         for (int i = 0; i < featureEncoderCount && i < layers.Count; i++)
             _featureEncoderLayers.Add(layers[i]);
 
-        // Transformer layers: numTransformerLayers * 3 (selfAttn + ff + ffOut)
         int transformerStart = featureEncoderCount;
-        int transformerCount = _numTransformerLayers * 3;
         for (int i = 0; i < transformerCount && transformerStart + i < layers.Count; i++)
             _transformerLayers.Add(layers[transformerStart + i]);
 
