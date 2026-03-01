@@ -9,12 +9,12 @@ namespace AiDotNet.Tests.FederatedLearning;
 public class FederatedLearningCompressionIntegrationTests
 {
     [Theory]
-    [InlineData("TopK")]
-    [InlineData("RandomK")]
-    [InlineData("Threshold")]
-    [InlineData("UniformQuantization")]
-    [InlineData("StochasticQuantization")]
-    public async Task BuildAsync_WithCompressionStrategy_ReportsCompressionMetadata(string strategy)
+    [InlineData(FederatedCompressionStrategy.TopK)]
+    [InlineData(FederatedCompressionStrategy.RandomK)]
+    [InlineData(FederatedCompressionStrategy.Threshold)]
+    [InlineData(FederatedCompressionStrategy.UniformQuantization)]
+    [InlineData(FederatedCompressionStrategy.StochasticQuantization)]
+    public async Task BuildAsync_WithCompressionStrategy_ReportsCompressionMetadata(FederatedCompressionStrategy strategy)
     {
         var (x, y) = CreateToyData();
         var loader = DataLoaders.FromMatrixVector(x, y);
@@ -41,7 +41,7 @@ public class FederatedLearningCompressionIntegrationTests
                 Strategy = strategy,
                 Ratio = 0.1,
                 UseErrorFeedback = true,
-                Threshold = strategy == "Threshold" ? 0.02 : 0.0,
+                Threshold = strategy == FederatedCompressionStrategy.Threshold ? 0.02 : 0.0,
                 QuantizationBits = 4
             }
         };
@@ -56,7 +56,7 @@ public class FederatedLearningCompressionIntegrationTests
         var metadata = result.GetFederatedLearningMetadata();
         Assert.NotNull(metadata);
         Assert.True(metadata!.CompressionEnabled);
-        Assert.Equal(strategy, metadata.CompressionStrategyUsed);
+        Assert.Equal(strategy.ToString(), metadata.CompressionStrategyUsed);
         Assert.All(metadata.RoundMetrics, r => Assert.True(r.UploadCompressionRatio <= 1.0));
     }
 
@@ -81,7 +81,7 @@ public class FederatedLearningCompressionIntegrationTests
             ConvergenceThreshold = 0.0,
             Compression = new FederatedCompressionOptions
             {
-                Strategy = "UniformQuantization",
+                Strategy = FederatedCompressionStrategy.UniformQuantization,
                 QuantizationBits = 4,
                 UseErrorFeedback = false
             }
