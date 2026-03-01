@@ -27,4 +27,6 @@ public sealed class DocVqaDataLoaderOptions
     public int ImageHeight { get; set; } = 224;
     /// <summary>Maximum question token length. Default is 64.</summary>
     public int MaxQuestionLength { get; set; } = 64;
+    /// <summary>Maximum answer character length for text encoding. Default is 128.</summary>
+    public int MaxAnswerLength { get; set; } = 128;
 }

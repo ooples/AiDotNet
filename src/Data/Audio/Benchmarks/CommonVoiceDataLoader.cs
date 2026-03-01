@@ -109,7 +109,7 @@ public class CommonVoiceDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, 
 
             byte[] audioBytes = await FilePolyfill.ReadAllBytesAsync(audioPath, cancellationToken);
             int featureOffset = i * _maxAudioSamples;
-            AudioLoaderHelper.LoadWavSamples(audioBytes, featuresData, featureOffset, _maxAudioSamples, NumOps);
+            AudioLoaderHelper.LoadAudioSamples(audioBytes, featuresData, featureOffset, _maxAudioSamples, NumOps);
 
             int labelOffset = i * maxTextLen;
             int charCount = Math.Min(transcript.Length, maxTextLen);

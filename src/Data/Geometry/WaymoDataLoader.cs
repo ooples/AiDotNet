@@ -20,7 +20,7 @@ namespace AiDotNet.Data.Geometry;
 ///     label/
 /// </code>
 /// Features are point cloud Tensor[N, PointsPerSample * Channels].
-/// Labels are simplified as class index Tensor[N, 1].
+/// Labels are the dominant object class per frame Tensor[N, 1] (0=Vehicle, 1=Pedestrian, 2=Cyclist, 3=Sign).
 /// </para>
 /// </remarks>
 public class WaymoDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor<T>>
@@ -29,6 +29,14 @@ public class WaymoDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor
     private readonly string _dataPath;
     private int _sampleCount;
     private int _channels;
+
+    // Waymo object class mapping: 1=Vehicle, 2=Pedestrian, 3=Cyclist, 4=Sign
+    // Also handle KITTI-style string labels for pre-processed exports
+    private static readonly Dictionary<string, int> WaymoClassMap = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["Vehicle"] = 0, ["Pedestrian"] = 1, ["Cyclist"] = 2, ["Sign"] = 3,
+        ["Car"] = 0, ["Truck"] = 0, ["Van"] = 0 // KITTI-style aliases
+    };
 
     public override string Name => "Waymo";
     public override string Description => "Waymo Open Dataset 3D detection (LiDAR)";
@@ -70,6 +78,11 @@ public class WaymoDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor
         var featuresData = new T[totalSamples * featureSize];
         var labelsData = new T[totalSamples];
 
+        // Find label directory
+        string labelDir = Path.Combine(splitDir, "label");
+        if (!Directory.Exists(labelDir))
+            labelDir = Path.Combine(splitDir, "label_2");
+
         for (int i = 0; i < totalSamples; i++)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -94,12 +107,66 @@ public class WaymoDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor
                 }
             }
 
-            labelsData[i] = NumOps.FromDouble(i);
+            // Parse label file: extract dominant object class per frame
+            labelsData[i] = NumOps.FromDouble(ParseWaymoLabelFile(labelDir, binFiles[i]));
         }
 
         LoadedFeatures = new Tensor<T>(featuresData, new[] { totalSamples, featureSize });
         LoadedLabels = new Tensor<T>(labelsData, new[] { totalSamples, 1 });
         InitializeIndices(totalSamples);
+    }
+
+    /// <summary>
+    /// Parses a Waymo label file and returns the dominant object class index.
+    /// Handles both numeric class_id format (1=Vehicle, 2=Pedestrian, 3=Cyclist, 4=Sign)
+    /// and KITTI-style string format (Car, Pedestrian, Cyclist, etc.).
+    /// </summary>
+    private static int ParseWaymoLabelFile(string labelDir, string binFilePath)
+    {
+        string labelFile = Path.Combine(labelDir,
+            Path.GetFileNameWithoutExtension(binFilePath) + ".txt");
+
+        if (!File.Exists(labelFile))
+            return 0;
+
+        var classCounts = new Dictionary<int, int>();
+        foreach (string line in File.ReadAllLines(labelFile))
+        {
+            if (string.IsNullOrWhiteSpace(line)) continue;
+            string[] parts = line.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length == 0) continue;
+
+            int classId;
+            if (int.TryParse(parts[0], out int numericId))
+            {
+                // Numeric format: class_id (1-based) -> 0-based
+                classId = Math.Max(0, numericId - 1);
+            }
+            else
+            {
+                // String format: type name -> class index
+                if (!WaymoClassMap.TryGetValue(parts[0], out classId))
+                    continue;
+            }
+
+            classCounts.TryGetValue(classId, out int count);
+            classCounts[classId] = count + 1;
+        }
+
+        if (classCounts.Count == 0)
+            return 0;
+
+        int bestClass = 0, bestCount = 0;
+        foreach (var kvp in classCounts)
+        {
+            if (kvp.Value > bestCount)
+            {
+                bestClass = kvp.Key;
+                bestCount = kvp.Value;
+            }
+        }
+
+        return bestClass;
     }
 
     protected override void UnloadDataCore()

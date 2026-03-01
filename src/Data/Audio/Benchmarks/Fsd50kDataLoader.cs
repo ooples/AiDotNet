@@ -138,7 +138,7 @@ public class Fsd50kDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tenso
             if (File.Exists(audioPath))
             {
                 byte[] audioBytes = await FilePolyfill.ReadAllBytesAsync(audioPath, cancellationToken);
-                AudioLoaderHelper.LoadWavSamples(audioBytes, featuresData, i * _maxAudioSamples, _maxAudioSamples, NumOps);
+                AudioLoaderHelper.LoadAudioSamples(audioBytes, featuresData, i * _maxAudioSamples, _maxAudioSamples, NumOps);
             }
 
             // Multi-hot encode labels

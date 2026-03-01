@@ -124,7 +124,7 @@ public class MaestroDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tens
             if (File.Exists(audioPath))
             {
                 byte[] audioBytes = await FilePolyfill.ReadAllBytesAsync(audioPath, cancellationToken);
-                AudioLoaderHelper.LoadWavSamples(audioBytes, featuresData, i * _maxAudioSamples, _maxAudioSamples, NumOps);
+                AudioLoaderHelper.LoadAudioSamples(audioBytes, featuresData, i * _maxAudioSamples, _maxAudioSamples, NumOps);
             }
 
             // Load MIDI note activations (simplified: extract active notes from MIDI file)

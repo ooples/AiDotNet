@@ -91,12 +91,12 @@ public class LibriSpeechDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, 
 
             var (audioPath, transcript) = samples[i];
 
-            // Load WAV audio
+            // Load audio (auto-detects WAV or FLAC)
             if (File.Exists(audioPath))
             {
                 byte[] audioBytes = await FilePolyfill.ReadAllBytesAsync(audioPath, cancellationToken);
                 int featureOffset = i * _maxAudioSamples;
-                AudioLoaderHelper.LoadWavSamples(audioBytes, featuresData, featureOffset, _maxAudioSamples, NumOps);
+                AudioLoaderHelper.LoadAudioSamples(audioBytes, featuresData, featureOffset, _maxAudioSamples, NumOps);
             }
 
             // Encode transcript as character indices

@@ -18,6 +18,7 @@ public class DocumentAITests
         Assert.Equal(DatasetSplit.Train, options.Split);
         Assert.Equal(224, options.ImageWidth);
         Assert.Equal(64, options.MaxQuestionLength);
+        Assert.Equal(128, options.MaxAnswerLength);
     }
 
     [Fact]
@@ -49,12 +50,13 @@ public class DocumentAITests
     }
 
     [Fact]
-    public async Task DocVqaDataLoader_LoadsImageData()
+    public async Task DocVqaDataLoader_LoadsImageDataWithAnswers()
     {
         string tempDir = Path.Combine(Path.GetTempPath(), "docvqa_test_" + Guid.NewGuid().ToString("N")[..8]);
         try
         {
-            string docsDir = Path.Combine(tempDir, "train", "documents");
+            string trainDir = Path.Combine(tempDir, "train");
+            string docsDir = Path.Combine(trainDir, "documents");
             Directory.CreateDirectory(docsDir);
 
             // Create small synthetic PNG-like files
@@ -63,13 +65,25 @@ public class DocumentAITests
                 File.WriteAllBytes(Path.Combine(docsDir, $"doc_{i}.png"), new byte[8 * 8 * 3]);
             }
 
+            // Create annotations JSON with answers
+            string annotationsJson = @"{
+                ""data"": [
+                    { ""image"": ""doc_0.png"", ""question"": ""What is the title?"", ""answers"": [""Hello""] },
+                    { ""image"": ""doc_1.png"", ""question"": ""What is the date?"", ""answers"": [""2024""] },
+                    { ""image"": ""doc_2.png"", ""question"": ""Who signed?"", ""answers"": [""ABC""] }
+                ]
+            }";
+            File.WriteAllText(Path.Combine(trainDir, "annotations.json"), annotationsJson);
+
+            int maxAnswerLen = 16;
             var options = new DocVqaDataLoaderOptions
             {
                 DataPath = tempDir,
                 AutoDownload = false,
                 ImageWidth = 8,
                 ImageHeight = 8,
-                MaxSamples = 3
+                MaxSamples = 3,
+                MaxAnswerLength = maxAnswerLen
             };
 
             var loader = new DocVqaDataLoader<double>(options);
@@ -77,6 +91,25 @@ public class DocumentAITests
 
             Assert.Equal(3, loader.TotalCount);
             Assert.Equal(192, loader.FeatureCount); // 8 * 8 * 3
+            Assert.Equal(maxAnswerLen, loader.OutputDimension);
+
+            // Verify character-level answer encoding
+            var batch = loader.GetBatches(batchSize: 3, shuffle: false).First();
+
+            // doc_0.png -> "Hello": H=72, e=101, l=108, l=108, o=111
+            Assert.Equal(72.0, batch.Labels[0, 0]); // 'H'
+            Assert.Equal(101.0, batch.Labels[0, 1]); // 'e'
+            Assert.Equal(108.0, batch.Labels[0, 2]); // 'l'
+            Assert.Equal(108.0, batch.Labels[0, 3]); // 'l'
+            Assert.Equal(111.0, batch.Labels[0, 4]); // 'o'
+            Assert.Equal(0.0, batch.Labels[0, 5]); // padding
+
+            // doc_1.png -> "2024": '2'=50, '0'=48, '2'=50, '4'=52
+            Assert.Equal(50.0, batch.Labels[1, 0]); // '2'
+            Assert.Equal(48.0, batch.Labels[1, 1]); // '0'
+            Assert.Equal(50.0, batch.Labels[1, 2]); // '2'
+            Assert.Equal(52.0, batch.Labels[1, 3]); // '4'
+            Assert.Equal(0.0, batch.Labels[1, 4]); // padding
         }
         finally
         {

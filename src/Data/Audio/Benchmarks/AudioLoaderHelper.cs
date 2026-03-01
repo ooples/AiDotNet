@@ -6,10 +6,30 @@ namespace AiDotNet.Data.Audio.Benchmarks;
 /// <summary>
 /// Shared helper methods for audio data loaders.
 /// Provides proper RIFF/WAVE chunk-based WAV parsing with support for 8/16/24/32-bit PCM
-/// and multi-channel to mono conversion.
+/// and multi-channel to mono conversion. Also supports FLAC decoding via <see cref="FlacDecoder"/>.
 /// </summary>
 internal static class AudioLoaderHelper
 {
+    /// <summary>
+    /// Auto-detects audio format (WAV or FLAC) and loads samples into the target array.
+    /// WAV: RIFF/WAVE chunk-based parsing. FLAC: full decode via <see cref="FlacDecoder"/>.
+    /// Output is normalized to [-1, 1], multi-channel averaged to mono.
+    /// </summary>
+    internal static void LoadAudioSamples<T>(byte[] audioBytes, T[] target, int offset, int maxSamples,
+        INumericOperations<T> numOps)
+    {
+        if (audioBytes.Length >= 4 &&
+            audioBytes[0] == (byte)'f' && audioBytes[1] == (byte)'L' &&
+            audioBytes[2] == (byte)'a' && audioBytes[3] == (byte)'C')
+        {
+            FlacDecoder.DecodeFlac(audioBytes, target, offset, maxSamples, numOps);
+        }
+        else
+        {
+            LoadWavSamples(audioBytes, target, offset, maxSamples, numOps);
+        }
+    }
+
     /// <summary>
     /// Loads PCM WAV samples from raw bytes into a target array, normalizing to [-1, 1].
     /// Properly parses RIFF/WAVE header chunks to locate format and data sections.

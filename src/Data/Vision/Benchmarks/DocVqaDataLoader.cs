@@ -1,3 +1,4 @@
+using System.Text.Json;
 using AiDotNet.Data.Geometry;
 using AiDotNet.Data.Loaders;
 using AiDotNet.Tensors.Helpers;
@@ -18,7 +19,8 @@ namespace AiDotNet.Data.Vision.Benchmarks;
 ///     annotations.json or qa.json (question-answer pairs)
 /// </code>
 /// Features are flattened image pixels Tensor[N, H * W * 3].
-/// Labels are answer class index Tensor[N, 1].
+/// Labels are answer text encoded as character indices Tensor[N, MaxAnswerLength],
+/// where each element is the Unicode code point of the character.
 /// </para>
 /// </remarks>
 public class DocVqaDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor<T>>
@@ -31,7 +33,7 @@ public class DocVqaDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tenso
     public override string Description => "DocVQA document visual question answering";
     public override int TotalCount => _sampleCount;
     public override int FeatureCount => _options.ImageWidth * _options.ImageHeight * 3;
-    public override int OutputDimension => 1;
+    public override int OutputDimension => _options.MaxAnswerLength;
 
     public DocVqaDataLoader(DocVqaDataLoaderOptions? options = null)
     {
@@ -57,6 +59,47 @@ public class DocVqaDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tenso
         if (!Directory.Exists(docsDir))
             throw new DirectoryNotFoundException($"DocVQA data not found at {docsDir}.");
 
+        // Parse annotations JSON to get image->answer mapping
+        var imageAnswers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        string[] annotationFiles = { "annotations.json", "qa.json", "train_v1.0.json", "val_v1.0.json" };
+        foreach (string annFile in annotationFiles)
+        {
+            string annPath = Path.Combine(splitDir, annFile);
+            if (!File.Exists(annPath))
+                annPath = Path.Combine(_dataPath, annFile);
+            if (!File.Exists(annPath)) continue;
+
+            using var stream = File.OpenRead(annPath);
+            using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+            var root = doc.RootElement;
+
+            // DocVQA format: {"data": [{"image": "...", "answers": ["..."], "question": "..."}]}
+            JsonElement dataArray;
+            if (root.TryGetProperty("data", out dataArray))
+            {
+                foreach (var item in dataArray.EnumerateArray())
+                {
+                    string imageName = item.TryGetProperty("image", out var imgElem)
+                        ? imgElem.GetString() ?? string.Empty
+                        : string.Empty;
+
+                    string answer = string.Empty;
+                    if (item.TryGetProperty("answers", out var answersElem) && answersElem.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (var ans in answersElem.EnumerateArray())
+                        {
+                            answer = ans.GetString() ?? string.Empty;
+                            if (answer.Length > 0) break; // Take first answer
+                        }
+                    }
+
+                    if (imageName.Length > 0 && !imageAnswers.ContainsKey(imageName))
+                        imageAnswers[imageName] = answer;
+                }
+            }
+            break; // Use first found annotation file
+        }
+
         var imageFiles = Directory.GetFiles(docsDir, "*.png")
             .Concat(Directory.GetFiles(docsDir, "*.jpg"))
             .Concat(Directory.GetFiles(docsDir, "*.jpeg")).ToArray();
@@ -70,8 +113,9 @@ public class DocVqaDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tenso
         int w = _options.ImageWidth;
         int h = _options.ImageHeight;
         int featureSize = w * h * 3;
+        int maxAnswerLen = _options.MaxAnswerLength;
         var featuresData = new T[totalSamples * featureSize];
-        var labelsData = new T[totalSamples];
+        var labelsData = new T[totalSamples * maxAnswerLen];
 
         for (int i = 0; i < totalSamples; i++)
         {
@@ -81,11 +125,17 @@ public class DocVqaDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tenso
             int copyLen = Math.Min(pixels.Length, featureSize);
             Array.Copy(pixels, 0, featuresData, featOff, copyLen);
 
-            labelsData[i] = NumOps.FromDouble(i % 100); // Simplified: QA answer class
+            // Encode answer text as character indices
+            string fileName = Path.GetFileName(imageFiles[i]);
+            string answer = imageAnswers.TryGetValue(fileName, out string? ans) ? ans : string.Empty;
+            int labelOffset = i * maxAnswerLen;
+            int charCount = Math.Min(answer.Length, maxAnswerLen);
+            for (int c = 0; c < charCount; c++)
+                labelsData[labelOffset + c] = NumOps.FromDouble(answer[c]);
         }
 
         LoadedFeatures = new Tensor<T>(featuresData, new[] { totalSamples, featureSize });
-        LoadedLabels = new Tensor<T>(labelsData, new[] { totalSamples, 1 });
+        LoadedLabels = new Tensor<T>(labelsData, new[] { totalSamples, maxAnswerLen });
         InitializeIndices(totalSamples);
     }
 

@@ -19,7 +19,8 @@ namespace AiDotNet.Data.Geometry;
 ///     velodyne/
 /// </code>
 /// Features are point cloud Tensor[N, PointsPerSample * Channels].
-/// Labels are 3D bounding boxes (simplified as class index) Tensor[N, 1].
+/// Labels are the dominant object class per frame Tensor[N, 1] (0=Car, 1=Van, 2=Truck,
+/// 3=Pedestrian, 4=Person_sitting, 5=Cyclist, 6=Tram, 7=Misc).
 /// </para>
 /// </remarks>
 public class KittiDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor<T>>
@@ -28,6 +29,13 @@ public class KittiDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor
     private readonly string _dataPath;
     private int _sampleCount;
     private int _channels;
+
+    // KITTI 3D object detection class mapping (8 classes + DontCare ignored)
+    private static readonly Dictionary<string, int> KittiClassMap = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["Car"] = 0, ["Van"] = 1, ["Truck"] = 2, ["Pedestrian"] = 3,
+        ["Person_sitting"] = 4, ["Cyclist"] = 5, ["Tram"] = 6, ["Misc"] = 7
+    };
 
     public override string Name => "KITTI";
     public override string Description => "KITTI 3D object detection (LiDAR)";
@@ -65,7 +73,12 @@ public class KittiDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor
         _sampleCount = totalSamples;
         int featureSize = _options.PointsPerSample * _channels;
         var featuresData = new T[totalSamples * featureSize];
-        var labelsData = new T[totalSamples]; // Simplified: scene index
+        var labelsData = new T[totalSamples];
+
+        // Find label directory (KITTI uses label_2/ for 3D detection)
+        string labelDir = Path.Combine(splitDir, "label_2");
+        if (!Directory.Exists(labelDir))
+            labelDir = Path.Combine(splitDir, "label");
 
         for (int i = 0; i < totalSamples; i++)
         {
@@ -92,12 +105,57 @@ public class KittiDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor
                 }
             }
 
-            labelsData[i] = NumOps.FromDouble(i);
+            // Parse label file: KITTI format is "type truncated occluded alpha bbox(4) dims(3) loc(3) ry [score]"
+            // Extract dominant (most frequent non-DontCare) object class in the frame
+            labelsData[i] = NumOps.FromDouble(ParseKittiLabelFile(labelDir, binFiles[i]));
         }
 
         LoadedFeatures = new Tensor<T>(featuresData, new[] { totalSamples, featureSize });
         LoadedLabels = new Tensor<T>(labelsData, new[] { totalSamples, 1 });
         InitializeIndices(totalSamples);
+    }
+
+    /// <summary>
+    /// Parses a KITTI label file and returns the dominant object class index.
+    /// KITTI label format: type truncated occluded alpha bbox(4) dimensions(3) location(3) rotation_y [score]
+    /// </summary>
+    private static int ParseKittiLabelFile(string labelDir, string binFilePath)
+    {
+        string labelFile = Path.Combine(labelDir,
+            Path.GetFileNameWithoutExtension(binFilePath) + ".txt");
+
+        if (!File.Exists(labelFile))
+            return 0;
+
+        var classCounts = new Dictionary<int, int>();
+        foreach (string line in File.ReadAllLines(labelFile))
+        {
+            if (string.IsNullOrWhiteSpace(line)) continue;
+            string typeName = line.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries)[0];
+            if (typeName.Equals("DontCare", StringComparison.OrdinalIgnoreCase)) continue;
+
+            if (KittiClassMap.TryGetValue(typeName, out int classId))
+            {
+                classCounts.TryGetValue(classId, out int count);
+                classCounts[classId] = count + 1;
+            }
+        }
+
+        if (classCounts.Count == 0)
+            return 0;
+
+        // Return the most frequent class
+        int bestClass = 0, bestCount = 0;
+        foreach (var kvp in classCounts)
+        {
+            if (kvp.Value > bestCount)
+            {
+                bestClass = kvp.Key;
+                bestCount = kvp.Value;
+            }
+        }
+
+        return bestClass;
     }
 
     protected override void UnloadDataCore()

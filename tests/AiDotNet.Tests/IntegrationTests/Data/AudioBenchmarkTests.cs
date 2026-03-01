@@ -3,6 +3,7 @@ using System.IO;
 using System.Threading.Tasks;
 using AiDotNet.Data.Audio.Benchmarks;
 using AiDotNet.Data.Transforms;
+using AiDotNet.Helpers;
 using Xunit;
 
 namespace AiDotNet.Tests.IntegrationTests.Data;
@@ -516,6 +517,145 @@ public class AudioBenchmarkTests
         midi.AddRange(trackData);
 
         return midi.ToArray();
+    }
+
+    [Fact]
+    public void FlacDecoder_DecodesAudioSamples()
+    {
+        // Test that LoadAudioSamples auto-detects FLAC and produces non-zero output.
+        // Create a minimal FLAC file with VERBATIM subframe.
+        byte[] flacData = CreateMinimalFlac(16000, 100); // 100 samples at 16kHz
+
+        var target = new double[200];
+        var numOps = MathHelper.GetNumericOperations<double>();
+        AudioLoaderHelper.LoadAudioSamples(flacData, target, 0, 200, numOps);
+
+        // Verify at least some non-zero samples were decoded
+        bool hasNonZero = false;
+        for (int i = 0; i < 100; i++)
+        {
+            if (Math.Abs(target[i]) > 1e-10)
+            {
+                hasNonZero = true;
+                break;
+            }
+        }
+
+        Assert.True(hasNonZero, "FLAC decoder should produce non-zero samples");
+
+        // Verify samples are normalized to [-1, 1]
+        for (int i = 0; i < 100; i++)
+        {
+            Assert.InRange(target[i], -1.0, 1.0);
+        }
+    }
+
+    [Fact]
+    public void AudioLoaderHelper_AutoDetectsWavVsFlac()
+    {
+        var numOps = MathHelper.GetNumericOperations<double>();
+
+        // WAV file should be detected by RIFF header
+        byte[] wavData = CreateSyntheticWav(16000, 0.01);
+        var wavTarget = new double[200];
+        AudioLoaderHelper.LoadAudioSamples(wavData, wavTarget, 0, 200, numOps);
+
+        bool wavHasNonZero = false;
+        for (int i = 0; i < wavTarget.Length; i++)
+        {
+            if (Math.Abs(wavTarget[i]) > 1e-10) { wavHasNonZero = true; break; }
+        }
+        Assert.True(wavHasNonZero, "WAV auto-detection should work through LoadAudioSamples");
+    }
+
+    /// <summary>
+    /// Creates a minimal valid FLAC file with a single frame using VERBATIM subframe encoding.
+    /// This is the simplest possible valid FLAC: raw uncompressed samples in FLAC container.
+    /// </summary>
+    private static byte[] CreateMinimalFlac(int sampleRate, int numSamples)
+    {
+        var flac = new System.Collections.Generic.List<byte>();
+        int bitsPerSample = 16;
+        int numChannels = 1;
+
+        // "fLaC" magic
+        flac.AddRange(new byte[] { (byte)'f', (byte)'L', (byte)'a', (byte)'C' });
+
+        // STREAMINFO metadata block (type 0, isLast=true)
+        flac.Add(0x80); // isLast=1, type=0
+        flac.Add(0); flac.Add(0); flac.Add(34); // length = 34 bytes
+
+        // Min/max block size (both = numSamples for single frame)
+        flac.Add((byte)(numSamples >> 8)); flac.Add((byte)(numSamples & 0xFF)); // min block
+        flac.Add((byte)(numSamples >> 8)); flac.Add((byte)(numSamples & 0xFF)); // max block
+
+        // Min/max frame size (0 = unknown)
+        flac.Add(0); flac.Add(0); flac.Add(0); // min frame
+        flac.Add(0); flac.Add(0); flac.Add(0); // max frame
+
+        // Sample rate (20 bits), channels-1 (3 bits), bps-1 (5 bits), total samples (36 bits)
+        // Byte 10: sample rate >> 12
+        flac.Add((byte)(sampleRate >> 12));
+        // Byte 11: (sample rate >> 4) & 0xFF
+        flac.Add((byte)((sampleRate >> 4) & 0xFF));
+        // Byte 12: (sampleRate & 0x0F) << 4 | (numChannels-1) << 1 | ((bps-1) >> 4)
+        flac.Add((byte)(((sampleRate & 0x0F) << 4) | ((numChannels - 1) << 1) | (((bitsPerSample - 1) >> 4) & 0x01)));
+        // Byte 13: ((bps-1) & 0x0F) << 4 | (totalSamples >> 32 & 0x0F)
+        flac.Add((byte)((((bitsPerSample - 1) & 0x0F) << 4) | (byte)((numSamples >> 32) & 0x0F)));
+        // Bytes 14-17: totalSamples lower 32 bits
+        flac.Add((byte)((numSamples >> 24) & 0xFF));
+        flac.Add((byte)((numSamples >> 16) & 0xFF));
+        flac.Add((byte)((numSamples >> 8) & 0xFF));
+        flac.Add((byte)(numSamples & 0xFF));
+
+        // MD5 signature (16 bytes of zeros — not validated)
+        for (int i = 0; i < 16; i++) flac.Add(0);
+
+        // FRAME
+        // Frame header sync code: 0xFFF8 (fixed block size)
+        int frameHeaderStart = flac.Count;
+        flac.Add(0xFF);
+        flac.Add(0xF8); // sync + fixed block size + reserved=0
+
+        // Block size code + sample rate code
+        // Block size: find code for our numSamples
+        int blockSizeCode = 6; // means: read 8-bit from end of header, blockSize = value + 1
+        int sampleRateCode = 0; // 0 = get from STREAMINFO
+        flac.Add((byte)((blockSizeCode << 4) | sampleRateCode));
+
+        // Channel assignment (0 = 1 channel mono) + sample size code + reserved
+        int channelAssignment = numChannels - 1; // 0 for mono
+        int sampleSizeCode = 4; // 4 = 16 bits
+        flac.Add((byte)((channelAssignment << 4) | (sampleSizeCode << 1)));
+
+        // Frame number (UTF-8 coded, frame 0 = single byte 0x00)
+        flac.Add(0x00);
+
+        // Block size: 8-bit value (blockSize - 1)
+        flac.Add((byte)(numSamples - 1));
+
+        // CRC-8 (placeholder — we don't validate)
+        flac.Add(0x00);
+
+        // SUBFRAME: VERBATIM (type = 1, padding=0, no wasted bits)
+        // Subframe header: [0][000001][0] = 0x02
+        flac.Add(0x02);
+
+        // Raw 16-bit samples (big-endian in FLAC)
+        for (int i = 0; i < numSamples; i++)
+        {
+            double t = (double)i / sampleRate;
+            short sample = (short)(Math.Sin(2.0 * Math.PI * 440.0 * t) * 16000);
+            flac.Add((byte)((sample >> 8) & 0xFF)); // MSB first
+            flac.Add((byte)(sample & 0xFF));
+        }
+
+        // Pad to byte boundary (already aligned)
+        // CRC-16 footer (placeholder)
+        flac.Add(0x00);
+        flac.Add(0x00);
+
+        return flac.ToArray();
     }
 
     private static string CreateTempDirectory()

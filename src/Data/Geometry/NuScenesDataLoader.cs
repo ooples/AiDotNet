@@ -16,7 +16,9 @@ namespace AiDotNet.Data.Geometry;
 ///   samples/LIDAR_TOP/   (.bin or .pcd.bin files)
 /// </code>
 /// Features are point cloud Tensor[N, PointsPerSample * Channels].
-/// Labels are simplified as scene index Tensor[N, 1].
+/// Labels are the dominant object class per frame Tensor[N, 1] (0=car, 1=truck, 2=bus,
+/// 3=trailer, 4=construction_vehicle, 5=pedestrian, 6=motorcycle, 7=bicycle,
+/// 8=traffic_cone, 9=barrier). Parsed from lidarseg or text label files.
 /// </para>
 /// </remarks>
 public class NuScenesDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor<T>>
@@ -25,6 +27,17 @@ public class NuScenesDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Ten
     private readonly string _dataPath;
     private int _sampleCount;
     private int _channels;
+
+    // nuScenes has 23 detection classes, simplified to 10 super-categories
+    private static readonly Dictionary<string, int> NuScenesClassMap = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["car"] = 0, ["truck"] = 1, ["bus"] = 2, ["trailer"] = 3,
+        ["construction_vehicle"] = 4, ["pedestrian"] = 5, ["motorcycle"] = 6,
+        ["bicycle"] = 7, ["traffic_cone"] = 8, ["barrier"] = 9,
+        // KITTI-style aliases for pre-processed exports
+        ["Car"] = 0, ["Truck"] = 1, ["Van"] = 1, ["Pedestrian"] = 5,
+        ["Cyclist"] = 7, ["Person_sitting"] = 5
+    };
 
     public override string Name => "nuScenes";
     public override string Description => "nuScenes 3D object detection (LiDAR)";
@@ -80,17 +93,39 @@ public class NuScenesDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Ten
         int floatsPerPoint = 5;
         int bytesPerFloat = 4;
 
+        // Find label directory: try lidarseg (per-point uint8), then label/ or label_2/ (text)
+        string? labelDir = null;
+        string lidarsegDir = Path.Combine(_dataPath, "lidarseg");
+        string labelTextDir = Path.Combine(_dataPath, "label");
+        string label2Dir = Path.Combine(_dataPath, "label_2");
+        bool useLidarseg = false;
+
+        if (Directory.Exists(lidarsegDir) && Directory.GetFiles(lidarsegDir, "*.bin").Length > 0)
+        {
+            labelDir = lidarsegDir;
+            useLidarseg = true;
+        }
+        else if (Directory.Exists(labelTextDir))
+        {
+            labelDir = labelTextDir;
+        }
+        else if (Directory.Exists(label2Dir))
+        {
+            labelDir = label2Dir;
+        }
+
         for (int i = 0; i < totalSamples; i++)
         {
             cancellationToken.ThrowIfCancellationRequested();
             byte[] bytes = await FilePolyfill.ReadAllBytesAsync(binFiles[i], cancellationToken);
 
-            int totalPoints = bytes.Length / (floatsPerPoint * bytesPerFloat);
+            int localFloatsPerPoint = floatsPerPoint;
+            int totalPoints = bytes.Length / (localFloatsPerPoint * bytesPerFloat);
             // If format doesn't match 5 floats, try 4 floats
-            if (totalPoints == 0 || totalPoints * floatsPerPoint * bytesPerFloat != bytes.Length)
+            if (totalPoints == 0 || totalPoints * localFloatsPerPoint * bytesPerFloat != bytes.Length)
             {
-                floatsPerPoint = 4;
-                totalPoints = bytes.Length / (floatsPerPoint * bytesPerFloat);
+                localFloatsPerPoint = 4;
+                totalPoints = bytes.Length / (localFloatsPerPoint * bytesPerFloat);
             }
 
             int pointsToRead = Math.Min(totalPoints, _options.PointsPerSample);
@@ -98,7 +133,7 @@ public class NuScenesDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Ten
             int featureOffset = i * featureSize;
             for (int p = 0; p < pointsToRead; p++)
             {
-                int byteBase = p * floatsPerPoint * bytesPerFloat;
+                int byteBase = p * localFloatsPerPoint * bytesPerFloat;
                 for (int c = 0; c < _channels; c++)
                 {
                     if (byteBase + (c + 1) * bytesPerFloat <= bytes.Length)
@@ -109,12 +144,98 @@ public class NuScenesDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Ten
                 }
             }
 
-            labelsData[i] = NumOps.FromDouble(i);
+            // Parse label for this frame
+            labelsData[i] = NumOps.FromDouble(
+                ParseNuScenesLabel(labelDir, binFiles[i], useLidarseg));
         }
 
         LoadedFeatures = new Tensor<T>(featuresData, new[] { totalSamples, featureSize });
         LoadedLabels = new Tensor<T>(labelsData, new[] { totalSamples, 1 });
         InitializeIndices(totalSamples);
+    }
+
+    /// <summary>
+    /// Parses a nuScenes label and returns the dominant object class.
+    /// Supports: lidarseg binary files (per-point uint8 labels) and text label files.
+    /// </summary>
+    private static int ParseNuScenesLabel(string? labelDir, string binFilePath, bool useLidarseg)
+    {
+        if (labelDir == null) return 0;
+
+        string baseName = Path.GetFileNameWithoutExtension(binFilePath);
+
+        if (useLidarseg)
+        {
+            // Lidarseg: binary file with one uint8 per point (semantic class)
+            string lblFile = Path.Combine(labelDir, baseName + ".bin");
+            if (!File.Exists(lblFile))
+                lblFile = Path.Combine(labelDir, baseName + "_lidarseg.bin");
+            if (!File.Exists(lblFile))
+                return 0;
+
+            byte[] lblBytes = File.ReadAllBytes(lblFile);
+            var classCounts = new Dictionary<int, int>();
+            foreach (byte b in lblBytes)
+            {
+                if (b == 0) continue; // Skip background/unlabeled
+                classCounts.TryGetValue(b, out int count);
+                classCounts[b] = count + 1;
+            }
+
+            return FindDominantClass(classCounts);
+        }
+        else
+        {
+            // Text label file: "type ..." or "class_id ..." per line
+            string lblFile = Path.Combine(labelDir, baseName + ".txt");
+            if (!File.Exists(lblFile))
+                return 0;
+
+            var classCounts = new Dictionary<int, int>();
+            foreach (string line in File.ReadAllLines(lblFile))
+            {
+                if (string.IsNullOrWhiteSpace(line)) continue;
+                string[] parts = line.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length == 0) continue;
+
+                int classId;
+                if (int.TryParse(parts[0], out int numericId))
+                {
+                    classId = numericId;
+                }
+                else
+                {
+                    string key = parts[0].Replace("vehicle.", "").Replace("human.pedestrian.", "pedestrian")
+                        .Replace("movable_object.", "");
+                    if (!NuScenesClassMap.TryGetValue(key, out classId) &&
+                        !NuScenesClassMap.TryGetValue(parts[0], out classId))
+                        continue;
+                }
+
+                classCounts.TryGetValue(classId, out int count);
+                classCounts[classId] = count + 1;
+            }
+
+            return FindDominantClass(classCounts);
+        }
+    }
+
+    private static int FindDominantClass(Dictionary<int, int> classCounts)
+    {
+        if (classCounts.Count == 0)
+            return 0;
+
+        int bestClass = 0, bestCount = 0;
+        foreach (var kvp in classCounts)
+        {
+            if (kvp.Value > bestCount)
+            {
+                bestClass = kvp.Key;
+                bestCount = kvp.Value;
+            }
+        }
+
+        return bestClass;
     }
 
     protected override void UnloadDataCore()

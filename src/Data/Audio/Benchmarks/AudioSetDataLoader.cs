@@ -139,7 +139,7 @@ public class AudioSetDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Ten
             if (File.Exists(audioPath))
             {
                 byte[] audioBytes = await FilePolyfill.ReadAllBytesAsync(audioPath, cancellationToken);
-                AudioLoaderHelper.LoadWavSamples(audioBytes, featuresData, i * _maxAudioSamples, _maxAudioSamples, NumOps);
+                AudioLoaderHelper.LoadAudioSamples(audioBytes, featuresData, i * _maxAudioSamples, _maxAudioSamples, NumOps);
             }
 
             // Multi-hot encode labels

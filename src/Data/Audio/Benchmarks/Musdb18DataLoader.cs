@@ -101,7 +101,7 @@ public class Musdb18DataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tens
             if (File.Exists(mixturePath))
             {
                 byte[] audioBytes = await FilePolyfill.ReadAllBytesAsync(mixturePath, cancellationToken);
-                AudioLoaderHelper.LoadWavSamples(audioBytes, featuresData, i * _segmentSamples, _segmentSamples, NumOps);
+                AudioLoaderHelper.LoadAudioSamples(audioBytes, featuresData, i * _segmentSamples, _segmentSamples, NumOps);
             }
 
             // Load stems
@@ -112,7 +112,7 @@ public class Musdb18DataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tens
                 {
                     byte[] stemBytes = await FilePolyfill.ReadAllBytesAsync(stemPath, cancellationToken);
                     int labelOffset = i * _segmentSamples * NumStems + s * _segmentSamples;
-                    AudioLoaderHelper.LoadWavSamples(stemBytes, labelsData, labelOffset, _segmentSamples, NumOps);
+                    AudioLoaderHelper.LoadAudioSamples(stemBytes, labelsData, labelOffset, _segmentSamples, NumOps);
                 }
             }
         }
