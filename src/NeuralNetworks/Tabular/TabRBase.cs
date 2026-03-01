@@ -37,6 +37,11 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 public abstract class TabRBase<T>
 {
     /// <summary>
+    /// Provides access to the hardware-accelerated tensor engine.
+    /// </summary>
+    protected IEngine Engine => AiDotNetEngine.Current;
+
+    /// <summary>
     /// Numeric operations helper for type T.
     /// </summary>
     protected readonly INumericOperations<T> NumOps;

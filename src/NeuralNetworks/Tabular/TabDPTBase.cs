@@ -34,6 +34,11 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 public abstract class TabDPTBase<T>
 {
+    /// <summary>
+    /// Provides access to the hardware-accelerated tensor engine.
+    /// </summary>
+    protected IEngine Engine => AiDotNetEngine.Current;
+
     protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     protected readonly TabDPTOptions<T> Options;
     protected readonly Random _random;
@@ -194,7 +199,7 @@ public abstract class TabDPTBase<T>
                 var catEmb = _categoricalEmbeddings[catIdx].Forward(oneHot);
 
                 // Add to embeddings
-                embeddings = AiDotNetEngine.Current.TensorAdd(embeddings, catEmb);
+                embeddings = Engine.TensorAdd(embeddings, catEmb);
             }
         }
 
