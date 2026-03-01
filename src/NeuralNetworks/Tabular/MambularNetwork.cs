@@ -68,6 +68,18 @@ public class MambularNetwork<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Initializes a new Mambular network with the specified architecture.
     /// </summary>
+    /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    public MambularNetwork()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.OneDimensional,
+            taskType: Enums.NeuralNetworkTaskType.Regression,
+            inputSize: 10,
+            outputSize: 10))
+    {
+    }
+
     public MambularNetwork(
         NeuralNetworkArchitecture<T> architecture,
         MambularOptions<T>? options = null,

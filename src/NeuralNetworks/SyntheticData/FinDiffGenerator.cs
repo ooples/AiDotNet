@@ -111,6 +111,18 @@ public class FinDiffGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
     /// FinDiff layers based on the original research paper specifications.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    public FinDiffGenerator()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.OneDimensional,
+            taskType: Enums.NeuralNetworkTaskType.Regression,
+            inputSize: 10,
+            outputSize: 10))
+    {
+    }
+
     public FinDiffGenerator(
         NeuralNetworkArchitecture<T> architecture,
         FinDiffOptions<T>? options = null,

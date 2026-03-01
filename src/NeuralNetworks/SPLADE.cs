@@ -57,7 +57,19 @@ namespace AiDotNet.NeuralNetworks
         /// <summary>
         /// Initializes a new instance of the SPLADE model.
         /// </summary>
-        public SPLADE(
+        /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    public SPLADE()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.OneDimensional,
+            taskType: Enums.NeuralNetworkTaskType.Regression,
+            inputSize: 768,
+            outputSize: 768))
+    {
+    }
+
+    public SPLADE(
             NeuralNetworkArchitecture<T> architecture,
             ITokenizer? tokenizer = null,
             IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,

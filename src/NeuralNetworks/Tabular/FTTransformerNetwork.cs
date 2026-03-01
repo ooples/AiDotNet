@@ -72,6 +72,18 @@ public class FTTransformerNetwork<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Initializes a new FT-Transformer network with the specified architecture.
     /// </summary>
+    /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    public FTTransformerNetwork()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.OneDimensional,
+            taskType: Enums.NeuralNetworkTaskType.Regression,
+            inputSize: 10,
+            outputSize: 10))
+    {
+    }
+
     public FTTransformerNetwork(
         NeuralNetworkArchitecture<T> architecture,
         FTTransformerOptions<T>? options = null,

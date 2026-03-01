@@ -126,6 +126,18 @@ public class GraphAttentionNetwork<T> : NeuralNetworkBase<T>
     /// ```
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    public GraphAttentionNetwork()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.OneDimensional,
+            taskType: Enums.NeuralNetworkTaskType.MultiClassClassification,
+            inputSize: 128,
+            outputSize: 7))
+    {
+    }
+
     public GraphAttentionNetwork(
         NeuralNetworkArchitecture<T> architecture,
         int numHeads = 8,

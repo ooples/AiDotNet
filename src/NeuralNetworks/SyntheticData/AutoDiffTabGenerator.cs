@@ -124,6 +124,18 @@ public class AutoDiffTabGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGe
     /// search discovers the best denoiser configuration automatically.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    public AutoDiffTabGenerator()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.OneDimensional,
+            taskType: Enums.NeuralNetworkTaskType.Regression,
+            inputSize: 10,
+            outputSize: 10))
+    {
+    }
+
     public AutoDiffTabGenerator(
         NeuralNetworkArchitecture<T> architecture,
         AutoDiffTabOptions<T>? options = null,

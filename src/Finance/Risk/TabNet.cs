@@ -62,6 +62,18 @@ public class TabNet<T> : RiskModelBase<T>
     /// This keeps the model flexible while still following the golden pattern.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    public TabNet()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: AiDotNet.Enums.InputType.OneDimensional,
+            taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression,
+            inputSize: 10,
+            outputSize: 1))
+    {
+    }
+
     public TabNet(
         NeuralNetworkArchitecture<T> architecture,
         TabNetOptions<T>? options = null,

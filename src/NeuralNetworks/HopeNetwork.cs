@@ -37,6 +37,18 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
     private T _selfModificationRate;
     private static readonly INumericOperations<T> _numOps = MathHelper.GetNumericOperations<T>();
 
+    /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    public HopeNetwork()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.OneDimensional,
+            taskType: Enums.NeuralNetworkTaskType.Regression,
+            inputSize: 128,
+            outputSize: 1))
+    {
+    }
+
     public HopeNetwork(
         NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,

@@ -151,7 +151,19 @@ namespace AiDotNet.NeuralNetworks
         /// know (vocabSize), how detailed its "mental map" should be (embeddingDimension), and which 
         /// learning strategy it should use (type).
         /// </remarks>
-        public Word2Vec(
+        /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    public Word2Vec()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.OneDimensional,
+            taskType: Enums.NeuralNetworkTaskType.Regression,
+            inputSize: 768,
+            outputSize: 768))
+    {
+    }
+
+    public Word2Vec(
             NeuralNetworkArchitecture<T> architecture,
             ITokenizer? tokenizer = null,
             IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,

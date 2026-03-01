@@ -71,6 +71,18 @@ public class ConvolutionalNeuralNetwork<T> : NeuralNetworkBase<T>
     /// dimension adaptation internally.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    public ConvolutionalNeuralNetwork()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.TwoDimensional,
+            taskType: Enums.NeuralNetworkTaskType.MultiClassClassification,
+            inputHeight: 28, inputWidth: 28, inputDepth: 1,
+            outputSize: 10))
+    {
+    }
+
     public ConvolutionalNeuralNetwork(
         NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,

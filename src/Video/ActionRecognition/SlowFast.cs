@@ -133,6 +133,18 @@ public class SlowFast<T> : NeuralNetworkBase<T>
     /// <param name="slowChannels">Base channels for slow pathway (default: 64).</param>
     /// <param name="fastChannels">Base channels for fast pathway (default: 8).</param>
     /// <param name="alpha">Frame rate ratio between fast and slow pathways (default: 8).</param>
+    /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    public SlowFast()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.ThreeDimensional,
+            taskType: Enums.NeuralNetworkTaskType.MultiClassClassification,
+            inputHeight: 224, inputWidth: 224, inputDepth: 3,
+            outputSize: 400))
+    {
+    }
+
     public SlowFast(
         NeuralNetworkArchitecture<T> architecture,
         int numClasses = 400,

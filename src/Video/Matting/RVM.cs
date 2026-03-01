@@ -83,6 +83,18 @@ public class RVM<T> : NeuralNetworkBase<T>
 
     #region Constructors
 
+    /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    public RVM()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.ThreeDimensional,
+            taskType: Enums.NeuralNetworkTaskType.BinaryClassification,
+            inputHeight: 256, inputWidth: 256, inputDepth: 3,
+            outputSize: 1))
+    {
+    }
+
     public RVM(
         NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,

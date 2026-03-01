@@ -100,6 +100,18 @@ public class VoxelCNN<T> : NeuralNetworkBase<T>
     /// - baseFilters: Starting number of feature detectors (32 is a good default)
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    public VoxelCNN()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.ThreeDimensional,
+            taskType: Enums.NeuralNetworkTaskType.Regression,
+            inputHeight: 64, inputWidth: 64, inputDepth: 64,
+            outputSize: 1))
+    {
+    }
+
     public VoxelCNN(
         NeuralNetworkArchitecture<T> architecture,
         int voxelResolution = 32,

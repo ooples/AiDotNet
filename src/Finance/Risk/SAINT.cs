@@ -48,6 +48,18 @@ public class SAINT<T> : RiskModelBase<T>
     /// SAINT learns both column relationships (features) and row relationships (samples).
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    public SAINT()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: AiDotNet.Enums.InputType.OneDimensional,
+            taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression,
+            inputSize: 10,
+            outputSize: 1))
+    {
+    }
+
     public SAINT(
         NeuralNetworkArchitecture<T> architecture,
         SAINTOptions<T>? options = null,

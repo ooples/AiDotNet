@@ -67,6 +67,18 @@ public class TabPFNNetwork<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Initializes a new TabPFN network with the specified architecture.
     /// </summary>
+    /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    public TabPFNNetwork()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.OneDimensional,
+            taskType: Enums.NeuralNetworkTaskType.Regression,
+            inputSize: 10,
+            outputSize: 10))
+    {
+    }
+
     public TabPFNNetwork(
         NeuralNetworkArchitecture<T> architecture,
         TabPFNOptions<T>? options = null,

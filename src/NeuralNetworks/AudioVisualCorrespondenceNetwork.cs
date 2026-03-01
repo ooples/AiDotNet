@@ -107,6 +107,18 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
     /// <param name="numEncoderLayers">Number of encoder layers per modality.</param>
     /// <param name="optimizer">Gradient-based optimizer for training.</param>
     /// <param name="lossFunction">Loss function for training.</param>
+    /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    public AudioVisualCorrespondenceNetwork()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.OneDimensional,
+            taskType: Enums.NeuralNetworkTaskType.BinaryClassification,
+            inputSize: 512,
+            outputSize: 1))
+    {
+    }
+
     public AudioVisualCorrespondenceNetwork(
         NeuralNetworkArchitecture<T> architecture,
         int embeddingDimension = DEFAULT_EMBEDDING_DIM,

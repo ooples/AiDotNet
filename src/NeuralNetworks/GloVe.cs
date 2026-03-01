@@ -135,7 +135,19 @@ namespace AiDotNet.NeuralNetworks
         /// <b>For Beginners:</b> This constructor builds the framework for the model. You can 
         /// decide how many words it should know and how detailed its "dictionary" should be.
         /// </remarks>
-        public GloVe(
+        /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    public GloVe()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.OneDimensional,
+            taskType: Enums.NeuralNetworkTaskType.Regression,
+            inputSize: 768,
+            outputSize: 768))
+    {
+    }
+
+    public GloVe(
             NeuralNetworkArchitecture<T> architecture,
             ITokenizer? tokenizer = null,
             IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
