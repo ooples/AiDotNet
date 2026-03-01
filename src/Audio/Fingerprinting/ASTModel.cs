@@ -525,52 +525,9 @@ public class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
     /// </summary>
     private Tensor<T> LayerNorm(Tensor<T> input)
     {
-        int batchSize = input.Shape[0];
-        int seqLen = input.Shape[1];
-        int dim = input.Shape[2];
-        double epsilon = 1e-6;
-
-        var normalized = new T[input.Length];
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int s = 0; s < seqLen; s++)
-            {
-                // Compute mean
-                double mean = 0;
-                for (int d = 0; d < dim; d++)
-                {
-                    int idx = b * seqLen * dim + s * dim + d;
-                    mean += _numOps.ToDouble(input.Data.Span[idx]);
-                }
-                mean /= dim;
-
-                // Compute variance
-                double variance = 0;
-                for (int d = 0; d < dim; d++)
-                {
-                    int idx = b * seqLen * dim + s * dim + d;
-                    double diff = _numOps.ToDouble(input.Data.Span[idx]) - mean;
-                    variance += diff * diff;
-                }
-                variance /= dim;
-
-                double std = Math.Sqrt(variance + epsilon);
-
-                // Normalize
-                for (int d = 0; d < dim; d++)
-                {
-                    int idx = b * seqLen * dim + s * dim + d;
-                    double val = _numOps.ToDouble(input.Data.Span[idx]);
-                    double normed = (val - mean) / std;
-                    double gamma = d < _normGamma.Length ? _numOps.ToDouble(_normGamma[d]) : 1.0;
-                    double beta = d < _normBeta.Length ? _numOps.ToDouble(_normBeta[d]) : 0.0;
-                    normalized[idx] = _numOps.FromDouble(gamma * normed + beta);
-                }
-            }
-        }
-
-        return new Tensor<T>(normalized, input.Shape);
+        var gammaTensor = new Tensor<T>(_normGamma, [_normGamma.Length]);
+        var betaTensor = new Tensor<T>(_normBeta, [_normBeta.Length]);
+        return Engine.LayerNorm(input, gammaTensor, betaTensor, 1e-6, out _, out _);
     }
 
     /// <summary>
@@ -1082,48 +1039,9 @@ public class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
 
         private Tensor<T> LayerNorm(Tensor<T> input, T[] gamma, T[] beta)
         {
-            int batchSize = input.Shape[0];
-            int seqLen = input.Shape[1];
-            int dim = input.Shape[2];
-            double epsilon = 1e-6;
-
-            var normalized = new T[input.Length];
-
-            for (int b = 0; b < batchSize; b++)
-            {
-                for (int s = 0; s < seqLen; s++)
-                {
-                    double mean = 0;
-                    for (int d = 0; d < dim; d++)
-                    {
-                        int idx = b * seqLen * dim + s * dim + d;
-                        mean += _ops.ToDouble(input.Data.Span[idx]);
-                    }
-                    mean /= dim;
-
-                    double variance = 0;
-                    for (int d = 0; d < dim; d++)
-                    {
-                        int idx = b * seqLen * dim + s * dim + d;
-                        double diff = _ops.ToDouble(input.Data.Span[idx]) - mean;
-                        variance += diff * diff;
-                    }
-                    variance /= dim;
-                    double std = Math.Sqrt(variance + epsilon);
-
-                    for (int d = 0; d < dim; d++)
-                    {
-                        int idx = b * seqLen * dim + s * dim + d;
-                        double val = _ops.ToDouble(input.Data.Span[idx]);
-                        double normed = (val - mean) / std;
-                        double g = d < gamma.Length ? _ops.ToDouble(gamma[d]) : 1.0;
-                        double be = d < beta.Length ? _ops.ToDouble(beta[d]) : 0.0;
-                        normalized[idx] = _ops.FromDouble(g * normed + be);
-                    }
-                }
-            }
-
-            return new Tensor<T>(normalized, input.Shape);
+            var gammaTensor = new Tensor<T>(gamma, [gamma.Length]);
+            var betaTensor = new Tensor<T>(beta, [beta.Length]);
+            return AiDotNetEngine.Current.LayerNorm(input, gammaTensor, betaTensor, 1e-6, out _, out _);
         }
 
         private Tensor<T> SelfAttention(Tensor<T> input)

@@ -1053,30 +1053,7 @@ internal class InformerEncoderLayerTensor<T>
 
     private Tensor<T> LayerNorm(Tensor<T> input, Tensor<T> gamma, Tensor<T> beta)
     {
-        int n = Math.Min(input.Length, gamma.Length);
-        double mean = 0;
-        for (int i = 0; i < n; i++)
-            mean += _numOps.ToDouble(input[i]);
-        mean /= n;
-
-        double variance = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double diff = _numOps.ToDouble(input[i]) - mean;
-            variance += diff * diff;
-        }
-        variance /= n;
-        double stddev = Math.Sqrt(variance + 1e-6);
-
-        var output = new Tensor<T>(new[] { n });
-        for (int i = 0; i < n; i++)
-        {
-            double norm = (_numOps.ToDouble(input[i]) - mean) / stddev;
-            output[i] = _numOps.Add(
-                _numOps.Multiply(gamma[i], _numOps.FromDouble(norm)),
-                beta[i]);
-        }
-        return output;
+        return AiDotNetEngine.Current.LayerNorm(input, gamma, beta, 1e-6, out _, out _);
     }
 
     private Tensor<T> MatVecMul(Tensor<T> matrix, Tensor<T> vec)
@@ -1729,30 +1706,7 @@ internal class InformerDecoderLayerTensor<T>
 
     private Tensor<T> LayerNorm(Tensor<T> input, Tensor<T> gamma, Tensor<T> beta)
     {
-        int n = Math.Min(input.Length, gamma.Length);
-        double mean = 0;
-        for (int i = 0; i < n; i++)
-            mean += _numOps.ToDouble(input[i]);
-        mean /= n;
-
-        double variance = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double diff = _numOps.ToDouble(input[i]) - mean;
-            variance += diff * diff;
-        }
-        variance /= n;
-        double stddev = Math.Sqrt(variance + 1e-6);
-
-        var output = new Tensor<T>(new[] { n });
-        for (int i = 0; i < n; i++)
-        {
-            double norm = (_numOps.ToDouble(input[i]) - mean) / stddev;
-            output[i] = _numOps.Add(
-                _numOps.Multiply(gamma[i], _numOps.FromDouble(norm)),
-                beta[i]);
-        }
-        return output;
+        return AiDotNetEngine.Current.LayerNorm(input, gamma, beta, 1e-6, out _, out _);
     }
 
     private Tensor<T> MatVecMul(Tensor<T> matrix, Tensor<T> vec)
