@@ -38,6 +38,14 @@ namespace AiDotNet.Classification.Meta;
 public class OneVsOneClassifier<T> : MetaClassifierBase<T>
 {
     /// <summary>
+    /// Initializes a new instance with default settings using Gaussian Naive Bayes as the base estimator.
+    /// </summary>
+    public OneVsOneClassifier()
+        : this(() => new AiDotNet.Classification.NaiveBayes.GaussianNaiveBayes<T>())
+    {
+    }
+
+    /// <summary>
     /// The binary classifiers for each pair of classes.
     /// </summary>
     private IClassifier<T>[]? _estimators;

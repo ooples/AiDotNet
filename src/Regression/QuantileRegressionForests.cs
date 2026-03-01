@@ -27,6 +27,14 @@ namespace AiDotNet.Regression;
 public class QuantileRegressionForests<T> : AsyncDecisionTreeRegressionBase<T>
 {
     /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public QuantileRegressionForests()
+        : this(new QuantileRegressionForestsOptions())
+    {
+    }
+
+    /// <summary>
     /// Configuration options for the Quantile Regression Forests model.
     /// </summary>
     /// <value>
