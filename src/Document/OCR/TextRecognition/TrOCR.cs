@@ -518,7 +518,7 @@ public class TrOCR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
 
         var slice = new Tensor<T>([actualCount]);
         logits.Data.Span.Slice(startIdx, actualCount).CopyTo(slice.Data.Span);
-        var result = AiDotNetEngine.Current.Softmax(slice, -1);
+        var result = Engine.Softmax(slice, -1);
 
         var probs = new T[vocabSize];
         result.Data.Span.CopyTo(probs.AsSpan(0, actualCount));

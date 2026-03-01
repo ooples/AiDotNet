@@ -309,7 +309,7 @@ public class TabPFNClassifier<T> : TabPFNBase<T>
 
     private Tensor<T> ApplySoftmax(Tensor<T> logits)
     {
-        return AiDotNetEngine.Current.Softmax(logits, -1);
+        return Engine.Softmax(logits, -1);
     }
 
     /// <summary>

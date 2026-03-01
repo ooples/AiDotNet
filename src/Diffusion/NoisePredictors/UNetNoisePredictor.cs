@@ -591,7 +591,7 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     /// </summary>
     private Tensor<T> ConcatenateChannels(Tensor<T> a, Tensor<T> b)
     {
-        return AiDotNetEngine.Current.TensorConcatenate([a, b], axis: 1);
+        return Engine.TensorConcatenate([a, b], axis: 1);
     }
 
     #region Layer Factory Methods

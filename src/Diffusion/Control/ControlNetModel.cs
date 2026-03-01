@@ -604,7 +604,7 @@ public class ControlNetModel<T> : LatentDiffusionModelBase<T>
     /// </summary>
     private Tensor<T> ScaleTensor(Tensor<T> tensor, double scale)
     {
-        return AiDotNetEngine.Current.TensorMultiplyScalar(tensor, NumOps.FromDouble(scale));
+        return Engine.TensorMultiplyScalar(tensor, NumOps.FromDouble(scale));
     }
 
     /// <summary>
@@ -612,7 +612,7 @@ public class ControlNetModel<T> : LatentDiffusionModelBase<T>
     /// </summary>
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
-        return AiDotNetEngine.Current.TensorBroadcastAdd(a, b);
+        return Engine.TensorBroadcastAdd(a, b);
     }
 
     /// <inheritdoc />

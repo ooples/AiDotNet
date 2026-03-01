@@ -458,7 +458,7 @@ public class AudioVAE<T> : VAEModelBase<T>
         int melChannels = melSpec.Shape[1];
         int timeFrames = melSpec.Shape[0];
         // Transpose [timeFrames, melChannels] -> [melChannels, timeFrames], then add batch dim
-        var transposed = AiDotNetEngine.Current.TensorPermute(melSpec, [1, 0]);
+        var transposed = Engine.TensorPermute(melSpec, [1, 0]);
         return transposed.Reshape([1, melChannels, timeFrames]);
     }
 

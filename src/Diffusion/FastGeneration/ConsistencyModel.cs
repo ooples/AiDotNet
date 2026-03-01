@@ -577,7 +577,7 @@ public class ConsistencyModel<T> : LatentDiffusionModelBase<T>
     /// </summary>
     private Tensor<T> ScaleTensor(Tensor<T> tensor, double scale)
     {
-        return AiDotNetEngine.Current.TensorMultiplyScalar(tensor, NumOps.FromDouble(scale));
+        return Engine.TensorMultiplyScalar(tensor, NumOps.FromDouble(scale));
     }
 
     #endregion

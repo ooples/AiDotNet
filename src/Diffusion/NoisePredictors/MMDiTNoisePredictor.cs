@@ -825,7 +825,7 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
 
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
-        return AiDotNetEngine.Current.TensorAdd(a, b);
+        return Engine.TensorAdd(a, b);
     }
 
     private Tensor<T> ConcatenateSequences(Tensor<T> a, Tensor<T> b)

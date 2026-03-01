@@ -655,7 +655,7 @@ public class NTMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
 
     private Tensor<T> ConcatenateTensors(Tensor<T> a, Tensor<T> b)
     {
-        return AiDotNetEngine.Current.TensorConcatenate([a, b], axis: 0);
+        return Engine.TensorConcatenate([a, b], axis: 0);
     }
 
     private T ComputeLoss(Tensor<T> predictions, TOutput targets)

@@ -210,7 +210,7 @@ public class YOLOv9<T> : ObjectDetectorBase<T>
 
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
-        return AiDotNetEngine.Current.TensorAdd(a, b);
+        return Engine.TensorAdd(a, b);
     }
 
     /// <inheritdoc/>
