@@ -22,6 +22,18 @@ namespace AiDotNet.ReinforcementLearning.Policies
         private readonly bool _useTanhSquashing;
 
         /// <summary>
+        /// <summary>
+        /// Initializes a new instance with default settings.
+        /// </summary>
+        public DeterministicPolicy()
+            : this(
+                new NeuralNetwork<T>(),
+                2,
+                new EpsilonGreedyExploration<T>())
+        {
+        }
+
+        /// <summary>
         /// Initializes a new instance of the DeterministicPolicy class.
         /// </summary>
         /// <param name="policyNetwork">The neural network that outputs actions.</param>

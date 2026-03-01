@@ -19,6 +19,18 @@ namespace AiDotNet.ReinforcementLearning.Policies
         private readonly int _actionSize;
         private readonly int _numComponents;
 
+        /// <summary>
+        /// Initializes a new instance with default settings.
+        /// </summary>
+        public MultiModalPolicy()
+            : this(
+                new NeuralNetwork<T>(),
+                2,
+                3,
+                new EpsilonGreedyExploration<T>())
+        {
+        }
+
         public MultiModalPolicy(
             NeuralNetwork<T> policyNetwork,
             int actionSize,

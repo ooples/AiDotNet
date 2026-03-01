@@ -20,6 +20,17 @@ namespace AiDotNet.ReinforcementLearning.Policies
         private readonly int _actionSize;
         private readonly bool _useTanhSquashing;
 
+        /// <summary>
+        /// Initializes a new instance with default settings.
+        /// </summary>
+        public ContinuousPolicy()
+            : this(
+                new NeuralNetwork<T>(),
+                2,
+                new EpsilonGreedyExploration<T>())
+        {
+        }
+
         public ContinuousPolicy(
             NeuralNetwork<T> policyNetwork,
             int actionSize,

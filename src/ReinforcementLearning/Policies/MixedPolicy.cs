@@ -28,6 +28,20 @@ namespace AiDotNet.ReinforcementLearning.Policies
         /// <summary>
         /// Initializes a new instance of the MixedPolicy class.
         /// </summary>
+        /// <summary>
+        /// Initializes a new instance with default settings.
+        /// </summary>
+        public MixedPolicy()
+            : this(
+                new NeuralNetwork<T>(),
+                new NeuralNetwork<T>(),
+                2,
+                2,
+                new EpsilonGreedyExploration<T>(),
+                new EpsilonGreedyExploration<T>())
+        {
+        }
+
         /// <param name="discreteNetwork">Network for discrete action logits.</param>
         /// <param name="continuousNetwork">Network for continuous action parameters (mean and log_std).</param>
         /// <param name="discreteActionSize">Number of discrete actions.</param>
