@@ -798,12 +798,7 @@ public class LoRAXSAdapter<T> : LoRAAdapterBase<T>
     /// </summary>
     private Tensor<T> ScaleTensor(Tensor<T> tensor, T scalar)
     {
-        Tensor<T> result = new Tensor<T>(tensor.Shape);
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            result[i] = NumOps.Multiply(tensor[i], scalar);
-        }
-        return result;
+        return AiDotNetEngine.Current.TensorMultiplyScalar(tensor, scalar);
     }
 
     /// <summary>

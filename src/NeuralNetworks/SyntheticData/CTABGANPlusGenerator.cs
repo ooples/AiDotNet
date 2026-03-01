@@ -662,7 +662,7 @@ public class CTABGANPlusGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGe
             if (_classifierHead is not null)
             {
                 var classGrad = ComputeClassifierGradient(classLogits, _packedRealBuf);
-                ScaleTensor(classGrad, _options.ClassifierWeight);
+                classGrad = ScaleTensor(classGrad, _options.ClassifierWeight);
                 _classifierHead.Backward(classGrad);
                 _classifierHead.UpdateParameters(scaledLr);
             }
@@ -1538,12 +1538,9 @@ public class CTABGANPlusGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGe
         return clone;
     }
 
-    private void ScaleTensor(Tensor<T> tensor, double scale)
+    private Tensor<T> ScaleTensor(Tensor<T> tensor, double scale)
     {
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            tensor[i] = NumOps.FromDouble(NumOps.ToDouble(tensor[i]) * scale);
-        }
+        return Engine.TensorMultiplyScalar(tensor, NumOps.FromDouble(scale));
     }
 
     #endregion
