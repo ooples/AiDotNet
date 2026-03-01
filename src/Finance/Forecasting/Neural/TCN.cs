@@ -260,6 +260,18 @@ public class TCN<T> : ForecastingModelBase<T>
     /// - Audio processing, financial time series, weather forecasting
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Initializes a new TCN with default architecture for univariate time series forecasting.
+    /// </summary>
+    public TCN()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            inputSize: 1,
+            outputSize: 1))
+    {
+    }
+
     public TCN(
         NeuralNetworkArchitecture<T> architecture,
         TCNOptions<T>? options = null,
