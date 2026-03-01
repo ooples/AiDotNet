@@ -121,6 +121,18 @@ public class RAFT<T> : OpticalFlowBase<T>
     /// <param name="correlationLevels">The number of levels in the correlation pyramid.</param>
     /// <param name="correlationRadius">The search radius for correlation lookup.</param>
     /// <param name="numIterations">The number of GRU refinement iterations.</param>
+    /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    public RAFT()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.ThreeDimensional,
+            taskType: Enums.NeuralNetworkTaskType.Regression,
+            inputHeight: 256, inputWidth: 256, inputDepth: 3,
+            outputSize: 2))
+    {
+    }
+
     public RAFT(
         NeuralNetworkArchitecture<T> architecture,
         int numFeatures = DefaultNumFeatures,

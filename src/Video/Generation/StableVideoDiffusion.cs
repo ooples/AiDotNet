@@ -142,6 +142,18 @@ public class StableVideoDiffusion<T> : NeuralNetworkBase<T>
     /// <param name="numFrames">Number of frames to generate.</param>
     /// <param name="numInferenceSteps">Number of denoising steps.</param>
     /// <param name="guidanceScale">Classifier-free guidance scale.</param>
+    /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    public StableVideoDiffusion()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.ThreeDimensional,
+            taskType: Enums.NeuralNetworkTaskType.Regression,
+            inputHeight: 256, inputWidth: 256, inputDepth: 3,
+            outputSize: 3))
+    {
+    }
+
     public StableVideoDiffusion(
         NeuralNetworkArchitecture<T> architecture,
         SVDModelVariant variant = SVDModelVariant.SVD,

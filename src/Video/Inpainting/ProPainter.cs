@@ -102,6 +102,18 @@ public class ProPainter<T> : VideoInpaintingBase<T>
     /// </summary>
     /// <param name="architecture">The neural network architecture configuration.</param>
     /// <param name="numFeatures">The number of features in intermediate layers.</param>
+    /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    public ProPainter()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.ThreeDimensional,
+            taskType: Enums.NeuralNetworkTaskType.Regression,
+            inputHeight: 256, inputWidth: 256, inputDepth: 3,
+            outputSize: 2))
+    {
+    }
+
     public ProPainter(
         NeuralNetworkArchitecture<T> architecture,
         int numFeatures = 128,

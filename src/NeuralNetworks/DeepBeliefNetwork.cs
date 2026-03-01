@@ -185,6 +185,18 @@ public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
     /// Think of it like designing a blueprint for the tower before construction begins.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    public DeepBeliefNetwork()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.OneDimensional,
+            taskType: Enums.NeuralNetworkTaskType.Regression,
+            inputSize: 128,
+            outputSize: 1))
+    {
+    }
+
     public DeepBeliefNetwork(
         NeuralNetworkArchitecture<T> architecture,
         T? learningRate = default,

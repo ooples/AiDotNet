@@ -143,6 +143,18 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
     /// <b>For Testing:</b> Omit vocabPath and mergesPath to use a simple test tokenizer.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    public VideoCLIP()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.ThreeDimensional,
+            taskType: Enums.NeuralNetworkTaskType.MultiClassClassification,
+            inputHeight: 224, inputWidth: 224, inputDepth: 3,
+            outputSize: 400))
+    {
+    }
+
     public VideoCLIP(
         NeuralNetworkArchitecture<T> architecture,
         int numFrames = 32,
