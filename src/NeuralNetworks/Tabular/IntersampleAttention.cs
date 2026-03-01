@@ -282,10 +282,15 @@ public class IntersampleAttention<T> : LayerBase<T>
         if (inputNodes == null)
             throw new ArgumentNullException(nameof(inputNodes));
 
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
+        // Delegate to Q/K/V projection layers and compose attention
+        var queryNode = _queryProjection.ExportComputationGraph(inputNodes);
+        var keyNode = _keyProjection.ExportComputationGraph(inputNodes);
+        var valueNode = _valueProjection.ExportComputationGraph(inputNodes);
 
-        return inputNode;
+        var attentionScores = TensorOperations<T>.MatrixMultiply(queryNode, TensorOperations<T>.Transpose(keyNode));
+        var attentionWeights = TensorOperations<T>.Softmax(attentionScores);
+        var attended = TensorOperations<T>.MatrixMultiply(attentionWeights, valueNode);
+
+        return _outputProjection.ExportComputationGraph(inputNodes);
     }
 }

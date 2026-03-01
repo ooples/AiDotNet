@@ -560,6 +560,16 @@ public class BatchEnsembleLayer<T> : LayerBase<T>
         var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
         inputNodes.Add(inputNode);
 
-        return inputNode;
+        // Export weights and compute matmul
+        var weightsNode = TensorOperations<T>.Constant(_weights, "weights");
+        var matmulNode = TensorOperations<T>.MatrixMultiply(inputNode, weightsNode);
+
+        if (_bias is not null)
+        {
+            var biasNode = TensorOperations<T>.Constant(_bias, "bias");
+            return TensorOperations<T>.Add(matmulNode, biasNode);
+        }
+
+        return matmulNode;
     }
 }

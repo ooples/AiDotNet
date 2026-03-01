@@ -500,10 +500,16 @@ public class FeatureTransformer<T> : LayerBase<T>
         if (inputNodes == null)
             throw new ArgumentNullException(nameof(inputNodes));
 
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
+        // Chain computation graphs through shared and step-specific FC layers
+        ComputationNode<T> current = _sharedFCLayers.Count > 0
+            ? _sharedFCLayers[0].ExportComputationGraph(inputNodes)
+            : throw new InvalidOperationException("No shared layers initialized.");
 
-        return inputNode;
+        for (int i = 1; i < _sharedFCLayers.Count; i++)
+        {
+            current = _sharedFCLayers[i].ExportComputationGraph(inputNodes);
+        }
+
+        return current;
     }
 }

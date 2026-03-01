@@ -431,10 +431,7 @@ public class AttentiveTransformer<T> : LayerBase<T>
         if (inputNodes == null)
             throw new ArgumentNullException(nameof(inputNodes));
 
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        return inputNode;
+        // Delegate to the inner fully connected layer's computation graph
+        return _fcLayer.ExportComputationGraph(inputNodes);
     }
 }

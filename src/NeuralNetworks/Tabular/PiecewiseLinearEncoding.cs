@@ -229,6 +229,9 @@ public class PiecewiseLinearEncoding<T> : LayerBase<T>
         var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
         inputNodes.Add(inputNode);
 
+        // Export bin boundaries as a constant for the computation graph
+        var boundariesNode = TensorOperations<T>.Constant(_binBoundaries, "binBoundaries");
+
         return inputNode;
     }
 }

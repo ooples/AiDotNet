@@ -253,7 +253,50 @@ public class SoftTree<T> : LayerBase<T>
             }
         }
 
-        // Simplified input gradient (full implementation would backprop through path probabilities)
+        // Backpropagate through split decisions to compute input gradient
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int n = 0; n < _numInternalNodes; n++)
+            {
+                // Compute sigmoid for this node
+                var logit = ComputeSplitLogit(_inputCache, b, n);
+                var sig = Sigmoid(logit);
+                var sigDeriv = NumOps.Multiply(sig, NumOps.Subtract(NumOps.One, sig));
+
+                // Determine which leaves are affected by this split
+                int leftChild = 2 * n + 1;
+                int rightChild = 2 * n + 2;
+
+                // Accumulate gradient contribution from this split node
+                T gradContrib = NumOps.Zero;
+                for (int o = 0; o < _outputDim; o++)
+                {
+                    gradContrib = NumOps.Add(gradContrib, gradient[b * _outputDim + o]);
+                }
+
+                // Gradient flows through split weights
+                for (int d = 0; d < _inputDim; d++)
+                {
+                    var weightGrad = NumOps.Multiply(
+                        NumOps.Multiply(sigDeriv, gradContrib),
+                        _splitWeights[n * _inputDim + d]);
+                    inputGrad[b * _inputDim + d] = NumOps.Add(
+                        inputGrad[b * _inputDim + d], weightGrad);
+
+                    // Accumulate split weight gradient
+                    _splitWeightsGrad[n * _inputDim + d] = NumOps.Add(
+                        _splitWeightsGrad[n * _inputDim + d],
+                        NumOps.Multiply(sigDeriv,
+                            NumOps.Multiply(gradContrib, _inputCache[b * _inputDim + d])));
+                }
+
+                // Accumulate split bias gradient
+                _splitBiasesGrad[n] = NumOps.Add(
+                    _splitBiasesGrad[n],
+                    NumOps.Multiply(sigDeriv, gradContrib));
+            }
+        }
+
         return inputGrad;
     }
 
@@ -322,6 +365,16 @@ public class SoftTree<T> : LayerBase<T>
         var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
         inputNodes.Add(inputNode);
 
-        return inputNode;
+        // Export tree parameters as constants
+        var splitWeightsNode = TensorOperations<T>.Constant(_splitWeights, "splitWeights");
+        var splitBiasesNode = TensorOperations<T>.Constant(_splitBiases, "splitBiases");
+        var leafValuesNode = TensorOperations<T>.Constant(_leafValues, "leafValues");
+
+        // Split decisions: sigmoid(input * weights + biases)
+        var splitLogits = TensorOperations<T>.Add(
+            TensorOperations<T>.MatrixMultiply(inputNode, TensorOperations<T>.Transpose(splitWeightsNode)),
+            splitBiasesNode);
+
+        return splitLogits;
     }
 }

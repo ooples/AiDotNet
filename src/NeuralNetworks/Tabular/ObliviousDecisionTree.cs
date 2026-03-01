@@ -393,6 +393,14 @@ public class ObliviousDecisionTree<T> : LayerBase<T>
         var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
         inputNodes.Add(inputNode);
 
-        return inputNode;
+        // Export feature selection weights and thresholds as constants
+        var featureWeightsNode = TensorOperations<T>.Constant(_featureSelectionWeights, "featureSelectionWeights");
+        var thresholdsNode = TensorOperations<T>.Constant(_thresholds, "thresholds");
+        var leafValuesNode = TensorOperations<T>.Constant(_leafValues, "leafValues");
+
+        // Feature selection: softmax over weights determines which feature each split uses
+        var featureSelection = TensorOperations<T>.MatrixMultiply(inputNode, TensorOperations<T>.Transpose(featureWeightsNode));
+
+        return featureSelection;
     }
 }

@@ -625,6 +625,21 @@ public class InteractingLayer<T> : LayerBase<T>
         var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
         inputNodes.Add(inputNode);
 
-        return inputNode;
+        // Export Q, K, V weight projections
+        var qWeightsNode = TensorOperations<T>.Constant(_queryWeights, "queryWeights");
+        var kWeightsNode = TensorOperations<T>.Constant(_keyWeights, "keyWeights");
+        var vWeightsNode = TensorOperations<T>.Constant(_valueWeights, "valueWeights");
+        var oWeightsNode = TensorOperations<T>.Constant(_outputWeights, "outputWeights");
+
+        var queryNode = TensorOperations<T>.MatrixMultiply(inputNode, qWeightsNode);
+        var keyNode = TensorOperations<T>.MatrixMultiply(inputNode, kWeightsNode);
+        var valueNode = TensorOperations<T>.MatrixMultiply(inputNode, vWeightsNode);
+
+        // Attention: softmax(Q * K^T) * V
+        var attentionScores = TensorOperations<T>.MatrixMultiply(queryNode, TensorOperations<T>.Transpose(keyNode));
+        var attentionWeights = TensorOperations<T>.Softmax(attentionScores);
+        var attended = TensorOperations<T>.MatrixMultiply(attentionWeights, valueNode);
+
+        return TensorOperations<T>.MatrixMultiply(attended, oWeightsNode);
     }
 }
