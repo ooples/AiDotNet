@@ -109,7 +109,7 @@ public static class VectorHelper
         double normB = numOps.ToDouble(engine.DotProduct(b, b));
 
         double denom = Math.Sqrt(normA * normB);
-        return denom > epsilon ? Math.Clamp(dot / denom, -1.0, 1.0) : 0;
+        return denom > epsilon ? Math.Max(-1.0, Math.Min(1.0, dot / denom)) : 0;
     }
 
     /// <summary>
