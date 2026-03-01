@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -326,12 +327,7 @@ public static class NumericalGradient<T>
     /// </summary>
     private static T DotProduct(Tensor<T> a, Tensor<T> b)
     {
-        var sum = NumOps.Zero;
-        for (int i = 0; i < a.Length; i++)
-        {
-            sum = NumOps.Add(sum, NumOps.Multiply(a[i], b[i]));
-        }
-        return sum;
+        return VectorHelper.DotProduct(a.ToVector(), b.ToVector());
     }
 
     /// <summary>

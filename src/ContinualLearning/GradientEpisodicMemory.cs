@@ -32,6 +32,7 @@ namespace AiDotNet.ContinualLearning;
 public class GradientEpisodicMemory<T> : IContinualLearningStrategy<T>
 {
     private readonly INumericOperations<T> _numOps;
+    private static IEngine Engine => AiDotNetEngine.Current;
     private readonly List<(Tensor<T> inputs, Tensor<T> targets)> _episodicMemory;
     private readonly List<Vector<T>> _referenceGradients;
     private readonly int _memorySize;
@@ -132,7 +133,7 @@ public class GradientEpisodicMemory<T> : IContinualLearningStrategy<T>
         var violations = new List<int>();
         for (int i = 0; i < _referenceGradients.Count; i++)
         {
-            var dotProduct = DotProduct(gradients, _referenceGradients[i]);
+            var dotProduct = VectorHelper.DotProduct(gradients, _referenceGradients[i]);
             var marginT = _numOps.FromDouble(-_margin);
             if (_numOps.LessThan(dotProduct, marginT))
             {
@@ -252,36 +253,20 @@ public class GradientEpisodicMemory<T> : IContinualLearningStrategy<T>
         foreach (var taskIdx in violations)
         {
             var refGrad = _referenceGradients[taskIdx];
-            var dot = DotProduct(projected, refGrad);
-            var refNormSq = DotProduct(refGrad, refGrad);
+            var dot = VectorHelper.DotProduct(projected, refGrad);
+            var refNormSq = VectorHelper.DotProduct(refGrad, refGrad);
 
             // Project out the component that violates the constraint
             if (_numOps.GreaterThan(refNormSq, _numOps.Zero))
             {
                 var scale = _numOps.Divide(dot, refNormSq);
-                for (int i = 0; i < projected.Length; i++)
-                {
-                    var adjustment = _numOps.Multiply(scale, refGrad[i]);
-                    projected[i] = _numOps.Subtract(projected[i], adjustment);
-                }
+                projected = Engine.Subtract(projected, Engine.Multiply(refGrad, scale));
             }
         }
 
         return projected;
     }
 
-    /// <summary>
-    /// Computes the dot product of two vectors.
-    /// </summary>
-    private T DotProduct(Vector<T> a, Vector<T> b)
-    {
-        var sum = _numOps.Zero;
-        for (int i = 0; i < a.Length; i++)
-        {
-            sum = _numOps.Add(sum, _numOps.Multiply(a[i], b[i]));
-        }
-        return sum;
-    }
 
     /// <summary>
     /// Computes the gradient of the loss with respect to output.

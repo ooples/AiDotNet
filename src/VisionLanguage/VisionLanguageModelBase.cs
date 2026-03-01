@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models.Options;
@@ -140,23 +141,7 @@ public abstract class VisionLanguageModelBase<T> : NeuralNetworkBase<T>
     /// <returns>Cosine similarity score in [-1, 1].</returns>
     protected T CosineSimilarity(Tensor<T> a, Tensor<T> b)
     {
-        double dotProduct = 0;
-        double normA = 0;
-        double normB = 0;
-        int dim = Math.Min(a.Length, b.Length);
-
-        for (int i = 0; i < dim; i++)
-        {
-            double av = NumOps.ToDouble(a[i]);
-            double bv = NumOps.ToDouble(b[i]);
-            dotProduct += av * bv;
-            normA += av * av;
-            normB += bv * bv;
-        }
-
-        double denom = Math.Sqrt(normA) * Math.Sqrt(normB);
-        double similarity = denom > 1e-8 ? dotProduct / denom : 0;
-        return NumOps.FromDouble(similarity);
+        return NumOps.FromDouble(VectorHelper.CosineSimilarity(a.ToVector(), b.ToVector()));
     }
 
     /// <summary>

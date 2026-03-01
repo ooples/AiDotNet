@@ -275,28 +275,21 @@ public class KernelPCADetector<T> : AnomalyDetectorBase<T>
 
     private double ComputeKernel(double[] a, double[] b, double gamma)
     {
+        var va = new Vector<double>(a);
+        var vb = new Vector<double>(b);
+
         switch (_kernel)
         {
             case KernelType.RBF:
-                double sqDist = 0;
-                for (int i = 0; i < a.Length; i++)
-                {
-                    double diff = a[i] - b[i];
-                    sqDist += diff * diff;
-                }
-                return Math.Exp(-gamma * sqDist);
+                double dist = VectorHelper.EuclideanDistance(va, vb);
+                return Math.Exp(-gamma * dist * dist);
 
             case KernelType.Polynomial:
-                double dot = 0;
-                for (int i = 0; i < a.Length; i++)
-                    dot += a[i] * b[i];
+                double dot = VectorHelper.DotProduct(va, vb);
                 return Math.Pow(dot + 1, 3); // Degree 3 polynomial
 
             case KernelType.Linear:
-                double linear = 0;
-                for (int i = 0; i < a.Length; i++)
-                    linear += a[i] * b[i];
-                return linear;
+                return VectorHelper.DotProduct(va, vb);
 
             default:
                 return 0;
@@ -353,8 +346,9 @@ public class KernelPCADetector<T> : AnomalyDetectorBase<T>
                 kVec[t] = kVec[t] - kMean - mean[t] + grandMean;
             }
 
-            // Project to kernel PCA space and reconstruct
+            // Project to kernel PCA space and compute scores
             double reconstructionError = ComputeKernel(point, point, effectiveGamma);
+            double mahalanobis = 0;
 
             for (int c = 0; c < _nComponents; c++)
             {
@@ -365,11 +359,20 @@ public class KernelPCADetector<T> : AnomalyDetectorBase<T>
                     proj += alphas[c][t] * kVec[t];
                 }
 
-                // Subtract reconstructed variance
-                reconstructionError -= proj * proj / lambdas[c];
+                // Only use components with sufficiently large eigenvalues to avoid
+                // division by near-zero lambdas causing numerical instability
+                if (lambdas[c] > 1e-10)
+                {
+                    // Subtract reconstructed variance for reconstruction error
+                    reconstructionError -= proj * proj / lambdas[c];
+
+                    // Mahalanobis distance in kernel PCA space: sum(proj^2 / lambda)
+                    mahalanobis += (proj * proj) / lambdas[c];
+                }
             }
 
-            scores[i] = NumOps.FromDouble(Math.Max(0, reconstructionError));
+            // Combined score: Mahalanobis distance + reconstruction error
+            scores[i] = NumOps.FromDouble(Math.Sqrt(mahalanobis + Math.Max(0, reconstructionError)));
         }
 
         return scores;

@@ -23,6 +23,11 @@ namespace AiDotNet.ComputerVision.Detection.Backbones;
 public abstract class BackboneBase<T>
 {
     /// <summary>
+    /// Provides access to the hardware-accelerated tensor engine.
+    /// </summary>
+    protected IEngine Engine => AiDotNetEngine.Current;
+
+    /// <summary>
     /// Numeric operations for type T.
     /// </summary>
     protected readonly INumericOperations<T> NumOps;

@@ -1,3 +1,4 @@
+using AiDotNet.Engines;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks.Layers;
 
@@ -46,6 +47,11 @@ public abstract class TabNetBase<T>
     /// Numeric operations provider for generic type T.
     /// </summary>
     protected readonly INumericOperations<T> NumOps;
+
+    /// <summary>
+    /// Hardware-accelerated engine for tensor operations.
+    /// </summary>
+    protected IEngine Engine => AiDotNetEngine.Current;
 
     /// <summary>
     /// Configuration options for TabNet.
@@ -472,12 +478,7 @@ public abstract class TabNetBase<T>
     /// </summary>
     protected Tensor<T> CreateOnes(int batchSize, int dim)
     {
-        var tensor = new Tensor<T>([batchSize, dim]);
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            tensor[i] = NumOps.One;
-        }
-        return tensor;
+        return Tensor<T>.CreateDefault([batchSize, dim], NumOps.One);
     }
 
     /// <summary>
@@ -485,12 +486,7 @@ public abstract class TabNetBase<T>
     /// </summary>
     protected Tensor<T> CreateZeros(int batchSize, int dim)
     {
-        var tensor = new Tensor<T>([batchSize, dim]);
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            tensor[i] = NumOps.Zero;
-        }
-        return tensor;
+        return Tensor<T>.CreateDefault([batchSize, dim], NumOps.Zero);
     }
 
     /// <summary>
@@ -498,12 +494,7 @@ public abstract class TabNetBase<T>
     /// </summary>
     protected Tensor<T> ApplyMask(Tensor<T> input, Tensor<T> mask)
     {
-        var result = new Tensor<T>(input.Shape);
-        for (int i = 0; i < input.Length; i++)
-        {
-            result[i] = NumOps.Multiply(input[i], mask[i]);
-        }
-        return result;
+        return Engine.TensorMultiply(input, mask);
     }
 
     /// <summary>
@@ -511,12 +502,7 @@ public abstract class TabNetBase<T>
     /// </summary>
     protected Tensor<T> ApplyMaskBackward(Tensor<T> gradient, Tensor<T> mask)
     {
-        var result = new Tensor<T>(gradient.Shape);
-        for (int i = 0; i < gradient.Length; i++)
-        {
-            result[i] = NumOps.Multiply(gradient[i], mask[i]);
-        }
-        return result;
+        return Engine.TensorMultiply(gradient, mask);
     }
 
     /// <summary>

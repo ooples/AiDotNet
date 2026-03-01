@@ -152,28 +152,12 @@ public class BYOL<T> : SSLMethodBase<T>
         // Update encoder
         var encoderGrads = _encoder.GetParameterGradients();
         var encoderParams = _encoder.GetParameters();
-        var newEncoderParams = new T[encoderParams.Length];
-
-        for (int i = 0; i < encoderParams.Length; i++)
-        {
-            newEncoderParams[i] = NumOps.Subtract(
-                encoderParams[i],
-                NumOps.Multiply(learningRate, encoderGrads[i]));
-        }
-        _encoder.UpdateParameters(new Vector<T>(newEncoderParams));
+        _encoder.UpdateParameters(Engine.Subtract(encoderParams, Engine.Multiply(encoderGrads, learningRate)));
 
         // Update online projector
         var projGrads = _onlineProjector.GetParameterGradients();
         var projParams = _onlineProjector.GetParameters();
-        var newProjParams = new T[projParams.Length];
-
-        for (int i = 0; i < projParams.Length; i++)
-        {
-            newProjParams[i] = NumOps.Subtract(
-                projParams[i],
-                NumOps.Multiply(learningRate, projGrads[i]));
-        }
-        _onlineProjector.SetParameters(new Vector<T>(newProjParams));
+        _onlineProjector.SetParameters(Engine.Subtract(projParams, Engine.Multiply(projGrads, learningRate)));
     }
 
     private void UpdateTargetProjector()
@@ -184,15 +168,9 @@ public class BYOL<T> : SSLMethodBase<T>
 
         var onlineParams = _onlineProjector.GetParameters();
         var targetParams = _targetProjector.GetParameters();
-        var newTargetParams = new T[targetParams.Length];
-
-        for (int i = 0; i < targetParams.Length; i++)
-        {
-            newTargetParams[i] = NumOps.Add(
-                NumOps.Multiply(momentum, targetParams[i]),
-                NumOps.Multiply(oneMinusMomentum, onlineParams[i]));
-        }
-        _targetProjector.SetParameters(new Vector<T>(newTargetParams));
+        _targetProjector.SetParameters(Engine.Add(
+            Engine.Multiply(targetParams, momentum),
+            Engine.Multiply(onlineParams, oneMinusMomentum)));
     }
 
     /// <inheritdoc />

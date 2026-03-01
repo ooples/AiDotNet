@@ -91,10 +91,17 @@ public abstract class InitializationStrategyBase<T> : IInitializationStrategy<T>
     protected void XavierNormalInitialize(Tensor<T> weights, int fanIn, int fanOut)
     {
         var stddev = Math.Sqrt(2.0 / (fanIn + fanOut));
+        var clipBound = 2.0 * stddev;
 
         for (int i = 0; i < weights.Length; i++)
         {
             var value = SampleGaussian(0, stddev);
+            // Truncated normal: re-sample values outside [-2*stddev, 2*stddev]
+            // This follows TensorFlow/Keras convention for weight initialization
+            while (Math.Abs(value) > clipBound)
+            {
+                value = SampleGaussian(0, stddev);
+            }
             weights.Data.Span[i] = NumOps.FromDouble(value);
         }
     }

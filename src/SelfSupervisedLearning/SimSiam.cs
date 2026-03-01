@@ -146,30 +146,14 @@ public class SimSiam<T> : SSLMethodBase<T>
     private void UpdateParameters(T learningRate)
     {
         // Update encoder
-        var encoderGrads = _encoder.GetParameterGradients();
+        var encoderGrads = new Vector<T>(_encoder.GetParameterGradients());
         var encoderParams = _encoder.GetParameters();
-        var newEncoderParams = new T[encoderParams.Length];
-
-        for (int i = 0; i < encoderParams.Length; i++)
-        {
-            newEncoderParams[i] = NumOps.Subtract(
-                encoderParams[i],
-                NumOps.Multiply(learningRate, encoderGrads[i]));
-        }
-        _encoder.UpdateParameters(new Vector<T>(newEncoderParams));
+        _encoder.UpdateParameters(Engine.Subtract(encoderParams, Engine.Multiply(encoderGrads, learningRate)));
 
         // Update projector
         var projGrads = SymmetricProjector.GetParameterGradients();
         var projParams = SymmetricProjector.GetParameters();
-        var newProjParams = new T[projParams.Length];
-
-        for (int i = 0; i < projParams.Length; i++)
-        {
-            newProjParams[i] = NumOps.Subtract(
-                projParams[i],
-                NumOps.Multiply(learningRate, projGrads[i]));
-        }
-        SymmetricProjector.SetParameters(new Vector<T>(newProjParams));
+        SymmetricProjector.SetParameters(Engine.Subtract(projParams, Engine.Multiply(projGrads, learningRate)));
     }
 
     private T ComputeStd(Tensor<T> tensor)

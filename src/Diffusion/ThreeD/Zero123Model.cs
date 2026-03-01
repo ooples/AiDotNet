@@ -426,7 +426,7 @@ public class Zero123Model<T> : LatentDiffusionModelBase<T>
     /// </summary>
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
-        return Engine.TensorAdd<T>(a, b);
+        return Engine.TensorAdd(a, b);
     }
 
     #endregion

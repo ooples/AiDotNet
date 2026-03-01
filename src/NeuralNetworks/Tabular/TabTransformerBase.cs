@@ -1,3 +1,4 @@
+using AiDotNet.Engines;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks.Layers;
 
@@ -41,6 +42,11 @@ public abstract class TabTransformerBase<T>
     /// Numeric operations helper for type T.
     /// </summary>
     protected readonly INumericOperations<T> NumOps;
+
+    /// <summary>
+    /// Hardware-accelerated engine for tensor operations.
+    /// </summary>
+    protected IEngine Engine => AiDotNetEngine.Current;
 
     /// <summary>
     /// The model configuration options.
@@ -447,26 +453,18 @@ public abstract class TabTransformerBase<T>
         // Update categorical embeddings
         for (int c = 0; c < _categoricalEmbeddings.Count; c++)
         {
-            if (_categoricalEmbeddingsGrad[c] != null)
+            if (_categoricalEmbeddingsGrad[c] is { } catGradTensor)
             {
-                for (int i = 0; i < _categoricalEmbeddings[c].Length; i++)
-                {
-                    _categoricalEmbeddings[c][i] = NumOps.Subtract(
-                        _categoricalEmbeddings[c][i],
-                        NumOps.Multiply(learningRate, _categoricalEmbeddingsGrad[c]![i]));
-                }
+                _categoricalEmbeddings[c] = Engine.TensorSubtract(_categoricalEmbeddings[c],
+                    Engine.TensorMultiplyScalar(catGradTensor, learningRate));
             }
         }
 
         // Update column embeddings
         if (_columnEmbeddings != null && _columnEmbeddingsGrad != null)
         {
-            for (int i = 0; i < _columnEmbeddings.Length; i++)
-            {
-                _columnEmbeddings[i] = NumOps.Subtract(
-                    _columnEmbeddings[i],
-                    NumOps.Multiply(learningRate, _columnEmbeddingsGrad[i]));
-            }
+            _columnEmbeddings = Engine.TensorSubtract(_columnEmbeddings,
+                Engine.TensorMultiplyScalar(_columnEmbeddingsGrad, learningRate));
         }
 
         // Update transformer layers

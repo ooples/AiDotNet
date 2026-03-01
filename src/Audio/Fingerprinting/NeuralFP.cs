@@ -157,10 +157,7 @@ internal class NeuralFP<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
     {
         ThrowIfDisposed();
         // Cosine similarity between L2-normalized fingerprints = dot product
-        double dot = 0;
-        int len = Math.Min(fp1.Data.Length, fp2.Data.Length);
-        for (int i = 0; i < len; i++)
-            dot += NumOps.ToDouble(fp1.Data[i]) * NumOps.ToDouble(fp2.Data[i]);
+        double dot = NumOps.ToDouble(VectorHelper.DotProduct(new Vector<T>(fp1.Data), new Vector<T>(fp2.Data)));
         return Math.Max(0, Math.Min(1, (dot + 1.0) / 2.0)); // Map [-1,1] to [0,1]
     }
 

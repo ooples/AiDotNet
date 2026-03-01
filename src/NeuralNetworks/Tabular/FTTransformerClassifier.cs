@@ -406,42 +406,7 @@ public class FTTransformerClassifier<T> : FTTransformerBase<T>
     /// </summary>
     private Tensor<T> ApplySoftmax(Tensor<T> logits)
     {
-        int batchSize = logits.Shape[0];
-        int numClasses = logits.Shape[1];
-        var probabilities = new Tensor<T>(logits.Shape);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            // Find max for numerical stability
-            var maxLogit = logits[b * numClasses + 0];
-            for (int c = 1; c < numClasses; c++)
-            {
-                var logit = logits[b * numClasses + c];
-                if (NumOps.Compare(logit, maxLogit) > 0)
-                {
-                    maxLogit = logit;
-                }
-            }
-
-            // Compute exp(logits - max) and sum
-            var sumExp = NumOps.Zero;
-            for (int c = 0; c < numClasses; c++)
-            {
-                var shiftedLogit = NumOps.Subtract(logits[b * numClasses + c], maxLogit);
-                var expVal = NumOps.Exp(shiftedLogit);
-                probabilities[b * numClasses + c] = expVal;
-                sumExp = NumOps.Add(sumExp, expVal);
-            }
-
-            // Normalize
-            for (int c = 0; c < numClasses; c++)
-            {
-                probabilities[b * numClasses + c] = NumOps.Divide(
-                    probabilities[b * numClasses + c], sumExp);
-            }
-        }
-
-        return probabilities;
+        return Engine.Softmax(logits, -1);
     }
 
     /// <summary>

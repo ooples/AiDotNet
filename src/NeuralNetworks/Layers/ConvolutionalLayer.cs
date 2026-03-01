@@ -1484,27 +1484,9 @@ public class ConvolutionalLayer<T> : LayerBase<T>
         }
         else
         {
-            // CPU Update
-            for (int o = 0; o < OutputDepth; o++)
-            {
-                for (int i = 0; i < InputDepth; i++)
-                {
-                    for (int ky = 0; ky < KernelSize; ky++)
-                    {
-                        for (int kx = 0; kx < KernelSize; kx++)
-                        {
-                            T update = NumOps.Multiply(learningRate, _kernelsGradient[o, i, ky, kx]);
-                            _kernels[o, i, ky, kx] = NumOps.Subtract(_kernels[o, i, ky, kx], update);
-                        }
-                    }
-                }
-            }
-
-            for (int o = 0; o < OutputDepth; o++)
-            {
-                T update = NumOps.Multiply(learningRate, _biasesGradient[o]);
-                _biases[o] = NumOps.Subtract(_biases[o], update);
-            }
+            // CPU Update using Engine tensor ops
+            _kernels = Engine.TensorSubtract(_kernels, Engine.TensorMultiplyScalar(_kernelsGradient, learningRate));
+            _biases = Engine.TensorSubtract(_biases, Engine.TensorMultiplyScalar(_biasesGradient, learningRate));
         }
 
         // Notify engine that parameters have changed (for GPU cache invalidation if needed)

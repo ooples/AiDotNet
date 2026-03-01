@@ -24,14 +24,14 @@ namespace AiDotNet.Diffusion.VAE;
 public abstract class VAEModelBase<T> : IVAEModel<T>
 {
     /// <summary>
+    /// Provides access to the hardware-accelerated tensor engine.
+    /// </summary>
+    protected IEngine Engine => AiDotNetEngine.Current;
+
+    /// <summary>
     /// Provides numeric operations for the specific type T.
     /// </summary>
     protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
-
-    /// <summary>
-    /// Gets the current hardware-accelerated engine for tensor operations.
-    /// </summary>
-    protected IEngine Engine => AiDotNetEngine.Current;
 
     /// <summary>
     /// Random number generator for sampling operations.
@@ -141,14 +141,14 @@ public abstract class VAEModelBase<T> : IVAEModel<T>
     public virtual Tensor<T> ScaleLatent(Tensor<T> latent)
     {
         var scaleFactor = NumOps.FromDouble(LatentScaleFactor);
-        return Engine.TensorMultiplyScalar<T>(latent, scaleFactor);
+        return Engine.TensorMultiplyScalar(latent, scaleFactor);
     }
 
     /// <inheritdoc />
     public virtual Tensor<T> UnscaleLatent(Tensor<T> latent)
     {
         var invScaleFactor = NumOps.FromDouble(1.0 / LatentScaleFactor);
-        return Engine.TensorMultiplyScalar<T>(latent, invScaleFactor);
+        return Engine.TensorMultiplyScalar(latent, invScaleFactor);
     }
 
     /// <inheritdoc />

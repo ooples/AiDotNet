@@ -1299,19 +1299,7 @@ public class InstantNGP<T> : NeuralNetworkBase<T>, IRadianceField<T>
 
     private Tensor<T> AddTensors(Tensor<T> left, Tensor<T> right)
     {
-        if (left.Length != right.Length)
-        {
-            throw new ArgumentException("Tensor lengths must match.");
-        }
-
-        var numOps = NumOps;
-        var data = new T[left.Length];
-        for (int i = 0; i < data.Length; i++)
-        {
-            data[i] = numOps.Add(left.Data.Span[i], right.Data.Span[i]);
-        }
-
-        return new Tensor<T>(data, left.Shape);
+        return Engine.TensorAdd(left, right);
     }
 
     private static double Clamp01(double value)

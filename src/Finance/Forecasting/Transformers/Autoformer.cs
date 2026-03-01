@@ -952,12 +952,7 @@ public class Autoformer<T> : ForecastingModelBase<T>
         if (b is null)
             return a;
 
-        var result = new Tensor<T>(a.Shape);
-        for (int i = 0; i < a.Length; i++)
-        {
-            result[i] = NumOps.Add(a[i], b[i]);
-        }
-        return result;
+        return Engine.TensorAdd(a, b);
     }
 
     /// <summary>
@@ -970,12 +965,7 @@ public class Autoformer<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> SubtractTensors(Tensor<T> a, Tensor<T> b)
     {
-        var result = new Tensor<T>(a.Shape);
-        for (int i = 0; i < a.Length; i++)
-        {
-            result[i] = NumOps.Subtract(a[i], b[i]);
-        }
-        return result;
+        return Engine.TensorSubtract(a, b);
     }
 
     /// <summary>

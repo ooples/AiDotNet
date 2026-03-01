@@ -129,29 +129,13 @@ public class SimCLR<T> : SSLMethodBase<T>
 
     private void UpdateWithGradients(T learningRate, Vector<T> encoderGrads, Vector<T> projectorGrads)
     {
-        // Simple SGD update for encoder
+        // SGD update for encoder
         var encoderParams = _encoder.GetParameters();
-        var newEncoderParams = new T[encoderParams.Length];
+        _encoder.UpdateParameters(Engine.Subtract(encoderParams, Engine.Multiply(encoderGrads, learningRate)));
 
-        for (int i = 0; i < encoderParams.Length; i++)
-        {
-            newEncoderParams[i] = NumOps.Subtract(
-                encoderParams[i],
-                NumOps.Multiply(learningRate, encoderGrads[i]));
-        }
-        _encoder.UpdateParameters(new Vector<T>(newEncoderParams));
-
-        // Simple SGD update for projector
+        // SGD update for projector
         var projectorParams = _projector!.GetParameters();
-        var newProjectorParams = new T[projectorParams.Length];
-
-        for (int i = 0; i < projectorParams.Length; i++)
-        {
-            newProjectorParams[i] = NumOps.Subtract(
-                projectorParams[i],
-                NumOps.Multiply(learningRate, projectorGrads[i]));
-        }
-        _projector.SetParameters(new Vector<T>(newProjectorParams));
+        _projector.SetParameters(Engine.Subtract(projectorParams, Engine.Multiply(projectorGrads, learningRate)));
     }
 
     private T ComputeAverageNorm(Tensor<T> embeddings)

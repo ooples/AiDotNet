@@ -396,15 +396,7 @@ public class DQNAgent<T> : DeepReinforcementLearningAgentBase<T>
                 nameof(gradients));
         }
 
-        var newParams = new Vector<T>(currentParams.Length);
-
-        for (int i = 0; i < currentParams.Length; i++)
-        {
-            var update = NumOps.Multiply(learningRate, gradients[i]);
-            newParams[i] = NumOps.Subtract(currentParams[i], update);
-        }
-
-        SetParameters(newParams);
+        SetParameters(Engine.Subtract(currentParams, Engine.Multiply(gradients, learningRate)));
     }
 
     // Helper methods

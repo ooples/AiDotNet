@@ -778,7 +778,7 @@ public class AnimateDiffModel<T> : VideoDiffusionModelBase<T>
     /// </summary>
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
-        return Engine.TensorAdd<T>(a, b);
+        return Engine.TensorAdd(a, b);
     }
 
     /// <summary>

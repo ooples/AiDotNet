@@ -44,6 +44,7 @@ public class BADGEStrategy<T, TInput, TOutput> : IQueryStrategy<T, TInput, TOutp
     private static Random ThreadRandom => _random ??= RandomHelper.CreateSecureRandom();
 
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+    protected static IEngine Engine => AiDotNetEngine.Current;
 
     private readonly int _numClasses;
     private readonly ActiveLearnerConfig<T>? _config;
@@ -87,7 +88,7 @@ public class BADGEStrategy<T, TInput, TOutput> : IQueryStrategy<T, TInput, TOutp
         {
             var input = unlabeledPool.GetInput(i);
             var gradientEmbedding = ComputeGradientEmbedding(model, input);
-            scores[i] = ComputeNorm(gradientEmbedding);
+            scores[i] = VectorHelper.L2Norm(gradientEmbedding);
         }
 
         return new Vector<T>(scores);
@@ -261,7 +262,7 @@ public class BADGEStrategy<T, TInput, TOutput> : IQueryStrategy<T, TInput, TOutp
 
         for (int i = 0; i < embeddings.Count; i++)
         {
-            magnitudes[i] = NumOps.ToDouble(ComputeNorm(embeddings[i]));
+            magnitudes[i] = NumOps.ToDouble(VectorHelper.L2Norm(embeddings[i]));
             totalMag += magnitudes[i];
         }
 
@@ -331,26 +332,9 @@ public class BADGEStrategy<T, TInput, TOutput> : IQueryStrategy<T, TInput, TOutp
 
     private T ComputeSquaredDistance(Vector<T> a, Vector<T> b)
     {
-        int length = Math.Min(a.Length, b.Length);
-        T sum = NumOps.Zero;
-
-        for (int i = 0; i < length; i++)
-        {
-            var diff = NumOps.Subtract(a[i], b[i]);
-            sum = NumOps.Add(sum, NumOps.Multiply(diff, diff));
-        }
-
-        return sum;
-    }
-
-    private T ComputeNorm(Vector<T> v)
-    {
-        T sum = NumOps.Zero;
-        for (int i = 0; i < v.Length; i++)
-        {
-            sum = NumOps.Add(sum, NumOps.Multiply(v[i], v[i]));
-        }
-        return NumOps.Sqrt(sum);
+        var engine = AiDotNetEngine.Current;
+        var diff = engine.Subtract(a, b);
+        return engine.DotProduct(diff, diff);
     }
 
     private int GetArgMax(Vector<T> v)

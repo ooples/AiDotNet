@@ -146,7 +146,7 @@ public class MotionModule<T> : LayerBase<T>
 
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
-        return Engine.TensorAdd<T>(a, b);
+        return AiDotNetEngine.Current.TensorAdd(a, b);
     }
 
     /// <inheritdoc />

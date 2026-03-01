@@ -5,6 +5,7 @@ using AiDotNet.Clustering.Interfaces;
 using AiDotNet.Clustering.Options;
 using AiDotNet.Clustering.Partitioning;
 using AiDotNet.Clustering.Probabilistic;
+using AiDotNet.Helpers;
 using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Clustering.AutoML;
@@ -388,13 +389,7 @@ public class ClusteringAutoML<T>
 
     private double ComputeDistance(Matrix<T> data, int i, int j)
     {
-        double sum = 0;
-        for (int k = 0; k < data.Columns; k++)
-        {
-            double diff = _numOps.ToDouble(data[i, k]) - _numOps.ToDouble(data[j, k]);
-            sum += diff * diff;
-        }
-        return Math.Sqrt(sum);
+        return _numOps.ToDouble(VectorHelper.EuclideanDistance(data.GetRow(i), data.GetRow(j)));
     }
 
     private int CountClusters(Vector<T> labels)

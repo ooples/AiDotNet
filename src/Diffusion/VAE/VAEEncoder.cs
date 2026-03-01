@@ -419,8 +419,9 @@ public class VAEEncoder<T> : LayerBase<T>
 
     private Tensor<T> ConcatenateChannels(Tensor<T> a, Tensor<T> b)
     {
-        // Concatenate along channel dimension (axis 1) using hardware-accelerated engine
-        return Engine.TensorConcatenate<T>(new[] { a, b }, axis: 1);
+        // Channel axis is 0 for 3D [C, H, W] and 1 for 4D [N, C, H, W]
+        int channelAxis = a.Shape.Length == 4 ? 1 : 0;
+        return Engine.TensorConcatenate([a, b], axis: channelAxis);
     }
 
     private (Tensor<T> First, Tensor<T> Second) SplitChannels(Tensor<T> combined, int splitChannels)

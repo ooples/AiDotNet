@@ -464,12 +464,7 @@ public class RRDBNetGenerator<T> : LayerBase<T>, IChainableComputationGraph<T>
     /// </summary>
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
-        var output = new Tensor<T>(a.Shape);
-        for (int i = 0; i < a.Length; i++)
-        {
-            output.Data.Span[i] = NumOps.Add(a.Data.Span[i], b.Data.Span[i]);
-        }
-        return output;
+        return Engine.TensorAdd(a, b);
     }
 
     #endregion

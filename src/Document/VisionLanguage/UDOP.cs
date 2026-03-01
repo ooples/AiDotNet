@@ -454,29 +454,7 @@ public class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocume
 
     private Tensor<T> ApplySoftmax(Tensor<T> input)
     {
-        var output = new Tensor<T>(input.Shape);
-        int length = input.Data.Length;
-
-        double maxVal = double.MinValue;
-        for (int i = 0; i < length; i++)
-        {
-            double val = NumOps.ToDouble(input.Data.Span[i]);
-            if (val > maxVal) maxVal = val;
-        }
-
-        double sumExp = 0;
-        for (int i = 0; i < length; i++)
-        {
-            sumExp += Math.Exp(NumOps.ToDouble(input.Data.Span[i]) - maxVal);
-        }
-
-        for (int i = 0; i < length; i++)
-        {
-            double val = NumOps.ToDouble(input.Data.Span[i]);
-            output.Data.Span[i] = NumOps.FromDouble(Math.Exp(val - maxVal) / sumExp);
-        }
-
-        return output;
+        return Engine.Softmax(input, -1);
     }
 
     #endregion
@@ -589,7 +567,7 @@ public class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocume
                 { "num_classes", _numClasses },
                 { "use_native_mode", _useNativeMode }
             },
-            ModelData = this.Serialize()
+            ModelData = SafeSerialize()
         };
     }
 
@@ -635,6 +613,53 @@ public class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocume
 
     #region NeuralNetworkBase Implementation
 
+    /// <summary>
+    /// Encoder-decoder forward pass: runs encoder layers, then feeds encoder output
+    /// as cross-attention context to decoder layers.
+    /// </summary>
+    protected override Tensor<T> Forward(Tensor<T> input)
+    {
+        Tensor<T> output = input;
+        Tensor<T>? encoderOutput = null;
+        bool hasPassedConvLayer = false;
+        bool hasReshapedToSequence = false;
+
+        foreach (var layer in Layers)
+        {
+            if (layer is ConvolutionalLayer<T> or BatchNormalizationLayer<T>
+                     or PoolingLayer<T> or MaxPoolingLayer<T> or AveragePoolingLayer<T>)
+            {
+                hasPassedConvLayer = true;
+            }
+
+            // Auto-reshape spatial to sequence when transitioning from CNN to non-spatial layers
+            bool isNonSpatialLayer = layer is not (ConvolutionalLayer<T> or BatchNormalizationLayer<T>
+                or PoolingLayer<T> or MaxPoolingLayer<T> or AveragePoolingLayer<T>);
+            if (!hasReshapedToSequence && hasPassedConvLayer && output.Shape.Length >= 3 && isNonSpatialLayer)
+            {
+                int channels = output.Shape.Length == 4 ? output.Shape[1] : output.Shape[0];
+                int spatialH = output.Shape.Length == 4 ? output.Shape[2] : output.Shape[1];
+                int spatialW = output.Shape.Length == 4 ? output.Shape[3] : output.Shape[2];
+                int numPatches = spatialH * spatialW;
+                output = new Tensor<T>(output.Data.ToArray(), [numPatches, channels]);
+                hasReshapedToSequence = true;
+            }
+
+            if (layer is TransformerDecoderLayer<T> decoderLayer)
+            {
+                // Save encoder output before first decoder layer
+                encoderOutput ??= output;
+                output = decoderLayer.Forward(output, encoderOutput);
+            }
+            else
+            {
+                output = layer.Forward(output);
+            }
+        }
+
+        return output;
+    }
+
     /// <inheritdoc/>
     public override Tensor<T> Predict(Tensor<T> input)
     {
@@ -670,8 +695,8 @@ public class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocume
 
         var currentParams = GetParameters();
         T lr = NumOps.FromDouble(0.0001);
-        for (int i = 0; i < currentParams.Length; i++)
-            currentParams[i] = NumOps.Subtract(currentParams[i], NumOps.Multiply(lr, gradients[i]));
+        
+        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, lr));
         SetParameters(currentParams);
     }
 

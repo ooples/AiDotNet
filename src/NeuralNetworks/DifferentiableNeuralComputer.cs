@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.NeuralNetworks.Options;
 
 namespace AiDotNet.NeuralNetworks;
@@ -1382,7 +1383,7 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
         for (int i = 0; i < _memorySize; i++)
         {
             Vector<T> memoryRow = memory.GetRow(i);
-            similarityScores[i] = CosineSimilarity(key, memoryRow);
+            similarityScores[i] = NumOps.FromDouble(VectorHelper.CosineSimilarity(key, memoryRow));
         }
 
         // Apply strength (temperature) to similarities
@@ -1395,42 +1396,6 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
         return Softmax(similarityScores);
     }
 
-    /// <summary>
-    /// Calculates the cosine similarity between two vectors.
-    /// </summary>
-    /// <param name="a">The first vector.</param>
-    /// <param name="b">The second vector.</param>
-    /// <returns>The cosine similarity between the vectors.</returns>
-    private T CosineSimilarity(Vector<T> a, Vector<T> b)
-    {
-        // Vectorized cosine similarity using IEngine tensor operations
-        var tensorA = new Tensor<T>(a.ToArray(), [a.Length]);
-        var tensorB = new Tensor<T>(b.ToArray(), [b.Length]);
-
-        // Calculate dot product: sum(a * b)
-        var product = Engine.TensorMultiply(tensorA, tensorB);
-        T dotProduct = Engine.TensorSum(product);
-
-        // Calculate magnitudes using vectorized operations
-        // magnitudeA = sqrt(sum(a * a))
-        var aSquared = Engine.TensorMultiply(tensorA, tensorA);
-        T sumASquared = Engine.TensorSum(aSquared);
-        T magnitudeA = NumOps.Sqrt(sumASquared);
-
-        // magnitudeB = sqrt(sum(b * b))
-        var bSquared = Engine.TensorMultiply(tensorB, tensorB);
-        T sumBSquared = Engine.TensorSum(bSquared);
-        T magnitudeB = NumOps.Sqrt(sumBSquared);
-
-        // Avoid division by zero
-        if (MathHelper.AlmostEqual(magnitudeA, NumOps.Zero) || MathHelper.AlmostEqual(magnitudeB, NumOps.Zero))
-        {
-            return NumOps.Zero;
-        }
-
-        // Calculate cosine similarity
-        return NumOps.Divide(dotProduct, NumOps.Multiply(magnitudeA, magnitudeB));
-    }
 
     /// <summary>
     /// Applies the softmax function to a vector.

@@ -894,20 +894,27 @@ public class TFT<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> AddGatedConnection(Tensor<T> input, Tensor<T> processed)
     {
-        // Simplified gating: element-wise combination
-        var result = new Tensor<T>(input.Shape);
-        T half = NumOps.FromDouble(0.5);
-
-        for (int i = 0; i < input.Length && i < processed.Length; i++)
+        if (input.Length != processed.Length)
         {
-            // Simple average for now; full implementation would use learned gates
-            var combined = NumOps.Add(
-                NumOps.Multiply(input[i], half),
-                NumOps.Multiply(processed[i], half));
-            result[i] = combined;
+            int minLen = Math.Min(input.Length, processed.Length);
+            var result = new Tensor<T>(input.Shape);
+            for (int i = 0; i < minLen; i++)
+                result[i] = NumOps.Add(input[i], processed[i]);
+            for (int i = minLen; i < input.Length; i++)
+                result[i] = input[i];
+            return result;
         }
 
-        return result;
+        // Adaptive sigmoid gating: gate decides how much processed vs input to use
+        var gate = Engine.Sigmoid(processed);
+        var gatedProcessed = Engine.TensorMultiply(gate, processed);
+        var ones = new Tensor<T>(gate.Shape);
+        for (int i = 0; i < ones.Length; i++)
+            ones[i] = NumOps.One;
+        var inverseGate = Engine.TensorSubtract(ones, gate);
+        var gatedInput = Engine.TensorMultiply(inverseGate, input);
+
+        return Engine.TensorAdd(gatedInput, gatedProcessed);
     }
 
     /// <summary>

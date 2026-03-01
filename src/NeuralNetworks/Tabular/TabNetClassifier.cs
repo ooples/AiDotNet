@@ -202,41 +202,7 @@ public class TabNetClassifier<T> : TabNetBase<T>
     /// </summary>
     private Tensor<T> ApplySoftmax(Tensor<T> logits)
     {
-        int batchSize = logits.Shape[0];
-        var probabilities = new Tensor<T>(logits.Shape);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            // Find max for numerical stability
-            var maxLogit = NumOps.FromDouble(double.NegativeInfinity);
-            for (int c = 0; c < _numClasses; c++)
-            {
-                var logit = logits[b * _numClasses + c];
-                if (NumOps.GreaterThan(logit, maxLogit))
-                {
-                    maxLogit = logit;
-                }
-            }
-
-            // Compute exp(logit - max) and sum
-            var expSum = NumOps.Zero;
-            for (int c = 0; c < _numClasses; c++)
-            {
-                var shiftedLogit = NumOps.Subtract(logits[b * _numClasses + c], maxLogit);
-                var expValue = NumOps.Exp(shiftedLogit);
-                probabilities[b * _numClasses + c] = expValue;
-                expSum = NumOps.Add(expSum, expValue);
-            }
-
-            // Normalize
-            for (int c = 0; c < _numClasses; c++)
-            {
-                probabilities[b * _numClasses + c] = NumOps.Divide(
-                    probabilities[b * _numClasses + c], expSum);
-            }
-        }
-
-        return probabilities;
+        return Engine.Softmax(logits, -1);
     }
 
     /// <summary>

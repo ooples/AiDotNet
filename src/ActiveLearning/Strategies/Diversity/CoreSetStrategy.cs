@@ -532,64 +532,23 @@ public class CoreSetStrategy<T, TInput, TOutput> : IDiversityStrategy<T, TInput,
     {
         return _distanceMetric switch
         {
-            DistanceMetric.Euclidean => EuclideanDistance(a, b),
+            DistanceMetric.Euclidean => VectorHelper.EuclideanDistance(a, b),
             DistanceMetric.Cosine => CosineDistance(a, b),
             DistanceMetric.Manhattan => ManhattanDistance(a, b),
-            _ => EuclideanDistance(a, b)
+            _ => VectorHelper.EuclideanDistance(a, b)
         };
     }
 
-    private T EuclideanDistance(Vector<T> a, Vector<T> b)
-    {
-        int length = Math.Min(a.Length, b.Length);
-        T sumSquared = NumOps.Zero;
-
-        for (int i = 0; i < length; i++)
-        {
-            var diff = NumOps.Subtract(a[i], b[i]);
-            sumSquared = NumOps.Add(sumSquared, NumOps.Multiply(diff, diff));
-        }
-
-        return NumOps.Sqrt(sumSquared);
-    }
 
     private T CosineDistance(Vector<T> a, Vector<T> b)
     {
-        // Cosine distance = 1 - cosine similarity
-        int length = Math.Min(a.Length, b.Length);
-        T dotProduct = NumOps.Zero;
-        T normA = NumOps.Zero;
-        T normB = NumOps.Zero;
-
-        for (int i = 0; i < length; i++)
-        {
-            dotProduct = NumOps.Add(dotProduct, NumOps.Multiply(a[i], b[i]));
-            normA = NumOps.Add(normA, NumOps.Multiply(a[i], a[i]));
-            normB = NumOps.Add(normB, NumOps.Multiply(b[i], b[i]));
-        }
-
-        var denominator = NumOps.Multiply(NumOps.Sqrt(normA), NumOps.Sqrt(normB));
-        if (NumOps.Compare(denominator, NumOps.Zero) <= 0)
-        {
-            return NumOps.One;
-        }
-
-        var similarity = NumOps.Divide(dotProduct, denominator);
-        return NumOps.Subtract(NumOps.One, similarity);
+        double similarity = VectorHelper.CosineSimilarity(a, b);
+        return NumOps.FromDouble(1.0 - similarity);
     }
 
     private T ManhattanDistance(Vector<T> a, Vector<T> b)
     {
-        int length = Math.Min(a.Length, b.Length);
-        T sum = NumOps.Zero;
-
-        for (int i = 0; i < length; i++)
-        {
-            var diff = NumOps.Subtract(a[i], b[i]);
-            sum = NumOps.Add(sum, NumOps.Abs(diff));
-        }
-
-        return sum;
+        return VectorHelper.ManhattanDistance(a, b);
     }
 
     private T ConvertToNumeric(TOutput output)

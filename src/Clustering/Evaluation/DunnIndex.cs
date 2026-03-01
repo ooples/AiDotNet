@@ -1,4 +1,5 @@
 using AiDotNet.Clustering.Interfaces;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.Clustering.Evaluation;
 
@@ -128,12 +129,6 @@ public class DunnIndex<T> : IClusterMetric<T>
 
     private double ComputeDistance(Matrix<T> data, int i, int j, int d, INumericOperations<T> numOps)
     {
-        double sum = 0;
-        for (int k = 0; k < d; k++)
-        {
-            double diff = numOps.ToDouble(data[i, k]) - numOps.ToDouble(data[j, k]);
-            sum += diff * diff;
-        }
-        return Math.Sqrt(sum);
+        return numOps.ToDouble(VectorHelper.EuclideanDistance(data.GetRow(i), data.GetRow(j)));
     }
 }

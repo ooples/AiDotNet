@@ -689,18 +689,7 @@ internal class TrOCREncoderLayer<T>
 
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b, int batch, int seqLen)
     {
-        var result = new Tensor<T>(a.Shape);
-        for (int i = 0; i < batch; i++)
-        {
-            for (int j = 0; j < seqLen; j++)
-            {
-                for (int k = 0; k < _hiddenDim; k++)
-                {
-                    result[i, j, k] = _numOps.Add(a[i, j, k], b[i, j, k]);
-                }
-            }
-        }
-        return result;
+        return AiDotNetEngine.Current.TensorAdd(a, b);
     }
 
     private Tensor<T> ApplySelfAttention(Tensor<T> x, int batch, int seqLen)
@@ -1013,18 +1002,7 @@ internal class TrOCRDecoderLayer<T>
 
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b, int batch, int seqLen)
     {
-        var result = new Tensor<T>(a.Shape);
-        for (int i = 0; i < batch; i++)
-        {
-            for (int j = 0; j < seqLen; j++)
-            {
-                for (int k = 0; k < _hiddenDim; k++)
-                {
-                    result[i, j, k] = _numOps.Add(a[i, j, k], b[i, j, k]);
-                }
-            }
-        }
-        return result;
+        return AiDotNetEngine.Current.TensorAdd(a, b);
     }
 
     private Tensor<T> ApplyCausalSelfAttention(Tensor<T> x, int batch, int seqLen)

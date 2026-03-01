@@ -497,16 +497,7 @@ public static class BackgroundSummarizer<T>
     /// </summary>
     private static double ComputeDistance(Vector<T> a, Vector<T> b)
     {
-        double sum = 0;
-        int len = Math.Min(a.Length, b.Length);
-
-        for (int i = 0; i < len; i++)
-        {
-            double diff = NumOps.ToDouble(a[i]) - NumOps.ToDouble(b[i]);
-            sum += diff * diff;
-        }
-
-        return Math.Sqrt(sum);
+        return NumOps.ToDouble(VectorHelper.EuclideanDistance(a, b));
     }
 
     /// <summary>

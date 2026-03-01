@@ -402,7 +402,7 @@ public class UViTNoisePredictor<T> : NoisePredictorBase<T>
 
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
-        return Engine.TensorAdd<T>(a, b);
+        return AiDotNetEngine.Current.TensorBroadcastAdd(a, b);
     }
 
     private Tensor<T> ConcatenateTensors(Tensor<T> a, Tensor<T> b)

@@ -36,6 +36,7 @@ namespace AiDotNet.Metrics;
 public class CLIPScore<T> where T : struct
 {
     private readonly INumericOperations<T> _numOps;
+    protected static IEngine Engine => AiDotNetEngine.Current;
     private readonly IMultimodalEmbedding<T> _clipModel;
 
     /// <summary>
@@ -245,11 +246,11 @@ public class CLIPScore<T> where T : struct
         var textDirection = SubtractVectors(editTextEmb, srcTextEmb);
 
         // Normalize direction vectors
-        imgDirection = NormalizeVector(imgDirection);
-        textDirection = NormalizeVector(textDirection);
+        imgDirection = VectorHelper.Normalize(imgDirection);
+        textDirection = VectorHelper.Normalize(textDirection);
 
         // Compute cosine similarity between directions
-        T similarity = ComputeCosineSimilarity(imgDirection, textDirection);
+        T similarity = _numOps.FromDouble(VectorHelper.CosineSimilarity(imgDirection, textDirection));
         double simDouble = _numOps.ToDouble(similarity);
 
         // Scale to 0-100 range
@@ -279,66 +280,9 @@ public class CLIPScore<T> where T : struct
     /// </summary>
     private Vector<T> SubtractVectors(Vector<T> a, Vector<T> b)
     {
-        var result = new Vector<T>(a.Length);
-        for (int i = 0; i < a.Length; i++)
-        {
-            result[i] = _numOps.Subtract(a[i], b[i]);
-        }
-        return result;
+        return Engine.Subtract(a, b);
     }
 
-    /// <summary>
-    /// Normalizes a vector to unit length.
-    /// </summary>
-    private Vector<T> NormalizeVector(Vector<T> v)
-    {
-        T normSq = _numOps.Zero;
-        for (int i = 0; i < v.Length; i++)
-        {
-            normSq = _numOps.Add(normSq, _numOps.Multiply(v[i], v[i]));
-        }
-
-        double normDouble = Math.Sqrt(_numOps.ToDouble(normSq));
-        if (normDouble < 1e-10)
-        {
-            return v;
-        }
-
-        T normInv = _numOps.FromDouble(1.0 / normDouble);
-        var result = new Vector<T>(v.Length);
-        for (int i = 0; i < v.Length; i++)
-        {
-            result[i] = _numOps.Multiply(v[i], normInv);
-        }
-        return result;
-    }
-
-    /// <summary>
-    /// Computes cosine similarity between two vectors.
-    /// </summary>
-    private T ComputeCosineSimilarity(Vector<T> a, Vector<T> b)
-    {
-        T dot = _numOps.Zero;
-        T normASq = _numOps.Zero;
-        T normBSq = _numOps.Zero;
-
-        for (int i = 0; i < a.Length; i++)
-        {
-            dot = _numOps.Add(dot, _numOps.Multiply(a[i], b[i]));
-            normASq = _numOps.Add(normASq, _numOps.Multiply(a[i], a[i]));
-            normBSq = _numOps.Add(normBSq, _numOps.Multiply(b[i], b[i]));
-        }
-
-        T denominator = _numOps.Sqrt(_numOps.Multiply(normASq, normBSq));
-
-        double denomDouble = _numOps.ToDouble(denominator);
-        if (denomDouble < 1e-10)
-        {
-            return _numOps.Zero;
-        }
-
-        return _numOps.Divide(dot, denominator);
-    }
 }
 
 /// <summary>

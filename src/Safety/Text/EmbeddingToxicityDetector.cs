@@ -1,4 +1,5 @@
 using AiDotNet.Enums;
+using AiDotNet.Helpers;
 using AiDotNet.Models;
 using AiDotNet.Safety;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -92,7 +93,7 @@ public class EmbeddingToxicityDetector<T> : TextSafetyModuleBase<T>
         // Compare against each toxic concept
         for (int i = 0; i < _toxicConceptVectors.Length; i++)
         {
-            T similarity = CosineSimilarity(inputEmbedding, _toxicConceptVectors[i]);
+            T similarity = NumOps.FromDouble(VectorHelper.CosineSimilarity(inputEmbedding, _toxicConceptVectors[i]));
 
             if (NumOps.GreaterThanOrEquals(similarity, _threshold))
             {
@@ -141,7 +142,7 @@ public class EmbeddingToxicityDetector<T> : TextSafetyModuleBase<T>
         }
 
         // L2 normalize
-        NormalizeVector(embedding);
+        VectorHelper.NormalizeInPlace(embedding);
 
         return embedding;
     }
@@ -162,54 +163,10 @@ public class EmbeddingToxicityDetector<T> : TextSafetyModuleBase<T>
             }
         }
 
-        NormalizeVector(centroid);
+        VectorHelper.NormalizeInPlace(centroid);
         return centroid;
     }
 
-    private static T CosineSimilarity(Vector<T> a, Vector<T> b)
-    {
-        T dot = NumOps.Zero;
-        T normA = NumOps.Zero;
-        T normB = NumOps.Zero;
-
-        for (int i = 0; i < a.Length && i < b.Length; i++)
-        {
-            dot = NumOps.Add(dot, NumOps.Multiply(a[i], b[i]));
-            normA = NumOps.Add(normA, NumOps.Multiply(a[i], a[i]));
-            normB = NumOps.Add(normB, NumOps.Multiply(b[i], b[i]));
-        }
-
-        T denominator = NumOps.FromDouble(
-            Math.Sqrt(NumOps.ToDouble(normA) * NumOps.ToDouble(normB)));
-
-        T epsilon = NumOps.FromDouble(1e-10);
-        if (NumOps.LessThan(denominator, epsilon)) return NumOps.Zero;
-
-        T similarity = NumOps.Divide(dot, denominator);
-
-        // Clamp to [0, 1]
-        if (NumOps.LessThan(similarity, NumOps.Zero)) return NumOps.Zero;
-        if (NumOps.GreaterThan(similarity, NumOps.One)) return NumOps.One;
-        return similarity;
-    }
-
-    private static void NormalizeVector(Vector<T> v)
-    {
-        T sumSq = NumOps.Zero;
-        for (int i = 0; i < v.Length; i++)
-        {
-            sumSq = NumOps.Add(sumSq, NumOps.Multiply(v[i], v[i]));
-        }
-
-        double norm = Math.Sqrt(NumOps.ToDouble(sumSq));
-        if (norm < 1e-10) return;
-
-        T normT = NumOps.FromDouble(norm);
-        for (int i = 0; i < v.Length; i++)
-        {
-            v[i] = NumOps.Divide(v[i], normT);
-        }
-    }
 
     private static int HashNgram(string text, int start, int length)
     {

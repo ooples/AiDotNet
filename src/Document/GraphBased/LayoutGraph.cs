@@ -466,7 +466,7 @@ public class LayoutGraph<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, 
                 { "max_nodes", _maxNodes },
                 { "use_native_mode", _useNativeMode }
             },
-            ModelData = this.Serialize()
+            ModelData = SafeSerialize()
         };
     }
 
@@ -536,9 +536,9 @@ public class LayoutGraph<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, 
             throw new NotSupportedException("Parameter updates not supported in ONNX mode.");
 
         var currentParams = GetParameters();
-        T lr = NumOps.FromDouble(0.001);
-        for (int i = 0; i < currentParams.Length; i++)
-            currentParams[i] = NumOps.Subtract(currentParams[i], NumOps.Multiply(lr, gradients[i]));
+        T lr = NumOps.FromDouble(_options.LearningRate);
+
+        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, lr));
         SetParameters(currentParams);
     }
 

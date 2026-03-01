@@ -465,8 +465,7 @@ public class IPAdapterModel<T> : LatentDiffusionModelBase<T>
     /// </summary>
     private Tensor<T> ScaleTensor(Tensor<T> tensor, double scale)
     {
-        var scaleT = NumOps.FromDouble(scale);
-        return Engine.TensorMultiplyScalar<T>(tensor, scaleT);
+        return Engine.TensorMultiplyScalar(tensor, NumOps.FromDouble(scale));
     }
 
     /// <summary>
@@ -474,7 +473,7 @@ public class IPAdapterModel<T> : LatentDiffusionModelBase<T>
     /// </summary>
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
-        return Engine.TensorAdd<T>(a, b);
+        return Engine.TensorAdd(a, b);
     }
 
     /// <inheritdoc />
@@ -693,7 +692,7 @@ public class ImageEncoder<T>
 
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
-        return AiDotNetEngine.Current.TensorAdd<T>(a, b);
+        return AiDotNetEngine.Current.TensorAdd(a, b);
     }
 
     /// <summary>

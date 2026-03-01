@@ -790,24 +790,12 @@ public class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILanguageIde
 
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
-        int len = Math.Min(a.Length, b.Length);
-        var output = new T[len];
-        for (int i = 0; i < len; i++)
-            output[i] = _numOps.Add(a[i], b[i]);
-        return new Tensor<T>(output, a.Shape);
+        return Engine.TensorAdd(a, b);
     }
 
     private Tensor<T> ConcatenateTensors(List<Tensor<T>> tensors)
     {
-        int totalLen = tensors.Sum(t => t.Length);
-        var output = new T[totalLen];
-        int offset = 0;
-        foreach (var tensor in tensors)
-        {
-            Array.Copy(tensor.Data.ToArray(), 0, output, offset, tensor.Length);
-            offset += tensor.Length;
-        }
-        return new Tensor<T>(output, [totalLen]);
+        return Engine.TensorConcatenate(tensors.ToArray(), axis: 0);
     }
 
     private Tensor<T> AttentiveStatisticsPooling(Tensor<T> input)

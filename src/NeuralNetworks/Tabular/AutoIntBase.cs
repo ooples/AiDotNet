@@ -1,4 +1,5 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Engines;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Models.Options;
@@ -34,6 +35,7 @@ public abstract class AutoIntBase<T>
     protected readonly int NumCategoricalFeatures;
     protected readonly int TotalFeatures;
     protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+    protected IEngine Engine => AiDotNetEngine.Current;
     private readonly Random _random = RandomHelper.CreateSecureRandom();
 
     // Feature embeddings
@@ -316,19 +318,13 @@ public abstract class AutoIntBase<T>
     private void AccumulateEmbeddingGradients(Tensor<T> gradEmbedded)
     {
         // Reset gradients
-        for (int i = 0; i < _numericalEmbeddingsGrad.Length; i++)
-        {
-            _numericalEmbeddingsGrad[i] = NumOps.Zero;
-        }
+        Engine.TensorFill(_numericalEmbeddingsGrad, NumOps.Zero);
 
         if (_categoricalEmbeddingsGrad != null)
         {
             foreach (var grad in _categoricalEmbeddingsGrad)
             {
-                for (int i = 0; i < grad.Length; i++)
-                {
-                    grad[i] = NumOps.Zero;
-                }
+                Engine.TensorFill(grad, NumOps.Zero);
             }
         }
 
@@ -402,11 +398,11 @@ public abstract class AutoIntBase<T>
             ? NumOps.Divide(learningRate, NumOps.FromDouble(batchSize))
             : learningRate;
 
+        // Note: _numericalEmbeddings is readonly, so we update in-place with subtract
+        var numUpdate = Engine.TensorMultiplyScalar(_numericalEmbeddingsGrad, scaledLr);
         for (int i = 0; i < _numericalEmbeddings.Length; i++)
         {
-            _numericalEmbeddings[i] = NumOps.Subtract(
-                _numericalEmbeddings[i],
-                NumOps.Multiply(scaledLr, _numericalEmbeddingsGrad[i]));
+            _numericalEmbeddings[i] = NumOps.Subtract(_numericalEmbeddings[i], numUpdate[i]);
         }
 
         if (_categoricalEmbeddings != null && _categoricalEmbeddingsGrad != null)
@@ -414,12 +410,10 @@ public abstract class AutoIntBase<T>
             for (int f = 0; f < _categoricalEmbeddings.Length; f++)
             {
                 var emb = _categoricalEmbeddings[f];
-                var grad = _categoricalEmbeddingsGrad[f];
+                var scaledGrad = Engine.TensorMultiplyScalar(_categoricalEmbeddingsGrad[f], scaledLr);
                 for (int i = 0; i < emb.Length; i++)
                 {
-                    emb[i] = NumOps.Subtract(
-                        emb[i],
-                        NumOps.Multiply(scaledLr, grad[i]));
+                    emb[i] = NumOps.Subtract(emb[i], scaledGrad[i]);
                 }
             }
         }

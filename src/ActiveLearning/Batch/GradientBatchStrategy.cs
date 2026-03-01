@@ -422,16 +422,7 @@ public class GradientBatchStrategy<T, TInput, TOutput> : IGradientBatchStrategy<
 
     private T ComputeDistance(Vector<T> a, Vector<T> b)
     {
-        int length = Math.Min(a.Length, b.Length);
-        T sum = NumOps.Zero;
-
-        for (int i = 0; i < length; i++)
-        {
-            var diff = NumOps.Subtract(a[i], b[i]);
-            sum = NumOps.Add(sum, NumOps.Multiply(diff, diff));
-        }
-
-        return NumOps.Sqrt(sum);
+        return VectorHelper.EuclideanDistance(a, b);
     }
 
     #endregion

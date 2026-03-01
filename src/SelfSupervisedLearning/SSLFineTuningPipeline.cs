@@ -23,6 +23,7 @@ namespace AiDotNet.SelfSupervisedLearning;
 public class SSLFineTuningPipeline<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+    private static IEngine Engine => AiDotNetEngine.Current;
 
     private readonly INeuralNetwork<T> _encoder;
     private readonly int _encoderOutputDim;
@@ -343,16 +344,9 @@ public class SSLFineTuningPipeline<T>
     private void UpdateEncoder(double lr)
     {
         var lrT = NumOps.FromDouble(lr);
-        var grads = _encoder.GetParameterGradients();
+        var grads = new Vector<T>(_encoder.GetParameterGradients());
         var pars = _encoder.GetParameters();
-        var newParams = new T[pars.Length];
-
-        for (int i = 0; i < pars.Length; i++)
-        {
-            newParams[i] = NumOps.Subtract(pars[i], NumOps.Multiply(lrT, grads[i]));
-        }
-
-        _encoder.UpdateParameters(new Vector<T>(newParams));
+        _encoder.UpdateParameters(Engine.Subtract(pars, Engine.Multiply(grads, lrT)));
     }
 
     private int ComputeCorrect(Tensor<T> logits, int[] labels)

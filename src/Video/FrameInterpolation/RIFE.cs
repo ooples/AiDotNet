@@ -227,8 +227,7 @@ public class RIFE<T> : FrameInterpolationBase<T>
         var predicted = Predict(input);
 
         // Calculate loss gradient
-        var lossGradient = predicted.Transform((v, idx) =>
-            NumOps.Subtract(v, expectedOutput.Data.Span[idx]));
+        var lossGradient = Engine.TensorSubtract(predicted, expectedOutput);
 
         // Backward pass
         BackwardPass(lossGradient);
@@ -642,38 +641,10 @@ public class RIFE<T> : FrameInterpolationBase<T>
         Tensor<T> flowGradAccumulator)
     {
         // flow_0_1 channels 0-1, flow_1_0 channels 2-3
-        int batchSize = flowGradAccumulator.Shape[0];
-        int height = flowGradAccumulator.Shape[2];
-        int width = flowGradAccumulator.Shape[3];
-
-        var combined = new Tensor<T>(flowGradAccumulator.Shape);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int h = 0; h < height; h++)
-            {
-                for (int w = 0; w < width; w++)
-                {
-                    // Flow 0->1 gradients (channels 0-1)
-                    combined[b, 0, h, w] = NumOps.Add(
-                        flowGradAccumulator[b, 0, h, w],
-                        flowGrad1[b, 0, h, w]);
-                    combined[b, 1, h, w] = NumOps.Add(
-                        flowGradAccumulator[b, 1, h, w],
-                        flowGrad1[b, 1, h, w]);
-
-                    // Flow 1->0 gradients (channels 2-3)
-                    combined[b, 2, h, w] = NumOps.Add(
-                        flowGradAccumulator[b, 2, h, w],
-                        flowGrad2[b, 0, h, w]);
-                    combined[b, 3, h, w] = NumOps.Add(
-                        flowGradAccumulator[b, 3, h, w],
-                        flowGrad2[b, 1, h, w]);
-                }
-            }
-        }
-
-        return combined;
+        // Concatenate the two 2-channel flow grads into a single 4-channel tensor
+        var flowGradsCombined = Engine.TensorConcatenate([flowGrad1, flowGrad2], axis: 1);
+        // Element-wise add with the accumulator
+        return Engine.TensorAdd(flowGradAccumulator, flowGradsCombined);
     }
 
     /// <summary>
@@ -731,12 +702,7 @@ public class RIFE<T> : FrameInterpolationBase<T>
     /// </summary>
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
-        var result = new Tensor<T>(a.Shape);
-        for (int i = 0; i < a.Length; i++)
-        {
-            result.Data.Span[i] = NumOps.Add(a.Data.Span[i], b.Data.Span[i]);
-        }
-        return result;
+        return Engine.TensorAdd(a, b);
     }
 
     /// <summary>
@@ -818,29 +784,7 @@ public class RIFE<T> : FrameInterpolationBase<T>
 
     private Tensor<T> ConcatenateChannels(Tensor<T> t1, Tensor<T> t2)
     {
-        int batchSize = t1.Shape[0];
-        int c1 = t1.Shape[1];
-        int c2 = t2.Shape[1];
-        int height = t1.Shape[2];
-        int width = t1.Shape[3];
-
-        var result = new Tensor<T>([batchSize, c1 + c2, height, width]);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int h = 0; h < height; h++)
-            {
-                for (int w = 0; w < width; w++)
-                {
-                    for (int c = 0; c < c1; c++)
-                        result[b, c, h, w] = t1[b, c, h, w];
-                    for (int c = 0; c < c2; c++)
-                        result[b, c1 + c, h, w] = t2[b, c, h, w];
-                }
-            }
-        }
-
-        return result;
+        return Engine.TensorConcatenate([t1, t2], axis: 1);
     }
 
     private Tensor<T> SliceChannels(Tensor<T> input, int startChannel, int endChannel)
@@ -871,7 +815,7 @@ public class RIFE<T> : FrameInterpolationBase<T>
 
     private Tensor<T> ScaleFlow(Tensor<T> flow, T scale)
     {
-        return flow.Transform((v, _) => NumOps.Multiply(v, scale));
+        return Engine.TensorMultiplyScalar(flow, scale);
     }
 
     private Tensor<T> WarpImage(Tensor<T> image, Tensor<T> flow)

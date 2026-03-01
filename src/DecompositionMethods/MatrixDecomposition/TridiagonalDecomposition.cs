@@ -313,6 +313,9 @@ public class TridiagonalDecomposition<T> : MatrixDecompositionBase<T>
 
             QMatrix.SetColumn(j, v);
 
+            // Save current beta (this is the off-diagonal T[j-1,j])
+            T betaPrev = beta;
+
             // w = A*v - beta*v_{j-1}
             w = A.Multiply(v).Subtract(vPrev.Multiply(beta));
 
@@ -323,7 +326,7 @@ public class TridiagonalDecomposition<T> : MatrixDecompositionBase<T>
             w = w.Subtract(v.Multiply(alpha));
 
             // Re-orthogonalization (important for numerical stability)
-            for (int i = 0; i < j; i++)
+            for (int i = 0; i <= j; i++)
             {
                 Vector<T> qi = QMatrix.GetColumn(i);
                 T dot = w.DotProduct(qi);
@@ -335,14 +338,8 @@ public class TridiagonalDecomposition<T> : MatrixDecompositionBase<T>
 
             // Set tridiagonal elements
             TMatrix[j, j] = alpha;
-            if (j > 0)
-            {
-                T prevBeta = NumOps.GreaterThan(NumOps.Abs(TMatrix[j - 1, j]), NumOps.FromDouble(1e-14))
-                    ? TMatrix[j - 1, j]
-                    : beta;
-                TMatrix[j, j - 1] = prevBeta;
-                TMatrix[j - 1, j] = prevBeta;
-            }
+            TMatrix[j, j - 1] = betaPrev;
+            TMatrix[j - 1, j] = betaPrev;
         }
     }
 

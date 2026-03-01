@@ -242,8 +242,9 @@ public class BayesianDenseLayer<T> : LayerBase<T>, IBayesianLayer<T>
         _lastInput = input;
         _lastPreActivation = null;
 
-        // Sample weights if not already sampled
-        if (_sampledWeights == null || _sampledBias == null)
+        // Always resample weights during training for proper Bayesian inference.
+        // During inference, reuse previously sampled weights for consistency.
+        if (_sampledWeights == null || _sampledBias == null || IsTrainingMode)
         {
             SampleWeights();
         }

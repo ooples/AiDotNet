@@ -417,51 +417,9 @@ public class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     /// </summary>
     private Tensor<T> LayerNorm(Tensor<T> input)
     {
-        int batchSize = input.Shape[0];
-        int numFrames = input.Shape[1];
-        int dim = input.Shape[2];
-        double epsilon = 1e-5;
-
-        var normalized = new T[input.Length];
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int f = 0; f < numFrames; f++)
-            {
-                // Compute mean
-                double sum = 0;
-                for (int d = 0; d < dim; d++)
-                {
-                    int idx = b * numFrames * dim + f * dim + d;
-                    sum += _numOps.ToDouble(input.Data.Span[idx]);
-                }
-                double mean = sum / dim;
-
-                // Compute variance
-                double varSum = 0;
-                for (int d = 0; d < dim; d++)
-                {
-                    int idx = b * numFrames * dim + f * dim + d;
-                    double diff = _numOps.ToDouble(input.Data.Span[idx]) - mean;
-                    varSum += diff * diff;
-                }
-                double variance = varSum / dim;
-                double std = Math.Sqrt(variance + epsilon);
-
-                // Normalize and apply gamma/beta
-                for (int d = 0; d < dim; d++)
-                {
-                    int idx = b * numFrames * dim + f * dim + d;
-                    double x = _numOps.ToDouble(input.Data.Span[idx]);
-                    double normed = (x - mean) / std;
-                    double gamma = _numOps.ToDouble(_normGamma[d % _normGamma.Length]);
-                    double beta = _numOps.ToDouble(_normBeta[d % _normBeta.Length]);
-                    normalized[idx] = _numOps.FromDouble(gamma * normed + beta);
-                }
-            }
-        }
-
-        return new Tensor<T>(normalized, input.Shape);
+        var gammaTensor = new Tensor<T>(_normGamma, [_normGamma.Length]);
+        var betaTensor = new Tensor<T>(_normBeta, [_normBeta.Length]);
+        return Engine.LayerNorm(input, gammaTensor, betaTensor, 1e-5, out _, out _);
     }
 
     /// <summary>

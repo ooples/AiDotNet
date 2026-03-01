@@ -536,7 +536,7 @@ public class DiffWaveNetwork<T>
 
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
-        return AiDotNetEngine.Current.TensorAdd<T>(a, b);
+        return AiDotNetEngine.Current.TensorAdd(a, b);
     }
 
     private Tensor<T> ApplyRelu(Tensor<T> x)
@@ -725,7 +725,7 @@ public class DiffWaveResidualBlock<T>
 
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
-        return AiDotNetEngine.Current.TensorAdd<T>(a, b);
+        return AiDotNetEngine.Current.TensorAdd(a, b);
     }
 
     private Tensor<T> ApplyGatedActivation(Tensor<T> x)

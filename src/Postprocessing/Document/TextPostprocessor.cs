@@ -47,7 +47,6 @@ public class TextPostprocessor<T> : PostprocessorBase<T, string, string>, IDispo
     {
         { "0", "O" },  // Zero often confused with O
         { "1", "l" },  // One often confused with l
-        { "1", "I" },  // One often confused with I
         { "5", "S" },  // Five often confused with S
         { "8", "B" },  // Eight often confused with B
         { "rn", "m" }, // rn often appears as m

@@ -20,6 +20,14 @@ namespace AiDotNet.Models.Options;
 public class DFPOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOptions<T, TInput, TOutput>
 {
     /// <summary>
+    /// Initializes a new instance of the DFPOptimizerOptions class with appropriate defaults.
+    /// </summary>
+    public DFPOptimizerOptions()
+    {
+        MaxIterations = 1000;
+    }
+
+    /// <summary>
     /// Gets or sets the batch size for gradient computation.
     /// </summary>
     /// <value>A positive integer for mini-batch size, or -1 for full batch (default).</value>
@@ -127,7 +135,6 @@ public class DFPOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOpt
     /// after a certain point, you decide to work with the best solution you've found so far rather than continuing
     /// indefinitely.</para>
     /// </remarks>
-    public new int MaxIterations { get; set; } = 1000;
 
     /// <summary>
     /// Gets or sets the maximum number of iterations for the line search procedure within each optimization step.

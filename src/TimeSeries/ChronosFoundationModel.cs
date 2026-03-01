@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Helpers;
@@ -645,29 +646,7 @@ public class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
 
     private Tensor<T> ApplyLayerNorm(Tensor<T> input, Tensor<T> gamma, Tensor<T> beta)
     {
-        double mean = 0;
-        for (int i = 0; i < input.Length; i++)
-            mean += Convert.ToDouble(input[i]);
-        mean /= input.Length;
-
-        double variance = 0;
-        for (int i = 0; i < input.Length; i++)
-        {
-            double diff = Convert.ToDouble(input[i]) - mean;
-            variance += diff * diff;
-        }
-        variance /= input.Length;
-
-        double stddev = Math.Sqrt(variance + 1e-6);
-        var output = new Tensor<T>(new[] { input.Length });
-        for (int i = 0; i < input.Length; i++)
-        {
-            double normalized = (Convert.ToDouble(input[i]) - mean) / stddev;
-            output[i] = _numOps.Add(
-                _numOps.Multiply(gamma[i], _numOps.FromDouble(normalized)),
-                beta[i]);
-        }
-        return output;
+        return Engine.LayerNorm(input, gamma, beta, 1e-6, out _, out _);
     }
 
     /// <summary>
@@ -1587,10 +1566,7 @@ internal class ChronosTransformerLayerTensor<T>
 
     private T DotProduct(Tensor<T> a, Tensor<T> b)
     {
-        T sum = _numOps.Zero;
-        for (int i = 0; i < Math.Min(a.Length, b.Length); i++)
-            sum = _numOps.Add(sum, _numOps.Multiply(a[i], b[i]));
-        return sum;
+        return VectorHelper.DotProduct(a.ToVector(), b.ToVector());
     }
 
     public void ApplyGradients(Dictionary<string, Tensor<T>> accumulators, int layerIndex,

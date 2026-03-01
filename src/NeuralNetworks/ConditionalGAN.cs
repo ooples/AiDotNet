@@ -523,28 +523,7 @@ public class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
     /// </summary>
     private Tensor<T> ConcatenateTensors(Tensor<T> noise, Tensor<T> conditions)
     {
-        int batchSize = noise.Shape[0];
-        int noiseSize = noise.Shape[1];
-        int conditionSize = conditions.Shape[1];
-
-        var result = new Tensor<T>(new int[] { batchSize, noiseSize + conditionSize });
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            // Copy noise
-            for (int i = 0; i < noiseSize; i++)
-            {
-                result[b, i] = noise[b, i];
-            }
-
-            // Copy conditions
-            for (int i = 0; i < conditionSize; i++)
-            {
-                result[b, noiseSize + i] = conditions[b, i];
-            }
-        }
-
-        return result;
+        return Engine.TensorConcatenate([noise, conditions], axis: 1);
     }
 
     /// <summary>
