@@ -512,31 +512,16 @@ public class TrOCR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
     private T[] ApplySoftmax(Tensor<T> logits, int position)
     {
         int vocabSize = Math.Min(_vocabSize, logits.Data.Length);
-        var probs = new T[vocabSize];
-
-        // Find max for numerical stability
-        double maxVal = double.MinValue;
         int startIdx = position * vocabSize;
-        for (int i = 0; i < vocabSize && (startIdx + i) < logits.Data.Length; i++)
-        {
-            double val = NumOps.ToDouble(logits.Data.Span[startIdx + i]);
-            if (val > maxVal) maxVal = val;
-        }
+        int actualCount = Math.Min(vocabSize, logits.Data.Length - startIdx);
+        if (actualCount <= 0) return new T[vocabSize];
 
-        // Compute softmax
-        double sumExp = 0;
-        for (int i = 0; i < vocabSize && (startIdx + i) < logits.Data.Length; i++)
-        {
-            double val = NumOps.ToDouble(logits.Data.Span[startIdx + i]);
-            sumExp += Math.Exp(val - maxVal);
-        }
+        var slice = new Tensor<T>([actualCount]);
+        logits.Data.Span.Slice(startIdx, actualCount).CopyTo(slice.Data.Span);
+        var result = AiDotNetEngine.Current.Softmax(slice, -1);
 
-        for (int i = 0; i < vocabSize && (startIdx + i) < logits.Data.Length; i++)
-        {
-            double val = NumOps.ToDouble(logits.Data.Span[startIdx + i]);
-            probs[i] = NumOps.FromDouble(Math.Exp(val - maxVal) / sumExp);
-        }
-
+        var probs = new T[vocabSize];
+        result.Data.Span.CopyTo(probs.AsSpan(0, actualCount));
         return probs;
     }
 
