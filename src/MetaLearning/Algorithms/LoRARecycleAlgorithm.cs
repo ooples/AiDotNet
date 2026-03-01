@@ -206,7 +206,7 @@ public class LoRARecycleAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
 
     /// <summary>
     /// Computes a task embedding by running support data through the model and projecting
-    /// the averaged feature representation through the prototype encoder.
+    /// the feature representation through the prototype encoder.
     /// </summary>
     private Vector<T> ComputeTaskEmbedding(TInput supportInput)
     {

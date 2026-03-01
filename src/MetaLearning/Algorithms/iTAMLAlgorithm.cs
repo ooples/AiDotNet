@@ -105,10 +105,9 @@ public class iTAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
             }
             if (predLen > 0) distillLoss /= predLen;
 
-            var totalLoss = NumOps.Add(queryLoss,
-                NumOps.FromDouble(_algoOptions.DistillationWeight * distillLoss));
-
-            losses.Add(totalLoss);
+            // Report query loss only for the outer update (distillation is a training-time
+            // regularizer; its gradient is not backpropagated through the meta-gradient path)
+            losses.Add(queryLoss);
 
             // Compute meta-gradient from adapted student
             MetaModel.SetParameters(adaptedParams);

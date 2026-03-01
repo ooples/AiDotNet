@@ -88,30 +88,37 @@ internal class DynamicTaskSamplingAlgorithm<T, TInput, TOutput> : MetaLearnerBas
             _taskVisits = new int[taskBatch.Tasks.Length];
         }
 
-        for (int t = 0; t < taskBatch.Tasks.Length; t++)
+        try
         {
-            var task = taskBatch.Tasks[t];
-            var adaptedParams = new Vector<T>(_paramDim);
-            for (int d = 0; d < _paramDim; d++) adaptedParams[d] = initParams[d];
-
-            for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
+            for (int t = 0; t < taskBatch.Tasks.Length; t++)
             {
+                var task = taskBatch.Tasks[t];
+                var adaptedParams = new Vector<T>(_paramDim);
+                for (int d = 0; d < _paramDim; d++) adaptedParams[d] = initParams[d];
+
+                for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
+                {
+                    MetaModel.SetParameters(adaptedParams);
+                    var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
+                    adaptedParams = ApplyGradients(adaptedParams, grad, _algoOptions.InnerLearningRate);
+                }
+
                 MetaModel.SetParameters(adaptedParams);
-                var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-                adaptedParams = ApplyGradients(adaptedParams, grad, _algoOptions.InnerLearningRate);
+                var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
+                double lossVal = NumOps.ToDouble(queryLoss);
+
+                // Update difficulty estimate
+                _taskVisits[t]++;
+                _taskDifficulty[t] = _algoOptions.DifficultyDecay * _taskDifficulty[t]
+                                   + (1.0 - _algoOptions.DifficultyDecay) * lossVal;
+
+                losses.Add(queryLoss);
+                metaGradients.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
             }
-
-            MetaModel.SetParameters(adaptedParams);
-            var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
-            double lossVal = NumOps.ToDouble(queryLoss);
-
-            // Update difficulty estimate
-            _taskVisits[t]++;
-            _taskDifficulty[t] = _algoOptions.DifficultyDecay * _taskDifficulty[t]
-                               + (1.0 - _algoOptions.DifficultyDecay) * lossVal;
-
-            losses.Add(queryLoss);
-            metaGradients.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
+        }
+        finally
+        {
+            MetaModel.SetParameters(initParams);
         }
 
         // Compute difficulty-proportional weights with UCB exploration
@@ -135,7 +142,6 @@ internal class DynamicTaskSamplingAlgorithm<T, TInput, TOutput> : MetaLearnerBas
         for (int t = 0; t < numTasks; t++) weights[t] /= (sumExp + SoftmaxEpsilon);
 
         // Weighted meta-gradient
-        MetaModel.SetParameters(initParams);
         if (metaGradients.Count > 0)
         {
             var weightedGrad = new Vector<T>(_paramDim);

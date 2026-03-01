@@ -119,9 +119,10 @@ public class MetaFDMixupAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
         {
             var avgGrad = AverageVectors(metaGradients);
             // Add alignment gradient: penalize high variance in gradient directions
+            // Weighted consistently with the alignment penalty added to the loss
             for (int d = 0; d < _paramDim; d++)
             {
-                double alignGrad = ComputeAlignmentGradient(taskGradPool, d);
+                double alignGrad = _algoOptions.AlignmentWeight * ComputeAlignmentGradient(taskGradPool, d);
                 avgGrad[d] = NumOps.Add(avgGrad[d], NumOps.FromDouble(alignGrad));
             }
             MetaModel.SetParameters(ApplyGradients(initParams, avgGrad, _algoOptions.OuterLearningRate));
@@ -165,7 +166,7 @@ public class MetaFDMixupAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
     {
         if (shape >= 1.0)
         {
-            // Marsaglia-Tsang
+            // Marsaglia-Tsang method
             double d = shape - 1.0 / 3.0;
             double c = 1.0 / Math.Sqrt(9.0 * d);
             while (true)
@@ -177,7 +178,9 @@ public class MetaFDMixupAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
                 if (v > 0)
                 {
                     v = v * v * v;
-                    if (Math.Log(u1) < 0.5 * z * z + d - d * v + d * Math.Log(v))
+                    // Use fresh uniform for acceptance test (not correlated u1)
+                    double u3 = Math.Max(1e-10, RandomGenerator.NextDouble());
+                    if (Math.Log(u3) < 0.5 * z * z + d - d * v + d * Math.Log(v))
                         return d * v;
                 }
             }

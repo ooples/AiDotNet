@@ -107,7 +107,7 @@ public class SineWaveMetaDataset<T, TInput, TOutput> : MetaDatasetBase<T, TInput
             double amplitude = _amplitudeMin + Rng.NextDouble() * (_amplitudeMax - _amplitudeMin);
             double phase = _phaseMin + Rng.NextDouble() * (_phaseMax - _phaseMin);
 
-            // Generate all x values for this wave and shuffle
+            // Generate random x values for this wave (uniform in [xMin, xMax])
             var xValues = new double[totalPerWay];
             for (int i = 0; i < totalPerWay; i++)
             {

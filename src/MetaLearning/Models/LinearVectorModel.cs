@@ -46,10 +46,14 @@ public class LinearVectorModel : IFullModel<double, Matrix<double>, Vector<doubl
     {
         Guard.NotNull(input);
         var output = new Vector<double>(input.Rows);
+        if (input.Columns < _inputDim)
+            throw new ArgumentException(
+                $"Input has {input.Columns} columns but model expects at least {_inputDim}.", nameof(input));
+
         for (int r = 0; r < input.Rows; r++)
         {
             double sum = _parameters[_inputDim];
-            for (int c = 0; c < _inputDim && c < input.Columns; c++)
+            for (int c = 0; c < _inputDim; c++)
             {
                 sum += input[r, c] * _parameters[c];
             }
@@ -123,6 +127,9 @@ public class LinearVectorModel : IFullModel<double, Matrix<double>, Vector<doubl
     public Vector<double> ComputeGradients(
         Matrix<double> input, Vector<double> target, ILossFunction<double>? lossFunction = null)
     {
+        Guard.NotNull(input);
+        Guard.NotNull(target);
+
         var gradients = new Vector<double>(_parameters.Length);
         int count = Math.Min(input.Rows, target.Length);
         if (count == 0)
@@ -131,10 +138,15 @@ public class LinearVectorModel : IFullModel<double, Matrix<double>, Vector<doubl
         }
 
         var predictions = Predict(input);
-        double scale = 2.0 / count;
+
+        // Use the provided loss function if available, otherwise fall back to MSE
+        var loss = lossFunction ?? DefaultLossFunction;
+        var lossGradient = loss.CalculateDerivative(predictions, target);
+
+        double scale = 1.0 / count;
         for (int r = 0; r < count; r++)
         {
-            double error = predictions[r] - target[r];
+            double error = lossGradient[r];
             for (int c = 0; c < _inputDim && c < input.Columns; c++)
             {
                 gradients[c] += scale * error * input[r, c];
@@ -149,8 +161,15 @@ public class LinearVectorModel : IFullModel<double, Matrix<double>, Vector<doubl
     /// <inheritdoc/>
     public void ApplyGradients(Vector<double> gradients, double learningRate)
     {
-        int length = Math.Min(gradients.Length, _parameters.Length);
-        for (int i = 0; i < length; i++)
+        Guard.NotNull(gradients);
+        if (gradients.Length != _parameters.Length)
+            throw new ArgumentException(
+                $"Gradient length mismatch: expected {_parameters.Length}, got {gradients.Length}.",
+                nameof(gradients));
+        if (learningRate <= 0)
+            throw new ArgumentOutOfRangeException(nameof(learningRate), "Learning rate must be positive.");
+
+        for (int i = 0; i < _parameters.Length; i++)
         {
             _parameters[i] -= learningRate * gradients[i];
         }
@@ -231,10 +250,10 @@ public class LinearVectorModel : IFullModel<double, Matrix<double>, Vector<doubl
             return importance;
         }
 
-        double score = 1.0 / _inputDim;
+        // Use absolute weight magnitude as feature importance
         for (int i = 0; i < _inputDim; i++)
         {
-            importance[$"feature_{i}"] = score;
+            importance[$"feature_{i}"] = Math.Abs(_parameters[i]);
         }
 
         return importance;

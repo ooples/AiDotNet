@@ -39,6 +39,8 @@ public class HyperCLIPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
     private readonly HyperCLIPOptions<T, TInput, TOutput> _algoOptions;
     private readonly int _paramDim;
 
+    private const double SpsaLearningRateMultiplier = 0.1;
+
     /// <summary>Projection weights: task projection (embDim × projDim) + param projection (embDim × projDim).</summary>
     private Vector<T> _projectionWeights;
 
@@ -50,6 +52,11 @@ public class HyperCLIPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
                options.LossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.MultiClassClassification),
                options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer)
     {
+        if (options.EmbeddingDim <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "EmbeddingDim must be positive.");
+        if (options.ProjectionDim <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "ProjectionDim must be positive.");
+
         _algoOptions = options;
         _paramDim = options.MetaModel.GetParameters().Length;
 
@@ -127,7 +134,7 @@ public class HyperCLIPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
             MetaModel.SetParameters(ApplyGradients(initParams, avgGrad, _algoOptions.OuterLearningRate));
         }
 
-        UpdateAuxiliaryParamsSPSA(taskBatch, ref _projectionWeights, _algoOptions.OuterLearningRate * 0.1, ComputeCLIPLoss);
+        UpdateAuxiliaryParamsSPSA(taskBatch, ref _projectionWeights, _algoOptions.OuterLearningRate * SpsaLearningRateMultiplier, ComputeCLIPLoss);
 
         return ComputeMean(losses);
     }
@@ -255,8 +262,23 @@ public class HyperCLIPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
     {
         double totalLoss = 0;
         var initParams = MetaModel.GetParameters();
-        foreach (var task in taskBatch.Tasks)
+        int embDim = _algoOptions.EmbeddingDim;
+        int projDim = _algoOptions.ProjectionDim;
+        int numTasks = taskBatch.Tasks.Length;
+
+        var taskEmbs = new double[numTasks][];
+        var paramEmbs = new double[numTasks][];
+
+        for (int i = 0; i < numTasks; i++)
         {
+            var task = taskBatch.Tasks[i];
+
+            // Task embedding from support gradient
+            MetaModel.SetParameters(initParams);
+            var supportGrad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
+            taskEmbs[i] = ProjectTask(CompressGradient(supportGrad, embDim));
+
+            // Adapt
             var ap = new Vector<T>(_paramDim);
             for (int d = 0; d < _paramDim; d++) ap[d] = initParams[d];
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
@@ -265,10 +287,19 @@ public class HyperCLIPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
                 var g = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
                 ap = ApplyGradients(ap, g, _algoOptions.InnerLearningRate);
             }
+
+            // Param embedding from delta
+            paramEmbs[i] = ProjectParam(CompressParamDelta(initParams, ap, embDim));
+
             MetaModel.SetParameters(ap);
             totalLoss += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
         }
+
+        // Include contrastive loss so projections are optimized for alignment
+        double contrastive = ComputeInfoNCE(taskEmbs, paramEmbs, numTasks, projDim);
+        totalLoss += _algoOptions.ContrastiveWeight * contrastive * numTasks;
+
         MetaModel.SetParameters(initParams);
-        return totalLoss / Math.Max(taskBatch.Tasks.Length, 1);
+        return totalLoss / Math.Max(numTasks, 1);
     }
 }

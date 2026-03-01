@@ -45,6 +45,8 @@ public class BayProNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
     private readonly BayProNetOptions<T, TInput, TOutput> _algoOptions;
     private readonly int _paramDim;
 
+    private const double SpsaLearningRateMultiplier = 0.1;
+
     /// <summary>Meta-learned per-parameter log-variance for the posterior distribution.</summary>
     private Vector<T> _posteriorLogVar;
 
@@ -70,6 +72,9 @@ public class BayProNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
     /// <inheritdoc/>
     public override T MetaTrain(TaskBatch<T, TInput, TOutput> taskBatch)
     {
+        if (taskBatch == null) throw new ArgumentNullException(nameof(taskBatch));
+        if (taskBatch.Tasks.Length == 0) return NumOps.Zero;
+
         var losses = new List<T>();
         var metaGradients = new List<Vector<T>>();
         var initParams = MetaModel.GetParameters();
@@ -131,7 +136,7 @@ public class BayProNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
         }
 
         // Update posterior log-variance via SPSA
-        UpdateAuxiliaryParamsSPSA(taskBatch, ref _posteriorLogVar, _algoOptions.OuterLearningRate * 0.1, ComputeBayProNetLoss);
+        UpdateAuxiliaryParamsSPSA(taskBatch, ref _posteriorLogVar, _algoOptions.OuterLearningRate * SpsaLearningRateMultiplier, ComputeBayProNetLoss);
 
         return ComputeMean(losses);
     }

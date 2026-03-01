@@ -42,6 +42,8 @@ internal class RecurrentHyperNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<
     private readonly RecurrentHyperNetOptions<T, TInput, TOutput> _algoOptions;
     private readonly int _paramDim;
 
+    private const double SpsaLearningRateMultiplier = 0.1;
+
     /// <summary>GRU weights: W_z, W_r, W_h — each (hidDim + inputDim) × hidDim.</summary>
     private Vector<T> _gruWeights;
 
@@ -129,7 +131,7 @@ internal class RecurrentHyperNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<
             MetaModel.SetParameters(ApplyGradients(initParams, avgGrad, _algoOptions.OuterLearningRate));
         }
 
-        UpdateAuxiliaryParamsSPSA(taskBatch, ref _gruWeights, _algoOptions.OuterLearningRate * 0.1, ComputeRecurrentLoss);
+        UpdateAuxiliaryParamsSPSA(taskBatch, ref _gruWeights, _algoOptions.OuterLearningRate * SpsaLearningRateMultiplier, ComputeRecurrentLoss);
 
         return ComputeMean(losses);
     }
@@ -261,7 +263,12 @@ internal class RecurrentHyperNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<
                 }
             }
             MetaModel.SetParameters(ap);
-            totalLoss += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
+            double queryLoss = NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
+
+            // Include cell regularization in SPSA objective to match training loss
+            double cellNorm = 0;
+            for (int h = 0; h < hidDim; h++) cellNorm += hid[h] * hid[h];
+            totalLoss += queryLoss + _algoOptions.CellRegWeight * cellNorm / hidDim;
         }
         MetaModel.SetParameters(initParams);
         return totalLoss / Math.Max(taskBatch.Tasks.Length, 1);

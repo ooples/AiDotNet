@@ -42,6 +42,8 @@ public class DiscoRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
     private readonly int _skillRank;
     private readonly int _compressedDim;
 
+    private const double SpsaLearningRateMultiplier = 0.1;
+
     /// <summary>Skill basis vectors: numSkills * skillRank * compressedDim.</summary>
     private Vector<T> _skillBasis;
 
@@ -53,7 +55,7 @@ public class DiscoRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
 
     public DiscoRLAlgorithm(DiscoRLOptions<T, TInput, TOutput> options)
         : base((options ?? throw new ArgumentNullException(nameof(options))).MetaModel,
-               options.LossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.Regression),
+               options.LossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.MultiClassClassification),
                options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer)
     {
         if (options.NumSkills <= 0)
@@ -165,8 +167,8 @@ public class DiscoRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
             MetaModel.SetParameters(ApplyGradients(initParams, avgGrad, _algoOptions.OuterLearningRate));
         }
 
-        UpdateAuxiliaryParamsSPSA(taskBatch, ref _skillBasis, _algoOptions.OuterLearningRate * 0.1, ComputeDiscoRLLoss);
-        UpdateAuxiliaryParamsSPSA(taskBatch, ref _gatingParams, _algoOptions.OuterLearningRate * 0.1, ComputeDiscoRLLoss);
+        UpdateAuxiliaryParamsSPSA(taskBatch, ref _skillBasis, _algoOptions.OuterLearningRate * SpsaLearningRateMultiplier, ComputeDiscoRLLoss);
+        UpdateAuxiliaryParamsSPSA(taskBatch, ref _gatingParams, _algoOptions.OuterLearningRate * SpsaLearningRateMultiplier, ComputeDiscoRLLoss);
 
         return ComputeMean(losses);
     }

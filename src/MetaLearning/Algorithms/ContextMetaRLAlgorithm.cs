@@ -56,11 +56,18 @@ public class ContextMetaRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
     /// <summary>Maximum compressed gradient dimension for encoder input.</summary>
     private const int MaxCompressedDim = 64;
 
+    private const double SpsaLearningRateMultiplier = 0.1;
+
     public ContextMetaRLAlgorithm(ContextMetaRLOptions<T, TInput, TOutput> options)
         : base((options ?? throw new ArgumentNullException(nameof(options))).MetaModel,
-               options.LossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.Regression),
+               options.LossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.MultiClassClassification),
                options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer)
     {
+        if (options.ContextDim <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "ContextDim must be positive.");
+        if (options.AttentionTemperature <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "AttentionTemperature must be positive.");
+
         _algoOptions = options;
         _paramDim = options.MetaModel.GetParameters().Length;
         if (_paramDim == 0)
@@ -132,9 +139,9 @@ public class ContextMetaRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
             MetaModel.SetParameters(ApplyGradients(initParams, avgGrad, _algoOptions.OuterLearningRate));
         }
 
-        UpdateAuxiliaryParamsSPSA(taskBatch, ref _encoderParams, _algoOptions.OuterLearningRate * 0.1, ComputeContextMetaRLLoss);
-        UpdateAuxiliaryParamsSPSA(taskBatch, ref _queryVector, _algoOptions.OuterLearningRate * 0.1, ComputeContextMetaRLLoss);
-        UpdateAuxiliaryParamsSPSA(taskBatch, ref _modulationParams, _algoOptions.OuterLearningRate * 0.1, ComputeContextMetaRLLoss);
+        UpdateAuxiliaryParamsSPSA(taskBatch, ref _encoderParams, _algoOptions.OuterLearningRate * SpsaLearningRateMultiplier, ComputeContextMetaRLLoss);
+        UpdateAuxiliaryParamsSPSA(taskBatch, ref _queryVector, _algoOptions.OuterLearningRate * SpsaLearningRateMultiplier, ComputeContextMetaRLLoss);
+        UpdateAuxiliaryParamsSPSA(taskBatch, ref _modulationParams, _algoOptions.OuterLearningRate * SpsaLearningRateMultiplier, ComputeContextMetaRLLoss);
 
         return ComputeMean(losses);
     }

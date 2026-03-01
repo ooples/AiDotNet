@@ -53,6 +53,9 @@ internal class MetaTaskAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput
     /// <inheritdoc/>
     public override T MetaTrain(TaskBatch<T, TInput, TOutput> taskBatch)
     {
+        if (taskBatch == null) throw new ArgumentNullException(nameof(taskBatch));
+        if (taskBatch.Tasks.Length == 0) return NumOps.Zero;
+
         var realLosses = new List<T>();
         var metaGradients = new List<Vector<T>>();
         var initParams = MetaModel.GetParameters();
@@ -119,22 +122,24 @@ internal class MetaTaskAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput
                     MetaModel.Predict(taskBatch.Tasks[evalIdx].QueryInput),
                     taskBatch.Tasks[evalIdx].QueryOutput);
                 syntheticLosses.Add(synthLoss);
+                metaGradients.Add(ClipGradients(ComputeGradients(
+                    MetaModel, taskBatch.Tasks[evalIdx].QueryInput, taskBatch.Tasks[evalIdx].QueryOutput)));
             }
         }
 
-        // Combine real and synthetic losses
-        T totalLoss = ComputeMean(realLosses);
-        if (syntheticLosses.Count > 0)
-            totalLoss = NumOps.Add(totalLoss,
-                NumOps.Multiply(NumOps.FromDouble(_algoOptions.SyntheticWeight), ComputeMean(syntheticLosses)));
-
-        // Outer update
+        // Outer update using all meta-gradients (real + synthetic)
         MetaModel.SetParameters(initParams);
         if (metaGradients.Count > 0)
         {
             var avgGrad = AverageVectors(metaGradients);
             MetaModel.SetParameters(ApplyGradients(initParams, avgGrad, _algoOptions.OuterLearningRate));
         }
+
+        // Report combined loss for monitoring
+        T totalLoss = ComputeMean(realLosses);
+        if (syntheticLosses.Count > 0)
+            totalLoss = NumOps.Add(totalLoss,
+                NumOps.Multiply(NumOps.FromDouble(_algoOptions.SyntheticWeight), ComputeMean(syntheticLosses)));
 
         return totalLoss;
     }

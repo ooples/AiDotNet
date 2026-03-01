@@ -168,13 +168,14 @@ internal class MePoAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TO
     {
         var proto = new double[_protoDim];
         // Average pooling: group gradient dims into _protoDim buckets
-        int bucketSize = Math.Max(1, _paramDim / _protoDim);
+        // Use ceiling division to ensure all dimensions are covered
         for (int p = 0; p < _protoDim; p++)
         {
             double sum = 0;
             int count = 0;
-            int start = p * bucketSize;
-            for (int d = start; d < start + bucketSize && d < grad.Length; d++)
+            int start = (int)((long)p * _paramDim / _protoDim);
+            int end = (int)((long)(p + 1) * _paramDim / _protoDim);
+            for (int d = start; d < end && d < grad.Length; d++)
             {
                 sum += NumOps.ToDouble(grad[d]);
                 count++;
@@ -187,13 +188,13 @@ internal class MePoAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TO
     private double[] CompressParamDelta(Vector<T> current, Vector<T> initial)
     {
         var delta = new double[_protoDim];
-        int bucketSize = Math.Max(1, _paramDim / _protoDim);
         for (int p = 0; p < _protoDim; p++)
         {
             double sum = 0;
             int count = 0;
-            int start = p * bucketSize;
-            for (int d = start; d < start + bucketSize && d < _paramDim; d++)
+            int start = (int)((long)p * _paramDim / _protoDim);
+            int end = (int)((long)(p + 1) * _paramDim / _protoDim);
+            for (int d = start; d < end && d < _paramDim; d++)
             {
                 sum += NumOps.ToDouble(current[d]) - NumOps.ToDouble(initial[d]);
                 count++;

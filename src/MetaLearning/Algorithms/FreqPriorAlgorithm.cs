@@ -54,6 +54,8 @@ internal class FreqPriorAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
     {
         _algoOptions = options;
         _paramDim = options.MetaModel.GetParameters().Length;
+        if (_paramDim == 0)
+            throw new ArgumentException("MetaModel has zero parameters.", nameof(options));
         _lowFreqCutoff = Math.Max(1, (int)(_paramDim * options.LowFreqFraction));
 
         // Assign frequency-dependent regularization weights

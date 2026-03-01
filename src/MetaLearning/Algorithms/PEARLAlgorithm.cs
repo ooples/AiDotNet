@@ -43,6 +43,8 @@ public class PEARLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
     private readonly int _latentDim;
     private readonly int _compressedDim;
 
+    private const double SpsaLearningRateMultiplier = 0.1;
+
     /// <summary>Encoder parameters: maps compressed gradient → (μ, log_σ²) of size 2*latentDim.</summary>
     private Vector<T> _encoderParams;
 
@@ -57,6 +59,13 @@ public class PEARLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
                options.LossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.Regression),
                options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer)
     {
+        if (options.LatentDim <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "LatentDim must be positive.");
+        if (options.EncoderHiddenDim <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "EncoderHiddenDim must be positive.");
+        if (options.NumPosteriorSamples <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "NumPosteriorSamples must be positive.");
+
         _algoOptions = options;
         _paramDim = options.MetaModel.GetParameters().Length;
         _latentDim = options.LatentDim;
@@ -85,6 +94,9 @@ public class PEARLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
     /// <inheritdoc/>
     public override T MetaTrain(TaskBatch<T, TInput, TOutput> taskBatch)
     {
+        if (taskBatch == null) throw new ArgumentNullException(nameof(taskBatch));
+        if (taskBatch.Tasks.Length == 0) return NumOps.Zero;
+
         var losses = new List<T>();
         var metaGradients = new List<Vector<T>>();
         var initParams = MetaModel.GetParameters();
@@ -146,8 +158,8 @@ public class PEARLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
         }
 
         // Update encoder and projection via SPSA
-        UpdateAuxiliaryParamsSPSA(taskBatch, ref _encoderParams, _algoOptions.OuterLearningRate * 0.1, ComputePEARLLoss);
-        UpdateAuxiliaryParamsSPSA(taskBatch, ref _projectionParams, _algoOptions.OuterLearningRate * 0.1, ComputePEARLLoss);
+        UpdateAuxiliaryParamsSPSA(taskBatch, ref _encoderParams, _algoOptions.OuterLearningRate * SpsaLearningRateMultiplier, ComputePEARLLoss);
+        UpdateAuxiliaryParamsSPSA(taskBatch, ref _projectionParams, _algoOptions.OuterLearningRate * SpsaLearningRateMultiplier, ComputePEARLLoss);
 
         return ComputeMean(losses);
     }
@@ -155,6 +167,7 @@ public class PEARLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
     /// <inheritdoc/>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
+        if (task == null) throw new ArgumentNullException(nameof(task));
         var initParams = MetaModel.GetParameters();
         var contextVec = ComputeContext(task.SupportInput, task.SupportOutput, initParams);
         var (mu, _) = Encode(contextVec);

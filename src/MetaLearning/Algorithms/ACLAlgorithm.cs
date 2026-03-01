@@ -70,6 +70,9 @@ public class ACLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
     /// <inheritdoc/>
     public override T MetaTrain(TaskBatch<T, TInput, TOutput> taskBatch)
     {
+        if (taskBatch == null) throw new ArgumentNullException(nameof(taskBatch));
+        if (taskBatch.Tasks.Length == 0) return NumOps.Zero;
+
         var losses = new List<T>();
         var metaGradients = new List<Vector<T>>();
         var initParams = MetaModel.GetParameters();
@@ -106,24 +109,10 @@ public class ACLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
             MetaModel.SetParameters(adaptedParams);
             var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
 
-            // Elastic weight consolidation regularization
-            double ewcReg = 0;
-            for (int d = 0; d < _paramDim; d++)
-            {
-                double diff = NumOps.ToDouble(adaptedParams[d]) - NumOps.ToDouble(initParams[d]);
-                ewcReg += _importance[d] * diff * diff;
-            }
-
-            // Mask sparsity penalty (L1 on importance)
-            double sparsityPenalty = 0;
-            for (int d = 0; d < _paramDim; d++)
-                sparsityPenalty += Math.Abs(_importance[d]);
-
-            var totalLoss = NumOps.Add(queryLoss,
-                NumOps.FromDouble(_algoOptions.ElasticRegWeight * ewcReg
-                                + _algoOptions.MaskSparsityPenalty * sparsityPenalty));
-
-            losses.Add(totalLoss);
+            // Report query loss only — this matches the meta-gradient which is computed from query loss.
+            // Regularization (EWC + sparsity) acts indirectly through importance-weighted learning rates
+            // in the inner loop, keeping the outer optimization objective clean.
+            losses.Add(queryLoss);
             metaGradients.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
         }
 

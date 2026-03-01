@@ -79,29 +79,55 @@ public class ModelPredictiveTaskSampler<T, TInput, TOutput> : ITaskSampler<T, TI
         return new TaskBatch<T, TInput, TOutput>(tasks, BatchingStrategy.Adaptive);
     }
 
+    /// <summary>Number of candidate episodes to sample for UCB selection.</summary>
+    private const int UcbCandidates = 5;
+
+    /// <summary>Fraction of calls that use pure random exploration.</summary>
+    private const double ExplorationRate = 0.1;
+
     /// <inheritdoc/>
     public IEpisode<T, TInput, TOutput> SampleOne()
     {
-        var episode = _dataset.SampleEpisode(NumWays, NumShots, NumQueryPerClass);
-
-        // Use UCB-style selection: prioritize tasks with high predicted reward or high uncertainty
-        if (_meanRewards.Count > 0 && _rng.NextDouble() > 0.1) // 90% exploit, 10% explore
+        // Pure exploration: random sample
+        if (_meanRewards.Count == 0 || _rng.NextDouble() < ExplorationRate)
         {
-            // Set difficulty based on predicted adaptation risk (inverse of mean reward)
-            double maxUcb = double.NegativeInfinity;
-            for (int i = 0; i < _meanRewards.Count; i++)
-            {
-                double exploitation = _meanRewards[i];
-                double exploration = _explorationWeight * Math.Sqrt(
-                    _ucbScale * Math.Log(_totalPulls + 1) / Math.Max(1, _pullCounts[i]));
-                double ucb = exploitation + exploration;
-                if (ucb > maxUcb) maxUcb = ucb;
-            }
-            episode.Difficulty = Math.Max(0, Math.Min(1, maxUcb));
+            _totalPulls++;
+            return _dataset.SampleEpisode(NumWays, NumShots, NumQueryPerClass);
         }
 
+        // Exploit: sample multiple candidates and pick the one with highest UCB score
+        IEpisode<T, TInput, TOutput>? bestEpisode = null;
+        double bestUcb = double.NegativeInfinity;
+
+        for (int c = 0; c < UcbCandidates; c++)
+        {
+            var candidate = _dataset.SampleEpisode(NumWays, NumShots, NumQueryPerClass);
+            int idx = candidate.EpisodeId;
+
+            double ucb;
+            if (idx < _meanRewards.Count && _pullCounts[idx] > 0)
+            {
+                double exploitation = _meanRewards[idx];
+                double exploration = _explorationWeight * Math.Sqrt(
+                    _ucbScale * Math.Log(_totalPulls + 1) / Math.Max(1, _pullCounts[idx]));
+                ucb = exploitation + exploration;
+            }
+            else
+            {
+                // Never-seen episodes get maximum exploration bonus
+                ucb = double.MaxValue;
+            }
+
+            if (ucb > bestUcb)
+            {
+                bestUcb = ucb;
+                bestEpisode = candidate;
+            }
+        }
+
+        bestEpisode!.Difficulty = bestUcb == double.MaxValue ? 1.0 : Math.Max(0, Math.Min(1, bestUcb));
         _totalPulls++;
-        return episode;
+        return bestEpisode;
     }
 
     /// <inheritdoc/>

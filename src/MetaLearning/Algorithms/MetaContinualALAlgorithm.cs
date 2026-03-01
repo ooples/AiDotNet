@@ -39,6 +39,9 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// </remarks>
 public class MetaContinualALAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
+    /// <summary>Learning rate dampening factor for low-uncertainty parameters.</summary>
+    private const double LowUncertaintyDampening = 0.1;
+
     private readonly MetaContinualALOptions<T, TInput, TOutput> _algoOptions;
     private readonly int _paramDim;
 
@@ -113,7 +116,7 @@ public class MetaContinualALAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
                 for (int d = 0; d < _paramDim; d++)
                 {
                     // Mask amplified by UncertaintyWeight for high-uncertainty params
-                    double mask = zScores[d] >= threshold ? 1.0 * uWeight : 0.1;
+                    double mask = zScores[d] >= threshold ? 1.0 * uWeight : LowUncertaintyDampening;
                     double gradVal = NumOps.ToDouble(grad[d]);
 
                     // Exploration bonus: noise proportional to uncertainty
@@ -177,7 +180,7 @@ public class MetaContinualALAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
             double uWeight = _algoOptions.UncertaintyWeight;
             for (int d = 0; d < _paramDim; d++)
             {
-                double mask = zScores[d] >= threshold ? 1.0 * uWeight : 0.1;
+                double mask = zScores[d] >= threshold ? 1.0 * uWeight : LowUncertaintyDampening;
                 adaptedParams[d] = NumOps.Subtract(adaptedParams[d],
                     NumOps.FromDouble(_algoOptions.InnerLearningRate * mask * NumOps.ToDouble(grad[d])));
             }

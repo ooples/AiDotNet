@@ -56,6 +56,10 @@ public class FreqPromptAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput
     /// <summary>Per-frequency regularization weights (higher for high-freq).</summary>
     private readonly double[] _freqWeights;
 
+    private const double SpsaBasisLearningRateMultiplier = 0.1;
+    private const double SpsaCoeffsLearningRateMultiplier = 0.5;
+    private const double CoeffInitScaleFactor = 0.1;
+
     /// <inheritdoc/>
     public override MetaLearningAlgorithmType AlgorithmType => MetaLearningAlgorithmType.FreqPrompt;
 
@@ -85,7 +89,7 @@ public class FreqPromptAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput
         // Initialize prompt coefficients to small values
         _promptCoeffsInit = new Vector<T>(_numComponents);
         for (int k = 0; k < _numComponents; k++)
-            _promptCoeffsInit[k] = NumOps.FromDouble(options.PromptInitScale * 0.1);
+            _promptCoeffsInit[k] = NumOps.FromDouble(options.PromptInitScale * CoeffInitScaleFactor);
 
         // Frequency-dependent regularization: low freq (k=0) gets least penalty
         _freqWeights = new double[_numComponents];
@@ -145,8 +149,8 @@ public class FreqPromptAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput
         }
 
         // Update prompt basis and initial coefficients via SPSA
-        UpdateAuxiliaryParamsSPSA(taskBatch, ref _promptBasis, _algoOptions.OuterLearningRate * 0.1, ComputeFreqPromptLoss);
-        UpdateAuxiliaryParamsSPSA(taskBatch, ref _promptCoeffsInit, _algoOptions.OuterLearningRate * 0.5, ComputeFreqPromptLoss);
+        UpdateAuxiliaryParamsSPSA(taskBatch, ref _promptBasis, _algoOptions.OuterLearningRate * SpsaBasisLearningRateMultiplier, ComputeFreqPromptLoss);
+        UpdateAuxiliaryParamsSPSA(taskBatch, ref _promptCoeffsInit, _algoOptions.OuterLearningRate * SpsaCoeffsLearningRateMultiplier, ComputeFreqPromptLoss);
 
         return ComputeMean(losses);
     }

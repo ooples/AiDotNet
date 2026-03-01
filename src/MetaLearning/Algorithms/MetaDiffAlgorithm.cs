@@ -76,9 +76,14 @@ public class MetaDiffAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
 
     public MetaDiffAlgorithm(MetaDiffOptions<T, TInput, TOutput> options)
         : base((options ?? throw new ArgumentNullException(nameof(options))).MetaModel,
-               options.LossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.Regression),
+               options.LossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.MultiClassClassification),
                options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer)
     {
+        if (options.BetaStart <= 0 || options.BetaEnd <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "BetaStart and BetaEnd must be positive.");
+        if (options.BetaStart >= 1.0 || options.BetaEnd >= 1.0)
+            throw new ArgumentOutOfRangeException(nameof(options), "BetaStart and BetaEnd must be less than 1.0.");
+
         _algoOptions = options;
         _paramDim = options.MetaModel.GetParameters().Length;
         _condDim = Math.Max(1, options.TaskConditionDim);
@@ -117,6 +122,9 @@ public class MetaDiffAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
     /// <inheritdoc/>
     public override T MetaTrain(TaskBatch<T, TInput, TOutput> taskBatch)
     {
+        if (taskBatch == null) throw new ArgumentNullException(nameof(taskBatch));
+        if (taskBatch.Tasks.Length == 0) return NumOps.Zero;
+
         var losses = new List<T>();
         var metaGradients = new List<Vector<T>>();
         var baseParams = MetaModel.GetParameters();

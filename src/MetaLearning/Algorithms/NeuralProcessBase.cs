@@ -66,6 +66,53 @@ public abstract class NeuralProcessBase<T, TInput, TOutput> : MetaLearnerBase<T,
         DecoderParams = InitializeParams(representationDim * 2);
     }
 
+    /// <summary>Base value for the modulation scale sigmoid.</summary>
+    private const double ModScaleBase = 0.5;
+
+    /// <summary>Range of the modulation scale sigmoid output.</summary>
+    private const double ModScaleRange = 0.5;
+
+    /// <summary>Center of the sigmoid for modulation scale computation.</summary>
+    private const double ModScaleSigmoidCenter = 1.0;
+
+    /// <summary>
+    /// Builds context representations from support features and labels by encoding each
+    /// example as a context pair via <see cref="EncodeContextPair"/>.
+    /// </summary>
+    protected List<Vector<T>> BuildContextRepresentations(Vector<T>? supportFeatures, Vector<T>? supportLabels)
+    {
+        var contextReps = new List<Vector<T>>();
+        if (supportFeatures != null && supportLabels != null && supportFeatures.Length > 0 && supportLabels.Length > 0)
+        {
+            int numEx = Math.Max(1, supportLabels.Length);
+            int fDim = Math.Max(1, supportFeatures.Length / numEx);
+            for (int i = 0; i < numEx; i++)
+            {
+                int fStart = i * fDim;
+                int fLen = Math.Min(fDim, supportFeatures.Length - fStart);
+                if (fLen <= 0) break;
+                var f = new Vector<T>(fLen);
+                for (int j = 0; j < fLen; j++) f[j] = supportFeatures[fStart + j];
+                var l = new Vector<T>(1);
+                l[0] = supportLabels[Math.Min(i, supportLabels.Length - 1)];
+                contextReps.Add(EncodeContextPair(f, l));
+            }
+        }
+        return contextReps;
+    }
+
+    /// <summary>
+    /// Computes a modulation scale from a representation vector using a shifted sigmoid
+    /// that maps representation norm to [ModScaleBase, ModScaleBase + ModScaleRange].
+    /// </summary>
+    protected double ComputeModScale(Vector<T> rep)
+    {
+        double norm = 0;
+        for (int i = 0; i < rep.Length; i++) norm += NumOps.ToDouble(rep[i]) * NumOps.ToDouble(rep[i]);
+        norm = Math.Sqrt(norm / Math.Max(rep.Length, 1));
+        return ModScaleBase + ModScaleRange / (1.0 + Math.Exp(-norm + ModScaleSigmoidCenter));
+    }
+
     /// <summary>Initializes parameter vector with small random values.</summary>
     protected Vector<T> InitializeParams(int size)
     {

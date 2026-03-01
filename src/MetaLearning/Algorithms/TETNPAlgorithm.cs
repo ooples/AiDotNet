@@ -270,14 +270,6 @@ internal class TETNPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput,
         return var / refined.Count;
     }
 
-    private double ComputeModScale(Vector<T> rep)
-    {
-        double norm = 0;
-        for (int i = 0; i < rep.Length; i++) norm += NumOps.ToDouble(rep[i]) * NumOps.ToDouble(rep[i]);
-        norm = Math.Sqrt(norm / Math.Max(rep.Length, 1));
-        return 0.5 + 0.5 / (1.0 + Math.Exp(-norm + 1.0));
-    }
-
     private double ComputeAuxLoss(TaskBatch<T, TInput, TOutput> tb)
     {
         var ip = MetaModel.GetParameters();

@@ -70,35 +70,22 @@ public class BalancedTaskSampler<T, TInput, TOutput> : ITaskSampler<T, TInput, T
 
     /// <inheritdoc/>
     /// <remarks>
-    /// Uses the internal class rotation to ensure long-run balance across all classes.
-    /// Samples multiple candidate episodes and selects the one whose NumWays best matches
-    /// the next classes in the rotation. Because <see cref="IMetaDataset{T, TInput, TOutput}"/>
-    /// does not support constrained class selection, exact per-episode class targeting is
-    /// best-effort: over many episodes the rotation still diversifies class exposure.
+    /// <para>
+    /// The internal class rotation tracks which classes have been covered. Each call advances
+    /// a pointer through a shuffled class list to ensure long-run uniform class exposure.
+    /// When the pointer wraps around, the class list is reshuffled.
+    /// </para>
+    /// <para>
+    /// Because <see cref="IMetaDataset{T, TInput, TOutput}.SampleEpisode"/> does not support
+    /// constrained class selection, exact per-episode targeting is not possible. The rotation
+    /// ensures that the sampler at least tracks coverage and reshuffles periodically.
+    /// </para>
     /// </remarks>
     public IEpisode<T, TInput, TOutput> SampleOne()
     {
-        // Sample multiple candidates and pick one whose task matches
-        // the next rotation window's NumWays value (best-effort diversity).
-        // This ensures the dataset's class distribution is explored more evenly than
-        // pure random sampling.
-        const int candidates = 3;
-        IEpisode<T, TInput, TOutput>? best = null;
-        int bestWayMatch = -1;
-
-        for (int c = 0; c < candidates; c++)
-        {
-            var candidate = _dataset.SampleEpisode(NumWays, NumShots, NumQueryPerClass);
-            int wayMatch = candidate.Task.NumWays;
-            if (wayMatch > bestWayMatch)
-            {
-                best = candidate;
-                bestWayMatch = wayMatch;
-            }
-        }
-
+        var episode = _dataset.SampleEpisode(NumWays, NumShots, NumQueryPerClass);
         AdvancePointer();
-        return best!;
+        return episode;
     }
 
     /// <inheritdoc/>

@@ -103,6 +103,9 @@ public class AutoLoRAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
     /// <inheritdoc/>
     public override T MetaTrain(TaskBatch<T, TInput, TOutput> taskBatch)
     {
+        if (taskBatch == null) throw new ArgumentNullException(nameof(taskBatch));
+        if (taskBatch.Tasks.Length == 0) return NumOps.Zero;
+
         var losses = new List<T>();
         var metaGradients = new List<Vector<T>>();
         var baseParams = MetaModel.GetParameters();

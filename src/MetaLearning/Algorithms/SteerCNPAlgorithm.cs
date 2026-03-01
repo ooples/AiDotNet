@@ -42,7 +42,7 @@ public class SteerCNPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput
             var supportLabels = ConvertToVector(task.SupportOutput);
 
             var contextReps = new List<Vector<T>>();
-            if (supportFeatures != null && supportLabels != null && supportFeatures.Length > 0)
+            if (supportFeatures != null && supportLabels != null && supportFeatures.Length > 0 && supportLabels.Length > 0)
             {
                 int numEx = Math.Max(1, supportLabels.Length);
                 int fDim = Math.Max(1, supportFeatures.Length / numEx);
@@ -111,14 +111,6 @@ public class SteerCNPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput
             modParams[i] = NumOps.Multiply(currentParams[i], NumOps.FromDouble(sc));
 
         return new NeuralProcessModel<T, TInput, TOutput>(MetaModel, modParams, aggRep);
-    }
-
-    private double ComputeModScale(Vector<T> rep)
-    {
-        double norm = 0;
-        for (int i = 0; i < rep.Length; i++) norm += NumOps.ToDouble(rep[i]) * NumOps.ToDouble(rep[i]);
-        norm = Math.Sqrt(norm / Math.Max(rep.Length, 1));
-        return 0.5 + 0.5 / (1.0 + Math.Exp(-norm + 1.0));
     }
 
     private double ComputeAuxLoss(TaskBatch<T, TInput, TOutput> tb)

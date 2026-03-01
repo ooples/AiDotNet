@@ -81,8 +81,10 @@ public class SDCLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
         {
             // Get teacher's soft targets on support set
             MetaModel.SetParameters(_teacherParams);
-            var teacherSupportPred = ConvertToVector(MetaModel.Predict(task.SupportInput)) ?? new Vector<T>(1);
-            var teacherQueryPred = ConvertToVector(MetaModel.Predict(task.QueryInput)) ?? new Vector<T>(1);
+            var teacherSupportPred = ConvertToVector(MetaModel.Predict(task.SupportInput))
+                ?? throw new InvalidOperationException("Teacher model returned non-vectorizable prediction for support input.");
+            var teacherQueryPred = ConvertToVector(MetaModel.Predict(task.QueryInput))
+                ?? throw new InvalidOperationException("Teacher model returned non-vectorizable prediction for query input.");
 
             // Inner loop: adapt student with task loss + distillation loss
             var studentParams = new Vector<T>(_paramDim);
