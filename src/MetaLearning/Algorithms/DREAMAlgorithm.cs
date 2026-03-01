@@ -56,6 +56,8 @@ public class DREAMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
     {
         if (options.RewardShaperHiddenDim <= 0)
             throw new ArgumentOutOfRangeException(nameof(options), "RewardShaperHiddenDim must be positive.");
+        if (options.ShapingDiscount < 0 || options.ShapingDiscount > 1)
+            throw new ArgumentOutOfRangeException(nameof(options), "ShapingDiscount must be in [0, 1].");
 
         _algoOptions = options;
         _paramDim = options.MetaModel.GetParameters().Length;
@@ -75,6 +77,10 @@ public class DREAMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
     /// <inheritdoc/>
     public override T MetaTrain(TaskBatch<T, TInput, TOutput> taskBatch)
     {
+        if (taskBatch == null) throw new ArgumentNullException(nameof(taskBatch));
+        if (taskBatch.Tasks.Length == 0)
+            return NumOps.Zero;
+
         var losses = new List<T>();
         var metaGradients = new List<Vector<T>>();
         var initParams = MetaModel.GetParameters();
@@ -138,6 +144,7 @@ public class DREAMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
     /// <inheritdoc/>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
+        if (task == null) throw new ArgumentNullException(nameof(task));
         var initParams = MetaModel.GetParameters();
         var adaptedParams = new Vector<T>(_paramDim);
         for (int d = 0; d < _paramDim; d++) adaptedParams[d] = initParams[d];

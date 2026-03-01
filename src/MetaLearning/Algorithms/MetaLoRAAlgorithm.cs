@@ -75,6 +75,8 @@ public class MetaLoRAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
         _algoOptions = options;
         _paramDim = options.MetaModel.GetParameters().Length;
         _rank = Math.Max(1, options.Rank);
+        if (options.ScalingAlpha <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "ScalingAlpha must be positive.");
         _scalingFactor = options.ScalingAlpha / _rank;
 
         // Initialize basis vectors with small random values (Kaiming-like initialization)
@@ -95,6 +97,10 @@ public class MetaLoRAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
     /// <inheritdoc/>
     public override T MetaTrain(TaskBatch<T, TInput, TOutput> taskBatch)
     {
+        if (taskBatch == null) throw new ArgumentNullException(nameof(taskBatch));
+        if (taskBatch.Tasks.Length == 0)
+            return NumOps.Zero;
+
         var losses = new List<T>();
         var metaGradients = new List<Vector<T>>();
         var baseParams = MetaModel.GetParameters();
@@ -152,6 +158,7 @@ public class MetaLoRAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
     /// <inheritdoc/>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
+        if (task == null) throw new ArgumentNullException(nameof(task));
         var baseParams = MetaModel.GetParameters();
 
         // Initialize task-specific coefficients from meta-learned init
@@ -234,7 +241,7 @@ public class MetaLoRAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
             {
                 var adaptedParams = ComputeAdaptedParams(baseParams, coeffs);
                 MetaModel.SetParameters(adaptedParams);
-                var fullGrad = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
+                var fullGrad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
                 for (int j = 0; j < _rank; j++)
                 {
                     double gradCoeff = _scalingFactor * DotProductWithBasis(fullGrad, j);

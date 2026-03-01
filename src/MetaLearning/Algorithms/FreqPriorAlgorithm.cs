@@ -37,7 +37,7 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// </code>
 /// </para>
 /// </remarks>
-public class FreqPriorAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
+internal class FreqPriorAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private readonly FreqPriorOptions<T, TInput, TOutput> _algoOptions;
     private readonly int _paramDim;
@@ -70,6 +70,10 @@ public class FreqPriorAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
     /// <inheritdoc/>
     public override T MetaTrain(TaskBatch<T, TInput, TOutput> taskBatch)
     {
+        if (taskBatch == null) throw new ArgumentNullException(nameof(taskBatch));
+        if (taskBatch.Tasks.Length == 0)
+            return NumOps.Zero;
+
         var losses = new List<T>();
         var metaGradients = new List<Vector<T>>();
         var initParams = MetaModel.GetParameters();
@@ -120,6 +124,7 @@ public class FreqPriorAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
     /// <inheritdoc/>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
+        if (task == null) throw new ArgumentNullException(nameof(task));
         var initParams = MetaModel.GetParameters();
         var adaptedParams = new Vector<T>(_paramDim);
         for (int d = 0; d < _paramDim; d++) adaptedParams[d] = initParams[d];

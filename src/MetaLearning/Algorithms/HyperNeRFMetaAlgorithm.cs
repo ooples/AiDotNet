@@ -65,6 +65,10 @@ public class HyperNeRFMetaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
         _paramDim = options.MetaModel.GetParameters().Length;
         if (_paramDim == 0)
             throw new ArgumentException("MetaModel has zero parameters. HyperNeRF requires a model with at least one parameter.");
+        if (options.NumFrequencyBands <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "NumFrequencyBands must be positive.");
+        if (options.LatentDim <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "LatentDim must be positive.");
         _peDim = 2 * options.NumFrequencyBands + 1;
 
         // Group parameters to reduce conditioning MLP calls

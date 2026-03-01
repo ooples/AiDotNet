@@ -94,8 +94,7 @@ public class SDCLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
                 var taskGrad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
 
                 // Compute distillation gradient: encourage student to match teacher's soft outputs
-                var studentPred = ConvertToVector(MetaModel.Predict(task.SupportInput)) ?? new Vector<T>(1);
-                var distillGrad = ComputeDistillationGradient(studentParams, teacherSupportPred, studentPred);
+                var distillGrad = ComputeDistillationGradient(studentParams, teacherSupportPred, task.SupportInput);
 
                 // Combined gradient
                 for (int d = 0; d < _paramDim; d++)
@@ -155,8 +154,7 @@ public class SDCLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
             MetaModel.SetParameters(studentParams);
             var taskGrad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
 
-            var studentPred = ConvertToVector(MetaModel.Predict(task.SupportInput)) ?? new Vector<T>(1);
-            var distillGrad = ComputeDistillationGradient(studentParams, teacherPred, studentPred);
+            var distillGrad = ComputeDistillationGradient(studentParams, teacherPred, task.SupportInput);
 
             for (int d = 0; d < _paramDim; d++)
             {
@@ -169,18 +167,18 @@ public class SDCLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
         return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, studentParams);
     }
 
+    private const double SpsaPerturbScale = 0.01;
+
     /// <summary>
     /// Computes the distillation gradient: ∂KL(teacher || student) / ∂θ_student.
     /// Uses SPSA (Simultaneous Perturbation Stochastic Approximation) for finite-difference
     /// gradient estimation when analytical gradients are not available.
     /// </summary>
-    private Vector<T> ComputeDistillationGradient(Vector<T> studentParams, Vector<T> teacherPred, Vector<T> studentPred)
+    private Vector<T> ComputeDistillationGradient(Vector<T> studentParams, Vector<T> teacherPred, TInput supportInput)
     {
-        double temp = _algoOptions.DistillationTemperature;
         var grad = new Vector<T>(_paramDim);
 
         // SPSA: perturb all parameters simultaneously with Rademacher random variables
-        double perturbScale = 0.01;
         var delta = new double[_paramDim];
         for (int d = 0; d < _paramDim; d++)
             delta[d] = RandomGenerator.NextDouble() < 0.5 ? -1.0 : 1.0;
@@ -191,15 +189,15 @@ public class SDCLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
         for (int d = 0; d < _paramDim; d++)
         {
             double p = NumOps.ToDouble(studentParams[d]);
-            paramsPlus[d] = NumOps.FromDouble(p + perturbScale * delta[d]);
-            paramsMinus[d] = NumOps.FromDouble(p - perturbScale * delta[d]);
+            paramsPlus[d] = NumOps.FromDouble(p + SpsaPerturbScale * delta[d]);
+            paramsMinus[d] = NumOps.FromDouble(p - SpsaPerturbScale * delta[d]);
         }
 
-        double lossPlus = ComputeKLDivergence(teacherPred, GetPredictionWithParams(paramsPlus, studentPred));
-        double lossMinus = ComputeKLDivergence(teacherPred, GetPredictionWithParams(paramsMinus, studentPred));
+        double lossPlus = ComputeKLDivergence(teacherPred, GetPredictionWithParams(paramsPlus, supportInput));
+        double lossMinus = ComputeKLDivergence(teacherPred, GetPredictionWithParams(paramsMinus, supportInput));
 
         // SPSA gradient estimate: g_d = (L+ - L-) / (2 * c * delta_d)
-        double gradScale = (lossPlus - lossMinus) / (2.0 * perturbScale);
+        double gradScale = (lossPlus - lossMinus) / (2.0 * SpsaPerturbScale);
         for (int d = 0; d < _paramDim; d++)
         {
             grad[d] = NumOps.FromDouble(gradScale / delta[d]);
@@ -209,26 +207,15 @@ public class SDCLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
     }
 
     /// <summary>
-    /// Gets a prediction by temporarily setting model parameters.
-    /// Falls back to the original prediction if the model produces equivalent output.
+    /// Gets a prediction by temporarily setting model parameters and running forward pass.
     /// </summary>
-    private Vector<T> GetPredictionWithParams(Vector<T> perturbed, Vector<T> fallback)
+    private Vector<T> GetPredictionWithParams(Vector<T> parameters, TInput input)
     {
-        // For SPSA, we approximate by using the original prediction scaled by the perturbation magnitude
-        // This avoids requiring a specific input to predict on
-        int dim = fallback.Length;
-        var result = new Vector<T>(dim);
-        double perturbNorm = 0;
-        for (int d = 0; d < Math.Min(perturbed.Length, dim); d++)
-            perturbNorm += Math.Abs(NumOps.ToDouble(perturbed[d]));
-        perturbNorm = perturbNorm / Math.Max(1, perturbed.Length) + 1e-10;
-
-        for (int i = 0; i < dim; i++)
-        {
-            double val = NumOps.ToDouble(fallback[i]);
-            result[i] = NumOps.FromDouble(val * (1.0 + 0.01 * (perturbNorm - 1.0)));
-        }
-        return result;
+        var savedParams = MetaModel.GetParameters();
+        MetaModel.SetParameters(parameters);
+        var prediction = ConvertToVector(MetaModel.Predict(input)) ?? new Vector<T>(1);
+        MetaModel.SetParameters(savedParams);
+        return prediction;
     }
 
     /// <summary>

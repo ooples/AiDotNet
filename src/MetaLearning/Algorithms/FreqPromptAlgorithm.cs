@@ -171,7 +171,7 @@ public class FreqPromptAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput
                 double gradC = 0;
                 for (int d = 0; d < _paramDim; d++)
                     gradC += NumOps.ToDouble(grad[d]) * NumOps.ToDouble(_promptBasis[k * _paramDim + d]);
-                double reg = _freqWeights[k] * _algoOptions.HighFreqPenalty * coeffs[k];
+                double reg = _freqWeights[k] * coeffs[k];
                 coeffs[k] -= _algoOptions.InnerLearningRate * (gradC + reg);
             }
         }
@@ -216,7 +216,7 @@ public class FreqPromptAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput
             {
                 var effectiveParams = ComputeEffectiveParams(baseParams, coeffs);
                 MetaModel.SetParameters(effectiveParams);
-                var grad = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
+                var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
 
                 for (int k = 0; k < _numComponents; k++)
                 {

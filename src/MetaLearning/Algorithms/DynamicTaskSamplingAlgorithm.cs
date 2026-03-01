@@ -33,7 +33,7 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// </code>
 /// </para>
 /// </remarks>
-public class DynamicTaskSamplingAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
+internal class DynamicTaskSamplingAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private readonly DynamicTaskSamplingOptions<T, TInput, TOutput> _algoOptions;
     private readonly int _paramDim;
@@ -72,9 +72,12 @@ public class DynamicTaskSamplingAlgorithm<T, TInput, TOutput> : MetaLearnerBase<
     /// <inheritdoc/>
     public override T MetaTrain(TaskBatch<T, TInput, TOutput> taskBatch)
     {
+        if (taskBatch == null) throw new ArgumentNullException(nameof(taskBatch));
+        if (taskBatch.Tasks.Length == 0)
+            return NumOps.Zero;
+
         var losses = new List<T>();
         var metaGradients = new List<Vector<T>>();
-        var taskLossValues = new List<double>();
         var initParams = MetaModel.GetParameters();
         _totalIterations++;
 
@@ -108,7 +111,6 @@ public class DynamicTaskSamplingAlgorithm<T, TInput, TOutput> : MetaLearnerBase<
                                + (1.0 - _algoOptions.DifficultyDecay) * lossVal;
 
             losses.Add(queryLoss);
-            taskLossValues.Add(lossVal);
             metaGradients.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
         }
 
@@ -129,7 +131,8 @@ public class DynamicTaskSamplingAlgorithm<T, TInput, TOutput> : MetaLearnerBase<
         // Softmax normalization
         double sumExp = 0;
         for (int t = 0; t < numTasks; t++) { weights[t] = Math.Exp(weights[t] - maxWeight); sumExp += weights[t]; }
-        for (int t = 0; t < numTasks; t++) weights[t] /= (sumExp + 1e-10);
+        const double SoftmaxEpsilon = 1e-10;
+        for (int t = 0; t < numTasks; t++) weights[t] /= (sumExp + SoftmaxEpsilon);
 
         // Weighted meta-gradient
         MetaModel.SetParameters(initParams);
@@ -150,6 +153,7 @@ public class DynamicTaskSamplingAlgorithm<T, TInput, TOutput> : MetaLearnerBase<
     /// <inheritdoc/>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
+        if (task == null) throw new ArgumentNullException(nameof(task));
         var initParams = MetaModel.GetParameters();
         var adaptedParams = new Vector<T>(_paramDim);
         for (int d = 0; d < _paramDim; d++) adaptedParams[d] = initParams[d];

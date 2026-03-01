@@ -49,6 +49,12 @@ public class ActiveTransFSLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TI
     {
         _algoOptions = options;
         _paramDim = options.MetaModel.GetParameters().Length;
+        if (_paramDim == 0)
+            throw new ArgumentException("MetaModel has zero parameters.", nameof(options));
+        if (options.TransductiveLR < 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "TransductiveLR must be non-negative.");
+        if (options.SelectionFraction <= 0 || options.SelectionFraction > 1)
+            throw new ArgumentOutOfRangeException(nameof(options), "SelectionFraction must be in (0, 1].");
     }
 
     /// <inheritdoc/>

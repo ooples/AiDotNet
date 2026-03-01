@@ -38,6 +38,8 @@ public class HyperNetMetaRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TI
     private readonly int _hiddenDim;
     private readonly int _compressedDim;
 
+    private const int MaxCompressedDim = 128;
+
     /// <summary>Task encoder: compressedDim → embDim.</summary>
     private Vector<T> _encoderParams;
 
@@ -46,6 +48,9 @@ public class HyperNetMetaRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TI
 
     /// <summary>Hypernetwork layer 2: hiddenDim → compressedDim.</summary>
     private Vector<T> _hyperLayer2;
+
+    /// <summary>SPSA learning rate multiplier for auxiliary parameter updates.</summary>
+    private const double SpsaLearningRateMultiplier = 0.1;
 
     /// <inheritdoc/>
     public override MetaLearningAlgorithmType AlgorithmType => MetaLearningAlgorithmType.HyperNetMetaRL;
@@ -64,7 +69,7 @@ public class HyperNetMetaRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TI
         _paramDim = options.MetaModel.GetParameters().Length;
         _embDim = options.TaskEmbeddingDim;
         _hiddenDim = options.HyperNetHiddenDim;
-        _compressedDim = Math.Min(_paramDim, 128);
+        _compressedDim = Math.Min(_paramDim, MaxCompressedDim);
 
         _encoderParams = InitRandom(_compressedDim * _embDim);
         _hyperLayer1 = InitRandom(_embDim * _hiddenDim);
@@ -133,9 +138,9 @@ public class HyperNetMetaRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TI
             MetaModel.SetParameters(ApplyGradients(initParams, avgGrad, _algoOptions.OuterLearningRate));
         }
 
-        UpdateAuxiliaryParamsSPSA(taskBatch, ref _encoderParams, _algoOptions.OuterLearningRate * 0.1, ComputeHyperNetLoss);
-        UpdateAuxiliaryParamsSPSA(taskBatch, ref _hyperLayer1, _algoOptions.OuterLearningRate * 0.1, ComputeHyperNetLoss);
-        UpdateAuxiliaryParamsSPSA(taskBatch, ref _hyperLayer2, _algoOptions.OuterLearningRate * 0.1, ComputeHyperNetLoss);
+        UpdateAuxiliaryParamsSPSA(taskBatch, ref _encoderParams, _algoOptions.OuterLearningRate * SpsaLearningRateMultiplier, ComputeHyperNetLoss);
+        UpdateAuxiliaryParamsSPSA(taskBatch, ref _hyperLayer1, _algoOptions.OuterLearningRate * SpsaLearningRateMultiplier, ComputeHyperNetLoss);
+        UpdateAuxiliaryParamsSPSA(taskBatch, ref _hyperLayer2, _algoOptions.OuterLearningRate * SpsaLearningRateMultiplier, ComputeHyperNetLoss);
 
         return ComputeMean(losses);
     }
@@ -144,7 +149,6 @@ public class HyperNetMetaRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TI
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
         var initParams = MetaModel.GetParameters();
-        MetaModel.SetParameters(initParams);
         var supportGrad = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
         var embedding = ComputeTaskEmbedding(supportGrad);
         var paramDelta = HyperNetForward(embedding);

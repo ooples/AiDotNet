@@ -7078,7 +7078,7 @@ Console.WriteLine(""  Answer: Yes"");
 "
                 }
             },
-            ["Meta-Learning"] = new()
+            ["Meta Learning"] = new()
             {
                 new CodeExample
                 {

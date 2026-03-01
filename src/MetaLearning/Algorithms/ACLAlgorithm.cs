@@ -56,6 +56,14 @@ public class ACLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
     {
         _algoOptions = options;
         _paramDim = options.MetaModel.GetParameters().Length;
+        if (_paramDim == 0)
+            throw new ArgumentException("MetaModel has zero parameters.", nameof(options));
+        if (options.ImportanceDecay <= 0 || options.ImportanceDecay >= 1)
+            throw new ArgumentOutOfRangeException(nameof(options), "ImportanceDecay must be in (0, 1).");
+        if (options.ProtectionStrength < 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "ProtectionStrength must be non-negative.");
+        if (options.ElasticRegWeight < 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "ElasticRegWeight must be non-negative.");
         _importance = new double[_paramDim];
     }
 

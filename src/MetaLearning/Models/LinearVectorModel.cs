@@ -20,15 +20,20 @@ public class LinearVectorModel : IFullModel<double, Matrix<double>, Vector<doubl
 {
     private Vector<double> _parameters;
     private readonly int _inputDim;
+    private readonly double _learningRate;
 
     /// <summary>
     /// Creates a new linear model with the given input dimension.
     /// </summary>
     /// <param name="inputDim">Number of input features.</param>
-    public LinearVectorModel(int inputDim)
+    /// <param name="learningRate">Learning rate for gradient descent in <see cref="Train"/>. Default is 0.01.</param>
+    public LinearVectorModel(int inputDim, double learningRate = 0.01)
     {
         Guard.Positive(inputDim);
+        if (learningRate <= 0)
+            throw new ArgumentOutOfRangeException(nameof(learningRate), "Learning rate must be positive.");
         _inputDim = inputDim;
+        _learningRate = learningRate;
         _parameters = new Vector<double>(inputDim + 1);
         for (int i = 0; i < _parameters.Length; i++)
         {
@@ -59,7 +64,7 @@ public class LinearVectorModel : IFullModel<double, Matrix<double>, Vector<doubl
     public void Train(Matrix<double> input, Vector<double> expectedOutput)
     {
         var gradients = ComputeGradients(input, expectedOutput, DefaultLossFunction);
-        ApplyGradients(gradients, 0.01);
+        ApplyGradients(gradients, _learningRate);
     }
 
     /// <inheritdoc/>
@@ -93,7 +98,7 @@ public class LinearVectorModel : IFullModel<double, Matrix<double>, Vector<doubl
     /// <inheritdoc/>
     public IFullModel<double, Matrix<double>, Vector<double>> WithParameters(Vector<double> parameters)
     {
-        var model = new LinearVectorModel(_inputDim);
+        var model = new LinearVectorModel(_inputDim, _learningRate);
         model.SetParameters(parameters);
         return model;
     }
@@ -101,7 +106,7 @@ public class LinearVectorModel : IFullModel<double, Matrix<double>, Vector<doubl
     /// <inheritdoc/>
     public virtual IFullModel<double, Matrix<double>, Vector<double>> DeepCopy()
     {
-        var copy = new LinearVectorModel(_inputDim);
+        var copy = new LinearVectorModel(_inputDim, _learningRate);
         copy.SetParameters(_parameters);
         return copy;
     }

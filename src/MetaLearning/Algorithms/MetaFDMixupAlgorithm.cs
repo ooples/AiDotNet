@@ -49,6 +49,8 @@ public class MetaFDMixupAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
     {
         _algoOptions = options;
         _paramDim = options.MetaModel.GetParameters().Length;
+        if (_paramDim == 0)
+            throw new ArgumentException("MetaModel has zero parameters.", nameof(options));
     }
 
     /// <inheritdoc/>

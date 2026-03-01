@@ -58,6 +58,8 @@ public class MetaContinualALAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
     {
         _algoOptions = options;
         _paramDim = options.MetaModel.GetParameters().Length;
+        if (_paramDim == 0)
+            throw new ArgumentException("MetaModel has zero parameters.", nameof(options));
         _uncertaintyMean = new double[_paramDim];
         _uncertaintyVar = new double[_paramDim];
         for (int d = 0; d < _paramDim; d++) _uncertaintyVar[d] = 1.0;
@@ -148,6 +150,7 @@ public class MetaContinualALAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
     /// <inheritdoc/>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
+        if (task == null) throw new ArgumentNullException(nameof(task));
         var initParams = MetaModel.GetParameters();
         var adaptedParams = new Vector<T>(_paramDim);
         for (int d = 0; d < _paramDim; d++) adaptedParams[d] = initParams[d];

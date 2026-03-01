@@ -62,6 +62,9 @@ public class AutoLoRAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
     private readonly int _maxRank;
     private readonly int _paramsPerGroup;
 
+    /// <summary>SPSA learning rate multiplier for auxiliary parameter updates.</summary>
+    private const double SpsaLearningRateMultiplier = 0.1;
+
     /// <inheritdoc/>
     public override MetaLearningAlgorithmType AlgorithmType => MetaLearningAlgorithmType.AutoLoRA;
 
@@ -147,7 +150,7 @@ public class AutoLoRAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
 
         // Update selection logits and rank components via SPSA
         UpdateAuxiliaryParamsSPSA(taskBatch, ref _selectionLogits, _algoOptions.OuterLearningRate, ComputeAutoLoRALoss);
-        UpdateAuxiliaryParamsSPSA(taskBatch, ref _rankComponents, _algoOptions.OuterLearningRate * 0.1, ComputeAutoLoRALoss);
+        UpdateAuxiliaryParamsSPSA(taskBatch, ref _rankComponents, _algoOptions.OuterLearningRate * SpsaLearningRateMultiplier, ComputeAutoLoRALoss);
 
         return ComputeMean(losses);
     }

@@ -142,6 +142,7 @@ public class ContextMetaRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
     /// <inheritdoc/>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
+        if (task == null) throw new ArgumentNullException(nameof(task));
         var initParams = MetaModel.GetParameters();
         var gradHistory = new List<double[]>();
         var adaptedParams = new Vector<T>(_paramDim);
@@ -244,7 +245,7 @@ public class ContextMetaRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
             {
                 MetaModel.SetParameters(ap);
-                var g = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
+                var g = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
                 gh.Add(EncodeGradient(g));
                 var cv = AttentionAggregate(gh);
                 var m = ComputeModulation(cv);

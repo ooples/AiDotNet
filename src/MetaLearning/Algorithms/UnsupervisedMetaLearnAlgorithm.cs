@@ -89,6 +89,10 @@ public class UnsupervisedMetaLearnAlgorithm<T, TInput, TOutput> : MetaLearnerBas
         var taskClusters = new List<int>();
         var initParams = MetaModel.GetParameters();
 
+        // Decay cluster counts once per batch to prevent indefinite accumulation
+        for (int c = 0; c < _algoOptions.NumClusters; c++)
+            _clusterCounts[c] *= (1.0 - _algoOptions.ClusterUpdateRate);
+
         // Phase 1: Adapt all tasks and assign to clusters
         foreach (var task in taskBatch.Tasks)
         {
@@ -98,9 +102,7 @@ public class UnsupervisedMetaLearnAlgorithm<T, TInput, TOutput> : MetaLearnerBas
             int cluster = AssignCluster(compressed);
             taskClusters.Add(cluster);
 
-            // Update centroid via EMA; decay counts to prevent indefinite accumulation
-            for (int c = 0; c < _algoOptions.NumClusters; c++)
-                _clusterCounts[c] *= (1.0 - _algoOptions.ClusterUpdateRate);
+            // Update centroid via EMA
             _clusterCounts[cluster] += 1.0;
             double rate = _algoOptions.ClusterUpdateRate;
             for (int d = 0; d < _clusterDim; d++)

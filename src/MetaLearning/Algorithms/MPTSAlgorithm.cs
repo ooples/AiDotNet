@@ -36,7 +36,7 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// </code>
 /// </para>
 /// </remarks>
-public class MPTSAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
+internal class MPTSAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private readonly MPTSOptions<T, TInput, TOutput> _algoOptions;
     private readonly int _paramDim;
@@ -56,6 +56,10 @@ public class MPTSAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
     {
         _algoOptions = options;
         _paramDim = options.MetaModel.GetParameters().Length;
+        if (_paramDim == 0)
+            throw new ArgumentException("MetaModel has zero parameters.", nameof(options));
+        if (options.PriorityDecayRate <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "PriorityDecayRate must be positive.");
         _numGroups = Math.Max(1, options.NumParamGroups);
         _groupSize = (_paramDim + _numGroups - 1) / _numGroups;
 
@@ -181,7 +185,7 @@ public class MPTSAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
             for (int step = 0; step < K; step++)
             {
                 MetaModel.SetParameters(ap);
-                var g = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
+                var g = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
                 double progress = (double)step / Math.Max(K - 1, 1);
                 for (int d = 0; d < _paramDim; d++)
                 {

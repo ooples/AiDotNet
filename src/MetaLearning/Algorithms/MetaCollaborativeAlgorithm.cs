@@ -36,7 +36,7 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// </code>
 /// </para>
 /// </remarks>
-public class MetaCollaborativeAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
+internal class MetaCollaborativeAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private readonly MetaCollaborativeOptions<T, TInput, TOutput> _algoOptions;
     private readonly int _paramDim;
@@ -66,6 +66,10 @@ public class MetaCollaborativeAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
     /// <inheritdoc/>
     public override T MetaTrain(TaskBatch<T, TInput, TOutput> taskBatch)
     {
+        if (taskBatch == null) throw new ArgumentNullException(nameof(taskBatch));
+        if (taskBatch.Tasks.Length == 0)
+            return NumOps.Zero;
+
         var losses = new List<T>();
         var metaGradients = new List<Vector<T>>();
         var initParams = MetaModel.GetParameters();

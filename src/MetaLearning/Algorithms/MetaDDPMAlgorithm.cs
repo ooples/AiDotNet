@@ -71,6 +71,9 @@ public class MetaDDPMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
     private readonly int _compressedDim;
     private readonly int _numTimesteps;
 
+    private const int MaxCompressedDim = 128;
+    private const int MaxFeatureDim = 64;
+
     /// <inheritdoc/>
     public override MetaLearningAlgorithmType AlgorithmType => MetaLearningAlgorithmType.MetaDDPM;
 
@@ -89,7 +92,7 @@ public class MetaDDPMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
         _algoOptions = options;
         _paramDim = options.MetaModel.GetParameters().Length;
         _condDim = options.TaskConditionDim;
-        _compressedDim = Math.Min(_paramDim, 128);
+        _compressedDim = Math.Min(_paramDim, MaxCompressedDim);
         _numTimesteps = options.NumTimesteps;
 
         // Precompute DDPM noise schedule quantities
@@ -116,7 +119,7 @@ public class MetaDDPMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
         }
 
         // Task encoder: featureDim → condDim
-        int featureDim = Math.Min(_paramDim, 64);
+        int featureDim = Math.Min(_paramDim, MaxFeatureDim);
         int encoderSize = featureDim * _condDim + _condDim;
         _taskEncoderParams = new Vector<T>(encoderSize);
         InitGaussian(_taskEncoderParams, 1.0 / Math.Sqrt(featureDim));
@@ -277,7 +280,7 @@ public class MetaDDPMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
     private double[] ComputeTaskCondition(TInput supportInput)
     {
         var features = ConvertToVector(MetaModel.Predict(supportInput));
-        int featureDim = Math.Min(_paramDim, 64);
+        int featureDim = Math.Min(_paramDim, MaxFeatureDim);
         var condition = new double[_condDim];
         if (features == null) return condition;
 
@@ -398,12 +401,8 @@ public class MetaDDPMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
 
     private void InitGaussian(Vector<T> v, double stdDev)
     {
+        var samples = SampleGaussian(v.Length);
         for (int i = 0; i < v.Length; i++)
-        {
-            double u1 = 1.0 - RandomGenerator.NextDouble();
-            double u2 = RandomGenerator.NextDouble();
-            double z = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-            v[i] = NumOps.FromDouble(z * stdDev);
-        }
+            v[i] = NumOps.FromDouble(samples[i] * stdDev);
     }
 }

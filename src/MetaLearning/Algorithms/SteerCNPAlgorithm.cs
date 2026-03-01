@@ -87,7 +87,7 @@ public class SteerCNPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput
         var supportLabels = ConvertToVector(task.SupportOutput);
 
         var contextReps = new List<Vector<T>>();
-        if (supportFeatures != null && supportLabels != null && supportFeatures.Length > 0)
+        if (supportFeatures != null && supportLabels != null && supportFeatures.Length > 0 && supportLabels.Length > 0)
         {
             int numEx = Math.Max(1, supportLabels.Length);
             int fDim = Math.Max(1, supportFeatures.Length / numEx);

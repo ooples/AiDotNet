@@ -37,7 +37,7 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// </code>
 /// </para>
 /// </remarks>
-public class RecurrentHyperNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
+internal class RecurrentHyperNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private readonly RecurrentHyperNetOptions<T, TInput, TOutput> _algoOptions;
     private readonly int _paramDim;
@@ -250,7 +250,7 @@ public class RecurrentHyperNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
             {
                 MetaModel.SetParameters(ap);
-                var g = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
+                var g = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
                 var inp = CompressGradient(g);
                 hid = GRUStep(hid, inp);
                 for (int d = 0; d < _paramDim; d++)

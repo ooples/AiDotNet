@@ -58,6 +58,8 @@ public class BayProNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
     {
         _algoOptions = options;
         _paramDim = options.MetaModel.GetParameters().Length;
+        if (_paramDim == 0)
+            throw new ArgumentException("MetaModel has zero parameters.", nameof(options));
 
         // Initialize per-parameter log-variance
         _posteriorLogVar = new Vector<T>(_paramDim);

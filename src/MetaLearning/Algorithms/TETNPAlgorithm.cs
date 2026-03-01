@@ -27,7 +27,7 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// </para>
 /// <para><b>Reference:</b> Gridded Transformer Neural Processes for Large Unstructured Spatio-Temporal Data (2024).</para>
 /// </remarks>
-public class TETNPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput, TOutput>
+internal class TETNPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput, TOutput>
 {
     private readonly TETNPOptions<T, TInput, TOutput> _algoOptions;
     private Vector<T> _relPosParams;
@@ -43,6 +43,9 @@ public class TETNPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput, T
                options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer,
                options.RepresentationDim)
     {
+        if (options.NumFrequencyBands <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "NumFrequencyBands must be positive.");
+
         _algoOptions = options;
         _numBands = options.NumFrequencyBands;
         _numHeads = Math.Max(1, options.NumHeads);

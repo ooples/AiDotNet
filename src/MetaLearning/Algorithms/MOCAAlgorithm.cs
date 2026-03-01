@@ -59,6 +59,12 @@ public class MOCAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
     {
         _algoOptions = options;
         _paramDim = options.MetaModel.GetParameters().Length;
+        if (_paramDim == 0)
+            throw new ArgumentException("MetaModel has zero parameters.", nameof(options));
+        if (options.AugmentationStrength < 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "AugmentationStrength must be non-negative.");
+        if (options.NumAugmentedTasks < 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "NumAugmentedTasks must be non-negative.");
         _gradMean = new double[_paramDim];
         _gradVar = new double[_paramDim];
         for (int d = 0; d < _paramDim; d++) _gradVar[d] = 1.0;
@@ -67,6 +73,10 @@ public class MOCAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
     /// <inheritdoc/>
     public override T MetaTrain(TaskBatch<T, TInput, TOutput> taskBatch)
     {
+        if (taskBatch == null) throw new ArgumentNullException(nameof(taskBatch));
+        if (taskBatch.Tasks.Length == 0)
+            return NumOps.Zero;
+
         var losses = new List<T>();
         var metaGradients = new List<Vector<T>>();
         var initParams = MetaModel.GetParameters();
@@ -149,6 +159,7 @@ public class MOCAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
     /// <inheritdoc/>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
+        if (task == null) throw new ArgumentNullException(nameof(task));
         var initParams = MetaModel.GetParameters();
         var adaptedParams = new Vector<T>(_paramDim);
         for (int d = 0; d < _paramDim; d++) adaptedParams[d] = initParams[d];

@@ -22,6 +22,8 @@ public class ConvCNPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput,
                options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer,
                options.RepresentationDim)
     {
+        if (options.RepresentationDim <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "RepresentationDim must be positive.");
         _algoOptions = options;
     }
 
@@ -39,7 +41,7 @@ public class ConvCNPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput,
             var supportLabels = ConvertToVector(task.SupportOutput);
 
             var contextReps = new List<Vector<T>>();
-            if (supportFeatures != null && supportLabels != null && supportFeatures.Length > 0)
+            if (supportFeatures != null && supportLabels != null && supportFeatures.Length > 0 && supportLabels.Length > 0)
             {
                 int numEx = Math.Max(1, supportLabels.Length);
                 int fDim = Math.Max(1, supportFeatures.Length / numEx);

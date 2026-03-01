@@ -262,7 +262,7 @@ public class HyperCLIPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
             {
                 MetaModel.SetParameters(ap);
-                var g = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
+                var g = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
                 ap = ApplyGradients(ap, g, _algoOptions.InnerLearningRate);
             }
             MetaModel.SetParameters(ap);

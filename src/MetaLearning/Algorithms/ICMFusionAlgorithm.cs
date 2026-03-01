@@ -38,7 +38,7 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// </code>
 /// </para>
 /// </remarks>
-public class ICMFusionAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
+internal class ICMFusionAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private readonly ICMFusionOptions<T, TInput, TOutput> _algoOptions;
 
@@ -72,6 +72,8 @@ public class ICMFusionAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
 
         _algoOptions = options;
         _paramDim = options.MetaModel.GetParameters().Length;
+        if (_paramDim == 0)
+            throw new ArgumentException("MetaModel has zero parameters.", nameof(options));
         _latentDim = options.LatentDim;
 
         // Compress param space for the VAE to keep encoder/decoder tractable

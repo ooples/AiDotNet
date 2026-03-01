@@ -267,7 +267,7 @@ public class PEARLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
             {
                 MetaModel.SetParameters(modulatedParams);
-                var grad = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
+                var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
                 modulatedParams = ApplyGradients(modulatedParams, grad, _algoOptions.InnerLearningRate);
             }
 

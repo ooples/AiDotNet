@@ -9,7 +9,7 @@ using AiDotNet.Models.Results;
 namespace AiDotNet.MetaLearning.Algorithms;
 
 /// <summary>Implementation of Transformer Neural Process (Nguyen & Grover, ICML 2023).</summary>
-public class TNPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput, TOutput>
+internal class TNPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput, TOutput>
 {
     private readonly TNPOptions<T, TInput, TOutput> _algoOptions;
 
@@ -39,7 +39,7 @@ public class TNPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput, TOu
             var supportLabels = ConvertToVector(task.SupportOutput);
 
             var contextReps = new List<Vector<T>>();
-            if (supportFeatures != null && supportLabels != null && supportFeatures.Length > 0)
+            if (supportFeatures != null && supportLabels != null && supportFeatures.Length > 0 && supportLabels.Length > 0)
             {
                 int numEx = Math.Max(1, supportLabels.Length);
                 int fDim = Math.Max(1, supportFeatures.Length / numEx);
@@ -84,7 +84,7 @@ public class TNPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput, TOu
         var supportLabels = ConvertToVector(task.SupportOutput);
 
         var contextReps = new List<Vector<T>>();
-        if (supportFeatures != null && supportLabels != null && supportFeatures.Length > 0)
+        if (supportFeatures != null && supportLabels != null && supportFeatures.Length > 0 && supportLabels.Length > 0)
         {
             int numEx = Math.Max(1, supportLabels.Length);
             int fDim = Math.Max(1, supportFeatures.Length / numEx);

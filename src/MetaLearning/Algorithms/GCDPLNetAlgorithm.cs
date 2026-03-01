@@ -58,6 +58,8 @@ public class GCDPLNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
 
         _algoOptions = options;
         _paramDim = options.MetaModel.GetParameters().Length;
+        if (_paramDim == 0)
+            throw new ArgumentException("MetaModel has zero parameters.", nameof(options));
         _numNodes = Math.Max(1, options.NumGraphNodes);
         _nodeSize = (_paramDim + _numNodes - 1) / _numNodes;
 
@@ -122,6 +124,7 @@ public class GCDPLNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
     /// <inheritdoc/>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
+        if (task == null) throw new ArgumentNullException(nameof(task));
         var initParams = MetaModel.GetParameters();
         var adaptedParams = new Vector<T>(_paramDim);
         for (int d = 0; d < _paramDim; d++) adaptedParams[d] = initParams[d];
@@ -203,7 +206,7 @@ public class GCDPLNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
             {
                 MetaModel.SetParameters(ap);
-                var g = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
+                var g = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
                 var nf = ComputeNodeFeatures(g);
                 for (int r = 0; r < _algoOptions.MessagePassingSteps; r++) nf = MessagePass(nf);
                 for (int d = 0; d < _paramDim; d++)

@@ -82,6 +82,8 @@ public class MetaDiffAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
         _algoOptions = options;
         _paramDim = options.MetaModel.GetParameters().Length;
         _condDim = Math.Max(1, options.TaskConditionDim);
+        if (_paramDim == 0)
+            throw new ArgumentException("MetaModel has zero parameters.", nameof(options));
         _compressedDim = Math.Min(_paramDim, 128);
         _diffusionSteps = Math.Max(1, options.DiffusionSteps);
 
@@ -182,8 +184,8 @@ public class MetaDiffAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
     /// <inheritdoc/>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
+        if (task == null) throw new ArgumentNullException(nameof(task));
         var baseParams = MetaModel.GetParameters();
-        MetaModel.SetParameters(baseParams);
 
         // Compute task conditioning from support set
         var taskCondition = ComputeTaskCondition(task.SupportInput);

@@ -60,6 +60,8 @@ public class DiscoRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
             throw new ArgumentOutOfRangeException(nameof(options), "NumSkills must be positive.");
         if (options.SkillRank <= 0)
             throw new ArgumentOutOfRangeException(nameof(options), "SkillRank must be positive.");
+        if (options.SelectionTemperature <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "SelectionTemperature must be positive.");
 
         _algoOptions = options;
         _paramDim = options.MetaModel.GetParameters().Length;
@@ -83,6 +85,10 @@ public class DiscoRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
     /// <inheritdoc/>
     public override T MetaTrain(TaskBatch<T, TInput, TOutput> taskBatch)
     {
+        if (taskBatch == null) throw new ArgumentNullException(nameof(taskBatch));
+        if (taskBatch.Tasks.Length == 0)
+            return NumOps.Zero;
+
         var losses = new List<T>();
         var metaGradients = new List<Vector<T>>();
         var initParams = MetaModel.GetParameters();
@@ -168,6 +174,7 @@ public class DiscoRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
     /// <inheritdoc/>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
+        if (task == null) throw new ArgumentNullException(nameof(task));
         var initParams = MetaModel.GetParameters();
         MetaModel.SetParameters(initParams);
         var initGrad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
@@ -258,7 +265,7 @@ public class DiscoRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
         foreach (var task in taskBatch.Tasks)
         {
             MetaModel.SetParameters(initParams);
-            var initGrad = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
+            var initGrad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
             var gating = ComputeGating(CompressGradient(initGrad));
             var coeffs = new double[_numSkills * _skillRank];
 
@@ -268,7 +275,7 @@ public class DiscoRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
                 var ep = new Vector<T>(_paramDim);
                 for (int d = 0; d < _paramDim; d++) ep[d] = NumOps.Add(initParams[d], NumOps.FromDouble(delta[d % _compressedDim]));
                 MetaModel.SetParameters(ep);
-                var grad = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
+                var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
                 var cg = CompressGradient(grad);
                 for (int k = 0; k < _numSkills; k++)
                     for (int r = 0; r < _skillRank; r++)
