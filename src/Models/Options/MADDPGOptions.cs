@@ -32,9 +32,9 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class MADDPGOptions<T> : ReinforcementLearningOptions<T>
 {
-    public int NumAgents { get; init; }
-    public int StateSize { get; init; }  // Per-agent state size
-    public int ActionSize { get; init; }  // Per-agent action size
+    public int NumAgents { get; init; } = 2;
+    public int StateSize { get; init; } = 16;  // Per-agent state size
+    public int ActionSize { get; init; } = 4;  // Per-agent action size
     public T ActorLearningRate { get; init; }
     public T CriticLearningRate { get; init; }
     public T TargetUpdateTau { get; init; }

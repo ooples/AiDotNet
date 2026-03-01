@@ -8,8 +8,8 @@ namespace AiDotNet.Models.Options;
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 public class DoubleDQNOptions<T> : ModelOptions
 {
-    public int StateSize { get; set; }
-    public int ActionSize { get; set; }
+    public int StateSize { get; set; } = 16;
+    public int ActionSize { get; set; } = 4;
     public T LearningRate { get; set; }
     public T DiscountFactor { get; set; }
     public ILossFunction<T> LossFunction { get; set; } = new MeanSquaredErrorLoss<T>();

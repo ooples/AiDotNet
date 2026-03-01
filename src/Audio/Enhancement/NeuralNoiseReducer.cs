@@ -176,6 +176,27 @@ public class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
     #region Constructors
 
     /// <summary>
+    /// Creates a NeuralNoiseReducer with default configuration for native training mode.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This creates a noise reducer with sensible defaults
+    /// (16kHz sample rate, 512 FFT size). You can train it on your own noisy/clean audio pairs.</para>
+    /// </remarks>
+    public NeuralNoiseReducer()
+        : this(CreateDefaultArchitecture())
+    {
+    }
+
+    private static NeuralNetworkArchitecture<T> CreateDefaultArchitecture()
+    {
+        return new NeuralNetworkArchitecture<T>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            inputSize: 257,   // fftSize/2 + 1 = 512/2 + 1
+            outputSize: 257);
+    }
+
+    /// <summary>
     /// Creates a NeuralNoiseReducer in ONNX inference mode using a pre-trained model.
     /// </summary>
     /// <param name="architecture">The neural network architecture (user-defined for full customization).</param>

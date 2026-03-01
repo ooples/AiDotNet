@@ -6,6 +6,6 @@ namespace AiDotNet.Models.Options;
 
 public class UCBBanditOptions<T> : ReinforcementLearningOptions<T>
 {
-    public int NumArms { get; init; }
+    public int NumArms { get; init; } = 10;
     public double ExplorationParameter { get; init; } = 2.0;  // c parameter in UCB
 }

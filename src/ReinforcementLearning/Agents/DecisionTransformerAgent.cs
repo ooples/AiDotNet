@@ -52,6 +52,8 @@ public class DecisionTransformerAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     private SequenceContext<T> _currentContext;
 
+    public DecisionTransformerAgent() : this(new DecisionTransformerOptions<T>()) { }
+
     public DecisionTransformerAgent(DecisionTransformerOptions<T> options, IOptimizer<T, Vector<T>, Vector<T>>? optimizer = null)
         : base(options)
     {

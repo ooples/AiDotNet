@@ -201,6 +201,27 @@ public class DeepFilterNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     #region Constructors
 
     /// <summary>
+    /// Creates a DeepFilterNet model with default configuration for native training mode.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This creates a DeepFilterNet with sensible defaults
+    /// (48kHz sample rate, 32 ERB bands, 96-dim hidden). Train on your own noisy/clean audio pairs.</para>
+    /// </remarks>
+    public DeepFilterNet()
+        : this(CreateDefaultArchitecture())
+    {
+    }
+
+    private static NeuralNetworkArchitecture<T> CreateDefaultArchitecture()
+    {
+        return new NeuralNetworkArchitecture<T>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            inputSize: 481,   // fftSize/2 + 1 = 960/2 + 1
+            outputSize: 481);
+    }
+
+    /// <summary>
     /// Creates a DeepFilterNet model for ONNX inference.
     /// </summary>
     /// <param name="architecture">Neural network architecture configuration.</param>
