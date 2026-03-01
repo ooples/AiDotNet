@@ -135,6 +135,18 @@ public class MixtureOfExpertsNeuralNetwork<T> : NeuralNetworkBase<T>
     /// var result = builder.ConfigureModel(model).Build(trainingData, trainingLabels);
     /// </code>
     /// </example>
+    /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public MixtureOfExpertsNeuralNetwork()
+        : this(options: new MixtureOfExpertsOptions<T>(), architecture: new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.OneDimensional,
+            taskType: Enums.NeuralNetworkTaskType.Regression,
+            inputSize: 128,
+            outputSize: 1))
+    {
+    }
+
     public MixtureOfExpertsNeuralNetwork(
         MixtureOfExpertsOptions<T> options,
         NeuralNetworkArchitecture<T> architecture,

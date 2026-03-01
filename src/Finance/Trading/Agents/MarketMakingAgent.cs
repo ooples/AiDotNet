@@ -50,6 +50,19 @@ public class MarketMakingAgent<T> : TradingAgentBase<T>
     /// <b>For Beginners:</b> In the MarketMakingAgent model, MarketMakingAgent sets up the architecture and options. This prepares the model for training or inference.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public MarketMakingAgent()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: AiDotNet.Enums.InputType.OneDimensional,
+            taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression,
+            inputSize: 10,
+            outputSize: 1),
+            options: new MarketMakingOptions<T>())
+    {
+    }
+
     public MarketMakingAgent(NeuralNetworkArchitecture<T> architecture, MarketMakingOptions<T> options)
         : base(options)
     {

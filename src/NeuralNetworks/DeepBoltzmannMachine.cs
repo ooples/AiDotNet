@@ -232,6 +232,20 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
     /// This constructor creates a Deep Boltzmann Machine with the specified architecture and training parameters,
     /// using a scalar activation function that is applied element-wise to unit activations.
     /// </remarks>
+    /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public DeepBoltzmannMachine()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.OneDimensional,
+            taskType: Enums.NeuralNetworkTaskType.Regression,
+            inputSize: 128,
+            outputSize: 1),
+            epochs: 10, learningRate: MathHelper.GetNumericOperations<T>().FromDouble(0.001),
+            activationFunction: (IActivationFunction<T>?)null)
+    {
+    }
+
     public DeepBoltzmannMachine(
         NeuralNetworkArchitecture<T> architecture,
         int epochs,

@@ -280,6 +280,20 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
     /// This prepares the RBM for training, but it won't actually learn anything until you train it with data.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public RestrictedBoltzmannMachine()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.OneDimensional,
+            taskType: Enums.NeuralNetworkTaskType.Regression,
+            inputSize: 128,
+            outputSize: 1),
+            visibleSize: 128, hiddenSize: 64,
+            scalarActivation: (IActivationFunction<T>?)null)
+    {
+    }
+
     public RestrictedBoltzmannMachine(NeuralNetworkArchitecture<T> architecture, int visibleSize, int hiddenSize, double learningRate = 0.01, int cdSteps = 1,
         IActivationFunction<T>? scalarActivation = null, ILossFunction<T>? lossFunction = null,
         RestrictedBoltzmannMachineOptions? options = null) :

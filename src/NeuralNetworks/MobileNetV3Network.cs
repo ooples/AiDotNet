@@ -60,6 +60,19 @@ public class MobileNetV3Network<T> : NeuralNetworkBase<T>
     /// <param name="optimizer">Optional optimizer for training (default: Adam).</param>
     /// <param name="lossFunction">Optional loss function (default: based on task type).</param>
     /// <param name="maxGradNorm">Maximum gradient norm for gradient clipping (default: 1.0).</param>
+    /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public MobileNetV3Network()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.TwoDimensional,
+            taskType: Enums.NeuralNetworkTaskType.MultiClassClassification,
+            inputHeight: 224, inputWidth: 224, inputDepth: 3,
+            outputSize: 1000),
+            configuration: MobileNetV3Configuration.CreateLarge(1000))
+    {
+    }
+
     public MobileNetV3Network(
         NeuralNetworkArchitecture<T> architecture,
         MobileNetV3Configuration configuration,

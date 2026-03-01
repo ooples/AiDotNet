@@ -211,6 +211,19 @@ public class LiquidStateMachine<T> : NeuralNetworkBase<T>
     /// on your specific task.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public LiquidStateMachine()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.OneDimensional,
+            taskType: Enums.NeuralNetworkTaskType.Regression,
+            inputSize: 128,
+            outputSize: 1),
+            reservoirSize: 100)
+    {
+    }
+
     public LiquidStateMachine(
         NeuralNetworkArchitecture<T> architecture,
         int reservoirSize,

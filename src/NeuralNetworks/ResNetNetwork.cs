@@ -122,6 +122,19 @@ public class ResNetNetwork<T> : NeuralNetworkBase<T>
     /// </list>
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public ResNetNetwork()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.TwoDimensional,
+            taskType: Enums.NeuralNetworkTaskType.MultiClassClassification,
+            inputHeight: 224, inputWidth: 224, inputDepth: 3,
+            outputSize: 1000),
+            configuration: ResNetConfiguration.CreateResNet50(1000))
+    {
+    }
+
     public ResNetNetwork(
         NeuralNetworkArchitecture<T> architecture,
         ResNetConfiguration configuration,

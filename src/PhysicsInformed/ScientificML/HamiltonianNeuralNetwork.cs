@@ -78,7 +78,20 @@ namespace AiDotNet.PhysicsInformed.ScientificML
         private readonly int _stateDim; // Dimension of state space (q and p together)
         private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
 
-        public HamiltonianNeuralNetwork(
+        /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public HamiltonianNeuralNetwork()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.OneDimensional,
+            taskType: Enums.NeuralNetworkTaskType.Regression,
+            inputSize: 4,
+            outputSize: 1),
+            stateDim: 2)
+    {
+    }
+
+    public HamiltonianNeuralNetwork(
             NeuralNetworkArchitecture<T> architecture,
             int stateDim,
             IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,

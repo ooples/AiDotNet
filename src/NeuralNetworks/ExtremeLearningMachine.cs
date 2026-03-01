@@ -79,6 +79,19 @@ public class ExtremeLearningMachine<T> : NeuralNetworkBase<T>
     /// where each team member will be randomly assigned what to look for.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public ExtremeLearningMachine()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.OneDimensional,
+            taskType: Enums.NeuralNetworkTaskType.Regression,
+            inputSize: 128,
+            outputSize: 1),
+            hiddenLayerSize: 100)
+    {
+    }
+
     public ExtremeLearningMachine(NeuralNetworkArchitecture<T> architecture, int hiddenLayerSize, ILossFunction<T>? lossFunction = null, ExtremeLearningMachineOptions? options = null)
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {

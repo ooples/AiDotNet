@@ -382,6 +382,20 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
     /// a notepad of specific size to help them remember and reason about information.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public DifferentiableNeuralComputer()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.OneDimensional,
+            taskType: Enums.NeuralNetworkTaskType.Regression,
+            inputSize: 128,
+            outputSize: 1),
+            memorySize: 64, memoryWordSize: 32, controllerSize: 128, readHeads: 4,
+            activationFunction: (IActivationFunction<T>?)null)
+    {
+    }
+
     public DifferentiableNeuralComputer(
         NeuralNetworkArchitecture<T> architecture,
         int memorySize,

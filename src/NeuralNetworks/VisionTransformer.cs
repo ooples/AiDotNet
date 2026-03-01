@@ -136,6 +136,19 @@ public class VisionTransformer<T> : NeuralNetworkBase<T>
     /// - ViT-Huge: hiddenDim=1280, numLayers=32, numHeads=16, mlpDim=5120
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public VisionTransformer()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.TwoDimensional,
+            taskType: Enums.NeuralNetworkTaskType.MultiClassClassification,
+            inputHeight: 224, inputWidth: 224, inputDepth: 3,
+            outputSize: 1000),
+            imageHeight: 224, imageWidth: 224, channels: 3, patchSize: 16, numClasses: 1000)
+    {
+    }
+
     public VisionTransformer(
         NeuralNetworkArchitecture<T> architecture,
         int imageHeight,

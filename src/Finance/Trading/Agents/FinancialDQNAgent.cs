@@ -52,6 +52,19 @@ public class FinancialDQNAgent<T> : TradingAgentBase<T>
     /// <b>For Beginners:</b> In the FinancialDQNAgent model, FinancialDQNAgent sets up the architecture and options. This prepares the model for training or inference.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public FinancialDQNAgent()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: AiDotNet.Enums.InputType.OneDimensional,
+            taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression,
+            inputSize: 10,
+            outputSize: 1),
+            options: new TradingAgentOptions<T>())
+    {
+    }
+
     public FinancialDQNAgent(NeuralNetworkArchitecture<T> architecture, TradingAgentOptions<T> options)
         : base(options)
     {
