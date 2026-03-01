@@ -127,12 +127,12 @@ public class DreamGaussianModel<T> : ThreeDDiffusionModelBase<T>
     /// <summary>
     /// The SD 1.5 U-Net noise predictor for SDS guidance.
     /// </summary>
-    private UNetNoisePredictor<T> _unet;
+    private UNetNoisePredictor<T>? _unet;
 
     /// <summary>
     /// The standard SD VAE for encoding/decoding rendered views.
     /// </summary>
-    private StandardVAE<T> _vae;
+    private StandardVAE<T>? _vae;
 
     /// <summary>
     /// The CLIP text encoder conditioning module.
@@ -144,10 +144,10 @@ public class DreamGaussianModel<T> : ThreeDDiffusionModelBase<T>
     #region Properties
 
     /// <inheritdoc />
-    public override INoisePredictor<T> NoisePredictor => _unet;
+    public override INoisePredictor<T> NoisePredictor { get { EnsureInitialized(); return _unet; } }
 
     /// <inheritdoc />
-    public override IVAEModel<T> VAE => _vae;
+    public override IVAEModel<T> VAE { get { EnsureInitialized(); return _vae; } }
 
     /// <inheritdoc />
     public override IConditioningModule<T>? Conditioner => _conditioner;
@@ -171,7 +171,7 @@ public class DreamGaussianModel<T> : ThreeDDiffusionModelBase<T>
     public override bool SupportsScoreDistillation => true;
 
     /// <inheritdoc />
-    public override int ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
+    public override int ParameterCount { get { EnsureInitialized(); return _unet.ParameterCount + _vae.ParameterCount; } }
 
     #endregion
 
@@ -214,12 +214,20 @@ public class DreamGaussianModel<T> : ThreeDDiffusionModelBase<T>
     {
         _conditioner = conditioner;
 
-        InitializeLayers(unet, vae, seed);
+        if (unet is not null || vae is not null)
+            InitializeLayers(unet, vae, seed);
     }
 
     #endregion
 
     #region Layer Initialization
+
+    [MemberNotNull(nameof(_unet), nameof(_vae))]
+    private void EnsureInitialized()
+    {
+        if (_unet is null || _vae is null)
+            InitializeLayers(null, null, null);
+    }
 
     /// <summary>
     /// Initializes the U-Net and VAE layers using custom or default configurations.
@@ -289,6 +297,7 @@ public class DreamGaussianModel<T> : ThreeDDiffusionModelBase<T>
     /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
+        EnsureInitialized();
         var unetParams = _unet.GetParameters();
         var vaeParams = _vae.GetParameters();
 
@@ -310,6 +319,7 @@ public class DreamGaussianModel<T> : ThreeDDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
+        EnsureInitialized();
         var unetCount = _unet.ParameterCount;
         var vaeCount = _vae.ParameterCount;
 
@@ -350,6 +360,7 @@ public class DreamGaussianModel<T> : ThreeDDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
+        EnsureInitialized();
         var clonedUnet = new UNetNoisePredictor<T>(
             inputChannels: LATENT_CHANNELS,
             outputChannels: LATENT_CHANNELS,

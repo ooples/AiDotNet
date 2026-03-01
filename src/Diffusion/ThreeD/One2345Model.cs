@@ -97,8 +97,8 @@ public class One2345Model<T> : ThreeDDiffusionModelBase<T>
 
     #region Fields
 
-    private UNetNoisePredictor<T> _unet;
-    private StandardVAE<T> _vae;
+    private UNetNoisePredictor<T>? _unet;
+    private StandardVAE<T>? _vae;
     private readonly IConditioningModule<T>? _conditioner;
 
     #endregion
@@ -106,9 +106,9 @@ public class One2345Model<T> : ThreeDDiffusionModelBase<T>
     #region Properties
 
     /// <inheritdoc />
-    public override INoisePredictor<T> NoisePredictor => _unet;
+    public override INoisePredictor<T> NoisePredictor { get { EnsureInitialized(); return _unet; } }
     /// <inheritdoc />
-    public override IVAEModel<T> VAE => _vae;
+    public override IVAEModel<T> VAE { get { EnsureInitialized(); return _vae; } }
     /// <inheritdoc />
     public override IConditioningModule<T>? Conditioner => _conditioner;
     /// <inheritdoc />
@@ -124,7 +124,7 @@ public class One2345Model<T> : ThreeDDiffusionModelBase<T>
     /// <inheritdoc />
     public override bool SupportsScoreDistillation => false;
     /// <inheritdoc />
-    public override int ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
+    public override int ParameterCount { get { EnsureInitialized(); return _unet.ParameterCount + _vae.ParameterCount; } }
 
     #endregion
 
@@ -149,12 +149,20 @@ public class One2345Model<T> : ThreeDDiffusionModelBase<T>
             defaultPointCount, architecture)
     {
         _conditioner = conditioner;
-        InitializeLayers(unet, vae, seed);
+        if (unet is not null || vae is not null)
+            InitializeLayers(unet, vae, seed);
     }
 
     #endregion
 
     #region Layer Initialization
+
+    [MemberNotNull(nameof(_unet), nameof(_vae))]
+    private void EnsureInitialized()
+    {
+        if (_unet is null || _vae is null)
+            InitializeLayers(null, null, null);
+    }
 
     [MemberNotNull(nameof(_unet), nameof(_vae))]
     private void InitializeLayers(UNetNoisePredictor<T>? unet, StandardVAE<T>? vae, int? seed)
@@ -191,6 +199,7 @@ public class One2345Model<T> : ThreeDDiffusionModelBase<T>
     /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
+        EnsureInitialized();
         var unetParams = _unet.GetParameters();
         var vaeParams = _vae.GetParameters();
         var combined = new Vector<T>(unetParams.Length + vaeParams.Length);
@@ -202,6 +211,7 @@ public class One2345Model<T> : ThreeDDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
+        EnsureInitialized();
         var unetCount = _unet.ParameterCount;
         var vaeCount = _vae.ParameterCount;
         if (parameters.Length != unetCount + vaeCount)
@@ -224,6 +234,7 @@ public class One2345Model<T> : ThreeDDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
+        EnsureInitialized();
         var clonedUnet = new UNetNoisePredictor<T>(
             inputChannels: INPUT_CHANNELS, outputChannels: LATENT_CHANNELS,
             baseChannels: BASE_CHANNELS, channelMultipliers: new[] { 1, 2, 4, 4 },

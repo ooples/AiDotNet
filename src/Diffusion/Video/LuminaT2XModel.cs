@@ -61,8 +61,8 @@ public class LuminaT2XModel<T> : LatentDiffusionModelBase<T>
 
     #region Fields
 
-    private DiTNoisePredictor<T> _dit;
-    private StandardVAE<T> _vae;
+    private DiTNoisePredictor<T>? _dit;
+    private StandardVAE<T>? _vae;
     private readonly IConditioningModule<T>? _conditioner;
 
     #endregion
@@ -70,15 +70,15 @@ public class LuminaT2XModel<T> : LatentDiffusionModelBase<T>
     #region Properties
 
     /// <inheritdoc />
-    public override INoisePredictor<T> NoisePredictor => _dit;
+    public override INoisePredictor<T> NoisePredictor { get { EnsureInitialized(); return _dit; } }
     /// <inheritdoc />
-    public override IVAEModel<T> VAE => _vae;
+    public override IVAEModel<T> VAE { get { EnsureInitialized(); return _vae; } }
     /// <inheritdoc />
     public override IConditioningModule<T>? Conditioner => _conditioner;
     /// <inheritdoc />
     public override int LatentChannels => LATENT_CHANNELS;
     /// <inheritdoc />
-    public override int ParameterCount => _dit.ParameterCount + _vae.ParameterCount;
+    public override int ParameterCount { get { EnsureInitialized(); return _dit.ParameterCount + _vae.ParameterCount; } }
 
     #endregion
 
@@ -102,12 +102,20 @@ public class LuminaT2XModel<T> : LatentDiffusionModelBase<T>
             architecture)
     {
         _conditioner = conditioner;
-        InitializeLayers(dit, vae, seed);
+        if (dit is not null || vae is not null)
+            InitializeLayers(dit, vae, seed);
     }
 
     #endregion
 
     #region Layer Initialization
+
+    [MemberNotNull(nameof(_dit), nameof(_vae))]
+    private void EnsureInitialized()
+    {
+        if (_dit is null || _vae is null)
+            InitializeLayers(null, null, null);
+    }
 
     [MemberNotNull(nameof(_dit), nameof(_vae))]
     private void InitializeLayers(DiTNoisePredictor<T>? dit, StandardVAE<T>? vae, int? seed)
@@ -144,6 +152,7 @@ public class LuminaT2XModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
+        EnsureInitialized();
         var dp = _dit.GetParameters(); var vp = _vae.GetParameters();
         var c = new Vector<T>(dp.Length + vp.Length);
         for (int i = 0; i < dp.Length; i++) c[i] = dp[i];
@@ -154,6 +163,7 @@ public class LuminaT2XModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
+        EnsureInitialized();
         int dc = _dit.ParameterCount, vc = _vae.ParameterCount;
         if (parameters.Length != dc + vc)
             throw new ArgumentException($"Expected {dc + vc}, got {parameters.Length}.", nameof(parameters));
@@ -173,6 +183,7 @@ public class LuminaT2XModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
+        EnsureInitialized();
         var cd = new DiTNoisePredictor<T>(
             inputChannels: LATENT_CHANNELS, hiddenSize: 1536,
             numLayers: 30, numHeads: 16, patchSize: 2,
