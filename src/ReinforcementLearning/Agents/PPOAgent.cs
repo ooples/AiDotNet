@@ -56,6 +56,14 @@ public class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>
     public override int FeatureCount => _ppoOptions.StateSize;
 
     /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public PPOAgent()
+        : this(new PPOOptions<T> { StateSize = 4, ActionSize = 2 })
+    {
+    }
+
+    /// <summary>
     /// Initializes a new instance of the PPOAgent class.
     /// </summary>
     /// <param name="options">Configuration options for the PPO agent.</param>

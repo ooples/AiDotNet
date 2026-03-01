@@ -33,6 +33,14 @@ namespace AiDotNet.TimeSeries;
 public class VARMAModel<T> : VectorAutoRegressionModel<T>
 {
     /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public VARMAModel()
+        : this(new VARMAModelOptions<T>())
+    {
+    }
+
+    /// <summary>
     /// Configuration options specific to the VARMA model.
     /// </summary>
     private readonly VARMAModelOptions<T> _varmaOptions;

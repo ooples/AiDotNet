@@ -42,6 +42,14 @@ public class FirstVisitMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
     private double _epsilon;
     private Random _random;
 
+    /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public FirstVisitMonteCarloAgent()
+        : this(new MonteCarloOptions<T> { StateSize = 4, ActionSize = 2 })
+    {
+    }
+
     public FirstVisitMonteCarloAgent(MonteCarloOptions<T> options)
         : base(options)
     {

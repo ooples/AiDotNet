@@ -19,6 +19,14 @@ public class LinearQLearningAgent<T> : ReinforcementLearningAgentBase<T>
     private Matrix<T> _weights;  // Weight matrix: [ActionSize x FeatureSize]
     private double _epsilon;
 
+    /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public LinearQLearningAgent()
+        : this(new LinearQLearningOptions<T> { ActionSize = 2 })
+    {
+    }
+
     public LinearQLearningAgent(LinearQLearningOptions<T> options) : base(options)
     {
         Guard.NotNull(options);

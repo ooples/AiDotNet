@@ -56,6 +56,14 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
     private T _alpha;
     private int _updateCount;
 
+    /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public CQLAgent()
+        : this(new CQLOptions<T> { StateSize = 4, ActionSize = 2 })
+    {
+    }
+
     public CQLAgent(CQLOptions<T> options) : base(CreateBaseOptions(options))
     {
         _options = options;

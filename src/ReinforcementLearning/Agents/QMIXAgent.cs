@@ -58,6 +58,14 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
     private double _epsilon;
     private int _stepCount;
 
+    /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public QMIXAgent()
+        : this(new QMIXOptions<T> { StateSize = 4, ActionSize = 2 })
+    {
+    }
+
     public QMIXAgent(QMIXOptions<T> options, IOptimizer<T, Vector<T>, Vector<T>>? optimizer = null)
         : base(options)
     {

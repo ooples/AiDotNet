@@ -59,6 +59,14 @@ public class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>
     private Random _random;
     private int _updateCount;
 
+    /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public IQLAgent()
+        : this(new IQLOptions<T> { StateSize = 4, ActionSize = 2 })
+    {
+    }
+
     public IQLAgent(IQLOptions<T> options) : base(new ReinforcementLearningOptions<T>
     {
         LearningRate = options.PolicyLearningRate,

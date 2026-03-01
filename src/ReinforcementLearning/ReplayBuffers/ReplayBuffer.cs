@@ -18,6 +18,14 @@ public class ReplayBuffer<T>
     private readonly Random _random;
 
     /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public ReplayBuffer()
+        : this(10000)
+    {
+    }
+
+    /// <summary>
     /// Gets the current number of experiences in the buffer.
     /// </summary>
     public int Count => _buffer.Count;

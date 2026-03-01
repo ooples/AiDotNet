@@ -50,6 +50,14 @@ public class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     private int _globalSteps;
 
+    /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public A3CAgent()
+        : this(new A3COptions<T> { StateSize = 4, ActionSize = 2 })
+    {
+    }
+
     public A3CAgent(A3COptions<T> options, IOptimizer<T, Vector<T>, Vector<T>>? optimizer = null)
         : base(options)
     {

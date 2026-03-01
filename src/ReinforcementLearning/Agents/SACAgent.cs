@@ -61,6 +61,14 @@ public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>
     public override int FeatureCount => _sacOptions.StateSize;
 
     /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public SACAgent()
+        : this(new SACOptions<T> { StateSize = 4, ActionSize = 2 })
+    {
+    }
+
+    /// <summary>
     /// Initializes a new instance of the SACAgent class.
     /// </summary>
     public SACAgent(SACOptions<T> options)

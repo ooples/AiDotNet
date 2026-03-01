@@ -36,6 +36,14 @@ namespace AiDotNet.TimeSeries;
 public class ARModel<T> : TimeSeriesModelBase<T>
 {
     /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public ARModel()
+        : this(new ARModelOptions<T>())
+    {
+    }
+
+    /// <summary>
     /// Coefficients for the autoregressive (AR) component of the model.
     /// </summary>
     /// <remarks>

@@ -57,6 +57,14 @@ public class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>
     private int _stepCount;
     private int _updateCount;
 
+    /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public TD3Agent()
+        : this(new TD3Options<T> { StateSize = 4, ActionSize = 2 })
+    {
+    }
+
     public TD3Agent(TD3Options<T> options) : base(CreateBaseOptions(options))
     {
         _options = options;

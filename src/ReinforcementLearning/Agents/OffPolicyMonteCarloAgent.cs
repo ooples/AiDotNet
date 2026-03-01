@@ -25,6 +25,14 @@ public class OffPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
     private List<(Vector<T> state, int action, T reward)> _episode;
     private Random _random;
 
+    /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public OffPolicyMonteCarloAgent()
+        : this(new OffPolicyMonteCarloOptions<T> { StateSize = 4, ActionSize = 2 })
+    {
+    }
+
     public OffPolicyMonteCarloAgent(OffPolicyMonteCarloOptions<T> options)
         : base(options)
     {

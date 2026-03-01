@@ -25,7 +25,15 @@ namespace AiDotNet.ReinforcementLearning.Policies.Exploration
         /// <param name="sigma">Volatility/noise scale (default: 0.2).</param>
         /// <param name="mu">Long-term mean (default: 0.0).</param>
         /// <param name="dt">Time step (default: 0.01).</param>
-        public OrnsteinUhlenbeckNoise(
+        /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public OrnsteinUhlenbeckNoise()
+        : this(4)
+    {
+    }
+
+    public OrnsteinUhlenbeckNoise(
             int actionSize,
             double theta = 0.15,
             double sigma = 0.2,

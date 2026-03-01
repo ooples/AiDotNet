@@ -54,6 +54,14 @@ public class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
     // N-step buffer
     private List<(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)> _nStepBuffer;
 
+    /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public RainbowDQNAgent()
+        : this(new RainbowDQNOptions<T> { StateSize = 4, ActionSize = 2 })
+    {
+    }
+
     public RainbowDQNAgent(RainbowDQNOptions<T> options, IOptimizer<T, Vector<T>, Vector<T>>? optimizer = null)
         : base(options)
     {

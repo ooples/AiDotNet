@@ -62,6 +62,14 @@ public class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>
         };
     }
 
+    /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public A2CAgent()
+        : this(new A2COptions<T> { StateSize = 4, ActionSize = 2 })
+    {
+    }
+
     public A2CAgent(A2COptions<T> options)
         : base(CreateBaseOptions(options))
     {

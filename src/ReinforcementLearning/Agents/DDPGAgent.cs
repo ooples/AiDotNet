@@ -59,6 +59,14 @@ public class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
     /// <inheritdoc/>
     public override int FeatureCount => _options.StateSize;
 
+    /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public DDPGAgent()
+        : this(new DDPGOptions<T> { StateSize = 4, ActionSize = 2 })
+    {
+    }
+
     public DDPGAgent(DDPGOptions<T> options)
         : base(CreateBaseOptions(options))
     {

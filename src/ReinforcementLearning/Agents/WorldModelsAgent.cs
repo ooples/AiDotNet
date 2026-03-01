@@ -59,6 +59,14 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
     private int _updateCount;
     private Random _random;
 
+    /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public WorldModelsAgent()
+        : this(new WorldModelsOptions<T> { ActionSize = 2 })
+    {
+    }
+
     public WorldModelsAgent(WorldModelsOptions<T> options) : base(options)
     {
         _options = options;

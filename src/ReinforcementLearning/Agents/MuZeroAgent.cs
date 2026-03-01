@@ -52,6 +52,14 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
     private UniformReplayBuffer<T, Vector<T>, Vector<T>> _replayBuffer;
     private int _updateCount;
 
+    /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public MuZeroAgent()
+        : this(new MuZeroOptions<T> { ActionSize = 2 })
+    {
+    }
+
     public MuZeroAgent(MuZeroOptions<T> options) : base(new ReinforcementLearningOptions<T>
     {
         LearningRate = options.LearningRate,

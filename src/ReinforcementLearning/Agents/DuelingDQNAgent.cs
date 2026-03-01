@@ -58,6 +58,14 @@ public class DuelingDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
     /// <inheritdoc/>
     public override int FeatureCount => _options.StateSize;
 
+    /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public DuelingDQNAgent()
+        : this(new DuelingDQNOptions<T> { StateSize = 4, ActionSize = 2 })
+    {
+    }
+
     public DuelingDQNAgent(DuelingDQNOptions<T> options)
         : base(new ReinforcementLearningOptions<T>
         {

@@ -54,6 +54,14 @@ public class DQNAgent<T> : DeepReinforcementLearningAgentBase<T>
     public override int FeatureCount => _dqnOptions.StateSize;
 
     /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public DQNAgent()
+        : this(new DQNOptions<T> { StateSize = 4, ActionSize = 2 })
+    {
+    }
+
+    /// <summary>
     /// Initializes a new instance of the DQNAgent class.
     /// </summary>
     /// <param name="options">Configuration options for the DQN agent.</param>

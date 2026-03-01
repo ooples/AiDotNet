@@ -53,6 +53,14 @@ public class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>
     private List<(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)> _trajectoryBuffer;
     private int _updateCount;
 
+    /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public TRPOAgent()
+        : this(new TRPOOptions<T> { StateSize = 4, ActionSize = 2 })
+    {
+    }
+
     public TRPOAgent(TRPOOptions<T> options, IOptimizer<T, Vector<T>, Vector<T>>? optimizer = null)
         : base(options)
     {

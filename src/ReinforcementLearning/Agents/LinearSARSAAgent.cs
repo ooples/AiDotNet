@@ -21,6 +21,14 @@ public class LinearSARSAAgent<T> : ReinforcementLearningAgentBase<T>
     private int _lastAction = -1;
     private Vector<T>? _lastState = null;
 
+    /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public LinearSARSAAgent()
+        : this(new LinearSARSAOptions<T> { ActionSize = 2 })
+    {
+    }
+
     public LinearSARSAAgent(LinearSARSAOptions<T> options) : base(options)
     {
         Guard.NotNull(options);
