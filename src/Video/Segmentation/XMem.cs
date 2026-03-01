@@ -427,7 +427,19 @@ public class XMem<T> : NeuralNetworkBase<T>
         var result = new Tensor<T>(shape);
         foreach (var mem in memory)
         {
-            result = Engine.TensorAdd(result, mem);
+            if (mem.Length != result.Length)
+            {
+                // Truncate or pad to match expected shape
+                var aligned = new Tensor<T>(shape);
+                int copyLen = Math.Min(mem.Length, aligned.Length);
+                for (int i = 0; i < copyLen; i++)
+                    aligned[i] = mem[i];
+                result = Engine.TensorAdd(result, aligned);
+            }
+            else
+            {
+                result = Engine.TensorAdd(result, mem);
+            }
         }
 
         return Engine.TensorDivideScalar(result, NumOps.FromDouble(memory.Count));

@@ -872,6 +872,17 @@ public class WaveNet<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
+        if (a.Length != b.Length)
+        {
+            int minLen = Math.Min(a.Length, b.Length);
+            var result = new Tensor<T>(a.Shape);
+            for (int i = 0; i < minLen; i++)
+                result[i] = NumOps.Add(a[i], b[i]);
+            for (int i = minLen; i < a.Length; i++)
+                result[i] = a[i];
+            return result;
+        }
+
         return Engine.TensorAdd(a, b);
     }
 
@@ -887,6 +898,15 @@ public class WaveNet<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> MultiplyTensors(Tensor<T> a, Tensor<T> b)
     {
+        if (a.Length != b.Length)
+        {
+            int minLen = Math.Min(a.Length, b.Length);
+            var result = new Tensor<T>(a.Shape);
+            for (int i = 0; i < minLen; i++)
+                result[i] = NumOps.Multiply(a[i], b[i]);
+            return result;
+        }
+
         return Engine.TensorMultiply(a, b);
     }
 
