@@ -142,8 +142,6 @@ public class MotionModule<T> : LayerBase<T>
         return AddTensors(afterAttnGrad, norm1Grad);
     }
 
-    private static readonly INumericOperations<T> StaticNumOps = MathHelper.GetNumericOperations<T>();
-
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
         return AiDotNetEngine.Current.TensorAdd(a, b);

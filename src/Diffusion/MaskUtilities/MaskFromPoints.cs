@@ -50,6 +50,7 @@ public class MaskFromPoints<T> : IDataTransformer<T, Tensor<T>, Tensor<T>>
         (int y, int x)[]? negativePoints = null,
         int pointRadius = 10)
     {
+        Guard.NotNull(positivePoints);
         Guard.Positive(pointRadius);
         _positivePoints = positivePoints;
         _negativePoints = negativePoints;
@@ -66,6 +67,9 @@ public class MaskFromPoints<T> : IDataTransformer<T, Tensor<T>, Tensor<T>>
     /// <inheritdoc />
     public Tensor<T> Transform(Tensor<T> data)
     {
+        Guard.NotNull(data);
+        if (data.Shape.Length == 0)
+            throw new ArgumentException("Input tensor must have at least one dimension.", nameof(data));
         var shape = data.Shape;
         int height = shape[0];
         int width = shape.Length > 1 ? shape[1] : 1;

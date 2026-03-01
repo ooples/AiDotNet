@@ -254,6 +254,8 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
         _inputChannels = inputChannels;
         _hiddenSize = hiddenSize;
         _numLayers = numLayers;
+        if (hiddenSize % numHeads != 0)
+            throw new ArgumentException($"hiddenSize ({hiddenSize}) must be divisible by numHeads ({numHeads}).", nameof(numHeads));
         _numHeads = numHeads;
         _patchSize = patchSize;
         _contextDim = contextDim;

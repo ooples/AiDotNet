@@ -37,6 +37,12 @@ public class DynamicCFGScheduler<T> : IGuidanceMethod<T>
     /// <param name="maxScale">Maximum guidance scale at initial timestep. Default: 15.0.</param>
     public DynamicCFGScheduler(double minScale = 1.0, double maxScale = 15.0)
     {
+        if (double.IsNaN(minScale) || double.IsInfinity(minScale) || minScale < 0)
+            throw new ArgumentOutOfRangeException(nameof(minScale), "Must be a finite non-negative value.");
+        if (double.IsNaN(maxScale) || double.IsInfinity(maxScale) || maxScale < 0)
+            throw new ArgumentOutOfRangeException(nameof(maxScale), "Must be a finite non-negative value.");
+        if (minScale > maxScale)
+            throw new ArgumentException("minScale must not exceed maxScale.", nameof(minScale));
         _minScale = minScale;
         _maxScale = maxScale;
     }

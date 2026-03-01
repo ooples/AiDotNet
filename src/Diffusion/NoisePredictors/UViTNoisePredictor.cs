@@ -236,10 +236,20 @@ public class UViTNoisePredictor<T> : NoisePredictorBase<T>
         // Add position embeddings using hardware-accelerated broadcast add
         if (_posEmbed != null)
         {
-            // Slice position embedding to match actual sequence length if needed
-            if (patches.Shape[1] <= _posEmbed.Shape[1])
+            int seqLen = patches.Shape[1];
+            int posLen = _posEmbed.Shape[1];
+            if (seqLen == posLen)
             {
                 patches = Engine.TensorBroadcastAdd<T>(patches, _posEmbed);
+            }
+            else if (seqLen < posLen)
+            {
+                // Slice position embedding to match actual sequence length
+                int hiddenDim = _posEmbed.Shape[2];
+                var slicedData = new T[seqLen * hiddenDim];
+                _posEmbed.AsSpan().Slice(0, seqLen * hiddenDim).CopyTo(slicedData);
+                var slicedPosEmbed = new Tensor<T>(new[] { 1, seqLen, hiddenDim }, new Vector<T>(slicedData));
+                patches = Engine.TensorBroadcastAdd<T>(patches, slicedPosEmbed);
             }
         }
 
@@ -383,12 +393,18 @@ public class UViTNoisePredictor<T> : NoisePredictorBase<T>
 
     private Tensor<T> AddTimeToPatches(Tensor<T> patches, Tensor<T> timeEmbed)
     {
-        // Reshape time embedding to [1, 1, hiddenSize] for broadcasting across [batch, seqLen, hidden]
+        // Reshape time embedding to [batch, 1, hiddenSize] for broadcasting across [batch, seqLen, hidden]
+        int batch = patches.Shape[0];
         int hiddenDim = patches.Shape.Length > 2 ? patches.Shape[2] : patches.Shape[^1];
         int timeLen = Math.Min(timeEmbed.AsSpan().Length, hiddenDim);
-        var timeData = new T[hiddenDim];
-        timeEmbed.AsSpan().Slice(0, timeLen).CopyTo(timeData.AsSpan());
-        var timeBroadcast = new Tensor<T>(new[] { 1, 1, hiddenDim }, new Vector<T>(timeData));
+        // Replicate the time embedding for each batch element
+        var timeData = new T[batch * hiddenDim];
+        var timeSpan = timeEmbed.AsSpan();
+        for (int b = 0; b < batch; b++)
+        {
+            timeSpan.Slice(0, timeLen).CopyTo(timeData.AsSpan(b * hiddenDim, timeLen));
+        }
+        var timeBroadcast = new Tensor<T>(new[] { batch, 1, hiddenDim }, new Vector<T>(timeData));
         return Engine.TensorBroadcastAdd<T>(patches, timeBroadcast);
     }
 

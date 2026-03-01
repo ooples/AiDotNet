@@ -31,7 +31,12 @@ namespace AiDotNet.Diffusion.MotionGeneration;
 /// </remarks>
 public class MotionDiffuseModel<T> : LatentDiffusionModelBase<T>
 {
-    private const int LATENT_CHANNELS = 263;
+    /// <summary>
+    /// Number of motion feature dimensions per frame (263 = 3 root velocity + 6*N joint rotations + ...).
+    /// This is the motion representation size, not the VAE latent channel count.
+    /// </summary>
+    private const int MOTION_FEATURE_DIM = 263;
+    private const int VAE_LATENT_CHANNELS = 4;
     private const double DEFAULT_GUIDANCE = 2.5;
 
     private SiTPredictor<T> _predictor;
@@ -41,7 +46,7 @@ public class MotionDiffuseModel<T> : LatentDiffusionModelBase<T>
     public override INoisePredictor<T> NoisePredictor => _predictor;
     public override IVAEModel<T> VAE => _vae;
     public override IConditioningModule<T>? Conditioner => _conditioner;
-    public override int LatentChannels => LATENT_CHANNELS;
+    public override int LatentChannels => VAE_LATENT_CHANNELS;
     public override int ParameterCount => _predictor.ParameterCount + _vae.ParameterCount;
 
     public MotionDiffuseModel(
@@ -102,7 +107,7 @@ public class MotionDiffuseModel<T> : LatentDiffusionModelBase<T>
             FeatureCount = ParameterCount, Complexity = ParameterCount };
         m.SetProperty("architecture", "part-aware-motion-diffusion");
         m.SetProperty("text_encoder", "CLIP ViT-L/14");
-        m.SetProperty("motion_dimensions", LATENT_CHANNELS);
+        m.SetProperty("motion_dimensions", MOTION_FEATURE_DIM);
         m.SetProperty("guidance_scale", DEFAULT_GUIDANCE);
         return m;
     }

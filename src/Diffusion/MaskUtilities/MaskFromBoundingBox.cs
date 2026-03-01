@@ -44,6 +44,7 @@ public class MaskFromBoundingBox<T> : IDataTransformer<T, Tensor<T>, Tensor<T>>
     /// <param name="boxes">Bounding boxes as (top, left, bottom, right) tuples to include in the mask.</param>
     public MaskFromBoundingBox(params (int top, int left, int bottom, int right)[] boxes)
     {
+        Guard.NotNull(boxes);
         _boxes = boxes;
     }
 
@@ -57,6 +58,9 @@ public class MaskFromBoundingBox<T> : IDataTransformer<T, Tensor<T>, Tensor<T>>
     /// <inheritdoc />
     public Tensor<T> Transform(Tensor<T> data)
     {
+        Guard.NotNull(data);
+        if (data.Shape.Length == 0)
+            throw new ArgumentException("Input tensor must have at least one dimension.", nameof(data));
         var shape = data.Shape;
         int height = shape[0];
         int width = shape.Length > 1 ? shape[1] : 1;

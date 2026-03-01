@@ -210,6 +210,8 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
         _hiddenSize = hiddenSize;
         _numJointLayers = numJointLayers;
         _numSingleLayers = numSingleLayers;
+        if (hiddenSize % numHeads != 0)
+            throw new ArgumentException($"hiddenSize ({hiddenSize}) must be divisible by numHeads ({numHeads}).", nameof(numHeads));
         _numHeads = numHeads;
         _patchSize = patchSize;
         _contextDim = contextDim;

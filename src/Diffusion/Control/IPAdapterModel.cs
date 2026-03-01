@@ -577,7 +577,7 @@ public class IPAdapterModel<T> : LatentDiffusionModelBase<T>
         m.SetProperty("architecture", "unet-decoupled-cross-attention");
         m.SetProperty("base_model", "Stable Diffusion 1.5");
         m.SetProperty("text_encoder", "CLIP ViT-L/14");
-        m.SetProperty("image_encoder", "CLIP ViT-H/14");
+        m.SetProperty("image_encoder", "CLIP ViT-L/14");
         m.SetProperty("context_dim", 768);
         m.SetProperty("image_prompt_weight", _imagePromptWeight);
         m.SetProperty("latent_channels", IPA_LATENT_CHANNELS);
