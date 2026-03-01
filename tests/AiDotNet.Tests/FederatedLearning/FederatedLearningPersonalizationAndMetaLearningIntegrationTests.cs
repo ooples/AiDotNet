@@ -31,7 +31,7 @@ public class FederatedLearningPersonalizationAndMetaLearningIntegrationTests
             Personalization = new FederatedPersonalizationOptions
             {
                 Enabled = true,
-                Strategy = "FedPer",
+                Strategy = FederatedPersonalizationStrategy.FedPer,
                 PersonalizedParameterFraction = 0.5,
                 LocalAdaptationEpochs = 0
             }
@@ -87,7 +87,7 @@ public class FederatedLearningPersonalizationAndMetaLearningIntegrationTests
             MetaLearning = new FederatedMetaLearningOptions
             {
                 Enabled = true,
-                Strategy = "Reptile",
+                Strategy = FederatedMetaLearningStrategy.Reptile,
                 MetaLearningRate = 0.5,
                 InnerEpochs = 1
             }

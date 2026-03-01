@@ -12,8 +12,8 @@ public class FederatedLearningInvalidConfigurationTests
     public async Task BuildAsync_WithPersonalizationAndMetaLearning_Throws()
     {
         var options = CreateBaseOptions();
-        options.Personalization = new FederatedPersonalizationOptions { Enabled = true, Strategy = "Ditto" };
-        options.MetaLearning = new FederatedMetaLearningOptions { Enabled = true, Strategy = "Reptile" };
+        options.Personalization = new FederatedPersonalizationOptions { Enabled = true, Strategy = FederatedPersonalizationStrategy.Ditto };
+        options.MetaLearning = new FederatedMetaLearningOptions { Enabled = true, Strategy = FederatedMetaLearningStrategy.Reptile };
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => BuildAsync(options));
         Assert.Contains("Personalization and federated meta-learning", ex.Message, StringComparison.OrdinalIgnoreCase);
@@ -121,10 +121,10 @@ public class FederatedLearningInvalidConfigurationTests
     public async Task BuildAsync_WithUnknownCompressionStrategy_Throws()
     {
         var options = CreateBaseOptions();
-        options.Compression = new FederatedCompressionOptions { Strategy = "Bogus", Ratio = 0.1, UseErrorFeedback = false };
+        options.Compression = new FederatedCompressionOptions { Strategy = (FederatedCompressionStrategy)999 };
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => BuildAsync(options, useDeterministicDeltaOptimizer: true));
-        Assert.Contains("Unknown compression strategy", ex.Message, StringComparison.OrdinalIgnoreCase);
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => BuildAsync(options));
+        Assert.Contains("compression", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     private static FederatedLearningOptions CreateBaseOptions()
