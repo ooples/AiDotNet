@@ -23,4 +23,12 @@ public sealed class KittiDataLoaderOptions
     public int PointsPerSample { get; set; } = 16384;
     /// <summary>Include reflectance as 4th channel. Default is true.</summary>
     public bool IncludeReflectance { get; set; } = true;
+
+    /// <summary>Validates that all option values are within acceptable ranges.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when any option is invalid.</exception>
+    public void Validate()
+    {
+        if (PointsPerSample <= 0) throw new ArgumentOutOfRangeException(nameof(PointsPerSample), "PointsPerSample must be positive.");
+        if (MaxSamples is <= 0) throw new ArgumentOutOfRangeException(nameof(MaxSamples), "MaxSamples must be positive when specified.");
+    }
 }

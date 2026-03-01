@@ -23,4 +23,12 @@ public sealed class Wikidata5mDataLoaderOptions
     public int? MaxSamples { get; set; }
     /// <summary>Entity embedding dimension. Default is 128.</summary>
     public int EmbeddingDimension { get; set; } = 128;
+
+    /// <summary>Validates that all option values are within acceptable ranges.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when any option is invalid.</exception>
+    public void Validate()
+    {
+        if (EmbeddingDimension <= 0) throw new ArgumentOutOfRangeException(nameof(EmbeddingDimension), "EmbeddingDimension must be positive.");
+        if (MaxSamples is <= 0) throw new ArgumentOutOfRangeException(nameof(MaxSamples), "MaxSamples must be positive when specified.");
+    }
 }

@@ -17,6 +17,14 @@ public sealed class CurriculumDataSchedulerOptions
     public double InitialFraction { get; set; } = 0.2;
     /// <summary>Epoch at which the full dataset becomes available. Default is 10.</summary>
     public int FullDataEpoch { get; set; } = 10;
+
+    /// <summary>Validates that all option values are within acceptable ranges.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when any option is invalid.</exception>
+    public void Validate()
+    {
+        if (InitialFraction <= 0 || InitialFraction > 1) throw new ArgumentOutOfRangeException(nameof(InitialFraction), "InitialFraction must be in (0, 1].");
+        if (FullDataEpoch <= 0) throw new ArgumentOutOfRangeException(nameof(FullDataEpoch), "FullDataEpoch must be positive.");
+    }
 }
 
 /// <summary>

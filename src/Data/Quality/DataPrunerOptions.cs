@@ -15,6 +15,14 @@ public sealed class DataPrunerOptions
     public PruneStrategy Strategy { get; set; } = PruneStrategy.HighConfidence;
     /// <summary>Minimum number of epochs before pruning scores are reliable. Default is 5.</summary>
     public int MinEpochsForScoring { get; set; } = 5;
+
+    /// <summary>Validates that all option values are within acceptable ranges.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when any option is invalid.</exception>
+    public void Validate()
+    {
+        if (PruneRatio < 0 || PruneRatio > 1) throw new ArgumentOutOfRangeException(nameof(PruneRatio), "PruneRatio must be between 0 and 1.");
+        if (MinEpochsForScoring < 0) throw new ArgumentOutOfRangeException(nameof(MinEpochsForScoring), "MinEpochsForScoring must be non-negative.");
+    }
 }
 
 /// <summary>

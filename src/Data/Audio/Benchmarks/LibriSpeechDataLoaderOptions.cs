@@ -37,4 +37,13 @@ public sealed class LibriSpeechDataLoaderOptions
     /// Options: "train-clean-100", "train-clean-360", "train-other-500", "dev-clean", "dev-other", "test-clean", "test-other".
     /// </summary>
     public string Subset { get; set; } = "train-clean-100";
+
+    /// <summary>Validates that all option values are within acceptable ranges.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when any option is invalid.</exception>
+    public void Validate()
+    {
+        if (SampleRate <= 0) throw new ArgumentOutOfRangeException(nameof(SampleRate), "SampleRate must be positive.");
+        if (MaxDurationSeconds <= 0) throw new ArgumentOutOfRangeException(nameof(MaxDurationSeconds), "MaxDurationSeconds must be positive.");
+        if (MaxSamples is <= 0) throw new ArgumentOutOfRangeException(nameof(MaxSamples), "MaxSamples must be positive when specified.");
+    }
 }

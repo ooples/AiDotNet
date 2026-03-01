@@ -65,11 +65,21 @@ public class RetinalFundusDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>
         bool isTest = _options.Split == Geometry.DatasetSplit.Test || _options.Split == Geometry.DatasetSplit.Validation;
         string imageDir = Path.Combine(_dataPath, isTest ? "test" : "train");
 
-        // Load labels CSV
-        string csvFile = Path.Combine(_dataPath, "trainLabels.csv");
-        if (!File.Exists(csvFile))
+        // Load labels CSV (try split-specific first, then fallback to common files)
+        string csvFile;
+        if (isTest)
         {
-            csvFile = Path.Combine(_dataPath, "train.csv");
+            csvFile = Path.Combine(_dataPath, "testLabels.csv");
+            if (!File.Exists(csvFile))
+                csvFile = Path.Combine(_dataPath, "test.csv");
+            if (!File.Exists(csvFile))
+                csvFile = Path.Combine(_dataPath, "retinopathy_solution.csv");
+        }
+        else
+        {
+            csvFile = Path.Combine(_dataPath, "trainLabels.csv");
+            if (!File.Exists(csvFile))
+                csvFile = Path.Combine(_dataPath, "train.csv");
         }
 
         if (!File.Exists(csvFile))

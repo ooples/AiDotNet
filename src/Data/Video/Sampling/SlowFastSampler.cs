@@ -14,6 +14,7 @@ public class SlowFastSampler : IVideoFrameSampler
     /// <param name="alpha">Temporal stride ratio between slow and fast pathways. Default is 8.</param>
     public SlowFastSampler(int alpha = 8)
     {
+        if (alpha <= 0) throw new ArgumentOutOfRangeException(nameof(alpha), "Alpha must be positive.");
         _alpha = alpha;
     }
 
@@ -31,14 +32,30 @@ public class SlowFastSampler : IVideoFrameSampler
 
         // Total indices: slow + fast pathway frames
         var indices = new int[slowCount + fastCount];
-        double slowStep = Math.Max(1.0, (double)(totalFrames - 1) / (slowCount - 1));
-        double fastStep = Math.Max(1.0, (double)(totalFrames - 1) / (fastCount - 1));
 
-        for (int i = 0; i < slowCount; i++)
-            indices[i] = Math.Min((int)(i * slowStep), totalFrames - 1);
+        // Fill slow pathway
+        if (slowCount == 1)
+        {
+            indices[0] = totalFrames / 2;
+        }
+        else
+        {
+            double slowStep = (double)(totalFrames - 1) / (slowCount - 1);
+            for (int i = 0; i < slowCount; i++)
+                indices[i] = Math.Min((int)(i * slowStep), totalFrames - 1);
+        }
 
-        for (int i = 0; i < fastCount; i++)
-            indices[slowCount + i] = Math.Min((int)(i * fastStep), totalFrames - 1);
+        // Fill fast pathway
+        if (fastCount == 1)
+        {
+            indices[slowCount] = totalFrames / 2;
+        }
+        else
+        {
+            double fastStep = (double)(totalFrames - 1) / (fastCount - 1);
+            for (int i = 0; i < fastCount; i++)
+                indices[slowCount + i] = Math.Min((int)(i * fastStep), totalFrames - 1);
+        }
 
         return indices;
     }

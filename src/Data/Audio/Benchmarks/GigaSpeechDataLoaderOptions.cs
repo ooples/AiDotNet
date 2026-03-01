@@ -27,4 +27,13 @@ public sealed class GigaSpeechDataLoaderOptions
     public double MaxDurationSeconds { get; set; } = 30.0;
     /// <summary>Subset to load. Default is "XS". Options: "XS", "S", "M", "L", "XL".</summary>
     public string Subset { get; set; } = "XS";
+
+    /// <summary>Validates that all option values are within acceptable ranges.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when any option is invalid.</exception>
+    public void Validate()
+    {
+        if (SampleRate <= 0) throw new ArgumentOutOfRangeException(nameof(SampleRate), "SampleRate must be positive.");
+        if (MaxDurationSeconds <= 0) throw new ArgumentOutOfRangeException(nameof(MaxDurationSeconds), "MaxDurationSeconds must be positive.");
+        if (MaxSamples is <= 0) throw new ArgumentOutOfRangeException(nameof(MaxSamples), "MaxSamples must be positive when specified.");
+    }
 }

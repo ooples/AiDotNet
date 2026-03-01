@@ -49,8 +49,8 @@ internal static class VisionLoaderHelper
         {
             for (int x = 0; x < targetWidth; x++)
             {
-                double srcY = srcHeight > 1 ? (double)y * (srcHeight - 1) / (targetHeight - 1) : 0;
-                double srcX = srcWidth > 1 ? (double)x * (srcWidth - 1) / (targetWidth - 1) : 0;
+                double srcY = (srcHeight > 1 && targetHeight > 1) ? (double)y * (srcHeight - 1) / (targetHeight - 1) : 0;
+                double srcX = (srcWidth > 1 && targetWidth > 1) ? (double)x * (srcWidth - 1) / (targetWidth - 1) : 0;
 
                 int y0 = (int)Math.Floor(srcY);
                 int y1 = Math.Min(y0 + 1, srcHeight - 1);

@@ -26,4 +26,13 @@ public sealed class Esc50DataLoaderOptions
     public int SampleRate { get; set; } = 44100;
     /// <summary>Cross-validation fold to use as test (1-5). Default is 5.</summary>
     public int TestFold { get; set; } = 5;
+
+    /// <summary>Validates that all option values are within acceptable ranges.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when any option is invalid.</exception>
+    public void Validate()
+    {
+        if (SampleRate <= 0) throw new ArgumentOutOfRangeException(nameof(SampleRate), "Sample rate must be positive.");
+        if (TestFold < 1 || TestFold > 5) throw new ArgumentOutOfRangeException(nameof(TestFold), "TestFold must be between 1 and 5.");
+        if (MaxSamples is <= 0) throw new ArgumentOutOfRangeException(nameof(MaxSamples), "MaxSamples must be positive when specified.");
+    }
 }

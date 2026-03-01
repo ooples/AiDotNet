@@ -28,4 +28,19 @@ public sealed class HeuristicTextFilterOptions
     public double MinPunctuationEndRatio { get; set; } = 0.1;
     /// <summary>Whether to filter documents containing common boilerplate phrases. Default is true.</summary>
     public bool FilterBoilerplate { get; set; } = true;
+
+    /// <summary>Validates that all option values are within acceptable ranges.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when any option is invalid.</exception>
+    public void Validate()
+    {
+        if (MinWordCount < 0) throw new ArgumentOutOfRangeException(nameof(MinWordCount), "MinWordCount must be non-negative.");
+        if (MaxWordCount < MinWordCount) throw new ArgumentOutOfRangeException(nameof(MaxWordCount), "MaxWordCount must be >= MinWordCount.");
+        if (MinAvgWordLength < 0) throw new ArgumentOutOfRangeException(nameof(MinAvgWordLength), "MinAvgWordLength must be non-negative.");
+        if (MaxAvgWordLength < MinAvgWordLength) throw new ArgumentOutOfRangeException(nameof(MaxAvgWordLength), "MaxAvgWordLength must be >= MinAvgWordLength.");
+        if (MaxSpecialCharRatio < 0 || MaxSpecialCharRatio > 1) throw new ArgumentOutOfRangeException(nameof(MaxSpecialCharRatio), "MaxSpecialCharRatio must be between 0 and 1.");
+        if (MaxUppercaseRatio < 0 || MaxUppercaseRatio > 1) throw new ArgumentOutOfRangeException(nameof(MaxUppercaseRatio), "MaxUppercaseRatio must be between 0 and 1.");
+        if (MaxDigitRatio < 0 || MaxDigitRatio > 1) throw new ArgumentOutOfRangeException(nameof(MaxDigitRatio), "MaxDigitRatio must be between 0 and 1.");
+        if (MaxEllipsisLineRatio < 0 || MaxEllipsisLineRatio > 1) throw new ArgumentOutOfRangeException(nameof(MaxEllipsisLineRatio), "MaxEllipsisLineRatio must be between 0 and 1.");
+        if (MinPunctuationEndRatio < 0 || MinPunctuationEndRatio > 1) throw new ArgumentOutOfRangeException(nameof(MinPunctuationEndRatio), "MinPunctuationEndRatio must be between 0 and 1.");
+    }
 }

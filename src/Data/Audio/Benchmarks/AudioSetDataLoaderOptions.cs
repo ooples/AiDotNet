@@ -26,4 +26,13 @@ public sealed class AudioSetDataLoaderOptions
     public int SampleRate { get; set; } = 16000;
     /// <summary>Audio clip duration in seconds. Default is 10.</summary>
     public double ClipDurationSeconds { get; set; } = 10.0;
+
+    /// <summary>Validates that all option values are within acceptable ranges.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when any option is invalid.</exception>
+    public void Validate()
+    {
+        if (SampleRate <= 0) throw new ArgumentOutOfRangeException(nameof(SampleRate), "SampleRate must be positive.");
+        if (ClipDurationSeconds <= 0) throw new ArgumentOutOfRangeException(nameof(ClipDurationSeconds), "ClipDurationSeconds must be positive.");
+        if (MaxSamples is <= 0) throw new ArgumentOutOfRangeException(nameof(MaxSamples), "MaxSamples must be positive when specified.");
+    }
 }

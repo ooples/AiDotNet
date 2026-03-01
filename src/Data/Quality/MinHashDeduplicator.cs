@@ -143,8 +143,28 @@ public class MinHashDeduplicator
         string normalized = text.ToLowerInvariant();
         for (int i = 0; i <= normalized.Length - _options.ShingleSize; i++)
         {
-            shingles.Add(normalized.Substring(i, _options.ShingleSize).GetHashCode());
+            shingles.Add(DeterministicHash(normalized, i, _options.ShingleSize));
         }
         return shingles;
+    }
+
+    /// <summary>
+    /// FNV-1a hash for deterministic, cross-process-stable hashing of character shingles.
+    /// String.GetHashCode() is randomized per process in .NET Core+ and is unsuitable for MinHash.
+    /// </summary>
+    private static int DeterministicHash(string text, int start, int length)
+    {
+        unchecked
+        {
+            const int fnvOffsetBasis = unchecked((int)2166136261);
+            const int fnvPrime = 16777619;
+            int hash = fnvOffsetBasis;
+            for (int i = start; i < start + length; i++)
+            {
+                hash ^= text[i];
+                hash *= fnvPrime;
+            }
+            return hash;
+        }
     }
 }

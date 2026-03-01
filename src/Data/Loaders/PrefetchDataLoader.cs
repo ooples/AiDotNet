@@ -15,7 +15,7 @@ namespace AiDotNet.Data.Loaders;
 public class PrefetchDataLoader<TBatch> : IDisposable
 {
     private readonly PrefetchDataLoaderOptions _options;
-    private readonly BlockingCollection<TBatch> _buffer;
+    private BlockingCollection<TBatch> _buffer;
     private CancellationTokenSource? _cts;
     private Task? _prefetchTask;
     private bool _disposed;
@@ -42,11 +42,12 @@ public class PrefetchDataLoader<TBatch> : IDisposable
     /// <returns>An enumerable of prefetched batches.</returns>
     public IEnumerable<TBatch> Prefetch(IEnumerable<TBatch> batchProducer)
     {
+        // Stop any previous prefetch and create a fresh buffer
+        // (BlockingCollection cannot be reused after CompleteAdding)
+        Stop();
+        _buffer = new BlockingCollection<TBatch>(_options.PrefetchCount);
         _cts = new CancellationTokenSource();
         var token = _cts.Token;
-
-        // Clear any leftover items
-        while (_buffer.TryTake(out _)) { }
 
         if (_options.UseBackgroundThread)
         {
@@ -97,13 +98,20 @@ public class PrefetchDataLoader<TBatch> : IDisposable
         _prefetchTask = null;
     }
 
+    private void DisposeBuffer()
+    {
+        // Drain any remaining items before disposing
+        while (_buffer.TryTake(out _)) { }
+        _buffer.Dispose();
+    }
+
     /// <inheritdoc/>
     public void Dispose()
     {
         if (!_disposed)
         {
             Stop();
-            _buffer.Dispose();
+            DisposeBuffer();
             _disposed = true;
         }
     }

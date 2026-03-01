@@ -18,4 +18,14 @@ public sealed class LanguageIdFilterOptions
     public int MaxProfileSize { get; set; } = 300;
     /// <summary>Minimum text length (in characters) for reliable detection. Default is 50.</summary>
     public int MinTextLength { get; set; } = 50;
+
+    /// <summary>Validates that all option values are within acceptable ranges.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when any option is invalid.</exception>
+    public void Validate()
+    {
+        if (MinConfidence < 0 || MinConfidence > 1) throw new ArgumentOutOfRangeException(nameof(MinConfidence), "MinConfidence must be between 0 and 1.");
+        if (ProfileNGramSize <= 0) throw new ArgumentOutOfRangeException(nameof(ProfileNGramSize), "ProfileNGramSize must be positive.");
+        if (MaxProfileSize <= 0) throw new ArgumentOutOfRangeException(nameof(MaxProfileSize), "MaxProfileSize must be positive.");
+        if (MinTextLength < 0) throw new ArgumentOutOfRangeException(nameof(MinTextLength), "MinTextLength must be non-negative.");
+    }
 }

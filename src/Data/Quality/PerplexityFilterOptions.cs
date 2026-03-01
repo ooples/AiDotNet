@@ -13,4 +13,14 @@ public sealed class PerplexityFilterOptions
     public int NGramOrder { get; set; } = 3;
     /// <summary>Smoothing factor for unseen n-grams. Default is 1.0 (Laplace smoothing).</summary>
     public double SmoothingFactor { get; set; } = 1.0;
+
+    /// <summary>Validates that all option values are within acceptable ranges.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when any option is invalid.</exception>
+    public void Validate()
+    {
+        if (MaxPerplexity <= 0) throw new ArgumentOutOfRangeException(nameof(MaxPerplexity), "MaxPerplexity must be positive.");
+        if (MinPerplexity < 0) throw new ArgumentOutOfRangeException(nameof(MinPerplexity), "MinPerplexity must be non-negative.");
+        if (NGramOrder <= 0) throw new ArgumentOutOfRangeException(nameof(NGramOrder), "NGramOrder must be positive.");
+        if (SmoothingFactor <= 0) throw new ArgumentOutOfRangeException(nameof(SmoothingFactor), "SmoothingFactor must be positive.");
+    }
 }

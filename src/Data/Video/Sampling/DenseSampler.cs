@@ -11,7 +11,14 @@ public class DenseSampler : IVideoFrameSampler
             return Array.Empty<int>();
 
         var indices = new int[numFramesToSample];
-        double step = Math.Max(1.0, (double)(totalFrames - 1) / (numFramesToSample - 1));
+
+        if (numFramesToSample == 1)
+        {
+            indices[0] = totalFrames / 2; // Sample the middle frame
+            return indices;
+        }
+
+        double step = (double)(totalFrames - 1) / (numFramesToSample - 1);
 
         for (int i = 0; i < numFramesToSample; i++)
         {

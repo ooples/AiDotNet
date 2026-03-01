@@ -17,4 +17,13 @@ public sealed class ElasticDistributedSamplerOptions
     public bool DropLast { get; set; } = true;
     /// <summary>Random seed for reproducibility. Default is null (random).</summary>
     public int? Seed { get; set; }
+
+    /// <summary>Validates that all option values are within acceptable ranges.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when any option is invalid.</exception>
+    public void Validate()
+    {
+        if (DatasetSize <= 0) throw new ArgumentOutOfRangeException(nameof(DatasetSize), "DatasetSize must be positive.");
+        if (NumReplicas <= 0) throw new ArgumentOutOfRangeException(nameof(NumReplicas), "NumReplicas must be positive.");
+        if (Rank < 0 || Rank >= NumReplicas) throw new ArgumentOutOfRangeException(nameof(Rank), "Rank must be in [0, NumReplicas).");
+    }
 }

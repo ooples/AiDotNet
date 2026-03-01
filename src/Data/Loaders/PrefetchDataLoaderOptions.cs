@@ -11,4 +11,12 @@ public sealed class PrefetchDataLoaderOptions
     public bool UseBackgroundThread { get; set; } = true;
     /// <summary>Timeout in milliseconds for waiting on a prefetched batch. Default is 30000 (30s).</summary>
     public int TimeoutMs { get; set; } = 30000;
+
+    /// <summary>Validates that all option values are within acceptable ranges.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when any option is invalid.</exception>
+    public void Validate()
+    {
+        if (PrefetchCount <= 0) throw new ArgumentOutOfRangeException(nameof(PrefetchCount), "PrefetchCount must be positive.");
+        if (TimeoutMs <= 0) throw new ArgumentOutOfRangeException(nameof(TimeoutMs), "TimeoutMs must be positive.");
+    }
 }

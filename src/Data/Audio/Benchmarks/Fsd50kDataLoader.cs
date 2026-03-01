@@ -98,13 +98,18 @@ public class Fsd50kDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tenso
         var samples = new List<(string AudioPath, int[] LabelIndices)>();
 
         // CSV: fname, labels, mids, split
+        // Labels field may be quoted and contain commas (e.g., "Speech,Music")
         for (int i = 1; i < lines.Length; i++)
         {
-            var parts = lines[i].Split(new[] { ',' }, 4);
-            if (parts.Length < 2) continue;
+            string line = lines[i];
+            if (string.IsNullOrWhiteSpace(line)) continue;
 
-            string fname = parts[0].Trim();
-            string labelsStr = parts[1].Trim();
+            // Parse CSV with quote awareness
+            var fields = ParseCsvLine(line);
+            if (fields.Count < 2) continue;
+
+            string fname = fields[0].Trim();
+            string labelsStr = fields[1].Trim();
 
             var labelNames = labelsStr.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
             var labelIndices = new List<int>();
@@ -187,5 +192,33 @@ public class Fsd50kDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tenso
             new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(AudioLoaderHelper.ExtractTensorBatch(features, shuffled.Skip(trainSize).Take(valSize).ToArray()), AudioLoaderHelper.ExtractTensorBatch(labels, shuffled.Skip(trainSize).Take(valSize).ToArray())),
             new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(AudioLoaderHelper.ExtractTensorBatch(features, shuffled.Skip(trainSize + valSize).ToArray()), AudioLoaderHelper.ExtractTensorBatch(labels, shuffled.Skip(trainSize + valSize).ToArray()))
         );
+    }
+
+    /// <summary>
+    /// Parses a CSV line respecting quoted fields (handles commas inside quotes).
+    /// </summary>
+    private static List<string> ParseCsvLine(string line)
+    {
+        var fields = new List<string>();
+        bool inQuotes = false;
+        int fieldStart = 0;
+
+        for (int i = 0; i < line.Length; i++)
+        {
+            if (line[i] == '"')
+            {
+                inQuotes = !inQuotes;
+            }
+            else if (line[i] == ',' && !inQuotes)
+            {
+                string field = line.Substring(fieldStart, i - fieldStart).Trim().Trim('"');
+                fields.Add(field);
+                fieldStart = i + 1;
+            }
+        }
+
+        // Add the last field
+        fields.Add(line.Substring(fieldStart).Trim().Trim('"'));
+        return fields;
     }
 }

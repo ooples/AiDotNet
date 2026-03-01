@@ -37,4 +37,13 @@ public sealed class CocoDetectionDataLoaderOptions
     /// Default is 100.
     /// </summary>
     public int MaxDetections { get; set; } = 100;
+
+    /// <summary>Validates that all option values are within acceptable ranges.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when any option is invalid.</exception>
+    public void Validate()
+    {
+        if (ImageSize <= 0) throw new ArgumentOutOfRangeException(nameof(ImageSize), "ImageSize must be positive.");
+        if (MaxDetections <= 0) throw new ArgumentOutOfRangeException(nameof(MaxDetections), "MaxDetections must be positive.");
+        if (MaxSamples is <= 0) throw new ArgumentOutOfRangeException(nameof(MaxSamples), "MaxSamples must be positive when specified.");
+    }
 }

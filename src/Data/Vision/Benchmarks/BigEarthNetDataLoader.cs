@@ -85,6 +85,9 @@ public class BigEarthNetDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, 
         var featuresData = new T[totalSamples * pixelsPerImage];
         var labelsData = new T[totalSamples * _numClasses];
 
+        // Build a class name to index mapping for string labels
+        var classNameToIndex = BuildClassNameIndex();
+
         for (int i = 0; i < totalSamples; i++)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -135,11 +138,20 @@ public class BigEarthNetDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, 
                     int labelOffset = i * _numClasses;
                     foreach (var labelElem in labelsElem.EnumerateArray())
                     {
-                        // Labels are stored as class index integers or class name strings
                         if (labelElem.ValueKind == JsonValueKind.Number)
                         {
                             int classIdx = labelElem.GetInt32();
                             if (classIdx >= 0 && classIdx < _numClasses)
+                            {
+                                labelsData[labelOffset + classIdx] = NumOps.One;
+                            }
+                        }
+                        else if (labelElem.ValueKind == JsonValueKind.String)
+                        {
+                            // BigEarthNet uses string class names; map via vocabulary index
+                            string className = labelElem.GetString() ?? string.Empty;
+                            if (classNameToIndex.TryGetValue(className, out int classIdx) &&
+                                classIdx >= 0 && classIdx < _numClasses)
                             {
                                 labelsData[labelOffset + classIdx] = NumOps.One;
                             }
@@ -198,6 +210,34 @@ public class BigEarthNetDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, 
                 ExtractTensorBatch(features, shuffled.Skip(trainSize + valSize).ToArray()),
                 ExtractTensorBatch(labels, shuffled.Skip(trainSize + valSize).ToArray()))
         );
+    }
+
+    /// <summary>
+    /// Builds a mapping from BigEarthNet CORINE Land Cover class names to indices.
+    /// Supports both the 19-class and 43-class schemes.
+    /// </summary>
+    private Dictionary<string, int> BuildClassNameIndex()
+    {
+        // BigEarthNet-19 class names (CLC Level-3 grouped into 19 classes)
+        string[] classNames19 =
+        {
+            "Urban fabric", "Industrial or commercial units", "Arable land",
+            "Permanent crops", "Pastures", "Complex cultivation patterns",
+            "Land principally occupied by agriculture", "Agro-forestry areas",
+            "Broad-leaved forest", "Coniferous forest", "Mixed forest",
+            "Natural grassland and sparsely vegetated areas", "Moors, heathland and sclerophyllous vegetation",
+            "Transitional woodland/shrub", "Beaches, dunes, sands", "Inland wetlands",
+            "Coastal wetlands", "Inland waters", "Marine waters"
+        };
+
+        var map = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var classNames = _options.Use19ClassScheme ? classNames19 : classNames19; // 43-class uses same scheme for first 19
+        for (int i = 0; i < classNames.Length && i < _numClasses; i++)
+        {
+            map[classNames[i]] = i;
+        }
+
+        return map;
     }
 
     private static string FindDataDirectory(string rootPath)

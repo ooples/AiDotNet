@@ -202,9 +202,9 @@ internal static class FlacDecoder
             {
                 int mid = channelData[0][i];
                 int side = channelData[1][i];
-                channelData[0][i] = (mid + side) >> 1;
-                // Use proper rounding: mid + side is always even after the shift
-                mid <<= 1;
+                // Mid-side decoding: mid is stored shifted right by 1, side is the difference.
+                // Restore: mid = mid << 1 | (side & 1), then left = (mid + side) / 2, right = (mid - side) / 2
+                mid = (mid << 1) | (side & 1);
                 channelData[0][i] = (mid + side) >> 1;
                 channelData[1][i] = (mid - side) >> 1;
             }

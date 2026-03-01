@@ -13,6 +13,13 @@ public sealed class CachingDataLoaderOptions
     public string DiskCacheDirectory { get; set; } = ".cache/dataloader";
     /// <summary>Cache eviction policy. Default is LRU.</summary>
     public MemoryCacheEvictionPolicy EvictionPolicy { get; set; } = MemoryCacheEvictionPolicy.LRU;
+
+    /// <summary>Validates that all option values are within acceptable ranges.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when any option is invalid.</exception>
+    public void Validate()
+    {
+        if (MaxCacheSize <= 0) throw new ArgumentOutOfRangeException(nameof(MaxCacheSize), "MaxCacheSize must be positive.");
+    }
 }
 
 /// <summary>

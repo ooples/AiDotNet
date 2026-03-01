@@ -18,4 +18,13 @@ public sealed class DatasetDistillerOptions
     public int NumSteps { get; set; } = 1000;
     /// <summary>Random seed for reproducibility. Default is null (random).</summary>
     public int? Seed { get; set; }
+
+    /// <summary>Validates that all option values are within acceptable ranges.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when any option is invalid.</exception>
+    public void Validate()
+    {
+        if (SamplesPerClass <= 0) throw new ArgumentOutOfRangeException(nameof(SamplesPerClass), "SamplesPerClass must be positive.");
+        if (DistillLearningRate <= 0) throw new ArgumentOutOfRangeException(nameof(DistillLearningRate), "DistillLearningRate must be positive.");
+        if (NumSteps <= 0) throw new ArgumentOutOfRangeException(nameof(NumSteps), "NumSteps must be positive.");
+    }
 }

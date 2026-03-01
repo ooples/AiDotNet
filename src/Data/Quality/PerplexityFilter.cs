@@ -16,7 +16,6 @@ public class PerplexityFilter
     private readonly PerplexityFilterOptions _options;
     private Dictionary<string, int> _ngramCounts;
     private Dictionary<string, int> _contextCounts;
-    private int _totalNgrams;
     private int _vocabularySize;
     private bool _isTrained;
 
@@ -25,7 +24,6 @@ public class PerplexityFilter
         _options = options ?? new PerplexityFilterOptions();
         _ngramCounts = new Dictionary<string, int>();
         _contextCounts = new Dictionary<string, int>();
-        _totalNgrams = 0;
         _vocabularySize = 0;
         _isTrained = false;
     }
@@ -36,9 +34,11 @@ public class PerplexityFilter
     /// <param name="referenceDocuments">High-quality reference documents to build the model from.</param>
     public void Train(IReadOnlyList<string> referenceDocuments)
     {
+        if (referenceDocuments.Count == 0)
+            throw new ArgumentException("Reference documents cannot be empty.", nameof(referenceDocuments));
+
         _ngramCounts.Clear();
         _contextCounts.Clear();
-        _totalNgrams = 0;
         var uniqueTokens = new HashSet<string>();
 
         foreach (string doc in referenceDocuments)
@@ -54,7 +54,6 @@ public class PerplexityFilter
 
                 _ngramCounts[ngram] = _ngramCounts.GetValueOrDefault(ngram, 0) + 1;
                 _contextCounts[context] = _contextCounts.GetValueOrDefault(context, 0) + 1;
-                _totalNgrams++;
             }
         }
 

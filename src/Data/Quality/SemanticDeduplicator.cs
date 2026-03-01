@@ -44,6 +44,19 @@ public class SemanticDeduplicator
     /// <returns>Set of indices that are duplicates (should be removed).</returns>
     public HashSet<int> FindDuplicates(double[][] embeddings)
     {
+        if (embeddings.Length == 0)
+            return new HashSet<int>();
+
+        // Validate all embeddings have the same dimension
+        int dim = embeddings[0].Length;
+        for (int i = 1; i < embeddings.Length; i++)
+        {
+            if (embeddings[i].Length != dim)
+                throw new ArgumentException(
+                    $"Embedding at index {i} has dimension {embeddings[i].Length}, expected {dim}.",
+                    nameof(embeddings));
+        }
+
         var duplicates = new HashSet<int>();
 
         for (int i = 0; i < embeddings.Length; i++)

@@ -127,7 +127,7 @@ public class WaymoDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor
             Path.GetFileNameWithoutExtension(binFilePath) + ".txt");
 
         if (!File.Exists(labelFile))
-            return 0;
+            return -1; // No label file found — return sentinel value
 
         var classCounts = new Dictionary<int, int>();
         foreach (string line in File.ReadAllLines(labelFile))
@@ -154,7 +154,7 @@ public class WaymoDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor
         }
 
         if (classCounts.Count == 0)
-            return 0;
+            return -1; // No labeled objects found — return sentinel value
 
         int bestClass = 0, bestCount = 0;
         foreach (var kvp in classCounts)

@@ -119,8 +119,12 @@ public class CheXpertDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Ten
                 }
             }
 
-            // Resolve relative path
-            string fullPath = Path.IsPathRooted(imagePath) ? imagePath : Path.Combine(_dataPath, imagePath);
+            // Resolve relative path: CheXpert CSV paths are relative to the CSV file's directory (baseDir),
+            // not _dataPath. E.g., "CheXpert-v1.0-small/train/patient00001/study1/view1_frontal.jpg"
+            string fullPath = Path.IsPathRooted(imagePath) ? imagePath : Path.Combine(baseDir, imagePath);
+            // If path includes the dataset directory prefix, try resolving from _dataPath as fallback
+            if (!File.Exists(fullPath))
+                fullPath = Path.IsPathRooted(imagePath) ? imagePath : Path.Combine(_dataPath, imagePath);
             samples.Add((fullPath, labels));
         }
 

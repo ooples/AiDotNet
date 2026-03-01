@@ -28,4 +28,14 @@ public sealed class UrbanSound8kDataLoaderOptions
     public double MaxDurationSeconds { get; set; } = 4.0;
     /// <summary>Cross-validation fold to use as test (1-10). Default is 10.</summary>
     public int TestFold { get; set; } = 10;
+
+    /// <summary>Validates that all option values are within acceptable ranges.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when any option is invalid.</exception>
+    public void Validate()
+    {
+        if (SampleRate <= 0) throw new ArgumentOutOfRangeException(nameof(SampleRate), "Sample rate must be positive.");
+        if (MaxDurationSeconds <= 0) throw new ArgumentOutOfRangeException(nameof(MaxDurationSeconds), "Max duration must be positive.");
+        if (TestFold < 1 || TestFold > 10) throw new ArgumentOutOfRangeException(nameof(TestFold), "TestFold must be between 1 and 10.");
+        if (MaxSamples is <= 0) throw new ArgumentOutOfRangeException(nameof(MaxSamples), "MaxSamples must be positive when specified.");
+    }
 }

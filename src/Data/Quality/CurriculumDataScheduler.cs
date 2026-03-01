@@ -15,10 +15,12 @@ namespace AiDotNet.Data.Quality;
 public class CurriculumDataScheduler
 {
     private readonly CurriculumDataSchedulerOptions _options;
+    private readonly Random _random;
 
     public CurriculumDataScheduler(CurriculumDataSchedulerOptions? options = null)
     {
         _options = options ?? new CurriculumDataSchedulerOptions();
+        _random = RandomHelper.CreateSecureRandom();
     }
 
     /// <summary>
@@ -39,12 +41,22 @@ public class CurriculumDataScheduler
         if (_options.Order == CurriculumOrder.HardToEasy)
             Array.Reverse(sortedIndices);
 
-        if (_options.Order == CurriculumOrder.Random)
-            return Enumerable.Range(0, n).ToList();
-
         // Determine fraction available at this epoch
         double fraction = ComputeFraction(epoch);
         int numAvailable = Math.Max(1, (int)(n * fraction));
+
+        if (_options.Order == CurriculumOrder.Random)
+        {
+            // Random still respects the curriculum fraction: take the easiest N,
+            // then shuffle them so order within the available pool is random.
+            var available = sortedIndices.Take(numAvailable).ToList();
+            for (int i = available.Count - 1; i > 0; i--)
+            {
+                int j = _random.Next(i + 1);
+                (available[i], available[j]) = (available[j], available[i]);
+            }
+            return available;
+        }
 
         return sortedIndices.Take(numAvailable).ToList();
     }

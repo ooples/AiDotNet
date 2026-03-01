@@ -1,3 +1,4 @@
+using AiDotNet.Data.Vision.Benchmarks;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Helpers;
 
@@ -19,14 +20,13 @@ internal static class VideoLoaderHelper
         int framePixels = frameHeight * frameWidth * 3;
         for (int f = 0; f < framesPerVideo && f < frameFiles.Length; f++)
         {
-            byte[] imageBytes = File.ReadAllBytes(frameFiles[f]);
+            // Use VisionLoaderHelper to properly decode compressed images (JPEG/PNG)
+            // rather than treating raw compressed bytes as pixel data
+            var pixels = VisionLoaderHelper.LoadAndResizeImage<T>(
+                frameFiles[f], frameHeight, frameWidth, 3, normalize);
             int featureOffset = offset + f * framePixels;
-            int pixelCount = Math.Min(imageBytes.Length, framePixels);
-            for (int p = 0; p < pixelCount; p++)
-            {
-                double val = normalize ? imageBytes[p] / 255.0 : imageBytes[p];
-                target[featureOffset + p] = numOps.FromDouble(val);
-            }
+            int copyLen = Math.Min(pixels.Length, framePixels);
+            Array.Copy(pixels, 0, target, featureOffset, copyLen);
         }
     }
 

@@ -31,4 +31,15 @@ public sealed class Ucf101DataLoaderOptions
     public bool Normalize { get; set; } = true;
     /// <summary>Split number (1, 2, or 3). Default is 1.</summary>
     public int SplitNumber { get; set; } = 1;
+
+    /// <summary>Validates that all option values are within acceptable ranges.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when any option is invalid.</exception>
+    public void Validate()
+    {
+        if (FramesPerVideo <= 0) throw new ArgumentOutOfRangeException(nameof(FramesPerVideo), "FramesPerVideo must be positive.");
+        if (FrameWidth <= 0) throw new ArgumentOutOfRangeException(nameof(FrameWidth), "FrameWidth must be positive.");
+        if (FrameHeight <= 0) throw new ArgumentOutOfRangeException(nameof(FrameHeight), "FrameHeight must be positive.");
+        if (SplitNumber < 1 || SplitNumber > 3) throw new ArgumentOutOfRangeException(nameof(SplitNumber), "SplitNumber must be between 1 and 3.");
+        if (MaxSamples is <= 0) throw new ArgumentOutOfRangeException(nameof(MaxSamples), "MaxSamples must be positive when specified.");
+    }
 }

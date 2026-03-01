@@ -32,6 +32,21 @@ public class ActiveLearningQueryStrategy
     /// <returns>Indices into the predictions array of selected samples.</returns>
     public List<int> Query(double[][] predictions)
     {
+        if (predictions.Length == 0)
+            return new List<int>();
+
+        // Validate predictions are non-empty and have consistent shape
+        int numClasses = predictions[0].Length;
+        if (numClasses == 0)
+            throw new ArgumentException("Prediction vectors must have at least one class.", nameof(predictions));
+        for (int i = 1; i < predictions.Length; i++)
+        {
+            if (predictions[i].Length != numClasses)
+                throw new ArgumentException(
+                    $"Prediction at index {i} has {predictions[i].Length} classes, expected {numClasses}.",
+                    nameof(predictions));
+        }
+
         int querySize = Math.Min(_options.QueryBatchSize, predictions.Length);
 
         return _options.Strategy switch

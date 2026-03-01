@@ -23,4 +23,12 @@ public sealed class NuScenesDataLoaderOptions
     public int PointsPerSample { get; set; } = 32768;
     /// <summary>Include intensity as 4th channel. Default is true.</summary>
     public bool IncludeIntensity { get; set; } = true;
+
+    /// <summary>Validates that all option values are within acceptable ranges.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when any option is invalid.</exception>
+    public void Validate()
+    {
+        if (PointsPerSample <= 0) throw new ArgumentOutOfRangeException(nameof(PointsPerSample), "PointsPerSample must be positive.");
+        if (MaxSamples is <= 0) throw new ArgumentOutOfRangeException(nameof(MaxSamples), "MaxSamples must be positive when specified.");
+    }
 }

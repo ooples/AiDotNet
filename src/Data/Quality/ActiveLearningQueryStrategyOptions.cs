@@ -17,6 +17,14 @@ public sealed class ActiveLearningQueryStrategyOptions
     public int NumMcDropoutPasses { get; set; } = 10;
     /// <summary>Random seed for reproducibility. Default is null (random).</summary>
     public int? Seed { get; set; }
+
+    /// <summary>Validates that all option values are within acceptable ranges.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when any option is invalid.</exception>
+    public void Validate()
+    {
+        if (QueryBatchSize <= 0) throw new ArgumentOutOfRangeException(nameof(QueryBatchSize), "QueryBatchSize must be positive.");
+        if (NumMcDropoutPasses <= 0) throw new ArgumentOutOfRangeException(nameof(NumMcDropoutPasses), "NumMcDropoutPasses must be positive.");
+    }
 }
 
 /// <summary>

@@ -15,6 +15,13 @@ public sealed class CoresetSelectorOptions
     public CoresetStrategy Strategy { get; set; } = CoresetStrategy.Greedy;
     /// <summary>Random seed for reproducibility. Default is null (random).</summary>
     public int? Seed { get; set; }
+
+    /// <summary>Validates that all option values are within acceptable ranges.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when any option is invalid.</exception>
+    public void Validate()
+    {
+        if (SelectionRatio <= 0 || SelectionRatio > 1) throw new ArgumentOutOfRangeException(nameof(SelectionRatio), "SelectionRatio must be in (0, 1].");
+    }
 }
 
 /// <summary>

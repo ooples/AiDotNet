@@ -160,7 +160,7 @@ public class NuScenesDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Ten
     /// </summary>
     private static int ParseNuScenesLabel(string? labelDir, string binFilePath, bool useLidarseg)
     {
-        if (labelDir == null) return 0;
+        if (labelDir == null) return -1;
 
         string baseName = Path.GetFileNameWithoutExtension(binFilePath);
 
@@ -171,7 +171,7 @@ public class NuScenesDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Ten
             if (!File.Exists(lblFile))
                 lblFile = Path.Combine(labelDir, baseName + "_lidarseg.bin");
             if (!File.Exists(lblFile))
-                return 0;
+                return -1;
 
             byte[] lblBytes = File.ReadAllBytes(lblFile);
             var classCounts = new Dictionary<int, int>();
@@ -189,7 +189,7 @@ public class NuScenesDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Ten
             // Text label file: "type ..." or "class_id ..." per line
             string lblFile = Path.Combine(labelDir, baseName + ".txt");
             if (!File.Exists(lblFile))
-                return 0;
+                return -1;
 
             var classCounts = new Dictionary<int, int>();
             foreach (string line in File.ReadAllLines(lblFile))
@@ -223,7 +223,7 @@ public class NuScenesDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Ten
     private static int FindDominantClass(Dictionary<int, int> classCounts)
     {
         if (classCounts.Count == 0)
-            return 0;
+            return -1;
 
         int bestClass = 0, bestCount = 0;
         foreach (var kvp in classCounts)

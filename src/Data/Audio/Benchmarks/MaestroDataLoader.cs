@@ -176,21 +176,109 @@ public class MaestroDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tens
 
     private void ExtractMidiNotes(byte[] midiBytes, T[] target, int offset)
     {
-        // Simplified MIDI parsing: scan for Note On events (status 0x9n) and mark active notes
-        // Real MIDI format: "MThd" header, then track chunks "MTrk"
+        // MIDI parsing: locate MTrk chunks and walk events with variable-length delta times.
+        // This is more robust than raw byte scanning which produces false positives.
         if (midiBytes.Length < 14) return;
 
-        for (int b = 0; b < midiBytes.Length - 2; b++)
+        // Validate MIDI header: "MThd"
+        if (midiBytes[0] != 'M' || midiBytes[1] != 'T' || midiBytes[2] != 'h' || midiBytes[3] != 'd')
+            return;
+
+        // Skip MThd chunk (4 byte tag + 4 byte size + 6 byte header data = 14 bytes)
+        int pos = 14;
+
+        // Process each MTrk chunk
+        while (pos + 8 < midiBytes.Length)
         {
-            byte status = midiBytes[b];
-            // Note On event: 0x90-0x9F
-            if ((status & 0xF0) == 0x90)
+            if (midiBytes[pos] != 'M' || midiBytes[pos + 1] != 'T' ||
+                midiBytes[pos + 2] != 'r' || midiBytes[pos + 3] != 'k')
             {
-                int note = midiBytes[b + 1] & 0x7F;
-                int velocity = midiBytes[b + 2] & 0x7F;
-                if (velocity > 0 && note < MidiNotes)
-                    target[offset + note] = NumOps.FromDouble(1.0);
+                pos++;
+                continue;
             }
+
+            int trackLen = (midiBytes[pos + 4] << 24) | (midiBytes[pos + 5] << 16) |
+                          (midiBytes[pos + 6] << 8) | midiBytes[pos + 7];
+            int trackEnd = pos + 8 + trackLen;
+            if (trackEnd > midiBytes.Length) trackEnd = midiBytes.Length;
+            int tp = pos + 8;
+            byte runningStatus = 0;
+
+            while (tp < trackEnd)
+            {
+                // Read variable-length delta time
+                while (tp < trackEnd && (midiBytes[tp] & 0x80) != 0)
+                    tp++;
+                tp++; // consume last delta byte
+
+                if (tp >= trackEnd) break;
+
+                byte status = midiBytes[tp];
+                if ((status & 0x80) != 0)
+                {
+                    runningStatus = status;
+                    tp++;
+                }
+                // else: running status, status byte is the data byte
+
+                byte cmd = (byte)(runningStatus & 0xF0);
+                if (cmd == 0x90 && tp + 1 < trackEnd)
+                {
+                    int note = midiBytes[tp] & 0x7F;
+                    int velocity = midiBytes[tp + 1] & 0x7F;
+                    if (velocity > 0 && note < MidiNotes)
+                        target[offset + note] = NumOps.FromDouble(1.0);
+                    tp += 2;
+                }
+                else if (cmd == 0x80 || cmd == 0xA0 || cmd == 0xB0 || cmd == 0xE0)
+                {
+                    tp += 2; // 2 data bytes
+                }
+                else if (cmd == 0xC0 || cmd == 0xD0)
+                {
+                    tp += 1; // 1 data byte
+                }
+                else if (runningStatus == 0xFF && tp < trackEnd)
+                {
+                    // Meta event: type byte + variable-length length + data
+                    tp++; // skip meta type
+                    if (tp >= trackEnd) break;
+                    int metaLen = 0;
+                    while (tp < trackEnd && (midiBytes[tp] & 0x80) != 0)
+                    {
+                        metaLen = (metaLen << 7) | (midiBytes[tp] & 0x7F);
+                        tp++;
+                    }
+                    if (tp < trackEnd)
+                    {
+                        metaLen = (metaLen << 7) | (midiBytes[tp] & 0x7F);
+                        tp++;
+                    }
+                    tp += metaLen;
+                }
+                else if (runningStatus == 0xF0 || runningStatus == 0xF7)
+                {
+                    // SysEx: variable-length length + data
+                    int sysLen = 0;
+                    while (tp < trackEnd && (midiBytes[tp] & 0x80) != 0)
+                    {
+                        sysLen = (sysLen << 7) | (midiBytes[tp] & 0x7F);
+                        tp++;
+                    }
+                    if (tp < trackEnd)
+                    {
+                        sysLen = (sysLen << 7) | (midiBytes[tp] & 0x7F);
+                        tp++;
+                    }
+                    tp += sysLen;
+                }
+                else
+                {
+                    tp++; // Unknown, advance
+                }
+            }
+
+            pos = trackEnd;
         }
     }
 }

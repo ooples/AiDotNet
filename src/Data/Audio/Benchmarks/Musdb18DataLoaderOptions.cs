@@ -25,4 +25,13 @@ public sealed class Musdb18DataLoaderOptions
     public int SampleRate { get; set; } = 44100;
     /// <summary>Segment duration in seconds (random segments are extracted from tracks). Default is 6.</summary>
     public double SegmentDurationSeconds { get; set; } = 6.0;
+
+    /// <summary>Validates that all option values are within acceptable ranges.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when any option is invalid.</exception>
+    public void Validate()
+    {
+        if (SampleRate <= 0) throw new ArgumentOutOfRangeException(nameof(SampleRate), "Sample rate must be positive.");
+        if (SegmentDurationSeconds <= 0) throw new ArgumentOutOfRangeException(nameof(SegmentDurationSeconds), "Segment duration must be positive.");
+        if (MaxSamples is <= 0) throw new ArgumentOutOfRangeException(nameof(MaxSamples), "MaxSamples must be positive when specified.");
+    }
 }
