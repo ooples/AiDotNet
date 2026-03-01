@@ -7077,6 +7077,355 @@ Console.WriteLine(""  Query: above(cat, table)?"");
 Console.WriteLine(""  Answer: Yes"");
 "
                 }
+            },
+            ["Meta-Learning"] = new()
+            {
+                new CodeExample
+                {
+                    Id = "meta-protonet",
+                    Name = "ProtoNets Few-Shot Classification",
+                    Description = "Classify new examples by computing distance to class prototypes",
+                    Difficulty = "Beginner",
+                    Tags = ["meta-learning", "few-shot", "prototypical", "classification"],
+                    Code = @"// Prototypical Networks — the simplest few-shot classifier
+// Classifies query examples by nearest class prototype (mean of support embeddings)
+using AiDotNet.MetaLearning;
+using AiDotNet.MetaLearning.Algorithms;
+using AiDotNet.MetaLearning.Data;
+using AiDotNet.MetaLearning.Options;
+using AiDotNet.Data.Structures;
+using AiDotNet.LinearAlgebra;
+
+// 1. Create a simple model (in practice, use a feature extractor)
+var model = new LinearVectorModel(inputDim: 3);
+
+// 2. Configure ProtoNets options
+var options = new ProtoNetsOptions<double, Matrix<double>, Vector<double>>(model)
+{
+    InnerLearningRate = 0.01,
+    OuterLearningRate = 0.001
+};
+
+// 3. Build the algorithm
+var protoNets = new ProtoNetsAlgorithm<double, Matrix<double>, Vector<double>>(options);
+
+// 4. Create a 2-way 2-shot task
+var rng = new Random(42);
+var supportX = new Matrix<double>(4, 3);
+var supportY = new Vector<double>(4);
+var queryX = new Matrix<double>(4, 3);
+var queryY = new Vector<double>(4);
+for (int i = 0; i < 4; i++)
+{
+    for (int j = 0; j < 3; j++)
+    {
+        supportX[i, j] = rng.NextDouble() - 0.5 + (i / 2) * 2.0; // class separation
+        queryX[i, j] = rng.NextDouble() - 0.5 + (i / 2) * 2.0;
+    }
+    supportY[i] = i / 2;
+    queryY[i] = i / 2;
+}
+
+var task = new MetaLearningTask<double, Matrix<double>, Vector<double>>
+{
+    SupportSetX = supportX, SupportSetY = supportY,
+    QuerySetX = queryX, QuerySetY = queryY,
+    NumWays = 2, NumShots = 2, NumQueryPerClass = 2
+};
+var batch = new TaskBatch<double, Matrix<double>, Vector<double>>(new[] { task });
+
+// 5. Meta-train and adapt
+Console.WriteLine(""Training ProtoNets..."");
+for (int epoch = 0; epoch < 10; epoch++)
+{
+    double loss = protoNets.MetaTrain(batch);
+    if (epoch % 3 == 0)
+        Console.WriteLine($""  Epoch {epoch}: loss = {loss:F4}"");
+}
+
+var adapted = protoNets.Adapt(task);
+var predictions = adapted.Predict(queryX);
+Console.WriteLine($""\nAdapted model predictions: {predictions}"");
+Console.WriteLine(""ProtoNets classification complete!"");
+"
+                },
+                new CodeExample
+                {
+                    Id = "meta-maml",
+                    Name = "MAML Few-Shot Adaptation",
+                    Description = "Learn an initialization that adapts to new tasks in a few gradient steps",
+                    Difficulty = "Intermediate",
+                    Tags = ["meta-learning", "maml", "gradient-based", "few-shot"],
+                    Code = @"// MAML — Model-Agnostic Meta-Learning (Finn et al., 2017)
+// Learns a parameter initialization that can be quickly fine-tuned to new tasks
+using AiDotNet.MetaLearning;
+using AiDotNet.MetaLearning.Algorithms;
+using AiDotNet.MetaLearning.Data;
+using AiDotNet.MetaLearning.Options;
+using AiDotNet.Data.Structures;
+using AiDotNet.LinearAlgebra;
+
+// 1. Create model
+var model = new LinearVectorModel(inputDim: 3);
+
+// 2. Configure MAML with inner (task) and outer (meta) learning rates
+var options = new MAMLOptions<double, Matrix<double>, Vector<double>>(model)
+{
+    InnerLearningRate = 0.01,  // Fast adaptation per task
+    OuterLearningRate = 0.001, // Slow meta-update across tasks
+    AdaptationSteps = 5        // Inner loop gradient steps
+};
+
+// 3. Create algorithm
+var maml = new MAMLAlgorithm<double, Matrix<double>, Vector<double>>(options);
+
+// 4. Create multiple tasks (MAML learns across task distribution)
+var rng = new Random(42);
+var tasks = new IMetaLearningTask<double, Matrix<double>, Vector<double>>[3];
+for (int t = 0; t < 3; t++)
+{
+    var sX = new Matrix<double>(4, 3);
+    var sY = new Vector<double>(4);
+    var qX = new Matrix<double>(4, 3);
+    var qY = new Vector<double>(4);
+    double offset = t * 0.5;
+    for (int i = 0; i < 4; i++)
+    {
+        for (int j = 0; j < 3; j++)
+        {
+            sX[i, j] = rng.NextDouble() - 0.5 + offset;
+            qX[i, j] = rng.NextDouble() - 0.5 + offset;
+        }
+        sY[i] = i % 2; qY[i] = i % 2;
+    }
+    tasks[t] = new MetaLearningTask<double, Matrix<double>, Vector<double>>
+    {
+        SupportSetX = sX, SupportSetY = sY,
+        QuerySetX = qX, QuerySetY = qY,
+        NumWays = 2, NumShots = 2, NumQueryPerClass = 2
+    };
+}
+var batch = new TaskBatch<double, Matrix<double>, Vector<double>>(tasks);
+
+// 5. Meta-train across all tasks
+Console.WriteLine(""MAML meta-training across 3 tasks..."");
+for (int epoch = 0; epoch < 15; epoch++)
+{
+    double loss = maml.MetaTrain(batch);
+    if (epoch % 5 == 0)
+        Console.WriteLine($""  Epoch {epoch}: meta-loss = {loss:F4}"");
+}
+
+// 6. Adapt to a brand new task
+Console.WriteLine(""\nAdapting to new unseen task..."");
+var adapted = maml.Adapt(tasks[0]);
+var preds = adapted.Predict(tasks[0].QuerySetX);
+Console.WriteLine($""Predictions: {preds}"");
+Console.WriteLine(""MAML adaptation complete!"");
+"
+                },
+                new CodeExample
+                {
+                    Id = "meta-neural-process",
+                    Name = "Neural Process Regression",
+                    Description = "Predict function values with uncertainty using a neural process",
+                    Difficulty = "Intermediate",
+                    Tags = ["meta-learning", "neural-process", "regression", "uncertainty"],
+                    Code = @"// Conditional Neural Process (CNP) — Garnelo et al., 2018
+// Encodes context points and decodes predictions at target points
+using AiDotNet.MetaLearning;
+using AiDotNet.MetaLearning.Algorithms;
+using AiDotNet.MetaLearning.Data;
+using AiDotNet.MetaLearning.Options;
+using AiDotNet.Data.Structures;
+using AiDotNet.LinearAlgebra;
+
+// 1. Create model for function regression
+var model = new LinearVectorModel(inputDim: 3);
+
+// 2. Configure CNP
+var options = new CNPOptions<double, Matrix<double>, Vector<double>>(model)
+{
+    InnerLearningRate = 0.01,
+    OuterLearningRate = 0.001,
+    RepresentationDim = 32 // Latent representation size
+};
+
+var cnp = new CNPAlgorithm<double, Matrix<double>, Vector<double>>(options);
+
+// 3. Create a regression task (sine wave approximation)
+var rng = new Random(42);
+var supportX = new Matrix<double>(4, 3);
+var supportY = new Vector<double>(4);
+var queryX = new Matrix<double>(4, 3);
+var queryY = new Vector<double>(4);
+for (int i = 0; i < 4; i++)
+{
+    double x = (i - 1.5) * 0.5;
+    for (int j = 0; j < 3; j++)
+    {
+        supportX[i, j] = x + rng.NextDouble() * 0.1;
+        queryX[i, j] = x + 0.25 + rng.NextDouble() * 0.1;
+    }
+    supportY[i] = Math.Sin(x);
+    queryY[i] = Math.Sin(x + 0.25);
+}
+
+var task = new MetaLearningTask<double, Matrix<double>, Vector<double>>
+{
+    SupportSetX = supportX, SupportSetY = supportY,
+    QuerySetX = queryX, QuerySetY = queryY,
+    NumWays = 2, NumShots = 2, NumQueryPerClass = 2
+};
+var batch = new TaskBatch<double, Matrix<double>, Vector<double>>(new[] { task });
+
+// 4. Train and evaluate
+Console.WriteLine(""Training Conditional Neural Process..."");
+for (int epoch = 0; epoch < 20; epoch++)
+{
+    double loss = cnp.MetaTrain(batch);
+    if (epoch % 5 == 0)
+        Console.WriteLine($""  Epoch {epoch}: loss = {loss:F4}"");
+}
+
+var adapted = cnp.Adapt(task);
+var predictions = adapted.Predict(queryX);
+Console.WriteLine($""\nPredictions at query points: {predictions}"");
+Console.WriteLine(""CNP regression complete!"");
+"
+                },
+                new CodeExample
+                {
+                    Id = "meta-episodic-data",
+                    Name = "Episodic Data Pipeline",
+                    Description = "Build a complete episodic data pipeline with synthetic datasets and task samplers",
+                    Difficulty = "Intermediate",
+                    Tags = ["meta-learning", "data", "episodic", "pipeline", "sampler"],
+                    Code = @"// Episodic Data Pipeline: synthetic dataset → task sampler → algorithm
+using AiDotNet.MetaLearning.Data;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+
+// 1. Create a synthetic Gaussian classification meta-dataset
+var dataset = new GaussianClassificationMetaDataset<double, Matrix<double>, Vector<double>>(
+    featureDim: 5,
+    numClasses: 20,
+    examplesPerClass: 30,
+    classSeparation: 3.0,
+    clusterStdDev: 1.0,
+    seed: 42);
+
+Console.WriteLine($""Dataset: {dataset.Name}"");
+Console.WriteLine($""  Classes: {dataset.TotalClasses}"");
+Console.WriteLine($""  Total examples: {dataset.TotalExamples}"");
+Console.WriteLine($""  Supports 5-way 1-shot: {dataset.SupportsConfiguration(5, 1, 15)}"");
+Console.WriteLine();
+
+// 2. Create different samplers
+var uniform = new UniformTaskSampler<double, Matrix<double>, Vector<double>>(
+    dataset, numWays: 5, numShots: 1, numQueryPerClass: 5);
+var balanced = new BalancedTaskSampler<double, Matrix<double>, Vector<double>>(
+    dataset, numWays: 5, numShots: 1, numQueryPerClass: 5, seed: 42);
+var dynamic = new DynamicTaskSampler<double, Matrix<double>, Vector<double>>(
+    dataset, numWays: 5, numShots: 1, numQueryPerClass: 5, explorationRate: 0.1, seed: 42);
+
+// 3. Sample tasks with each sampler
+Console.WriteLine(""Sampling with Uniform sampler..."");
+var uniformBatch = uniform.SampleBatch(4);
+Console.WriteLine($""  Batch size: {uniformBatch.BatchSize}, Strategy: {uniformBatch.BatchingStrategy}"");
+
+Console.WriteLine(""Sampling with Balanced sampler..."");
+var balancedBatch = balanced.SampleBatch(4);
+Console.WriteLine($""  Batch size: {balancedBatch.BatchSize}, Strategy: {balancedBatch.BatchingStrategy}"");
+
+Console.WriteLine(""Sampling with Dynamic sampler..."");
+var dynamicBatch = dynamic.SampleBatch(4);
+Console.WriteLine($""  Batch size: {dynamicBatch.BatchSize}, Strategy: {dynamicBatch.BatchingStrategy}"");
+
+// 4. Show episode metadata
+var episode = dataset.SampleEpisode(5, 1, 5);
+Console.WriteLine($""\nEpisode ID: {episode.EpisodeId}"");
+Console.WriteLine($""  Difficulty: {episode.Difficulty}"");
+Console.WriteLine($""  Domain: {episode.Domain ?? ""(none)""}"");
+Console.WriteLine($""  Task N-way: {episode.Task.NumWays}, K-shot: {episode.Task.NumShots}"");
+
+Console.WriteLine(""\nEpisodic data pipeline demo complete!"");
+"
+                },
+                new CodeExample
+                {
+                    Id = "meta-cross-domain",
+                    Name = "Cross-Domain Few-Shot",
+                    Description = "Transfer meta-knowledge across different data domains using FreqPrior",
+                    Difficulty = "Advanced",
+                    Tags = ["meta-learning", "cross-domain", "frequency", "few-shot", "transfer"],
+                    Code = @"// Cross-Domain Few-Shot Learning with FreqPrior
+// Separates domain-specific (high-freq) from shared (low-freq) features
+using AiDotNet.MetaLearning;
+using AiDotNet.MetaLearning.Algorithms;
+using AiDotNet.MetaLearning.Data;
+using AiDotNet.MetaLearning.Options;
+using AiDotNet.Data.Structures;
+using AiDotNet.LinearAlgebra;
+
+var model = new LinearVectorModel(inputDim: 3);
+
+// FreqPrior: decomposes features into frequency bands
+var options = new FreqPriorOptions<double, Matrix<double>, Vector<double>>(model)
+{
+    InnerLearningRate = 0.01,
+    OuterLearningRate = 0.001,
+    LowPassCutoff = 0.3,       // Low-frequency = domain-invariant features
+    HighPassCutoff = 0.7,       // High-frequency = domain-specific features
+    FreqRegWeight = 0.01        // Regularize frequency separation
+};
+
+var freqPrior = new FreqPriorAlgorithm<double, Matrix<double>, Vector<double>>(options);
+
+// Create tasks from two ""domains"" (different data distributions)
+var rng = new Random(42);
+var tasks = new IMetaLearningTask<double, Matrix<double>, Vector<double>>[4];
+for (int t = 0; t < 4; t++)
+{
+    double domainShift = (t < 2) ? 0.0 : 3.0; // two domains
+    var sX = new Matrix<double>(4, 3);
+    var sY = new Vector<double>(4);
+    var qX = new Matrix<double>(4, 3);
+    var qY = new Vector<double>(4);
+    for (int i = 0; i < 4; i++)
+    {
+        for (int j = 0; j < 3; j++)
+        {
+            sX[i, j] = rng.NextDouble() - 0.5 + domainShift;
+            qX[i, j] = rng.NextDouble() - 0.5 + domainShift;
+        }
+        sY[i] = i % 2; qY[i] = i % 2;
+    }
+    tasks[t] = new MetaLearningTask<double, Matrix<double>, Vector<double>>
+    {
+        SupportSetX = sX, SupportSetY = sY,
+        QuerySetX = qX, QuerySetY = qY,
+        NumWays = 2, NumShots = 2, NumQueryPerClass = 2
+    };
+}
+var batch = new TaskBatch<double, Matrix<double>, Vector<double>>(tasks);
+
+// Train across domains
+Console.WriteLine(""FreqPrior cross-domain training..."");
+for (int epoch = 0; epoch < 15; epoch++)
+{
+    double loss = freqPrior.MetaTrain(batch);
+    if (epoch % 5 == 0)
+        Console.WriteLine($""  Epoch {epoch}: loss = {loss:F4}"");
+}
+
+// Adapt to a task from the second domain
+var adapted = freqPrior.Adapt(tasks[3]);
+var predictions = adapted.Predict(tasks[3].QuerySetX);
+Console.WriteLine($""\nCross-domain predictions: {predictions}"");
+Console.WriteLine(""FreqPrior cross-domain example complete!"");
+"
+                }
             }
         };
     }
