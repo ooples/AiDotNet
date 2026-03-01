@@ -22,6 +22,10 @@ public sealed class CachingDataLoaderOptions
     public void Validate()
     {
         if (MaxCacheSize <= 0) throw new ArgumentOutOfRangeException(nameof(MaxCacheSize), "MaxCacheSize must be positive.");
+        if (!Enum.IsDefined(typeof(MemoryCacheEvictionPolicy), EvictionPolicy))
+            throw new ArgumentOutOfRangeException(nameof(EvictionPolicy), "EvictionPolicy must be a valid enum value.");
+        if (EnableDiskCache && string.IsNullOrWhiteSpace(DiskCacheDirectory))
+            throw new ArgumentException("DiskCacheDirectory must not be empty when disk cache is enabled.", nameof(DiskCacheDirectory));
     }
 }
 

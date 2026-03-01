@@ -34,7 +34,10 @@ public sealed class UrbanSound8kDataLoaderOptions
     public void Validate()
     {
         if (SampleRate <= 0) throw new ArgumentOutOfRangeException(nameof(SampleRate), "Sample rate must be positive.");
-        if (MaxDurationSeconds <= 0) throw new ArgumentOutOfRangeException(nameof(MaxDurationSeconds), "Max duration must be positive.");
+        if (MaxDurationSeconds <= 0 || double.IsNaN(MaxDurationSeconds) || double.IsInfinity(MaxDurationSeconds))
+            throw new ArgumentOutOfRangeException(nameof(MaxDurationSeconds), "Max duration must be a positive finite number.");
+        if (DataPath is not null && string.IsNullOrWhiteSpace(DataPath))
+            throw new ArgumentException("DataPath must not be empty or whitespace when provided.", nameof(DataPath));
         if (TestFold < 1 || TestFold > 10) throw new ArgumentOutOfRangeException(nameof(TestFold), "TestFold must be between 1 and 10.");
         if (MaxSamples is <= 0) throw new ArgumentOutOfRangeException(nameof(MaxSamples), "MaxSamples must be positive when specified.");
     }

@@ -44,6 +44,7 @@ public class MaestroDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tens
     public MaestroDataLoader(MaestroDataLoaderOptions? options = null)
     {
         _options = options ?? new MaestroDataLoaderOptions();
+        _options.Validate();
         _dataPath = _options.DataPath ?? DatasetDownloader.GetDefaultDataPath("maestro");
         _maxAudioSamples = (int)(_options.SampleRate * _options.MaxDurationSeconds);
     }
@@ -81,10 +82,11 @@ public class MaestroDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tens
         var samples = new List<(string AudioPath, string MidiPath)>();
 
         // CSV: canonical_composer, canonical_title, split, year, midi_filename, audio_filename, duration
+        // Use quote-aware parsing since composer/title fields may contain commas
         for (int i = 1; i < lines.Length; i++)
         {
-            var parts = lines[i].Split(new[] { ',' }, 7);
-            if (parts.Length < 6) continue;
+            var parts = ParseCsvLine(lines[i]);
+            if (parts.Count < 6) continue;
 
             string split = parts[2].Trim();
             if (!split.Equals(splitName, StringComparison.OrdinalIgnoreCase)) continue;
@@ -172,6 +174,38 @@ public class MaestroDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tens
             new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(AudioLoaderHelper.ExtractTensorBatch(features, shuffled.Skip(trainSize).Take(valSize).ToArray()), AudioLoaderHelper.ExtractTensorBatch(labels, shuffled.Skip(trainSize).Take(valSize).ToArray())),
             new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(AudioLoaderHelper.ExtractTensorBatch(features, shuffled.Skip(trainSize + valSize).ToArray()), AudioLoaderHelper.ExtractTensorBatch(labels, shuffled.Skip(trainSize + valSize).ToArray()))
         );
+    }
+
+    /// <summary>
+    /// Parses a CSV line respecting quoted fields (handles commas and escaped quotes inside quotes).
+    /// </summary>
+    private static List<string> ParseCsvLine(string line)
+    {
+        var fields = new List<string>();
+        bool inQuotes = false;
+        int fieldStart = 0;
+
+        for (int i = 0; i < line.Length; i++)
+        {
+            if (line[i] == '"')
+            {
+                // Handle escaped quotes ("") inside quoted fields
+                if (inQuotes && i + 1 < line.Length && line[i + 1] == '"')
+                {
+                    i++; // skip escaped quote
+                    continue;
+                }
+                inQuotes = !inQuotes;
+            }
+            else if (line[i] == ',' && !inQuotes)
+            {
+                fields.Add(line.Substring(fieldStart, i - fieldStart).Trim().Trim('"').Replace("\"\"", "\""));
+                fieldStart = i + 1;
+            }
+        }
+
+        fields.Add(line.Substring(fieldStart).Trim().Trim('"').Replace("\"\"", "\""));
+        return fields;
     }
 
     private void ExtractMidiNotes(byte[] midiBytes, T[] target, int offset)

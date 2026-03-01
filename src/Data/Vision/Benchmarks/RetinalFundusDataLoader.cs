@@ -131,6 +131,11 @@ public class RetinalFundusDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>
                 int copyLen = Math.Min(pixels.Length, pixelsPerImage);
                 Array.Copy(pixels, 0, featuresData, featureOffset, copyLen);
             }
+            else
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    $"[RetinalFundusDataLoader] Warning: Image not found for '{imageName}'. Features will be zero-filled.");
+            }
 
             labelsData[i * NumClasses + label] = NumOps.One;
         }

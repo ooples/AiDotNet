@@ -30,5 +30,9 @@ public sealed class Wikidata5mDataLoaderOptions
     {
         if (EmbeddingDimension <= 0) throw new ArgumentOutOfRangeException(nameof(EmbeddingDimension), "EmbeddingDimension must be positive.");
         if (MaxSamples is <= 0) throw new ArgumentOutOfRangeException(nameof(MaxSamples), "MaxSamples must be positive when specified.");
+        if (!Enum.IsDefined(typeof(DatasetSplit), Split))
+            throw new ArgumentOutOfRangeException(nameof(Split), "Split must be a valid DatasetSplit value.");
+        if (DataPath is not null && string.IsNullOrWhiteSpace(DataPath))
+            throw new ArgumentException("DataPath must not be empty or whitespace when provided.", nameof(DataPath));
     }
 }

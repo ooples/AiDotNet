@@ -20,6 +20,7 @@ public class CurriculumDataScheduler
     public CurriculumDataScheduler(CurriculumDataSchedulerOptions? options = null)
     {
         _options = options ?? new CurriculumDataSchedulerOptions();
+        _options.Validate();
         _random = RandomHelper.CreateSecureRandom();
     }
 
@@ -31,6 +32,8 @@ public class CurriculumDataScheduler
     /// <returns>Sorted indices of samples available at this epoch.</returns>
     public List<int> GetAvailableIndices(double[] difficultyScores, int epoch)
     {
+        if (difficultyScores == null) throw new ArgumentNullException(nameof(difficultyScores));
+        if (epoch < 0) throw new ArgumentOutOfRangeException(nameof(epoch), "Epoch must be non-negative.");
         int n = difficultyScores.Length;
 
         // Sort indices by difficulty
@@ -68,6 +71,7 @@ public class CurriculumDataScheduler
     /// <returns>Fraction in [InitialFraction, 1.0].</returns>
     public double ComputeFraction(int epoch)
     {
+        if (epoch < 0) throw new ArgumentOutOfRangeException(nameof(epoch), "Epoch must be non-negative.");
         if (epoch >= _options.FullDataEpoch)
             return 1.0;
 

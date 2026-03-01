@@ -48,6 +48,7 @@ public class NuScenesDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Ten
     public NuScenesDataLoader(NuScenesDataLoaderOptions? options = null)
     {
         _options = options ?? new NuScenesDataLoaderOptions();
+        _options.Validate();
         _dataPath = _options.DataPath ?? DatasetDownloader.GetDefaultDataPath("nuscenes");
         _channels = _options.IncludeIntensity ? 4 : 3;
     }

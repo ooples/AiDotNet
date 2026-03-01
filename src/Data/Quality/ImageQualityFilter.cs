@@ -69,10 +69,14 @@ public class ImageQualityFilter
             return false;
 
         // Check dominant color ratio
+        // Quantize to 256 bins to handle both [0,255] and [0,1] normalized pixel ranges
         var valueCounts = new Dictionary<int, int>();
         foreach (double p in pixels)
         {
-            int quantized = (int)Math.Round(p);
+            // If pixels appear to be in [0,1] range, scale to [0,255] for binning
+            int quantized = p <= 1.0 && p >= 0.0 && mean <= 1.0
+                ? (int)Math.Round(p * 255.0)
+                : (int)Math.Round(p);
             valueCounts[quantized] = valueCounts.GetValueOrDefault(quantized, 0) + 1;
         }
 

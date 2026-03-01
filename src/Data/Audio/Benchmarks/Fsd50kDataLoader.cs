@@ -46,6 +46,7 @@ public class Fsd50kDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tenso
     public Fsd50kDataLoader(Fsd50kDataLoaderOptions? options = null)
     {
         _options = options ?? new Fsd50kDataLoaderOptions();
+        _options.Validate();
         _dataPath = _options.DataPath ?? DatasetDownloader.GetDefaultDataPath("fsd50k");
         _maxAudioSamples = (int)(_options.SampleRate * _options.MaxDurationSeconds);
     }
@@ -207,18 +208,23 @@ public class Fsd50kDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tenso
         {
             if (line[i] == '"')
             {
+                // Handle RFC4180 escaped quotes ("") inside quoted fields
+                if (inQuotes && i + 1 < line.Length && line[i + 1] == '"')
+                {
+                    i++; // skip escaped quote
+                    continue;
+                }
                 inQuotes = !inQuotes;
             }
             else if (line[i] == ',' && !inQuotes)
             {
-                string field = line.Substring(fieldStart, i - fieldStart).Trim().Trim('"');
-                fields.Add(field);
+                fields.Add(line.Substring(fieldStart, i - fieldStart).Trim().Trim('"').Replace("\"\"", "\""));
                 fieldStart = i + 1;
             }
         }
 
         // Add the last field
-        fields.Add(line.Substring(fieldStart).Trim().Trim('"'));
+        fields.Add(line.Substring(fieldStart).Trim().Trim('"').Replace("\"\"", "\""));
         return fields;
     }
 }

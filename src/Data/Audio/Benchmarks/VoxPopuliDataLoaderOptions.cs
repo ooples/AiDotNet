@@ -33,7 +33,13 @@ public sealed class VoxPopuliDataLoaderOptions
     public void Validate()
     {
         if (SampleRate <= 0) throw new ArgumentOutOfRangeException(nameof(SampleRate), "SampleRate must be positive.");
-        if (MaxDurationSeconds <= 0) throw new ArgumentOutOfRangeException(nameof(MaxDurationSeconds), "MaxDurationSeconds must be positive.");
+        if (MaxDurationSeconds <= 0 || double.IsNaN(MaxDurationSeconds) || double.IsInfinity(MaxDurationSeconds))
+            throw new ArgumentOutOfRangeException(nameof(MaxDurationSeconds), "MaxDurationSeconds must be a positive finite number.");
         if (MaxSamples is <= 0) throw new ArgumentOutOfRangeException(nameof(MaxSamples), "MaxSamples must be positive when specified.");
+        if (string.IsNullOrWhiteSpace(Language)) throw new ArgumentException("Language must not be empty or whitespace.", nameof(Language));
+        if (!Enum.IsDefined(typeof(Geometry.DatasetSplit), Split))
+            throw new ArgumentOutOfRangeException(nameof(Split), "Split must be a valid DatasetSplit value.");
+        if (DataPath is not null && string.IsNullOrWhiteSpace(DataPath))
+            throw new ArgumentException("DataPath must not be empty or whitespace when provided.", nameof(DataPath));
     }
 }

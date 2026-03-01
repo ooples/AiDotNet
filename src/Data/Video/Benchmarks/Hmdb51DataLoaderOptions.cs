@@ -41,5 +41,9 @@ public sealed class Hmdb51DataLoaderOptions
         if (FrameHeight <= 0) throw new ArgumentOutOfRangeException(nameof(FrameHeight), "FrameHeight must be positive.");
         if (SplitNumber < 1 || SplitNumber > 3) throw new ArgumentOutOfRangeException(nameof(SplitNumber), "SplitNumber must be between 1 and 3.");
         if (MaxSamples is <= 0) throw new ArgumentOutOfRangeException(nameof(MaxSamples), "MaxSamples must be positive when specified.");
+        if (!Enum.IsDefined(typeof(Geometry.DatasetSplit), Split))
+            throw new ArgumentOutOfRangeException(nameof(Split), "Split must be a valid DatasetSplit value.");
+        if (DataPath is not null && string.IsNullOrWhiteSpace(DataPath))
+            throw new ArgumentException("DataPath must not be empty or whitespace when provided.", nameof(DataPath));
     }
 }

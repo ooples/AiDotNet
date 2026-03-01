@@ -22,6 +22,7 @@ public class MinHashDeduplicator
     public MinHashDeduplicator(MinHashDeduplicatorOptions? options = null)
     {
         _options = options ?? new MinHashDeduplicatorOptions();
+        _options.Validate();
         _random = _options.Seed.HasValue
             ? RandomHelper.CreateSeededRandom(_options.Seed.Value)
             : RandomHelper.CreateSecureRandom();
@@ -66,6 +67,10 @@ public class MinHashDeduplicator
     /// </summary>
     public double EstimateSimilarity(int[] sig1, int[] sig2)
     {
+        if (sig1.Length != sig2.Length)
+            throw new ArgumentException($"Signature lengths must match: sig1={sig1.Length}, sig2={sig2.Length}.");
+        if (sig1.Length == 0)
+            return 0;
         int matches = 0;
         for (int i = 0; i < sig1.Length; i++)
         {

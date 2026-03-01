@@ -38,18 +38,24 @@ public class Hmdb51DataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tenso
         if (!Directory.Exists(dataDir))
             throw new DirectoryNotFoundException($"HMDB51 data not found at {dataDir}.");
 
-        var classDirs = Directory.GetDirectories(dataDir);
-        Array.Sort(classDirs, StringComparer.OrdinalIgnoreCase);
+        var classDirs = Directory.GetDirectories(dataDir)
+            .Where(d => !Path.GetFileName(d).StartsWith(".")) // skip hidden dirs
+            .OrderBy(d => Path.GetFileName(d), StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        // Build stable class name -> index mapping from sorted directory names
+        var classNameToIndex = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        for (int ci = 0; ci < Math.Min(classDirs.Length, NumClasses); ci++)
+            classNameToIndex[Path.GetFileName(classDirs[ci])] = ci;
+
         var samples = new List<(string VideoDir, int ClassIndex)>();
-        int classIdx = 0;
 
         foreach (var classDir in classDirs)
         {
-            if (classIdx >= NumClasses) break;
+            string className = Path.GetFileName(classDir);
+            if (!classNameToIndex.TryGetValue(className, out int classIdx)) continue;
             var videoDirs = Directory.GetDirectories(classDir);
             foreach (var videoDir in videoDirs)
                 samples.Add((videoDir, classIdx));
-            classIdx++;
         }
 
         int totalSamples = samples.Count;

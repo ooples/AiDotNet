@@ -38,7 +38,8 @@ internal static class TextLoaderHelper
 
     internal static Dictionary<string, int> BuildVocabulary(IList<string> texts, int sampleCount, int maxVocabSize)
     {
-        var wordCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        // Use Ordinal (case-sensitive) since Tokenize() lowercases all tokens
+        var wordCounts = new Dictionary<string, int>(StringComparer.Ordinal);
         int limit = Math.Min(sampleCount, texts.Count);
         for (int i = 0; i < limit; i++)
         {
@@ -51,7 +52,7 @@ internal static class TextLoaderHelper
             }
         }
 
-        var vocabulary = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var vocabulary = new Dictionary<string, int>(StringComparer.Ordinal);
         int idx = 2; // 0 = PAD, 1 = UNK
         foreach (var pair in wordCounts.OrderByDescending(p => p.Value))
         {

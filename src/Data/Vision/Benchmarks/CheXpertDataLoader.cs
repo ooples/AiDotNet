@@ -135,8 +135,14 @@ public class CheXpertDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Ten
         }
 
         _sampleCount = totalSamples;
-        int pixelsPerImage = _imageSize * _imageSize;
-        var featuresData = new T[totalSamples * pixelsPerImage];
+        long pixelsPerImageLong = (long)_imageSize * _imageSize;
+        if (pixelsPerImageLong > int.MaxValue)
+            throw new InvalidOperationException($"Image dimensions too large: {_imageSize}x{_imageSize} exceeds max array size.");
+        int pixelsPerImage = (int)pixelsPerImageLong;
+        long totalFeaturesLong = (long)totalSamples * pixelsPerImage;
+        if (totalFeaturesLong > int.MaxValue)
+            throw new InvalidOperationException($"Total allocation too large: {totalSamples} samples x {pixelsPerImage} pixels exceeds max array size. Use MaxSamples to limit.");
+        var featuresData = new T[totalFeaturesLong];
         var labelsData = new T[totalSamples * NumClasses];
 
         for (int i = 0; i < totalSamples; i++)

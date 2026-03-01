@@ -23,7 +23,7 @@ public class PrefetchDataLoader<TBatch> : IDisposable
     /// <summary>
     /// Gets the number of batches currently buffered.
     /// </summary>
-    public int BufferedCount => _buffer.Count;
+    public int BufferedCount => _disposed ? 0 : _buffer.Count;
 
     /// <summary>
     /// Creates a new prefetch data loader.
@@ -32,6 +32,7 @@ public class PrefetchDataLoader<TBatch> : IDisposable
     public PrefetchDataLoader(PrefetchDataLoaderOptions? options = null)
     {
         _options = options ?? new PrefetchDataLoaderOptions();
+        _options.Validate();
         _buffer = new BlockingCollection<TBatch>(_options.PrefetchCount);
     }
 
@@ -42,6 +43,8 @@ public class PrefetchDataLoader<TBatch> : IDisposable
     /// <returns>An enumerable of prefetched batches.</returns>
     public IEnumerable<TBatch> Prefetch(IEnumerable<TBatch> batchProducer)
     {
+        if (batchProducer == null) throw new ArgumentNullException(nameof(batchProducer));
+        if (_disposed) throw new ObjectDisposedException(nameof(PrefetchDataLoader<TBatch>));
         // Stop any previous prefetch and create a fresh buffer
         // (BlockingCollection cannot be reused after CompleteAdding)
         Stop();
@@ -90,8 +93,17 @@ public class PrefetchDataLoader<TBatch> : IDisposable
     /// </summary>
     public void Stop()
     {
+        if (_disposed) return;
         _cts?.Cancel();
-        try { _prefetchTask?.Wait(TimeSpan.FromMilliseconds(_options.TimeoutMs)); }
+        try
+        {
+            if (_prefetchTask != null && !_prefetchTask.Wait(TimeSpan.FromMilliseconds(_options.TimeoutMs)))
+            {
+                // Task didn't complete in time — drain the buffer to unblock the producer
+                while (_buffer.TryTake(out _)) { }
+                _prefetchTask.Wait(TimeSpan.FromMilliseconds(1000));
+            }
+        }
         catch (AggregateException) { /* Expected on cancellation */ }
         _cts?.Dispose();
         _cts = null;

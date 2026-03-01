@@ -47,6 +47,7 @@ public class WaymoDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor
     public WaymoDataLoader(WaymoDataLoaderOptions? options = null)
     {
         _options = options ?? new WaymoDataLoaderOptions();
+        _options.Validate();
         _dataPath = _options.DataPath ?? DatasetDownloader.GetDefaultDataPath("waymo");
         _channels = _options.IncludeIntensity ? 4 : 3;
     }
@@ -120,6 +121,8 @@ public class WaymoDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor
     /// Parses a Waymo label file and returns the dominant object class index.
     /// Handles both numeric class_id format (1=Vehicle, 2=Pedestrian, 3=Cyclist, 4=Sign)
     /// and KITTI-style string format (Car, Pedestrian, Cyclist, etc.).
+    /// Returns -1 when no label file exists or no valid objects are found.
+    /// Downstream consumers should filter or handle the -1 sentinel appropriately.
     /// </summary>
     private static int ParseWaymoLabelFile(string labelDir, string binFilePath)
     {

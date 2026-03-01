@@ -20,6 +20,7 @@ public class ActiveLearningQueryStrategy
     public ActiveLearningQueryStrategy(ActiveLearningQueryStrategyOptions? options = null)
     {
         _options = options ?? new ActiveLearningQueryStrategyOptions();
+        _options.Validate();
         _random = _options.Seed.HasValue
             ? RandomHelper.CreateSeededRandom(_options.Seed.Value)
             : RandomHelper.CreateSecureRandom();

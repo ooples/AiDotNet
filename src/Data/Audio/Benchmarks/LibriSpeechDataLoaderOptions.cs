@@ -43,7 +43,11 @@ public sealed class LibriSpeechDataLoaderOptions
     public void Validate()
     {
         if (SampleRate <= 0) throw new ArgumentOutOfRangeException(nameof(SampleRate), "SampleRate must be positive.");
-        if (MaxDurationSeconds <= 0) throw new ArgumentOutOfRangeException(nameof(MaxDurationSeconds), "MaxDurationSeconds must be positive.");
+        if (MaxDurationSeconds <= 0 || double.IsNaN(MaxDurationSeconds) || double.IsInfinity(MaxDurationSeconds))
+            throw new ArgumentOutOfRangeException(nameof(MaxDurationSeconds), "MaxDurationSeconds must be a positive finite number.");
         if (MaxSamples is <= 0) throw new ArgumentOutOfRangeException(nameof(MaxSamples), "MaxSamples must be positive when specified.");
+        if (string.IsNullOrWhiteSpace(Subset)) throw new ArgumentException("Subset must not be empty or whitespace.", nameof(Subset));
+        if (DataPath is not null && string.IsNullOrWhiteSpace(DataPath))
+            throw new ArgumentException("DataPath must not be empty or whitespace when provided.", nameof(DataPath));
     }
 }

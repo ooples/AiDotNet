@@ -20,6 +20,13 @@ internal static class VisionLoaderHelper
     /// <returns>Flat pixel array of length targetHeight * targetWidth * channels in HWC order.</returns>
     public static T[] LoadAndResizeImage<T>(string filePath, int targetHeight, int targetWidth, int channels = 3, bool normalize = true)
     {
+        if (targetHeight <= 0) throw new ArgumentOutOfRangeException(nameof(targetHeight), "Must be positive.");
+        if (targetWidth <= 0) throw new ArgumentOutOfRangeException(nameof(targetWidth), "Must be positive.");
+        if (channels <= 0) throw new ArgumentOutOfRangeException(nameof(channels), "Must be positive.");
+        // Guard against integer overflow in pixel allocation
+        long totalPixelsLong = (long)targetHeight * targetWidth * channels;
+        if (totalPixelsLong > int.MaxValue)
+            throw new ArgumentOutOfRangeException(nameof(targetHeight), $"Image dimensions too large: {targetHeight}x{targetWidth}x{channels} exceeds max array size.");
         var numOps = MathHelper.GetNumericOperations<T>();
 
         // Use ImageHelper for proper format decoding (JPEG/PNG/BMP via ImageSharp on .NET 6+, BMP/PPM/PGM natively)

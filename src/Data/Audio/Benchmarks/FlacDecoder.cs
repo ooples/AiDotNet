@@ -94,9 +94,11 @@ internal static class FlacDecoder
                 pos += 2;
                 if (pos <= frameStart) pos = frameStart + 2; // Safety: always advance
             }
-            catch
+            catch (Exception ex) when (ex is not OutOfMemoryException)
             {
-                // If frame decode fails, skip to next potential sync
+                // Frame decode failed (e.g., truncated data, invalid subframe type).
+                // Skip to next potential sync code rather than aborting entire decode.
+                System.Diagnostics.Debug.WriteLine($"FLAC frame decode failed at byte {frameStart}: {ex.Message}");
                 pos = frameStart + 2;
             }
         }
@@ -447,7 +449,8 @@ internal static class FlacDecoder
             int result = 0;
             while (count > 0)
             {
-                if (_bytePos >= _data.Length) return result;
+                if (_bytePos >= _data.Length)
+                    throw new InvalidDataException("Unexpected end of FLAC bitstream.");
 
                 int bitsAvailable = 8 - _bitPos;
                 int bitsToRead = Math.Min(count, bitsAvailable);

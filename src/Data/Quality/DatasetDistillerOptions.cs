@@ -24,7 +24,8 @@ public sealed class DatasetDistillerOptions
     public void Validate()
     {
         if (SamplesPerClass <= 0) throw new ArgumentOutOfRangeException(nameof(SamplesPerClass), "SamplesPerClass must be positive.");
-        if (DistillLearningRate <= 0) throw new ArgumentOutOfRangeException(nameof(DistillLearningRate), "DistillLearningRate must be positive.");
+        if (DistillLearningRate <= 0 || double.IsNaN(DistillLearningRate) || double.IsInfinity(DistillLearningRate))
+            throw new ArgumentOutOfRangeException(nameof(DistillLearningRate), "DistillLearningRate must be a positive finite number.");
         if (NumSteps <= 0) throw new ArgumentOutOfRangeException(nameof(NumSteps), "NumSteps must be positive.");
     }
 }

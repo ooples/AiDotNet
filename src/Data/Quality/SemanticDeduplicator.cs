@@ -17,6 +17,7 @@ public class SemanticDeduplicator
     public SemanticDeduplicator(SemanticDeduplicatorOptions? options = null)
     {
         _options = options ?? new SemanticDeduplicatorOptions();
+        _options.Validate();
     }
 
     /// <summary>

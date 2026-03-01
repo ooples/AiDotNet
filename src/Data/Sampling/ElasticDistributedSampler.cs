@@ -75,8 +75,10 @@ public class ElasticDistributedSampler : DataSamplerBase
 
         if (_options.Shuffle)
         {
-            // Use epoch-dependent seed for reproducible shuffling across replicas
-            var epochRandom = RandomHelper.CreateSeededRandom(CurrentEpoch + (_options.Seed ?? 0));
+            // Use epoch-dependent seed for reproducible shuffling across replicas.
+            // When no seed is set, use a large prime multiplier to differentiate runs.
+            int baseSeed = _options.Seed ?? Environment.TickCount;
+            var epochRandom = RandomHelper.CreateSeededRandom(CurrentEpoch + baseSeed);
             for (int i = indices.Length - 1; i > 0; i--)
             {
                 int j = epochRandom.Next(i + 1);

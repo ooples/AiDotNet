@@ -46,6 +46,7 @@ public class KittiDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor
     public KittiDataLoader(KittiDataLoaderOptions? options = null)
     {
         _options = options ?? new KittiDataLoaderOptions();
+        _options.Validate();
         _dataPath = _options.DataPath ?? DatasetDownloader.GetDefaultDataPath("kitti");
         _channels = _options.IncludeReflectance ? 4 : 3;
     }
