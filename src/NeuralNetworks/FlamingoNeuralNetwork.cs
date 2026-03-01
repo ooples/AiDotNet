@@ -968,15 +968,7 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
 
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
-        var result = Tensor<T>.CreateDefault(a.Shape, NumOps.Zero);
-        for (int i = 0; i < a.Shape[0]; i++)
-        {
-            for (int j = 0; j < a.Shape[1]; j++)
-            {
-                result[i, j] = NumOps.Add(a[i, j], b[i, j]);
-            }
-        }
-        return result;
+        return Engine.TensorAdd(a, b);
     }
 
     private int SampleFromLogits(Tensor<T> logits)

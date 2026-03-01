@@ -292,16 +292,7 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
 
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
-        var vecA = a.ToVector();
-        var vecB = b.ToVector();
-        var result = new Vector<T>(vecA.Length);
-
-        for (int i = 0; i < Math.Min(vecA.Length, vecB.Length); i++)
-        {
-            result[i] = _numOps.Add(vecA[i], vecB[i]);
-        }
-
-        return new Tensor<T>(a.Shape, result);
+        return Engine.TensorAdd(a, b);
     }
 
     /// <summary>
