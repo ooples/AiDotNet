@@ -1,5 +1,6 @@
 using AiDotNet.Augmentation.Image;
 using AiDotNet.ComputerVision.Detection.ObjectDetection;
+using AiDotNet.Helpers;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.Helpers;
 
@@ -505,21 +506,7 @@ internal class DeepTrack<T>
         if (a.Length != b.Length)
             return 0;
 
-        double dot = 0, normA = 0, normB = 0;
-
-        for (int i = 0; i < a.Length; i++)
-        {
-            double va = _numOps.ToDouble(a[i]);
-            double vb = _numOps.ToDouble(b[i]);
-            dot += va * vb;
-            normA += va * va;
-            normB += vb * vb;
-        }
-
-        if (normA <= 0 || normB <= 0)
-            return 0;
-
-        return dot / (Math.Sqrt(normA) * Math.Sqrt(normB));
+        return VectorHelper.CosineSimilarity(a.ToVector(), b.ToVector());
     }
 
     public Track<T> ToTrack()

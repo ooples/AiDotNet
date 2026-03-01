@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
@@ -335,12 +336,6 @@ public class NearMissUnderSampler<T> : IUnderSampler<T>
     /// </summary>
     private double ComputeDistance(Matrix<T> data, int idx1, int idx2, int cols)
     {
-        double dist = 0;
-        for (int c = 0; c < cols; c++)
-        {
-            double diff = _numOps.ToDouble(data[idx1, c]) - _numOps.ToDouble(data[idx2, c]);
-            dist += diff * diff;
-        }
-        return Math.Sqrt(dist);
+        return _numOps.ToDouble(VectorHelper.EuclideanDistance(data.GetRow(idx1), data.GetRow(idx2)));
     }
 }

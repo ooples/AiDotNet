@@ -650,38 +650,7 @@ public class VideoMAE<T> : NeuralNetworkBase<T>
 
     private Tensor<T> ApplySoftmax(Tensor<T> input)
     {
-        int lastDim = input.Shape[^1];
-        var output = new Tensor<T>(input.Shape);
-
-        int totalElements = input.Data.Length;
-        int numVectors = totalElements / lastDim;
-
-        for (int v = 0; v < numVectors; v++)
-        {
-            int offset = v * lastDim;
-
-            double maxVal = double.MinValue;
-            for (int i = 0; i < lastDim; i++)
-            {
-                double val = Convert.ToDouble(input.Data.Span[offset + i]);
-                if (val > maxVal) maxVal = val;
-            }
-
-            double sum = 0;
-            for (int i = 0; i < lastDim; i++)
-            {
-                double val = Convert.ToDouble(input.Data.Span[offset + i]);
-                sum += Math.Exp(val - maxVal);
-            }
-
-            for (int i = 0; i < lastDim; i++)
-            {
-                double val = Convert.ToDouble(input.Data.Span[offset + i]);
-                output.Data.Span[offset + i] = NumOps.FromDouble(Math.Exp(val - maxVal) / sum);
-            }
-        }
-
-        return output;
+        return Engine.Softmax(input);
     }
 
     private Tensor<T> AddBatchDimension5D(Tensor<T> tensor)

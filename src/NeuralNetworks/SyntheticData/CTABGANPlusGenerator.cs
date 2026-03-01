@@ -662,7 +662,7 @@ public class CTABGANPlusGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGe
             if (_classifierHead is not null)
             {
                 var classGrad = ComputeClassifierGradient(classLogits, _packedRealBuf);
-                ScaleTensor(classGrad, _options.ClassifierWeight);
+                classGrad = ScaleTensor(classGrad, _options.ClassifierWeight);
                 _classifierHead.Backward(classGrad);
                 _classifierHead.UpdateParameters(scaledLr);
             }
@@ -1164,26 +1164,13 @@ public class CTABGANPlusGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGe
     private void ApplySoftmaxBlock(Tensor<T> input, Tensor<T> output, ref int idx, int count)
     {
         if (count <= 0) return;
-
-        double maxVal = double.MinValue;
-        for (int m = 0; m < count && (idx + m) < input.Length; m++)
-        {
-            double v = NumOps.ToDouble(input[idx + m]);
-            if (v > maxVal) maxVal = v;
-        }
-
-        double sumExp = 0;
-        for (int m = 0; m < count && (idx + m) < input.Length; m++)
-        {
-            sumExp += Math.Exp(NumOps.ToDouble(input[idx + m]) - maxVal);
-        }
-
-        for (int m = 0; m < count && idx < input.Length; m++)
-        {
-            double expVal = Math.Exp(NumOps.ToDouble(input[idx]) - maxVal);
-            output[idx] = NumOps.FromDouble(expVal / Math.Max(sumExp, 1e-10));
-            idx++;
-        }
+        int actualCount = Math.Min(count, input.Length - idx);
+        if (actualCount <= 0) return;
+        var slice = new Tensor<T>([actualCount]);
+        input.Data.Span.Slice(idx, actualCount).CopyTo(slice.Data.Span);
+        var result = Engine.Softmax(slice, -1);
+        result.Data.Span.CopyTo(output.Data.Span.Slice(idx, actualCount));
+        idx += actualCount;
     }
 
     #endregion
@@ -1538,12 +1525,9 @@ public class CTABGANPlusGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGe
         return clone;
     }
 
-    private void ScaleTensor(Tensor<T> tensor, double scale)
+    private Tensor<T> ScaleTensor(Tensor<T> tensor, double scale)
     {
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            tensor[i] = NumOps.FromDouble(NumOps.ToDouble(tensor[i]) * scale);
-        }
+        return Engine.TensorMultiplyScalar(tensor, NumOps.FromDouble(scale));
     }
 
     #endregion

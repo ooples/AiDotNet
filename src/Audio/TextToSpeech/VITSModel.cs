@@ -774,10 +774,7 @@ public class VITSModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         {
             // Fallback: manual SGD with VITS's smaller learning rate
             T learningRate = NumOps.FromDouble(0.0002);
-            for (int i = 0; i < currentParams.Length; i++)
-            {
-                currentParams[i] = NumOps.Subtract(currentParams[i], NumOps.Multiply(learningRate, gradients[i]));
-            }
+            currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, learningRate));
             SetParameters(currentParams);
         }
     }

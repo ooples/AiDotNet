@@ -562,12 +562,7 @@ internal class DINOEncoderLayer<T>
 
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
-        var result = new Tensor<T>(a.Shape);
-        for (int i = 0; i < a.Length; i++)
-        {
-            result[i] = _numOps.Add(a[i], b[i]);
-        }
-        return result;
+        return AiDotNetEngine.Current.TensorAdd(a, b);
     }
 
     private static double GELU(double x)

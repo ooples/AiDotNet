@@ -20,6 +20,11 @@ namespace AiDotNet.AutoML
     /// <typeparam name="TOutput">The output data type</typeparam>
     public abstract class AutoMLModelBase<T, TInput, TOutput> : IAutoMLModel<T, TInput, TOutput>
     {
+        /// <summary>
+        /// Hardware-accelerated engine for vector/tensor operations.
+        /// </summary>
+        protected static IEngine Engine => AiDotNetEngine.Current;
+
         protected readonly List<TrialResult> _trialHistory = new();
         protected readonly Dictionary<string, ParameterRange> _searchSpace = new();
         protected readonly List<ModelType> _candidateModels = new();

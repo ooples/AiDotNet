@@ -1381,38 +1381,7 @@ internal class AutoformerEncoderLayer<T>
 
     private Tensor<T> LayerNorm(Tensor<T> x, Tensor<T> gamma, Tensor<T> beta)
     {
-        int seqLen = x.Shape[0];
-        int embDim = x.Shape[1];
-        var output = new Tensor<T>(x.Shape);
-
-        for (int t = 0; t < seqLen; t++)
-        {
-            // Compute mean and variance for this position
-            var mean = _numOps.Zero;
-            for (int d = 0; d < embDim; d++)
-            {
-                mean = _numOps.Add(mean, x[t * embDim + d]);
-            }
-            mean = _numOps.Divide(mean, _numOps.FromDouble(embDim));
-
-            var variance = _numOps.Zero;
-            for (int d = 0; d < embDim; d++)
-            {
-                var diff = _numOps.Subtract(x[t * embDim + d], mean);
-                variance = _numOps.Add(variance, _numOps.Multiply(diff, diff));
-            }
-            variance = _numOps.Divide(variance, _numOps.FromDouble(embDim));
-            var std = _numOps.Sqrt(_numOps.Add(variance, _numOps.FromDouble(1e-6)));
-
-            // Normalize and scale
-            for (int d = 0; d < embDim; d++)
-            {
-                var normalized = _numOps.Divide(_numOps.Subtract(x[t * embDim + d], mean), std);
-                output[t * embDim + d] = _numOps.Add(_numOps.Multiply(gamma[d], normalized), beta[d]);
-            }
-        }
-
-        return output;
+        return AiDotNetEngine.Current.LayerNorm(x, gamma, beta, 1e-6, out _, out _);
     }
 
     private Tensor<T> FeedForward(Tensor<T> x)
@@ -1734,13 +1703,7 @@ internal class AutoformerDecoderLayer<T>
 
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
-        var result = new Tensor<T>(a.Shape);
-        int len = Math.Min(a.Length, b.Length);
-        for (int i = 0; i < len; i++)
-        {
-            result[i] = _numOps.Add(a[i], b[i]);
-        }
-        return result;
+        return AiDotNetEngine.Current.TensorAdd(a, b);
     }
 
     private Tensor<T> ApplySelfAutoCorrelation(Tensor<T> x, int topK)

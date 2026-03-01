@@ -154,16 +154,9 @@ public abstract class TeacherStudentSSL<T> : SSLMethodBase<T>
 
         var studentParams = _projector!.GetParameters();
         var teacherParams = TeacherProjector.GetParameters();
-        var newParams = new T[teacherParams.Length];
-
-        for (int i = 0; i < teacherParams.Length; i++)
-        {
-            newParams[i] = NumOps.Add(
-                NumOps.Multiply(momentum, teacherParams[i]),
-                NumOps.Multiply(oneMinusMomentum, studentParams[i]));
-        }
-
-        TeacherProjector.SetParameters(new Vector<T>(newParams));
+        TeacherProjector.SetParameters(Engine.Add(
+            Engine.Multiply(teacherParams, momentum),
+            Engine.Multiply(studentParams, oneMinusMomentum)));
     }
 
     /// <summary>
@@ -172,32 +165,16 @@ public abstract class TeacherStudentSSL<T> : SSLMethodBase<T>
     protected virtual void UpdateStudent(T learningRate)
     {
         // Update encoder
-        var encoderGrads = _encoder.GetParameterGradients();
+        var encoderGrads = new Vector<T>(_encoder.GetParameterGradients());
         var encoderParams = _encoder.GetParameters();
-        var newEncoderParams = new T[encoderParams.Length];
-
-        for (int i = 0; i < encoderParams.Length; i++)
-        {
-            newEncoderParams[i] = NumOps.Subtract(
-                encoderParams[i],
-                NumOps.Multiply(learningRate, encoderGrads[i]));
-        }
-        _encoder.UpdateParameters(new Vector<T>(newEncoderParams));
+        _encoder.UpdateParameters(Engine.Subtract(encoderParams, Engine.Multiply(encoderGrads, learningRate)));
 
         // Update projector
         if (_projector is not null)
         {
             var projGrads = _projector.GetParameterGradients();
             var projParams = _projector.GetParameters();
-            var newProjParams = new T[projParams.Length];
-
-            for (int i = 0; i < projParams.Length; i++)
-            {
-                newProjParams[i] = NumOps.Subtract(
-                    projParams[i],
-                    NumOps.Multiply(learningRate, projGrads[i]));
-            }
-            _projector.SetParameters(new Vector<T>(newProjParams));
+            _projector.SetParameters(Engine.Subtract(projParams, Engine.Multiply(projGrads, learningRate)));
         }
     }
 

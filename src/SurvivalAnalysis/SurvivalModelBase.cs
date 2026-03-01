@@ -339,7 +339,7 @@ public abstract class SurvivalModelBase<T> : ISurvivalModel<T>
         EnsureFitted();
 
         var riskScores = PredictHazardRatio(x);
-        int concordant = 0;
+        double concordant = 0;
         int comparable = 0;
 
         for (int i = 0; i < x.Rows; i++)
@@ -362,12 +362,12 @@ public abstract class SurvivalModelBase<T> : ISurvivalModel<T>
 
                     if (riskI > riskJ)
                     {
-                        concordant++;
+                        concordant += 1.0;
                     }
                     else if (Math.Abs(riskI - riskJ) < 1e-10)
                     {
-                        concordant++;
-                        comparable++;
+                        // Harrell's C-index: tied risk scores get half credit
+                        concordant += 0.5;
                     }
                 }
             }
@@ -378,7 +378,7 @@ public abstract class SurvivalModelBase<T> : ISurvivalModel<T>
             return NumOps.FromDouble(0.5);
         }
 
-        return NumOps.FromDouble((double)concordant / comparable);
+        return NumOps.FromDouble(concordant / comparable);
     }
 
     /// <summary>

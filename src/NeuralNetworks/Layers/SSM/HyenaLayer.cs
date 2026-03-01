@@ -722,7 +722,7 @@ public class HyenaLayer<T> : LayerBase<T>
     {
         var sig = Engine.Sigmoid(x);
         var ones = new Tensor<T>(x.Shape);
-        for (int i = 0; i < ones.Length; i++) ones[i] = NumOps.One;
+        ones.Fill(NumOps.One);
         var oneMinusSig = Engine.TensorSubtract(ones, sig);
         var xTimesOneMinusSig = Engine.TensorMultiply(x, oneMinusSig);
         var onePlusXSig = Engine.TensorAdd(ones, xTimesOneMinusSig);
@@ -734,7 +734,10 @@ public class HyenaLayer<T> : LayerBase<T>
     /// <inheritdoc />
     public override void UpdateParameters(T learningRate)
     {
-        if (_inputProjectionWeightsGradients == null)
+        if (_inputProjectionWeightsGradients == null || _inputProjectionBiasesGradients == null ||
+            _filterWeights1Gradients == null || _filterBiases1Gradients == null ||
+            _filterWeights2Gradients == null || _filterBiases2Gradients == null ||
+            _outputProjectionWeightsGradient == null || _outputProjectionBiasGradient == null)
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
 
         T negLR = NumOps.Negate(learningRate);
@@ -747,7 +750,7 @@ public class HyenaLayer<T> : LayerBase<T>
                 Engine.TensorMultiplyScalar(_inputProjectionWeightsGradients[i], negLR));
             _inputProjectionBiases[i] = Engine.TensorAdd(
                 _inputProjectionBiases[i],
-                Engine.TensorMultiplyScalar(_inputProjectionBiasesGradients![i], negLR));
+                Engine.TensorMultiplyScalar(_inputProjectionBiasesGradients[i], negLR));
         }
 
         // Update filter networks
@@ -755,25 +758,25 @@ public class HyenaLayer<T> : LayerBase<T>
         {
             _filterWeights1[i] = Engine.TensorAdd(
                 _filterWeights1[i],
-                Engine.TensorMultiplyScalar(_filterWeights1Gradients![i], negLR));
+                Engine.TensorMultiplyScalar(_filterWeights1Gradients[i], negLR));
             _filterBiases1[i] = Engine.TensorAdd(
                 _filterBiases1[i],
-                Engine.TensorMultiplyScalar(_filterBiases1Gradients![i], negLR));
+                Engine.TensorMultiplyScalar(_filterBiases1Gradients[i], negLR));
             _filterWeights2[i] = Engine.TensorAdd(
                 _filterWeights2[i],
-                Engine.TensorMultiplyScalar(_filterWeights2Gradients![i], negLR));
+                Engine.TensorMultiplyScalar(_filterWeights2Gradients[i], negLR));
             _filterBiases2[i] = Engine.TensorAdd(
                 _filterBiases2[i],
-                Engine.TensorMultiplyScalar(_filterBiases2Gradients![i], negLR));
+                Engine.TensorMultiplyScalar(_filterBiases2Gradients[i], negLR));
         }
 
         // Update output projection
         _outputProjectionWeights = Engine.TensorAdd(
             _outputProjectionWeights,
-            Engine.TensorMultiplyScalar(_outputProjectionWeightsGradient!, negLR));
+            Engine.TensorMultiplyScalar(_outputProjectionWeightsGradient, negLR));
         _outputProjectionBias = Engine.TensorAdd(
             _outputProjectionBias,
-            Engine.TensorMultiplyScalar(_outputProjectionBiasGradient!, negLR));
+            Engine.TensorMultiplyScalar(_outputProjectionBiasGradient, negLR));
     }
 
     /// <inheritdoc />

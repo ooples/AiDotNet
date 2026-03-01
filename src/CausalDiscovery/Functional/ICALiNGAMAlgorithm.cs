@@ -1,4 +1,5 @@
 using AiDotNet.Extensions;
+using AiDotNet.Helpers;
 using AiDotNet.Models.Options;
 
 namespace AiDotNet.CausalDiscovery.Functional;
@@ -116,7 +117,7 @@ public class ICALiNGAMAlgorithm<T> : FunctionalBase<T>
         {
             var w = new Vector<T>(d);
             for (int j = 0; j < d; j++) w[j] = NumOps.FromDouble(rng.NextDouble() - 0.5);
-            NormalizeVector(w);
+            VectorHelper.NormalizeInPlace(w);
 
             for (int iter = 0; iter < 200; iter++)
             {
@@ -156,7 +157,7 @@ public class ICALiNGAMAlgorithm<T> : FunctionalBase<T>
                         wNew[j] = NumOps.Subtract(wNew[j], NumOps.Multiply(dot, W[k, j]));
                 }
 
-                NormalizeVector(wNew);
+                VectorHelper.NormalizeInPlace(wNew);
 
                 // Check convergence
                 double diff = 0;
@@ -170,18 +171,6 @@ public class ICALiNGAMAlgorithm<T> : FunctionalBase<T>
         }
 
         return W;
-    }
-
-    private void NormalizeVector(Vector<T> v)
-    {
-        T norm = NumOps.Zero;
-        for (int j = 0; j < v.Length; j++)
-            norm = NumOps.Add(norm, NumOps.Multiply(v[j], v[j]));
-        norm = NumOps.Sqrt(norm);
-
-        if (NumOps.ToDouble(norm) > 1e-15)
-            for (int j = 0; j < v.Length; j++)
-                v[j] = NumOps.Divide(v[j], norm);
     }
 
     private int[] FindCausalOrder(Matrix<T> B, int d)

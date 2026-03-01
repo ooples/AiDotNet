@@ -3107,7 +3107,21 @@ public enum ModelType
     /// Examples: Mask R-CNN, YOLOv8-Seg, YOLO26-Seg
     /// </para>
     /// </remarks>
-    InstanceSegmentation
+    InstanceSegmentation,
+
+    /// <summary>
+    /// Named Entity Recognition model for identifying entities in text sequences.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Named Entity Recognition (NER) models identify and classify named entities
+    /// in text into predefined categories such as person names, organizations, locations, dates, etc.
+    /// They process text token by token and assign labels using sequence labeling techniques.
+    ///
+    /// Examples: BiLSTM-CRF, BERT-NER, SpanNER, GLiNER
+    /// </para>
+    /// </remarks>
+    NamedEntityRecognition
 }
 
 

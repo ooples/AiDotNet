@@ -1,6 +1,7 @@
 using System.IO;
 using System.Text;
 using System.Text.RegularExpressions;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
@@ -362,13 +363,13 @@ public class Gpt4VisionNeuralNetwork<T> : NeuralNetworkBase<T>, IGpt4VisionModel
     {
         var imageEmb = GetImageEmbedding(image);
         var textEmb = GetTextEmbedding(text);
-        return CosineSimilarity(imageEmb, textEmb);
+        return NumOps.FromDouble(VectorHelper.CosineSimilarity(imageEmb, textEmb));
     }
 
     /// <inheritdoc/>
     public T ComputeSimilarity(Vector<T> textEmbedding, Vector<T> imageEmbedding)
     {
-        return CosineSimilarity(textEmbedding, imageEmbedding);
+        return NumOps.FromDouble(VectorHelper.CosineSimilarity(textEmbedding, imageEmbedding));
     }
 
     /// <inheritdoc/>
@@ -392,7 +393,7 @@ public class Gpt4VisionNeuralNetwork<T> : NeuralNetworkBase<T>, IGpt4VisionModel
         foreach (var label in labelList)
         {
             var textEmb = GetTextEmbedding(label);
-            scores.Add(CosineSimilarity(imageEmb, textEmb));
+            scores.Add(NumOps.FromDouble(VectorHelper.CosineSimilarity(imageEmb, textEmb)));
         }
 
         // Softmax over scores
@@ -415,7 +416,7 @@ public class Gpt4VisionNeuralNetwork<T> : NeuralNetworkBase<T>, IGpt4VisionModel
         for (int i = 0; i < imageList.Count; i++)
         {
             var imageEmb = GetImageEmbedding(imageList[i]);
-            var score = CosineSimilarity(queryEmb, imageEmb);
+            var score = NumOps.FromDouble(VectorHelper.CosineSimilarity(queryEmb, imageEmb));
             scores.Add((i, score));
         }
 
@@ -432,7 +433,7 @@ public class Gpt4VisionNeuralNetwork<T> : NeuralNetworkBase<T>, IGpt4VisionModel
         for (int i = 0; i < textList.Count; i++)
         {
             var textEmb = GetTextEmbedding(textList[i]);
-            var score = CosineSimilarity(imageEmb, textEmb);
+            var score = NumOps.FromDouble(VectorHelper.CosineSimilarity(imageEmb, textEmb));
             scores.Add((i, score));
         }
 
@@ -1292,28 +1293,6 @@ For each category, indicate if it's flagged (YES/NO) and confidence level (HIGH/
         return pooled;
     }
 
-    private T CosineSimilarity(Vector<T> a, Vector<T> b)
-    {
-        T dot = NumOps.Zero;
-        T normA = NumOps.Zero;
-        T normB = NumOps.Zero;
-
-        int len = Math.Min(a.Length, b.Length);
-        for (int i = 0; i < len; i++)
-        {
-            dot = NumOps.Add(dot, NumOps.Multiply(a[i], b[i]));
-            normA = NumOps.Add(normA, NumOps.Multiply(a[i], a[i]));
-            normB = NumOps.Add(normB, NumOps.Multiply(b[i], b[i]));
-        }
-
-        T denom = NumOps.Multiply(NumOps.Sqrt(normA), NumOps.Sqrt(normB));
-        if (NumOps.ToDouble(denom) < 1e-8)
-        {
-            return NumOps.Zero;
-        }
-
-        return NumOps.Divide(dot, denom);
-    }
 
     private List<T> Softmax(List<T> values)
     {
@@ -1678,10 +1657,7 @@ For each category, indicate if it's flagged (YES/NO) and confidence level (HIGH/
 
         // Apply gradient descent update: params = params - learning_rate * gradients
         T learningRate = NumOps.FromDouble(0.001); // Default learning rate
-        for (int i = 0; i < currentParams.Length; i++)
-        {
-            currentParams[i] = NumOps.Subtract(currentParams[i], NumOps.Multiply(learningRate, gradients[i]));
-        }
+        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, learningRate));
 
         // Set the updated parameters
         SetParameters(currentParams);

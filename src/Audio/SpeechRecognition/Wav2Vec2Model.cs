@@ -582,10 +582,7 @@ public class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         var currentParams = GetParameters();
         T learningRate = NumOps.FromDouble(0.0001); // Wav2Vec2 uses smaller learning rate
 
-        for (int i = 0; i < currentParams.Length; i++)
-        {
-            currentParams[i] = NumOps.Subtract(currentParams[i], NumOps.Multiply(learningRate, gradients[i]));
-        }
+        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, learningRate));
 
         SetParameters(currentParams);
     }

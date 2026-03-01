@@ -2,6 +2,7 @@ using AiDotNet.ActiveLearning.Interfaces;
 using AiDotNet.ContinualLearning.Interfaces;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.ContinualLearning.Memory;
 
@@ -872,13 +873,11 @@ public class ExperienceReplayBuffer<T, TInput, TOutput>
         if (a == null || b == null || a.Length != b.Length)
             return double.MaxValue;
 
-        double dist = 0;
-        for (int i = 0; i < a.Length; i++)
-        {
-            double diff = a[i] - b[i];
-            dist += diff * diff;
-        }
-        return dist;
+        var va = new Vector<double>(a);
+        var vb = new Vector<double>(b);
+        var engine = AiDotNetEngine.Current;
+        var diff = (Vector<double>)engine.Subtract(va, vb);
+        return engine.DotProduct(diff, diff);
     }
 
     #endregion

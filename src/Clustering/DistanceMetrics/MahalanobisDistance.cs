@@ -1,3 +1,5 @@
+using AiDotNet.Helpers;
+
 namespace AiDotNet.Clustering.DistanceMetrics;
 
 /// <summary>
@@ -163,13 +165,7 @@ public class MahalanobisDistance<T> : DistanceMetricBase<T>
 
     private T ComputeEuclidean(Vector<T> a, Vector<T> b)
     {
-        T sumSquared = NumOps.Zero;
-        for (int i = 0; i < a.Length; i++)
-        {
-            T diff = NumOps.Subtract(a[i], b[i]);
-            sumSquared = NumOps.Add(sumSquared, NumOps.Multiply(diff, diff));
-        }
-        return Sqrt(sumSquared);
+        return VectorHelper.EuclideanDistance(a, b);
     }
 
     private Vector<T> MultiplyMatrixVector(Matrix<T> matrix, Vector<T> vector)

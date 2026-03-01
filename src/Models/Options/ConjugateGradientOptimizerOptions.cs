@@ -18,6 +18,14 @@ namespace AiDotNet.Models.Options;
 public class ConjugateGradientOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOptions<T, TInput, TOutput>
 {
     /// <summary>
+    /// Initializes a new instance of the ConjugateGradientOptimizerOptions class with appropriate defaults.
+    /// </summary>
+    public ConjugateGradientOptimizerOptions()
+    {
+        MaxIterations = 1000;
+    }
+
+    /// <summary>
     /// Gets or sets the batch size for gradient computation.
     /// </summary>
     /// <value>A positive integer for mini-batch size, or -1 for full batch (default).</value>
@@ -125,5 +133,4 @@ public class ConjugateGradientOptimizerOptions<T, TInput, TOutput> : GradientBas
     /// while for very complex problems, you might need to increase it to allow more time for convergence.
     /// This value overrides the one from the parent class to provide a more appropriate default for the conjugate gradient method.</para>
     /// </remarks>
-    public new int MaxIterations { get; set; } = 1000;
 }

@@ -250,11 +250,13 @@ public class LSCPDetector<T> : AnomalyDetectorBase<T>
     private static double EuclideanDistance(double[] a, double[] b)
     {
         double sum = 0;
-        for (int i = 0; i < a.Length; i++)
+        int len = Math.Min(a.Length, b.Length);
+        for (int i = 0; i < len; i++)
         {
             double diff = a[i] - b[i];
             sum += diff * diff;
         }
+
         return Math.Sqrt(sum);
     }
 

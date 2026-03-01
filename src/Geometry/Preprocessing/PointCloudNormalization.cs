@@ -165,15 +165,20 @@ public static class PointCloudNormalization<T>
             return workingCloud;
         }
 
+        // Re-center at bounding box midpoint so data is symmetric around 0,
+        // then scale by 1/maxRange to guarantee all points fit in [-0.5, 0.5]^3
+        T midX = NumOps.FromDouble((NumOps.ToDouble(minX) + NumOps.ToDouble(maxX)) / 2.0);
+        T midY = NumOps.FromDouble((NumOps.ToDouble(minY) + NumOps.ToDouble(maxY)) / 2.0);
+        T midZ = NumOps.FromDouble((NumOps.ToDouble(minZ) + NumOps.ToDouble(maxZ)) / 2.0);
         T scale = NumOps.FromDouble(1.0 / maxRange);
 
         var scaledData = new T[numPoints * numFeatures];
         for (int i = 0; i < numPoints; i++)
         {
             int baseIdx = i * numFeatures;
-            scaledData[baseIdx] = NumOps.Multiply(workingCloud.Points[i, 0], scale);
-            scaledData[baseIdx + 1] = NumOps.Multiply(workingCloud.Points[i, 1], scale);
-            scaledData[baseIdx + 2] = NumOps.Multiply(workingCloud.Points[i, 2], scale);
+            scaledData[baseIdx] = NumOps.Multiply(NumOps.Subtract(workingCloud.Points[i, 0], midX), scale);
+            scaledData[baseIdx + 1] = NumOps.Multiply(NumOps.Subtract(workingCloud.Points[i, 1], midY), scale);
+            scaledData[baseIdx + 2] = NumOps.Multiply(NumOps.Subtract(workingCloud.Points[i, 2], midZ), scale);
 
             for (int f = 3; f < numFeatures; f++)
             {

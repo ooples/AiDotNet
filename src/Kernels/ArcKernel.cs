@@ -1,3 +1,5 @@
+using AiDotNet.Helpers;
+
 namespace AiDotNet.Kernels;
 
 /// <summary>
@@ -101,23 +103,11 @@ public class ArcKernel<T> : IKernelFunction<T>
         if (x1.Length != x2.Length)
             throw new ArgumentException("Vectors must have the same length.");
 
-        // Compute norms and dot product
-        double dotProduct = 0;
-        double norm1Sq = 0;
-        double norm2Sq = 0;
-
-        for (int i = 0; i < x1.Length; i++)
-        {
-            double v1 = _numOps.ToDouble(x1[i]);
-            double v2 = _numOps.ToDouble(x2[i]);
-
-            dotProduct += v1 * v2;
-            norm1Sq += v1 * v1;
-            norm2Sq += v2 * v2;
-        }
-
-        double norm1 = Math.Sqrt(norm1Sq);
-        double norm2 = Math.Sqrt(norm2Sq);
+        // Compute norms and dot product using hardware-accelerated ops
+        var engine = AiDotNetEngine.Current;
+        double dotProduct = _numOps.ToDouble(engine.DotProduct(x1, x2));
+        double norm1 = _numOps.ToDouble(VectorHelper.L2Norm(x1));
+        double norm2 = _numOps.ToDouble(VectorHelper.L2Norm(x2));
 
         if (norm1 < 1e-10 || norm2 < 1e-10)
         {

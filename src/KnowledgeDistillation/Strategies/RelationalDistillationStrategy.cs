@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 
@@ -839,7 +840,7 @@ public class RelationalDistillationStrategy<T> : DistillationStrategyBase<T>
         switch (_distanceMetric)
         {
             case RelationalDistanceMetric.Euclidean:
-                return ComputeEuclideanDistance(v1, v2);
+                return VectorHelper.EuclideanDistance(v1, v2);
 
             case RelationalDistanceMetric.Cosine:
                 return ComputeCosineDistance(v1, v2);
@@ -852,45 +853,16 @@ public class RelationalDistillationStrategy<T> : DistillationStrategyBase<T>
         }
     }
 
-    private T ComputeEuclideanDistance(Vector<T> v1, Vector<T> v2)
-    {
-        T sum = NumOps.Zero;
-        for (int i = 0; i < v1.Length; i++)
-        {
-            var diff = NumOps.Subtract(v1[i], v2[i]);
-            sum = NumOps.Add(sum, NumOps.Multiply(diff, diff));
-        }
-        return NumOps.FromDouble(Math.Sqrt(Convert.ToDouble(sum)));
-    }
 
     private T ComputeCosineDistance(Vector<T> v1, Vector<T> v2)
     {
-        T dot = NumOps.Zero;
-        T norm1 = NumOps.Zero;
-        T norm2 = NumOps.Zero;
-
-        for (int i = 0; i < v1.Length; i++)
-        {
-            dot = NumOps.Add(dot, NumOps.Multiply(v1[i], v2[i]));
-            norm1 = NumOps.Add(norm1, NumOps.Multiply(v1[i], v1[i]));
-            norm2 = NumOps.Add(norm2, NumOps.Multiply(v2[i], v2[i]));
-        }
-
-        double similarity = Convert.ToDouble(dot) /
-            (Math.Sqrt(Convert.ToDouble(norm1)) * Math.Sqrt(Convert.ToDouble(norm2)) + Epsilon);
-
+        double similarity = VectorHelper.CosineSimilarity(v1, v2);
         return NumOps.FromDouble(1.0 - similarity); // Distance = 1 - similarity
     }
 
     private T ComputeManhattanDistance(Vector<T> v1, Vector<T> v2)
     {
-        T sum = NumOps.Zero;
-        for (int i = 0; i < v1.Length; i++)
-        {
-            var diff = Math.Abs(Convert.ToDouble(NumOps.Subtract(v1[i], v2[i])));
-            sum = NumOps.Add(sum, NumOps.FromDouble(diff));
-        }
-        return sum;
+        return VectorHelper.ManhattanDistance(v1, v2);
     }
 
     /// <summary>
@@ -899,13 +871,13 @@ public class RelationalDistillationStrategy<T> : DistillationStrategyBase<T>
     private T ComputeAngle(Vector<T> vi, Vector<T> vj, Vector<T> vk)
     {
         // Vectors from j to i and j to k
-        var ji = Subtract(vi, vj);
-        var jk = Subtract(vk, vj);
+        var ji = Engine.Subtract(vi, vj);
+        var jk = Engine.Subtract(vk, vj);
 
         // Dot product and norms
-        T dot = DotProduct(ji, jk);
-        T normJi = Norm(ji);
-        T normJk = Norm(jk);
+        T dot = VectorHelper.DotProduct(ji, jk);
+        T normJi = VectorHelper.L2Norm(ji);
+        T normJk = VectorHelper.L2Norm(jk);
 
         // cos(angle) = dot / (norm1 * norm2)
         double cosAngle = Convert.ToDouble(dot) /
@@ -917,35 +889,8 @@ public class RelationalDistillationStrategy<T> : DistillationStrategyBase<T>
         return NumOps.FromDouble(Math.Acos(cosAngle)); // Return angle in radians
     }
 
-    private Vector<T> Subtract(Vector<T> v1, Vector<T> v2)
-    {
-        var result = new Vector<T>(v1.Length);
-        for (int i = 0; i < v1.Length; i++)
-        {
-            result[i] = NumOps.Subtract(v1[i], v2[i]);
-        }
-        return result;
-    }
 
-    private T DotProduct(Vector<T> v1, Vector<T> v2)
-    {
-        T sum = NumOps.Zero;
-        for (int i = 0; i < v1.Length; i++)
-        {
-            sum = NumOps.Add(sum, NumOps.Multiply(v1[i], v2[i]));
-        }
-        return sum;
-    }
 
-    private T Norm(Vector<T> v)
-    {
-        T sum = NumOps.Zero;
-        for (int i = 0; i < v.Length; i++)
-        {
-            sum = NumOps.Add(sum, NumOps.Multiply(v[i], v[i]));
-        }
-        return NumOps.FromDouble(Math.Sqrt(Convert.ToDouble(sum)));
-    }
 
 
 

@@ -559,7 +559,7 @@ public class UnifiedMultimodalNetwork<T> : NeuralNetworkBase<T>, IUnifiedMultimo
     {
         var emb1 = Encode(input1);
         var emb2 = Encode(input2);
-        return CosineSimilarity(emb1, emb2);
+        return _numOps.FromDouble(VectorHelper.CosineSimilarity(emb1, emb2));
     }
 
     /// <inheritdoc/>
@@ -575,7 +575,7 @@ public class UnifiedMultimodalNetwork<T> : NeuralNetworkBase<T>, IUnifiedMultimo
         foreach (var item in database)
         {
             var itemEmb = Encode(item);
-            var score = CosineSimilarity(queryEmb, itemEmb);
+            var score = _numOps.FromDouble(VectorHelper.CosineSimilarity(queryEmb, itemEmb));
             results.Add((idx, score, item.Modality));
             idx++;
         }
@@ -583,25 +583,6 @@ public class UnifiedMultimodalNetwork<T> : NeuralNetworkBase<T>, IUnifiedMultimo
         return results.OrderByDescending(r => _numOps.ToDouble(r.Score)).Take(topK);
     }
 
-    private T CosineSimilarity(Vector<T> a, Vector<T> b)
-    {
-        int minLen = Math.Min(a.Length, b.Length);
-        T dot = _numOps.Zero;
-        T normA = _numOps.Zero;
-        T normB = _numOps.Zero;
-
-        for (int i = 0; i < minLen; i++)
-        {
-            dot = _numOps.Add(dot, _numOps.Multiply(a[i], b[i]));
-            normA = _numOps.Add(normA, _numOps.Multiply(a[i], a[i]));
-            normB = _numOps.Add(normB, _numOps.Multiply(b[i], b[i]));
-        }
-
-        var denom = _numOps.Multiply(_numOps.Sqrt(normA), _numOps.Sqrt(normB));
-        if (_numOps.ToDouble(denom) < 1e-8) return _numOps.Zero;
-
-        return _numOps.Divide(dot, denom);
-    }
 
     #endregion
 
@@ -654,7 +635,7 @@ public class UnifiedMultimodalNetwork<T> : NeuralNetworkBase<T>, IUnifiedMultimo
         {
             var embedding = Encode(input);
             var targetEmb = Encode(MultimodalInput<T>.FromText(targetDescription));
-            var similarity = CosineSimilarity(embedding, targetEmb);
+            var similarity = _numOps.FromDouble(VectorHelper.CosineSimilarity(embedding, targetEmb));
 
             if (_numOps.ToDouble(similarity) > 0.5)
             {
@@ -704,7 +685,7 @@ public class UnifiedMultimodalNetwork<T> : NeuralNetworkBase<T>, IUnifiedMultimo
                     vecJ[k] = embeddings[j, k];
                 }
 
-                alignment[i, j] = CosineSimilarity(vecI, vecJ);
+                alignment[i, j] = _numOps.FromDouble(VectorHelper.CosineSimilarity(vecI, vecJ));
             }
         }
 
@@ -809,7 +790,7 @@ public class UnifiedMultimodalNetwork<T> : NeuralNetworkBase<T>, IUnifiedMultimo
                     vecJ[k] = embeddings[j, k];
                 }
 
-                attentionData[idx++] = CosineSimilarity(vecI, vecJ);
+                attentionData[idx++] = _numOps.FromDouble(VectorHelper.CosineSimilarity(vecI, vecJ));
             }
         }
 
@@ -875,7 +856,7 @@ public class UnifiedMultimodalNetwork<T> : NeuralNetworkBase<T>, IUnifiedMultimo
             foreach (var input in inputList)
             {
                 var inputEmb = Encode(input);
-                criterionScores.Add(CosineSimilarity(inputEmb, criterionEmb));
+                criterionScores.Add(_numOps.FromDouble(VectorHelper.CosineSimilarity(inputEmb, criterionEmb)));
             }
 
             scores[criterion] = criterionScores;

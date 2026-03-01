@@ -53,7 +53,7 @@ public class InterpretabilityIntegrationTests
     public void InterpretationMethod_HasExpectedCount()
     {
         var values = (InterpretationMethod[])Enum.GetValues(typeof(InterpretationMethod));
-        Assert.Equal(22, values.Length);
+        Assert.Equal(26, values.Length);
     }
 
     [Theory]
@@ -79,6 +79,10 @@ public class InterpretabilityIntegrationTests
     [InlineData(InterpretationMethod.LayerGradCAM)]
     [InlineData(InterpretationMethod.GuidedGradCAM)]
     [InlineData(InterpretationMethod.NoiseTunnel)]
+    [InlineData(InterpretationMethod.InputXGradient)]
+    [InlineData(InterpretationMethod.NeuronAttribution)]
+    [InlineData(InterpretationMethod.LayerAttribution)]
+    [InlineData(InterpretationMethod.TracIn)]
     public void InterpretationMethod_IsDefined(InterpretationMethod method)
     {
         Assert.True(Enum.IsDefined(typeof(InterpretationMethod), method));
@@ -107,6 +111,10 @@ public class InterpretabilityIntegrationTests
     [InlineData(InterpretationMethod.LayerGradCAM, "LayerGradCAM")]
     [InlineData(InterpretationMethod.GuidedGradCAM, "GuidedGradCAM")]
     [InlineData(InterpretationMethod.NoiseTunnel, "NoiseTunnel")]
+    [InlineData(InterpretationMethod.InputXGradient, "InputXGradient")]
+    [InlineData(InterpretationMethod.NeuronAttribution, "NeuronAttribution")]
+    [InlineData(InterpretationMethod.LayerAttribution, "LayerAttribution")]
+    [InlineData(InterpretationMethod.TracIn, "TracIn")]
     public void InterpretationMethod_ToString_ReturnsExpectedString(InterpretationMethod method, string expected)
     {
         Assert.Equal(expected, method.ToString());

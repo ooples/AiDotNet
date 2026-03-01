@@ -222,8 +222,7 @@ public class ProPainter<T> : VideoInpaintingBase<T>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         var predicted = Predict(input);
-        var lossGradient = predicted.Transform((v, idx) =>
-            NumOps.Subtract(v, expectedOutput.Data.Span[idx]));
+        var lossGradient = Engine.TensorSubtract(predicted, expectedOutput);
 
         BackwardPass(lossGradient);
 
@@ -525,29 +524,7 @@ public class ProPainter<T> : VideoInpaintingBase<T>
 
     private Tensor<T> ConcatenateChannelsDim1(Tensor<T> t1, Tensor<T> t2)
     {
-        int batchSize = t1.Shape[0];
-        int c1 = t1.Shape[1];
-        int c2 = t2.Shape[1];
-        int height = t1.Shape[2];
-        int width = t1.Shape[3];
-
-        var result = new Tensor<T>([batchSize, c1 + c2, height, width]);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int h = 0; h < height; h++)
-            {
-                for (int w = 0; w < width; w++)
-                {
-                    for (int c = 0; c < c1; c++)
-                        result[b, c, h, w] = t1[b, c, h, w];
-                    for (int c = 0; c < c2; c++)
-                        result[b, c1 + c, h, w] = t2[b, c, h, w];
-                }
-            }
-        }
-
-        return result;
+        return Engine.TensorConcatenate([t1, t2], axis: 1);
     }
 
     private Tensor<T> ApplyReLU(Tensor<T> input)
@@ -575,7 +552,7 @@ public class ProPainter<T> : VideoInpaintingBase<T>
     /// </summary>
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
-        return a.Transform((v, idx) => NumOps.Add(v, b.Data.Span[idx]));
+        return Engine.TensorAdd(a, b);
     }
 
     /// <summary>

@@ -1,4 +1,5 @@
 using AiDotNet.Extensions;
+using AiDotNet.Helpers;
 using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.FederatedLearning.Privacy;
@@ -52,7 +53,7 @@ public sealed class GaussianDifferentialPrivacyVector<T> : PrivacyMechanismBase<
         var noisy = new Vector<T>(model.ToArray());
 
         // Clip by L2 norm.
-        var l2Norm = CalculateL2Norm(noisy);
+        var l2Norm = VectorHelper.L2Norm(noisy);
         var clipNormT = NumOps.FromDouble(_clipNorm);
         if (NumOps.GreaterThan(l2Norm, clipNormT))
         {
@@ -117,17 +118,6 @@ public sealed class GaussianDifferentialPrivacyVector<T> : PrivacyMechanismBase<
         {
             _privacyBudgetConsumed = 0.0;
         }
-    }
-
-    private T CalculateL2Norm(Vector<T> vector)
-    {
-        var sum = NumOps.Zero;
-        for (int i = 0; i < vector.Length; i++)
-        {
-            sum = NumOps.Add(sum, NumOps.Square(vector[i]));
-        }
-
-        return NumOps.Sqrt(sum);
     }
 
     private double GenerateGaussianNoise(double mean, double stdDev)

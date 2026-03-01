@@ -511,8 +511,7 @@ public class StableVideoDiffusion<T> : NeuralNetworkBase<T>
         var predictedNoise = PredictNoise(noisyLatent, null, timeEmbed, null, null);
 
         // Compute loss gradient
-        var lossGradient = predictedNoise.Transform((v, idx) =>
-            NumOps.Subtract(v, noise.Data.Span[idx]));
+        var lossGradient = Engine.TensorSubtract(predictedNoise, noise);
 
         BackwardPass(lossGradient);
 
@@ -755,40 +754,30 @@ public class StableVideoDiffusion<T> : NeuralNetworkBase<T>
         double sqrtAlphaCumprod = Math.Sqrt(alphaCumprod);
         double sqrtOneMinusAlphaCumprod = Math.Sqrt(1 - alphaCumprod);
 
-        // Predict x0
-        var x0Pred = latents.Transform((v, idx) =>
-        {
-            double latent = Convert.ToDouble(v);
-            double noise = Convert.ToDouble(noisePred.Data.Span[idx]);
-            double x0 = (latent - sqrtOneMinusAlphaCumprod * noise) / sqrtAlphaCumprod;
-            return NumOps.FromDouble(x0);
-        });
+        // Predict x0: x0 = (latent - sqrtOneMinusAlphaCumprod * noise) / sqrtAlphaCumprod
+        var scaledNoise = Engine.TensorMultiplyScalar(noisePred, NumOps.FromDouble(sqrtOneMinusAlphaCumprod));
+        var x0Pred = Engine.TensorDivideScalar(
+            Engine.TensorSubtract(latents, scaledNoise),
+            NumOps.FromDouble(sqrtAlphaCumprod));
 
         // Compute direction
         double sqrtAlphaCumprodPrev = Math.Sqrt(alphaCumprodPrev);
         double sqrtOneMinusAlphaCumprodPrev = Math.Sqrt(1 - alphaCumprodPrev);
 
-        // Sample next latent
-        var nextLatent = x0Pred.Transform((v, idx) =>
-        {
-            double x0 = Convert.ToDouble(v);
-            double noise = Convert.ToDouble(noisePred.Data.Span[idx]);
-            double next = sqrtAlphaCumprodPrev * x0 + sqrtOneMinusAlphaCumprodPrev * noise;
-            return NumOps.FromDouble(next);
-        });
+        // Sample next latent: next = sqrtAlphaCumprodPrev * x0 + sqrtOneMinusAlphaCumprodPrev * noise
+        var nextLatent = Engine.TensorAdd(
+            Engine.TensorMultiplyScalar(x0Pred, NumOps.FromDouble(sqrtAlphaCumprodPrev)),
+            Engine.TensorMultiplyScalar(noisePred, NumOps.FromDouble(sqrtOneMinusAlphaCumprodPrev)));
 
         return nextLatent;
     }
 
     private Tensor<T> ApplyGuidance(Tensor<T> uncond, Tensor<T> cond, double scale)
     {
-        return uncond.Transform((v, idx) =>
-        {
-            double u = Convert.ToDouble(v);
-            double c = Convert.ToDouble(cond.Data.Span[idx]);
-            double guided = u + scale * (c - u);
-            return NumOps.FromDouble(guided);
-        });
+        // guided = uncond + scale * (cond - uncond)
+        var diff = Engine.TensorSubtract(cond, uncond);
+        var scaled = Engine.TensorMultiplyScalar(diff, NumOps.FromDouble(scale));
+        return Engine.TensorAdd(uncond, scaled);
     }
 
     private Tensor<T> CreateTimeEmbedding(double t)
@@ -974,7 +963,7 @@ public class StableVideoDiffusion<T> : NeuralNetworkBase<T>
     /// </summary>
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
-        return a.Transform((v, idx) => NumOps.Add(v, b.Data.Span[idx]));
+        return Engine.TensorAdd(a, b);
     }
 
     private Tensor<T> AddCondition(Tensor<T> features, Tensor<T> condition)
@@ -1005,24 +994,16 @@ public class StableVideoDiffusion<T> : NeuralNetworkBase<T>
 
     private Tensor<T> InterpolateLatents(Tensor<T> start, Tensor<T> end, double t)
     {
-        return start.Transform((v, idx) =>
-        {
-            double s = Convert.ToDouble(v);
-            double e = Convert.ToDouble(end.Data.Span[idx]);
-            double interpolated = s * (1 - t) + e * t;
-            return NumOps.FromDouble(interpolated);
-        });
+        var scaledStart = Engine.TensorMultiplyScalar(start, NumOps.FromDouble(1.0 - t));
+        var scaledEnd = Engine.TensorMultiplyScalar(end, NumOps.FromDouble(t));
+        return Engine.TensorAdd(scaledStart, scaledEnd);
     }
 
     private Tensor<T> AddNoise(Tensor<T> latent, double noiseLevel, Random random)
     {
         var noise = GenerateNoise(latent.Shape, random);
-        return latent.Transform((v, idx) =>
-        {
-            double x = Convert.ToDouble(v);
-            double n = Convert.ToDouble(noise.Data.Span[idx]);
-            return NumOps.FromDouble(x + noiseLevel * n);
-        });
+        var scaledNoise = Engine.TensorMultiplyScalar(noise, NumOps.FromDouble(noiseLevel));
+        return Engine.TensorAdd(latent, scaledNoise);
     }
 
     private Tensor<T> AddNoiseAtLevel(Tensor<T> latent, Tensor<T> noise, double level)
@@ -1031,12 +1012,9 @@ public class StableVideoDiffusion<T> : NeuralNetworkBase<T>
         double sqrtAlpha = Math.Sqrt(_alphasCumprod[stepIndex]);
         double sqrtOneMinusAlpha = Math.Sqrt(1 - _alphasCumprod[stepIndex]);
 
-        return latent.Transform((v, idx) =>
-        {
-            double x = Convert.ToDouble(v);
-            double n = Convert.ToDouble(noise.Data.Span[idx]);
-            return NumOps.FromDouble(sqrtAlpha * x + sqrtOneMinusAlpha * n);
-        });
+        var scaledLatent = Engine.TensorMultiplyScalar(latent, NumOps.FromDouble(sqrtAlpha));
+        var scaledNoise = Engine.TensorMultiplyScalar(noise, NumOps.FromDouble(sqrtOneMinusAlpha));
+        return Engine.TensorAdd(scaledLatent, scaledNoise);
     }
 
     private Tensor<T> QuickDenoise(Tensor<T> latent, int steps)
@@ -1084,40 +1062,7 @@ public class StableVideoDiffusion<T> : NeuralNetworkBase<T>
 
     private Tensor<T> ConcatenateChannels(Tensor<T> a, Tensor<T> b)
     {
-        int batchSize = a.Shape[0];
-        int channelsA = a.Shape[1];
-        int channelsB = b.Shape[1];
-        int height = a.Shape[2];
-        int width = a.Shape[3];
-
-        var output = new Tensor<T>([batchSize, channelsA + channelsB, height, width]);
-
-        for (int batch = 0; batch < batchSize; batch++)
-        {
-            for (int c = 0; c < channelsA; c++)
-            {
-                for (int h = 0; h < height; h++)
-                {
-                    for (int w = 0; w < width; w++)
-                    {
-                        output[batch, c, h, w] = a[batch, c, h, w];
-                    }
-                }
-            }
-
-            for (int c = 0; c < channelsB; c++)
-            {
-                for (int h = 0; h < height; h++)
-                {
-                    for (int w = 0; w < width; w++)
-                    {
-                        output[batch, channelsA + c, h, w] = b[batch, c, h, w];
-                    }
-                }
-            }
-        }
-
-        return output;
+        return Engine.TensorConcatenate([a, b], axis: 1);
     }
 
     private Tensor<T> ApplySiLU(Tensor<T> input)

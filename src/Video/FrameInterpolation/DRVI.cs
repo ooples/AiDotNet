@@ -101,13 +101,9 @@ public class DRVI<T> : FrameInterpolationBase<T>
         {
             var boundary = t < 0.5 ? frame0 : frame1;
             double alpha = t < 0.5 ? 2.0 * t : 2.0 * (1.0 - t);
-            var a = NumOps.FromDouble(alpha);
-            var oneMinusA = NumOps.FromDouble(1.0 - alpha);
-            int len = Math.Min(result.Length, boundary.Length);
-            for (int i = 0; i < len; i++)
-                result.Data.Span[i] = NumOps.Add(
-                    NumOps.Multiply(a, result.Data.Span[i]),
-                    NumOps.Multiply(oneMinusA, boundary.Data.Span[i]));
+            var scaledResult = Engine.TensorMultiplyScalar(result, NumOps.FromDouble(alpha));
+            var scaledBoundary = Engine.TensorMultiplyScalar(boundary, NumOps.FromDouble(1.0 - alpha));
+            result = Engine.TensorAdd(scaledResult, scaledBoundary);
         }
 
         return result;

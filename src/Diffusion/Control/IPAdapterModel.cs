@@ -464,17 +464,7 @@ public class IPAdapterModel<T> : LatentDiffusionModelBase<T>
     /// </summary>
     private Tensor<T> ScaleTensor(Tensor<T> tensor, double scale)
     {
-        var result = new Tensor<T>(tensor.Shape);
-        var inputSpan = tensor.AsSpan();
-        var resultSpan = result.AsWritableSpan();
-        var scaleT = NumOps.FromDouble(scale);
-
-        for (int i = 0; i < resultSpan.Length; i++)
-        {
-            resultSpan[i] = NumOps.Multiply(scaleT, inputSpan[i]);
-        }
-
-        return result;
+        return Engine.TensorMultiplyScalar(tensor, NumOps.FromDouble(scale));
     }
 
     /// <summary>
@@ -482,18 +472,7 @@ public class IPAdapterModel<T> : LatentDiffusionModelBase<T>
     /// </summary>
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
-        var result = new Tensor<T>(a.Shape);
-        var aSpan = a.AsSpan();
-        var bSpan = b.AsSpan();
-        var resultSpan = result.AsWritableSpan();
-
-        var minLen = Math.Min(aSpan.Length, bSpan.Length);
-        for (int i = 0; i < minLen; i++)
-        {
-            resultSpan[i] = NumOps.Add(aSpan[i], bSpan[i]);
-        }
-
-        return result;
+        return Engine.TensorAdd(a, b);
     }
 
     /// <inheritdoc />
@@ -693,18 +672,7 @@ public class ImageEncoder<T>
 
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
-        var result = new Tensor<T>(a.Shape);
-        var aSpan = a.AsSpan();
-        var bSpan = b.AsSpan();
-        var resultSpan = result.AsWritableSpan();
-
-        var minLen = Math.Min(aSpan.Length, bSpan.Length);
-        for (int i = 0; i < minLen; i++)
-        {
-            resultSpan[i] = NumOps.Add(aSpan[i], bSpan[i]);
-        }
-
-        return result;
+        return AiDotNetEngine.Current.TensorAdd(a, b);
     }
 
     /// <summary>

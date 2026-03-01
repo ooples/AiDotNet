@@ -1,6 +1,7 @@
 using AiDotNet.FederatedLearning.Infrastructure;
-using AiDotNet.Models.Options;
+using AiDotNet.Helpers;
 using AiDotNet.Tensors;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.FederatedLearning.Fairness;
 
@@ -104,7 +105,7 @@ public class PrototypicalContributionEvaluator<T> : FederatedLearningComponentBa
         // Score each client
         foreach (int clientId in clientIds)
         {
-            double alignment = ComputeAlignment(prototypes[clientId], globalDirection);
+            double alignment = CosineSimilarity(prototypes[clientId], globalDirection);
             double diversity = ComputeDiversity(clientId, prototypes, clientIds);
             double magnitude = ComputeMagnitude(prototypes[clientId]);
 
@@ -146,22 +147,6 @@ public class PrototypicalContributionEvaluator<T> : FederatedLearningComponentBa
         return freeRiders;
     }
 
-    private static double ComputeAlignment(double[] prototype, double[] globalDirection)
-    {
-        // Cosine similarity between client prototype and global direction
-        double dot = 0, normA = 0, normB = 0;
-
-        for (int i = 0; i < prototype.Length; i++)
-        {
-            dot += prototype[i] * globalDirection[i];
-            normA += prototype[i] * prototype[i];
-            normB += globalDirection[i] * globalDirection[i];
-        }
-
-        double denom = Math.Sqrt(normA) * Math.Sqrt(normB);
-        return denom > 1e-12 ? dot / denom : 0;
-    }
-
     private static double ComputeDiversity(int clientId, Dictionary<int, double[]> prototypes, List<int> clientIds)
     {
         // Diversity: average angular distance from other clients
@@ -185,29 +170,12 @@ public class PrototypicalContributionEvaluator<T> : FederatedLearningComponentBa
 
     private static double CosineSimilarity(double[] a, double[] b)
     {
-        double dot = 0, normA = 0, normB = 0;
-        int size = Math.Min(a.Length, b.Length);
-
-        for (int i = 0; i < size; i++)
-        {
-            dot += a[i] * b[i];
-            normA += a[i] * a[i];
-            normB += b[i] * b[i];
-        }
-
-        double denom = Math.Sqrt(normA) * Math.Sqrt(normB);
-        return denom > 1e-12 ? dot / denom : 0;
+        return VectorHelper.CosineSimilarity(new Vector<double>(a), new Vector<double>(b));
     }
 
     private static double ComputeMagnitude(double[] prototype)
     {
-        double sumSq = 0;
-        foreach (double v in prototype)
-        {
-            sumSq += v * v;
-        }
-
-        return Math.Sqrt(sumSq);
+        return VectorHelper.L2Norm(new Vector<double>(prototype));
     }
 
     private static void NormalizeScores(Dictionary<int, double> scores)

@@ -53,7 +53,25 @@ public class MishActivation<T> : ActivationFunctionBase<T>
     /// </remarks>
     public override T Activate(T input)
     {
-        T softplus = NumericalStabilityHelper.SafeLog(NumOps.Add(NumOps.One, NumOps.Exp(input)));
+        // Numerically stable softplus: ln(1 + e^x)
+        // For large positive x: ≈ x; For large negative x: ≈ e^x
+        T threshold = NumOps.FromDouble(20.0);
+        T negThreshold = NumOps.Negate(threshold);
+        T softplus;
+
+        if (NumOps.GreaterThan(input, threshold))
+        {
+            softplus = input;
+        }
+        else if (NumOps.LessThan(input, negThreshold))
+        {
+            softplus = NumOps.Exp(input);
+        }
+        else
+        {
+            softplus = NumericalStabilityHelper.SafeLog(NumOps.Add(NumOps.One, NumOps.Exp(input)));
+        }
+
         T tanh = MathHelper.Tanh(softplus);
 
         return NumOps.Multiply(input, tanh);
@@ -97,9 +115,10 @@ public class MishActivation<T> : ActivationFunctionBase<T>
             )
         );
 
+        // delta = 2 + 2*e^x + e^(2x) = (1 + e^x)^2 + 1
         T delta = NumOps.Add(
-            NumOps.Add(NumOps.Multiply(NumOps.FromDouble(2), exp_2x), NumOps.FromDouble(2)),
-            NumOps.Multiply(exp_2x, NumOps.Square(NumOps.Add(input, NumOps.FromDouble(2))))
+            NumOps.Add(NumOps.FromDouble(2), NumOps.Multiply(NumOps.FromDouble(2), exp_x)),
+            exp_2x
         );
 
         return NumOps.Divide(NumOps.Multiply(exp_x, omega), NumOps.Square(delta));

@@ -196,12 +196,12 @@ public class ClusteredBatchStrategy<T, TInput, TOutput> : IClusteringBatchStrate
     {
         if (sample1 is Vector<T> vec1 && sample2 is Vector<T> vec2)
         {
-            return ComputeEuclideanDistance(vec1, vec2);
+            return VectorHelper.EuclideanDistance(vec1, vec2);
         }
 
         if (sample1 is T[] arr1 && sample2 is T[] arr2)
         {
-            return ComputeEuclideanDistance(new Vector<T>(arr1), new Vector<T>(arr2));
+            return VectorHelper.EuclideanDistance(new Vector<T>(arr1), new Vector<T>(arr2));
         }
 
         return NumOps.One;
@@ -421,22 +421,11 @@ public class ClusteredBatchStrategy<T, TInput, TOutput> : IClusteringBatchStrate
 
     private T ComputeSquaredDistance(Vector<T> a, Vector<T> b)
     {
-        int length = Math.Min(a.Length, b.Length);
-        T sum = NumOps.Zero;
-
-        for (int i = 0; i < length; i++)
-        {
-            var diff = NumOps.Subtract(a[i], b[i]);
-            sum = NumOps.Add(sum, NumOps.Multiply(diff, diff));
-        }
-
-        return sum;
+        var engine = AiDotNetEngine.Current;
+        var diff = engine.Subtract(a, b);
+        return engine.DotProduct(diff, diff);
     }
 
-    private T ComputeEuclideanDistance(Vector<T> a, Vector<T> b)
-    {
-        return NumOps.Sqrt(ComputeSquaredDistance(a, b));
-    }
 
     #endregion
 }

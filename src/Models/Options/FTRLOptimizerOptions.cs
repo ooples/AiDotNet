@@ -22,6 +22,14 @@ namespace AiDotNet.Models.Options;
 public class FTRLOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOptions<T, TInput, TOutput>
 {
     /// <summary>
+    /// Initializes a new instance of the FTRLOptimizerOptions class with appropriate defaults.
+    /// </summary>
+    public FTRLOptimizerOptions()
+    {
+        MaxIterations = 1000;
+    }
+
+    /// <summary>
     /// Gets or sets the batch size for mini-batch gradient descent.
     /// </summary>
     /// <value>A positive integer, defaulting to 32.</value>
@@ -185,5 +193,4 @@ public class FTRLOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOp
     /// need far fewer iterations (like 50-100), while complex problems might benefit from more iterations.
     /// This parameter prevents your model from training forever if it's struggling to find a good solution.</para>
     /// </remarks>
-    public new int MaxIterations { get; set; } = 1000;
 }

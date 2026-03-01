@@ -678,19 +678,7 @@ public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>
 
     private Tensor<T> AddTensors(Tensor<T> left, Tensor<T> right)
     {
-        if (left.Length != right.Length)
-        {
-            throw new ArgumentException("Tensor lengths must match.");
-        }
-
-        var numOps = NumOps;
-        var data = new T[left.Length];
-        for (int i = 0; i < data.Length; i++)
-        {
-            data[i] = numOps.Add(left.Data.Span[i], right.Data.Span[i]);
-        }
-
-        return new Tensor<T>(data, left.Shape);
+        return Engine.TensorAdd(left, right);
     }
 
     private (Tensor<T> origins, Tensor<T> directions) GenerateCameraRays(
@@ -1254,9 +1242,11 @@ public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>
         var flatExpected = expectedOutput.ToVector();
         LastLoss = _lossFunction.CalculateLoss(flatPrediction, flatExpected);
 
-        // Compute gradients
+        // Compute gradients - reshape to [N, 4] for backpropagation
         var lossGradient = _lossFunction.CalculateDerivative(flatPrediction, flatExpected);
-        Backpropagate(Tensor<T>.FromVector(lossGradient));
+        int numPoints = prediction.Shape[0];
+        var gradTensor = new Tensor<T>(lossGradient.ToArray(), [numPoints, 4]);
+        Backpropagate(gradTensor);
 
         // Update layer parameters
         foreach (var layer in Layers)
@@ -1282,10 +1272,7 @@ public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>
 
         // Apply gradient descent: params = params - learning_rate * gradients
         var currentParams = GetParameters();
-        for (int i = 0; i < currentParams.Length; i++)
-        {
-            currentParams[i] = NumOps.Subtract(currentParams[i], NumOps.Multiply(_learningRate, gradients[i]));
-        }
+        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, _learningRate));
 
         SetParameters(currentParams);
     }

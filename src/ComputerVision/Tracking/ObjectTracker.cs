@@ -1,5 +1,6 @@
 using AiDotNet.Augmentation.Image;
 using AiDotNet.ComputerVision.Detection.ObjectDetection;
+using AiDotNet.Helpers;
 using AiDotNet.Tensors;
 
 namespace AiDotNet.ComputerVision.Tracking;
@@ -256,21 +257,7 @@ public abstract class ObjectTrackerBase<T>
         if (a.Length != b.Length)
             return 0;
 
-        double dot = 0, normA = 0, normB = 0;
-
-        for (int i = 0; i < a.Length; i++)
-        {
-            double va = NumOps.ToDouble(a[i]);
-            double vb = NumOps.ToDouble(b[i]);
-            dot += va * vb;
-            normA += va * va;
-            normB += vb * vb;
-        }
-
-        if (normA <= 0 || normB <= 0)
-            return 0;
-
-        return dot / (Math.Sqrt(normA) * Math.Sqrt(normB));
+        return VectorHelper.CosineSimilarity(a.ToVector(), b.ToVector());
     }
 
     /// <summary>

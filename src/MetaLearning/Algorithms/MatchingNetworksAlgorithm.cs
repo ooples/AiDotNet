@@ -435,10 +435,10 @@ public class MatchingNetworksAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
 
             T similarity = _matchingOptions.AttentionFunction switch
             {
-                MatchingNetworksAttentionFunction.Cosine => ComputeCosineSimilarity(queryEmbedding, supportEmbedding),
-                MatchingNetworksAttentionFunction.DotProduct => ComputeDotProduct(queryEmbedding, supportEmbedding),
-                MatchingNetworksAttentionFunction.Euclidean => ComputeNegativeEuclideanDistance(queryEmbedding, supportEmbedding),
-                _ => ComputeCosineSimilarity(queryEmbedding, supportEmbedding)
+                MatchingNetworksAttentionFunction.Cosine => NumOps.FromDouble(VectorHelper.CosineSimilarity(queryEmbedding, supportEmbedding)),
+                MatchingNetworksAttentionFunction.DotProduct => VectorHelper.DotProduct(queryEmbedding, supportEmbedding),
+                MatchingNetworksAttentionFunction.Euclidean => NumOps.Negate(VectorHelper.EuclideanDistance(queryEmbedding, supportEmbedding)),
+                _ => NumOps.FromDouble(VectorHelper.CosineSimilarity(queryEmbedding, supportEmbedding))
             };
 
             // Apply temperature scaling
@@ -454,65 +454,10 @@ public class MatchingNetworksAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
         return ApplySoftmax(weights);
     }
 
-    /// <summary>
-    /// Computes cosine similarity between two vectors.
-    /// </summary>
-    private T ComputeCosineSimilarity(Vector<T> a, Vector<T> b)
-    {
-        T dotProduct = NumOps.Zero;
-        T normASq = NumOps.Zero;
-        T normBSq = NumOps.Zero;
-
-        int minLen = Math.Min(a.Length, b.Length);
-        for (int i = 0; i < minLen; i++)
-        {
-            dotProduct = NumOps.Add(dotProduct, NumOps.Multiply(a[i], b[i]));
-            normASq = NumOps.Add(normASq, NumOps.Multiply(a[i], a[i]));
-            normBSq = NumOps.Add(normBSq, NumOps.Multiply(b[i], b[i]));
-        }
-
-        T normA = NumOps.FromDouble(Math.Sqrt(NumOps.ToDouble(normASq)));
-        T normB = NumOps.FromDouble(Math.Sqrt(NumOps.ToDouble(normBSq)));
-
-        T denominator = NumOps.Multiply(normA, normB);
-        if (NumOps.ToDouble(denominator) < 1e-8)
-        {
-            return NumOps.Zero;
-        }
-
-        return NumOps.Divide(dotProduct, denominator);
-    }
-
-    /// <summary>
-    /// Computes dot product between two vectors.
-    /// </summary>
-    private T ComputeDotProduct(Vector<T> a, Vector<T> b)
-    {
-        T dotProduct = NumOps.Zero;
-        int minLen = Math.Min(a.Length, b.Length);
-        for (int i = 0; i < minLen; i++)
-        {
-            dotProduct = NumOps.Add(dotProduct, NumOps.Multiply(a[i], b[i]));
-        }
-        return dotProduct;
-    }
 
     /// <summary>
     /// Computes negative Euclidean distance (higher = more similar).
     /// </summary>
-    private T ComputeNegativeEuclideanDistance(Vector<T> a, Vector<T> b)
-    {
-        T sumSquares = NumOps.Zero;
-        int minLen = Math.Min(a.Length, b.Length);
-        for (int i = 0; i < minLen; i++)
-        {
-            T diff = NumOps.Subtract(a[i], b[i]);
-            sumSquares = NumOps.Add(sumSquares, NumOps.Multiply(diff, diff));
-        }
-        T distance = NumOps.FromDouble(Math.Sqrt(NumOps.ToDouble(sumSquares)));
-        return NumOps.Negate(distance);
-    }
-
     /// <summary>
     /// Applies softmax to a vector.
     /// </summary>
@@ -663,6 +608,7 @@ public class MatchingNetworksAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
 /// </remarks>
 public class MatchingNetworksModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
 {
+    protected static IEngine Engine => AiDotNetEngine.Current;
     private readonly IFullModel<T, TInput, TOutput> _encoder;
     private readonly Matrix<T> _supportEmbeddings;
     private readonly Matrix<T> _supportLabelsOneHot;
@@ -771,10 +717,10 @@ public class MatchingNetworksModel<T, TInput, TOutput> : IModel<TInput, TOutput,
             // Respect the AttentionFunction option (consistent with algorithm's ComputeAttentionWeights)
             T similarity = _options.AttentionFunction switch
             {
-                MatchingNetworksAttentionFunction.Cosine => ComputeCosineSimilarity(queryEmbedding, supportEmbedding),
-                MatchingNetworksAttentionFunction.DotProduct => ComputeDotProduct(queryEmbedding, supportEmbedding),
-                MatchingNetworksAttentionFunction.Euclidean => ComputeNegativeEuclideanDistance(queryEmbedding, supportEmbedding),
-                _ => ComputeCosineSimilarity(queryEmbedding, supportEmbedding)
+                MatchingNetworksAttentionFunction.Cosine => _numOps.FromDouble(VectorHelper.CosineSimilarity(queryEmbedding, supportEmbedding)),
+                MatchingNetworksAttentionFunction.DotProduct => VectorHelper.DotProduct(queryEmbedding, supportEmbedding),
+                MatchingNetworksAttentionFunction.Euclidean => _numOps.Negate(VectorHelper.EuclideanDistance(queryEmbedding, supportEmbedding)),
+                _ => _numOps.FromDouble(VectorHelper.CosineSimilarity(queryEmbedding, supportEmbedding))
             };
 
             if (Math.Abs(_options.Temperature - 1.0) >= 1e-10)
@@ -788,55 +734,6 @@ public class MatchingNetworksModel<T, TInput, TOutput> : IModel<TInput, TOutput,
         return ApplySoftmax(weights);
     }
 
-    private T ComputeDotProduct(Vector<T> a, Vector<T> b)
-    {
-        T dotProduct = _numOps.Zero;
-        int minLen = Math.Min(a.Length, b.Length);
-        for (int i = 0; i < minLen; i++)
-        {
-            dotProduct = _numOps.Add(dotProduct, _numOps.Multiply(a[i], b[i]));
-        }
-        return dotProduct;
-    }
-
-    private T ComputeNegativeEuclideanDistance(Vector<T> a, Vector<T> b)
-    {
-        T sumSq = _numOps.Zero;
-        int minLen = Math.Min(a.Length, b.Length);
-        for (int i = 0; i < minLen; i++)
-        {
-            T diff = _numOps.Subtract(a[i], b[i]);
-            sumSq = _numOps.Add(sumSq, _numOps.Multiply(diff, diff));
-        }
-        // Return negative distance so larger (less negative) = more similar
-        return _numOps.Negate(_numOps.Sqrt(sumSq));
-    }
-
-    private T ComputeCosineSimilarity(Vector<T> a, Vector<T> b)
-    {
-        T dotProduct = _numOps.Zero;
-        T normASq = _numOps.Zero;
-        T normBSq = _numOps.Zero;
-
-        int minLen = Math.Min(a.Length, b.Length);
-        for (int i = 0; i < minLen; i++)
-        {
-            dotProduct = _numOps.Add(dotProduct, _numOps.Multiply(a[i], b[i]));
-            normASq = _numOps.Add(normASq, _numOps.Multiply(a[i], a[i]));
-            normBSq = _numOps.Add(normBSq, _numOps.Multiply(b[i], b[i]));
-        }
-
-        T normA = _numOps.FromDouble(Math.Sqrt(_numOps.ToDouble(normASq)));
-        T normB = _numOps.FromDouble(Math.Sqrt(_numOps.ToDouble(normBSq)));
-
-        T denominator = _numOps.Multiply(normA, normB);
-        if (_numOps.ToDouble(denominator) < 1e-8)
-        {
-            return _numOps.Zero;
-        }
-
-        return _numOps.Divide(dotProduct, denominator);
-    }
 
     private Vector<T> ApplySoftmax(Vector<T> values)
     {

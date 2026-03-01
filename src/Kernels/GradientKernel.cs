@@ -1,3 +1,5 @@
+using AiDotNet.Helpers;
+
 namespace AiDotNet.Kernels;
 
 /// <summary>
@@ -445,14 +447,7 @@ public class GradientKernel<T> : IKernelFunction<T>
     /// </summary>
     private double ComputeDistance(Vector<T> x1, Vector<T> x2)
     {
-        double sum = 0;
-        int d = Math.Min(x1.Length, x2.Length);
-        for (int i = 0; i < d; i++)
-        {
-            double diff = _numOps.ToDouble(x1[i]) - _numOps.ToDouble(x2[i]);
-            sum += diff * diff;
-        }
-        return Math.Sqrt(sum);
+        return _numOps.ToDouble(VectorHelper.EuclideanDistance(x1, x2));
     }
 
     /// <summary>

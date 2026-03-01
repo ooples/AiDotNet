@@ -400,81 +400,9 @@ public class DenseBlock<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> ConcatenateChannels(Tensor<T> a, Tensor<T> b)
     {
-        // Handle 3D tensors (CHW format)
-        if (a.Shape.Length == 3)
-        {
-            int channelsA = a.Shape[0];
-            int channelsB = b.Shape[0];
-            int height = a.Shape[1];
-            int width = a.Shape[2];
-
-            int totalChannels = channelsA + channelsB;
-            var result = new Tensor<T>([totalChannels, height, width]);
-
-            int spatialSize = height * width;
-
-            // Copy first tensor
-            for (int c = 0; c < channelsA; c++)
-            {
-                for (int hw = 0; hw < spatialSize; hw++)
-                {
-                    int srcIdx = c * spatialSize + hw;
-                    int dstIdx = c * spatialSize + hw;
-                    result.Data.Span[dstIdx] = a.Data.Span[srcIdx];
-                }
-            }
-
-            // Copy second tensor
-            for (int c = 0; c < channelsB; c++)
-            {
-                for (int hw = 0; hw < spatialSize; hw++)
-                {
-                    int srcIdx = c * spatialSize + hw;
-                    int dstIdx = (channelsA + c) * spatialSize + hw;
-                    result.Data.Span[dstIdx] = b.Data.Span[srcIdx];
-                }
-            }
-
-            return result;
-        }
-
-        // Handle 4D tensors (NCHW format)
-        int batch = a.Shape[0];
-        int channelsA4D = a.Shape[1];
-        int channelsB4D = b.Shape[1];
-        int height4D = a.Shape[2];
-        int width4D = a.Shape[3];
-
-        int totalChannels4D = channelsA4D + channelsB4D;
-        var result4D = new Tensor<T>([batch, totalChannels4D, height4D, width4D]);
-
-        // Copy first tensor
-        int spatialSize4D = height4D * width4D;
-        for (int n = 0; n < batch; n++)
-        {
-            for (int c = 0; c < channelsA4D; c++)
-            {
-                for (int hw = 0; hw < spatialSize4D; hw++)
-                {
-                    int srcIdx = n * (channelsA4D * spatialSize4D) + c * spatialSize4D + hw;
-                    int dstIdx = n * (totalChannels4D * spatialSize4D) + c * spatialSize4D + hw;
-                    result4D.Data.Span[dstIdx] = a.Data.Span[srcIdx];
-                }
-            }
-
-            // Copy second tensor
-            for (int c = 0; c < channelsB4D; c++)
-            {
-                for (int hw = 0; hw < spatialSize4D; hw++)
-                {
-                    int srcIdx = n * (channelsB4D * spatialSize4D) + c * spatialSize4D + hw;
-                    int dstIdx = n * (totalChannels4D * spatialSize4D) + (channelsA4D + c) * spatialSize4D + hw;
-                    result4D.Data.Span[dstIdx] = b.Data.Span[srcIdx];
-                }
-            }
-        }
-
-        return result4D;
+        // Channel axis is 0 for 3D (CHW) and 1 for 4D (NCHW)
+        int channelAxis = a.Shape.Length == 4 ? 1 : 0;
+        return Engine.TensorConcatenate([a, b], axis: channelAxis);
     }
 
     /// <summary>

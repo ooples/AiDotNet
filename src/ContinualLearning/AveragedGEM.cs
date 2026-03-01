@@ -37,6 +37,7 @@ namespace AiDotNet.ContinualLearning;
 public class AveragedGEM<T> : IContinualLearningStrategy<T>
 {
     private readonly INumericOperations<T> _numOps;
+    private static IEngine Engine => AiDotNetEngine.Current;
     private readonly List<(Tensor<T> inputs, Tensor<T> targets)> _episodicMemory;
     private readonly int _memorySize;
     private readonly int _sampleSize;
@@ -121,12 +122,12 @@ public class AveragedGEM<T> : IContinualLearningStrategy<T>
         var refGradient = ComputeReferenceGradient(network, memInputs, memTargets);
 
         // Check if gradient violates constraint
-        var dotProduct = DotProduct(gradients, refGradient);
+        var dotProduct = VectorHelper.DotProduct(gradients, refGradient);
 
         if (_numOps.LessThan(dotProduct, _numOps.Zero))
         {
             // Project gradient: g_proj = g - (g · g_ref / g_ref · g_ref) × g_ref
-            var refNormSq = DotProduct(refGradient, refGradient);
+            var refNormSq = VectorHelper.DotProduct(refGradient, refGradient);
 
             if (_numOps.GreaterThan(refNormSq, _numOps.Zero))
             {
@@ -288,18 +289,6 @@ public class AveragedGEM<T> : IContinualLearningStrategy<T>
         return grads.Clone();
     }
 
-    /// <summary>
-    /// Computes the dot product of two vectors.
-    /// </summary>
-    private T DotProduct(Vector<T> a, Vector<T> b)
-    {
-        var sum = _numOps.Zero;
-        for (int i = 0; i < a.Length; i++)
-        {
-            sum = _numOps.Add(sum, _numOps.Multiply(a[i], b[i]));
-        }
-        return sum;
-    }
 
     /// <summary>
     /// Computes the gradient of the loss.

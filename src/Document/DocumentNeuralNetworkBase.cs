@@ -3,6 +3,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Onnx;
 using AiDotNet.Postprocessing;
 using AiDotNet.Preprocessing;
@@ -300,9 +301,43 @@ public abstract class DocumentNeuralNetworkBase<T> : NeuralNetworkBase<T>
     protected virtual Tensor<T> Forward(Tensor<T> input)
     {
         Tensor<T> output = input;
+        Tensor<T>? encoderOutput = null;
+        bool hasReshapedToSequence = false;
+        bool hasPassedConvLayer = false;
         foreach (var layer in Layers)
         {
-            output = layer.Forward(output);
+            // Track whether we've passed through any convolutional/pooling layer
+            if (layer is ConvolutionalLayer<T> or BatchNormalizationLayer<T>
+                     or PoolingLayer<T> or MaxPoolingLayer<T> or AveragePoolingLayer<T>)
+            {
+                hasPassedConvLayer = true;
+            }
+
+            // Auto-reshape once when transitioning from spatial (CNN) to non-spatial layers
+            // Only reshape if we actually went through conv layers (not raw image input)
+            // CNN outputs [B, C, H, W] or [C, H, W]; non-spatial layers expect [SeqLen, EmbDim]
+            bool isNonSpatialLayer = layer is not (ConvolutionalLayer<T> or BatchNormalizationLayer<T>
+                or PoolingLayer<T> or MaxPoolingLayer<T> or AveragePoolingLayer<T>);
+            if (!hasReshapedToSequence && hasPassedConvLayer && output.Shape.Length >= 3 && isNonSpatialLayer)
+            {
+                int channels = output.Shape.Length == 4 ? output.Shape[1] : output.Shape[0];
+                int spatialH = output.Shape.Length == 4 ? output.Shape[2] : output.Shape[1];
+                int spatialW = output.Shape.Length == 4 ? output.Shape[3] : output.Shape[2];
+                int numPatches = spatialH * spatialW;
+                output = new Tensor<T>(output.Data.ToArray(), [numPatches, channels]);
+                hasReshapedToSequence = true;
+            }
+
+            // TransformerDecoderLayer requires encoder output as cross-attention context
+            if (layer is TransformerDecoderLayer<T> decoderLayer)
+            {
+                encoderOutput ??= output;
+                output = decoderLayer.Forward(output, encoderOutput);
+            }
+            else
+            {
+                output = layer.Forward(output);
+            }
         }
         return output;
     }
@@ -313,6 +348,21 @@ public abstract class DocumentNeuralNetworkBase<T> : NeuralNetworkBase<T>
     /// <param name="image">The tensor to validate.</param>
     /// <exception cref="ArgumentNullException">If image is null.</exception>
     /// <exception cref="ArgumentException">If the tensor shape is invalid.</exception>
+    /// <summary>
+    /// Safely serializes the model, returning an empty array if the model is too large.
+    /// </summary>
+    protected byte[] SafeSerialize()
+    {
+        try
+        {
+            return this.Serialize();
+        }
+        catch (OutOfMemoryException)
+        {
+            return Array.Empty<byte>();
+        }
+    }
+
     protected void ValidateImageShape(Tensor<T> image)
     {
         if (image is null)
