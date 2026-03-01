@@ -1,4 +1,3 @@
-using AiDotNet.Models;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Helpers;
@@ -99,7 +98,7 @@ public static class VectorHelper
     /// <param name="a">First vector.</param>
     /// <param name="b">Second vector.</param>
     /// <param name="epsilon">Minimum denominator threshold. Default: 1e-10.</param>
-    /// <returns>Cosine similarity clamped to [0, 1]. Returns 0 if either vector has near-zero norm.</returns>
+    /// <returns>Cosine similarity in [-1, 1]. Returns 0 if either vector has near-zero norm.</returns>
     public static double CosineSimilarity<T>(Vector<T> a, Vector<T> b, double epsilon = 1e-10)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
@@ -110,7 +109,7 @@ public static class VectorHelper
         double normB = numOps.ToDouble(engine.DotProduct(b, b));
 
         double denom = Math.Sqrt(normA * normB);
-        return denom > epsilon ? Math.Max(0, dot / denom) : 0;
+        return denom > epsilon ? Math.Clamp(dot / denom, -1.0, 1.0) : 0;
     }
 
     /// <summary>

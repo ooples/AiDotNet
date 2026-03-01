@@ -36,7 +36,7 @@ namespace AiDotNet.Metrics;
 public class CLIPScore<T> where T : struct
 {
     private readonly INumericOperations<T> _numOps;
-    protected static IEngine Engine => Engine;
+    protected static IEngine Engine => AiDotNetEngine.Current;
     private readonly IMultimodalEmbedding<T> _clipModel;
 
     /// <summary>

@@ -22,7 +22,7 @@ namespace AiDotNet.TransferLearning.FeatureMapping;
 public class LinearFeatureMapper<T> : IFeatureMapper<T>
 {
     private readonly INumericOperations<T> _numOps;
-    protected static IEngine Engine => Engine;
+    protected static IEngine Engine => AiDotNetEngine.Current;
     private Matrix<T>? _projectionMatrix;
     private Matrix<T>? _reverseProjectionMatrix;
     private T _confidence;
