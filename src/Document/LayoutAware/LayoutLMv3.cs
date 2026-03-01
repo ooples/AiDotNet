@@ -963,34 +963,7 @@ public class LayoutLMv3<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
 
     private Tensor<T> ApplySoftmax(Tensor<T> input)
     {
-        var output = new Tensor<T>(input.Shape);
-        int lastDim = input.Shape[^1];
-        int numBatches = input.Data.Length / lastDim;
-
-        for (int b = 0; b < numBatches; b++)
-        {
-            double maxVal = double.MinValue;
-            for (int i = 0; i < lastDim; i++)
-            {
-                double val = NumOps.ToDouble(input.Data.Span[b * lastDim + i]);
-                if (val > maxVal) maxVal = val;
-            }
-
-            double sumExp = 0;
-            for (int i = 0; i < lastDim; i++)
-            {
-                double val = NumOps.ToDouble(input.Data.Span[b * lastDim + i]);
-                sumExp += Math.Exp(val - maxVal);
-            }
-
-            for (int i = 0; i < lastDim; i++)
-            {
-                double val = NumOps.ToDouble(input.Data.Span[b * lastDim + i]);
-                output.Data.Span[b * lastDim + i] = NumOps.FromDouble(Math.Exp(val - maxVal) / sumExp);
-            }
-        }
-
-        return output;
+        return Engine.Softmax(input, -1);
     }
 
     #endregion
@@ -1230,10 +1203,7 @@ public class LayoutLMv3<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
         var currentParams = GetParameters();
         T learningRate = NumOps.FromDouble(0.001);
 
-        for (int i = 0; i < currentParams.Length; i++)
-        {
-            currentParams[i] = NumOps.Subtract(currentParams[i], NumOps.Multiply(learningRate, gradients[i]));
-        }
+        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, learningRate));
 
         SetParameters(currentParams);
     }

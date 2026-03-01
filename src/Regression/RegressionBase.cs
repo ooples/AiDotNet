@@ -991,11 +991,7 @@ public abstract class RegressionBase<T> : IRegression<T>, IConfigurableModel<T>
         var currentParams = GetParameters();
 
         // Apply gradient descent: params = params - learningRate * gradients
-        var newParams = new Vector<T>(currentParams.Length);
-        for (int i = 0; i < currentParams.Length; i++)
-        {
-            newParams[i] = NumOps.Subtract(currentParams[i], NumOps.Multiply(learningRate, gradients[i]));
-        }
+        var newParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, learningRate));
 
         // Use SetParameters to update all model state
         SetParameters(newParams);

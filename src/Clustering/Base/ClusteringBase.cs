@@ -3,6 +3,7 @@ using AiDotNet.Autodiff;
 using AiDotNet.Clustering.Interfaces;
 using AiDotNet.Clustering.Options;
 using AiDotNet.Enums;
+using AiDotNet.Helpers;
 using AiDotNet.Factories;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
@@ -168,13 +169,7 @@ public abstract class ClusteringBase<T> : IClustering<T>, IConfigurableModel<T>
     /// </summary>
     protected virtual T ComputeDistance(Matrix<T> x, int sampleIndex, Matrix<T> centers, int clusterIndex)
     {
-        T sum = NumOps.Zero;
-        for (int j = 0; j < NumFeatures; j++)
-        {
-            T diff = NumOps.Subtract(x[sampleIndex, j], centers[clusterIndex, j]);
-            sum = NumOps.Add(sum, NumOps.Multiply(diff, diff));
-        }
-        return NumOps.Sqrt(sum);
+        return VectorHelper.EuclideanDistance(x.GetRow(sampleIndex), centers.GetRow(clusterIndex));
     }
 
     /// <summary>
@@ -182,13 +177,9 @@ public abstract class ClusteringBase<T> : IClustering<T>, IConfigurableModel<T>
     /// </summary>
     protected T ComputeSquaredDistance(Matrix<T> x, int sampleIndex, Matrix<T> centers, int clusterIndex)
     {
-        T sum = NumOps.Zero;
-        for (int j = 0; j < NumFeatures; j++)
-        {
-            T diff = NumOps.Subtract(x[sampleIndex, j], centers[clusterIndex, j]);
-            sum = NumOps.Add(sum, NumOps.Multiply(diff, diff));
-        }
-        return sum;
+        var engine = AiDotNetEngine.Current;
+        var diff = engine.Subtract(x.GetRow(sampleIndex), centers.GetRow(clusterIndex));
+        return engine.DotProduct(diff, diff);
     }
 
     /// <summary>

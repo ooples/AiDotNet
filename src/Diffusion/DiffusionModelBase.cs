@@ -36,6 +36,11 @@ namespace AiDotNet.Diffusion;
 public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableModel<T>
 {
     /// <summary>
+    /// Provides access to the hardware-accelerated tensor engine.
+    /// </summary>
+    protected IEngine Engine => AiDotNetEngine.Current;
+
+    /// <summary>
     /// Provides numeric operations for the specific type T.
     /// </summary>
     protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();

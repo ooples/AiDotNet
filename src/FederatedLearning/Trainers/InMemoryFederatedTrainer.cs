@@ -2026,20 +2026,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
 
     private double ComputeL2Distance(Vector<T> a, Vector<T> b)
     {
-        if (a.Length != b.Length)
-        {
-            throw new ArgumentException("Vector length mismatch when computing distance.");
-        }
-
-        T sum = NumOps.Zero;
-        for (int i = 0; i < a.Length; i++)
-        {
-            var diff = NumOps.Subtract(a[i], b[i]);
-            sum = NumOps.Add(sum, NumOps.Multiply(diff, diff));
-        }
-
-        var norm = NumOps.Sqrt(sum);
-        return NumOps.ToDouble(norm);
+        return NumOps.ToDouble(VectorHelper.EuclideanDistance(a, b));
     }
 
     private static IFullModel<T, TInput, TOutput> CloneModelByParameters(IFullModel<T, TInput, TOutput> model)

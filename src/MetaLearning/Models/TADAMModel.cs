@@ -28,6 +28,7 @@ namespace AiDotNet.MetaLearning.Models;
 public class TADAMModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+    protected static IEngine Engine => AiDotNetEngine.Current;
 
     private readonly IFullModel<T, TInput, TOutput> _featureEncoder;
     private readonly Dictionary<int, Tensor<T>> _prototypes;
@@ -75,7 +76,7 @@ public class TADAMModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetad
         // Optionally normalize the embedding
         if (_options.NormalizeEmbeddings)
         {
-            queryEmbedding = NormalizeVector(queryEmbedding);
+            queryEmbedding = VectorHelper.Normalize(queryEmbedding);
         }
 
         // Compute scaled distances to each prototype
@@ -89,32 +90,6 @@ public class TADAMModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetad
 
         // Convert to output type
         return ConvertToOutput(probabilities);
-    }
-
-    /// <summary>
-    /// Normalizes a vector to unit length.
-    /// </summary>
-    private Vector<T> NormalizeVector(Vector<T> vector)
-    {
-        T norm = NumOps.Zero;
-        for (int i = 0; i < vector.Length; i++)
-        {
-            norm = NumOps.Add(norm, NumOps.Multiply(vector[i], vector[i]));
-        }
-
-        double normValue = Math.Sqrt(NumOps.ToDouble(norm));
-        if (normValue < 1e-10)
-        {
-            return vector; // Avoid division by zero
-        }
-
-        var normalized = new Vector<T>(vector.Length);
-        for (int i = 0; i < vector.Length; i++)
-        {
-            normalized[i] = NumOps.Divide(vector[i], NumOps.FromDouble(normValue));
-        }
-
-        return normalized;
     }
 
     /// <summary>

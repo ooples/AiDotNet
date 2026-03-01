@@ -604,17 +604,7 @@ public class ControlNetModel<T> : LatentDiffusionModelBase<T>
     /// </summary>
     private Tensor<T> ScaleTensor(Tensor<T> tensor, double scale)
     {
-        var result = new Tensor<T>(tensor.Shape);
-        var inputSpan = tensor.AsSpan();
-        var resultSpan = result.AsWritableSpan();
-        var scaleT = NumOps.FromDouble(scale);
-
-        for (int i = 0; i < resultSpan.Length; i++)
-        {
-            resultSpan[i] = NumOps.Multiply(scaleT, inputSpan[i]);
-        }
-
-        return result;
+        return Engine.TensorMultiplyScalar(tensor, NumOps.FromDouble(scale));
     }
 
     /// <summary>
@@ -622,40 +612,7 @@ public class ControlNetModel<T> : LatentDiffusionModelBase<T>
     /// </summary>
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
-        var aSpan = a.AsSpan();
-        var bSpan = b.AsSpan();
-
-        // Use the larger tensor's shape for the result
-        var resultShape = aSpan.Length >= bSpan.Length ? a.Shape : b.Shape;
-        var result = new Tensor<T>(resultShape);
-        var resultSpan = result.AsWritableSpan();
-
-        var minLen = Math.Min(aSpan.Length, bSpan.Length);
-        var maxLen = Math.Max(aSpan.Length, bSpan.Length);
-
-        // Add overlapping elements
-        for (int i = 0; i < minLen; i++)
-        {
-            resultSpan[i] = NumOps.Add(aSpan[i], bSpan[i]);
-        }
-
-        // Copy remaining elements from the larger tensor
-        if (aSpan.Length > minLen)
-        {
-            for (int i = minLen; i < maxLen; i++)
-            {
-                resultSpan[i] = aSpan[i];
-            }
-        }
-        else if (bSpan.Length > minLen)
-        {
-            for (int i = minLen; i < maxLen; i++)
-            {
-                resultSpan[i] = bSpan[i];
-            }
-        }
-
-        return result;
+        return Engine.TensorBroadcastAdd(a, b);
     }
 
     /// <inheritdoc />

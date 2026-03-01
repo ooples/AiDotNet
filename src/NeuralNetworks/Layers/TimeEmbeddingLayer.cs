@@ -375,35 +375,27 @@ public class TimeEmbeddingLayer<T> : LayerBase<T>
         _lastSinusoidalEmbed = sinEmbed;
 
         // Step 2: First linear layer + SiLU activation
+        // sinEmbed: [batch, embeddingDim] @ _linear1Weights: [embeddingDim, outputDim] -> [batch, outputDim]
+        var preActivation = Engine.TensorMatMul(sinEmbed, _linear1Weights);
+        var bias1Broadcast = _linear1Bias.Reshape([1, _outputDim]);
+        preActivation = Engine.TensorBroadcastAdd(preActivation, bias1Broadcast);
+
+        // Apply SiLU element-wise (no tensor op available for SiLU)
         var hidden = new Tensor<T>([batch, _outputDim]);
         for (int b = 0; b < batch; b++)
         {
             for (int j = 0; j < _outputDim; j++)
             {
-                var sum = _linear1Bias[j];
-                for (int i = 0; i < _embeddingDim; i++)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply(sinEmbed[b, i], _linear1Weights[i, j]));
-                }
-                hidden[b, j] = SiLU(sum);
+                hidden[b, j] = SiLU(preActivation[b, j]);
             }
         }
         _lastHidden = hidden;
 
         // Step 3: Second linear layer
-        var output = new Tensor<T>([batch, _outputDim]);
-        for (int b = 0; b < batch; b++)
-        {
-            for (int j = 0; j < _outputDim; j++)
-            {
-                var sum = _linear2Bias[j];
-                for (int i = 0; i < _outputDim; i++)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply(hidden[b, i], _linear2Weights[i, j]));
-                }
-                output[b, j] = sum;
-            }
-        }
+        // hidden: [batch, outputDim] @ _linear2Weights: [outputDim, outputDim] -> [batch, outputDim]
+        var output = Engine.TensorMatMul(hidden, _linear2Weights);
+        var bias2Broadcast = _linear2Bias.Reshape([1, _outputDim]);
+        output = Engine.TensorBroadcastAdd(output, bias2Broadcast);
 
         return output;
     }
@@ -426,56 +418,40 @@ public class TimeEmbeddingLayer<T> : LayerBase<T>
         _linear1WeightsGradient = Tensor<T>.CreateDefault([_embeddingDim, _outputDim], NumOps.Zero);
         _linear1BiasGradient = Tensor<T>.CreateDefault([_outputDim], NumOps.Zero);
 
-        // Backprop through second linear layer
-        var hiddenGradient = new Tensor<T>([batch, _outputDim]);
-        for (int b = 0; b < batch; b++)
-        {
-            for (int j = 0; j < _outputDim; j++)
-            {
-                var grad = outputGradient[b, j];
-                _linear2BiasGradient[j] = NumOps.Add(_linear2BiasGradient[j], grad);
+        // Backprop through second linear layer using Engine tensor ops
+        // Bias gradient: sum over batch dimension
+        _linear2BiasGradient = Engine.ReduceSum(outputGradient, [0], keepDims: false);
 
-                for (int i = 0; i < _outputDim; i++)
-                {
-                    _linear2WeightsGradient[i, j] = NumOps.Add(_linear2WeightsGradient[i, j],
-                        NumOps.Multiply(grad, _lastHidden[b, i]));
-                    hiddenGradient[b, i] = NumOps.Add(hiddenGradient[b, i],
-                        NumOps.Multiply(grad, _linear2Weights[i, j]));
-                }
-            }
-        }
+        // Weight gradient: lastHidden^T @ outputGradient -> [outputDim, outputDim]
+        var lastHiddenT = Engine.TensorTranspose(_lastHidden);
+        _linear2WeightsGradient = Engine.TensorMatMul(lastHiddenT, outputGradient);
+
+        // Hidden gradient: outputGradient @ linear2Weights^T -> [batch, outputDim]
+        var linear2WeightsT = Engine.TensorTranspose(_linear2Weights);
+        var hiddenGradient = Engine.TensorMatMul(outputGradient, linear2WeightsT);
 
         // Backprop through SiLU activation
+        // Recompute pre-activation: sinEmbed @ linear1Weights + bias
+        var recomputedPreAct = Engine.TensorMatMul(_lastSinusoidalEmbed, _linear1Weights);
+        var bias1BC = _linear1Bias.Reshape([1, _outputDim]);
+        recomputedPreAct = Engine.TensorBroadcastAdd(recomputedPreAct, bias1BC);
+
         var preActivationGrad = new Tensor<T>([batch, _outputDim]);
         for (int b = 0; b < batch; b++)
         {
             for (int j = 0; j < _outputDim; j++)
             {
-                // Recompute pre-activation value
-                var sum = _linear1Bias[j];
-                for (int i = 0; i < _embeddingDim; i++)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply(_lastSinusoidalEmbed[b, i], _linear1Weights[i, j]));
-                }
-                preActivationGrad[b, j] = NumOps.Multiply(hiddenGradient[b, j], SiLUDerivative(sum));
+                preActivationGrad[b, j] = NumOps.Multiply(hiddenGradient[b, j], SiLUDerivative(recomputedPreAct[b, j]));
             }
         }
 
-        // Backprop through first linear layer
-        for (int b = 0; b < batch; b++)
-        {
-            for (int j = 0; j < _outputDim; j++)
-            {
-                var grad = preActivationGrad[b, j];
-                _linear1BiasGradient[j] = NumOps.Add(_linear1BiasGradient[j], grad);
+        // Backprop through first linear layer using Engine tensor ops
+        // Bias gradient: sum over batch dimension
+        _linear1BiasGradient = Engine.ReduceSum(preActivationGrad, [0], keepDims: false);
 
-                for (int i = 0; i < _embeddingDim; i++)
-                {
-                    _linear1WeightsGradient[i, j] = NumOps.Add(_linear1WeightsGradient[i, j],
-                        NumOps.Multiply(grad, _lastSinusoidalEmbed[b, i]));
-                }
-            }
-        }
+        // Weight gradient: sinEmbed^T @ preActivationGrad -> [embeddingDim, outputDim]
+        var sinEmbedT = Engine.TensorTranspose(_lastSinusoidalEmbed);
+        _linear1WeightsGradient = Engine.TensorMatMul(sinEmbedT, preActivationGrad);
 
         // Return gradient w.r.t. timesteps (typically not used but required by interface)
         return _lastInput.Rank == 1

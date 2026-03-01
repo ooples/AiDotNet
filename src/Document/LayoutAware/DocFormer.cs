@@ -400,29 +400,7 @@ public class DocFormer<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, ID
 
     private Tensor<T> ApplySoftmax(Tensor<T> input)
     {
-        var output = new Tensor<T>(input.Shape);
-        int length = input.Data.Length;
-
-        double maxVal = double.MinValue;
-        for (int i = 0; i < length; i++)
-        {
-            double val = NumOps.ToDouble(input.Data.Span[i]);
-            if (val > maxVal) maxVal = val;
-        }
-
-        double sumExp = 0;
-        for (int i = 0; i < length; i++)
-        {
-            sumExp += Math.Exp(NumOps.ToDouble(input.Data.Span[i]) - maxVal);
-        }
-
-        for (int i = 0; i < length; i++)
-        {
-            double val = NumOps.ToDouble(input.Data.Span[i]);
-            output.Data.Span[i] = NumOps.FromDouble(Math.Exp(val - maxVal) / sumExp);
-        }
-
-        return output;
+        return Engine.Softmax(input, -1);
     }
 
     #endregion
@@ -616,8 +594,8 @@ public class DocFormer<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, ID
 
         var currentParams = GetParameters();
         T lr = NumOps.FromDouble(0.00005);
-        for (int i = 0; i < currentParams.Length; i++)
-            currentParams[i] = NumOps.Subtract(currentParams[i], NumOps.Multiply(lr, gradients[i]));
+        
+        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, lr));
         SetParameters(currentParams);
     }
 

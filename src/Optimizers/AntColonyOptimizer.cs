@@ -359,7 +359,7 @@ public class AntColonyOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, T
             var deposit = NumOps.Divide(_currentPheromoneIntensity, NumOps.Add(NumOps.One, FitnessList[k]));
 
             // Vectorized absolute value of parameters
-            var absParams = (Vector<T>)AiDotNetEngine.Current.Abs(parameters);
+            var absParams = (Vector<T>)Engine.Abs(parameters);
 
             // Only iterate up to pheromone matrix size, not parameter length
             // Parameters may include intercept which is not a feature

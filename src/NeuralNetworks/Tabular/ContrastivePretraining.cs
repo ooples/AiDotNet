@@ -1,3 +1,4 @@
+using AiDotNet.Engines;
 using AiDotNet.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Tabular;
@@ -25,6 +26,7 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 public class ContrastivePretraining<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+    private IEngine Engine => AiDotNetEngine.Current;
     private readonly Random _random;
 
     private readonly int _numFeatures;
@@ -93,10 +95,7 @@ public class ContrastivePretraining<T>
             _projectionWeights[i] = NumOps.FromDouble(_random.NextGaussian() * scale);
         }
 
-        for (int i = 0; i < _projectionBias.Length; i++)
-        {
-            _projectionBias[i] = NumOps.Zero;
-        }
+        _projectionBias.Fill(NumOps.Zero);
     }
 
     /// <summary>
@@ -389,17 +388,10 @@ public class ContrastivePretraining<T>
                 $"gradBias length ({gradBias.Length}) does not match projection bias length ({_projectionBias.Length}).");
         }
 
-        for (int i = 0; i < _projectionWeights.Length; i++)
-        {
-            _projectionWeights[i] = NumOps.Subtract(_projectionWeights[i],
-                NumOps.Multiply(learningRate, gradWeights[i]));
-        }
-
-        for (int i = 0; i < _projectionBias.Length; i++)
-        {
-            _projectionBias[i] = NumOps.Subtract(_projectionBias[i],
-                NumOps.Multiply(learningRate, gradBias[i]));
-        }
+        _projectionWeights = Engine.TensorSubtract(_projectionWeights,
+            Engine.TensorMultiplyScalar(gradWeights, learningRate));
+        _projectionBias = Engine.TensorSubtract(_projectionBias,
+            Engine.TensorMultiplyScalar(gradBias, learningRate));
     }
 
     /// <summary>

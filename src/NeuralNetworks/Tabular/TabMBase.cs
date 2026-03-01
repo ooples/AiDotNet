@@ -1,3 +1,4 @@
+using AiDotNet.Engines;
 using AiDotNet.Models.Options;
 
 namespace AiDotNet.NeuralNetworks.Tabular;
@@ -42,6 +43,11 @@ public abstract class TabMBase<T>
     /// Numeric operations helper for type T.
     /// </summary>
     protected readonly INumericOperations<T> NumOps;
+
+    /// <summary>
+    /// Hardware-accelerated engine for tensor operations.
+    /// </summary>
+    protected IEngine Engine => AiDotNetEngine.Current;
 
     /// <summary>
     /// The model configuration options.
@@ -323,11 +329,10 @@ public abstract class TabMBase<T>
         // Update feature embeddings if used
         if (_featureEmbeddings != null && _featureEmbeddingsGrad != null)
         {
+            var updated = Engine.TensorSubtract(_featureEmbeddings,
+                Engine.TensorMultiplyScalar(_featureEmbeddingsGrad, learningRate));
             for (int i = 0; i < _featureEmbeddings.Length; i++)
-            {
-                _featureEmbeddings[i] = NumOps.Subtract(_featureEmbeddings[i],
-                    NumOps.Multiply(learningRate, _featureEmbeddingsGrad[i]));
-            }
+                _featureEmbeddings[i] = updated[i];
         }
 
         // Update hidden layers

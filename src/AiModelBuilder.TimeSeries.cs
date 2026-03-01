@@ -354,32 +354,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             return tensors[0];
         }
 
-        int timeSteps = tensors[0].Shape[0];
-        int totalFeatures = tensors.Sum(t => t.Shape[1]);
-
-        var result = new Tensor<T>(new[] { timeSteps, totalFeatures });
-
-        int featureOffset = 0;
-        foreach (var tensor in tensors)
-        {
-            if (tensor.Shape[0] != timeSteps)
-            {
-                throw new ArgumentException(
-                    $"All tensors must have the same number of time steps. Expected {timeSteps}, got {tensor.Shape[0]}.");
-            }
-
-            int numFeatures = tensor.Shape[1];
-            for (int t = 0; t < timeSteps; t++)
-            {
-                for (int f = 0; f < numFeatures; f++)
-                {
-                    result[t, featureOffset + f] = tensor[t, f];
-                }
-            }
-            featureOffset += numFeatures;
-        }
-
-        return result;
+        return AiDotNetEngine.Current.TensorConcatenate(tensors.ToArray(), axis: 1);
     }
 
     #endregion

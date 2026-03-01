@@ -1089,7 +1089,7 @@ public class BASEDLayer<T> : LayerBase<T>
     private Tensor<T> CreateOnesLike(Tensor<T> template)
     {
         var ones = new Tensor<T>(template.Shape);
-        for (int i = 0; i < ones.Length; i++) ones[i] = NumOps.One;
+        ones.Fill(NumOps.One);
         return ones;
     }
 
@@ -1098,21 +1098,24 @@ public class BASEDLayer<T> : LayerBase<T>
     /// <inheritdoc />
     public override void UpdateParameters(T learningRate)
     {
-        if (_linearQueryWeightsGradient == null)
+        if (_linearQueryWeightsGradient == null || _linearKeyWeightsGradient == null || _linearValueWeightsGradient == null ||
+            _windowQueryWeightsGradient == null || _windowKeyWeightsGradient == null || _windowValueWeightsGradient == null ||
+            _featureMapScaleGradient == null || _mixingGateWeightsGradient == null || _mixingGateBiasGradient == null ||
+            _outputProjectionWeightsGradient == null || _outputProjectionBiasGradient == null)
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
 
         T negLR = NumOps.Negate(learningRate);
         _linearQueryWeights = Engine.TensorAdd(_linearQueryWeights, Engine.TensorMultiplyScalar(_linearQueryWeightsGradient, negLR));
-        _linearKeyWeights = Engine.TensorAdd(_linearKeyWeights, Engine.TensorMultiplyScalar(_linearKeyWeightsGradient!, negLR));
-        _linearValueWeights = Engine.TensorAdd(_linearValueWeights, Engine.TensorMultiplyScalar(_linearValueWeightsGradient!, negLR));
-        _windowQueryWeights = Engine.TensorAdd(_windowQueryWeights, Engine.TensorMultiplyScalar(_windowQueryWeightsGradient!, negLR));
-        _windowKeyWeights = Engine.TensorAdd(_windowKeyWeights, Engine.TensorMultiplyScalar(_windowKeyWeightsGradient!, negLR));
-        _windowValueWeights = Engine.TensorAdd(_windowValueWeights, Engine.TensorMultiplyScalar(_windowValueWeightsGradient!, negLR));
-        _featureMapScale = Engine.TensorAdd(_featureMapScale, Engine.TensorMultiplyScalar(_featureMapScaleGradient!, negLR));
-        _mixingGateWeights = Engine.TensorAdd(_mixingGateWeights, Engine.TensorMultiplyScalar(_mixingGateWeightsGradient!, negLR));
-        _mixingGateBias = Engine.TensorAdd(_mixingGateBias, Engine.TensorMultiplyScalar(_mixingGateBiasGradient!, negLR));
-        _outputProjectionWeights = Engine.TensorAdd(_outputProjectionWeights, Engine.TensorMultiplyScalar(_outputProjectionWeightsGradient!, negLR));
-        _outputProjectionBias = Engine.TensorAdd(_outputProjectionBias, Engine.TensorMultiplyScalar(_outputProjectionBiasGradient!, negLR));
+        _linearKeyWeights = Engine.TensorAdd(_linearKeyWeights, Engine.TensorMultiplyScalar(_linearKeyWeightsGradient, negLR));
+        _linearValueWeights = Engine.TensorAdd(_linearValueWeights, Engine.TensorMultiplyScalar(_linearValueWeightsGradient, negLR));
+        _windowQueryWeights = Engine.TensorAdd(_windowQueryWeights, Engine.TensorMultiplyScalar(_windowQueryWeightsGradient, negLR));
+        _windowKeyWeights = Engine.TensorAdd(_windowKeyWeights, Engine.TensorMultiplyScalar(_windowKeyWeightsGradient, negLR));
+        _windowValueWeights = Engine.TensorAdd(_windowValueWeights, Engine.TensorMultiplyScalar(_windowValueWeightsGradient, negLR));
+        _featureMapScale = Engine.TensorAdd(_featureMapScale, Engine.TensorMultiplyScalar(_featureMapScaleGradient, negLR));
+        _mixingGateWeights = Engine.TensorAdd(_mixingGateWeights, Engine.TensorMultiplyScalar(_mixingGateWeightsGradient, negLR));
+        _mixingGateBias = Engine.TensorAdd(_mixingGateBias, Engine.TensorMultiplyScalar(_mixingGateBiasGradient, negLR));
+        _outputProjectionWeights = Engine.TensorAdd(_outputProjectionWeights, Engine.TensorMultiplyScalar(_outputProjectionWeightsGradient, negLR));
+        _outputProjectionBias = Engine.TensorAdd(_outputProjectionBias, Engine.TensorMultiplyScalar(_outputProjectionBiasGradient, negLR));
     }
 
     /// <inheritdoc />

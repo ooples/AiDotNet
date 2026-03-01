@@ -736,7 +736,7 @@ public class CrossAttentionLayer<T> : LayerBase<T>
         var gSpan = gradient.AsSpan();
         for (int i = 0; i < wSpan.Length; i++)
         {
-            wSpan[i] = NumOps.Subtract(wSpan[i], NumOps.Multiply(learningRate, gSpan[i]));
+            wSpan[i] = NumOps.Subtract(wSpan[i], NumOps.Multiply(gSpan[i], learningRate));
         }
     }
 

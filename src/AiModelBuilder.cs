@@ -138,6 +138,7 @@ namespace AiDotNet;
 /// </remarks>
 public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TInput, TOutput>
 {
+    private static IEngine Engine => AiDotNetEngine.Current;
     private PreprocessingPipeline<T, TInput, TInput>? _preprocessingPipeline;
     private PostprocessingPipeline<T, TOutput, TOutput>? _postprocessingPipeline;
     private IRegularization<T, TInput, TOutput>? _regularization;
@@ -5674,18 +5675,10 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                     {
                         // Fallback: Simple gradient descent with configured learning rate
                         // This doesn't preserve optimizer state but respects the learning rate
+                        var engine = AiDotNetEngine.Current;
                         var currentParams = nnModel.GetParameters();
                         var learningRate = NumOps.FromDouble(options.LearningRate);
-                        var newParams = new Vector<T>(currentParams.Length);
-
-                        for (int i = 0; i < currentParams.Length; i++)
-                        {
-                            // Apply gradient descent: params = params - learningRate * gradient
-                            newParams[i] = NumOps.Subtract(currentParams[i],
-                                NumOps.Multiply(learningRate, paramGradients[i]));
-                        }
-
-                        nnModel.UpdateParameters(newParams);
+                        nnModel.UpdateParameters(engine.Subtract(currentParams, engine.Multiply(paramGradients, learningRate)));
                     }
                 }
                 catch (Exception ex)

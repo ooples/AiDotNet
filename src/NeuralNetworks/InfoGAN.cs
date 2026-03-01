@@ -570,42 +570,7 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
     /// </summary>
     private Tensor<T> ConcatenateTensors(Tensor<T> noise, Tensor<T> codes)
     {
-        // Require exactly rank 2 since we only handle [batch, features] concatenation
-        if (noise.Shape.Length != 2 || codes.Shape.Length != 2)
-        {
-            throw new ArgumentException(
-                $"Both noise and codes must be exactly 2D tensors [batch, features]. " +
-                $"Got noise with rank {noise.Shape.Length} and codes with rank {codes.Shape.Length}.");
-        }
-
-        int noiseBatchSize = noise.Shape[0];
-        int codesBatchSize = codes.Shape[0];
-
-        if (noiseBatchSize != codesBatchSize)
-        {
-            throw new ArgumentException(
-                $"Batch size mismatch: noise has {noiseBatchSize} samples, codes has {codesBatchSize} samples.");
-        }
-
-        int batchSize = noiseBatchSize;
-        int noiseSize = noise.Shape[1];
-        int codeSize = codes.Shape[1];
-
-        var result = new Tensor<T>(new int[] { batchSize, noiseSize + codeSize });
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int i = 0; i < noiseSize; i++)
-            {
-                result[b, i] = noise[b, i];
-            }
-            for (int i = 0; i < codeSize; i++)
-            {
-                result[b, noiseSize + i] = codes[b, i];
-            }
-        }
-
-        return result;
+        return Engine.TensorConcatenate([noise, codes], axis: 1);
     }
 
     /// <summary>

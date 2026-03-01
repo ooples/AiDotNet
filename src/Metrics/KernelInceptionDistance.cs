@@ -292,14 +292,7 @@ public class KernelInceptionDistance<T>
     /// </summary>
     private double ComputeDotProduct(Matrix<T> features1, int idx1, Matrix<T> features2, int idx2)
     {
-        double dot = 0.0;
-        for (int k = 0; k < features1.Columns; k++)
-        {
-            double v1 = _numOps.ToDouble(features1[idx1, k]);
-            double v2 = _numOps.ToDouble(features2[idx2, k]);
-            dot += v1 * v2;
-        }
-        return dot;
+        return _numOps.ToDouble(VectorHelper.DotProduct(features1.GetRow(idx1), features2.GetRow(idx2)));
     }
 
     /// <summary>

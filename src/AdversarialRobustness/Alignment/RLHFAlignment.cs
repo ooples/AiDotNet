@@ -1,4 +1,5 @@
 using System.Text;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
@@ -360,7 +361,7 @@ public class RLHFAlignment<T> : IAlignmentMethod<T>
     private bool IsHelpful(Vector<T> output, Vector<T> expected)
     {
         // Simplified helpfulness check
-        var similarity = ComputeCosineSimilarity(output, expected);
+        var similarity = VectorHelper.CosineSimilarity(output, expected);
         return similarity > 0.5;
     }
 
@@ -415,26 +416,6 @@ public class RLHFAlignment<T> : IAlignmentMethod<T>
         }
 
         return (false, 0.0, "None");
-    }
-
-    private double ComputeCosineSimilarity(Vector<T> a, Vector<T> b)
-    {
-        if (a.Length != b.Length) return 0.0;
-
-        double dotProduct = 0.0;
-        double normA = 0.0;
-        double normB = 0.0;
-
-        for (int i = 0; i < a.Length; i++)
-        {
-            var aVal = NumOps.ToDouble(a[i]);
-            var bVal = NumOps.ToDouble(b[i]);
-            dotProduct += aVal * bVal;
-            normA += aVal * aVal;
-            normB += bVal * bVal;
-        }
-
-        return dotProduct / (Math.Sqrt(normA) * Math.Sqrt(normB) + 1e-10);
     }
 
     private static string ConvertToString(Vector<T> data)

@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using AiDotNet.FederatedLearning.Infrastructure;
+using AiDotNet.Helpers;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors;
 
@@ -196,15 +197,7 @@ public class GradientAscentUnlearner<T> : FederatedLearningComponentBase<T>, IFe
 
     private double ComputeL2Distance(Tensor<T> a, Tensor<T> b)
     {
-        int size = Math.Min(a.Shape[0], b.Shape[0]);
-        double sumSq = 0;
-        for (int i = 0; i < size; i++)
-        {
-            double diff = NumOps.ToDouble(a[i]) - NumOps.ToDouble(b[i]);
-            sumSq += diff * diff;
-        }
-
-        return Math.Sqrt(sumSq);
+        return NumOps.ToDouble(VectorHelper.EuclideanDistance(a.ToVector(), b.ToVector()));
     }
 
     private string ComputeModelHash(Tensor<T> model)

@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using AiDotNet.Extensions;
+using AiDotNet.Helpers;
 using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Embeddings;
@@ -90,35 +91,6 @@ public class StubEmbeddingModel<T> : EmbeddingModelBase<T>
         var vector = new Vector<T>(values);
 
         // Normalize the vector to unit length for cosine similarity
-        return NormalizeVector(vector);
-    }
-
-    /// <summary>
-    /// Normalizes a vector to unit length.
-    /// </summary>
-    /// <param name="vector">The vector to normalize.</param>
-    /// <returns>The normalized vector.</returns>
-    private Vector<T> NormalizeVector(Vector<T> vector)
-    {
-        double magnitude = 0;
-        for (int i = 0; i < vector.Length; i++)
-        {
-            var value = Convert.ToDouble(vector[i]);
-            magnitude += value * value;
-        }
-        magnitude = Math.Sqrt(magnitude);
-
-        const double epsilon = 1e-8;
-        if (Math.Abs(magnitude) < epsilon)
-            return vector;
-
-        var normalized = new T[vector.Length];
-        for (int i = 0; i < vector.Length; i++)
-        {
-            var value = Convert.ToDouble(vector[i]);
-            normalized[i] = (T)Convert.ChangeType(value / magnitude, typeof(T));
-        }
-
-        return new Vector<T>(normalized);
+        return VectorHelper.Normalize(vector);
     }
 }

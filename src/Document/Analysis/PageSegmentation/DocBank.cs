@@ -560,51 +560,8 @@ public class DocBank<T> : DocumentNeuralNetworkBase<T>, IPageSegmenter<T>
 
     private Tensor<T> ApplySoftmax(Tensor<T> input)
     {
-        int numClasses = input.Shape.Length > 1 ? input.Shape[1] : _numClasses;
-        int height = input.Shape.Length > 2 ? input.Shape[2] : ImageSize;
-        int width = input.Shape.Length > 3 ? input.Shape[3] : ImageSize;
-
-        var output = new Tensor<T>(input.Shape);
-
-        for (int h = 0; h < height; h++)
-        {
-            for (int w = 0; w < width; w++)
-            {
-                double maxVal = double.MinValue;
-                for (int c = 0; c < numClasses; c++)
-                {
-                    int idx = c * height * width + h * width + w;
-                    if (idx < input.Data.Length)
-                    {
-                        double val = NumOps.ToDouble(input.Data.Span[idx]);
-                        if (val > maxVal) maxVal = val;
-                    }
-                }
-
-                double sumExp = 0;
-                for (int c = 0; c < numClasses; c++)
-                {
-                    int idx = c * height * width + h * width + w;
-                    if (idx < input.Data.Length)
-                    {
-                        double val = NumOps.ToDouble(input.Data.Span[idx]);
-                        sumExp += Math.Exp(val - maxVal);
-                    }
-                }
-
-                for (int c = 0; c < numClasses; c++)
-                {
-                    int idx = c * height * width + h * width + w;
-                    if (idx < input.Data.Length)
-                    {
-                        double val = NumOps.ToDouble(input.Data.Span[idx]);
-                        output.Data.Span[idx] = NumOps.FromDouble(Math.Exp(val - maxVal) / sumExp);
-                    }
-                }
-            }
-        }
-
-        return output;
+        int classAxis = input.Shape.Length > 1 ? 1 : 0;
+        return Engine.Softmax(input, classAxis);
     }
 
     #endregion
@@ -719,10 +676,7 @@ public class DocBank<T> : DocumentNeuralNetworkBase<T>, IPageSegmenter<T>
         var currentParams = GetParameters();
         T learningRate = NumOps.FromDouble(0.0001);
 
-        for (int i = 0; i < currentParams.Length; i++)
-        {
-            currentParams[i] = NumOps.Subtract(currentParams[i], NumOps.Multiply(learningRate, gradients[i]));
-        }
+        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, learningRate));
 
         SetParameters(currentParams);
     }

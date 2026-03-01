@@ -1,3 +1,4 @@
+using AiDotNet.Autodiff;
 using AiDotNet.NeuralNetworks.Layers;
 
 namespace AiDotNet.NeuralNetworks.Tabular;
@@ -33,9 +34,8 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public class FeatureTransformer<T>
+public class FeatureTransformer<T> : LayerBase<T>
 {
-    private readonly INumericOperations<T> _numOps;
     private readonly int _inputDim;
     private readonly int _outputDim;
     private readonly int _numSharedLayers;
@@ -56,10 +56,11 @@ public class FeatureTransformer<T>
     private Tensor<T>? _inputCache;
     private readonly List<Tensor<T>> _intermediateOutputs = [];
 
-    /// <summary>
-    /// Gets whether this layer supports training.
-    /// </summary>
-    public bool SupportsTraining => true;
+    /// <inheritdoc/>
+    public override bool SupportsTraining => true;
+
+    /// <inheritdoc/>
+    public override bool SupportsJitCompilation => false;
 
     /// <summary>
     /// Initializes a new instance of the FeatureTransformer class.
@@ -96,8 +97,8 @@ public class FeatureTransformer<T>
         int virtualBatchSize = 128,
         double momentum = 0.02,
         double epsilon = 1e-5)
+        : base([inputDim], [outputDim])
     {
-        _numOps = MathHelper.GetNumericOperations<T>();
         _inputDim = inputDim;
         _outputDim = outputDim;
         _numSharedLayers = numSharedLayers;
@@ -204,28 +205,22 @@ public class FeatureTransformer<T>
         int fullDim = input.Shape[1];
         int halfDim = fullDim / 2;
 
-        var output = new Tensor<T>([batchSize, halfDim]);
+        // Split input into value (first half) and gate (second half)
+        var values = new Tensor<T>([batchSize, halfDim]);
+        var gates = new Tensor<T>([batchSize, halfDim]);
 
         for (int b = 0; b < batchSize; b++)
         {
             for (int d = 0; d < halfDim; d++)
             {
-                // First half is the value
-                var value = input[b * fullDim + d];
-                // Second half is the gate
-                var gate = input[b * fullDim + halfDim + d];
-
-                // Sigmoid on gate
-                var sigmoidGate = _numOps.Divide(
-                    _numOps.One,
-                    _numOps.Add(_numOps.One, _numOps.Exp(_numOps.Negate(gate))));
-
-                // GLU: value * sigmoid(gate)
-                output[b * halfDim + d] = _numOps.Multiply(value, sigmoidGate);
+                values[b * halfDim + d] = input[b * fullDim + d];
+                gates[b * halfDim + d] = input[b * fullDim + halfDim + d];
             }
         }
 
-        return output;
+        // Apply sigmoid to gates and multiply with values
+        var sigmoidGates = Engine.Sigmoid(gates);
+        return Engine.TensorMultiply(values, sigmoidGates);
     }
 
     /// <summary>
@@ -233,7 +228,7 @@ public class FeatureTransformer<T>
     /// </summary>
     /// <param name="input">The input tensor of shape [batch_size, input_dim].</param>
     /// <returns>The transformed output tensor of shape [batch_size, output_dim].</returns>
-    public Tensor<T> Forward(Tensor<T> input)
+    public override Tensor<T> Forward(Tensor<T> input)
     {
         _inputCache = input;
         _intermediateOutputs.Clear();
@@ -250,9 +245,9 @@ public class FeatureTransformer<T>
             // Residual connection (if dimensions match)
             if (i > 0 && current.Shape[1] == gluOutput.Shape[1])
             {
-                gluOutput = AddTensors(gluOutput, current);
+                gluOutput = Engine.TensorAdd(gluOutput, current);
                 // Scale by sqrt(0.5) for stability
-                gluOutput = ScaleTensor(gluOutput, Math.Sqrt(0.5));
+                gluOutput = Engine.TensorMultiplyScalar(gluOutput, NumOps.FromDouble(Math.Sqrt(0.5)));
             }
 
             _intermediateOutputs.Add(gluOutput);
@@ -269,8 +264,8 @@ public class FeatureTransformer<T>
             // Residual connection
             if (current.Shape[1] == gluOutput.Shape[1])
             {
-                gluOutput = AddTensors(gluOutput, current);
-                gluOutput = ScaleTensor(gluOutput, Math.Sqrt(0.5));
+                gluOutput = Engine.TensorAdd(gluOutput, current);
+                gluOutput = Engine.TensorMultiplyScalar(gluOutput, NumOps.FromDouble(Math.Sqrt(0.5)));
             }
 
             _intermediateOutputs.Add(gluOutput);
@@ -281,38 +276,11 @@ public class FeatureTransformer<T>
     }
 
     /// <summary>
-    /// Helper method to add two tensors element-wise.
-    /// </summary>
-    private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
-    {
-        var result = new Tensor<T>(a.Shape);
-        for (int i = 0; i < a.Length; i++)
-        {
-            result[i] = _numOps.Add(a[i], b[i]);
-        }
-        return result;
-    }
-
-    /// <summary>
-    /// Helper method to scale a tensor by a scalar value.
-    /// </summary>
-    private Tensor<T> ScaleTensor(Tensor<T> tensor, double scale)
-    {
-        var result = new Tensor<T>(tensor.Shape);
-        var scaleT = _numOps.FromDouble(scale);
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            result[i] = _numOps.Multiply(tensor[i], scaleT);
-        }
-        return result;
-    }
-
-    /// <summary>
     /// Performs the backward pass through the Feature Transformer.
     /// </summary>
     /// <param name="outputGradient">The gradient flowing back from the next layer.</param>
     /// <returns>The gradient with respect to the input.</returns>
-    public Tensor<T> Backward(Tensor<T> outputGradient)
+    public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
         var currentGrad = outputGradient;
 
@@ -335,10 +303,8 @@ public class FeatureTransformer<T>
         return currentGrad;
     }
 
-    /// <summary>
-    /// Gets all trainable parameters of this layer.
-    /// </summary>
-    public Vector<T> GetParameters()
+    /// <inheritdoc/>
+    public override Vector<T> GetParameters()
     {
         var allParams = new List<T>();
 
@@ -377,7 +343,7 @@ public class FeatureTransformer<T>
     /// <summary>
     /// Sets the trainable parameters of this layer.
     /// </summary>
-    public void SetParameters(Vector<T> parameters)
+    public override void SetParameters(Vector<T> parameters)
     {
         int offset = 0;
 
@@ -421,7 +387,7 @@ public class FeatureTransformer<T>
     /// <summary>
     /// Gets the parameter gradients from the last backward pass.
     /// </summary>
-    public Vector<T> GetParameterGradients()
+    public override Vector<T> GetParameterGradients()
     {
         var allGrads = new List<T>();
 
@@ -454,10 +420,8 @@ public class FeatureTransformer<T>
         return result;
     }
 
-    /// <summary>
-    /// Gets the total number of trainable parameters.
-    /// </summary>
-    public int ParameterCount
+    /// <inheritdoc/>
+    public override int ParameterCount
     {
         get
         {
@@ -473,27 +437,20 @@ public class FeatureTransformer<T>
     /// <summary>
     /// Gets the input shape for this layer.
     /// </summary>
-    public int[] GetInputShape() => [_inputDim];
-
-    /// <summary>
-    /// Gets the output shape for this layer.
-    /// </summary>
-    public int[] GetOutputShape() => [_outputDim];
+    public override int[] GetInputShape() => [_inputDim];
 
     /// <summary>
     /// Gets the weights tensor (not applicable for this composite layer).
     /// </summary>
-    public Tensor<T>? GetWeights() => null;
+    public override Tensor<T>? GetWeights() => null;
 
     /// <summary>
     /// Gets the biases tensor (not applicable for this composite layer).
     /// </summary>
-    public Tensor<T>? GetBiases() => null;
+    public override Tensor<T>? GetBiases() => null;
 
-    /// <summary>
-    /// Updates the parameters using the specified learning rate.
-    /// </summary>
-    public void UpdateParameters(T learningRate)
+    /// <inheritdoc/>
+    public override void UpdateParameters(T learningRate)
     {
         foreach (var fc in _sharedFCLayers) fc.UpdateParameters(learningRate);
         foreach (var fc in _stepFCLayers) fc.UpdateParameters(learningRate);
@@ -503,7 +460,7 @@ public class FeatureTransformer<T>
     /// <summary>
     /// Updates the parameters using the specified parameter values.
     /// </summary>
-    public void UpdateParameters(Vector<T> parameters)
+    public override void UpdateParameters(Vector<T> parameters)
     {
         SetParameters(parameters);
     }
@@ -511,7 +468,7 @@ public class FeatureTransformer<T>
     /// <summary>
     /// Clears accumulated gradients.
     /// </summary>
-    public void ClearGradients()
+    public override void ClearGradients()
     {
         foreach (var fc in _sharedFCLayers) fc.ClearGradients();
         foreach (var bn in _sharedBNLayers) bn.ResetGradients();
@@ -519,10 +476,8 @@ public class FeatureTransformer<T>
         foreach (var bn in _stepBNLayers) bn.ResetGradients();
     }
 
-    /// <summary>
-    /// Resets the internal state.
-    /// </summary>
-    public void ResetState()
+    /// <inheritdoc/>
+    public override void ResetState()
     {
         _inputCache = null;
         _intermediateOutputs.Clear();
@@ -533,10 +488,28 @@ public class FeatureTransformer<T>
     /// <summary>
     /// Sets training mode.
     /// </summary>
-    public void SetTrainingMode(bool isTraining)
+    public override void SetTrainingMode(bool isTraining)
     {
         foreach (var fc in _sharedFCLayers) fc.SetTrainingMode(isTraining);
         foreach (var fc in _stepFCLayers) fc.SetTrainingMode(isTraining);
     }
 
+    /// <inheritdoc/>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        // Chain computation graphs through shared and step-specific FC layers
+        ComputationNode<T> current = _sharedFCLayers.Count > 0
+            ? _sharedFCLayers[0].ExportComputationGraph(inputNodes)
+            : throw new InvalidOperationException("No shared layers initialized.");
+
+        for (int i = 1; i < _sharedFCLayers.Count; i++)
+        {
+            current = _sharedFCLayers[i].ExportComputationGraph(inputNodes);
+        }
+
+        return current;
+    }
 }

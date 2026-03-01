@@ -159,33 +159,15 @@ public class MoCo<T> : SSLMethodBase<T>
 
     private void UpdateEncoderParameters(T learningRate)
     {
-        var encoderGrads = _encoder.GetParameterGradients();
+        var encoderGrads = new Vector<T>(_encoder.GetParameterGradients());
         var encoderParams = _encoder.GetParameters();
-        var newParams = new T[encoderParams.Length];
-
-        for (int i = 0; i < encoderParams.Length; i++)
-        {
-            newParams[i] = NumOps.Subtract(
-                encoderParams[i],
-                NumOps.Multiply(learningRate, encoderGrads[i]));
-        }
-
-        _encoder.UpdateParameters(new Vector<T>(newParams));
+        _encoder.UpdateParameters(Engine.Subtract(encoderParams, Engine.Multiply(encoderGrads, learningRate)));
 
         if (_projector is not null)
         {
-            var projGrads = _projector.GetParameterGradients();
+            var projGrads = new Vector<T>(_projector.GetParameterGradients());
             var projParams = _projector.GetParameters();
-            var newProjParams = new T[projParams.Length];
-
-            for (int i = 0; i < projParams.Length; i++)
-            {
-                newProjParams[i] = NumOps.Subtract(
-                    projParams[i],
-                    NumOps.Multiply(learningRate, projGrads[i]));
-            }
-
-            _projector.SetParameters(new Vector<T>(newProjParams));
+            _projector.SetParameters(Engine.Subtract(projParams, Engine.Multiply(projGrads, learningRate)));
         }
     }
 

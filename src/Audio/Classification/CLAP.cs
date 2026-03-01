@@ -570,19 +570,7 @@ public class CLAP<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
             var textEmbedding = _textEncoder.Run(textInput);
 
             // Compute cosine similarity between audio and text embeddings
-            double sim = 0, normA = 0, normB = 0;
-            int dim = Math.Min(audioEmbedding.Length, textEmbedding.Length);
-            for (int d = 0; d < dim; d++)
-            {
-                double a = NumOps.ToDouble(audioEmbedding[d]);
-                double b = NumOps.ToDouble(textEmbedding[d]);
-                sim += a * b;
-                normA += a * a;
-                normB += b * b;
-            }
-
-            double denom = Math.Sqrt(normA) * Math.Sqrt(normB);
-            double cosSim = denom > 1e-8 ? sim / denom : 0;
+            double cosSim = VectorHelper.CosineSimilarity(audioEmbedding.ToVector(), textEmbedding.ToVector());
             double logit = cosSim / temp;
             scores[i] = NumOps.FromDouble(1.0 / (1.0 + Math.Exp(-logit)));
         }

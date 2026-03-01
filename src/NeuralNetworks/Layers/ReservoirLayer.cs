@@ -1,4 +1,5 @@
 using AiDotNet.Autodiff;
+using AiDotNet.Helpers;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
@@ -827,12 +828,7 @@ public class ReservoirLayer<T> : LayerBase<T>
     /// </summary>
     private T ComputeNorm(Tensor<T> tensor)
     {
-        T sumSquares = NumOps.Zero;
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            sumSquares = NumOps.Add(sumSquares, NumOps.Multiply(tensor[i], tensor[i]));
-        }
-        return NumOps.Sqrt(sumSquares);
+        return VectorHelper.L2Norm(tensor.ToVector());
     }
 
     /// <summary>
@@ -840,12 +836,7 @@ public class ReservoirLayer<T> : LayerBase<T>
     /// </summary>
     private T ComputeDotProduct(Tensor<T> a, Tensor<T> b)
     {
-        T result = NumOps.Zero;
-        for (int i = 0; i < a.Length; i++)
-        {
-            result = NumOps.Add(result, NumOps.Multiply(a[i], b[i]));
-        }
-        return result;
+        return VectorHelper.DotProduct(a.ToVector(), b.ToVector());
     }
 
     public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
