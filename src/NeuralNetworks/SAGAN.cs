@@ -410,31 +410,7 @@ public class SAGAN<T> : NeuralNetworkBase<T>
     /// </summary>
     private Tensor<T> ConcatenateTensors(Tensor<T> a, Tensor<T> b)
     {
-        if (a.Shape[0] != b.Shape[0])
-        {
-            throw new ArgumentException("Batch sizes must match");
-        }
-
-        var batchSize = a.Shape[0];
-        var aFeatures = a.Length / batchSize;
-        var bFeatures = b.Length / batchSize;
-        var totalFeatures = aFeatures + bFeatures;
-
-        var result = new Tensor<T>([batchSize, totalFeatures]);
-
-        for (int i = 0; i < batchSize; i++)
-        {
-            for (int j = 0; j < aFeatures; j++)
-            {
-                result.SetFlat(i * totalFeatures + j, a.GetFlat(i * aFeatures + j));
-            }
-            for (int j = 0; j < bFeatures; j++)
-            {
-                result.SetFlat(i * totalFeatures + aFeatures + j, b.GetFlat(i * bFeatures + j));
-            }
-        }
-
-        return result;
+        return Engine.TensorConcatenate([a, b], axis: 1);
     }
 
     /// <summary>

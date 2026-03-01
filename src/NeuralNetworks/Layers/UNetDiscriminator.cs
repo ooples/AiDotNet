@@ -814,44 +814,9 @@ internal class UNetUpBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
 
     private Tensor<T> ConcatenateChannels(Tensor<T> a, Tensor<T> b)
     {
-        // Handle both 3D [C, H, W] and 4D [N, C, H, W] tensors
-        bool has4D = a.Shape.Length == 4;
-        int batch = has4D ? a.Shape[0] : 1;
-        int channelsA = has4D ? a.Shape[1] : a.Shape[0];
-        int channelsB = has4D ? b.Shape[1] : b.Shape[0];
-        int height = has4D ? a.Shape[2] : a.Shape[1];
-        int width = has4D ? a.Shape[3] : a.Shape[2];
-        int spatialSize = height * width;
-
-        var resultShape = has4D
-            ? new int[] { batch, channelsA + channelsB, height, width }
-            : new int[] { channelsA + channelsB, height, width };
-        var result = new Tensor<T>(resultShape);
-
-        for (int n = 0; n < batch; n++)
-        {
-            int batchOffsetA = n * channelsA * spatialSize;
-            int batchOffsetB = n * channelsB * spatialSize;
-            int batchOffsetResult = n * (channelsA + channelsB) * spatialSize;
-
-            for (int c = 0; c < channelsA; c++)
-            {
-                for (int hw = 0; hw < spatialSize; hw++)
-                {
-                    result.Data.Span[batchOffsetResult + c * spatialSize + hw] = a.Data.Span[batchOffsetA + c * spatialSize + hw];
-                }
-            }
-
-            for (int c = 0; c < channelsB; c++)
-            {
-                for (int hw = 0; hw < spatialSize; hw++)
-                {
-                    result.Data.Span[batchOffsetResult + (channelsA + c) * spatialSize + hw] = b.Data.Span[batchOffsetB + c * spatialSize + hw];
-                }
-            }
-        }
-
-        return result;
+        // Channel axis is 0 for 3D [C, H, W] and 1 for 4D [N, C, H, W]
+        int channelAxis = a.Shape.Length == 4 ? 1 : 0;
+        return Engine.TensorConcatenate([a, b], axis: channelAxis);
     }
 
     private (Tensor<T> first, Tensor<T> second) SplitGradient(Tensor<T> grad, int firstChannels, int secondChannels)

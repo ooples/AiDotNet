@@ -840,19 +840,7 @@ public class DeepFactor<T> : ForecastingModelBase<T>
     /// </remarks>
     private static Tensor<T> ConcatenateTensors(Tensor<T> a, Tensor<T> b)
     {
-        var result = new Tensor<T>(new[] { a.Length + b.Length });
-
-        for (int i = 0; i < a.Length; i++)
-        {
-            result.Data.Span[i] = a.Data.Span[i];
-        }
-
-        for (int i = 0; i < b.Length; i++)
-        {
-            result.Data.Span[a.Length + i] = b.Data.Span[i];
-        }
-
-        return result;
+        return AiDotNetEngine.Current.TensorConcatenate([a, b], axis: 0);
     }
 
     /// <summary>
