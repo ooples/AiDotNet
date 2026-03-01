@@ -843,7 +843,7 @@ public class ProtoNetsAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
 /// </remarks>
 public class PrototypicalModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
 {
-    protected static IEngine Engine => AiDotNetEngine.Current;
+    private static IEngine Engine => AiDotNetEngine.Current;
     private readonly IFullModel<T, TInput, TOutput> _featureEncoder;
     private readonly Dictionary<int, Vector<T>> _classPrototypes;
     private readonly ProtoNetsOptions<T, TInput, TOutput> _options;

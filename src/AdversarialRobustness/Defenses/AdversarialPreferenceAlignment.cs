@@ -39,7 +39,7 @@ namespace AiDotNet.AdversarialRobustness.Defenses;
 public class AdversarialPreferenceAlignment<T> : IAlignmentMethod<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
-    protected static IEngine Engine => AiDotNetEngine.Current;
+    private static IEngine Engine => AiDotNetEngine.Current;
 
     private AlignmentMethodOptions<T> _options;
     private readonly double _adversarialRatio;

@@ -5675,9 +5675,10 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                     {
                         // Fallback: Simple gradient descent with configured learning rate
                         // This doesn't preserve optimizer state but respects the learning rate
+                        var engine = AiDotNetEngine.Current;
                         var currentParams = nnModel.GetParameters();
                         var learningRate = NumOps.FromDouble(options.LearningRate);
-                        nnModel.UpdateParameters(Engine.Subtract(currentParams, Engine.Multiply(paramGradients, learningRate)));
+                        nnModel.UpdateParameters(engine.Subtract(currentParams, engine.Multiply(paramGradients, learningRate)));
                     }
                 }
                 catch (Exception ex)

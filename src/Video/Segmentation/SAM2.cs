@@ -541,7 +541,19 @@ public class SAM2<T> : NeuralNetworkBase<T>
         }
 
         var predicted = Predict(input);
-        var lossGradient = Engine.TensorSubtract(predicted, expectedOutput);
+
+        // Compute loss gradient via configured loss function
+        var predFlat = new Vector<T>(predicted.Length);
+        var targetFlat = new Vector<T>(expectedOutput.Length);
+        for (int i = 0; i < predicted.Length; i++)
+            predFlat[i] = predicted[i];
+        int copyLen = Math.Min(expectedOutput.Length, targetFlat.Length);
+        for (int i = 0; i < copyLen; i++)
+            targetFlat[i] = expectedOutput[i];
+        var gradVec = LossFunction.CalculateDerivative(predFlat, targetFlat);
+        var lossGradient = new Tensor<T>(predicted.Shape);
+        for (int i = 0; i < gradVec.Length; i++)
+            lossGradient[i] = gradVec[i];
 
         BackwardPass(lossGradient);
 

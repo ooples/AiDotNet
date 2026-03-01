@@ -249,7 +249,15 @@ public class LSCPDetector<T> : AnomalyDetectorBase<T>
 
     private static double EuclideanDistance(double[] a, double[] b)
     {
-        return VectorHelper.EuclideanDistance(new Vector<double>(a), new Vector<double>(b));
+        double sum = 0;
+        int len = Math.Min(a.Length, b.Length);
+        for (int i = 0; i < len; i++)
+        {
+            double diff = a[i] - b[i];
+            sum += diff * diff;
+        }
+
+        return Math.Sqrt(sum);
     }
 
     private static double ComputeCorrelation(double[] x, double[] y)

@@ -985,7 +985,7 @@ public class MANNMemoryStatistics
 /// <typeparam name="TOutput">The output data type.</typeparam>
 public class MANNModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
 {
-    protected static IEngine Engine => AiDotNetEngine.Current;
+    private static IEngine Engine => AiDotNetEngine.Current;
     private readonly IFullModel<T, TInput, TOutput> _controller;
     private readonly ExternalMemory<T> _memory;
     private readonly MANNOptions<T, TInput, TOutput> _options;

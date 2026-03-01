@@ -373,6 +373,17 @@ public abstract class VideoNeuralNetworkBase<T> : NeuralNetworkBase<T>
     /// <returns>Concatenated tensor with combined channels.</returns>
     protected Tensor<T> ConcatenateFeatures(Tensor<T> feat1, Tensor<T> feat2)
     {
+        if (feat1.Rank < 1 || feat2.Rank < 1)
+        {
+            throw new ArgumentException("Feature tensors must have at least 1 dimension for concatenation.");
+        }
+
+        if (feat1.Rank != feat2.Rank)
+        {
+            throw new ArgumentException(
+                $"Feature tensors must have the same rank for concatenation (got {feat1.Rank} and {feat2.Rank}).");
+        }
+
         // Concatenate along the channel dimension (axis 1 for 4D, axis 0 for 3D)
         int channelAxis = feat1.Rank == 4 ? 1 : 0;
         return Engine.TensorConcatenate([feat1, feat2], channelAxis);

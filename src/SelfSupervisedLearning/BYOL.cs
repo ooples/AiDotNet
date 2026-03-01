@@ -150,12 +150,12 @@ public class BYOL<T> : SSLMethodBase<T>
     private void UpdateOnlineParameters(T learningRate)
     {
         // Update encoder
-        var encoderGrads = new Vector<T>(_encoder.GetParameterGradients());
+        var encoderGrads = _encoder.GetParameterGradients();
         var encoderParams = _encoder.GetParameters();
         _encoder.UpdateParameters(Engine.Subtract(encoderParams, Engine.Multiply(encoderGrads, learningRate)));
 
         // Update online projector
-        var projGrads = new Vector<T>(_onlineProjector.GetParameterGradients());
+        var projGrads = _onlineProjector.GetParameterGradients();
         var projParams = _onlineProjector.GetParameters();
         _onlineProjector.SetParameters(Engine.Subtract(projParams, Engine.Multiply(projGrads, learningRate)));
     }

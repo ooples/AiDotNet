@@ -32,7 +32,7 @@ namespace AiDotNet.ContinualLearning;
 public class GradientEpisodicMemory<T> : IContinualLearningStrategy<T>
 {
     private readonly INumericOperations<T> _numOps;
-    protected static IEngine Engine => AiDotNetEngine.Current;
+    private static IEngine Engine => AiDotNetEngine.Current;
     private readonly List<(Tensor<T> inputs, Tensor<T> targets)> _episodicMemory;
     private readonly List<Vector<T>> _referenceGradients;
     private readonly int _memorySize;

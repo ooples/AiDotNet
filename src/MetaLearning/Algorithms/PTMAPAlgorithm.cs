@@ -121,10 +121,13 @@ public class PTMAPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
     /// </summary>
     private Vector<T> CenterAndNormalize(Vector<T> features)
     {
+        if (features.Length == 0)
+            return features;
+
         var engine = AiDotNetEngine.Current;
 
         // Center: subtract mean
-        T mean = NumOps.Divide(engine.Sum(features), NumOps.FromDouble(Math.Max(1, features.Length)));
+        T mean = NumOps.Divide(engine.Sum(features), NumOps.FromDouble(features.Length));
         var meanVec = new Vector<T>(features.Length);
         for (int i = 0; i < features.Length; i++)
             meanVec[i] = mean;

@@ -76,6 +76,13 @@ public class ObliviousDecisionTree<T> : LayerBase<T>
     public ObliviousDecisionTree(int inputDim, int depth = 6, int outputDim = 1, double initScale = 0.01)
         : base([inputDim], [outputDim])
     {
+        if (inputDim <= 0)
+            throw new ArgumentOutOfRangeException(nameof(inputDim), "Input dimension must be positive.");
+        if (depth <= 0 || depth > 30)
+            throw new ArgumentOutOfRangeException(nameof(depth), "Depth must be between 1 and 30.");
+        if (outputDim <= 0)
+            throw new ArgumentOutOfRangeException(nameof(outputDim), "Output dimension must be positive.");
+
         _inputDim = inputDim;
         _depth = depth;
         _outputDim = outputDim;

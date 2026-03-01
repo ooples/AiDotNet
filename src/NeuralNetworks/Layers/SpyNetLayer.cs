@@ -420,12 +420,11 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         // Simple bilinear upsampling to target resolution
         var upsampled = UpsampleGradient(gradient, targetH, targetW, hasBatch);
 
-        var accumulated = Engine.TensorAdd(target, upsampled);
         var tSpan = target.AsWritableSpan();
-        var aSpan = accumulated.AsSpan();
+        var uSpan = upsampled.AsSpan();
         for (int i = 0; i < tSpan.Length; i++)
         {
-            tSpan[i] = aSpan[i];
+            tSpan[i] = NumOps.Add(tSpan[i], uSpan[i]);
         }
     }
 

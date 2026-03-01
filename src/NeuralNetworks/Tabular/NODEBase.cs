@@ -163,6 +163,11 @@ public abstract class NODEBase<T>
         // Aggregate outputs from all trees
         var output = new Tensor<T>(new[] { batchSize, Options.TreeOutputDimension });
 
+        if (Options.NumTrees <= 0)
+        {
+            throw new InvalidOperationException("NumTrees must be greater than 0.");
+        }
+
         for (int t = 0; t < Options.NumTrees; t++)
         {
             var treeOutput = ForwardTree(t, processed, batchSize);
