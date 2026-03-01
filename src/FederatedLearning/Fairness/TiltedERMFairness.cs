@@ -58,14 +58,14 @@ public class TiltedERMFairness<T> : Infrastructure.FederatedLearningComponentBas
             return clientLosses.ToDictionary(kvp => kvp.Key, _ => 1.0 / clientLosses.Count);
         }
 
-        // Softmax with temperature = 1/t.
-        double maxLoss = clientLosses.Values.Max();
+        // Softmax with temperature = 1/t. Use min for negative tilt to prevent overflow.
+        double anchor = _tilt >= 0 ? clientLosses.Values.Max() : clientLosses.Values.Min();
         var weights = new Dictionary<int, double>();
         double total = 0;
 
         foreach (var (clientId, loss) in clientLosses)
         {
-            double w = Math.Exp(_tilt * (loss - maxLoss));
+            double w = Math.Exp(_tilt * (loss - anchor));
             weights[clientId] = w;
             total += w;
         }

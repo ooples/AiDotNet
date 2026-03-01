@@ -58,6 +58,12 @@ internal class OneShotFederatedTrainer<T> : Infrastructure.FederatedLearningComp
             throw new ArgumentOutOfRangeException(nameof(distillationSteps), "Must have at least 1 distillation step.");
         }
 
+        if (!Enum.IsDefined(typeof(OneShotAggregationMode), aggregationMode))
+        {
+            throw new ArgumentOutOfRangeException(nameof(aggregationMode),
+                $"Invalid aggregation mode: {(int)aggregationMode}. Valid values: {string.Join(", ", Enum.GetNames(typeof(OneShotAggregationMode)))}.");
+        }
+
         _localEpochs = localEpochs;
         _aggregationMode = aggregationMode;
         _distillationTemperature = distillationTemperature;
@@ -281,6 +287,8 @@ internal class OneShotFederatedTrainer<T> : Infrastructure.FederatedLearningComp
     /// <returns>Distillation loss: T² * KL(ensemble || student).</returns>
     public double ComputeDistillationLoss(double[] ensembleSoftLabels, double[] studentLogits)
     {
+        Guard.NotNull(ensembleSoftLabels);
+        Guard.NotNull(studentLogits);
         int n = ensembleSoftLabels.Length;
         if (n != studentLogits.Length)
         {
@@ -335,6 +343,8 @@ internal class OneShotFederatedTrainer<T> : Infrastructure.FederatedLearningComp
         double[] studentLogits,
         double alpha = 0.7)
     {
+        Guard.NotNull(ensembleSoftLabels);
+        Guard.NotNull(studentLogits);
         if (alpha < 0 || alpha > 1)
         {
             throw new ArgumentOutOfRangeException(nameof(alpha), "Alpha must be in [0, 1].");

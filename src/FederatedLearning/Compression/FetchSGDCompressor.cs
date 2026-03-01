@@ -131,14 +131,16 @@ public class FetchSGDCompressor<T> : Infrastructure.FederatedLearningComponentBa
         // Update error accumulator if using feedback.
         if (useErrorFeedback)
         {
+            var previousError = _errorAccumulator;
             _errorAccumulator = new double[gradient.Length];
             for (int i = 0; i < gradient.Length; i++)
             {
-                // Error = original gradient - sketch reconstruction.
-                // The error from the previous round was already folded into the sketch above,
-                // so we only track the new residual for the next round.
+                // Error = (original gradient + previous error) - sketch reconstruction.
+                // This correctly tracks the residual of the signal that was fed into the sketch.
+                double inputSignal = NumOps.ToDouble(gradient[i]) +
+                    (previousError != null && i < previousError.Length ? previousError[i] : 0);
                 double estimate = EstimateFromSketch(sketch, i);
-                _errorAccumulator[i] = NumOps.ToDouble(gradient[i]) - estimate;
+                _errorAccumulator[i] = inputSignal - estimate;
             }
         }
 

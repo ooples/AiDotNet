@@ -81,7 +81,10 @@ public class OptiGradTrustAggregationStrategy<T> : ParameterDictionaryAggregatio
 
         if (clientModels.Count == 1)
         {
-            return new Dictionary<string, T[]>(clientModels.First().Value);
+            var single = clientModels.First().Value;
+            var copy = new Dictionary<string, T[]>(single.Count, single.Comparer);
+            foreach (var kv in single) copy[kv.Key] = (T[])kv.Value.Clone();
+            return copy;
         }
 
         var referenceModel = clientModels.First().Value;

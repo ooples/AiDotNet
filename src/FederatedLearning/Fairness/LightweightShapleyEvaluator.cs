@@ -42,6 +42,11 @@ public class LightweightShapleyEvaluator<T> : Infrastructure.FederatedLearningCo
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// The <paramref name="clientHistories"/> parameter is intentionally unused in this lightweight
+    /// implementation. Full Shapley evaluation uses histories; this cosine-similarity-based
+    /// approximation only needs the current round's models.
+    /// </remarks>
     public Dictionary<int, double> EvaluateContributions(
         Dictionary<int, Tensor<T>> clientModels,
         Tensor<T> globalModel,
@@ -64,6 +69,17 @@ public class LightweightShapleyEvaluator<T> : Infrastructure.FederatedLearningCo
         }
 
         double globalNorm = Math.Sqrt(globalNorm2);
+
+        // Zero global norm means no update signal — all clients get zero scores.
+        if (globalNorm <= 0)
+        {
+            foreach (var clientId in clientModels.Keys)
+            {
+                scores[clientId] = 0;
+            }
+
+            return scores;
+        }
 
         foreach (var (clientId, clientModel) in clientModels)
         {

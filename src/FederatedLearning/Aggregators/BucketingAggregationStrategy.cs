@@ -78,9 +78,11 @@ public class BucketingAggregationStrategy<T> : ParameterDictionaryAggregationStr
         // Validate all clients have matching layer structure before bucketing.
         foreach (var (clientId, model) in clientModels)
         {
+            if (model == null)
+                throw new ArgumentException($"Client {clientId} has null model.", nameof(clientModels));
             foreach (var layerName in layerNames)
             {
-                if (!model.TryGetValue(layerName, out var layer))
+                if (!model.TryGetValue(layerName, out var layer) || layer == null)
                 {
                     throw new ArgumentException(
                         $"Client {clientId} missing layer '{layerName}'.", nameof(clientModels));

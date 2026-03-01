@@ -118,6 +118,14 @@ public class FedMeZO<T> : Infrastructure.FederatedLearningComponentBase<T>, IFed
     /// <returns>Tuple of (w_plus, w_minus) perturbed weight vectors.</returns>
     public (Vector<T> wPlus, Vector<T> wMinus) ComputePerturbedWeights(Vector<T> weights, int seed)
     {
+        Guard.NotNull(weights);
+        if (weights.Length != _modelDim)
+        {
+            throw new ArgumentException(
+                $"Weights length ({weights.Length}) must match model dimension ({_modelDim}).",
+                nameof(weights));
+        }
+
         var z = GeneratePerturbation(seed);
         var eps = NumOps.FromDouble(_perturbationScale);
 

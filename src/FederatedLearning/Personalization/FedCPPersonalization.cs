@@ -52,7 +52,8 @@ public class FedCPPersonalization<T> : Infrastructure.FederatedLearningComponent
     /// </summary>
     public Dictionary<string, T[]> ExtractSharedParameters(Dictionary<string, T[]> fullParameters)
     {
-        var layerNames = fullParameters.Keys.ToArray();
+        Guard.NotNull(fullParameters);
+        var layerNames = fullParameters.Keys.OrderBy(k => k, StringComparer.Ordinal).ToArray();
         int policyLayerCount = (int)(layerNames.Length * _policyFraction);
         int sharedCount = layerNames.Length - policyLayerCount;
 
@@ -70,7 +71,8 @@ public class FedCPPersonalization<T> : Infrastructure.FederatedLearningComponent
     /// </summary>
     public Dictionary<string, T[]> ExtractPolicyParameters(Dictionary<string, T[]> fullParameters)
     {
-        var layerNames = fullParameters.Keys.ToArray();
+        Guard.NotNull(fullParameters);
+        var layerNames = fullParameters.Keys.OrderBy(k => k, StringComparer.Ordinal).ToArray();
         int policyLayerCount = (int)(layerNames.Length * _policyFraction);
         int sharedCount = layerNames.Length - policyLayerCount;
 

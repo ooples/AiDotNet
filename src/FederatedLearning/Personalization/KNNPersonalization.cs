@@ -62,10 +62,11 @@ public class KNNPersonalization<T> : Infrastructure.FederatedLearningComponentBa
             throw new ArgumentException("Features and labels must have the same count.");
         }
 
+        // Defensive copy to prevent external mutation of cached data.
         _cache = new List<(T[] Features, int Label)>(features.Length);
         for (int i = 0; i < features.Length; i++)
         {
-            _cache.Add((features[i], labels[i]));
+            _cache.Add(((T[])features[i].Clone(), labels[i]));
         }
     }
 
@@ -151,6 +152,15 @@ public class KNNPersonalization<T> : Infrastructure.FederatedLearningComponentBa
             for (int c = 0; c < numClasses; c++)
             {
                 classCounts[c] /= totalWeight;
+            }
+        }
+        else
+        {
+            // All similarities are non-positive: fall back to uniform distribution.
+            double uniform = 1.0 / numClasses;
+            for (int c = 0; c < numClasses; c++)
+            {
+                classCounts[c] = uniform;
             }
         }
 

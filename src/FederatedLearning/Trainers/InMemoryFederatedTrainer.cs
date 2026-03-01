@@ -1932,31 +1932,11 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
         {
             // Advanced compression (PowerSGD, FetchSGD, FedKD, etc.) requires specialized
             // compressor instances that are handled by the advanced compression pipeline.
-            // When used in the in-memory trainer's simple CompressDelta path, fall back to
-            // TopK with the configured ratio as a reasonable default.
-            double ratio = Math.Max(0.0, Math.Min(1.0, options.Ratio));
-            int k = Math.Max(1, (int)Math.Round(ratio * n));
-            k = Math.Min(k, n);
-
-            var magnitudes = new double[n];
-            var indices = new int[n];
-            for (int i = 0; i < n; i++)
-            {
-                indices[i] = i;
-                magnitudes[i] = Math.Abs(NumOps.ToDouble(delta[i]));
-            }
-
-            Array.Sort(magnitudes, indices);
-
-            var result = new Vector<T>(n);
-            for (int t = n - k; t < n; t++)
-            {
-                int idx = indices[t];
-                result[idx] = delta[idx];
-            }
-
-            uploadRatio = (double)k / n;
-            return result;
+            // Throw explicitly instead of silently falling back to a simpler strategy.
+            throw new NotSupportedException(
+                $"'{nameof(FederatedCompressionStrategy)}.{nameof(FederatedCompressionStrategy.Advanced)}' " +
+                "requires a specialized compressor instance (FetchSGDCompressor, FedKDCompressor, etc.). " +
+                "Use the advanced compression pipeline or select a simpler strategy (TopK, RandomSparsification, Quantization).");
         }
 
         throw new InvalidOperationException($"Unknown compression strategy '{strategy}'. Supported values: {string.Join(", ", Enum.GetNames(typeof(FederatedCompressionStrategy)))}.");

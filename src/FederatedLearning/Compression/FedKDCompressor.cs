@@ -66,9 +66,38 @@ public class FedKDCompressor<T> : Infrastructure.FederatedLearningComponentBase<
         }
 
         var firstClient = clientLogits.First().Value;
+        if (firstClient == null || firstClient.Length == 0)
+        {
+            throw new ArgumentException("First client has null or empty logits.", nameof(clientLogits));
+        }
+
         int numSamples = firstClient.Length;
         int numClasses = firstClient[0].Length;
+
+        // Validate all clients have matching shapes.
+        foreach (var (clientId, logits) in clientLogits)
+        {
+            if (logits == null || logits.Length != numSamples)
+            {
+                throw new ArgumentException(
+                    $"Client {clientId} has mismatched sample count: {logits?.Length} vs expected {numSamples}.", nameof(clientLogits));
+            }
+
+            for (int s = 0; s < logits.Length; s++)
+            {
+                if (logits[s] == null || logits[s].Length != numClasses)
+                {
+                    throw new ArgumentException(
+                        $"Client {clientId} sample {s} has mismatched class count: {logits[s]?.Length} vs expected {numClasses}.", nameof(clientLogits));
+                }
+            }
+        }
+
         double totalWeight = clientWeights.Values.Sum();
+        if (totalWeight <= 0)
+        {
+            totalWeight = clientLogits.Count;
+        }
 
         var aggregated = new T[numSamples][];
         for (int s = 0; s < numSamples; s++)
@@ -181,6 +210,29 @@ public class FedKDCompressor<T> : Infrastructure.FederatedLearningComponentBase<
         double learningRate = 0.01,
         int steps = 10)
     {
+        Guard.NotNull(studentParams);
+        Guard.NotNull(aggregatedSoftLabels);
+        Guard.NotNull(studentLogitsFn);
+        if (studentParams.Length == 0)
+        {
+            throw new ArgumentException("Student parameters cannot be empty.", nameof(studentParams));
+        }
+
+        if (aggregatedSoftLabels.Length == 0)
+        {
+            throw new ArgumentException("Aggregated soft labels cannot be empty.", nameof(aggregatedSoftLabels));
+        }
+
+        if (learningRate <= 0 || double.IsNaN(learningRate) || double.IsInfinity(learningRate))
+        {
+            throw new ArgumentOutOfRangeException(nameof(learningRate), "Learning rate must be a positive finite value.");
+        }
+
+        if (steps < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(steps), "Steps must be at least 1.");
+        }
+
         var currentParams = (T[])studentParams.Clone();
         double lastLoss = 0;
 
@@ -253,9 +305,20 @@ public class FedKDCompressor<T> : Infrastructure.FederatedLearningComponentBase<
 
         foreach (var (clientId, logits) in clientLogits)
         {
+            if (logits == null)
+            {
+                throw new ArgumentException($"Client {clientId} has null logits.", nameof(clientLogits));
+            }
+
             var clientNorm = new T[logits.Length][];
             for (int s = 0; s < logits.Length; s++)
             {
+                if (logits[s] == null)
+                {
+                    throw new ArgumentException(
+                        $"Client {clientId} sample {s} has null logit array.", nameof(clientLogits));
+                }
+
                 var sample = new T[targetClasses];
                 int copyLen = Math.Min(logits[s].Length, targetClasses);
                 for (int c = 0; c < copyLen; c++)

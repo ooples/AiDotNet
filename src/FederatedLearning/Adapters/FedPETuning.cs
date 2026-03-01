@@ -93,14 +93,23 @@ public class FedPETuning<T> : Infrastructure.FederatedLearningComponentBase<T>, 
         _layerDim = layerDim;
 
         // Prefix tuning uses 2x parameters (separate K and V prefix matrices).
-        AdapterParameterCount = _method switch
+        // Use checked arithmetic to detect integer overflow for large dimensions.
+        try
         {
-            PEFTMethod.LoRA => _numAdaptedLayers * 2 * _layerDim * _bottleneckDim,
-            PEFTMethod.Adapter => _numAdaptedLayers * (2 * _layerDim * _bottleneckDim + _bottleneckDim),
-            PEFTMethod.PrefixTuning => _numAdaptedLayers * 2 * _bottleneckDim * _layerDim,
-            PEFTMethod.BitFit => _numAdaptedLayers * _layerDim,
-            _ => _numAdaptedLayers * 2 * _layerDim * _bottleneckDim
-        };
+            AdapterParameterCount = _method switch
+            {
+                PEFTMethod.LoRA => checked(_numAdaptedLayers * 2 * _layerDim * _bottleneckDim),
+                PEFTMethod.Adapter => checked(_numAdaptedLayers * (2 * _layerDim * _bottleneckDim + _bottleneckDim)),
+                PEFTMethod.PrefixTuning => checked(_numAdaptedLayers * 2 * _bottleneckDim * _layerDim),
+                PEFTMethod.BitFit => checked(_numAdaptedLayers * _layerDim),
+                _ => checked(_numAdaptedLayers * 2 * _layerDim * _bottleneckDim)
+            };
+        }
+        catch (OverflowException)
+        {
+            throw new ArgumentException(
+                $"Adapter parameter count overflows int32 for numAdaptedLayers={numAdaptedLayers}, layerDim={layerDim}, bottleneckDim={bottleneckDim}.");
+        }
 
         CompressionRatio = _modelDim > 0 ? (double)AdapterParameterCount / _modelDim : 0;
     }
@@ -340,6 +349,8 @@ public class FedPETuning<T> : Infrastructure.FederatedLearningComponentBase<T>, 
     /// <returns>Masked adapter parameters.</returns>
     public Vector<T> ApplySelectionMask(Vector<T> adapters, bool[] mask)
     {
+        Guard.NotNull(adapters);
+        Guard.NotNull(mask);
         var result = new T[adapters.Length];
         for (int i = 0; i < adapters.Length; i++)
         {

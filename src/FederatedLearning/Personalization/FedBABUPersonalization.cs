@@ -56,7 +56,8 @@ public class FedBABUPersonalization<T> : Infrastructure.FederatedLearningCompone
     public Dictionary<string, T[]> ExtractBody(Dictionary<string, T[]> fullParameters)
     {
         Guard.NotNull(fullParameters);
-        var layerNames = fullParameters.Keys.ToArray();
+        // Sort layer names for deterministic partitioning across frameworks/runs.
+        var layerNames = fullParameters.Keys.OrderBy(k => k, StringComparer.Ordinal).ToArray();
         int headStart = (int)(layerNames.Length * (1.0 - _headFraction));
 
         var body = new Dictionary<string, T[]>(headStart);
@@ -102,7 +103,7 @@ public class FedBABUPersonalization<T> : Infrastructure.FederatedLearningCompone
     public Dictionary<string, T[]> ExtractHead(Dictionary<string, T[]> fullParameters)
     {
         Guard.NotNull(fullParameters);
-        var layerNames = fullParameters.Keys.ToArray();
+        var layerNames = fullParameters.Keys.OrderBy(k => k, StringComparer.Ordinal).ToArray();
         int headStart = (int)(layerNames.Length * (1.0 - _headFraction));
 
         var head = new Dictionary<string, T[]>(layerNames.Length - headStart);

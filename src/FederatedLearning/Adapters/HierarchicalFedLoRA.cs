@@ -227,8 +227,18 @@ public class HierarchicalFedLoRA<T> : Infrastructure.FederatedLearningComponentB
     /// <returns>Adapter parameters promoted to global rank (zero-padded).</returns>
     public Vector<T> PromoteToGlobalRank(Vector<T> localAdapter)
     {
+        Guard.NotNull(localAdapter);
         int localParamsPerLayer = 2 * _layerDim * _localRank;
         int globalParamsPerLayer = 2 * _layerDim * _globalRank;
+        int expectedLocalLen = _numAdaptedLayers * localParamsPerLayer;
+
+        if (localAdapter.Length < expectedLocalLen)
+        {
+            throw new ArgumentException(
+                $"Local adapter length ({localAdapter.Length}) is shorter than expected ({expectedLocalLen}).",
+                nameof(localAdapter));
+        }
+
         int globalTotalParams = _numAdaptedLayers * globalParamsPerLayer;
 
         var promoted = new T[globalTotalParams];

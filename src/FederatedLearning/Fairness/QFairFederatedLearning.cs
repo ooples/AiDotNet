@@ -30,9 +30,9 @@ public class QFairFederatedLearning<T> : Infrastructure.FederatedLearningCompone
     /// <param name="q">Fairness parameter. q=0: FedAvg, q→∞: minimax. Default: 1.0.</param>
     public QFairFederatedLearning(double q = 1.0)
     {
-        if (q < 0)
+        if (double.IsNaN(q) || double.IsInfinity(q) || q < 0)
         {
-            throw new ArgumentOutOfRangeException(nameof(q), "q must be non-negative.");
+            throw new ArgumentOutOfRangeException(nameof(q), "q must be a finite non-negative value.");
         }
 
         _q = q;

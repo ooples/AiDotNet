@@ -320,6 +320,7 @@ public class DataFreeFCL<T> : Infrastructure.FederatedLearningComponentBase<T>, 
         int inputDim,
         int seed = 42)
     {
+        Guard.NotNull(teacherLogitsFn);
         if (numClasses <= 0)
         {
             throw new ArgumentOutOfRangeException(nameof(numClasses), "Number of classes must be positive.");

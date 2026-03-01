@@ -79,9 +79,14 @@ public class DivideAndConquerAggregationStrategy<T> : ParameterDictionaryAggrega
         // Validate all clients have matching layer structure before flattening.
         foreach (var (clientId, model) in clientModels)
         {
+            if (model == null)
+            {
+                throw new ArgumentException($"Client {clientId} has null model.", nameof(clientModels));
+            }
+
             foreach (var layerName in layerNames)
             {
-                if (!model.TryGetValue(layerName, out var layer))
+                if (!model.TryGetValue(layerName, out var layer) || layer == null)
                 {
                     throw new ArgumentException(
                         $"Client {clientId} missing layer '{layerName}'.", nameof(clientModels));
@@ -207,10 +212,17 @@ public class DivideAndConquerAggregationStrategy<T> : ParameterDictionaryAggrega
             result[layerName] = CreateZeroInitializedLayer(referenceModel[layerName].Length);
         }
 
+        // Validate and accumulate weights, rejecting non-finite values.
         double trustedTotalWeight = 0;
         foreach (int c in activeIndices)
         {
             double w = clientWeights.TryGetValue(clientIds[c], out var cw) ? cw : 1.0;
+            if (double.IsNaN(w) || double.IsInfinity(w) || w < 0)
+            {
+                throw new ArgumentException(
+                    $"Client {clientIds[c]} has invalid weight: {w}.", nameof(clientWeights));
+            }
+
             trustedTotalWeight += w;
         }
 

@@ -42,10 +42,16 @@ public class FLTrustAggregationStrategy<T> : ParameterDictionaryAggregationStrat
     {
         Guard.NotNull(serverGradient);
 
-        // Defensive copy to prevent external mutation.
+        // Defensive copy with validation to prevent external mutation.
         _serverGradient = new Dictionary<string, T[]>(serverGradient.Count);
         foreach (var (layerName, layerParams) in serverGradient)
         {
+            if (layerParams == null)
+            {
+                throw new ArgumentException(
+                    $"Server gradient layer '{layerName}' has null parameters.", nameof(serverGradient));
+            }
+
             _serverGradient[layerName] = (T[])layerParams.Clone();
         }
     }
@@ -62,7 +68,10 @@ public class FLTrustAggregationStrategy<T> : ParameterDictionaryAggregationStrat
 
         if (clientModels.Count == 1)
         {
-            return clientModels.First().Value;
+            var single = clientModels.First().Value;
+            var copy = new Dictionary<string, T[]>(single.Count, single.Comparer);
+            foreach (var kv in single) copy[kv.Key] = (T[])kv.Value.Clone();
+            return copy;
         }
 
         // If no server gradient is set, fall back to weighted average (graceful degradation).

@@ -153,10 +153,10 @@ public class TimeVaryingTopology<T> : Infrastructure.FederatedLearningComponentB
     /// <inheritdoc/>
     public double GetMixingWeight(int nodeId, int peerId, int totalNodes)
     {
-        // Metropolis-Hastings weights for doubly stochastic mixing.
-        // For uniform degree d: w_ij = 1/(max(d_i, d_j) + 1), w_ii = 1 - sum(w_ij).
-        // Simplified: equal weight for all neighbors.
-        // Use the cached topology from the last GetPeers call to ensure consistency.
+        // Metropolis-Hastings weights: w_ij = 1 / (1 + max(d_i, d_j))
+        if (totalNodes <= 0)
+            throw new ArgumentOutOfRangeException(nameof(totalNodes), "Must be positive.");
+
         var topology = _cachedTopology ?? GetOrGenerateTopologyForRound(totalNodes, _roundCounter);
 
         if (!topology.TryGetValue(nodeId, out var peers))
@@ -164,8 +164,13 @@ public class TimeVaryingTopology<T> : Infrastructure.FederatedLearningComponentB
             return 0;
         }
 
-        int degree = peers.Count; // includes self
-        return peers.Contains(peerId) ? 1.0 / degree : 0;
+        if (!peers.Contains(peerId))
+            return 0;
+
+        // Proper Metropolis-Hastings: w_ij = 1 / (1 + max(d_i, d_j))
+        int degreeI = peers.Count;
+        int degreeJ = topology.TryGetValue(peerId, out var peerNeighbors) ? peerNeighbors.Count : 1;
+        return 1.0 / (1 + Math.Max(degreeI, degreeJ));
     }
 
     /// <summary>

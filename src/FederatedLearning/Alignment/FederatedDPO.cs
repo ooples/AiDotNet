@@ -115,8 +115,20 @@ public class FederatedDPO<T> : Infrastructure.FederatedLearningComponentBase<T>
 
             foreach (var layerName in layerNames)
             {
-                var cp = clientModel[layerName];
+                if (!clientModel.TryGetValue(layerName, out var cp))
+                {
+                    throw new ArgumentException(
+                        $"Client {clientId} missing layer '{layerName}'.", nameof(clientModels));
+                }
+
                 var rp = aggregated[layerName];
+                if (cp.Length != rp.Length)
+                {
+                    throw new ArgumentException(
+                        $"Client {clientId} layer '{layerName}' length mismatch: {cp.Length} != {rp.Length}.",
+                        nameof(clientModels));
+                }
+
                 for (int i = 0; i < rp.Length; i++)
                 {
                     rp[i] = NumOps.Add(rp[i], NumOps.Multiply(cp[i], normalizedWeight));

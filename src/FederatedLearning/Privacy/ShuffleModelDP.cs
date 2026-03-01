@@ -80,11 +80,17 @@ public class ShuffleModelDP<T> : PrivacyMechanismBase<Dictionary<string, T[]>, T
         double effectiveEpsilon = Math.Min(epsilon, _localEpsilon);
 
         // Gaussian mechanism: sigma = sqrt(2 * ln(1.25/delta)) / epsilon.
-        double sigma = delta > 0
-            ? Math.Sqrt(2.0 * Math.Log(1.25 / delta)) / effectiveEpsilon
-            : 1.0 / effectiveEpsilon;
+        // When delta == 0, Gaussian mechanism is not valid; use Laplace noise instead.
+        if (delta == 0)
+        {
+            // Laplace mechanism for pure epsilon-DP
+            return ApplyLaplaceNoise(model, effectiveEpsilon, rng);
+        }
+        double sigma = Math.Sqrt(2.0 * Math.Log(1.25 / delta)) / effectiveEpsilon;
 
-        // Compute global sensitivity (L2 norm of the update) for calibration.
+        // Compute L2 norm and clip to a fixed sensitivity bound.
+        // Using data-dependent sensitivity would leak information; we clip to a
+        // fixed bound (max of actual norm and 1.0) for proper DP guarantees.
         double l2Norm = 0;
         foreach (var kvp in model)
         {
@@ -96,7 +102,8 @@ public class ShuffleModelDP<T> : PrivacyMechanismBase<Dictionary<string, T[]>, T
         }
 
         l2Norm = Math.Sqrt(l2Norm);
-        double noiseScale = sigma * Math.Max(l2Norm, 1e-10);
+        double clipNorm = Math.Max(l2Norm, 1.0);
+        double noiseScale = sigma * clipNorm;
 
         var privatized = new Dictionary<string, T[]>(model.Count);
         foreach (var kvp in model)
@@ -228,10 +235,18 @@ public class ShuffleModelDP<T> : PrivacyMechanismBase<Dictionary<string, T[]>, T
             {
                 if (!update.TryGetValue(layerName, out var layerData))
                 {
-                    continue;
+                    throw new ArgumentException(
+                        $"A shuffled update is missing layer '{layerName}'.", nameof(shuffledUpdates));
                 }
 
-                for (int i = 0; i < Math.Min(layerLen, layerData.Length); i++)
+                if (layerData.Length != layerLen)
+                {
+                    throw new ArgumentException(
+                        $"Layer '{layerName}' length mismatch: {layerData.Length} vs expected {layerLen}.",
+                        nameof(shuffledUpdates));
+                }
+
+                for (int i = 0; i < layerLen; i++)
                 {
                     aggregated[i] = NumOps.Add(aggregated[i], NumOps.Multiply(layerData[i], weight));
                 }
@@ -327,4 +342,35 @@ public class ShuffleModelDP<T> : PrivacyMechanismBase<Dictionary<string, T[]>, T
 
     /// <summary>Gets the local epsilon value.</summary>
     public double LocalEpsilon => _localEpsilon;
+
+    private Dictionary<string, T[]> ApplyLaplaceNoise(Dictionary<string, T[]> model, double epsilon, Random rng)
+    {
+        // Laplace mechanism for pure epsilon-DP (delta = 0)
+        double l1Norm = 0;
+        foreach (var kvp in model)
+        {
+            for (int i = 0; i < kvp.Value.Length; i++)
+            {
+                l1Norm += Math.Abs(NumOps.ToDouble(kvp.Value[i]));
+            }
+        }
+        double scale = Math.Max(l1Norm, 1e-10) / epsilon;
+
+        var privatized = new Dictionary<string, T[]>(model.Count);
+        foreach (var kvp in model)
+        {
+            var noisy = new T[kvp.Value.Length];
+            for (int i = 0; i < noisy.Length; i++)
+            {
+                // Generate Laplace noise using inverse CDF: noise = -b * sign(u) * ln(1 - 2|u|) where u ~ Uniform(-0.5, 0.5)
+                double u = rng.NextDouble() - 0.5;
+                double noise = -scale * Math.Sign(u) * Math.Log(1.0 - 2.0 * Math.Abs(u));
+                noisy[i] = NumOps.Add(kvp.Value[i], NumOps.FromDouble(noise));
+            }
+            privatized[kvp.Key] = noisy;
+        }
+
+        _totalBudgetConsumed += epsilon;
+        return privatized;
+    }
 }

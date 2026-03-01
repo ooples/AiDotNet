@@ -60,6 +60,16 @@ public class FedPACPersonalization<T> : Infrastructure.FederatedLearningComponen
         Guard.NotNull(prototypes);
         _clientPrototypes ??= new Dictionary<int, Dictionary<int, T[]>>();
 
+        // Validate prototype entries.
+        foreach (var (classLabel, proto) in prototypes)
+        {
+            if (proto == null || proto.Length == 0)
+            {
+                throw new ArgumentException(
+                    $"Prototype for class {classLabel} is null or empty.", nameof(prototypes));
+            }
+        }
+
         // Defensive copy to prevent external mutation of internal state.
         var copy = new Dictionary<int, T[]>(prototypes.Count);
         foreach (var (classLabel, proto) in prototypes)
@@ -247,6 +257,12 @@ public class FedPACPersonalization<T> : Infrastructure.FederatedLearningComponen
                 {
                     sumProto = new double[proto.Length];
                 }
+                else if (proto.Length != sumProto.Length)
+                {
+                    throw new ArgumentException(
+                        $"Client {clientId} prototype for class {classLabel} has dimension {proto.Length}, expected {sumProto.Length}.",
+                        nameof(clientPrototypes));
+                }
 
                 for (int d = 0; d < proto.Length; d++)
                 {
@@ -299,7 +315,14 @@ public class FedPACPersonalization<T> : Infrastructure.FederatedLearningComponen
                 continue;
             }
 
-            int dim = Math.Min(localProto.Length, globalProto.Length);
+            if (localProto.Length != globalProto.Length)
+            {
+                throw new ArgumentException(
+                    $"Local prototype for class {classLabel} has dimension {localProto.Length}, " +
+                    $"but global prototype has dimension {globalProto.Length}.");
+            }
+
+            int dim = localProto.Length;
             double l2sq = 0;
             for (int d = 0; d < dim; d++)
             {

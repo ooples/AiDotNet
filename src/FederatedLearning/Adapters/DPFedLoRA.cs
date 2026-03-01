@@ -243,6 +243,9 @@ public class DPFedLoRA<T> : Infrastructure.FederatedLearningComponentBase<T>, IF
         int n = clientAdapters.Count;
         if (_noiseMultiplier > 0 && n > 0)
         {
+            // System.Random is used with a deterministic seed for reproducible DP noise.
+            // For production deployments requiring cryptographic-strength randomness,
+            // replace with System.Security.Cryptography.RandomNumberGenerator.
             var rng = new Random(_seed + _roundCounter);
             _roundCounter++;
             int paramsPerLayer = adapterLen / Math.Max(_numAdaptedLayers, 1);

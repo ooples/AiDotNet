@@ -90,6 +90,16 @@ public class FedCILContinualLearning<T> : Infrastructure.FederatedLearningCompon
     /// <returns>Synthetic feature vectors.</returns>
     public T[][] GenerateSyntheticFeatures(int classLabel, int numSamples, double noiseScale = 0.1)
     {
+        if (numSamples <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(numSamples), "Number of samples must be positive.");
+        }
+
+        if (noiseScale < 0 || double.IsNaN(noiseScale) || double.IsInfinity(noiseScale))
+        {
+            throw new ArgumentOutOfRangeException(nameof(noiseScale), "Noise scale must be non-negative and finite.");
+        }
+
         if (!_globalPrototypes.TryGetValue(classLabel, out var prototype))
         {
             throw new ArgumentException($"No prototype for class {classLabel}.", nameof(classLabel));
@@ -181,6 +191,7 @@ public class FedCILContinualLearning<T> : Infrastructure.FederatedLearningCompon
 
         int d = clientImportances.Values.First().Length;
         var aggregated = new T[d];
+        for (int i = 0; i < d; i++) aggregated[i] = NumOps.Zero;
         double totalWeight = clientWeights?.Values.Sum() ?? clientImportances.Count;
         if (totalWeight <= 0)
         {

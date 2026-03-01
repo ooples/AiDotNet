@@ -110,8 +110,12 @@ internal class FedNtdAggregationStrategy<T> : ParameterDictionaryAggregationStra
                 continue;
             }
 
-            localNT[idx] = NumOps.ToDouble(localLogits[c]) / _temperature;
-            globalNT[idx] = NumOps.ToDouble(globalLogits[c]) / _temperature;
+            double localVal = NumOps.ToDouble(localLogits[c]) / _temperature;
+            double globalVal = NumOps.ToDouble(globalLogits[c]) / _temperature;
+            if (double.IsNaN(localVal) || double.IsInfinity(localVal) || double.IsNaN(globalVal) || double.IsInfinity(globalVal))
+                throw new InvalidOperationException($"Non-finite logit at class {c}: local={localVal}, global={globalVal}");
+            localNT[idx] = localVal;
+            globalNT[idx] = globalVal;
             idx++;
         }
 

@@ -59,6 +59,8 @@ public class AgnosticFairnessObjective<T> : Infrastructure.FederatedLearningComp
         // Clamp the exponent to prevent overflow (exp(700) ~ double.MaxValue).
         foreach (var (clientId, loss) in clientLosses)
         {
+            if (double.IsNaN(loss) || double.IsInfinity(loss))
+                throw new ArgumentException($"Client {clientId} has non-finite loss: {loss}.", nameof(clientLosses));
             double exponent = _lambdaLearningRate * loss;
             exponent = Math.Max(-20, Math.Min(20, exponent)); // Prevent overflow.
 
@@ -86,7 +88,10 @@ public class AgnosticFairnessObjective<T> : Infrastructure.FederatedLearningComp
         foreach (var clientId in clientLosses.Keys)
         {
             double lambda = _lambdas.GetValueOrDefault(clientId, 1.0);
-            weights[clientId] = total > 0 ? lambda / total : 1.0 / clientLosses.Count;
+            double normalized = total > 0 ? lambda / total : 1.0 / clientLosses.Count;
+            weights[clientId] = normalized;
+            // Persist normalized lambdas to prevent long-run numerical blowup
+            _lambdas[clientId] = normalized;
         }
 
         return weights;

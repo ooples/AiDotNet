@@ -60,6 +60,8 @@ public class FederatedExperienceReplay<T> : Infrastructure.FederatedLearningComp
     public void AddToBuffer(T[] features, int label)
     {
         Guard.NotNull(features);
+        // Defensive copy to prevent external mutation of buffered references.
+        features = (T[])features.Clone();
         _totalSeen++;
         if (_buffer.Count < _bufferCapacity)
         {
@@ -82,6 +84,11 @@ public class FederatedExperienceReplay<T> : Infrastructure.FederatedLearningComp
     /// <returns>Sampled examples.</returns>
     public List<(T[] Features, int Label)> SampleReplay(int batchSize)
     {
+        if (batchSize < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(batchSize), "Batch size must be non-negative.");
+        }
+
         if (_buffer.Count == 0)
         {
             return new List<(T[], int)>();
@@ -137,6 +144,7 @@ public class FederatedExperienceReplay<T> : Infrastructure.FederatedLearningComp
 
         int d = clientImportances.Values.First().Length;
         var aggregated = new T[d];
+        for (int i = 0; i < d; i++) aggregated[i] = NumOps.Zero;
         double totalWeight = clientWeights?.Values.Sum() ?? clientImportances.Count;
         if (totalWeight <= 0)
         {

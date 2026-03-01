@@ -58,7 +58,7 @@ public class FedRoDPersonalization<T> : Infrastructure.FederatedLearningComponen
             return new Dictionary<string, T[]>();
         }
 
-        var layerNames = fullParameters.Keys.ToArray();
+        var layerNames = fullParameters.Keys.OrderBy(k => k, StringComparer.Ordinal).ToArray();
         int personalizedHeadCount = (int)(layerNames.Length * _headFraction);
         int sharedCount = layerNames.Length - personalizedHeadCount;
 
@@ -76,7 +76,7 @@ public class FedRoDPersonalization<T> : Infrastructure.FederatedLearningComponen
     /// </summary>
     public Dictionary<string, T[]> ExtractPersonalizedHead(Dictionary<string, T[]> fullParameters)
     {
-        var layerNames = fullParameters.Keys.ToArray();
+        var layerNames = fullParameters.Keys.OrderBy(k => k, StringComparer.Ordinal).ToArray();
         int personalizedHeadCount = (int)(layerNames.Length * _headFraction);
         int sharedCount = layerNames.Length - personalizedHeadCount;
 
@@ -171,7 +171,7 @@ public class FedRoDPersonalization<T> : Infrastructure.FederatedLearningComponen
     public Dictionary<string, T[]> ExtractGenericHead(Dictionary<string, T[]> fullParameters)
     {
         Guard.NotNull(fullParameters);
-        var layerNames = fullParameters.Keys.ToArray();
+        var layerNames = fullParameters.Keys.OrderBy(k => k, StringComparer.Ordinal).ToArray();
         int personalizedCount = (int)(layerNames.Length * _headFraction);
         // Clamp to prevent negative index with small models.
         int genericStart = Math.Max(0, layerNames.Length - 2 * personalizedCount);

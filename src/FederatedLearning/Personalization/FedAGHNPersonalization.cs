@@ -150,7 +150,13 @@ public class FedAGHNPersonalization<T> : Infrastructure.FederatedLearningCompone
     {
         Guard.NotNull(gradA);
         Guard.NotNull(gradB);
-        int len = Math.Min(gradA.Length, gradB.Length);
+        if (gradA.Length != gradB.Length)
+        {
+            throw new ArgumentException(
+                $"Gradient lengths must match. Got gradA={gradA.Length}, gradB={gradB.Length}.");
+        }
+
+        int len = gradA.Length;
         double dot = 0, normA = 0, normB = 0;
 
         for (int i = 0; i < len; i++)
@@ -223,6 +229,16 @@ public class FedAGHNPersonalization<T> : Infrastructure.FederatedLearningCompone
             {
                 double prev = previousWeights.GetValueOrDefault(key, weights[key]);
                 weights[key] = _adaptiveWeightMomentum * prev + (1 - _adaptiveWeightMomentum) * weights[key];
+            }
+
+            // Renormalize after momentum blending to ensure weights sum to 1.
+            double blendedTotal = weights.Values.Sum();
+            if (blendedTotal > 0)
+            {
+                foreach (var key in weights.Keys.ToArray())
+                {
+                    weights[key] /= blendedTotal;
+                }
             }
         }
 

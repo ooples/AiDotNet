@@ -141,7 +141,7 @@ public class PFedGatePersonalization<T> : Infrastructure.FederatedLearningCompon
     {
         if (_gates == null)
         {
-            return;
+            throw new InvalidOperationException("Gates have not been initialized. Call InitializeGates first.");
         }
 
         foreach (var layerName in _gates.Keys.ToArray())
@@ -169,6 +169,8 @@ public class PFedGatePersonalization<T> : Infrastructure.FederatedLearningCompon
     /// <returns>Gate regularization loss.</returns>
     public double ComputeGateRegularizationLoss(double regularizationStrength = 0.01)
     {
+        if (regularizationStrength < 0)
+            throw new ArgumentOutOfRangeException(nameof(regularizationStrength), "Must be non-negative.");
         if (_gates == null)
         {
             return 0;

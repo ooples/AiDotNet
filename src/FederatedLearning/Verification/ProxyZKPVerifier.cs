@@ -186,6 +186,16 @@ public class ProxyZKPVerifier<T> : Infrastructure.FederatedLearningComponentBase
     /// <returns>A signed certificate.</returns>
     public ProxyCertificate IssueCertificate(string commitment, double updateNorm)
     {
+        if (string.IsNullOrEmpty(commitment))
+        {
+            throw new ArgumentException("Commitment hash cannot be null or empty.", nameof(commitment));
+        }
+
+        if (double.IsNaN(updateNorm) || double.IsInfinity(updateNorm) || updateNorm < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(updateNorm), "Update norm must be a non-negative finite value.");
+        }
+
         long issuedAtTicks = DateTime.UtcNow.Ticks;
         long expiresAtTicks = issuedAtTicks + _certificateValidity.Ticks;
 
@@ -317,6 +327,8 @@ public class ProxyCertificate
     /// <summary>Creates a new proxy certificate.</summary>
     public ProxyCertificate(string commitmentHash, double updateNorm, long issuedAtTicks, long expiresAtTicks, string signature)
     {
+        Guard.NotNull(commitmentHash);
+        Guard.NotNull(signature);
         CommitmentHash = commitmentHash;
         UpdateNorm = updateNorm;
         IssuedAtTicks = issuedAtTicks;

@@ -76,9 +76,10 @@ public class FedAlignAggregationStrategy<T> : ParameterDictionaryAggregationStra
     /// <param name="anchors">Anchor input matrix [numAnchors x inputDim].</param>
     public void SetAnchors(Matrix<T> anchors)
     {
-        if (anchors.Rows == 0 || anchors.Columns == 0)
+        Guard.NotNull(anchors);
+        if (anchors.Rows < 2 || anchors.Columns < 1)
         {
-            throw new ArgumentException("Anchor matrix must not be empty.", nameof(anchors));
+            throw new ArgumentException("Anchor matrix must have at least 2 rows and 1 column.", nameof(anchors));
         }
 
         _anchorInputs = anchors.Clone();

@@ -38,9 +38,9 @@ public class FedMaAggregationStrategy<T> : ParameterDictionaryAggregationStrateg
             throw new ArgumentException("Matching iterations must be at least 1.", nameof(matchingIterations));
         }
 
-        if (matchingThreshold < 0 || matchingThreshold > 1)
+        if (double.IsNaN(matchingThreshold) || double.IsInfinity(matchingThreshold) || matchingThreshold < 0 || matchingThreshold > 1)
         {
-            throw new ArgumentException("Matching threshold must be between 0 and 1.", nameof(matchingThreshold));
+            throw new ArgumentException("Matching threshold must be a finite value between 0 and 1.", nameof(matchingThreshold));
         }
 
         _matchingIterations = matchingIterations;
@@ -61,10 +61,13 @@ public class FedMaAggregationStrategy<T> : ParameterDictionaryAggregationStrateg
         {
             // Return a defensive copy to prevent callers from mutating the client's model.
             var single = clientModels.First().Value;
-            return single.ToDictionary(kv => kv.Key, kv => (T[])kv.Value.Clone());
+            var copy = new Dictionary<string, T[]>(single.Count, single.Comparer);
+            foreach (var kv in single) copy[kv.Key] = (T[])kv.Value.Clone();
+            return copy;
         }
 
-        var referenceClientId = clientModels.Keys.First();
+        // Use the client with the smallest ID for deterministic reference selection
+        var referenceClientId = clientModels.Keys.OrderBy(k => k).First();
         var referenceModel = clientModels[referenceClientId];
         var layerNames = referenceModel.Keys.ToArray();
 
@@ -171,6 +174,8 @@ public class FedMaAggregationStrategy<T> : ParameterDictionaryAggregationStrateg
             }
 
             // Apply full permutation (bijection preserved).
+            // Note: per-layer independent permutation is the standard FedMA approach;
+            // cross-layer consistency requires joint optimization (future enhancement).
             var permutedParams = new T[layerSize];
             for (int i = 0; i < neuronCount; i++)
             {

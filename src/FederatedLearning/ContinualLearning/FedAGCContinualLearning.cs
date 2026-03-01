@@ -164,6 +164,8 @@ public class FedAGCContinualLearning<T> : Infrastructure.FederatedLearningCompon
     /// <inheritdoc/>
     public Vector<T> ProjectGradient(Vector<T> gradient, Vector<T> importanceWeights)
     {
+        Guard.NotNull(gradient);
+        Guard.NotNull(importanceWeights);
         int d = gradient.Length;
         var projected = new T[d];
 
@@ -213,6 +215,7 @@ public class FedAGCContinualLearning<T> : Infrastructure.FederatedLearningCompon
 
         int d = clientImportances.Values.First().Length;
         var aggregated = new T[d];
+        for (int i = 0; i < d; i++) aggregated[i] = NumOps.Zero;
         double totalWeight = clientWeights?.Values.Sum() ?? clientImportances.Count;
         if (totalWeight <= 0)
         {

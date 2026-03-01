@@ -180,7 +180,7 @@ public class SemiAsyncFederatedTrainer<T> : Infrastructure.FederatedLearningComp
             return updated;
         }
 
-        // FedAvg-style weighted average at the barrier, including async-updated global model.
+        // FedAvg-style weighted average at the barrier using client sample counts.
         double totalSamples = clientSampleCounts.Values.Sum();
         if (totalSamples <= 0) totalSamples = clientModels.Count;
         var result = new Dictionary<string, T[]>();
@@ -189,14 +189,8 @@ public class SemiAsyncFederatedTrainer<T> : Infrastructure.FederatedLearningComp
         {
             var merged = new double[layerParams.Length];
 
-            // Include the async-updated global model in the average.
-            for (int i = 0; i < layerParams.Length; i++)
-            {
-                merged[i] = NumOps.ToDouble(layerParams[i]);
-            }
-
-            // Blend with client models: merged = (1/(n+1)) * (updated + sum(w_k * client_k)).
-            int contributorCount = 1; // 1 for the async-updated global model.
+            // Weight each client's contribution by its sample count.
+            double effectiveTotalWeight = 0;
 
             foreach (var (clientId, model) in clientModels)
             {
@@ -208,20 +202,28 @@ public class SemiAsyncFederatedTrainer<T> : Infrastructure.FederatedLearningComp
                             $"Client {clientId} layer '{layerName}' length {clientLayer.Length} differs from expected {layerParams.Length}.");
                     }
 
+                    double w = clientSampleCounts.TryGetValue(clientId, out var sc) ? sc : 1.0;
+                    effectiveTotalWeight += w;
+
                     for (int i = 0; i < clientLayer.Length; i++)
                     {
-                        merged[i] += NumOps.ToDouble(clientLayer[i]);
+                        merged[i] += w * NumOps.ToDouble(clientLayer[i]);
                     }
-
-                    contributorCount++;
                 }
             }
 
+            // Include async-updated global model with weight equal to average client weight.
+            double globalWeight = effectiveTotalWeight > 0
+                ? effectiveTotalWeight / clientModels.Count
+                : 1.0;
+            effectiveTotalWeight += globalWeight;
+
             var mergedT = new T[layerParams.Length];
-            double invCount = 1.0 / contributorCount;
+            double invTotal = effectiveTotalWeight > 0 ? 1.0 / effectiveTotalWeight : 0;
             for (int i = 0; i < mergedT.Length; i++)
             {
-                mergedT[i] = NumOps.FromDouble(merged[i] * invCount);
+                mergedT[i] = NumOps.FromDouble(
+                    (merged[i] + globalWeight * NumOps.ToDouble(layerParams[i])) * invTotal);
             }
 
             result[layerName] = mergedT;

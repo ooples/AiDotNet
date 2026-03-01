@@ -65,10 +65,17 @@ public class BufferedAsyncFederatedTrainer<T> : Infrastructure.FederatedLearning
     public void SubmitUpdate(int clientId, Dictionary<string, T[]> update, int clientRound)
     {
         Guard.NotNull(update);
+        // Defensive copy to prevent external mutation after submission.
+        var copy = new Dictionary<string, T[]>(update.Count);
+        foreach (var (key, value) in update)
+        {
+            copy[key] = (T[])value.Clone();
+        }
+
         int staleness = _currentGlobalRound - clientRound;
         lock (_bufferLock)
         {
-            _buffer.Add((clientId, update, Math.Max(0, staleness)));
+            _buffer.Add((clientId, copy, Math.Max(0, staleness)));
         }
     }
 

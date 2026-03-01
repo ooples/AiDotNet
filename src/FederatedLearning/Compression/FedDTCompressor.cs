@@ -77,6 +77,12 @@ public class FedDTCompressor<T> : Infrastructure.FederatedLearningComponentBase<
 
         foreach (var (layerName, delta) in parameterDelta)
         {
+            if (delta == null || delta.Length == 0)
+            {
+                throw new ArgumentException(
+                    $"Layer '{layerName}' has null or empty parameter delta.", nameof(parameterDelta));
+            }
+
             var values = new double[delta.Length];
             for (int i = 0; i < delta.Length; i++)
             {

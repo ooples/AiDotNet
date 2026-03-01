@@ -86,6 +86,11 @@ public class FedSamAggregationStrategy<T> : ParameterDictionaryAggregationStrate
             throw new ArgumentException("Global perturbation radius must be non-negative.", nameof(globalPerturbationRadius));
         }
 
+        if (double.IsNaN(approximationCoeff) || double.IsInfinity(approximationCoeff))
+            throw new ArgumentException("Approximation coefficient must be a finite value.", nameof(approximationCoeff));
+        if (double.IsNaN(controlCoeff) || double.IsInfinity(controlCoeff))
+            throw new ArgumentException("Control coefficient must be a finite value.", nameof(controlCoeff));
+
         _perturbationRadius = perturbationRadius;
         _variant = variant;
         _globalPerturbationRadius = globalPerturbationRadius;
@@ -181,6 +186,7 @@ public class FedSamAggregationStrategy<T> : ParameterDictionaryAggregationStrate
     /// <param name="gradient">The gradient from the current step.</param>
     public void UpdateGradientHistory(Dictionary<string, T[]> gradient)
     {
+        Guard.NotNull(gradient);
         _previousGradient = new Dictionary<string, T[]>(gradient.Count);
         foreach (var (layerName, grad) in gradient)
         {
@@ -205,6 +211,7 @@ public class FedSamAggregationStrategy<T> : ParameterDictionaryAggregationStrate
         Dictionary<string, T[]> currentGradient,
         Dictionary<string, T[]>? perturbedGradient)
     {
+        Guard.NotNull(currentGradient);
         if (_variant == FedSamVariant.FedSpeed || _variant == FedSamVariant.FedLESAM)
         {
             // Approximate: g_sam ≈ g + alpha * (g - g_prev)
@@ -334,7 +341,9 @@ public class FedSamAggregationStrategy<T> : ParameterDictionaryAggregationStrate
 
         foreach (var (layerName, pGrad) in perturbedGradient)
         {
-            var cGrad = currentGradient[layerName];
+            if (!currentGradient.TryGetValue(layerName, out var cGrad))
+                continue;
+
             var output = new T[pGrad.Length];
 
             if (_previousGradient != null && _previousGradient.TryGetValue(layerName, out var prevGrad))

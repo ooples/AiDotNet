@@ -55,7 +55,40 @@ public class FederatedRLHF<T> : Infrastructure.FederatedLearningComponentBase<T>
         // Weighted average of reward model parameters.
         var referenceModel = clientRewardModels.First().Value;
         var layerNames = referenceModel.Keys.ToArray();
-        double totalWeight = clientWeights.Values.Sum();
+
+        // Validate all clients have matching layer structure.
+        foreach (var (clientId, rewardModel) in clientRewardModels)
+        {
+            foreach (var layerName in layerNames)
+            {
+                if (!rewardModel.TryGetValue(layerName, out var layer))
+                {
+                    throw new ArgumentException(
+                        $"Client {clientId} missing reward model layer '{layerName}'.", nameof(clientRewardModels));
+                }
+
+                if (layer.Length != referenceModel[layerName].Length)
+                {
+                    throw new ArgumentException(
+                        $"Client {clientId} layer '{layerName}' length mismatch: {layer.Length} != {referenceModel[layerName].Length}.",
+                        nameof(clientRewardModels));
+                }
+            }
+        }
+
+        // Validate and compute total weight.
+        double totalWeight = 0;
+        foreach (var (clientId, w) in clientWeights)
+        {
+            if (double.IsNaN(w) || double.IsInfinity(w) || w < 0)
+            {
+                throw new ArgumentException(
+                    $"Client {clientId} has invalid weight: {w}.", nameof(clientWeights));
+            }
+
+            totalWeight += w;
+        }
+
         if (totalWeight <= 0)
         {
             totalWeight = clientRewardModels.Count;

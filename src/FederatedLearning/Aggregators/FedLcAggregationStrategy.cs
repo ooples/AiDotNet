@@ -210,9 +210,15 @@ public class FedLcAggregationStrategy<T> : ParameterDictionaryAggregationStrateg
     /// <returns>Probability distribution vector of length numClasses.</returns>
     public static Vector<T> ComputeClassDistribution(int[] labels, int numClasses)
     {
+        Guard.NotNull(labels);
         if (labels.Length == 0)
         {
             throw new ArgumentException("Labels array must not be empty.", nameof(labels));
+        }
+
+        if (numClasses <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(numClasses), "Number of classes must be positive.");
         }
 
         var counts = new double[numClasses];
