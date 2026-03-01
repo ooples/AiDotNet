@@ -154,14 +154,19 @@ public class PascalVocDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Te
                 int copyLen = Math.Min(pixels.Length, pixelsPerImage);
                 Array.Copy(pixels, 0, featuresData, featureOffset, copyLen);
             }
+            else
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    $"[PascalVocDataLoader] Warning: Image not found for '{imageId}' at {imgPath}. Features will be zero-filled.");
+            }
 
             // Parse XML annotation
             if (File.Exists(annPath))
             {
                 var doc = XDocument.Load(annPath);
                 var sizeElem = doc.Root?.Element("size");
-                double imgWidth = double.Parse(sizeElem?.Element("width")?.Value ?? "1");
-                double imgHeight = double.Parse(sizeElem?.Element("height")?.Value ?? "1");
+                double imgWidth = double.Parse(sizeElem?.Element("width")?.Value ?? "1", System.Globalization.CultureInfo.InvariantCulture);
+                double imgHeight = double.Parse(sizeElem?.Element("height")?.Value ?? "1", System.Globalization.CultureInfo.InvariantCulture);
 
                 var objects = doc.Root?.Elements("object").ToList() ?? new List<XElement>();
                 int labelOffset = i * _maxDetections * 5;
@@ -175,10 +180,10 @@ public class PascalVocDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Te
 
                     if (bndbox != null && ClassToIndex.TryGetValue(className, out int classIdx))
                     {
-                        double xmin = double.Parse(bndbox.Element("xmin")?.Value ?? "0") / imgWidth;
-                        double ymin = double.Parse(bndbox.Element("ymin")?.Value ?? "0") / imgHeight;
-                        double xmax = double.Parse(bndbox.Element("xmax")?.Value ?? "0") / imgWidth;
-                        double ymax = double.Parse(bndbox.Element("ymax")?.Value ?? "0") / imgHeight;
+                        double xmin = double.Parse(bndbox.Element("xmin")?.Value ?? "0", System.Globalization.CultureInfo.InvariantCulture) / imgWidth;
+                        double ymin = double.Parse(bndbox.Element("ymin")?.Value ?? "0", System.Globalization.CultureInfo.InvariantCulture) / imgHeight;
+                        double xmax = double.Parse(bndbox.Element("xmax")?.Value ?? "0", System.Globalization.CultureInfo.InvariantCulture) / imgWidth;
+                        double ymax = double.Parse(bndbox.Element("ymax")?.Value ?? "0", System.Globalization.CultureInfo.InvariantCulture) / imgHeight;
 
                         int dOffset = labelOffset + d * 5;
                         labelsData[dOffset + 0] = NumOps.FromDouble(classIdx);

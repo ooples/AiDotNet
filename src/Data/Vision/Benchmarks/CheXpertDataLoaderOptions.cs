@@ -39,6 +39,20 @@ public sealed class CheXpertDataLoaderOptions
     /// Zeros: treat uncertain as negative. Ones: treat as positive. Ignore: set to 0.
     /// </summary>
     public UncertaintyPolicy UncertaintyHandling { get; set; } = UncertaintyPolicy.Zeros;
+
+    /// <summary>Validates that all option values are within acceptable ranges.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when any option is invalid.</exception>
+    public void Validate()
+    {
+        if (ImageSize <= 0) throw new ArgumentOutOfRangeException(nameof(ImageSize), "ImageSize must be positive.");
+        if (MaxSamples is <= 0) throw new ArgumentOutOfRangeException(nameof(MaxSamples), "MaxSamples must be positive when specified.");
+        if (!Enum.IsDefined(typeof(DatasetSplit), Split))
+            throw new ArgumentOutOfRangeException(nameof(Split), "Split must be a valid DatasetSplit value.");
+        if (!Enum.IsDefined(typeof(UncertaintyPolicy), UncertaintyHandling))
+            throw new ArgumentOutOfRangeException(nameof(UncertaintyHandling), "UncertaintyHandling must be a valid UncertaintyPolicy value.");
+        if (DataPath is not null && string.IsNullOrWhiteSpace(DataPath))
+            throw new ArgumentException("DataPath must not be empty or whitespace when provided.", nameof(DataPath));
+    }
 }
 
 /// <summary>

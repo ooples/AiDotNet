@@ -28,6 +28,7 @@ public class ExactHashDeduplicator
     /// </summary>
     public string ComputeHash(string text)
     {
+        if (text == null) throw new ArgumentNullException(nameof(text));
         string normalized = text;
         if (_options.CaseInsensitive)
             normalized = normalized.ToLowerInvariant();
@@ -46,6 +47,7 @@ public class ExactHashDeduplicator
     /// <returns>Set of indices that are duplicates (should be removed).</returns>
     public HashSet<int> FindDuplicates(IReadOnlyList<string> documents)
     {
+        if (documents == null) throw new ArgumentNullException(nameof(documents));
         var seen = new Dictionary<string, int>();
         var duplicates = new HashSet<int>();
 

@@ -60,6 +60,7 @@ public class CheXpertDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Ten
     public CheXpertDataLoader(CheXpertDataLoaderOptions? options = null)
     {
         _options = options ?? new CheXpertDataLoaderOptions();
+        _options.Validate();
         _dataPath = _options.DataPath ?? DatasetDownloader.GetDefaultDataPath("chexpert");
         _imageSize = _options.ImageSize;
     }

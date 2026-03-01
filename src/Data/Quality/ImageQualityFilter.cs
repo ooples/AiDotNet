@@ -17,6 +17,7 @@ public class ImageQualityFilter
     public ImageQualityFilter(ImageQualityFilterOptions? options = null)
     {
         _options = options ?? new ImageQualityFilterOptions();
+        _options.Validate();
     }
 
     /// <summary>
@@ -47,6 +48,7 @@ public class ImageQualityFilter
     /// <returns>True if the image passes pixel statistics checks.</returns>
     public bool PassesPixelCheck(double[] pixels)
     {
+        if (pixels == null) throw new ArgumentNullException(nameof(pixels));
         if (pixels.Length == 0)
             return false;
 

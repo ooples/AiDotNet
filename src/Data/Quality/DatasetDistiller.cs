@@ -1,5 +1,3 @@
-using AiDotNet.Helpers;
-
 namespace AiDotNet.Data.Quality;
 
 /// <summary>
@@ -20,6 +18,7 @@ public class DatasetDistiller
     public DatasetDistiller(DatasetDistillerOptions? options = null)
     {
         _options = options ?? new DatasetDistillerOptions();
+        _options.Validate();
         _random = _options.Seed.HasValue
             ? RandomHelper.CreateSeededRandom(_options.Seed.Value)
             : RandomHelper.CreateSecureRandom();
@@ -52,6 +51,8 @@ public class DatasetDistiller
             list.Add(i);
         }
 
+        if (features[0] == null)
+            throw new ArgumentException("First feature row must not be null.", nameof(features));
         int featureDim = features[0].Length;
         var distilledFeatures = new List<double[]>();
         var distilledLabels = new List<int>();

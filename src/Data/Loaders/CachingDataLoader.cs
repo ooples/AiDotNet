@@ -57,6 +57,7 @@ public class CachingDataLoader<TKey, TValue> where TKey : notnull
     public CachingDataLoader(CachingDataLoaderOptions? options = null)
     {
         _options = options ?? new CachingDataLoaderOptions();
+        _options.Validate();
         _cache = new Dictionary<TKey, CacheEntry>();
         _accessOrder = new LinkedList<TKey>();
     }
@@ -69,6 +70,8 @@ public class CachingDataLoader<TKey, TValue> where TKey : notnull
     /// <returns>The cached or freshly loaded value.</returns>
     public TValue GetOrLoad(TKey key, Func<TKey, TValue> factory)
     {
+        if (factory == null) throw new ArgumentNullException(nameof(factory));
+
         lock (_lock)
         {
             Interlocked.Increment(ref _totalRequests);
@@ -98,10 +101,15 @@ public class CachingDataLoader<TKey, TValue> where TKey : notnull
             if (_cache.TryGetValue(key, out var existing))
                 return existing.Value;
 
-            // Evict if needed
-            while (_cache.Count >= _options.MaxCacheSize && _cache.Count > 0)
+            // Evict if needed (bound iterations to prevent infinite loop if Evict makes no progress)
+            int evictAttempts = 0;
+            int maxEvictAttempts = _cache.Count + 1;
+            while (_cache.Count >= _options.MaxCacheSize && _cache.Count > 0 && evictAttempts < maxEvictAttempts)
             {
+                int countBefore = _cache.Count;
                 Evict();
+                evictAttempts++;
+                if (_cache.Count >= countBefore) break; // No progress — avoid infinite loop
             }
 
             var node = _accessOrder.AddFirst(key);

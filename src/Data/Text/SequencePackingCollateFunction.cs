@@ -33,6 +33,7 @@ public class SequencePackingCollateFunction<T> : ICollateFunction<Tensor<T>, (Te
     /// <param name="padTokenId">Token ID used for padding remaining space. Default is 0.</param>
     public SequencePackingCollateFunction(int blockSize = 2048, int padTokenId = 0)
     {
+        if (blockSize <= 0) throw new ArgumentOutOfRangeException(nameof(blockSize), "blockSize must be positive.");
         _blockSize = blockSize;
         _padTokenId = padTokenId;
     }
@@ -44,6 +45,8 @@ public class SequencePackingCollateFunction<T> : ICollateFunction<Tensor<T>, (Te
     /// <returns>Packed tokens [num_blocks, block_size] and attention mask [num_blocks, block_size].</returns>
     public (Tensor<T> PackedTokens, Tensor<T> AttentionMask) Collate(IReadOnlyList<Tensor<T>> samples)
     {
+        if (samples == null) throw new ArgumentNullException(nameof(samples));
+
         // Flatten all tokens into a single stream
         var allTokens = new List<T>();
 

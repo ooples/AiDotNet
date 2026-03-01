@@ -101,7 +101,8 @@ public class SomethingSomethingV2DataLoader<T> : InputOutputDataLoaderBase<T, Te
                             string labelText = line.Substring(lqStart + 1, lqEnd - lqStart - 1);
                             if (!labelToIndex.TryGetValue(labelText, out classIndex))
                             {
-                                classIndex = labelToIndex.Count % NumClasses;
+                                // Assign deterministic index based on current count; cap at NumClasses-1
+                                classIndex = Math.Min(labelToIndex.Count, NumClasses - 1);
                                 labelToIndex[labelText] = classIndex;
                             }
                         }
@@ -127,7 +128,7 @@ public class SomethingSomethingV2DataLoader<T> : InputOutputDataLoaderBase<T, Te
                 string dirName = Path.GetFileName(dir);
                 if (!labelToIndex.TryGetValue(dirName, out int classIdx))
                 {
-                    classIdx = labelToIndex.Count % NumClasses;
+                    classIdx = Math.Min(labelToIndex.Count, NumClasses - 1);
                     labelToIndex[dirName] = classIdx;
                 }
                 samples.Add((dir, classIdx));

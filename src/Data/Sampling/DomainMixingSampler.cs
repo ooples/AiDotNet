@@ -37,11 +37,12 @@ public class DomainMixingSampler : DataSamplerBase
         {
             if (domainSizes[i] <= 0)
                 throw new ArgumentOutOfRangeException(nameof(domainSizes), $"Domain size at index {i} must be positive.");
-            if (domainWeights[i] < 0)
-                throw new ArgumentOutOfRangeException(nameof(domainWeights), $"Domain weight at index {i} must be non-negative.");
+            if (domainWeights[i] < 0 || double.IsNaN(domainWeights[i]) || double.IsInfinity(domainWeights[i]))
+                throw new ArgumentOutOfRangeException(nameof(domainWeights), $"Domain weight at index {i} must be a non-negative finite number.");
         }
 
-        _domainSizes = domainSizes;
+        // Defensive copies to prevent external mutation
+        _domainSizes = (int[])domainSizes.Clone();
 
         // Normalize weights
         double weightSum = domainWeights.Sum();
@@ -56,15 +57,19 @@ public class DomainMixingSampler : DataSamplerBase
             _cumulativeWeights[i] = _cumulativeWeights[i - 1] + _domainWeights[i];
         _cumulativeWeights[_domainWeights.Length - 1] = 1.0; // Ensure no floating-point gap
 
-        // Compute cumulative offsets
-        _domainOffsets = new int[domainSizes.Length];
-        int offset = 0;
-        for (int i = 0; i < domainSizes.Length; i++)
+        // Compute cumulative offsets with overflow check
+        _domainOffsets = new int[_domainSizes.Length];
+        long offset = 0;
+        for (int i = 0; i < _domainSizes.Length; i++)
         {
-            _domainOffsets[i] = offset;
-            offset += domainSizes[i];
+            if (offset > int.MaxValue)
+                throw new OverflowException($"Total domain sizes exceed int.MaxValue at domain index {i}.");
+            _domainOffsets[i] = (int)offset;
+            offset += _domainSizes[i];
         }
-        _totalSize = offset;
+        if (offset > int.MaxValue)
+            throw new OverflowException($"Total domain sizes ({offset}) exceed int.MaxValue.");
+        _totalSize = (int)offset;
     }
 
     /// <inheritdoc/>

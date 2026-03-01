@@ -15,4 +15,14 @@ public sealed class ArrowDatasetOptions
     public bool MemoryMap { get; set; } = true;
     /// <summary>Number of rows per batch when reading. Default is 1024.</summary>
     public int BatchSize { get; set; } = 1024;
+
+    /// <summary>Validates that all option values are within acceptable ranges.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when any option is invalid.</exception>
+    public void Validate()
+    {
+        if (string.IsNullOrWhiteSpace(DataPath)) throw new ArgumentException("DataPath must not be empty.", nameof(DataPath));
+        if (string.IsNullOrWhiteSpace(FeatureColumn)) throw new ArgumentException("FeatureColumn must not be empty.", nameof(FeatureColumn));
+        if (string.IsNullOrWhiteSpace(LabelColumn)) throw new ArgumentException("LabelColumn must not be empty.", nameof(LabelColumn));
+        if (BatchSize <= 0) throw new ArgumentOutOfRangeException(nameof(BatchSize), "BatchSize must be positive.");
+    }
 }

@@ -18,6 +18,7 @@ public class LanguageIdFilter
     public LanguageIdFilter(LanguageIdFilterOptions? options = null)
     {
         _options = options ?? new LanguageIdFilterOptions();
+        _options.Validate();
         _languageProfiles = new Dictionary<string, Dictionary<string, int>>();
     }
 
@@ -61,6 +62,7 @@ public class LanguageIdFilter
     /// <returns>Tuple of (language code, confidence score). Returns ("unknown", 0) if no profiles loaded.</returns>
     public (string Language, double Confidence) DetectLanguage(string text)
     {
+        if (text == null) throw new ArgumentNullException(nameof(text));
         if (_languageProfiles.Count == 0)
             return ("unknown", 0.0);
 
@@ -124,6 +126,7 @@ public class LanguageIdFilter
     /// <returns>Set of indices that are not in the target language(s) (should be removed).</returns>
     public HashSet<int> Filter(IReadOnlyList<string> documents)
     {
+        if (documents == null) throw new ArgumentNullException(nameof(documents));
         if (_languageProfiles.Count == 0)
             throw new InvalidOperationException("No language profiles loaded. Call AddLanguageProfile() before filtering.");
 

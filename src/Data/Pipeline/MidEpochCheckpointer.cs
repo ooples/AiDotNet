@@ -24,13 +24,7 @@ public class MidEpochCheckpointer
     public MidEpochCheckpointer(MidEpochCheckpointerOptions options)
     {
         _options = options ?? throw new ArgumentNullException(nameof(options));
-
-        if (string.IsNullOrWhiteSpace(options.CheckpointDirectory))
-            throw new ArgumentException("CheckpointDirectory must not be null or empty.", nameof(options));
-        if (options.SaveEveryNBatches <= 0)
-            throw new ArgumentOutOfRangeException(nameof(options), "SaveEveryNBatches must be positive.");
-        if (options.MaxCheckpoints <= 0)
-            throw new ArgumentOutOfRangeException(nameof(options), "MaxCheckpoints must be positive.");
+        _options.Validate();
 
         _batchesSinceLastSave = 0;
         Directory.CreateDirectory(_options.CheckpointDirectory);

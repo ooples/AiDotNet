@@ -56,7 +56,9 @@ public class ArrowDataset<T> : IDisposable
     /// <param name="options">Configuration options.</param>
     public ArrowDataset(ArrowDatasetOptions options)
     {
-        _options = options;
+        _options = options ?? throw new ArgumentNullException(nameof(options));
+        if (string.IsNullOrWhiteSpace(_options.DataPath))
+            throw new ArgumentException("DataPath must not be null or empty.", nameof(options));
         _columns = new Dictionary<string, ColumnInfo>();
 
         string filePath = _options.DataPath;
@@ -75,6 +77,10 @@ public class ArrowDataset<T> : IDisposable
             _stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
             _reader = new BinaryReader(_stream);
             ReadHeader();
+        }
+        else
+        {
+            throw new FileNotFoundException($"Arrow dataset file not found: {filePath}");
         }
     }
 
@@ -112,6 +118,13 @@ public class ArrowDataset<T> : IDisposable
     /// <returns>Array of T values for the specified rows.</returns>
     public T[] ReadColumnSlice(string columnName, int startRow, int numRows)
     {
+        if (string.IsNullOrWhiteSpace(columnName))
+            throw new ArgumentException("Column name must not be null or empty.", nameof(columnName));
+        if (startRow < 0)
+            throw new ArgumentOutOfRangeException(nameof(startRow), "startRow must be non-negative.");
+        if (numRows < 0)
+            throw new ArgumentOutOfRangeException(nameof(numRows), "numRows must be non-negative.");
+
         if (_reader == null || _stream == null)
             throw new InvalidOperationException("No file is open.");
 
@@ -120,7 +133,7 @@ public class ArrowDataset<T> : IDisposable
 
         int actualRows = Math.Min(numRows, _numRows - startRow);
         if (actualRows <= 0)
-            throw new ArgumentOutOfRangeException(nameof(startRow));
+            throw new ArgumentOutOfRangeException(nameof(startRow), "startRow is beyond available rows.");
 
         long rowOffset = (long)startRow * info.ElementsPerRow * 8;
         _stream.Position = info.DataOffset + rowOffset;

@@ -23,6 +23,8 @@ public sealed class LanguageIdFilterOptions
     /// <exception cref="ArgumentOutOfRangeException">Thrown when any option is invalid.</exception>
     public void Validate()
     {
+        if (TargetLanguages == null || TargetLanguages.Length == 0)
+            throw new ArgumentException("TargetLanguages must not be null or empty.", nameof(TargetLanguages));
         if (MinConfidence < 0 || MinConfidence > 1) throw new ArgumentOutOfRangeException(nameof(MinConfidence), "MinConfidence must be between 0 and 1.");
         if (ProfileNGramSize <= 0) throw new ArgumentOutOfRangeException(nameof(ProfileNGramSize), "ProfileNGramSize must be positive.");
         if (MaxProfileSize <= 0) throw new ArgumentOutOfRangeException(nameof(MaxProfileSize), "MaxProfileSize must be positive.");

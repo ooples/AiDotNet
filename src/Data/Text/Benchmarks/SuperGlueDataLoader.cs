@@ -76,13 +76,25 @@ public class SuperGlueDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Te
         {
             if (string.IsNullOrWhiteSpace(line)) continue;
             // Simple JSON parsing for text and label fields
-            string text = ExtractJsonField(line, "passage") + " [SEP] " + ExtractJsonField(line, "question");
-            if (text.Length <= 7) // only " [SEP] "
-                text = ExtractJsonField(line, "premise") + " [SEP] " + ExtractJsonField(line, "hypothesis");
-            if (text.Length <= 7)
-                text = ExtractJsonField(line, "sentence1") + " [SEP] " + ExtractJsonField(line, "sentence2");
-            if (text.Length <= 7)
-                text = ExtractJsonField(line, "sentence") + " [SEP] " + ExtractJsonField(line, "word");
+            // Try field pairs in order of specificity for different SuperGLUE tasks
+            const string sep = " [SEP] ";
+            string text = string.Empty;
+            string[][] fieldPairs = {
+                new[] { "passage", "question" },
+                new[] { "premise", "hypothesis" },
+                new[] { "sentence1", "sentence2" },
+                new[] { "sentence", "word" }
+            };
+            foreach (var pair in fieldPairs)
+            {
+                string a = ExtractJsonField(line, pair[0]);
+                string b = ExtractJsonField(line, pair[1]);
+                if (a.Length > 0 || b.Length > 0)
+                {
+                    text = a + sep + b;
+                    break;
+                }
+            }
 
             string labelStr = ExtractJsonField(line, "label");
             int label = 0;
@@ -100,7 +112,7 @@ public class SuperGlueDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Te
             else if (labelStr.Equals("neutral", StringComparison.OrdinalIgnoreCase))
                 label = 2;
 
-            if (text.Length > 7)
+            if (text.Length > 0)
             {
                 texts.Add(text);
                 labelValues.Add(label);

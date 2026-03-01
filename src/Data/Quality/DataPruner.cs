@@ -1,5 +1,3 @@
-using AiDotNet.Helpers;
-
 namespace AiDotNet.Data.Quality;
 
 /// <summary>
@@ -20,6 +18,7 @@ public class DataPruner
     public DataPruner(DataPrunerOptions? options = null)
     {
         _options = options ?? new DataPrunerOptions();
+        _options.Validate();
     }
 
     /// <summary>
@@ -30,6 +29,7 @@ public class DataPruner
     /// <returns>Set of indices to remove.</returns>
     public HashSet<int> PruneByConfidence(double[] confidenceScores)
     {
+        if (confidenceScores == null) throw new ArgumentNullException(nameof(confidenceScores));
         int numToPrune = (int)(confidenceScores.Length * _options.PruneRatio);
         return PruneTopK(confidenceScores, numToPrune, ascending: false);
     }
@@ -42,6 +42,7 @@ public class DataPruner
     /// <returns>Set of indices to remove.</returns>
     public HashSet<int> PruneByForgetting(int[] forgettingCounts)
     {
+        if (forgettingCounts == null) throw new ArgumentNullException(nameof(forgettingCounts));
         int numToPrune = (int)(forgettingCounts.Length * _options.PruneRatio);
         var scores = forgettingCounts.Select(c => (double)c).ToArray();
         return PruneTopK(scores, numToPrune, ascending: true);
@@ -55,6 +56,7 @@ public class DataPruner
     /// <returns>Set of indices to remove.</returns>
     public HashSet<int> PruneByEL2N(double[] el2nScores)
     {
+        if (el2nScores == null) throw new ArgumentNullException(nameof(el2nScores));
         int numToPrune = (int)(el2nScores.Length * _options.PruneRatio);
         return PruneTopK(el2nScores, numToPrune, ascending: true);
     }
@@ -67,6 +69,7 @@ public class DataPruner
     /// <returns>Set of indices to remove.</returns>
     public HashSet<int> PruneByGraNd(double[] grandScores)
     {
+        if (grandScores == null) throw new ArgumentNullException(nameof(grandScores));
         int numToPrune = (int)(grandScores.Length * _options.PruneRatio);
         return PruneTopK(grandScores, numToPrune, ascending: true);
     }
@@ -78,6 +81,7 @@ public class DataPruner
     /// <returns>Set of indices to remove.</returns>
     public HashSet<int> Prune(double[] scores)
     {
+        if (scores == null) throw new ArgumentNullException(nameof(scores));
         return _options.Strategy switch
         {
             PruneStrategy.HighConfidence => PruneByConfidence(scores),

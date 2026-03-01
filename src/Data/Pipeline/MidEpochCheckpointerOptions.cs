@@ -21,5 +21,6 @@ public sealed class MidEpochCheckpointerOptions
         if (string.IsNullOrWhiteSpace(CheckpointDirectory)) throw new ArgumentException("CheckpointDirectory must not be empty.", nameof(CheckpointDirectory));
         if (SaveEveryNBatches <= 0) throw new ArgumentOutOfRangeException(nameof(SaveEveryNBatches), "SaveEveryNBatches must be positive.");
         if (MaxCheckpoints <= 0) throw new ArgumentOutOfRangeException(nameof(MaxCheckpoints), "MaxCheckpoints must be positive.");
+        if (string.IsNullOrWhiteSpace(FilePrefix)) throw new ArgumentException("FilePrefix must not be empty or whitespace.", nameof(FilePrefix));
     }
 }
