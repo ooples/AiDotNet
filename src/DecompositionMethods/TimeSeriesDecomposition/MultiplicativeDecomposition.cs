@@ -141,10 +141,11 @@ public class MultiplicativeDecomposition<T> : TimeSeriesDecompositionBase<T>
         T level = TimeSeries[0];
         T trendComponent = NumOps.One;
 
-        // Initialize seasonal factors
+        // Use a separate rotating buffer for seasonal factors
+        T[] seasonalFactors = new T[_seasonalPeriod];
         for (int i = 0; i < _seasonalPeriod; i++)
         {
-            seasonal[i] = NumOps.Divide(TimeSeries[i], level);
+            seasonalFactors[i] = NumOps.Divide(TimeSeries[i], level);
         }
 
         for (int t = 0; t < n; t++)
@@ -152,7 +153,7 @@ public class MultiplicativeDecomposition<T> : TimeSeriesDecompositionBase<T>
             T value = TimeSeries[t];
             T lastLevel = level;
             T lastTrend = trendComponent;
-            T lastSeasonal = seasonal[t % _seasonalPeriod];
+            T lastSeasonal = seasonalFactors[t % _seasonalPeriod];
 
             // Update level
             level = NumOps.Add(
@@ -166,15 +167,16 @@ public class MultiplicativeDecomposition<T> : TimeSeriesDecompositionBase<T>
                 NumOps.Multiply(NumOps.Subtract(NumOps.One, beta), lastTrend)
             );
 
-            // Update seasonal
-            seasonal[t % _seasonalPeriod] = NumOps.Add(
+            // Update seasonal factor
+            seasonalFactors[t % _seasonalPeriod] = NumOps.Add(
                 NumOps.Multiply(gamma, NumOps.Divide(value, level)),
                 NumOps.Multiply(NumOps.Subtract(NumOps.One, gamma), lastSeasonal)
             );
 
-            // Calculate components
+            // Store per-timestep seasonal for correct reconstruction: data = trend * seasonal * residual
             trend[t] = NumOps.Multiply(level, trendComponent);
-            residual[t] = NumOps.Divide(value, NumOps.Multiply(trend[t], seasonal[t % _seasonalPeriod]));
+            seasonal[t] = seasonalFactors[t % _seasonalPeriod];
+            residual[t] = NumOps.Divide(value, NumOps.Multiply(trend[t], seasonal[t]));
         }
 
         AddComponent(DecompositionComponentType.Trend, trend);

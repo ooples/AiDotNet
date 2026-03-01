@@ -177,6 +177,12 @@ public static class TimeSeriesHelper<T>
             sumSquared = _numOps.Add(sumSquared, _numOps.Multiply(y[i], y[i]));
         }
 
+        // Guard against division by zero (constant or zero series)
+        if (!_numOps.GreaterThan(sumSquared, _numOps.Zero))
+        {
+            return _numOps.Zero;
+        }
+
         return _numOps.Divide(sum, sumSquared);
     }
 }

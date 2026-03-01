@@ -411,7 +411,26 @@ public abstract class RegressionBase<T> : IRegression<T>, IConfigurableModel<T>
                     {
                         // General-purpose fallback for square systems.
                         var lu = new LuDecomposition<T>(a);
-                        return lu.Solve(b);
+                        var result = lu.Solve(b);
+
+                        // LU on singular matrices may silently produce NaN/Infinity instead of throwing.
+                        // Detect this and fall through to SVD which handles rank-deficient matrices.
+                        bool hasInvalid = false;
+                        for (int i = 0; i < result.Length; i++)
+                        {
+                            double val = NumOps.ToDouble(result[i]);
+                            if (double.IsNaN(val) || double.IsInfinity(val))
+                            {
+                                hasInvalid = true;
+                                break;
+                            }
+                        }
+                        if (hasInvalid)
+                        {
+                            throw new InvalidOperationException("LU solution contains NaN or Infinity values.");
+                        }
+
+                        return result;
                     }
                     catch (Exception ex2) when (ex2 is ArgumentException or InvalidOperationException)
                     {

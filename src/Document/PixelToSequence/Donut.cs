@@ -1072,7 +1072,7 @@ public class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDocumentQA<
                 { "use_native_mode", _useNativeMode },
                 { "ocr_free", IsOCRFree }
             },
-            ModelData = this.Serialize()
+            ModelData = SafeSerialize()
         };
     }
 

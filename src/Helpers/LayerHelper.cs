@@ -421,8 +421,14 @@ public static class LayerHelper<T>
         NeuralNetworkArchitecture<T> architecture,
         int hiddenLayerCount = 1,
         int hiddenLayerSize = 64,
-        int outputSize = 1)
+        int outputSize = -1)
     {
+        // Use architecture's output size if not explicitly provided
+        if (outputSize <= 0)
+        {
+            outputSize = architecture.OutputSize > 0 ? architecture.OutputSize : 1;
+        }
+
         ValidateLayerParameters(hiddenLayerCount, hiddenLayerSize, outputSize);
 
         int inputSize = architecture.CalculatedInputSize;
@@ -477,7 +483,15 @@ public static class LayerHelper<T>
         ValidateLayerParameters(convLayerCount, filterCount, kernelSize);
         ValidateLayerParameters(denseLayerCount, denseLayerSize, outputSize);
 
-        var inputShape = architecture.GetInputShape();
+        var rawShape = architecture.GetInputShape();
+
+        // Normalize to 3D [depth, height, width] - 2D input [height, width] is treated as single-channel
+        var inputShape = rawShape.Length switch
+        {
+            3 => rawShape,
+            2 => new[] { 1, rawShape[0], rawShape[1] },
+            _ => throw new ArgumentException($"CNN requires 2D or 3D input, got {rawShape.Length}D input shape.")
+        };
 
         // Convolutional layers
         for (int i = 0; i < convLayerCount; i++)
@@ -663,7 +677,9 @@ public static class LayerHelper<T>
         ValidateLayerParameters(1, 32, architecture.OutputSize);
 
         var inputShape = architecture.GetInputShape();
-        int inputFeatures = inputShape[2];  // Assuming shape is [batch, time, features]
+        // For 2D input [time, features], features is the last element
+        // For 3D input [batch, time, features], features is also the last element
+        int inputFeatures = inputShape[inputShape.Length - 1];
 
         // LSTM layers to process temporal data
         yield return new LSTMLayer<T>(
@@ -3878,13 +3894,18 @@ public static class LayerHelper<T>
 
         var hiddenActivation = new TanhActivation<T>() as IActivationFunction<T>;
 
-        // First hidden layer
+        // First hidden layer projects input to hidden dimension
         yield return new DenseLayer<T>(inputSize, hiddenLayerSize, hiddenActivation);
 
-        // Additional hidden layers
-        for (int i = 1; i < hiddenLayerCount; i++)
+        // Deep Ritz uses residual blocks with skip connections
+        // This follows the original Deep Ritz paper (Weinan E & Bing Yu, 2018)
+        int numResidualBlocks = Math.Max(1, hiddenLayerCount / 2);
+        for (int i = 0; i < numResidualBlocks; i++)
         {
-            yield return new DenseLayer<T>(hiddenLayerSize, hiddenLayerSize, hiddenActivation);
+            yield return new ResidualLayer<T>(
+                [hiddenLayerSize],
+                new DenseLayer<T>(hiddenLayerSize, hiddenLayerSize, hiddenActivation),
+                hiddenActivation);
         }
 
         // Output layer - linear for energy/solution values
@@ -10315,7 +10336,8 @@ public static class LayerHelper<T>
         int cnnChannels = 512,
         int rnnHiddenSize = 256,
         int rnnLayers = 2,
-        int charsetSize = 95)
+        int charsetSize = 95,
+        int inputDepth = 1)
     {
         IActivationFunction<T> reluActivation = new ReLUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
@@ -10325,7 +10347,7 @@ public static class LayerHelper<T>
 
         // CNN feature extractor (VGG-style)
         int[] channels = [64, 128, 256, 256, 512, 512, 512];
-        int inputChannels = 1; // Grayscale
+        int inputChannels = inputDepth;
 
         for (int i = 0; i < channels.Length; i++)
         {
@@ -10442,9 +10464,8 @@ public static class LayerHelper<T>
         int intermediateSize = hiddenDim * 4;
         int numPatches = (imageSize / patchSize) * (imageSize / patchSize);
 
-        // Patch embedding (linear projection of flattened patches)
-        yield return new ConvolutionalLayer<T>(3, imageSize, imageSize, hiddenDim, patchSize, patchSize, 0);
-        yield return new FlattenLayer<T>([hiddenDim, imageSize / patchSize, imageSize / patchSize]);
+        // Patch embedding: [B, 3, imageSize, imageSize] -> [B, numPatches, hiddenDim]
+        yield return new PatchEmbeddingLayer<T>(imageSize, imageSize, 3, patchSize, hiddenDim);
 
         // Position embeddings
         yield return new PositionalEncodingLayer<T>(numPatches + 1, hiddenDim);
@@ -10729,8 +10750,8 @@ public static class LayerHelper<T>
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
 
-        // Multi-scale vision encoder
-        yield return new ConvolutionalLayer<T>(3, imageSize / 16, imageSize / 16, visionDim, 16, 16, 0);
+        // Patch embedding: conv with kernel=16, stride=16 on full image → (imageSize/16)^2 patches
+        yield return new ConvolutionalLayer<T>(3, imageSize, imageSize, visionDim, 16, 16, 0);
         yield return new LayerNormalizationLayer<T>(visionDim);
 
         for (int i = 0; i < Math.Min(visionLayers, 6); i++)

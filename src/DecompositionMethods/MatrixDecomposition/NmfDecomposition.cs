@@ -148,17 +148,52 @@ public class NmfDecomposition<T> : MatrixDecompositionBase<T>
                 "Integer-based numeric types cannot represent the small positive values required by the algorithm.");
         }
 
-        // Initialize W and H with small random positive values
-        Matrix<T> tempW = InitializeRandomMatrix(m, k);
-        Matrix<T> tempH = InitializeRandomMatrix(k, n);
+        // Scale initialization to data magnitude to avoid zero-locking
+        T vSum = NumOps.Zero;
+        for (int i = 0; i < m; i++)
+            for (int j = 0; j < n; j++)
+                vSum = NumOps.Add(vSum, V[i, j]);
+        T vMean = NumOps.Divide(vSum, NumOps.FromDouble((double)(m * n)));
+        T initScale = NumOps.Sqrt(NumOps.Divide(NumOps.Add(vMean, NumOps.FromDouble(1e-10)), NumOps.FromDouble((double)k)));
+
+        // Use multiple random restarts to escape degenerate local optima
+        // (multiplicative updates can get trapped in zero-locked states)
+        Matrix<T> bestW = new Matrix<T>(0, 0);
+        Matrix<T> bestH = new Matrix<T>(0, 0);
+        T bestError = NumOps.FromDouble(double.MaxValue);
+        int nRestarts = 5;
+
+        for (int restart = 0; restart < nRestarts; restart++)
+        {
+            var (trialW, trialH) = RunNmfTrial(V, m, n, k, maxIterations, tolerance, initScale);
+            T trialError = ComputeReconstructionError(V, trialW, trialH);
+
+            if (NumOps.LessThan(trialError, bestError))
+            {
+                bestW = trialW;
+                bestH = trialH;
+                bestError = trialError;
+            }
+        }
+
+        return (bestW, bestH);
+    }
+
+    /// <summary>
+    /// Runs a single trial of NMF with random initialization.
+    /// </summary>
+    private (Matrix<T> W, Matrix<T> H) RunNmfTrial(Matrix<T> V, int m, int n, int k, int maxIterations, double tolerance, T initScale)
+    {
+        Matrix<T> tempW = InitializeRandomMatrix(m, k, initScale);
+        Matrix<T> tempH = InitializeRandomMatrix(k, n, initScale);
 
         T previousError = NumOps.FromDouble(double.MaxValue);
         T toleranceT = NumOps.FromDouble(tolerance);
-        T epsilon = NumOps.FromDouble(1e-10); // Small value to prevent division by zero
+        T epsilon = NumOps.FromDouble(1e-10);
 
         for (int iteration = 0; iteration < maxIterations; iteration++)
         {
-            // Update H: H = H .* (W^T * V) ./ (W^T * W * H + epsilon)
+            // Update H: H = H .* (W^T * V + eps) ./ (W^T * W * H + eps)
             Matrix<T> WT = tempW.Transpose();
             Matrix<T> WTV = WT.Multiply(V);
             Matrix<T> WTW = WT.Multiply(tempW);
@@ -170,17 +205,18 @@ public class NmfDecomposition<T> : MatrixDecompositionBase<T>
 
             for (int i = 0; i < k; i++)
             {
-                Vector<T> numerator = WTV.GetRow(i);
+                Vector<T> numeratorH = WTV.GetRow(i);
                 Vector<T> wtwhRow = WTWH.GetRow(i);
                 Vector<T> tempHRow = tempH.GetRow(i);
 
+                var stabilizedNumerator = (Vector<T>)Engine.Add(numeratorH, epsilonVec);
                 var denominator = (Vector<T>)Engine.Add(wtwhRow, epsilonVec);
-                var ratio = (Vector<T>)Engine.Divide(numerator, denominator);
+                var ratio = (Vector<T>)Engine.Divide(stabilizedNumerator, denominator);
                 var updated = (Vector<T>)Engine.Multiply(tempHRow, ratio);
                 tempH.SetRow(i, updated);
             }
 
-            // Update W: W = W .* (V * H^T) ./ (W * H * H^T + epsilon)
+            // Update W: W = W .* (V * H^T + eps) ./ (W * H * H^T + eps)
             Matrix<T> HT = tempH.Transpose();
             Matrix<T> VHT = V.Multiply(HT);
             Matrix<T> WH = tempW.Multiply(tempH);
@@ -192,12 +228,13 @@ public class NmfDecomposition<T> : MatrixDecompositionBase<T>
 
             for (int i = 0; i < m; i++)
             {
-                Vector<T> numerator = VHT.GetRow(i);
+                Vector<T> numeratorW = VHT.GetRow(i);
                 Vector<T> whhtRow = WHHT.GetRow(i);
                 Vector<T> tempWRow = tempW.GetRow(i);
 
+                var stabilizedNumerator = (Vector<T>)Engine.Add(numeratorW, epsilonVecW);
                 var denominator = (Vector<T>)Engine.Add(whhtRow, epsilonVecW);
-                var ratio = (Vector<T>)Engine.Divide(numerator, denominator);
+                var ratio = (Vector<T>)Engine.Divide(stabilizedNumerator, denominator);
                 var updated = (Vector<T>)Engine.Multiply(tempWRow, ratio);
                 tempW.SetRow(i, updated);
             }
@@ -221,12 +258,13 @@ public class NmfDecomposition<T> : MatrixDecompositionBase<T>
     }
 
     /// <summary>
-    /// Initializes a matrix with small random positive values.
+    /// Initializes a matrix with random positive values scaled to the data magnitude.
     /// </summary>
     /// <param name="rows">Number of rows.</param>
     /// <param name="cols">Number of columns.</param>
+    /// <param name="scale">Scale factor derived from the data (typically sqrt(mean(V)/k)).</param>
     /// <returns>A randomly initialized matrix.</returns>
-    private Matrix<T> InitializeRandomMatrix(int rows, int cols)
+    private Matrix<T> InitializeRandomMatrix(int rows, int cols, T scale)
     {
         var random = RandomHelper.CreateSecureRandom();
         var matrix = new Matrix<T>(rows, cols);
@@ -235,8 +273,10 @@ public class NmfDecomposition<T> : MatrixDecompositionBase<T>
         {
             for (int j = 0; j < cols; j++)
             {
-                // Initialize with small random positive values between 0 and 1
-                matrix[i, j] = NumOps.FromDouble(random.NextDouble());
+                // Use [0.1, 1.1) * scale to avoid near-zero values that cause
+                // zero-locking in multiplicative updates
+                T randomValue = NumOps.FromDouble(0.1 + random.NextDouble());
+                matrix[i, j] = NumOps.Multiply(scale, randomValue);
             }
         }
 

@@ -633,7 +633,7 @@ public class Nougat<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
                 { "supports_latex", SupportsLatex },
                 { "use_native_mode", _useNativeMode }
             },
-            ModelData = this.Serialize()
+            ModelData = SafeSerialize()
         };
     }
 

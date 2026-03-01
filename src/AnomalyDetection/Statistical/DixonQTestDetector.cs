@@ -153,45 +153,36 @@ public class DixonQTestDetector<T> : AnomalyDetectorBase<T>
                 // If closer to max: Q = (max - x) / range compared to (max - x(n-1)) / range
 
                 T value = X[i, j];
-                T distFromMin = NumOps.Subtract(value, _minValues![j]);
-                T distFromMax = NumOps.Subtract(_maxValues![j], value);
-
-                double distMinD = NumOps.ToDouble(distFromMin);
-                double distMaxD = NumOps.ToDouble(distFromMax);
-                double rangeD = NumOps.ToDouble(_ranges[j]);
+                double rangeD = NumOps.ToDouble(_ranges![j]);
+                double valueD = NumOps.ToDouble(value);
+                double secondMinD = NumOps.ToDouble(_secondMin![j]);
+                double secondMaxD = NumOps.ToDouble(_secondMax![j]);
 
                 T qStatistic;
-                double valueD = NumOps.ToDouble(value);
-                double minD = NumOps.ToDouble(_minValues![j]);
-                double maxD = NumOps.ToDouble(_maxValues![j]);
 
-                if (valueD < minD)
+                // Dixon's Q measures how extreme a point is by comparing the gap
+                // between the suspect value and its nearest neighbor to the total range.
+                // For the max: Q = (max - secondMax) / range
+                // For the min: Q = (secondMin - min) / range
+                // General: points near/beyond extremes get high Q scores.
+
+                if (valueD >= secondMaxD)
                 {
-                    // Point is MORE extreme than training minimum (beyond min)
-                    // Higher Q score indicates potential outlier
-                    T gapToSecond = NumOps.Subtract(_secondMin![j], _minValues[j]);
-                    double gapD = NumOps.ToDouble(gapToSecond);
-                    double beyondMin = minD - valueD;
-                    qStatistic = NumOps.FromDouble((gapD + beyondMin) / rangeD + 1.0);
+                    // Point is at or beyond the high end of the distribution
+                    // Dixon Q: gap from second-highest value, normalized by range
+                    qStatistic = NumOps.FromDouble((valueD - secondMaxD) / rangeD);
                 }
-                else if (valueD > maxD)
+                else if (valueD <= secondMinD)
                 {
-                    // Point is MORE extreme than training maximum (beyond max)
-                    T gapFromSecond = NumOps.Subtract(_maxValues[j], _secondMax![j]);
-                    double gapD = NumOps.ToDouble(gapFromSecond);
-                    double beyondMax = valueD - maxD;
-                    qStatistic = NumOps.FromDouble((gapD + beyondMax) / rangeD + 1.0);
-                }
-                else if (distMinD <= distMaxD)
-                {
-                    // Point is within range, closer to minimum
-                    // Classic Dixon Q: ratio of gap to nearest neighbor vs total range
-                    qStatistic = NumOps.FromDouble(distMinD / rangeD);
+                    // Point is at or beyond the low end of the distribution
+                    // Dixon Q: gap from second-lowest value, normalized by range
+                    qStatistic = NumOps.FromDouble((secondMinD - valueD) / rangeD);
                 }
                 else
                 {
-                    // Point is within range, closer to maximum
-                    qStatistic = NumOps.FromDouble(distMaxD / rangeD);
+                    // Point is in the interior (between secondMin and secondMax)
+                    // Not an outlier by Dixon's Q test
+                    qStatistic = NumOps.Zero;
                 }
 
                 if (NumOps.GreaterThan(qStatistic, maxQStatistic))

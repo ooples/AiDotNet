@@ -212,15 +212,16 @@ public class FlattenLayer<T> : LayerBase<T>
     {
         _lastInput = input;
 
-        // Handle unbatched input (3D: [C, H, W] or 2D: [H, W])
-        if (input.Rank <= 3)
+        // Handle truly unbatched 1D input
+        if (input.Rank == 1)
         {
-            // Unbatched input: flatten to 1D vector
+            // Already 1D: nothing to flatten
             _outputSize = input.Length;
-            return Engine.Reshape(input, [input.Length]);
+            return input;
         }
 
-        // Batched input: flatten spatial dimensions keeping batch dimension
+        // For rank >= 2: preserve first dimension (batch) and flatten the rest
+        // This matches PyTorch nn.Flatten(start_dim=1) behavior
         int batchSize = input.Shape[0];
         // Calculate actual flattened size from input dimensions, not pre-computed _outputSize
         int actualOutputSize = 1;
@@ -274,8 +275,9 @@ public class FlattenLayer<T> : LayerBase<T>
         var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
 
         // Replay forward pass: flatten is just a reshape operation
+        // Must match Forward() logic: rank 1 stays 1D, rank >= 2 becomes [batch, flat]
         int[] flattenedShape;
-        if (_lastInput.Rank <= 3)
+        if (_lastInput.Rank == 1)
         {
             flattenedShape = new[] { _outputSize };
         }

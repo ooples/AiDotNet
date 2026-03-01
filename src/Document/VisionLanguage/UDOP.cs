@@ -589,7 +589,7 @@ public class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocume
                 { "num_classes", _numClasses },
                 { "use_native_mode", _useNativeMode }
             },
-            ModelData = this.Serialize()
+            ModelData = SafeSerialize()
         };
     }
 
@@ -634,6 +634,53 @@ public class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocume
     #endregion
 
     #region NeuralNetworkBase Implementation
+
+    /// <summary>
+    /// Encoder-decoder forward pass: runs encoder layers, then feeds encoder output
+    /// as cross-attention context to decoder layers.
+    /// </summary>
+    protected override Tensor<T> Forward(Tensor<T> input)
+    {
+        Tensor<T> output = input;
+        Tensor<T>? encoderOutput = null;
+        bool hasPassedConvLayer = false;
+        bool hasReshapedToSequence = false;
+
+        foreach (var layer in Layers)
+        {
+            if (layer is ConvolutionalLayer<T> or BatchNormalizationLayer<T>
+                     or PoolingLayer<T> or MaxPoolingLayer<T> or AveragePoolingLayer<T>)
+            {
+                hasPassedConvLayer = true;
+            }
+
+            // Auto-reshape spatial to sequence when transitioning from CNN to non-spatial layers
+            bool isNonSpatialLayer = layer is not (ConvolutionalLayer<T> or BatchNormalizationLayer<T>
+                or PoolingLayer<T> or MaxPoolingLayer<T> or AveragePoolingLayer<T>);
+            if (!hasReshapedToSequence && hasPassedConvLayer && output.Shape.Length >= 3 && isNonSpatialLayer)
+            {
+                int channels = output.Shape.Length == 4 ? output.Shape[1] : output.Shape[0];
+                int spatialH = output.Shape.Length == 4 ? output.Shape[2] : output.Shape[1];
+                int spatialW = output.Shape.Length == 4 ? output.Shape[3] : output.Shape[2];
+                int numPatches = spatialH * spatialW;
+                output = new Tensor<T>(output.Data.ToArray(), [numPatches, channels]);
+                hasReshapedToSequence = true;
+            }
+
+            if (layer is TransformerDecoderLayer<T> decoderLayer)
+            {
+                // Save encoder output before first decoder layer
+                encoderOutput ??= output;
+                output = decoderLayer.Forward(output, encoderOutput);
+            }
+            else
+            {
+                output = layer.Forward(output);
+            }
+        }
+
+        return output;
+    }
 
     /// <inheritdoc/>
     public override Tensor<T> Predict(Tensor<T> input)

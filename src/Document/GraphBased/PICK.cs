@@ -417,7 +417,7 @@ public class PICK<T> : DocumentNeuralNetworkBase<T>, IFormUnderstanding<T>
                 { "num_entity_types", _numEntityTypes },
                 { "use_native_mode", _useNativeMode }
             },
-            ModelData = this.Serialize()
+            ModelData = SafeSerialize()
         };
     }
 

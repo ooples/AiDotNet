@@ -5,8 +5,8 @@ namespace AiDotNet.JitCompiler.IR.Operations;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Forward: y = tanh(beta * x)
-/// Backward: grad_x = grad_y * beta * (1 - y^2)
+/// Forward: y = (1 - exp(-beta*x)) / (1 + exp(-beta*x)) = tanh(beta*x/2)
+/// Backward: grad_x = grad_y * (beta/2) * (1 - y^2)
 /// </para>
 /// </remarks>
 public class GradScaledTanhOp : BackwardOp

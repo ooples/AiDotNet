@@ -397,7 +397,7 @@ public class FederatedLearningOptions : ModelOptions
     /// <b>For Beginners:</b> If this is set, it overrides the legacy
     /// <see cref="EnablePersonalization"/> / <see cref="PersonalizationLayerFraction"/> settings.
     /// </remarks>
-    public FederatedPersonalizationOptions? Personalization { get; set; } = new();
+    public FederatedPersonalizationOptions? Personalization { get; set; } = null;
 
     /// <summary>
     /// Gets or sets federated meta-learning options (Per-FedAvg / FedMAML / Reptile-style).
@@ -433,7 +433,7 @@ public class FederatedLearningOptions : ModelOptions
     /// <b>For Beginners:</b> This is the preferred way to configure compression. If null,
     /// the legacy <see cref="UseCompression"/> / <see cref="CompressionRatio"/> properties are used.
     /// </remarks>
-    public FederatedCompressionOptions? Compression { get; set; } = new();
+    public FederatedCompressionOptions? Compression { get; set; } = null;
 
     /// <summary>
     /// Gets or sets the compression ratio (0.0 to 1.0) if compression is enabled.

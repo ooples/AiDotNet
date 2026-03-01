@@ -956,7 +956,7 @@ public class LiLT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocume
                 { "text_backbone", _textBackbone },
                 { "use_native_mode", _useNativeMode }
             },
-            ModelData = this.Serialize()
+            ModelData = SafeSerialize()
         };
     }
 

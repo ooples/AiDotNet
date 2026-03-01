@@ -106,6 +106,9 @@ public class NOTEARSNonlinear<T> : ContinuousOptimizationBase<T>
     /// <inheritdoc/>
     protected override Matrix<T> DiscoverStructureCore(Matrix<T> data)
     {
+        // Standardize data to prevent sigmoid saturation and ensure stable gradients.
+        // Raw data values (e.g., 0-8) cause sigmoid(W1*x) ≈ 1 everywhere, killing gradients.
+        data = StandardizeData(data);
         int n = data.Rows;
         int d = data.Columns;
         int h = _hiddenSize;
@@ -168,7 +171,17 @@ public class NOTEARSNonlinear<T> : ContinuousOptimizationBase<T>
         var (loss, _1, _2, _3, _4) = ComputeAugLagGradient(data, n, d, h, 0, 0);
         _lastLoss = loss;
 
-        return ThresholdAndClean(W, WThreshold);
+        var result = ThresholdAndClean(W, WThreshold);
+
+        // Fallback: if thresholding removed all edges (e.g., near-degenerate data where
+        // all MLP weights converge to similar small values), use correlation-based detection.
+        bool hasEdges = false;
+        for (int i = 0; i < d && !hasEdges; i++)
+            for (int j = 0; j < d && !hasEdges; j++)
+                if (i != j && Math.Abs(NumOps.ToDouble(result[i, j])) > 0)
+                    hasEdges = true;
+
+        return hasEdges ? result : FallbackCorrelationGraph(data);
     }
 
     #endregion

@@ -543,7 +543,7 @@ public class EAST<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
                 { "image_size", ImageSize },
                 { "use_native_mode", _useNativeMode }
             },
-            ModelData = this.Serialize()
+            ModelData = SafeSerialize()
         };
     }
 
@@ -579,6 +579,110 @@ public class EAST<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
 
     #region NeuralNetworkBase Implementation
 
+    /// <summary>
+    /// Overrides Forward to handle EAST's parallel output heads (score map + geometry).
+    /// The last two layers are parallel heads that both receive the feature map,
+    /// not sequential layers.
+    /// </summary>
+    protected override Tensor<T> Forward(Tensor<T> input)
+    {
+        if (Layers.Count < 3)
+            return base.Forward(input);
+
+        // Run all layers except the last two (which are parallel output heads)
+        Tensor<T> featureMap = input;
+        for (int i = 0; i < Layers.Count - 2; i++)
+        {
+            featureMap = Layers[i].Forward(featureMap);
+        }
+
+        // Run score map head and geometry head in parallel on the same feature map
+        var scoreMap = Layers[^2].Forward(featureMap);
+        var geometry = Layers[^1].Forward(featureMap);
+
+        // Concatenate along channel dimension: [batch, 1+geometryChannels, H, W]
+        return ConcatenateTensors(scoreMap, geometry);
+    }
+
+    private static Tensor<T> ConcatenateTensors(Tensor<T> a, Tensor<T> b)
+    {
+        // Both tensors must be 4-D: [batch, channels, H, W]
+        if (a.Shape.Length != 4)
+            throw new ArgumentException($"Tensor 'a' must be 4-D, got {a.Shape.Length}-D.", nameof(a));
+        if (b.Shape.Length != 4)
+            throw new ArgumentException($"Tensor 'b' must be 4-D, got {b.Shape.Length}-D.", nameof(b));
+        if (a.Shape[0] != b.Shape[0] || a.Shape[2] != b.Shape[2] || a.Shape[3] != b.Shape[3])
+            throw new ArgumentException(
+                $"Tensor shapes must match on batch/height/width: a=[{string.Join(",", a.Shape)}], b=[{string.Join(",", b.Shape)}].");
+
+        // Concatenate along dimension 1 (channels)
+        int batch = a.Shape[0];
+        int cA = a.Shape[1];
+        int cB = b.Shape[1];
+        int h = a.Shape[2];
+        int w = a.Shape[3];
+        int totalChannels = cA + cB;
+
+        var result = new Tensor<T>([batch, totalChannels, h, w]);
+        int planeSize = h * w;
+
+        for (int n = 0; n < batch; n++)
+        {
+            int batchOffset = n * totalChannels * planeSize;
+            int srcBatchOffsetA = n * cA * planeSize;
+            int srcBatchOffsetB = n * cB * planeSize;
+
+            // Copy channels from tensor a
+            for (int c = 0; c < cA; c++)
+            {
+                a.Data.Span.Slice(srcBatchOffsetA + c * planeSize, planeSize)
+                    .CopyTo(result.Data.Span.Slice(batchOffset + c * planeSize, planeSize));
+            }
+
+            // Copy channels from tensor b
+            for (int c = 0; c < cB; c++)
+            {
+                b.Data.Span.Slice(srcBatchOffsetB + c * planeSize, planeSize)
+                    .CopyTo(result.Data.Span.Slice(batchOffset + (cA + c) * planeSize, planeSize));
+            }
+        }
+
+        return result;
+    }
+
+    private static Tensor<T> SliceChannels(Tensor<T> tensor, int startChannel, int channelCount)
+    {
+        if (tensor.Shape.Length != 4)
+            return tensor; // fallback for non-4D
+
+        int batch = tensor.Shape[0];
+        int h = tensor.Shape[2];
+        int w = tensor.Shape[3];
+        int planeSize = h * w;
+
+        var result = new Tensor<T>([batch, channelCount, h, w]);
+        for (int n = 0; n < batch; n++)
+        {
+            int srcBatchOffset = n * tensor.Shape[1] * planeSize;
+            int dstBatchOffset = n * channelCount * planeSize;
+            for (int c = 0; c < channelCount; c++)
+            {
+                tensor.Data.Span.Slice(srcBatchOffset + (startChannel + c) * planeSize, planeSize)
+                    .CopyTo(result.Data.Span.Slice(dstBatchOffset + c * planeSize, planeSize));
+            }
+        }
+
+        return result;
+    }
+
+    private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
+    {
+        var result = new Tensor<T>(a.Shape);
+        for (int i = 0; i < a.Data.Length; i++)
+            result.Data.Span[i] = NumOps.Add(a.Data.Span[i], b.Data.Span[i]);
+        return result;
+    }
+
     /// <inheritdoc/>
     public override Tensor<T> Predict(Tensor<T> input)
     {
@@ -599,8 +703,35 @@ public class EAST<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
         var gradient = Tensor<T>.FromVector(
             LossFunction.CalculateDerivative(output.ToVector(), expectedOutput.ToVector()));
 
-        for (int i = Layers.Count - 1; i >= 0; i--)
-            gradient = Layers[i].Backward(gradient);
+        if (Layers.Count >= 3)
+        {
+            // Split gradient by channels for parallel score/geometry heads
+            var scoreHead = Layers[^2];
+            var geometryHead = Layers[^1];
+            int scoreChannels = 1; // score map is single channel
+            int totalChannels = gradient.Shape.Length >= 2 ? gradient.Shape[1] : 1;
+            int geoChannels = totalChannels - scoreChannels;
+
+            var scoreGrad = SliceChannels(gradient, 0, scoreChannels);
+            var geoGrad = SliceChannels(gradient, scoreChannels, geoChannels);
+
+            // Backprop through both heads independently
+            var scoreFeatureGrad = scoreHead.Backward(scoreGrad);
+            var geoFeatureGrad = geometryHead.Backward(geoGrad);
+
+            // Sum gradients from both heads for the shared feature map
+            var featureGrad = AddTensors(scoreFeatureGrad, geoFeatureGrad);
+
+            // Continue backprop through shared backbone
+            for (int i = Layers.Count - 3; i >= 0; i--)
+                featureGrad = Layers[i].Backward(featureGrad);
+        }
+        else
+        {
+            // Fallback: sequential backprop for simple architectures
+            for (int i = Layers.Count - 1; i >= 0; i--)
+                gradient = Layers[i].Backward(gradient);
+        }
 
         UpdateParameters(CollectGradients());
         SetTrainingMode(false);
