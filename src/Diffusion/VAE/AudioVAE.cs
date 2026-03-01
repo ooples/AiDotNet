@@ -455,23 +455,11 @@ public class AudioVAE<T> : VAEModelBase<T>
     /// </summary>
     private Tensor<T> TransposeAndAddBatch(Tensor<T> melSpec)
     {
-        int timeFrames = melSpec.Shape[0];
         int melChannels = melSpec.Shape[1];
-        var result = new Tensor<T>(new[] { 1, melChannels, timeFrames });
-        var resultSpan = result.AsWritableSpan();
-        var melSpan = melSpec.AsSpan();
-
-        for (int t = 0; t < timeFrames; t++)
-        {
-            for (int m = 0; m < melChannels; m++)
-            {
-                var srcIdx = t * melChannels + m;
-                var dstIdx = m * timeFrames + t;
-                resultSpan[dstIdx] = melSpan[srcIdx];
-            }
-        }
-
-        return result;
+        int timeFrames = melSpec.Shape[0];
+        // Transpose [timeFrames, melChannels] -> [melChannels, timeFrames], then add batch dim
+        var transposed = AiDotNetEngine.Current.TensorPermute(melSpec, [1, 0]);
+        return transposed.Reshape([1, melChannels, timeFrames]);
     }
 
     /// <summary>
