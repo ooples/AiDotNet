@@ -514,6 +514,11 @@ public partial class YamlModelConfig
     public YamlTypeSection? RLAgent { get; set; }
 
     /// <summary>
+    /// YAML configuration for ConfigureSegmentationVisualization().
+    /// </summary>
+    public AiDotNet.ComputerVision.Segmentation.Common.SegmentationVisualizationConfig? SegmentationVisualization { get; set; }
+
+    /// <summary>
     /// YAML configuration for ConfigureUncertaintyQuantification().
     /// </summary>
     public AiDotNet.Models.Options.UncertaintyQuantificationOptions? UncertaintyQuantification { get; set; }
@@ -1134,6 +1139,11 @@ public partial class YamlModelConfig
     public YamlTypeSection? InputOutputDataLoader { get; set; }
 
     /// <summary>
+    /// YAML configuration for the InstanceSegmentation section.
+    /// </summary>
+    public YamlTypeSection? InstanceSegmentation { get; set; }
+
+    /// <summary>
     /// YAML configuration for the IntermediateActivationStrategy section.
     /// </summary>
     public YamlTypeSection? IntermediateActivationStrategy { get; set; }
@@ -1172,6 +1182,11 @@ public partial class YamlModelConfig
     /// YAML configuration for the LLaVAModel section.
     /// </summary>
     public YamlTypeSection? LLaVAModel { get; set; }
+
+    /// <summary>
+    /// YAML configuration for the MedicalSegmentation section.
+    /// </summary>
+    public YamlTypeSection? MedicalSegmentation { get; set; }
 
     /// <summary>
     /// YAML configuration for the MetaLearnerOptions section.
@@ -1254,6 +1269,11 @@ public partial class YamlModelConfig
     public YamlTypeSection? OnnxModel { get; set; }
 
     /// <summary>
+    /// YAML configuration for the OpenVocabSegmentation section.
+    /// </summary>
+    public YamlTypeSection? OpenVocabSegmentation { get; set; }
+
+    /// <summary>
     /// YAML configuration for the OrdinalClassifier section.
     /// </summary>
     public YamlTypeSection? OrdinalClassifier { get; set; }
@@ -1262,6 +1282,11 @@ public partial class YamlModelConfig
     /// YAML configuration for the OutlierRemoval section.
     /// </summary>
     public YamlTypeSection? OutlierRemoval { get; set; }
+
+    /// <summary>
+    /// YAML configuration for the PanopticSegmentation section.
+    /// </summary>
+    public YamlTypeSection? PanopticSegmentation { get; set; }
 
     /// <summary>
     /// YAML configuration for the Parameterizable section.
@@ -1284,6 +1309,11 @@ public partial class YamlModelConfig
     public YamlTypeSection? ProbabilisticClassifier { get; set; }
 
     /// <summary>
+    /// YAML configuration for the PromptableSegmentation section.
+    /// </summary>
+    public YamlTypeSection? PromptableSegmentation { get; set; }
+
+    /// <summary>
     /// YAML configuration for the PruningMask section.
     /// </summary>
     public YamlTypeSection? PruningMask { get; set; }
@@ -1302,6 +1332,11 @@ public partial class YamlModelConfig
     /// YAML configuration for the ReasoningStrategy section.
     /// </summary>
     public YamlTypeSection? ReasoningStrategy { get; set; }
+
+    /// <summary>
+    /// YAML configuration for the ReferringSegmentation section.
+    /// </summary>
+    public YamlTypeSection? ReferringSegmentation { get; set; }
 
     /// <summary>
     /// YAML configuration for the Reranker section.
@@ -1334,9 +1369,19 @@ public partial class YamlModelConfig
     public YamlTypeSection? SceneClassifier { get; set; }
 
     /// <summary>
+    /// YAML configuration for the SegmentationModel section.
+    /// </summary>
+    public YamlTypeSection? SegmentationModel { get; set; }
+
+    /// <summary>
     /// YAML configuration for the SelfSupervisedLoss section.
     /// </summary>
     public YamlTypeSection? SelfSupervisedLoss { get; set; }
+
+    /// <summary>
+    /// YAML configuration for the SemanticSegmentation section.
+    /// </summary>
+    public YamlTypeSection? SemanticSegmentation { get; set; }
 
     /// <summary>
     /// YAML configuration for the SemiSupervisedClassifier section.
@@ -1442,6 +1487,11 @@ public partial class YamlModelConfig
     /// YAML configuration for the VideoDiffusionModel section.
     /// </summary>
     public YamlTypeSection? VideoDiffusionModel { get; set; }
+
+    /// <summary>
+    /// YAML configuration for the VideoSegmentation section.
+    /// </summary>
+    public YamlTypeSection? VideoSegmentation { get; set; }
 
     /// <summary>
     /// YAML configuration for the VoiceActivityDetector section.

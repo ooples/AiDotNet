@@ -107,6 +107,11 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
     private bool _inputWas1D;
 
     /// <summary>
+    /// Stores the original input shape from forward pass so backward can restore it.
+    /// </summary>
+    private int[]? _originalInputShape;
+
+    /// <summary>
     /// The batch mean from the last forward pass.
     /// </summary>
     /// <remarks>
@@ -337,6 +342,9 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        // Store original shape for backward pass restoration
+        _originalInputShape = input.Shape;
+
         // Auto-reshape 1D input to [1, N] for batch normalization compatibility
         _inputWas1D = input.Shape.Length == 1;
         if (_inputWas1D)
@@ -800,6 +808,13 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
         return inputGradient;
     }
 
+    private static int ComputeTotalElements(int[] shape)
+    {
+        int total = 1;
+        for (int i = 0; i < shape.Length; i++) total *= shape[i];
+        return total;
+    }
+
     /// <summary>
     /// Backward pass implementation using automatic differentiation.
     /// </summary>
@@ -889,8 +904,12 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
 
         var inputGrad = inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
 
-        // Preserve original rank: if forward input was 1D, return 1D gradient
-        if (_inputWas1D && inputGrad.Shape.Length > 1)
+        // Restore original input shape so gradient rank matches the forward input rank
+        if (_originalInputShape != null && inputGrad.Length == ComputeTotalElements(_originalInputShape))
+        {
+            inputGrad = inputGrad.Reshape(_originalInputShape);
+        }
+        else if (_inputWas1D && inputGrad.Shape.Length > 1)
         {
             inputGrad = inputGrad.Reshape(inputGrad.Length);
         }
