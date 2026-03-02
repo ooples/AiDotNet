@@ -125,7 +125,21 @@ public class ActiveTransFSLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TI
             double w = _algoOptions.TransductiveWeight;
             double combinedLoss = (1.0 - w) * NumOps.ToDouble(inductiveLoss) + w * NumOps.ToDouble(transductiveLoss);
             losses.Add(NumOps.FromDouble(combinedLoss));
-            metaGradients.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
+
+            // Compute combined gradient consistent with the combined loss:
+            // grad_meta = (1-w) * grad_inductive + w * grad_transductive
+            MetaModel.SetParameters(adaptedParams);
+            var inductiveGrad = ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput);
+            MetaModel.SetParameters(transParams);
+            var transductiveGrad = ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput);
+
+            var combinedGrad = new Vector<T>(_paramDim);
+            for (int d = 0; d < _paramDim; d++)
+            {
+                double gd = (1.0 - w) * NumOps.ToDouble(inductiveGrad[d]) + w * NumOps.ToDouble(transductiveGrad[d]);
+                combinedGrad[d] = NumOps.FromDouble(gd);
+            }
+            metaGradients.Add(ClipGradients(combinedGrad));
         }
 
         ApplyOuterUpdate(initParams, metaGradients, _algoOptions.OuterLearningRate);

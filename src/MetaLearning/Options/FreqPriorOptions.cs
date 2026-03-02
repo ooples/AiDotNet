@@ -51,11 +51,18 @@ public class FreqPriorOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOp
     /// </summary>
     public double HighFreqRegWeight { get; set; } = 0.01;
 
+    /// <summary>
+    /// Scale factor for the frequency penalty term applied to low-frequency gradient variance.
+    /// Controls how strongly cross-task consistency of low-frequency gradients is enforced. Default: 0.01.
+    /// </summary>
+    public double FrequencyPenaltyScale { get; set; } = 0.01;
+
     public FreqPriorOptions(IFullModel<T, TInput, TOutput> metaModel)
     { Guard.NotNull(metaModel); MetaModel = metaModel; }
 
     public bool IsValid() => MetaModel != null && OuterLearningRate > 0 && MetaBatchSize > 0
-        && LowFreqFraction > 0 && LowFreqFraction < 1 && LowFreqRegWeight >= 0 && HighFreqRegWeight >= 0;
+        && LowFreqFraction > 0 && LowFreqFraction < 1 && LowFreqRegWeight >= 0 && HighFreqRegWeight >= 0
+        && FrequencyPenaltyScale >= 0;
     public IMetaLearnerOptions<T> Clone() => new FreqPriorOptions<T, TInput, TOutput>(MetaModel)
     {
         LossFunction = LossFunction, MetaOptimizer = MetaOptimizer, InnerOptimizer = InnerOptimizer,
@@ -64,6 +71,7 @@ public class FreqPriorOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOp
         GradientClipThreshold = GradientClipThreshold, RandomSeed = RandomSeed, EvaluationTasks = EvaluationTasks,
         EvaluationFrequency = EvaluationFrequency, EnableCheckpointing = EnableCheckpointing,
         CheckpointFrequency = CheckpointFrequency, UseFirstOrder = UseFirstOrder,
-        LowFreqFraction = LowFreqFraction, LowFreqRegWeight = LowFreqRegWeight, HighFreqRegWeight = HighFreqRegWeight
+        LowFreqFraction = LowFreqFraction, LowFreqRegWeight = LowFreqRegWeight, HighFreqRegWeight = HighFreqRegWeight,
+        FrequencyPenaltyScale = FrequencyPenaltyScale
     };
 }

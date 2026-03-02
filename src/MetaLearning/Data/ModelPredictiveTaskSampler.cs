@@ -184,8 +184,9 @@ public class ModelPredictiveTaskSampler<T, TInput, TOutput> : ITaskSampler<T, TI
         // Use episode metadata or difficulty as a secondary discriminator
         if (episode.Difficulty.HasValue)
             hash = hash * 31 + episode.Difficulty.Value.GetHashCode();
-        // Bound the arm space to prevent unbounded growth (1024 arms)
-        return (hash & int.MaxValue) % 1024;
+        // Bound the arm space to prevent unbounded growth (1024 arms) using
+        // an unsigned modulo to avoid Math.Abs(int.MinValue) overflow.
+        return (int)((uint)hash % 1024u);
     }
 
     /// <inheritdoc/>

@@ -161,6 +161,6 @@ public class FreqPriorAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
             foreach (var g in gradients) var_d += (NumOps.ToDouble(g[d]) - mean) * (NumOps.ToDouble(g[d]) - mean);
             penalty += var_d / gradients.Count;
         }
-        return _algoOptions.LowFreqRegWeight * 0.01 * penalty;
+        return _algoOptions.LowFreqRegWeight * _algoOptions.FrequencyPenaltyScale * penalty;
     }
 }

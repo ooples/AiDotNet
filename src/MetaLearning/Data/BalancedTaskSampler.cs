@@ -99,15 +99,29 @@ public class BalancedTaskSampler<T, TInput, TOutput> : ITaskSampler<T, TInput, T
         {
             var candidate = _dataset.SampleEpisode(NumWays, NumShots, NumQueryPerClass);
 
-            // Count how many of the candidate's classes match the target rotation window
+            // Count how many of the candidate's classes match the target rotation window.
+            // Prefer EpisodeMetadata["class_ids"] (global class IDs) because episode labels
+            // are often remapped to 0..(numWays-1), making direct label comparison unreliable.
             int overlap = 0;
-            if (candidate.Task.SupportOutput is Vector<T> supportLabels)
+            HashSet<int>? candidateClasses = null;
+
+            if (candidate.EpisodeMetadata is not null
+                && candidate.EpisodeMetadata.TryGetValue("class_ids", out var classIdsObj)
+                && classIdsObj is IEnumerable<int> classIds)
             {
+                candidateClasses = new HashSet<int>(classIds);
+            }
+            else if (candidate.Task.SupportOutput is Vector<T> supportLabels)
+            {
+                // Fallback: inspect labels (works when labels are not remapped)
                 var numOps = MathHelper.GetNumericOperations<T>();
-                var candidateClasses = new HashSet<int>();
+                candidateClasses = new HashSet<int>();
                 for (int i = 0; i < supportLabels.Length; i++)
                     candidateClasses.Add((int)Math.Round(numOps.ToDouble(supportLabels[i])));
+            }
 
+            if (candidateClasses is not null)
+            {
                 foreach (int cls in candidateClasses)
                 {
                     if (targetClasses.Contains(cls)) overlap++;
