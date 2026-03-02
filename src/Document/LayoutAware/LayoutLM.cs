@@ -409,33 +409,7 @@ public class LayoutLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>
 
     private Tensor<T> ApplySoftmax(Tensor<T> input)
     {
-        var output = new Tensor<T>(input.Shape);
-        int seqLen = input.Shape[0];
-        int numClasses = input.Shape.Length > 1 ? input.Shape[1] : _numClasses;
-
-        for (int s = 0; s < seqLen; s++)
-        {
-            double maxVal = double.MinValue;
-            for (int c = 0; c < numClasses; c++)
-            {
-                double val = NumOps.ToDouble(input[s, c]);
-                if (val > maxVal) maxVal = val;
-            }
-
-            double sumExp = 0;
-            for (int c = 0; c < numClasses; c++)
-            {
-                sumExp += Math.Exp(NumOps.ToDouble(input[s, c]) - maxVal);
-            }
-
-            for (int c = 0; c < numClasses; c++)
-            {
-                double val = NumOps.ToDouble(input[s, c]);
-                output[s, c] = NumOps.FromDouble(Math.Exp(val - maxVal) / sumExp);
-            }
-        }
-
-        return output;
+        return Engine.Softmax(input, -1);
     }
 
     #endregion
@@ -463,7 +437,7 @@ public class LayoutLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>
                 { "num_classes", _numClasses },
                 { "use_native_mode", _useNativeMode }
             },
-            ModelData = this.Serialize()
+            ModelData = SafeSerialize()
         };
     }
 
@@ -549,8 +523,8 @@ public class LayoutLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>
         var currentParams = GetParameters();
         T lr = NumOps.FromDouble(0.00005);
 
-        for (int i = 0; i < currentParams.Length; i++)
-            currentParams[i] = NumOps.Subtract(currentParams[i], NumOps.Multiply(lr, gradients[i]));
+        
+        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, lr));
 
         SetParameters(currentParams);
     }

@@ -1,4 +1,5 @@
 using AiDotNet.Enums;
+using AiDotNet.Helpers;
 using AiDotNet.Models;
 using AiDotNet.Safety;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -152,7 +153,7 @@ public class ReferenceBasedHallucinationDetector<T> : TextSafetyModuleBase<T>
             // Embedding similarity score
             var claimEmb = ComputeEmbedding(claimLower);
             var docEmb = ComputeEmbedding(docLower);
-            double embScore = ComputeCosineSimilarity(claimEmb, docEmb);
+            double embScore = VectorHelper.CosineSimilarity(claimEmb, docEmb);
 
             // Combined: 60% n-gram overlap + 40% embedding similarity
             double combined = 0.6 * ngramScore + 0.4 * embScore;
@@ -198,23 +199,6 @@ public class ReferenceBasedHallucinationDetector<T> : TextSafetyModuleBase<T>
         return embedding;
     }
 
-    private static double ComputeCosineSimilarity(Vector<T> a, Vector<T> b)
-    {
-        double dot = 0, normA = 0, normB = 0;
-        int len = Math.Min(a.Length, b.Length);
-
-        for (int i = 0; i < len; i++)
-        {
-            double ai = NumOps.ToDouble(a[i]);
-            double bi = NumOps.ToDouble(b[i]);
-            dot += ai * bi;
-            normA += ai * ai;
-            normB += bi * bi;
-        }
-
-        double denom = Math.Sqrt(normA * normB);
-        return denom > 1e-10 ? Math.Max(0, dot / denom) : 0;
-    }
 
     private static HashSet<string> ExtractNgrams(string text, int n)
     {

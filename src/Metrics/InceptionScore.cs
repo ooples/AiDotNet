@@ -210,35 +210,7 @@ namespace AiDotNet.Metrics
         /// </summary>
         private Tensor<T> Softmax(Tensor<T> logits)
         {
-            var result = new Tensor<T>(logits.Shape);
-            var maxLogit = NumOps.Zero;
-
-            // Find max for numerical stability
-            for (int i = 0; i < logits.Length; i++)
-            {
-                if (NumOps.GreaterThan(logits.GetFlat(i), maxLogit))
-                {
-                    maxLogit = logits.GetFlat(i);
-                }
-            }
-
-            // Compute exp(x - max) and sum
-            var sum = NumOps.Zero;
-            for (int i = 0; i < logits.Length; i++)
-            {
-                var shifted = NumOps.Subtract(logits.GetFlat(i), maxLogit);
-                var expVal = NumOps.Exp(shifted);
-                result.SetFlat(i, expVal);
-                sum = NumOps.Add(sum, expVal);
-            }
-
-            // Normalize
-            for (int i = 0; i < result.Length; i++)
-            {
-                result.SetFlat(i, NumOps.Divide(result.GetFlat(i), sum));
-            }
-
-            return result;
+            return AiDotNetEngine.Current.Softmax(logits, -1);
         }
 
         /// <summary>

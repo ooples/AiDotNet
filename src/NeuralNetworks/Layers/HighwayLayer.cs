@@ -1,3 +1,4 @@
+using System.Linq;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Gpu;
 
@@ -1302,16 +1303,9 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         int inputDimension = _lastGateOutput.Shape[1];
         int totalElements = batchSize * inputDimension;
 
-        T sum = NumOps.Zero;
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int d = 0; d < inputDimension; d++)
-            {
-                T gateValue = _lastGateOutput[new int[] { b, d }];
-                sum = NumOps.Add(sum, gateValue);
-            }
-        }
-
+        var allAxes = Enumerable.Range(0, _lastGateOutput.Shape.Length).ToArray();
+        var sumTensor = Engine.ReduceSum(_lastGateOutput, allAxes, keepDims: false);
+        T sum = sumTensor.GetFlat(0);
         T meanGate = NumOps.Divide(sum, NumOps.FromDouble(totalElements));
 
         // Compute loss = (mean_gate - 0.5)^2 to encourage balanced gating

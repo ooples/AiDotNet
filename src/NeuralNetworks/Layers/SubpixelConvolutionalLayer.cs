@@ -599,8 +599,11 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
         // Perform fused convolution + bias (without activation since PixelShuffle must come before activation)
         // Note: Can't use FusedConv2D with activation because PixelShuffle must occur between conv and activation
         int padSize = _kernelSize / 2;
+        // Reshape bias from [intermediateChannels] to [1, intermediateChannels, 1, 1] for NCHW broadcast
+        int intermediateChannels = _biases.Shape[0];
+        var biasReshaped4D = _biases.Reshape([1, intermediateChannels, 1, 1]);
         var convOutputNCHW = Engine.FusedConv2D(
-            input4D, _kernels, _biases,
+            input4D, _kernels, biasReshaped4D,
             1, 1,           // stride
             padSize, padSize, // padding
             1, 1,           // dilation

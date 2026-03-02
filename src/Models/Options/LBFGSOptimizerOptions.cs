@@ -33,6 +33,14 @@ namespace AiDotNet.Models.Options;
 public class LBFGSOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOptions<T, TInput, TOutput>
 {
     /// <summary>
+    /// Initializes a new instance of the LBFGSOptimizerOptions class with appropriate defaults.
+    /// </summary>
+    public LBFGSOptimizerOptions()
+    {
+        MaxIterations = 1000;
+    }
+
+    /// <summary>
     /// Gets or sets the batch size for gradient computation.
     /// </summary>
     /// <value>A positive integer, defaulting to -1 (full batch).</value>
@@ -258,8 +266,7 @@ public class LBFGSOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerO
     /// needs fewer iterations to reach a good solution. However, the exact number needed depends
     /// greatly on your specific problem.
     /// 
-    /// Note: This property uses the "new" keyword because it overrides the base class property with a
-    /// different default value that's more appropriate for L-BFGS.</para>
+    /// Note: The default value for MaxIterations is set to 1000 via the constructor, which is more
+    /// appropriate for L-BFGS than the base class default.</para>
     /// </remarks>
-    public new int MaxIterations { get; set; } = 1000;
 }

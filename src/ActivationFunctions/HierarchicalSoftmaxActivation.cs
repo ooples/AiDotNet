@@ -42,7 +42,12 @@ public class HierarchicalSoftmaxActivation<T> : ActivationFunctionBase<T>
     /// <summary>
     /// The weights for each node in the binary tree.
     /// </summary>
-    private readonly Matrix<T> _nodeWeights;
+    private Matrix<T> _nodeWeights;
+
+    /// <summary>
+    /// The input dimension that the weight matrix was initialized for.
+    /// </summary>
+    private int _weightInputDim;
 
     /// <summary>
     /// Gets the node weights as a tensor for use in computation graphs.
@@ -78,6 +83,7 @@ public class HierarchicalSoftmaxActivation<T> : ActivationFunctionBase<T>
     {
         _numClasses = numClasses;
         _treeDepth = (int)Math.Ceiling(MathHelper.Log2(numClasses));
+        _weightInputDim = numClasses;
         _nodeWeights = new Matrix<T>(_treeDepth, numClasses);
         InitializeWeights();
     }
@@ -109,6 +115,14 @@ public class HierarchicalSoftmaxActivation<T> : ActivationFunctionBase<T>
     /// </remarks>
     public override Vector<T> Activate(Vector<T> input)
     {
+        // Reinitialize weights if input dimension doesn't match
+        if (input.Length != _weightInputDim)
+        {
+            _weightInputDim = input.Length;
+            _nodeWeights = new Matrix<T>(_treeDepth, input.Length);
+            InitializeWeights();
+        }
+
         Vector<T> output = new Vector<T>(_numClasses);
         for (int i = 0; i < _numClasses; i++)
         {
@@ -192,9 +206,10 @@ public class HierarchicalSoftmaxActivation<T> : ActivationFunctionBase<T>
     private void InitializeWeights()
     {
         var random = RandomHelper.CreateSecureRandom();
+        int cols = _nodeWeights.Columns;
         for (int i = 0; i < _treeDepth; i++)
         {
-            for (int j = 0; j < _numClasses; j++)
+            for (int j = 0; j < cols; j++)
             {
                 _nodeWeights[i, j] = NumOps.FromDouble(random.NextDouble() - 0.5);
             }

@@ -1,4 +1,5 @@
 
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 
@@ -350,7 +351,7 @@ public class ContrastiveDistillationStrategy<T> : DistillationStrategyBase<T>, I
         for (int i = 0; i < batchSize; i++)
         {
             // Positive: teacher-student pair for same sample
-            double positiveSim = CosineSimilarity(teacherEmbs[i], studentEmbs[i]);
+            double positiveSim = VectorHelper.CosineSimilarity(teacherEmbs[i], studentEmbs[i]);
             double positiveScore = Math.Exp(positiveSim / Temperature);
 
             // Negatives: all other samples
@@ -361,7 +362,7 @@ public class ContrastiveDistillationStrategy<T> : DistillationStrategyBase<T>, I
             {
                 if (i != j)
                 {
-                    double negativeSim = CosineSimilarity(teacherEmbs[i], studentEmbs[j]);
+                    double negativeSim = VectorHelper.CosineSimilarity(teacherEmbs[i], studentEmbs[j]);
                     negativeSum += Math.Exp(negativeSim / Temperature);
                     negativeCount++;
                 }
@@ -418,8 +419,8 @@ public class ContrastiveDistillationStrategy<T> : DistillationStrategyBase<T>, I
             // Positive distance: student to its corresponding teacher
             // Negative distance: student to teacher of different class
             // This ensures student embeddings align with teacher's embedding space
-            double posDist = EuclideanDistance(studentEmbs[i], teacherEmbs[i]);
-            double negDist = EuclideanDistance(studentEmbs[i], teacherEmbs[negativeIdx]);
+            double posDist = NumOps.ToDouble(VectorHelper.EuclideanDistance(studentEmbs[i], teacherEmbs[i]));
+            double negDist = NumOps.ToDouble(VectorHelper.EuclideanDistance(studentEmbs[i], teacherEmbs[negativeIdx]));
             double loss = Math.Max(0, posDist - negDist + margin);
 
             totalLoss = NumOps.Add(totalLoss, NumOps.FromDouble(loss));
@@ -442,7 +443,7 @@ public class ContrastiveDistillationStrategy<T> : DistillationStrategyBase<T>, I
         for (int i = 0; i < batchSize; i++)
         {
             // Positive: corresponding teacher embedding
-            double positiveSim = CosineSimilarity(studentEmbs[i], teacherEmbs[i]) / Temperature;
+            double positiveSim = VectorHelper.CosineSimilarity(studentEmbs[i], teacherEmbs[i]) / Temperature;
 
             // Denominator: sum over ALL pairs (including positive)
             double denominator = Math.Exp(positiveSim); // Include positive pair
@@ -450,7 +451,7 @@ public class ContrastiveDistillationStrategy<T> : DistillationStrategyBase<T>, I
             {
                 if (i != j)
                 {
-                    double sim = CosineSimilarity(studentEmbs[i], teacherEmbs[j]) / Temperature;
+                    double sim = VectorHelper.CosineSimilarity(studentEmbs[i], teacherEmbs[j]) / Temperature;
                     denominator += Math.Exp(sim);
                 }
             }
@@ -463,36 +464,7 @@ public class ContrastiveDistillationStrategy<T> : DistillationStrategyBase<T>, I
         return NumOps.Divide(totalLoss, NumOps.FromDouble(batchSize));
     }
 
-    private double CosineSimilarity(Vector<T> v1, Vector<T> v2)
-    {
-        T dot = NumOps.Zero;
-        T norm1 = NumOps.Zero;
-        T norm2 = NumOps.Zero;
 
-        for (int i = 0; i < v1.Length; i++)
-        {
-            dot = NumOps.Add(dot, NumOps.Multiply(v1[i], v2[i]));
-            norm1 = NumOps.Add(norm1, NumOps.Multiply(v1[i], v1[i]));
-            norm2 = NumOps.Add(norm2, NumOps.Multiply(v2[i], v2[i]));
-        }
-
-        double dotVal = Convert.ToDouble(dot);
-        double norm1Val = Math.Sqrt(Convert.ToDouble(norm1));
-        double norm2Val = Math.Sqrt(Convert.ToDouble(norm2));
-
-        return dotVal / (norm1Val * norm2Val + Epsilon);
-    }
-
-    private double EuclideanDistance(Vector<T> v1, Vector<T> v2)
-    {
-        T sumSq = NumOps.Zero;
-        for (int i = 0; i < v1.Length; i++)
-        {
-            var diff = NumOps.Subtract(v1[i], v2[i]);
-            sumSq = NumOps.Add(sumSq, NumOps.Multiply(diff, diff));
-        }
-        return Math.Sqrt(Convert.ToDouble(sumSq));
-    }
 
     /// <summary>
     /// Computes gradients of intermediate activation loss with respect to student embeddings.
@@ -610,7 +582,7 @@ public class ContrastiveDistillationStrategy<T> : DistillationStrategyBase<T>, I
 
         for (int j = 0; j < batchSize; j++)
         {
-            similarities[j] = CosineSimilarity(studentAnchor, teacherEmbeddings[j]);
+            similarities[j] = VectorHelper.CosineSimilarity(studentAnchor, teacherEmbeddings[j]);
             expSims[j] = Math.Exp(similarities[j] / Temperature);
             sumExpSims += expSims[j];
         }
@@ -668,21 +640,11 @@ public class ContrastiveDistillationStrategy<T> : DistillationStrategyBase<T>, I
         int dim = student.Length;
         var gradient = new Vector<T>(dim);
 
-        // Compute dot product and norms
-        T dot = NumOps.Zero;
-        T normStudent = NumOps.Zero;
-        T normTeacher = NumOps.Zero;
-
-        for (int i = 0; i < dim; i++)
-        {
-            dot = NumOps.Add(dot, NumOps.Multiply(student[i], teacher[i]));
-            normStudent = NumOps.Add(normStudent, NumOps.Multiply(student[i], student[i]));
-            normTeacher = NumOps.Add(normTeacher, NumOps.Multiply(teacher[i], teacher[i]));
-        }
-
-        double dotVal = Convert.ToDouble(dot);
-        double normS = Math.Sqrt(Convert.ToDouble(normStudent)) + Epsilon;
-        double normT = Math.Sqrt(Convert.ToDouble(normTeacher)) + Epsilon;
+        // Compute dot product and norms using IEngine
+        var engine = AiDotNetEngine.Current;
+        double dotVal = NumOps.ToDouble(engine.DotProduct(student, teacher));
+        double normS = Math.Sqrt(Math.Max(0, NumOps.ToDouble(engine.DotProduct(student, student)))) + Epsilon;
+        double normT = Math.Sqrt(Math.Max(0, NumOps.ToDouble(engine.DotProduct(teacher, teacher)))) + Epsilon;
 
         // Compute gradient for each dimension
         for (int i = 0; i < dim; i++)

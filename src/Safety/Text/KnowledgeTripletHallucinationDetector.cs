@@ -1,4 +1,5 @@
 using AiDotNet.Enums;
+using AiDotNet.Helpers;
 using AiDotNet.Models;
 using AiDotNet.Safety;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -212,7 +213,7 @@ public class KnowledgeTripletHallucinationDetector<T> : TextSafetyModuleBase<T>
 
             // 3. Embedding similarity
             var docEmb = ComputeEmbedding(docLower);
-            double embScore = ComputeCosineSimilarity(queryEmb, docEmb);
+            double embScore = VectorHelper.CosineSimilarity(queryEmb, docEmb);
 
             // Combined: 40% entity co-occurrence + 30% n-gram + 30% embedding
             double combined = 0.4 * entityScore + 0.3 * ngramScore + 0.3 * embScore;
@@ -255,23 +256,6 @@ public class KnowledgeTripletHallucinationDetector<T> : TextSafetyModuleBase<T>
         return embedding;
     }
 
-    private static double ComputeCosineSimilarity(Vector<T> a, Vector<T> b)
-    {
-        double dot = 0, normA = 0, normB = 0;
-        int len = Math.Min(a.Length, b.Length);
-
-        for (int i = 0; i < len; i++)
-        {
-            double ai = NumOps.ToDouble(a[i]);
-            double bi = NumOps.ToDouble(b[i]);
-            dot += ai * bi;
-            normA += ai * ai;
-            normB += bi * bi;
-        }
-
-        double denom = Math.Sqrt(normA * normB);
-        return denom > 1e-10 ? Math.Max(0, dot / denom) : 0;
-    }
 
     private static HashSet<string> ExtractWordNgrams(string text, int n)
     {

@@ -148,16 +148,7 @@ public class NTXentLoss<T>
 
     private Tensor<T> Concatenate(Tensor<T> a, Tensor<T> b)
     {
-        var batchA = a.Shape[0];
-        var batchB = b.Shape[0];
-        var dim = a.Shape[1];
-
-        var result = new T[(batchA + batchB) * dim];
-
-        Array.Copy(a.Data.ToArray(), 0, result, 0, batchA * dim);
-        Array.Copy(b.Data.ToArray(), 0, result, batchA * dim, batchB * dim);
-
-        return new Tensor<T>(result, [batchA + batchB, dim]);
+        return AiDotNetEngine.Current.TensorConcatenate(new[] { a, b }, 0);
     }
 
     private Tensor<T> ComputeSimilarityMatrix(Tensor<T> embeddings)

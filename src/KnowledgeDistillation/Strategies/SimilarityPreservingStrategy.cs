@@ -1,4 +1,5 @@
 
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 
@@ -170,8 +171,8 @@ public class SimilarityPreservingStrategy<T> : DistillationStrategyBase<T>
         {
             for (int j = i + 1; j < n; j++)
             {
-                double teacherSim = CosineSimilarity(teacherEmbeddings[i], teacherEmbeddings[j]);
-                double studentSim = CosineSimilarity(studentEmbeddings[i], studentEmbeddings[j]);
+                double teacherSim = VectorHelper.CosineSimilarity(teacherEmbeddings[i], teacherEmbeddings[j]);
+                double studentSim = VectorHelper.CosineSimilarity(studentEmbeddings[i], studentEmbeddings[j]);
                 double diff = teacherSim - studentSim;
                 totalLoss = NumOps.Add(totalLoss, NumOps.FromDouble(diff * diff));
                 pairCount++;
@@ -182,19 +183,6 @@ public class SimilarityPreservingStrategy<T> : DistillationStrategyBase<T>
         return NumOps.Multiply(loss, NumOps.FromDouble(_similarityWeight));
     }
 
-    private double CosineSimilarity(Vector<T> v1, Vector<T> v2)
-    {
-        T dot = NumOps.Zero, norm1 = NumOps.Zero, norm2 = NumOps.Zero;
-
-        for (int i = 0; i < v1.Length; i++)
-        {
-            dot = NumOps.Add(dot, NumOps.Multiply(v1[i], v2[i]));
-            norm1 = NumOps.Add(norm1, NumOps.Multiply(v1[i], v1[i]));
-            norm2 = NumOps.Add(norm2, NumOps.Multiply(v2[i], v2[i]));
-        }
-
-        return Convert.ToDouble(dot) / (Math.Sqrt(Convert.ToDouble(norm1)) * Math.Sqrt(Convert.ToDouble(norm2)) + Epsilon);
-    }
 
     private Matrix<T> ComputeSimilarityGradient(Vector<T>[] studentEmbeddings, Vector<T>[] teacherEmbeddings)
     {
@@ -221,8 +209,8 @@ public class SimilarityPreservingStrategy<T> : DistillationStrategyBase<T>
             {
                 if (i == j) continue;
 
-                double teacherSim = CosineSimilarity(teacherEmbeddings[i], teacherEmbeddings[j]);
-                double studentSim = CosineSimilarity(studentEmbeddings[i], studentEmbeddings[j]);
+                double teacherSim = VectorHelper.CosineSimilarity(teacherEmbeddings[i], teacherEmbeddings[j]);
+                double studentSim = VectorHelper.CosineSimilarity(studentEmbeddings[i], studentEmbeddings[j]);
 
                 double simDiff = teacherSim - studentSim;
 

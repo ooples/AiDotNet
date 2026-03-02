@@ -1,4 +1,5 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
@@ -421,43 +422,38 @@ public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>
         _positionLayers.Clear();
         _colorLayers.Clear();
 
-        int positionDim = 3 * 2 * _positionEncodingLevels;
-        int directionDim = 3 * 2 * _directionEncodingLevels;
+        if (Architecture.Layers != null && Architecture.Layers.Count > 0)
+        {
+            foreach (var layer in Architecture.Layers)
+                AddLayerToCollection(layer);
+        }
+        else
+        {
+            foreach (var layer in LayerHelper<T>.CreateNeRFLayers(
+                _positionEncodingLevels, _directionEncodingLevels,
+                _hiddenDim, _numLayers, _colorHiddenDim, _colorNumLayers))
+            {
+                AddLayerToCollection(layer);
+            }
+        }
+
+        // Distribute layers to internal fields
+        int idx = 0;
 
         // Position MLP layers
         for (int i = 0; i < _numLayers; i++)
-        {
-            int inputDim = i == 0 ? positionDim : _hiddenDim;
-            if (_skipConnectionLayer >= 0 && i == _skipConnectionLayer)
-            {
-                inputDim = _hiddenDim + positionDim;
-            }
+            _positionLayers.Add((DenseLayer<T>)Layers[idx++]);
 
-            var layer = new DenseLayer<T>(inputDim, _hiddenDim, activationFunction: new ReLUActivation<T>());
-            _positionLayers.Add(layer);
-            AddLayerToCollection(layer);
-        }
-
-        // Density and feature layers
-        _densityLayer = new DenseLayer<T>(_hiddenDim, 1, activationFunction: new IdentityActivation<T>());
-        AddLayerToCollection(_densityLayer);
-
-        _featureLayer = new DenseLayer<T>(_hiddenDim, _hiddenDim, activationFunction: new IdentityActivation<T>());
-        AddLayerToCollection(_featureLayer);
+        // Density + feature layers
+        _densityLayer = (DenseLayer<T>)Layers[idx++];
+        _featureLayer = (DenseLayer<T>)Layers[idx++];
 
         // Color MLP layers
-        int colorInputDim = _hiddenDim + directionDim;
-        int colorHiddenDim = _colorNumLayers > 0 ? _colorHiddenDim : colorInputDim;
         for (int i = 0; i < _colorNumLayers; i++)
-        {
-            int inputDim = i == 0 ? colorInputDim : colorHiddenDim;
-            var layer = new DenseLayer<T>(inputDim, colorHiddenDim, activationFunction: new ReLUActivation<T>());
-            _colorLayers.Add(layer);
-            AddLayerToCollection(layer);
-        }
+            _colorLayers.Add((DenseLayer<T>)Layers[idx++]);
 
-        _colorOutputLayer = new DenseLayer<T>(colorHiddenDim, 3, activationFunction: new IdentityActivation<T>());
-        AddLayerToCollection(_colorOutputLayer);
+        // Color output
+        _colorOutputLayer = (DenseLayer<T>)Layers[idx++];
     }
 
     #endregion
@@ -682,19 +678,7 @@ public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>
 
     private Tensor<T> AddTensors(Tensor<T> left, Tensor<T> right)
     {
-        if (left.Length != right.Length)
-        {
-            throw new ArgumentException("Tensor lengths must match.");
-        }
-
-        var numOps = NumOps;
-        var data = new T[left.Length];
-        for (int i = 0; i < data.Length; i++)
-        {
-            data[i] = numOps.Add(left.Data.Span[i], right.Data.Span[i]);
-        }
-
-        return new Tensor<T>(data, left.Shape);
+        return Engine.TensorAdd(left, right);
     }
 
     private (Tensor<T> origins, Tensor<T> directions) GenerateCameraRays(
@@ -1258,9 +1242,11 @@ public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>
         var flatExpected = expectedOutput.ToVector();
         LastLoss = _lossFunction.CalculateLoss(flatPrediction, flatExpected);
 
-        // Compute gradients
+        // Compute gradients - reshape to [N, 4] for backpropagation
         var lossGradient = _lossFunction.CalculateDerivative(flatPrediction, flatExpected);
-        Backpropagate(Tensor<T>.FromVector(lossGradient));
+        int numPoints = prediction.Shape[0];
+        var gradTensor = new Tensor<T>(lossGradient.ToArray(), [numPoints, 4]);
+        Backpropagate(gradTensor);
 
         // Update layer parameters
         foreach (var layer in Layers)
@@ -1286,10 +1272,7 @@ public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>
 
         // Apply gradient descent: params = params - learning_rate * gradients
         var currentParams = GetParameters();
-        for (int i = 0; i < currentParams.Length; i++)
-        {
-            currentParams[i] = NumOps.Subtract(currentParams[i], NumOps.Multiply(_learningRate, gradients[i]));
-        }
+        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, _learningRate));
 
         SetParameters(currentParams);
     }

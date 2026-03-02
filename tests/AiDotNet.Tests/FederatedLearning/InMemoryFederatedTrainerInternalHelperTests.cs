@@ -192,7 +192,7 @@ public class InMemoryFederatedTrainerInternalHelperTests
     {
         Assert.Null(InvokePrivateStatic<object>("ResolveCompressionOptions", (object?)null));
 
-        var explicitCompression = new FederatedCompressionOptions { Strategy = "Threshold", Threshold = 0.1 };
+        var explicitCompression = new FederatedCompressionOptions { Strategy = FederatedCompressionStrategy.Threshold, Threshold = 0.1 };
         var explicitOptions = new FederatedLearningOptions { Compression = explicitCompression };
         var resolvedExplicit = InvokePrivateStatic<FederatedCompressionOptions>("ResolveCompressionOptions", explicitOptions);
         Assert.True(ReferenceEquals(explicitCompression, resolvedExplicit));
@@ -203,7 +203,7 @@ public class InMemoryFederatedTrainerInternalHelperTests
             CompressionRatio = 0.25
         };
         var resolvedLegacy = InvokePrivateStatic<FederatedCompressionOptions>("ResolveCompressionOptions", legacy);
-        Assert.Equal("TopK", resolvedLegacy.Strategy);
+        Assert.Equal(FederatedCompressionStrategy.TopK, resolvedLegacy.Strategy);
         Assert.Equal(0.25, resolvedLegacy.Ratio, precision: 12);
         Assert.True(resolvedLegacy.UseErrorFeedback);
     }
@@ -213,7 +213,7 @@ public class InMemoryFederatedTrainerInternalHelperTests
     {
         Assert.Null(InvokePrivateStatic<object>("ResolvePersonalizationOptions", (object?)null));
 
-        var explicitPersonalization = new FederatedPersonalizationOptions { Enabled = true, Strategy = "FedPer", PersonalizedParameterFraction = 0.5 };
+        var explicitPersonalization = new FederatedPersonalizationOptions { Enabled = true, Strategy = FederatedPersonalizationStrategy.FedPer, PersonalizedParameterFraction = 0.5 };
         var explicitOptions = new FederatedLearningOptions { Personalization = explicitPersonalization };
         var resolvedExplicit = InvokePrivateStatic<FederatedPersonalizationOptions>("ResolvePersonalizationOptions", explicitOptions);
         Assert.True(ReferenceEquals(explicitPersonalization, resolvedExplicit));
@@ -225,7 +225,7 @@ public class InMemoryFederatedTrainerInternalHelperTests
         };
         var resolvedLegacy = InvokePrivateStatic<FederatedPersonalizationOptions>("ResolvePersonalizationOptions", legacy);
         Assert.True(resolvedLegacy.Enabled);
-        Assert.Equal("FedPer", resolvedLegacy.Strategy);
+        Assert.Equal(FederatedPersonalizationStrategy.FedPer, resolvedLegacy.Strategy);
         Assert.Equal(0.4, resolvedLegacy.PersonalizedParameterFraction, precision: 12);
     }
 
@@ -326,8 +326,8 @@ public class InMemoryFederatedTrainerInternalHelperTests
         var headSplitStart = InvokePrivateInstance<IFullModel<double, Matrix<double>, Vector<double>>>(
             trainer,
             "CreatePersonalizedStartModel",
-            "FedPer",
-            new FederatedPersonalizationOptions { Enabled = true, Strategy = "FedPer" },
+            FederatedPersonalizationStrategy.FedPer,
+            new FederatedPersonalizationOptions { Enabled = true, Strategy = FederatedPersonalizationStrategy.FedPer },
             clientId,
             globalModel,
             globalParams,
@@ -340,7 +340,7 @@ public class InMemoryFederatedTrainerInternalHelperTests
         Assert.Equal(100.0, headSplitParams[5], precision: 12);
 
         // Clustered: use cluster head values when available.
-        var clusteredOptions = new FederatedPersonalizationOptions { Enabled = true, Strategy = "Clustered", ClusterCount = 2 };
+        var clusteredOptions = new FederatedPersonalizationOptions { Enabled = true, Strategy = FederatedPersonalizationStrategy.Clustered, ClusterCount = 2 };
         var clusterId = InvokePrivateStatic<int>("GetClusterId", 3, clusteredOptions.ClusterCount);
         var clusterHead = globalParams.Clone();
         clusterHead[4] = -5.0;
@@ -350,7 +350,7 @@ public class InMemoryFederatedTrainerInternalHelperTests
         var clusteredStart = InvokePrivateInstance<IFullModel<double, Matrix<double>, Vector<double>>>(
             trainer,
             "CreatePersonalizedStartModel",
-            "Clustered",
+            FederatedPersonalizationStrategy.Clustered,
             clusteredOptions,
             3,
             globalModel,
@@ -368,8 +368,8 @@ public class InMemoryFederatedTrainerInternalHelperTests
         var pFedMeStart = InvokePrivateInstance<IFullModel<double, Matrix<double>, Vector<double>>>(
             trainer,
             "CreatePersonalizedStartModel",
-            "pFedMe",
-            new FederatedPersonalizationOptions { Enabled = true, Strategy = "pFedMe" },
+            FederatedPersonalizationStrategy.PFedMe,
+            new FederatedPersonalizationOptions { Enabled = true, Strategy = FederatedPersonalizationStrategy.PFedMe },
             1,
             globalModel,
             globalParams,
@@ -383,8 +383,8 @@ public class InMemoryFederatedTrainerInternalHelperTests
         var dittoStart = InvokePrivateInstance<IFullModel<double, Matrix<double>, Vector<double>>>(
             trainer,
             "CreatePersonalizedStartModel",
-            "Ditto",
-            new FederatedPersonalizationOptions { Enabled = true, Strategy = "Ditto" },
+            FederatedPersonalizationStrategy.Ditto,
+            new FederatedPersonalizationOptions { Enabled = true, Strategy = FederatedPersonalizationStrategy.Ditto },
             1,
             globalModel,
             globalParams,
@@ -400,8 +400,8 @@ public class InMemoryFederatedTrainerInternalHelperTests
         var fedPerMasked = InvokePrivateInstance<Vector<double>>(
             trainer,
             "ApplyPersonalizationAfterLocalTraining",
-            "FedPer",
-            new FederatedPersonalizationOptions { Enabled = true, Strategy = "FedPer" },
+            FederatedPersonalizationStrategy.FedPer,
+            new FederatedPersonalizationOptions { Enabled = true, Strategy = FederatedPersonalizationStrategy.FedPer },
             0,
             baseline,
             trained,
@@ -416,8 +416,8 @@ public class InMemoryFederatedTrainerInternalHelperTests
         var dittoReturned = InvokePrivateInstance<Vector<double>>(
             trainer,
             "ApplyPersonalizationAfterLocalTraining",
-            "Ditto",
-            new FederatedPersonalizationOptions { Enabled = true, Strategy = "Ditto", DittoLambda = 0.1 },
+            FederatedPersonalizationStrategy.Ditto,
+            new FederatedPersonalizationOptions { Enabled = true, Strategy = FederatedPersonalizationStrategy.Ditto, DittoLambda = 0.1 },
             5,
             baseline,
             trained,
@@ -431,8 +431,8 @@ public class InMemoryFederatedTrainerInternalHelperTests
         var pFedMeUpdated = InvokePrivateInstance<Vector<double>>(
             trainer,
             "ApplyPersonalizationAfterLocalTraining",
-            "pFedMe",
-            new FederatedPersonalizationOptions { Enabled = true, Strategy = "pFedMe", PFedMeMu = 0.0, PFedMeInnerSteps = 2 },
+            FederatedPersonalizationStrategy.PFedMe,
+            new FederatedPersonalizationOptions { Enabled = true, Strategy = FederatedPersonalizationStrategy.PFedMe, PFedMeMu = 0.0, PFedMeInnerSteps = 2 },
             9,
             baseline,
             trained,

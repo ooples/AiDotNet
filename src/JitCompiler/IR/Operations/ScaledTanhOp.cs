@@ -5,8 +5,8 @@ namespace AiDotNet.JitCompiler.IR.Operations;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Computes ScaledTanh(x) = tanh(beta * x).
-/// Tanh with adjustable steepness.
+/// Computes ScaledTanh(x) = (1 - exp(-beta*x)) / (1 + exp(-beta*x)) = tanh(beta*x/2).
+/// Tanh with adjustable steepness. Equivalent to standard tanh when beta = 2.
 /// </para>
 /// </remarks>
 public class ScaledTanhOp : IROp

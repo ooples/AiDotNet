@@ -210,12 +210,7 @@ public class YOLOv9<T> : ObjectDetectorBase<T>
 
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
-        var result = new Tensor<T>(a.Shape);
-        for (int i = 0; i < a.Length; i++)
-        {
-            result[i] = NumOps.Add(a[i], b[i]);
-        }
-        return result;
+        return Engine.TensorAdd(a, b);
     }
 
     /// <inheritdoc/>

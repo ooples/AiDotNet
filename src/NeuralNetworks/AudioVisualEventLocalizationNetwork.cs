@@ -4,9 +4,11 @@ using System.IO;
 using System.Linq;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Enums;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
+using AiDotNet.Helpers;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Tensors.Helpers;
@@ -136,53 +138,51 @@ public class AudioVisualEventLocalizationNetwork<T> : NeuralNetworkBase<T>, IAud
     /// <inheritdoc/>
     protected override void InitializeLayers()
     {
-        IActivationFunction<T>? nullActivation = null;
-        var geluActivation = new GELUActivation<T>() as IActivationFunction<T>;
+        Layers.Clear();
 
-        // Audio encoder
-        _audioInputProjection = new DenseLayer<T>(SPECTROGRAM_BINS, _embeddingDimension, nullActivation);
+        if (Architecture.Layers != null && Architecture.Layers.Count > 0)
+        {
+            Layers.AddRange(Architecture.Layers);
+        }
+        else
+        {
+            Layers.AddRange(LayerHelper<T>.CreateAudioVisualEventLocalizationLayers(
+                _embeddingDimension, _numEncoderLayers, _supportedCategories.Count));
+        }
+
+        // Distribute layers to internal fields
+        int idx = 0;
+
+        // Audio encoder: input projection + attention × numEncoderLayers + output projection
+        _audioInputProjection = (DenseLayer<T>)Layers[idx++];
         _audioEncoderLayers = new MultiHeadAttentionLayer<T>[_numEncoderLayers];
         for (int i = 0; i < _numEncoderLayers; i++)
-        {
-            // Constructor: (sequenceLength, embeddingDimension, headCount, activation)
-            // Use sequenceLength=1 as placeholder since attention works with variable-length sequences
-            _audioEncoderLayers[i] = new MultiHeadAttentionLayer<T>(
-                1, _embeddingDimension, 8, geluActivation);
-        }
-        _audioOutputProjection = new DenseLayer<T>(_embeddingDimension, _embeddingDimension, nullActivation);
+            _audioEncoderLayers[i] = (MultiHeadAttentionLayer<T>)Layers[idx++];
+        _audioOutputProjection = (DenseLayer<T>)Layers[idx++];
 
-        // Visual encoder
-        _visualInputProjection = new DenseLayer<T>(768, _embeddingDimension, nullActivation); // ViT-style input
+        // Visual encoder: input projection + attention × numEncoderLayers + output projection
+        _visualInputProjection = (DenseLayer<T>)Layers[idx++];
         _visualEncoderLayers = new MultiHeadAttentionLayer<T>[_numEncoderLayers];
         for (int i = 0; i < _numEncoderLayers; i++)
-        {
-            _visualEncoderLayers[i] = new MultiHeadAttentionLayer<T>(
-                1, _embeddingDimension, 8, geluActivation);
-        }
-        _visualOutputProjection = new DenseLayer<T>(_embeddingDimension, _embeddingDimension, nullActivation);
+            _visualEncoderLayers[i] = (MultiHeadAttentionLayer<T>)Layers[idx++];
+        _visualOutputProjection = (DenseLayer<T>)Layers[idx++];
 
-        // Temporal modeling
+        // Temporal modeling: 4 attention layers + proposal head
         _temporalAttentionLayers = new MultiHeadAttentionLayer<T>[4];
         for (int i = 0; i < 4; i++)
-        {
-            _temporalAttentionLayers[i] = new MultiHeadAttentionLayer<T>(
-                1, _embeddingDimension, 8, geluActivation);
-        }
-        _temporalProposalHead = new DenseLayer<T>(_embeddingDimension, 2, nullActivation); // start, end offsets
+            _temporalAttentionLayers[i] = (MultiHeadAttentionLayer<T>)Layers[idx++];
+        _temporalProposalHead = (DenseLayer<T>)Layers[idx++];
 
-        // Cross-modal fusion
+        // Cross-modal fusion: 4 attention layers
         _crossModalAttentionLayers = new MultiHeadAttentionLayer<T>[4];
         for (int i = 0; i < 4; i++)
-        {
-            _crossModalAttentionLayers[i] = new MultiHeadAttentionLayer<T>(
-                1, _embeddingDimension * 2, 8, geluActivation);
-        }
+            _crossModalAttentionLayers[i] = (MultiHeadAttentionLayer<T>)Layers[idx++];
 
         // Task-specific heads
-        _eventClassificationHead = new DenseLayer<T>(_embeddingDimension * 2, _supportedCategories.Count, nullActivation);
-        _temporalBoundaryHead = new DenseLayer<T>(_embeddingDimension * 2, 3, nullActivation); // start, end, confidence
-        _spatialLocalizationHead = new DenseLayer<T>(_embeddingDimension * 2, 4, nullActivation); // x, y, w, h
-        _anomalyDetectionHead = new DenseLayer<T>(_embeddingDimension * 2, 1, nullActivation); // anomaly score
+        _eventClassificationHead = (DenseLayer<T>)Layers[idx++];
+        _temporalBoundaryHead = (DenseLayer<T>)Layers[idx++];
+        _spatialLocalizationHead = (DenseLayer<T>)Layers[idx++];
+        _anomalyDetectionHead = (DenseLayer<T>)Layers[idx++];
     }
 
     private static List<string> GetDefaultEventCategories()
@@ -452,7 +452,7 @@ public class AudioVisualEventLocalizationNetwork<T> : NeuralNetworkBase<T>, IAud
 
             // Compute text-to-feature similarity
             var descriptionEmbedding = EncodeTextDescription(eventDescription);
-            var similarity = ComputeCosineSimilarity(fusedFeatures, descriptionEmbedding);
+            var similarity = _numOps.FromDouble(VectorHelper.CosineSimilarity(fusedFeatures, descriptionEmbedding));
 
             if (_numOps.ToDouble(similarity) > 0.3)
             {
@@ -607,7 +607,7 @@ public class AudioVisualEventLocalizationNetwork<T> : NeuralNetworkBase<T>, IAud
                 audioWaveform, frameList, searchStart, searchEnd, frameRate);
 
             var searchFeatures = FuseFeatures(EncodeAudio(searchAudio), EncodeVisual(searchFrames));
-            var similarity = ComputeCosineSimilarity(referenceFeatures, searchFeatures);
+            var similarity = _numOps.FromDouble(VectorHelper.CosineSimilarity(referenceFeatures, searchFeatures));
 
             if (_numOps.ToDouble(similarity) < 0.5)
             {
@@ -705,9 +705,9 @@ public class AudioVisualEventLocalizationNetwork<T> : NeuralNetworkBase<T>, IAud
 
         for (int i = 1; i < segmentFeatures.Count; i++)
         {
-            var similarity = ComputeCosineSimilarity(
+            var similarity = _numOps.FromDouble(VectorHelper.CosineSimilarity(
                 segmentFeatures[i - 1].Features,
-                segmentFeatures[i].Features);
+                segmentFeatures[i].Features));
 
             if (_numOps.Compare(_numOps.Subtract(_numOps.One, similarity), threshold) > 0)
             {
@@ -861,7 +861,7 @@ public class AudioVisualEventLocalizationNetwork<T> : NeuralNetworkBase<T>, IAud
         // Find anomalies based on distance from mean
         for (int i = 0; i < allFeatures.Count; i++)
         {
-            var distance = ComputeEuclideanDistance(allFeatures[i], meanFeatures);
+            var distance = VectorHelper.EuclideanDistance(allFeatures[i], meanFeatures);
 
             // Apply anomaly detection head
             var featureTensor = Tensor<T>.FromVector(allFeatures[i]);
@@ -1081,7 +1081,7 @@ public class AudioVisualEventLocalizationNetwork<T> : NeuralNetworkBase<T>, IAud
         }
 
         // L2 normalize
-        return NormalizeVector(result);
+        return VectorHelper.Normalize(result);
     }
 
     /// <summary>
@@ -1103,51 +1103,6 @@ public class AudioVisualEventLocalizationNetwork<T> : NeuralNetworkBase<T>, IAud
             }
             return hash;
         }
-    }
-
-    private T ComputeCosineSimilarity(Vector<T> a, Vector<T> b)
-    {
-        int minLen = Math.Min(a.Length, b.Length);
-        T dot = _numOps.Zero;
-        T normA = _numOps.Zero;
-        T normB = _numOps.Zero;
-
-        for (int i = 0; i < minLen; i++)
-        {
-            dot = _numOps.Add(dot, _numOps.Multiply(a[i], b[i]));
-            normA = _numOps.Add(normA, _numOps.Multiply(a[i], a[i]));
-            normB = _numOps.Add(normB, _numOps.Multiply(b[i], b[i]));
-        }
-
-        var denom = _numOps.Multiply(_numOps.Sqrt(normA), _numOps.Sqrt(normB));
-        if (_numOps.ToDouble(denom) < 1e-8)
-        {
-            return _numOps.Zero;
-        }
-
-        return _numOps.Divide(dot, denom);
-    }
-
-    private Vector<T> NormalizeVector(Vector<T> vec)
-    {
-        T norm = _numOps.Zero;
-        for (int i = 0; i < vec.Length; i++)
-        {
-            norm = _numOps.Add(norm, _numOps.Multiply(vec[i], vec[i]));
-        }
-        norm = _numOps.Sqrt(norm);
-
-        if (_numOps.ToDouble(norm) < 1e-8)
-        {
-            return vec;
-        }
-
-        var result = new Vector<T>(vec.Length);
-        for (int i = 0; i < vec.Length; i++)
-        {
-            result[i] = _numOps.Divide(vec[i], norm);
-        }
-        return result;
     }
 
     private T ComputeAverageScore(List<T> scores, int start, int end)
@@ -1196,7 +1151,7 @@ public class AudioVisualEventLocalizationNetwork<T> : NeuralNetworkBase<T>, IAud
 
     private T ComputeSyncQuality(Vector<T> audioFeatures, Vector<T> visualFeatures)
     {
-        return ComputeCosineSimilarity(audioFeatures, visualFeatures);
+        return _numOps.FromDouble(VectorHelper.CosineSimilarity(audioFeatures, visualFeatures));
     }
 
     private string DescribeSyncEvent(Tensor<T> audioSeg, IEnumerable<Tensor<T>> frameSeg)
@@ -1282,19 +1237,6 @@ public class AudioVisualEventLocalizationNetwork<T> : NeuralNetworkBase<T>, IAud
         return result;
     }
 
-    private T ComputeEuclideanDistance(Vector<T> a, Vector<T> b)
-    {
-        T sum = _numOps.Zero;
-        int minLen = Math.Min(a.Length, b.Length);
-
-        for (int i = 0; i < minLen; i++)
-        {
-            var diff = _numOps.Subtract(a[i], b[i]);
-            sum = _numOps.Add(sum, _numOps.Multiply(diff, diff));
-        }
-
-        return _numOps.Sqrt(sum);
-    }
 
     private string DescribeAnomaly(Vector<T> features, Vector<T> mean)
     {
@@ -1372,11 +1314,8 @@ public class AudioVisualEventLocalizationNetwork<T> : NeuralNetworkBase<T>, IAud
         var currentParams = GetParameters();
 
         // Apply gradient descent update: params = params - learning_rate * gradients
-        T learningRate = NumOps.FromDouble(0.001); // Default learning rate
-        for (int i = 0; i < currentParams.Length; i++)
-        {
-            currentParams[i] = NumOps.Subtract(currentParams[i], NumOps.Multiply(learningRate, gradients[i]));
-        }
+        T learningRate = NumOps.FromDouble(_options.LearningRate);
+        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, learningRate));
 
         // Set the updated parameters
         SetParameters(currentParams);

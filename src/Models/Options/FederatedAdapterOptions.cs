@@ -12,7 +12,21 @@ public enum FederatedAdapterType
     /// <summary>Heterogeneous LoRA — different ranks per client with SVD aggregation.</summary>
     HeterogeneousLoRA,
     /// <summary>Prompt Tuning — soft prompt token aggregation.</summary>
-    PromptTuning
+    PromptTuning,
+    /// <summary>FedPETuning — unified PEFT framework (LoRA, adapters, prefix, BitFit).</summary>
+    FedPETuning,
+    /// <summary>FedAdapter — bottleneck adapter layers inserted into transformer blocks.</summary>
+    FedAdapter,
+    /// <summary>FLoRA — stacked lossless LoRA aggregation via SVD.</summary>
+    FLoRA,
+    /// <summary>HierFedLoRA — hierarchical LoRA for edge-cloud topologies.</summary>
+    HierFedLoRA,
+    /// <summary>SLoRA — sparse LoRA that only communicates non-zero adapter elements.</summary>
+    SLoRA,
+    /// <summary>DP-FedLoRA — differentially private LoRA with per-layer noise calibration.</summary>
+    DPFedLoRA,
+    /// <summary>FedMeZO — memory-efficient zeroth-order optimization for LLM fine-tuning.</summary>
+    FedMeZO
 }
 
 /// <summary>

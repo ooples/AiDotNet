@@ -1,4 +1,5 @@
 using AiDotNet.Extensions;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
@@ -600,22 +601,7 @@ public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
     /// </summary>
     private double ComputeCosineSimilarity(Tensor<T> a, Tensor<T> b)
     {
-        double dot = 0;
-        double normA = 0;
-        double normB = 0;
-
-        int len = Math.Min(a.Length, b.Length);
-        for (int i = 0; i < len; i++)
-        {
-            double valA = _numOps.ToDouble(a.Data.Span[i]);
-            double valB = _numOps.ToDouble(b.Data.Span[i]);
-            dot += valA * valB;
-            normA += valA * valA;
-            normB += valB * valB;
-        }
-
-        if (normA < 1e-10 || normB < 1e-10) return 0;
-        return dot / (Math.Sqrt(normA) * Math.Sqrt(normB));
+        return VectorHelper.CosineSimilarity(a.ToVector(), b.ToVector());
     }
 
     /// <summary>

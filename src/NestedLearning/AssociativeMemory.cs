@@ -1,4 +1,5 @@
 
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 
@@ -110,27 +111,7 @@ public class AssociativeMemory<T> : IAssociativeMemory<T>
 
     private T ComputeSimilarity(Vector<T> a, Vector<T> b)
     {
-        // Cosine similarity
-        T dotProduct = _numOps.Zero;
-        T normA = _numOps.Zero;
-        T normB = _numOps.Zero;
-
-        for (int i = 0; i < _dimension; i++)
-        {
-            dotProduct = _numOps.Add(dotProduct, _numOps.Multiply(a[i], b[i]));
-            normA = _numOps.Add(normA, _numOps.Square(a[i]));
-            normB = _numOps.Add(normB, _numOps.Square(b[i]));
-        }
-
-        normA = _numOps.Sqrt(normA);
-        normB = _numOps.Sqrt(normB);
-
-        T denominator = _numOps.Multiply(normA, normB);
-
-        if (_numOps.Equals(denominator, _numOps.Zero))
-            return _numOps.Zero;
-
-        return _numOps.Divide(dotProduct, denominator);
+        return _numOps.FromDouble(VectorHelper.CosineSimilarity(a, b));
     }
 
     public int Capacity => _capacity;

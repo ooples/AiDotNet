@@ -33,6 +33,11 @@ public abstract class ContinualLearningStrategyBase<T, TInput, TOutput> : IConti
     protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     /// <summary>
+    /// Gets the global execution engine for hardware-accelerated vector operations.
+    /// </summary>
+    protected static IEngine Engine => AiDotNetEngine.Current;
+
+    /// <summary>
     /// The loss function used for computing task losses.
     /// </summary>
     protected readonly ILossFunction<T> LossFunction;
@@ -233,12 +238,7 @@ public abstract class ContinualLearningStrategyBase<T, TInput, TOutput> : IConti
     /// <returns>The L2 norm.</returns>
     protected T ComputeL2Norm(Vector<T> vector)
     {
-        T sum = NumOps.Zero;
-        for (int i = 0; i < vector.Length; i++)
-        {
-            sum = NumOps.Add(sum, NumOps.Multiply(vector[i], vector[i]));
-        }
-        return NumOps.FromDouble(Math.Sqrt(Convert.ToDouble(sum)));
+        return VectorHelper.L2Norm(vector);
     }
 
     /// <summary>

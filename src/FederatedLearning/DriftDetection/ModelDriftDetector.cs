@@ -1,4 +1,5 @@
 using AiDotNet.FederatedLearning.Infrastructure;
+using AiDotNet.Helpers;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors;
 
@@ -232,34 +233,12 @@ public class ModelDriftDetector<T> : FederatedLearningComponentBase<T>, IFederat
 
     private double CosineSimilarity(Tensor<T> a, Tensor<T> b)
     {
-        int size = Math.Min(a.Shape[0], b.Shape[0]);
-        double dot = 0, normA = 0, normB = 0;
-
-        for (int i = 0; i < size; i++)
-        {
-            double va = NumOps.ToDouble(a[i]);
-            double vb = NumOps.ToDouble(b[i]);
-            dot += va * vb;
-            normA += va * va;
-            normB += vb * vb;
-        }
-
-        double denom = Math.Sqrt(normA) * Math.Sqrt(normB);
-        return denom > 1e-12 ? dot / denom : 0;
+        return VectorHelper.CosineSimilarity(a.ToVector(), b.ToVector());
     }
 
     private double L2Distance(Tensor<T> a, Tensor<T> b)
     {
-        int size = Math.Min(a.Shape[0], b.Shape[0]);
-        double sumSq = 0;
-
-        for (int i = 0; i < size; i++)
-        {
-            double diff = NumOps.ToDouble(a[i]) - NumOps.ToDouble(b[i]);
-            sumSq += diff * diff;
-        }
-
-        return Math.Sqrt(sumSq);
+        return NumOps.ToDouble(VectorHelper.EuclideanDistance(a.ToVector(), b.ToVector()));
     }
 
     private ClientDriftResult ClassifyDrift(int clientId, double driftScore, int round)

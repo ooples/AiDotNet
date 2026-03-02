@@ -28,6 +28,7 @@ public class FedGENDistillation<T> : Infrastructure.FederatedLearningComponentBa
     private readonly int _generatorEpochs;
     private readonly double _generatorLearningRate;
     private readonly int _seed;
+    private int _roundCounter;
     private Random _rng;
 
     // Server-side generator parameters: simple linear generator per class
@@ -146,7 +147,8 @@ public class FedGENDistillation<T> : Infrastructure.FederatedLearningComponentBa
         var syntheticData = new Matrix<T>(totalSamples, statDim);
         var syntheticLabels = new int[totalSamples];
 
-        _rng = new Random(_seed);
+        _rng = new Random(_seed + _roundCounter);
+        _roundCounter++;
         for (int c = 0; c < _numClasses; c++)
         {
             for (int s = 0; s < samplesPerClass; s++)

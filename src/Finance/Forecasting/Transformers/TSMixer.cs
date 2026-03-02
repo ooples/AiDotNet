@@ -972,12 +972,11 @@ public class TSMixer<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> ApplyRevIN(Tensor<T> input, bool normalize)
     {
-        var result = new Tensor<T>(input.Shape);
         var eps = NumOps.FromDouble(1e-5);
 
         if (normalize)
         {
-            // Compute mean and std for this instance
+            // Compute mean and std for this instance (scalar reductions)
             T sum = NumOps.Zero;
             for (int i = 0; i < input.Length; i++)
             {
@@ -1000,14 +999,9 @@ public class TSMixer<T> : ForecastingModelBase<T>
             _instanceStd = new Tensor<T>(new[] { 1 });
             _instanceStd.Data.Span[0] = std;
 
-            // Normalize
-            for (int i = 0; i < input.Length; i++)
-            {
-                var normalized = NumOps.Divide(
-                    NumOps.Subtract(input.Data.Span[i], mean),
-                    std);
-                result.Data.Span[i] = normalized;
-            }
+            // Normalize: (input - mean) / std
+            var centered = Engine.TensorSubtractScalar(input, mean);
+            return Engine.TensorDivideScalar(centered, std);
         }
         else
         {
@@ -1020,16 +1014,10 @@ public class TSMixer<T> : ForecastingModelBase<T>
             var mean = _instanceMean.Data.Span[0];
             var std = _instanceStd.Data.Span[0];
 
-            for (int i = 0; i < input.Length; i++)
-            {
-                var denormalized = NumOps.Add(
-                    NumOps.Multiply(input.Data.Span[i], std),
-                    mean);
-                result.Data.Span[i] = denormalized;
-            }
+            // De-normalize: input * std + mean
+            var scaled = Engine.TensorMultiplyScalar(input, std);
+            return Engine.TensorAddScalar(scaled, mean);
         }
-
-        return result;
     }
 
     /// <summary>

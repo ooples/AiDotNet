@@ -442,7 +442,7 @@ public class ABINet<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
                 { "charset_size", _charset.Length },
                 { "use_native_mode", _useNativeMode }
             },
-            ModelData = this.Serialize()
+            ModelData = SafeSerialize()
         };
     }
 
@@ -525,8 +525,8 @@ public class ABINet<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
 
         var currentParams = GetParameters();
         T lr = NumOps.FromDouble(0.0001);
-        for (int i = 0; i < currentParams.Length; i++)
-            currentParams[i] = NumOps.Subtract(currentParams[i], NumOps.Multiply(lr, gradients[i]));
+        
+        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, lr));
         SetParameters(currentParams);
     }
 

@@ -29,6 +29,11 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 public abstract class MambularBase<T>
 {
+    /// <summary>
+    /// Provides access to the hardware-accelerated tensor engine.
+    /// </summary>
+    protected IEngine Engine => AiDotNetEngine.Current;
+
     protected readonly MambularOptions<T> Options;
     protected readonly int NumNumericalFeatures;
     protected readonly int NumCategoricalFeatures;

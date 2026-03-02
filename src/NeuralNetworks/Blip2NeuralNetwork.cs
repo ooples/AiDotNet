@@ -1,8 +1,10 @@
 using System.IO;
 using AiDotNet.Enums;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
+using AiDotNet.Helpers;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Tensors.Helpers;
@@ -503,9 +505,52 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
     {
         int numPatches = (_imageSize / _patchSize) * (_imageSize / _patchSize);
 
-        // Vision encoder: Patch embedding
-        _patchEmbedding = new PatchEmbeddingLayer<T>(
-            _imageSize, _imageSize, channels, _patchSize, _visionHiddenDim);
+        Layers.Clear();
+
+        if (Architecture.Layers != null && Architecture.Layers.Count > 0)
+        {
+            Layers.AddRange(Architecture.Layers);
+        }
+        else
+        {
+            Layers.AddRange(LayerHelper<T>.CreateBlip2Layers(
+                _imageSize, channels, _patchSize, _visionHiddenDim,
+                _qformerHiddenDim, _numQformerLayers, _numHeads, _vocabularySize,
+                _embeddingDimension, _lmHiddenDim, _numLmDecoderLayers, _maxSequenceLength));
+        }
+
+        // Distribute layers to internal fields
+        int idx = 0;
+
+        // Vision encoder: PatchEmbed
+        _patchEmbedding = Layers[idx++];
+
+        // Q-Former layers: (self-attn + cross-attn + FFN) × numQformerLayers
+        _qformerSelfAttentionLayers.Clear();
+        _qformerCrossAttentionLayers.Clear();
+        _qformerFeedForwardLayers.Clear();
+        for (int i = 0; i < _numQformerLayers; i++)
+        {
+            _qformerSelfAttentionLayers.Add(Layers[idx++]);
+            _qformerCrossAttentionLayers.Add(Layers[idx++]);
+            _qformerFeedForwardLayers.Add((DenseLayer<T>)Layers[idx++]);
+        }
+
+        // Text embedding
+        _textTokenEmbedding = Layers[idx++];
+
+        // ITM head + ITC projection + LM projection
+        _itmHead = Layers[idx++];
+        _itcProjection = Layers[idx++];
+        _languageModelProjection = Layers[idx++];
+
+        // LM decoder layers
+        _lmDecoderLayers.Clear();
+        for (int i = 0; i < _numLmDecoderLayers; i++)
+            _lmDecoderLayers.Add((TransformerDecoderLayer<T>)Layers[idx++]);
+
+        // LM head
+        _lmHead = Layers[idx++];
 
         // Vision CLS token and positional embeddings
         _visionClsToken = Tensor<T>.CreateDefault([1, _visionHiddenDim], NumOps.Zero);
@@ -518,51 +563,6 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
         // Gradient storage for query tokens and positional embeddings
         _queryTokensGradients = Tensor<T>.CreateDefault([_numQueryTokens, _qformerHiddenDim], NumOps.Zero);
         _queryPositionalEmbeddingsGradients = Tensor<T>.CreateDefault([_numQueryTokens, _qformerHiddenDim], NumOps.Zero);
-
-        // Q-Former layers
-        int feedForwardDim = _qformerHiddenDim * 4;
-        for (int i = 0; i < _numQformerLayers; i++)
-        {
-            // Self-attention for queries
-            _qformerSelfAttentionLayers.Add(new TransformerEncoderLayer<T>(
-                _qformerHiddenDim, _numHeads, feedForwardDim));
-
-            // Cross-attention from queries to image features - use TransformerEncoderLayer
-            _qformerCrossAttentionLayers.Add(new TransformerEncoderLayer<T>(
-                _qformerHiddenDim, _numHeads, feedForwardDim));
-
-            // Feed-forward
-            _qformerFeedForwardLayers.Add(new DenseLayer<T>(_qformerHiddenDim, _qformerHiddenDim, (IActivationFunction<T>?)null));
-        }
-
-        // Text embedding for Q-Former's text encoder
-        _textTokenEmbedding = new EmbeddingLayer<T>(_vocabularySize, _qformerHiddenDim);
-
-        // ITM head (binary classification)
-        _itmHead = new DenseLayer<T>(_qformerHiddenDim, 2, (IActivationFunction<T>?)null);
-
-        // ITC projection
-        _itcProjection = new DenseLayer<T>(_qformerHiddenDim, _embeddingDimension, (IActivationFunction<T>?)null);
-
-        // LM projection (project Q-Former output to LLM dimension)
-        _languageModelProjection = new DenseLayer<T>(_qformerHiddenDim, _lmHiddenDim, (IActivationFunction<T>?)null);
-
-        // LM Decoder layers for text generation
-        int lmFeedForwardDim = _lmHiddenDim * 4;
-        int lmNumHeads = Math.Max(8, _lmHiddenDim / 64); // Scale heads with hidden dimension
-        var geluActivation = new GELUActivation<T>();
-        for (int i = 0; i < _numLmDecoderLayers; i++)
-        {
-            _lmDecoderLayers.Add(new TransformerDecoderLayer<T>(
-                embeddingSize: _lmHiddenDim,
-                numHeads: lmNumHeads,
-                feedForwardDim: lmFeedForwardDim,
-                sequenceLength: _maxSequenceLength,
-                ffnActivation: geluActivation));
-        }
-
-        // LM Head: Projects decoder output to vocabulary logits
-        _lmHead = new DenseLayer<T>(_lmHiddenDim, _vocabularySize, (IActivationFunction<T>?)null);
 
         // Initialize with small random values
         InitializeWeights();
@@ -676,7 +676,7 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
             embedding[i] = NumOps.Divide(sum, NumOps.FromDouble(_numQueryTokens));
         }
 
-        return NormalizeVector(embedding);
+        return VectorHelper.Normalize(embedding);
     }
 
     /// <inheritdoc/>
@@ -944,7 +944,7 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
                 }
                 embedding[j] = NumOps.Divide(sum, NumOps.FromDouble(_numQueryTokens));
             }
-            embedding = NormalizeVector(embedding);
+            embedding = VectorHelper.Normalize(embedding);
 
             var score = ComputeSimilarity(textEmbedding, embedding);
             candidates.Add((i, score));
@@ -1006,10 +1006,10 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
             {
                 result[i] = projected[i];
             }
-            return NormalizeVector(result);
+            return VectorHelper.Normalize(result);
         }
 
-        return NormalizeVector(clsEmbedding);
+        return VectorHelper.Normalize(clsEmbedding);
     }
 
     /// <summary>
@@ -1329,7 +1329,7 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
                 $"Unexpected Q-Former output rank: {output.Rank}. Expected 2 or 3 dimensions.");
         }
 
-        return NormalizeVector(embedding);
+        return VectorHelper.Normalize(embedding);
     }
 
     /// <summary>
@@ -1706,7 +1706,7 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
             queryMean[d] = NumOps.Divide(sum, NumOps.FromDouble(_numQueryTokens));
         }
 
-        queryMean = NormalizeVector(queryMean);
+        queryMean = VectorHelper.Normalize(queryMean);
         return ComputeSimilarity(textEmbedding, queryMean);
     }
 
@@ -1797,30 +1797,6 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
             throw new ArgumentException($"Image must have 3 channels (RGB), got {channels}.");
         if (height != _imageSize || width != _imageSize)
             throw new ArgumentException($"Image must be {_imageSize}x{_imageSize}, got {height}x{width}.");
-    }
-
-    /// <summary>
-    /// Normalizes a vector to unit length.
-    /// </summary>
-    private Vector<T> NormalizeVector(Vector<T> vector)
-    {
-        T sumSquares = NumOps.Zero;
-        for (int i = 0; i < vector.Length; i++)
-        {
-            sumSquares = NumOps.Add(sumSquares, NumOps.Multiply(vector[i], vector[i]));
-        }
-
-        T norm = NumOps.FromDouble(Math.Sqrt(NumOps.ToDouble(sumSquares)));
-        if (NumOps.ToDouble(norm) < 1e-10)
-            return vector;
-
-        var normalized = new Vector<T>(vector.Length);
-        for (int i = 0; i < vector.Length; i++)
-        {
-            normalized[i] = NumOps.Divide(vector[i], norm);
-        }
-
-        return normalized;
     }
 
     /// <summary>
@@ -1969,10 +1945,7 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
 
         // Apply gradient descent update: params = params - learning_rate * gradients
         T learningRate = NumOps.FromDouble(0.001); // Default learning rate
-        for (int i = 0; i < currentParams.Length; i++)
-        {
-            currentParams[i] = NumOps.Subtract(currentParams[i], NumOps.Multiply(learningRate, gradients[i]));
-        }
+        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, learningRate));
 
         // Set the updated parameters
         SetParameters(currentParams);

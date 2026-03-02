@@ -980,32 +980,7 @@ public class Mamba2Block<T> : LayerBase<T>
 
     private static Tensor<T> ConcatenateTensors(Tensor<T> a, Tensor<T> b, int axis)
     {
-        var shape = (int[])a.Shape.Clone();
-        shape[axis] = a.Shape[axis] + b.Shape[axis];
-        var output = new Tensor<T>(shape);
-        var indices = new int[a.Shape.Length];
-        ConcatRecursive(a, output, indices, 0, axis, 0);
-        ConcatRecursive(b, output, indices, 0, axis, a.Shape[axis]);
-        return output;
-    }
-
-    private static void ConcatRecursive(
-        Tensor<T> src, Tensor<T> dst, int[] indices,
-        int dim, int axis, int offset)
-    {
-        if (dim == indices.Length)
-        {
-            var dstIndices = (int[])indices.Clone();
-            dstIndices[axis] += offset;
-            dst[dstIndices] = src[indices];
-            return;
-        }
-        int limit = src.Shape[dim];
-        for (int i = 0; i < limit; i++)
-        {
-            indices[dim] = i;
-            ConcatRecursive(src, dst, indices, dim + 1, axis, offset);
-        }
+        return AiDotNetEngine.Current.TensorConcatenate([a, b], axis: axis);
     }
 
     #endregion

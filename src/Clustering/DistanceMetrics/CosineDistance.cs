@@ -1,3 +1,5 @@
+using AiDotNet.Helpers;
+
 namespace AiDotNet.Clustering.DistanceMetrics;
 
 /// <summary>
@@ -40,39 +42,9 @@ public class CosineDistance<T> : DistanceMetricBase<T>
                 $"Vectors must have the same length. Got {a.Length} and {b.Length}.");
         }
 
-        T dotProduct = NumOps.Zero;
-        T normA = NumOps.Zero;
-        T normB = NumOps.Zero;
-
-        for (int i = 0; i < a.Length; i++)
-        {
-            dotProduct = NumOps.Add(dotProduct, NumOps.Multiply(a[i], b[i]));
-            normA = NumOps.Add(normA, NumOps.Multiply(a[i], a[i]));
-            normB = NumOps.Add(normB, NumOps.Multiply(b[i], b[i]));
-        }
-
-        normA = Sqrt(normA);
-        normB = Sqrt(normB);
-
-        // Handle zero vectors
-        double normADouble = NumOps.ToDouble(normA);
-        double normBDouble = NumOps.ToDouble(normB);
-
-        if (normADouble < 1e-10 || normBDouble < 1e-10)
-        {
-            // If either vector is zero, return maximum distance
-            return NumOps.One;
-        }
-
-        T denominator = NumOps.Multiply(normA, normB);
-        T similarity = NumOps.Divide(dotProduct, denominator);
-
-        // Clamp to [-1, 1] to handle floating-point errors
-        double simDouble = NumOps.ToDouble(similarity);
-        simDouble = Math.Max(-1.0, Math.Min(1.0, simDouble));
-
         // Distance = 1 - similarity
-        return NumOps.FromDouble(1.0 - simDouble);
+        double similarity = VectorHelper.CosineSimilarity(a, b);
+        return NumOps.FromDouble(1.0 - similarity);
     }
 
     /// <summary>

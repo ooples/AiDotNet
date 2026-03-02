@@ -461,7 +461,7 @@ public class HybridBlockScheduler<T> : LayerBase<T>
     /// <inheritdoc />
     public override void UpdateParameters(T learningRate)
     {
-        if (_normGammaGradients == null)
+        if (_normGammaGradients == null || _normBetaGradients == null)
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
 
         T negLR = NumOps.Negate(learningRate);
@@ -473,7 +473,7 @@ public class HybridBlockScheduler<T> : LayerBase<T>
             _normGammas[i] = Engine.TensorAdd(_normGammas[i],
                 Engine.TensorMultiplyScalar(_normGammaGradients[i], negLR));
             _normBetas[i] = Engine.TensorAdd(_normBetas[i],
-                Engine.TensorMultiplyScalar(_normBetaGradients![i], negLR));
+                Engine.TensorMultiplyScalar(_normBetaGradients[i], negLR));
         }
     }
 

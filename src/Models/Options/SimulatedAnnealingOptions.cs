@@ -42,6 +42,15 @@ namespace AiDotNet.Models.Options;
 public class SimulatedAnnealingOptions<T, TInput, TOutput> : OptimizationAlgorithmOptions<T, TInput, TOutput>
 {
     /// <summary>
+    /// Initializes a new instance of the SimulatedAnnealingOptions class with appropriate defaults.
+    /// </summary>
+    public SimulatedAnnealingOptions()
+    {
+        // SA typically needs more iterations than the base default of 100
+        MaxIterations = 10000;
+    }
+
+    /// <summary>
     /// Gets or sets the initial temperature of the annealing process.
     /// </summary>
     /// <value>A positive double value, defaulting to 100.0.</value>
@@ -233,7 +242,9 @@ public class SimulatedAnnealingOptions<T, TInput, TOutput> : OptimizationAlgorit
     /// the temperature falls below MinTemperature OR the number of iterations reaches MaxIterations.
     /// </para>
     /// </remarks>
-    public new int MaxIterations { get; set; } = 10000;
+    // Note: SimulatedAnnealing default MaxIterations is set in the constructor
+    // to avoid the 'new' keyword which causes JSON serialization issues with
+    // duplicate property names in the base and derived class.
 
     /// <summary>
     /// Gets or sets the maximum number of consecutive iterations without improvement before early stopping.

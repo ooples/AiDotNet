@@ -176,10 +176,7 @@ public class BisectingKMeansSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
 
     private double ComputeDistance(double[] a, double[] b, int dim)
     {
-        double dist = 0;
-        for (int i = 0; i < dim; i++)
-            dist += (a[i] - b[i]) * (a[i] - b[i]);
-        return Math.Sqrt(dist);
+        return VectorHelper.EuclideanDistance(new Vector<double>(a), new Vector<double>(b));
     }
 
     private void UpdateCentroid(double[][] vectors, List<int> cluster, double[] centroid, int dim)

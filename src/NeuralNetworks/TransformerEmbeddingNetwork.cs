@@ -215,17 +215,9 @@ namespace AiDotNet.NeuralNetworks
             }
             else
             {
-                // Core Transformer Encoder Stack
-                Layers.AddRange(new ILayer<T>[]
-                {
-                    new EmbeddingLayer<T>(_vocabSize, _embeddingDimension),
-                    new PositionalEncodingLayer<T>(_maxSequenceLength, _embeddingDimension)
-                });
-
-                for (int i = 0; i < _numLayers; i++)
-                {
-                    Layers.Add(new TransformerEncoderLayer<T>(_embeddingDimension, _numHeads, _feedForwardDim));
-                }
+                Layers.AddRange(LayerHelper<T>.CreateTransformerEmbeddingLayers(
+                    _vocabSize, _embeddingDimension, _maxSequenceLength,
+                    _numLayers, _numHeads, _feedForwardDim));
             }
         }
 

@@ -348,39 +348,7 @@ internal class CSPBlock<T>
 
     private Tensor<T> ConcatenateChannels(Tensor<T> a, Tensor<T> b)
     {
-        int batch = a.Shape[0];
-        int channelsA = a.Shape[1];
-        int channelsB = b.Shape[1];
-        int height = a.Shape[2];
-        int width = a.Shape[3];
-
-        var result = new Tensor<T>(new[] { batch, channelsA + channelsB, height, width });
-
-        for (int n = 0; n < batch; n++)
-        {
-            for (int c = 0; c < channelsA; c++)
-            {
-                for (int h = 0; h < height; h++)
-                {
-                    for (int w = 0; w < width; w++)
-                    {
-                        result[n, c, h, w] = a[n, c, h, w];
-                    }
-                }
-            }
-            for (int c = 0; c < channelsB; c++)
-            {
-                for (int h = 0; h < height; h++)
-                {
-                    for (int w = 0; w < width; w++)
-                    {
-                        result[n, channelsA + c, h, w] = b[n, c, h, w];
-                    }
-                }
-            }
-        }
-
-        return result;
+        return AiDotNetEngine.Current.TensorConcatenate([a, b], axis: 1);
     }
 }
 

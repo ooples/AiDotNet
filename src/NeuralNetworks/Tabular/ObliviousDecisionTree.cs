@@ -1,5 +1,7 @@
+using AiDotNet.Autodiff;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
+using AiDotNet.NeuralNetworks.Layers;
 
 namespace AiDotNet.NeuralNetworks.Tabular;
 
@@ -23,11 +25,8 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public class ObliviousDecisionTree<T>
+public class ObliviousDecisionTree<T> : LayerBase<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
-    private readonly Random _random;
-
     private readonly int _inputDim;
     private readonly int _depth;
     private readonly int _outputDim;
@@ -55,10 +54,14 @@ public class ObliviousDecisionTree<T>
     /// </summary>
     public int NumLeaves => _numLeaves;
 
-    /// <summary>
-    /// Gets the total parameter count.
-    /// </summary>
-    public int ParameterCount =>
+    /// <inheritdoc/>
+    public override bool SupportsTraining => true;
+
+    /// <inheritdoc/>
+    public override bool SupportsJitCompilation => false;
+
+    /// <inheritdoc/>
+    public override int ParameterCount =>
         _depth * _inputDim +      // feature selection weights
         _depth +                   // thresholds
         _numLeaves * _outputDim;   // leaf values
@@ -71,12 +74,19 @@ public class ObliviousDecisionTree<T>
     /// <param name="outputDim">Output dimension per leaf.</param>
     /// <param name="initScale">Initialization scale.</param>
     public ObliviousDecisionTree(int inputDim, int depth = 6, int outputDim = 1, double initScale = 0.01)
+        : base([inputDim], [outputDim])
     {
+        if (inputDim <= 0)
+            throw new ArgumentOutOfRangeException(nameof(inputDim), "Input dimension must be positive.");
+        if (depth <= 0 || depth > 30)
+            throw new ArgumentOutOfRangeException(nameof(depth), "Depth must be between 1 and 30.");
+        if (outputDim <= 0)
+            throw new ArgumentOutOfRangeException(nameof(outputDim), "Output dimension must be positive.");
+
         _inputDim = inputDim;
         _depth = depth;
         _outputDim = outputDim;
         _numLeaves = 1 << depth;  // 2^depth
-        _random = RandomHelper.CreateSecureRandom();
 
         // Initialize parameters
         _featureSelectionWeights = new Tensor<T>([depth, inputDim]);
@@ -96,19 +106,19 @@ public class ObliviousDecisionTree<T>
         // Initialize feature selection weights (uniform, will be softmaxed)
         for (int i = 0; i < _featureSelectionWeights.Length; i++)
         {
-            _featureSelectionWeights[i] = NumOps.FromDouble(_random.NextGaussian() * scale);
+            _featureSelectionWeights[i] = NumOps.FromDouble(Random.NextGaussian() * scale);
         }
 
         // Initialize thresholds to small random values
         for (int i = 0; i < _thresholds.Length; i++)
         {
-            _thresholds[i] = NumOps.FromDouble(_random.NextGaussian() * scale * 0.1);
+            _thresholds[i] = NumOps.FromDouble(Random.NextGaussian() * scale * 0.1);
         }
 
         // Initialize leaf values
         for (int i = 0; i < _leafValues.Length; i++)
         {
-            _leafValues[i] = NumOps.FromDouble(_random.NextGaussian() * scale);
+            _leafValues[i] = NumOps.FromDouble(Random.NextGaussian() * scale);
         }
     }
 
@@ -117,7 +127,7 @@ public class ObliviousDecisionTree<T>
     /// </summary>
     /// <param name="input">Input features [batchSize, inputDim].</param>
     /// <returns>Tree output [batchSize, outputDim].</returns>
-    public Tensor<T> Forward(Tensor<T> input)
+    public override Tensor<T> Forward(Tensor<T> input)
     {
         _inputCache = input;
         int batchSize = input.Shape[0];
@@ -263,7 +273,7 @@ public class ObliviousDecisionTree<T>
     /// </summary>
     /// <param name="gradient">Gradient with respect to output [batchSize, outputDim].</param>
     /// <returns>Gradient with respect to input [batchSize, inputDim].</returns>
-    public Tensor<T> Backward(Tensor<T> gradient)
+    public override Tensor<T> Backward(Tensor<T> gradient)
     {
         if (_inputCache == null || _leafProbabilitiesCache == null)
         {
@@ -273,13 +283,10 @@ public class ObliviousDecisionTree<T>
         int batchSize = _inputCache.Shape[0];
         var inputGrad = new Tensor<T>([batchSize, _inputDim]);
 
-        // Reset gradients
-        for (int i = 0; i < _featureSelectionGrad.Length; i++)
-            _featureSelectionGrad[i] = NumOps.Zero;
-        for (int i = 0; i < _thresholdsGrad.Length; i++)
-            _thresholdsGrad[i] = NumOps.Zero;
-        for (int i = 0; i < _leafValuesGrad.Length; i++)
-            _leafValuesGrad[i] = NumOps.Zero;
+        // Reset gradients using Engine
+        Engine.TensorFill(_featureSelectionGrad, NumOps.Zero);
+        Engine.TensorFill(_thresholdsGrad, NumOps.Zero);
+        Engine.TensorFill(_leafValuesGrad, NumOps.Zero);
 
         // Gradient for leaf values
         for (int b = 0; b < batchSize; b++)
@@ -337,45 +344,63 @@ public class ObliviousDecisionTree<T>
         return importance;
     }
 
-    /// <summary>
-    /// Updates parameters.
-    /// </summary>
-    public void UpdateParameters(T learningRate)
+    /// <inheritdoc/>
+    public override void UpdateParameters(T learningRate)
     {
-        for (int i = 0; i < _featureSelectionWeights.Length; i++)
-        {
-            _featureSelectionWeights[i] = NumOps.Subtract(_featureSelectionWeights[i],
-                NumOps.Multiply(learningRate, _featureSelectionGrad[i]));
-        }
-
-        for (int i = 0; i < _thresholds.Length; i++)
-        {
-            _thresholds[i] = NumOps.Subtract(_thresholds[i],
-                NumOps.Multiply(learningRate, _thresholdsGrad[i]));
-        }
-
-        for (int i = 0; i < _leafValues.Length; i++)
-        {
-            _leafValues[i] = NumOps.Subtract(_leafValues[i],
-                NumOps.Multiply(learningRate, _leafValuesGrad[i]));
-        }
+        _featureSelectionWeights = Engine.TensorSubtract(_featureSelectionWeights,
+            Engine.TensorMultiplyScalar(_featureSelectionGrad, learningRate));
+        _thresholds = Engine.TensorSubtract(_thresholds,
+            Engine.TensorMultiplyScalar(_thresholdsGrad, learningRate));
+        _leafValues = Engine.TensorSubtract(_leafValues,
+            Engine.TensorMultiplyScalar(_leafValuesGrad, learningRate));
     }
 
-    /// <summary>
-    /// Resets internal state.
-    /// </summary>
-    public void ResetState()
+    /// <inheritdoc/>
+    public override void ResetState()
     {
         _inputCache = null;
         _featureSelectionsCache = null;
         _splitDecisionsCache = null;
         _leafProbabilitiesCache = null;
 
-        for (int i = 0; i < _featureSelectionGrad.Length; i++)
-            _featureSelectionGrad[i] = NumOps.Zero;
-        for (int i = 0; i < _thresholdsGrad.Length; i++)
-            _thresholdsGrad[i] = NumOps.Zero;
-        for (int i = 0; i < _leafValuesGrad.Length; i++)
-            _leafValuesGrad[i] = NumOps.Zero;
+        Engine.TensorFill(_featureSelectionGrad, NumOps.Zero);
+        Engine.TensorFill(_thresholdsGrad, NumOps.Zero);
+        Engine.TensorFill(_leafValuesGrad, NumOps.Zero);
+    }
+
+    /// <inheritdoc/>
+    public override Vector<T> GetParameters()
+    {
+        int total = _featureSelectionWeights.Length + _thresholds.Length + _leafValues.Length;
+        var result = new Vector<T>(total);
+        int offset = 0;
+        for (int i = 0; i < _featureSelectionWeights.Length; i++)
+            result[offset++] = _featureSelectionWeights[i];
+        for (int i = 0; i < _thresholds.Length; i++)
+            result[offset++] = _thresholds[i];
+        for (int i = 0; i < _leafValues.Length; i++)
+            result[offset++] = _leafValues[i];
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
+        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
+        inputNodes.Add(inputNode);
+
+        // Export feature selection weights and thresholds as constants
+        var featureWeightsNode = TensorOperations<T>.Constant(_featureSelectionWeights, "featureSelectionWeights");
+        var thresholdsNode = TensorOperations<T>.Constant(_thresholds, "thresholds");
+        var leafValuesNode = TensorOperations<T>.Constant(_leafValues, "leafValues");
+
+        // Feature selection: softmax over weights determines which feature each split uses
+        var featureSelection = TensorOperations<T>.MatrixMultiply(inputNode, TensorOperations<T>.Transpose(featureWeightsNode));
+
+        return featureSelection;
     }
 }

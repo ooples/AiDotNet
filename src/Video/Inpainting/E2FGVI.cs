@@ -105,43 +105,42 @@ public class E2FGVI<T> : VideoInpaintingBase<T>
         _propagation = [];
         _decoder = [];
 
-        int featH = _height / 4;
-        int featW = _width / 4;
+        int numTransformerBlocks = 8;
 
-        // Flow estimation network
-        _flowNet.Add(new ConvolutionalLayer<T>(_channels * 2, _height, _width, 64, 7, 2, 3));
-        _flowNet.Add(new ConvolutionalLayer<T>(64, _height / 2, _width / 2, 128, 5, 2, 2));
-        _flowNet.Add(new ConvolutionalLayer<T>(128, featH, featW, _numFeatures, 3, 1, 1));
-        _flowHead = new ConvolutionalLayer<T>(_numFeatures, featH, featW, 4, 3, 1, 1); // Forward + backward flow
-
-        // Content encoder
-        _encoder.Add(new ConvolutionalLayer<T>(_channels + 1, _height, _width, 64, 7, 2, 3));
-        _encoder.Add(new ConvolutionalLayer<T>(64, _height / 2, _width / 2, 128, 3, 2, 1));
-        _encoder.Add(new ConvolutionalLayer<T>(128, featH, featW, _numFeatures, 3, 1, 1));
-
-        // Transformer layers for content hallucination
-        for (int i = 0; i < 8; i++)
+        // Check for user-provided custom layers
+        if (Architecture.Layers != null && Architecture.Layers.Count > 0)
         {
-            _transformer.Add(new ConvolutionalLayer<T>(_numFeatures, featH, featW, _numFeatures, 3, 1, 1));
+            Layers.AddRange(Architecture.Layers);
+        }
+        else
+        {
+            var layers = LayerHelper<T>.CreateE2FGVILayers(
+                channels: _channels, height: _height, width: _width,
+                numFeatures: _numFeatures, numTransformerBlocks: numTransformerBlocks).ToList();
+            Layers.AddRange(layers);
         }
 
-        // Flow-guided propagation
-        _propagation.Add(new ConvolutionalLayer<T>(_numFeatures * 2, featH, featW, _numFeatures, 3, 1, 1));
-        _propagation.Add(new ConvolutionalLayer<T>(_numFeatures, featH, featW, _numFeatures, 3, 1, 1));
-
-        // Decoder
-        _decoder.Add(new ConvolutionalLayer<T>(_numFeatures, featH, featW, 128, 3, 1, 1));
-        _decoder.Add(new ConvolutionalLayer<T>(128, featH * 2, featW * 2, 64, 3, 1, 1));
-        _outputHead = new ConvolutionalLayer<T>(64, _height, _width, _channels, 3, 1, 1);
-
-        // Register layers
-        foreach (var l in _flowNet) Layers.Add(l);
-        Layers.Add(_flowHead);
-        foreach (var l in _encoder) Layers.Add(l);
-        foreach (var l in _transformer) Layers.Add(l);
-        foreach (var l in _propagation) Layers.Add(l);
-        foreach (var l in _decoder) Layers.Add(l);
-        Layers.Add(_outputHead);
+        // Distribute layers to sub-lists for forward pass
+        int idx = 0;
+        // Flow network (3 layers)
+        for (int i = 0; i < 3; i++)
+            _flowNet.Add((ConvolutionalLayer<T>)Layers[idx++]);
+        // Flow head
+        _flowHead = (ConvolutionalLayer<T>)Layers[idx++];
+        // Content encoder (3 layers)
+        for (int i = 0; i < 3; i++)
+            _encoder.Add((ConvolutionalLayer<T>)Layers[idx++]);
+        // Transformer layers
+        for (int i = 0; i < numTransformerBlocks; i++)
+            _transformer.Add((ConvolutionalLayer<T>)Layers[idx++]);
+        // Propagation (2 layers)
+        for (int i = 0; i < 2; i++)
+            _propagation.Add((ConvolutionalLayer<T>)Layers[idx++]);
+        // Decoder (2 layers)
+        for (int i = 0; i < 2; i++)
+            _decoder.Add((ConvolutionalLayer<T>)Layers[idx++]);
+        // Output head
+        _outputHead = (ConvolutionalLayer<T>)Layers[idx++];
     }
 
     #endregion
@@ -712,35 +711,14 @@ public class E2FGVI<T> : VideoInpaintingBase<T>
     private Tensor<T> ZeroTensor(int[] shape) => new Tensor<T>(shape);
 
     private Tensor<T> ScaleTensor(Tensor<T> tensor, double scale) =>
-        tensor.Transform((v, _) => NumOps.FromDouble(Convert.ToDouble(v) * scale));
+        Engine.TensorMultiplyScalar(tensor, NumOps.FromDouble(scale));
 
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b) =>
-        a.Transform((v, idx) => NumOps.Add(v, b.Data.Span[idx]));
+        Engine.TensorAdd(a, b);
 
     private Tensor<T> ConcatenateChannels(Tensor<T> a, Tensor<T> b)
     {
-        int batchSize = a.Shape[0];
-        int channelsA = a.Shape[1];
-        int channelsB = b.Shape[1];
-        int height = a.Shape[2];
-        int width = a.Shape[3];
-
-        var output = new Tensor<T>([batchSize, channelsA + channelsB, height, width]);
-
-        for (int batch = 0; batch < batchSize; batch++)
-        {
-            for (int c = 0; c < channelsA; c++)
-                for (int h = 0; h < height; h++)
-                    for (int w = 0; w < width; w++)
-                        output[batch, c, h, w] = a[batch, c, h, w];
-
-            for (int c = 0; c < channelsB; c++)
-                for (int h = 0; h < height; h++)
-                    for (int w = 0; w < width; w++)
-                        output[batch, channelsA + c, h, w] = b[batch, c, h, w];
-        }
-
-        return output;
+        return Engine.TensorConcatenate([a, b], axis: 1);
     }
 
     private Tensor<T> Upsample2x(Tensor<T> input)
@@ -771,7 +749,7 @@ public class E2FGVI<T> : VideoInpaintingBase<T>
         input.Transform((v, _) => NumOps.FromDouble(Math.Max(0, Convert.ToDouble(v))));
 
     private Tensor<T> ApplySigmoid(Tensor<T> input) =>
-        input.Transform((v, _) => NumOps.FromDouble(1.0 / (1.0 + Math.Exp(-Convert.ToDouble(v)))));
+        Engine.Sigmoid(input);
 
     private Tensor<T> AddBatchDimension(Tensor<T> tensor)
     {

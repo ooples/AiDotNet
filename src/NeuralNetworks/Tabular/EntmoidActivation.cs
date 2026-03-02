@@ -309,34 +309,9 @@ public class EntmaxAttention<T>
 
     private Tensor<T> ApplySoftmax(Tensor<T> scores, int batchSize, int seqLen)
     {
-        var output = new Tensor<T>(scores.Shape);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            // Find max for numerical stability
-            var maxVal = scores[b * seqLen];
-            for (int i = 1; i < seqLen; i++)
-            {
-                if (NumOps.Compare(scores[b * seqLen + i], maxVal) > 0)
-                    maxVal = scores[b * seqLen + i];
-            }
-
-            // Compute exp and sum
-            var sumExp = NumOps.Zero;
-            for (int i = 0; i < seqLen; i++)
-            {
-                output[b * seqLen + i] = NumOps.Exp(NumOps.Subtract(scores[b * seqLen + i], maxVal));
-                sumExp = NumOps.Add(sumExp, output[b * seqLen + i]);
-            }
-
-            // Normalize
-            for (int i = 0; i < seqLen; i++)
-            {
-                output[b * seqLen + i] = NumOps.Divide(output[b * seqLen + i], sumExp);
-            }
-        }
-
-        return output;
+        var reshaped = scores.Reshape([batchSize, seqLen]);
+        var result = AiDotNetEngine.Current.Softmax(reshaped, -1);
+        return result.Reshape(scores.Shape);
     }
 
     private Tensor<T> ApplySparsemax(Tensor<T> scores, int batchSize, int seqLen)

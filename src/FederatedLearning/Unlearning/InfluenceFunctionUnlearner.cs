@@ -1,7 +1,9 @@
 using System.Security.Cryptography;
 using AiDotNet.FederatedLearning.Infrastructure;
+using AiDotNet.Helpers;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.FederatedLearning.Unlearning;
 
@@ -210,16 +212,8 @@ public class InfluenceFunctionUnlearner<T> : FederatedLearningComponentBase<T>, 
     private static double EstimateMembershipScore(double[] gradient, double[] correction)
     {
         // How well the correction aligns with the original gradient
-        double dot = 0, normG = 0, normC = 0;
-        for (int i = 0; i < gradient.Length; i++)
-        {
-            dot += gradient[i] * correction[i];
-            normG += gradient[i] * gradient[i];
-            normC += correction[i] * correction[i];
-        }
-
-        double denom = Math.Sqrt(normG) * Math.Sqrt(normC);
-        double alignment = denom > 1e-12 ? dot / denom : 0;
+        double alignment = VectorHelper.CosineSimilarity(
+            new Vector<double>(gradient), new Vector<double>(correction));
 
         // Good unlearning: correction aligns well with gradient (removes it)
         return 0.5 + Math.Abs(alignment) * 0.4;
@@ -227,15 +221,7 @@ public class InfluenceFunctionUnlearner<T> : FederatedLearningComponentBase<T>, 
 
     private double ComputeL2Distance(Tensor<T> a, Tensor<T> b)
     {
-        int size = Math.Min(a.Shape[0], b.Shape[0]);
-        double sumSq = 0;
-        for (int i = 0; i < size; i++)
-        {
-            double diff = NumOps.ToDouble(a[i]) - NumOps.ToDouble(b[i]);
-            sumSq += diff * diff;
-        }
-
-        return Math.Sqrt(sumSq);
+        return NumOps.ToDouble(VectorHelper.EuclideanDistance(a.ToVector(), b.ToVector()));
     }
 
     private string ComputeModelHash(Tensor<T> model)

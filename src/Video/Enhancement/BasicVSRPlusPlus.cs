@@ -348,67 +348,49 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
         int width = arch.InputWidth > 0 ? arch.InputWidth : 64;
         int channels = arch.InputDepth > 0 ? arch.InputDepth : 3;
 
-        // SPyNet for optical flow estimation
-        _flowEstimator = new SpyNetLayer<T>(height, width, channels, numLevels: 5);
-
-        // Initial feature extraction
-        // ConvolutionalLayer(inputDepth, inputHeight, inputWidth, outputDepth, kernelSize, stride, padding)
-        _featExtract = new ConvolutionalLayer<T>(channels, height, width, _numFeatures, 3, 1, 1);
-
-        // Residual blocks for deep feature extraction
-        for (int i = 0; i < _numResidualBlocks; i++)
+        if (Architecture.Layers != null && Architecture.Layers.Count > 0)
         {
-            _residualBlocks.Add(new ResidualDenseBlock<T>(
-                numFeatures: _numFeatures,
-                growthChannels: 32,
-                inputHeight: height,
-                inputWidth: width,
-                residualScale: 0.2));
+            Layers.AddRange(Architecture.Layers);
+        }
+        else
+        {
+            var layers = LayerHelper<T>.CreateBasicVSRPlusPlusLayers(
+                channels, height, width,
+                _numFeatures, _scaleFactor,
+                _numResidualBlocks, _numPropagations,
+                numLevels: 5, deformGroups: 8, growthChannels: 32).ToList();
+            Layers.AddRange(layers);
         }
 
-        // Deformable alignment modules for each propagation
+        // Distribute layers to sub-lists for forward pass
+        int idx = 0;
+
+        // SPyNet flow estimator
+        _flowEstimator = (SpyNetLayer<T>)Layers[idx++];
+
+        // Feature extraction
+        _featExtract = (ConvolutionalLayer<T>)Layers[idx++];
+
+        // Residual blocks
+        for (int i = 0; i < _numResidualBlocks; i++)
+            _residualBlocks.Add((ResidualDenseBlock<T>)Layers[idx++]);
+
+        // Deformable alignment + propagation convolutions per propagation iteration
         for (int i = 0; i < _numPropagations; i++)
         {
-            // Backward alignment
-            _backwardAlignments.Add(new DeformableConvolutionalLayer<T>(
-                height, width, _numFeatures * 2, _numFeatures,
-                kernelSize: 3, padding: 1, deformGroups: 8));
-
-            // Forward alignment
-            _forwardAlignments.Add(new DeformableConvolutionalLayer<T>(
-                height, width, _numFeatures * 2, _numFeatures,
-                kernelSize: 3, padding: 1, deformGroups: 8));
-
-            // Propagation convolutions
-            // ConvolutionalLayer(inputDepth, inputHeight, inputWidth, outputDepth, kernelSize, stride, padding)
-            _backwardConvs.Add(new ConvolutionalLayer<T>(
-                _numFeatures * 2, height, width, _numFeatures, 3, 1, 1));
-            _forwardConvs.Add(new ConvolutionalLayer<T>(
-                _numFeatures * 2, height, width, _numFeatures, 3, 1, 1));
+            _backwardAlignments.Add((DeformableConvolutionalLayer<T>)Layers[idx++]);
+            _forwardAlignments.Add((DeformableConvolutionalLayer<T>)Layers[idx++]);
+            _backwardConvs.Add((ConvolutionalLayer<T>)Layers[idx++]);
+            _forwardConvs.Add((ConvolutionalLayer<T>)Layers[idx++]);
         }
 
-        // Upsampling layers using PixelShuffle
+        // Upsampling layers
         int numUpsample = _scaleFactor == 4 ? 2 : 1;
-        int currentHeight = height;
-        int currentWidth = width;
-
         for (int i = 0; i < numUpsample; i++)
-        {
-            // PixelShuffleLayer(inputShape, upscaleFactor)
-            // Input channels need to be upscaleFactor^2 * outputChannels
-            // For scale=2, we need 4 * numFeatures channels in, numFeatures channels out
-            int[] inputShape = [1, _numFeatures * 4, currentHeight, currentWidth];
-            _upsampleLayers.Add(new PixelShuffleLayer<T>(inputShape, 2));
-            currentHeight *= 2;
-            currentWidth *= 2;
-        }
+            _upsampleLayers.Add((PixelShuffleLayer<T>)Layers[idx++]);
 
-        // Final output convolution
-        // ConvolutionalLayer(inputDepth, inputHeight, inputWidth, outputDepth, kernelSize, stride, padding)
-        _outputConv = new ConvolutionalLayer<T>(
-            _numFeatures, currentHeight, currentWidth, channels, 3, 1, 1);
-
-        InitializeLayers();
+        // Output convolution
+        _outputConv = (ConvolutionalLayer<T>)Layers[idx++];
     }
 
     #endregion

@@ -1,4 +1,5 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Engines;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Models.Options;
@@ -33,6 +34,11 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 public abstract class TabDPTBase<T>
 {
+    /// <summary>
+    /// Provides access to the hardware-accelerated tensor engine.
+    /// </summary>
+    protected IEngine Engine => AiDotNetEngine.Current;
+
     protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     protected readonly TabDPTOptions<T> Options;
     protected readonly Random _random;
@@ -193,10 +199,7 @@ public abstract class TabDPTBase<T>
                 var catEmb = _categoricalEmbeddings[catIdx].Forward(oneHot);
 
                 // Add to embeddings
-                for (int i = 0; i < embeddings.Length; i++)
-                {
-                    embeddings[i] = NumOps.Add(embeddings[i], catEmb[i]);
-                }
+                embeddings = Engine.TensorAdd(embeddings, catEmb);
             }
         }
 
@@ -473,11 +476,8 @@ public abstract class TabDPTBase<T>
             _attentionOutputCache = attentionOutput;
 
             // Residual connection
-            var residual1 = new Tensor<TBlock>(input.Shape);
-            for (int i = 0; i < input.Length; i++)
-            {
-                residual1[i] = Ops.Add(input[i], attentionOutput[i]);
-            }
+            var eng = AiDotNetEngine.Current;
+            var residual1 = eng.TensorAdd(input, attentionOutput);
 
             if (!_usePreNorm)
             {
@@ -499,11 +499,7 @@ public abstract class TabDPTBase<T>
             ffOutput = _ff2.Forward(ffOutput);
 
             // Residual connection
-            var output = new Tensor<TBlock>(residual1.Shape);
-            for (int i = 0; i < residual1.Length; i++)
-            {
-                output[i] = Ops.Add(residual1[i], ffOutput[i]);
-            }
+            var output = eng.TensorAdd(residual1, ffOutput);
 
             if (!_usePreNorm)
             {
@@ -585,28 +581,7 @@ public abstract class TabDPTBase<T>
 
         private static Tensor<TBlock> MatMul(Tensor<TBlock> input, Tensor<TBlock> weights)
         {
-            int batchSize = input.Shape[0];
-            int inputDim = weights.Shape[0];
-            int outputDim = weights.Shape[1];
-
-            var output = new Tensor<TBlock>([batchSize, outputDim]);
-
-            for (int b = 0; b < batchSize; b++)
-            {
-                for (int o = 0; o < outputDim; o++)
-                {
-                    var sum = Ops.Zero;
-                    for (int i = 0; i < inputDim; i++)
-                    {
-                        sum = Ops.Add(sum, Ops.Multiply(
-                            input[b * inputDim + i],
-                            weights[i * outputDim + o]));
-                    }
-                    output[b * outputDim + o] = sum;
-                }
-            }
-
-            return output;
+            return AiDotNetEngine.Current.TensorMatMul(input, weights);
         }
 
         public Tensor<TBlock> Backward(Tensor<TBlock> gradient)
@@ -616,10 +591,7 @@ public abstract class TabDPTBase<T>
             grad = _ff1.Backward(grad);
 
             // Add residual gradient
-            for (int i = 0; i < gradient.Length; i++)
-            {
-                grad[i] = Ops.Add(grad[i], gradient[i]);
-            }
+            grad = AiDotNetEngine.Current.TensorAdd(grad, gradient);
 
             return grad;
         }
@@ -627,13 +599,11 @@ public abstract class TabDPTBase<T>
         public void UpdateParameters(TBlock learningRate)
         {
             // Update attention weights
-            for (int i = 0; i < _queryWeights.Length; i++)
-            {
-                _queryWeights[i] = Ops.Subtract(_queryWeights[i], Ops.Multiply(learningRate, _queryGrad[i]));
-                _keyWeights[i] = Ops.Subtract(_keyWeights[i], Ops.Multiply(learningRate, _keyGrad[i]));
-                _valueWeights[i] = Ops.Subtract(_valueWeights[i], Ops.Multiply(learningRate, _valueGrad[i]));
-                _outputWeights[i] = Ops.Subtract(_outputWeights[i], Ops.Multiply(learningRate, _outputGrad[i]));
-            }
+            var eng = AiDotNetEngine.Current;
+            _queryWeights = eng.TensorSubtract(_queryWeights, eng.TensorMultiplyScalar(_queryGrad, learningRate));
+            _keyWeights = eng.TensorSubtract(_keyWeights, eng.TensorMultiplyScalar(_keyGrad, learningRate));
+            _valueWeights = eng.TensorSubtract(_valueWeights, eng.TensorMultiplyScalar(_valueGrad, learningRate));
+            _outputWeights = eng.TensorSubtract(_outputWeights, eng.TensorMultiplyScalar(_outputGrad, learningRate));
 
             _ff1.UpdateParameters(learningRate);
             _ff2.UpdateParameters(learningRate);
@@ -652,13 +622,11 @@ public abstract class TabDPTBase<T>
             _attentionScoresCache = null;
 
             // Zero gradients
-            for (int i = 0; i < _queryGrad.Length; i++)
-            {
-                _queryGrad[i] = Ops.Zero;
-                _keyGrad[i] = Ops.Zero;
-                _valueGrad[i] = Ops.Zero;
-                _outputGrad[i] = Ops.Zero;
-            }
+            var eng = AiDotNetEngine.Current;
+            eng.TensorFill(_queryGrad, Ops.Zero);
+            eng.TensorFill(_keyGrad, Ops.Zero);
+            eng.TensorFill(_valueGrad, Ops.Zero);
+            eng.TensorFill(_outputGrad, Ops.Zero);
 
             _ff1.ResetState();
             _ff2.ResetState();

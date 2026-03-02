@@ -2,6 +2,7 @@
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Inputs;
 using AiDotNet.Models.Options;
+using AiDotNet.Models.Results;
 using AiDotNet.Optimizers;
 using AiDotNet.Regression;
 using Xunit;
@@ -92,6 +93,41 @@ public class MetaheuristicOptimizerIntegrationTests
         return (X, y);
     }
 
+    /// <summary>
+    /// Validates that an optimization result has meaningful content, not just non-null fields.
+    /// </summary>
+    private static void AssertValidOptimizationResult(
+        OptimizationResult<double, Matrix<double>, Vector<double>> result,
+        string optimizerName)
+    {
+        Assert.NotNull(result.BestSolution);
+
+        // Fitness score must be a valid finite number
+        Assert.False(double.IsNaN(result.BestFitnessScore),
+            $"{optimizerName}: BestFitnessScore should not be NaN");
+        Assert.False(double.IsInfinity(result.BestFitnessScore),
+            $"{optimizerName}: BestFitnessScore should not be Infinity");
+        Assert.True(result.BestFitnessScore >= 0,
+            $"{optimizerName}: BestFitnessScore should be non-negative, got {result.BestFitnessScore}");
+
+        // Optimization should have run at least 1 iteration
+        Assert.True(result.Iterations >= 1,
+            $"{optimizerName}: Should have run at least 1 iteration, got {result.Iterations}");
+
+        // Fitness history should track progress
+        Assert.NotNull(result.FitnessHistory);
+        Assert.True(result.FitnessHistory.Length > 0,
+            $"{optimizerName}: FitnessHistory should have at least 1 entry");
+
+        // Selected features should be populated
+        Assert.NotNull(result.SelectedFeatures);
+        Assert.True(result.SelectedFeatures.Count > 0,
+            $"{optimizerName}: SelectedFeatures should contain at least one feature set");
+
+        // Training result should have predictions
+        Assert.NotNull(result.TrainingResult);
+    }
+
     #endregion
 
     #region Genetic Algorithm Optimizer Tests
@@ -144,10 +180,7 @@ public class MetaheuristicOptimizerIntegrationTests
 
         var result = optimizer.Optimize(inputData);
 
-        Assert.NotNull(result);
-        Assert.NotNull(result.BestSolution);
-        // GA is stochastic, so we just verify it produces a valid result
-        Assert.True(result.BestFitnessScore >= 0, "Fitness score should be non-negative");
+        AssertValidOptimizationResult(result, "GeneticAlgorithm");
     }
 
     #endregion
@@ -202,8 +235,7 @@ public class MetaheuristicOptimizerIntegrationTests
 
         var result = optimizer.Optimize(inputData);
 
-        Assert.NotNull(result);
-        Assert.NotNull(result.BestSolution);
+        AssertValidOptimizationResult(result, "ParticleSwarm");
     }
 
     #endregion
@@ -257,8 +289,7 @@ public class MetaheuristicOptimizerIntegrationTests
 
         var result = optimizer.Optimize(inputData);
 
-        Assert.NotNull(result);
-        Assert.NotNull(result.BestSolution);
+        AssertValidOptimizationResult(result, "DifferentialEvolution");
     }
 
     #endregion
@@ -313,8 +344,7 @@ public class MetaheuristicOptimizerIntegrationTests
 
         var result = optimizer.Optimize(inputData);
 
-        Assert.NotNull(result);
-        Assert.NotNull(result.BestSolution);
+        AssertValidOptimizationResult(result, "SimulatedAnnealing");
     }
 
     #endregion
@@ -368,8 +398,7 @@ public class MetaheuristicOptimizerIntegrationTests
 
         var result = optimizer.Optimize(inputData);
 
-        Assert.NotNull(result);
-        Assert.NotNull(result.BestSolution);
+        AssertValidOptimizationResult(result, "AntColony");
     }
 
     #endregion
@@ -422,8 +451,7 @@ public class MetaheuristicOptimizerIntegrationTests
 
         var result = optimizer.Optimize(inputData);
 
-        Assert.NotNull(result);
-        Assert.NotNull(result.BestSolution);
+        AssertValidOptimizationResult(result, "TabuSearch");
     }
 
     #endregion
@@ -475,8 +503,7 @@ public class MetaheuristicOptimizerIntegrationTests
 
         var result = optimizer.Optimize(inputData);
 
-        Assert.NotNull(result);
-        Assert.NotNull(result.BestSolution);
+        AssertValidOptimizationResult(result, "CMAES");
     }
 
     #endregion
@@ -529,8 +556,7 @@ public class MetaheuristicOptimizerIntegrationTests
 
         var result = optimizer.Optimize(inputData);
 
-        Assert.NotNull(result);
-        Assert.NotNull(result.BestSolution);
+        AssertValidOptimizationResult(result, "Bayesian");
     }
 
     #endregion
@@ -584,8 +610,7 @@ public class MetaheuristicOptimizerIntegrationTests
 
         var result = optimizer.Optimize(inputData);
 
-        Assert.NotNull(result);
-        Assert.NotNull(result.BestSolution);
+        AssertValidOptimizationResult(result, "NelderMead");
     }
 
     #endregion
@@ -636,8 +661,7 @@ public class MetaheuristicOptimizerIntegrationTests
 
         var result = optimizer.Optimize(inputData);
 
-        Assert.NotNull(result);
-        Assert.NotNull(result.BestSolution);
+        AssertValidOptimizationResult(result, "Powell");
     }
 
     #endregion
@@ -659,16 +683,22 @@ public class MetaheuristicOptimizerIntegrationTests
         // Serialize
         var serialized = optimizer.Serialize();
         Assert.NotNull(serialized);
-        Assert.True(serialized.Length > 0);
+        Assert.True(serialized.Length > 0, "Serialized data should not be empty");
 
-        // Deserialize
+        // Deserialize into a fresh optimizer with different options
+        var differentOptions = new GeneticAlgorithmOptimizerOptions<double, Matrix<double>, Vector<double>>
+        {
+            MaxIterations = 999,
+            PopulationSize = 1
+        };
         var newOptimizer = new GeneticAlgorithmOptimizer<double, Matrix<double>, Vector<double>>(
-            null, options);
+            null, differentOptions);
         newOptimizer.Deserialize(serialized);
 
-        // Verify options are preserved
+        // Verify options are preserved from serialized data
         var restoredOptions = newOptimizer.GetOptions();
         Assert.NotNull(restoredOptions);
+        Assert.Equal(10, restoredOptions.MaxIterations);
     }
 
     [Fact]
@@ -685,14 +715,21 @@ public class MetaheuristicOptimizerIntegrationTests
 
         var serialized = optimizer.Serialize();
         Assert.NotNull(serialized);
-        Assert.True(serialized.Length > 0);
+        Assert.True(serialized.Length > 0, "Serialized data should not be empty");
 
+        // Deserialize into a fresh optimizer with different options
+        var differentOptions = new ParticleSwarmOptimizationOptions<double, Matrix<double>, Vector<double>>
+        {
+            MaxIterations = 999,
+            SwarmSize = 1
+        };
         var newOptimizer = new ParticleSwarmOptimizer<double, Matrix<double>, Vector<double>>(
-            null, options);
+            null, differentOptions);
         newOptimizer.Deserialize(serialized);
 
         var restoredOptions = newOptimizer.GetOptions();
         Assert.NotNull(restoredOptions);
+        Assert.Equal(10, restoredOptions.MaxIterations);
     }
 
     [Fact]
@@ -709,14 +746,21 @@ public class MetaheuristicOptimizerIntegrationTests
 
         var serialized = optimizer.Serialize();
         Assert.NotNull(serialized);
-        Assert.True(serialized.Length > 0);
+        Assert.True(serialized.Length > 0, "Serialized data should not be empty");
 
+        // Deserialize into a fresh optimizer with different options
+        var differentOptions = new SimulatedAnnealingOptions<double, Matrix<double>, Vector<double>>
+        {
+            MaxIterations = 999,
+            InitialTemperature = 1.0
+        };
         var newOptimizer = new SimulatedAnnealingOptimizer<double, Matrix<double>, Vector<double>>(
-            null, options);
+            null, differentOptions);
         newOptimizer.Deserialize(serialized);
 
         var restoredOptions = newOptimizer.GetOptions();
         Assert.NotNull(restoredOptions);
+        Assert.Equal(10, restoredOptions.MaxIterations);
     }
 
     #endregion
@@ -754,9 +798,9 @@ public class MetaheuristicOptimizerIntegrationTests
         var optimizer = new GeneticAlgorithmOptimizer<double, Matrix<double>, Vector<double>>(
             model, options);
 
-        // Should not throw with minimal data
+        // Should not throw with minimal data and should produce valid results
         var result = optimizer.Optimize(inputData);
-        Assert.NotNull(result);
+        AssertValidOptimizationResult(result, "GA_MinimalData");
     }
 
     [Fact]
@@ -805,8 +849,7 @@ public class MetaheuristicOptimizerIntegrationTests
             model, options);
 
         var result = optimizer.Optimize(inputData);
-        Assert.NotNull(result);
-        Assert.NotNull(result.BestSolution);
+        AssertValidOptimizationResult(result, "PSO_HighDimensional");
     }
 
     [Fact]
@@ -840,7 +883,7 @@ public class MetaheuristicOptimizerIntegrationTests
 
         // Should complete without error even with single iteration
         var result = optimizer.Optimize(inputData);
-        Assert.NotNull(result);
+        AssertValidOptimizationResult(result, "DE_SingleIteration");
     }
 
     #endregion
@@ -896,9 +939,7 @@ public class MetaheuristicOptimizerIntegrationTests
 
         var result = optimizer.Optimize(inputData);
 
-        Assert.NotNull(result);
-        Assert.NotNull(result.BestSolution);
-        Assert.True(result.BestFitnessScore >= 0, "Fitness score should be non-negative");
+        AssertValidOptimizationResult(result, "Normal");
     }
 
     [Fact]
@@ -935,9 +976,7 @@ public class MetaheuristicOptimizerIntegrationTests
         // Run optimization - adaptive parameters should change during execution
         var result = optimizer.Optimize(inputData);
 
-        Assert.NotNull(result);
-        // The optimizer should have completed without errors
-        // Adaptive parameters are internal, but we verify it completes successfully
+        AssertValidOptimizationResult(result, "Normal_Adaptive");
     }
 
     [Fact]
@@ -957,16 +996,24 @@ public class MetaheuristicOptimizerIntegrationTests
         // Serialize
         var serialized = optimizer.Serialize();
         Assert.NotNull(serialized);
-        Assert.True(serialized.Length > 0);
+        Assert.True(serialized.Length > 0, "Serialized data should not be empty");
 
-        // Deserialize
+        // Deserialize into a fresh optimizer with different options
+        var differentOptions = new GeneticAlgorithmOptimizerOptions<double, Matrix<double>, Vector<double>>
+        {
+            MaxIterations = 999,
+            PopulationSize = 1,
+            MutationRate = 0.99,
+            CrossoverRate = 0.01
+        };
         var newOptimizer = new NormalOptimizer<double, Matrix<double>, Vector<double>>(
-            null, options);
+            null, differentOptions);
         newOptimizer.Deserialize(serialized);
 
-        // Verify options are preserved
+        // Verify options are preserved from serialized data
         var restoredOptions = newOptimizer.GetOptions();
         Assert.NotNull(restoredOptions);
+        Assert.Equal(10, restoredOptions.MaxIterations);
     }
 
     [Fact]
@@ -999,7 +1046,7 @@ public class MetaheuristicOptimizerIntegrationTests
 
         // Should complete without error even with single iteration
         var result = optimizer.Optimize(inputData);
-        Assert.NotNull(result);
+        AssertValidOptimizationResult(result, "Normal_SingleIteration");
     }
 
     #endregion

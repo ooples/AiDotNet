@@ -921,13 +921,18 @@ public class NHiTSFinance<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> SubtractTensors(Tensor<T> a, Tensor<T> b)
     {
-        var result = new Tensor<T>(a.Shape);
-        int length = Math.Min(a.Length, b.Length);
-        for (int i = 0; i < length; i++)
+        if (a.Length != b.Length)
         {
-            result.Data.Span[i] = NumOps.Subtract(a.Data.Span[i], b.Data.Span[i]);
+            int minLen = Math.Min(a.Length, b.Length);
+            var result = new Tensor<T>(a.Shape);
+            for (int i = 0; i < minLen; i++)
+                result[i] = NumOps.Subtract(a[i], b[i]);
+            for (int i = minLen; i < a.Length; i++)
+                result[i] = a[i];
+            return result;
         }
-        return result;
+
+        return Engine.TensorSubtract(a, b);
     }
 
     /// <summary>
@@ -940,13 +945,18 @@ public class NHiTSFinance<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
-        var result = new Tensor<T>(a.Shape);
-        int length = Math.Min(a.Length, b.Length);
-        for (int i = 0; i < length; i++)
+        if (a.Length != b.Length)
         {
-            result.Data.Span[i] = NumOps.Add(a.Data.Span[i], b.Data.Span[i]);
+            int minLen = Math.Min(a.Length, b.Length);
+            var result = new Tensor<T>(a.Shape);
+            for (int i = 0; i < minLen; i++)
+                result[i] = NumOps.Add(a[i], b[i]);
+            for (int i = minLen; i < a.Length; i++)
+                result[i] = a[i];
+            return result;
         }
-        return result;
+
+        return Engine.TensorAdd(a, b);
     }
 
     /// <summary>

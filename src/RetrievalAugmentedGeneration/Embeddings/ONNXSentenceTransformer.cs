@@ -112,11 +112,9 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
             if (string.IsNullOrWhiteSpace(text))
                 return CreateZeroVector();
 
-            // Fall back to deterministic hash-based embedding when model file is unavailable.
-            // Uses EnsureModelLoaded() for consistent behavior - no separate File.Exists check
-            // that could race with the lazy-init check inside EnsureModelLoaded().
+            // Ensure model is loaded - throw if model file is unavailable
             if (!EnsureModelLoaded())
-                return GenerateFallbackEmbedding(text);
+                throw new FileNotFoundException($"ONNX model file not found: {_modelPath}", _modelPath);
 
             // 1. Tokenize (model is guaranteed loaded at this point)
             var tokenizationResult = Tokenizer.Encode(text, new AiDotNet.Tokenization.Models.EncodingOptions

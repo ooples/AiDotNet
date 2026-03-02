@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Augmentation.Tabular;
@@ -290,13 +291,7 @@ public class AdasynAugmenter<T> : TabularAugmenterBase<T>
     /// </remarks>
     private double ComputeDistance(Matrix<T> data1, int idx1, Matrix<T> data2, int idx2, int cols)
     {
-        double dist = 0;
-        for (int c = 0; c < cols; c++)
-        {
-            double diff = NumOps.ToDouble(data1[idx1, c]) - NumOps.ToDouble(data2[idx2, c]);
-            dist += diff * diff;
-        }
-        return Math.Sqrt(dist);
+        return NumOps.ToDouble(VectorHelper.EuclideanDistance(data1.GetRow(idx1), data2.GetRow(idx2)));
     }
 
     /// <summary>

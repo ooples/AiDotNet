@@ -391,32 +391,7 @@ public class SlowFast<T> : NeuralNetworkBase<T>
     /// </summary>
     private Tensor<T> ConcatenateTensors(Tensor<T> a, Tensor<T> b)
     {
-        if (a.Rank != 4 || b.Rank != 4)
-            throw new ArgumentException("Both tensors must be 4D [batch, channels, height, width].");
-
-        int batch = a.Shape[0];
-        int aChannels = a.Shape[1];
-        int bChannels = b.Shape[1];
-        int h = a.Shape[2];
-        int w = a.Shape[3];
-
-        if (batch != b.Shape[0] || h != b.Shape[2] || w != b.Shape[3])
-            throw new ArgumentException(
-                $"Tensor dimensions must match. Expected batch={batch}, height={h}, width={w}, " +
-                $"but got batch={b.Shape[0]}, height={b.Shape[2]}, width={b.Shape[3]}.");
-
-        var result = new Tensor<T>([batch, aChannels + bChannels, h, w]);
-        int aSliceSize = aChannels * h * w;
-        int bSliceSize = bChannels * h * w;
-        int resultSliceSize = (aChannels + bChannels) * h * w;
-
-        for (int bi = 0; bi < batch; bi++)
-        {
-            a.Data.Span.Slice(bi * aSliceSize, aSliceSize).CopyTo(result.Data.Span.Slice(bi * resultSliceSize, aSliceSize));
-            b.Data.Span.Slice(bi * bSliceSize, bSliceSize).CopyTo(result.Data.Span.Slice(bi * resultSliceSize + aSliceSize, bSliceSize));
-        }
-
-        return result;
+        return Engine.TensorConcatenate([a, b], axis: 1);
     }
 
     private Tensor<T> PredictOnnx(Tensor<T> input)

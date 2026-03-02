@@ -11,6 +11,7 @@ namespace AiDotNet.Models.Results;
 public partial class AiModelResult<T, TInput, TOutput>
 {
     private readonly INumericOperations<T> _robustnessNumOps = MathHelper.GetNumericOperations<T>();
+    private static IEngine RobustnessEngine => AiDotNetEngine.Current;
 
     [JsonProperty]
     internal AdversarialRobustnessOptions<T>? AdversarialRobustnessOptions { get; private set; }
@@ -159,7 +160,7 @@ public partial class AiModelResult<T, TInput, TOutput>
                 var inputVector = ConversionsHelper.ConvertToVector<T, TInput>(input);
                 var adversarialVector = ConversionsHelper.ConvertToVector<T, TInput>(adversarial);
                 var perturbation = SubtractVectors(adversarialVector, inputVector);
-                var l2Norm = ComputeL2NormVector(perturbation);
+                var l2Norm = VectorHelper.L2Norm(perturbation);
                 perturbationSizes.Add(_robustnessNumOps.ToDouble(l2Norm));
             }
             catch (ArgumentException)
@@ -305,21 +306,7 @@ public partial class AiModelResult<T, TInput, TOutput>
 
     private Vector<T> SubtractVectors(Vector<T> a, Vector<T> b)
     {
-        var result = new Vector<T>(a.Length);
-        for (int i = 0; i < a.Length; i++)
-        {
-            result[i] = _robustnessNumOps.Subtract(a[i], b[i]);
-        }
-        return result;
+        return RobustnessEngine.Subtract(a, b);
     }
 
-    private T ComputeL2NormVector(Vector<T> vector)
-    {
-        var sumSquares = _robustnessNumOps.Zero;
-        for (int i = 0; i < vector.Length; i++)
-        {
-            sumSquares = _robustnessNumOps.Add(sumSquares, _robustnessNumOps.Multiply(vector[i], vector[i]));
-        }
-        return _robustnessNumOps.Sqrt(sumSquares);
-    }
 }

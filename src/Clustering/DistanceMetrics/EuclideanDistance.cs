@@ -1,3 +1,5 @@
+using AiDotNet.Helpers;
+
 namespace AiDotNet.Clustering.DistanceMetrics;
 
 /// <summary>
@@ -33,14 +35,7 @@ public class EuclideanDistance<T> : DistanceMetricBase<T>
                 $"Vectors must have the same length. Got {a.Length} and {b.Length}.");
         }
 
-        T sumSquared = NumOps.Zero;
-        for (int i = 0; i < a.Length; i++)
-        {
-            T diff = NumOps.Subtract(a[i], b[i]);
-            sumSquared = NumOps.Add(sumSquared, NumOps.Multiply(diff, diff));
-        }
-
-        return Sqrt(sumSquared);
+        return VectorHelper.EuclideanDistance(a, b);
     }
 
     /// <summary>
@@ -63,13 +58,8 @@ public class EuclideanDistance<T> : DistanceMetricBase<T>
                 $"Vectors must have the same length. Got {a.Length} and {b.Length}.");
         }
 
-        T sumSquared = NumOps.Zero;
-        for (int i = 0; i < a.Length; i++)
-        {
-            T diff = NumOps.Subtract(a[i], b[i]);
-            sumSquared = NumOps.Add(sumSquared, NumOps.Multiply(diff, diff));
-        }
-
-        return sumSquared;
+        var engine = AiDotNetEngine.Current;
+        var diff = (Vector<T>)engine.Subtract(a, b);
+        return engine.DotProduct(diff, diff);
     }
 }

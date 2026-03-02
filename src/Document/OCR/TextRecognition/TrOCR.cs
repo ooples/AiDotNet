@@ -398,8 +398,28 @@ public class TrOCR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
     private Tensor<T> RunEncoder(Tensor<T> input)
     {
         var output = input;
+        bool hasReshapedToSequence = false;
+        bool hasPassedConvLayer = false;
         foreach (var layer in _encoderLayers)
         {
+            if (layer is ConvolutionalLayer<T> or BatchNormalizationLayer<T>
+                     or PoolingLayer<T> or MaxPoolingLayer<T> or AveragePoolingLayer<T>)
+            {
+                hasPassedConvLayer = true;
+            }
+
+            // Auto-reshape once when transitioning from spatial (CNN) to non-spatial layers
+            bool isNonSpatialLayer = layer is not (ConvolutionalLayer<T> or BatchNormalizationLayer<T>
+                or PoolingLayer<T> or MaxPoolingLayer<T> or AveragePoolingLayer<T>);
+            if (!hasReshapedToSequence && hasPassedConvLayer && output.Shape.Length >= 3 && isNonSpatialLayer)
+            {
+                int channels = output.Shape.Length == 4 ? output.Shape[1] : output.Shape[0];
+                int spatialH = output.Shape.Length == 4 ? output.Shape[2] : output.Shape[1];
+                int spatialW = output.Shape.Length == 4 ? output.Shape[3] : output.Shape[2];
+                int numPatches = spatialH * spatialW;
+                output = new Tensor<T>(output.Data.ToArray(), [numPatches, channels]);
+                hasReshapedToSequence = true;
+            }
             output = layer.Forward(output);
         }
         return output;
@@ -512,31 +532,16 @@ public class TrOCR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
     private T[] ApplySoftmax(Tensor<T> logits, int position)
     {
         int vocabSize = Math.Min(_vocabSize, logits.Data.Length);
-        var probs = new T[vocabSize];
-
-        // Find max for numerical stability
-        double maxVal = double.MinValue;
         int startIdx = position * vocabSize;
-        for (int i = 0; i < vocabSize && (startIdx + i) < logits.Data.Length; i++)
-        {
-            double val = NumOps.ToDouble(logits.Data.Span[startIdx + i]);
-            if (val > maxVal) maxVal = val;
-        }
+        int actualCount = Math.Min(vocabSize, logits.Data.Length - startIdx);
+        if (actualCount <= 0) return new T[vocabSize];
 
-        // Compute softmax
-        double sumExp = 0;
-        for (int i = 0; i < vocabSize && (startIdx + i) < logits.Data.Length; i++)
-        {
-            double val = NumOps.ToDouble(logits.Data.Span[startIdx + i]);
-            sumExp += Math.Exp(val - maxVal);
-        }
+        var slice = new Tensor<T>([actualCount]);
+        logits.Data.Span.Slice(startIdx, actualCount).CopyTo(slice.Data.Span);
+        var result = Engine.Softmax(slice, -1);
 
-        for (int i = 0; i < vocabSize && (startIdx + i) < logits.Data.Length; i++)
-        {
-            double val = NumOps.ToDouble(logits.Data.Span[startIdx + i]);
-            probs[i] = NumOps.FromDouble(Math.Exp(val - maxVal) / sumExp);
-        }
-
+        var probs = new T[vocabSize];
+        result.Data.Span.CopyTo(probs.AsSpan(0, actualCount));
         return probs;
     }
 
@@ -717,7 +722,7 @@ public class TrOCR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
                 { "image_size", ImageSize },
                 { "use_native_mode", _useNativeMode }
             },
-            ModelData = this.Serialize()
+            ModelData = SafeSerialize()
         };
     }
 
@@ -822,12 +827,9 @@ public class TrOCR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         }
 
         var currentParams = GetParameters();
-        T learningRate = NumOps.FromDouble(0.0001);
+        T learningRate = NumOps.FromDouble(_options.LearningRate);
 
-        for (int i = 0; i < currentParams.Length; i++)
-        {
-            currentParams[i] = NumOps.Subtract(currentParams[i], NumOps.Multiply(learningRate, gradients[i]));
-        }
+        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, learningRate));
 
         SetParameters(currentParams);
     }

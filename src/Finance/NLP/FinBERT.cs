@@ -922,33 +922,7 @@ public class FinBERT<T> : FinancialNLPModelBase<T>
     /// </remarks>
     private Tensor<T> ApplySoftmax(Tensor<T> logits)
     {
-        var data = logits.ToVector();
-        var probs = new T[data.Length];
-
-        // Find max for numerical stability
-        double maxVal = double.MinValue;
-        for (int i = 0; i < data.Length; i++)
-        {
-            double val = NumOps.ToDouble(data[i]);
-            if (val > maxVal) maxVal = val;
-        }
-
-        // Compute exp(x - max) and sum
-        double sum = 0;
-        var expValues = new double[data.Length];
-        for (int i = 0; i < data.Length; i++)
-        {
-            expValues[i] = Math.Exp(NumOps.ToDouble(data[i]) - maxVal);
-            sum += expValues[i];
-        }
-
-        // Normalize
-        for (int i = 0; i < data.Length; i++)
-        {
-            probs[i] = NumOps.FromDouble(expValues[i] / sum);
-        }
-
-        return new Tensor<T>(logits.Shape, new Vector<T>(probs));
+        return Engine.Softmax(logits, -1);
     }
 
     #endregion

@@ -259,7 +259,7 @@ public class GradientEpisodicMemory<T, TInput, TOutput>
         if (taskGradient == null)
             throw new ArgumentNullException(nameof(taskGradient));
 
-        var gradientToStore = _normalizeGradients ? NormalizeVector(taskGradient) : CloneVector(taskGradient);
+        var gradientToStore = _normalizeGradients ? VectorHelper.Normalize(taskGradient) : CloneVector(taskGradient);
 
         // Replace the most recent placeholder or add new
         if (_taskGradients.Count > TaskCount)
@@ -271,7 +271,7 @@ public class GradientEpisodicMemory<T, TInput, TOutput>
             _taskGradients.Add(gradientToStore);
         }
 
-        RecordMetric($"Task{TaskCount}_GradientNorm", Convert.ToDouble(ComputeL2Norm(gradientToStore)));
+        RecordMetric($"Task{TaskCount}_GradientNorm", Convert.ToDouble(VectorHelper.L2Norm(gradientToStore)));
     }
 
     /// <inheritdoc/>
@@ -322,7 +322,7 @@ public class GradientEpisodicMemory<T, TInput, TOutput>
         if (_taskGradients.Count == 0)
             return gradients;
 
-        var normalizedGradient = _normalizeGradients ? NormalizeVector(gradients) : gradients;
+        var normalizedGradient = _normalizeGradients ? VectorHelper.Normalize(gradients) : gradients;
         bool violates = ViolatesConstraint(normalizedGradient);
 
         if (!violates)
@@ -337,8 +337,8 @@ public class GradientEpisodicMemory<T, TInput, TOutput>
         // Scale back to original magnitude if we normalized
         if (_normalizeGradients)
         {
-            T originalMagnitude = ComputeL2Norm(gradients);
-            T projectedMagnitude = ComputeL2Norm(projected);
+            T originalMagnitude = VectorHelper.L2Norm(gradients);
+            T projectedMagnitude = VectorHelper.L2Norm(projected);
 
             if (Convert.ToDouble(projectedMagnitude) > 1e-10)
             {
@@ -348,7 +348,7 @@ public class GradientEpisodicMemory<T, TInput, TOutput>
         }
 
         // Track projection magnitude
-        T projMag = ComputeL2Norm(SubtractVectors(projected, gradients));
+        T projMag = VectorHelper.L2Norm(SubtractVectors(projected, gradients));
         _averageProjectionMagnitude = (_averageProjectionMagnitude * (_totalProjections - 1) +
                                         Convert.ToDouble(projMag)) / _totalProjections;
 
@@ -567,38 +567,14 @@ public class GradientEpisodicMemory<T, TInput, TOutput>
 
     #region Helper Methods
 
-    private Vector<T> NormalizeVector(Vector<T> vector)
-    {
-        T norm = ComputeL2Norm(vector);
-        if (Convert.ToDouble(norm) < 1e-10)
-            return CloneVector(vector);
-
-        var normalized = new Vector<T>(vector.Length);
-        for (int i = 0; i < vector.Length; i++)
-        {
-            normalized[i] = NumOps.Divide(vector[i], norm);
-        }
-        return normalized;
-    }
-
     private Vector<T> ScaleVector(Vector<T> vector, T scale)
     {
-        var scaled = new Vector<T>(vector.Length);
-        for (int i = 0; i < vector.Length; i++)
-        {
-            scaled[i] = NumOps.Multiply(vector[i], scale);
-        }
-        return scaled;
+        return Engine.Multiply(vector, scale);
     }
 
     private Vector<T> SubtractVectors(Vector<T> a, Vector<T> b)
     {
-        var result = new Vector<T>(a.Length);
-        for (int i = 0; i < a.Length; i++)
-        {
-            result[i] = NumOps.Subtract(a[i], b[i]);
-        }
-        return result;
+        return Engine.Subtract(a, b);
     }
 
     #endregion

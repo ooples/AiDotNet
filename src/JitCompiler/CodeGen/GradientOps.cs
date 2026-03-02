@@ -1310,14 +1310,7 @@ public static class GradientOps
     /// </summary>
     private static Tensor<T> PermuteAxes<T>(Tensor<T> input, int[] axes)
     {
-        // For now, use transpose if it's a 2D case
-        if (axes.Length == 2 && axes[0] == 1 && axes[1] == 0)
-        {
-            return input.Transpose();
-        }
-
-        // General permutation - simplified implementation
-        return input; // Would need full permutation implementation
+        return AiDotNetEngine.Current.TensorPermute(input, axes);
     }
 
     /// <summary>
