@@ -873,6 +873,11 @@ public class GARCHModel<T> : TimeSeriesModelBase<T>
         SerializationHelper<T>.SerializeVector(writer, _conditionalVariances);
 
         writer.Write(JsonConvert.SerializeObject(_garchOptions));
+
+        // Serialize the mean model so it can be restored on deserialization
+        byte[] meanModelBytes = _meanModel.Serialize();
+        writer.Write(meanModelBytes.Length);
+        writer.Write(meanModelBytes);
     }
 
     /// <summary>
@@ -911,6 +916,12 @@ public class GARCHModel<T> : TimeSeriesModelBase<T>
 
         string optionsJson = reader.ReadString();
         _garchOptions = JsonConvert.DeserializeObject<GARCHModelOptions<T>>(optionsJson) ?? new();
+
+        // Deserialize the mean model to restore its trained state
+        int meanModelBytesLength = reader.ReadInt32();
+        byte[] meanModelBytes = reader.ReadBytes(meanModelBytesLength);
+        _meanModel = _garchOptions.MeanModel ?? new ARIMAModel<T>();
+        _meanModel.Deserialize(meanModelBytes);
     }
 
     /// <summary>

@@ -638,28 +638,7 @@ public class Cutie<T> : NeuralNetworkBase<T>
 
     private Tensor<T> ConcatenateChannels(Tensor<T> a, Tensor<T> b)
     {
-        int batchSize = a.Shape[0];
-        int channelsA = a.Shape[1];
-        int channelsB = b.Shape[1];
-        int height = a.Shape[2];
-        int width = a.Shape[3];
-
-        var output = new Tensor<T>([batchSize, channelsA + channelsB, height, width]);
-
-        for (int batch = 0; batch < batchSize; batch++)
-        {
-            for (int c = 0; c < channelsA; c++)
-                for (int h = 0; h < height; h++)
-                    for (int w = 0; w < width; w++)
-                        output[batch, c, h, w] = a[batch, c, h, w];
-
-            for (int c = 0; c < channelsB; c++)
-                for (int h = 0; h < height; h++)
-                    for (int w = 0; w < width; w++)
-                        output[batch, channelsA + c, h, w] = b[batch, c, h, w];
-        }
-
-        return output;
+        return Engine.TensorConcatenate([a, b], axis: 1);
     }
 
     private Tensor<T> Upsample2x(Tensor<T> input)

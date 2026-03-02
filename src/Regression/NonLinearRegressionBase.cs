@@ -865,11 +865,12 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>, ICon
             throw new ArgumentException($"Expected {expectedParamCount} parameters, but got {parameters.Length}", nameof(parameters));
         }
 
+        // Match GetParameters order: bias first, then alphas
+        B = parameters[0];
         for (int i = 0; i < Alphas.Length; i++)
         {
-            Alphas[i] = parameters[i];
+            Alphas[i] = parameters[i + 1];
         }
-        B = parameters[Alphas.Length];
     }
 
     /// <summary>
@@ -1158,11 +1159,7 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>, ICon
         var currentParams = GetParameters();
 
         // Apply gradient descent: params = params - learningRate * gradients
-        var newParams = new Vector<T>(currentParams.Length);
-        for (int i = 0; i < currentParams.Length; i++)
-        {
-            newParams[i] = NumOps.Subtract(currentParams[i], NumOps.Multiply(learningRate, gradients[i]));
-        }
+        var newParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, learningRate));
 
         // Use SetParameters to update all model state
         SetParameters(newParams);

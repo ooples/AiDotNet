@@ -1,4 +1,5 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.NeuralNetworks.Layers;
 
@@ -23,11 +24,8 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public class GatedFeatureLearningUnit<T>
+public class GatedFeatureLearningUnit<T> : LayerBase<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
-    private readonly Random _random;
-
     private readonly int _inputDim;
     private readonly int _outputDim;
 
@@ -42,10 +40,14 @@ public class GatedFeatureLearningUnit<T>
     private Tensor<T>? _transformedCache;
     private Tensor<T>? _gateCache;
 
-    /// <summary>
-    /// Gets the total parameter count.
-    /// </summary>
-    public int ParameterCount => _featureTransform.ParameterCount + _gateTransform.ParameterCount;
+    /// <inheritdoc/>
+    public override bool SupportsTraining => true;
+
+    /// <inheritdoc/>
+    public override bool SupportsJitCompilation => false;
+
+    /// <inheritdoc/>
+    public override int ParameterCount => _featureTransform.ParameterCount + _gateTransform.ParameterCount;
 
     /// <summary>
     /// Initializes a Gated Feature Learning Unit.
@@ -53,10 +55,10 @@ public class GatedFeatureLearningUnit<T>
     /// <param name="inputDim">Input dimension.</param>
     /// <param name="outputDim">Output dimension.</param>
     public GatedFeatureLearningUnit(int inputDim, int outputDim)
+        : base([inputDim], [outputDim])
     {
         _inputDim = inputDim;
         _outputDim = outputDim;
-        _random = RandomHelper.CreateSecureRandom();
 
         // Feature transformation with ReLU
         _featureTransform = new FullyConnectedLayer<T>(
@@ -72,7 +74,7 @@ public class GatedFeatureLearningUnit<T>
     /// </summary>
     /// <param name="input">Input tensor [batchSize, inputDim].</param>
     /// <returns>Gated output [batchSize, outputDim].</returns>
-    public Tensor<T> Forward(Tensor<T> input)
+    public override Tensor<T> Forward(Tensor<T> input)
     {
         _inputCache = input;
 
@@ -82,30 +84,11 @@ public class GatedFeatureLearningUnit<T>
 
         // Compute gate values with sigmoid
         var gateLogits = _gateTransform.Forward(input);
-        var gate = ApplySigmoid(gateLogits);
+        var gate = Engine.Sigmoid(gateLogits);
         _gateCache = gate;
 
         // Apply gate: output = transformed * gate
-        var output = new Tensor<T>(transformed.Shape);
-        for (int i = 0; i < transformed.Length; i++)
-        {
-            output[i] = NumOps.Multiply(transformed[i], gate[i]);
-        }
-
-        return output;
-    }
-
-    private Tensor<T> ApplySigmoid(Tensor<T> input)
-    {
-        var output = new Tensor<T>(input.Shape);
-        for (int i = 0; i < input.Length; i++)
-        {
-            var negX = NumOps.Negate(input[i]);
-            var expNegX = NumOps.Exp(negX);
-            var onePlusExp = NumOps.Add(NumOps.One, expNegX);
-            output[i] = NumOps.Divide(NumOps.One, onePlusExp);
-        }
-        return output;
+        return Engine.TensorMultiply(transformed, gate);
     }
 
     /// <summary>
@@ -113,7 +96,7 @@ public class GatedFeatureLearningUnit<T>
     /// </summary>
     /// <param name="gradient">Gradient from upstream [batchSize, outputDim].</param>
     /// <returns>Gradient with respect to input [batchSize, inputDim].</returns>
-    public Tensor<T> Backward(Tensor<T> gradient)
+    public override Tensor<T> Backward(Tensor<T> gradient)
     {
         if (_transformedCache == null || _gateCache == null)
         {
@@ -121,40 +104,22 @@ public class GatedFeatureLearningUnit<T>
         }
 
         // Gradient for transformed: dL/dtransformed = dL/dout * gate
-        var transformedGrad = new Tensor<T>(_transformedCache.Shape);
-        for (int i = 0; i < gradient.Length; i++)
-        {
-            transformedGrad[i] = NumOps.Multiply(gradient[i], _gateCache[i]);
-        }
+        var transformedGrad = Engine.TensorMultiply(gradient, _gateCache);
 
         // Gradient for gate: dL/dgate = dL/dout * transformed
-        var gateGrad = new Tensor<T>(_gateCache.Shape);
-        for (int i = 0; i < gradient.Length; i++)
-        {
-            gateGrad[i] = NumOps.Multiply(gradient[i], _transformedCache[i]);
-        }
+        var gateGrad = Engine.TensorMultiply(gradient, _transformedCache);
 
         // Gradient through sigmoid: dL/dlogits = dL/dgate * gate * (1 - gate)
-        var gateLogitsGrad = new Tensor<T>(_gateCache.Shape);
-        for (int i = 0; i < _gateCache.Length; i++)
-        {
-            var sigmoidDeriv = NumOps.Multiply(_gateCache[i],
-                NumOps.Subtract(NumOps.One, _gateCache[i]));
-            gateLogitsGrad[i] = NumOps.Multiply(gateGrad[i], sigmoidDeriv);
-        }
+        var ones = Tensor<T>.CreateDefault(_gateCache.Shape, NumOps.One);
+        var sigmoidDeriv = Engine.TensorMultiply(_gateCache, Engine.TensorSubtract(ones, _gateCache));
+        var gateLogitsGrad = Engine.TensorMultiply(gateGrad, sigmoidDeriv);
 
         // Backprop through both layers
         var inputGrad1 = _featureTransform.Backward(transformedGrad);
         var inputGrad2 = _gateTransform.Backward(gateLogitsGrad);
 
         // Sum gradients
-        var inputGrad = new Tensor<T>(inputGrad1.Shape);
-        for (int i = 0; i < inputGrad.Length; i++)
-        {
-            inputGrad[i] = NumOps.Add(inputGrad1[i], inputGrad2[i]);
-        }
-
-        return inputGrad;
+        return Engine.TensorAdd(inputGrad1, inputGrad2);
     }
 
     /// <summary>
@@ -189,24 +154,47 @@ public class GatedFeatureLearningUnit<T>
         return importance;
     }
 
-    /// <summary>
-    /// Updates parameters.
-    /// </summary>
-    public void UpdateParameters(T learningRate)
+    /// <inheritdoc/>
+    public override void UpdateParameters(T learningRate)
     {
         _featureTransform.UpdateParameters(learningRate);
         _gateTransform.UpdateParameters(learningRate);
     }
 
-    /// <summary>
-    /// Resets internal state.
-    /// </summary>
-    public void ResetState()
+    /// <inheritdoc/>
+    public override void ResetState()
     {
         _inputCache = null;
         _transformedCache = null;
         _gateCache = null;
         _featureTransform.ResetState();
         _gateTransform.ResetState();
+    }
+
+    /// <inheritdoc/>
+    public override Vector<T> GetParameters()
+    {
+        var featureParams = _featureTransform.GetParameters();
+        var gateParams = _gateTransform.GetParameters();
+        var result = new Vector<T>(featureParams.Length + gateParams.Length);
+        int offset = 0;
+        for (int i = 0; i < featureParams.Length; i++)
+            result[offset++] = featureParams[i];
+        for (int i = 0; i < gateParams.Length; i++)
+            result[offset++] = gateParams[i];
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
+        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
+        inputNodes.Add(inputNode);
+
+        return inputNode;
     }
 }

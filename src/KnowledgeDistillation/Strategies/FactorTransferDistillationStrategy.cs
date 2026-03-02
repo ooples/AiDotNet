@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 
@@ -266,7 +267,7 @@ public class FactorTransferDistillationStrategy<T> : DistillationStrategyBase<T>
         T cosineLoss = NumOps.Zero;
         for (int i = 0; i < studentFactors.Length; i++)
         {
-            double cosSim = CosineSimilarity(studentFactors[i], teacherFactors[i]);
+            double cosSim = VectorHelper.CosineSimilarity(studentFactors[i], teacherFactors[i]);
             cosineLoss = NumOps.Add(cosineLoss, NumOps.FromDouble(1.0 - cosSim));
         }
         cosineLoss = NumOps.Divide(cosineLoss, NumOps.FromDouble(studentFactors.Length));
@@ -300,7 +301,7 @@ public class FactorTransferDistillationStrategy<T> : DistillationStrategyBase<T>
 
             if (_normalizeFactors)
             {
-                factors[i] = NormalizeVector(factors[i]);
+                factors[i] = VectorHelper.Normalize(factors[i]);
             }
 
             // Deflate: remove this component from covariance matrix
@@ -402,7 +403,7 @@ public class FactorTransferDistillationStrategy<T> : DistillationStrategyBase<T>
         {
             vector[i] = NumOps.FromDouble(random.NextDouble() - 0.5);
         }
-        vector = NormalizeVector(vector);
+        vector = VectorHelper.Normalize(vector);
 
         // Power iteration (10 iterations usually sufficient)
         for (int iter = 0; iter < 10; iter++)
@@ -420,7 +421,7 @@ public class FactorTransferDistillationStrategy<T> : DistillationStrategyBase<T>
                 newVector[i] = NumOps.FromDouble(sum);
             }
 
-            vector = NormalizeVector(newVector);
+            vector = VectorHelper.Normalize(newVector);
         }
 
         return vector;
@@ -466,25 +467,6 @@ public class FactorTransferDistillationStrategy<T> : DistillationStrategyBase<T>
         }
     }
 
-    private Vector<T> NormalizeVector(Vector<T> vector)
-    {
-        double norm = 0;
-        for (int i = 0; i < vector.Length; i++)
-        {
-            double val = Convert.ToDouble(vector[i]);
-            norm += val * val;
-        }
-        norm = Math.Sqrt(norm);
-
-        var normalized = new Vector<T>(vector.Length);
-        for (int i = 0; i < vector.Length; i++)
-        {
-            normalized[i] = NumOps.FromDouble(Convert.ToDouble(vector[i]) / (norm + Epsilon));
-        }
-
-        return normalized;
-    }
-
     private T ComputeMSE(Vector<T>[] vectors1, Vector<T>[] vectors2)
     {
         int n = vectors1.Length;
@@ -504,19 +486,6 @@ public class FactorTransferDistillationStrategy<T> : DistillationStrategyBase<T>
         return NumOps.Divide(mse, NumOps.FromDouble(totalElements));
     }
 
-    private double CosineSimilarity(Vector<T> v1, Vector<T> v2)
-    {
-        T dot = NumOps.Zero, norm1 = NumOps.Zero, norm2 = NumOps.Zero;
-
-        for (int i = 0; i < v1.Length; i++)
-        {
-            dot = NumOps.Add(dot, NumOps.Multiply(v1[i], v2[i]));
-            norm1 = NumOps.Add(norm1, NumOps.Multiply(v1[i], v1[i]));
-            norm2 = NumOps.Add(norm2, NumOps.Multiply(v2[i], v2[i]));
-        }
-
-        return Convert.ToDouble(dot) / (Math.Sqrt(Convert.ToDouble(norm1)) * Math.Sqrt(Convert.ToDouble(norm2)) + Epsilon);
-    }
 
 
 

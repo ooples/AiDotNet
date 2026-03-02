@@ -366,41 +366,7 @@ public class CRNN<T> : OCRBase<T>
     /// </summary>
     private Tensor<T> ApplySoftmax(Tensor<T> logits)
     {
-        int batch = logits.Shape[0];
-        int seqLen = logits.Shape[1];
-        int vocabSize = logits.Shape[2];
-
-        var probs = new Tensor<T>(logits.Shape);
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int t = 0; t < seqLen; t++)
-            {
-                // Find max for numerical stability
-                double maxVal = double.NegativeInfinity;
-                for (int v = 0; v < vocabSize; v++)
-                {
-                    maxVal = Math.Max(maxVal, NumOps.ToDouble(logits[b, t, v]));
-                }
-
-                // Compute exp and sum
-                double sum = 0;
-                var expVals = new double[vocabSize];
-                for (int v = 0; v < vocabSize; v++)
-                {
-                    expVals[v] = Math.Exp(NumOps.ToDouble(logits[b, t, v]) - maxVal);
-                    sum += expVals[v];
-                }
-
-                // Normalize
-                for (int v = 0; v < vocabSize; v++)
-                {
-                    probs[b, t, v] = NumOps.FromDouble(expVals[v] / sum);
-                }
-            }
-        }
-
-        return probs;
+        return Engine.Softmax(logits, -1);
     }
 
     /// <summary>

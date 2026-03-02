@@ -1,5 +1,7 @@
+using AiDotNet.Autodiff;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
+using AiDotNet.NeuralNetworks.Layers;
 
 namespace AiDotNet.NeuralNetworks.Tabular;
 
@@ -21,11 +23,8 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public class SoftTree<T>
+public class SoftTree<T> : LayerBase<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
-    private readonly Random _random;
-
     private readonly int _inputDim;
     private readonly int _depth;
     private readonly int _outputDim;
@@ -54,10 +53,14 @@ public class SoftTree<T>
     /// </summary>
     public int NumLeaves => _numLeaves;
 
-    /// <summary>
-    /// Gets the total parameter count.
-    /// </summary>
-    public int ParameterCount =>
+    /// <inheritdoc/>
+    public override bool SupportsTraining => true;
+
+    /// <inheritdoc/>
+    public override bool SupportsJitCompilation => false;
+
+    /// <inheritdoc/>
+    public override int ParameterCount =>
         _numInternalNodes * _inputDim +  // split weights
         _numInternalNodes +               // split biases
         _numLeaves * _outputDim;          // leaf values
@@ -71,12 +74,12 @@ public class SoftTree<T>
     /// <param name="temperature">Temperature for soft splits (lower = harder splits).</param>
     /// <param name="initScale">Initialization scale.</param>
     public SoftTree(int inputDim, int depth = 4, int outputDim = 1, double temperature = 1.0, double initScale = 0.01)
+        : base([inputDim], [outputDim])
     {
         _inputDim = inputDim;
         _depth = depth;
         _outputDim = outputDim;
         _temperature = temperature;
-        _random = RandomHelper.CreateSecureRandom();
 
         _numInternalNodes = (1 << depth) - 1;  // 2^depth - 1
         _numLeaves = 1 << depth;                // 2^depth
@@ -101,19 +104,19 @@ public class SoftTree<T>
         // Initialize split weights
         for (int i = 0; i < _splitWeights.Length; i++)
         {
-            _splitWeights[i] = NumOps.FromDouble(_random.NextGaussian() * scale);
+            _splitWeights[i] = NumOps.FromDouble(Random.NextGaussian() * scale);
         }
 
         // Initialize split biases to small random values
         for (int i = 0; i < _splitBiases.Length; i++)
         {
-            _splitBiases[i] = NumOps.FromDouble(_random.NextGaussian() * scale * 0.1);
+            _splitBiases[i] = NumOps.FromDouble(Random.NextGaussian() * scale * 0.1);
         }
 
         // Initialize leaf values
         for (int i = 0; i < _leafValues.Length; i++)
         {
-            _leafValues[i] = NumOps.FromDouble(_random.NextGaussian() * scale);
+            _leafValues[i] = NumOps.FromDouble(Random.NextGaussian() * scale);
         }
     }
 
@@ -122,7 +125,7 @@ public class SoftTree<T>
     /// </summary>
     /// <param name="input">Input features [batchSize, inputDim].</param>
     /// <returns>Tree output [batchSize, outputDim].</returns>
-    public Tensor<T> Forward(Tensor<T> input)
+    public override Tensor<T> Forward(Tensor<T> input)
     {
         _inputCache = input;
         int batchSize = input.Shape[0];
@@ -220,7 +223,7 @@ public class SoftTree<T>
     /// </summary>
     /// <param name="gradient">Gradient with respect to output [batchSize, outputDim].</param>
     /// <returns>Gradient with respect to input [batchSize, inputDim].</returns>
-    public Tensor<T> Backward(Tensor<T> gradient)
+    public override Tensor<T> Backward(Tensor<T> gradient)
     {
         if (_inputCache == null || _pathProbabilitiesCache == null)
         {
@@ -231,12 +234,9 @@ public class SoftTree<T>
         var inputGrad = new Tensor<T>([batchSize, _inputDim]);
 
         // Zero gradients
-        for (int i = 0; i < _leafValuesGrad.Length; i++)
-            _leafValuesGrad[i] = NumOps.Zero;
-        for (int i = 0; i < _splitWeightsGrad.Length; i++)
-            _splitWeightsGrad[i] = NumOps.Zero;
-        for (int i = 0; i < _splitBiasesGrad.Length; i++)
-            _splitBiasesGrad[i] = NumOps.Zero;
+        Engine.TensorFill(_leafValuesGrad, NumOps.Zero);
+        Engine.TensorFill(_splitWeightsGrad, NumOps.Zero);
+        Engine.TensorFill(_splitBiasesGrad, NumOps.Zero);
 
         // Gradient for leaf values
         for (int b = 0; b < batchSize; b++)
@@ -253,7 +253,50 @@ public class SoftTree<T>
             }
         }
 
-        // Simplified input gradient (full implementation would backprop through path probabilities)
+        // Backpropagate through split decisions to compute input gradient
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int n = 0; n < _numInternalNodes; n++)
+            {
+                // Compute sigmoid for this node
+                var logit = ComputeSplitLogit(_inputCache, b, n);
+                var sig = Sigmoid(logit);
+                var sigDeriv = NumOps.Multiply(sig, NumOps.Subtract(NumOps.One, sig));
+
+                // Determine which leaves are affected by this split
+                int leftChild = 2 * n + 1;
+                int rightChild = 2 * n + 2;
+
+                // Accumulate gradient contribution from this split node
+                T gradContrib = NumOps.Zero;
+                for (int o = 0; o < _outputDim; o++)
+                {
+                    gradContrib = NumOps.Add(gradContrib, gradient[b * _outputDim + o]);
+                }
+
+                // Gradient flows through split weights
+                for (int d = 0; d < _inputDim; d++)
+                {
+                    var weightGrad = NumOps.Multiply(
+                        NumOps.Multiply(sigDeriv, gradContrib),
+                        _splitWeights[n * _inputDim + d]);
+                    inputGrad[b * _inputDim + d] = NumOps.Add(
+                        inputGrad[b * _inputDim + d], weightGrad);
+
+                    // Accumulate split weight gradient
+                    _splitWeightsGrad[n * _inputDim + d] = NumOps.Add(
+                        _splitWeightsGrad[n * _inputDim + d],
+                        NumOps.Multiply(sigDeriv,
+                            NumOps.Multiply(gradContrib, _inputCache[b * _inputDim + d])));
+                }
+
+                // Accumulate split bias gradient
+                _splitBiasesGrad[n] = NumOps.Add(
+                    _splitBiasesGrad[n],
+                    NumOps.Multiply(sigDeriv, gradContrib));
+            }
+        }
+
         return inputGrad;
     }
 
@@ -278,43 +321,60 @@ public class SoftTree<T>
         return importance;
     }
 
-    /// <summary>
-    /// Updates parameters.
-    /// </summary>
-    public void UpdateParameters(T learningRate)
+    /// <inheritdoc/>
+    public override void UpdateParameters(T learningRate)
     {
-        for (int i = 0; i < _splitWeights.Length; i++)
-        {
-            _splitWeights[i] = NumOps.Subtract(_splitWeights[i],
-                NumOps.Multiply(learningRate, _splitWeightsGrad[i]));
-        }
-
-        for (int i = 0; i < _splitBiases.Length; i++)
-        {
-            _splitBiases[i] = NumOps.Subtract(_splitBiases[i],
-                NumOps.Multiply(learningRate, _splitBiasesGrad[i]));
-        }
-
-        for (int i = 0; i < _leafValues.Length; i++)
-        {
-            _leafValues[i] = NumOps.Subtract(_leafValues[i],
-                NumOps.Multiply(learningRate, _leafValuesGrad[i]));
-        }
+        _splitWeights = Engine.TensorSubtract(_splitWeights, Engine.TensorMultiplyScalar(_splitWeightsGrad, learningRate));
+        _splitBiases = Engine.TensorSubtract(_splitBiases, Engine.TensorMultiplyScalar(_splitBiasesGrad, learningRate));
+        _leafValues = Engine.TensorSubtract(_leafValues, Engine.TensorMultiplyScalar(_leafValuesGrad, learningRate));
     }
 
-    /// <summary>
-    /// Resets internal state.
-    /// </summary>
-    public void ResetState()
+    /// <inheritdoc/>
+    public override void ResetState()
     {
         _inputCache = null;
         _pathProbabilitiesCache = null;
 
-        for (int i = 0; i < _splitWeightsGrad.Length; i++)
-            _splitWeightsGrad[i] = NumOps.Zero;
-        for (int i = 0; i < _splitBiasesGrad.Length; i++)
-            _splitBiasesGrad[i] = NumOps.Zero;
-        for (int i = 0; i < _leafValuesGrad.Length; i++)
-            _leafValuesGrad[i] = NumOps.Zero;
+        Engine.TensorFill(_splitWeightsGrad, NumOps.Zero);
+        Engine.TensorFill(_splitBiasesGrad, NumOps.Zero);
+        Engine.TensorFill(_leafValuesGrad, NumOps.Zero);
+    }
+
+    /// <inheritdoc/>
+    public override Vector<T> GetParameters()
+    {
+        int total = _splitWeights.Length + _splitBiases.Length + _leafValues.Length;
+        var result = new Vector<T>(total);
+        int offset = 0;
+        for (int i = 0; i < _splitWeights.Length; i++)
+            result[offset++] = _splitWeights[i];
+        for (int i = 0; i < _splitBiases.Length; i++)
+            result[offset++] = _splitBiases[i];
+        for (int i = 0; i < _leafValues.Length; i++)
+            result[offset++] = _leafValues[i];
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
+        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
+        inputNodes.Add(inputNode);
+
+        // Export tree parameters as constants
+        var splitWeightsNode = TensorOperations<T>.Constant(_splitWeights, "splitWeights");
+        var splitBiasesNode = TensorOperations<T>.Constant(_splitBiases, "splitBiases");
+        var leafValuesNode = TensorOperations<T>.Constant(_leafValues, "leafValues");
+
+        // Split decisions: sigmoid(input * weights + biases)
+        var splitLogits = TensorOperations<T>.Add(
+            TensorOperations<T>.MatrixMultiply(inputNode, TensorOperations<T>.Transpose(splitWeightsNode)),
+            splitBiasesNode);
+
+        return splitLogits;
     }
 }

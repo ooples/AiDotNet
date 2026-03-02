@@ -655,25 +655,7 @@ public class NTMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
 
     private Tensor<T> ConcatenateTensors(Tensor<T> a, Tensor<T> b)
     {
-        // Concatenate along first dimension (both are 1D)
-        int sizeA = 1;
-        for (int i = 0; i < a.Shape.Length; i++) sizeA *= a.Shape[i];
-
-        int sizeB = 1;
-        for (int i = 0; i < b.Shape.Length; i++) sizeB *= b.Shape[i];
-
-        var result = new Tensor<T>(new int[] { sizeA + sizeB });
-
-        for (int i = 0; i < sizeA; i++)
-        {
-            result[i] = a.GetFlat(i);
-        }
-        for (int i = 0; i < sizeB; i++)
-        {
-            result[sizeA + i] = b.GetFlat(i);
-        }
-
-        return result;
+        return Engine.TensorConcatenate([a, b], axis: 0);
     }
 
     private T ComputeLoss(Tensor<T> predictions, TOutput targets)

@@ -1037,40 +1037,12 @@ public class UniTS<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> ApplySoftmax(Tensor<T> input)
     {
-        var result = new Tensor<T>(input.Shape);
-
         if (input.Length == 0)
         {
-            return result;
+            return new Tensor<T>(input.Shape);
         }
 
-        // Find max for numerical stability
-        T maxVal = input.Data.Span[0];
-        for (int i = 1; i < input.Length; i++)
-        {
-            if (NumOps.ToDouble(input.Data.Span[i]) > NumOps.ToDouble(maxVal))
-            {
-                maxVal = input.Data.Span[i];
-            }
-        }
-
-        // Compute exp(x - max) and sum
-        T sum = NumOps.Zero;
-        for (int i = 0; i < input.Length; i++)
-        {
-            var shifted = NumOps.Subtract(input.Data.Span[i], maxVal);
-            var expVal = NumOps.FromDouble(Math.Exp(NumOps.ToDouble(shifted)));
-            result.Data.Span[i] = expVal;
-            sum = NumOps.Add(sum, expVal);
-        }
-
-        // Normalize
-        for (int i = 0; i < result.Length; i++)
-        {
-            result.Data.Span[i] = NumOps.Divide(result.Data.Span[i], sum);
-        }
-
-        return result;
+        return Engine.Softmax(input, -1);
     }
 
     #endregion

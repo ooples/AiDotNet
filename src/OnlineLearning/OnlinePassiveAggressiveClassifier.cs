@@ -250,7 +250,7 @@ public class OnlinePassiveAggressiveClassifier<T> : OnlineLearningModelBase<T>
     public override T PredictSingle(Vector<T> x)
     {
         double score = ComputeScore(x);
-        return NumOps.FromDouble(score >= 0 ? 1.0 : -1.0);
+        return NumOps.FromDouble(score >= 0 ? 1.0 : 0.0);
     }
 
     /// <summary>

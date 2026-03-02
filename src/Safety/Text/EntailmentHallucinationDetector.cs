@@ -1,4 +1,5 @@
 using AiDotNet.Enums;
+using AiDotNet.Helpers;
 using AiDotNet.Models;
 using AiDotNet.Safety;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -200,7 +201,7 @@ public class EntailmentHallucinationDetector<T> : TextSafetyModuleBase<T>
 
                 // 2. Embedding similarity
                 var docSentEmb = ComputeEmbedding(docSentLower);
-                double embScore = ComputeCosineSimilarity(claimEmb, docSentEmb);
+                double embScore = VectorHelper.CosineSimilarity(claimEmb, docSentEmb);
 
                 // 3. Negation check: similar content but opposite polarity = contradiction
                 bool docHasNegation = HasNegation(docSentLower);
@@ -366,23 +367,6 @@ public class EntailmentHallucinationDetector<T> : TextSafetyModuleBase<T>
         return embedding;
     }
 
-    private static double ComputeCosineSimilarity(Vector<T> a, Vector<T> b)
-    {
-        double dot = 0, normA = 0, normB = 0;
-        int len = Math.Min(a.Length, b.Length);
-
-        for (int i = 0; i < len; i++)
-        {
-            double ai = NumOps.ToDouble(a[i]);
-            double bi = NumOps.ToDouble(b[i]);
-            dot += ai * bi;
-            normA += ai * ai;
-            normB += bi * bi;
-        }
-
-        double denom = Math.Sqrt(normA * normB);
-        return denom > 1e-10 ? Math.Max(0, dot / denom) : 0;
-    }
 
     private static string[] SplitIntoSentences(string text)
     {

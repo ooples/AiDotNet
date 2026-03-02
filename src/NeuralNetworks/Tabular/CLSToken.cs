@@ -1,3 +1,4 @@
+using AiDotNet.Engines;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 
@@ -26,6 +27,7 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 public class CLSToken<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+    private IEngine Engine => AiDotNetEngine.Current;
     private readonly Random _random;
 
     private Tensor<T> _clsEmbedding;
@@ -226,12 +228,8 @@ public class CLSToken<T>
     /// <param name="learningRate">The learning rate.</param>
     public void UpdateParameters(T learningRate)
     {
-        for (int i = 0; i < EmbeddingDimension; i++)
-        {
-            _clsEmbedding[i] = NumOps.Subtract(
-                _clsEmbedding[i],
-                NumOps.Multiply(learningRate, _clsGradient[i]));
-        }
+        _clsEmbedding = Engine.TensorSubtract(_clsEmbedding,
+            Engine.TensorMultiplyScalar(_clsGradient, learningRate));
     }
 
     /// <summary>
@@ -239,10 +237,7 @@ public class CLSToken<T>
     /// </summary>
     public void ResetGradients()
     {
-        for (int i = 0; i < EmbeddingDimension; i++)
-        {
-            _clsGradient[i] = NumOps.Zero;
-        }
+        Engine.TensorFill(_clsGradient, NumOps.Zero);
     }
 
     /// <summary>

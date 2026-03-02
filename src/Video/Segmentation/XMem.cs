@@ -427,20 +427,22 @@ public class XMem<T> : NeuralNetworkBase<T>
         var result = new Tensor<T>(shape);
         foreach (var mem in memory)
         {
-            int minLen = Math.Min(result.Length, mem.Length);
-            for (int i = 0; i < minLen; i++)
+            if (mem.Length != result.Length)
             {
-                result.Data.Span[i] = NumOps.Add(result.Data.Span[i], mem.Data.Span[i]);
+                // Truncate or pad to match expected shape
+                var aligned = new Tensor<T>(shape);
+                int copyLen = Math.Min(mem.Length, aligned.Length);
+                for (int i = 0; i < copyLen; i++)
+                    aligned[i] = mem[i];
+                result = Engine.TensorAdd(result, aligned);
+            }
+            else
+            {
+                result = Engine.TensorAdd(result, mem);
             }
         }
 
-        double scale = 1.0 / memory.Count;
-        for (int i = 0; i < result.Length; i++)
-        {
-            result.Data.Span[i] = NumOps.FromDouble(Convert.ToDouble(result.Data.Span[i]) * scale);
-        }
-
-        return result;
+        return Engine.TensorDivideScalar(result, NumOps.FromDouble(memory.Count));
     }
 
     private Tensor<T> CompressFeatures(Tensor<T> features, int targetChannels)
@@ -506,28 +508,7 @@ public class XMem<T> : NeuralNetworkBase<T>
 
     private Tensor<T> ConcatenateChannels(Tensor<T> a, Tensor<T> b)
     {
-        int batchSize = a.Shape[0];
-        int channelsA = a.Shape[1];
-        int channelsB = b.Shape[1];
-        int height = a.Shape[2];
-        int width = a.Shape[3];
-
-        var output = new Tensor<T>([batchSize, channelsA + channelsB, height, width]);
-
-        for (int batch = 0; batch < batchSize; batch++)
-        {
-            for (int c = 0; c < channelsA; c++)
-                for (int h = 0; h < height; h++)
-                    for (int w = 0; w < width; w++)
-                        output[batch, c, h, w] = a[batch, c, h, w];
-
-            for (int c = 0; c < channelsB; c++)
-                for (int h = 0; h < height; h++)
-                    for (int w = 0; w < width; w++)
-                        output[batch, channelsA + c, h, w] = b[batch, c, h, w];
-        }
-
-        return output;
+        return Engine.TensorConcatenate([a, b], axis: 1);
     }
 
     private Tensor<T> DownsampleMask(Tensor<T> mask, int targetH, int targetW)

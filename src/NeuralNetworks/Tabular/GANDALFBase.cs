@@ -1,3 +1,4 @@
+using AiDotNet.Engines;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks.Layers;
 
@@ -36,6 +37,11 @@ public abstract class GANDALFBase<T>
     /// Numeric operations helper for type T.
     /// </summary>
     protected readonly INumericOperations<T> NumOps;
+
+    /// <summary>
+    /// Hardware-accelerated engine for tensor operations.
+    /// </summary>
+    protected IEngine Engine => AiDotNetEngine.Current;
 
     /// <summary>
     /// The model configuration options.
@@ -202,15 +208,7 @@ public abstract class GANDALFBase<T>
         var logits = _gatingOutput.Forward(x);
 
         // Apply sigmoid for gating weights in [0, 1]
-        int batchSize = logits.Shape[0];
-        var weights = new Tensor<T>(logits.Shape);
-
-        for (int i = 0; i < logits.Length; i++)
-        {
-            var negLogit = NumOps.Negate(logits[i]);
-            var expNeg = NumOps.Exp(negLogit);
-            weights[i] = NumOps.Divide(NumOps.One, NumOps.Add(NumOps.One, expNeg));
-        }
+        var weights = Engine.Sigmoid(logits);
 
         _gatingWeightsCache = weights;
         return weights;
@@ -351,11 +349,7 @@ public abstract class GANDALFBase<T>
         var gatingWeights = ComputeGating(features);
 
         // Step 2: Apply gating to features
-        var gatedFeatures = new Tensor<T>(features.Shape);
-        for (int i = 0; i < features.Length; i++)
-        {
-            gatedFeatures[i] = NumOps.Multiply(features[i], gatingWeights[i]);
-        }
+        var gatedFeatures = Engine.TensorMultiply(features, gatingWeights);
 
         // Step 3: Pass through all trees and aggregate
         var aggregatedOutput = new Tensor<T>([batchSize, leafDim]);
@@ -371,10 +365,7 @@ public abstract class GANDALFBase<T>
             var treeOutput = ComputeTreeOutput(leafProbs, t);
 
             // Add to aggregated output
-            for (int i = 0; i < aggregatedOutput.Length; i++)
-            {
-                aggregatedOutput[i] = NumOps.Add(aggregatedOutput[i], treeOutput[i]);
-            }
+            aggregatedOutput = Engine.TensorAdd(aggregatedOutput, treeOutput);
         }
 
         return aggregatedOutput;
@@ -458,34 +449,22 @@ public abstract class GANDALFBase<T>
         // Update tree parameters
         for (int t = 0; t < Options.NumTrees; t++)
         {
-            if (_treeSplitWeightsGrad[t] != null)
+            if (_treeSplitWeightsGrad[t] is { } swGrad)
             {
-                for (int i = 0; i < _treeSplitWeights[t].Length; i++)
-                {
-                    _treeSplitWeights[t][i] = NumOps.Subtract(
-                        _treeSplitWeights[t][i],
-                        NumOps.Multiply(learningRate, _treeSplitWeightsGrad[t]![i]));
-                }
+                _treeSplitWeights[t] = Engine.TensorSubtract(_treeSplitWeights[t],
+                    Engine.TensorMultiplyScalar(swGrad, learningRate));
             }
 
-            if (_treeSplitBiasesGrad[t] != null)
+            if (_treeSplitBiasesGrad[t] is { } sbGrad)
             {
-                for (int i = 0; i < _treeSplitBiases[t].Length; i++)
-                {
-                    _treeSplitBiases[t][i] = NumOps.Subtract(
-                        _treeSplitBiases[t][i],
-                        NumOps.Multiply(learningRate, _treeSplitBiasesGrad[t]![i]));
-                }
+                _treeSplitBiases[t] = Engine.TensorSubtract(_treeSplitBiases[t],
+                    Engine.TensorMultiplyScalar(sbGrad, learningRate));
             }
 
-            if (_treeLeafValuesGrad[t] != null)
+            if (_treeLeafValuesGrad[t] is { } lvGrad)
             {
-                for (int i = 0; i < _treeLeafValues[t].Length; i++)
-                {
-                    _treeLeafValues[t][i] = NumOps.Subtract(
-                        _treeLeafValues[t][i],
-                        NumOps.Multiply(learningRate, _treeLeafValuesGrad[t]![i]));
-                }
+                _treeLeafValues[t] = Engine.TensorSubtract(_treeLeafValues[t],
+                    Engine.TensorMultiplyScalar(lvGrad, learningRate));
             }
         }
     }

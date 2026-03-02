@@ -36,6 +36,11 @@ public abstract class TextConditioningBase<T> : IConditioningModule<T>
     protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     /// <summary>
+    /// Hardware-accelerated engine for vector/tensor operations.
+    /// </summary>
+    protected static IEngine Engine => AiDotNetEngine.Current;
+
+    /// <summary>
     /// Random number generator for initialization.
     /// </summary>
     protected readonly Random Rng;

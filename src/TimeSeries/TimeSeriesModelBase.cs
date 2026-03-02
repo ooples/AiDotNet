@@ -1631,10 +1631,7 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
         if (gradients.Length != parameters.Length)
             throw new ArgumentException($"Gradient vector length ({gradients.Length}) must match parameter count ({parameters.Length}).");
 
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            parameters[i] = NumOps.Subtract(parameters[i], NumOps.Multiply(learningRate, gradients[i]));
-        }
+        parameters = Engine.Subtract(parameters, Engine.Multiply(gradients, learningRate));
 
         SetParameters(parameters);
     }

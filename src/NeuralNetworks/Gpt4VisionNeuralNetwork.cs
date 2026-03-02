@@ -1,9 +1,11 @@
 using System.IO;
 using System.Text;
 using System.Text.RegularExpressions;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
+using AiDotNet.Helpers;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Tokenization.Interfaces;
@@ -267,45 +269,55 @@ public class Gpt4VisionNeuralNetwork<T> : NeuralNetworkBase<T>, IGpt4VisionModel
     private void InitializeNativeLayers()
     {
         int numPatches = (_imageSize / _patchSize) * (_imageSize / _patchSize);
-        int ffnDim = _hiddenDim * 4;
 
-        // Vision encoder: Patch embedding
-        _visionPatchEmbedding = new PatchEmbeddingLayer<T>(
-            _imageSize, _imageSize, 3, _patchSize, _visionEmbeddingDim);
+        Layers.Clear();
+
+        if (Architecture.Layers != null && Architecture.Layers.Count > 0)
+        {
+            Layers.AddRange(Architecture.Layers);
+        }
+        else
+        {
+            Layers.AddRange(LayerHelper<T>.CreateGpt4VisionLayers(
+                _imageSize, _patchSize, _visionEmbeddingDim, _embeddingDimension,
+                _hiddenDim, _numVisionLayers, _numLanguageLayers, _numHeads, _vocabularySize));
+        }
+
+        // Distribute layers to internal fields
+        int idx = 0;
+
+        // Vision encoder: PatchEmbed + TransformerEncoder × numVisionLayers + LayerNorm
+        _visionPatchEmbedding = Layers[idx++];
+        _visionEncoderLayers.Clear();
+        for (int i = 0; i < _numVisionLayers; i++)
+            _visionEncoderLayers.Add(Layers[idx++]);
+        _visionLayerNorm = Layers[idx++];
+
+        // Vision projectors (2-layer MLP)
+        _visionProjector1 = Layers[idx++];
+        _visionProjector2 = Layers[idx++];
+
+        // Text token embedding
+        _tokenEmbedding = Layers[idx++];
+
+        // Language model transformer layers + cross-attention layers
+        _languageModelLayers.Clear();
+        _crossAttentionLayers.Clear();
+        for (int i = 0; i < _numLanguageLayers; i++)
+        {
+            _languageModelLayers.Add(Layers[idx++]);
+            if (i % 4 == 0)
+                _crossAttentionLayers.Add(Layers[idx++]);
+        }
+
+        // Final layer norm + LM head
+        _finalLayerNorm = Layers[idx++];
+        _lmHead = Layers[idx++];
 
         // Vision CLS token and positional embeddings
         _visionClsToken = Matrix<T>.CreateDefault(1, _visionEmbeddingDim, NumOps.Zero);
         _visionPositionalEmbeddings = Matrix<T>.CreateDefault(numPatches + 1, _visionEmbeddingDim, NumOps.Zero);
-
-        // Vision transformer layers
-        for (int i = 0; i < _numVisionLayers; i++)
-        {
-            _visionEncoderLayers.Add(new TransformerEncoderLayer<T>(_visionEmbeddingDim, _numHeads, ffnDim));
-        }
-        _visionLayerNorm = new LayerNormalizationLayer<T>(_visionEmbeddingDim);
-
-        // Vision-Language Projector (MLP to map vision features to language space)
-        _visionProjector1 = new DenseLayer<T>(_visionEmbeddingDim, _embeddingDimension, (IActivationFunction<T>?)null);
-        _visionProjector2 = new DenseLayer<T>(_embeddingDimension, _embeddingDimension, (IActivationFunction<T>?)null);
-
-        // Language model: Token embedding
-        _tokenEmbedding = new EmbeddingLayer<T>(_vocabularySize, _embeddingDimension);
         _textPositionalEmbeddings = Matrix<T>.CreateDefault(_maxSequenceLength, _embeddingDimension, NumOps.Zero);
-
-        // Language model transformer layers with causal masking
-        for (int i = 0; i < _numLanguageLayers; i++)
-        {
-            _languageModelLayers.Add(new TransformerEncoderLayer<T>(_embeddingDimension, _numHeads, ffnDim));
-
-            // Add cross-attention layer every 4 layers for vision-language fusion
-            if (i % 4 == 0)
-            {
-                _crossAttentionLayers.Add(new TransformerEncoderLayer<T>(_embeddingDimension, _numHeads, ffnDim));
-            }
-        }
-
-        _finalLayerNorm = new LayerNormalizationLayer<T>(_embeddingDimension);
-        _lmHead = new DenseLayer<T>(_embeddingDimension, _vocabularySize, (IActivationFunction<T>?)null);
     }
 
     #endregion
@@ -351,13 +363,13 @@ public class Gpt4VisionNeuralNetwork<T> : NeuralNetworkBase<T>, IGpt4VisionModel
     {
         var imageEmb = GetImageEmbedding(image);
         var textEmb = GetTextEmbedding(text);
-        return CosineSimilarity(imageEmb, textEmb);
+        return NumOps.FromDouble(VectorHelper.CosineSimilarity(imageEmb, textEmb));
     }
 
     /// <inheritdoc/>
     public T ComputeSimilarity(Vector<T> textEmbedding, Vector<T> imageEmbedding)
     {
-        return CosineSimilarity(textEmbedding, imageEmbedding);
+        return NumOps.FromDouble(VectorHelper.CosineSimilarity(textEmbedding, imageEmbedding));
     }
 
     /// <inheritdoc/>
@@ -381,7 +393,7 @@ public class Gpt4VisionNeuralNetwork<T> : NeuralNetworkBase<T>, IGpt4VisionModel
         foreach (var label in labelList)
         {
             var textEmb = GetTextEmbedding(label);
-            scores.Add(CosineSimilarity(imageEmb, textEmb));
+            scores.Add(NumOps.FromDouble(VectorHelper.CosineSimilarity(imageEmb, textEmb)));
         }
 
         // Softmax over scores
@@ -404,7 +416,7 @@ public class Gpt4VisionNeuralNetwork<T> : NeuralNetworkBase<T>, IGpt4VisionModel
         for (int i = 0; i < imageList.Count; i++)
         {
             var imageEmb = GetImageEmbedding(imageList[i]);
-            var score = CosineSimilarity(queryEmb, imageEmb);
+            var score = NumOps.FromDouble(VectorHelper.CosineSimilarity(queryEmb, imageEmb));
             scores.Add((i, score));
         }
 
@@ -421,7 +433,7 @@ public class Gpt4VisionNeuralNetwork<T> : NeuralNetworkBase<T>, IGpt4VisionModel
         for (int i = 0; i < textList.Count; i++)
         {
             var textEmb = GetTextEmbedding(textList[i]);
-            var score = CosineSimilarity(imageEmb, textEmb);
+            var score = NumOps.FromDouble(VectorHelper.CosineSimilarity(imageEmb, textEmb));
             scores.Add((i, score));
         }
 
@@ -1281,28 +1293,6 @@ For each category, indicate if it's flagged (YES/NO) and confidence level (HIGH/
         return pooled;
     }
 
-    private T CosineSimilarity(Vector<T> a, Vector<T> b)
-    {
-        T dot = NumOps.Zero;
-        T normA = NumOps.Zero;
-        T normB = NumOps.Zero;
-
-        int len = Math.Min(a.Length, b.Length);
-        for (int i = 0; i < len; i++)
-        {
-            dot = NumOps.Add(dot, NumOps.Multiply(a[i], b[i]));
-            normA = NumOps.Add(normA, NumOps.Multiply(a[i], a[i]));
-            normB = NumOps.Add(normB, NumOps.Multiply(b[i], b[i]));
-        }
-
-        T denom = NumOps.Multiply(NumOps.Sqrt(normA), NumOps.Sqrt(normB));
-        if (NumOps.ToDouble(denom) < 1e-8)
-        {
-            return NumOps.Zero;
-        }
-
-        return NumOps.Divide(dot, denom);
-    }
 
     private List<T> Softmax(List<T> values)
     {
@@ -1667,10 +1657,7 @@ For each category, indicate if it's flagged (YES/NO) and confidence level (HIGH/
 
         // Apply gradient descent update: params = params - learning_rate * gradients
         T learningRate = NumOps.FromDouble(0.001); // Default learning rate
-        for (int i = 0; i < currentParams.Length; i++)
-        {
-            currentParams[i] = NumOps.Subtract(currentParams[i], NumOps.Multiply(learningRate, gradients[i]));
-        }
+        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, learningRate));
 
         // Set the updated parameters
         SetParameters(currentParams);

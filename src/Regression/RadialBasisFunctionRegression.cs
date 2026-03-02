@@ -1,3 +1,5 @@
+using AiDotNet.Helpers;
+
 namespace AiDotNet.Regression;
 
 /// <summary>
@@ -210,11 +212,11 @@ public class RadialBasisFunctionRegression<T> : NonLinearRegressionBase<T>
             for (int i = 0; i < x.Rows; i++)
             {
                 int nearestCenter = 0;
-                T minDistance = EuclideanDistance(x.GetRow(i), centers.GetRow(0));
+                T minDistance = VectorHelper.EuclideanDistance(x.GetRow(i), centers.GetRow(0));
 
                 for (int j = 1; j < numCenters; j++)
                 {
-                    T distance = EuclideanDistance(x.GetRow(i), centers.GetRow(j));
+                    T distance = VectorHelper.EuclideanDistance(x.GetRow(i), centers.GetRow(j));
                     if (NumOps.LessThan(distance, minDistance))
                     {
                         minDistance = distance;
@@ -327,7 +329,7 @@ public class RadialBasisFunctionRegression<T> : NonLinearRegressionBase<T>
 
         for (int i = 0; i < _centers.Rows; i++)
         {
-            T distance = EuclideanDistance(x, _centers.GetRow(i));
+            T distance = VectorHelper.EuclideanDistance(x, _centers.GetRow(i));
             features[i + 1] = RbfKernel(distance);
         }
 
@@ -350,17 +352,6 @@ public class RadialBasisFunctionRegression<T> : NonLinearRegressionBase<T>
     /// Pythagorean theorem. This is used to determine how close an input point is to each center.
     /// </para>
     /// </remarks>
-    private T EuclideanDistance(Vector<T> x1, Vector<T> x2)
-    {
-        T sumSquared = NumOps.Zero;
-        for (int i = 0; i < x1.Length; i++)
-        {
-            T diff = NumOps.Subtract(x1[i], x2[i]);
-            sumSquared = NumOps.Add(sumSquared, NumOps.Multiply(diff, diff));
-        }
-
-        return NumOps.Sqrt(sumSquared);
-    }
 
     /// <summary>
     /// Applies the radial basis function kernel to a distance value.

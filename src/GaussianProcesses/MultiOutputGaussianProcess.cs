@@ -139,11 +139,11 @@ public class MultiOutputGaussianProcess<T> : IGaussianProcess<T>
         // Calculate the kernel matrix
         _K = CalculateKernelMatrix(X, X);
 
-        // Add a small value to the diagonal for numerical stability
-        for (int i = 0; i < _K.Rows; i++)
-        {
-            _K[i, i] = _numOps.Add(_K[i, i], _numOps.FromDouble(1e-8));
-        }
+        // Add adaptive jitter to diagonal for numerical stability.
+        // Kernels like Exponential and Laplacian produce ill-conditioned matrices
+        // where Cholesky succeeds but forward/backward substitution produces NaN.
+        // We check the condition number via the L diagonal ratio.
+        AddJitter(_K);
 
         // Solve for alpha using Cholesky decomposition
         _alpha = new Matrix<T>(Y.Rows, Y.Columns);
@@ -278,6 +278,59 @@ public class MultiOutputGaussianProcess<T> : IGaussianProcess<T>
     /// based on how similar new points are to the training data points.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Adds adaptive jitter to the diagonal of a kernel matrix for numerical stability.
+    /// </summary>
+    private void AddJitter(Matrix<T> K)
+    {
+        double jitterValue = 1e-6;
+        const double maxJitter = 1e-1;
+
+        while (jitterValue <= maxJitter)
+        {
+            var jitter = _numOps.FromDouble(jitterValue);
+            for (int i = 0; i < K.Rows; i++)
+                K[i, i] = _numOps.Add(K[i, i], jitter);
+
+            try
+            {
+                var chol = new CholeskyDecomposition<T>(K);
+
+                double minDiag = double.MaxValue;
+                double maxDiag = 0;
+                bool hasNaN = false;
+                for (int i = 0; i < chol.L.Rows; i++)
+                {
+                    double d = _numOps.ToDouble(chol.L[i, i]);
+                    if (double.IsNaN(d) || double.IsInfinity(d) || d <= 0)
+                    {
+                        hasNaN = true;
+                        break;
+                    }
+                    minDiag = Math.Min(minDiag, d);
+                    maxDiag = Math.Max(maxDiag, d);
+                }
+
+                if (!hasNaN && minDiag > 0 && maxDiag / minDiag < 1e8)
+                    return;
+
+                for (int i = 0; i < K.Rows; i++)
+                    K[i, i] = _numOps.Subtract(K[i, i], jitter);
+                jitterValue *= 10;
+            }
+            catch (ArgumentException)
+            {
+                for (int i = 0; i < K.Rows; i++)
+                    K[i, i] = _numOps.Subtract(K[i, i], jitter);
+                jitterValue *= 10;
+            }
+        }
+
+        var maxJitterT = _numOps.FromDouble(maxJitter);
+        for (int i = 0; i < K.Rows; i++)
+            K[i, i] = _numOps.Add(K[i, i], maxJitterT);
+    }
+
     private Matrix<T> CalculateKernelMatrix(Matrix<T> X1, Matrix<T> X2)
     {
         var K = new Matrix<T>(X1.Rows, X2.Rows);

@@ -227,8 +227,7 @@ public class RIFE<T> : FrameInterpolationBase<T>
         var predicted = Predict(input);
 
         // Calculate loss gradient
-        var lossGradient = predicted.Transform((v, idx) =>
-            NumOps.Subtract(v, expectedOutput.Data.Span[idx]));
+        var lossGradient = Engine.TensorSubtract(predicted, expectedOutput);
 
         // Backward pass
         BackwardPass(lossGradient);
@@ -247,54 +246,37 @@ public class RIFE<T> : FrameInterpolationBase<T>
 
     private void InitializeNativeLayers()
     {
-        // Encoder: extract features from concatenated frames
-        _encoder.Add(new ConvolutionalLayer<T>(
-            _channels * 2, _height, _width, _numFeatures, 3, 1, 1));
-        _encoder.Add(new ConvolutionalLayer<T>(
-            _numFeatures, _height, _width, _numFeatures * 2, 3, 2, 1));
-        _encoder.Add(new ConvolutionalLayer<T>(
-            _numFeatures * 2, _height / 2, _width / 2, _numFeatures * 4, 3, 2, 1));
-
-        // Context encoder
-        _contextEncoder.Add(new ConvolutionalLayer<T>(
-            _channels * 2, _height, _width, _numFeatures, 3, 1, 1));
-        _contextEncoder.Add(new ConvolutionalLayer<T>(
-            _numFeatures, _height, _width, _numFeatures, 3, 1, 1));
-
-        // Flow decoder
-        int decoderH = _height / 4;
-        int decoderW = _width / 4;
-
-        _flowDecoder.Add(new ConvolutionalLayer<T>(
-            _numFeatures * 4, decoderH, decoderW, _numFeatures * 2, 3, 1, 1));
-        _flowDecoder.Add(new ConvolutionalLayer<T>(
-            _numFeatures * 2, decoderH * 2, decoderW * 2, _numFeatures, 3, 1, 1));
-        _flowDecoder.Add(new ConvolutionalLayer<T>(
-            _numFeatures, decoderH * 4, decoderW * 4, 4, 3, 1, 1));
-
-        // Flow refinement blocks
-        for (int i = 0; i < _numFlowBlocks; i++)
+        // Check for user-provided custom layers
+        if (Architecture.Layers != null && Architecture.Layers.Count > 0)
         {
-            _flowBlocks.Add(new ConvolutionalLayer<T>(
-                _numFeatures + 4, _height, _width, _numFeatures, 3, 1, 1));
+            Layers.AddRange(Architecture.Layers);
+        }
+        else
+        {
+            var layers = LayerHelper<T>.CreateRIFELayers(
+                channels: _channels, height: _height, width: _width,
+                numFeatures: _numFeatures, numFlowBlocks: _numFlowBlocks).ToList();
+            Layers.AddRange(layers);
         }
 
-        // Fusion layer
-        int fusionInputChannels = _channels * 2 + _numFeatures + 4;
-        _fusion = new ConvolutionalLayer<T>(
-            fusionInputChannels, _height, _width, _numFeatures, 3, 1, 1);
-
-        // Output convolution
-        _outputConv = new ConvolutionalLayer<T>(
-            _numFeatures, _height, _width, _channels, 3, 1, 1);
-
-        // Register all layers
-        foreach (var layer in _encoder) Layers.Add(layer);
-        foreach (var layer in _flowDecoder) Layers.Add(layer);
-        foreach (var layer in _contextEncoder) Layers.Add(layer);
-        foreach (var layer in _flowBlocks) Layers.Add(layer);
-        Layers.Add(_fusion);
-        Layers.Add(_outputConv);
+        // Distribute layers to sub-lists for forward pass
+        int idx = 0;
+        // Encoder (3 layers)
+        for (int i = 0; i < 3; i++)
+            _encoder.Add((ConvolutionalLayer<T>)Layers[idx++]);
+        // Flow decoder (3 layers)
+        for (int i = 0; i < 3; i++)
+            _flowDecoder.Add((ConvolutionalLayer<T>)Layers[idx++]);
+        // Context encoder (2 layers)
+        for (int i = 0; i < 2; i++)
+            _contextEncoder.Add((ConvolutionalLayer<T>)Layers[idx++]);
+        // Flow blocks
+        for (int i = 0; i < _numFlowBlocks; i++)
+            _flowBlocks.Add((ConvolutionalLayer<T>)Layers[idx++]);
+        // Fusion
+        _fusion = (ConvolutionalLayer<T>)Layers[idx++];
+        // Output conv
+        _outputConv = (ConvolutionalLayer<T>)Layers[idx++];
     }
 
     private Tensor<T> ProcessInterpolation(Tensor<T> concatenatedFrames, double timestep)
@@ -642,38 +624,10 @@ public class RIFE<T> : FrameInterpolationBase<T>
         Tensor<T> flowGradAccumulator)
     {
         // flow_0_1 channels 0-1, flow_1_0 channels 2-3
-        int batchSize = flowGradAccumulator.Shape[0];
-        int height = flowGradAccumulator.Shape[2];
-        int width = flowGradAccumulator.Shape[3];
-
-        var combined = new Tensor<T>(flowGradAccumulator.Shape);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int h = 0; h < height; h++)
-            {
-                for (int w = 0; w < width; w++)
-                {
-                    // Flow 0->1 gradients (channels 0-1)
-                    combined[b, 0, h, w] = NumOps.Add(
-                        flowGradAccumulator[b, 0, h, w],
-                        flowGrad1[b, 0, h, w]);
-                    combined[b, 1, h, w] = NumOps.Add(
-                        flowGradAccumulator[b, 1, h, w],
-                        flowGrad1[b, 1, h, w]);
-
-                    // Flow 1->0 gradients (channels 2-3)
-                    combined[b, 2, h, w] = NumOps.Add(
-                        flowGradAccumulator[b, 2, h, w],
-                        flowGrad2[b, 0, h, w]);
-                    combined[b, 3, h, w] = NumOps.Add(
-                        flowGradAccumulator[b, 3, h, w],
-                        flowGrad2[b, 1, h, w]);
-                }
-            }
-        }
-
-        return combined;
+        // Concatenate the two 2-channel flow grads into a single 4-channel tensor
+        var flowGradsCombined = Engine.TensorConcatenate([flowGrad1, flowGrad2], axis: 1);
+        // Element-wise add with the accumulator
+        return Engine.TensorAdd(flowGradAccumulator, flowGradsCombined);
     }
 
     /// <summary>
@@ -731,12 +685,7 @@ public class RIFE<T> : FrameInterpolationBase<T>
     /// </summary>
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
-        var result = new Tensor<T>(a.Shape);
-        for (int i = 0; i < a.Length; i++)
-        {
-            result.Data.Span[i] = NumOps.Add(a.Data.Span[i], b.Data.Span[i]);
-        }
-        return result;
+        return Engine.TensorAdd(a, b);
     }
 
     /// <summary>
@@ -818,29 +767,7 @@ public class RIFE<T> : FrameInterpolationBase<T>
 
     private Tensor<T> ConcatenateChannels(Tensor<T> t1, Tensor<T> t2)
     {
-        int batchSize = t1.Shape[0];
-        int c1 = t1.Shape[1];
-        int c2 = t2.Shape[1];
-        int height = t1.Shape[2];
-        int width = t1.Shape[3];
-
-        var result = new Tensor<T>([batchSize, c1 + c2, height, width]);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int h = 0; h < height; h++)
-            {
-                for (int w = 0; w < width; w++)
-                {
-                    for (int c = 0; c < c1; c++)
-                        result[b, c, h, w] = t1[b, c, h, w];
-                    for (int c = 0; c < c2; c++)
-                        result[b, c1 + c, h, w] = t2[b, c, h, w];
-                }
-            }
-        }
-
-        return result;
+        return Engine.TensorConcatenate([t1, t2], axis: 1);
     }
 
     private Tensor<T> SliceChannels(Tensor<T> input, int startChannel, int endChannel)
@@ -871,7 +798,7 @@ public class RIFE<T> : FrameInterpolationBase<T>
 
     private Tensor<T> ScaleFlow(Tensor<T> flow, T scale)
     {
-        return flow.Transform((v, _) => NumOps.Multiply(v, scale));
+        return Engine.TensorMultiplyScalar(flow, scale);
     }
 
     private Tensor<T> WarpImage(Tensor<T> image, Tensor<T> flow)

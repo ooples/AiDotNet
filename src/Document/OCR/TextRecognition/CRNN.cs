@@ -215,7 +215,8 @@ public class CRNN<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
             cnnChannels: _cnnChannels,
             rnnHiddenSize: _rnnHiddenSize,
             rnnLayers: _rnnLayers,
-            charsetSize: _charset.Length + 1)); // +1 for CTC blank
+            charsetSize: _charset.Length + 1, // +1 for CTC blank
+            inputDepth: Architecture.InputDepth));
     }
 
     #endregion
@@ -516,7 +517,7 @@ public class CRNN<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
                 { "image_width", ImageSize },
                 { "use_native_mode", _useNativeMode }
             },
-            ModelData = this.Serialize()
+            ModelData = SafeSerialize()
         };
     }
 
@@ -640,8 +641,8 @@ public class CRNN<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
 
         var currentParams = GetParameters();
         T lr = NumOps.FromDouble(0.0001);
-        for (int i = 0; i < currentParams.Length; i++)
-            currentParams[i] = NumOps.Subtract(currentParams[i], NumOps.Multiply(lr, gradients[i]));
+        
+        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, lr));
         SetParameters(currentParams);
     }
 

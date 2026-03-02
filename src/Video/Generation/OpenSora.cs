@@ -337,12 +337,9 @@ public class OpenSora<T> : NeuralNetworkBase<T>
         var noise = InitializeLatents(input.Shape, random);
 
         // Create noisy input: x_t = sqrt(alpha_cumprod) * x_0 + sqrt(1 - alpha_cumprod) * noise
-        var noisyInput = input.Transform((v, idx) =>
-        {
-            double x0 = Convert.ToDouble(v);
-            double n = Convert.ToDouble(noise.Data.Span[idx]);
-            return NumOps.FromDouble(sqrtAlphaCumprod * x0 + sqrtOneMinusAlphaCumprod * n);
-        });
+        var scaledInput = Engine.TensorMultiplyScalar(input, NumOps.FromDouble(sqrtAlphaCumprod));
+        var scaledNoise = Engine.TensorMultiplyScalar(noise, NumOps.FromDouble(sqrtOneMinusAlphaCumprod));
+        var noisyInput = Engine.TensorAdd(scaledInput, scaledNoise);
 
         // Forward pass: predict the noise
         var timeEmbed = CreateTimeEmbedding(t);
@@ -444,13 +441,10 @@ public class OpenSora<T> : NeuralNetworkBase<T>
     {
         var noise = InitializeLatents(imageLatent.Shape, random);
 
-        // Mix image latent with noise
-        return imageLatent.Transform((v, idx) =>
-        {
-            double img = Convert.ToDouble(v);
-            double n = Convert.ToDouble(noise.Data.Span[idx]);
-            return NumOps.FromDouble(img * 0.5 + n * 0.5);
-        });
+        // Mix image latent with noise (50/50 blend)
+        var scaledImg = Engine.TensorMultiplyScalar(imageLatent, NumOps.FromDouble(0.5));
+        var scaledN = Engine.TensorMultiplyScalar(noise, NumOps.FromDouble(0.5));
+        return Engine.TensorAdd(scaledImg, scaledN);
     }
 
     private Tensor<T> ProcessTextEmbedding(Tensor<T> textEmbedding)
@@ -584,24 +578,23 @@ public class OpenSora<T> : NeuralNetworkBase<T>
         double sqrtAlphaCumprodPrev = Math.Sqrt(alphaCumprodPrev);
         double sqrtOneMinusAlphaCumprodPrev = Math.Sqrt(1 - alphaCumprodPrev);
 
-        return latents.Transform((v, idx) =>
-        {
-            double x = Convert.ToDouble(v);
-            double noise = Convert.ToDouble(noisePred.Data.Span[idx]);
-            double x0 = (x - sqrtOneMinusAlphaCumprod * noise) / sqrtAlphaCumprod;
-            double next = sqrtAlphaCumprodPrev * x0 + sqrtOneMinusAlphaCumprodPrev * noise;
-            return NumOps.FromDouble(next);
-        });
+        // x0 = (x - sqrtOneMinusAlphaCumprod * noise) / sqrtAlphaCumprod
+        var scaledNoisePred = Engine.TensorMultiplyScalar(noisePred, NumOps.FromDouble(sqrtOneMinusAlphaCumprod));
+        var x0 = Engine.TensorDivideScalar(
+            Engine.TensorSubtract(latents, scaledNoisePred),
+            NumOps.FromDouble(sqrtAlphaCumprod));
+        // next = sqrtAlphaCumprodPrev * x0 + sqrtOneMinusAlphaCumprodPrev * noise
+        return Engine.TensorAdd(
+            Engine.TensorMultiplyScalar(x0, NumOps.FromDouble(sqrtAlphaCumprodPrev)),
+            Engine.TensorMultiplyScalar(noisePred, NumOps.FromDouble(sqrtOneMinusAlphaCumprodPrev)));
     }
 
     private Tensor<T> ApplyGuidance(Tensor<T> uncond, Tensor<T> cond, double scale)
     {
-        return uncond.Transform((v, idx) =>
-        {
-            double u = Convert.ToDouble(v);
-            double c = Convert.ToDouble(cond.Data.Span[idx]);
-            return NumOps.FromDouble(u + scale * (c - u));
-        });
+        // guided = uncond + scale * (cond - uncond)
+        var diff = Engine.TensorSubtract(cond, uncond);
+        var scaled = Engine.TensorMultiplyScalar(diff, NumOps.FromDouble(scale));
+        return Engine.TensorAdd(uncond, scaled);
     }
 
     private List<Tensor<T>> DecodeToFrames(Tensor<T> latents)
@@ -820,7 +813,7 @@ public class OpenSora<T> : NeuralNetworkBase<T>
     }
 
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b) =>
-        a.Transform((v, idx) => NumOps.Add(v, b.Data.Span[idx]));
+        Engine.TensorAdd(a, b);
 
     private Tensor<T> Upsample2x(Tensor<T> input)
     {
@@ -862,7 +855,7 @@ public class OpenSora<T> : NeuralNetworkBase<T>
         });
 
     private Tensor<T> ApplySigmoid(Tensor<T> input) =>
-        input.Transform((v, _) => NumOps.FromDouble(1.0 / (1.0 + Math.Exp(-Convert.ToDouble(v)))));
+        Engine.Sigmoid(input);
 
     /// <summary>
     /// Applies layer normalization (standardization) across spatial dimensions.

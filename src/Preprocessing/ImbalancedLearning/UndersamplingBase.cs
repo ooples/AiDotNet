@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors.Helpers;
@@ -238,13 +239,7 @@ public abstract class UndersamplingBase<T> : IResamplingStrategy<T>
     /// </summary>
     protected T EuclideanDistance(Vector<T> a, Vector<T> b)
     {
-        T sum = NumOps.Zero;
-        for (int i = 0; i < a.Length; i++)
-        {
-            T diff = NumOps.Subtract(a[i], b[i]);
-            sum = NumOps.Add(sum, NumOps.Multiply(diff, diff));
-        }
-        return NumOps.Sqrt(sum);
+        return VectorHelper.EuclideanDistance(a, b);
     }
 
     /// <summary>

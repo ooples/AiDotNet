@@ -18,6 +18,14 @@ namespace AiDotNet.Models.Options;
 public class BFGSOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOptions<T, TInput, TOutput>
 {
     /// <summary>
+    /// Initializes a new instance of the BFGSOptimizerOptions class with appropriate defaults.
+    /// </summary>
+    public BFGSOptimizerOptions()
+    {
+        MaxIterations = 1000;
+    }
+
+    /// <summary>
     /// Gets or sets the batch size for gradient computation.
     /// </summary>
     /// <value>A positive integer, defaulting to -1 (full batch).</value>
@@ -121,11 +129,10 @@ public class BFGSOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOp
     /// the optimal solution. The algorithm will stop either when it reaches this limit
     /// or when the convergence tolerance is met, whichever comes first.
     /// </para>
-    /// <para><b>For Beginners:</b> This is a safety limit that prevents the algorithm from running forever 
-    /// if it can't find a satisfactory solution. The default (1000 iterations) is sufficient for most problems. 
-    /// If your problem is particularly complex, you might need to increase this. If the algorithm consistently 
-    /// hits this limit without converging, it usually indicates either a very difficult problem or that other 
+    /// <para><b>For Beginners:</b> This is a safety limit that prevents the algorithm from running forever
+    /// if it can't find a satisfactory solution. The default (1000 iterations) is sufficient for most problems.
+    /// If your problem is particularly complex, you might need to increase this. If the algorithm consistently
+    /// hits this limit without converging, it usually indicates either a very difficult problem or that other
     /// settings need adjustment.</para>
     /// </remarks>
-    public new int MaxIterations { get; set; } = 1000;
 }

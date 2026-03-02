@@ -1473,18 +1473,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
 
         private Tensor<T> AddTensors(Tensor<T> left, Tensor<T> right)
         {
-            if (!left.Shape.SequenceEqual(right.Shape))
-            {
-                throw new ArgumentException("Tensor shapes must match for addition.");
-            }
-
-            var output = new Tensor<T>(left.Shape);
-            for (int i = 0; i < left.Length; i++)
-            {
-                output[i] = _numOps.Add(left[i], right[i]);
-            }
-
-            return output;
+            return Engine.TensorAdd(left, right);
         }
 
         private Tensor<Complex<T>> ForwardFFT(Tensor<T> input)

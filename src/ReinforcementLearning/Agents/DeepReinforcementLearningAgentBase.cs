@@ -38,6 +38,11 @@ namespace AiDotNet.ReinforcementLearning.Agents;
 public abstract class DeepReinforcementLearningAgentBase<T> : ReinforcementLearningAgentBase<T>
 {
     /// <summary>
+    /// Gets the global execution engine for hardware-accelerated vector operations.
+    /// </summary>
+    protected IEngine Engine => AiDotNetEngine.Current;
+
+    /// <summary>
     /// The neural network(s) used by this agent for function approximation.
     /// </summary>
     /// <remarks>

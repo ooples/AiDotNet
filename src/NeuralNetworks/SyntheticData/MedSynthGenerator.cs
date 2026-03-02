@@ -925,24 +925,13 @@ public class MedSynthGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
     private static void ApplySoftmax(Tensor<T> input, Tensor<T> output, ref int idx, int count)
     {
         if (count <= 0) return;
-        var ops = MathHelper.GetNumericOperations<T>();
-        double maxVal = double.MinValue;
-        for (int i = 0; i < count && (idx + i) < input.Length; i++)
-        {
-            double v = ops.ToDouble(input[idx + i]);
-            if (v > maxVal) maxVal = v;
-        }
-        double sumExp = 0;
-        for (int i = 0; i < count && (idx + i) < input.Length; i++)
-        {
-            sumExp += Math.Exp(ops.ToDouble(input[idx + i]) - maxVal);
-        }
-        for (int i = 0; i < count && idx < input.Length; i++)
-        {
-            double expVal = Math.Exp(ops.ToDouble(input[idx]) - maxVal);
-            output[idx] = ops.FromDouble(expVal / Math.Max(sumExp, 1e-10));
-            idx++;
-        }
+        int actualCount = Math.Min(count, input.Length - idx);
+        if (actualCount <= 0) return;
+        var slice = new Tensor<T>([actualCount]);
+        input.Data.Span.Slice(idx, actualCount).CopyTo(slice.Data.Span);
+        var result = AiDotNetEngine.Current.Softmax(slice, -1);
+        result.Data.Span.CopyTo(output.Data.Span.Slice(idx, actualCount));
+        idx += actualCount;
     }
 
     #endregion

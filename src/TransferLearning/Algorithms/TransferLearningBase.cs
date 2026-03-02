@@ -1,4 +1,5 @@
 
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.TransferLearning.DomainAdaptation;
 using AiDotNet.TransferLearning.FeatureMapping;
@@ -204,13 +205,6 @@ public abstract class TransferLearningBase<T, TInput, TOutput>
     /// </summary>
     protected T ComputeEuclideanDistance(Vector<T> a, Vector<T> b)
     {
-        T sumSquares = NumOps.Zero;
-        int length = Math.Min(a.Length, b.Length);
-        for (int i = 0; i < length; i++)
-        {
-            T diff = NumOps.Subtract(a[i], b[i]);
-            sumSquares = NumOps.Add(sumSquares, NumOps.Multiply(diff, diff));
-        }
-        return NumOps.Sqrt(sumSquares);
+        return VectorHelper.EuclideanDistance(a, b);
     }
 }

@@ -267,9 +267,9 @@ public class Blip2NeuralNetworkTests
     [Fact]
     public void GetModelMetadata_ReturnsCorrectModelType()
     {
-        // Arrange
+        // Arrange - use small dimensions to avoid OOM during Serialize()
         var architecture = CreateBasicArchitecture();
-        var network = new Blip2NeuralNetwork<float>(architecture);
+        var network = CreateSmallBlip2Network(architecture);
 
         // Act
         var metadata = network.GetModelMetadata();
@@ -281,11 +281,21 @@ public class Blip2NeuralNetworkTests
     [Fact]
     public void GetModelMetadata_ContainsRequiredInfo()
     {
-        // Arrange
+        // Arrange - use small dimensions to avoid OOM during Serialize()
         var architecture = CreateBasicArchitecture();
         var network = new Blip2NeuralNetwork<float>(
             architecture,
+            imageSize: 28,
+            patchSize: 14,
+            vocabularySize: 64,
+            embeddingDimension: 16,
+            qformerHiddenDim: 32,
+            visionHiddenDim: 32,
+            lmHiddenDim: 32,
+            numQformerLayers: 1,
             numQueryTokens: 32,
+            numHeads: 2,
+            numLmDecoderLayers: 1,
             languageModelBackbone: LanguageModelBackbone.FlanT5);
 
         // Act
@@ -300,20 +310,28 @@ public class Blip2NeuralNetworkTests
     [Fact]
     public void GetModelMetadata_ContainsQFormerConfiguration()
     {
-        // Arrange
+        // Arrange - use small dimensions to avoid OOM during Serialize()
         var architecture = CreateBasicArchitecture();
         var network = new Blip2NeuralNetwork<float>(
             architecture,
-            qformerHiddenDim: 768,
-            numQformerLayers: 12);
+            imageSize: 28,
+            patchSize: 14,
+            vocabularySize: 64,
+            embeddingDimension: 16,
+            qformerHiddenDim: 48,
+            visionHiddenDim: 32,
+            lmHiddenDim: 32,
+            numQformerLayers: 2,
+            numHeads: 2,
+            numLmDecoderLayers: 1);
 
         // Act
         var metadata = network.GetModelMetadata();
 
         // Assert
         Assert.NotNull(metadata.AdditionalInfo);
-        Assert.Equal(768, metadata.AdditionalInfo["QFormerHiddenDim"]);
-        Assert.Equal(12, metadata.AdditionalInfo["NumQformerLayers"]);
+        Assert.Equal(48, metadata.AdditionalInfo["QFormerHiddenDim"]);
+        Assert.Equal(2, metadata.AdditionalInfo["NumQformerLayers"]);
     }
 
     #endregion
@@ -343,6 +361,23 @@ public class Blip2NeuralNetworkTests
             inputSize: 512,
             outputSize: 512
         );
+    }
+
+    private static Blip2NeuralNetwork<float> CreateSmallBlip2Network(
+        NeuralNetworkArchitecture<float> architecture)
+    {
+        return new Blip2NeuralNetwork<float>(
+            architecture,
+            imageSize: 28,
+            patchSize: 14,
+            vocabularySize: 64,
+            embeddingDimension: 16,
+            qformerHiddenDim: 32,
+            visionHiddenDim: 32,
+            lmHiddenDim: 32,
+            numQformerLayers: 1,
+            numHeads: 2,
+            numLmDecoderLayers: 1);
     }
 
     #endregion

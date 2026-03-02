@@ -1,3 +1,5 @@
+using AiDotNet.Helpers;
+
 namespace AiDotNet.TransferLearning.FeatureMapping;
 
 /// <summary>
@@ -20,6 +22,7 @@ namespace AiDotNet.TransferLearning.FeatureMapping;
 public class LinearFeatureMapper<T> : IFeatureMapper<T>
 {
     private readonly INumericOperations<T> _numOps;
+    protected static IEngine Engine => AiDotNetEngine.Current;
     private Matrix<T>? _projectionMatrix;
     private Matrix<T>? _reverseProjectionMatrix;
     private T _confidence;
@@ -200,12 +203,12 @@ public class LinearFeatureMapper<T> : IFeatureMapper<T>
             for (int k = 0; k < j; k++)
             {
                 var prevColumn = result.GetColumn(k);
-                T dotProduct = DotProduct(column, prevColumn);
+                T dotProduct = VectorHelper.DotProduct(column, prevColumn);
                 column = SubtractScaled(column, prevColumn, dotProduct);
             }
 
             // Normalize the column
-            T norm = VectorNorm(column);
+            T norm = VectorHelper.L2Norm(column);
             if (_numOps.GreaterThan(norm, _numOps.FromDouble(1e-10)))
             {
                 column = ScaleVector(column, _numOps.Divide(_numOps.One, norm));
@@ -221,43 +224,15 @@ public class LinearFeatureMapper<T> : IFeatureMapper<T>
         return result;
     }
 
-    /// <summary>
-    /// Computes the dot product of two vectors.
-    /// </summary>
-    private T DotProduct(Vector<T> a, Vector<T> b)
-    {
-        T sum = _numOps.Zero;
-        for (int i = 0; i < a.Length; i++)
-        {
-            sum = _numOps.Add(sum, _numOps.Multiply(a[i], b[i]));
-        }
-        return sum;
-    }
 
-    /// <summary>
-    /// Computes the Euclidean norm (length) of a vector.
-    /// </summary>
-    private T VectorNorm(Vector<T> vector)
-    {
-        T sumSquares = _numOps.Zero;
-        for (int i = 0; i < vector.Length; i++)
-        {
-            sumSquares = _numOps.Add(sumSquares, _numOps.Multiply(vector[i], vector[i]));
-        }
-        return _numOps.Sqrt(sumSquares);
-    }
 
     /// <summary>
     /// Subtracts a scaled vector from another vector.
     /// </summary>
     private Vector<T> SubtractScaled(Vector<T> a, Vector<T> b, T scale)
     {
-        var result = new Vector<T>(a.Length);
-        for (int i = 0; i < a.Length; i++)
-        {
-            result[i] = _numOps.Subtract(a[i], _numOps.Multiply(scale, b[i]));
-        }
-        return result;
+        var engine = Engine;
+        return engine.Subtract(a, engine.Multiply(b, scale));
     }
 
     /// <summary>
@@ -265,12 +240,7 @@ public class LinearFeatureMapper<T> : IFeatureMapper<T>
     /// </summary>
     private Vector<T> ScaleVector(Vector<T> vector, T scale)
     {
-        var result = new Vector<T>(vector.Length);
-        for (int i = 0; i < vector.Length; i++)
-        {
-            result[i] = _numOps.Multiply(vector[i], scale);
-        }
-        return result;
+        return Engine.Multiply(vector, scale);
     }
 
     /// <summary>

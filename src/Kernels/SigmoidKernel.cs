@@ -118,7 +118,11 @@ public class SigmoidKernel<T> : IKernelFunction<T>
     public SigmoidKernel(T? alpha = default, T? c = default)
     {
         _numOps = MathHelper.GetNumericOperations<T>();
-        _alpha = alpha ?? _numOps.FromDouble(1.0);
+        // For value types (e.g., double), T? is just T, and default(T) = 0, not null.
+        // The ?? operator never triggers. Use explicit checks for the intended defaults.
+        bool alphaIsDefault = alpha is null || object.Equals(alpha, default(T));
+        _alpha = alphaIsDefault ? _numOps.FromDouble(1.0) : (alpha ?? _numOps.FromDouble(1.0));
+        // c=0.0 is the intended default, so the ?? pattern works correctly here
         _c = c ?? _numOps.FromDouble(0.0);
     }
 

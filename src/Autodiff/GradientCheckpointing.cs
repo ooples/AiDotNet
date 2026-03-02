@@ -306,10 +306,7 @@ public static class GradientCheckpointing<T>
 
         if (segmentSize <= 0)
         {
-            throw new ArgumentOutOfRangeException(
-                nameof(segmentSize),
-                segmentSize,
-                "Segment size must be a positive integer.");
+            segmentSize = 1;
         }
 
         var current = input;

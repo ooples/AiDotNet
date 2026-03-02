@@ -574,12 +574,10 @@ public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputati
 
             // Backprop through sigmoid: gradMask * sigmoid(x) * (1 - sigmoid(x))
             // _lastMask is already sigmoid output, so grad = gradMask * mask * (1 - mask)
-            for (int i = 0; i < gradMask.Length; i++)
-            {
-                T m = _lastMask.Data.Span[i];
-                T oneMinusM = NumOps.Subtract(NumOps.One, m);
-                gradMask.Data.Span[i] = NumOps.Multiply(NumOps.Multiply(gradMask.Data.Span[i], m), oneMinusM);
-            }
+            var onesTensor = Tensor<T>.CreateDefault(_lastMask.Shape, NumOps.One);
+            var oneMinusMask = Engine.TensorSubtract(onesTensor, _lastMask);
+            var sigmoidDeriv = Engine.TensorMultiply(_lastMask, oneMinusMask);
+            gradMask = Engine.TensorMultiply(gradMask, sigmoidDeriv);
         }
 
         // 6. Backprop through offset prediction conv to get offset weight/bias gradients
@@ -595,16 +593,11 @@ public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputati
                 input4D, _maskWeights!, gradMask, _maskWeightGradients!, _maskBiasGradients!);
         }
 
-        // 8. Sum all input gradient contributions
-        var totalInputGrad = new Tensor<T>(input4D.Shape);
-        for (int i = 0; i < totalInputGrad.Length; i++)
+        // 8. Sum all input gradient contributions using Engine tensor ops
+        var totalInputGrad = Engine.TensorAdd(gradInputFromDeform, gradInputFromOffset);
+        if (gradInputFromMask != null)
         {
-            totalInputGrad.Data.Span[i] = gradInputFromDeform.Data.Span[i];
-            totalInputGrad.Data.Span[i] = NumOps.Add(totalInputGrad.Data.Span[i], gradInputFromOffset.Data.Span[i]);
-            if (gradInputFromMask != null)
-            {
-                totalInputGrad.Data.Span[i] = NumOps.Add(totalInputGrad.Data.Span[i], gradInputFromMask.Data.Span[i]);
-            }
+            totalInputGrad = Engine.TensorAdd(totalInputGrad, gradInputFromMask);
         }
 
         // Remove batch dimension if original input didn't have one
@@ -1213,63 +1206,39 @@ public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputati
     /// <inheritdoc/>
     public override void UpdateParameters(T learningRate)
     {
-        // Update main convolution weights
+        // Update main convolution weights using Engine tensor ops
         if (_weightGradients != null)
         {
-            for (int i = 0; i < _weights.Length; i++)
-            {
-                _weights.Data.Span[i] = NumOps.Subtract(_weights.Data.Span[i],
-                    NumOps.Multiply(learningRate, _weightGradients.Data.Span[i]));
-            }
+            _weights = Engine.TensorSubtract(_weights, Engine.TensorMultiplyScalar(_weightGradients, learningRate));
         }
 
         if (_biasGradients != null)
         {
-            for (int i = 0; i < _bias.Length; i++)
-            {
-                _bias.Data.Span[i] = NumOps.Subtract(_bias.Data.Span[i],
-                    NumOps.Multiply(learningRate, _biasGradients.Data.Span[i]));
-            }
+            _bias = Engine.TensorSubtract(_bias, Engine.TensorMultiplyScalar(_biasGradients, learningRate));
         }
 
-        // Update offset prediction network weights
+        // Update offset prediction network weights using Engine tensor ops
         if (_offsetWeightGradients != null)
         {
-            for (int i = 0; i < _offsetWeights.Length; i++)
-            {
-                _offsetWeights.Data.Span[i] = NumOps.Subtract(_offsetWeights.Data.Span[i],
-                    NumOps.Multiply(learningRate, _offsetWeightGradients.Data.Span[i]));
-            }
+            _offsetWeights = Engine.TensorSubtract(_offsetWeights, Engine.TensorMultiplyScalar(_offsetWeightGradients, learningRate));
         }
 
         if (_offsetBiasGradients != null)
         {
-            for (int i = 0; i < _offsetBias.Length; i++)
-            {
-                _offsetBias.Data.Span[i] = NumOps.Subtract(_offsetBias.Data.Span[i],
-                    NumOps.Multiply(learningRate, _offsetBiasGradients.Data.Span[i]));
-            }
+            _offsetBias = Engine.TensorSubtract(_offsetBias, Engine.TensorMultiplyScalar(_offsetBiasGradients, learningRate));
         }
 
-        // Update mask prediction network weights (if using modulation)
+        // Update mask prediction network weights (if using modulation) using Engine tensor ops
         if (_useModulation)
         {
             if (_maskWeightGradients != null && _maskWeights != null)
             {
-                for (int i = 0; i < _maskWeights.Length; i++)
-                {
-                    _maskWeights.Data.Span[i] = NumOps.Subtract(_maskWeights.Data.Span[i],
-                        NumOps.Multiply(learningRate, _maskWeightGradients.Data.Span[i]));
-                }
+                _maskWeights = Engine.TensorSubtract(_maskWeights, Engine.TensorMultiplyScalar(_maskWeightGradients, learningRate));
             }
 
             if (_maskBiasGradients != null && _maskBias != null)
             {
-                for (int i = 0; i < _maskBias.Length; i++)
-                {
-                    _maskBias.Data.Span[i] = NumOps.Subtract(_maskBias.Data.Span[i],
-                        NumOps.Multiply(learningRate, _maskBiasGradients.Data.Span[i]));
-                }
+                _maskBias = Engine.TensorSubtract(_maskBias, Engine.TensorMultiplyScalar(_maskBiasGradients, learningRate));
             }
         }
 

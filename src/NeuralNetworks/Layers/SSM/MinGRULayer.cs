@@ -474,7 +474,7 @@ public class MinGRULayer<T> : LayerBase<T>
     private Tensor<T> CreateOnesLike(Tensor<T> template)
     {
         var ones = new Tensor<T>(template.Shape);
-        for (int i = 0; i < ones.Length; i++) ones[i] = NumOps.One;
+        ones.Fill(NumOps.One);
         return ones;
     }
 

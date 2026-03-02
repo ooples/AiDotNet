@@ -142,53 +142,51 @@ public class FILM<T> : FrameInterpolationBase<T>
         _flowEstimator = [];
         _fusionLayers = [];
 
-        // Multi-scale feature extractor (shared for both frames)
-        _featureExtractor.Add(new ConvolutionalLayer<T>(_channels, _height, _width, _numFeatures, 3, 1, 1));
-        _featureExtractor.Add(new ConvolutionalLayer<T>(_numFeatures, _height, _width, _numFeatures, 3, 1, 1));
-        _featureExtractor.Add(new ConvolutionalLayer<T>(_numFeatures, _height, _width, _numFeatures * 2, 3, 2, 1));
-
-        // Pyramid layers for each scale
-        int currentH = _height / 2;
-        int currentW = _width / 2;
-        int currentC = _numFeatures * 2;
-
-        for (int s = 0; s < _numScales - 1; s++)
+        // Check for user-provided custom layers
+        if (Architecture.Layers != null && Architecture.Layers.Count > 0)
         {
-            _pyramidLayers.Add(new ConvolutionalLayer<T>(currentC, currentH, currentW, currentC * 2, 3, 2, 1));
-            currentH /= 2;
-            currentW /= 2;
-            currentC = Math.Min(currentC * 2, 512);
-            if (currentH < 4 || currentW < 4) break;
+            Layers.AddRange(Architecture.Layers);
+        }
+        else
+        {
+            var layers = LayerHelper<T>.CreateFILMLayers(
+                channels: _channels, height: _height, width: _width,
+                numScales: _numScales, numFeatures: _numFeatures).ToList();
+            Layers.AddRange(layers);
         }
 
-        // Bi-directional flow estimator
-        int flowInputC = _numFeatures * 2 * 2; // Concatenated features from both frames
-        _flowEstimator.Add(new ConvolutionalLayer<T>(flowInputC, _height / 2, _width / 2, _numFeatures * 2, 3, 1, 1));
-        _flowEstimator.Add(new ConvolutionalLayer<T>(_numFeatures * 2, _height / 2, _width / 2, _numFeatures, 3, 1, 1));
-        _flowEstimator.Add(new ConvolutionalLayer<T>(_numFeatures, _height / 2, _width / 2, 4, 3, 1, 1)); // 4 = 2 flows x 2 coords
+        // Compute pyramid count to distribute layers correctly
+        int pyramidCount = 0;
+        {
+            int cH = _height / 2, cW = _width / 2, cC = _numFeatures * 2;
+            for (int s = 0; s < _numScales - 1; s++)
+            {
+                if (cH < 4 || cW < 4) break;
+                pyramidCount++;
+                cH /= 2; cW /= 2; cC = Math.Min(cC * 2, 512);
+            }
+        }
 
+        // Distribute layers to sub-lists for forward pass
+        int idx = 0;
+        // Feature extractor (3 layers)
+        for (int i = 0; i < 3; i++)
+            _featureExtractor.Add((ConvolutionalLayer<T>)Layers[idx++]);
+        // Pyramid layers (variable)
+        for (int i = 0; i < pyramidCount; i++)
+            _pyramidLayers.Add((ConvolutionalLayer<T>)Layers[idx++]);
+        // Flow estimator (3 layers)
+        for (int i = 0; i < 3; i++)
+            _flowEstimator.Add((ConvolutionalLayer<T>)Layers[idx++]);
         // Flow refinement
-        _flowRefinement = new ConvolutionalLayer<T>(4 + _numFeatures, _height / 2, _width / 2, 4, 3, 1, 1);
-
+        _flowRefinement = (ConvolutionalLayer<T>)Layers[idx++];
         // Occlusion estimator
-        _occlusionEstimator = new ConvolutionalLayer<T>(flowInputC + 4, _height / 2, _width / 2, 2, 3, 1, 1);
-
-        // Feature fusion for synthesis
-        int fusionInputC = _numFeatures * 2 * 2 + 4 + 2; // Features + flow + occlusion
-        _fusionLayers.Add(new ConvolutionalLayer<T>(fusionInputC, _height / 2, _width / 2, _numFeatures * 2, 3, 1, 1));
-        _fusionLayers.Add(new ConvolutionalLayer<T>(_numFeatures * 2, _height / 2, _width / 2, _numFeatures, 3, 1, 1));
-
+        _occlusionEstimator = (ConvolutionalLayer<T>)Layers[idx++];
+        // Fusion layers (2 layers)
+        for (int i = 0; i < 2; i++)
+            _fusionLayers.Add((ConvolutionalLayer<T>)Layers[idx++]);
         // Synthesis head
-        _synthesisHead = new ConvolutionalLayer<T>(_numFeatures, _height, _width, _channels, 3, 1, 1);
-
-        // Register layers
-        foreach (var layer in _featureExtractor) Layers.Add(layer);
-        foreach (var layer in _pyramidLayers) Layers.Add(layer);
-        foreach (var layer in _flowEstimator) Layers.Add(layer);
-        Layers.Add(_flowRefinement);
-        Layers.Add(_occlusionEstimator);
-        foreach (var layer in _fusionLayers) Layers.Add(layer);
-        Layers.Add(_synthesisHead);
+        _synthesisHead = (ConvolutionalLayer<T>)Layers[idx++];
     }
 
     #endregion
@@ -355,8 +353,7 @@ public class FILM<T> : FrameInterpolationBase<T>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         var predicted = Predict(input);
-        var lossGradient = predicted.Transform((v, idx) =>
-            NumOps.Subtract(v, expectedOutput.Data.Span[idx]));
+        var lossGradient = Engine.TensorSubtract(predicted, expectedOutput);
 
         BackwardPass(lossGradient);
 
@@ -427,7 +424,7 @@ public class FILM<T> : FrameInterpolationBase<T>
 
     private Tensor<T> ScaleFlow(Tensor<T> flow, double scale)
     {
-        return flow.Transform((v, _) => NumOps.FromDouble(Convert.ToDouble(v) * scale));
+        return Engine.TensorMultiplyScalar(flow, NumOps.FromDouble(scale));
     }
 
     private (Tensor<T> occ1, Tensor<T> occ2) EstimateOcclusion(
@@ -568,28 +565,7 @@ public class FILM<T> : FrameInterpolationBase<T>
 
     private Tensor<T> ConcatenateChannels(Tensor<T> a, Tensor<T> b)
     {
-        int batchSize = a.Shape[0];
-        int channelsA = a.Shape[1];
-        int channelsB = b.Shape[1];
-        int height = a.Shape[2];
-        int width = a.Shape[3];
-
-        var output = new Tensor<T>([batchSize, channelsA + channelsB, height, width]);
-
-        for (int batch = 0; batch < batchSize; batch++)
-        {
-            for (int c = 0; c < channelsA; c++)
-                for (int h = 0; h < height; h++)
-                    for (int w = 0; w < width; w++)
-                        output[batch, c, h, w] = a[batch, c, h, w];
-
-            for (int c = 0; c < channelsB; c++)
-                for (int h = 0; h < height; h++)
-                    for (int w = 0; w < width; w++)
-                        output[batch, channelsA + c, h, w] = b[batch, c, h, w];
-        }
-
-        return output;
+        return Engine.TensorConcatenate([a, b], axis: 1);
     }
 
     private Tensor<T> Upsample2x(Tensor<T> input)
@@ -627,11 +603,7 @@ public class FILM<T> : FrameInterpolationBase<T>
 
     private Tensor<T> ApplySigmoid(Tensor<T> input)
     {
-        return input.Transform((v, _) =>
-        {
-            double x = Convert.ToDouble(v);
-            return NumOps.FromDouble(1.0 / (1.0 + Math.Exp(-x)));
-        });
+        return Engine.Sigmoid(input);
     }
 
     private Tensor<T> AddBatchDimension(Tensor<T> tensor)
@@ -1198,7 +1170,7 @@ public class FILM<T> : FrameInterpolationBase<T>
 
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
-        return a.Transform((v, idx) => NumOps.Add(v, b.Data.Span[idx]));
+        return Engine.TensorAdd(a, b);
     }
 
     private void BackwardThroughFeatureExtractor(Tensor<T> gradient, List<Tensor<T>> activationCache)

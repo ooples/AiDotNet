@@ -413,46 +413,20 @@ public class GNNMetaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
         switch (_gnnOptions.SimilarityMetric)
         {
             case TaskSimilarityMetric.ParameterDistance:
-                return ComputeCosineSimilarity(embedding1, embedding2);
+                return NumOps.FromDouble(VectorHelper.CosineSimilarity(embedding1, embedding2));
 
             case TaskSimilarityMetric.GradientSimilarity:
-                return ComputeCosineSimilarity(embedding1, embedding2);
+                return NumOps.FromDouble(VectorHelper.CosineSimilarity(embedding1, embedding2));
 
             case TaskSimilarityMetric.DataDistribution:
-                return ComputeCosineSimilarity(embedding1, embedding2);
+                return NumOps.FromDouble(VectorHelper.CosineSimilarity(embedding1, embedding2));
 
             case TaskSimilarityMetric.Learned:
                 return ComputeLearnedSimilarity(embedding1, embedding2);
 
             default:
-                return ComputeCosineSimilarity(embedding1, embedding2);
+                return NumOps.FromDouble(VectorHelper.CosineSimilarity(embedding1, embedding2));
         }
-    }
-
-    /// <summary>
-    /// Computes cosine similarity between two vectors.
-    /// </summary>
-    private T ComputeCosineSimilarity(Vector<T> a, Vector<T> b)
-    {
-        T dotProduct = NumOps.Zero;
-        T normA = NumOps.Zero;
-        T normB = NumOps.Zero;
-
-        int minLen = Math.Min(a.Length, b.Length);
-        for (int i = 0; i < minLen; i++)
-        {
-            dotProduct = NumOps.Add(dotProduct, NumOps.Multiply(a[i], b[i]));
-            normA = NumOps.Add(normA, NumOps.Multiply(a[i], a[i]));
-            normB = NumOps.Add(normB, NumOps.Multiply(b[i], b[i]));
-        }
-
-        double normAVal = Math.Sqrt(Math.Max(NumOps.ToDouble(normA), 1e-8));
-        double normBVal = Math.Sqrt(Math.Max(NumOps.ToDouble(normB), 1e-8));
-        double similarity = NumOps.ToDouble(dotProduct) / (normAVal * normBVal);
-
-        // Convert to 0-1 range
-        similarity = (similarity + 1.0) / 2.0;
-        return NumOps.FromDouble(similarity);
     }
 
     /// <summary>
@@ -706,7 +680,7 @@ public class GNNMetaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
         T totalScore = NumOps.Zero;
         for (int i = 0; i < embeddings.Count; i++)
         {
-            T score = ComputeCosineSimilarity(query, embeddings[i]);
+            T score = NumOps.FromDouble(VectorHelper.CosineSimilarity(query, embeddings[i]));
             attentionWeights[i] = score;
             totalScore = NumOps.Add(totalScore, score);
         }
@@ -786,7 +760,7 @@ public class GNNMetaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
 
         foreach (var cachedEmbedding in _currentNodeEmbeddings)
         {
-            T similarity = ComputeCosineSimilarity(taskEmbedding, cachedEmbedding);
+            T similarity = NumOps.FromDouble(VectorHelper.CosineSimilarity(taskEmbedding, cachedEmbedding));
             double simVal = NumOps.ToDouble(similarity);
 
             if (simVal > bestSimilarity)

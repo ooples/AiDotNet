@@ -1,4 +1,5 @@
 using AiDotNet.Autodiff;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.Regression;
 
@@ -236,23 +237,13 @@ public class LocallyWeightedRegression<T> : NonLinearRegressionBase<T>
 
         for (int i = 0; i < _xTrain.Rows; i++)
         {
-            var distance = EuclideanDistance(input, _xTrain.GetRow(i));
+            var distance = VectorHelper.EuclideanDistance(input, _xTrain.GetRow(i));
             weights[i] = KernelFunction(NumOps.Divide(distance, bandwidth));
         }
 
         return weights;
     }
 
-    /// <summary>
-    /// Calculates the Euclidean distance between two feature vectors.
-    /// </summary>
-    /// <param name="v1">The first feature vector.</param>
-    /// <param name="v2">The second feature vector.</param>
-    /// <returns>The Euclidean distance between the two vectors.</returns>
-    private T EuclideanDistance(Vector<T> v1, Vector<T> v2)
-    {
-        return NumOps.Sqrt(v1.Subtract(v2).PointwiseMultiply(v1.Subtract(v2)).Sum());
-    }
 
     /// <summary>
     /// Applies a kernel function to transform distances into weights.

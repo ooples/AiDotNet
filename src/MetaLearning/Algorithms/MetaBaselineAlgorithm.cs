@@ -69,18 +69,7 @@ public class MetaBaselineAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     private Vector<T>? NormalizeVector(Vector<T>? features)
     {
         if (features == null || features.Length == 0) return features;
-        double normSq = 0;
-        for (int i = 0; i < features.Length; i++)
-        {
-            double v = NumOps.ToDouble(features[i]);
-            normSq += v * v;
-        }
-        double norm = Math.Sqrt(normSq);
-        if (norm < 1e-10) return features;
-        var normalized = new Vector<T>(features.Length);
-        for (int i = 0; i < features.Length; i++)
-            normalized[i] = NumOps.Divide(features[i], NumOps.FromDouble(norm));
-        return normalized;
+        return VectorHelper.Normalize(features);
     }
 
     /// <inheritdoc/>

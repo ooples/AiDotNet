@@ -111,14 +111,12 @@ public class StandardGaussianProcess<T> : IGaussianProcess<T>
         _y = y;
         _K = CalculateKernelMatrix(X, X);
 
-        // Add small jitter term to diagonal for numerical stability
+        // Add jitter term to diagonal for numerical stability.
         // This prevents the kernel matrix from being singular or nearly singular
-        // when data points are close together, which would cause Cholesky decomposition to fail
-        var jitter = _numOps.FromDouble(1e-6);
-        for (int i = 0; i < _K.Rows; i++)
-        {
-            _K[i, i] = _numOps.Add(_K[i, i], jitter);
-        }
+        // when data points are close together, which would cause Cholesky decomposition to fail.
+        // Exponential-family kernels (Exponential, Laplacian, Matern) can produce
+        // ill-conditioned matrices that require larger jitter than RBF kernels.
+        AddJitter(_K);
     }
 
     /// <summary>
@@ -151,15 +149,45 @@ public class StandardGaussianProcess<T> : IGaussianProcess<T>
     {
         var k = CalculateKernelVector(_X, x);
 
-        // Solve _K * alpha = _y
-        var alpha = MatrixSolutionHelper.SolveLinearSystem(_K, _y, _decompositionType);
+        // Solve _K * alpha = _y, falling back to SVD if the primary solver produces NaN.
+        // Kernels like Exponential and Laplacian produce ill-conditioned matrices where
+        // Cholesky succeeds but forward/backward substitution amplifies numerical errors.
+        var alpha = SolveWithFallback(_K, _y);
         var mean = k.DotProduct(alpha);
 
         // Solve _K * v = k
-        var v = MatrixSolutionHelper.SolveLinearSystem(_K, k, _decompositionType);
+        var v = SolveWithFallback(_K, k);
         var variance = _numOps.Subtract(_kernel.Calculate(x, x), k.DotProduct(v));
 
         return (mean, variance);
+    }
+
+    /// <summary>
+    /// Solves a linear system using the configured decomposition type, falling back to SVD if the result contains NaN.
+    /// </summary>
+    private Vector<T> SolveWithFallback(Matrix<T> A, Vector<T> b)
+    {
+        var result = MatrixSolutionHelper.SolveLinearSystem(A, b, _decompositionType);
+
+        // Check if the result contains NaN (indicates ill-conditioned matrix for the chosen solver)
+        bool hasNaN = false;
+        for (int i = 0; i < result.Length; i++)
+        {
+            double val = _numOps.ToDouble(result[i]);
+            if (double.IsNaN(val) || double.IsInfinity(val))
+            {
+                hasNaN = true;
+                break;
+            }
+        }
+
+        if (hasNaN && _decompositionType != MatrixDecompositionType.Svd)
+        {
+            // SVD is the most numerically stable solver
+            result = MatrixSolutionHelper.SolveLinearSystem(A, b, MatrixDecompositionType.Svd);
+        }
+
+        return result;
     }
 
     /// <summary>
@@ -248,6 +276,69 @@ public class StandardGaussianProcess<T> : IGaussianProcess<T>
     /// between data points through these similarity measures.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Adds adaptive jitter to the diagonal of a kernel matrix for numerical stability.
+    /// Tries Cholesky decomposition with increasing jitter until it succeeds with
+    /// a well-conditioned factor (checking L diagonal ratio, not just decomposition success).
+    /// </summary>
+    private void AddJitter(Matrix<T> K)
+    {
+        double jitterValue = 1e-6;
+        const double maxJitter = 1e-1;
+
+        while (jitterValue <= maxJitter)
+        {
+            var jitter = _numOps.FromDouble(jitterValue);
+            for (int i = 0; i < K.Rows; i++)
+                K[i, i] = _numOps.Add(K[i, i], jitter);
+
+            try
+            {
+                var chol = new CholeskyDecomposition<T>(K);
+
+                // Verify the Cholesky factor is well-conditioned.
+                // If the ratio of max to min diagonal of L is too large,
+                // forward/backward substitution will amplify errors to NaN.
+                // This catches kernels like Exponential/Laplacian that produce
+                // technically positive-definite but ill-conditioned matrices.
+                double minDiag = double.MaxValue;
+                double maxDiag = 0;
+                bool hasNaN = false;
+                for (int i = 0; i < chol.L.Rows; i++)
+                {
+                    double d = _numOps.ToDouble(chol.L[i, i]);
+                    if (double.IsNaN(d) || double.IsInfinity(d) || d <= 0)
+                    {
+                        hasNaN = true;
+                        break;
+                    }
+                    minDiag = Math.Min(minDiag, d);
+                    maxDiag = Math.Max(maxDiag, d);
+                }
+
+                if (!hasNaN && minDiag > 0 && maxDiag / minDiag < 1e8)
+                    return; // Well-conditioned decomposition
+
+                // Ill-conditioned - remove jitter and try larger value
+                for (int i = 0; i < K.Rows; i++)
+                    K[i, i] = _numOps.Subtract(K[i, i], jitter);
+                jitterValue *= 10;
+            }
+            catch (ArgumentException)
+            {
+                // Cholesky failed - remove jitter and try larger value
+                for (int i = 0; i < K.Rows; i++)
+                    K[i, i] = _numOps.Subtract(K[i, i], jitter);
+                jitterValue *= 10;
+            }
+        }
+
+        // Fallback: add max jitter
+        var maxJitterT = _numOps.FromDouble(maxJitter);
+        for (int i = 0; i < K.Rows; i++)
+            K[i, i] = _numOps.Add(K[i, i], maxJitterT);
+    }
+
     private Vector<T> CalculateKernelVector(Matrix<T> X, Vector<T> x)
     {
         var k = new Vector<T>(X.Rows);

@@ -1,4 +1,5 @@
 
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
@@ -165,7 +166,7 @@ public class MaximalMarginalRelevanceReranker<T> : RerankerBase<T>
                 var maxSimilarity = NumOps.Zero;
                 foreach (var j in selected)
                 {
-                    var similarity = NumOps.FromDouble(CalculateCosineSimilarity(embeddings[i], embeddings[j]));
+                    var similarity = NumOps.FromDouble(VectorHelper.CosineSimilarity(embeddings[i], embeddings[j]));
                     if (NumOps.GreaterThan(similarity, maxSimilarity))
                         maxSimilarity = similarity;
                 }
@@ -213,18 +214,4 @@ public class MaximalMarginalRelevanceReranker<T> : RerankerBase<T>
         return reranked;
     }
 
-    /// <summary>
-    /// Calculates cosine similarity between two vectors.
-    /// </summary>
-    private double CalculateCosineSimilarity(Vector<T> a, Vector<T> b)
-    {
-        if (a == null || b == null)
-            throw new ArgumentNullException("Vectors cannot be null");
-
-        if (a.Length != b.Length)
-            throw new ArgumentException("Vectors must have the same length");
-
-        var similarityT = StatisticsHelper<T>.CosineSimilarity(a, b);
-        return Convert.ToDouble(similarityT);
-    }
 }

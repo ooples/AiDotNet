@@ -167,11 +167,18 @@ public class GeneticAlgorithmOptimizer<T, TInput, TOutput> : OptimizerBase<T, TI
         var bestIndividual = _geneticAlgorithm.GetBestIndividual();
         var model = _geneticAlgorithm.IndividualToModel(bestIndividual);
 
-        var bestStepData = new OptimizationStepData<T, TInput, TOutput>
+        // Evaluate the best model through the standard pipeline to populate
+        // SelectedFeatures, evaluation data, and data subsets
+        var bestStepData = EvaluateSolution(model, inputData);
+        bestStepData.FitnessScore = bestIndividual.GetFitness();
+
+        // Transfer fitness history and iteration count from the genetic algorithm
+        FitnessList.Clear();
+        FitnessList.AddRange(evolutionStats.FitnessHistory);
+        for (int i = 0; i < evolutionStats.Generation; i++)
         {
-            Solution = model,
-            FitnessScore = bestIndividual.GetFitness(),
-        };
+            UpdateIterationHistoryAndCheckEarlyStopping(i, bestStepData);
+        }
 
         return CreateOptimizationResult(bestStepData, inputData);
     }

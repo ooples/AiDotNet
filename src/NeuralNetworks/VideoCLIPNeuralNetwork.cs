@@ -1,4 +1,5 @@
 using System.IO;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
@@ -264,49 +265,42 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
     {
         int numPatches = (_imageSize / _patchSize) * (_imageSize / _patchSize);
 
-        // Vision frame encoder (shared across frames)
-        _patchEmbedding = new PatchEmbeddingLayer<T>(
-            _imageSize, _imageSize, channels, _patchSize, _visionHiddenDim);
+        if (Architecture.Layers != null && Architecture.Layers.Count > 0)
+        {
+            Layers.AddRange(Architecture.Layers);
+        }
+        else
+        {
+            Layers.AddRange(LayerHelper<T>.CreateVideoCLIPLayers(
+                _imageSize, channels, _patchSize, _visionHiddenDim, _textHiddenDim,
+                _embeddingDimension, _numFrameEncoderLayers, _numTemporalLayers,
+                _numTextLayers, _numHeads, _vocabularySize, _maxSequenceLength));
+        }
 
+        // Distribute layers to internal sub-lists
+        int idx = 0;
+        _patchEmbedding = Layers[idx++];
+
+        for (int i = 0; i < _numFrameEncoderLayers; i++)
+            _frameEncoderLayers.Add(Layers[idx++]);
+
+        for (int i = 0; i < _numTemporalLayers; i++)
+            _temporalEncoderLayers.Add(Layers[idx++]);
+
+        _videoProjection = Layers[idx++];
+        _textTokenEmbedding = Layers[idx++];
+
+        for (int i = 0; i < _numTextLayers; i++)
+            _textEncoderLayers.Add(Layers[idx++]);
+
+        _textProjection = Layers[idx++];
+        _captionHead = Layers[idx++];
+
+        // Initialize positional embeddings
         _visionClsToken = Matrix<T>.CreateDefault(1, _visionHiddenDim, NumOps.Zero);
         _visionPositionalEmbeddings = Matrix<T>.CreateDefault(numPatches + 1, _visionHiddenDim, NumOps.Zero);
-
-        int visionFfnDim = _visionHiddenDim * 4;
-        for (int i = 0; i < _numFrameEncoderLayers; i++)
-        {
-            _frameEncoderLayers.Add(new TransformerEncoderLayer<T>(
-                _visionHiddenDim, _numHeads, visionFfnDim));
-        }
-
-        // Temporal encoder (processes frame features over time)
         _temporalPositionalEmbeddings = Matrix<T>.CreateDefault(_numFrames, _visionHiddenDim, NumOps.Zero);
-
-        int temporalFfnDim = _visionHiddenDim * 4;
-        for (int i = 0; i < _numTemporalLayers; i++)
-        {
-            _temporalEncoderLayers.Add(new TransformerEncoderLayer<T>(
-                _visionHiddenDim, _numHeads, temporalFfnDim));
-        }
-
-        // Video projection to embedding space
-        _videoProjection = new DenseLayer<T>(_visionHiddenDim, _embeddingDimension, (IActivationFunction<T>?)null);
-
-        // Text encoder
-        _textTokenEmbedding = new EmbeddingLayer<T>(_vocabularySize, _textHiddenDim);
         _textPositionalEmbeddings = Matrix<T>.CreateDefault(_maxSequenceLength, _textHiddenDim, NumOps.Zero);
-
-        int textFfnDim = _textHiddenDim * 4;
-        for (int i = 0; i < _numTextLayers; i++)
-        {
-            _textEncoderLayers.Add(new TransformerEncoderLayer<T>(
-                _textHiddenDim, _numHeads, textFfnDim));
-        }
-
-        // Text projection to embedding space
-        _textProjection = new DenseLayer<T>(_textHiddenDim, _embeddingDimension, (IActivationFunction<T>?)null);
-
-        // Caption generation head
-        _captionHead = new DenseLayer<T>(_embeddingDimension, _vocabularySize, (IActivationFunction<T>?)null);
 
         InitializeWeights();
     }
@@ -1386,23 +1380,7 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
 
     private Vector<T> Normalize(Vector<T> vector)
     {
-        T sumSquares = NumOps.Zero;
-        for (int i = 0; i < vector.Length; i++)
-        {
-            sumSquares = NumOps.Add(sumSquares, NumOps.Multiply(vector[i], vector[i]));
-        }
-
-        T norm = NumOps.Sqrt(sumSquares);
-        if (NumOps.ToDouble(norm) < 1e-12)
-            return vector;
-
-        var result = new Vector<T>(vector.Length);
-        for (int i = 0; i < vector.Length; i++)
-        {
-            result[i] = NumOps.Divide(vector[i], norm);
-        }
-
-        return result;
+        return VectorHelper.Normalize(vector);
     }
 
     private List<T> Softmax(List<T> values)

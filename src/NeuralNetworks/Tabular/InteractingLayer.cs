@@ -1,5 +1,4 @@
-using AiDotNet.ActivationFunctions;
-using AiDotNet.Helpers;
+using AiDotNet.Autodiff;
 using AiDotNet.NeuralNetworks.Layers;
 
 namespace AiDotNet.NeuralNetworks.Tabular;
@@ -24,11 +23,8 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public class InteractingLayer<T>
+public class InteractingLayer<T> : LayerBase<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
-    private readonly Random _random;
-
     private readonly int _embeddingDim;
     private readonly int _numHeads;
     private readonly int _headDim;
@@ -62,10 +58,14 @@ public class InteractingLayer<T>
     private Tensor<T>? _attendedCache;
     private Tensor<T>? _preActivationCache;
 
-    /// <summary>
-    /// Gets the total parameter count.
-    /// </summary>
-    public int ParameterCount =>
+    /// <inheritdoc/>
+    public override bool SupportsTraining => true;
+
+    /// <inheritdoc/>
+    public override bool SupportsJitCompilation => false;
+
+    /// <inheritdoc/>
+    public override int ParameterCount =>
         _queryWeights.Length + _keyWeights.Length + _valueWeights.Length +
         _outputWeights.Length + (_residualWeights?.Length ?? 0);
 
@@ -83,13 +83,13 @@ public class InteractingLayer<T>
         int? attentionDim = null,
         bool useResidual = true,
         double initScale = 0.02)
+        : base([embeddingDim], [embeddingDim])
     {
         _embeddingDim = embeddingDim;
         _numHeads = numHeads;
         _attentionDim = attentionDim ?? embeddingDim;
         _headDim = _attentionDim / numHeads;
         _useResidual = useResidual;
-        _random = RandomHelper.CreateSecureRandom();
 
         // Initialize attention weights
         _queryWeights = new Tensor<T>([embeddingDim, _attentionDim]);
@@ -121,29 +121,29 @@ public class InteractingLayer<T>
 
         for (int i = 0; i < _queryWeights.Length; i++)
         {
-            _queryWeights[i] = NumOps.FromDouble(_random.NextGaussian() * queryKeyScale);
+            _queryWeights[i] = NumOps.FromDouble(Random.NextGaussian() * queryKeyScale);
         }
 
         for (int i = 0; i < _keyWeights.Length; i++)
         {
-            _keyWeights[i] = NumOps.FromDouble(_random.NextGaussian() * queryKeyScale);
+            _keyWeights[i] = NumOps.FromDouble(Random.NextGaussian() * queryKeyScale);
         }
 
         for (int i = 0; i < _valueWeights.Length; i++)
         {
-            _valueWeights[i] = NumOps.FromDouble(_random.NextGaussian() * queryKeyScale);
+            _valueWeights[i] = NumOps.FromDouble(Random.NextGaussian() * queryKeyScale);
         }
 
         for (int i = 0; i < _outputWeights.Length; i++)
         {
-            _outputWeights[i] = NumOps.FromDouble(_random.NextGaussian() * outputScale);
+            _outputWeights[i] = NumOps.FromDouble(Random.NextGaussian() * outputScale);
         }
 
         if (_residualWeights != null)
         {
             for (int i = 0; i < _residualWeights.Length; i++)
             {
-                _residualWeights[i] = NumOps.FromDouble(_random.NextGaussian() * scale);
+                _residualWeights[i] = NumOps.FromDouble(Random.NextGaussian() * scale);
             }
         }
     }
@@ -153,7 +153,7 @@ public class InteractingLayer<T>
     /// </summary>
     /// <param name="input">Input embeddings [batchSize, numFeatures, embeddingDim].</param>
     /// <returns>Feature interactions [batchSize, numFeatures, embeddingDim].</returns>
-    public Tensor<T> Forward(Tensor<T> input)
+    public override Tensor<T> Forward(Tensor<T> input)
     {
         _inputCache = input;
 
@@ -161,7 +161,7 @@ public class InteractingLayer<T>
         int numFeatures = input.Shape[1];
         int embDim = input.Shape[2];
 
-        // Project to queries, keys, values
+        // Project to queries, keys, values using Engine.TensorMatMul
         var queries = ProjectInput(input, _queryWeights, batchSize, numFeatures, embDim, _attentionDim);
         var keys = ProjectInput(input, _keyWeights, batchSize, numFeatures, embDim, _attentionDim);
         var values = ProjectInput(input, _valueWeights, batchSize, numFeatures, embDim, _attentionDim);
@@ -170,11 +170,11 @@ public class InteractingLayer<T>
         _keysCache = keys;
         _valuesCache = values;
 
-        // Multi-head self-attention
+        // Multi-head self-attention using Engine ops
         var attended = MultiHeadAttention(queries, keys, values, batchSize, numFeatures);
         _attendedCache = attended;
 
-        // Output projection
+        // Output projection using Engine.TensorMatMul
         var output = ProjectOutput(attended, batchSize, numFeatures);
 
         // Residual connection
@@ -185,8 +185,8 @@ public class InteractingLayer<T>
 
         _preActivationCache = output;
 
-        // Apply ReLU activation
-        output = ApplyReLU(output);
+        // Apply ReLU activation using Engine
+        output = Engine.ReLU(output);
 
         return output;
     }
@@ -194,27 +194,12 @@ public class InteractingLayer<T>
     private Tensor<T> ProjectInput(Tensor<T> input, Tensor<T> weights,
         int batchSize, int numFeatures, int inputDim, int outputDim)
     {
-        var projected = new Tensor<T>([batchSize, numFeatures, outputDim]);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int f = 0; f < numFeatures; f++)
-            {
-                for (int o = 0; o < outputDim; o++)
-                {
-                    var sum = NumOps.Zero;
-                    for (int i = 0; i < inputDim; i++)
-                    {
-                        sum = NumOps.Add(sum, NumOps.Multiply(
-                            input[b * numFeatures * inputDim + f * inputDim + i],
-                            weights[i * outputDim + o]));
-                    }
-                    projected[b * numFeatures * outputDim + f * outputDim + o] = sum;
-                }
-            }
-        }
-
-        return projected;
+        // Reshape [batchSize, numFeatures, inputDim] -> [batchSize * numFeatures, inputDim]
+        var flat = input.Reshape(batchSize * numFeatures, inputDim);
+        // MatMul: [batchSize * numFeatures, inputDim] x [inputDim, outputDim] -> [batchSize * numFeatures, outputDim]
+        var projected = Engine.TensorMatMul(flat, weights);
+        // Reshape back to [batchSize, numFeatures, outputDim]
+        return projected.Reshape(batchSize, numFeatures, outputDim);
     }
 
     private Tensor<T> MultiHeadAttention(Tensor<T> queries, Tensor<T> keys, Tensor<T> values,
@@ -226,62 +211,34 @@ public class InteractingLayer<T>
 
         for (int b = 0; b < batchSize; b++)
         {
-            // Compute attention scores [numFeatures, numFeatures]
-            var scores = new T[numFeatures, numFeatures];
+            // Extract batch slices [numFeatures, attentionDim]
+            var qSlice = ExtractBatchSlice(queries, b, numFeatures, _attentionDim);
+            var kSlice = ExtractBatchSlice(keys, b, numFeatures, _attentionDim);
+            var vSlice = ExtractBatchSlice(values, b, numFeatures, _attentionDim);
 
-            for (int i = 0; i < numFeatures; i++)
+            // Q * K^T -> [numFeatures, numFeatures]
+            var kT = kSlice.Transpose(new[] { 1, 0 });
+            var scores = Engine.TensorMatMul(qSlice, kT);
+            scores = Engine.TensorMultiplyScalar(scores, scale);
+
+            // Softmax over features
+            scores = Engine.Softmax(scores);
+
+            // Store attention scores
+            int scoreOffset = b * numFeatures * numFeatures;
+            for (int i = 0; i < numFeatures * numFeatures; i++)
             {
-                for (int j = 0; j < numFeatures; j++)
-                {
-                    var dot = NumOps.Zero;
-                    for (int d = 0; d < _attentionDim; d++)
-                    {
-                        dot = NumOps.Add(dot, NumOps.Multiply(
-                            queries[b * numFeatures * _attentionDim + i * _attentionDim + d],
-                            keys[b * numFeatures * _attentionDim + j * _attentionDim + d]));
-                    }
-                    scores[i, j] = NumOps.Multiply(dot, scale);
-                }
+                attentionScores[scoreOffset + i] = scores[i];
             }
 
-            // Softmax over features (column dimension)
-            for (int i = 0; i < numFeatures; i++)
+            // Apply attention: scores * V -> [numFeatures, attentionDim]
+            var attended = Engine.TensorMatMul(scores, vSlice);
+
+            // Store into output
+            int outOffset = b * numFeatures * _attentionDim;
+            for (int i = 0; i < numFeatures * _attentionDim; i++)
             {
-                var maxScore = scores[i, 0];
-                for (int j = 1; j < numFeatures; j++)
-                {
-                    if (NumOps.Compare(scores[i, j], maxScore) > 0)
-                        maxScore = scores[i, j];
-                }
-
-                var sumExp = NumOps.Zero;
-                for (int j = 0; j < numFeatures; j++)
-                {
-                    scores[i, j] = NumOps.Exp(NumOps.Subtract(scores[i, j], maxScore));
-                    sumExp = NumOps.Add(sumExp, scores[i, j]);
-                }
-
-                for (int j = 0; j < numFeatures; j++)
-                {
-                    scores[i, j] = NumOps.Divide(scores[i, j], sumExp);
-                    attentionScores[b * numFeatures * numFeatures + i * numFeatures + j] = scores[i, j];
-                }
-            }
-
-            // Apply attention to values
-            for (int i = 0; i < numFeatures; i++)
-            {
-                for (int d = 0; d < _attentionDim; d++)
-                {
-                    var sum = NumOps.Zero;
-                    for (int j = 0; j < numFeatures; j++)
-                    {
-                        sum = NumOps.Add(sum, NumOps.Multiply(
-                            scores[i, j],
-                            values[b * numFeatures * _attentionDim + j * _attentionDim + d]));
-                    }
-                    output[b * numFeatures * _attentionDim + i * _attentionDim + d] = sum;
-                }
+                output[outOffset + i] = attended[i];
             }
         }
 
@@ -289,81 +246,41 @@ public class InteractingLayer<T>
         return output;
     }
 
+    private Tensor<T> ExtractBatchSlice(Tensor<T> tensor, int batchIdx, int rows, int cols)
+    {
+        var slice = new Tensor<T>([rows, cols]);
+        int offset = batchIdx * rows * cols;
+        for (int i = 0; i < rows * cols; i++)
+        {
+            slice[i] = tensor[offset + i];
+        }
+        return slice;
+    }
+
     private Tensor<T> ProjectOutput(Tensor<T> attended, int batchSize, int numFeatures)
     {
-        var projected = new Tensor<T>([batchSize, numFeatures, _embeddingDim]);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int f = 0; f < numFeatures; f++)
-            {
-                for (int o = 0; o < _embeddingDim; o++)
-                {
-                    var sum = NumOps.Zero;
-                    for (int i = 0; i < _attentionDim; i++)
-                    {
-                        sum = NumOps.Add(sum, NumOps.Multiply(
-                            attended[b * numFeatures * _attentionDim + f * _attentionDim + i],
-                            _outputWeights[i * _embeddingDim + o]));
-                    }
-                    projected[b * numFeatures * _embeddingDim + f * _embeddingDim + o] = sum;
-                }
-            }
-        }
-
-        return projected;
+        // Reshape [batchSize, numFeatures, attentionDim] -> [batchSize * numFeatures, attentionDim]
+        var flat = attended.Reshape(batchSize * numFeatures, _attentionDim);
+        // MatMul: [batchSize * numFeatures, attentionDim] x [attentionDim, embeddingDim]
+        var projected = Engine.TensorMatMul(flat, _outputWeights);
+        // Reshape back to [batchSize, numFeatures, embeddingDim]
+        return projected.Reshape(batchSize, numFeatures, _embeddingDim);
     }
 
     private Tensor<T> AddResidual(Tensor<T> input, Tensor<T> output,
         int batchSize, int numFeatures, int embDim)
     {
-        var result = new Tensor<T>(output.Shape);
-
         if (_residualWeights != null)
         {
             // Project residual if dimensions differ
-            for (int b = 0; b < batchSize; b++)
-            {
-                for (int f = 0; f < numFeatures; f++)
-                {
-                    for (int o = 0; o < embDim; o++)
-                    {
-                        var residual = NumOps.Zero;
-                        for (int i = 0; i < embDim; i++)
-                        {
-                            residual = NumOps.Add(residual, NumOps.Multiply(
-                                input[b * numFeatures * embDim + f * embDim + i],
-                                _residualWeights[i * embDim + o]));
-                        }
-                        result[b * numFeatures * embDim + f * embDim + o] = NumOps.Add(
-                            output[b * numFeatures * embDim + f * embDim + o],
-                            residual);
-                    }
-                }
-            }
-        }
-        else
-        {
-            // Direct addition
-            for (int i = 0; i < output.Length; i++)
-            {
-                result[i] = NumOps.Add(output[i], input[i]);
-            }
+            var flat = input.Reshape(batchSize * numFeatures, embDim);
+            var projected = Engine.TensorMatMul(flat, _residualWeights);
+            var residual = projected.Reshape(batchSize, numFeatures, embDim);
+            return Engine.TensorAdd(output, residual);
         }
 
-        return result;
-    }
-
-    private Tensor<T> ApplyReLU(Tensor<T> input)
-    {
-        var output = new Tensor<T>(input.Shape);
-
-        for (int i = 0; i < input.Length; i++)
-        {
-            output[i] = NumOps.Compare(input[i], NumOps.Zero) > 0 ? input[i] : NumOps.Zero;
-        }
-
-        return output;
+        // Direct addition
+        return Engine.TensorAdd(output, input);
     }
 
     /// <summary>
@@ -371,7 +288,7 @@ public class InteractingLayer<T>
     /// </summary>
     /// <param name="gradient">Gradient from upstream.</param>
     /// <returns>Gradient with respect to input.</returns>
-    public Tensor<T> Backward(Tensor<T> gradient)
+    public override Tensor<T> Backward(Tensor<T> gradient)
     {
         if (_inputCache == null
             || _queriesCache == null
@@ -391,20 +308,13 @@ public class InteractingLayer<T>
         var inputGrad = new Tensor<T>([batchSize, numFeatures, embDim]);
 
         // Reset gradients
-        for (int i = 0; i < _queryWeightsGrad.Length; i++)
-            _queryWeightsGrad[i] = NumOps.Zero;
-        for (int i = 0; i < _keyWeightsGrad.Length; i++)
-            _keyWeightsGrad[i] = NumOps.Zero;
-        for (int i = 0; i < _valueWeightsGrad.Length; i++)
-            _valueWeightsGrad[i] = NumOps.Zero;
-        for (int i = 0; i < _outputWeightsGrad.Length; i++)
-            _outputWeightsGrad[i] = NumOps.Zero;
+        Engine.TensorFill(_queryWeightsGrad, NumOps.Zero);
+        Engine.TensorFill(_keyWeightsGrad, NumOps.Zero);
+        Engine.TensorFill(_valueWeightsGrad, NumOps.Zero);
+        Engine.TensorFill(_outputWeightsGrad, NumOps.Zero);
         if (_residualWeightsGrad != null)
         {
-            for (int i = 0; i < _residualWeightsGrad.Length; i++)
-            {
-                _residualWeightsGrad[i] = NumOps.Zero;
-            }
+            Engine.TensorFill(_residualWeightsGrad, NumOps.Zero);
         }
 
         // ReLU backward
@@ -464,10 +374,7 @@ public class InteractingLayer<T>
             }
             else
             {
-                for (int i = 0; i < inputGrad.Length; i++)
-                {
-                    inputGrad[i] = NumOps.Add(inputGrad[i], gradPreActivation[i]);
-                }
+                inputGrad = Engine.TensorAdd(inputGrad, gradPreActivation);
             }
         }
 
@@ -642,48 +549,53 @@ public class InteractingLayer<T>
     public Tensor<T>? GetAttentionScores() => _attentionScoresCache;
 
     /// <summary>
-    /// Updates parameters.
+    /// Updates parameters using gradient descent.
     /// </summary>
-    public void UpdateParameters(T learningRate)
+    public override void UpdateParameters(T learningRate)
     {
-        for (int i = 0; i < _queryWeights.Length; i++)
-        {
-            _queryWeights[i] = NumOps.Subtract(_queryWeights[i],
-                NumOps.Multiply(learningRate, _queryWeightsGrad[i]));
-        }
-
-        for (int i = 0; i < _keyWeights.Length; i++)
-        {
-            _keyWeights[i] = NumOps.Subtract(_keyWeights[i],
-                NumOps.Multiply(learningRate, _keyWeightsGrad[i]));
-        }
-
-        for (int i = 0; i < _valueWeights.Length; i++)
-        {
-            _valueWeights[i] = NumOps.Subtract(_valueWeights[i],
-                NumOps.Multiply(learningRate, _valueWeightsGrad[i]));
-        }
-
-        for (int i = 0; i < _outputWeights.Length; i++)
-        {
-            _outputWeights[i] = NumOps.Subtract(_outputWeights[i],
-                NumOps.Multiply(learningRate, _outputWeightsGrad[i]));
-        }
+        // w = w - lr * grad  =>  Engine.TensorSubtract(w, Engine.TensorMultiplyScalar(grad, lr))
+        _queryWeights = Engine.TensorSubtract(_queryWeights, Engine.TensorMultiplyScalar(_queryWeightsGrad, learningRate));
+        _keyWeights = Engine.TensorSubtract(_keyWeights, Engine.TensorMultiplyScalar(_keyWeightsGrad, learningRate));
+        _valueWeights = Engine.TensorSubtract(_valueWeights, Engine.TensorMultiplyScalar(_valueWeightsGrad, learningRate));
+        _outputWeights = Engine.TensorSubtract(_outputWeights, Engine.TensorMultiplyScalar(_outputWeightsGrad, learningRate));
 
         if (_residualWeights != null && _residualWeightsGrad != null)
         {
-            for (int i = 0; i < _residualWeights.Length; i++)
-            {
-                _residualWeights[i] = NumOps.Subtract(_residualWeights[i],
-                    NumOps.Multiply(learningRate, _residualWeightsGrad[i]));
-            }
+            _residualWeights = Engine.TensorSubtract(_residualWeights, Engine.TensorMultiplyScalar(_residualWeightsGrad, learningRate));
+        }
+    }
+
+    /// <inheritdoc/>
+    public override Vector<T> GetParameters()
+    {
+        int total = ParameterCount;
+        var result = new Vector<T>(total);
+        int offset = 0;
+
+        CopyTensorToVector(_queryWeights, result, ref offset);
+        CopyTensorToVector(_keyWeights, result, ref offset);
+        CopyTensorToVector(_valueWeights, result, ref offset);
+        CopyTensorToVector(_outputWeights, result, ref offset);
+        if (_residualWeights != null)
+        {
+            CopyTensorToVector(_residualWeights, result, ref offset);
+        }
+
+        return result;
+    }
+
+    private static void CopyTensorToVector(Tensor<T> tensor, Vector<T> vector, ref int offset)
+    {
+        for (int i = 0; i < tensor.Length; i++)
+        {
+            vector[offset++] = tensor[i];
         }
     }
 
     /// <summary>
     /// Resets internal state.
     /// </summary>
-    public void ResetState()
+    public override void ResetState()
     {
         _inputCache = null;
         _queriesCache = null;
@@ -693,20 +605,41 @@ public class InteractingLayer<T>
         _attendedCache = null;
         _preActivationCache = null;
 
-        for (int i = 0; i < _queryWeightsGrad.Length; i++)
-            _queryWeightsGrad[i] = NumOps.Zero;
-        for (int i = 0; i < _keyWeightsGrad.Length; i++)
-            _keyWeightsGrad[i] = NumOps.Zero;
-        for (int i = 0; i < _valueWeightsGrad.Length; i++)
-            _valueWeightsGrad[i] = NumOps.Zero;
-        for (int i = 0; i < _outputWeightsGrad.Length; i++)
-            _outputWeightsGrad[i] = NumOps.Zero;
+        Engine.TensorFill(_queryWeightsGrad, NumOps.Zero);
+        Engine.TensorFill(_keyWeightsGrad, NumOps.Zero);
+        Engine.TensorFill(_valueWeightsGrad, NumOps.Zero);
+        Engine.TensorFill(_outputWeightsGrad, NumOps.Zero);
         if (_residualWeightsGrad != null)
         {
-            for (int i = 0; i < _residualWeightsGrad.Length; i++)
-            {
-                _residualWeightsGrad[i] = NumOps.Zero;
-            }
+            Engine.TensorFill(_residualWeightsGrad, NumOps.Zero);
         }
+    }
+
+    /// <inheritdoc/>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
+        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
+        inputNodes.Add(inputNode);
+
+        // Export Q, K, V weight projections
+        var qWeightsNode = TensorOperations<T>.Constant(_queryWeights, "queryWeights");
+        var kWeightsNode = TensorOperations<T>.Constant(_keyWeights, "keyWeights");
+        var vWeightsNode = TensorOperations<T>.Constant(_valueWeights, "valueWeights");
+        var oWeightsNode = TensorOperations<T>.Constant(_outputWeights, "outputWeights");
+
+        var queryNode = TensorOperations<T>.MatrixMultiply(inputNode, qWeightsNode);
+        var keyNode = TensorOperations<T>.MatrixMultiply(inputNode, kWeightsNode);
+        var valueNode = TensorOperations<T>.MatrixMultiply(inputNode, vWeightsNode);
+
+        // Attention: softmax(Q * K^T) * V
+        var attentionScores = TensorOperations<T>.MatrixMultiply(queryNode, TensorOperations<T>.Transpose(keyNode));
+        var attentionWeights = TensorOperations<T>.Softmax(attentionScores);
+        var attended = TensorOperations<T>.MatrixMultiply(attentionWeights, valueNode);
+
+        return TensorOperations<T>.MatrixMultiply(attended, oWeightsNode);
     }
 }

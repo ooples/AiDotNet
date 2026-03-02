@@ -39,6 +39,18 @@ namespace AiDotNet.AnomalyDetection.DistanceBased;
 /// </remarks>
 public class LOCIDetector<T> : AnomalyDetectorBase<T>
 {
+    /// <summary>Number of radius steps used to sweep from zero to <c>_maxRadius</c>.</summary>
+    private const int NumRadiiSteps = 20;
+
+    /// <summary>Multiplier applied to <c>_maxRadius</c> so the sweep slightly exceeds it, avoiding floating-point edge cases.</summary>
+    private const double RadiusOvershootFactor = 1.1;
+
+    /// <summary>MDEF score assigned to points that have counting neighbors but zero sampling neighbors, indicating extreme isolation.</summary>
+    private const double IsolatedPointScore = 1.0;
+
+    /// <summary>Score for points with no neighbors at any radius. Chosen to be within Half max (~65504).</summary>
+    private const double NoNeighborScore = 60000.0;
+
     private readonly double _alpha;
     private readonly int _kMax;
     private Matrix<T>? _trainingData;
@@ -123,23 +135,32 @@ public class LOCIDetector<T> : AnomalyDetectorBase<T>
         for (int i = 0; i < X.Rows; i++)
         {
             double maxMdef = 0;
+            bool hadNeighbors = false;
 
-            // Test multiple radii
-            int numRadii = 10;
-            for (int ri = 1; ri <= numRadii; ri++)
+            // Test multiple radii (use more steps for better resolution)
+            for (int ri = 1; ri <= NumRadiiSteps; ri++)
             {
-                double r = (_maxRadius * ri) / numRadii;
+                // Use slightly larger than _maxRadius to handle floating-point edge cases
+                double r = (_maxRadius * RadiusOvershootFactor * ri) / NumRadiiSteps;
                 double alphaR = _alpha * r;
 
                 // Count points in r-neighborhood (counting neighborhood)
                 int nR = CountPointsInRadius(X, i, _trainingData!, r);
 
                 if (nR < 2) continue;
+                hadNeighbors = true;
 
                 // Get points in alpha*r neighborhood (sampling neighborhood)
                 var samplingNeighbors = GetPointsInRadius(X, i, _trainingData!, alphaR);
 
-                if (samplingNeighbors.Count == 0) continue;
+                if (samplingNeighbors.Count == 0)
+                {
+                    // No sampling neighbors means this point is extremely isolated at this radius.
+                    // It has counting neighbors at radius r but not at alpha*r, indicating
+                    // a large gap between this point and its neighborhood.
+                    if (IsolatedPointScore > maxMdef) maxMdef = IsolatedPointScore;
+                    continue;
+                }
 
                 // Compute average n(r) of neighbors in sampling neighborhood
                 double avgNR = 0;
@@ -173,6 +194,13 @@ public class LOCIDetector<T> : AnomalyDetectorBase<T>
                 {
                     maxMdef = lociScore;
                 }
+            }
+
+            // If the point had no neighbors at ANY tested radius, it is an extreme isolate.
+            // Use a large but finite score safely representable for Half/float/double.
+            if (!hadNeighbors)
+            {
+                maxMdef = NoNeighborScore;
             }
 
             scores[i] = NumOps.FromDouble(maxMdef);

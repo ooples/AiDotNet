@@ -91,15 +91,17 @@ public class DiceLoss<T> : LossFunctionBase<T>
         }
 
         T denominator = NumOps.Add(sumPredicted, sumActual);
-        T twoIntersection = NumOps.Multiply(NumOps.FromDouble(2.0), intersection);
 
         var result = new T[predicted.Length];
         for (int i = 0; i < predicted.Length; i++)
         {
-            // Derivative: -2 * (actual[i] * denominator - 2 * intersection) / denominator²
+            // Derivative of Dice loss wrt p_i:
+            // loss = 1 - 2*intersection/denom
+            // d(loss)/dp_i = -2 * (a_i * denom - intersection) / denom^2
+            // (quotient rule: d(intersection)/dp_i = a_i, d(denom)/dp_i = 1)
             T numerator = NumOps.Subtract(
                 NumOps.Multiply(actual[i], denominator),
-                twoIntersection
+                intersection
             );
             result[i] = NumOps.Negate(
                 NumericalStabilityHelper.SafeDiv(

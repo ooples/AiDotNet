@@ -7,4 +7,8 @@ namespace AiDotNet.Document.Options;
 /// </summary>
 public class TrOCROptions : DocumentNeuralNetworkOptions
 {
+    /// <summary>
+    /// Gets or sets the learning rate for gradient descent parameter updates. Default: 0.0001.
+    /// </summary>
+    public double LearningRate { get; set; } = 0.0001;
 }

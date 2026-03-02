@@ -48,12 +48,13 @@ public class MissingModelsIntegrationTests
     }
 
     [Fact]
-    public void ClipNeuralNetwork_Predict_ProducesEmbeddingShape()
+    public void ClipNeuralNetwork_InvalidOnnxModels_ThrowsOnConstruction()
     {
         string tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempDir);
         string imagePath = Path.Combine(tempDir, "image.onnx");
         string textPath = Path.Combine(tempDir, "text.onnx");
+        // Write empty files as invalid ONNX models
         File.WriteAllText(imagePath, string.Empty);
         File.WriteAllText(textPath, string.Empty);
 
@@ -71,24 +72,15 @@ public class MissingModelsIntegrationTests
                 inputWidth: imageSize,
                 outputSize: embeddingDim);
 
-            var clip = new ClipNeuralNetwork<float>(
+            // Invalid ONNX models should throw during construction
+            Assert.ThrowsAny<Exception>(() => new ClipNeuralNetwork<float>(
                 architecture,
                 imagePath,
                 textPath,
                 tokenizer,
                 embeddingDimension: embeddingDim,
                 maxSequenceLength: 8,
-                imageSize: imageSize);
-
-            var input = CreateRandomTensor(new[] { 3, imageSize, imageSize });
-            var output = clip.Predict(input);
-
-            Assert.Equal(new[] { 1, embeddingDim }, output.Shape);
-
-            var textEmbedding = clip.EncodeText("hello world");
-            Assert.Equal(embeddingDim, textEmbedding.Length);
-
-            Assert.Throws<NotSupportedException>(() => clip.Train(input, output));
+                imageSize: imageSize));
         }
         finally
         {

@@ -271,48 +271,32 @@ public class UMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// </summary>
     private double ComputeDistance(double[] pointA, double[] pointB)
     {
-        int p = pointA.Length;
-        double dist = 0;
+        var va = new Vector<double>(pointA);
+        var vb = new Vector<double>(pointB);
         switch (_metric)
         {
             case UMAPMetric.Euclidean:
-                for (int k = 0; k < p; k++)
-                {
-                    double diff = pointA[k] - pointB[k];
-                    dist += diff * diff;
-                }
-                return Math.Sqrt(dist);
+                return VectorHelper.EuclideanDistance(va, vb);
 
             case UMAPMetric.Manhattan:
-                for (int k = 0; k < p; k++)
-                {
-                    dist += Math.Abs(pointA[k] - pointB[k]);
-                }
-                return dist;
+                return VectorHelper.ManhattanDistance(va, vb);
 
             case UMAPMetric.Cosine:
-                double dot = 0, normA = 0, normB = 0;
-                for (int k = 0; k < p; k++)
-                {
-                    dot += pointA[k] * pointB[k];
-                    normA += pointA[k] * pointA[k];
-                    normB += pointB[k] * pointB[k];
-                }
-                double denom = Math.Sqrt(normA * normB);
-                return denom > 1e-10 ? 1 - dot / denom : 1;
+                return 1.0 - VectorHelper.CosineSimilarity(va, vb);
 
             case UMAPMetric.Correlation:
+                int dim = pointA.Length;
                 double meanA = 0, meanB = 0;
-                for (int k = 0; k < p; k++)
+                for (int k = 0; k < dim; k++)
                 {
                     meanA += pointA[k];
                     meanB += pointB[k];
                 }
-                meanA /= p;
-                meanB /= p;
+                meanA /= dim;
+                meanB /= dim;
 
                 double cov = 0, varA = 0, varB = 0;
-                for (int k = 0; k < p; k++)
+                for (int k = 0; k < dim; k++)
                 {
                     double diffA = pointA[k] - meanA;
                     double diffB = pointB[k] - meanB;

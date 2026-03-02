@@ -498,10 +498,10 @@ public class ProtoNetsAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
 
                 T distance = _protoNetsOptions.DistanceFunction switch
                 {
-                    ProtoNetsDistanceFunction.Euclidean => ComputeEuclideanDistance(queryFeature, prototype),
+                    ProtoNetsDistanceFunction.Euclidean => VectorHelper.EuclideanDistance(queryFeature, prototype),
                     ProtoNetsDistanceFunction.Cosine => ComputeCosineDistance(queryFeature, prototype),
                     ProtoNetsDistanceFunction.Mahalanobis => ComputeMahalanobisDistance(queryFeature, prototype),
-                    _ => ComputeEuclideanDistance(queryFeature, prototype)
+                    _ => VectorHelper.EuclideanDistance(queryFeature, prototype)
                 };
 
                 // Apply class-specific scaling if enabled
@@ -621,66 +621,12 @@ public class ProtoNetsAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
     }
 
     /// <summary>
-    /// Computes Euclidean distance between two feature vectors using IEngine for vectorization.
-    /// </summary>
-    private T ComputeEuclideanDistance(Vector<T> a, Vector<T> b)
-    {
-        // diff = a - b
-        var diff = Engine.Subtract(a, b);
-
-        // squared = diff * diff (element-wise)
-        var squared = Engine.Multiply(diff, diff);
-
-        // Sum all squared elements
-        T sumSquares = NumOps.Zero;
-        for (int i = 0; i < squared.Length; i++)
-        {
-            sumSquares = NumOps.Add(sumSquares, squared[i]);
-        }
-
-        return NumOps.FromDouble(Math.Sqrt(NumOps.ToDouble(sumSquares)));
-    }
-
-    /// <summary>
     /// Computes cosine distance between two feature vectors.
     /// </summary>
     private T ComputeCosineDistance(Vector<T> a, Vector<T> b)
     {
-        // Compute dot product using IEngine
-        var elementProduct = Engine.Multiply(a, b);
-        T dotProduct = NumOps.Zero;
-        for (int i = 0; i < elementProduct.Length; i++)
-        {
-            dotProduct = NumOps.Add(dotProduct, elementProduct[i]);
-        }
-
-        // Compute norms using IEngine
-        var aSquared = Engine.Multiply(a, a);
-        var bSquared = Engine.Multiply(b, b);
-
-        T normASq = NumOps.Zero;
-        T normBSq = NumOps.Zero;
-        for (int i = 0; i < a.Length; i++)
-        {
-            normASq = NumOps.Add(normASq, aSquared[i]);
-            normBSq = NumOps.Add(normBSq, bSquared[i]);
-        }
-
-        T normA = NumOps.FromDouble(Math.Sqrt(NumOps.ToDouble(normASq)));
-        T normB = NumOps.FromDouble(Math.Sqrt(NumOps.ToDouble(normBSq)));
-
-        // Avoid division by zero
-        T denominator = NumOps.Multiply(normA, normB);
-        if (NumOps.ToDouble(denominator) < 1e-8)
-        {
-            return NumOps.One; // Maximum distance
-        }
-
-        // Cosine similarity = dot / (||a|| * ||b||)
-        T cosineSimilarity = NumOps.Divide(dotProduct, denominator);
-
-        // Cosine distance = 1 - cosine similarity
-        return NumOps.Subtract(NumOps.One, cosineSimilarity);
+        double similarity = VectorHelper.CosineSimilarity(a, b);
+        return NumOps.FromDouble(1.0 - similarity);
     }
 
     /// <summary>
@@ -898,6 +844,7 @@ public class ProtoNetsAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
 /// </remarks>
 public class PrototypicalModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
 {
+    private static IEngine Engine => AiDotNetEngine.Current;
     private readonly IFullModel<T, TInput, TOutput> _featureEncoder;
     private readonly Dictionary<int, Vector<T>> _classPrototypes;
     private readonly ProtoNetsOptions<T, TInput, TOutput> _options;
@@ -974,7 +921,7 @@ public class PrototypicalModel<T, TInput, TOutput> : IModel<TInput, TOutput, Mod
             // Normalize if configured
             if (_options.NormalizeFeatures)
             {
-                featureVector = NormalizeVector(featureVector);
+                featureVector = VectorHelper.Normalize(featureVector);
             }
 
             // Compute distances to all prototypes
@@ -1147,29 +1094,6 @@ public class PrototypicalModel<T, TInput, TOutput> : IModel<TInput, TOutput, Mod
         return null;
     }
 
-    private Vector<T> NormalizeVector(Vector<T> vector)
-    {
-        T sumSquares = _numOps.Zero;
-        for (int i = 0; i < vector.Length; i++)
-        {
-            sumSquares = _numOps.Add(sumSquares, _numOps.Multiply(vector[i], vector[i]));
-        }
-
-        T norm = _numOps.FromDouble(Math.Sqrt(_numOps.ToDouble(sumSquares)));
-
-        if (_numOps.ToDouble(norm) < 1e-8)
-        {
-            return vector;
-        }
-
-        var normalized = new Vector<T>(vector.Length);
-        for (int i = 0; i < vector.Length; i++)
-        {
-            normalized[i] = _numOps.Divide(vector[i], norm);
-        }
-        return normalized;
-    }
-
     private void NormalizeMatrix(Matrix<T> matrix)
     {
         for (int i = 0; i < matrix.Rows; i++)
@@ -1196,48 +1120,17 @@ public class PrototypicalModel<T, TInput, TOutput> : IModel<TInput, TOutput, Mod
     {
         return _options.DistanceFunction switch
         {
-            ProtoNetsDistanceFunction.Euclidean => ComputeEuclideanDistance(a, b),
+            ProtoNetsDistanceFunction.Euclidean => VectorHelper.EuclideanDistance(a, b),
             ProtoNetsDistanceFunction.Cosine => ComputeCosineDistance(a, b),
             ProtoNetsDistanceFunction.Mahalanobis => ComputeMahalanobisDistance(a, b),
-            _ => ComputeEuclideanDistance(a, b)
+            _ => VectorHelper.EuclideanDistance(a, b)
         };
-    }
-
-    private T ComputeEuclideanDistance(Vector<T> a, Vector<T> b)
-    {
-        T sumSquares = _numOps.Zero;
-        for (int i = 0; i < a.Length; i++)
-        {
-            T diff = _numOps.Subtract(a[i], b[i]);
-            sumSquares = _numOps.Add(sumSquares, _numOps.Multiply(diff, diff));
-        }
-        return _numOps.FromDouble(Math.Sqrt(_numOps.ToDouble(sumSquares)));
     }
 
     private T ComputeCosineDistance(Vector<T> a, Vector<T> b)
     {
-        T dotProduct = _numOps.Zero;
-        T normASq = _numOps.Zero;
-        T normBSq = _numOps.Zero;
-
-        for (int i = 0; i < a.Length; i++)
-        {
-            dotProduct = _numOps.Add(dotProduct, _numOps.Multiply(a[i], b[i]));
-            normASq = _numOps.Add(normASq, _numOps.Multiply(a[i], a[i]));
-            normBSq = _numOps.Add(normBSq, _numOps.Multiply(b[i], b[i]));
-        }
-
-        T normA = _numOps.FromDouble(Math.Sqrt(_numOps.ToDouble(normASq)));
-        T normB = _numOps.FromDouble(Math.Sqrt(_numOps.ToDouble(normBSq)));
-
-        T denominator = _numOps.Multiply(normA, normB);
-        if (_numOps.ToDouble(denominator) < 1e-8)
-        {
-            return _numOps.One;
-        }
-
-        T cosineSimilarity = _numOps.Divide(dotProduct, denominator);
-        return _numOps.Subtract(_numOps.One, cosineSimilarity);
+        double similarity = VectorHelper.CosineSimilarity(a, b);
+        return _numOps.FromDouble(1.0 - similarity);
     }
 
     private T ComputeMahalanobisDistance(Vector<T> a, Vector<T> b)

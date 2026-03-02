@@ -91,21 +91,46 @@ public class GrangerCausalityAlgorithm<T> : TimeSeriesCausalBase<T>
                 int k = 2 * MaxLag; // parameters in unrestricted model (excluding intercept)
                 int dfResidual = effectiveN - k - 1; // degrees of freedom for residuals
 
-                if (dfResidual > 0 && rssUnrestricted > 1e-10 && rssRestricted >= rssUnrestricted)
+                if (dfResidual > 0 && rssRestricted >= rssUnrestricted)
                 {
-                    double fStat = ((rssRestricted - rssUnrestricted) / q) /
-                                   (rssUnrestricted / dfResidual);
-
-                    if (fStat > 0)
+                    if (rssUnrestricted > 1e-10)
                     {
-                        // Compute p-value from F-distribution using regularized incomplete beta function
-                        double pValue = FDistributionSurvivalFunction(fStat, q, dfResidual);
+                        // Standard F-test path
+                        double fStat = ((rssRestricted - rssUnrestricted) / q) /
+                                       (rssUnrestricted / dfResidual);
 
-                        if (pValue <= _significanceLevel)
+                        if (fStat > 0)
                         {
-                            // Use R² improvement as edge weight (interpretable, bounded [0,1])
-                            double rSquaredImprovement = (rssRestricted - rssUnrestricted) / rssRestricted;
-                            W[cause, target] = NumOps.FromDouble(rSquaredImprovement);
+                            double pValue = FDistributionSurvivalFunction(fStat, q, dfResidual);
+
+                            if (pValue <= _significanceLevel)
+                            {
+                                double rSquaredImprovement = (rssRestricted - rssUnrestricted) / rssRestricted;
+                                W[cause, target] = NumOps.FromDouble(rSquaredImprovement);
+                            }
+                        }
+                    }
+                    else if (rssRestricted > 1e-10)
+                    {
+                        // Near-perfect unrestricted fit: the cause's lags drive RSS to near zero
+                        // while the restricted model still has residuals. This indicates the cause
+                        // variable is strongly predictive.
+                        double rSquaredImprovement = (rssRestricted - rssUnrestricted) / rssRestricted;
+                        if (rSquaredImprovement > 0.01)
+                        {
+                            W[cause, target] = NumOps.FromDouble(Math.Min(rSquaredImprovement, 1.0));
+                        }
+                    }
+                    else
+                    {
+                        // Both models achieve near-perfect fit (deterministic data).
+                        // Fall back to lagged cross-correlation as a causality proxy:
+                        // if the cause's past values correlate strongly with the target's current value,
+                        // record an edge with the correlation magnitude as weight.
+                        double crossCorr = ComputeLaggedCrossCorrelation(data, cause, target, MaxLag);
+                        if (Math.Abs(crossCorr) > 0.5)
+                        {
+                            W[cause, target] = NumOps.FromDouble(Math.Abs(crossCorr));
                         }
                     }
                 }
@@ -242,6 +267,52 @@ public class GrangerCausalityAlgorithm<T> : TimeSeriesCausalBase<T>
         }
 
         return h; // did not fully converge, return best estimate
+    }
+
+    /// <summary>
+    /// Computes lagged cross-correlation between cause (at lag) and target (at present).
+    /// Returns the maximum absolute cross-correlation across all lags from 1 to maxLag.
+    /// Used as a fallback when the F-test cannot be computed (e.g., near-zero RSS).
+    /// </summary>
+    private double ComputeLaggedCrossCorrelation(Matrix<T> data, int cause, int target, int maxLag)
+    {
+        int n = data.Rows;
+        double maxCorr = 0;
+
+        for (int lag = 1; lag <= maxLag && lag < n; lag++)
+        {
+            int effectiveN = n - lag;
+            if (effectiveN < 3) continue;
+
+            // Compute correlation between cause[0..effectiveN-1] and target[lag..n-1]
+            double sumC = 0, sumT = 0;
+            for (int t = 0; t < effectiveN; t++)
+            {
+                sumC += NumOps.ToDouble(data[t, cause]);
+                sumT += NumOps.ToDouble(data[t + lag, target]);
+            }
+            double meanC = sumC / effectiveN;
+            double meanT = sumT / effectiveN;
+
+            double sxy = 0, sxx = 0, syy = 0;
+            for (int t = 0; t < effectiveN; t++)
+            {
+                double dx = NumOps.ToDouble(data[t, cause]) - meanC;
+                double dy = NumOps.ToDouble(data[t + lag, target]) - meanT;
+                sxy += dx * dy;
+                sxx += dx * dx;
+                syy += dy * dy;
+            }
+
+            double denom = Math.Sqrt(sxx * syy);
+            if (denom > 1e-15)
+            {
+                double corr = Math.Abs(sxy / denom);
+                if (corr > maxCorr) maxCorr = corr;
+            }
+        }
+
+        return maxCorr;
     }
 
     /// <summary>

@@ -31,14 +31,7 @@ public static class NeuralNetworkHelper<T>
     /// </remarks>
     public static T EuclideanDistance(Vector<T> v1, Vector<T> v2)
     {
-        var sum = _numOps.Zero;
-        for (int i = 0; i < v1.Length; i++)
-        {
-            var diff = _numOps.Subtract(v1[i], v2[i]);
-            sum = _numOps.Add(sum, _numOps.Multiply(diff, diff));
-        }
-
-        return _numOps.Sqrt(sum);
+        return VectorHelper.EuclideanDistance(v1, v2);
     }
 
     /// <summary>
@@ -238,33 +231,8 @@ public static class NeuralNetworkHelper<T>
     /// <param name="tensor">The tensor to apply softmax to.</param>
     private static void ApplySoftmax(Tensor<T> tensor)
     {
-        for (int i = 0; i < tensor.Shape[0]; i++)
-        {
-            // Find maximum value for numerical stability
-            T max = tensor[i, 0];
-            for (int j = 1; j < tensor.Shape[1]; j++)
-            {
-                if (_numOps.GreaterThan(tensor[i, j], max))
-                {
-                    max = tensor[i, j];
-                }
-            }
-
-            // Calculate exp of each element (shifted by max)
-            T sum = _numOps.Zero;
-            for (int j = 0; j < tensor.Shape[1]; j++)
-            {
-                T exp = _numOps.FromDouble(Math.Exp(Convert.ToDouble(_numOps.Subtract(tensor[i, j], max))));
-                tensor[i, j] = exp;
-                sum = _numOps.Add(sum, exp);
-            }
-
-            // Normalize by sum
-            for (int j = 0; j < tensor.Shape[1]; j++)
-            {
-                tensor[i, j] = _numOps.Divide(tensor[i, j], sum);
-            }
-        }
+        var result = AiDotNetEngine.Current.Softmax(tensor, -1);
+        result.Data.Span.CopyTo(tensor.Data.Span);
     }
 
     /// <summary>

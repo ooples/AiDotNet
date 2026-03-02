@@ -22,6 +22,11 @@ namespace AiDotNet.Safety.Text;
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 public abstract class TextSafetyModuleBase<T> : ITextSafetyModule<T>
 {
+    /// <summary>
+    /// Hardware-accelerated engine for vector/tensor operations.
+    /// </summary>
+    protected static IEngine Engine => AiDotNetEngine.Current;
+
     /// <inheritdoc />
     public abstract string ModuleName { get; }
 

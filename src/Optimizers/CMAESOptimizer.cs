@@ -205,8 +205,8 @@ public class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutp
             // === Vectorized Population Generation using IEngine (Phase B: US-GPU-015) ===
             // population[i] = mean + sigma * sample
             var sample = GenerateMultivariateNormalSample(dimensions);
-            var scaledSample = (Vector<T>)AiDotNetEngine.Current.Multiply(sample, _sigma);
-            var individual = (Vector<T>)AiDotNetEngine.Current.Add(_mean, scaledSample);
+            var scaledSample = (Vector<T>)Engine.Multiply(sample, _sigma);
+            var individual = (Vector<T>)Engine.Add(_mean, scaledSample);
 
             for (int j = 0; j < dimensions; j++)
             {
@@ -354,13 +354,13 @@ public class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutp
         }
 
         // weights[i] = (mu + 0.5) - log(mu + 0.5 + i)
-        var muPlusHalf = AiDotNetEngine.Current.Fill<T>(mu, NumOps.FromDouble(mu + 0.5));
-        var indexPlusMu = (Vector<T>)AiDotNetEngine.Current.Add(indices, muPlusHalf);
-        var logValues = (Vector<T>)AiDotNetEngine.Current.Log(indexPlusMu);
-        var weights = (Vector<T>)AiDotNetEngine.Current.Subtract(muPlusHalf, logValues);
+        var muPlusHalf = Engine.Fill<T>(mu, NumOps.FromDouble(mu + 0.5));
+        var indexPlusMu = (Vector<T>)Engine.Add(indices, muPlusHalf);
+        var logValues = (Vector<T>)Engine.Log(indexPlusMu);
+        var weights = (Vector<T>)Engine.Subtract(muPlusHalf, logValues);
 
         // Normalize weights
-        T sumWeights = AiDotNetEngine.Current.Sum(weights);
+        T sumWeights = Engine.Sum(weights);
         weights = weights.Divide(sumWeights);
 
         // Calculate effective mu - vectorized
@@ -370,7 +370,7 @@ public class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutp
         {
             weightsSquared[i] = NumOps.Square(weights[i]);
         }
-        T sumSquaredWeights = AiDotNetEngine.Current.Sum(weightsSquared);
+        T sumSquaredWeights = Engine.Sum(weightsSquared);
         T muEff = NumOps.Divide(NumOps.One, sumSquaredWeights);
 
         // Update mean

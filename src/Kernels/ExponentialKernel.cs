@@ -106,7 +106,14 @@ public class ExponentialKernel<T> : IKernelFunction<T>
     public T Calculate(Vector<T> x1, Vector<T> x2)
     {
         var diff = x1.Subtract(x2);
-        var distance = _numOps.Sqrt(diff.DotProduct(diff));
+        var squaredDistance = diff.DotProduct(diff);
+
+        // Guard: when points are identical (or nearly so), the kernel value is 1.
+        // This avoids potential NaN from Sqrt/Exp chain on zero values.
+        if (_numOps.LessThanOrEquals(squaredDistance, _numOps.Zero))
+            return _numOps.One;
+
+        var distance = _numOps.Sqrt(squaredDistance);
 
         return _numOps.Exp(_numOps.Divide(_numOps.Negate(distance), _sigma));
     }

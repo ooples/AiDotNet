@@ -1,7 +1,9 @@
 using System.Security.Cryptography;
 using AiDotNet.FederatedLearning.Infrastructure;
+using AiDotNet.Helpers;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.FederatedLearning.Unlearning;
 
@@ -186,16 +188,8 @@ public class ExactRetrainingUnlearner<T> : FederatedLearningComponentBase<T>, IF
             }
         }
 
-        double dotProd = 0, normA = 0, normB = 0;
-        for (int i = 0; i < size; i++)
-        {
-            dotProd += diff[i] * update[i];
-            normA += diff[i] * diff[i];
-            normB += update[i] * update[i];
-        }
-
-        double denom = Math.Sqrt(normA) * Math.Sqrt(normB);
-        return denom > 1e-12 ? dotProd / denom : 0;
+        return VectorHelper.CosineSimilarity(
+            new Vector<double>(diff), new Vector<double>(update));
     }
 
     private string ComputeModelHash(Tensor<T> model)

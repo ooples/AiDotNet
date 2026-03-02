@@ -639,38 +639,8 @@ public class RWKV7Block<T> : LayerBase<T>
     private Tensor<T> ApplyLayerNorm(Tensor<T> input, Tensor<T> gamma, Tensor<T> beta,
         int batchSize, int seqLen)
     {
-        var output = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
-        T epsilon = NumOps.FromDouble(1e-6);
-
-        for (int bi = 0; bi < batchSize; bi++)
-        {
-            for (int t = 0; t < seqLen; t++)
-            {
-                T mean = NumOps.Zero;
-                for (int d = 0; d < _modelDimension; d++)
-                    mean = NumOps.Add(mean, input[new[] { bi, t, d }]);
-                mean = NumOps.Divide(mean, NumOps.FromDouble(_modelDimension));
-
-                T variance = NumOps.Zero;
-                for (int d = 0; d < _modelDimension; d++)
-                {
-                    T diff = NumOps.Subtract(input[new[] { bi, t, d }], mean);
-                    variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
-                }
-                variance = NumOps.Divide(variance, NumOps.FromDouble(_modelDimension));
-                T stdInv = NumOps.Divide(NumOps.One, NumOps.Sqrt(NumOps.Add(variance, epsilon)));
-
-                for (int d = 0; d < _modelDimension; d++)
-                {
-                    T normalized = NumOps.Multiply(
-                        NumOps.Subtract(input[new[] { bi, t, d }], mean), stdInv);
-                    output[new[] { bi, t, d }] = NumOps.Add(
-                        NumOps.Multiply(gamma[d], normalized), beta[d]);
-                }
-            }
-        }
-
-        return output;
+        var shaped = input.Reshape([batchSize, seqLen, _modelDimension]);
+        return Engine.LayerNorm(shaped, gamma, beta, 1e-6, out _, out _);
     }
 
     /// <inheritdoc />
