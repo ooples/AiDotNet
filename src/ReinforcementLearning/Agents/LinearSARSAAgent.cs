@@ -25,7 +25,7 @@ public class LinearSARSAAgent<T> : ReinforcementLearningAgentBase<T>
     /// Initializes a new instance with default settings.
     /// </summary>
     public LinearSARSAAgent()
-        : this(new LinearSARSAOptions<T> { ActionSize = 2 })
+        : this(new LinearSARSAOptions<T> { ActionSize = 2, FeatureSize = 4 })
     {
     }
 

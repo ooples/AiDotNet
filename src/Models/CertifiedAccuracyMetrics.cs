@@ -1,3 +1,5 @@
+using AiDotNet.Helpers;
+
 namespace AiDotNet.Models;
 
 #pragma warning disable CS8618 // Generic T properties use default(T) - always used with value types
@@ -8,7 +10,13 @@ namespace AiDotNet.Models;
 public class CertifiedAccuracyMetrics<T>
 {
     [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
-    public CertifiedAccuracyMetrics() { }
+    public CertifiedAccuracyMetrics()
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        CertificationRadius = numOps.Zero;
+        AverageCertifiedRadius = numOps.Zero;
+        MedianCertifiedRadius = numOps.Zero;
+    }
 
     /// <summary>
     /// Gets or sets the standard accuracy on clean examples.

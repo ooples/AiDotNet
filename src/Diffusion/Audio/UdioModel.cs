@@ -110,6 +110,7 @@ public class UdioModel<T> : AudioDiffusionModelBase<T>
     private DiTNoisePredictor<T>? _dit;
     private AudioVAE<T>? _audioVAE;
     private readonly IConditioningModule<T>? _conditioner;
+    private readonly int? _seed;
 
     #endregion
 
@@ -157,6 +158,7 @@ public class UdioModel<T> : AudioDiffusionModelBase<T>
             melChannels: MEL_CHANNELS, architecture: architecture)
     {
         _conditioner = conditioner;
+        _seed = seed;
         if (dit is not null || audioVAE is not null)
             InitializeLayers(dit, audioVAE, seed);
     }
@@ -169,7 +171,7 @@ public class UdioModel<T> : AudioDiffusionModelBase<T>
     private void EnsureInitialized()
     {
         if (_dit is null || _audioVAE is null)
-            InitializeLayers(null, null, null);
+            InitializeLayers(null, null, _seed);
     }
 
     [MemberNotNull(nameof(_dit), nameof(_audioVAE))]

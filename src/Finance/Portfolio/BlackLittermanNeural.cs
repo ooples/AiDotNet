@@ -55,7 +55,7 @@ public class BlackLittermanNeural<T> : PortfolioOptimizerBase<T>
             inputType: AiDotNet.Enums.InputType.OneDimensional,
             taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression,
             inputSize: 10,
-            outputSize: 1))
+            outputSize: 10))
     {
     }
 

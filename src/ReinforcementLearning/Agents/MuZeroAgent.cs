@@ -62,7 +62,7 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     public MuZeroAgent(MuZeroOptions<T> options) : base(new ReinforcementLearningOptions<T>
     {
-        LearningRate = options.LearningRate,
+        LearningRate = (options ?? throw new ArgumentNullException(nameof(options))).LearningRate,
         DiscountFactor = options.DiscountFactor,
         LossFunction = new MeanSquaredErrorLoss<T>(),
         Seed = options.Seed

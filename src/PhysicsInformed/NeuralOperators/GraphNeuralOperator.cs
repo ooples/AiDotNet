@@ -74,9 +74,9 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
     public GraphNeuralOperator()
         : this(new NeuralNetworkArchitecture<T>(
             inputType: Enums.InputType.OneDimensional,
-            taskType: Enums.NeuralNetworkTaskType.MultiClassClassification,
+            taskType: Enums.NeuralNetworkTaskType.Regression,
             inputSize: 128,
-            outputSize: 7))
+            outputSize: 128))
     {
     }
 

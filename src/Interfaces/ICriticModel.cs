@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Reasoning.Models;
 
 namespace AiDotNet.Interfaces;
@@ -96,7 +97,10 @@ public class ReasoningContext
 public class CritiqueResult<T>
 {
     [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
-    public CritiqueResult() { }
+    public CritiqueResult()
+    {
+        Score = MathHelper.GetNumericOperations<T>().Zero;
+    }
 
     /// <summary>
     /// Quality score for the reasoning (typically 0.0 to 1.0).

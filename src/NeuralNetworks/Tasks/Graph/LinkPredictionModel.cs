@@ -144,9 +144,9 @@ public class LinkPredictionModel<T> : NeuralNetworkBase<T>
     public LinkPredictionModel()
         : this(new NeuralNetworkArchitecture<T>(
             inputType: Enums.InputType.OneDimensional,
-            taskType: Enums.NeuralNetworkTaskType.MultiClassClassification,
+            taskType: Enums.NeuralNetworkTaskType.BinaryClassification,
             inputSize: 128,
-            outputSize: 7))
+            outputSize: 1))
     {
     }
 

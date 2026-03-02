@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Reasoning.Models;
 
 namespace AiDotNet.Interfaces;
@@ -63,7 +64,10 @@ internal interface IExternalToolVerifier<T>
 public class VerificationResult<T>
 {
     [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
-    public VerificationResult() { }
+    public VerificationResult()
+    {
+        Confidence = MathHelper.GetNumericOperations<T>().Zero;
+    }
     /// <summary>
     /// Whether the verification passed.
     /// </summary>

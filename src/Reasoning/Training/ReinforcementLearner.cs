@@ -4,6 +4,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Reasoning.Models;
 using AiDotNet.Reasoning.Strategies;
 using Newtonsoft.Json;
+using AiDotNet.Helpers;
 using AiDotNet.Validation;
 
 namespace AiDotNet.Reasoning.Training;
@@ -626,7 +627,13 @@ internal class RLConfig
 internal class EpochMetrics<T>
 {
     [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
-    public EpochMetrics() { }
+    public EpochMetrics()
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        AverageReward = numOps.Zero;
+        AverageLoss = numOps.Zero;
+        ValidationReward = numOps.Zero;
+    }
 
     public int Epoch { get; set; }
     public required T AverageReward { get; set; }

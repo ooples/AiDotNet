@@ -8,6 +8,7 @@ using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Helpers;
 using AiDotNet.Enums;
 using AiDotNet.ReinforcementLearning.ReplayBuffers;
+using AiDotNet.Validation;
 using AiDotNet.LossFunctions;
 
 namespace AiDotNet.Finance.Trading.Agents;
@@ -61,6 +62,8 @@ public class FinancialA2CAgent<T> : TradingAgentBase<T>
         TradingAgentOptions<T> options)
         : base(options)
     {
+        Guard.NotNull(actorArchitecture);
+        Guard.NotNull(criticArchitecture);
         _options = options as FinancialA2CAgentOptions<T> ?? new FinancialA2CAgentOptions<T>();
         _actorArchitecture = actorArchitecture;
         _criticArchitecture = criticArchitecture;

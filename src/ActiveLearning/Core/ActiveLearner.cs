@@ -475,7 +475,7 @@ public class ActiveLearner<T, TInput, TOutput> : IActiveLearner<T, TInput, TOutp
     private TrainingMetrics<T> TrainModelInternal()
     {
         if (_labeledPool is null)
-            return new TrainingMetrics<T>();
+            throw new InvalidOperationException("_labeledPool must not be null. Call Initialize() before training.");
 
         var trainingStopwatch = Stopwatch.StartNew();
 

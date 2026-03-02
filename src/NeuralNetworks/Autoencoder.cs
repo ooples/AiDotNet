@@ -202,7 +202,7 @@ public class Autoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
             inputType: Enums.InputType.OneDimensional,
             taskType: Enums.NeuralNetworkTaskType.Regression,
             inputSize: 128,
-            outputSize: 1),
+            outputSize: 128),
             learningRate: MathHelper.GetNumericOperations<T>().FromDouble(0.001))
     {
     }

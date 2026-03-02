@@ -95,9 +95,9 @@ public class CapsuleNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     public CapsuleNetwork()
         : this(new NeuralNetworkArchitecture<T>(
             inputType: Enums.InputType.OneDimensional,
-            taskType: Enums.NeuralNetworkTaskType.Regression,
+            taskType: Enums.NeuralNetworkTaskType.MultiClassClassification,
             inputSize: 128,
-            outputSize: 1))
+            outputSize: 10))
     {
     }
 

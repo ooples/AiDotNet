@@ -84,6 +84,7 @@ public class NullTextInversionModel<T> : LatentDiffusionModelBase<T>
     private UNetNoisePredictor<T>? _unet;
     private StandardVAE<T>? _vae;
     private readonly IConditioningModule<T>? _conditioner;
+    private readonly int? _seed;
 
     #endregion
 
@@ -142,6 +143,7 @@ public class NullTextInversionModel<T> : LatentDiffusionModelBase<T>
             architecture)
     {
         _conditioner = conditioner;
+        _seed = seed;
 
         if (unet is not null || vae is not null)
             InitializeLayers(unet, vae, seed);
@@ -157,7 +159,7 @@ public class NullTextInversionModel<T> : LatentDiffusionModelBase<T>
     private void EnsureInitialized()
     {
         if (_unet is null || _vae is null)
-            InitializeLayers(null, null, null);
+            InitializeLayers(null, null, _seed);
     }
 
     /// <summary>

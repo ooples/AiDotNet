@@ -125,8 +125,8 @@ public class RIFE<T> : FrameInterpolationBase<T>
         : this(new NeuralNetworkArchitecture<T>(
             inputType: Enums.InputType.ThreeDimensional,
             taskType: Enums.NeuralNetworkTaskType.Regression,
-            inputHeight: 256, inputWidth: 256, inputDepth: 3,
-            outputSize: 2))
+            inputHeight: 256, inputWidth: 256, inputDepth: 6,
+            outputSize: 3))
     {
     }
 

@@ -150,7 +150,7 @@ public class CTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerato
     public CTGANGenerator()
         : this(new NeuralNetworkArchitecture<T>(
             inputType: Enums.InputType.OneDimensional,
-            taskType: Enums.NeuralNetworkTaskType.Regression,
+            taskType: Enums.NeuralNetworkTaskType.Generative,
             inputSize: 10,
             outputSize: 10))
     {

@@ -312,9 +312,12 @@ public class TrainingMemoryManager<T> : IDisposable
         // If this is a checkpointed layer, we need to recompute forward first
         if (_checkpoints.TryGetValue(layerIndex, out var checkpoint))
         {
+            if (checkpoint.Input is null)
+                throw new InvalidOperationException(
+                    $"Checkpoint at layer {layerIndex} has null input. Cannot recompute forward pass.");
+
             // Recompute forward pass from checkpoint with precision awareness
-            if (checkpoint.Input is not null)
-                _ = layer.ForwardWithPrecisionCheck(checkpoint.Input);
+            _ = layer.ForwardWithPrecisionCheck(checkpoint.Input);
         }
 
         // Now run backward pass

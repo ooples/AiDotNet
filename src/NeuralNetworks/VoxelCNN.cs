@@ -107,7 +107,7 @@ public class VoxelCNN<T> : NeuralNetworkBase<T>
         : this(new NeuralNetworkArchitecture<T>(
             inputType: Enums.InputType.ThreeDimensional,
             taskType: Enums.NeuralNetworkTaskType.Regression,
-            inputHeight: 64, inputWidth: 64, inputDepth: 64,
+            inputHeight: 32, inputWidth: 32, inputDepth: 32,
             outputSize: 1))
     {
     }

@@ -19,13 +19,15 @@ public class PrioritizedReplayBuffer<T>
     private double _maxPriority;
     private readonly INumericOperations<T> _numOps;
 
+    private const int DefaultCapacity = 10000;
+
     public int Count => _buffer.Count;
 
     /// <summary>
     /// Initializes a new instance with default settings.
     /// </summary>
     public PrioritizedReplayBuffer()
-        : this(10000)
+        : this(DefaultCapacity)
     {
     }
 

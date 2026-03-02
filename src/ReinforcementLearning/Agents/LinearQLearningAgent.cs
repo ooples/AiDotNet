@@ -23,7 +23,7 @@ public class LinearQLearningAgent<T> : ReinforcementLearningAgentBase<T>
     /// Initializes a new instance with default settings.
     /// </summary>
     public LinearQLearningAgent()
-        : this(new LinearQLearningOptions<T> { ActionSize = 2 })
+        : this(new LinearQLearningOptions<T> { ActionSize = 2, FeatureSize = 4 })
     {
     }
 

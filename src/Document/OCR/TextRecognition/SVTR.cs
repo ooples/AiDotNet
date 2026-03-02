@@ -111,7 +111,7 @@ public class SVTR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
             inputType: InputType.TwoDimensional,
             taskType: NeuralNetworkTaskType.MultiClassClassification,
             inputHeight: 32, inputWidth: 256,
-            outputSize: 37))
+            outputSize: 96))
     {
     }
 

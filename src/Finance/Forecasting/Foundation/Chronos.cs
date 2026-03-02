@@ -510,6 +510,8 @@ public class Chronos<T> : ForecastingModelBase<T>
     /// </remarks>
     public override void UpdateParameters(Vector<T> gradients)
     {
+        throw new NotSupportedException(
+            "Chronos is a pre-trained foundation model. Parameter updates should be performed through fine-tuning APIs, not direct gradient application.");
     }
 
     /// <inheritdoc/>

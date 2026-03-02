@@ -138,6 +138,7 @@ public class RiffusionModel<T> : LatentDiffusionModelBase<T>
     /// GPU-accelerated mel spectrogram processor.
     /// </summary>
     private MelSpectrogram<T>? _melSpectrogram;
+    private readonly int? _seed;
 
     #endregion
 
@@ -200,6 +201,7 @@ public class RiffusionModel<T> : LatentDiffusionModelBase<T>
     {
         _conditioner = conditioner;
         _spectrogramConfig = spectrogramConfig ?? new SpectrogramConfig();
+        _seed = seed;
 
         if (unet is not null || vae is not null)
             InitializeLayers(unet, vae, seed);
@@ -213,7 +215,7 @@ public class RiffusionModel<T> : LatentDiffusionModelBase<T>
     private void EnsureInitialized()
     {
         if (_unet is null || _vae is null || _griffinLim is null || _melSpectrogram is null)
-            InitializeLayers(null, null, null);
+            InitializeLayers(null, null, _seed);
     }
 
     /// <summary>

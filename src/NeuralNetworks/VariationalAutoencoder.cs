@@ -175,7 +175,7 @@ public class VariationalAutoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLay
             inputType: Enums.InputType.OneDimensional,
             taskType: Enums.NeuralNetworkTaskType.Regression,
             inputSize: 128,
-            outputSize: 1),
+            outputSize: 128),
             latentSize: 32)
     {
     }

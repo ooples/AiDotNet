@@ -100,6 +100,7 @@ public class One2345Model<T> : ThreeDDiffusionModelBase<T>
     private UNetNoisePredictor<T>? _unet;
     private StandardVAE<T>? _vae;
     private readonly IConditioningModule<T>? _conditioner;
+    private readonly int? _seed;
 
     #endregion
 
@@ -149,6 +150,7 @@ public class One2345Model<T> : ThreeDDiffusionModelBase<T>
             defaultPointCount, architecture)
     {
         _conditioner = conditioner;
+        _seed = seed;
         if (unet is not null || vae is not null)
             InitializeLayers(unet, vae, seed);
     }
@@ -161,7 +163,7 @@ public class One2345Model<T> : ThreeDDiffusionModelBase<T>
     private void EnsureInitialized()
     {
         if (_unet is null || _vae is null)
-            InitializeLayers(null, null, null);
+            InitializeLayers(null, null, _seed);
     }
 
     [MemberNotNull(nameof(_unet), nameof(_vae))]

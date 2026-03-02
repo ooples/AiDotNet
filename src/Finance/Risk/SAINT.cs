@@ -55,7 +55,7 @@ public class SAINT<T> : RiskModelBase<T>
         : this(new NeuralNetworkArchitecture<T>(
             inputType: AiDotNet.Enums.InputType.OneDimensional,
             taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression,
-            inputSize: 10,
+            inputSize: 50,
             outputSize: 1))
     {
     }

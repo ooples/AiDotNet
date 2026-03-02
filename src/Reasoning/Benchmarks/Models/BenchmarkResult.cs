@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.Reasoning.Benchmarks.Models;
@@ -33,7 +34,12 @@ namespace AiDotNet.Reasoning.Benchmarks.Models;
 public class BenchmarkResult<T>
 {
     [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
-    public BenchmarkResult() { }
+    public BenchmarkResult()
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        Accuracy = numOps.Zero;
+        AverageConfidence = numOps.Zero;
+    }
 
     /// <summary>
     /// Name of the benchmark that was evaluated.

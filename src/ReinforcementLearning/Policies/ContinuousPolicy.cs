@@ -25,7 +25,11 @@ namespace AiDotNet.ReinforcementLearning.Policies
         /// </summary>
         public ContinuousPolicy()
             : this(
-                new NeuralNetwork<T>(),
+                new NeuralNetwork<T>(new NeuralNetworkArchitecture<T>(
+                    inputType: Enums.InputType.OneDimensional,
+                    taskType: Enums.NeuralNetworkTaskType.Regression,
+                    inputSize: 4,
+                    outputSize: 4)),
                 2,
                 new EpsilonGreedyExploration<T>())
         {

@@ -134,7 +134,7 @@ public class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
     /// </summary>
     public ConditionalGAN()
         : this(
-            new NeuralNetworkArchitecture<T>(InputType.OneDimensional, NeuralNetworkTaskType.Regression, inputSize: 100, outputSize: 784),
+            new NeuralNetworkArchitecture<T>(InputType.OneDimensional, NeuralNetworkTaskType.Regression, inputSize: 110, outputSize: 784),
             new NeuralNetworkArchitecture<T>(InputType.OneDimensional, NeuralNetworkTaskType.BinaryClassification, inputSize: 784, outputSize: 1),
             numConditionClasses: 10,
             inputType: InputType.OneDimensional)

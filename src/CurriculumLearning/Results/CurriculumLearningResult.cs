@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.CurriculumLearning.Results;
@@ -23,7 +24,12 @@ namespace AiDotNet.CurriculumLearning.Results;
 public class CurriculumLearningResult<T>
 {
     [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
-    public CurriculumLearningResult() { }
+    public CurriculumLearningResult()
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        FinalTrainingLoss = numOps.Zero;
+        BestTrainingLoss = numOps.Zero;
+    }
 
     /// <summary>
     /// Gets or sets whether training was successful.
@@ -167,7 +173,16 @@ public class CurriculumLearningResult<T>
 public class CurriculumPhaseResult<T>
 {
     [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
-    public CurriculumPhaseResult() { }
+    public CurriculumPhaseResult()
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        DataFraction = numOps.Zero;
+        StartLoss = numOps.Zero;
+        EndLoss = numOps.Zero;
+        BestLoss = numOps.Zero;
+        LossImprovement = numOps.Zero;
+        ImprovementRate = numOps.Zero;
+    }
 
     /// <summary>
     /// Gets or sets the phase number (0-indexed).
@@ -282,7 +297,13 @@ public class CurriculumPhaseResult<T>
 public class CurriculumProgressionEntry<T>
 {
     [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
-    public CurriculumProgressionEntry() { }
+    public CurriculumProgressionEntry()
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        DataFraction = numOps.Zero;
+        TrainingLoss = numOps.Zero;
+        DifficultyThreshold = numOps.Zero;
+    }
 
     /// <summary>
     /// Gets or sets the epoch number.
