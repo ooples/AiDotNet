@@ -151,6 +151,10 @@ public class LLMTime<T> : TimeSeriesFoundationModelBase<T>
         _numHeads = options.NumHeads;
         _dropout = options.DropoutRate;
         _modelSize = options.ModelSize;
+
+        // LLM-specific options: stored for serialization and future external LLM API integration.
+        // In native mode, the model uses a transformer approximation. In production, these
+        // control the external LLM call (decimal precision, sampling count, temperature).
         _numDecimalPlaces = options.NumDecimalPlaces;
         _numSamples = options.NumSamples;
         _temperature = options.Temperature;

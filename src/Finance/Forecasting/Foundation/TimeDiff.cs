@@ -272,7 +272,16 @@ public class TimeDiff<T> : TimeSeriesFoundationModelBase<T>
     #region IForecastingModel Implementation
 
     public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null) => _useNativeMode ? ForwardNative(historicalData) : ForecastOnnx(historicalData);
-    public override Tensor<T> AutoregressiveForecast(Tensor<T> input, int steps) => Forecast(input, null); // TimeDiff is non-autoregressive
+    public override Tensor<T> AutoregressiveForecast(Tensor<T> input, int steps)
+    {
+        // TimeDiff is non-autoregressive — truncate output to requested steps
+        var fullForecast = Forecast(input, null);
+        if (steps >= fullForecast.Length) return fullForecast;
+        var result = new Tensor<T>(new[] { steps });
+        for (int i = 0; i < steps; i++)
+            result.Data.Span[i] = fullForecast[i];
+        return result;
+    }
 
     public override Dictionary<string, T> Evaluate(Tensor<T> predictions, Tensor<T> actuals) { T mse = NumOps.Zero; T mae = NumOps.Zero; int count = 0; for (int i = 0; i < predictions.Length && i < actuals.Length; i++) { var diff = NumOps.Subtract(predictions[i], actuals[i]); mse = NumOps.Add(mse, NumOps.Multiply(diff, diff)); mae = NumOps.Add(mae, NumOps.Abs(diff)); count++; } if (count > 0) { mse = NumOps.Divide(mse, NumOps.FromDouble(count)); mae = NumOps.Divide(mae, NumOps.FromDouble(count)); } return new Dictionary<string, T> { ["MSE"] = mse, ["MAE"] = mae, ["RMSE"] = NumOps.Sqrt(mse) }; }
 

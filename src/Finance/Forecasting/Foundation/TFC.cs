@@ -239,6 +239,9 @@ public class TFC<T> : TimeSeriesFoundationModelBase<T>
             T contrastiveLoss = ComputeContrastiveLoss(input);
 
             // Combined loss: forecast_loss + contrastive_loss
+            // Note: currently only forecast_loss gradients are backpropagated.
+            // Contrastive loss acts as a monitoring metric; full gradient requires
+            // batch-level InfoNCE with negatives (future enhancement).
             LastLoss = NumOps.Add(forecastLoss, contrastiveLoss);
 
             var gradient = _lossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
@@ -253,8 +256,10 @@ public class TFC<T> : TimeSeriesFoundationModelBase<T>
     }
 
     /// <summary>
-    /// InfoNCE contrastive loss between time and frequency encoder outputs.
-    /// Maximizes agreement between time and frequency representations of the same sample.
+    /// Contrastive loss between time and frequency encoder outputs.
+    /// Computes a positive-pair similarity loss (-log sigmoid) between time-domain and
+    /// frequency-domain representations. This is a single-sample approximation of InfoNCE;
+    /// full InfoNCE requires a batch of negatives which will be supported when batch training is added.
     /// </summary>
     private T ComputeContrastiveLoss(Tensor<T> input)
     {

@@ -1,5 +1,6 @@
 using System.IO;
 using AiDotNet.Enums;
+using AiDotNet.Validation;
 using AiDotNet.Finance.Interfaces;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -149,6 +150,15 @@ public class TOTEM<T> : TimeSeriesFoundationModelBase<T>
 
     private void CopyOptionsToFields(TOTEMOptions<T> options)
     {
+        Guard.Positive(options.ContextLength, nameof(options.ContextLength));
+        Guard.Positive(options.ForecastHorizon, nameof(options.ForecastHorizon));
+        Guard.Positive(options.HiddenDimension, nameof(options.HiddenDimension));
+        Guard.Positive(options.NumLayers, nameof(options.NumLayers));
+        Guard.Positive(options.NumHeads, nameof(options.NumHeads));
+        Guard.Positive(options.CodebookSize, nameof(options.CodebookSize));
+        Guard.Positive(options.CodebookDimension, nameof(options.CodebookDimension));
+        Guard.Positive(options.NumCodebooks, nameof(options.NumCodebooks));
+
         _contextLength = options.ContextLength;
         _forecastHorizon = options.ForecastHorizon;
         _hiddenDimension = options.HiddenDimension;
@@ -268,6 +278,9 @@ public class TOTEM<T> : TimeSeriesFoundationModelBase<T>
             T reconstructionLoss = _lossFunction.CalculateLoss(output.ToVector(), target.ToVector());
 
             // Total loss = reconstruction + commitment (commitment computed during VectorQuantize)
+            // Note: commitment loss gradient flows via the straight-through estimator (STE) in
+            // VectorQuantize — the encoder receives reconstruction gradients, and codebook entries
+            // are updated via exponential moving average during the forward pass.
             LastLoss = NumOps.Add(reconstructionLoss, _lastCommitmentLoss);
 
             var gradient = _lossFunction.CalculateDerivative(output.ToVector(), target.ToVector());

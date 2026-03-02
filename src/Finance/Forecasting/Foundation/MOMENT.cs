@@ -298,7 +298,6 @@ public class MOMENT<T> : TimeSeriesFoundationModelBase<T>
     private void ExtractLayerReferences()
     {
         int idx = 0;
-        int numPatches = _contextLength / _patchLength;
 
         // Patch embedding
         if (idx < Layers.Count)
@@ -415,6 +414,7 @@ public class MOMENT<T> : TimeSeriesFoundationModelBase<T>
     /// <inheritdoc/>
     public override void UpdateParameters(Vector<T> gradients)
     {
+        // Parameters are updated through the optimizer in Train()
     }
 
     /// <inheritdoc/>
@@ -694,9 +694,9 @@ public class MOMENT<T> : TimeSeriesFoundationModelBase<T>
         if (_classificationHead is not null)
             return _classificationHead.Forward(pooled);
 
-        // Fallback: simple linear projection
-        var logits = new Tensor<T>(new[] { batchSize, numClasses });
-        return logits;
+        // No classification head available — cannot classify
+        throw new InvalidOperationException(
+            "Classification head is not initialized. Ensure the model was created with classification layers.");
     }
 
     /// <inheritdoc/>

@@ -423,6 +423,13 @@ public class TimesFM<T> : TimeSeriesFoundationModelBase<T>
             _quantileHidden = Layers[idx++];
         if (_numQuantiles > 0 && idx < Layers.Count)
             _quantileOutput = Layers[idx];
+
+        // Validate quantile head completeness when quantile mode is configured
+        if (_numQuantiles > 0 && (_quantileHidden is null || _quantileOutput is null))
+            throw new InvalidOperationException(
+                $"Quantile mode is enabled (NumQuantiles={_numQuantiles}) but the layer stack " +
+                "does not contain quantile head layers. Ensure CreateDefaultTimesFMLayers was called " +
+                "with numQuantiles > 0, or provide custom layers with quantile head.");
     }
 
     /// <summary>
@@ -652,15 +659,18 @@ public class TimesFM<T> : TimeSeriesFoundationModelBase<T>
     /// </remarks>
     public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
     {
-        var pointForecast = _useNativeMode ? ForecastNative(historicalData) : ForecastOnnx(historicalData);
-
         // TimesFM 2.5: if quantiles requested and quantile head is available, produce quantile forecasts
-        if (quantiles is not null && quantiles.Length > 0 && _numQuantiles > 0 && _useNativeMode)
+        if (quantiles is not null && quantiles.Length > 0 && _numQuantiles > 0)
         {
+            if (!_useNativeMode)
+                throw new NotSupportedException(
+                    "Quantile forecasting is only supported in native mode. " +
+                    "ONNX inference returns point forecasts only.");
+
             return ProduceQuantileForecasts(historicalData, quantiles);
         }
 
-        return pointForecast;
+        return _useNativeMode ? ForecastNative(historicalData) : ForecastOnnx(historicalData);
     }
 
     /// <summary>
@@ -673,6 +683,14 @@ public class TimesFM<T> : TimeSeriesFoundationModelBase<T>
     /// </remarks>
     private Tensor<T> ProduceQuantileForecasts(Tensor<T> historicalData, double[] quantiles)
     {
+        // Validate quantile levels are in (0, 1)
+        for (int i = 0; i < quantiles.Length; i++)
+        {
+            if (quantiles[i] <= 0.0 || quantiles[i] >= 1.0)
+                throw new ArgumentOutOfRangeException(nameof(quantiles),
+                    $"Quantile level {quantiles[i]} at index {i} must be in (0, 1).");
+        }
+
         SetTrainingMode(false);
 
         // Get hidden states from the transformer (before the point forecast output projection)

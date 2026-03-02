@@ -195,11 +195,11 @@ public class TimeBridge<T> : TimeSeriesFoundationModelBase<T>
         for (int i = 0; i < totalEncoderLayers && idx < Layers.Count; i++)
             _encoderLayers.Add(Layers[idx++]);
 
-        // Bridge module (2 layers: encode + gate/decode)
+        // Bridge module (2 layers: bridge encode + bridge decode)
         if (idx < Layers.Count)
             _bridgeModule = Layers[idx++];
         if (idx < Layers.Count)
-            idx++; // bridge decode layer
+            idx++; // second bridge layer (decode half)
 
         if (idx < Layers.Count)
             _finalLayerNorm = Layers[idx++];
@@ -247,6 +247,7 @@ public class TimeBridge<T> : TimeSeriesFoundationModelBase<T>
     /// <inheritdoc/>
     public override void UpdateParameters(Vector<T> gradients)
     {
+        // Parameters are updated through the optimizer in Train()
     }
 
     /// <inheritdoc/>

@@ -92,7 +92,13 @@ public class TimeSeriesTokenizer<T>
     {
         Guard.NotNull(series);
 
-        int seqLen = series.Rank == 1 ? series.Length : series.Shape[series.Rank - 1];
+        if (series.Rank > 1)
+            throw new ArgumentException(
+                $"CreatePatches expects a rank-1 (univariate) time series but received rank {series.Rank}. " +
+                "Flatten or slice the input to a single sequence before patching.",
+                nameof(series));
+
+        int seqLen = series.Length;
         var patches = new List<Tensor<T>>();
 
         for (int start = 0; start + PatchLength <= seqLen; start += Stride)

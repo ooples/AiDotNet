@@ -294,8 +294,16 @@ public class CSDI<T> : TimeSeriesFoundationModelBase<T>
     public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null) =>
         _useNativeMode ? ForwardNative(historicalData) : ForecastOnnx(historicalData);
 
-    public override Tensor<T> AutoregressiveForecast(Tensor<T> input, int steps) =>
-        Forecast(input, null); // CSDI is non-autoregressive
+    public override Tensor<T> AutoregressiveForecast(Tensor<T> input, int steps)
+    {
+        // CSDI is non-autoregressive — truncate output to requested steps
+        var fullForecast = Forecast(input, null);
+        if (steps >= fullForecast.Length) return fullForecast;
+        var result = new Tensor<T>(new[] { steps });
+        for (int i = 0; i < steps; i++)
+            result.Data.Span[i] = fullForecast[i];
+        return result;
+    }
 
     public override Dictionary<string, T> Evaluate(Tensor<T> predictions, Tensor<T> actuals)
     {

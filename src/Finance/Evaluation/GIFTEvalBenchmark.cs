@@ -228,26 +228,42 @@ public class GIFTEvalBenchmark<T>
             for (int i = 0; i < horizonLen; i++)
                 future.Data.Span[i] = series[contextLen + i];
 
-            // Get forecast
-            var prediction = model.Forecast(context, quantileLevels);
-            int evalLen = Math.Min(prediction.Length, horizonLen);
+            // Get point forecast (no quantiles) for MASE
+            var pointPrediction = model.Forecast(context, null);
+            int evalLen = Math.Min(pointPrediction.Length, horizonLen);
 
-            // Compute MASE
+            // Compute MASE from point forecast
             var predSlice = new Tensor<T>(new[] { evalLen });
             var actualSlice = new Tensor<T>(new[] { evalLen });
             for (int i = 0; i < evalLen; i++)
             {
-                predSlice.Data.Span[i] = prediction[i];
+                predSlice.Data.Span[i] = pointPrediction[i];
                 actualSlice.Data.Span[i] = future[i];
             }
 
             double mase = ComputeMASE(predSlice, actualSlice, context, seasonalPeriod);
             if (!double.IsInfinity(mase) && !double.IsNaN(mase))
                 maseScores.Add(mase);
+
+            // Compute CRPS from quantile forecasts
+            var quantileDict = new Dictionary<double, Tensor<T>>();
+            foreach (double q in quantileLevels)
+            {
+                var qForecast = model.Forecast(context, new[] { q });
+                var qSlice = new Tensor<T>(new[] { evalLen });
+                for (int i = 0; i < evalLen; i++)
+                    qSlice.Data.Span[i] = i < qForecast.Length ? qForecast[i] : NumOps.Zero;
+                quantileDict[q] = qSlice;
+            }
+
+            double crps = ComputeCRPS(quantileDict, actualSlice);
+            if (!double.IsInfinity(crps) && !double.IsNaN(crps))
+                crpsScores.Add(crps);
         }
 
         var results = new Dictionary<string, double>();
         results["MASE"] = maseScores.Count > 0 ? maseScores.Average() : double.NaN;
+        results["CRPS"] = crpsScores.Count > 0 ? crpsScores.Average() : double.NaN;
         results["NumSeries"] = testSeries.Count;
         results["NumEvaluated"] = maseScores.Count;
 

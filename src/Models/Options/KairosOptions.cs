@@ -61,12 +61,18 @@ public class KairosOptions<T> : TimeSeriesRegressionOptions<T>
     /// Gets or sets the context length.
     /// </summary>
     /// <value>Defaults to 1024.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> How many historical time steps the model sees.</para>
+    /// </remarks>
     public int ContextLength { get; set; } = 1024;
 
     /// <summary>
     /// Gets or sets the forecast horizon.
     /// </summary>
     /// <value>Defaults to 96.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> How many future steps to predict.</para>
+    /// </remarks>
     public int ForecastHorizon { get; set; } = 96;
 
     /// <summary>
@@ -84,35 +90,53 @@ public class KairosOptions<T> : TimeSeriesRegressionOptions<T>
     /// Gets or sets the hidden dimension.
     /// </summary>
     /// <value>Defaults to 512.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Internal representation size. Must be divisible by <see cref="NumHeads"/>.</para>
+    /// </remarks>
     public int HiddenDimension { get; set; } = 512;
 
     /// <summary>
     /// Gets or sets the number of transformer layers.
     /// </summary>
     /// <value>Defaults to 12.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> More layers allow deeper pattern recognition.</para>
+    /// </remarks>
     public int NumLayers { get; set; } = 12;
 
     /// <summary>
     /// Gets or sets the number of attention heads.
     /// </summary>
     /// <value>Defaults to 8.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Each head focuses on different aspects of the input.</para>
+    /// </remarks>
     public int NumHeads { get; set; } = 8;
 
     /// <summary>
     /// Gets or sets the intermediate size for the feed-forward network.
     /// </summary>
     /// <value>Defaults to 2048.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Size of the hidden layer in each feed-forward block. Typically 4x hidden dimension.</para>
+    /// </remarks>
     public int IntermediateSize { get; set; } = 2048;
 
     /// <summary>
     /// Gets or sets the dropout rate.
     /// </summary>
     /// <value>Defaults to 0.1.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Regularization to prevent overfitting. Set to 0 to disable.</para>
+    /// </remarks>
     public double DropoutRate { get; set; } = 0.1;
 
     /// <summary>
     /// Gets or sets the model size variant.
     /// </summary>
     /// <value>Defaults to <see cref="FoundationModelSize.Base"/>.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Controls overall model capacity. Larger models handle more complex data.</para>
+    /// </remarks>
     public FoundationModelSize ModelSize { get; set; } = FoundationModelSize.Base;
 }

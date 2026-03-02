@@ -1,5 +1,6 @@
 using System.IO;
 using AiDotNet.Enums;
+using AiDotNet.Validation;
 using AiDotNet.Finance.Interfaces;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -148,6 +149,16 @@ public class ChronosBolt<T> : TimeSeriesFoundationModelBase<T>
 
     private void CopyOptionsToFields(ChronosBoltOptions<T> options)
     {
+        Guard.Positive(options.ContextLength, nameof(options.ContextLength));
+        Guard.Positive(options.ForecastHorizon, nameof(options.ForecastHorizon));
+        Guard.Positive(options.PatchLength, nameof(options.PatchLength));
+        Guard.Positive(options.EncoderHiddenDim, nameof(options.EncoderHiddenDim));
+        Guard.Positive(options.DecoderHiddenDim, nameof(options.DecoderHiddenDim));
+        Guard.Positive(options.NumEncoderLayers, nameof(options.NumEncoderLayers));
+        Guard.Positive(options.NumDecoderLayers, nameof(options.NumDecoderLayers));
+        Guard.Positive(options.NumHeads, nameof(options.NumHeads));
+        Guard.Positive(options.NumQuantiles, nameof(options.NumQuantiles));
+
         _contextLength = options.ContextLength;
         _forecastHorizon = options.ForecastHorizon;
         _patchLength = options.PatchLength;

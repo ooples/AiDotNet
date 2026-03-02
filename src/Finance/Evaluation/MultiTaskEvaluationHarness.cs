@@ -111,9 +111,11 @@ public class MultiTaskEvaluationHarness<T>
 
         for (int s = 0; s < testSeries.Count && s < groundTruthLabels.Count; s++)
         {
+            // Pass threshold to model (null = use model's own default for anomaly scoring)
             var scores = model.DetectAnomalies(testSeries[s], threshold);
             var labels = groundTruthLabels[s];
 
+            // For evaluation, interpret scores > threshold as anomalies (0.5 default for normalized scores)
             double scoreThreshold = threshold ?? 0.5;
             int evalLen = Math.Min(scores.Length, labels.Length);
 

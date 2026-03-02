@@ -67,60 +67,90 @@ public class ChronosBoltOptions<T> : TimeSeriesRegressionOptions<T>
     /// Gets or sets the context length.
     /// </summary>
     /// <value>Defaults to 512.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> How many past time steps the encoder processes.</para>
+    /// </remarks>
     public int ContextLength { get; set; } = 512;
 
     /// <summary>
     /// Gets or sets the forecast horizon.
     /// </summary>
     /// <value>Defaults to 64.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> How many future steps the decoder outputs in one pass.</para>
+    /// </remarks>
     public int ForecastHorizon { get; set; } = 64;
 
     /// <summary>
     /// Gets or sets the patch length for input tokenization.
     /// </summary>
     /// <value>Defaults to 16.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Groups consecutive time steps into patches. Must divide evenly into <see cref="ContextLength"/>.</para>
+    /// </remarks>
     public int PatchLength { get; set; } = 16;
 
     /// <summary>
     /// Gets or sets the encoder hidden dimension.
     /// </summary>
     /// <value>Defaults to 512.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Internal representation size for the encoder that processes historical data.</para>
+    /// </remarks>
     public int EncoderHiddenDim { get; set; } = 512;
 
     /// <summary>
     /// Gets or sets the decoder hidden dimension.
     /// </summary>
     /// <value>Defaults to 512.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Internal representation size for the decoder that produces forecasts.</para>
+    /// </remarks>
     public int DecoderHiddenDim { get; set; } = 512;
 
     /// <summary>
     /// Gets or sets the number of encoder layers.
     /// </summary>
     /// <value>Defaults to 6.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Depth of the encoder stack. More layers capture more complex input patterns.</para>
+    /// </remarks>
     public int NumEncoderLayers { get; set; } = 6;
 
     /// <summary>
     /// Gets or sets the number of decoder layers.
     /// </summary>
     /// <value>Defaults to 6.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Depth of the decoder stack. More layers can produce more nuanced forecasts.</para>
+    /// </remarks>
     public int NumDecoderLayers { get; set; } = 6;
 
     /// <summary>
     /// Gets or sets the number of attention heads.
     /// </summary>
     /// <value>Defaults to 8.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Each head focuses on different temporal patterns. Must divide into encoder/decoder hidden dims.</para>
+    /// </remarks>
     public int NumHeads { get; set; } = 8;
 
     /// <summary>
     /// Gets or sets the dropout rate.
     /// </summary>
     /// <value>Defaults to 0.1.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Regularization to prevent overfitting. Set to 0 to disable.</para>
+    /// </remarks>
     public double DropoutRate { get; set; } = 0.1;
 
     /// <summary>
     /// Gets or sets the model size variant.
     /// </summary>
     /// <value>Defaults to <see cref="FoundationModelSize.Base"/>.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Controls overall model capacity. Available sizes: Mini, Small, Base.</para>
+    /// </remarks>
     public FoundationModelSize ModelSize { get; set; } = FoundationModelSize.Base;
 
     /// <summary>

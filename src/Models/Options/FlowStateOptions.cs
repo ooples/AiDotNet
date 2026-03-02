@@ -63,12 +63,19 @@ public class FlowStateOptions<T> : TimeSeriesRegressionOptions<T>
     /// Gets or sets the context length.
     /// </summary>
     /// <value>Defaults to 2048.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> SSMs handle long sequences efficiently, so FlowState
+    /// supports very long contexts. 2048 is a good default for most applications.</para>
+    /// </remarks>
     public int ContextLength { get; set; } = 2048;
 
     /// <summary>
     /// Gets or sets the forecast horizon.
     /// </summary>
     /// <value>Defaults to 96.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> How many future steps to predict.</para>
+    /// </remarks>
     public int ForecastHorizon { get; set; } = 96;
 
     /// <summary>
@@ -86,24 +93,39 @@ public class FlowStateOptions<T> : TimeSeriesRegressionOptions<T>
     /// Gets or sets the hidden dimension.
     /// </summary>
     /// <value>Defaults to 256.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Controls the model's representational capacity. FlowState
+    /// achieves strong results with small dimensions due to the efficiency of SSMs.</para>
+    /// </remarks>
     public int HiddenDimension { get; set; } = 256;
 
     /// <summary>
     /// Gets or sets the number of SSM layers.
     /// </summary>
     /// <value>Defaults to 8.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Each SSM layer processes the sequence with a learned state-space
+    /// model. More layers allow deeper temporal reasoning.</para>
+    /// </remarks>
     public int NumLayers { get; set; } = 8;
 
     /// <summary>
     /// Gets or sets the dropout rate.
     /// </summary>
     /// <value>Defaults to 0.1.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Regularization to prevent overfitting.</para>
+    /// </remarks>
     public double DropoutRate { get; set; } = 0.1;
 
     /// <summary>
     /// Gets or sets the model size variant.
     /// </summary>
     /// <value>Defaults to <see cref="FoundationModelSize.Small"/>.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> FlowState defaults to Small (9.1M params) because
+    /// it achieves competitive results at this size.</para>
+    /// </remarks>
     public FoundationModelSize ModelSize { get; set; } = FoundationModelSize.Small;
 
     /// <summary>

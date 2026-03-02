@@ -59,9 +59,20 @@ public class QuantileForecastResult<T>
         Guard.NotNull(pointForecast);
         Guard.NotNull(quantileForecasts);
 
+        // Defensive copy to prevent external mutation
+        var copy = new Dictionary<double, Tensor<T>>(quantileForecasts.Count);
+        foreach (var kvp in quantileForecasts)
+        {
+            if (kvp.Key < 0.0 || kvp.Key > 1.0)
+                throw new ArgumentOutOfRangeException(nameof(quantileForecasts), $"Quantile level {kvp.Key} must be between 0 and 1.");
+            if (kvp.Value.Length != pointForecast.Length)
+                throw new ArgumentException($"Quantile forecast for q={kvp.Key:F2} has length {kvp.Value.Length} but point forecast has length {pointForecast.Length}.", nameof(quantileForecasts));
+            copy[kvp.Key] = kvp.Value;
+        }
+
         PointForecast = pointForecast;
-        QuantileForecasts = quantileForecasts;
-        QuantileLevels = quantileForecasts.Keys.OrderBy(q => q).ToList();
+        QuantileForecasts = copy;
+        QuantileLevels = copy.Keys.OrderBy(q => q).ToList();
     }
 
     /// <summary>
@@ -103,23 +114,27 @@ public class QuantileForecastResult<T>
         for (int t = 0; t < horizon; t++)
             PointForecast.Data.Span[t] = pointData[t];
 
-        // Compute quantile forecasts
+        // Pre-create tensors for each quantile level
         var qForecasts = new Dictionary<double, Tensor<T>>();
         foreach (double q in quantileLevels)
         {
-            var qTensor = new Tensor<T>(new[] { horizon });
-            for (int t = 0; t < horizon; t++)
-            {
-                var values = new double[numSamples];
-                for (int s = 0; s < numSamples; s++)
-                    values[s] = NumOps.ToDouble(samples[s][t]);
-                Array.Sort(values);
+            qForecasts[q] = new Tensor<T>(new[] { horizon });
+        }
 
+        // For each time step, sort sample values once and fill all quantiles
+        for (int t = 0; t < horizon; t++)
+        {
+            var values = new double[numSamples];
+            for (int s = 0; s < numSamples; s++)
+                values[s] = NumOps.ToDouble(samples[s][t]);
+            Array.Sort(values);
+
+            foreach (double q in quantileLevels)
+            {
                 int idx = (int)Math.Floor(q * (numSamples - 1));
                 idx = Math.Max(0, Math.Min(idx, numSamples - 1));
-                qTensor.Data.Span[t] = NumOps.FromDouble(values[idx]);
+                qForecasts[q].Data.Span[t] = NumOps.FromDouble(values[idx]);
             }
-            qForecasts[q] = qTensor;
         }
 
         QuantileForecasts = qForecasts;
@@ -137,6 +152,9 @@ public class QuantileForecastResult<T>
     /// </remarks>
     public (Tensor<T> Lower, Tensor<T> Upper) GetPredictionInterval(double confidenceLevel = 0.9)
     {
+        if (confidenceLevel <= 0.0 || confidenceLevel >= 1.0)
+            throw new ArgumentOutOfRangeException(nameof(confidenceLevel), confidenceLevel, "Confidence level must be between 0 and 1 (exclusive).");
+
         double lowerQ = (1.0 - confidenceLevel) / 2.0;
         double upperQ = 1.0 - lowerQ;
 

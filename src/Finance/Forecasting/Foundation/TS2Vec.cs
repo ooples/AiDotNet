@@ -210,6 +210,13 @@ public class TS2Vec<T> : TimeSeriesFoundationModelBase<T>
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// Currently uses supervised forecasting loss only. The TS2Vec hierarchical contrastive
+    /// objective (temporal + instance contrastive losses weighted by
+    /// <c>_temporalContrastiveWeight</c> and <c>_instanceContrastiveWeight</c>) requires
+    /// batch-level training with augmented views, which will be implemented when batch
+    /// training support is added. The contrastive weights are stored for forward compatibility.
+    /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> target)
     {
         if (!_useNativeMode)

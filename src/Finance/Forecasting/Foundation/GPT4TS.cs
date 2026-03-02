@@ -247,7 +247,18 @@ public class GPT4TS<T> : TimeSeriesFoundationModelBase<T>
             if (_patchEmbedding is not null)
                 _patchEmbedding.Backward(gradTensor);
 
-            _optimizer.UpdateParameters(Layers);
+            // Only update trainable layers: when backbone is frozen, skip backbone layers
+            if (_freezeBackbone)
+            {
+                var trainableLayers = new List<ILayer<T>>();
+                if (_patchEmbedding is not null) trainableLayers.Add(_patchEmbedding);
+                if (_taskHead is not null) trainableLayers.Add(_taskHead);
+                _optimizer.UpdateParameters(trainableLayers);
+            }
+            else
+            {
+                _optimizer.UpdateParameters(Layers);
+            }
         }
         finally
         {

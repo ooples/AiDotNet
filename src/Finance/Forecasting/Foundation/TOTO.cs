@@ -376,8 +376,9 @@ public class TOTO<T> : TimeSeriesFoundationModelBase<T>
     /// <inheritdoc/>
     public override Tensor<T> ApplyInstanceNormalization(Tensor<T> input)
     {
-        int batchSize = input.Shape[0];
-        int seqLen = input.Shape.Length > 1 ? input.Shape[1] : input.Length;
+        // For rank-1 inputs, treat as single sequence (batch=1, seqLen=input.Length)
+        int batchSize = input.Rank > 1 ? input.Shape[0] : 1;
+        int seqLen = input.Rank > 1 ? input.Shape[1] : input.Length;
         var result = new Tensor<T>(input.Shape);
 
         for (int b = 0; b < batchSize; b++)

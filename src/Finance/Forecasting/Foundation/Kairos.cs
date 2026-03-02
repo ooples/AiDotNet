@@ -437,9 +437,22 @@ public class Kairos<T> : TimeSeriesFoundationModelBase<T>
             addedBatchDim = true;
         }
 
-        // Forward through all layers sequentially
-        foreach (var layer in Layers)
+        // Forward through extracted layer references for proper Kairos architecture:
+        // 1. Patch embedding (with adaptive multi-size tokenization)
+        if (_patchEmbedding is not null)
+            current = _patchEmbedding.Forward(current);
+
+        // 2. Transformer layers (with Mixture-of-Size routing)
+        foreach (var layer in _transformerLayers)
             current = layer.Forward(current);
+
+        // 3. Final layer norm
+        if (_finalLayerNorm is not null)
+            current = _finalLayerNorm.Forward(current);
+
+        // 4. Forecast head
+        if (_forecastHead is not null)
+            current = _forecastHead.Forward(current);
 
         if (addedBatchDim && current.Rank == 2 && current.Shape[0] == 1)
             current = current.Reshape(new[] { current.Shape[1] });

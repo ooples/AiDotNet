@@ -190,8 +190,10 @@ public class TimeMoE<T> : TimeSeriesFoundationModelBase<T>
             _patchEmbedding = Layers[idx++];
 
         _transformerLayers.Clear();
-        // MoE layers: norm + 4 attention projections + dropout + norm + N expert FFNs + router + dropout
-        int layersPerBlock = _dropout > 0 ? (7 + _numExperts * 2 + 1) : (5 + _numExperts * 2 + 1);
+        // Each MoE block consists of:
+        //   With dropout: norm(1) + attn_QKV+out(4) + dropout(1) + norm(1) + N*2 expert FFN layers + router(1) + dropout(1) = 9 + N*2
+        //   Without dropout: norm(1) + attn_QKV+out(4) + norm(1) + N*2 expert FFN layers + router(1) = 7 + N*2
+        int layersPerBlock = (_dropout > 0 ? 9 : 7) + _numExperts * 2;
         int totalLayers = _numLayers * layersPerBlock;
 
         for (int i = 0; i < totalLayers && idx < Layers.Count; i++)
@@ -325,6 +327,10 @@ public class TimeMoE<T> : TimeSeriesFoundationModelBase<T>
     #region IForecastingModel Implementation
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// TimeMoE produces point forecasts only. The <paramref name="quantiles"/> parameter
+    /// is accepted for interface compatibility but is not used.
+    /// </remarks>
     public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
     {
         return _useNativeMode ? ForwardNative(historicalData) : ForecastOnnx(historicalData);
@@ -505,9 +511,11 @@ public class TimeMoE<T> : TimeSeriesFoundationModelBase<T>
 
         var inputTensor = new OnnxTensors.DenseTensor<float>(
             inputData, new[] { batchSize, seqLen, features });
+        // Use the first input name from the ONNX model, falling back to "input"
+        string inputName = OnnxSession.InputMetadata.Keys.FirstOrDefault() ?? "input";
         var inputs = new List<NamedOnnxValue>
         {
-            NamedOnnxValue.CreateFromTensor("input", inputTensor)
+            NamedOnnxValue.CreateFromTensor(inputName, inputTensor)
         };
 
         using var results = OnnxSession.Run(inputs);

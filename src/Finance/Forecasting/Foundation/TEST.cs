@@ -1,5 +1,6 @@
 using System.IO;
 using AiDotNet.Enums;
+using AiDotNet.Validation;
 using AiDotNet.Finance.Interfaces;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -145,6 +146,15 @@ public class TEST<T> : TimeSeriesFoundationModelBase<T>
 
     private void CopyOptionsToFields(TESTOptions<T> options)
     {
+        Guard.Positive(options.ContextLength, nameof(options.ContextLength));
+        Guard.Positive(options.ForecastHorizon, nameof(options.ForecastHorizon));
+        Guard.Positive(options.PatchLength, nameof(options.PatchLength));
+        Guard.Positive(options.HiddenDimension, nameof(options.HiddenDimension));
+        Guard.Positive(options.TextEmbeddingDimension, nameof(options.TextEmbeddingDimension));
+        Guard.Positive(options.NumLayers, nameof(options.NumLayers));
+        Guard.Positive(options.NumHeads, nameof(options.NumHeads));
+        Guard.Positive(options.NumPrototypes, nameof(options.NumPrototypes));
+
         _contextLength = options.ContextLength;
         _forecastHorizon = options.ForecastHorizon;
         _patchLength = options.PatchLength;
