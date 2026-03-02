@@ -129,6 +129,19 @@ public class HopfieldNetwork<T> : NeuralNetworkBase<T>
     /// you would set the size to 64 (8x8=64).
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public HopfieldNetwork()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.OneDimensional,
+            taskType: Enums.NeuralNetworkTaskType.Regression,
+            inputSize: 128,
+            outputSize: 1),
+            size: 128)
+    {
+    }
+
     public HopfieldNetwork(NeuralNetworkArchitecture<T> architecture, int size, ILossFunction<T>? lossFunction = null, HopfieldNetworkOptions? options = null) : base(new NeuralNetworkArchitecture<T>(
         architecture.InputType,
         taskType: architecture.TaskType,

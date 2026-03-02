@@ -40,6 +40,18 @@ public class NeuralCVaR<T> : RiskModelBase<T>
     #endregion
 
     /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    public NeuralCVaR()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: AiDotNet.Enums.InputType.OneDimensional,
+            taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression,
+            inputSize: 10,
+            outputSize: 1))
+    {
+    }
+
+    /// <summary>
     /// Initializes a new instance of the NeuralCVaR model.
     /// </summary>
     /// <param name="architecture">The neural network architecture configuration.</param>

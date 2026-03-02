@@ -49,11 +49,19 @@ public class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>
     public override ModelOptions GetOptions() => _ppoOptions;
     private readonly Trajectory<T> _trajectory;
 
-    private NeuralNetwork<T> _policyNetwork;
-    private NeuralNetwork<T> _valueNetwork;
+    private INeuralNetwork<T> _policyNetwork;
+    private INeuralNetwork<T> _valueNetwork;
 
     /// <inheritdoc/>
     public override int FeatureCount => _ppoOptions.StateSize;
+
+    /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public PPOAgent()
+        : this(new PPOOptions<T> { StateSize = 4, ActionSize = 2 })
+    {
+    }
 
     /// <summary>
     /// Initializes a new instance of the PPOAgent class.

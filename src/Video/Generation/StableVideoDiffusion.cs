@@ -153,6 +153,21 @@ public class StableVideoDiffusion<T> : NeuralNetworkBase<T>
     /// <param name="numFrames">Number of frames to generate.</param>
     /// <param name="numInferenceSteps">Number of denoising steps.</param>
     /// <param name="guidanceScale">Classifier-free guidance scale.</param>
+    /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    private const int DefaultResolution = 64;
+    private const int DefaultChannels = 3;
+
+    public StableVideoDiffusion()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.ThreeDimensional,
+            taskType: Enums.NeuralNetworkTaskType.Regression,
+            inputHeight: DefaultResolution, inputWidth: DefaultResolution, inputDepth: DefaultChannels,
+            outputSize: DefaultChannels))
+    {
+    }
+
     /// <param name="vaeChannels">Number of VAE encoder/decoder base channels. Default: 128.</param>
     /// <param name="textEncoderDim">Hidden dimension for text encoder. Default: 768 (ViT-H).</param>
     /// <param name="textEncoderLayers">Number of text encoder transformer layers. Default: 12 (ViT-H).</param>

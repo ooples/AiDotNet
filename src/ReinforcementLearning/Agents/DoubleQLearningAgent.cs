@@ -38,6 +38,14 @@ public class DoubleQLearningAgent<T> : ReinforcementLearningAgentBase<T>
     private double _epsilon;
     private Random _random;
 
+    /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public DoubleQLearningAgent()
+        : this(new DoubleQLearningOptions<T> { StateSize = 4, ActionSize = 2 })
+    {
+    }
+
     public DoubleQLearningAgent(DoubleQLearningOptions<T> options)
         : base(options)
     {

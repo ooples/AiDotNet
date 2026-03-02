@@ -219,6 +219,20 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
     private ILossFunction<T> _lossFunction;
 
     /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public DeepBoltzmannMachine()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.OneDimensional,
+            taskType: Enums.NeuralNetworkTaskType.Regression,
+            inputSize: 128,
+            outputSize: 1),
+            epochs: 10, learningRate: MathHelper.GetNumericOperations<T>().FromDouble(0.001),
+            activationFunction: (IActivationFunction<T>?)null)
+    {
+    }
+
+    /// <summary>
     /// Initializes a new instance of the DeepBoltzmannMachine class with scalar activation.
     /// </summary>
     /// <param name="architecture">The neural network architecture configuration.</param>

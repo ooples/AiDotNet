@@ -133,6 +133,22 @@ public class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDocumentQA<
     #region Constructors
 
     /// <summary>
+    /// Creates a Donut model with default configuration for native training.
+    /// </summary>
+    private const int DefaultImageHeight = 960;
+    private const int DefaultImageWidth = 1280;
+    private const int DefaultVocabSize = 57522;
+
+    public Donut()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: InputType.ThreeDimensional,
+            taskType: NeuralNetworkTaskType.MultiClassClassification,
+            inputHeight: DefaultImageHeight, inputWidth: DefaultImageWidth, inputDepth: 3,
+            outputSize: DefaultVocabSize))
+    {
+    }
+
+    /// <summary>
     /// Creates a Donut model using pre-trained ONNX models for inference.
     /// </summary>
     /// <param name="architecture">The neural network architecture.</param>

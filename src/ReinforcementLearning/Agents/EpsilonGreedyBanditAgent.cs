@@ -21,6 +21,14 @@ public class EpsilonGreedyBanditAgent<T> : ReinforcementLearningAgentBase<T>
     private Vector<T> _qValues;
     private Vector<int> _actionCounts;
 
+    /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public EpsilonGreedyBanditAgent()
+        : this(new EpsilonGreedyBanditOptions<T>())
+    {
+    }
+
     public EpsilonGreedyBanditAgent(EpsilonGreedyBanditOptions<T> options) : base(options)
     {
         Guard.NotNull(options);

@@ -172,6 +172,18 @@ public class HTMNetwork<T> : NeuralNetworkBase<T>
     /// based on your specific needs.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    public HTMNetwork()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.OneDimensional,
+            taskType: Enums.NeuralNetworkTaskType.Regression,
+            inputSize: 128,
+            outputSize: 1))
+    {
+    }
+
     public HTMNetwork(
         NeuralNetworkArchitecture<T> architecture,
         int columnCount = 2048,

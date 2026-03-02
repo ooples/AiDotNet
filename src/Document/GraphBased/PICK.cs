@@ -565,7 +565,7 @@ public class ExtractedEntity<T>
     /// <summary>
     /// Gets or sets the confidence score.
     /// </summary>
-    public T Confidence { get; set; } = default!;
+    public required T Confidence { get; set; }
 
     /// <summary>
     /// Gets or sets the confidence as a double.

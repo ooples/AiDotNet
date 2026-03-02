@@ -68,7 +68,19 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
         private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
         private readonly bool _usesDefaultOptimizer;
 
-        public GraphNeuralOperator(
+        /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    public GraphNeuralOperator()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.OneDimensional,
+            taskType: Enums.NeuralNetworkTaskType.Regression,
+            inputSize: 128,
+            outputSize: 128))
+    {
+    }
+
+    public GraphNeuralOperator(
             NeuralNetworkArchitecture<T> architecture,
             int numLayers = 4,
             int hiddenDim = 64,

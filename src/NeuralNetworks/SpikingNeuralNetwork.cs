@@ -161,6 +161,18 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
     /// <param name="timeStep">The simulation time step, defaults to 0.1.</param>
     /// <param name="simulationSteps">The number of time steps to simulate, defaults to 100.</param>
     /// <param name="vectorActivation">The vector activation function to use. If null, a default activation is used.</param>
+    /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    public SpikingNeuralNetwork()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.OneDimensional,
+            taskType: Enums.NeuralNetworkTaskType.Regression,
+            inputSize: 128,
+            outputSize: 1), vectorActivation: (IVectorActivationFunction<T>?)null)
+    {
+    }
+
     public SpikingNeuralNetwork(NeuralNetworkArchitecture<T> architecture, double timeStep = 0.1, int simulationSteps = 100,
         IVectorActivationFunction<T>? vectorActivation = null, ILossFunction<T>? lossFunction = null,
         SpikingNeuralNetworkOptions? options = null)

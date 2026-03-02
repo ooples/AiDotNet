@@ -34,6 +34,14 @@ namespace AiDotNet.Classification.Meta;
 public class ClassifierChain<T> : MetaClassifierBase<T>
 {
     /// <summary>
+    /// Initializes a new instance with default settings using Gaussian Naive Bayes as the base estimator.
+    /// </summary>
+    public ClassifierChain()
+        : this(() => new AiDotNet.Classification.NaiveBayes.GaussianNaiveBayes<T>())
+    {
+    }
+
+    /// <summary>
     /// Gets the chain-specific options.
     /// </summary>
     protected new ClassifierChainOptions<T> Options => (ClassifierChainOptions<T>)base.Options;

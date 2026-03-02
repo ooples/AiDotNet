@@ -167,6 +167,19 @@ public class VariationalAutoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLay
     /// If you don't specify an optimizer or loss function, the VAE will use default options that work well in most cases.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public VariationalAutoencoder()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.OneDimensional,
+            taskType: Enums.NeuralNetworkTaskType.Regression,
+            inputSize: 128,
+            outputSize: 128),
+            latentSize: 32)
+    {
+    }
+
     public VariationalAutoencoder(
         NeuralNetworkArchitecture<T> architecture,
         int latentSize,

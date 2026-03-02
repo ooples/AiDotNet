@@ -171,6 +171,23 @@ public class NEAT<T> : NeuralNetworkBase<T>
     /// </remarks>
     private int _innovationNumber;
 
+    private const int DefaultInputSize = 10;
+    private const int DefaultOutputSize = 1;
+    private const int DefaultPopulationSize = 150;
+
+    /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public NEAT()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.OneDimensional,
+            taskType: Enums.NeuralNetworkTaskType.Regression,
+            inputSize: DefaultInputSize,
+            outputSize: DefaultOutputSize),
+            populationSize: DefaultPopulationSize)
+    {
+    }
+
     /// <summary>
     /// Initializes a new instance of the <see cref="NEAT{T}"/> class with the specified architecture and evolution parameters.
     /// </summary>
@@ -179,32 +196,7 @@ public class NEAT<T> : NeuralNetworkBase<T>
     /// <param name="mutationRate">The probability of mutation occurring during reproduction. Default is 0.1.</param>
     /// <param name="crossoverRate">The probability of crossover occurring during reproduction. Default is 0.75.</param>
     /// <remarks>
-    /// <para>
-    /// This constructor initializes a NEAT algorithm with the specified parameters. Unlike traditional neural networks,
-    /// NEAT doesn't use a fixed architecture with predefined layers. Instead, it uses the architecture primarily
-    /// to determine input and output sizes. The constructor initializes a population of minimal network structures
-    /// (genomes) that will evolve over time through the evolutionary process.
-    /// </para>
-    /// <para><b>For Beginners:</b> This creates a new NEAT system with your chosen settings.
-    /// 
-    /// When creating a NEAT system, you specify:
-    /// 
-    /// 1. Architecture: Mainly used to define how many inputs and outputs your networks need
-    ///    - For example, if solving a game, inputs might be game state variables
-    ///    - Outputs might be action choices the AI can make
-    /// 
-    /// 2. Population Size: How many different neural networks to evolve at once
-    ///    - Larger populations explore more possibilities but need more computing power
-    /// 
-    /// 3. Mutation Rate: How often random changes occur (default 0.1 or 10%)
-    ///    - Controls the amount of exploration vs. stability
-    /// 
-    /// 4. Crossover Rate: How often networks combine vs. just being copied (default 0.75 or 75%)
-    ///    - Controls how much genetic material is mixed between solutions
-    /// 
-    /// After creation, NEAT initializes a starting population of very simple networks
-    /// that will grow more complex through evolution.
-    /// </para>
+    /// <para><b>For Beginners:</b> This creates a new NEAT system with your chosen settings.</para>
     /// </remarks>
     public NEAT(NeuralNetworkArchitecture<T> architecture, int populationSize, double mutationRate = 0.1, double crossoverRate = 0.75, ILossFunction<T>? lossFunction = null, NEATOptions? options = null)
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))

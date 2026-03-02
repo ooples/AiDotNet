@@ -123,6 +123,21 @@ namespace AiDotNet.NeuralNetworks
         /// <summary>
         /// Initializes a new instance of the GloVe embedding model.
         /// </summary>
+        /// <summary>
+        /// Initializes a new instance with default architecture settings.
+        /// </summary>
+        public GloVe()
+            : this(new NeuralNetworkArchitecture<T>(
+                inputType: Enums.InputType.OneDimensional,
+                taskType: Enums.NeuralNetworkTaskType.Regression,
+                inputSize: 768,
+                outputSize: 768))
+        {
+        }
+
+        /// <summary>
+        /// Initializes a new instance of the GloVe model.
+        /// </summary>
         /// <param name="architecture">The configuration defining the model's metadata.</param>
         /// <param name="tokenizer">Optional tokenizer for text processing.</param>
         /// <param name="optimizer">Optional optimizer for training.</param>
@@ -132,7 +147,7 @@ namespace AiDotNet.NeuralNetworks
         /// <param name="lossFunction">Optional loss function. Defaults to Mean Squared Error.</param>
         /// <param name="maxGradNorm">Maximum gradient norm for stability (default: 1.0).</param>
         /// <remarks>
-        /// <b>For Beginners:</b> This constructor builds the framework for the model. You can 
+        /// <b>For Beginners:</b> This constructor builds the framework for the model. You can
         /// decide how many words it should know and how detailed its "dictionary" should be.
         /// </remarks>
         public GloVe(

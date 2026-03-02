@@ -182,6 +182,18 @@ public class Cutie<T> : NeuralNetworkBase<T>
     /// </code>
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    public Cutie()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.ThreeDimensional,
+            taskType: Enums.NeuralNetworkTaskType.BinaryClassification,
+            inputHeight: 256, inputWidth: 256, inputDepth: 3,
+            outputSize: 1))
+    {
+    }
+
     public Cutie(
         NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,

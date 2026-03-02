@@ -59,6 +59,14 @@ public class TabRClassifier<T> : TabRBase<T>
     public override int ParameterCount => base.ParameterCount + _classificationHead.ParameterCount;
 
     /// <summary>
+    /// Initializes a new instance of the TabRClassifier class with default configuration.
+    /// </summary>
+    public TabRClassifier()
+        : this(numFeatures: 16, numClasses: 2)
+    {
+    }
+
+    /// <summary>
     /// Initializes a new instance of the TabRClassifier class.
     /// </summary>
     /// <param name="numFeatures">Number of input features.</param>

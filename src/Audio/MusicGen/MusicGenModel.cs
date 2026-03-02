@@ -122,6 +122,18 @@ public class MusicGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
     #region Constructors
 
     /// <summary>
+    /// Creates a MusicGen model with default configuration for native training.
+    /// </summary>
+    public MusicGenModel()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Generative,
+            inputSize: 128,
+            outputSize: 2048))
+    {
+    }
+
+    /// <summary>
     /// Creates a MusicGen model using pretrained ONNX models for inference.
     /// </summary>
     /// <param name="architecture">The neural network architecture configuration.</param>

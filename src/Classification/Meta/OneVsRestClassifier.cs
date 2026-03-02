@@ -45,6 +45,14 @@ namespace AiDotNet.Classification.Meta;
 public class OneVsRestClassifier<T> : MetaClassifierBase<T>
 {
     /// <summary>
+    /// Initializes a new instance with default settings using Gaussian Naive Bayes as the base estimator.
+    /// </summary>
+    public OneVsRestClassifier()
+        : this(() => new AiDotNet.Classification.NaiveBayes.GaussianNaiveBayes<T>())
+    {
+    }
+
+    /// <summary>
     /// The binary classifiers, one per class.
     /// </summary>
     private IClassifier<T>[]? _estimators;

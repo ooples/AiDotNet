@@ -15,13 +15,28 @@ namespace AiDotNet.ReinforcementLearning.Policies
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
     public class ContinuousPolicy<T> : PolicyBase<T>
     {
-        private readonly NeuralNetwork<T> _policyNetwork;
+        private readonly INeuralNetwork<T> _policyNetwork;
         private readonly IExplorationStrategy<T> _explorationStrategy;
         private readonly int _actionSize;
         private readonly bool _useTanhSquashing;
 
+        /// <summary>
+        /// Initializes a new instance with default settings.
+        /// </summary>
+        public ContinuousPolicy()
+            : this(
+                new NeuralNetwork<T>(new NeuralNetworkArchitecture<T>(
+                    inputType: Enums.InputType.OneDimensional,
+                    taskType: Enums.NeuralNetworkTaskType.Regression,
+                    inputSize: 4,
+                    outputSize: 4)),
+                2,
+                new EpsilonGreedyExploration<T>())
+        {
+        }
+
         public ContinuousPolicy(
-            NeuralNetwork<T> policyNetwork,
+            INeuralNetwork<T> policyNetwork,
             int actionSize,
             IExplorationStrategy<T> explorationStrategy,
             bool useTanhSquashing = false,

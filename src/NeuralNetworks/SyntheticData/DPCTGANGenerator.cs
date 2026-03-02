@@ -155,6 +155,18 @@ public class DPCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
     /// (epsilon, delta, clipNorm) are in the options object. Lower epsilon = more privacy.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    public DPCTGANGenerator()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.OneDimensional,
+            taskType: Enums.NeuralNetworkTaskType.Regression,
+            inputSize: 10,
+            outputSize: 10))
+    {
+    }
+
     public DPCTGANGenerator(
         NeuralNetworkArchitecture<T> architecture,
         DPCTGANOptions<T>? options = null,

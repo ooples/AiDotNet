@@ -29,6 +29,14 @@ namespace AiDotNet.TimeSeries;
 public class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
 {
     /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public ExponentialSmoothingModel()
+        : this(new ExponentialSmoothingOptions<T>())
+    {
+    }
+
+    /// <summary>
     /// The smoothing factor for the level component (alpha).
     /// </summary>
     /// <remarks>

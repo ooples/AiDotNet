@@ -42,6 +42,18 @@ public class MemFlow<T> : OpticalFlowBase<T>
     /// <param name="numFeatures">Number of feature channels. Default: 64.</param>
     /// <param name="numLayers">Number of processing layers. Default: 8.</param>
     /// <param name="options">Optional configuration options.</param>
+    /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    public MemFlow()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.ThreeDimensional,
+            taskType: Enums.NeuralNetworkTaskType.Regression,
+            inputHeight: 256, inputWidth: 256, inputDepth: 3,
+            outputSize: 2))
+    {
+    }
+
     public MemFlow(
         NeuralNetworkArchitecture<T> architecture,
         int numFeatures = 64,

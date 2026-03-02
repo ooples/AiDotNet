@@ -35,6 +35,14 @@ public class RollingOriginSplitter<T> : DataSplitterBase<T>
     private int _nSplits;
 
     /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public RollingOriginSplitter()
+        : this(100, 20)
+    {
+    }
+
+    /// <summary>
     /// Creates a new rolling origin splitter.
     /// </summary>
     /// <param name="initialOrigin">First origin point (last training index for first split).</param>

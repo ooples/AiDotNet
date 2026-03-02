@@ -17,7 +17,7 @@ namespace AiDotNet.ReinforcementLearning.Policies
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
     public class BetaPolicy<T> : PolicyBase<T>
     {
-        private readonly NeuralNetwork<T> _policyNetwork;
+        private readonly INeuralNetwork<T> _policyNetwork;
         private readonly IExplorationStrategy<T> _explorationStrategy;
         private readonly int _actionSize;
         private readonly double _actionMin;
@@ -27,13 +27,24 @@ namespace AiDotNet.ReinforcementLearning.Policies
         /// Initializes a new instance of the BetaPolicy class.
         /// </summary>
         /// <param name="policyNetwork">Network that outputs alpha and beta parameters (2 * actionSize outputs).</param>
+        /// <summary>
+        /// Initializes a new instance with default settings.
+        /// </summary>
+        public BetaPolicy()
+            : this(
+                new NeuralNetwork<T>(),
+                2,
+                new EpsilonGreedyExploration<T>())
+        {
+        }
+
         /// <param name="actionSize">The size of the action space.</param>
         /// <param name="explorationStrategy">The exploration strategy.</param>
         /// <param name="actionMin">Minimum action value (default: 0.0).</param>
         /// <param name="actionMax">Maximum action value (default: 1.0).</param>
         /// <param name="random">Optional random number generator.</param>
         public BetaPolicy(
-            NeuralNetwork<T> policyNetwork,
+            INeuralNetwork<T> policyNetwork,
             int actionSize,
             IExplorationStrategy<T> explorationStrategy,
             double actionMin = 0.0,

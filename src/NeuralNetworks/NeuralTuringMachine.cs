@@ -164,6 +164,20 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<
     /// <param name="contentAddressingActivation">The activation function to apply to content-based addressing. If null, softmax will be used.</param>
     /// <param name="gateActivation">The activation function to apply to interpolation gates. If null, sigmoid will be used.</param>
     /// <param name="outputActivation">The activation function to apply to the final output. If null, a default based on task type will be used.</param>
+    /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public NeuralTuringMachine()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.OneDimensional,
+            taskType: Enums.NeuralNetworkTaskType.Regression,
+            inputSize: 128,
+            outputSize: 1),
+            memorySize: 64, memoryVectorSize: 32, controllerSize: 128,
+            contentAddressingActivation: (IActivationFunction<T>?)null)
+    {
+    }
+
     public NeuralTuringMachine(
         NeuralNetworkArchitecture<T> architecture,
         int memorySize,

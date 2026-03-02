@@ -14,12 +14,23 @@ namespace AiDotNet.ReinforcementLearning.Policies
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
     public class DiscretePolicy<T> : PolicyBase<T>
     {
-        private readonly NeuralNetwork<T> _policyNetwork;
+        private readonly INeuralNetwork<T> _policyNetwork;
         private readonly IExplorationStrategy<T> _explorationStrategy;
         private readonly int _actionSize;
 
+        /// <summary>
+        /// Initializes a new instance with default settings.
+        /// </summary>
+        public DiscretePolicy()
+            : this(
+                new NeuralNetwork<T>(),
+                2,
+                new EpsilonGreedyExploration<T>())
+        {
+        }
+
         public DiscretePolicy(
-            NeuralNetwork<T> policyNetwork,
+            INeuralNetwork<T> policyNetwork,
             int actionSize,
             IExplorationStrategy<T> explorationStrategy,
             Random? random = null)

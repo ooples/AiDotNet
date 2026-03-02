@@ -64,6 +64,18 @@ public class HyperbolicNeuralNetwork<T> : NeuralNetworkBase<T>
     /// A curvature of -1.0 is a good default for most applications.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    public HyperbolicNeuralNetwork()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.OneDimensional,
+            taskType: Enums.NeuralNetworkTaskType.Regression,
+            inputSize: 128,
+            outputSize: 1))
+    {
+    }
+
     public HyperbolicNeuralNetwork(
         NeuralNetworkArchitecture<T> architecture,
         double curvature = -1.0,

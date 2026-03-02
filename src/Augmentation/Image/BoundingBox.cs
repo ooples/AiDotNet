@@ -3,6 +3,8 @@ using AiDotNet.Tensors.Interfaces;
 
 namespace AiDotNet.Augmentation.Image;
 
+#pragma warning disable CS8601, CS8618 // Generic T defaults use default(T) - always used with value types
+
 /// <summary>
 /// Specifies the format of bounding box coordinates.
 /// </summary>
@@ -121,10 +123,10 @@ public class BoundingBox<T>
     /// </summary>
     public BoundingBox()
     {
-        X1 = default!;
-        Y1 = default!;
-        X2 = default!;
-        Y2 = default!;
+        X1 = default;
+        Y1 = default;
+        X2 = default;
+        Y2 = default;
         Format = BoundingBoxFormat.XYXY;
     }
 

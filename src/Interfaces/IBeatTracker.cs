@@ -128,12 +128,12 @@ public class BeatTrackingResult<T>
     /// <summary>
     /// Gets or sets the estimated tempo in beats per minute.
     /// </summary>
-    public T Tempo { get; set; } = default!;
+    public required T Tempo { get; set; }
 
     /// <summary>
     /// Gets or sets the confidence in the tempo estimate (0.0 to 1.0).
     /// </summary>
-    public T TempoConfidence { get; set; } = default!;
+    public required T TempoConfidence { get; set; }
 
     /// <summary>
     /// Gets or sets the beat positions in seconds.
@@ -165,12 +165,12 @@ public class TempoHypothesis<T>
     /// <summary>
     /// Gets or sets the tempo in BPM.
     /// </summary>
-    public T Tempo { get; set; } = default!;
+    public required T Tempo { get; set; }
 
     /// <summary>
     /// Gets or sets the confidence score (0.0 to 1.0).
     /// </summary>
-    public T Confidence { get; set; } = default!;
+    public required T Confidence { get; set; }
 
     /// <summary>
     /// Gets or sets whether this is a half-tempo or double-tempo variant.

@@ -52,6 +52,14 @@ public class LabelPowerset<T> : MultiLabelClassifierBase<T>
     #region Fields
 
     /// <summary>
+    /// Initializes a new instance with default settings using Gaussian Naive Bayes as the base classifier.
+    /// </summary>
+    public LabelPowerset()
+        : this(() => new AiDotNet.Classification.NaiveBayes.GaussianNaiveBayes<T>())
+    {
+    }
+
+    /// <summary>
     /// Factory function to create the multi-class classifier.
     /// </summary>
     /// <remarks>

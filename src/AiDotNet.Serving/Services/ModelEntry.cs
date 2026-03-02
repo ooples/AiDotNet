@@ -7,7 +7,7 @@ namespace AiDotNet.Serving.Services;
 /// </summary>
 internal sealed class ModelEntry
 {
-    public object Model { get; set; } = null!;
+    public object? Model { get; set; }
     public NumericType NumericType { get; set; } = NumericType.Double;
     public DateTime LoadedAt { get; set; }
     public string? SourcePath { get; set; }

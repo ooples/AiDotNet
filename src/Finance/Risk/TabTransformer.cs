@@ -51,6 +51,18 @@ public class TabTransformer<T> : RiskModelBase<T>
     /// those layers will be used instead of the default TabTransformer layers.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    public TabTransformer()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: AiDotNet.Enums.InputType.OneDimensional,
+            taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression,
+            inputSize: 10,
+            outputSize: 1))
+    {
+    }
+
     public TabTransformer(
         NeuralNetworkArchitecture<T> architecture,
         TabTransformerOptions<T>? options = null,

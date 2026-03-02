@@ -107,6 +107,18 @@ public class TableGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
     public bool IsFitted { get; private set; }
 
     /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    public TableGANGenerator()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.OneDimensional,
+            taskType: Enums.NeuralNetworkTaskType.Regression,
+            inputSize: 10,
+            outputSize: 10))
+    {
+    }
+
+    /// <summary>
     /// Initializes a new TableGAN generator with the specified architecture.
     /// </summary>
     public TableGANGenerator(

@@ -1,7 +1,9 @@
+using AiDotNet.Helpers;
 using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.Reasoning.Benchmarks.Models;
 
+#pragma warning disable CS8618 // Generic T properties use default(T) - always used with value types
 /// <summary>
 /// Results from evaluating a reasoning system on a benchmark.
 /// </summary>
@@ -31,6 +33,14 @@ namespace AiDotNet.Reasoning.Benchmarks.Models;
 /// </remarks>
 public class BenchmarkResult<T>
 {
+    [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
+    public BenchmarkResult()
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        Accuracy = numOps.Zero;
+        AverageConfidence = numOps.Zero;
+    }
+
     /// <summary>
     /// Name of the benchmark that was evaluated.
     /// </summary>
@@ -54,7 +64,7 @@ public class BenchmarkResult<T>
     /// 0.87 means 87% correct, 1.0 means perfect score (100%).
     /// </para>
     /// </remarks>
-    public T Accuracy { get; set; } = default!;
+    public required T Accuracy { get; set; }
 
     /// <summary>
     /// Confidence scores for each evaluated problem (as a Vector).
@@ -70,7 +80,7 @@ public class BenchmarkResult<T>
     /// <summary>
     /// Average confidence across all evaluated problems.
     /// </summary>
-    public T AverageConfidence { get; set; } = default!;
+    public required T AverageConfidence { get; set; }
 
     /// <summary>
     /// Total time spent evaluating all problems.
@@ -177,7 +187,7 @@ public class ProblemEvaluation<T>
     /// <summary>
     /// Confidence score for this answer.
     /// </summary>
-    public T Confidence { get; set; } = default!;
+    public required T Confidence { get; set; }
 
     /// <summary>
     /// Time taken to solve this problem.

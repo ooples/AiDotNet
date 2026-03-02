@@ -616,12 +616,12 @@ public class TreeSHAPExplanation<T>
     /// SHAP values explain how knowing feature values changes this default.
     /// </para>
     /// </remarks>
-    public T ExpectedValue { get; set; } = default!;
+    public required T ExpectedValue { get; set; }
 
     /// <summary>
     /// Gets or sets the actual prediction for this instance.
     /// </summary>
-    public T Prediction { get; set; } = default!;
+    public required T Prediction { get; set; }
 
     /// <summary>
     /// Gets or sets the input instance.

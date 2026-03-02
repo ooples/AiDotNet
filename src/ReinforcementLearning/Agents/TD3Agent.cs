@@ -45,17 +45,25 @@ public class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>
     public override ModelOptions GetOptions() => _options;
     private readonly INumericOperations<T> _numOps;
 
-    private NeuralNetwork<T> _actorNetwork;
-    private NeuralNetwork<T> _targetActorNetwork;
-    private NeuralNetwork<T> _critic1Network;
-    private NeuralNetwork<T> _critic2Network;
-    private NeuralNetwork<T> _targetCritic1Network;
-    private NeuralNetwork<T> _targetCritic2Network;
+    private INeuralNetwork<T> _actorNetwork;
+    private INeuralNetwork<T> _targetActorNetwork;
+    private INeuralNetwork<T> _critic1Network;
+    private INeuralNetwork<T> _critic2Network;
+    private INeuralNetwork<T> _targetCritic1Network;
+    private INeuralNetwork<T> _targetCritic2Network;
 
     private UniformReplayBuffer<T, Vector<T>, Vector<T>> _replayBuffer;
     private Random _random;
     private int _stepCount;
     private int _updateCount;
+
+    /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public TD3Agent()
+        : this(new TD3Options<T> { StateSize = 4, ActionSize = 2 })
+    {
+    }
 
     public TD3Agent(TD3Options<T> options) : base(CreateBaseOptions(options))
     {
@@ -369,7 +377,7 @@ public class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>
         SoftUpdateNetwork(_critic2Network, _targetCritic2Network);
     }
 
-    private void SoftUpdateNetwork(NeuralNetwork<T> source, NeuralNetwork<T> target)
+    private void SoftUpdateNetwork(INeuralNetwork<T> source, INeuralNetwork<T> target)
     {
         var sourceParams = source.GetParameters();
         var targetParams = target.GetParameters();
@@ -388,7 +396,7 @@ public class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>
         target.UpdateParameters(targetParams);
     }
 
-    private void CopyNetworkWeights(NeuralNetwork<T> source, NeuralNetwork<T> target)
+    private void CopyNetworkWeights(INeuralNetwork<T> source, INeuralNetwork<T> target)
     {
         var sourceParams = source.GetParameters();
         target.UpdateParameters(sourceParams);

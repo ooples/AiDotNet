@@ -17,8 +17,8 @@ namespace AiDotNet.ReinforcementLearning.Policies
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
     public class MixedPolicy<T> : PolicyBase<T>
     {
-        private readonly NeuralNetwork<T> _discreteNetwork;
-        private readonly NeuralNetwork<T> _continuousNetwork;
+        private readonly INeuralNetwork<T> _discreteNetwork;
+        private readonly INeuralNetwork<T> _continuousNetwork;
         private readonly IExplorationStrategy<T> _discreteExploration;
         private readonly IExplorationStrategy<T> _continuousExploration;
         private readonly int _discreteActionSize;
@@ -28,6 +28,20 @@ namespace AiDotNet.ReinforcementLearning.Policies
         /// <summary>
         /// Initializes a new instance of the MixedPolicy class.
         /// </summary>
+        /// <summary>
+        /// Initializes a new instance with default settings.
+        /// </summary>
+        public MixedPolicy()
+            : this(
+                new NeuralNetwork<T>(),
+                new NeuralNetwork<T>(),
+                2,
+                2,
+                new EpsilonGreedyExploration<T>(),
+                new EpsilonGreedyExploration<T>())
+        {
+        }
+
         /// <param name="discreteNetwork">Network for discrete action logits.</param>
         /// <param name="continuousNetwork">Network for continuous action parameters (mean and log_std).</param>
         /// <param name="discreteActionSize">Number of discrete actions.</param>
@@ -37,8 +51,8 @@ namespace AiDotNet.ReinforcementLearning.Policies
         /// <param name="sharedFeatures">Whether networks share feature extraction layers.</param>
         /// <param name="random">Optional random number generator.</param>
         public MixedPolicy(
-            NeuralNetwork<T> discreteNetwork,
-            NeuralNetwork<T> continuousNetwork,
+            INeuralNetwork<T> discreteNetwork,
+            INeuralNetwork<T> continuousNetwork,
             int discreteActionSize,
             int continuousActionSize,
             IExplorationStrategy<T> discreteExploration,
@@ -55,7 +69,9 @@ namespace AiDotNet.ReinforcementLearning.Policies
             _discreteExploration = discreteExploration;
             Guard.NotNull(continuousExploration);
             _continuousExploration = continuousExploration;
+            Guard.Positive(discreteActionSize);
             _discreteActionSize = discreteActionSize;
+            Guard.Positive(continuousActionSize);
             _continuousActionSize = continuousActionSize;
             _sharedFeatures = sharedFeatures;
         }

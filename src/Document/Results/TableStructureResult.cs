@@ -41,7 +41,7 @@ public class TableStructureResult<T>
     /// <summary>
     /// Gets the overall confidence for the structure detection.
     /// </summary>
-    public T Confidence { get; init; } = default!;
+    public required T Confidence { get; init; }
 
     /// <summary>
     /// Gets the table content as a 2D list of strings.
@@ -108,7 +108,7 @@ public class TableCell<T>
     /// <summary>
     /// Gets the confidence for this cell's detection.
     /// </summary>
-    public T Confidence { get; init; } = default!;
+    public required T Confidence { get; init; }
 }
 
 /// <summary>
@@ -130,7 +130,7 @@ public class TableRegion<T>
     /// <summary>
     /// Gets the detection confidence.
     /// </summary>
-    public T Confidence { get; init; } = default!;
+    public required T Confidence { get; init; }
 
     /// <summary>
     /// Gets the page index where the table was found.

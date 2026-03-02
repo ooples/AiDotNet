@@ -12,9 +12,12 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Helpers;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
-
+
+
 using AiDotNet.Finance.Base;
 namespace AiDotNet.Finance.Forecasting.Foundation;
+
+#pragma warning disable CS8601, CS8618 // Generic T defaults use default(T) - always used with value types
 
 /// <summary>
 /// Chronos foundation model for time series forecasting using tokenization.
@@ -157,8 +160,8 @@ public class Chronos<T> : ForecastingModelBase<T>
     private double _dropout;
     private double _temperature;
     private string _modelSize;
-    private T _lastTokenMin = default!;
-    private T _lastTokenRange = default!;
+    private T _lastTokenMin = default;
+    private T _lastTokenRange = default;
     private bool _hasTokenScale;
 
     #endregion
@@ -507,6 +510,8 @@ public class Chronos<T> : ForecastingModelBase<T>
     /// </remarks>
     public override void UpdateParameters(Vector<T> gradients)
     {
+        throw new NotSupportedException(
+            "Chronos is a pre-trained foundation model. Parameter updates should be performed through fine-tuning APIs, not direct gradient application.");
     }
 
     /// <inheritdoc/>
@@ -636,18 +641,16 @@ public class Chronos<T> : ForecastingModelBase<T>
     /// </remarks>
     public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
     {
-        var output = _useNativeMode ? ForecastNative(historicalData) : ForecastOnnx(historicalData);
-
-        // Detokenize to get continuous values
-        var pointPredictions = Detokenize(output);
-
-        // If quantiles requested, generate multiple samples
+        // If quantiles requested, skip point inference and go directly to quantile sampling
         if (quantiles is not null && quantiles.Length > 0)
         {
             return GenerateQuantileSamples(historicalData, quantiles);
         }
 
-        return pointPredictions;
+        var output = _useNativeMode ? ForecastNative(historicalData) : ForecastOnnx(historicalData);
+
+        // Detokenize to get continuous values
+        return Detokenize(output);
     }
 
     /// <inheritdoc/>

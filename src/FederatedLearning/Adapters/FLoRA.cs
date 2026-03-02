@@ -251,7 +251,7 @@ public class FLoRA<T> : Infrastructure.FederatedLearningComponentBase<T>, IFeder
     {
         const int maxIter = 50;
         const double tolerance = 1e-8;
-        var rng = new Random(42);
+        var rng = Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
 
         var B = new double[rows * rank];
         var A = new double[rank * cols];

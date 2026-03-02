@@ -48,6 +48,18 @@ public class NeuralStressTest<T> : RiskModelBase<T>
     /// from scratch. The model learns to simulate extreme scenarios for your portfolio.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    public NeuralStressTest()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: AiDotNet.Enums.InputType.OneDimensional,
+            taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression,
+            inputSize: 10,
+            outputSize: 1))
+    {
+    }
+
     public NeuralStressTest(
         NeuralNetworkArchitecture<T> architecture,
         NeuralStressTestOptions<T>? options = null,

@@ -21,10 +21,10 @@ public class SimpleNeuralNetwork<T>
     private readonly int _hiddenSize;
     private readonly int _outputSize;
 
-    private PrototypeVector<T> _weightsInputHidden = null!;
-    private PrototypeVector<T> _biasHidden = null!;
-    private PrototypeVector<T> _weightsHiddenOutput = null!;
-    private PrototypeVector<T> _biasOutput = null!;
+    private PrototypeVector<T> _weightsInputHidden;
+    private PrototypeVector<T> _biasHidden;
+    private PrototypeVector<T> _weightsHiddenOutput;
+    private PrototypeVector<T> _biasOutput;
 
     private PrototypeVector<T>? _lastInput;
     private PrototypeVector<T>? _lastHidden;
@@ -63,6 +63,9 @@ public class SimpleNeuralNetwork<T>
     /// <summary>
     /// Initializes weights using Xavier/Glorot initialization.
     /// </summary>
+    [System.Diagnostics.CodeAnalysis.MemberNotNull(
+        nameof(_weightsInputHidden), nameof(_biasHidden),
+        nameof(_weightsHiddenOutput), nameof(_biasOutput))]
     private void InitializeWeights()
     {
         // Xavier initialization: scale = sqrt(2 / (fan_in + fan_out))

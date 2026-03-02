@@ -17,6 +17,14 @@ public class WatkinsQLambdaAgent<T> : ReinforcementLearningAgentBase<T>
     private Dictionary<string, Dictionary<int, T>> _eligibilityTraces;
     private double _epsilon;
 
+    /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public WatkinsQLambdaAgent()
+        : this(new WatkinsQLambdaOptions<T> { StateSize = 4, ActionSize = 2 })
+    {
+    }
+
     public WatkinsQLambdaAgent(WatkinsQLambdaOptions<T> options) : base(options)
     {
         Guard.NotNull(options);

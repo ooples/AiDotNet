@@ -165,6 +165,18 @@ public class AnimateDiff<T> : NeuralNetworkBase<T>
     /// </code>
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    public AnimateDiff()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.ThreeDimensional,
+            taskType: Enums.NeuralNetworkTaskType.Regression,
+            inputHeight: 64, inputWidth: 64, inputDepth: 320,
+            outputSize: 320))
+    {
+    }
+
     public AnimateDiff(
         NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,

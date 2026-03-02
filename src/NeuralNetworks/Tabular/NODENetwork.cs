@@ -80,6 +80,18 @@ public class NODENetwork<T> : NeuralNetworkBase<T>
     /// <param name="optimizer">Gradient-based optimizer (defaults to Adam).</param>
     /// <param name="lossFunction">Loss function (defaults based on task type).</param>
     /// <param name="maxGradNorm">Maximum gradient norm for clipping (default 1.0).</param>
+    /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    public NODENetwork()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.OneDimensional,
+            taskType: Enums.NeuralNetworkTaskType.Regression,
+            inputSize: 10,
+            outputSize: 10))
+    {
+    }
+
     public NODENetwork(
         NeuralNetworkArchitecture<T> architecture,
         NODEOptions<T>? options = null,

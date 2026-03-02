@@ -13,6 +13,17 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class FinancialDQNAgentOptions<T> : TradingAgentOptions<T>
 {
+    [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
+    public FinancialDQNAgentOptions() { }
+
+    [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
+    public FinancialDQNAgentOptions(FinancialDQNAgentOptions<T> other) : this()
+    {
+        if (other is null) throw new ArgumentNullException(nameof(other));
+        UseDoubleDQN = other.UseDoubleDQN;
+        UseDuelingNetwork = other.UseDuelingNetwork;
+    }
+
     /// <summary>
     /// Whether to use double DQN for more stable Q-value estimates.
     /// </summary>

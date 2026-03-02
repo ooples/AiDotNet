@@ -18,7 +18,7 @@ public sealed class ServingDbContext : DbContext, IDataProtectionKeyContext
 
     public DbSet<ProtectedArtifactEntity> ProtectedArtifacts => Set<ProtectedArtifactEntity>();
 
-    public DbSet<DataProtectionKey> DataProtectionKeys { get; set; } = null!;
+    public DbSet<DataProtectionKey> DataProtectionKeys => Set<DataProtectionKey>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

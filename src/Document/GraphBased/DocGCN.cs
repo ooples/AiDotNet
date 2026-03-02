@@ -118,6 +118,18 @@ public class DocGCN<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>
     #region Constructors
 
     /// <summary>
+    /// Creates a DocGCN model with default configuration for native training.
+    /// </summary>
+    public DocGCN()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.MultiClassClassification,
+            inputSize: 256,
+            outputSize: 9))
+    {
+    }
+
+    /// <summary>
     /// Creates a DocGCN model using a pre-trained ONNX model for inference.
     /// </summary>
     public DocGCN(

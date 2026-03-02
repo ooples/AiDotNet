@@ -48,6 +48,14 @@ public class ClassifierChainClassifier<T> : MultiLabelClassifierBase<T>
     #region Fields
 
     /// <summary>
+    /// Initializes a new instance with default settings using Gaussian Naive Bayes as the base classifier.
+    /// </summary>
+    public ClassifierChainClassifier()
+        : this(() => new AiDotNet.Classification.NaiveBayes.GaussianNaiveBayes<T>())
+    {
+    }
+
+    /// <summary>
     /// Factory function to create binary classifiers for each position in the chain.
     /// </summary>
     /// <remarks>

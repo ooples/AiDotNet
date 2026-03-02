@@ -139,7 +139,7 @@ public class SceneClassificationResult<T>
     /// <summary>
     /// Gets or sets the confidence score.
     /// </summary>
-    public T Confidence { get; set; } = default!;
+    public required T Confidence { get; set; }
 
     /// <summary>
     /// Gets or sets all scene predictions sorted by probability.
@@ -193,7 +193,7 @@ public class SceneFeatures<T>
     /// <summary>
     /// Gets or sets the estimated tempo in BPM.
     /// </summary>
-    public T Tempo { get; set; } = default!;
+    public required T Tempo { get; set; }
 }
 
 /// <summary>
@@ -215,7 +215,7 @@ public class ScenePrediction<T>
     /// <summary>
     /// Gets or sets the probability/confidence score.
     /// </summary>
-    public T Probability { get; set; } = default!;
+    public required T Probability { get; set; }
 
     /// <summary>
     /// Gets or sets the rank (1 = most likely).
@@ -232,12 +232,12 @@ public class AcousticCharacteristics<T>
     /// <summary>
     /// Gets or sets the estimated reverberation level.
     /// </summary>
-    public T ReverberationLevel { get; set; } = default!;
+    public required T ReverberationLevel { get; set; }
 
     /// <summary>
     /// Gets or sets the estimated background noise level.
     /// </summary>
-    public T BackgroundNoiseLevel { get; set; } = default!;
+    public required T BackgroundNoiseLevel { get; set; }
 
     /// <summary>
     /// Gets or sets whether the environment appears to be indoor.
@@ -316,7 +316,7 @@ public class SceneSegment<T>
     /// <summary>
     /// Gets or sets the confidence score.
     /// </summary>
-    public T Confidence { get; set; } = default!;
+    public required T Confidence { get; set; }
 }
 
 /// <summary>
@@ -343,5 +343,5 @@ public class SceneTransition<T>
     /// <summary>
     /// Gets or sets the confidence in the transition detection.
     /// </summary>
-    public T Confidence { get; set; } = default!;
+    public required T Confidence { get; set; }
 }

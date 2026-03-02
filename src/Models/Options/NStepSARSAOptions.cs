@@ -8,7 +8,7 @@ namespace AiDotNet.Models.Options;
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 public class NStepSARSAOptions<T> : ReinforcementLearningOptions<T>
 {
-    public int StateSize { get; init; }
-    public int ActionSize { get; init; }
+    public int StateSize { get; init; } = 16;
+    public int ActionSize { get; init; } = 4;
     public int NSteps { get; init; } = 3;
 }

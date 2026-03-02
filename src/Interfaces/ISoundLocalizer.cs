@@ -177,12 +177,12 @@ public class SoundSource<T>
     /// <summary>
     /// Gets or sets the azimuth angle in degrees (-180 to 180, 0 = front).
     /// </summary>
-    public T Azimuth { get; set; } = default!;
+    public required T Azimuth { get; set; }
 
     /// <summary>
     /// Gets or sets the elevation angle in degrees (-90 to 90, 0 = level).
     /// </summary>
-    public T Elevation { get; set; } = default!;
+    public required T Elevation { get; set; }
 
     /// <summary>
     /// Gets or sets the estimated distance (if supported).
@@ -192,12 +192,12 @@ public class SoundSource<T>
     /// <summary>
     /// Gets or sets the confidence score (0.0 to 1.0).
     /// </summary>
-    public T Confidence { get; set; } = default!;
+    public required T Confidence { get; set; }
 
     /// <summary>
     /// Gets or sets the relative energy level.
     /// </summary>
-    public T Energy { get; set; } = default!;
+    public required T Energy { get; set; }
 
     /// <summary>
     /// Gets or sets the frequency range of this source.
@@ -214,17 +214,17 @@ public class DirectionEstimate<T>
     /// <summary>
     /// Gets or sets the azimuth angle in degrees.
     /// </summary>
-    public T Azimuth { get; set; } = default!;
+    public required T Azimuth { get; set; }
 
     /// <summary>
     /// Gets or sets the elevation angle in degrees.
     /// </summary>
-    public T Elevation { get; set; } = default!;
+    public required T Elevation { get; set; }
 
     /// <summary>
     /// Gets or sets the confidence score.
     /// </summary>
-    public T Confidence { get; set; } = default!;
+    public required T Confidence { get; set; }
 }
 
 /// <summary>
@@ -290,17 +290,17 @@ public class TrajectoryPoint<T>
     /// <summary>
     /// Gets or sets the azimuth angle.
     /// </summary>
-    public T Azimuth { get; set; } = default!;
+    public required T Azimuth { get; set; }
 
     /// <summary>
     /// Gets or sets the elevation angle.
     /// </summary>
-    public T Elevation { get; set; } = default!;
+    public required T Elevation { get; set; }
 
     /// <summary>
     /// Gets or sets the confidence at this point.
     /// </summary>
-    public T Confidence { get; set; } = default!;
+    public required T Confidence { get; set; }
 }
 
 /// <summary>
@@ -327,7 +327,7 @@ public class MicrophoneArrayConfig<T>
     /// <summary>
     /// Gets or sets the spacing between microphones (for regular arrays).
     /// </summary>
-    public T Spacing { get; set; } = default!;
+    public required T Spacing { get; set; }
 }
 
 /// <summary>
@@ -354,10 +354,10 @@ public class FrequencyRange<T>
     /// <summary>
     /// Gets or sets the lower frequency bound in Hz.
     /// </summary>
-    public T LowFrequency { get; set; } = default!;
+    public required T LowFrequency { get; set; }
 
     /// <summary>
     /// Gets or sets the upper frequency bound in Hz.
     /// </summary>
-    public T HighFrequency { get; set; } = default!;
+    public required T HighFrequency { get; set; }
 }

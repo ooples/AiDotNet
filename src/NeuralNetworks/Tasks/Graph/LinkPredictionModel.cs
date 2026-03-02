@@ -138,6 +138,18 @@ public class LinkPredictionModel<T> : NeuralNetworkBase<T>
     /// ```
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    public LinkPredictionModel()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.OneDimensional,
+            taskType: Enums.NeuralNetworkTaskType.BinaryClassification,
+            inputSize: 128,
+            outputSize: 1))
+    {
+    }
+
     public LinkPredictionModel(
         NeuralNetworkArchitecture<T> architecture,
         int hiddenDim = 64,

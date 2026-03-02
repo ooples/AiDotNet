@@ -27,6 +27,8 @@ public class Donut<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<
     private readonly ITokenizer? _tokenizer; private bool _useNativeMode; private bool _disposed;
     private int _encoderLayerEnd;
 
+    public Donut() : this(new NeuralNetworkArchitecture<T>(inputType: InputType.TwoDimensional, taskType: NeuralNetworkTaskType.MultiClassClassification, inputHeight: 960, inputWidth: 720, outputSize: 50265)) { }
+
     public Donut(NeuralNetworkArchitecture<T> architecture, string modelPath, DonutOptions? options = null) : base(architecture) { _options = options ?? new DonutOptions(); _useNativeMode = false; base.ImageSize = _options.ImageSize; base.ImageChannels = 3; base.EmbeddingDim = _options.DecoderDim; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions); _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize); InitializeLayers(); }
     public Donut(NeuralNetworkArchitecture<T> architecture, DonutOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new DonutOptions(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.ImageSize = _options.ImageSize; base.ImageChannels = 3; base.EmbeddingDim = _options.DecoderDim; _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize); InitializeLayers(); }
 

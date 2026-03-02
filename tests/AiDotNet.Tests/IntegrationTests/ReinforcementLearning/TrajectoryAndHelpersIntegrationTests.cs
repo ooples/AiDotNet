@@ -58,7 +58,7 @@ public class TrajectoryAndHelpersIntegrationTests
             Value = 0.5
         };
 
-        node.Children[0] = new MCTSNode<double> { HiddenState = CreateVector(2, 0.3) };
+        node.Children[0] = new MCTSNode<double> { HiddenState = CreateVector(2, 0.3), Value = 0.0 };
         node.VisitCounts[0] = 1;
         node.QValues[0] = 0.25;
         node.Rewards[0] = 0.1;
@@ -90,16 +90,16 @@ public class TrajectoryAndHelpersIntegrationTests
     [Fact]
     public void WorkerNetworks_DefaultsAndAssignments_Work()
     {
-        var worker = new WorkerNetworks<double>();
+        var policyNetwork = CreateNetwork(2, 1);
+        var valueNetwork = CreateNetwork(2, 1);
+        var worker = new WorkerNetworks<double>(policyNetwork, valueNetwork);
 
         Assert.NotNull(worker.Trajectory);
         Assert.Empty(worker.Trajectory);
-
-        worker.PolicyNetwork = CreateNetwork(2, 1);
-        worker.ValueNetwork = CreateNetwork(2, 1);
-
         Assert.NotNull(worker.PolicyNetwork);
         Assert.NotNull(worker.ValueNetwork);
+        Assert.Same(policyNetwork, worker.PolicyNetwork);
+        Assert.Same(valueNetwork, worker.ValueNetwork);
     }
 
     private static Vector<double> CreateVector(int size, double start)

@@ -27,6 +27,14 @@ namespace AiDotNet.TimeSeries;
 public class SARIMAModel<T> : TimeSeriesModelBase<T>
 {
     /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public SARIMAModel()
+        : this(new SARIMAOptions<T>())
+    {
+    }
+
+    /// <summary>
     /// Stores the configuration options for the SARIMA model.
     /// </summary>
     private readonly SARIMAOptions<T> _sarimaOptions;

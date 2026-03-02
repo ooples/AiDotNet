@@ -25,6 +25,14 @@ public class DynaQPlusAgent<T> : ReinforcementLearningAgentBase<T>
     private int _totalSteps;
     private Random _random;
 
+    /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public DynaQPlusAgent()
+        : this(new DynaQPlusOptions<T> { StateSize = 4, ActionSize = 2 })
+    {
+    }
+
     public DynaQPlusAgent(DynaQPlusOptions<T> options) : base(options)
     {
         Guard.NotNull(options);

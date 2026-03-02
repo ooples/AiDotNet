@@ -4,6 +4,8 @@ using AiDotNet.Tensors.Interfaces;
 
 namespace AiDotNet.Augmentation;
 
+#pragma warning disable CS8601, CS8618 // Generic T defaults use default(T) - always used with value types
+
 /// <summary>
 /// Abstract base class for all augmentations providing common functionality.
 /// </summary>
@@ -288,7 +290,7 @@ public abstract class LabelMixingAugmentationBase<T, TData> : AugmentationBase<T
     /// <summary>
     /// Gets the mixing lambda from the last application.
     /// </summary>
-    public T LastMixingLambda { get; protected set; } = default!;
+    public T LastMixingLambda { get; protected set; } = default;
 
     /// <summary>
     /// Gets or sets the alpha parameter for Beta distribution sampling.

@@ -35,6 +35,14 @@ namespace AiDotNet.Regression;
 public class KernelRidgeRegression<T> : NonLinearRegressionBase<T>
 {
     /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public KernelRidgeRegression()
+        : this(new KernelRidgeRegressionOptions())
+    {
+    }
+
+    /// <summary>
     /// The Gram matrix (kernel matrix) that represents pairwise similarities between all training points.
     /// </summary>
     private Matrix<T> _gramMatrix;
