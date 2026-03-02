@@ -168,7 +168,7 @@ public class ModelPredictiveTaskSampler<T, TInput, TOutput> : ITaskSampler<T, TI
         // This groups episodes from similar tasks together for meaningful exploitation
         int hash = 17;
         if (episode.Domain is not null)
-            hash = hash * 31 + episode.Domain.GetHashCode(StringComparison.Ordinal);
+            hash = hash * 31 + StringComparer.Ordinal.GetHashCode(episode.Domain);
         // Use episode metadata or difficulty as a secondary discriminator
         if (episode.Difficulty.HasValue)
             hash = hash * 31 + episode.Difficulty.Value.GetHashCode();
