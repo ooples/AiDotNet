@@ -50,7 +50,7 @@ public class REINFORCEAgent<T> : DeepReinforcementLearningAgentBase<T>
     public override ModelOptions GetOptions() => _reinforceOptions;
     private readonly Trajectory<T> _trajectory;
 
-    private NeuralNetwork<T> _policyNetwork;
+    private INeuralNetwork<T> _policyNetwork;
 
     /// <inheritdoc/>
     public override int FeatureCount => _reinforceOptions.StateSize;
@@ -336,7 +336,7 @@ public class REINFORCEAgent<T> : DeepReinforcementLearningAgentBase<T>
     private void UpdatePolicyNetwork()
     {
         var params_ = _policyNetwork.GetParameters();
-        var grads = _policyNetwork.GetGradients();
+        var grads = _policyNetwork.GetParameterGradients();
 
         for (int i = 0; i < params_.Length; i++)
         {

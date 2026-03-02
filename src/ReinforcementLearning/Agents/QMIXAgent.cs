@@ -334,7 +334,7 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
             var mixingGradientVec = new Vector<T>(1);
             mixingGradientVec[0] = NumOps.Multiply(NumOps.FromDouble(-2.0), tdError);
             var mixingGradient = Tensor<T>.FromVector(mixingGradientVec);
-            ((NeuralNetwork<T>)_mixingNetwork).Backpropagate(mixingGradient);
+            _mixingNetwork.Backpropagate(mixingGradient);
 
             // Get gradient w.r.t. mixing network inputs (agent Q-values) for gradient flow
             // This should be obtained from the mixing network's input gradient after backprop
@@ -344,7 +344,7 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
 
             // Manual parameter update for mixing network
             var mixingParams = _mixingNetwork.GetParameters();
-            var mixingGrads = ((NeuralNetwork<T>)_mixingNetwork).GetGradients();
+            var mixingGrads = _mixingNetwork.GetParameterGradients();
             for (int j = 0; j < mixingParams.Length; j++)
             {
                 mixingParams[j] = NumOps.Subtract(mixingParams[j],
@@ -374,7 +374,7 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
 
                 // Manual parameter update with learning rate
                 var agentParams = _agentNetworks[i].GetParameters();
-                var agentGrads = ((NeuralNetwork<T>)_agentNetworks[i]).GetGradients();
+                var agentGrads = ((NeuralNetwork<T>)_agentNetworks[i]).GetParameterGradients();
                 for (int j = 0; j < agentParams.Length; j++)
                 {
                     agentParams[j] = NumOps.Subtract(agentParams[j],
@@ -781,7 +781,7 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         // Manual parameter update with learning rate
         var agentParams = _agentNetworks[0].GetParameters();
-        var agentGrads = ((NeuralNetwork<T>)_agentNetworks[0]).GetGradients();
+        var agentGrads = ((NeuralNetwork<T>)_agentNetworks[0]).GetParameterGradients();
         for (int i = 0; i < agentParams.Length; i++)
         {
             agentParams[i] = NumOps.Subtract(agentParams[i],

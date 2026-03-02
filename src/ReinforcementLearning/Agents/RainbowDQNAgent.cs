@@ -42,8 +42,8 @@ public class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
     public override ModelOptions GetOptions() => _options;
     private IOptimizer<T, Vector<T>, Vector<T>> _optimizer;
 
-    private NeuralNetwork<T> _onlineNetwork;
-    private NeuralNetwork<T> _targetNetwork;
+    private INeuralNetwork<T> _onlineNetwork;
+    private INeuralNetwork<T> _targetNetwork;
     private PrioritizedReplayBuffer<T> _replayBuffer;
 
     private double _epsilon;
@@ -331,7 +331,7 @@ public class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
         return NumOps.Divide(totalLoss, NumOps.FromDouble(batch.Count));
     }
 
-    private Vector<T> ComputeQValuesFromNetwork(NeuralNetwork<T> network, Vector<T> state)
+    private Vector<T> ComputeQValuesFromNetwork(INeuralNetwork<T> network, Vector<T> state)
     {
         var stateTensor = Tensor<T>.FromVector(state);
         var outputTensor = network.Predict(stateTensor);
@@ -361,7 +361,7 @@ public class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
         return output;
     }
 
-    private void CopyNetworkWeights(NeuralNetwork<T> source, NeuralNetwork<T> target)
+    private void CopyNetworkWeights(INeuralNetwork<T> source, INeuralNetwork<T> target)
     {
         var sourceParams = source.GetParameters();
         target.UpdateParameters(sourceParams);

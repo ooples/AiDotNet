@@ -46,7 +46,7 @@ public class DecisionTransformerAgent<T> : DeepReinforcementLearningAgentBase<T>
     public override ModelOptions GetOptions() => _options;
     private IOptimizer<T, Vector<T>, Vector<T>> _optimizer;
 
-    private NeuralNetwork<T> _transformerNetwork;
+    private INeuralNetwork<T> _transformerNetwork;
     private List<(Vector<T> state, Vector<T> action, T reward, T returnToGo, Vector<T> previousAction)> _trajectoryBuffer;
     private int _updateCount;
 

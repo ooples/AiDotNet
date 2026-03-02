@@ -49,11 +49,11 @@ public class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>
     public override ModelOptions GetOptions() => _options;
     private readonly INumericOperations<T> _numOps;
 
-    private NeuralNetwork<T> _policyNetwork;
-    private NeuralNetwork<T> _valueNetwork;
-    private NeuralNetwork<T> _q1Network;
-    private NeuralNetwork<T> _q2Network;
-    private NeuralNetwork<T> _targetValueNetwork;
+    private INeuralNetwork<T> _policyNetwork;
+    private INeuralNetwork<T> _valueNetwork;
+    private INeuralNetwork<T> _q1Network;
+    private INeuralNetwork<T> _q2Network;
+    private INeuralNetwork<T> _targetValueNetwork;
 
     private UniformReplayBuffer<T, Vector<T>, Vector<T>> _offlineBuffer;
     private Random _random;
@@ -457,7 +457,7 @@ public class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>
         _targetValueNetwork.SetParameters(updatedParams);
     }
 
-    private void CopyNetworkWeights(NeuralNetwork<T> source, NeuralNetwork<T> target)
+    private void CopyNetworkWeights(INeuralNetwork<T> source, INeuralNetwork<T> target)
     {
         var sourceParams = source.GetParameters();
         target.SetParameters(sourceParams.Clone());
@@ -668,17 +668,17 @@ public class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>
         Deserialize(data);
     }
 
-    private Vector<T> ExtractNetworkParameters(NeuralNetwork<T> network)
+    private Vector<T> ExtractNetworkParameters(INeuralNetwork<T> network)
     {
         return network.GetParameters();
     }
 
-    private void UpdateNetworkParameters(NeuralNetwork<T> network, Vector<T> parameters)
+    private void UpdateNetworkParameters(INeuralNetwork<T> network, Vector<T> parameters)
     {
         network.SetParameters(parameters);
     }
 
-    private byte[] SerializeNetwork(NeuralNetwork<T> network)
+    private byte[] SerializeNetwork(INeuralNetwork<T> network)
     {
         using var ms = new MemoryStream();
         using var writer = new BinaryWriter(ms);
@@ -694,7 +694,7 @@ public class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>
         return ms.ToArray();
     }
 
-    private void DeserializeNetwork(NeuralNetwork<T> network, byte[] data)
+    private void DeserializeNetwork(INeuralNetwork<T> network, byte[] data)
     {
         using var ms = new MemoryStream(data);
         using var reader = new BinaryReader(ms);

@@ -21,9 +21,11 @@ public class FinancialA2CAgent<T> : TradingAgentBase<T>
     #region Fields
 
     private readonly FinancialA2CAgentOptions<T> _options;
-    private readonly NeuralNetwork<T> _actor;
-    private readonly NeuralNetwork<T> _critic;
+    private readonly INeuralNetwork<T> _actor;
+    private readonly INeuralNetwork<T> _critic;
     private readonly ReplayBuffer<T> ReplayBuffer;
+    private readonly NeuralNetworkArchitecture<T> _actorArchitecture;
+    private readonly NeuralNetworkArchitecture<T> _criticArchitecture;
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
@@ -60,6 +62,8 @@ public class FinancialA2CAgent<T> : TradingAgentBase<T>
         : base(options)
     {
         _options = options as FinancialA2CAgentOptions<T> ?? new FinancialA2CAgentOptions<T>();
+        _actorArchitecture = actorArchitecture;
+        _criticArchitecture = criticArchitecture;
 
         EnsureDefaultLayers(actorArchitecture, options.StateSize, options.ActionSize);
         EnsureDefaultLayers(criticArchitecture, options.StateSize, 1);
@@ -330,7 +334,7 @@ public class FinancialA2CAgent<T> : TradingAgentBase<T>
     /// </remarks>
     public override IFullModel<T, Vector<T>, Vector<T>> Clone()
     {
-        var clone = new FinancialA2CAgent<T>(_actor.GetArchitecture(), _critic.GetArchitecture(), TradingOptions);
+        var clone = new FinancialA2CAgent<T>(_actorArchitecture, _criticArchitecture, TradingOptions);
         clone.SetParameters(GetParameters());
         return clone;
     }

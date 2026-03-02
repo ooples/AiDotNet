@@ -42,8 +42,8 @@ public class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>
     public override ModelOptions GetOptions() => _a2cOptions;
     private readonly Trajectory<T> _trajectory;
 
-    private NeuralNetwork<T> _policyNetwork;
-    private NeuralNetwork<T> _valueNetwork;
+    private INeuralNetwork<T> _policyNetwork;
+    private INeuralNetwork<T> _valueNetwork;
 
     /// <inheritdoc/>
     public override int FeatureCount => _a2cOptions.StateSize;
@@ -375,7 +375,7 @@ public class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         // Gradients have been accumulated via Backpropagate() calls in the training loop
         var params_ = _policyNetwork.GetParameters();
-        var grads = _policyNetwork.GetGradients();
+        var grads = _policyNetwork.GetParameterGradients();
 
         // Apply gradient ascent (policy gradient: maximize J, so add gradients)
         for (int i = 0; i < params_.Length; i++)
@@ -392,7 +392,7 @@ public class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         // Gradients have been accumulated via Backpropagate() calls in the training loop
         var params_ = _valueNetwork.GetParameters();
-        var grads = _valueNetwork.GetGradients();
+        var grads = _valueNetwork.GetParameterGradients();
 
         // Apply gradient descent (minimize loss, so subtract gradients)
         for (int i = 0; i < params_.Length; i++)

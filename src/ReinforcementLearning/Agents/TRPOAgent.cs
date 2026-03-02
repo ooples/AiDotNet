@@ -368,11 +368,11 @@ public class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>
                 gradient[0] = error;
                 var gradientTensor = Tensor<T>.FromVector(gradient);
 
-                ((NeuralNetwork<T>)_valueNetwork).Backpropagate(gradientTensor);
+                _valueNetwork.Backpropagate(gradientTensor);
 
                 // Manual parameter update with learning rate
                 var valueParams = _valueNetwork.GetParameters();
-                var valueGrads = ((NeuralNetwork<T>)_valueNetwork).GetGradients();
+                var valueGrads = _valueNetwork.GetParameterGradients();
                 for (int j = 0; j < valueParams.Length; j++)
                 {
                     valueParams[j] = NumOps.Subtract(valueParams[j],
@@ -416,7 +416,7 @@ public class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>
 
                 var policyGradient = ComputeTRPOPolicyGradient(policyOutput, action, weightedAdvantage);
                 var policyGradientTensor = Tensor<T>.FromVector(policyGradient);
-                ((NeuralNetwork<T>)_policyNetwork).Backpropagate(policyGradientTensor);
+                _policyNetwork.Backpropagate(policyGradientTensor);
             }
         }
     }
@@ -750,11 +750,11 @@ public class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>
     public override void ApplyGradients(Vector<T> gradients, T learningRate)
     {
         var gradientsTensor = Tensor<T>.FromVector(gradients);
-        ((NeuralNetwork<T>)_policyNetwork).Backpropagate(gradientsTensor);
+        _policyNetwork.Backpropagate(gradientsTensor);
 
         // Manual parameter update with learning rate
         var policyParams = _policyNetwork.GetParameters();
-        var policyGrads = ((NeuralNetwork<T>)_policyNetwork).GetGradients();
+        var policyGrads = _policyNetwork.GetParameterGradients();
         for (int i = 0; i < policyParams.Length; i++)
         {
             policyParams[i] = NumOps.Subtract(policyParams[i],

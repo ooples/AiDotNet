@@ -20,8 +20,9 @@ public class MarketMakingAgent<T> : TradingAgentBase<T>
 {
     #region Fields
 
-    private readonly NeuralNetwork<T> _policyNetwork;
+    private readonly INeuralNetwork<T> _policyNetwork;
     private readonly MarketMakingOptions<T> _mmOptions;
+    private readonly NeuralNetworkArchitecture<T> _architecture;
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _mmOptions;
@@ -67,6 +68,7 @@ public class MarketMakingAgent<T> : TradingAgentBase<T>
         : base(options)
     {
         _mmOptions = options;
+        _architecture = architecture;
         EnsureMarketMakingLayers(architecture, options.StateSize, options.ActionSize);
         _policyNetwork = new NeuralNetwork<T>(architecture, TradingOptions.LossFunction ?? new MeanSquaredErrorLoss<T>());
         ReplayBuffer = new ReplayBuffer<T>(options.ReplayBufferSize, options.Seed);
@@ -283,7 +285,7 @@ public class MarketMakingAgent<T> : TradingAgentBase<T>
     /// </remarks>
     public override IFullModel<T, Vector<T>, Vector<T>> Clone()
     {
-        var clone = new MarketMakingAgent<T>(_policyNetwork.GetArchitecture(), _mmOptions);
+        var clone = new MarketMakingAgent<T>(_architecture, _mmOptions);
         clone.SetParameters(GetParameters());
         return clone;
     }

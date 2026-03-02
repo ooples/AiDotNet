@@ -45,8 +45,8 @@ public class DQNAgent<T> : DeepReinforcementLearningAgentBase<T>
     public override ModelOptions GetOptions() => _dqnOptions;
     private readonly UniformReplayBuffer<T, Vector<T>, Vector<T>> _replayBuffer;
 
-    private NeuralNetwork<T> _qNetwork;
-    private NeuralNetwork<T> _targetNetwork;
+    private INeuralNetwork<T> _qNetwork;
+    private INeuralNetwork<T> _targetNetwork;
     private double _epsilon;
     private int _steps;
 
@@ -230,7 +230,7 @@ public class DQNAgent<T> : DeepReinforcementLearningAgentBase<T>
             _qNetwork.Backpropagate(gradientsTensor);
 
             // Extract parameter gradients from network layers (not output-space gradients)
-            var parameterGradients = _qNetwork.GetGradients();
+            var parameterGradients = _qNetwork.GetParameterGradients();
             var parameters = _qNetwork.GetParameters();
 
             for (int i = 0; i < parameters.Length; i++)
@@ -400,7 +400,7 @@ public class DQNAgent<T> : DeepReinforcementLearningAgentBase<T>
             throw new ArgumentException(
                 $"Gradient vector length ({gradients.Length}) must match parameter vector length ({currentParams.Length}). " +
                 $"ApplyGradients expects parameter-space gradients (w.r.t. all network weights), not output-space gradients (w.r.t. network outputs). " +
-                $"Use _qNetwork.GetGradients() after backpropagation to obtain parameter-space gradients.",
+                $"Use _qNetwork.GetParameterGradients() after backpropagation to obtain parameter-space gradients.",
                 nameof(gradients));
         }
 
@@ -409,7 +409,7 @@ public class DQNAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     // Helper methods
 
-    private void CopyNetworkWeights(NeuralNetwork<T> source, NeuralNetwork<T> target)
+    private void CopyNetworkWeights(INeuralNetwork<T> source, INeuralNetwork<T> target)
     {
         var sourceParams = source.GetParameters();
         target.UpdateParameters(sourceParams);

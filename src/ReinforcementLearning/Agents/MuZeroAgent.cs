@@ -45,9 +45,9 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
     public override ModelOptions GetOptions() => _options;
 
     // Three core networks
-    private NeuralNetwork<T> _representationNetwork;  // h = f(observation)
-    private NeuralNetwork<T> _dynamicsNetwork;  // (h', r) = g(h, action)
-    private NeuralNetwork<T> _predictionNetwork;  // (p, v) = f(h)
+    private INeuralNetwork<T> _representationNetwork;  // h = f(observation)
+    private INeuralNetwork<T> _dynamicsNetwork;  // (h', r) = g(h, action)
+    private INeuralNetwork<T> _predictionNetwork;  // (p, v) = f(h)
 
     private UniformReplayBuffer<T, Vector<T>, Vector<T>> _replayBuffer;
     private int _updateCount;
