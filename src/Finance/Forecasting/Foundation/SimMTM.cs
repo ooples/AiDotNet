@@ -178,6 +178,7 @@ public class SimMTM<T> : TimeSeriesFoundationModelBase<T>
     private void ExtractLayerReferences()
     {
         int idx = 0;
+        // SimMTM block layout: norm(1) + attn_QKV+out(4) + norm(1) + FFN(2) = 8; +dropout=9
         int layersPerBlock = _dropout > 0 ? 9 : 7;
 
         if (idx < Layers.Count)
@@ -193,6 +194,12 @@ public class SimMTM<T> : TimeSeriesFoundationModelBase<T>
 
         if (idx < Layers.Count)
             _forecastHead = Layers[idx++];
+
+        // Validate critical references were extracted
+        int expectedLayers = 1 + totalTransformerLayers + 2; // patch + transformer + reconstruction + forecast
+        if (Layers.Count < expectedLayers)
+            System.Diagnostics.Debug.WriteLine(
+                $"SimMTM: Expected {expectedLayers} layers but found {Layers.Count}. Some layer references may be null.");
     }
 
     #endregion
@@ -262,7 +269,7 @@ public class SimMTM<T> : TimeSeriesFoundationModelBase<T>
     /// <inheritdoc/>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        return new SimMTM<T>(Architecture, new SimMTMOptions<T>
+        var opts = new SimMTMOptions<T>
         {
             ContextLength = _contextLength,
             ForecastHorizon = _forecastHorizon,
@@ -273,7 +280,12 @@ public class SimMTM<T> : TimeSeriesFoundationModelBase<T>
             MaskRatio = _maskRatio,
             DropoutRate = _dropout,
             SimilarityTemperature = _similarityTemperature
-        });
+        };
+
+        if (!_useNativeMode && OnnxModelPath is not null)
+            return new SimMTM<T>(Architecture, OnnxModelPath, opts);
+
+        return new SimMTM<T>(Architecture, opts);
     }
 
     /// <inheritdoc/>
@@ -311,6 +323,9 @@ public class SimMTM<T> : TimeSeriesFoundationModelBase<T>
     /// <inheritdoc/>
     public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
     {
+        if (quantiles is not null && quantiles.Length > 0)
+            throw new NotSupportedException("SimMTM does not support quantile forecasting. Pass null for point forecasts.");
+
         return _useNativeMode ? ForwardNative(historicalData) : ForecastOnnx(historicalData);
     }
 
@@ -366,8 +381,8 @@ public class SimMTM<T> : TimeSeriesFoundationModelBase<T>
     /// <inheritdoc/>
     public override Tensor<T> ApplyInstanceNormalization(Tensor<T> input)
     {
-        int batchSize = input.Shape[0];
-        int seqLen = input.Shape.Length > 1 ? input.Shape[1] : input.Length;
+        int batchSize = input.Rank > 1 ? input.Shape[0] : 1;
+        int seqLen = input.Rank > 1 ? input.Shape[1] : input.Length;
         var result = new Tensor<T>(input.Shape);
 
         for (int b = 0; b < batchSize; b++)
@@ -488,9 +503,9 @@ public class SimMTM<T> : TimeSeriesFoundationModelBase<T>
         if (OnnxSession == null)
             throw new InvalidOperationException("ONNX session is not initialized.");
 
-        int batchSize = input.Shape[0];
-        int seqLen = input.Shape.Length > 1 ? input.Shape[1] : input.Length;
-        int features = input.Shape.Length > 2 ? input.Shape[2] : 1;
+        int batchSize = input.Rank > 1 ? input.Shape[0] : 1;
+        int seqLen = input.Rank > 1 ? input.Shape[1] : input.Length;
+        int features = input.Rank > 2 ? input.Shape[2] : 1;
 
         var inputData = new float[batchSize * seqLen * features];
         for (int i = 0; i < input.Length && i < inputData.Length; i++)
@@ -499,9 +514,10 @@ public class SimMTM<T> : TimeSeriesFoundationModelBase<T>
         var inputTensor = new OnnxTensors.DenseTensor<float>(
             inputData, new[] { batchSize, seqLen, features });
 
+        string inputName = OnnxSession.InputMetadata.Keys.FirstOrDefault() ?? "input";
         var inputs = new List<NamedOnnxValue>
         {
-            NamedOnnxValue.CreateFromTensor("input", inputTensor)
+            NamedOnnxValue.CreateFromTensor(inputName, inputTensor)
         };
 
         using var results = OnnxSession.Run(inputs);
@@ -525,6 +541,9 @@ public class SimMTM<T> : TimeSeriesFoundationModelBase<T>
 
     private new int GetParameterCount()
     {
+        if (_patchLength <= 0)
+            return 0;
+
         int numPatches = _contextLength / _patchLength;
         long total = (long)_patchLength * _hiddenDimension + _hiddenDimension;
 

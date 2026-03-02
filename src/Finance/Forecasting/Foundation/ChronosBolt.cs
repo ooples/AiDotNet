@@ -157,6 +157,9 @@ public class ChronosBolt<T> : TimeSeriesFoundationModelBase<T>
         Guard.Positive(options.NumHeads, nameof(options.NumHeads));
         Guard.Positive(options.NumQuantiles, nameof(options.NumQuantiles));
 
+        if (options.DropoutRate < 0.0 || options.DropoutRate >= 1.0)
+            throw new ArgumentOutOfRangeException(nameof(options), $"DropoutRate must be in [0, 1) but was {options.DropoutRate}.");
+
         _contextLength = options.ContextLength;
         _forecastHorizon = options.ForecastHorizon;
         _patchLength = options.PatchLength;
@@ -366,8 +369,8 @@ public class ChronosBolt<T> : TimeSeriesFoundationModelBase<T>
     /// <inheritdoc/>
     public override Tensor<T> ApplyInstanceNormalization(Tensor<T> input)
     {
-        int batchSize = input.Shape[0];
-        int seqLen = input.Shape.Length > 1 ? input.Shape[1] : input.Length;
+        int batchSize = input.Rank > 1 ? input.Shape[0] : 1;
+        int seqLen = input.Rank > 1 ? input.Shape[1] : input.Length;
         var result = new Tensor<T>(input.Shape);
         for (int b = 0; b < batchSize; b++)
         {

@@ -65,6 +65,8 @@ public class QuantileForecastResult<T>
         {
             if (kvp.Key < 0.0 || kvp.Key > 1.0)
                 throw new ArgumentOutOfRangeException(nameof(quantileForecasts), $"Quantile level {kvp.Key} must be between 0 and 1.");
+            if (kvp.Value is null)
+                throw new ArgumentException($"Quantile forecast tensor for q={kvp.Key:F2} is null.", nameof(quantileForecasts));
             if (kvp.Value.Length != pointForecast.Length)
                 throw new ArgumentException($"Quantile forecast for q={kvp.Key:F2} has length {kvp.Value.Length} but point forecast has length {pointForecast.Length}.", nameof(quantileForecasts));
             copy[kvp.Key] = kvp.Value;

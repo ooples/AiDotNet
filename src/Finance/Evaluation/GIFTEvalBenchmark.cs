@@ -250,9 +250,12 @@ public class GIFTEvalBenchmark<T>
             foreach (double q in quantileLevels)
             {
                 var qForecast = model.Forecast(context, new[] { q });
+                if (qForecast.Length < evalLen)
+                    throw new InvalidOperationException(
+                        $"Quantile forecast for q={q:F2} returned {qForecast.Length} values but {evalLen} were expected.");
                 var qSlice = new Tensor<T>(new[] { evalLen });
                 for (int i = 0; i < evalLen; i++)
-                    qSlice.Data.Span[i] = i < qForecast.Length ? qForecast[i] : NumOps.Zero;
+                    qSlice.Data.Span[i] = qForecast[i];
                 quantileDict[q] = qSlice;
             }
 

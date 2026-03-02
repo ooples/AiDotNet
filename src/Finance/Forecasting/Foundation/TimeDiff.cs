@@ -86,11 +86,22 @@ public class TimeDiff<T> : TimeSeriesFoundationModelBase<T>
         TimeDiffOptions<T>? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null, ILossFunction<T>? lossFunction = null)
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
     {
-        if (string.IsNullOrWhiteSpace(onnxModelPath)) throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
-        if (!File.Exists(onnxModelPath)) throw new FileNotFoundException($"ONNX model not found: {onnxModelPath}");
-        options ??= new TimeDiffOptions<T>(); _options = options; Options = _options;
-        _useNativeMode = false; OnnxModelPath = onnxModelPath; OnnxSession = new InferenceSession(onnxModelPath);
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this); _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
+        if (string.IsNullOrWhiteSpace(onnxModelPath))
+            throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
+        if (!File.Exists(onnxModelPath))
+            throw new FileNotFoundException($"ONNX model not found: {onnxModelPath}");
+
+        options ??= new TimeDiffOptions<T>();
+        _options = options;
+        Options = _options;
+
+        _useNativeMode = false;
+        OnnxModelPath = onnxModelPath;
+        OnnxSession = new InferenceSession(onnxModelPath);
+
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
+
         CopyOptionsToFields(options);
     }
 
@@ -98,19 +109,33 @@ public class TimeDiff<T> : TimeSeriesFoundationModelBase<T>
         TimeDiffOptions<T>? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null, ILossFunction<T>? lossFunction = null)
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
     {
-        options ??= new TimeDiffOptions<T>(); _options = options; Options = _options;
-        _useNativeMode = true; OnnxSession = null; OnnxModelPath = null;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this); _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
-        CopyOptionsToFields(options); InitializeLayers();
+        options ??= new TimeDiffOptions<T>();
+        _options = options;
+        Options = _options;
+
+        _useNativeMode = true;
+        OnnxSession = null;
+        OnnxModelPath = null;
+
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
+
+        CopyOptionsToFields(options);
+        InitializeLayers();
     }
 
     private void CopyOptionsToFields(TimeDiffOptions<T> options)
     {
-        _contextLength = options.ContextLength; _forecastHorizon = options.ForecastHorizon;
-        _hiddenDimension = options.HiddenDimension; _numLayers = options.NumLayers;
-        _numHeads = options.NumHeads; _diffusionSteps = options.DiffusionSteps;
-        _dropout = options.DropoutRate; _betaStart = options.BetaStart;
-        _betaEnd = options.BetaEnd; _useFutureMixup = options.UseFutureMixup;
+        _contextLength = options.ContextLength;
+        _forecastHorizon = options.ForecastHorizon;
+        _hiddenDimension = options.HiddenDimension;
+        _numLayers = options.NumLayers;
+        _numHeads = options.NumHeads;
+        _diffusionSteps = options.DiffusionSteps;
+        _dropout = options.DropoutRate;
+        _betaStart = options.BetaStart;
+        _betaEnd = options.BetaEnd;
+        _useFutureMixup = options.UseFutureMixup;
         _useAutoregressiveInit = options.UseAutoregressiveInit;
         ComputeNoiseSchedule();
     }

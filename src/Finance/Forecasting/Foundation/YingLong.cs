@@ -10,6 +10,7 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Validation;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
 
@@ -140,6 +141,14 @@ public class YingLong<T> : TimeSeriesFoundationModelBase<T>
 
     private void CopyOptionsToFields(YingLongOptions<T> options)
     {
+        Guard.Positive(options.ContextLength, nameof(options.ContextLength));
+        Guard.Positive(options.ForecastHorizon, nameof(options.ForecastHorizon));
+        Guard.Positive(options.PatchLength, nameof(options.PatchLength));
+        Guard.Positive(options.HiddenDimension, nameof(options.HiddenDimension));
+        Guard.Positive(options.NumLayers, nameof(options.NumLayers));
+        Guard.Positive(options.NumHeads, nameof(options.NumHeads));
+        Guard.Positive(options.IntermediateSize, nameof(options.IntermediateSize));
+
         _contextLength = options.ContextLength;
         _forecastHorizon = options.ForecastHorizon;
         _patchLength = options.PatchLength;
@@ -180,6 +189,7 @@ public class YingLong<T> : TimeSeriesFoundationModelBase<T>
             _patchEmbedding = Layers[idx++];
 
         _transformerLayers.Clear();
+        // YingLong block layout: norm(1) + attn_QKV+out(4) + norm(1) + FFN(2) = 8; with dropout: +1 = 9
         int layersPerBlock = _dropout > 0 ? 9 : 7;
         int totalTransformerLayers = _numLayers * layersPerBlock;
 
@@ -310,6 +320,9 @@ public class YingLong<T> : TimeSeriesFoundationModelBase<T>
     /// <inheritdoc/>
     public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
     {
+        if (quantiles is not null && quantiles.Length > 0)
+            throw new NotSupportedException("YingLong does not support quantile forecasting. Pass null for point forecasts.");
+
         return _useNativeMode ? ForwardNative(historicalData) : ForecastOnnx(historicalData);
     }
 
@@ -365,8 +378,11 @@ public class YingLong<T> : TimeSeriesFoundationModelBase<T>
     /// <inheritdoc/>
     public override Tensor<T> ApplyInstanceNormalization(Tensor<T> input)
     {
-        int batchSize = input.Shape[0];
-        int seqLen = input.Shape.Length > 1 ? input.Shape[1] : input.Length;
+        int batchSize = input.Rank > 1 ? input.Shape[0] : 1;
+        int seqLen = input.Rank > 1 ? input.Shape[1] : input.Length;
+        if (input.Length == 0 || seqLen == 0)
+            return new Tensor<T>(input.Shape);
+
         var result = new Tensor<T>(input.Shape);
 
         for (int b = 0; b < batchSize; b++)
@@ -499,9 +515,10 @@ public class YingLong<T> : TimeSeriesFoundationModelBase<T>
         var inputTensor = new OnnxTensors.DenseTensor<float>(
             inputData, new[] { batchSize, seqLen, features });
 
+        string inputName = OnnxSession.InputMetadata.Keys.FirstOrDefault() ?? "input";
         var inputs = new List<NamedOnnxValue>
         {
-            NamedOnnxValue.CreateFromTensor("input", inputTensor)
+            NamedOnnxValue.CreateFromTensor(inputName, inputTensor)
         };
 
         using var results = OnnxSession.Run(inputs);

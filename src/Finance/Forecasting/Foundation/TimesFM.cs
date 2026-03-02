@@ -659,9 +659,14 @@ public class TimesFM<T> : TimeSeriesFoundationModelBase<T>
     /// </remarks>
     public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
     {
-        // TimesFM 2.5: if quantiles requested and quantile head is available, produce quantile forecasts
-        if (quantiles is not null && quantiles.Length > 0 && _numQuantiles > 0)
+        // TimesFM 2.5: if quantiles requested, validate quantile head is configured
+        if (quantiles is not null && quantiles.Length > 0)
         {
+            if (_numQuantiles <= 0)
+                throw new NotSupportedException(
+                    "Quantile forecasting requires NumQuantiles > 0 in TimesFMOptions. " +
+                    "Configure the quantile head or pass null for point forecasts.");
+
             if (!_useNativeMode)
                 throw new NotSupportedException(
                     "Quantile forecasting is only supported in native mode. " +

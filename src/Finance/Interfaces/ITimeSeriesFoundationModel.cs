@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using AiDotNet.Enums;
 
 namespace AiDotNet.Finance.Interfaces;

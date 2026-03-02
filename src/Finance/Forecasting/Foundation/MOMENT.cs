@@ -567,8 +567,8 @@ public class MOMENT<T> : TimeSeriesFoundationModelBase<T>
     public override Tensor<T> ApplyInstanceNormalization(Tensor<T> input)
     {
         // MOMENT uses RevIN (Reversible Instance Normalization)
-        int batchSize = input.Shape[0];
-        int seqLen = input.Shape.Length > 1 ? input.Shape[1] : input.Length;
+        int batchSize = input.Rank > 1 ? input.Shape[0] : 1;
+        int seqLen = input.Rank > 1 ? input.Shape[1] : input.Length;
         var result = new Tensor<T>(input.Shape);
 
         for (int b = 0; b < batchSize; b++)
@@ -633,6 +633,10 @@ public class MOMENT<T> : TimeSeriesFoundationModelBase<T>
     {
         ValidateTaskSupported(TimeSeriesFoundationModelTask.AnomalyDetection);
 
+        if (!_useNativeMode)
+            throw new NotSupportedException(
+                "Anomaly detection requires native mode. ONNX inference only supports forecasting.");
+
         // Anomaly detection via reconstruction error
         var normalized = ApplyInstanceNormalization(series);
         var reconstructed = ReconstructNative(normalized);
@@ -663,6 +667,13 @@ public class MOMENT<T> : TimeSeriesFoundationModelBase<T>
     public override Tensor<T> Classify(Tensor<T> series, int numClasses)
     {
         ValidateTaskSupported(TimeSeriesFoundationModelTask.Classification);
+
+        if (numClasses <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numClasses), numClasses, "Number of classes must be positive.");
+
+        if (!_useNativeMode)
+            throw new NotSupportedException(
+                "Classification requires native mode. ONNX inference only supports forecasting.");
 
         var normalized = ApplyInstanceNormalization(series);
         var encoded = ForwardEncoder(normalized);
@@ -704,6 +715,10 @@ public class MOMENT<T> : TimeSeriesFoundationModelBase<T>
     {
         ValidateTaskSupported(TimeSeriesFoundationModelTask.Imputation);
 
+        if (!_useNativeMode)
+            throw new NotSupportedException(
+                "Imputation requires native mode. ONNX inference only supports forecasting.");
+
         // Apply mask to input (zero out missing values)
         var masked = new Tensor<T>(series.Shape);
         for (int i = 0; i < series.Length && i < mask.Length; i++)
@@ -736,6 +751,10 @@ public class MOMENT<T> : TimeSeriesFoundationModelBase<T>
     public override Tensor<T> Embed(Tensor<T> series)
     {
         ValidateTaskSupported(TimeSeriesFoundationModelTask.Embedding);
+
+        if (!_useNativeMode)
+            throw new NotSupportedException(
+                "Embedding extraction requires native mode. ONNX inference only supports forecasting.");
 
         var normalized = ApplyInstanceNormalization(series);
         var encoded = ForwardEncoder(normalized);
@@ -883,9 +902,9 @@ public class MOMENT<T> : TimeSeriesFoundationModelBase<T>
         if (OnnxSession == null)
             throw new InvalidOperationException("ONNX session is not initialized.");
 
-        int batchSize = input.Shape[0];
-        int seqLen = input.Shape.Length > 1 ? input.Shape[1] : input.Length;
-        int features = input.Shape.Length > 2 ? input.Shape[2] : 1;
+        int batchSize = input.Rank > 1 ? input.Shape[0] : 1;
+        int seqLen = input.Rank > 1 ? input.Shape[1] : input.Length;
+        int features = input.Rank > 2 ? input.Shape[2] : 1;
 
         var inputData = new float[batchSize * seqLen * features];
         for (int i = 0; i < input.Length && i < inputData.Length; i++)
@@ -896,9 +915,10 @@ public class MOMENT<T> : TimeSeriesFoundationModelBase<T>
         var inputTensor = new OnnxTensors.DenseTensor<float>(
             inputData, new[] { batchSize, seqLen, features });
 
+        string inputName = OnnxSession.InputMetadata.Keys.FirstOrDefault() ?? "input";
         var inputs = new List<NamedOnnxValue>
         {
-            NamedOnnxValue.CreateFromTensor("input", inputTensor)
+            NamedOnnxValue.CreateFromTensor(inputName, inputTensor)
         };
 
         using var results = OnnxSession.Run(inputs);

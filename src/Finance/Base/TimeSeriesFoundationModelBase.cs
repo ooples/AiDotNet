@@ -1,3 +1,6 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
 using AiDotNet.LossFunctions;

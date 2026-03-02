@@ -282,7 +282,7 @@ public class TEST<T> : TimeSeriesFoundationModelBase<T>
     /// <inheritdoc/>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        return new TEST<T>(Architecture, new TESTOptions<T>
+        var opts = new TESTOptions<T>
         {
             ContextLength = _contextLength,
             ForecastHorizon = _forecastHorizon,
@@ -295,7 +295,12 @@ public class TEST<T> : TimeSeriesFoundationModelBase<T>
             ModelSize = _modelSize,
             NumPrototypes = _numPrototypes,
             AlignmentWeight = _alignmentWeight
-        });
+        };
+
+        if (!_useNativeMode && OnnxModelPath is not null)
+            return new TEST<T>(Architecture, OnnxModelPath, opts);
+
+        return new TEST<T>(Architecture, opts);
     }
 
     /// <inheritdoc/>
@@ -395,8 +400,8 @@ public class TEST<T> : TimeSeriesFoundationModelBase<T>
     /// <inheritdoc/>
     public override Tensor<T> ApplyInstanceNormalization(Tensor<T> input)
     {
-        int batchSize = input.Shape[0];
-        int seqLen = input.Shape.Length > 1 ? input.Shape[1] : input.Length;
+        int batchSize = input.Rank > 1 ? input.Shape[0] : 1;
+        int seqLen = input.Rank > 1 ? input.Shape[1] : input.Length;
         var result = new Tensor<T>(input.Shape);
 
         for (int b = 0; b < batchSize; b++)

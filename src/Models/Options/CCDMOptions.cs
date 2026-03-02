@@ -45,6 +45,16 @@ public class CCDMOptions<T> : TimeSeriesRegressionOptions<T>
     public CCDMOptions(CCDMOptions<T> other)
     {
         if (other == null) throw new ArgumentNullException(nameof(other));
+
+        // Copy inherited TimeSeriesRegressionOptions properties
+        LagOrder = other.LagOrder;
+        IncludeTrend = other.IncludeTrend;
+        SeasonalPeriod = other.SeasonalPeriod;
+        AutocorrelationCorrection = other.AutocorrelationCorrection;
+        ModelType = other.ModelType;
+        LossFunction = other.LossFunction;
+
+        // Copy CCDM-specific properties
         ContextLength = other.ContextLength;
         ForecastHorizon = other.ForecastHorizon;
         HiddenDimension = other.HiddenDimension;
@@ -160,10 +170,15 @@ public class CCDMOptions<T> : TimeSeriesRegressionOptions<T>
     /// <summary>
     /// Gets or sets the maximum noise level for the continuous diffusion schedule.
     /// </summary>
-    /// <value>Defaults to 80.0.</value>
+    /// <value>Defaults to 80.0 (from Song et al., "Score-Based Generative Modeling through SDEs", ICLR 2021).</value>
     /// <remarks>
     /// <para><b>For Beginners:</b> The largest noise scale used. Higher values mean the
     /// model learns to recover signal from more aggressive corruption.</para>
+    /// <para><b>Provenance:</b> Default noise schedule parameters (BetaStart=0.0001, BetaEnd=0.5,
+    /// SigmaMin=0.002, SigmaMax=80.0) follow standard continuous diffusion practice from
+    /// Song et al. (2021) and Ho et al. "Denoising Diffusion Probabilistic Models" (NeurIPS 2020).
+    /// Architecture defaults (HiddenDimension=128, NumLayers=4, NumHeads=8, DiffusionSteps=100)
+    /// are common baselines for time series diffusion models.</para>
     /// </remarks>
     public double SigmaMax { get; set; } = 80.0;
 }

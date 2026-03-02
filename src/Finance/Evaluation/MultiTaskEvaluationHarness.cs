@@ -107,16 +107,21 @@ public class MultiTaskEvaluationHarness<T>
             };
         }
 
+        if (testSeries.Count != groundTruthLabels.Count)
+            throw new ArgumentException(
+                $"testSeries count ({testSeries.Count}) must match groundTruthLabels count ({groundTruthLabels.Count}).",
+                nameof(groundTruthLabels));
+
         int tp = 0, fp = 0, fn = 0;
 
-        for (int s = 0; s < testSeries.Count && s < groundTruthLabels.Count; s++)
+        // Use a single consistent threshold for both detection and metric binarization
+        double scoreThreshold = threshold ?? 0.5;
+
+        for (int s = 0; s < testSeries.Count; s++)
         {
-            // Pass threshold to model (null = use model's own default for anomaly scoring)
-            var scores = model.DetectAnomalies(testSeries[s], threshold);
+            var scores = model.DetectAnomalies(testSeries[s], scoreThreshold);
             var labels = groundTruthLabels[s];
 
-            // For evaluation, interpret scores > threshold as anomalies (0.5 default for normalized scores)
-            double scoreThreshold = threshold ?? 0.5;
             int evalLen = Math.Min(scores.Length, labels.Length);
 
             for (int i = 0; i < evalLen; i++)
@@ -237,10 +242,20 @@ public class MultiTaskEvaluationHarness<T>
         double totalMse = 0;
         int totalMasked = 0;
 
-        for (int s = 0; s < completeSeries.Count && s < masks.Count; s++)
+        if (completeSeries.Count != masks.Count)
+            throw new ArgumentException(
+                $"completeSeries count ({completeSeries.Count}) must match masks count ({masks.Count}).",
+                nameof(masks));
+
+        for (int s = 0; s < completeSeries.Count; s++)
         {
             var original = completeSeries[s];
             var mask = masks[s];
+
+            if (original.Length != mask.Length)
+                throw new ArgumentException(
+                    $"Series {s} length ({original.Length}) must match mask length ({mask.Length}).",
+                    nameof(masks));
 
             // Create masked input (zero out masked positions)
             var maskedInput = new Tensor<T>(original.Shape);
@@ -254,7 +269,7 @@ public class MultiTaskEvaluationHarness<T>
 
             // Evaluate only on masked positions
             int evalLen = Math.Min(imputed.Length, original.Length);
-            for (int i = 0; i < evalLen && i < mask.Length; i++)
+            for (int i = 0; i < evalLen; i++)
             {
                 if (NumOps.ToDouble(mask[i]) < 0.5) // This was masked
                 {

@@ -484,8 +484,19 @@ public class Kairos<T> : TimeSeriesFoundationModelBase<T>
             current = current.Reshape(new[] { 1, current.Length });
             addedBatchDim = true;
         }
-        for (int i = Layers.Count - 1; i >= 0; i--)
-            current = Layers[i].Backward(current);
+
+        if (_forecastHead is not null)
+            current = _forecastHead.Backward(current);
+
+        if (_finalLayerNorm is not null)
+            current = _finalLayerNorm.Backward(current);
+
+        for (int i = _transformerLayers.Count - 1; i >= 0; i--)
+            current = _transformerLayers[i].Backward(current);
+
+        if (_patchEmbedding is not null)
+            current = _patchEmbedding.Backward(current);
+
         if (addedBatchDim && current.Rank == 2 && current.Shape[0] == 1)
             current = current.Reshape(new[] { current.Shape[1] });
         return current;
