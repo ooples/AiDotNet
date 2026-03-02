@@ -176,6 +176,9 @@ public class TimeGrad<T> : TimeSeriesFoundationModelBase<T>
     /// </remarks>
     private void ComputeNoiseSchedule()
     {
+        if (_numDiffusionSteps <= 0)
+            throw new ArgumentOutOfRangeException(nameof(_numDiffusionSteps), "DiffusionSteps must be positive.");
+
         _betas = new double[_numDiffusionSteps];
         _alphas = new double[_numDiffusionSteps];
         _alphasCumprod = new double[_numDiffusionSteps];
@@ -299,7 +302,10 @@ public class TimeGrad<T> : TimeSeriesFoundationModelBase<T>
     }
 
     /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> gradients) { }
+    public override void UpdateParameters(Vector<T> gradients)
+    {
+        // Parameters are updated through the optimizer in Train()
+    }
 
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()

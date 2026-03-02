@@ -315,7 +315,7 @@ public class MOIRAI<T> : TimeSeriesFoundationModelBase<T>
         {
             foreach (var patchSize in _patchSizes)
             {
-                _totalPatches += _contextLength / patchSize;
+                _totalPatches += _contextLength / Math.Max(1, patchSize);
             }
         }
 
@@ -380,7 +380,7 @@ public class MOIRAI<T> : TimeSeriesFoundationModelBase<T>
         {
             foreach (var patchSize in _patchSizes)
             {
-                _totalPatches += _contextLength / patchSize;
+                _totalPatches += _contextLength / Math.Max(1, patchSize);
             }
         }
 

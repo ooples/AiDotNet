@@ -214,7 +214,10 @@ public class ChronosBolt<T> : TimeSeriesFoundationModelBase<T>
     }
 
     /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> gradients) { }
+    public override void UpdateParameters(Vector<T> gradients)
+    {
+        // Parameters are updated through the optimizer in Train()
+    }
 
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
@@ -304,8 +307,14 @@ public class ChronosBolt<T> : TimeSeriesFoundationModelBase<T>
     /// <inheritdoc/>
     public override Tensor<T> AutoregressiveForecast(Tensor<T> input, int steps)
     {
-        // Chronos-Bolt is non-autoregressive — direct multi-step output
-        return Forecast(input, null);
+        // Chronos-Bolt is non-autoregressive — direct multi-step output, truncated to requested steps
+        var fullForecast = Forecast(input, null);
+        if (steps >= fullForecast.Length) return fullForecast;
+
+        var result = new Tensor<T>(new[] { steps });
+        for (int i = 0; i < steps; i++)
+            result.Data.Span[i] = fullForecast[i];
+        return result;
     }
 
     /// <inheritdoc/>

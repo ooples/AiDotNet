@@ -69,6 +69,7 @@ public class TimeSeriesTokenizer<T>
         Strategy = strategy;
         PatchLength = patchLength;
         Stride = stride ?? patchLength;
+        Guard.Positive(Stride, nameof(Stride));
         VocabularySize = vocabularySize;
     }
 

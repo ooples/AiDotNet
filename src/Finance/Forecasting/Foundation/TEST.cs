@@ -241,6 +241,7 @@ public class TEST<T> : TimeSeriesFoundationModelBase<T>
     /// <inheritdoc/>
     public override void UpdateParameters(Vector<T> gradients)
     {
+        // Parameters are updated through the optimizer in Train()
     }
 
     /// <inheritdoc/>

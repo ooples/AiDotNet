@@ -39,10 +39,6 @@ public class VisionTS<T> : TimeSeriesFoundationModelBase<T>
     private readonly bool _useNativeMode;
     private readonly List<ILayer<T>> _encoderLayers = [];
     private readonly List<ILayer<T>> _decoderLayers = [];
-    #pragma warning disable CS0169 // Field is never directly used (extracted from Layers collection)
-    private ILayer<T>? _patchEmbedding;
-    private ILayer<T>? _forecastHead;
-    #pragma warning restore CS0169
 
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ILossFunction<T> _lossFunction;
@@ -211,7 +207,10 @@ public class VisionTS<T> : TimeSeriesFoundationModelBase<T>
     }
 
     /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> gradients) { }
+    public override void UpdateParameters(Vector<T> gradients)
+    {
+        // Parameters are updated through the optimizer in Train()
+    }
 
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()

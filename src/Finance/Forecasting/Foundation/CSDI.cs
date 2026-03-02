@@ -153,6 +153,9 @@ public class CSDI<T> : TimeSeriesFoundationModelBase<T>
 
     private void ComputeNoiseSchedule()
     {
+        if (_numDiffusionSteps <= 0)
+            throw new ArgumentOutOfRangeException(nameof(_numDiffusionSteps), "DiffusionSteps must be positive.");
+
         _betas = new Vector<T>(_numDiffusionSteps);
         _alphas = new Vector<T>(_numDiffusionSteps);
         _alphasCumprod = new Vector<T>(_numDiffusionSteps);
@@ -238,7 +241,10 @@ public class CSDI<T> : TimeSeriesFoundationModelBase<T>
         finally { SetTrainingMode(false); }
     }
 
-    public override void UpdateParameters(Vector<T> gradients) { }
+    public override void UpdateParameters(Vector<T> gradients)
+    {
+        // Parameters are updated through the optimizer in Train()
+    }
 
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
@@ -278,6 +284,7 @@ public class CSDI<T> : TimeSeriesFoundationModelBase<T>
         _numDiffusionSteps = reader.ReadInt32(); _numHeads = reader.ReadInt32();
         _timeEmbeddingDim = reader.ReadInt32(); _dropout = reader.ReadDouble();
         _betaStart = reader.ReadDouble(); _betaEnd = reader.ReadDouble();
+        ComputeNoiseSchedule();
     }
 
     #endregion

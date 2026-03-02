@@ -117,6 +117,9 @@ public class CCDM<T> : TimeSeriesFoundationModelBase<T>
 
     private void ComputeNoiseSchedule()
     {
+        if (_diffusionSteps <= 0)
+            throw new ArgumentOutOfRangeException(nameof(_diffusionSteps), "DiffusionSteps must be positive.");
+
         // Standard DDPM beta schedule
         _betas = new Vector<T>(_diffusionSteps);
         _alphas = new Vector<T>(_diffusionSteps);
@@ -259,7 +262,10 @@ public class CCDM<T> : TimeSeriesFoundationModelBase<T>
         return result;
     }
 
-    public override void UpdateParameters(Vector<T> gradients) { }
+    public override void UpdateParameters(Vector<T> gradients)
+    {
+        // Parameters are updated through the optimizer in Train()
+    }
 
     public override ModelMetadata<T> GetModelMetadata() => new()
     {

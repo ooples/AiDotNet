@@ -8,6 +8,7 @@ using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Validation;
 using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Helpers;
 using Microsoft.ML.OnnxRuntime;
@@ -143,6 +144,13 @@ public class TOTO<T> : TimeSeriesFoundationModelBase<T>
 
     private void CopyOptionsToFields(TOTOOptions<T> options)
     {
+        Guard.Positive(options.ContextLength, nameof(options.ContextLength));
+        Guard.Positive(options.ForecastHorizon, nameof(options.ForecastHorizon));
+        Guard.Positive(options.PatchLength, nameof(options.PatchLength));
+        Guard.Positive(options.HiddenDimension, nameof(options.HiddenDimension));
+        Guard.Positive(options.NumLayers, nameof(options.NumLayers));
+        Guard.Positive(options.NumHeads, nameof(options.NumHeads));
+
         _contextLength = options.ContextLength;
         _forecastHorizon = options.ForecastHorizon;
         _patchLength = options.PatchLength;
@@ -235,6 +243,7 @@ public class TOTO<T> : TimeSeriesFoundationModelBase<T>
     /// <inheritdoc/>
     public override void UpdateParameters(Vector<T> gradients)
     {
+        // Parameters are updated through the optimizer in Train()
     }
 
     /// <inheritdoc/>

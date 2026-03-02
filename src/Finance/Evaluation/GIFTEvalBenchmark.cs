@@ -63,6 +63,8 @@ public class GIFTEvalBenchmark<T>
         int horizon = Math.Min(predictions.Length, actuals.Length);
 
         // Compute forecast MAE
+        if (horizon == 0) return 0.0;
+
         double forecastMae = 0;
         for (int i = 0; i < horizon; i++)
         {
@@ -129,7 +131,9 @@ public class GIFTEvalBenchmark<T>
             foreach (var kvp in quantileForecasts)
             {
                 double q = kvp.Key;
-                double predicted = t < kvp.Value.Length ? NumOps.ToDouble(kvp.Value[t]) : 0;
+                if (t >= kvp.Value.Length)
+                    throw new ArgumentException($"Quantile forecast for q={q:F2} has length {kvp.Value.Length} but horizon requires index {t}.", nameof(quantileForecasts));
+                double predicted = NumOps.ToDouble(kvp.Value[t]);
                 double error = actual - predicted;
 
                 // Pinball loss (quantile loss)
@@ -196,6 +200,11 @@ public class GIFTEvalBenchmark<T>
         Guard.NotNull(seasonalPeriods);
 
         quantileLevels ??= new[] { 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9 };
+
+        if (contextLengths.Count != testSeries.Count)
+            throw new ArgumentException($"contextLengths.Count ({contextLengths.Count}) must equal testSeries.Count ({testSeries.Count}).", nameof(contextLengths));
+        if (seasonalPeriods.Count != testSeries.Count)
+            throw new ArgumentException($"seasonalPeriods.Count ({seasonalPeriods.Count}) must equal testSeries.Count ({testSeries.Count}).", nameof(seasonalPeriods));
 
         var maseScores = new List<double>();
         var crpsScores = new List<double>();

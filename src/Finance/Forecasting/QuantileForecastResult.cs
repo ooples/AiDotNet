@@ -83,6 +83,11 @@ public class QuantileForecastResult<T>
             throw new ArgumentException("At least one sample is required.", nameof(samples));
 
         int horizon = samples[0].Length;
+        for (int i = 1; i < samples.Count; i++)
+        {
+            if (samples[i].Length != horizon)
+                throw new ArgumentException($"All samples must have equal length. Sample 0 has length {horizon}, but sample {i} has length {samples[i].Length}.", nameof(samples));
+        }
         int numSamples = samples.Count;
 
         // Compute point forecast as mean of samples

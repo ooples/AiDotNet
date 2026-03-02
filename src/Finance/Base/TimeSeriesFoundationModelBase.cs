@@ -149,8 +149,7 @@ public abstract class TimeSeriesFoundationModelBase<T> : ForecastingModelBase<T>
     public virtual Tensor<T> DetectAnomalies(Tensor<T> series, double? threshold = null)
     {
         ValidateTaskSupported(TimeSeriesFoundationModelTask.AnomalyDetection);
-        // If validation passed (shouldn't for base), return empty tensor
-        return new Tensor<T>(new[] { series.Shape[0], series.Shape[1], 1 });
+        throw new NotSupportedException($"Override {nameof(DetectAnomalies)} in a derived class to provide an implementation.");
     }
 
     /// <inheritdoc/>
@@ -163,7 +162,7 @@ public abstract class TimeSeriesFoundationModelBase<T> : ForecastingModelBase<T>
     public virtual Tensor<T> Classify(Tensor<T> series, int numClasses)
     {
         ValidateTaskSupported(TimeSeriesFoundationModelTask.Classification);
-        return new Tensor<T>(new[] { series.Shape[0], numClasses });
+        throw new NotSupportedException($"Override {nameof(Classify)} in a derived class to provide an implementation.");
     }
 
     /// <inheritdoc/>
@@ -176,7 +175,7 @@ public abstract class TimeSeriesFoundationModelBase<T> : ForecastingModelBase<T>
     public virtual Tensor<T> Impute(Tensor<T> series, Tensor<T> mask)
     {
         ValidateTaskSupported(TimeSeriesFoundationModelTask.Imputation);
-        return new Tensor<T>(series.Shape);
+        throw new NotSupportedException($"Override {nameof(Impute)} in a derived class to provide an implementation.");
     }
 
     /// <inheritdoc/>
@@ -189,7 +188,7 @@ public abstract class TimeSeriesFoundationModelBase<T> : ForecastingModelBase<T>
     public virtual Tensor<T> Embed(Tensor<T> series)
     {
         ValidateTaskSupported(TimeSeriesFoundationModelTask.Embedding);
-        return new Tensor<T>(new[] { series.Shape[0], 1 });
+        throw new NotSupportedException($"Override {nameof(Embed)} in a derived class to provide an implementation.");
     }
 
     #endregion
