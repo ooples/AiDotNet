@@ -210,9 +210,13 @@ public class InstantIDModel<T> : LatentDiffusionModelBase<T>
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };
         m.SetProperty("architecture", "sdxl-ipadapter-identitynet");
-        m.SetProperty("face_encoder", "InsightFace");
+        m.SetProperty("base_model", "Stable Diffusion XL");
+        m.SetProperty("text_encoder", "CLIP ViT-L/14 + OpenCLIP ViT-bigG/14");
+        m.SetProperty("context_dim", CROSS_ATTENTION_DIM);
+        m.SetProperty("face_encoder", "InsightFace (Antelopev2)");
         m.SetProperty("face_embedding_dim", FACE_EMBEDDING_DIM);
         m.SetProperty("latent_channels", LATENT_CHANNELS);
+        m.SetProperty("guidance_scale", DEFAULT_GUIDANCE_SCALE);
         m.SetProperty("default_resolution", DefaultWidth);
         return m;
     }

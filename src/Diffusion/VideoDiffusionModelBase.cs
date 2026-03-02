@@ -760,22 +760,12 @@ public abstract class VideoDiffusionModelBase<T> : LatentDiffusionModelBase<T>, 
     /// </summary>
     protected virtual Tensor<T> LinearBlend(Tensor<T> frame0, Tensor<T> frame1, double t)
     {
-        var result = new Tensor<T>(frame0.Shape);
-        var span0 = frame0.AsSpan();
-        var span1 = frame1.AsSpan();
-        var resultSpan = result.AsWritableSpan();
-
+        // result = (1-t) * frame0 + t * frame1 using hardware-accelerated engine
         var tVal = NumOps.FromDouble(t);
         var oneMinusT = NumOps.FromDouble(1.0 - t);
-
-        for (int i = 0; i < resultSpan.Length; i++)
-        {
-            resultSpan[i] = NumOps.Add(
-                NumOps.Multiply(oneMinusT, span0[i]),
-                NumOps.Multiply(tVal, span1[i]));
-        }
-
-        return result;
+        var term0 = Engine.TensorMultiplyScalar<T>(frame0, oneMinusT);
+        var term1 = Engine.TensorMultiplyScalar<T>(frame1, tVal);
+        return Engine.TensorAdd<T>(term0, term1);
     }
 
     #endregion

@@ -190,7 +190,7 @@ public class FactorizedSpatioTemporalAttention<T> : LayerBase<T>
 
     private static new readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
-    private static Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
+    private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
         return AiDotNetEngine.Current.TensorAdd(a, b);
     }

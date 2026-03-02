@@ -240,26 +240,45 @@ public class UViTNoisePredictor<T> : NoisePredictorBase<T>
         var patches = Patchify(x);
         patches = _patchEmbed.Forward(patches);
 
-        // Add position embeddings
+        // Add position embeddings using hardware-accelerated broadcast add
         if (_posEmbed != null)
         {
-            var posData = new T[patches.Shape[0] * patches.Shape[1] * patches.Shape[2]];
-            for (int i = 0; i < posData.Length; i++)
+            int seqLen = patches.Shape[1];
+            int posLen = _posEmbed.Shape[1];
+            if (seqLen == posLen)
             {
-                int seqIdx = (i / patches.Shape[2]) % patches.Shape[1];
-                int dimIdx = i % patches.Shape[2];
-                if (seqIdx < _posEmbed.Shape[1] && dimIdx < _posEmbed.Shape[2])
-                {
-                    posData[i] = NumOps.Add(
-                        patches.AsSpan()[i],
-                        _posEmbed[0, seqIdx, dimIdx]);
-                }
-                else
-                {
-                    posData[i] = patches.AsSpan()[i];
-                }
+                patches = Engine.TensorBroadcastAdd<T>(patches, _posEmbed);
             }
-            patches = new Tensor<T>(patches.Shape, new Vector<T>(posData));
+            else
+            {
+                // Slice position embedding to match actual sequence length (seqLen < posLen)
+                // or apply to the first posLen tokens only (seqLen > posLen)
+                int applyLen = Math.Min(seqLen, posLen);
+                int hiddenDim = _posEmbed.Shape[2];
+                var posEmbedSpan = _posEmbed.AsSpan();
+
+                // Copy all patch data (preserving batch dimension)
+                var patchSpan = patches.AsSpan();
+                int totalLen = batch * seqLen * hiddenDim;
+                var resultData = new T[totalLen];
+                patchSpan.Slice(0, totalLen).CopyTo(resultData);
+
+                // Add position embeddings to the first applyLen tokens for each batch element
+                for (int b = 0; b < batch; b++)
+                {
+                    int batchOffset = b * seqLen * hiddenDim;
+                    for (int s = 0; s < applyLen; s++)
+                    {
+                        int patchIdx = batchOffset + s * hiddenDim;
+                        int posIdx = s * hiddenDim; // posEmbed is [1, posLen, hidden], shared across batch
+                        for (int d = 0; d < hiddenDim; d++)
+                        {
+                            resultData[patchIdx + d] = NumOps.Add(resultData[patchIdx + d], posEmbedSpan[posIdx + d]);
+                        }
+                    }
+                }
+                patches = new Tensor<T>(patches.Shape, new Vector<T>(resultData));
+            }
         }
 
         // Add time embedding (broadcast to all tokens)
@@ -400,64 +419,45 @@ public class UViTNoisePredictor<T> : NoisePredictorBase<T>
         return new Tensor<T>(new[] { batch, _inputChannels, height, width }, new Vector<T>(result));
     }
 
-    private static Tensor<T> AddTimeToPatches(Tensor<T> patches, Tensor<T> timeEmbed)
+    private Tensor<T> AddTimeToPatches(Tensor<T> patches, Tensor<T> timeEmbed)
     {
-        var data = new T[patches.AsSpan().Length];
-        var pSpan = patches.AsSpan();
-        var tSpan = timeEmbed.AsSpan();
+        // Reshape time embedding to [batch, 1, hiddenSize] for broadcasting across [batch, seqLen, hidden]
+        int batch = patches.Shape[0];
+        int hiddenDim = patches.Shape.Length > 2 ? patches.Shape[2] : patches.Shape[^1];
+        var timeSpan = timeEmbed.AsSpan();
+        int totalTimeLen = timeSpan.Length;
+        int perBatchTimeLen = totalTimeLen >= batch * hiddenDim ? hiddenDim : totalTimeLen;
+        bool isBatched = totalTimeLen >= batch * hiddenDim;
 
-        for (int i = 0; i < data.Length; i++)
+        // Build [batch, 1, hiddenDim] tensor with per-batch time embeddings
+        var timeData = new T[batch * hiddenDim];
+        for (int b = 0; b < batch; b++)
         {
-            int dimIdx = i % (patches.Shape.Length > 2 ? patches.Shape[2] : patches.Shape[^1]);
-            data[i] = NumOps.Add(pSpan[i], dimIdx < tSpan.Length ? tSpan[dimIdx] : NumOps.Zero);
+            int srcOffset = isBatched ? b * perBatchTimeLen : 0;
+            int copyLen = Math.Min(perBatchTimeLen, hiddenDim);
+            timeSpan.Slice(srcOffset, copyLen).CopyTo(timeData.AsSpan(b * hiddenDim, copyLen));
         }
-
-        return new Tensor<T>(patches.Shape, new Vector<T>(data));
+        var timeBroadcast = new Tensor<T>(new[] { batch, 1, hiddenDim }, new Vector<T>(timeData));
+        return Engine.TensorBroadcastAdd<T>(patches, timeBroadcast);
     }
 
     private static Tensor<T> CloneTensor(Tensor<T> t)
     {
         var span = t.AsSpan();
         var data = new T[span.Length];
-        for (int i = 0; i < span.Length; i++) data[i] = span[i];
+        span.CopyTo(data);
         return new Tensor<T>(t.Shape, new Vector<T>(data));
     }
 
-    private static Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
+    private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
         return AiDotNetEngine.Current.TensorBroadcastAdd(a, b);
     }
 
-    private static Tensor<T> ConcatenateTensors(Tensor<T> a, Tensor<T> b)
+    private Tensor<T> ConcatenateTensors(Tensor<T> a, Tensor<T> b)
     {
         // Concatenate along feature dimension (last dim)
-        var aShape = a.Shape;
-        var bShape = b.Shape;
-        int batch = aShape[0];
-        int seqLen = aShape.Length > 1 ? aShape[1] : 1;
-        int dimA = aShape.Length > 2 ? aShape[2] : aShape[^1];
-        int dimB = bShape.Length > 2 ? bShape[2] : bShape[^1];
-        int dimOut = dimA + dimB;
-
-        var data = new T[batch * seqLen * dimOut];
-        var aSpan = a.AsSpan();
-        var bSpan = b.AsSpan();
-
-        for (int n = 0; n < batch * seqLen; n++)
-        {
-            for (int d = 0; d < dimA; d++)
-            {
-                int aIdx = n * dimA + d;
-                data[n * dimOut + d] = aIdx < aSpan.Length ? aSpan[aIdx] : NumOps.Zero;
-            }
-            for (int d = 0; d < dimB; d++)
-            {
-                int bIdx = n * dimB + d;
-                data[n * dimOut + dimA + d] = bIdx < bSpan.Length ? bSpan[bIdx] : NumOps.Zero;
-            }
-        }
-
-        return new Tensor<T>(new[] { batch, seqLen, dimOut }, new Vector<T>(data));
+        return Engine.TensorConcatenate<T>(new[] { a, b }, axis: -1);
     }
 
     #endregion

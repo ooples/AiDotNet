@@ -451,6 +451,7 @@ public class DeepFloydIFModel<T> : LatentDiffusionModelBase<T>
         };
 
         metadata.SetProperty("architecture", "cascaded-pixel-diffusion");
+        metadata.SetProperty("base_model", "DeepFloyd IF");
         metadata.SetProperty("text_encoder", "T5-XXL");
         metadata.SetProperty("cross_attention_dim", IF_CROSS_ATTENTION_DIM);
         metadata.SetProperty("stage1_resolution", 64);

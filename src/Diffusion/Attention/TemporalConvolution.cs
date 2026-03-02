@@ -35,7 +35,7 @@ public class TemporalConvolution<T> : LayerBase<T>
     private static new readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private Tensor<T>? _lastInput;
 
-    private static Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
+    private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
         return AiDotNetEngine.Current.TensorAdd(a, b);
     }

@@ -289,7 +289,7 @@ public class DiffusionExtendedIntegrationTests
     [Fact]
     public void LuminaT2XModel_Construction()
     {
-        var model = new LuminaT2XModel<double>();
+        var model = new AiDotNet.Diffusion.TextToImage.LuminaT2XModel<double>();
         Assert.NotNull(model);
     }
 

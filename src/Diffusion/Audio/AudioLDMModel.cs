@@ -430,19 +430,12 @@ public class AudioLDMModel<T> : AudioDiffusionModelBase<T>
         var alpha = 1.0 - (timestep / 1000.0);
         var sigma = Math.Sqrt(1.0 - alpha * alpha);
 
-        var result = new Tensor<T>(latent.Shape);
-        var resultSpan = result.AsWritableSpan();
-        var latentSpan = latent.AsSpan();
-        var noiseSpan = noise.AsSpan();
-
-        for (int i = 0; i < resultSpan.Length; i++)
-        {
-            var latentVal = NumOps.ToDouble(latentSpan[i]);
-            var noiseVal = NumOps.ToDouble(noiseSpan[i]);
-            resultSpan[i] = NumOps.FromDouble(alpha * latentVal + sigma * noiseVal);
-        }
-
-        return result;
+        // result = alpha * latent + sigma * noise
+        var alphaT = NumOps.FromDouble(alpha);
+        var sigmaT = NumOps.FromDouble(sigma);
+        var scaledLatent = Engine.TensorMultiplyScalar<T>(latent, alphaT);
+        var scaledNoise = Engine.TensorMultiplyScalar<T>(noise, sigmaT);
+        return Engine.TensorAdd<T>(scaledLatent, scaledNoise);
     }
 
     /// <summary>

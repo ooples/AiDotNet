@@ -390,19 +390,12 @@ public class DreamFusionModel<T> : LatentDiffusionModelBase<T>
         double sqrtAlpha = Math.Sqrt(alphasCumprod);
         double sqrtOneMinusAlpha = Math.Sqrt(1.0 - alphasCumprod);
 
-        var result = new Tensor<T>(image.Shape);
-        var resultSpan = result.AsWritableSpan();
-        var imageSpan = image.AsSpan();
-        var noiseSpan = noise.AsSpan();
-
-        for (int i = 0; i < resultSpan.Length; i++)
-        {
-            double imgVal = NumOps.ToDouble(imageSpan[i]);
-            double noiseVal = NumOps.ToDouble(noiseSpan[i]);
-            resultSpan[i] = NumOps.FromDouble(sqrtAlpha * imgVal + sqrtOneMinusAlpha * noiseVal);
-        }
-
-        return result;
+        // result = sqrtAlpha * image + sqrtOneMinusAlpha * noise
+        var sqrtAlphaT = NumOps.FromDouble(sqrtAlpha);
+        var sqrtOneMinusAlphaT = NumOps.FromDouble(sqrtOneMinusAlpha);
+        var scaledImage = Engine.TensorMultiplyScalar<T>(image, sqrtAlphaT);
+        var scaledNoise = Engine.TensorMultiplyScalar<T>(noise, sqrtOneMinusAlphaT);
+        return Engine.TensorAdd<T>(scaledImage, scaledNoise);
     }
 
     /// <summary>
@@ -435,19 +428,11 @@ public class DreamFusionModel<T> : LatentDiffusionModelBase<T>
     /// </summary>
     private Tensor<T> ApplyGuidanceInternal(Tensor<T> unconditional, Tensor<T> conditional, double guidanceScale)
     {
-        var result = new Tensor<T>(unconditional.Shape);
-        var resultSpan = result.AsWritableSpan();
-        var uncondSpan = unconditional.AsSpan();
-        var condSpan = conditional.AsSpan();
-
-        for (int i = 0; i < resultSpan.Length; i++)
-        {
-            double uncond = NumOps.ToDouble(uncondSpan[i]);
-            double cond = NumOps.ToDouble(condSpan[i]);
-            resultSpan[i] = NumOps.FromDouble(uncond + guidanceScale * (cond - uncond));
-        }
-
-        return result;
+        // CFG: guided = uncond + scale * (cond - uncond)
+        var scaleT = NumOps.FromDouble(guidanceScale);
+        var diff = Engine.TensorSubtract<T>(conditional, unconditional);
+        var scaled = Engine.TensorMultiplyScalar<T>(diff, scaleT);
+        return Engine.TensorAdd<T>(unconditional, scaled);
     }
 
     /// <summary>
@@ -458,19 +443,10 @@ public class DreamFusionModel<T> : LatentDiffusionModelBase<T>
         // w(t) weight function - typically higher for lower noise levels
         double wt = ComputeSDSWeight(timestep);
 
-        var result = new Tensor<T>(noisePred.Shape);
-        var resultSpan = result.AsWritableSpan();
-        var predSpan = noisePred.AsSpan();
-        var noiseSpan = noise.AsSpan();
-
-        for (int i = 0; i < resultSpan.Length; i++)
-        {
-            double pred = NumOps.ToDouble(predSpan[i]);
-            double n = NumOps.ToDouble(noiseSpan[i]);
-            resultSpan[i] = NumOps.FromDouble(wt * (pred - n));
-        }
-
-        return result;
+        // gradient = wt * (noisePred - noise)
+        var wtT = NumOps.FromDouble(wt);
+        var diff = Engine.TensorSubtract<T>(noisePred, noise);
+        return Engine.TensorMultiplyScalar<T>(diff, wtT);
     }
 
     /// <summary>

@@ -73,7 +73,7 @@ namespace AiDotNet.Diffusion.TextToImage;
 /// var sd3 = new StableDiffusion3Model&lt;float&gt;();
 ///
 /// // Create SD3.5 Large
-/// var sd35 = new StableDiffusion3Model&lt;float&gt;(variant: "3.5-Large");
+/// var sd35 = new StableDiffusion3Model&lt;float&gt;(variant: SD3Variant.Large);
 ///
 /// // Generate an image
 /// var image = sd3.GenerateFromText(
@@ -110,7 +110,7 @@ public class StableDiffusion3Model<T> : LatentDiffusionModelBase<T>
     private MMDiTNoisePredictor<T> _mmdit;
     private StandardVAE<T> _vae;
     private readonly IConditioningModule<T>? _conditioner;
-    private readonly string _variant;
+    private readonly SD3Variant _variant;
 
     #endregion
 
@@ -132,9 +132,9 @@ public class StableDiffusion3Model<T> : LatentDiffusionModelBase<T>
     public override int ParameterCount => _mmdit.ParameterCount + _vae.ParameterCount;
 
     /// <summary>
-    /// Gets the model variant ("3-Medium", "3.5-Large", "3.5-Large-Turbo").
+    /// Gets the model variant.
     /// </summary>
-    public string Variant => _variant;
+    public SD3Variant Variant => _variant;
 
     #endregion
 
@@ -148,7 +148,7 @@ public class StableDiffusion3Model<T> : LatentDiffusionModelBase<T>
     /// <param name="mmdit">Custom MMDiT noise predictor.</param>
     /// <param name="vae">Custom 16-channel VAE.</param>
     /// <param name="conditioner">Triple text encoder conditioning module.</param>
-    /// <param name="variant">Model variant: "3-Medium", "3.5-Large", or "3.5-Large-Turbo" (default: "3-Medium").</param>
+    /// <param name="variant">Model variant: Medium, Large, or LargeTurbo (default: Medium).</param>
     /// <param name="seed">Optional random seed for reproducibility.</param>
     public StableDiffusion3Model(
         NeuralNetworkArchitecture<T>? architecture = null,
@@ -157,7 +157,7 @@ public class StableDiffusion3Model<T> : LatentDiffusionModelBase<T>
         MMDiTNoisePredictor<T>? mmdit = null,
         StandardVAE<T>? vae = null,
         IConditioningModule<T>? conditioner = null,
-        string variant = "3-Medium",
+        SD3Variant variant = SD3Variant.Medium,
         int? seed = null)
         : base(
             options ?? new DiffusionModelOptions<T>
@@ -191,7 +191,7 @@ public class StableDiffusion3Model<T> : LatentDiffusionModelBase<T>
         // Select architecture based on variant
         var (hiddenSize, numLayers, numHeads) = _variant switch
         {
-            "3.5-Large" or "3.5-Large-Turbo" => (2432, 38, 38),
+            SD3Variant.Large or SD3Variant.LargeTurbo => (2432, 38, 38),
             _ => (1536, 24, 24)  // SD3 Medium
         };
 
@@ -325,7 +325,7 @@ public class StableDiffusion3Model<T> : LatentDiffusionModelBase<T>
     {
         var (hiddenSize, numLayers, numHeads) = _variant switch
         {
-            "3.5-Large" or "3.5-Large-Turbo" => (2432, 38, 38),
+            SD3Variant.Large or SD3Variant.LargeTurbo => (2432, 38, 38),
             _ => (1536, 24, 24)
         };
 
@@ -361,17 +361,25 @@ public class StableDiffusion3Model<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
+        var variantName = _variant switch
+        {
+            SD3Variant.Medium => "3-Medium",
+            SD3Variant.Large => "3.5-Large",
+            SD3Variant.LargeTurbo => "3.5-Large-Turbo",
+            _ => _variant.ToString()
+        };
         var metadata = new ModelMetadata<T>
         {
-            Name = $"Stable Diffusion {_variant}",
-            Version = _variant,
+            Name = $"Stable Diffusion {variantName}",
+            Version = variantName,
             ModelType = ModelType.NeuralNetwork,
-            Description = $"Stable Diffusion {_variant} with MMDiT architecture, rectified flow, and triple text encoders",
+            Description = $"Stable Diffusion {variantName} with MMDiT architecture, rectified flow, and triple text encoders",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount
         };
 
         metadata.SetProperty("architecture", "mmdit-rectified-flow");
+        metadata.SetProperty("base_model", "Stable Diffusion 3");
         metadata.SetProperty("text_encoder_1", "CLIP ViT-L/14");
         metadata.SetProperty("text_encoder_2", "OpenCLIP ViT-bigG/14");
         metadata.SetProperty("text_encoder_3", "T5-XXL");

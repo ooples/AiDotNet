@@ -358,6 +358,7 @@ public class OmniGenModel<T> : LatentDiffusionModelBase<T>
         };
 
         metadata.SetProperty("architecture", "unified-dit");
+        metadata.SetProperty("base_model", "OmniGen");
         metadata.SetProperty("tasks", "text2img,editing,subject-driven,conditional");
         metadata.SetProperty("latent_channels", LATENT_CHANNELS);
         metadata.SetProperty("cross_attention_dim", CROSS_ATTENTION_DIM);

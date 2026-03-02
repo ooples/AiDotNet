@@ -263,6 +263,7 @@ public class EDiffIModel<T> : LatentDiffusionModelBase<T>
         };
 
         metadata.SetProperty("architecture", "ensemble-expert-unet");
+        metadata.SetProperty("base_model", "eDiff-I");
         metadata.SetProperty("num_experts", NUM_EXPERTS);
         metadata.SetProperty("text_encoder", "T5-XXL+CLIP");
         metadata.SetProperty("cross_attention_dim", CROSS_ATTENTION_DIM);

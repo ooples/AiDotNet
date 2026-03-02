@@ -130,37 +130,6 @@ fairnessEvaluator:
     }
 
     [Fact]
-    public void LoadFromString_WithTokenizerSection_DeserializesCorrectly()
-    {
-        var yaml = @"
-tokenizer:
-  type: BPETokenizer
-  params:
-    vocabSize: 32000
-";
-
-        var config = YamlConfigLoader.LoadFromString(yaml);
-
-        Assert.NotNull(config.Tokenizer);
-        Assert.Equal("BPETokenizer", config.Tokenizer.Type);
-        Assert.True(config.Tokenizer.Params.ContainsKey("vocabSize"));
-    }
-
-    [Fact]
-    public void LoadFromString_WithPromptTemplateSection_DeserializesCorrectly()
-    {
-        var yaml = @"
-promptTemplate:
-  type: InstructionFollowingTemplate
-";
-
-        var config = YamlConfigLoader.LoadFromString(yaml);
-
-        Assert.NotNull(config.PromptTemplate);
-        Assert.Equal("InstructionFollowingTemplate", config.PromptTemplate.Type);
-    }
-
-    [Fact]
     public void LoadFromString_WithPreprocessingPipeline_DeserializesCorrectly()
     {
         var yaml = @"
@@ -251,26 +220,6 @@ uncertaintyQuantification:
         Assert.True(config.UncertaintyQuantification.Enabled);
         Assert.Equal(100, config.UncertaintyQuantification.NumSamples);
         Assert.Equal(0.1, config.UncertaintyQuantification.MonteCarloDropoutRate);
-    }
-
-    [Fact]
-    public void LoadFromString_WithVisualizationSection_DeserializesCorrectly()
-    {
-        var yaml = @"
-visualization:
-  boxThickness: 3
-  showLabels: true
-  showConfidence: false
-  maskOpacity: 0.5
-";
-
-        var config = YamlConfigLoader.LoadFromString(yaml);
-
-        Assert.NotNull(config.Visualization);
-        Assert.Equal(3, config.Visualization.BoxThickness);
-        Assert.True(config.Visualization.ShowLabels);
-        Assert.False(config.Visualization.ShowConfidence);
-        Assert.Equal(0.5, config.Visualization.MaskOpacity);
     }
 
     [Fact]

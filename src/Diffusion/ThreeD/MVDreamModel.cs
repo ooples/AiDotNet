@@ -1,6 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Diffusion.VAE;
+using AiDotNet.Engines;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -580,21 +581,10 @@ public class MVDreamModel<T> : ThreeDDiffusionModelBase<T>
         var condNoisePred = _multiViewUNet.PredictNoiseMultiView(noisyLatentsTensor, timestep, combinedCondCond);
         var uncondNoisePred = _multiViewUNet.PredictNoiseMultiView(noisyLatentsTensor, timestep, combinedUncondCond);
 
-        // Compute SDS gradient
-        var gradient = new Tensor<T>(condNoisePred.Shape);
-        var gradSpan = gradient.AsWritableSpan();
-        var condSpan = condNoisePred.AsSpan();
-        var uncondSpan = uncondNoisePred.AsSpan();
-
-        var scale = NumOps.FromDouble(guidanceScale);
-
-        for (int i = 0; i < gradSpan.Length; i++)
-        {
-            var diff = NumOps.Subtract(condSpan[i], uncondSpan[i]);
-            gradSpan[i] = NumOps.Multiply(scale, diff);
-        }
-
-        return gradient;
+        // Compute SDS gradient: scale * (cond - uncond)
+        var scaleT = NumOps.FromDouble(guidanceScale);
+        var diff = Engine.TensorSubtract<T>(condNoisePred, uncondNoisePred);
+        return Engine.TensorMultiplyScalar<T>(diff, scaleT);
     }
 
     #endregion
@@ -1349,23 +1339,7 @@ public class MultiViewUNet<T>
 
     private Tensor<T> CombineViews(Tensor<T>[] views, int[] shape)
     {
-        var result = new Tensor<T>(shape);
-        var resultSpan = result.AsWritableSpan();
-
-        var viewSize = shape[1] * shape[2] * shape[3];
-
-        for (int v = 0; v < views.Length; v++)
-        {
-            var viewSpan = views[v].AsSpan();
-            var offset = v * viewSize;
-
-            for (int i = 0; i < viewSize && i < viewSpan.Length && offset + i < resultSpan.Length; i++)
-            {
-                resultSpan[offset + i] = viewSpan[i];
-            }
-        }
-
-        return result;
+        return AiDotNetEngine.Current.TensorConcatenate<T>(views, axis: 0);
     }
 
     /// <summary>

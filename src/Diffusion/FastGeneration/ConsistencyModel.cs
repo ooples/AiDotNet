@@ -347,22 +347,11 @@ public class ConsistencyModel<T> : LatentDiffusionModelBase<T>
 
         // Apply skip connection and output scaling
         // f(x, sigma) = c_skip * x + c_out * F(c_in * x, sigma)
-        var result = new Tensor<T>(x.Shape);
-        var xSpan = x.AsSpan();
-        var outSpan = modelOutput.AsSpan();
-        var resultSpan = result.AsWritableSpan();
-
         var cSkipT = NumOps.FromDouble(cSkip);
         var cOutT = NumOps.FromDouble(cOut);
-
-        for (int i = 0; i < resultSpan.Length; i++)
-        {
-            resultSpan[i] = NumOps.Add(
-                NumOps.Multiply(cSkipT, xSpan[i]),
-                NumOps.Multiply(cOutT, outSpan[i]));
-        }
-
-        return result;
+        var skipTerm = Engine.TensorMultiplyScalar<T>(x, cSkipT);
+        var outTerm = Engine.TensorMultiplyScalar<T>(modelOutput, cOutT);
+        return Engine.TensorAdd<T>(skipTerm, outTerm);
     }
 
     /// <summary>

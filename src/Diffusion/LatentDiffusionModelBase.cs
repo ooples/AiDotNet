@@ -391,21 +391,11 @@ public abstract class LatentDiffusionModelBase<T> : DiffusionModelBase<T>, ILate
     /// <returns>The guided noise prediction.</returns>
     protected virtual Tensor<T> ApplyGuidance(Tensor<T> unconditional, Tensor<T> conditional, double scale)
     {
-        var result = new Tensor<T>(unconditional.Shape);
-        var uncondSpan = unconditional.AsSpan();
-        var condSpan = conditional.AsSpan();
-        var resultSpan = result.AsWritableSpan();
-
+        // guided = uncond + scale * (cond - uncond) using hardware-accelerated engine
         var scaleT = NumOps.FromDouble(scale);
-
-        for (int i = 0; i < resultSpan.Length; i++)
-        {
-            // guided = uncond + scale * (cond - uncond)
-            var diff = NumOps.Subtract(condSpan[i], uncondSpan[i]);
-            resultSpan[i] = NumOps.Add(uncondSpan[i], NumOps.Multiply(scaleT, diff));
-        }
-
-        return result;
+        var diff = Engine.TensorSubtract<T>(conditional, unconditional);
+        var scaled = Engine.TensorMultiplyScalar<T>(diff, scaleT);
+        return Engine.TensorAdd<T>(unconditional, scaled);
     }
 
     /// <summary>

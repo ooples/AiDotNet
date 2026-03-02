@@ -257,6 +257,7 @@ public class RAPHAELModel<T> : LatentDiffusionModelBase<T>
         };
 
         metadata.SetProperty("architecture", "unet-moe-crossattn");
+        metadata.SetProperty("base_model", "RAPHAEL");
         metadata.SetProperty("expert_routing", "space-moe-time-moe");
         metadata.SetProperty("cross_attention_dim", CROSS_ATTENTION_DIM);
         metadata.SetProperty("latent_channels", LATENT_CHANNELS);

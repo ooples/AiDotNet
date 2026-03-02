@@ -278,6 +278,7 @@ public class Imagen2Model<T> : LatentDiffusionModelBase<T>
         };
 
         metadata.SetProperty("architecture", "cascaded-latent-diffusion");
+        metadata.SetProperty("base_model", "Imagen 2");
         metadata.SetProperty("text_encoder", "T5-XXL");
         metadata.SetProperty("cross_attention_dim", CROSS_ATTENTION_DIM);
         metadata.SetProperty("latent_channels", LATENT_CHANNELS);
