@@ -85,7 +85,7 @@ public class ETPNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
             // Compute support embedding
             MetaModel.SetParameters(adaptedParams);
             var supportGrad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-            var supportEmb = CompressGradient(supportGrad);
+            var supportEmb = CompressVector(supportGrad, _algoOptions.TransformDim);
 
             int effectiveTransIter = Math.Min(_algoOptions.TransductiveIterations, _algoOptions.AdaptationSteps);
             for (int tIter = 0; tIter < effectiveTransIter; tIter++)
@@ -93,12 +93,12 @@ public class ETPNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
                 // Compute query embedding for transductive signal
                 MetaModel.SetParameters(adaptedParams);
                 var queryGrad = ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput);
-                var queryEmb = CompressGradient(queryGrad);
+                var queryEmb = CompressVector(queryGrad, _algoOptions.TransformDim);
 
                 // Combine embeddings
-                var combined = new double[_algoOptions.TransformDim];
+                var combined = new Vector<T>(_algoOptions.TransformDim);
                 for (int e = 0; e < _algoOptions.TransformDim && e < supportEmb.Length; e++)
-                    combined[e] = supportEmb[e] + _algoOptions.QueryInfluenceWeight * queryEmb[e];
+                    combined[e] = NumOps.FromDouble(NumOps.ToDouble(supportEmb[e]) + _algoOptions.QueryInfluenceWeight * NumOps.ToDouble(queryEmb[e]));
 
                 // Compute transform
                 var transform = ComputeTransform(combined);
@@ -110,7 +110,7 @@ public class ETPNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
                 {
                     int cd = d % _compressedDim;
                     adaptedParams[d] = NumOps.Subtract(adaptedParams[d],
-                        NumOps.FromDouble(_algoOptions.InnerLearningRate * transform[cd] * NumOps.ToDouble(grad[d])));
+                        NumOps.FromDouble(_algoOptions.InnerLearningRate * NumOps.ToDouble(transform[cd]) * NumOps.ToDouble(grad[d])));
                 }
             }
 
@@ -138,12 +138,7 @@ public class ETPNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
             metaGradients.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
         }
 
-        MetaModel.SetParameters(initParams);
-        if (metaGradients.Count > 0)
-        {
-            var avgGrad = AverageVectors(metaGradients);
-            MetaModel.SetParameters(ApplyGradients(initParams, avgGrad, _algoOptions.OuterLearningRate));
-        }
+        ApplyOuterUpdate(initParams, metaGradients, _algoOptions.OuterLearningRate);
 
         UpdateAuxiliaryParamsSPSA(taskBatch, ref _transformParams, _algoOptions.OuterLearningRate * 0.1, ComputeETPNLoss);
 
@@ -159,9 +154,9 @@ public class ETPNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
 
         MetaModel.SetParameters(adaptedParams);
         var supportGrad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-        var supportEmb = CompressGradient(supportGrad);
+        var supportEmb = CompressVector(supportGrad, _algoOptions.TransformDim);
 
-        var combined = new double[_algoOptions.TransformDim];
+        var combined = new Vector<T>(_algoOptions.TransformDim);
         for (int e = 0; e < _algoOptions.TransformDim && e < supportEmb.Length; e++)
             combined[e] = supportEmb[e];
         var transform = ComputeTransform(combined);
@@ -174,7 +169,7 @@ public class ETPNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
             {
                 int cd = d % _compressedDim;
                 adaptedParams[d] = NumOps.Subtract(adaptedParams[d],
-                    NumOps.FromDouble(_algoOptions.InnerLearningRate * transform[cd] * NumOps.ToDouble(grad[d])));
+                    NumOps.FromDouble(_algoOptions.InnerLearningRate * NumOps.ToDouble(transform[cd]) * NumOps.ToDouble(grad[d])));
             }
         }
 
@@ -182,31 +177,16 @@ public class ETPNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
         return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, adaptedParams);
     }
 
-    private double[] CompressGradient(Vector<T> grad)
+    private Vector<T> ComputeTransform(Vector<T> combined)
     {
-        var result = new double[_algoOptions.TransformDim];
-        int bucketSize = Math.Max(1, _paramDim / _algoOptions.TransformDim);
-        for (int e = 0; e < _algoOptions.TransformDim; e++)
-        {
-            double sum = 0;
-            int start = e * bucketSize;
-            for (int d = start; d < start + bucketSize && d < grad.Length; d++)
-                sum += NumOps.ToDouble(grad[d]);
-            result[e] = Math.Tanh(sum / bucketSize);
-        }
-        return result;
-    }
-
-    private double[] ComputeTransform(double[] combined)
-    {
-        var transform = new double[_compressedDim];
+        var transform = new Vector<T>(_compressedDim);
         for (int d = 0; d < _compressedDim; d++)
         {
             double sum = 0;
             for (int e = 0; e < _algoOptions.TransformDim; e++)
-                sum += combined[e] * NumOps.ToDouble(_transformParams[d * _algoOptions.TransformDim + e]);
-            transform[d] = 1.0 / (1.0 + Math.Exp(-sum)); // sigmoid → [0,1] scaling
-            transform[d] = 0.5 + transform[d]; // shift to [0.5, 1.5] so it doesn't kill gradients
+                sum += NumOps.ToDouble(combined[e]) * NumOps.ToDouble(_transformParams[d * _algoOptions.TransformDim + e]);
+            double sigmoid = 1.0 / (1.0 + Math.Exp(-sum));
+            transform[d] = NumOps.FromDouble(0.5 + sigmoid); // shift to [0.5, 1.5] so it doesn't kill gradients
         }
         return transform;
     }
@@ -221,17 +201,15 @@ public class ETPNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
             for (int d = 0; d < _paramDim; d++) ap[d] = initParams[d];
             MetaModel.SetParameters(ap);
             var sg = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
-            var se = CompressGradient(sg);
-            var c = new double[_algoOptions.TransformDim];
-            for (int e = 0; e < _algoOptions.TransformDim && e < se.Length; e++) c[e] = se[e];
-            var t = ComputeTransform(c);
+            var se = CompressVector(sg, _algoOptions.TransformDim);
+            var t = ComputeTransform(se);
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
             {
                 MetaModel.SetParameters(ap);
                 var g = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
                 for (int d = 0; d < _paramDim; d++)
                     ap[d] = NumOps.Subtract(ap[d],
-                        NumOps.FromDouble(_algoOptions.InnerLearningRate * t[d % _compressedDim] * NumOps.ToDouble(g[d])));
+                        NumOps.FromDouble(_algoOptions.InnerLearningRate * NumOps.ToDouble(t[d % _compressedDim]) * NumOps.ToDouble(g[d])));
             }
             MetaModel.SetParameters(ap);
             totalLoss += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));

@@ -145,7 +145,7 @@ public class MetaDiffAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
             double sqrtOneMinusAlphaCumprod = Math.Sqrt(1.0 - _alphasCumprod[t]);
             var noisedDelta = new double[_compressedDim];
             for (int i = 0; i < _compressedDim; i++)
-                noisedDelta[i] = sqrtAlphaCumprod * targetDelta[i] + sqrtOneMinusAlphaCumprod * noise[i];
+                noisedDelta[i] = sqrtAlphaCumprod * NumOps.ToDouble(targetDelta[i]) + sqrtOneMinusAlphaCumprod * noise[i];
 
             // Step 4: Compute task conditioning
             var taskCondition = ComputeTaskCondition(task.SupportInput);
@@ -208,7 +208,7 @@ public class MetaDiffAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
     /// <summary>
     /// Computes target parameter delta by gradient adaptation on support set (compressed).
     /// </summary>
-    private double[] ComputeTargetDelta(Vector<T> baseParams, IMetaLearningTask<T, TInput, TOutput> task)
+    private Vector<T> ComputeTargetDelta(Vector<T> baseParams, IMetaLearningTask<T, TInput, TOutput> task)
     {
         var currentParams = new Vector<T>(_paramDim);
         for (int d = 0; d < _paramDim; d++) currentParams[d] = baseParams[d];
@@ -220,13 +220,12 @@ public class MetaDiffAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
             currentParams = ApplyGradients(currentParams, grad, _algoOptions.InnerLearningRate);
         }
 
-        // Compress delta
-        var delta = new double[_compressedDim];
+        var delta = new Vector<T>(_compressedDim);
         int stride = Math.Max(1, _paramDim / _compressedDim);
         for (int i = 0; i < _compressedDim; i++)
         {
             int idx = Math.Min(i * stride, _paramDim - 1);
-            delta[i] = NumOps.ToDouble(currentParams[idx]) - NumOps.ToDouble(baseParams[idx]);
+            delta[i] = NumOps.FromDouble(NumOps.ToDouble(currentParams[idx]) - NumOps.ToDouble(baseParams[idx]));
         }
         return delta;
     }
@@ -234,11 +233,11 @@ public class MetaDiffAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
     /// <summary>
     /// Computes task conditioning vector from support features.
     /// </summary>
-    private double[] ComputeTaskCondition(TInput supportInput)
+    private Vector<T> ComputeTaskCondition(TInput supportInput)
     {
         var features = ConvertToVector(MetaModel.Predict(supportInput));
         int featureDim = Math.Min(_paramDim, 64);
-        var condition = new double[_condDim];
+        var condition = new Vector<T>(_condDim);
 
         if (features == null) return condition;
 
@@ -251,7 +250,7 @@ public class MetaDiffAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
                 sum += NumOps.ToDouble(features[i]) * NumOps.ToDouble(_taskEncoderParams[o * featureDim + i]);
             if (biasOffset + o < _taskEncoderParams.Length)
                 sum += NumOps.ToDouble(_taskEncoderParams[biasOffset + o]);
-            condition[o] = Math.Tanh(sum);
+            condition[o] = NumOps.FromDouble(Math.Tanh(sum));
         }
         return condition;
     }
@@ -260,7 +259,7 @@ public class MetaDiffAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
     /// Denoiser MLP: predicts noise given noised weights, task condition, and timestep.
     /// Architecture: concat(w_t, c, t/T) → hidden(ReLU) → output.
     /// </summary>
-    private double[] PredictNoise(double[] noisedDelta, double[] taskCondition, int timestep)
+    private double[] PredictNoise(double[] noisedDelta, Vector<T> taskCondition, int timestep)
     {
         int inputDim = _compressedDim + _condDim + 1;
         int hidden = Math.Max(32, _compressedDim);
@@ -268,7 +267,8 @@ public class MetaDiffAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
         // Build input vector
         var input = new double[inputDim];
         Array.Copy(noisedDelta, 0, input, 0, _compressedDim);
-        Array.Copy(taskCondition, 0, input, _compressedDim, _condDim);
+        for (int i = 0; i < _condDim; i++)
+            input[_compressedDim + i] = NumOps.ToDouble(taskCondition[i]);
         input[_compressedDim + _condDim] = (double)timestep / _diffusionSteps; // Normalized timestep
 
         // Layer 1: input → hidden (ReLU)
@@ -313,7 +313,7 @@ public class MetaDiffAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
     /// <summary>
     /// Runs the reverse diffusion process (denoising) to generate task-specific weight deltas.
     /// </summary>
-    private double[] RunDenoisingInference(double[] taskCondition, int numSteps)
+    private Vector<T> RunDenoisingInference(Vector<T> taskCondition, int numSteps)
     {
         // Start from pure noise
         var wt = SampleGaussianArray(_compressedDim);
@@ -328,9 +328,7 @@ public class MetaDiffAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
             double betaOverSqrt = _betas[t] / Math.Sqrt(1.0 - _alphasCumprod[t] + 1e-10);
 
             for (int i = 0; i < _compressedDim; i++)
-            {
                 wt[i] = (wt[i] - betaOverSqrt * predictedNoise[i]) / sqrtAlpha;
-            }
 
             // Add noise (except for t=0)
             if (t > 0)
@@ -342,10 +340,13 @@ public class MetaDiffAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
             }
         }
 
-        return wt;
+        var result = new Vector<T>(_compressedDim);
+        for (int i = 0; i < _compressedDim; i++)
+            result[i] = NumOps.FromDouble(wt[i]);
+        return result;
     }
 
-    private Vector<T> ApplyCompressedDelta(Vector<T> baseParams, double[] compressedDelta)
+    private Vector<T> ApplyCompressedDelta(Vector<T> baseParams, Vector<T> compressedDelta)
     {
         var result = new Vector<T>(_paramDim);
         int stride = Math.Max(1, _paramDim / _compressedDim);
@@ -357,9 +358,8 @@ public class MetaDiffAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
         {
             int start = i * stride;
             int end = Math.Min((i + 1) * stride, _paramDim);
-            T delta = NumOps.FromDouble(compressedDelta[i]);
             for (int d = start; d < end; d++)
-                result[d] = NumOps.Add(result[d], delta);
+                result[d] = NumOps.Add(result[d], compressedDelta[i]);
         }
         return result;
     }
@@ -368,11 +368,7 @@ public class MetaDiffAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
     {
         var arr = new double[length];
         for (int i = 0; i < length; i++)
-        {
-            double u1 = 1.0 - RandomGenerator.NextDouble();
-            double u2 = RandomGenerator.NextDouble();
-            arr[i] = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-        }
+            arr[i] = SampleNormal();
         return arr;
     }
 
@@ -392,7 +388,7 @@ public class MetaDiffAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
             double sqrtOMAC = Math.Sqrt(1.0 - _alphasCumprod[t]);
             var noised = new double[_compressedDim];
             for (int i = 0; i < _compressedDim; i++)
-                noised[i] = sqrtAC * targetDelta[i] + sqrtOMAC * noise[i];
+                noised[i] = sqrtAC * NumOps.ToDouble(targetDelta[i]) + sqrtOMAC * noise[i];
 
             var cond = ComputeTaskCondition(task.SupportInput);
             var pred = PredictNoise(noised, cond, t);
@@ -413,11 +409,6 @@ public class MetaDiffAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
     private void InitGaussian(Vector<T> v, double stdDev)
     {
         for (int i = 0; i < v.Length; i++)
-        {
-            double u1 = 1.0 - RandomGenerator.NextDouble();
-            double u2 = RandomGenerator.NextDouble();
-            double z = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-            v[i] = NumOps.FromDouble(z * stdDev);
-        }
+            v[i] = NumOps.FromDouble(SampleNormal() * stdDev);
     }
 }

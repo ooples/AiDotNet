@@ -190,20 +190,20 @@ internal class ICMFusionAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
         return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, finalParams);
     }
 
-    private double[] CompressTaskVector(Vector<T> baseParams, Vector<T> adaptedParams)
+    private Vector<T> CompressTaskVector(Vector<T> baseParams, Vector<T> adaptedParams)
     {
-        var compressed = new double[_compressedDim];
+        var compressed = new Vector<T>(_compressedDim);
         // Strided sampling + averaging for compression
         int stride = Math.Max(1, _paramDim / _compressedDim);
         for (int i = 0; i < _compressedDim; i++)
         {
             int idx = Math.Min(i * stride, _paramDim - 1);
-            compressed[i] = NumOps.ToDouble(adaptedParams[idx]) - NumOps.ToDouble(baseParams[idx]);
+            compressed[i] = NumOps.FromDouble(NumOps.ToDouble(adaptedParams[idx]) - NumOps.ToDouble(baseParams[idx]));
         }
         return compressed;
     }
 
-    private void EncodeTaskVector(double[] taskVector, out double[] mu, out double[] logVar)
+    private void EncodeTaskVector(Vector<T> taskVector, out double[] mu, out double[] logVar)
     {
         mu = new double[_latentDim];
         logVar = new double[_latentDim];
@@ -216,8 +216,9 @@ internal class ICMFusionAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
             {
                 int muIdx = o * _compressedDim + i;
                 int lvIdx = (_latentDim + o) * _compressedDim + i;
-                sumMu += taskVector[i] * NumOps.ToDouble(_encoderParams[muIdx]);
-                sumLogVar += taskVector[i] * NumOps.ToDouble(_encoderParams[lvIdx]);
+                double tv = NumOps.ToDouble(taskVector[i]);
+                sumMu += tv * NumOps.ToDouble(_encoderParams[muIdx]);
+                sumLogVar += tv * NumOps.ToDouble(_encoderParams[lvIdx]);
             }
             mu[o] = sumMu + NumOps.ToDouble(_encoderParams[biasOffset + o]);
             logVar[o] = sumLogVar + NumOps.ToDouble(_encoderParams[biasOffset + _latentDim + o]);
@@ -230,18 +231,13 @@ internal class ICMFusionAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
     {
         var z = new double[_latentDim];
         for (int i = 0; i < _latentDim; i++)
-        {
-            double u1 = 1.0 - RandomGenerator.NextDouble();
-            double u2 = RandomGenerator.NextDouble();
-            double eps = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-            z[i] = mu[i] + Math.Exp(0.5 * logVar[i]) * eps;
-        }
+            z[i] = mu[i] + Math.Exp(0.5 * logVar[i]) * SampleNormal();
         return z;
     }
 
-    private double[] DecodeLatent(double[] z)
+    private Vector<T> DecodeLatent(double[] z)
     {
-        var output = new double[_compressedDim];
+        var output = new Vector<T>(_compressedDim);
         int biasOffset = _latentDim * _compressedDim;
 
         for (int o = 0; o < _compressedDim; o++)
@@ -253,12 +249,12 @@ internal class ICMFusionAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
             if (biasOffset + o < _decoderParams.Length)
                 sum += NumOps.ToDouble(_decoderParams[biasOffset + o]);
 
-            output[o] = Math.Tanh(sum); // Bounded output
+            output[o] = NumOps.FromDouble(Math.Tanh(sum)); // Bounded output
         }
         return output;
     }
 
-    private Vector<T> ApplyCompressedDelta(Vector<T> baseParams, double[] compressedDelta)
+    private Vector<T> ApplyCompressedDelta(Vector<T> baseParams, Vector<T> compressedDelta)
     {
         var result = new Vector<T>(_paramDim);
         int stride = Math.Max(1, _paramDim / _compressedDim);
@@ -271,9 +267,8 @@ internal class ICMFusionAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
         {
             int start = i * stride;
             int end = Math.Min((i + 1) * stride, _paramDim);
-            T delta = NumOps.FromDouble(compressedDelta[i]);
             for (int d = start; d < end; d++)
-                result[d] = NumOps.Add(result[d], delta);
+                result[d] = NumOps.Add(result[d], compressedDelta[i]);
         }
         return result;
     }
@@ -360,11 +355,6 @@ internal class ICMFusionAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
     private void InitializeGaussian(Vector<T> v, double stdDev)
     {
         for (int i = 0; i < v.Length; i++)
-        {
-            double u1 = 1.0 - RandomGenerator.NextDouble();
-            double u2 = RandomGenerator.NextDouble();
-            double z = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-            v[i] = NumOps.FromDouble(z * stdDev);
-        }
+            v[i] = NumOps.FromDouble(SampleNormal() * stdDev);
     }
 }

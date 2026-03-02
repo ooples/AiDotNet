@@ -271,12 +271,7 @@ public class MCLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
         }
 
         // Update backbone
-        MetaModel.SetParameters(initParams);
-        if (metaGradients.Count > 0)
-        {
-            var avgGrad = AverageVectors(metaGradients);
-            MetaModel.SetParameters(ApplyGradients(initParams, avgGrad, _mclOptions.OuterLearningRate));
-        }
+        ApplyOuterUpdate(initParams, metaGradients, _mclOptions.OuterLearningRate);
 
         // Update projection head via multi-sample SPSA
         UpdateAuxiliaryParamsSPSA(taskBatch, ref _projectionParams, _mclOptions.OuterLearningRate, ComputeAuxLoss);

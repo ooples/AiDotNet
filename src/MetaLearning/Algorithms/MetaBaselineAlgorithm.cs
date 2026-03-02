@@ -61,17 +61,12 @@ public class MetaBaselineAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
             metaGradients.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
         }
 
-        MetaModel.SetParameters(initParams);
-        if (metaGradients.Count > 0)
-        {
-            var avgGrad = AverageVectors(metaGradients);
-            MetaModel.SetParameters(ApplyGradients(initParams, avgGrad, _metaBaselineOptions.OuterLearningRate));
-        }
+        ApplyOuterUpdate(initParams, metaGradients, _metaBaselineOptions.OuterLearningRate);
         return ComputeMean(losses);
     }
 
     /// <summary>L2-normalizes a feature vector for cosine similarity computation.</summary>
-    private Vector<T>? L2Normalize(Vector<T>? features)
+    private Vector<T>? NormalizeVector(Vector<T>? features)
     {
         if (features == null || features.Length == 0) return features;
         double normSq = 0;
@@ -96,7 +91,7 @@ public class MetaBaselineAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
         // Extract and L2-normalize support features for cosine-similarity classification
         var supportPred = MetaModel.Predict(task.SupportInput);
         var supportFeatures = ConvertToVector(supportPred);
-        var normalizedSupport = L2Normalize(supportFeatures);
+        var normalizedSupport = NormalizeVector(supportFeatures);
 
         // Compute modulation: cosine normalization changes feature magnitudes
         double[]? modulationFactors = null;

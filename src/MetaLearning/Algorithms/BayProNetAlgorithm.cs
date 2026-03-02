@@ -127,13 +127,7 @@ public class BayProNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
         }
 
         // Outer loop: update meta-parameters
-        MetaModel.SetParameters(initParams);
-        if (metaGradients.Count > 0)
-        {
-            var avgGrad = AverageVectors(metaGradients);
-            var newParams = ApplyGradients(initParams, avgGrad, _algoOptions.OuterLearningRate);
-            MetaModel.SetParameters(newParams);
-        }
+        ApplyOuterUpdate(initParams, metaGradients, _algoOptions.OuterLearningRate);
 
         // Update posterior log-variance via SPSA
         UpdateAuxiliaryParamsSPSA(taskBatch, ref _posteriorLogVar, _algoOptions.OuterLearningRate * SpsaLearningRateMultiplier, ComputeBayProNetLoss);
@@ -179,10 +173,7 @@ public class BayProNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
         for (int d = 0; d < _paramDim; d++)
         {
             double std = Math.Sqrt(Math.Exp(NumOps.ToDouble(_posteriorLogVar[d])));
-            double u1 = Math.Max(1e-10, RandomGenerator.NextDouble());
-            double u2 = RandomGenerator.NextDouble();
-            double noise = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-            sample[d] = NumOps.Add(mean[d], NumOps.FromDouble(std * noise));
+            sample[d] = NumOps.Add(mean[d], NumOps.FromDouble(std * SampleNormal()));
         }
         return sample;
     }

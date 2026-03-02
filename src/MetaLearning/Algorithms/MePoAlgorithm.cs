@@ -43,7 +43,7 @@ internal class MePoAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TO
     private readonly int _protoDim;
 
     /// <summary>Memory bank: list of prototype vectors.</summary>
-    private readonly List<double[]> _memoryBank;
+    private readonly List<Vector<T>> _memoryBank;
 
     /// <inheritdoc/>
     public override MetaLearningAlgorithmType AlgorithmType => MetaLearningAlgorithmType.MePo;
@@ -59,7 +59,7 @@ internal class MePoAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TO
         _algoOptions = options;
         _paramDim = options.MetaModel.GetParameters().Length;
         _protoDim = options.PrototypeDim;
-        _memoryBank = new List<double[]>();
+        _memoryBank = new List<Vector<T>>();
     }
 
     /// <inheritdoc/>
@@ -100,7 +100,7 @@ internal class MePoAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TO
                     if (retrieved != null)
                     {
                         int cd = d % _protoDim;
-                        regGrad = _algoOptions.PrototypeRegWeight * (paramDelta[cd] - retrieved[cd]);
+                        regGrad = _algoOptions.PrototypeRegWeight * (NumOps.ToDouble(paramDelta[cd]) - NumOps.ToDouble(retrieved[cd]));
                     }
 
                     adaptedParams[d] = NumOps.Subtract(adaptedParams[d],
@@ -117,12 +117,7 @@ internal class MePoAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TO
             metaGradients.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
         }
 
-        MetaModel.SetParameters(initParams);
-        if (metaGradients.Count > 0)
-        {
-            var avgGrad = AverageVectors(metaGradients);
-            MetaModel.SetParameters(ApplyGradients(initParams, avgGrad, _algoOptions.OuterLearningRate));
-        }
+        ApplyOuterUpdate(initParams, metaGradients, _algoOptions.OuterLearningRate);
 
         return ComputeMean(losses);
     }
@@ -152,7 +147,7 @@ internal class MePoAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TO
                 if (retrieved != null)
                 {
                     int cd = d % _protoDim;
-                    regGrad = _algoOptions.PrototypeRegWeight * (paramDelta[cd] - retrieved[cd]);
+                    regGrad = _algoOptions.PrototypeRegWeight * (NumOps.ToDouble(paramDelta[cd]) - NumOps.ToDouble(retrieved[cd]));
                 }
                 adaptedParams[d] = NumOps.Subtract(adaptedParams[d],
                     NumOps.FromDouble(_algoOptions.InnerLearningRate * (gradVal + regGrad)));
@@ -164,9 +159,9 @@ internal class MePoAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TO
         return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, adaptedParams);
     }
 
-    private double[] CompressToPrototype(Vector<T> grad)
+    private Vector<T> CompressToPrototype(Vector<T> grad)
     {
-        var proto = new double[_protoDim];
+        var proto = new Vector<T>(_protoDim);
         // Average pooling: group gradient dims into _protoDim buckets
         // Use ceiling division to ensure all dimensions are covered
         for (int p = 0; p < _protoDim; p++)
@@ -180,14 +175,14 @@ internal class MePoAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TO
                 sum += NumOps.ToDouble(grad[d]);
                 count++;
             }
-            proto[p] = count > 0 ? Math.Tanh(sum / count) : 0;
+            proto[p] = NumOps.FromDouble(count > 0 ? Math.Tanh(sum / count) : 0);
         }
         return proto;
     }
 
-    private double[] CompressParamDelta(Vector<T> current, Vector<T> initial)
+    private Vector<T> CompressParamDelta(Vector<T> current, Vector<T> initial)
     {
-        var delta = new double[_protoDim];
+        var delta = new Vector<T>(_protoDim);
         for (int p = 0; p < _protoDim; p++)
         {
             double sum = 0;
@@ -199,30 +194,25 @@ internal class MePoAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TO
                 sum += NumOps.ToDouble(current[d]) - NumOps.ToDouble(initial[d]);
                 count++;
             }
-            delta[p] = count > 0 ? sum / count : 0;
+            delta[p] = NumOps.FromDouble(count > 0 ? sum / count : 0);
         }
         return delta;
     }
 
-    private double[]? RetrievePrototypes(double[] query)
+    private Vector<T>? RetrievePrototypes(Vector<T> query)
     {
         if (_memoryBank.Count == 0) return null;
 
         // Compute cosine similarity to all stored prototypes
-        double queryNorm = 0;
-        for (int p = 0; p < _protoDim; p++) queryNorm += query[p] * query[p];
-        queryNorm = Math.Sqrt(queryNorm) + 1e-10;
+        double queryNorm = Math.Sqrt(L2NormSquared(query)) + 1e-10;
 
         var similarities = new List<(int idx, double sim)>();
         for (int i = 0; i < _memoryBank.Count; i++)
         {
-            double dot = 0, memNorm = 0;
+            double dot = 0;
+            double memNorm = Math.Sqrt(L2NormSquared(_memoryBank[i])) + 1e-10;
             for (int p = 0; p < _protoDim; p++)
-            {
-                dot += query[p] * _memoryBank[i][p];
-                memNorm += _memoryBank[i][p] * _memoryBank[i][p];
-            }
-            memNorm = Math.Sqrt(memNorm) + 1e-10;
+                dot += NumOps.ToDouble(query[p]) * NumOps.ToDouble(_memoryBank[i][p]);
             similarities.Add((i, dot / (queryNorm * memNorm)));
         }
 
@@ -241,17 +231,17 @@ internal class MePoAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TO
         }
         for (int i = 0; i < topK; i++) weights[i] /= (sumExp + 1e-10);
 
-        var result = new double[_protoDim];
+        var result = new Vector<T>(_protoDim);
         for (int i = 0; i < topK; i++)
         {
             int idx = similarities[i].idx;
             for (int p = 0; p < _protoDim; p++)
-                result[p] += weights[i] * _memoryBank[idx][p];
+                result[p] = NumOps.Add(result[p], NumOps.FromDouble(weights[i] * NumOps.ToDouble(_memoryBank[idx][p])));
         }
         return result;
     }
 
-    private void StorePrototype(double[] prototype)
+    private void StorePrototype(Vector<T> prototype)
     {
         if (_memoryBank.Count >= _algoOptions.MemorySize)
             _memoryBank.RemoveAt(0);

@@ -89,12 +89,7 @@ public class AutoLoRAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
         _rankComponents = new Vector<T>(totalComponents);
         double initScale = 0.01;
         for (int i = 0; i < totalComponents; i++)
-        {
-            double u1 = 1.0 - RandomGenerator.NextDouble();
-            double u2 = RandomGenerator.NextDouble();
-            double z = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-            _rankComponents[i] = NumOps.FromDouble(z * initScale);
-        }
+            _rankComponents[i] = NumOps.FromDouble(SampleNormal() * initScale);
 
         // Initialize selection logits to uniform (all components equally likely)
         _selectionLogits = new Vector<T>(_numGroups * _maxRank);

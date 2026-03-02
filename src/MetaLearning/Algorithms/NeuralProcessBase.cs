@@ -234,11 +234,10 @@ public abstract class NeuralProcessBase<T, TInput, TOutput> : MetaLearnerBase<T,
     protected Vector<T> ReparameterizeSample(Vector<T> mean, Vector<T> logvar)
     {
         var z = new Vector<T>(mean.Length);
-        var rng = RandomGenerator;
 
         for (int i = 0; i < mean.Length; i++)
         {
-            double eps = NormalSample(rng);
+            double eps = SampleNormal();
             double std = Math.Exp(0.5 * NumOps.ToDouble(logvar[i]));
             z[i] = NumOps.FromDouble(NumOps.ToDouble(mean[i]) + std * eps);
         }
@@ -246,12 +245,61 @@ public abstract class NeuralProcessBase<T, TInput, TOutput> : MetaLearnerBase<T,
         return z;
     }
 
-    /// <summary>Samples from a standard normal distribution using Box-Muller transform.</summary>
-    private static double NormalSample(Random rng)
+    /// <summary>
+    /// Modulates backbone parameters by a scale derived from the context representation,
+    /// then sets them on the model.
+    /// </summary>
+    protected void ModulateParameters(Vector<T> initParams, double scale)
     {
-        double u1 = 1.0 - rng.NextDouble();
-        double u2 = rng.NextDouble();
-        return Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
+        MetaModel.SetParameters(ScaleVector(initParams, scale));
+    }
+
+    /// <summary>
+    /// Standard NP meta-training loop shared by simple NP variants (EquivCNP, SwinTNP, TNP, etc.).
+    /// For each task: build context reps, aggregate, modulate backbone, compute loss and gradients.
+    /// Then apply outer update and update encoder params via SPSA.
+    /// </summary>
+    protected T StandardNPMetaTrain(TaskBatch<T, TInput, TOutput> taskBatch, double outerLR)
+    {
+        var losses = new List<T>();
+        var metaGradients = new List<Vector<T>>();
+        var initParams = MetaModel.GetParameters();
+
+        foreach (var task in taskBatch.Tasks)
+        {
+            MetaModel.SetParameters(initParams);
+            var supportFeatures = ConvertToVector(MetaModel.Predict(task.SupportInput));
+            var supportLabels = ConvertToVector(task.SupportOutput);
+            var contextReps = BuildContextRepresentations(supportFeatures, supportLabels);
+
+            var aggRep = AggregateRepresentations(contextReps);
+            double scale = ComputeModScale(aggRep);
+            ModulateParameters(initParams, scale);
+
+            var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
+            losses.Add(queryLoss);
+            metaGradients.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
+        }
+
+        ApplyOuterUpdate(initParams, metaGradients, outerLR);
+        UpdateAuxiliaryParamsSPSA(taskBatch, ref EncoderParams, outerLR, StandardAuxLoss);
+        return ComputeMean(losses);
+    }
+
+    /// <summary>
+    /// Standard NP adaptation: build context reps, aggregate, modulate, return adapted model.
+    /// </summary>
+    protected IModel<TInput, TOutput, ModelMetadata<T>> StandardNPAdapt(IMetaLearningTask<T, TInput, TOutput> task)
+    {
+        var currentParams = MetaModel.GetParameters();
+        var supportFeatures = ConvertToVector(MetaModel.Predict(task.SupportInput));
+        var supportLabels = ConvertToVector(task.SupportOutput);
+        var contextReps = BuildContextRepresentations(supportFeatures, supportLabels);
+
+        var aggRep = AggregateRepresentations(contextReps);
+        double sc = ComputeModScale(aggRep);
+
+        return new NeuralProcessModel<T, TInput, TOutput>(MetaModel, ScaleVector(currentParams, sc), aggRep);
     }
 }
 

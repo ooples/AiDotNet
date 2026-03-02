@@ -83,12 +83,7 @@ public class MetaLoRAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
         _loraBasis = new Vector<T>(_rank * _paramDim);
         double initStd = options.BasisInitStdDev;
         for (int i = 0; i < _loraBasis.Length; i++)
-        {
-            double u1 = 1.0 - RandomGenerator.NextDouble();
-            double u2 = RandomGenerator.NextDouble();
-            double z = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-            _loraBasis[i] = NumOps.FromDouble(z * initStd);
-        }
+            _loraBasis[i] = NumOps.FromDouble(SampleNormal() * initStd);
 
         // Initialize coefficients to zero (no initial offset)
         _loraCoeffInit = new Vector<T>(_rank);

@@ -185,12 +185,7 @@ public class DKTAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
         }
 
         // Update backbone
-        MetaModel.SetParameters(initParams);
-        if (metaGradients.Count > 0)
-        {
-            var avgGrad = AverageVectors(metaGradients);
-            MetaModel.SetParameters(ApplyGradients(initParams, avgGrad, _dktOptions.OuterLearningRate));
-        }
+        ApplyOuterUpdate(initParams, metaGradients, _dktOptions.OuterLearningRate);
 
         // Update kernel hyperparameters via SPSA
         UpdateAuxiliaryParamsSPSA(taskBatch, ref _kernelParams, _dktOptions.OuterLearningRate, ComputeAuxLoss);

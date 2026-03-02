@@ -81,11 +81,7 @@ public class HyperNetMetaRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TI
         var v = new Vector<T>(size);
         double scale = 1.0 / Math.Sqrt(size);
         for (int i = 0; i < size; i++)
-        {
-            double u1 = Math.Max(1e-10, RandomGenerator.NextDouble());
-            double u2 = RandomGenerator.NextDouble();
-            v[i] = NumOps.FromDouble(scale * Math.Sqrt(-2 * Math.Log(u1)) * Math.Cos(2 * Math.PI * u2));
-        }
+            v[i] = NumOps.FromDouble(scale * SampleNormal());
         return v;
     }
 
@@ -112,7 +108,7 @@ public class HyperNetMetaRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TI
             // Apply parameter delta
             var taskParams = new Vector<T>(_paramDim);
             for (int d = 0; d < _paramDim; d++)
-                taskParams[d] = NumOps.Add(initParams[d], NumOps.FromDouble(paramDelta[d % _compressedDim]));
+                taskParams[d] = NumOps.Add(initParams[d], paramDelta[d % _compressedDim]);
 
             // Optional fine-tuning
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
@@ -127,19 +123,14 @@ public class HyperNetMetaRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TI
 
             // Parameter regularization: ||Δθ||²
             double paramReg = 0;
-            for (int d = 0; d < _compressedDim; d++) paramReg += paramDelta[d] * paramDelta[d];
+            for (int d = 0; d < _compressedDim; d++) { double pd = NumOps.ToDouble(paramDelta[d]); paramReg += pd * pd; }
             var totalLoss = NumOps.Add(queryLoss, NumOps.FromDouble(_algoOptions.ParamRegWeight * paramReg));
 
             losses.Add(totalLoss);
             metaGradients.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
         }
 
-        MetaModel.SetParameters(initParams);
-        if (metaGradients.Count > 0)
-        {
-            var avgGrad = AverageVectors(metaGradients);
-            MetaModel.SetParameters(ApplyGradients(initParams, avgGrad, _algoOptions.OuterLearningRate));
-        }
+        ApplyOuterUpdate(initParams, metaGradients, _algoOptions.OuterLearningRate);
 
         UpdateAuxiliaryParamsSPSA(taskBatch, ref _encoderParams, _algoOptions.OuterLearningRate * SpsaLearningRateMultiplier, ComputeHyperNetLoss);
         UpdateAuxiliaryParamsSPSA(taskBatch, ref _hyperLayer1, _algoOptions.OuterLearningRate * SpsaLearningRateMultiplier, ComputeHyperNetLoss);
@@ -159,7 +150,7 @@ public class HyperNetMetaRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TI
 
         var taskParams = new Vector<T>(_paramDim);
         for (int d = 0; d < _paramDim; d++)
-            taskParams[d] = NumOps.Add(initParams[d], NumOps.FromDouble(paramDelta[d % _compressedDim]));
+            taskParams[d] = NumOps.Add(initParams[d], paramDelta[d % _compressedDim]);
 
         for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
         {
@@ -172,20 +163,20 @@ public class HyperNetMetaRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TI
         return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, taskParams);
     }
 
-    private double[] ComputeTaskEmbedding(Vector<T> grad)
+    private Vector<T> ComputeTaskEmbedding(Vector<T> grad)
     {
-        var emb = new double[_embDim];
+        var emb = new Vector<T>(_embDim);
         for (int e = 0; e < _embDim; e++)
         {
             double sum = 0;
             for (int d = 0; d < _compressedDim && d < grad.Length; d++)
                 sum += NumOps.ToDouble(grad[d]) * NumOps.ToDouble(_encoderParams[e * _compressedDim + d]);
-            emb[e] = Math.Tanh(sum);
+            emb[e] = NumOps.FromDouble(Math.Tanh(sum));
         }
         return emb;
     }
 
-    private double[] HyperNetForward(double[] embedding)
+    private Vector<T> HyperNetForward(Vector<T> embedding)
     {
         // Layer 1: embedding → hidden (ReLU)
         var hidden = new double[_hiddenDim];
@@ -193,18 +184,18 @@ public class HyperNetMetaRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TI
         {
             double sum = 0;
             for (int e = 0; e < _embDim; e++)
-                sum += embedding[e] * NumOps.ToDouble(_hyperLayer1[h * _embDim + e]);
+                sum += NumOps.ToDouble(embedding[e]) * NumOps.ToDouble(_hyperLayer1[h * _embDim + e]);
             hidden[h] = Math.Max(0, sum);
         }
 
         // Layer 2: hidden → param delta
-        var delta = new double[_compressedDim];
+        var delta = new Vector<T>(_compressedDim);
         for (int d = 0; d < _compressedDim; d++)
         {
             double sum = 0;
             for (int h = 0; h < _hiddenDim; h++)
                 sum += hidden[h] * NumOps.ToDouble(_hyperLayer2[d * _hiddenDim + h]);
-            delta[d] = sum;
+            delta[d] = NumOps.FromDouble(sum);
         }
         return delta;
     }
@@ -220,7 +211,7 @@ public class HyperNetMetaRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TI
             var emb = ComputeTaskEmbedding(sg);
             var pd = HyperNetForward(emb);
             var tp = new Vector<T>(_paramDim);
-            for (int d = 0; d < _paramDim; d++) tp[d] = NumOps.Add(initParams[d], NumOps.FromDouble(pd[d % _compressedDim]));
+            for (int d = 0; d < _paramDim; d++) tp[d] = NumOps.Add(initParams[d], pd[d % _compressedDim]);
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
             {
                 MetaModel.SetParameters(tp);
@@ -232,7 +223,7 @@ public class HyperNetMetaRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TI
 
             // Include parameter regularization to match MetaTrain objective
             double paramReg = 0;
-            for (int d = 0; d < _compressedDim; d++) paramReg += pd[d] * pd[d];
+            for (int d = 0; d < _compressedDim; d++) { double pdv = NumOps.ToDouble(pd[d]); paramReg += pdv * pdv; }
             totalLoss += queryLoss + _algoOptions.ParamRegWeight * paramReg;
         }
         MetaModel.SetParameters(initParams);

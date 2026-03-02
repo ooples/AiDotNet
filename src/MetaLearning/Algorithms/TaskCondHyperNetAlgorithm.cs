@@ -88,7 +88,7 @@ public class TaskCondHyperNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
             // Compute task embedding from support gradient
             MetaModel.SetParameters(initParams);
             var supportGrad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-            var embedding = CompressGradient(supportGrad, embDim);
+            var embedding = CompressVector(supportGrad, embDim);
 
             // Generate parameter delta via hypernetwork
             var delta = RunHyperNetwork(embedding);
@@ -96,7 +96,7 @@ public class TaskCondHyperNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
             // Apply hypernetwork-generated delta to init params
             var adaptedParams = new Vector<T>(_paramDim);
             for (int d = 0; d < _paramDim; d++)
-                adaptedParams[d] = NumOps.Add(initParams[d], NumOps.FromDouble(delta[d]));
+                adaptedParams[d] = NumOps.Add(initParams[d], delta[d]);
 
             // Fine-tune with standard MAML steps
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
@@ -111,7 +111,7 @@ public class TaskCondHyperNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
 
             // Embedding regularization
             double embNorm = 0;
-            for (int e = 0; e < embDim; e++) embNorm += embedding[e] * embedding[e];
+            for (int e = 0; e < embDim; e++) { double ev = NumOps.ToDouble(embedding[e]); embNorm += ev * ev; }
             var totalLoss = NumOps.Add(queryLoss,
                 NumOps.FromDouble(_algoOptions.EmbeddingRegWeight * embNorm / embDim));
 
@@ -119,12 +119,7 @@ public class TaskCondHyperNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
             metaGradients.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
         }
 
-        MetaModel.SetParameters(initParams);
-        if (metaGradients.Count > 0)
-        {
-            var avgGrad = AverageVectors(metaGradients);
-            MetaModel.SetParameters(ApplyGradients(initParams, avgGrad, _algoOptions.OuterLearningRate));
-        }
+        ApplyOuterUpdate(initParams, metaGradients, _algoOptions.OuterLearningRate);
 
         UpdateAuxiliaryParamsSPSA(taskBatch, ref _hyperNetWeights, _algoOptions.OuterLearningRate * 0.1, ComputeHyperLoss);
 
@@ -139,12 +134,12 @@ public class TaskCondHyperNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
 
         MetaModel.SetParameters(initParams);
         var supportGrad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-        var embedding = CompressGradient(supportGrad, embDim);
+        var embedding = CompressVector(supportGrad, embDim);
         var delta = RunHyperNetwork(embedding);
 
         var adaptedParams = new Vector<T>(_paramDim);
         for (int d = 0; d < _paramDim; d++)
-            adaptedParams[d] = NumOps.Add(initParams[d], NumOps.FromDouble(delta[d]));
+            adaptedParams[d] = NumOps.Add(initParams[d], delta[d]);
 
         for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
         {
@@ -157,22 +152,7 @@ public class TaskCondHyperNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
         return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, adaptedParams);
     }
 
-    private double[] CompressGradient(Vector<T> grad, int targetDim)
-    {
-        var result = new double[targetDim];
-        int bucketSize = Math.Max(1, _paramDim / targetDim);
-        for (int e = 0; e < targetDim; e++)
-        {
-            double sum = 0;
-            int start = e * bucketSize;
-            for (int d = start; d < start + bucketSize && d < grad.Length; d++)
-                sum += NumOps.ToDouble(grad[d]);
-            result[e] = Math.Tanh(sum / bucketSize);
-        }
-        return result;
-    }
-
-    private double[] RunHyperNetwork(double[] embedding)
+    private Vector<T> RunHyperNetwork(Vector<T> embedding)
     {
         int embDim = _algoOptions.EmbeddingDim;
         int hidDim = _algoOptions.HyperHiddenDim;
@@ -185,7 +165,7 @@ public class TaskCondHyperNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
         {
             double sum = 0;
             for (int e = 0; e < embDim; e++)
-                sum += NumOps.ToDouble(_hyperNetWeights[wIdx++]) * embedding[e];
+                sum += NumOps.ToDouble(_hyperNetWeights[wIdx++]) * NumOps.ToDouble(embedding[e]);
             hidden[h] = sum;
         }
         // Add bias
@@ -193,7 +173,7 @@ public class TaskCondHyperNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
             hidden[h] = Math.Tanh(hidden[h] + NumOps.ToDouble(_hyperNetWeights[wIdx++]));
 
         // Layer 2: per-chunk output heads → parameter deltas
-        var delta = new double[_paramDim];
+        var delta = new Vector<T>(_paramDim);
         for (int c = 0; c < _numChunks; c++)
         {
             int startParam = c * chunkSize;
@@ -203,7 +183,7 @@ public class TaskCondHyperNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
                 double sum = 0;
                 for (int h = 0; h < hidDim; h++)
                     sum += NumOps.ToDouble(_hyperNetWeights[wIdx + (p - startParam) * hidDim + h]) * hidden[h];
-                delta[p] = sum * 0.01; // Small initial scale to avoid disrupting init
+                delta[p] = NumOps.FromDouble(sum * 0.01);
             }
             wIdx += chunkSize * hidDim;
         }
@@ -220,11 +200,11 @@ public class TaskCondHyperNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
         {
             MetaModel.SetParameters(initParams);
             var sg = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
-            var emb = CompressGradient(sg, embDim);
+            var emb = CompressVector(sg, embDim);
             var delta = RunHyperNetwork(emb);
             var ap = new Vector<T>(_paramDim);
             for (int d = 0; d < _paramDim; d++)
-                ap[d] = NumOps.Add(initParams[d], NumOps.FromDouble(delta[d]));
+                ap[d] = NumOps.Add(initParams[d], delta[d]);
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
             {
                 MetaModel.SetParameters(ap);

@@ -68,18 +68,14 @@ internal class TETNPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput,
             var supportLabels = ConvertToVector(task.SupportOutput);
 
             // 1. Encode context pairs into per-example representations
-            var contextReps = EncodeContextSet(supportFeatures, supportLabels);
+            var contextReps = BuildContextRepresentations(supportFeatures, supportLabels);
 
             // 2. Refine representations with relative-position self-attention
             var refinedReps = ApplyRelativeSelfAttention(contextReps, supportFeatures, supportLabels);
 
             // 3. Aggregate and modulate
             var aggRep = AggregateRepresentations(refinedReps);
-            double scale = ComputeModScale(aggRep);
-            var modParams = new Vector<T>(initParams.Length);
-            for (int i = 0; i < initParams.Length; i++)
-                modParams[i] = NumOps.Multiply(initParams[i], NumOps.FromDouble(scale));
-            MetaModel.SetParameters(modParams);
+            ModulateParameters(initParams, ComputeModScale(aggRep));
 
             // 4. Query loss + equivariance regularization
             var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
@@ -89,9 +85,7 @@ internal class TETNPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput,
             metaGradients.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
         }
 
-        MetaModel.SetParameters(initParams);
-        if (metaGradients.Count > 0)
-            MetaModel.SetParameters(ApplyGradients(initParams, AverageVectors(metaGradients), _algoOptions.OuterLearningRate));
+        ApplyOuterUpdate(initParams, metaGradients, _algoOptions.OuterLearningRate);
 
         UpdateAuxiliaryParamsSPSA(taskBatch, ref EncoderParams, _algoOptions.OuterLearningRate, ComputeAuxLoss);
         UpdateAuxiliaryParamsSPSA(taskBatch, ref _relPosParams, _algoOptions.OuterLearningRate, ComputeAuxLoss);
@@ -105,38 +99,11 @@ internal class TETNPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput,
         var supportFeatures = ConvertToVector(MetaModel.Predict(task.SupportInput));
         var supportLabels = ConvertToVector(task.SupportOutput);
 
-        var contextReps = EncodeContextSet(supportFeatures, supportLabels);
+        var contextReps = BuildContextRepresentations(supportFeatures, supportLabels);
         var refinedReps = ApplyRelativeSelfAttention(contextReps, supportFeatures, supportLabels);
         var aggRep = AggregateRepresentations(refinedReps);
-        double sc = ComputeModScale(aggRep);
-        var modParams = new Vector<T>(currentParams.Length);
-        for (int i = 0; i < currentParams.Length; i++)
-            modParams[i] = NumOps.Multiply(currentParams[i], NumOps.FromDouble(sc));
 
-        return new NeuralProcessModel<T, TInput, TOutput>(MetaModel, modParams, aggRep);
-    }
-
-    /// <summary>Encodes support features/labels into per-example context representations.</summary>
-    private List<Vector<T>> EncodeContextSet(Vector<T>? supportFeatures, Vector<T>? supportLabels)
-    {
-        var contextReps = new List<Vector<T>>();
-        if (supportFeatures == null || supportLabels == null || supportFeatures.Length == 0)
-            return contextReps;
-
-        int numEx = Math.Max(1, supportLabels.Length);
-        int fDim = Math.Max(1, supportFeatures.Length / numEx);
-        for (int i = 0; i < numEx; i++)
-        {
-            int fStart = i * fDim;
-            int fLen = Math.Min(fDim, supportFeatures.Length - fStart);
-            if (fLen <= 0) break;
-            var f = new Vector<T>(fLen);
-            for (int j = 0; j < fLen; j++) f[j] = supportFeatures[fStart + j];
-            var l = new Vector<T>(1);
-            l[0] = supportLabels.Length > 0 ? supportLabels[Math.Min(i, supportLabels.Length - 1)] : NumOps.Zero;
-            contextReps.Add(EncodeContextPair(f, l));
-        }
-        return contextReps;
+        return new NeuralProcessModel<T, TInput, TOutput>(MetaModel, ScaleVector(currentParams, ComputeModScale(aggRep)), aggRep);
     }
 
     /// <summary>
@@ -284,7 +251,7 @@ internal class TETNPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput,
             var sl = ConvertToVector(t.SupportOutput);
             if (sf != null && sl != null && sf.Length > 0 && sl.Length > 0)
             {
-                var contextReps = EncodeContextSet(sf, sl);
+                var contextReps = BuildContextRepresentations(sf, sl);
                 var refinedReps = ApplyRelativeSelfAttention(contextReps, sf, sl);
                 double equivReg = ComputeEquivarianceReg(contextReps, refinedReps);
                 queryLoss += _algoOptions.EquivarianceRegWeight * equivReg;

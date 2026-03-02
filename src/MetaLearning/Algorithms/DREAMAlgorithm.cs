@@ -67,11 +67,7 @@ public class DREAMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
         int shaperSize = 3 * _hiddenDim + _hiddenDim; // weights + output weights
         _shaperParams = new Vector<T>(shaperSize);
         for (int i = 0; i < shaperSize; i++)
-        {
-            double u1 = Math.Max(1e-10, RandomGenerator.NextDouble());
-            double u2 = RandomGenerator.NextDouble();
-            _shaperParams[i] = NumOps.FromDouble(0.1 * Math.Sqrt(-2 * Math.Log(u1)) * Math.Cos(2 * Math.PI * u2));
-        }
+            _shaperParams[i] = NumOps.FromDouble(0.1 * SampleNormal());
     }
 
     /// <inheritdoc/>
@@ -129,12 +125,7 @@ public class DREAMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
             metaGradients.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
         }
 
-        MetaModel.SetParameters(initParams);
-        if (metaGradients.Count > 0)
-        {
-            var avgGrad = AverageVectors(metaGradients);
-            MetaModel.SetParameters(ApplyGradients(initParams, avgGrad, _algoOptions.OuterLearningRate));
-        }
+        ApplyOuterUpdate(initParams, metaGradients, _algoOptions.OuterLearningRate);
 
         UpdateAuxiliaryParamsSPSA(taskBatch, ref _shaperParams, _algoOptions.OuterLearningRate * 0.1, ComputeDREAMLoss);
 

@@ -97,7 +97,7 @@ public class GCDPLNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
                 for (int d = 0; d < _paramDim; d++)
                 {
                     int g = Math.Min(d / _nodeSize, _numNodes - 1);
-                    double adaptiveLR = _algoOptions.InnerLearningRate * (1.0 + nodeFeatures[g]);
+                    double adaptiveLR = _algoOptions.InnerLearningRate * (1.0 + NumOps.ToDouble(nodeFeatures[g]));
                     adaptedParams[d] = NumOps.Subtract(adaptedParams[d],
                         NumOps.FromDouble(adaptiveLR * NumOps.ToDouble(grad[d])));
                 }
@@ -109,12 +109,7 @@ public class GCDPLNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
             metaGradients.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
         }
 
-        MetaModel.SetParameters(initParams);
-        if (metaGradients.Count > 0)
-        {
-            var avgGrad = AverageVectors(metaGradients);
-            MetaModel.SetParameters(ApplyGradients(initParams, avgGrad, _algoOptions.OuterLearningRate));
-        }
+        ApplyOuterUpdate(initParams, metaGradients, _algoOptions.OuterLearningRate);
 
         UpdateAuxiliaryParamsSPSA(taskBatch, ref _graphAttention, _algoOptions.OuterLearningRate * 0.1, ComputeGraphLoss);
 
@@ -140,7 +135,7 @@ public class GCDPLNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
             for (int d = 0; d < _paramDim; d++)
             {
                 int g = Math.Min(d / _nodeSize, _numNodes - 1);
-                double adaptiveLR = _algoOptions.InnerLearningRate * (1.0 + nodeFeatures[g]);
+                double adaptiveLR = _algoOptions.InnerLearningRate * (1.0 + NumOps.ToDouble(nodeFeatures[g]));
                 adaptedParams[d] = NumOps.Subtract(adaptedParams[d],
                     NumOps.FromDouble(adaptiveLR * NumOps.ToDouble(grad[d])));
             }
@@ -150,9 +145,9 @@ public class GCDPLNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
         return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, adaptedParams);
     }
 
-    private double[] ComputeNodeFeatures(Vector<T> grad)
+    private Vector<T> ComputeNodeFeatures(Vector<T> grad)
     {
-        var features = new double[_numNodes];
+        var features = new Vector<T>(_numNodes);
         for (int g = 0; g < _numNodes; g++)
         {
             double sum = 0;
@@ -163,23 +158,24 @@ public class GCDPLNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
                 sum += Math.Abs(NumOps.ToDouble(grad[d]));
                 count++;
             }
-            features[g] = count > 0 ? Math.Tanh(sum / count) : 0;
+            features[g] = NumOps.FromDouble(count > 0 ? Math.Tanh(sum / count) : 0);
         }
         return features;
     }
 
-    private double[] MessagePass(double[] features)
+    private Vector<T> MessagePass(Vector<T> features)
     {
-        var updated = new double[_numNodes];
+        var updated = new Vector<T>(_numNodes);
         for (int g = 0; g < _numNodes; g++)
         {
             // Compute attention weights from this node to all others
             var scores = new double[_numNodes];
             double maxScore = double.NegativeInfinity;
+            double fg = NumOps.ToDouble(features[g]);
             for (int g2 = 0; g2 < _numNodes; g2++)
             {
                 scores[g2] = NumOps.ToDouble(_graphAttention[g * _numNodes + g2])
-                           * (features[g] + features[g2]);
+                           * (fg + NumOps.ToDouble(features[g2]));
                 if (scores[g2] > maxScore) maxScore = scores[g2];
             }
             double sumExp = 0;
@@ -188,9 +184,9 @@ public class GCDPLNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
 
             // Weighted message
             double message = 0;
-            for (int g2 = 0; g2 < _numNodes; g2++) message += scores[g2] * features[g2];
+            for (int g2 = 0; g2 < _numNodes; g2++) message += scores[g2] * NumOps.ToDouble(features[g2]);
 
-            updated[g] = Math.Tanh(features[g] + _algoOptions.MessageWeight * message);
+            updated[g] = NumOps.FromDouble(Math.Tanh(fg + _algoOptions.MessageWeight * message));
         }
         return updated;
     }
@@ -213,7 +209,7 @@ public class GCDPLNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
                 {
                     int grp = Math.Min(d / _nodeSize, _numNodes - 1);
                     ap[d] = NumOps.Subtract(ap[d],
-                        NumOps.FromDouble(_algoOptions.InnerLearningRate * (1.0 + nf[grp]) * NumOps.ToDouble(g[d])));
+                        NumOps.FromDouble(_algoOptions.InnerLearningRate * (1.0 + NumOps.ToDouble(nf[grp])) * NumOps.ToDouble(g[d])));
                 }
             }
             MetaModel.SetParameters(ap);

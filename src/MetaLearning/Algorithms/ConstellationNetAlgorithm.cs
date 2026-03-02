@@ -143,12 +143,7 @@ public class ConstellationNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
         }
 
         // Update backbone
-        MetaModel.SetParameters(initParams);
-        if (metaGradients.Count > 0)
-        {
-            var avgGrad = AverageVectors(metaGradients);
-            MetaModel.SetParameters(ApplyGradients(initParams, avgGrad, _constellationOptions.OuterLearningRate));
-        }
+        ApplyOuterUpdate(initParams, metaGradients, _constellationOptions.OuterLearningRate);
 
         // Update part detector and relation module via multi-sample SPSA
         UpdateAuxiliaryParamsSPSA(taskBatch, ref _partDetectorParams, _constellationOptions.OuterLearningRate, ComputeAuxLoss);

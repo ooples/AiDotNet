@@ -75,20 +75,12 @@ public class PEARLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
         int encoderSize = _compressedDim * _algoOptions.EncoderHiddenDim + _algoOptions.EncoderHiddenDim * 2 * _latentDim;
         _encoderParams = new Vector<T>(encoderSize);
         for (int i = 0; i < encoderSize; i++)
-        {
-            double u1 = Math.Max(1e-10, RandomGenerator.NextDouble());
-            double u2 = RandomGenerator.NextDouble();
-            _encoderParams[i] = NumOps.FromDouble(0.01 * Math.Sqrt(-2 * Math.Log(u1)) * Math.Cos(2 * Math.PI * u2));
-        }
+            _encoderParams[i] = NumOps.FromDouble(0.01 * SampleNormal());
 
         // Projection: z → parameter delta
         _projectionParams = new Vector<T>(_latentDim * _compressedDim);
         for (int i = 0; i < _projectionParams.Length; i++)
-        {
-            double u1 = Math.Max(1e-10, RandomGenerator.NextDouble());
-            double u2 = RandomGenerator.NextDouble();
-            _projectionParams[i] = NumOps.FromDouble(0.01 * Math.Sqrt(-2 * Math.Log(u1)) * Math.Cos(2 * Math.PI * u2));
-        }
+            _projectionParams[i] = NumOps.FromDouble(0.01 * SampleNormal());
     }
 
     /// <inheritdoc/>
@@ -124,7 +116,7 @@ public class PEARLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
                 for (int d = 0; d < _paramDim; d++)
                 {
                     int cd = d % _compressedDim;
-                    modulatedParams[d] = NumOps.Add(initParams[d], NumOps.FromDouble(paramDelta[cd]));
+                    modulatedParams[d] = NumOps.Add(initParams[d], paramDelta[cd]);
                 }
 
                 // Gradient adaptation
@@ -150,12 +142,7 @@ public class PEARLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
         }
 
         // Outer loop
-        MetaModel.SetParameters(initParams);
-        if (metaGradients.Count > 0)
-        {
-            var avgGrad = AverageVectors(metaGradients);
-            MetaModel.SetParameters(ApplyGradients(initParams, avgGrad, _algoOptions.OuterLearningRate));
-        }
+        ApplyOuterUpdate(initParams, metaGradients, _algoOptions.OuterLearningRate);
 
         // Update encoder and projection via SPSA
         UpdateAuxiliaryParamsSPSA(taskBatch, ref _encoderParams, _algoOptions.OuterLearningRate * SpsaLearningRateMultiplier, ComputePEARLLoss);
@@ -178,7 +165,7 @@ public class PEARLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
         for (int d = 0; d < _paramDim; d++)
         {
             int cd = d % _compressedDim;
-            modulatedParams[d] = NumOps.Add(initParams[d], NumOps.FromDouble(paramDelta[cd]));
+            modulatedParams[d] = NumOps.Add(initParams[d], paramDelta[cd]);
         }
 
         for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
@@ -192,17 +179,17 @@ public class PEARLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
         return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, modulatedParams);
     }
 
-    private double[] ComputeContext(TInput supportInput, TOutput supportOutput, Vector<T> currentParams)
+    private Vector<T> ComputeContext(TInput supportInput, TOutput supportOutput, Vector<T> currentParams)
     {
         MetaModel.SetParameters(currentParams);
         var grad = ComputeGradients(MetaModel, supportInput, supportOutput);
-        var ctx = new double[_compressedDim];
+        var ctx = new Vector<T>(_compressedDim);
         for (int d = 0; d < _compressedDim && d < grad.Length; d++)
-            ctx[d] = NumOps.ToDouble(grad[d]);
+            ctx[d] = grad[d];
         return ctx;
     }
 
-    private (double[] mu, double[] logVar) Encode(double[] context)
+    private (double[] mu, double[] logVar) Encode(Vector<T> context)
     {
         int hiddenDim = _algoOptions.EncoderHiddenDim;
         var hidden = new double[hiddenDim];
@@ -213,7 +200,7 @@ public class PEARLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
         {
             double sum = 0;
             for (int c = 0; c < _compressedDim; c++)
-                sum += context[c] * NumOps.ToDouble(_encoderParams[offset + h * _compressedDim + c]);
+                sum += NumOps.ToDouble(context[c]) * NumOps.ToDouble(_encoderParams[offset + h * _compressedDim + c]);
             hidden[h] = Math.Max(0, sum); // ReLU
         }
         offset += _compressedDim * hiddenDim;
@@ -240,24 +227,19 @@ public class PEARLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
     {
         var z = new double[_latentDim];
         for (int i = 0; i < _latentDim; i++)
-        {
-            double u1 = Math.Max(1e-10, RandomGenerator.NextDouble());
-            double u2 = RandomGenerator.NextDouble();
-            double eps = Math.Sqrt(-2 * Math.Log(u1)) * Math.Cos(2 * Math.PI * u2);
-            z[i] = mu[i] + Math.Exp(0.5 * logVar[i]) * eps;
-        }
+            z[i] = mu[i] + Math.Exp(0.5 * logVar[i]) * SampleNormal();
         return z;
     }
 
-    private double[] ProjectZ(double[] z)
+    private Vector<T> ProjectZ(double[] z)
     {
-        var delta = new double[_compressedDim];
+        var delta = new Vector<T>(_compressedDim);
         for (int d = 0; d < _compressedDim; d++)
         {
             double sum = 0;
             for (int l = 0; l < _latentDim; l++)
                 sum += z[l] * NumOps.ToDouble(_projectionParams[d * _latentDim + l]);
-            delta[d] = sum;
+            delta[d] = NumOps.FromDouble(sum);
         }
         return delta;
     }
@@ -275,7 +257,7 @@ public class PEARLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
 
             var modulatedParams = new Vector<T>(_paramDim);
             for (int d = 0; d < _paramDim; d++)
-                modulatedParams[d] = NumOps.Add(initParams[d], NumOps.FromDouble(paramDelta[d % _compressedDim]));
+                modulatedParams[d] = NumOps.Add(initParams[d], paramDelta[d % _compressedDim]);
 
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
             {

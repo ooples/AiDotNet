@@ -99,7 +99,7 @@ public class ATAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
                 {
                     int cd = d % _compressedDim;
                     adaptedParams[d] = NumOps.Subtract(adaptedParams[d],
-                        NumOps.FromDouble(_algoOptions.InnerLearningRate * weights[cd] * NumOps.ToDouble(grad[d])));
+                        NumOps.FromDouble(_algoOptions.InnerLearningRate * NumOps.ToDouble(weights[cd]) * NumOps.ToDouble(grad[d])));
                 }
             }
 
@@ -114,12 +114,7 @@ public class ATAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
             metaGradients.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
         }
 
-        MetaModel.SetParameters(initParams);
-        if (metaGradients.Count > 0)
-        {
-            var avgGrad = AverageVectors(metaGradients);
-            MetaModel.SetParameters(ApplyGradients(initParams, avgGrad, _algoOptions.OuterLearningRate));
-        }
+        ApplyOuterUpdate(initParams, metaGradients, _algoOptions.OuterLearningRate);
 
         UpdateAuxiliaryParamsSPSA(taskBatch, ref _attentionParams, _algoOptions.OuterLearningRate * 0.1, ComputeATAMLLoss);
 
@@ -144,7 +139,7 @@ public class ATAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
             {
                 int cd = d % _compressedDim;
                 adaptedParams[d] = NumOps.Subtract(adaptedParams[d],
-                    NumOps.FromDouble(_algoOptions.InnerLearningRate * weights[cd] * NumOps.ToDouble(grad[d])));
+                    NumOps.FromDouble(_algoOptions.InnerLearningRate * NumOps.ToDouble(weights[cd]) * NumOps.ToDouble(grad[d])));
             }
         }
 
@@ -152,9 +147,9 @@ public class ATAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
         return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, adaptedParams);
     }
 
-    private double[] CompressGradient(Vector<T> grad)
+    private Vector<T> CompressGradient(Vector<T> grad)
     {
-        var result = new double[_algoOptions.AttentionDim];
+        var result = new Vector<T>(_algoOptions.AttentionDim);
         int bucketSize = Math.Max(1, (_paramDim + _algoOptions.AttentionDim - 1) / _algoOptions.AttentionDim);
         for (int a = 0; a < _algoOptions.AttentionDim; a++)
         {
@@ -166,19 +161,19 @@ public class ATAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
                 sum += NumOps.ToDouble(grad[d]) * NumOps.ToDouble(grad[d]);
                 count++;
             }
-            result[a] = Math.Tanh(count > 0 ? sum / count : 0);
+            result[a] = NumOps.FromDouble(Math.Tanh(count > 0 ? sum / count : 0));
         }
         return result;
     }
 
-    private (double[] weights, double entropy) ComputeAttention(double[] compressed)
+    private (Vector<T> weights, double entropy) ComputeAttention(Vector<T> compressed)
     {
         var logits = new double[_compressedDim];
         for (int d = 0; d < _compressedDim; d++)
         {
             double sum = 0;
             for (int a = 0; a < _algoOptions.AttentionDim; a++)
-                sum += compressed[a] * NumOps.ToDouble(_attentionParams[d * _algoOptions.AttentionDim + a]);
+                sum += NumOps.ToDouble(compressed[a]) * NumOps.ToDouble(_attentionParams[d * _algoOptions.AttentionDim + a]);
             logits[d] = sum / _algoOptions.AttentionTemperature;
         }
 
@@ -201,7 +196,11 @@ public class ATAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
             if (p > 1e-10) entropy -= p * Math.Log(p);
         }
 
-        return (logits, entropy);
+        var weights = new Vector<T>(_compressedDim);
+        for (int d = 0; d < _compressedDim; d++)
+            weights[d] = NumOps.FromDouble(logits[d]);
+
+        return (weights, entropy);
     }
 
     private double ComputeATAMLLoss(TaskBatch<T, TInput, TOutput> taskBatch)
@@ -220,7 +219,7 @@ public class ATAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
                 var (w, _) = ComputeAttention(c);
                 for (int d = 0; d < _paramDim; d++)
                     ap[d] = NumOps.Subtract(ap[d],
-                        NumOps.FromDouble(_algoOptions.InnerLearningRate * w[d % _compressedDim] * NumOps.ToDouble(g[d])));
+                        NumOps.FromDouble(_algoOptions.InnerLearningRate * NumOps.ToDouble(w[d % _compressedDim]) * NumOps.ToDouble(g[d])));
             }
             MetaModel.SetParameters(ap);
             totalLoss += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));

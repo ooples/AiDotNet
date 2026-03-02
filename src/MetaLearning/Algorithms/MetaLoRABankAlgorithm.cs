@@ -84,24 +84,14 @@ public class MetaLoRABankAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
         _moduleBank = new Vector<T>(_bankSize * moduleSize);
         double initScale = 0.01;
         for (int i = 0; i < _moduleBank.Length; i++)
-        {
-            double u1 = 1.0 - RandomGenerator.NextDouble();
-            double u2 = RandomGenerator.NextDouble();
-            double z = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-            _moduleBank[i] = NumOps.FromDouble(z * initScale);
-        }
+            _moduleBank[i] = NumOps.FromDouble(SampleNormal() * initScale);
 
         // Initialize gating network: linear(embeddingDim → bankSize)
         int gatingSize = _embeddingDim * _bankSize + _bankSize;
         _gatingParams = new Vector<T>(gatingSize);
         double gateScale = 1.0 / Math.Sqrt(_embeddingDim);
         for (int i = 0; i < gatingSize; i++)
-        {
-            double u1 = 1.0 - RandomGenerator.NextDouble();
-            double u2 = RandomGenerator.NextDouble();
-            double z = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-            _gatingParams[i] = NumOps.FromDouble(z * gateScale);
-        }
+            _gatingParams[i] = NumOps.FromDouble(SampleNormal() * gateScale);
     }
 
     /// <inheritdoc/>
@@ -218,18 +208,18 @@ public class MetaLoRABankAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
         return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, finalParams);
     }
 
-    private double[] ComputeTaskEmbedding(TInput supportInput)
+    private Vector<T> ComputeTaskEmbedding(TInput supportInput)
     {
         var features = ConvertToVector(MetaModel.Predict(supportInput));
-        var embed = new double[_embeddingDim];
+        var embed = new Vector<T>(_embeddingDim);
         if (features == null) return embed;
 
         for (int i = 0; i < _embeddingDim && i < features.Length; i++)
-            embed[i] = NumOps.ToDouble(features[i]);
+            embed[i] = features[i];
         return embed;
     }
 
-    private double[] ComputeGatingScores(double[] taskEmbed)
+    private double[] ComputeGatingScores(Vector<T> taskEmbed)
     {
         var scores = new double[_bankSize];
         int biasOffset = _embeddingDim * _bankSize;
@@ -237,7 +227,7 @@ public class MetaLoRABankAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
         {
             double sum = 0;
             for (int i = 0; i < _embeddingDim; i++)
-                sum += taskEmbed[i] * NumOps.ToDouble(_gatingParams[k * _embeddingDim + i]);
+                sum += NumOps.ToDouble(taskEmbed[i]) * NumOps.ToDouble(_gatingParams[k * _embeddingDim + i]);
             if (biasOffset + k < _gatingParams.Length)
                 sum += NumOps.ToDouble(_gatingParams[biasOffset + k]);
             scores[k] = sum;

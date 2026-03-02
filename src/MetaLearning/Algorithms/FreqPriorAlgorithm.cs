@@ -113,12 +113,7 @@ internal class FreqPriorAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
         double freqPenalty = ComputeFrequencyPenalty(metaGradients);
 
         // Outer loop
-        MetaModel.SetParameters(initParams);
-        if (metaGradients.Count > 0)
-        {
-            var avgGrad = AverageVectors(metaGradients);
-            MetaModel.SetParameters(ApplyGradients(initParams, avgGrad, _algoOptions.OuterLearningRate));
-        }
+        ApplyOuterUpdate(initParams, metaGradients, _algoOptions.OuterLearningRate);
 
         return NumOps.Add(ComputeMean(losses), NumOps.FromDouble(freqPenalty));
     }

@@ -177,13 +177,13 @@ public class MetaDMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TO
         return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, adaptedParams);
     }
 
-    private double[] ExtractFeatures(TInput input)
+    private Vector<T> ExtractFeatures(TInput input)
     {
         var features = ConvertToVector(MetaModel.Predict(input));
-        var result = new double[_prototypeDim];
+        var result = new Vector<T>(_prototypeDim);
         if (features == null) return result;
         for (int i = 0; i < _prototypeDim && i < features.Length; i++)
-            result[i] = NumOps.ToDouble(features[i]);
+            result[i] = features[i];
         return result;
     }
 
@@ -191,11 +191,12 @@ public class MetaDMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TO
     /// Computes a class prototype from a feature vector. For single-example scenarios,
     /// the prototype is the feature vector itself (truncated or padded to prototypeDim).
     /// </summary>
-    private double[] ComputePrototype(double[] features)
+    private Vector<T> ComputePrototype(Vector<T> features)
     {
-        var proto = new double[_prototypeDim];
+        var proto = new Vector<T>(_prototypeDim);
         int copyLen = Math.Min(features.Length, _prototypeDim);
-        Array.Copy(features, proto, copyLen);
+        for (int i = 0; i < copyLen; i++)
+            proto[i] = features[i];
         return proto;
     }
 
@@ -203,7 +204,7 @@ public class MetaDMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TO
     /// Generates synthetic features by running the reverse diffusion process
     /// conditioned on the class prototype.
     /// </summary>
-    private double[][] GenerateSyntheticFeatures(double[] prototype, int numSamples)
+    private double[][] GenerateSyntheticFeatures(Vector<T> prototype, int numSamples)
     {
         var synthetic = new double[numSamples][];
         int denoisingSteps = Math.Max(1, _algoOptions.DenoisingSteps);
@@ -241,14 +242,15 @@ public class MetaDMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TO
     /// <summary>
     /// Feature denoiser MLP: predicts noise given noised features, prototype condition, and timestep.
     /// </summary>
-    private double[] PredictFeatureNoise(double[] noisedFeatures, double[] prototype, int timestep)
+    private double[] PredictFeatureNoise(double[] noisedFeatures, Vector<T> prototype, int timestep)
     {
         int inputDim = _prototypeDim * 2 + 1;
         int hidden = Math.Max(32, _prototypeDim * 2);
 
         var input = new double[inputDim];
         Array.Copy(noisedFeatures, 0, input, 0, _prototypeDim);
-        Array.Copy(prototype, 0, input, _prototypeDim, _prototypeDim);
+        for (int i = 0; i < _prototypeDim; i++)
+            input[_prototypeDim + i] = NumOps.ToDouble(prototype[i]);
         input[_prototypeDim * 2] = (double)timestep / _diffusionSteps;
 
         // Hidden layer (ReLU)
@@ -292,7 +294,7 @@ public class MetaDMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TO
     /// Computes distribution matching loss between real and synthetic feature distributions
     /// (moment matching: mean and variance).
     /// </summary>
-    private double ComputeDistributionMatchingLoss(double[] realFeatures, double[][] syntheticFeatures)
+    private double ComputeDistributionMatchingLoss(Vector<T> realFeatures, double[][] syntheticFeatures)
     {
         if (syntheticFeatures.Length == 0) return 0;
 
@@ -305,7 +307,7 @@ public class MetaDMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TO
                 synthMean += syntheticFeatures[s][d];
             synthMean /= syntheticFeatures.Length;
 
-            double diff = realFeatures[d] - synthMean;
+            double diff = NumOps.ToDouble(realFeatures[d]) - synthMean;
             meanLoss += diff * diff;
         }
 
@@ -337,7 +339,7 @@ public class MetaDMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TO
     /// Modulates the real gradient with information from synthetic features to create
     /// an augmented gradient that benefits from the diffusion-generated data.
     /// </summary>
-    private Vector<T> ModulateWithSynthetic(Vector<T> realGrad, double[][] syntheticFeatures, double[] prototype)
+    private Vector<T> ModulateWithSynthetic(Vector<T> realGrad, double[][] syntheticFeatures, Vector<T> prototype)
     {
         if (syntheticFeatures.Length == 0) return realGrad;
 
@@ -347,7 +349,7 @@ public class MetaDMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TO
         {
             double dot = 0;
             for (int d = 0; d < _prototypeDim; d++)
-                dot += syntheticFeatures[s][d] * prototype[d];
+                dot += syntheticFeatures[s][d] * NumOps.ToDouble(prototype[d]);
             agreement += dot;
         }
         agreement /= syntheticFeatures.Length * _prototypeDim;
@@ -401,22 +403,13 @@ public class MetaDMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TO
     {
         var arr = new double[length];
         for (int i = 0; i < length; i++)
-        {
-            double u1 = 1.0 - RandomGenerator.NextDouble();
-            double u2 = RandomGenerator.NextDouble();
-            arr[i] = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-        }
+            arr[i] = SampleNormal();
         return arr;
     }
 
     private void InitGaussian(Vector<T> v, double stdDev)
     {
         for (int i = 0; i < v.Length; i++)
-        {
-            double u1 = 1.0 - RandomGenerator.NextDouble();
-            double u2 = RandomGenerator.NextDouble();
-            double z = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-            v[i] = NumOps.FromDouble(z * stdDev);
-        }
+            v[i] = NumOps.FromDouble(SampleNormal() * stdDev);
     }
 }

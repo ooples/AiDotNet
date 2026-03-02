@@ -96,7 +96,7 @@ internal class RecurrentHyperNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<
                 var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
 
                 // Compress gradient to input dim
-                var input = CompressGradient(grad);
+                var input = CompressVector(grad, _algoOptions.InputDim);
 
                 // GRU step
                 hidden = GRUStep(hidden, input);
@@ -124,12 +124,7 @@ internal class RecurrentHyperNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<
             metaGradients.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
         }
 
-        MetaModel.SetParameters(initParams);
-        if (metaGradients.Count > 0)
-        {
-            var avgGrad = AverageVectors(metaGradients);
-            MetaModel.SetParameters(ApplyGradients(initParams, avgGrad, _algoOptions.OuterLearningRate));
-        }
+        ApplyOuterUpdate(initParams, metaGradients, _algoOptions.OuterLearningRate);
 
         UpdateAuxiliaryParamsSPSA(taskBatch, ref _gruWeights, _algoOptions.OuterLearningRate * SpsaLearningRateMultiplier, ComputeRecurrentLoss);
 
@@ -150,7 +145,7 @@ internal class RecurrentHyperNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<
         {
             MetaModel.SetParameters(adaptedParams);
             var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-            var input = CompressGradient(grad);
+            var input = CompressVector(grad, _algoOptions.InputDim);
             hidden = GRUStep(hidden, input);
 
             for (int d = 0; d < _paramDim; d++)
@@ -166,23 +161,7 @@ internal class RecurrentHyperNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<
         return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, adaptedParams);
     }
 
-    private double[] CompressGradient(Vector<T> grad)
-    {
-        int inDim = _algoOptions.InputDim;
-        var result = new double[inDim];
-        int bucketSize = Math.Max(1, _paramDim / inDim);
-        for (int e = 0; e < inDim; e++)
-        {
-            double sum = 0;
-            int start = e * bucketSize;
-            for (int d = start; d < start + bucketSize && d < grad.Length; d++)
-                sum += NumOps.ToDouble(grad[d]);
-            result[e] = Math.Tanh(sum / bucketSize);
-        }
-        return result;
-    }
-
-    private double[] GRUStep(double[] prevHidden, double[] input)
+    private double[] GRUStep(double[] prevHidden, Vector<T> input)
     {
         int hidDim = _algoOptions.HiddenStateDim;
         int inDim = _algoOptions.InputDim;
@@ -191,7 +170,8 @@ internal class RecurrentHyperNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<
         // Concatenate [h, x]
         var concat = new double[concatDim];
         Array.Copy(prevHidden, 0, concat, 0, hidDim);
-        Array.Copy(input, 0, concat, hidDim, inDim);
+        for (int i = 0; i < inDim && i < input.Length; i++)
+            concat[hidDim + i] = NumOps.ToDouble(input[i]);
 
         int gateSize = concatDim * hidDim;
 
@@ -219,7 +199,8 @@ internal class RecurrentHyperNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<
         // Candidate: h̃ = tanh(W_h · [r ⊙ h, x])
         var resetConcat = new double[concatDim];
         for (int h = 0; h < hidDim; h++) resetConcat[h] = r[h] * prevHidden[h];
-        Array.Copy(input, 0, resetConcat, hidDim, inDim);
+        for (int i = 0; i < inDim && i < input.Length; i++)
+            resetConcat[hidDim + i] = NumOps.ToDouble(input[i]);
 
         var candidate = new double[hidDim];
         int hOffset = 2 * gateSize;
@@ -253,7 +234,7 @@ internal class RecurrentHyperNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<
             {
                 MetaModel.SetParameters(ap);
                 var g = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-                var inp = CompressGradient(g);
+                var inp = CompressVector(g, _algoOptions.InputDim);
                 hid = GRUStep(hid, inp);
                 for (int d = 0; d < _paramDim; d++)
                 {

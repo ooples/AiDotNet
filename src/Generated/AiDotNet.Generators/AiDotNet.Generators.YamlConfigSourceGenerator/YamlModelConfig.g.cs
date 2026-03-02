@@ -1544,6 +1544,11 @@ public partial class YamlModelConfig
     public YamlTypeSection? NTMController { get; set; }
 
     /// <summary>
+    /// YAML configuration for the NERModel section.
+    /// </summary>
+    public YamlTypeSection? NERModel { get; set; }
+
+    /// <summary>
     /// YAML configuration for the RadianceField section.
     /// </summary>
     public YamlTypeSection? RadianceField { get; set; }

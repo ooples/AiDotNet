@@ -123,13 +123,7 @@ public class BMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
         }
 
         // Outer loop: update meta-parameters
-        MetaModel.SetParameters(initParams);
-        if (metaGradients.Count > 0)
-        {
-            var avgGrad = AverageVectors(metaGradients);
-            var newParams = ApplyGradients(initParams, avgGrad, _algoOptions.OuterLearningRate);
-            MetaModel.SetParameters(newParams);
-        }
+        ApplyOuterUpdate(initParams, metaGradients, _algoOptions.OuterLearningRate);
 
         return ComputeMean(losses);
     }
@@ -185,10 +179,7 @@ public class BMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
             particles[i] = new Vector<T>(_paramDim);
             for (int d = 0; d < _paramDim; d++)
             {
-                // Box-Muller for Gaussian noise
-                double u1 = Math.Max(1e-10, RandomGenerator.NextDouble());
-                double u2 = RandomGenerator.NextDouble();
-                double noise = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
+                double noise = SampleNormal();
                 particles[i][d] = NumOps.Add(metaParams[d],
                     NumOps.FromDouble(_algoOptions.ParticleInitScale * noise));
             }

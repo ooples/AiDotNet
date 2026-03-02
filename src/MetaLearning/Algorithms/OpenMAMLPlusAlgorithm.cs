@@ -152,12 +152,7 @@ public class OpenMAMLPlusAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
         }
 
         // Outer loop
-        MetaModel.SetParameters(initParams);
-        if (metaGradients.Count > 0)
-        {
-            var avgGrad = AverageVectors(metaGradients);
-            MetaModel.SetParameters(ApplyGradients(initParams, avgGrad, _algoOptions.OuterLearningRate));
-        }
+        ApplyOuterUpdate(initParams, metaGradients, _algoOptions.OuterLearningRate);
 
         // Update per-parameter learning rates via SPSA
         if (_algoOptions.LearnPerParamLR)

@@ -126,13 +126,7 @@ public class TIMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
             metaGradients.Add(ClipGradients(metaGrad));
         }
 
-        MetaModel.SetParameters(initParams);
-        if (metaGradients.Count > 0)
-        {
-            var avgGrad = AverageVectors(metaGradients);
-            var updatedParams = ApplyGradients(initParams, avgGrad, _timOptions.OuterLearningRate);
-            MetaModel.SetParameters(updatedParams);
-        }
+        ApplyOuterUpdate(initParams, metaGradients, _timOptions.OuterLearningRate);
 
         return ComputeMean(losses);
     }

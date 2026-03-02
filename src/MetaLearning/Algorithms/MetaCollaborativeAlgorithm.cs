@@ -42,7 +42,7 @@ internal class MetaCollaborativeAlgorithm<T, TInput, TOutput> : MetaLearnerBase<
     private readonly int _paramDim;
 
     /// <summary>Domain-specific gradient momentum buffers.</summary>
-    private readonly double[][] _domainBuffers;
+    private readonly Vector<T>[] _domainBuffers;
 
     /// <inheritdoc/>
     public override MetaLearningAlgorithmType AlgorithmType => MetaLearningAlgorithmType.MetaCollaborative;
@@ -58,9 +58,9 @@ internal class MetaCollaborativeAlgorithm<T, TInput, TOutput> : MetaLearnerBase<
         _algoOptions = options;
         _paramDim = options.MetaModel.GetParameters().Length;
 
-        _domainBuffers = new double[options.NumDomainSlots][];
+        _domainBuffers = new Vector<T>[options.NumDomainSlots];
         for (int k = 0; k < options.NumDomainSlots; k++)
-            _domainBuffers[k] = new double[_paramDim];
+            _domainBuffers[k] = new Vector<T>(_paramDim);
     }
 
     /// <inheritdoc/>
@@ -111,12 +111,7 @@ internal class MetaCollaborativeAlgorithm<T, TInput, TOutput> : MetaLearnerBase<
         }
 
         // Outer loop
-        MetaModel.SetParameters(initParams);
-        if (metaGradients.Count > 0)
-        {
-            var avgGrad = AverageVectors(metaGradients);
-            MetaModel.SetParameters(ApplyGradients(initParams, avgGrad, _algoOptions.OuterLearningRate));
-        }
+        ApplyOuterUpdate(initParams, metaGradients, _algoOptions.OuterLearningRate);
 
         return ComputeMean(losses);
     }
@@ -151,9 +146,7 @@ internal class MetaCollaborativeAlgorithm<T, TInput, TOutput> : MetaLearnerBase<
         bool buffersInitialized = false;
         for (int k = 0; k < _algoOptions.NumDomainSlots; k++)
         {
-            double norm = 0;
-            for (int d = 0; d < _paramDim; d++) norm += _domainBuffers[k][d] * _domainBuffers[k][d];
-            if (norm > 1e-10) { buffersInitialized = true; break; }
+            if (L2NormSquared(_domainBuffers[k]) > 1e-10) { buffersInitialized = true; break; }
         }
 
         for (int t = 0; t < taskGrads.Count; t++)
@@ -183,16 +176,16 @@ internal class MetaCollaborativeAlgorithm<T, TInput, TOutput> : MetaLearnerBase<
     {
         double beta = _algoOptions.GradientMomentum;
         var counts = new int[_algoOptions.NumDomainSlots];
-        var sums = new double[_algoOptions.NumDomainSlots][];
+        var sums = new Vector<T>[_algoOptions.NumDomainSlots];
         for (int k = 0; k < _algoOptions.NumDomainSlots; k++)
-            sums[k] = new double[_paramDim];
+            sums[k] = new Vector<T>(_paramDim);
 
         for (int t = 0; t < taskGrads.Count; t++)
         {
             int k = assignments[t];
             counts[k]++;
             for (int d = 0; d < _paramDim; d++)
-                sums[k][d] += NumOps.ToDouble(taskGrads[t][d]);
+                sums[k][d] = NumOps.Add(sums[k][d], taskGrads[t][d]);
         }
 
         for (int k = 0; k < _algoOptions.NumDomainSlots; k++)
@@ -200,7 +193,8 @@ internal class MetaCollaborativeAlgorithm<T, TInput, TOutput> : MetaLearnerBase<
             if (counts[k] > 0)
             {
                 for (int d = 0; d < _paramDim; d++)
-                    _domainBuffers[k][d] = beta * _domainBuffers[k][d] + (1 - beta) * sums[k][d] / counts[k];
+                    _domainBuffers[k][d] = NumOps.FromDouble(
+                        beta * NumOps.ToDouble(_domainBuffers[k][d]) + (1 - beta) * NumOps.ToDouble(sums[k][d]) / counts[k]);
             }
         }
     }
@@ -220,22 +214,22 @@ internal class MetaCollaborativeAlgorithm<T, TInput, TOutput> : MetaLearnerBase<
             {
                 // Positive alignment: add domain buffer signal
                 for (int d = 0; d < _paramDim; d++)
-                    result[d] = NumOps.Add(result[d], NumOps.FromDouble(_algoOptions.AlignmentWeight * sim * _domainBuffers[k][d]));
+                    result[d] = NumOps.Add(result[d],
+                        NumOps.FromDouble(_algoOptions.AlignmentWeight * sim * NumOps.ToDouble(_domainBuffers[k][d])));
             }
             else if (sim < -0.1)
             {
                 // PCGrad: project out conflicting component
-                double dot = 0, bufNorm = 0;
+                double dot = 0;
+                double bufNorm = L2NormSquared(_domainBuffers[k]);
                 for (int d = 0; d < _paramDim; d++)
-                {
-                    dot += NumOps.ToDouble(result[d]) * _domainBuffers[k][d];
-                    bufNorm += _domainBuffers[k][d] * _domainBuffers[k][d];
-                }
+                    dot += NumOps.ToDouble(result[d]) * NumOps.ToDouble(_domainBuffers[k][d]);
                 if (bufNorm > 1e-10)
                 {
                     double proj = dot / bufNorm;
                     for (int d = 0; d < _paramDim; d++)
-                        result[d] = NumOps.Subtract(result[d], NumOps.FromDouble(proj * _domainBuffers[k][d]));
+                        result[d] = NumOps.Subtract(result[d],
+                            NumOps.FromDouble(proj * NumOps.ToDouble(_domainBuffers[k][d])));
                 }
             }
         }
@@ -246,18 +240,5 @@ internal class MetaCollaborativeAlgorithm<T, TInput, TOutput> : MetaLearnerBase<
     private Vector<T> ComputeCollaborativeGradientFromBuffers(Vector<T> grad)
     {
         return ComputeCollaborativeGradient(grad, -1);
-    }
-
-    private double CosineSimilarity(Vector<T> a, double[] b)
-    {
-        double dot = 0, normA = 0, normB = 0;
-        for (int d = 0; d < _paramDim; d++)
-        {
-            double aVal = NumOps.ToDouble(a[d]);
-            dot += aVal * b[d];
-            normA += aVal * aVal;
-            normB += b[d] * b[d];
-        }
-        return dot / (Math.Sqrt(normA * normB) + 1e-10);
     }
 }

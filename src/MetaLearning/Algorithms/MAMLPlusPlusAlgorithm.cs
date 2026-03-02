@@ -268,14 +268,7 @@ public class MAMLPlusPlusAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
         }
 
         // Restore and apply averaged meta-gradients
-        MetaModel.SetParameters(initParams);
-
-        if (metaGradients.Count > 0)
-        {
-            var avgGrad = AverageVectors(metaGradients);
-            var updatedParams = ApplyGradients(initParams, avgGrad, effectiveOuterLR);
-            MetaModel.SetParameters(updatedParams);
-        }
+        ApplyOuterUpdate(initParams, metaGradients, effectiveOuterLR);
 
         // Update per-step learning rates via finite differences (LSLR meta-learning)
         // Per paper: alpha = alpha - beta * grad(meta_loss, alpha)

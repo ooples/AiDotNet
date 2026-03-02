@@ -89,7 +89,7 @@ public class InContextRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
         foreach (var task in taskBatch.Tasks)
         {
             // Build context buffer sequentially
-            var contextEntries = new List<double[]>();
+            var contextEntries = new List<Vector<T>>();
             var contextLosses = new List<double>();
             var currentParams = new Vector<T>(_paramDim);
             for (int d = 0; d < _paramDim; d++) currentParams[d] = initParams[d];
@@ -120,7 +120,7 @@ public class InContextRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
                 for (int d = 0; d < _paramDim; d++)
                 {
                     int cd = d % _compressedDim;
-                    currentParams[d] = NumOps.Add(initParams[d], NumOps.FromDouble(modulation[cd]));
+                    currentParams[d] = NumOps.Add(initParams[d], modulation[cd]);
                 }
             }
 
@@ -143,12 +143,7 @@ public class InContextRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
             metaGradients.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
         }
 
-        MetaModel.SetParameters(initParams);
-        if (metaGradients.Count > 0)
-        {
-            var avgGrad = AverageVectors(metaGradients);
-            MetaModel.SetParameters(ApplyGradients(initParams, avgGrad, _algoOptions.OuterLearningRate));
-        }
+        ApplyOuterUpdate(initParams, metaGradients, _algoOptions.OuterLearningRate);
 
         UpdateAuxiliaryParamsSPSA(taskBatch, ref _contextEncoderParams, _algoOptions.OuterLearningRate * 0.1, ComputeInContextLoss);
         UpdateAuxiliaryParamsSPSA(taskBatch, ref _modulationParams, _algoOptions.OuterLearningRate * 0.1, ComputeInContextLoss);
@@ -160,7 +155,7 @@ public class InContextRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
         var initParams = MetaModel.GetParameters();
-        var contextEntries = new List<double[]>();
+        var contextEntries = new List<Vector<T>>();
         var contextLosses = new List<double>();
         var currentParams = new Vector<T>(_paramDim);
         for (int d = 0; d < _paramDim; d++) currentParams[d] = initParams[d];
@@ -179,29 +174,29 @@ public class InContextRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
             var contextVec = AggregateContext(contextEntries, contextLosses);
             var modulation = ComputeModulation(contextVec);
             for (int d = 0; d < _paramDim; d++)
-                currentParams[d] = NumOps.Add(initParams[d], NumOps.FromDouble(modulation[d % _compressedDim]));
+                currentParams[d] = NumOps.Add(initParams[d], modulation[d % _compressedDim]);
         }
 
         MetaModel.SetParameters(initParams);
         return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, currentParams);
     }
 
-    private double[] EncodeContextEntry(Vector<T> grad)
+    private Vector<T> EncodeContextEntry(Vector<T> grad)
     {
-        var entry = new double[_contextDim];
+        var entry = new Vector<T>(_contextDim);
         for (int c = 0; c < _contextDim; c++)
         {
             double sum = 0;
             for (int d = 0; d < _compressedDim && d < grad.Length; d++)
                 sum += NumOps.ToDouble(grad[d]) * NumOps.ToDouble(_contextEncoderParams[c * _compressedDim + d]);
-            entry[c] = Math.Tanh(sum);
+            entry[c] = NumOps.FromDouble(Math.Tanh(sum));
         }
         return entry;
     }
 
-    private double[] AggregateContext(List<double[]> entries, List<double> entryLosses)
+    private Vector<T> AggregateContext(List<Vector<T>> entries, List<double> entryLosses)
     {
-        var result = new double[_contextDim];
+        var result = new Vector<T>(_contextDim);
         if (entries.Count == 0) return result;
 
         // Loss-weighted attention: lower loss → higher weight
@@ -218,19 +213,19 @@ public class InContextRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
 
         for (int i = 0; i < entries.Count; i++)
             for (int c = 0; c < _contextDim; c++)
-                result[c] += weights[i] * entries[i][c];
+                result[c] = NumOps.Add(result[c], NumOps.FromDouble(weights[i] * NumOps.ToDouble(entries[i][c])));
         return result;
     }
 
-    private double[] ComputeModulation(double[] contextVec)
+    private Vector<T> ComputeModulation(Vector<T> contextVec)
     {
-        var mod = new double[_compressedDim];
+        var mod = new Vector<T>(_compressedDim);
         for (int d = 0; d < _compressedDim; d++)
         {
             double sum = 0;
             for (int c = 0; c < _contextDim; c++)
-                sum += contextVec[c] * NumOps.ToDouble(_modulationParams[d * _contextDim + c]);
-            mod[d] = sum;
+                sum += NumOps.ToDouble(contextVec[c]) * NumOps.ToDouble(_modulationParams[d * _contextDim + c]);
+            mod[d] = NumOps.FromDouble(sum);
         }
         return mod;
     }
@@ -241,7 +236,7 @@ public class InContextRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
         var initParams = MetaModel.GetParameters();
         foreach (var task in taskBatch.Tasks)
         {
-            var entries = new List<double[]>();
+            var entries = new List<Vector<T>>();
             var eLosses = new List<double>();
             var cp = new Vector<T>(_paramDim);
             for (int d = 0; d < _paramDim; d++) cp[d] = initParams[d];
@@ -262,7 +257,7 @@ public class InContextRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
 
                 var cv = AggregateContext(entries, eLosses);
                 var m = ComputeModulation(cv);
-                for (int d = 0; d < _paramDim; d++) cp[d] = NumOps.Add(initParams[d], NumOps.FromDouble(m[d % _compressedDim]));
+                for (int d = 0; d < _paramDim; d++) cp[d] = NumOps.Add(initParams[d], m[d % _compressedDim]);
             }
             MetaModel.SetParameters(cp);
             totalLoss += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));

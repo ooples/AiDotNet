@@ -122,12 +122,7 @@ public class MetaContinualALAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
                     // Exploration bonus: noise proportional to uncertainty
                     double noise = 0;
                     if (_algoOptions.ExplorationBonus > 0)
-                    {
-                        double u1 = Math.Max(1e-10, RandomGenerator.NextDouble());
-                        double u2 = RandomGenerator.NextDouble();
-                        noise = _algoOptions.ExplorationBonus * Math.Sqrt(_uncertaintyVar[d])
-                              * Math.Sqrt(-2 * Math.Log(u1)) * Math.Cos(2 * Math.PI * u2);
-                    }
+                        noise = _algoOptions.ExplorationBonus * Math.Sqrt(_uncertaintyVar[d]) * SampleNormal();
 
                     adaptedParams[d] = NumOps.Subtract(adaptedParams[d],
                         NumOps.FromDouble(_algoOptions.InnerLearningRate * mask * (gradVal + noise)));
@@ -140,12 +135,7 @@ public class MetaContinualALAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
             metaGradients.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
         }
 
-        MetaModel.SetParameters(initParams);
-        if (metaGradients.Count > 0)
-        {
-            var avgGrad = AverageVectors(metaGradients);
-            MetaModel.SetParameters(ApplyGradients(initParams, avgGrad, _algoOptions.OuterLearningRate));
-        }
+        ApplyOuterUpdate(initParams, metaGradients, _algoOptions.OuterLearningRate);
 
         return ComputeMean(losses);
     }

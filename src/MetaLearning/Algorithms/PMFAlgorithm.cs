@@ -97,12 +97,7 @@ public class PMFAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
             metaGradients.Add(ClipGradients(metaGrad));
         }
 
-        MetaModel.SetParameters(initParams);
-        if (metaGradients.Count > 0)
-        {
-            var avgGrad = AverageVectors(metaGradients);
-            MetaModel.SetParameters(ApplyGradients(initParams, avgGrad, _pmfOptions.OuterLearningRate));
-        }
+        ApplyOuterUpdate(initParams, metaGradients, _pmfOptions.OuterLearningRate);
 
         return ComputeMean(losses);
     }

@@ -146,12 +146,7 @@ public class MOCAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
             metaGradients.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
         }
 
-        MetaModel.SetParameters(initParams);
-        if (metaGradients.Count > 0)
-        {
-            var avgGrad = AverageVectors(metaGradients);
-            MetaModel.SetParameters(ApplyGradients(initParams, avgGrad, _algoOptions.OuterLearningRate));
-        }
+        ApplyOuterUpdate(initParams, metaGradients, _algoOptions.OuterLearningRate);
 
         return ComputeMean(losses);
     }
@@ -186,11 +181,7 @@ public class MOCAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
         // Generate random noise
         var noise = new double[_paramDim];
         for (int d = 0; d < _paramDim; d++)
-        {
-            double u1 = Math.Max(1e-10, RandomGenerator.NextDouble());
-            double u2 = RandomGenerator.NextDouble();
-            noise[d] = Math.Sqrt(-2 * Math.Log(u1)) * Math.Cos(2 * Math.PI * u2);
-        }
+            noise[d] = SampleNormal();
 
         // Gram-Schmidt: project out the gradient direction to get orthogonal component
         double gradNormSq = 0;

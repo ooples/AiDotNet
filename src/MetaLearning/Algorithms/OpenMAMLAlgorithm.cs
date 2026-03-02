@@ -142,12 +142,7 @@ public class OpenMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
         }
 
         // Outer loop update
-        MetaModel.SetParameters(initParams);
-        if (metaGradients.Count > 0)
-        {
-            var avgGrad = AverageVectors(metaGradients);
-            MetaModel.SetParameters(ApplyGradients(initParams, avgGrad, _openMAMLOptions.OuterLearningRate));
-        }
+        ApplyOuterUpdate(initParams, metaGradients, _openMAMLOptions.OuterLearningRate);
 
         return ComputeMean(losses);
     }

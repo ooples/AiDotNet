@@ -97,7 +97,7 @@ public class ContextMetaRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
 
         foreach (var task in taskBatch.Tasks)
         {
-            var gradHistory = new List<double[]>();
+            var gradHistory = new List<Vector<T>>();
             var adaptedParams = new Vector<T>(_paramDim);
             for (int d = 0; d < _paramDim; d++) adaptedParams[d] = initParams[d];
 
@@ -118,7 +118,7 @@ public class ContextMetaRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
                 for (int d = 0; d < _paramDim; d++)
                 {
                     int cd = d % _compressedDim;
-                    double mod = 1.0 + _algoOptions.ModulationStrength * Sigmoid(modulation[cd]);
+                    double mod = 1.0 + _algoOptions.ModulationStrength * Sigmoid(NumOps.ToDouble(modulation[cd]));
                     double gradVal = NumOps.ToDouble(grad[d]);
                     adaptedParams[d] = NumOps.Subtract(
                         NumOps.Multiply(adaptedParams[d], NumOps.FromDouble(mod)),
@@ -132,12 +132,7 @@ public class ContextMetaRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
             metaGradients.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
         }
 
-        MetaModel.SetParameters(initParams);
-        if (metaGradients.Count > 0)
-        {
-            var avgGrad = AverageVectors(metaGradients);
-            MetaModel.SetParameters(ApplyGradients(initParams, avgGrad, _algoOptions.OuterLearningRate));
-        }
+        ApplyOuterUpdate(initParams, metaGradients, _algoOptions.OuterLearningRate);
 
         UpdateAuxiliaryParamsSPSA(taskBatch, ref _encoderParams, _algoOptions.OuterLearningRate * SpsaLearningRateMultiplier, ComputeContextMetaRLLoss);
         UpdateAuxiliaryParamsSPSA(taskBatch, ref _queryVector, _algoOptions.OuterLearningRate * SpsaLearningRateMultiplier, ComputeContextMetaRLLoss);
@@ -151,7 +146,7 @@ public class ContextMetaRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
     {
         if (task == null) throw new ArgumentNullException(nameof(task));
         var initParams = MetaModel.GetParameters();
-        var gradHistory = new List<double[]>();
+        var gradHistory = new List<Vector<T>>();
         var adaptedParams = new Vector<T>(_paramDim);
         for (int d = 0; d < _paramDim; d++) adaptedParams[d] = initParams[d];
 
@@ -166,7 +161,7 @@ public class ContextMetaRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
             for (int d = 0; d < _paramDim; d++)
             {
                 int cd = d % _compressedDim;
-                double mod = 1.0 + _algoOptions.ModulationStrength * Sigmoid(modulation[cd]);
+                double mod = 1.0 + _algoOptions.ModulationStrength * Sigmoid(NumOps.ToDouble(modulation[cd]));
                 adaptedParams[d] = NumOps.Subtract(
                     NumOps.Multiply(adaptedParams[d], NumOps.FromDouble(mod)),
                     NumOps.FromDouble(_algoOptions.InnerLearningRate * NumOps.ToDouble(grad[d])));
@@ -177,15 +172,15 @@ public class ContextMetaRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
         return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, adaptedParams);
     }
 
-    private double[] EncodeGradient(Vector<T> grad)
+    private Vector<T> EncodeGradient(Vector<T> grad)
     {
-        var encoded = new double[_contextDim];
+        var encoded = new Vector<T>(_contextDim);
         for (int c = 0; c < _contextDim; c++)
         {
             double sum = 0;
             for (int d = 0; d < _compressedDim && d < grad.Length; d++)
                 sum += NumOps.ToDouble(grad[d]) * NumOps.ToDouble(_encoderParams[c * _compressedDim + d]);
-            encoded[c] = Math.Tanh(sum);
+            encoded[c] = NumOps.FromDouble(Math.Tanh(sum));
         }
         return encoded;
     }
@@ -193,9 +188,9 @@ public class ContextMetaRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
     /// <summary>
     /// Multi-head attention aggregation: α_k = softmax(q^T e_k / √d / τ).
     /// </summary>
-    private double[] AttentionAggregate(List<double[]> encodedGrads)
+    private Vector<T> AttentionAggregate(List<Vector<T>> encodedGrads)
     {
-        var result = new double[_contextDim];
+        var result = new Vector<T>(_contextDim);
         if (encodedGrads.Count == 0) return result;
 
         double scaleFactor = 1.0 / (Math.Sqrt(_contextDim) * _algoOptions.AttentionTemperature);
@@ -207,7 +202,7 @@ public class ContextMetaRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
         {
             double dot = 0;
             for (int c = 0; c < _contextDim; c++)
-                dot += NumOps.ToDouble(_queryVector[c]) * encodedGrads[i][c];
+                dot += NumOps.ToDouble(_queryVector[c]) * NumOps.ToDouble(encodedGrads[i][c]);
             scores[i] = dot * scaleFactor;
             if (scores[i] > maxScore) maxScore = scores[i];
         }
@@ -220,20 +215,20 @@ public class ContextMetaRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
         // Weighted sum
         for (int i = 0; i < encodedGrads.Count; i++)
             for (int c = 0; c < _contextDim; c++)
-                result[c] += scores[i] * encodedGrads[i][c];
+                result[c] = NumOps.Add(result[c], NumOps.FromDouble(scores[i] * NumOps.ToDouble(encodedGrads[i][c])));
 
         return result;
     }
 
-    private double[] ComputeModulation(double[] contextVec)
+    private Vector<T> ComputeModulation(Vector<T> contextVec)
     {
-        var mod = new double[_compressedDim];
+        var mod = new Vector<T>(_compressedDim);
         for (int d = 0; d < _compressedDim; d++)
         {
             double sum = 0;
             for (int c = 0; c < _contextDim; c++)
-                sum += contextVec[c] * NumOps.ToDouble(_modulationParams[d * _contextDim + c]);
-            mod[d] = sum;
+                sum += NumOps.ToDouble(contextVec[c]) * NumOps.ToDouble(_modulationParams[d * _contextDim + c]);
+            mod[d] = NumOps.FromDouble(sum);
         }
         return mod;
     }
@@ -246,7 +241,7 @@ public class ContextMetaRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
         var initParams = MetaModel.GetParameters();
         foreach (var task in taskBatch.Tasks)
         {
-            var gh = new List<double[]>();
+            var gh = new List<Vector<T>>();
             var ap = new Vector<T>(_paramDim);
             for (int d = 0; d < _paramDim; d++) ap[d] = initParams[d];
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
@@ -259,7 +254,7 @@ public class ContextMetaRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
                 for (int d = 0; d < _paramDim; d++)
                 {
                     int cd = d % _compressedDim;
-                    double mod = 1.0 + _algoOptions.ModulationStrength * Sigmoid(m[cd]);
+                    double mod = 1.0 + _algoOptions.ModulationStrength * Sigmoid(NumOps.ToDouble(m[cd]));
                     ap[d] = NumOps.Subtract(NumOps.Multiply(ap[d], NumOps.FromDouble(mod)),
                         NumOps.FromDouble(_algoOptions.InnerLearningRate * NumOps.ToDouble(g[d])));
                 }

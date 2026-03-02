@@ -44,7 +44,7 @@ public class UnsupervisedMetaLearnAlgorithm<T, TInput, TOutput> : MetaLearnerBas
     private readonly int _clusterDim;
 
     /// <summary>Cluster centroids: NumClusters × ClusteringDim.</summary>
-    private double[][] _centroids;
+    private Vector<T>[] _centroids;
 
     /// <summary>Per-cluster count for EMA weighting.</summary>
     private double[] _clusterCounts;
@@ -67,17 +67,13 @@ public class UnsupervisedMetaLearnAlgorithm<T, TInput, TOutput> : MetaLearnerBas
         _clusterDim = options.ClusteringDim;
 
         // Initialize centroids randomly
-        _centroids = new double[options.NumClusters][];
+        _centroids = new Vector<T>[options.NumClusters];
         _clusterCounts = new double[options.NumClusters];
         for (int k = 0; k < options.NumClusters; k++)
         {
-            _centroids[k] = new double[_clusterDim];
+            _centroids[k] = new Vector<T>(_clusterDim);
             for (int d = 0; d < _clusterDim; d++)
-            {
-                double u1 = Math.Max(1e-10, RandomGenerator.NextDouble());
-                double u2 = RandomGenerator.NextDouble();
-                _centroids[k][d] = 0.1 * Math.Sqrt(-2 * Math.Log(u1)) * Math.Cos(2 * Math.PI * u2);
-            }
+                _centroids[k][d] = NumOps.FromDouble(0.1 * SampleNormal());
         }
     }
 
@@ -101,7 +97,7 @@ public class UnsupervisedMetaLearnAlgorithm<T, TInput, TOutput> : MetaLearnerBas
         {
             MetaModel.SetParameters(initParams);
             var initGrad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-            var compressed = CompressGradient(initGrad);
+            var compressed = CompressVector(initGrad, _clusterDim);
             int cluster = AssignCluster(compressed);
             taskClusters.Add(cluster);
 
@@ -109,7 +105,8 @@ public class UnsupervisedMetaLearnAlgorithm<T, TInput, TOutput> : MetaLearnerBas
             _clusterCounts[cluster] += 1.0;
             double rate = _algoOptions.ClusterUpdateRate;
             for (int d = 0; d < _clusterDim; d++)
-                _centroids[cluster][d] = (1.0 - rate) * _centroids[cluster][d] + rate * compressed[d];
+                _centroids[cluster][d] = NumOps.FromDouble(
+                    (1.0 - rate) * NumOps.ToDouble(_centroids[cluster][d]) + rate * NumOps.ToDouble(compressed[d]));
 
             // Inner loop adaptation
             var adaptedParams = new Vector<T>(_paramDim);
@@ -194,22 +191,7 @@ public class UnsupervisedMetaLearnAlgorithm<T, TInput, TOutput> : MetaLearnerBas
         return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, adaptedParams);
     }
 
-    private double[] CompressGradient(Vector<T> grad)
-    {
-        var compressed = new double[_clusterDim];
-        int bucketSize = Math.Max(1, _paramDim / _clusterDim);
-        for (int c = 0; c < _clusterDim; c++)
-        {
-            double sum = 0;
-            int start = c * bucketSize;
-            for (int d = start; d < start + bucketSize && d < grad.Length; d++)
-                sum += NumOps.ToDouble(grad[d]);
-            compressed[c] = Math.Tanh(sum / bucketSize);
-        }
-        return compressed;
-    }
-
-    private int AssignCluster(double[] compressed)
+    private int AssignCluster(Vector<T> compressed)
     {
         int bestCluster = 0;
         double bestDist = double.MaxValue;
@@ -218,7 +200,7 @@ public class UnsupervisedMetaLearnAlgorithm<T, TInput, TOutput> : MetaLearnerBas
             double dist = 0;
             for (int d = 0; d < _clusterDim; d++)
             {
-                double diff = compressed[d] - _centroids[k][d];
+                double diff = NumOps.ToDouble(compressed[d]) - NumOps.ToDouble(_centroids[k][d]);
                 dist += diff * diff;
             }
             if (dist < bestDist) { bestDist = dist; bestCluster = k; }

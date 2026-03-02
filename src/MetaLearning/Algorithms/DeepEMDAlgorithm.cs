@@ -166,13 +166,7 @@ public class DeepEMDAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
             metaGradients.Add(ClipGradients(metaGrad));
         }
 
-        MetaModel.SetParameters(initParams);
-        if (metaGradients.Count > 0)
-        {
-            var avgGrad = AverageVectors(metaGradients);
-            var updatedParams = ApplyGradients(initParams, avgGrad, _deepEmdOptions.OuterLearningRate);
-            MetaModel.SetParameters(updatedParams);
-        }
+        ApplyOuterUpdate(initParams, metaGradients, _deepEmdOptions.OuterLearningRate);
 
         return ComputeMean(losses);
     }

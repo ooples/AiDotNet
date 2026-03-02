@@ -128,12 +128,7 @@ internal class MetaTaskAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput
         }
 
         // Outer update using all meta-gradients (real + synthetic)
-        MetaModel.SetParameters(initParams);
-        if (metaGradients.Count > 0)
-        {
-            var avgGrad = AverageVectors(metaGradients);
-            MetaModel.SetParameters(ApplyGradients(initParams, avgGrad, _algoOptions.OuterLearningRate));
-        }
+        ApplyOuterUpdate(initParams, metaGradients, _algoOptions.OuterLearningRate);
 
         // Report combined loss for monitoring
         T totalLoss = ComputeMean(realLosses);
@@ -162,30 +157,4 @@ internal class MetaTaskAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput
         return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, adaptedParams);
     }
 
-    private double SampleBeta(double alpha, double beta)
-    {
-        double x = SampleGamma(alpha);
-        double y = SampleGamma(beta);
-        return x / (x + y + 1e-10);
-    }
-
-    private double SampleGamma(double shape)
-    {
-        if (shape < 1.0)
-        {
-            double u = RandomGenerator.NextDouble();
-            return SampleGamma(shape + 1.0) * Math.Pow(u, 1.0 / shape);
-        }
-        double d = shape - 1.0 / 3.0;
-        double c = 1.0 / Math.Sqrt(9.0 * d);
-        while (true)
-        {
-            double u1 = Math.Max(1e-10, RandomGenerator.NextDouble());
-            double u2 = RandomGenerator.NextDouble();
-            double z = Math.Sqrt(-2 * Math.Log(u1)) * Math.Cos(2 * Math.PI * u2);
-            double v = Math.Pow(1.0 + c * z, 3);
-            if (v > 0 && Math.Log(RandomGenerator.NextDouble()) < 0.5 * z * z + d - d * v + d * Math.Log(v))
-                return d * v;
-        }
-    }
 }

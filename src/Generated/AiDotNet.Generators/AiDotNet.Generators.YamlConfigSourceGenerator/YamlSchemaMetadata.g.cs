@@ -340,6 +340,7 @@ internal static class YamlSchemaMetadata
         new YamlSectionMeta("AdaptiveDistillationStrategy", "AdaptiveDistillationStrategy", "Interface", false, System.Array.Empty<string>()),
         new YamlSectionMeta("CurriculumDistillationStrategy", "CurriculumDistillationStrategy", "Interface", false, System.Array.Empty<string>()),
         new YamlSectionMeta("NTMController", "NTMController", "Interface", false, System.Array.Empty<string>()),
+        new YamlSectionMeta("NERModel", "NERModel", "Interface", false, System.Array.Empty<string>()),
         new YamlSectionMeta("RadianceField", "RadianceField", "Interface", false, System.Array.Empty<string>()),
         new YamlSectionMeta("DomainDecompositionTrainingHistory", "DomainDecompositionTrainingHistory", "Interface", false, System.Array.Empty<string>()),
         new YamlSectionMeta("MultiFidelityTrainingHistory", "MultiFidelityTrainingHistory", "Interface", false, System.Array.Empty<string>()),

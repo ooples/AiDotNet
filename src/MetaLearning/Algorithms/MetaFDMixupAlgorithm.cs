@@ -151,49 +151,6 @@ public class MetaFDMixupAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
     }
 
     /// <summary>
-    /// Samples from Beta(α, β) using the Gamma distribution trick.
-    /// Beta(a,b) = Gamma(a)/(Gamma(a)+Gamma(b)).
-    /// Gamma sampling via Marsaglia and Tsang's method simplified for our case.
-    /// </summary>
-    private double SampleBeta(double alpha, double beta)
-    {
-        double x = SampleGamma(alpha);
-        double y = SampleGamma(beta);
-        return x / (x + y + 1e-10);
-    }
-
-    private double SampleGamma(double shape)
-    {
-        if (shape >= 1.0)
-        {
-            // Marsaglia-Tsang method
-            double d = shape - 1.0 / 3.0;
-            double c = 1.0 / Math.Sqrt(9.0 * d);
-            while (true)
-            {
-                double u1 = Math.Max(1e-10, RandomGenerator.NextDouble());
-                double u2 = RandomGenerator.NextDouble();
-                double z = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-                double v = 1.0 + c * z;
-                if (v > 0)
-                {
-                    v = v * v * v;
-                    // Use fresh uniform for acceptance test (not correlated u1)
-                    double u3 = Math.Max(1e-10, RandomGenerator.NextDouble());
-                    if (Math.Log(u3) < 0.5 * z * z + d - d * v + d * Math.Log(v))
-                        return d * v;
-                }
-            }
-        }
-        else
-        {
-            // For shape < 1: Gamma(a) = Gamma(a+1) * U^(1/a)
-            double g = SampleGamma(shape + 1.0);
-            return g * Math.Pow(Math.Max(1e-10, RandomGenerator.NextDouble()), 1.0 / shape);
-        }
-    }
-
-    /// <summary>
     /// Computes variance of gradient directions as alignment penalty.
     /// </summary>
     private double ComputeGradientAlignmentPenalty(List<Vector<T>> gradients)

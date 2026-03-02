@@ -129,7 +129,7 @@ public class HyperNeRFMetaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
                 {
                     int g = Math.Min(d / _groupSize, _numGroups - 1);
                     adaptedParams[d] = NumOps.Subtract(adaptedParams[d],
-                        NumOps.FromDouble(_algoOptions.InnerLearningRate * modulation[g] * NumOps.ToDouble(grad[d])));
+                        NumOps.FromDouble(_algoOptions.InnerLearningRate * NumOps.ToDouble(modulation[g]) * NumOps.ToDouble(grad[d])));
                 }
 
                 // Recompute latent code for dynamic conditioning (optional: every other step)
@@ -157,12 +157,7 @@ public class HyperNeRFMetaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
             metaGradients.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
         }
 
-        MetaModel.SetParameters(initParams);
-        if (metaGradients.Count > 0)
-        {
-            var avgGrad = AverageVectors(metaGradients);
-            MetaModel.SetParameters(ApplyGradients(initParams, avgGrad, _algoOptions.OuterLearningRate));
-        }
+        ApplyOuterUpdate(initParams, metaGradients, _algoOptions.OuterLearningRate);
 
         UpdateAuxiliaryParamsSPSA(taskBatch, ref _conditioningWeights, _algoOptions.OuterLearningRate * 0.1, ComputeNeRFLoss);
 
@@ -190,7 +185,7 @@ public class HyperNeRFMetaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
             {
                 int g = Math.Min(d / _groupSize, _numGroups - 1);
                 adaptedParams[d] = NumOps.Subtract(adaptedParams[d],
-                    NumOps.FromDouble(_algoOptions.InnerLearningRate * modulation[g] * NumOps.ToDouble(grad[d])));
+                    NumOps.FromDouble(_algoOptions.InnerLearningRate * NumOps.ToDouble(modulation[g]) * NumOps.ToDouble(grad[d])));
             }
         }
 
@@ -198,10 +193,10 @@ public class HyperNeRFMetaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
         return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, adaptedParams);
     }
 
-    private double[] CompressGradient(Vector<T> grad)
+    private Vector<T> CompressGradient(Vector<T> grad)
     {
         int latentDim = _algoOptions.LatentDim;
-        var result = new double[latentDim];
+        var result = new Vector<T>(latentDim);
         // Use ceiling division so all parameters are covered (no remainder dropped)
         int bucketSize = Math.Max(1, (_paramDim + latentDim - 1) / latentDim);
         for (int e = 0; e < latentDim; e++)
@@ -212,16 +207,16 @@ public class HyperNeRFMetaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
             int count = end - start;
             for (int d = start; d < end; d++)
                 sum += NumOps.ToDouble(grad[d]);
-            result[e] = count > 0 ? Math.Tanh(sum / count) : 0.0;
+            result[e] = NumOps.FromDouble(count > 0 ? Math.Tanh(sum / count) : 0.0);
         }
         return result;
     }
 
-    private double[] ComputeModulation(double[] latentCode)
+    private Vector<T> ComputeModulation(Vector<T> latentCode)
     {
         int latentDim = _algoOptions.LatentDim;
         int inputDim = _peDim + latentDim;
-        var modulation = new double[_numGroups];
+        var modulation = new Vector<T>(_numGroups);
 
         for (int g = 0; g < _numGroups; g++)
         {
@@ -235,11 +230,11 @@ public class HyperNeRFMetaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
 
             // Latent code features
             for (int l = 0; l < latentDim; l++)
-                sum += NumOps.ToDouble(_conditioningWeights[wOffset + _peDim + l]) * latentCode[l];
+                sum += NumOps.ToDouble(_conditioningWeights[wOffset + _peDim + l]) * NumOps.ToDouble(latentCode[l]);
 
             // Sigmoid → modulation
             double gamma = 1.0 / (1.0 + Math.Exp(-sum));
-            modulation[g] = 1.0 + _algoOptions.ConditioningStrength * (gamma - 0.5);
+            modulation[g] = NumOps.FromDouble(1.0 + _algoOptions.ConditioningStrength * (gamma - 0.5));
         }
 
         return modulation;
@@ -265,7 +260,7 @@ public class HyperNeRFMetaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
                 {
                     int grp = Math.Min(d / _groupSize, _numGroups - 1);
                     ap[d] = NumOps.Subtract(ap[d],
-                        NumOps.FromDouble(_algoOptions.InnerLearningRate * mod[grp] * NumOps.ToDouble(g[d])));
+                        NumOps.FromDouble(_algoOptions.InnerLearningRate * NumOps.ToDouble(mod[grp]) * NumOps.ToDouble(g[d])));
                 }
             }
             MetaModel.SetParameters(ap);

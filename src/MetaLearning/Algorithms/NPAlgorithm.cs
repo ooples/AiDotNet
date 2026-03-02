@@ -62,7 +62,7 @@ public class NPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput, TOut
             // Encode context (support)
             var supportFeatures = ConvertToVector(MetaModel.Predict(task.SupportInput));
             var supportLabels = ConvertToVector(task.SupportOutput);
-            var contextRep = EncodeAndAggregateNP(supportFeatures, supportLabels);
+            var contextRep = AggregateRepresentations(BuildContextRepresentations(supportFeatures, supportLabels));
 
             // Compute latent distribution from context
             var (priorMean, priorLogVar) = ComputeLatentDistribution(contextRep);
@@ -70,14 +70,14 @@ public class NPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput, TOut
             // Encode full set (context + target) for posterior
             var queryFeatures = ConvertToVector(MetaModel.Predict(task.QueryInput));
             var queryLabels = ConvertToVector(task.QueryOutput);
-            var fullRep = EncodeAndAggregateNP(
+            var fullRep = AggregateRepresentations(BuildContextRepresentations(
                 ConcatVectors(supportFeatures, queryFeatures),
-                ConcatVectors(supportLabels, queryLabels));
+                ConcatVectors(supportLabels, queryLabels)));
             var (postMean, postLogVar) = ComputeLatentDistribution(fullRep);
 
             // Sample z from posterior and modulate backbone
             var z = ReparameterizeSample(postMean, postLogVar);
-            ModulateWithLatent(z, initParams);
+            ModulateParameters(initParams, ComputeModScale(z));
 
             // Compute reconstruction loss + KL
             double reconLoss = NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
@@ -88,12 +88,7 @@ public class NPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput, TOut
             metaGradients.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
         }
 
-        MetaModel.SetParameters(initParams);
-        if (metaGradients.Count > 0)
-        {
-            var avgGrad = AverageVectors(metaGradients);
-            MetaModel.SetParameters(ApplyGradients(initParams, avgGrad, _npOptions.OuterLearningRate));
-        }
+        ApplyOuterUpdate(initParams, metaGradients, _npOptions.OuterLearningRate);
 
         // Update auxiliary params
         UpdateAuxiliaryParamsSPSA(taskBatch, ref EncoderParams, _npOptions.OuterLearningRate, ComputeAuxLoss);
@@ -109,45 +104,13 @@ public class NPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput, TOut
 
         var supportFeatures = ConvertToVector(MetaModel.Predict(task.SupportInput));
         var supportLabels = ConvertToVector(task.SupportOutput);
-        var contextRep = EncodeAndAggregateNP(supportFeatures, supportLabels);
+        var contextRep = AggregateRepresentations(BuildContextRepresentations(supportFeatures, supportLabels));
 
         var (mean, logvar) = ComputeLatentDistribution(contextRep);
         // Use mean for deterministic prediction at adaptation time
         var z = mean;
 
-        var modParams = new Vector<T>(currentParams.Length);
-        double scale = ComputeLatentScale(z);
-        for (int i = 0; i < currentParams.Length; i++)
-            modParams[i] = NumOps.Multiply(currentParams[i], NumOps.FromDouble(scale));
-
-        return new NeuralProcessModel<T, TInput, TOutput>(MetaModel, modParams, contextRep);
-    }
-
-    private Vector<T> EncodeAndAggregateNP(Vector<T>? features, Vector<T>? labels)
-    {
-        if (features == null || labels == null || features.Length == 0)
-            return new Vector<T>(RepresentationDim);
-
-        var representations = new List<Vector<T>>();
-        int numExamples = Math.Max(1, labels.Length);
-        int featureDim = Math.Max(1, features.Length / numExamples);
-
-        for (int i = 0; i < numExamples; i++)
-        {
-            int fStart = i * featureDim;
-            int fLen = Math.Min(featureDim, features.Length - fStart);
-            if (fLen <= 0) break;
-
-            var f = new Vector<T>(fLen);
-            for (int j = 0; j < fLen; j++) f[j] = features[fStart + j];
-
-            var l = new Vector<T>(1);
-            l[0] = labels[Math.Min(i, labels.Length - 1)];
-
-            representations.Add(EncodeContextPair(f, l));
-        }
-
-        return AggregateRepresentations(representations);
+        return new NeuralProcessModel<T, TInput, TOutput>(MetaModel, ScaleVector(currentParams, ComputeModScale(z)), contextRep);
     }
 
     private (Vector<T> mean, Vector<T> logvar) ComputeLatentDistribution(Vector<T> representation)
@@ -178,34 +141,6 @@ public class NPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput, TOut
         return (mean, logvar);
     }
 
-    private void ModulateWithLatent(Vector<T> z, Vector<T> initParams)
-    {
-        double scale = ComputeLatentScale(z);
-        var modulated = new Vector<T>(initParams.Length);
-        for (int i = 0; i < initParams.Length; i++)
-            modulated[i] = NumOps.Multiply(initParams[i], NumOps.FromDouble(scale));
-        MetaModel.SetParameters(modulated);
-    }
-
-    private double ComputeLatentScale(Vector<T> z)
-    {
-        double norm = 0;
-        for (int i = 0; i < z.Length; i++)
-            norm += NumOps.ToDouble(z[i]) * NumOps.ToDouble(z[i]);
-        norm = Math.Sqrt(norm / Math.Max(z.Length, 1));
-        return 0.5 + 0.5 / (1.0 + Math.Exp(-norm + 1.0));
-    }
-
-    private Vector<T>? ConcatVectors(Vector<T>? a, Vector<T>? b)
-    {
-        if (a == null) return b;
-        if (b == null) return a;
-        var result = new Vector<T>(a.Length + b.Length);
-        for (int i = 0; i < a.Length; i++) result[i] = a[i];
-        for (int i = 0; i < b.Length; i++) result[a.Length + i] = b[i];
-        return result;
-    }
-
     private double ComputeAuxLoss(TaskBatch<T, TInput, TOutput> taskBatch)
     {
         var initParams = MetaModel.GetParameters();
@@ -216,10 +151,10 @@ public class NPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput, TOut
             MetaModel.SetParameters(initParams);
             var sf = ConvertToVector(MetaModel.Predict(task.SupportInput));
             var sl = ConvertToVector(task.SupportOutput);
-            var cr = EncodeAndAggregateNP(sf, sl);
+            var cr = AggregateRepresentations(BuildContextRepresentations(sf, sl));
             var (mean, logvar) = ComputeLatentDistribution(cr);
             var z = ReparameterizeSample(mean, logvar);
-            ModulateWithLatent(z, initParams);
+            ModulateParameters(initParams, ComputeModScale(z));
             totalLoss += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
         }
 

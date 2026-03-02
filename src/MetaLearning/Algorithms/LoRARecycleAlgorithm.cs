@@ -93,12 +93,7 @@ public class LoRARecycleAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
         _encoderParams = new Vector<T>(encoderSize);
         double initScale = 1.0 / Math.Sqrt(encoderInputDim);
         for (int i = 0; i < encoderSize; i++)
-        {
-            double u1 = 1.0 - RandomGenerator.NextDouble();
-            double u2 = RandomGenerator.NextDouble();
-            double z = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-            _encoderParams[i] = NumOps.FromDouble(z * initScale);
-        }
+            _encoderParams[i] = NumOps.FromDouble(SampleNormal() * initScale);
     }
 
     /// <inheritdoc/>

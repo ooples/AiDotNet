@@ -113,13 +113,7 @@ public class LaplacianShotAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
             metaGradients.Add(ClipGradients(metaGrad));
         }
 
-        MetaModel.SetParameters(initParams);
-        if (metaGradients.Count > 0)
-        {
-            var avgGrad = AverageVectors(metaGradients);
-            var updatedParams = ApplyGradients(initParams, avgGrad, _lapShotOptions.OuterLearningRate);
-            MetaModel.SetParameters(updatedParams);
-        }
+        ApplyOuterUpdate(initParams, metaGradients, _lapShotOptions.OuterLearningRate);
 
         return ComputeMean(losses);
     }

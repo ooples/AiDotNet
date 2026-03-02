@@ -130,13 +130,7 @@ public class SIBAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
             metaGradients.Add(ClipGradients(metaGrad));
         }
 
-        MetaModel.SetParameters(initParams);
-        if (metaGradients.Count > 0)
-        {
-            var avgGrad = AverageVectors(metaGradients);
-            var updatedParams = ApplyGradients(initParams, avgGrad, _sibOptions.OuterLearningRate);
-            MetaModel.SetParameters(updatedParams);
-        }
+        ApplyOuterUpdate(initParams, metaGradients, _sibOptions.OuterLearningRate);
 
         return ComputeMean(losses);
     }

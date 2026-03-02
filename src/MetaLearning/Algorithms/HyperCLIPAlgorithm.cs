@@ -81,8 +81,8 @@ public class HyperCLIPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
         int numTasks = taskBatch.Tasks.Length;
 
         // Collect task and param embeddings for contrastive loss
-        var taskEmbeddings = new double[numTasks][];
-        var paramEmbeddings = new double[numTasks][];
+        var taskEmbeddings = new Vector<T>[numTasks];
+        var paramEmbeddings = new Vector<T>[numTasks];
 
         for (int i = 0; i < numTasks; i++)
         {
@@ -91,7 +91,7 @@ public class HyperCLIPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
             // Task embedding from support gradient
             MetaModel.SetParameters(initParams);
             var supportGrad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-            var gradFeatures = CompressGradient(supportGrad, embDim);
+            var gradFeatures = CompressVector(supportGrad, embDim);
             taskEmbeddings[i] = ProjectTask(gradFeatures);
 
             // Standard MAML adaptation
@@ -127,12 +127,7 @@ public class HyperCLIPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
                 losses[i] = NumOps.Add(losses[i], contrastiveT);
         }
 
-        MetaModel.SetParameters(initParams);
-        if (metaGradients.Count > 0)
-        {
-            var avgGrad = AverageVectors(metaGradients);
-            MetaModel.SetParameters(ApplyGradients(initParams, avgGrad, _algoOptions.OuterLearningRate));
-        }
+        ApplyOuterUpdate(initParams, metaGradients, _algoOptions.OuterLearningRate);
 
         UpdateAuxiliaryParamsSPSA(taskBatch, ref _projectionWeights, _algoOptions.OuterLearningRate * SpsaLearningRateMultiplier, ComputeCLIPLoss);
 
@@ -157,24 +152,9 @@ public class HyperCLIPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
         return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, adaptedParams);
     }
 
-    private double[] CompressGradient(Vector<T> grad, int targetDim)
+    private Vector<T> CompressParamDelta(Vector<T> initParams, Vector<T> adaptedParams, int targetDim)
     {
-        var result = new double[targetDim];
-        int bucketSize = Math.Max(1, _paramDim / targetDim);
-        for (int e = 0; e < targetDim; e++)
-        {
-            double sum = 0;
-            int start = e * bucketSize;
-            for (int d = start; d < start + bucketSize && d < grad.Length; d++)
-                sum += NumOps.ToDouble(grad[d]);
-            result[e] = Math.Tanh(sum / bucketSize);
-        }
-        return result;
-    }
-
-    private double[] CompressParamDelta(Vector<T> initParams, Vector<T> adaptedParams, int targetDim)
-    {
-        var result = new double[targetDim];
+        var result = new Vector<T>(targetDim);
         int bucketSize = Math.Max(1, _paramDim / targetDim);
         for (int e = 0; e < targetDim; e++)
         {
@@ -182,55 +162,44 @@ public class HyperCLIPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
             int start = e * bucketSize;
             for (int d = start; d < start + bucketSize && d < _paramDim; d++)
                 sum += NumOps.ToDouble(adaptedParams[d]) - NumOps.ToDouble(initParams[d]);
-            result[e] = Math.Tanh(sum / bucketSize);
+            result[e] = NumOps.FromDouble(Math.Tanh(sum / bucketSize));
         }
         return result;
     }
 
-    private double[] ProjectTask(double[] features)
+    private Vector<T> ProjectTask(Vector<T> features)
     {
         int embDim = _algoOptions.EmbeddingDim;
         int projDim = _algoOptions.ProjectionDim;
-        var projected = new double[projDim];
+        var projected = new Vector<T>(projDim);
         // Task projection: first embDim * projDim weights
         for (int p = 0; p < projDim; p++)
         {
             double sum = 0;
             for (int e = 0; e < embDim; e++)
-                sum += NumOps.ToDouble(_projectionWeights[p * embDim + e]) * features[e];
-            projected[p] = sum;
+                sum += NumOps.ToDouble(_projectionWeights[p * embDim + e]) * NumOps.ToDouble(features[e]);
+            projected[p] = NumOps.FromDouble(sum);
         }
-        // L2 normalize
-        L2Normalize(projected);
-        return projected;
+        return L2Normalize(projected);
     }
 
-    private double[] ProjectParam(double[] features)
+    private Vector<T> ProjectParam(Vector<T> features)
     {
         int embDim = _algoOptions.EmbeddingDim;
         int projDim = _algoOptions.ProjectionDim;
         int offset = embDim * projDim; // After task projection weights
-        var projected = new double[projDim];
+        var projected = new Vector<T>(projDim);
         for (int p = 0; p < projDim; p++)
         {
             double sum = 0;
             for (int e = 0; e < embDim; e++)
-                sum += NumOps.ToDouble(_projectionWeights[offset + p * embDim + e]) * features[e];
-            projected[p] = sum;
+                sum += NumOps.ToDouble(_projectionWeights[offset + p * embDim + e]) * NumOps.ToDouble(features[e]);
+            projected[p] = NumOps.FromDouble(sum);
         }
-        L2Normalize(projected);
-        return projected;
+        return L2Normalize(projected);
     }
 
-    private static void L2Normalize(double[] vec)
-    {
-        double norm = 0;
-        for (int i = 0; i < vec.Length; i++) norm += vec[i] * vec[i];
-        norm = Math.Sqrt(norm) + 1e-10;
-        for (int i = 0; i < vec.Length; i++) vec[i] /= norm;
-    }
-
-    private double ComputeInfoNCE(double[][] taskEmb, double[][] paramEmb, int n, int dim)
+    private double ComputeInfoNCE(Vector<T>[] taskEmb, Vector<T>[] paramEmb, int n, int dim)
     {
         if (n <= 1) return 0;
         double tau = _algoOptions.ContrastiveTemperature;
@@ -244,7 +213,7 @@ public class HyperCLIPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
             for (int j = 0; j < n; j++)
             {
                 double dot = 0;
-                for (int d = 0; d < dim; d++) dot += taskEmb[i][d] * paramEmb[j][d];
+                for (int d = 0; d < dim; d++) dot += NumOps.ToDouble(taskEmb[i][d]) * NumOps.ToDouble(paramEmb[j][d]);
                 sims[j] = dot / tau;
                 if (sims[j] > maxSim) maxSim = sims[j];
             }
@@ -266,8 +235,8 @@ public class HyperCLIPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
         int projDim = _algoOptions.ProjectionDim;
         int numTasks = taskBatch.Tasks.Length;
 
-        var taskEmbs = new double[numTasks][];
-        var paramEmbs = new double[numTasks][];
+        var taskEmbs = new Vector<T>[numTasks];
+        var paramEmbs = new Vector<T>[numTasks];
 
         for (int i = 0; i < numTasks; i++)
         {
@@ -276,7 +245,7 @@ public class HyperCLIPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
             // Task embedding from support gradient
             MetaModel.SetParameters(initParams);
             var supportGrad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-            taskEmbs[i] = ProjectTask(CompressGradient(supportGrad, embDim));
+            taskEmbs[i] = ProjectTask(CompressVector(supportGrad, embDim));
 
             // Adapt
             var ap = new Vector<T>(_paramDim);

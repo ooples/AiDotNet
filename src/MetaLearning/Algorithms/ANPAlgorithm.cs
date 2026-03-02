@@ -53,7 +53,7 @@ public class ANPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput, TOu
             var queryFeatures = ConvertToVector(MetaModel.Predict(task.QueryInput));
 
             // Deterministic path: cross-attention from query to context
-            var contextReps = EncodeContextReps(supportFeatures, supportLabels);
+            var contextReps = BuildContextRepresentations(supportFeatures, supportLabels);
             var attendedRep = CrossAttend(queryFeatures, contextReps);
 
             // Latent path: aggregate and sample
@@ -62,16 +62,16 @@ public class ANPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput, TOu
 
             // Posterior from full set
             var queryLabels = ConvertToVector(task.QueryOutput);
-            var fullReps = EncodeContextReps(
-                ConcatVecs(supportFeatures, queryFeatures),
-                ConcatVecs(supportLabels, queryLabels));
+            var fullReps = BuildContextRepresentations(
+                ConcatVectors(supportFeatures, queryFeatures),
+                ConcatVectors(supportLabels, queryLabels));
             var fullAgg = AggregateRepresentations(fullReps);
             var (postMean, postLogVar) = ComputeLatent(fullAgg);
 
             var z = ReparameterizeSample(postMean, postLogVar);
 
             // Modulate backbone with attended rep + latent
-            ModulateWithAttentionAndLatent(attendedRep, z, initParams);
+            ModulateParameters(initParams, ComputeScale(z, attendedRep));
 
             double reconLoss = NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
             double klLoss = KLDivergenceGaussian(postMean, postLogVar, priorMean, priorLogVar);
@@ -79,9 +79,7 @@ public class ANPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput, TOu
             metaGradients.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
         }
 
-        MetaModel.SetParameters(initParams);
-        if (metaGradients.Count > 0)
-            MetaModel.SetParameters(ApplyGradients(initParams, AverageVectors(metaGradients), _anpOptions.OuterLearningRate));
+        ApplyOuterUpdate(initParams, metaGradients, _anpOptions.OuterLearningRate);
 
         UpdateAuxiliaryParamsSPSA(taskBatch, ref EncoderParams, _anpOptions.OuterLearningRate, ComputeAuxLoss);
         UpdateAuxiliaryParamsSPSA(taskBatch, ref _attentionParams, _anpOptions.OuterLearningRate, ComputeAuxLoss);
@@ -96,38 +94,11 @@ public class ANPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput, TOu
         var supportFeatures = ConvertToVector(MetaModel.Predict(task.SupportInput));
         var supportLabels = ConvertToVector(task.SupportOutput);
 
-        var contextReps = EncodeContextReps(supportFeatures, supportLabels);
+        var contextReps = BuildContextRepresentations(supportFeatures, supportLabels);
         var aggRep = AggregateRepresentations(contextReps);
         var (mean, _) = ComputeLatent(aggRep);
 
-        double scale = ComputeScale(mean, aggRep);
-        var modParams = new Vector<T>(currentParams.Length);
-        for (int i = 0; i < currentParams.Length; i++)
-            modParams[i] = NumOps.Multiply(currentParams[i], NumOps.FromDouble(scale));
-
-        return new NeuralProcessModel<T, TInput, TOutput>(MetaModel, modParams, aggRep);
-    }
-
-    private List<Vector<T>> EncodeContextReps(Vector<T>? features, Vector<T>? labels)
-    {
-        var reps = new List<Vector<T>>();
-        if (features == null || labels == null || features.Length == 0 || labels.Length == 0) return reps;
-
-        int numExamples = labels.Length;
-        int featureDim = Math.Max(1, features.Length / numExamples);
-
-        for (int i = 0; i < numExamples; i++)
-        {
-            int fStart = i * featureDim;
-            int fLen = Math.Min(featureDim, features.Length - fStart);
-            if (fLen <= 0) break;
-            var f = new Vector<T>(fLen);
-            for (int j = 0; j < fLen; j++) f[j] = features[fStart + j];
-            var l = new Vector<T>(1);
-            l[0] = labels[Math.Min(i, labels.Length - 1)];
-            reps.Add(EncodeContextPair(f, l));
-        }
-        return reps;
+        return new NeuralProcessModel<T, TInput, TOutput>(MetaModel, ScaleVector(currentParams, ComputeScale(mean, aggRep)), aggRep);
     }
 
     private Vector<T> CrossAttend(Vector<T>? queryFeatures, List<Vector<T>> contextReps)
@@ -194,15 +165,6 @@ public class ANPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput, TOu
         return (mean, logvar);
     }
 
-    private void ModulateWithAttentionAndLatent(Vector<T> attended, Vector<T> z, Vector<T> initParams)
-    {
-        double scale = ComputeScale(z, attended);
-        var modulated = new Vector<T>(initParams.Length);
-        for (int i = 0; i < initParams.Length; i++)
-            modulated[i] = NumOps.Multiply(initParams[i], NumOps.FromDouble(scale));
-        MetaModel.SetParameters(modulated);
-    }
-
     private double ComputeScale(Vector<T> z, Vector<T> attended)
     {
         double norm = 0;
@@ -210,16 +172,6 @@ public class ANPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput, TOu
         for (int i = 0; i < attended.Length; i++) norm += NumOps.ToDouble(attended[i]) * NumOps.ToDouble(attended[i]);
         norm = Math.Sqrt(norm / Math.Max(z.Length + attended.Length, 1));
         return 0.5 + 0.5 / (1.0 + Math.Exp(-norm + 1.0));
-    }
-
-    private Vector<T>? ConcatVecs(Vector<T>? a, Vector<T>? b)
-    {
-        if (a == null) return b;
-        if (b == null) return a;
-        var r = new Vector<T>(a.Length + b.Length);
-        for (int i = 0; i < a.Length; i++) r[i] = a[i];
-        for (int i = 0; i < b.Length; i++) r[a.Length + i] = b[i];
-        return r;
     }
 
     private double ComputeAuxLoss(TaskBatch<T, TInput, TOutput> taskBatch)
@@ -231,12 +183,12 @@ public class ANPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput, TOu
             MetaModel.SetParameters(initParams);
             var sf = ConvertToVector(MetaModel.Predict(task.SupportInput));
             var sl = ConvertToVector(task.SupportOutput);
-            var cr = EncodeContextReps(sf, sl);
+            var cr = BuildContextRepresentations(sf, sl);
             var att = CrossAttend(ConvertToVector(MetaModel.Predict(task.QueryInput)), cr);
             var agg = AggregateRepresentations(cr);
             var (m, lv) = ComputeLatent(agg);
             var z = ReparameterizeSample(m, lv);
-            ModulateWithAttentionAndLatent(att, z, initParams);
+            ModulateParameters(initParams, ComputeScale(z, att));
             totalLoss += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
         }
         MetaModel.SetParameters(initParams);

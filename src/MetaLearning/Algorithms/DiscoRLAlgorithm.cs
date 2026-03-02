@@ -73,11 +73,7 @@ public class DiscoRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
 
         _skillBasis = new Vector<T>(_numSkills * _skillRank * _compressedDim);
         for (int i = 0; i < _skillBasis.Length; i++)
-        {
-            double u1 = Math.Max(1e-10, RandomGenerator.NextDouble());
-            double u2 = RandomGenerator.NextDouble();
-            _skillBasis[i] = NumOps.FromDouble(0.01 * Math.Sqrt(-2 * Math.Log(u1)) * Math.Cos(2 * Math.PI * u2));
-        }
+            _skillBasis[i] = NumOps.FromDouble(0.01 * SampleNormal());
 
         _gatingParams = new Vector<T>(_compressedDim * _numSkills);
         for (int i = 0; i < _gatingParams.Length; i++)
@@ -118,7 +114,7 @@ public class DiscoRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
                 var delta = ComposeSkillDelta(coeffs, gating);
                 var effectiveParams = new Vector<T>(_paramDim);
                 for (int d = 0; d < _paramDim; d++)
-                    effectiveParams[d] = NumOps.Add(adaptedParams[d], NumOps.FromDouble(delta[d % _compressedDim]));
+                    effectiveParams[d] = NumOps.Add(adaptedParams[d], delta[d % _compressedDim]);
 
                 MetaModel.SetParameters(effectiveParams);
                 var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
@@ -127,16 +123,17 @@ public class DiscoRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
                 // Project gradient onto skill subspaces to get coefficient gradients
                 for (int k = 0; k < _numSkills; k++)
                 {
-                    if (gating[k] < 1e-6) continue;
+                    double gk = NumOps.ToDouble(gating[k]);
+                    if (gk < 1e-6) continue;
                     for (int r = 0; r < _skillRank; r++)
                     {
                         double projGrad = 0;
                         for (int c = 0; c < _compressedDim; c++)
                         {
                             int basisIdx = (k * _skillRank + r) * _compressedDim + c;
-                            projGrad += compGrad[c] * NumOps.ToDouble(_skillBasis[basisIdx]);
+                            projGrad += NumOps.ToDouble(compGrad[c]) * NumOps.ToDouble(_skillBasis[basisIdx]);
                         }
-                        coeffs[k * _skillRank + r] -= _algoOptions.InnerLearningRate * gating[k] * projGrad;
+                        coeffs[k * _skillRank + r] -= _algoOptions.InnerLearningRate * gk * projGrad;
                     }
                 }
             }
@@ -145,7 +142,7 @@ public class DiscoRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
             var finalDelta = ComposeSkillDelta(coeffs, gating);
             var finalParams = new Vector<T>(_paramDim);
             for (int d = 0; d < _paramDim; d++)
-                finalParams[d] = NumOps.Add(adaptedParams[d], NumOps.FromDouble(finalDelta[d % _compressedDim]));
+                finalParams[d] = NumOps.Add(adaptedParams[d], finalDelta[d % _compressedDim]);
 
             MetaModel.SetParameters(finalParams);
             var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
@@ -153,19 +150,17 @@ public class DiscoRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
             // Entropy bonus for diverse skill usage
             double entropy = 0;
             for (int k = 0; k < _numSkills; k++)
-                if (gating[k] > 1e-10) entropy -= gating[k] * Math.Log(gating[k]);
+            {
+                double gk = NumOps.ToDouble(gating[k]);
+                if (gk > 1e-10) entropy -= gk * Math.Log(gk);
+            }
             var totalLoss = NumOps.Subtract(queryLoss, NumOps.FromDouble(_algoOptions.SkillEntropyBonus * entropy));
 
             losses.Add(totalLoss);
             metaGradients.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
         }
 
-        MetaModel.SetParameters(initParams);
-        if (metaGradients.Count > 0)
-        {
-            var avgGrad = AverageVectors(metaGradients);
-            MetaModel.SetParameters(ApplyGradients(initParams, avgGrad, _algoOptions.OuterLearningRate));
-        }
+        ApplyOuterUpdate(initParams, metaGradients, _algoOptions.OuterLearningRate);
 
         UpdateAuxiliaryParamsSPSA(taskBatch, ref _skillBasis, _algoOptions.OuterLearningRate * SpsaLearningRateMultiplier, ComputeDiscoRLLoss);
         UpdateAuxiliaryParamsSPSA(taskBatch, ref _gatingParams, _algoOptions.OuterLearningRate * SpsaLearningRateMultiplier, ComputeDiscoRLLoss);
@@ -188,7 +183,7 @@ public class DiscoRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
             var delta = ComposeSkillDelta(coeffs, gating);
             var effectiveParams = new Vector<T>(_paramDim);
             for (int d = 0; d < _paramDim; d++)
-                effectiveParams[d] = NumOps.Add(initParams[d], NumOps.FromDouble(delta[d % _compressedDim]));
+                effectiveParams[d] = NumOps.Add(initParams[d], delta[d % _compressedDim]);
 
             MetaModel.SetParameters(effectiveParams);
             var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
@@ -196,13 +191,14 @@ public class DiscoRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
 
             for (int k = 0; k < _numSkills; k++)
             {
-                if (gating[k] < 1e-6) continue;
+                double gk = NumOps.ToDouble(gating[k]);
+                if (gk < 1e-6) continue;
                 for (int r = 0; r < _skillRank; r++)
                 {
                     double projGrad = 0;
                     for (int c = 0; c < _compressedDim; c++)
-                        projGrad += compGrad[c] * NumOps.ToDouble(_skillBasis[(k * _skillRank + r) * _compressedDim + c]);
-                    coeffs[k * _skillRank + r] -= _algoOptions.InnerLearningRate * gating[k] * projGrad;
+                        projGrad += NumOps.ToDouble(compGrad[c]) * NumOps.ToDouble(_skillBasis[(k * _skillRank + r) * _compressedDim + c]);
+                    coeffs[k * _skillRank + r] -= _algoOptions.InnerLearningRate * gk * projGrad;
                 }
             }
         }
@@ -210,28 +206,28 @@ public class DiscoRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
         var finalDelta = ComposeSkillDelta(coeffs, gating);
         var adaptedParams = new Vector<T>(_paramDim);
         for (int d = 0; d < _paramDim; d++)
-            adaptedParams[d] = NumOps.Add(initParams[d], NumOps.FromDouble(finalDelta[d % _compressedDim]));
+            adaptedParams[d] = NumOps.Add(initParams[d], finalDelta[d % _compressedDim]);
 
         MetaModel.SetParameters(initParams);
         return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, adaptedParams);
     }
 
-    private double[] CompressGradient(Vector<T> grad)
+    private Vector<T> CompressGradient(Vector<T> grad)
     {
-        var compressed = new double[_compressedDim];
+        var compressed = new Vector<T>(_compressedDim);
         for (int c = 0; c < _compressedDim && c < grad.Length; c++)
-            compressed[c] = NumOps.ToDouble(grad[c]);
+            compressed[c] = grad[c];
         return compressed;
     }
 
-    private double[] ComputeGating(double[] compressed)
+    private Vector<T> ComputeGating(Vector<T> compressed)
     {
         var logits = new double[_numSkills];
         for (int k = 0; k < _numSkills; k++)
         {
             double sum = 0;
             for (int c = 0; c < _compressedDim; c++)
-                sum += compressed[c] * NumOps.ToDouble(_gatingParams[k * _compressedDim + c]);
+                sum += NumOps.ToDouble(compressed[c]) * NumOps.ToDouble(_gatingParams[k * _compressedDim + c]);
             logits[k] = sum / _algoOptions.SelectionTemperature;
         }
 
@@ -241,20 +237,26 @@ public class DiscoRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
         double sumExp = 0;
         for (int k = 0; k < _numSkills; k++) { logits[k] = Math.Exp(logits[k] - maxLogit); sumExp += logits[k]; }
         for (int k = 0; k < _numSkills; k++) logits[k] /= (sumExp + 1e-10);
-        return logits;
+
+        var result = new Vector<T>(_numSkills);
+        for (int k = 0; k < _numSkills; k++)
+            result[k] = NumOps.FromDouble(logits[k]);
+        return result;
     }
 
-    private double[] ComposeSkillDelta(double[] coeffs, double[] gating)
+    private Vector<T> ComposeSkillDelta(double[] coeffs, Vector<T> gating)
     {
-        var delta = new double[_compressedDim];
+        var delta = new Vector<T>(_compressedDim);
         for (int k = 0; k < _numSkills; k++)
         {
-            if (gating[k] < 1e-6) continue;
+            double gk = NumOps.ToDouble(gating[k]);
+            if (gk < 1e-6) continue;
             for (int r = 0; r < _skillRank; r++)
             {
                 double coeff = coeffs[k * _skillRank + r];
                 for (int c = 0; c < _compressedDim; c++)
-                    delta[c] += gating[k] * coeff * NumOps.ToDouble(_skillBasis[(k * _skillRank + r) * _compressedDim + c]);
+                    delta[c] = NumOps.Add(delta[c],
+                        NumOps.FromDouble(gk * coeff * NumOps.ToDouble(_skillBasis[(k * _skillRank + r) * _compressedDim + c])));
             }
         }
         return delta;
@@ -275,28 +277,34 @@ public class DiscoRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
             {
                 var delta = ComposeSkillDelta(coeffs, gating);
                 var ep = new Vector<T>(_paramDim);
-                for (int d = 0; d < _paramDim; d++) ep[d] = NumOps.Add(initParams[d], NumOps.FromDouble(delta[d % _compressedDim]));
+                for (int d = 0; d < _paramDim; d++) ep[d] = NumOps.Add(initParams[d], delta[d % _compressedDim]);
                 MetaModel.SetParameters(ep);
                 var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
                 var cg = CompressGradient(grad);
                 for (int k = 0; k < _numSkills; k++)
+                {
+                    double gk = NumOps.ToDouble(gating[k]);
                     for (int r = 0; r < _skillRank; r++)
                     {
                         double pg = 0;
-                        for (int c = 0; c < _compressedDim; c++) pg += cg[c] * NumOps.ToDouble(_skillBasis[(k * _skillRank + r) * _compressedDim + c]);
-                        coeffs[k * _skillRank + r] -= _algoOptions.InnerLearningRate * gating[k] * pg;
+                        for (int c = 0; c < _compressedDim; c++) pg += NumOps.ToDouble(cg[c]) * NumOps.ToDouble(_skillBasis[(k * _skillRank + r) * _compressedDim + c]);
+                        coeffs[k * _skillRank + r] -= _algoOptions.InnerLearningRate * gk * pg;
                     }
+                }
             }
             var fd = ComposeSkillDelta(coeffs, gating);
             var fp = new Vector<T>(_paramDim);
-            for (int d = 0; d < _paramDim; d++) fp[d] = NumOps.Add(initParams[d], NumOps.FromDouble(fd[d % _compressedDim]));
+            for (int d = 0; d < _paramDim; d++) fp[d] = NumOps.Add(initParams[d], fd[d % _compressedDim]);
             MetaModel.SetParameters(fp);
             double queryLoss = NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
 
             // Include entropy bonus to match MetaTrain objective
             double entropy = 0;
             for (int k = 0; k < _numSkills; k++)
-                if (gating[k] > 1e-10) entropy -= gating[k] * Math.Log(gating[k]);
+            {
+                double gk = NumOps.ToDouble(gating[k]);
+                if (gk > 1e-10) entropy -= gk * Math.Log(gk);
+            }
             totalLoss += queryLoss - _algoOptions.SkillEntropyBonus * entropy;
         }
         MetaModel.SetParameters(initParams);

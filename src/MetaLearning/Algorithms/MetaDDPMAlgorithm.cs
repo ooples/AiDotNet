@@ -161,7 +161,7 @@ public class MetaDDPMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
             // Forward diffusion: w_t = √ᾱ_t * w_0 + √(1-ᾱ_t) * ε
             var wt = new double[_compressedDim];
             for (int i = 0; i < _compressedDim; i++)
-                wt[i] = _sqrtAlphasCumprod[t] * targetDelta[i] + _sqrtOneMinusAlphasCumprod[t] * epsilon[i];
+                wt[i] = _sqrtAlphasCumprod[t] * NumOps.ToDouble(targetDelta[i]) + _sqrtOneMinusAlphasCumprod[t] * epsilon[i];
 
             // Predict noise using denoiser
             var predictedNoise = PredictNoise(wt, condition, t, useEma: false);
@@ -225,7 +225,7 @@ public class MetaDDPMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
     /// <summary>
     /// Full DDPM sampling (reverse process) with standard variance.
     /// </summary>
-    private double[] SampleDDPM(double[] condition, int numSteps)
+    private Vector<T> SampleDDPM(Vector<T> condition, int numSteps)
     {
         var wt = SampleGaussian(_compressedDim);
         int stepSize = Math.Max(1, _numTimesteps / Math.Max(numSteps, 1));
@@ -252,10 +252,13 @@ public class MetaDDPMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
             }
         }
 
-        return wt;
+        var result = new Vector<T>(_compressedDim);
+        for (int i = 0; i < _compressedDim; i++)
+            result[i] = NumOps.FromDouble(wt[i]);
+        return result;
     }
 
-    private double[] ComputeTargetDelta(Vector<T> baseParams, IMetaLearningTask<T, TInput, TOutput> task)
+    private Vector<T> ComputeTargetDelta(Vector<T> baseParams, IMetaLearningTask<T, TInput, TOutput> task)
     {
         var current = new Vector<T>(_paramDim);
         for (int d = 0; d < _paramDim; d++) current[d] = baseParams[d];
@@ -267,21 +270,21 @@ public class MetaDDPMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
             current = ApplyGradients(current, grad, _algoOptions.InnerLearningRate);
         }
 
-        var delta = new double[_compressedDim];
+        var delta = new Vector<T>(_compressedDim);
         int stride = Math.Max(1, _paramDim / _compressedDim);
         for (int i = 0; i < _compressedDim; i++)
         {
             int idx = Math.Min(i * stride, _paramDim - 1);
-            delta[i] = NumOps.ToDouble(current[idx]) - NumOps.ToDouble(baseParams[idx]);
+            delta[i] = NumOps.FromDouble(NumOps.ToDouble(current[idx]) - NumOps.ToDouble(baseParams[idx]));
         }
         return delta;
     }
 
-    private double[] ComputeTaskCondition(TInput supportInput)
+    private Vector<T> ComputeTaskCondition(TInput supportInput)
     {
         var features = ConvertToVector(MetaModel.Predict(supportInput));
         int featureDim = Math.Min(_paramDim, MaxFeatureDim);
-        var condition = new double[_condDim];
+        var condition = new Vector<T>(_condDim);
         if (features == null) return condition;
 
         int biasOffset = featureDim * _condDim;
@@ -293,12 +296,12 @@ public class MetaDDPMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
                 sum += NumOps.ToDouble(features[i]) * NumOps.ToDouble(_taskEncoderParams[o * featureDim + i]);
             if (biasOffset + o < _taskEncoderParams.Length)
                 sum += NumOps.ToDouble(_taskEncoderParams[biasOffset + o]);
-            condition[o] = Math.Tanh(sum);
+            condition[o] = NumOps.FromDouble(Math.Tanh(sum));
         }
         return condition;
     }
 
-    private double[] PredictNoise(double[] wt, double[] condition, int timestep, bool useEma)
+    private double[] PredictNoise(double[] wt, Vector<T> condition, int timestep, bool useEma)
     {
         var denoiser = useEma ? _denoiserEma : _denoiserParams;
         int inputDim = _compressedDim + _condDim + 1;
@@ -306,7 +309,8 @@ public class MetaDDPMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
 
         var input = new double[inputDim];
         Array.Copy(wt, 0, input, 0, _compressedDim);
-        Array.Copy(condition, 0, input, _compressedDim, _condDim);
+        for (int i = 0; i < _condDim; i++)
+            input[_compressedDim + i] = NumOps.ToDouble(condition[i]);
         input[_compressedDim + _condDim] = (double)timestep / _numTimesteps;
 
         // Hidden layer (ReLU)
@@ -342,7 +346,7 @@ public class MetaDDPMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
         return output;
     }
 
-    private Vector<T> ApplyCompressedDelta(Vector<T> baseParams, double[] delta)
+    private Vector<T> ApplyCompressedDelta(Vector<T> baseParams, Vector<T> delta)
     {
         var result = new Vector<T>(_paramDim);
         int stride = Math.Max(1, _paramDim / _compressedDim);
@@ -352,9 +356,8 @@ public class MetaDDPMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
         {
             int start = i * stride;
             int end = Math.Min((i + 1) * stride, _paramDim);
-            T dt = NumOps.FromDouble(delta[i]);
             for (int d = start; d < end; d++)
-                result[d] = NumOps.Add(result[d], dt);
+                result[d] = NumOps.Add(result[d], delta[i]);
         }
         return result;
     }
@@ -373,7 +376,7 @@ public class MetaDDPMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
 
             var noised = new double[_compressedDim];
             for (int i = 0; i < _compressedDim; i++)
-                noised[i] = _sqrtAlphasCumprod[t] * target[i] + _sqrtOneMinusAlphasCumprod[t] * eps[i];
+                noised[i] = _sqrtAlphasCumprod[t] * NumOps.ToDouble(target[i]) + _sqrtOneMinusAlphasCumprod[t] * eps[i];
 
             var cond = ComputeTaskCondition(task.SupportInput);
             var pred = PredictNoise(noised, cond, t, useEma: false);
@@ -391,18 +394,13 @@ public class MetaDDPMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
     {
         var arr = new double[length];
         for (int i = 0; i < length; i++)
-        {
-            double u1 = 1.0 - RandomGenerator.NextDouble();
-            double u2 = RandomGenerator.NextDouble();
-            arr[i] = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-        }
+            arr[i] = SampleNormal();
         return arr;
     }
 
     private void InitGaussian(Vector<T> v, double stdDev)
     {
-        var samples = SampleGaussian(v.Length);
         for (int i = 0; i < v.Length; i++)
-            v[i] = NumOps.FromDouble(samples[i] * stdDev);
+            v[i] = NumOps.FromDouble(SampleNormal() * stdDev);
     }
 }

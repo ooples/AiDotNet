@@ -176,12 +176,7 @@ public class NPBMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
         }
 
         // Update backbone
-        MetaModel.SetParameters(initParams);
-        if (metaGradients.Count > 0)
-        {
-            var avgGrad = AverageVectors(metaGradients);
-            MetaModel.SetParameters(ApplyGradients(initParams, avgGrad, _npbmlOptions.OuterLearningRate));
-        }
+        ApplyOuterUpdate(initParams, metaGradients, _npbmlOptions.OuterLearningRate);
 
         // Update encoder/decoder via multi-sample SPSA
         UpdateAuxiliaryParamsSPSA(taskBatch, ref _encoderParams, _npbmlOptions.OuterLearningRate, ComputeAuxLoss);
@@ -319,12 +314,7 @@ public class NPBMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
         {
             int latIdx = i % latentDim;
             double sigma = Math.Exp(logSigma[latIdx]);
-            // Box-Muller for Gaussian sample
-            double u1 = Math.Max(RandomGenerator.NextDouble(), 1e-10);
-            double u2 = RandomGenerator.NextDouble();
-            double epsilon = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-
-            double z = mu[latIdx] + sigma * epsilon;
+            double z = mu[latIdx] + sigma * SampleNormal();
 
             // Modulate support features with sampled latent
             double modulation = 1.0 / (1.0 + Math.Exp(-z)); // Sigmoid gate

@@ -117,12 +117,7 @@ public class BayTransProtoAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
             metaGradients.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
         }
 
-        MetaModel.SetParameters(initParams);
-        if (metaGradients.Count > 0)
-        {
-            var avgGrad = AverageVectors(metaGradients);
-            MetaModel.SetParameters(ApplyGradients(initParams, avgGrad, _algoOptions.OuterLearningRate));
-        }
+        ApplyOuterUpdate(initParams, metaGradients, _algoOptions.OuterLearningRate);
 
         UpdateAuxiliaryParamsSPSA(taskBatch, ref _logVar, _algoOptions.OuterLearningRate * 0.01, ComputeBayTransLoss);
 
@@ -153,10 +148,7 @@ public class BayTransProtoAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
         for (int d = 0; d < _paramDim; d++)
         {
             double std = Math.Exp(0.5 * NumOps.ToDouble(_logVar[d]));
-            double u1 = Math.Max(1e-10, RandomGenerator.NextDouble());
-            double u2 = RandomGenerator.NextDouble();
-            double noise = Math.Sqrt(-2 * Math.Log(u1)) * Math.Cos(2 * Math.PI * u2);
-            sample[d] = NumOps.Add(mean[d], NumOps.FromDouble(std * noise));
+            sample[d] = NumOps.Add(mean[d], NumOps.FromDouble(std * SampleNormal()));
         }
         return sample;
     }

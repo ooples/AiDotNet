@@ -210,13 +210,7 @@ public class VERSAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
         }
 
         // Update backbone parameters
-        MetaModel.SetParameters(initParams);
-        if (metaGradients.Count > 0)
-        {
-            var avgGrad = AverageVectors(metaGradients);
-            var updatedParams = ApplyGradients(initParams, avgGrad, _versaOptions.OuterLearningRate);
-            MetaModel.SetParameters(updatedParams);
-        }
+        ApplyOuterUpdate(initParams, metaGradients, _versaOptions.OuterLearningRate);
 
         // Update amortization network parameters using finite differences
         UpdateAuxiliaryParamsSPSA(taskBatch, ref _amortizationParams, _versaOptions.OuterLearningRate, ComputeAuxLoss);
