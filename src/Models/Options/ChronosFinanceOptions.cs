@@ -1,4 +1,5 @@
 using System;
+using AiDotNet.Enums;
 
 namespace AiDotNet.Models.Options;
 
@@ -83,6 +84,12 @@ public class ChronosFinanceOptions<T> : TimeSeriesRegressionOptions<T>
         DropoutRate = other.DropoutRate;
         Temperature = other.Temperature;
         ModelSize = other.ModelSize;
+        MaxContextLength = other.MaxContextLength;
+        NumCovariates = other.NumCovariates;
+        NumQuantiles = other.NumQuantiles;
+        GroupAttentionGroups = other.GroupAttentionGroups;
+        UseMultivariate = other.UseMultivariate;
+        UsePatchInput = other.UsePatchInput;
     }
 
     /// <summary>
@@ -200,14 +207,83 @@ public class ChronosFinanceOptions<T> : TimeSeriesRegressionOptions<T>
     /// <summary>
     /// Gets or sets the model size variant.
     /// </summary>
-    /// <value>The model size, defaulting to "base".</value>
+    /// <value>The model size, defaulting to <see cref="FoundationModelSize.Base"/>.</value>
     /// <remarks>
     /// <para><b>For Beginners:</b> Chronos comes in different sizes:
-    /// - "mini": Smallest, fastest (20M params)
-    /// - "small": Light (46M params)
-    /// - "base": Balanced (200M params)
-    /// - "large": Best accuracy (710M params)
+    /// - Mini: Smallest, fastest (20M params)
+    /// - Small: Light (46M params)
+    /// - Base: Balanced (200M params)
+    /// - Large: Best accuracy (710M params)
     /// </para>
     /// </remarks>
-    public string ModelSize { get; set; } = "base";
+    public FoundationModelSize ModelSize { get; set; } = FoundationModelSize.Base;
+
+    /// <summary>
+    /// Gets or sets the maximum context length for Chronos-2 encoder-only mode.
+    /// </summary>
+    /// <value>Defaults to 8192. Chronos-2 supports up to 8192 time steps.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Chronos-2 uses an encoder-only architecture that supports
+    /// much longer context windows than the original. This allows the model to look at more
+    /// historical data for better predictions.
+    /// </para>
+    /// </remarks>
+    public int MaxContextLength { get; set; } = 8192;
+
+    /// <summary>
+    /// Gets or sets the number of exogenous covariates for Chronos-2 multivariate support.
+    /// </summary>
+    /// <value>Defaults to 0 (univariate mode).</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Chronos-2 adds multivariate support. Set this to the
+    /// number of additional variables (covariates) beyond the target series. For example,
+    /// if predicting sales with temperature and day-of-week features, set to 2.
+    /// </para>
+    /// </remarks>
+    public int NumCovariates { get; set; } = 0;
+
+    /// <summary>
+    /// Gets or sets the number of quantiles for Chronos-2 quantile forecasting.
+    /// </summary>
+    /// <value>Defaults to 9.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Chronos-2 directly outputs quantile forecasts instead
+    /// of sampling from a token distribution. More quantiles give finer uncertainty
+    /// estimation (e.g., 9 quantiles: 0.1, 0.2, ..., 0.9).
+    /// </para>
+    /// </remarks>
+    public int NumQuantiles { get; set; } = 9;
+
+    /// <summary>
+    /// Gets or sets the number of groups for group attention in Chronos-2.
+    /// </summary>
+    /// <value>Defaults to 4.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Chronos-2 uses grouped attention (similar to GQA) to
+    /// reduce computation while maintaining performance. More groups = more efficient.
+    /// </para>
+    /// </remarks>
+    public int GroupAttentionGroups { get; set; } = 4;
+
+    /// <summary>
+    /// Gets or sets whether to enable multivariate forecasting in Chronos-2.
+    /// </summary>
+    /// <value>Defaults to true.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> When true, Chronos-2 processes multiple variables
+    /// simultaneously. When false, it operates in univariate mode like Chronos v1.
+    /// </para>
+    /// </remarks>
+    public bool UseMultivariate { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether to use patch-based input for Chronos-2.
+    /// </summary>
+    /// <value>Defaults to true.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Chronos-2 uses patch-based input instead of token-based
+    /// input from v1. This is more efficient and allows longer context processing.
+    /// </para>
+    /// </remarks>
+    public bool UsePatchInput { get; set; } = true;
 }

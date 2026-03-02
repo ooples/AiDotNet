@@ -12,8 +12,7 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Helpers;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
-
-
+
 using AiDotNet.Finance.Base;
 namespace AiDotNet.Finance.Forecasting.Foundation;
 
@@ -75,7 +74,7 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// Create separate instances for concurrent usage scenarios.
 /// </para>
 /// </remarks>
-public class Chronos<T> : ForecastingModelBase<T>
+public class Chronos<T> : TimeSeriesFoundationModelBase<T>
 {
     #region Execution Mode
 
@@ -159,7 +158,7 @@ public class Chronos<T> : ForecastingModelBase<T>
     private int _numSamples;
     private double _dropout;
     private double _temperature;
-    private string _modelSize;
+    private FoundationModelSize _modelSize;
     private T _lastTokenMin = default;
     private T _lastTokenRange = default;
     private bool _hasTokenScale;
@@ -201,16 +200,19 @@ public class Chronos<T> : ForecastingModelBase<T>
     /// </remarks>
     public int NumTokens => _numTokens;
 
-    /// <summary>
-    /// Gets the model size variant.
-    /// </summary>
-    /// <value>The model size (mini, small, base, large).</value>
+    /// <inheritdoc/>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> Larger models have more capacity but require more compute.
     /// </para>
     /// </remarks>
-    public string ModelSize => _modelSize;
+    public override FoundationModelSize ModelSize => _modelSize;
+
+    /// <inheritdoc/>
+    public override int MaxContextLength => _options.MaxContextLength;
+
+    /// <inheritdoc/>
+    public override int MaxPredictionHorizon => _forecastHorizon;
 
     #endregion
 
@@ -510,8 +512,8 @@ public class Chronos<T> : ForecastingModelBase<T>
     /// </remarks>
     public override void UpdateParameters(Vector<T> gradients)
     {
-        throw new NotSupportedException(
-            "Chronos is a pre-trained foundation model. Parameter updates should be performed through fine-tuning APIs, not direct gradient application.");
+        // Chronos is a pretrained foundation model — parameters are updated through the optimizer in Train()
+        throw new NotSupportedException("Chronos is a pretrained foundation model. Use Train() for parameter updates via the optimizer.");
     }
 
     /// <inheritdoc/>
@@ -537,7 +539,7 @@ public class Chronos<T> : ForecastingModelBase<T>
                 { "IntermediateSize", _intermediateSize },
                 { "NumSamples", _numSamples },
                 { "Temperature", _temperature },
-                { "ModelSize", _modelSize },
+                { "ModelSize", _modelSize.ToString() },
                 { "UseNativeMode", _useNativeMode },
                 { "ParameterCount", GetParameterCount() }
             },
@@ -593,7 +595,7 @@ public class Chronos<T> : ForecastingModelBase<T>
         writer.Write(_numSamples);
         writer.Write(_dropout);
         writer.Write(_temperature);
-        writer.Write(_modelSize);
+        writer.Write((int)_modelSize);
 
         // Serialize tokenization scaling state
         writer.Write(_hasTokenScale);
@@ -621,7 +623,7 @@ public class Chronos<T> : ForecastingModelBase<T>
         _numSamples = reader.ReadInt32();
         _dropout = reader.ReadDouble();
         _temperature = reader.ReadDouble();
-        _modelSize = reader.ReadString();
+        _modelSize = (FoundationModelSize)reader.ReadInt32();
 
         // Deserialize tokenization scaling state
         _hasTokenScale = reader.ReadBoolean();
@@ -641,16 +643,18 @@ public class Chronos<T> : ForecastingModelBase<T>
     /// </remarks>
     public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
     {
-        // If quantiles requested, skip point inference and go directly to quantile sampling
+        var output = _useNativeMode ? ForecastNative(historicalData) : ForecastOnnx(historicalData);
+
+        // Detokenize to get continuous values
+        var pointPredictions = Detokenize(output);
+
+        // If quantiles requested, generate multiple samples
         if (quantiles is not null && quantiles.Length > 0)
         {
             return GenerateQuantileSamples(historicalData, quantiles);
         }
 
-        var output = _useNativeMode ? ForecastNative(historicalData) : ForecastOnnx(historicalData);
-
-        // Detokenize to get continuous values
-        return Detokenize(output);
+        return pointPredictions;
     }
 
     /// <inheritdoc/>
