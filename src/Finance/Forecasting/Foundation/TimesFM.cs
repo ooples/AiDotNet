@@ -751,18 +751,20 @@ public class TimesFM<T> : TimeSeriesFoundationModelBase<T>
     }
 
     /// <summary>
-    /// Creates a quantile-conditioned input by appending quantile level info to hidden states.
+    /// Creates a quantile-conditioned input by modulating hidden states with the quantile level.
     /// </summary>
+    /// <remarks>
+    /// Maps the quantile level to [-1, 1] and applies a subtle value-dependent shift to each
+    /// hidden state element. This allows the same quantile head to produce different outputs per
+    /// quantile without changing the tensor shape.
+    /// </remarks>
     private Tensor<T> CreateQuantileConditionedInput(Tensor<T> hiddenStates, double quantileLevel)
     {
-        // Add the quantile level as an additional feature to each hidden state position
-        // This allows the same quantile head to produce different outputs per quantile
         var conditioned = new Tensor<T>(hiddenStates.Shape);
-        double qScale = 2.0 * quantileLevel - 1.0; // Map [0,1] → [-1,1]
+        double qScale = 2.0 * quantileLevel - 1.0; // Map [0,1] to [-1,1]
 
         for (int i = 0; i < hiddenStates.Length; i++)
         {
-            // Modulate hidden states by quantile level using a simple scaling
             double h = NumOps.ToDouble(hiddenStates[i]);
             double modulated = h + qScale * Math.Abs(h) * 0.1; // Subtle quantile-dependent shift
             conditioned.Data.Span[i] = NumOps.FromDouble(modulated);

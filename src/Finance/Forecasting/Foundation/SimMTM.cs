@@ -178,8 +178,8 @@ public class SimMTM<T> : TimeSeriesFoundationModelBase<T>
     private void ExtractLayerReferences()
     {
         int idx = 0;
-        // SimMTM block layout: norm(1) + attn_QKV+out(4) + norm(1) + FFN(2) = 8; +dropout=9
-        int layersPerBlock = _dropout > 0 ? 9 : 7;
+        // SimMTM block layout: norm(1) + attn(2) + norm(1) + FFN(2) = 6; with dropout: +2 = 8
+        int layersPerBlock = _dropout > 0 ? 8 : 6;
 
         if (idx < Layers.Count)
             _patchEmbedding = Layers[idx++];

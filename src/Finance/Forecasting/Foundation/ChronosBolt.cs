@@ -339,7 +339,37 @@ public class ChronosBolt<T> : TimeSeriesFoundationModelBase<T>
     /// <inheritdoc/>
     public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
     {
-        return _useNativeMode ? ForwardNative(historicalData) : ForecastOnnx(historicalData);
+        var rawOutput = _useNativeMode ? ForwardNative(historicalData) : ForecastOnnx(historicalData);
+
+        // If no specific quantiles requested, return the median (middle quantile)
+        if (quantiles is null || quantiles.Length == 0)
+        {
+            // Raw output is [horizon * numQuantiles]; extract median (middle index)
+            int medianIdx = _numQuantiles / 2;
+            var median = new Tensor<T>(new[] { _forecastHorizon });
+            for (int t = 0; t < _forecastHorizon && t * _numQuantiles + medianIdx < rawOutput.Length; t++)
+                median.Data.Span[t] = rawOutput[t * _numQuantiles + medianIdx];
+            return median;
+        }
+
+        // Map requested quantile levels to nearest model quantile indices
+        // Model quantiles are evenly spaced: 1/(N+1), 2/(N+1), ..., N/(N+1)
+        var result = new Tensor<T>(new[] { _forecastHorizon * quantiles.Length });
+        for (int q = 0; q < quantiles.Length; q++)
+        {
+            // Find the closest model quantile index for the requested level
+            int bestIdx = 0;
+            double bestDist = double.MaxValue;
+            for (int k = 0; k < _numQuantiles; k++)
+            {
+                double modelQ = (k + 1.0) / (_numQuantiles + 1.0);
+                double dist = Math.Abs(modelQ - quantiles[q]);
+                if (dist < bestDist) { bestDist = dist; bestIdx = k; }
+            }
+            for (int t = 0; t < _forecastHorizon && t * _numQuantiles + bestIdx < rawOutput.Length; t++)
+                result.Data.Span[t * quantiles.Length + q] = rawOutput[t * _numQuantiles + bestIdx];
+        }
+        return result;
     }
 
     /// <inheritdoc/>

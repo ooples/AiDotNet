@@ -189,8 +189,8 @@ public class YingLong<T> : TimeSeriesFoundationModelBase<T>
             _patchEmbedding = Layers[idx++];
 
         _transformerLayers.Clear();
-        // YingLong block layout: norm(1) + attn_QKV+out(4) + norm(1) + FFN(2) = 8; with dropout: +1 = 9
-        int layersPerBlock = _dropout > 0 ? 9 : 7;
+        // YingLong block layout: norm(1) + attn_QKV+out(4) + norm(1) + FFN(2) = 8; with dropout: +2 = 10
+        int layersPerBlock = _dropout > 0 ? 10 : 8;
         int totalTransformerLayers = _numLayers * layersPerBlock;
 
         for (int i = 0; i < totalTransformerLayers && idx < Layers.Count; i++)

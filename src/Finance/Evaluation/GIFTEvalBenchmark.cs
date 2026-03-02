@@ -245,18 +245,22 @@ public class GIFTEvalBenchmark<T>
             if (!double.IsInfinity(mase) && !double.IsNaN(mase))
                 maseScores.Add(mase);
 
-            // Compute CRPS from quantile forecasts
+            // Compute CRPS from quantile forecasts (single call with all quantile levels)
+            var allQuantileForecast = model.Forecast(context, quantileLevels);
             var quantileDict = new Dictionary<double, Tensor<T>>();
-            foreach (double q in quantileLevels)
+            int numQ = quantileLevels.Length;
+            for (int qi = 0; qi < numQ; qi++)
             {
-                var qForecast = model.Forecast(context, new[] { q });
-                if (qForecast.Length < evalLen)
-                    throw new InvalidOperationException(
-                        $"Quantile forecast for q={q:F2} returned {qForecast.Length} values but {evalLen} were expected.");
                 var qSlice = new Tensor<T>(new[] { evalLen });
                 for (int i = 0; i < evalLen; i++)
-                    qSlice.Data.Span[i] = qForecast[i];
-                quantileDict[q] = qSlice;
+                {
+                    // Output layout: [horizon * numQuantiles] with quantile as inner dimension
+                    int srcIdx = i * numQ + qi;
+                    qSlice.Data.Span[i] = srcIdx < allQuantileForecast.Length
+                        ? allQuantileForecast[srcIdx]
+                        : NumOps.Zero;
+                }
+                quantileDict[quantileLevels[qi]] = qSlice;
             }
 
             double crps = ComputeCRPS(quantileDict, actualSlice);
