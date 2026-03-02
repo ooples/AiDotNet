@@ -1,4 +1,5 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
@@ -610,34 +611,38 @@ public class InstantNGP<T> : NeuralNetworkBase<T>, IRadianceField<T>
         _densityLayers.Clear();
         _colorLayers.Clear();
 
-        int hashFeatureDim = _numLevels * _featuresPerLevel;
-        int currentDim = hashFeatureDim;
+        if (Architecture.Layers != null && Architecture.Layers.Count > 0)
+        {
+            foreach (var layer in Architecture.Layers)
+                AddLayerToCollection(layer);
+        }
+        else
+        {
+            foreach (var layer in LayerHelper<T>.CreateInstantNGPLayers(
+                _numLevels, _featuresPerLevel, _mlpNumLayers, _mlpHiddenDim,
+                _featureDim, _colorHiddenDim, _colorNumLayers))
+            {
+                AddLayerToCollection(layer);
+            }
+        }
+
+        // Distribute layers to internal fields
+        int idx = 0;
+
+        // Density MLP layers
         for (int i = 0; i < _mlpNumLayers; i++)
-        {
-            var hidden = new DenseLayer<T>(currentDim, _mlpHiddenDim, activationFunction: new ReLUActivation<T>());
-            _densityLayers.Add(hidden);
-            AddLayerToCollection(hidden);
-            currentDim = _mlpHiddenDim;
-        }
+            _densityLayers.Add((DenseLayer<T>)Layers[idx++]);
 
-        _densityOutputLayer = new DenseLayer<T>(currentDim, 1, activationFunction: new IdentityActivation<T>());
-        AddLayerToCollection(_densityOutputLayer);
+        // Density output + feature layer
+        _densityOutputLayer = (DenseLayer<T>)Layers[idx++];
+        _featureLayer = (DenseLayer<T>)Layers[idx++];
 
-        _featureLayer = new DenseLayer<T>(currentDim, _featureDim, activationFunction: new IdentityActivation<T>());
-        AddLayerToCollection(_featureLayer);
-
-        int colorInputDim = _featureDim + 3;
-        int colorHiddenDim = _colorNumLayers > 0 ? _colorHiddenDim : colorInputDim;
+        // Color MLP layers
         for (int i = 0; i < _colorNumLayers; i++)
-        {
-            int inputDim = i == 0 ? colorInputDim : colorHiddenDim;
-            var hidden = new DenseLayer<T>(inputDim, colorHiddenDim, activationFunction: new ReLUActivation<T>());
-            _colorLayers.Add(hidden);
-            AddLayerToCollection(hidden);
-        }
+            _colorLayers.Add((DenseLayer<T>)Layers[idx++]);
 
-        _colorOutputLayer = new DenseLayer<T>(colorHiddenDim, 3, activationFunction: new IdentityActivation<T>());
-        AddLayerToCollection(_colorOutputLayer);
+        // Color output
+        _colorOutputLayer = (DenseLayer<T>)Layers[idx++];
     }
 
     public (Tensor<T> rgb, Tensor<T> density) QueryField(Tensor<T> positions, Tensor<T> viewingDirections)

@@ -147,6 +147,26 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
     /// </summary>
     private readonly bool _supportsImageConditioning;
 
+    /// <summary>
+    /// Latent spatial height.
+    /// </summary>
+    private readonly int _inputHeight;
+
+    /// <summary>
+    /// Latent spatial width.
+    /// </summary>
+    private readonly int _inputWidth;
+
+    /// <summary>
+    /// Typical number of video frames for temporal attention.
+    /// </summary>
+    private readonly int _numFrames;
+
+    /// <summary>
+    /// CLIP text token sequence length for cross-attention.
+    /// </summary>
+    private readonly int _clipTokenLength;
+
     /// <inheritdoc />
     public override int InputChannels => _inputChannels;
 
@@ -194,6 +214,10 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
     /// <param name="contextDim">Context dimension for cross-attention (default: 1024).</param>
     /// <param name="numHeads">Number of attention heads (default: 8).</param>
     /// <param name="supportsImageConditioning">Whether to support image conditioning (default: true).</param>
+    /// <param name="inputHeight">Latent spatial height (default: 64 for 512/8).</param>
+    /// <param name="inputWidth">Latent spatial width (default: 64 for 512/8).</param>
+    /// <param name="numFrames">Typical number of video frames for temporal attention (default: 25).</param>
+    /// <param name="clipTokenLength">CLIP text token sequence length for cross-attention (default: 77).</param>
     /// <param name="lossFunction">Optional loss function (default: MSE).</param>
     /// <param name="seed">Optional random seed for reproducibility.</param>
     public VideoUNetPredictor(
@@ -207,6 +231,10 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
         int contextDim = 1024,
         int numHeads = 8,
         bool supportsImageConditioning = true,
+        int inputHeight = 64,
+        int inputWidth = 64,
+        int numFrames = 25,
+        int clipTokenLength = 77,
         ILossFunction<T>? lossFunction = null,
         int? seed = null)
         : base(lossFunction, seed)
@@ -222,6 +250,10 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
         _numHeads = numHeads;
         _timeEmbeddingDim = baseChannels * 4;
         _supportsImageConditioning = supportsImageConditioning;
+        _inputHeight = inputHeight;
+        _inputWidth = inputWidth;
+        _numFrames = numFrames;
+        _clipTokenLength = clipTokenLength;
 
         _encoderBlocks = new List<VideoBlock>();
         _middleBlocks = new List<VideoBlock>();
@@ -241,8 +273,8 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
             inputDepth: _inputChannels,
             outputDepth: _baseChannels,
             kernelSize: 3,
-            inputHeight: 64,
-            inputWidth: 64,
+            inputHeight: _inputHeight,
+            inputWidth: _inputWidth,
             stride: 1,
             padding: 1,
             activationFunction: new IdentityActivation<T>());
@@ -265,8 +297,8 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
                 inputDepth: _inputChannels,
                 outputDepth: _baseChannels,
                 kernelSize: 1,
-                inputHeight: 64,
-                inputWidth: 64,
+                inputHeight: _inputHeight,
+                inputWidth: _inputWidth,
                 stride: 1,
                 padding: 0,
                 activationFunction: new IdentityActivation<T>());
@@ -355,8 +387,8 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
             inputDepth: _baseChannels,
             outputDepth: _outputChannels,
             kernelSize: 3,
-            inputHeight: 64,
-            inputWidth: 64,
+            inputHeight: _inputHeight,
+            inputWidth: _inputWidth,
             stride: 1,
             padding: 1,
             activationFunction: new IdentityActivation<T>());
@@ -818,7 +850,7 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
     private ILayer<T> CreateSpatialAttention(int channels)
     {
         return new MultiHeadAttentionLayer<T>(
-            sequenceLength: 64 * 64,
+            sequenceLength: _inputHeight * _inputWidth,
             embeddingDimension: channels,
             headCount: _numHeads,
             activationFunction: new IdentityActivation<T>());
@@ -827,7 +859,7 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
     private ILayer<T> CreateTemporalAttention(int channels)
     {
         return new MultiHeadAttentionLayer<T>(
-            sequenceLength: 25, // Typical frame count
+            sequenceLength: _numFrames,
             embeddingDimension: channels,
             headCount: _numHeads,
             activationFunction: new IdentityActivation<T>());
@@ -836,7 +868,7 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
     private ILayer<T> CreateCrossAttention(int channels)
     {
         return new MultiHeadAttentionLayer<T>(
-            sequenceLength: 77, // CLIP token length
+            sequenceLength: _clipTokenLength,
             embeddingDimension: channels,
             headCount: _numHeads,
             activationFunction: new IdentityActivation<T>());
@@ -848,8 +880,8 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
             inputDepth: channels,
             outputDepth: channels,
             kernelSize: 3,
-            inputHeight: 64,
-            inputWidth: 64,
+            inputHeight: _inputHeight,
+            inputWidth: _inputWidth,
             stride: 2,
             padding: 1,
             activationFunction: new IdentityActivation<T>());
@@ -861,7 +893,7 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
         // With stride=2, kernel=4, padding=1: output = (input - 1) * 2 + 4 - 2*1 = 2*input
         // This doubles the spatial dimensions
         return new DeconvolutionalLayer<T>(
-            inputShape: new[] { 1, channels, 32, 32 },  // [batch, channels, height, width]
+            inputShape: new[] { 1, channels, _inputHeight / 2, _inputWidth / 2 },
             outputDepth: channels,
             kernelSize: 4,
             stride: 2,
@@ -1020,6 +1052,10 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
             _contextDim,
             _numHeads,
             _supportsImageConditioning,
+            _inputHeight,
+            _inputWidth,
+            _numFrames,
+            _clipTokenLength,
             LossFunction);
 
         clone.SetParameters(GetParameters());

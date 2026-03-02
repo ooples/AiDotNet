@@ -119,6 +119,11 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     private readonly double _mlpRatio;
 
     /// <summary>
+    /// Latent spatial size (height = width) for computing patch count.
+    /// </summary>
+    private readonly int _latentSpatialSize;
+
+    /// <summary>
     /// The neural network architecture configuration, if provided.
     /// </summary>
     private readonly NeuralNetworkArchitecture<T>? _architecture;
@@ -208,6 +213,7 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     /// <param name="patchSize">Patch size for tokenization (default: 2).</param>
     /// <param name="contextDim">Conditioning context dimension (default: 1024).</param>
     /// <param name="mlpRatio">MLP hidden dimension ratio (default: 4.0).</param>
+    /// <param name="latentSpatialSize">Latent spatial size for computing patch count (default: 32 for 256/8).</param>
     /// <param name="numClasses">Number of classes for class conditioning (0 for text-only).</param>
     /// <param name="customBlocks">
     /// Optional custom transformer blocks. If provided, these blocks are used instead of creating
@@ -244,6 +250,7 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
         int patchSize = 2,
         int contextDim = 1024,
         double mlpRatio = 4.0,
+        int latentSpatialSize = 32,
         int numClasses = 0,
         List<DiTBlock>? customBlocks = null,
         ILossFunction<T>? lossFunction = null,
@@ -258,6 +265,7 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
         _patchSize = patchSize;
         _contextDim = contextDim;
         _mlpRatio = mlpRatio;
+        _latentSpatialSize = latentSpatialSize;
 
         _blocks = new List<DiTBlock>();
 
@@ -388,10 +396,10 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     /// </remarks>
     private SelfAttentionLayer<T> CreateAttentionLayer()
     {
-        // Default sequence length for 32x32 latent with patch size 2 = 256 patches
-        // Actual sequence length is handled dynamically in forward pass
+        // Compute sequence length from latent spatial size and patch size
+        var numPatches = (_latentSpatialSize / _patchSize) * (_latentSpatialSize / _patchSize);
         return new SelfAttentionLayer<T>(
-            sequenceLength: 256,
+            sequenceLength: numPatches,
             embeddingDimension: _hiddenSize,
             headCount: _numHeads,
             activationFunction: null);
@@ -1142,7 +1150,8 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
             numHeads: _numHeads,
             patchSize: _patchSize,
             contextDim: _contextDim,
-            mlpRatio: _mlpRatio);
+            mlpRatio: _mlpRatio,
+            latentSpatialSize: _latentSpatialSize);
 
         // Preserve trained weights
         clone.SetParameters(GetParameters());
