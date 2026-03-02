@@ -1,4 +1,5 @@
 using System;
+using AiDotNet.Enums;
 
 namespace AiDotNet.Models.Options;
 
@@ -77,6 +78,8 @@ public class TimerOptions<T> : TimeSeriesRegressionOptions<T>
         MaskRatio = other.MaskRatio;
         UseAutoregressiveDecoding = other.UseAutoregressiveDecoding;
         GenerationTemperature = other.GenerationTemperature;
+        MaxContextLength = other.MaxContextLength;
+        ModelSize = other.ModelSize;
     }
 
     /// <summary>
@@ -204,4 +207,21 @@ public class TimerOptions<T> : TimeSeriesRegressionOptions<T>
     /// </para>
     /// </remarks>
     public double GenerationTemperature { get; set; } = 1.0;
+
+    /// <summary>
+    /// Gets or sets the maximum context length for Timer-XL.
+    /// </summary>
+    /// <value>Defaults to 4096. Timer-XL supports extended context for long-range dependencies.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Timer-XL extends the context window to 4,096 time steps,
+    /// allowing the model to leverage longer historical data for improved long-horizon forecasting.
+    /// </para>
+    /// </remarks>
+    public int MaxContextLength { get; set; } = 4096;
+
+    /// <summary>
+    /// Gets or sets the model size variant for Timer-XL.
+    /// </summary>
+    /// <value>Defaults to <see cref="FoundationModelSize.Base"/>.</value>
+    public FoundationModelSize ModelSize { get; set; } = FoundationModelSize.Base;
 }
