@@ -46,7 +46,7 @@ public class ReferenceOnlyModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override int LatentChannels => LATENT_CHANNELS;
     /// <inheritdoc />
-    public override int ParameterCount => _baseUNet.ParameterCount;
+    public override int ParameterCount => _baseUNet.ParameterCount + _vae.ParameterCount;
 
     /// <summary>
     /// Initializes a new Reference-Only model.
@@ -87,10 +87,31 @@ public class ReferenceOnlyModel<T> : LatentDiffusionModelBase<T>
     }
 
     /// <inheritdoc />
-    public override Vector<T> GetParameters() => _baseUNet.GetParameters();
+    public override Vector<T> GetParameters()
+    {
+        var unetParams = _baseUNet.GetParameters();
+        var vaeParams = _vae.GetParameters();
+        var combined = new Vector<T>(unetParams.Length + vaeParams.Length);
+        for (int i = 0; i < unetParams.Length; i++) combined[i] = unetParams[i];
+        for (int i = 0; i < vaeParams.Length; i++) combined[unetParams.Length + i] = vaeParams[i];
+        return combined;
+    }
 
     /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters) => _baseUNet.SetParameters(parameters);
+    public override void SetParameters(Vector<T> parameters)
+    {
+        int o = 0;
+        var uc = _baseUNet.ParameterCount;
+        var unetArr = new T[uc];
+        for (int i = 0; i < uc; i++) unetArr[i] = parameters[o + i];
+        _baseUNet.SetParameters(new Vector<T>(unetArr));
+        o += uc;
+
+        var vc = _vae.ParameterCount;
+        var vaeArr = new T[vc];
+        for (int i = 0; i < vc; i++) vaeArr[i] = parameters[o + i];
+        _vae.SetParameters(new Vector<T>(vaeArr));
+    }
 
     /// <inheritdoc />
     public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();

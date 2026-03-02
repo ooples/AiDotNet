@@ -249,14 +249,26 @@ public class UViTNoisePredictor<T> : NoisePredictorBase<T>
             {
                 patches = Engine.TensorBroadcastAdd<T>(patches, _posEmbed);
             }
-            else if (seqLen < posLen)
+            else
             {
-                // Slice position embedding to match actual sequence length
+                // Slice position embedding to match actual sequence length (seqLen < posLen)
+                // or apply to the first posLen tokens only (seqLen > posLen)
+                int applyLen = Math.Min(seqLen, posLen);
                 int hiddenDim = _posEmbed.Shape[2];
-                var slicedData = new T[seqLen * hiddenDim];
-                _posEmbed.AsSpan().Slice(0, seqLen * hiddenDim).CopyTo(slicedData);
-                var slicedPosEmbed = new Tensor<T>(new[] { 1, seqLen, hiddenDim }, new Vector<T>(slicedData));
-                patches = Engine.TensorBroadcastAdd<T>(patches, slicedPosEmbed);
+                var slicedPosData = new T[applyLen * hiddenDim];
+                _posEmbed.AsSpan().Slice(0, applyLen * hiddenDim).CopyTo(slicedPosData);
+                var slicedPosEmbed = new Tensor<T>(new[] { 1, applyLen, hiddenDim }, new Vector<T>(slicedPosData));
+
+                // Extract the first applyLen tokens, add position embeddings, then recombine
+                var patchSpan = patches.AsSpan();
+                var resultData = new T[seqLen * hiddenDim];
+                patchSpan.CopyTo(resultData);
+                var posSpan = slicedPosEmbed.AsSpan();
+                for (int i = 0; i < applyLen * hiddenDim; i++)
+                {
+                    resultData[i] = NumOps.Add(resultData[i], posSpan[i]);
+                }
+                patches = new Tensor<T>(patches.Shape, new Vector<T>(resultData));
             }
         }
 
