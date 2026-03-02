@@ -108,7 +108,7 @@ public class DynamicTaskSampler<T, TInput, TOutput> : ITaskSampler<T, TInput, TO
         if (_feedbackCount == 0 || _rng.NextDouble() < _explorationRate)
         {
             var episode = _dataset.SampleEpisode(NumWays, NumShots, NumQueryPerClass);
-            episode.Difficulty = _runningMeanLoss;
+            episode.Difficulty = Math.Max(0.0, Math.Min(1.0, _runningMeanLoss));
             return episode;
         }
 

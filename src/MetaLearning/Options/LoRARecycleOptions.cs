@@ -69,7 +69,8 @@ public class LoRARecycleOptions<T, TInput, TOutput> : ModelOptions, IMetaLearner
     public LoRARecycleOptions(IFullModel<T, TInput, TOutput> metaModel)
     { Guard.NotNull(metaModel); MetaModel = metaModel; }
 
-    public bool IsValid() => MetaModel != null && OuterLearningRate > 0 && MetaBatchSize > 0 && Rank > 0 && NumRecycledAdapters > 0;
+    public bool IsValid() => MetaModel != null && OuterLearningRate > 0 && MetaBatchSize > 0 &&
+        Rank > 0 && NumRecycledAdapters > 0 && PrototypeDim > 0 && SelectionTemperature > 0 && KLWeight >= 0;
     public IMetaLearnerOptions<T> Clone() => new LoRARecycleOptions<T, TInput, TOutput>(MetaModel)
     {
         LossFunction = LossFunction, MetaOptimizer = MetaOptimizer, InnerOptimizer = InnerOptimizer,

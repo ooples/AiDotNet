@@ -13,6 +13,7 @@ namespace AiDotNet.MetaLearning.Data;
 public class EpisodeCache<T, TInput, TOutput>
 {
     private readonly int _capacity;
+    private readonly object _syncRoot = new();
     private readonly LinkedList<IEpisode<T, TInput, TOutput>> _order;
     private readonly Dictionary<int, LinkedListNode<IEpisode<T, TInput, TOutput>>> _lookup;
 
@@ -55,19 +56,22 @@ public class EpisodeCache<T, TInput, TOutput>
     /// <returns>True if the episode was found in the cache.</returns>
     public bool TryGet(int episodeId, out IEpisode<T, TInput, TOutput>? episode)
     {
-        if (_lookup.TryGetValue(episodeId, out var node))
+        lock (_syncRoot)
         {
-            // Move to front (most recently used)
-            _order.Remove(node);
-            _order.AddFirst(node);
-            episode = node.Value;
-            HitCount++;
-            return true;
-        }
+            if (_lookup.TryGetValue(episodeId, out var node))
+            {
+                // Move to front (most recently used)
+                _order.Remove(node);
+                _order.AddFirst(node);
+                episode = node.Value;
+                HitCount++;
+                return true;
+            }
 
-        episode = null;
-        MissCount++;
-        return false;
+            episode = null;
+            MissCount++;
+            return false;
+        }
     }
 
     /// <summary>
@@ -76,27 +80,30 @@ public class EpisodeCache<T, TInput, TOutput>
     /// <param name="episode">The episode to cache.</param>
     public void Put(IEpisode<T, TInput, TOutput> episode)
     {
-        if (_lookup.TryGetValue(episode.EpisodeId, out var existing))
+        lock (_syncRoot)
         {
-            // Already cached — move to front
-            _order.Remove(existing);
-            _order.AddFirst(existing);
-            return;
-        }
-
-        // Evict LRU if at capacity
-        if (_lookup.Count >= _capacity)
-        {
-            var last = _order.Last;
-            if (last != null)
+            if (_lookup.TryGetValue(episode.EpisodeId, out var existing))
             {
-                _lookup.Remove(last.Value.EpisodeId);
-                _order.RemoveLast();
+                // Already cached — move to front
+                _order.Remove(existing);
+                _order.AddFirst(existing);
+                return;
             }
-        }
 
-        var node = _order.AddFirst(episode);
-        _lookup[episode.EpisodeId] = node;
+            // Evict LRU if at capacity
+            if (_lookup.Count >= _capacity)
+            {
+                var last = _order.Last;
+                if (last != null)
+                {
+                    _lookup.Remove(last.Value.EpisodeId);
+                    _order.RemoveLast();
+                }
+            }
+
+            var node = _order.AddFirst(episode);
+            _lookup[episode.EpisodeId] = node;
+        }
     }
 
     /// <summary>
@@ -116,10 +123,13 @@ public class EpisodeCache<T, TInput, TOutput>
     /// </summary>
     public void Clear()
     {
-        _order.Clear();
-        _lookup.Clear();
-        HitCount = 0;
-        MissCount = 0;
+        lock (_syncRoot)
+        {
+            _order.Clear();
+            _lookup.Clear();
+            HitCount = 0;
+            MissCount = 0;
+        }
     }
 
     /// <summary>

@@ -1,4 +1,4 @@
-using AiDotNet.MetaLearning.Data;
+using AiDotNet.MetaLearning.Data; // TaskBatch<T,TInput,TOutput> lives here
 
 namespace AiDotNet.Interfaces;
 
