@@ -267,6 +267,42 @@ public abstract class MetaLearnerBase<T, TInput, TOutput> : IMetaLearner<T, TInp
         );
     }
 
+    /// <summary>
+    /// Performs a single meta-training step using a task sampler.
+    /// This overload allows the new <see cref="ITaskSampler{T, TInput, TOutput}"/>
+    /// infrastructure to be used alongside the existing data-loader-based workflow.
+    /// </summary>
+    /// <param name="sampler">The task sampler to draw a batch from.</param>
+    /// <param name="batchSize">Number of tasks to sample.</param>
+    /// <returns>A result containing the meta-loss and step metadata.</returns>
+    public virtual MetaTrainingStepResult<T> MetaTrainStep(
+        ITaskSampler<T, TInput, TOutput> sampler,
+        int batchSize)
+    {
+        Guard.NotNull(sampler);
+        if (batchSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(batchSize), batchSize, "Batch size must be a positive integer.");
+
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+        var taskBatch = sampler.SampleBatch(batchSize);
+        if (taskBatch.Tasks.Length == 0)
+            throw new InvalidOperationException("Sampler returned an empty task batch.");
+        var metaLoss = MetaTrain(taskBatch);
+        _currentIteration++;
+
+        stopwatch.Stop();
+
+        return new MetaTrainingStepResult<T>(
+            metaLoss: metaLoss,
+            taskLoss: metaLoss,
+            accuracy: NumOps.Zero,
+            numTasks: taskBatch.Tasks.Length,
+            iteration: _currentIteration,
+            timeMs: stopwatch.Elapsed.TotalMilliseconds
+        );
+    }
+
     /// <inheritdoc/>
     public virtual MetaTrainingResult<T> Train()
     {
@@ -1156,6 +1192,229 @@ public abstract class MetaLearnerBase<T, TInput, TOutput> : IMetaLearner<T, TInp
 
         return NumOps.Divide(sum, NumOps.FromDouble(values.Count));
     }
+
+    #region Shared Algorithm Utilities
+
+    /// <summary>
+    /// Concatenates two nullable vectors into a single vector.
+    /// Returns the non-null vector if one is null, or null if both are null.
+    /// </summary>
+    protected Vector<T>? ConcatVectors(Vector<T>? a, Vector<T>? b)
+    {
+        if (a == null) return b;
+        if (b == null) return a;
+        var result = new Vector<T>(a.Length + b.Length);
+        for (int i = 0; i < a.Length; i++) result[i] = a[i];
+        for (int i = 0; i < b.Length; i++) result[a.Length + i] = b[i];
+        return result;
+    }
+
+    /// <summary>
+    /// Scales every element of a parameter vector by a scalar factor.
+    /// </summary>
+    protected Vector<T> ScaleVector(Vector<T> parameters, double scale)
+    {
+        var scaled = new Vector<T>(parameters.Length);
+        var scaleT = NumOps.FromDouble(scale);
+        for (int i = 0; i < parameters.Length; i++)
+            scaled[i] = NumOps.Multiply(parameters[i], scaleT);
+        return scaled;
+    }
+
+    /// <summary>
+    /// Computes cosine similarity between two Vector&lt;T&gt; instances.
+    /// </summary>
+    protected double CosineSimilarity(Vector<T> a, Vector<T> b, double epsilon = 1e-8)
+    {
+        double dot = 0, normA = 0, normB = 0;
+        int len = Math.Min(a.Length, b.Length);
+        for (int i = 0; i < len; i++)
+        {
+            double ai = NumOps.ToDouble(a[i]);
+            double bi = NumOps.ToDouble(b[i]);
+            dot += ai * bi;
+            normA += ai * ai;
+            normB += bi * bi;
+        }
+        return dot / (Math.Sqrt(normA) * Math.Sqrt(normB) + epsilon);
+    }
+
+    /// <summary>
+    /// Computes the squared L2 norm of a Vector&lt;T&gt;.
+    /// </summary>
+    protected double L2NormSquared(Vector<T> vector)
+    {
+        double sum = 0;
+        for (int i = 0; i < vector.Length; i++)
+        {
+            double v = NumOps.ToDouble(vector[i]);
+            sum += v * v;
+        }
+        return sum;
+    }
+
+    /// <summary>
+    /// Returns a new L2-normalized copy of a Vector&lt;T&gt;.
+    /// </summary>
+    protected Vector<T> L2Normalize(Vector<T> vector, double epsilon = 1e-10)
+    {
+        double norm = 0;
+        for (int i = 0; i < vector.Length; i++)
+        {
+            double v = NumOps.ToDouble(vector[i]);
+            norm += v * v;
+        }
+        norm = Math.Sqrt(norm) + epsilon;
+        var result = new Vector<T>(vector.Length);
+        for (int i = 0; i < vector.Length; i++)
+            result[i] = NumOps.FromDouble(NumOps.ToDouble(vector[i]) / norm);
+        return result;
+    }
+
+    /// <summary>
+    /// Compresses a Vector&lt;T&gt; into a smaller Vector&lt;T&gt; of target dimension using bucket averaging with tanh.
+    /// Used for gradient compression and embedding.
+    /// </summary>
+    protected Vector<T> CompressVector(Vector<T> vector, int targetDim)
+    {
+        var result = new Vector<T>(targetDim);
+        int bucketSize = Math.Max(1, vector.Length / targetDim);
+        for (int e = 0; e < targetDim; e++)
+        {
+            double sum = 0;
+            int start = e * bucketSize;
+            for (int d = start; d < start + bucketSize && d < vector.Length; d++)
+                sum += NumOps.ToDouble(vector[d]);
+            result[e] = NumOps.FromDouble(Math.Tanh(sum / bucketSize));
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Computes softmax over a Vector&lt;T&gt; of logits using the max-subtraction trick for numerical stability.
+    /// </summary>
+    protected Vector<T> Softmax(Vector<T> logits)
+    {
+        double max = double.NegativeInfinity;
+        for (int i = 0; i < logits.Length; i++)
+        {
+            double v = NumOps.ToDouble(logits[i]);
+            if (v > max) max = v;
+        }
+
+        var result = new Vector<T>(logits.Length);
+        double sumExp = 0;
+        var exps = new double[logits.Length];
+        for (int i = 0; i < logits.Length; i++)
+        {
+            exps[i] = Math.Exp(NumOps.ToDouble(logits[i]) - max);
+            sumExp += exps[i];
+        }
+        for (int i = 0; i < logits.Length; i++)
+            result[i] = NumOps.FromDouble(exps[i] / (sumExp + 1e-10));
+        return result;
+    }
+
+    /// <summary>
+    /// Samples from a standard normal distribution using the Box-Muller transform.
+    /// </summary>
+    protected double SampleNormal(double mean = 0, double stddev = 1)
+    {
+        double u1 = 1.0 - RandomGenerator.NextDouble();
+        double u2 = RandomGenerator.NextDouble();
+        double z = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
+        return mean + stddev * z;
+    }
+
+    /// <summary>
+    /// Samples from a Gamma distribution using the Marsaglia-Tsang method.
+    /// </summary>
+    protected double SampleGamma(double shape, double scale = 1.0)
+    {
+        if (shape >= 1.0)
+        {
+            double d = shape - 1.0 / 3.0;
+            double c = 1.0 / Math.Sqrt(9.0 * d);
+            while (true)
+            {
+                double u1 = Math.Max(1e-10, RandomGenerator.NextDouble());
+                double u2 = RandomGenerator.NextDouble();
+                double z = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
+                double v = 1.0 + c * z;
+                if (v > 0)
+                {
+                    v = v * v * v;
+                    double u3 = Math.Max(1e-10, RandomGenerator.NextDouble());
+                    if (Math.Log(u3) < 0.5 * z * z + d - d * v + d * Math.Log(v))
+                        return d * v * scale;
+                }
+            }
+        }
+        else
+        {
+            double g = SampleGamma(shape + 1.0, 1.0);
+            return g * Math.Pow(Math.Max(1e-10, RandomGenerator.NextDouble()), 1.0 / shape) * scale;
+        }
+    }
+
+    /// <summary>
+    /// Samples from a Beta distribution using the Gamma distribution trick:
+    /// Beta(a,b) = Gamma(a) / (Gamma(a) + Gamma(b)).
+    /// </summary>
+    protected double SampleBeta(double alpha, double beta)
+    {
+        double x = SampleGamma(alpha);
+        double y = SampleGamma(beta);
+        return x / (x + y + 1e-10);
+    }
+
+    /// <summary>
+    /// Applies the standard outer-loop meta-update: averages meta-gradients and updates parameters.
+    /// </summary>
+    protected void ApplyOuterUpdate(Vector<T> initParams, List<Vector<T>> metaGradients, double outerLR)
+    {
+        MetaModel.SetParameters(initParams);
+        if (metaGradients.Count > 0)
+            MetaModel.SetParameters(ApplyGradients(initParams, AverageVectors(metaGradients), outerLR));
+    }
+
+    /// <summary>
+    /// Performs the standard MAML-style inner loop: K gradient steps on support data starting from initParams.
+    /// Returns the adapted parameter vector.
+    /// </summary>
+    protected virtual Vector<T> StandardInnerAdapt(
+        Vector<T> initParams,
+        IMetaLearningTask<T, TInput, TOutput> task,
+        int steps,
+        double innerLR)
+    {
+        var adaptedParams = initParams;
+        for (int step = 0; step < steps; step++)
+        {
+            MetaModel.SetParameters(adaptedParams);
+            var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
+            adaptedParams = ApplyGradients(adaptedParams, grad, innerLR);
+        }
+        return adaptedParams;
+    }
+
+    /// <summary>
+    /// Computes the standard auxiliary loss for SPSA updates: average query loss across all tasks.
+    /// </summary>
+    protected double StandardAuxLoss(TaskBatch<T, TInput, TOutput> taskBatch)
+    {
+        var ip = MetaModel.GetParameters();
+        double total = 0;
+        foreach (var t in taskBatch.Tasks)
+        {
+            MetaModel.SetParameters(ip);
+            total += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(t.QueryInput), t.QueryOutput));
+        }
+        MetaModel.SetParameters(ip);
+        return total / Math.Max(taskBatch.Tasks.Length, 1);
+    }
+
+    #endregion
 
     /// <summary>
     /// Clones the meta-model for task-specific adaptation.

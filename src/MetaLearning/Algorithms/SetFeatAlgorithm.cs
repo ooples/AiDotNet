@@ -6,6 +6,7 @@ using AiDotNet.MetaLearning.Options;
 using AiDotNet.Models;
 using AiDotNet.Models.Results;
 using AiDotNet.Tensors;
+using AiDotNet.Data.Structures;
 
 namespace AiDotNet.MetaLearning.Algorithms;
 
@@ -136,12 +137,7 @@ public class SetFeatAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
         }
 
         // Update backbone
-        MetaModel.SetParameters(initParams);
-        if (metaGradients.Count > 0)
-        {
-            var avgGrad = AverageVectors(metaGradients);
-            MetaModel.SetParameters(ApplyGradients(initParams, avgGrad, _setFeatOptions.OuterLearningRate));
-        }
+        ApplyOuterUpdate(initParams, metaGradients, _setFeatOptions.OuterLearningRate);
 
         // Update set encoder and cross-attention via multi-sample SPSA
         UpdateAuxiliaryParamsSPSA(taskBatch, ref _setEncoderParams, _setFeatOptions.OuterLearningRate, ComputeAuxLoss);

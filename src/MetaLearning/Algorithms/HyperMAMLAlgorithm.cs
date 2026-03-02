@@ -6,6 +6,7 @@ using AiDotNet.MetaLearning.Options;
 using AiDotNet.Models;
 using AiDotNet.Models.Results;
 using AiDotNet.Tensors;
+using AiDotNet.Data.Structures;
 
 namespace AiDotNet.MetaLearning.Algorithms;
 
@@ -191,12 +192,7 @@ public class HyperMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
         }
 
         // Outer loop update
-        MetaModel.SetParameters(initParams);
-        if (metaGradients.Count > 0)
-        {
-            var avgGrad = AverageVectors(metaGradients);
-            MetaModel.SetParameters(ApplyGradients(initParams, avgGrad, _hyperMAMLOptions.OuterLearningRate));
-        }
+        ApplyOuterUpdate(initParams, metaGradients, _hyperMAMLOptions.OuterLearningRate);
 
         // Update hypernetwork via SPSA
         UpdateAuxiliaryParamsSPSA(taskBatch, ref _hypernetParams, _hyperMAMLOptions.OuterLearningRate, ComputeAuxLoss);

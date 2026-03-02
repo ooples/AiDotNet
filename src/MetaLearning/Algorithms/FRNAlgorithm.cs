@@ -6,6 +6,7 @@ using AiDotNet.MetaLearning.Options;
 using AiDotNet.Models;
 using AiDotNet.Models.Results;
 using AiDotNet.Tensors;
+using AiDotNet.Data.Structures;
 
 namespace AiDotNet.MetaLearning.Algorithms;
 
@@ -227,12 +228,7 @@ public class FRNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
             metaGradients.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
         }
 
-        MetaModel.SetParameters(initParams);
-        if (metaGradients.Count > 0)
-        {
-            var avgGrad = AverageVectors(metaGradients);
-            MetaModel.SetParameters(ApplyGradients(initParams, avgGrad, _frnOptions.OuterLearningRate));
-        }
+        ApplyOuterUpdate(initParams, metaGradients, _frnOptions.OuterLearningRate);
 
         return ComputeMean(losses);
     }

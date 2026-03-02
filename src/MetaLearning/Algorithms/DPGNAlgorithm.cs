@@ -6,6 +6,7 @@ using AiDotNet.MetaLearning.Options;
 using AiDotNet.Models;
 using AiDotNet.Models.Results;
 using AiDotNet.Tensors;
+using AiDotNet.Data.Structures;
 
 namespace AiDotNet.MetaLearning.Algorithms;
 
@@ -144,12 +145,7 @@ public class DPGNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
         }
 
         // Update backbone
-        MetaModel.SetParameters(initParams);
-        if (metaGradients.Count > 0)
-        {
-            var avgGrad = AverageVectors(metaGradients);
-            MetaModel.SetParameters(ApplyGradients(initParams, avgGrad, _dpgnOptions.OuterLearningRate));
-        }
+        ApplyOuterUpdate(initParams, metaGradients, _dpgnOptions.OuterLearningRate);
 
         // Update dual graph params via multi-sample SPSA
         UpdateAuxiliaryParamsSPSA(taskBatch, ref _pointGraphParams, _dpgnOptions.OuterLearningRate, ComputeAuxLoss);

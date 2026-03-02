@@ -6,6 +6,7 @@ using AiDotNet.MetaLearning.Options;
 using AiDotNet.Models;
 using AiDotNet.Models.Results;
 using AiDotNet.Tensors;
+using AiDotNet.Data.Structures;
 
 namespace AiDotNet.MetaLearning.Algorithms;
 
@@ -164,12 +165,7 @@ public class FewTUREAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
         }
 
         // Update backbone
-        MetaModel.SetParameters(initParams);
-        if (metaGradients.Count > 0)
-        {
-            var avgGrad = AverageVectors(metaGradients);
-            MetaModel.SetParameters(ApplyGradients(initParams, avgGrad, _fewTUREOptions.OuterLearningRate));
-        }
+        ApplyOuterUpdate(initParams, metaGradients, _fewTUREOptions.OuterLearningRate);
 
         // Update uncertainty module via SPSA
         UpdateAuxiliaryParamsSPSA(taskBatch, ref _uncertaintyParams, _fewTUREOptions.OuterLearningRate, ComputeAuxLoss);
