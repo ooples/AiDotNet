@@ -32,7 +32,7 @@ namespace AiDotNet.ReinforcementLearning.Agents;
 /// their own unique learning logic while sharing common functionality.
 /// </para>
 /// </remarks>
-public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IConfigurableModel<T>, IDisposable
+public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IConfigurableModel<T>, IModelShape, IDisposable
 {
     /// <summary>
     /// Numeric operations provider for type T.
@@ -293,17 +293,46 @@ public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IConfigur
     /// </summary>
     public abstract void ApplyGradients(Vector<T> gradients, T learningRate);
 
-    /// <summary>
-    /// Saves the agent's state to a file.
-    /// </summary>
-    /// <param name="filepath">Path to save the agent.</param>
-    public abstract void SaveModel(string filepath);
+    /// <inheritdoc/>
+    public virtual int[] GetInputShape()
+    {
+        return new[] { FeatureCount };
+    }
+
+    /// <inheritdoc/>
+    public virtual int[] GetOutputShape()
+    {
+        return new[] { 1 };
+    }
 
     /// <summary>
-    /// Loads the agent's state from a file.
+    /// Saves the agent's state to a file with an AIMF envelope header.
+    /// </summary>
+    /// <param name="filepath">Path to save the agent.</param>
+    public virtual void SaveModel(string filepath)
+    {
+        byte[] serializedData = Serialize();
+        byte[] envelopedData = ModelFileHeader.WrapWithHeader(
+            serializedData, this, GetInputShape(), GetOutputShape(), SerializationFormat.Binary);
+        File.WriteAllBytes(filepath, envelopedData);
+    }
+
+    /// <summary>
+    /// Loads the agent's state from a file, stripping the AIMF header if present.
     /// </summary>
     /// <param name="filepath">Path to load the agent from.</param>
-    public abstract void LoadModel(string filepath);
+    public virtual void LoadModel(string filepath)
+    {
+        byte[] data = File.ReadAllBytes(filepath);
+
+        // Strip AIMF envelope header if present, falling back to legacy format
+        if (ModelFileHeader.HasHeader(data))
+        {
+            data = ModelFileHeader.ExtractPayload(data);
+        }
+
+        Deserialize(data);
+    }
 
     /// <summary>
     /// Gets the current training metrics.
