@@ -33202,22 +33202,31 @@ public static class LayerHelper<T>
         NeuralNetworkArchitecture<T> architecture,
         int contextLength = 2048, int forecastHorizon = 96,
         int stateDim = 64, int hiddenDim = 256, int numLayers = 8,
-        double dropout = 0.1)
+        double dropout = 0.1, int ssmRank = 16, bool useDiscretization = true)
     {
         if (contextLength < 1) throw new ArgumentOutOfRangeException(nameof(contextLength));
         if (forecastHorizon < 1) throw new ArgumentOutOfRangeException(nameof(forecastHorizon));
 
+        // Use SSM rank for low-rank state projections (B and C matrices)
+        int rankDim = Math.Min(ssmRank, stateDim);
+
         // Input projection
         yield return new DenseLayer<T>(inputSize: contextLength, outputSize: hiddenDim, activationFunction: null);
 
-        // SSM blocks (approximated with dense layers for the A,B,C,D matrices)
+        // SSM blocks with low-rank B/C projections controlled by ssmRank
         for (int layer = 0; layer < numLayers; layer++)
         {
             yield return new BatchNormalizationLayer<T>(hiddenDim);
-            // SSM: input -> state projection (B), state dynamics (A), output projection (C), skip (D)
-            yield return new DenseLayer<T>(inputSize: hiddenDim, outputSize: stateDim, activationFunction: null); // B
-            yield return new DenseLayer<T>(inputSize: stateDim, outputSize: hiddenDim, activationFunction: new GELUActivation<T>()); // C * A
-            yield return new DenseLayer<T>(inputSize: hiddenDim, outputSize: hiddenDim, activationFunction: null); // skip connection D
+            // SSM: B matrix (input -> low-rank state projection)
+            yield return new DenseLayer<T>(inputSize: hiddenDim, outputSize: rankDim, activationFunction: null);
+            // SSM: C * A (state dynamics with discretization-aware activation)
+            // When useDiscretization is true, use tanh to approximate ZOH discretization bounds
+            var stateActivation = useDiscretization
+                ? (IActivationFunction<T>)new TanhActivation<T>()
+                : new GELUActivation<T>();
+            yield return new DenseLayer<T>(inputSize: rankDim, outputSize: hiddenDim, activationFunction: stateActivation);
+            // SSM: D matrix (skip connection)
+            yield return new DenseLayer<T>(inputSize: hiddenDim, outputSize: hiddenDim, activationFunction: null);
             if (dropout > 0) yield return new DropoutLayer<T>(dropout);
         }
 

@@ -189,7 +189,6 @@ public class LLMTime<T> : TimeSeriesFoundationModelBase<T>
             _inputProjection = Layers[idx++];
 
         _backboneLayers.Clear();
-        int intermediateSize = _hiddenDimension * 4;
         int layersPerBlock = _dropout > 0 ? 9 : 7;
         int totalBackboneLayers = _numLayers * layersPerBlock;
 

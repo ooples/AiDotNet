@@ -701,7 +701,6 @@ public class TimesFM<T> : TimeSeriesFoundationModelBase<T>
 
         // Get hidden states from the transformer (before the point forecast output projection)
         var current = historicalData;
-        int originalRank = current.Rank;
 
         if (current.Rank == 1)
             current = current.Reshape(new[] { 1, current.Length });

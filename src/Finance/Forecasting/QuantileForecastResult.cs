@@ -92,6 +92,9 @@ public class QuantileForecastResult<T>
         Guard.NotNull(samples);
         Guard.NotNull(quantileLevels);
 
+        if (quantileLevels.Length == 0)
+            throw new ArgumentException("At least one quantile level is required.", nameof(quantileLevels));
+
         // Validate quantile levels are in (0, 1) and distinct
         var seen = new HashSet<double>();
         for (int i = 0; i < quantileLevels.Length; i++)

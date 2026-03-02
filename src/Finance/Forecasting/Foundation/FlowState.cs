@@ -53,6 +53,8 @@ public class FlowState<T> : TimeSeriesFoundationModelBase<T>
     private int _hiddenDimension;
     private int _numLayers;
     private double _dropout;
+    private int _ssmRank;
+    private bool _useDiscretization;
     private FoundationModelSize _modelSize;
 
     #endregion
@@ -147,6 +149,8 @@ public class FlowState<T> : TimeSeriesFoundationModelBase<T>
         _hiddenDimension = options.HiddenDimension;
         _numLayers = options.NumLayers;
         _dropout = options.DropoutRate;
+        _ssmRank = options.SSMRank;
+        _useDiscretization = options.UseDiscretization;
         _modelSize = options.ModelSize;
     }
 
@@ -166,7 +170,8 @@ public class FlowState<T> : TimeSeriesFoundationModelBase<T>
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultFlowStateLayers(
                 Architecture, _contextLength, _forecastHorizon,
-                _stateDimension, _hiddenDimension, _numLayers, _dropout));
+                _stateDimension, _hiddenDimension, _numLayers, _dropout,
+                _ssmRank, _useDiscretization));
             ExtractLayerReferences();
         }
     }
@@ -262,6 +267,8 @@ public class FlowState<T> : TimeSeriesFoundationModelBase<T>
             HiddenDimension = _hiddenDimension,
             NumLayers = _numLayers,
             DropoutRate = _dropout,
+            SSMRank = _ssmRank,
+            UseDiscretization = _useDiscretization,
             ModelSize = _modelSize
         });
     }
@@ -275,6 +282,8 @@ public class FlowState<T> : TimeSeriesFoundationModelBase<T>
         writer.Write(_hiddenDimension);
         writer.Write(_numLayers);
         writer.Write(_dropout);
+        writer.Write(_ssmRank);
+        writer.Write(_useDiscretization);
         writer.Write((int)_modelSize);
     }
 
@@ -287,6 +296,8 @@ public class FlowState<T> : TimeSeriesFoundationModelBase<T>
         _hiddenDimension = reader.ReadInt32();
         _numLayers = reader.ReadInt32();
         _dropout = reader.ReadDouble();
+        _ssmRank = reader.ReadInt32();
+        _useDiscretization = reader.ReadBoolean();
         _modelSize = (FoundationModelSize)reader.ReadInt32();
     }
 
