@@ -294,138 +294,58 @@ public class StandardVAE<T> : VAEModelBase<T>
         // Priority 2: Use layers from NeuralNetworkArchitecture
         if (architecture?.Layers != null && architecture.Layers.Count > 0)
         {
-            // Architecture layers are used as encoder; decoder is auto-created as mirror
+            // Architecture layers are used as encoder; decoder is auto-created
             _encoderLayers = new List<ILayer<T>>(architecture.Layers);
             _decoderLayers = new List<ILayer<T>>();
-            CreateDefaultDecoderLayers();
+            AssignDecoderLayers();
             return;
         }
 
-        // Priority 3: Create industry-standard layers from the Stable Diffusion paper
+        // Priority 3: Create industry-standard layers via LayerHelper
         _encoderLayers = new List<ILayer<T>>();
         _decoderLayers = new List<ILayer<T>>();
-        CreateDefaultEncoderLayers();
-        CreateDefaultDecoderLayers();
+        AssignEncoderLayers();
+        AssignDecoderLayers();
     }
 
     /// <summary>
-    /// Creates industry-standard encoder layers based on the Stable Diffusion VAE paper.
+    /// Assigns encoder layers from LayerHelper, extracting special layers by position.
     /// </summary>
-    private void CreateDefaultEncoderLayers()
+    private void AssignEncoderLayers()
     {
-        // Input convolution: [inputChannels] -> [baseChannels]
-        _inputConv = new ConvolutionalLayer<T>(
-            inputDepth: _inputChannels,
-            outputDepth: _baseChannels,
-            kernelSize: 3,
-            inputHeight: 64,  // Placeholder - actual size handled dynamically
-            inputWidth: 64,
-            stride: 1,
-            padding: 1,
-            activationFunction: new IdentityActivation<T>());
+        var allEncoderLayers = LayerHelper<T>.CreateStandardVAEEncoderLayers(
+            _inputChannels, _latentChannels, _baseChannels,
+            _channelMultipliers, _numResBlocksPerLevel).ToList();
 
-        // Build encoder
-        var inChannels = _baseChannels;
-        for (int level = 0; level < _channelMultipliers.Length; level++)
-        {
-            var outChannels = _baseChannels * _channelMultipliers[level];
+        // First layer is the input convolution
+        _inputConv = (ConvolutionalLayer<T>)allEncoderLayers[0];
 
-            // Residual blocks at this level
-            for (int block = 0; block < _numResBlocksPerLevel; block++)
-            {
-                _encoderLayers.Add(CreateResBlock(inChannels, outChannels));
-                inChannels = outChannels;
-            }
+        // Last 3 layers are latent projections: MeanConv, LogVarConv, QuantConv
+        _quantConv = (ConvolutionalLayer<T>)allEncoderLayers[^1];
+        _logVarConv = (ConvolutionalLayer<T>)allEncoderLayers[^2];
+        _meanConv = (ConvolutionalLayer<T>)allEncoderLayers[^3];
 
-            // Downsample (except last level)
-            if (level < _channelMultipliers.Length - 1)
-            {
-                _encoderLayers.Add(CreateDownsample(outChannels));
-            }
-        }
-
-        // Latent projection layers
-        var lastEncoderChannels = _baseChannels * _channelMultipliers[^1];
-        _meanConv = new ConvolutionalLayer<T>(
-            inputDepth: lastEncoderChannels,
-            outputDepth: _latentChannels,
-            kernelSize: 3,
-            inputHeight: 8,
-            inputWidth: 8,
-            stride: 1,
-            padding: 1,
-            activationFunction: new IdentityActivation<T>());
-
-        _logVarConv = new ConvolutionalLayer<T>(
-            inputDepth: lastEncoderChannels,
-            outputDepth: _latentChannels,
-            kernelSize: 3,
-            inputHeight: 8,
-            inputWidth: 8,
-            stride: 1,
-            padding: 1,
-            activationFunction: new IdentityActivation<T>());
-
-        // Quant convolution for latent processing
-        _quantConv = new ConvolutionalLayer<T>(
-            inputDepth: _latentChannels,
-            outputDepth: _latentChannels,
-            kernelSize: 1,
-            inputHeight: 8,
-            inputWidth: 8,
-            stride: 1,
-            padding: 0,
-            activationFunction: new IdentityActivation<T>());
+        // Middle layers are the encoder ResBlocks and downsamples
+        _encoderLayers = allEncoderLayers.GetRange(1, allEncoderLayers.Count - 4);
     }
 
     /// <summary>
-    /// Creates industry-standard decoder layers based on the Stable Diffusion VAE paper.
+    /// Assigns decoder layers from LayerHelper, extracting special layers by position.
     /// </summary>
-    private void CreateDefaultDecoderLayers()
+    private void AssignDecoderLayers()
     {
-        var lastEncoderChannels = _baseChannels * _channelMultipliers[^1];
+        var allDecoderLayers = LayerHelper<T>.CreateStandardVAEDecoderLayers(
+            _inputChannels, _latentChannels, _baseChannels,
+            _channelMultipliers, _numResBlocksPerLevel).ToList();
 
-        // Post-quant convolution for decoder input
-        _postQuantConv = new ConvolutionalLayer<T>(
-            inputDepth: _latentChannels,
-            outputDepth: lastEncoderChannels,
-            kernelSize: 3,
-            inputHeight: 8,
-            inputWidth: 8,
-            stride: 1,
-            padding: 1,
-            activationFunction: new IdentityActivation<T>());
+        // First layer is the post-quant convolution
+        _postQuantConv = (ConvolutionalLayer<T>)allDecoderLayers[0];
 
-        // Build decoder (mirror of encoder)
-        var inChannels = lastEncoderChannels;
-        for (int level = _channelMultipliers.Length - 1; level >= 0; level--)
-        {
-            var outChannels = _baseChannels * _channelMultipliers[level];
+        // Last layer is the output convolution
+        _outputConv = (ConvolutionalLayer<T>)allDecoderLayers[^1];
 
-            // Residual blocks at this level
-            for (int block = 0; block < _numResBlocksPerLevel; block++)
-            {
-                _decoderLayers.Add(CreateResBlock(inChannels, outChannels));
-                inChannels = outChannels;
-            }
-
-            // Upsample (except first level going backwards)
-            if (level > 0)
-            {
-                _decoderLayers.Add(CreateUpsample(outChannels));
-            }
-        }
-
-        // Output convolution: [baseChannels] -> [inputChannels]
-        _outputConv = new ConvolutionalLayer<T>(
-            inputDepth: _baseChannels,
-            outputDepth: _inputChannels,
-            kernelSize: 3,
-            inputHeight: 64,
-            inputWidth: 64,
-            stride: 1,
-            padding: 1,
-            activationFunction: new TanhActivation<T>()); // Output in [-1, 1]
+        // Middle layers are the decoder ResBlocks and upsamples
+        _decoderLayers = allDecoderLayers.GetRange(1, allDecoderLayers.Count - 2);
     }
 
     /// <inheritdoc />
@@ -542,52 +462,8 @@ public class StandardVAE<T> : VAEModelBase<T>
     }
 
     #region Layer Factory Methods
-
-    private ILayer<T> CreateResBlock(int inChannels, int outChannels)
-    {
-        int numGroups = CalculateGroupCount(inChannels, outChannels);
-        return new VAEResBlock<T>(inChannels, outChannels, numGroups, spatialSize: 32);
-    }
-
-    private static int CalculateGroupCount(int inChannels, int outChannels)
-    {
-        int[] preferredGroups = [32, 16, 8, 4, 2, 1];
-
-        foreach (int groups in preferredGroups)
-        {
-            if (inChannels % groups == 0 && outChannels % groups == 0)
-            {
-                return groups;
-            }
-        }
-
-        return 1;
-    }
-
-    private ILayer<T> CreateDownsample(int channels)
-    {
-        return new ConvolutionalLayer<T>(
-            inputDepth: channels,
-            outputDepth: channels,
-            kernelSize: 3,
-            inputHeight: 32,
-            inputWidth: 32,
-            stride: 2,
-            padding: 1,
-            activationFunction: new IdentityActivation<T>());
-    }
-
-    private ILayer<T> CreateUpsample(int channels)
-    {
-        return new DeconvolutionalLayer<T>(
-            inputShape: [1, channels, 16, 16],
-            outputDepth: channels,
-            kernelSize: 4,
-            stride: 2,
-            padding: 1,
-            activationFunction: new IdentityActivation<T>());
-    }
-
+    // Layer creation has been moved to LayerHelper<T>.CreateStandardVAEEncoderLayers()
+    // and LayerHelper<T>.CreateStandardVAEDecoderLayers() following the golden pattern.
     #endregion
 
     #region Parameter Management

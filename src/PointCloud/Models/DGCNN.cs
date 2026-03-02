@@ -228,6 +228,16 @@ public class DGCNN<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPointCloudCl
         _edgeConvLayers.Clear();
         _classificationHeadLayers.Clear();
 
+        if (Architecture?.Layers != null && Architecture.Layers.Count > 0)
+        {
+            foreach (var layer in Architecture.Layers)
+            {
+                AddLayerToCollection(layer);
+            }
+
+            return;
+        }
+
         // Build EdgeConv layers
         int inputChannels = _inputFeatureDim; // Start with XYZ coordinates
 

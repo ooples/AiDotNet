@@ -156,27 +156,16 @@ public class MaskRCNN<T> : InstanceSegmenterBase<T>
 
         int numAnchors = anchors.Count;
 
-        // Use actual feature map dimensions from objectness tensor
-        int featureH = objectness.Shape[2];
-        int featureW = objectness.Shape[3];
+        // RPN.Forward returns objectness as [B, N, 2] and bboxDeltas as [B, N, 4]
+        // where N = H * W * numAnchorsPerLocation
+        int totalPositions = objectness.Rank == 3 ? objectness.Shape[1] : objectness.Rank == 2 ? objectness.Shape[0] : objectness.Length / 2;
 
-        // Guard against zero feature dimensions
-        if (featureH <= 0 || featureW <= 0)
+        for (int i = 0; i < numAnchors && i < totalPositions; i++)
         {
-            return new List<BoundingBox<T>>();
-        }
-
-        for (int i = 0; i < numAnchors && i < objectness.Length / 2; i++)
-        {
-            // Use actual feature map dimensions for indexing
-            int h = i / featureW;
-            int w = i % featureW;
-
-            // Guard against out of bounds access
-            if (h >= featureH || w >= featureW)
-                continue;
-
-            double score = NumOps.ToDouble(objectness[0, 1, h, w]);
+            // Objectness is [B, N, 2]: index 1 = foreground score
+            double score = objectness.Rank == 3
+                ? NumOps.ToDouble(objectness[0, i, 1])
+                : NumOps.ToDouble(objectness[i * 2 + 1]); // Flat [bg, fg, bg, fg, ...] layout
 
             if (score > 0.3) // Pre-NMS threshold
             {
@@ -189,14 +178,25 @@ public class MaskRCNN<T> : InstanceSegmenterBase<T>
                 double anchorH = NumOps.ToDouble(anchor.Y2) - NumOps.ToDouble(anchor.Y1);
 
                 // Decode using standard box encoding
+                // bboxDeltas is [B, N, 4]
                 double dx = 0, dy = 0, dw = 0, dh = 0;
-                int idx = i * 4;
-                if (idx + 3 < bboxDeltas.Length)
+                if (bboxDeltas.Rank == 3 && i < bboxDeltas.Shape[1])
                 {
-                    dx = NumOps.ToDouble(bboxDeltas[idx]);
-                    dy = NumOps.ToDouble(bboxDeltas[idx + 1]);
-                    dw = NumOps.ToDouble(bboxDeltas[idx + 2]);
-                    dh = NumOps.ToDouble(bboxDeltas[idx + 3]);
+                    dx = NumOps.ToDouble(bboxDeltas[0, i, 0]);
+                    dy = NumOps.ToDouble(bboxDeltas[0, i, 1]);
+                    dw = NumOps.ToDouble(bboxDeltas[0, i, 2]);
+                    dh = NumOps.ToDouble(bboxDeltas[0, i, 3]);
+                }
+                else
+                {
+                    int idx = i * 4;
+                    if (idx + 3 < bboxDeltas.Length)
+                    {
+                        dx = NumOps.ToDouble(bboxDeltas[idx]);
+                        dy = NumOps.ToDouble(bboxDeltas[idx + 1]);
+                        dw = NumOps.ToDouble(bboxDeltas[idx + 2]);
+                        dh = NumOps.ToDouble(bboxDeltas[idx + 3]);
+                    }
                 }
 
                 double predX = anchorX + dx * anchorW;
