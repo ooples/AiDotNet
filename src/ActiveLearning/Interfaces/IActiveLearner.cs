@@ -50,14 +50,14 @@ public interface IActiveLearner<T, TInput, TOutput>
     IQueryStrategy<T, TInput, TOutput> QueryStrategy { get; }
 
     /// <summary>
-    /// Gets the current labeled dataset.
+    /// Gets the current labeled dataset. Null before Initialize() is called.
     /// </summary>
-    IDataset<T, TInput, TOutput> LabeledPool { get; }
+    IDataset<T, TInput, TOutput>? LabeledPool { get; }
 
     /// <summary>
-    /// Gets the current unlabeled pool.
+    /// Gets the current unlabeled pool. Null before Initialize() is called.
     /// </summary>
-    IDataset<T, TInput, TOutput> UnlabeledPool { get; }
+    IDataset<T, TInput, TOutput>? UnlabeledPool { get; }
 
     /// <summary>
     /// Gets the number of queries (labeling requests) made so far.

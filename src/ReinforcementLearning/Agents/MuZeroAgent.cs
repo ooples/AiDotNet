@@ -151,7 +151,7 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     private int RunMCTS(Vector<T> rootHiddenState)
     {
-        var root = new MCTSNode<T> { HiddenState = rootHiddenState };
+        var root = new MCTSNode<T> { HiddenState = rootHiddenState, Value = NumOps.Zero };
 
         // Initialize root
         var rootPredictionTensor = Tensor<T>.FromVector(rootHiddenState);
@@ -261,6 +261,8 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
     private int SelectActionPUCT(MCTSNode<T> node)
     {
         // PUCT formula: Q(s,a) + c * P(s,a) * sqrt(N(s)) / (1 + N(s,a))
+        if (node.HiddenState is null)
+            throw new InvalidOperationException("MCTS node HiddenState must be set before action selection.");
         var predictionTensor = Tensor<T>.FromVector(node.HiddenState);
         var predictionOutput = _predictionNetwork.Predict(predictionTensor);
         var prediction = predictionOutput.ToVector();
@@ -300,6 +302,8 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
         var actionVec = new Vector<T>(_options.ActionSize);
         actionVec[action] = NumOps.One;
 
+        if (parent.HiddenState is null)
+            throw new InvalidOperationException("Parent MCTS node HiddenState must be set before expansion.");
         var dynamicsInput = ConcatenateVectors(parent.HiddenState, actionVec);
         var dynamicsInputTensor = Tensor<T>.FromVector(dynamicsInput);
         var dynamicsOutputTensor = _dynamicsNetwork.Predict(dynamicsInputTensor);

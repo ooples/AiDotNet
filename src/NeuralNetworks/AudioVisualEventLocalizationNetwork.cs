@@ -124,21 +124,6 @@ public class AudioVisualEventLocalizationNetwork<T> : NeuralNetworkBase<T>, IAud
         // Default event categories
         _supportedCategories = (eventCategories?.ToList() ?? GetDefaultEventCategories()).AsReadOnly();
 
-        // Initialize all layers
-        _audioInputProjection = null!;
-        _audioEncoderLayers = null!;
-        _audioOutputProjection = null!;
-        _visualInputProjection = null!;
-        _visualEncoderLayers = null!;
-        _visualOutputProjection = null!;
-        _temporalAttentionLayers = null!;
-        _temporalProposalHead = null!;
-        _crossModalAttentionLayers = null!;
-        _eventClassificationHead = null!;
-        _temporalBoundaryHead = null!;
-        _spatialLocalizationHead = null!;
-        _anomalyDetectionHead = null!;
-
         InitializeLayers();
     }
 
@@ -147,6 +132,13 @@ public class AudioVisualEventLocalizationNetwork<T> : NeuralNetworkBase<T>, IAud
     #region Initialization
 
     /// <inheritdoc/>
+    [System.Diagnostics.CodeAnalysis.MemberNotNull(
+        nameof(_audioInputProjection), nameof(_audioEncoderLayers), nameof(_audioOutputProjection),
+        nameof(_visualInputProjection), nameof(_visualEncoderLayers), nameof(_visualOutputProjection),
+        nameof(_temporalAttentionLayers), nameof(_temporalProposalHead),
+        nameof(_crossModalAttentionLayers),
+        nameof(_eventClassificationHead), nameof(_temporalBoundaryHead),
+        nameof(_spatialLocalizationHead), nameof(_anomalyDetectionHead))]
     protected override void InitializeLayers()
     {
         IActivationFunction<T>? nullActivation = null;

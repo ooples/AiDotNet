@@ -264,6 +264,8 @@ namespace AiDotNet.AutoML.NAS
             // Update attention weights based on performance gradient
             // This is a simplified update; full implementation would use policy gradients
             var embedding = config.Embedding;
+            if (embedding is null)
+                return;
 
             for (int i = 0; i < Math.Min(_attentionWeights.Rows, embedding.Length); i++)
             {

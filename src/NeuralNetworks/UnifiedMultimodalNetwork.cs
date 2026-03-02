@@ -142,21 +142,6 @@ public class UnifiedMultimodalNetwork<T> : NeuralNetworkBase<T>, IUnifiedMultimo
             ModalityType.Audio
         }.AsReadOnly();
 
-        // Initialize null references
-        _textEncoder = null!;
-        _imageEncoder = null!;
-        _audioEncoder = null!;
-        _videoEncoder = null!;
-        _transformerLayers = null!;
-        _crossModalAttention = null!;
-        _textDecoder = null!;
-        _imageDecoder = null!;
-        _audioDecoder = null!;
-        _videoDecoder = null!;
-        _fusionLayer = null!;
-        _classificationHead = null!;
-        _generationHead = null!;
-
         InitializeLayers();
     }
 
@@ -165,6 +150,11 @@ public class UnifiedMultimodalNetwork<T> : NeuralNetworkBase<T>, IUnifiedMultimo
     #region Initialization
 
     /// <inheritdoc/>
+    [System.Diagnostics.CodeAnalysis.MemberNotNull(
+        nameof(_textEncoder), nameof(_imageEncoder), nameof(_audioEncoder), nameof(_videoEncoder),
+        nameof(_transformerLayers), nameof(_crossModalAttention),
+        nameof(_textDecoder), nameof(_imageDecoder), nameof(_audioDecoder), nameof(_videoDecoder),
+        nameof(_fusionLayer), nameof(_classificationHead), nameof(_generationHead))]
     protected override void InitializeLayers()
     {
         IActivationFunction<T>? nullActivation = null;

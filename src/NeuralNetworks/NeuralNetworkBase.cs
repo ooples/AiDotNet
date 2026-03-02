@@ -1129,9 +1129,9 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// }
     /// </code>
     /// </remarks>
-    protected bool TryForwardGpuOptimized(Tensor<T> input, out Tensor<T> result)
+    protected bool TryForwardGpuOptimized(Tensor<T> input, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out Tensor<T>? result)
     {
-        result = null!;
+        result = null;
 
         if (Engine is not DirectGpuTensorEngine)
             return false;
