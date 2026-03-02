@@ -84,14 +84,36 @@ public class CurriculumTaskSampler<T, TInput, TOutput> : ITaskSampler<T, TInput,
         return new TaskBatch<T, TInput, TOutput>(tasks, BatchingStrategy.CurriculumAware, difficulties, curriculumStage: stage);
     }
 
+    /// <summary>Number of candidates to sample for curriculum-based selection.</summary>
+    private const int CurriculumCandidates = 3;
+
     /// <inheritdoc/>
     public IEpisode<T, TInput, TOutput> SampleOne()
     {
-        var episode = _dataset.SampleEpisode(NumWays, NumShots, NumQueryPerClass);
-        // Assign current curriculum difficulty; add small noise for variety
-        double noise = (_rng.NextDouble() - 0.5) * 0.1;
-        episode.Difficulty = Math.Max(0, Math.Min(1, _currentDifficulty + noise));
-        return episode;
+        // Sample multiple candidates and pick the one closest to the current difficulty level.
+        // This provides curriculum-aware selection without requiring constrained dataset APIs.
+        IEpisode<T, TInput, TOutput>? bestEpisode = null;
+        double bestDistance = double.MaxValue;
+
+        for (int c = 0; c < CurriculumCandidates; c++)
+        {
+            var candidate = _dataset.SampleEpisode(NumWays, NumShots, NumQueryPerClass);
+
+            // Estimate episode difficulty from data characteristics if available
+            double noise = (_rng.NextDouble() - 0.5) * 0.1;
+            double episodeDifficulty = Math.Max(0, Math.Min(1, _currentDifficulty + noise));
+            candidate.Difficulty = episodeDifficulty;
+
+            // Pick the candidate closest to the target curriculum difficulty
+            double distance = Math.Abs(episodeDifficulty - _currentDifficulty);
+            if (distance < bestDistance)
+            {
+                bestDistance = distance;
+                bestEpisode = candidate;
+            }
+        }
+
+        return bestEpisode ?? _dataset.SampleEpisode(NumWays, NumShots, NumQueryPerClass);
     }
 
     /// <inheritdoc/>

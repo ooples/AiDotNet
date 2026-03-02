@@ -120,11 +120,18 @@ public abstract class MetaDatasetBase<T, TInput, TOutput> : IMetaDataset<T, TInp
         if (count > max)
             throw new ArgumentException($"Cannot sample {count} items from range [0, {max}).");
 
-        var selected = new HashSet<int>();
-        while (selected.Count < count)
+        // Use Fisher-Yates partial shuffle for deterministic ordering with a given RNG seed
+        var pool = new int[max];
+        for (int i = 0; i < max; i++) pool[i] = i;
+
+        for (int i = 0; i < count; i++)
         {
-            selected.Add(Rng.Next(max));
+            int j = i + Rng.Next(max - i);
+            (pool[i], pool[j]) = (pool[j], pool[i]);
         }
-        return selected.ToArray();
+
+        var result = new int[count];
+        Array.Copy(pool, result, count);
+        return result;
     }
 }

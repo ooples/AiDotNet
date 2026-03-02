@@ -99,15 +99,30 @@ public class DynamicTaskSampler<T, TInput, TOutput> : ITaskSampler<T, TInput, TO
         return new TaskBatch<T, TInput, TOutput>(tasks, BatchingStrategy.Adaptive, difficulties);
     }
 
+    /// <summary>Number of candidates to sample for loss-biased selection.</summary>
+    private const int SelectionCandidates = 3;
+
     /// <inheritdoc/>
     public IEpisode<T, TInput, TOutput> SampleOne()
     {
-        var episode = _dataset.SampleEpisode(NumWays, NumShots, NumQueryPerClass);
-
-        if (_feedbackCount > 0 && _rng.NextDouble() > _explorationRate)
+        // Pure exploration mode: uniform random sampling
+        if (_feedbackCount == 0 || _rng.NextDouble() < _explorationRate)
         {
-            // Sample difficulty from recent loss distribution (mean + noise from variance)
-            // This produces per-episode variation rather than identical difficulty values
+            var episode = _dataset.SampleEpisode(NumWays, NumShots, NumQueryPerClass);
+            episode.Difficulty = _runningMeanLoss;
+            return episode;
+        }
+
+        // Loss-biased selection: sample multiple candidates and pick the one with
+        // highest estimated difficulty (proxy for higher expected loss)
+        IEpisode<T, TInput, TOutput>? bestCandidate = null;
+        double bestDifficulty = double.NegativeInfinity;
+
+        for (int c = 0; c < SelectionCandidates; c++)
+        {
+            var candidate = _dataset.SampleEpisode(NumWays, NumShots, NumQueryPerClass);
+
+            // Estimate difficulty from recent loss distribution with per-candidate noise
             double lossStdDev = 0;
             if (_lossHistory.Count > 1)
             {
@@ -122,12 +137,19 @@ public class DynamicTaskSampler<T, TInput, TOutput> : ITaskSampler<T, TInput, TO
                 lossStdDev = Math.Sqrt(sumSqDiff / count);
             }
 
-            // Difficulty = mean + random perturbation scaled by std dev, clamped to [0, 1]
             double noise = (_rng.NextDouble() - 0.5) * 2.0 * lossStdDev;
-            episode.Difficulty = Math.Max(0, Math.Min(1.0, _runningMeanLoss + noise));
+            double difficulty = Math.Max(0, Math.Min(1.0, _runningMeanLoss + noise));
+            candidate.Difficulty = difficulty;
+
+            // Prefer candidates with higher difficulty (higher expected loss)
+            if (difficulty > bestDifficulty)
+            {
+                bestDifficulty = difficulty;
+                bestCandidate = candidate;
+            }
         }
 
-        return episode;
+        return bestCandidate ?? _dataset.SampleEpisode(NumWays, NumShots, NumQueryPerClass);
     }
 
     /// <inheritdoc/>

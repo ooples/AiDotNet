@@ -23,8 +23,8 @@ public class ModelPredictiveTaskSampler<T, TInput, TOutput> : ITaskSampler<T, TI
     private readonly IMetaDataset<T, TInput, TOutput> _dataset;
     private readonly double _explorationWeight;
     private readonly double _ucbScale;
-    private readonly List<double> _meanRewards;
-    private readonly List<int> _pullCounts;
+    private readonly Dictionary<int, double> _meanRewards;
+    private readonly Dictionary<int, int> _pullCounts;
     private int _totalPulls;
     private Random _rng;
 
@@ -63,8 +63,8 @@ public class ModelPredictiveTaskSampler<T, TInput, TOutput> : ITaskSampler<T, TI
         NumQueryPerClass = numQueryPerClass;
         _explorationWeight = explorationWeight;
         _ucbScale = ucbScale;
-        _meanRewards = new List<double>();
-        _pullCounts = new List<int>();
+        _meanRewards = new Dictionary<int, double>();
+        _pullCounts = new Dictionary<int, int>();
         _rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
     }
 
@@ -102,19 +102,21 @@ public class ModelPredictiveTaskSampler<T, TInput, TOutput> : ITaskSampler<T, TI
         for (int c = 0; c < UcbCandidates; c++)
         {
             var candidate = _dataset.SampleEpisode(NumWays, NumShots, NumQueryPerClass);
-            int idx = candidate.EpisodeId;
+            // Use a stable task signature (hash of Domain + EpisodeId modulo a fixed arm space)
+            // to prevent unbounded growth while allowing meaningful exploitation
+            int armKey = ComputeArmKey(candidate);
 
             double ucb;
-            if (idx < _meanRewards.Count && _pullCounts[idx] > 0)
+            if (_pullCounts.TryGetValue(armKey, out int pulls) && pulls > 0)
             {
-                double exploitation = _meanRewards[idx];
+                double exploitation = _meanRewards[armKey];
                 double exploration = _explorationWeight * Math.Sqrt(
-                    _ucbScale * Math.Log(_totalPulls + 1) / Math.Max(1, _pullCounts[idx]));
+                    _ucbScale * Math.Log(_totalPulls + 1) / Math.Max(1, pulls));
                 ucb = exploitation + exploration;
             }
             else
             {
-                // Never-seen episodes get maximum exploration bonus
+                // Never-seen arms get maximum exploration bonus
                 ucb = double.MaxValue;
             }
 
@@ -139,20 +141,39 @@ public class ModelPredictiveTaskSampler<T, TInput, TOutput> : ITaskSampler<T, TI
             episodes[i].SampleCount++;
 
             // Reward = loss reduction potential (higher loss = more potential improvement)
-            double reward = losses[i]; // Higher loss = higher reward for sampling
+            double reward = losses[i];
 
-            // Use episode ID directly to preserve per-episode fidelity
-            int idx = episodes[i].EpisodeId;
-            while (_meanRewards.Count <= idx)
+            // Use stable arm key instead of unbounded EpisodeId
+            int armKey = ComputeArmKey(episodes[i]);
+
+            if (!_pullCounts.ContainsKey(armKey))
             {
-                _meanRewards.Add(0);
-                _pullCounts.Add(0);
+                _pullCounts[armKey] = 0;
+                _meanRewards[armKey] = 0;
             }
 
             // Incremental mean update
-            _pullCounts[idx]++;
-            _meanRewards[idx] += (reward - _meanRewards[idx]) / _pullCounts[idx];
+            _pullCounts[armKey]++;
+            _meanRewards[armKey] += (reward - _meanRewards[armKey]) / _pullCounts[armKey];
         }
+    }
+
+    /// <summary>
+    /// Computes a stable arm key for bandit statistics from an episode's domain and structure.
+    /// Uses a bounded hash to prevent unbounded memory growth.
+    /// </summary>
+    private static int ComputeArmKey(IEpisode<T, TInput, TOutput> episode)
+    {
+        // Combine domain (if available) with a hash of the task structure
+        // This groups episodes from similar tasks together for meaningful exploitation
+        int hash = 17;
+        if (episode.Domain is not null)
+            hash = hash * 31 + episode.Domain.GetHashCode(StringComparison.Ordinal);
+        // Use episode metadata or difficulty as a secondary discriminator
+        if (episode.Difficulty.HasValue)
+            hash = hash * 31 + episode.Difficulty.Value.GetHashCode();
+        // Bound the arm space to prevent unbounded growth (1024 arms)
+        return Math.Abs(hash) % 1024;
     }
 
     /// <inheritdoc/>

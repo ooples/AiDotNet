@@ -68,24 +68,60 @@ public class BalancedTaskSampler<T, TInput, TOutput> : ITaskSampler<T, TInput, T
         return new TaskBatch<T, TInput, TOutput>(tasks, BatchingStrategy.DomainBalanced);
     }
 
+    /// <summary>Number of candidates to sample for class-balanced selection.</summary>
+    private const int BalanceCandidates = 5;
+
     /// <inheritdoc/>
     /// <remarks>
     /// <para>
-    /// The internal class rotation tracks which classes have been covered. Each call advances
-    /// a pointer through a shuffled class list to ensure long-run uniform class exposure.
-    /// When the pointer wraps around, the class list is reshuffled.
-    /// </para>
-    /// <para>
-    /// Because <see cref="IMetaDataset{T, TInput, TOutput}.SampleEpisode"/> does not support
-    /// constrained class selection, exact per-episode targeting is not possible. The rotation
-    /// ensures that the sampler at least tracks coverage and reshuffles periodically.
+    /// Samples multiple candidate episodes and selects the one whose classes best overlap
+    /// with the current rotation window, ensuring long-run uniform class exposure.
     /// </para>
     /// </remarks>
     public IEpisode<T, TInput, TOutput> SampleOne()
     {
-        var episode = _dataset.SampleEpisode(NumWays, NumShots, NumQueryPerClass);
+        // Get the target classes from the current rotation window
+        var targetClasses = new HashSet<int>();
+        for (int i = 0; i < NumWays && (_classPointer + i) < _allClasses.Length; i++)
+            targetClasses.Add(_allClasses[_classPointer + i]);
+
+        // Sample multiple candidates and pick the one with best class coverage
+        IEpisode<T, TInput, TOutput>? bestEpisode = null;
+        int bestOverlap = -1;
+
+        for (int c = 0; c < BalanceCandidates; c++)
+        {
+            var candidate = _dataset.SampleEpisode(NumWays, NumShots, NumQueryPerClass);
+
+            // Count how many of the candidate's classes match the target rotation window
+            int overlap = 0;
+            if (candidate.Task.SupportOutput is Vector<T> supportLabels)
+            {
+                var numOps = MathHelper.GetNumericOperations<T>();
+                var candidateClasses = new HashSet<int>();
+                for (int i = 0; i < supportLabels.Length; i++)
+                    candidateClasses.Add((int)Math.Round(numOps.ToDouble(supportLabels[i])));
+
+                foreach (int cls in candidateClasses)
+                {
+                    if (targetClasses.Contains(cls)) overlap++;
+                }
+            }
+            else
+            {
+                // If we can't inspect classes, accept the first candidate
+                overlap = c == 0 ? 1 : 0;
+            }
+
+            if (overlap > bestOverlap)
+            {
+                bestOverlap = overlap;
+                bestEpisode = candidate;
+            }
+        }
+
         AdvancePointer();
-        return episode;
+        return bestEpisode ?? _dataset.SampleEpisode(NumWays, NumShots, NumQueryPerClass);
     }
 
     /// <inheritdoc/>

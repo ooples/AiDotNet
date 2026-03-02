@@ -36,17 +36,28 @@ public static class TaskDifficultyEstimator<T>
         int numExamples = supportY.Length;
 
         // Validate episode shape: numShots * numWays should match numExamples
-        int expectedExamples = numWays * Math.Max(1, numShots);
         if (numExamples < numWays)
             return 0.5; // Not enough examples to compute meaningful difficulty
 
-        int featureDim = Math.Max(1, supportX.Length / numExamples);
+        // Validate feature dimensions: supportX must be exactly divisible by numExamples
+        if (supportX.Length % numExamples != 0)
+            return 0.5; // Feature vector not evenly divisible — can't decode reliably
 
-        // Validate that supportX is properly shaped
-        if (supportX.Length < numExamples * featureDim)
+        int featureDim = supportX.Length / numExamples;
+        if (featureDim == 0)
             return 0.5;
 
         // 1. Compute class centroids
+        // Map distinct label values to class indices instead of using modular arithmetic,
+        // which can collapse distinct labels onto the same class
+        var labelToClass = new Dictionary<int, int>();
+        for (int i = 0; i < numExamples; i++)
+        {
+            int rawLabel = (int)Math.Round(NumOps.ToDouble(supportY[i]));
+            if (!labelToClass.ContainsKey(rawLabel) && labelToClass.Count < numWays)
+                labelToClass[rawLabel] = labelToClass.Count;
+        }
+
         var centroids = new double[numWays][];
         var classCounts = new int[numWays];
         for (int c = 0; c < numWays; c++)
@@ -54,8 +65,10 @@ public static class TaskDifficultyEstimator<T>
 
         for (int i = 0; i < numExamples; i++)
         {
-            int classIdx = (int)Math.Round(NumOps.ToDouble(supportY[i])) % numWays;
+            int rawLabel = (int)Math.Round(NumOps.ToDouble(supportY[i]));
+            int classIdx = labelToClass.TryGetValue(rawLabel, out int mapped) ? mapped : rawLabel % numWays;
             if (classIdx < 0) classIdx += numWays;
+            if (classIdx >= numWays) classIdx = numWays - 1;
             classCounts[classIdx]++;
             int start = i * featureDim;
             for (int d = 0; d < featureDim && start + d < supportX.Length; d++)
@@ -95,8 +108,10 @@ public static class TaskDifficultyEstimator<T>
         int totalIntra = 0;
         for (int i = 0; i < numExamples; i++)
         {
-            int classIdx = (int)Math.Round(NumOps.ToDouble(supportY[i])) % numWays;
+            int rawLabel = (int)Math.Round(NumOps.ToDouble(supportY[i]));
+            int classIdx = labelToClass.TryGetValue(rawLabel, out int mappedIntra) ? mappedIntra : rawLabel % numWays;
             if (classIdx < 0) classIdx += numWays;
+            if (classIdx >= numWays) classIdx = numWays - 1;
             int start = i * featureDim;
             double dist = 0;
             for (int d = 0; d < featureDim && start + d < supportX.Length; d++)

@@ -1240,13 +1240,8 @@ public class PrototypicalModel<T, TInput, TOutput> : IModel<TInput, TOutput, Mod
         }
         else if (typeof(TOutput) == typeof(Vector<T>))
         {
-            // Flatten to vector if single sample (return per-class probabilities)
-            if (batchSize == 1)
-            {
-                return (TOutput)(object)new Vector<T>(allProbabilities[0].ToArray());
-            }
-            // For multiple samples, return argmax class prediction per sample
-            // This matches the input label format (one scalar label per sample)
+            // Always return argmax class label per sample for consistent semantics
+            // regardless of batch size (Vector<T> of length batchSize with class labels)
             var predictions = new Vector<T>(batchSize);
             for (int i = 0; i < batchSize; i++)
             {

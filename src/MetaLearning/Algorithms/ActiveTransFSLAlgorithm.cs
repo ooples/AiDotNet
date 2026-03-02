@@ -120,10 +120,11 @@ public class ActiveTransFSLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TI
             MetaModel.SetParameters(transParams);
             var transductiveLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
 
-            // Report transductive loss — this matches the meta-gradient which is computed
-            // at the transductive parameters. The inductive phase acts as a warm-start for
-            // the transductive refinement.
-            losses.Add(transductiveLoss);
+            // Combine inductive and transductive losses using TransductiveWeight
+            // L_meta = (1 - w) * L_inductive + w * L_transductive
+            double w = _algoOptions.TransductiveWeight;
+            double combinedLoss = (1.0 - w) * NumOps.ToDouble(inductiveLoss) + w * NumOps.ToDouble(transductiveLoss);
+            losses.Add(NumOps.FromDouble(combinedLoss));
             metaGradients.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
         }
 
