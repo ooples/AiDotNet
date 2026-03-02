@@ -1,6 +1,7 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Validation;
+using AiDotNet.Data.Structures;
 
 namespace AiDotNet.MetaLearning.Data;
 

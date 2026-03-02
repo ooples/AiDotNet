@@ -105,12 +105,12 @@ public class MetaDatasetFormat<T, TInput, TOutput> : IMetaDataset<T, TInput, TOu
     {
         int domainIdx = SelectDomain(numWays, numShots, numQueryPerClass);
         var episode = _domains[domainIdx].SampleEpisode(numWays, numShots, numQueryPerClass);
-        episode.Difficulty ??= 0.5;
-        // Wrap with domain metadata
+        var difficulty = episode.Difficulty ?? 0.5;
+        // Wrap with domain metadata without mutating the underlying episode
         return new Episode<T, TInput, TOutput>(
             episode.Task,
             domain: _domainNames[domainIdx],
-            difficulty: episode.Difficulty,
+            difficulty: difficulty,
             metadata: new Dictionary<string, object> { ["source_domain_index"] = domainIdx });
     }
 

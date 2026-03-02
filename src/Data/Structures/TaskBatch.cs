@@ -2,7 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Validation;
 
-namespace AiDotNet.MetaLearning.Data;
+namespace AiDotNet.Data.Structures;
 
 /// <summary>
 /// Represents a batch of tasks for meta-learning with advanced batching strategies.

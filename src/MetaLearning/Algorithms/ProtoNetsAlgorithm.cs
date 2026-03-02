@@ -7,6 +7,7 @@ using AiDotNet.Models;
 using AiDotNet.Models.Results;
 using AiDotNet.Tensors;
 using AiDotNet.Validation;
+using AiDotNet.Data.Structures;
 
 namespace AiDotNet.MetaLearning.Algorithms;
 
@@ -1246,12 +1247,13 @@ public class PrototypicalModel<T, TInput, TOutput> : IModel<TInput, TOutput, Mod
             for (int i = 0; i < batchSize; i++)
             {
                 int maxIdx = 0;
-                T maxVal = allProbabilities[i][0];
+                double maxValD = _numOps.ToDouble(allProbabilities[i][0]);
                 for (int j = 1; j < numClasses; j++)
                 {
-                    if (_numOps.ToDouble(allProbabilities[i][j]) > _numOps.ToDouble(maxVal))
+                    double candidateD = _numOps.ToDouble(allProbabilities[i][j]);
+                    if (candidateD > maxValD)
                     {
-                        maxVal = allProbabilities[i][j];
+                        maxValD = candidateD;
                         maxIdx = j;
                     }
                 }

@@ -4,6 +4,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.MetaLearning.Data;
 using AiDotNet.MetaLearning.Options;
 using AiDotNet.Models;
+using AiDotNet.Data.Structures;
 
 namespace AiDotNet.MetaLearning.Algorithms;
 

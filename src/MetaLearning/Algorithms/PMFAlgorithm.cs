@@ -6,6 +6,7 @@ using AiDotNet.MetaLearning.Options;
 using AiDotNet.Models;
 using AiDotNet.Models.Results;
 using AiDotNet.Tensors;
+using AiDotNet.Data.Structures;
 
 namespace AiDotNet.MetaLearning.Algorithms;
 

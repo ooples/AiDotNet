@@ -10,6 +10,7 @@ using AiDotNet.Tensors.LinearAlgebra;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using AiDotNet.Validation;
+using AiDotNet.Data.Structures;
 
 namespace AiDotNet.Serving.Services;
 

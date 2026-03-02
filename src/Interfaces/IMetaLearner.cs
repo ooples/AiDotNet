@@ -1,6 +1,5 @@
 using AiDotNet.Data.Structures;
 using AiDotNet.MetaLearning;
-using AiDotNet.MetaLearning.Data;
 using AiDotNet.Models;
 using AiDotNet.Models.Results;
 
