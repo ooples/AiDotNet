@@ -51,6 +51,7 @@ internal interface ICriticModel<T>
         CancellationToken cancellationToken = default);
 }
 
+#pragma warning disable CS8618 // Generic T properties use default(T) - always used with value types
 /// <summary>
 /// Context information for critiquing reasoning steps.
 /// </summary>
@@ -94,10 +95,13 @@ public class ReasoningContext
 /// </remarks>
 public class CritiqueResult<T>
 {
+    [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
+    public CritiqueResult() { }
+
     /// <summary>
     /// Quality score for the reasoning (typically 0.0 to 1.0).
     /// </summary>
-    public T Score { get; set; } = default!;
+    public required T Score { get; set; }
 
     /// <summary>
     /// Detailed feedback explaining the score.

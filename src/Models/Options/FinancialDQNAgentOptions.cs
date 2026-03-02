@@ -13,6 +13,9 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class FinancialDQNAgentOptions<T> : TradingAgentOptions<T>
 {
+    [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
+    public FinancialDQNAgentOptions() { }
+
     /// <summary>
     /// Whether to use double DQN for more stable Q-value estimates.
     /// </summary>

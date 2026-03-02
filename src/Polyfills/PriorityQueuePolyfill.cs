@@ -5,6 +5,7 @@
 // PriorityQueue was introduced in .NET 6.0
 
 #if !NET6_0_OR_GREATER
+#pragma warning disable CS8601 // Possible null reference assignment in out params
 
 using System.Collections.Generic;
 
@@ -122,8 +123,8 @@ namespace System.Collections.Generic
         {
             if (_heap.Count == 0)
             {
-                element = default!;
-                priority = default!;
+                element = default;
+                priority = default;
                 return false;
             }
 
@@ -150,8 +151,8 @@ namespace System.Collections.Generic
         {
             if (_heap.Count == 0)
             {
-                element = default!;
-                priority = default!;
+                element = default;
+                priority = default;
                 return false;
             }
 

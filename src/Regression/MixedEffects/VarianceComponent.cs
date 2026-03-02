@@ -1,5 +1,6 @@
 namespace AiDotNet.Regression.MixedEffects;
 
+#pragma warning disable CS8618 // Generic T properties use default(T) - always used with value types
 /// <summary>
 /// Represents variance components in a mixed-effects model.
 /// </summary>
@@ -24,6 +25,9 @@ namespace AiDotNet.Regression.MixedEffects;
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 public class VarianceComponent<T>
 {
+    [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
+    public VarianceComponent() { }
+
     /// <summary>
     /// Numeric operations for type T.
     /// </summary>
@@ -37,22 +41,22 @@ public class VarianceComponent<T>
     /// <summary>
     /// Gets or sets the estimated variance for this component.
     /// </summary>
-    public T Variance { get; set; } = default!;
+    public required T Variance { get; set; }
 
     /// <summary>
     /// Gets or sets the standard error of the variance estimate.
     /// </summary>
-    public T StandardError { get; set; } = default!;
+    public required T StandardError { get; set; }
 
     /// <summary>
     /// Gets or sets the lower bound of the confidence interval.
     /// </summary>
-    public T ConfidenceIntervalLower { get; set; } = default!;
+    public required T ConfidenceIntervalLower { get; set; }
 
     /// <summary>
     /// Gets or sets the upper bound of the confidence interval.
     /// </summary>
-    public T ConfidenceIntervalUpper { get; set; } = default!;
+    public required T ConfidenceIntervalUpper { get; set; }
 
     /// <summary>
     /// Gets or sets the covariance matrix for this variance component.
@@ -80,6 +84,7 @@ public class VarianceComponent<T>
     /// Initializes a new variance component.
     /// </summary>
     /// <param name="name">Name identifying this variance component.</param>
+    [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
     public VarianceComponent(string name)
     {
         Name = name;

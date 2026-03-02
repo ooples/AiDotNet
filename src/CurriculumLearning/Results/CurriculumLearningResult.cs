@@ -19,8 +19,12 @@ namespace AiDotNet.CurriculumLearning.Results;
 /// <item><description><b>CurriculumEfficiency:</b> How much curriculum learning helped</description></item>
 /// </list>
 /// </remarks>
+#pragma warning disable CS8618 // Generic T properties use default(T) - always used with value types
 public class CurriculumLearningResult<T>
 {
+    [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
+    public CurriculumLearningResult() { }
+
     /// <summary>
     /// Gets or sets whether training was successful.
     /// </summary>
@@ -34,7 +38,7 @@ public class CurriculumLearningResult<T>
     /// <summary>
     /// Gets or sets the final training loss.
     /// </summary>
-    public T FinalTrainingLoss { get; set; } = default!;
+    public required T FinalTrainingLoss { get; set; }
 
     /// <summary>
     /// Gets or sets the final validation loss (if validation data provided).
@@ -44,7 +48,7 @@ public class CurriculumLearningResult<T>
     /// <summary>
     /// Gets or sets the best training loss achieved during training.
     /// </summary>
-    public T BestTrainingLoss { get; set; } = default!;
+    public required T BestTrainingLoss { get; set; }
 
     /// <summary>
     /// Gets or sets the best validation loss achieved during training.
@@ -162,6 +166,9 @@ public class CurriculumLearningResult<T>
 /// <typeparam name="T">The numeric type.</typeparam>
 public class CurriculumPhaseResult<T>
 {
+    [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
+    public CurriculumPhaseResult() { }
+
     /// <summary>
     /// Gets or sets the phase number (0-indexed).
     /// </summary>
@@ -170,7 +177,7 @@ public class CurriculumPhaseResult<T>
     /// <summary>
     /// Gets or sets the data fraction used in this phase.
     /// </summary>
-    public T DataFraction { get; set; } = default!;
+    public required T DataFraction { get; set; }
 
     /// <summary>
     /// Gets or sets the number of samples available in this phase.
@@ -190,17 +197,17 @@ public class CurriculumPhaseResult<T>
     /// <summary>
     /// Gets or sets the training loss at the start of the phase.
     /// </summary>
-    public T StartLoss { get; set; } = default!;
+    public required T StartLoss { get; set; }
 
     /// <summary>
     /// Gets or sets the training loss at the end of the phase.
     /// </summary>
-    public T EndLoss { get; set; } = default!;
+    public required T EndLoss { get; set; }
 
     /// <summary>
     /// Gets or sets the best loss achieved during this phase.
     /// </summary>
-    public T BestLoss { get; set; } = default!;
+    public required T BestLoss { get; set; }
 
     /// <summary>
     /// Gets or sets the validation loss at the start of the phase.
@@ -215,12 +222,12 @@ public class CurriculumPhaseResult<T>
     /// <summary>
     /// Gets or sets the loss improvement in this phase.
     /// </summary>
-    public T LossImprovement { get; set; } = default!;
+    public required T LossImprovement { get; set; }
 
     /// <summary>
     /// Gets or sets the improvement rate (improvement per epoch).
     /// </summary>
-    public T ImprovementRate { get; set; } = default!;
+    public required T ImprovementRate { get; set; }
 
     /// <summary>
     /// Gets or sets the training time for this phase in milliseconds.
@@ -250,7 +257,7 @@ public class CurriculumPhaseResult<T>
     /// <summary>
     /// Gets or sets the final training loss at end of this phase.
     /// </summary>
-    public T FinalTrainingLoss { get; set; } = default!;
+    public required T FinalTrainingLoss { get; set; }
 
     /// <summary>
     /// Gets or sets the final validation loss at end of this phase (if available).
@@ -274,6 +281,9 @@ public class CurriculumPhaseResult<T>
 /// <typeparam name="T">The numeric type.</typeparam>
 public class CurriculumProgressionEntry<T>
 {
+    [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
+    public CurriculumProgressionEntry() { }
+
     /// <summary>
     /// Gets or sets the epoch number.
     /// </summary>
@@ -287,12 +297,12 @@ public class CurriculumProgressionEntry<T>
     /// <summary>
     /// Gets or sets the current data fraction.
     /// </summary>
-    public T DataFraction { get; set; } = default!;
+    public required T DataFraction { get; set; }
 
     /// <summary>
     /// Gets or sets the training loss.
     /// </summary>
-    public T TrainingLoss { get; set; } = default!;
+    public required T TrainingLoss { get; set; }
 
     /// <summary>
     /// Gets or sets the validation loss (if available).
@@ -307,7 +317,7 @@ public class CurriculumProgressionEntry<T>
     /// <summary>
     /// Gets or sets the difficulty threshold for this epoch.
     /// </summary>
-    public T DifficultyThreshold { get; set; } = default!;
+    public required T DifficultyThreshold { get; set; }
 
     /// <summary>
     /// Gets or sets the timestamp.

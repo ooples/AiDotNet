@@ -15,6 +15,8 @@ using AiDotNet.Validation;
 
 namespace AiDotNet.Models.Results;
 
+#pragma warning disable CS8601, CS8618 // Generic T defaults use default(T) - always used with value types
+
 public partial class AiModelResult<T, TInput, TOutput>
 {
     private const string PredictiveEntropyMetricKey = "predictive_entropy";
@@ -34,13 +36,13 @@ public partial class AiModelResult<T, TInput, TOutput>
     internal bool HasConformalRegression { get; private set; }
 
     [JsonProperty]
-    internal T ConformalRegressionQuantile { get; private set; } = default!;
+    internal T ConformalRegressionQuantile { get; private set; } = default;
 
     [JsonProperty]
     internal bool HasConformalClassification { get; private set; }
 
     [JsonProperty]
-    internal T ConformalClassificationThreshold { get; private set; } = default!;
+    internal T ConformalClassificationThreshold { get; private set; } = default;
 
     [JsonProperty]
     internal int ConformalClassificationNumClasses { get; private set; }
@@ -58,7 +60,7 @@ public partial class AiModelResult<T, TInput, TOutput>
     internal bool HasTemperatureScaling { get; private set; }
 
     [JsonProperty]
-    internal T TemperatureScalingTemperature { get; private set; } = default!;
+    internal T TemperatureScalingTemperature { get; private set; } = default;
 
     [JsonProperty]
     internal bool HasPlattScaling { get; private set; }
@@ -100,7 +102,7 @@ public partial class AiModelResult<T, TInput, TOutput>
     internal bool HasExpectedCalibrationError { get; private set; }
 
     [JsonProperty]
-    internal T ExpectedCalibrationError { get; private set; } = default!;
+    internal T ExpectedCalibrationError { get; private set; } = default;
 
     internal void SetUncertaintyQuantificationOptions(UncertaintyQuantificationOptions? options)
     {

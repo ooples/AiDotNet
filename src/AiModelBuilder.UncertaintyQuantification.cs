@@ -12,6 +12,8 @@ using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet;
 
+#pragma warning disable CS8601 // Possible null reference assignment in out params
+
 public partial class AiModelBuilder<T, TInput, TOutput>
 {
     /// <summary>
@@ -1202,8 +1204,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         out TInput input,
         out TOutput target)
     {
-        input = default!;
-        target = default!;
+        input = default;
+        target = default;
 
         if (labels.Length == 0 || result.Model == null)
         {
@@ -1249,8 +1251,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         out TInput input,
         out TOutput target)
     {
-        input = default!;
-        target = default!;
+        input = default;
+        target = default;
 
         var max = Math.Max(1, options.PosteriorFitMaxSamples);
         var take = max;
@@ -1285,7 +1287,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
 
     private static bool TrySliceFirstSamples<TValue>(TValue value, int take, out TValue sliced)
     {
-        sliced = default!;
+        sliced = default;
 
         if (take <= 0)
         {
@@ -1334,7 +1336,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
 
     private static bool TryCreateOneHotTarget(Vector<int> labels, int batch, int classes, out TOutput target)
     {
-        target = default!;
+        target = default;
         var numOps = MathHelper.GetNumericOperations<T>();
 
         if (typeof(TOutput) == typeof(Tensor<T>))

@@ -216,7 +216,7 @@ public class OptimizationHistoryEntry<T>
     /// <summary>
     /// Gets or sets the performance score achieved.
     /// </summary>
-    public T Score { get; set; } = default!;
+    public required T Score { get; set; }
 
     /// <summary>
     /// Gets or sets the timestamp of this iteration.

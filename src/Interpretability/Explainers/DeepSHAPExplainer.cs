@@ -504,12 +504,12 @@ public class DeepSHAPExplanation<T>
     /// <summary>
     /// Gets or sets the expected (baseline) prediction value.
     /// </summary>
-    public T ExpectedValue { get; set; } = default!;
+    public required T ExpectedValue { get; set; }
 
     /// <summary>
     /// Gets or sets the actual prediction for this instance.
     /// </summary>
-    public T Prediction { get; set; } = default!;
+    public required T Prediction { get; set; }
 
     /// <summary>
     /// Gets or sets the input instance.

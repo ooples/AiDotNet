@@ -332,8 +332,12 @@ namespace AiDotNet.PhysicsInformed.Interfaces
     /// Results from inverse problem optimization.
     /// </summary>
     /// <typeparam name="T">The numeric type.</typeparam>
+#pragma warning disable CS8618 // Generic T properties use default(T) - always used with value types
     public class InverseProblemResult<T>
     {
+    [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
+    public InverseProblemResult() { }
+
         /// <summary>
         /// The identified parameter values.
         /// </summary>
@@ -355,17 +359,17 @@ namespace AiDotNet.PhysicsInformed.Interfaces
         /// <summary>
         /// Final data loss (fit to observations).
         /// </summary>
-        public T DataLoss { get; set; } = default!;
+        public required T DataLoss { get; set; }
 
         /// <summary>
         /// Final physics loss (PDE residual).
         /// </summary>
-        public T PhysicsLoss { get; set; } = default!;
+        public required T PhysicsLoss { get; set; }
 
         /// <summary>
         /// Total loss (data + physics + regularization).
         /// </summary>
-        public T TotalLoss { get; set; } = default!;
+        public required T TotalLoss { get; set; }
 
         /// <summary>
         /// History of parameter values during training.

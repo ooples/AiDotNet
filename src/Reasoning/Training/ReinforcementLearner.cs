@@ -8,6 +8,7 @@ using AiDotNet.Validation;
 
 namespace AiDotNet.Reasoning.Training;
 
+#pragma warning disable CS8618 // Generic T properties use default(T) - always used with value types
 /// <summary>
 /// Orchestrates reinforcement learning training for reasoning models.
 /// </summary>
@@ -624,11 +625,14 @@ internal class RLConfig
 /// </summary>
 internal class EpochMetrics<T>
 {
+    [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
+    public EpochMetrics() { }
+
     public int Epoch { get; set; }
-    public T AverageReward { get; set; } = default!;
-    public T AverageLoss { get; set; } = default!;
+    public required T AverageReward { get; set; }
+    public required T AverageLoss { get; set; }
     public double Accuracy { get; set; }
-    public T ValidationReward { get; set; } = default!;
+    public required T ValidationReward { get; set; }
 }
 
 /// <summary>

@@ -59,8 +59,11 @@ internal interface IExternalToolVerifier<T>
 /// what was the actual result, and how confident are we in the verification?
 /// </para>
 /// </remarks>
+#pragma warning disable CS8618 // Generic T properties use default(T) - always used with value types
 public class VerificationResult<T>
 {
+    [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
+    public VerificationResult() { }
     /// <summary>
     /// Whether the verification passed.
     /// </summary>
@@ -84,7 +87,7 @@ public class VerificationResult<T>
     /// <summary>
     /// Confidence score in the verification (0.0 to 1.0).
     /// </summary>
-    public T Confidence { get; set; } = default!;
+    public required T Confidence { get; set; }
 
     /// <summary>
     /// Name of the tool that performed the verification.

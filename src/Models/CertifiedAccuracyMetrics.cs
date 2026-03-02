@@ -1,11 +1,15 @@
 namespace AiDotNet.Models;
 
+#pragma warning disable CS8618 // Generic T properties use default(T) - always used with value types
 /// <summary>
 /// Contains metrics for certified accuracy evaluation.
 /// </summary>
 /// <typeparam name="T">The numeric data type used for calculations.</typeparam>
 public class CertifiedAccuracyMetrics<T>
 {
+    [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
+    public CertifiedAccuracyMetrics() { }
+
     /// <summary>
     /// Gets or sets the standard accuracy on clean examples.
     /// </summary>
@@ -19,12 +23,12 @@ public class CertifiedAccuracyMetrics<T>
     /// <summary>
     /// Gets or sets the certification radius used.
     /// </summary>
-    public T CertificationRadius { get; set; } = default!;
+    public required T CertificationRadius { get; set; }
 
     /// <summary>
     /// Gets or sets the average certified radius across all examples.
     /// </summary>
-    public T AverageCertifiedRadius { get; set; } = default!;
+    public required T AverageCertifiedRadius { get; set; }
 
     /// <summary>
     /// Gets or sets the percentage of examples that could be certified.
@@ -34,7 +38,7 @@ public class CertifiedAccuracyMetrics<T>
     /// <summary>
     /// Gets or sets the median certified radius.
     /// </summary>
-    public T MedianCertifiedRadius { get; set; } = default!;
+    public required T MedianCertifiedRadius { get; set; }
 
     /// <summary>
     /// Gets or sets additional certification metrics.

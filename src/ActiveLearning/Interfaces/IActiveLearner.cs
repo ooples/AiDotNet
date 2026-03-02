@@ -185,6 +185,7 @@ public interface IOracle<TInput, TOutput>
     T GetLabelingCost<T>(TInput input);
 }
 
+#pragma warning disable CS8618 // Generic T properties use default(T) - always used with value types
 /// <summary>
 /// Event arguments for when samples are selected for labeling.
 /// </summary>
@@ -226,15 +227,18 @@ public class SamplesSelectedEventArgs<TInput> : EventArgs
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 public class TrainingMetrics<T>
 {
+    [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
+    public TrainingMetrics() { }
+
     /// <summary>
     /// Gets or sets the training loss.
     /// </summary>
-    public T Loss { get; set; } = default!;
+    public required T Loss { get; set; }
 
     /// <summary>
     /// Gets or sets the training accuracy.
     /// </summary>
-    public T Accuracy { get; set; } = default!;
+    public required T Accuracy { get; set; }
 
     /// <summary>
     /// Gets or sets the number of epochs trained.
@@ -253,15 +257,18 @@ public class TrainingMetrics<T>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 public class EvaluationMetrics<T>
 {
+    [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
+    public EvaluationMetrics() { }
+
     /// <summary>
     /// Gets or sets the evaluation loss.
     /// </summary>
-    public T Loss { get; set; } = default!;
+    public required T Loss { get; set; }
 
     /// <summary>
     /// Gets or sets the evaluation accuracy.
     /// </summary>
-    public T Accuracy { get; set; } = default!;
+    public required T Accuracy { get; set; }
 
     /// <summary>
     /// Gets or sets the precision (for classification).

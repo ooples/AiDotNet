@@ -249,7 +249,7 @@ public class ModelComparisonReport<T>
     /// <summary>
     /// Primary statistical test result.
     /// </summary>
-    public StatisticalTestResult<T> PrimaryTest { get; init; } = default!;
+    public required StatisticalTestResult<T> PrimaryTest { get; init; }
 
     /// <summary>
     /// Additional test results, if computed.

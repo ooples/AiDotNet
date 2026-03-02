@@ -4,6 +4,8 @@ using AiDotNet.Interfaces;
 
 namespace AiDotNet.LinearAlgebra;
 
+#pragma warning disable CS8601 // Possible null reference assignment
+
 /// <summary>
 /// A thread-safe dictionary implementation that uses INumericOperations for key comparison,
 /// allowing generic numeric types T to be used as keys without requiring the notnull constraint.
@@ -205,7 +207,7 @@ public class NumericDictionary<TKey, TValue> : IEnumerable<KeyValuePair<TKey, TV
                 value = _values[index];
                 return true;
             }
-            value = default!;
+            value = default;
             return false;
         }
     }

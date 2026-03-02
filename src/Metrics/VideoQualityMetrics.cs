@@ -609,17 +609,17 @@ public class VideoQualityResult<T>
     /// <summary>
     /// Mean PSNR across all frames (dB).
     /// </summary>
-    public T MeanPSNR { get; set; } = default!;
+    public required T MeanPSNR { get; set; }
 
     /// <summary>
     /// Minimum per-frame PSNR (dB).
     /// </summary>
-    public T MinPSNR { get; set; } = default!;
+    public required T MinPSNR { get; set; }
 
     /// <summary>
     /// Maximum per-frame PSNR (dB).
     /// </summary>
-    public T MaxPSNR { get; set; } = default!;
+    public required T MaxPSNR { get; set; }
 
     /// <summary>
     /// PSNR values for each frame.
@@ -629,20 +629,20 @@ public class VideoQualityResult<T>
     /// <summary>
     /// Mean SSIM across all frames (0-1).
     /// </summary>
-    public T MeanSSIM { get; set; } = default!;
+    public required T MeanSSIM { get; set; }
 
     /// <summary>
     /// Temporal consistency score (0-1, higher is better).
     /// </summary>
-    public T TemporalConsistency { get; set; } = default!;
+    public required T TemporalConsistency { get; set; }
 
     /// <summary>
     /// Flicker score (0-1, lower is better).
     /// </summary>
-    public T FlickerScore { get; set; } = default!;
+    public required T FlickerScore { get; set; }
 
     /// <summary>
     /// Overall composite quality score (0-1).
     /// </summary>
-    public T OverallScore { get; set; } = default!;
+    public required T OverallScore { get; set; }
 }

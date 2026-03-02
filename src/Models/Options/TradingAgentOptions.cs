@@ -3,6 +3,7 @@ using AiDotNet.LossFunctions;
 
 namespace AiDotNet.Models.Options;
 
+#pragma warning disable CS8618 // Generic T properties use default(T) - always used with value types
 /// <summary>
 /// Configuration options for financial trading agents.
 /// </summary>
@@ -33,6 +34,9 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class TradingAgentOptions<T> : ModelOptions
 {
+    [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
+    public TradingAgentOptions() { }
+
     #region RL Parameters
 
     /// <summary>
@@ -45,7 +49,7 @@ public class TradingAgentOptions<T> : ModelOptions
     /// Typical values: 1e-4 to 1e-3.
     /// </para>
     /// </remarks>
-    public T LearningRate { get; set; } = default!;
+    public required T LearningRate { get; set; }
 
     /// <summary>
     /// Discount factor (gamma) for future rewards.
@@ -57,7 +61,7 @@ public class TradingAgentOptions<T> : ModelOptions
     /// 0.9 means more focus on short-term profits.
     /// </para>
     /// </remarks>
-    public T DiscountFactor { get; set; } = default!;
+    public required T DiscountFactor { get; set; }
 
     /// <summary>
     /// Loss function for training the agent's neural networks.
@@ -156,7 +160,7 @@ public class TradingAgentOptions<T> : ModelOptions
     /// Common values: 10000, 100000, 1000000.
     /// </para>
     /// </remarks>
-    public T InitialCapital { get; set; } = default!;
+    public required T InitialCapital { get; set; }
 
     /// <summary>
     /// Transaction cost as a fraction of trade value.
@@ -181,7 +185,7 @@ public class TradingAgentOptions<T> : ModelOptions
     /// Lower values enforce diversification.
     /// </para>
     /// </remarks>
-    public T MaxPositionSize { get; set; } = default!;
+    public required T MaxPositionSize { get; set; }
 
     /// <summary>
     /// Annual risk-free rate for Sharpe ratio calculation.

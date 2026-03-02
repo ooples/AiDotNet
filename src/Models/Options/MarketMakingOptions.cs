@@ -13,6 +13,9 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class MarketMakingOptions<T> : TradingAgentOptions<T>
 {
+    [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
+    public MarketMakingOptions() { }
+
     /// <summary>
     /// The maximum inventory size the agent can hold.
     /// </summary>

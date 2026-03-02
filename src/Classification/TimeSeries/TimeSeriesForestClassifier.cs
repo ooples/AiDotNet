@@ -5,6 +5,8 @@ using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Classification.TimeSeries;
 
+#pragma warning disable CS8601, CS8618 // Generic T defaults use default(T) - always used with value types
+
 /// <summary>
 /// Implements the Time Series Forest classifier.
 /// </summary>
@@ -79,7 +81,7 @@ public class TimeSeriesForestClassifier<T> : ClassifierBase<T>, ITimeSeriesClass
         public int FeatureIndex { get; set; } = -1;
         public double Threshold { get; set; }
         public bool IsLeaf { get; set; }
-        public T PredictedClass { get; set; } = default!;
+        public T PredictedClass { get; set; } = default;
         public double[]? ClassProbabilities { get; set; }
         public DecisionTreeNode? Left { get; set; }
         public DecisionTreeNode? Right { get; set; }

@@ -13,6 +13,9 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class FinancialPPOAgentOptions<T> : TradingAgentOptions<T>
 {
+    [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
+    public FinancialPPOAgentOptions() { }
+
     /// <summary>
     /// Number of optimization epochs per batch of data.
     /// </summary>

@@ -155,12 +155,16 @@ public interface ISpeakerVerifier<T> : IFullModel<T, Tensor<T>, Tensor<T>>
     T GetThresholdForFAR(double targetFAR);
 }
 
+#pragma warning disable CS8618 // Generic T properties use default(T) - always used with value types
 /// <summary>
 /// Result of a speaker verification attempt.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 public class SpeakerVerificationResult<T>
 {
+    [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
+    public SpeakerVerificationResult() { }
+
     /// <summary>
     /// Gets or sets whether the verification was accepted.
     /// </summary>
@@ -169,17 +173,17 @@ public class SpeakerVerificationResult<T>
     /// <summary>
     /// Gets or sets the verification score.
     /// </summary>
-    public T Score { get; set; } = default!;
+    public required T Score { get; set; }
 
     /// <summary>
     /// Gets or sets the threshold used for the decision.
     /// </summary>
-    public T Threshold { get; set; } = default!;
+    public required T Threshold { get; set; }
 
     /// <summary>
     /// Gets or sets the confidence level of the decision.
     /// </summary>
-    public T Confidence { get; set; } = default!;
+    public required T Confidence { get; set; }
 }
 
 /// <summary>
@@ -196,7 +200,7 @@ public class SpeakerProfile<T>
     /// <summary>
     /// Gets or sets the speaker embedding.
     /// </summary>
-    public Tensor<T> Embedding { get; set; } = default!;
+    public required Tensor<T> Embedding { get; set; }
 
     /// <summary>
     /// Gets or sets the number of audio samples used to create this profile.

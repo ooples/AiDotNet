@@ -14,6 +14,9 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class FinancialSACAgentOptions<T> : TradingAgentOptions<T>
 {
+    [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
+    public FinancialSACAgentOptions() { }
+
     /// <summary>
     /// Initial log alpha value for automatic temperature tuning.
     /// </summary>

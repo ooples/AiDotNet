@@ -245,17 +245,17 @@ public class CalibrationResult<T>
     /// <summary>
     /// Expected Calibration Error: weighted average of |predicted - observed| across bins.
     /// </summary>
-    public T ExpectedCalibrationError { get; init; } = default!;
+    public required T ExpectedCalibrationError { get; init; }
 
     /// <summary>
     /// Maximum Calibration Error: worst bin's |predicted - observed|.
     /// </summary>
-    public T MaximumCalibrationError { get; init; } = default!;
+    public required T MaximumCalibrationError { get; init; }
 
     /// <summary>
     /// Brier Score: mean squared error of probability predictions.
     /// </summary>
-    public T BrierScore { get; init; } = default!;
+    public required T BrierScore { get; init; }
 
     /// <summary>
     /// Total number of samples analyzed.
@@ -286,12 +286,12 @@ public class CalibrationBin<T>
     /// <summary>
     /// Mean predicted probability in this bin.
     /// </summary>
-    public T MeanPredictedProbability { get; init; } = default!;
+    public required T MeanPredictedProbability { get; init; }
 
     /// <summary>
     /// Observed frequency of positive class in this bin.
     /// </summary>
-    public T ObservedFrequency { get; init; } = default!;
+    public required T ObservedFrequency { get; init; }
 
     /// <summary>
     /// Number of samples in this bin.

@@ -5,6 +5,7 @@ using AiDotNet.Validation;
 
 namespace AiDotNet.Reasoning.Training;
 
+#pragma warning disable CS8618 // Generic T properties use default(T) - always used with value types
 /// <summary>
 /// Policy gradient trainer for reinforcement learning of reasoning models.
 /// </summary>
@@ -455,11 +456,14 @@ internal class PolicyGradientTrainer<T>
 /// </summary>
 internal class TrainingMetrics<T>
 {
-    public T PolicyLoss { get; set; } = default!;
-    public T Entropy { get; set; } = default!;
-    public T TotalLoss { get; set; } = default!;
-    public T AverageReward { get; set; } = default!;
-    public T AverageReturn { get; set; } = default!;
+    [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
+    public TrainingMetrics() { }
+
+    public required T PolicyLoss { get; set; }
+    public required T Entropy { get; set; }
+    public required T TotalLoss { get; set; }
+    public required T AverageReward { get; set; }
+    public required T AverageReturn { get; set; }
     public int ChainCount { get; set; }
 
     public override string ToString()
@@ -479,8 +483,11 @@ Chains: {ChainCount}";
 /// </summary>
 internal class EvaluationMetrics<T>
 {
+    [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
+    public EvaluationMetrics() { }
+
     public double Accuracy { get; set; }
-    public T AverageReward { get; set; } = default!;
+    public required T AverageReward { get; set; }
     public int TotalEvaluated { get; set; }
 
     public override string ToString()

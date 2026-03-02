@@ -13,6 +13,9 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class FinRLAgentOptions<T> : TradingAgentOptions<T>
 {
+    [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
+    public FinRLAgentOptions() { }
+
     /// <summary>
     /// Whether to automatically select the best algorithm based on the action space.
     /// </summary>

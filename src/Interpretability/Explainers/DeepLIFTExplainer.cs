@@ -463,23 +463,23 @@ public class DeepLIFTExplanation<T>
     /// <summary>
     /// Gets or sets the prediction at the baseline.
     /// </summary>
-    public T BaselinePrediction { get; set; } = default!;
+    public required T BaselinePrediction { get; set; }
 
     /// <summary>
     /// Gets or sets the prediction at the input.
     /// </summary>
-    public T InputPrediction { get; set; } = default!;
+    public required T InputPrediction { get; set; }
 
     /// <summary>
     /// Gets or sets the difference between input and baseline predictions.
     /// </summary>
-    public T DeltaOutput { get; set; } = default!;
+    public required T DeltaOutput { get; set; }
 
     /// <summary>
     /// Gets or sets the completeness error (difference between sum of attributions and delta output).
     /// A small error indicates the attributions properly explain the prediction change.
     /// </summary>
-    public T CompletenessError { get; set; } = default!;
+    public required T CompletenessError { get; set; }
 
     /// <summary>
     /// Gets or sets the feature names.

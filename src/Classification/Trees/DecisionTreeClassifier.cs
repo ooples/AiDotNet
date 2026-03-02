@@ -4,6 +4,8 @@ using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Classification.Trees;
 
+#pragma warning disable CS8601, CS8618 // Generic T defaults use default(T) - always used with value types
+
 /// <summary>
 /// A decision tree classifier that learns a hierarchy of decision rules from training data.
 /// </summary>
@@ -876,7 +878,7 @@ internal class DecisionNode<T>
     /// <summary>
     /// The threshold value for splitting (internal nodes only).
     /// </summary>
-    public T Threshold { get; set; } = default!;
+    public T Threshold { get; set; } = default;
 
     /// <summary>
     /// The left child node (values <= threshold).
