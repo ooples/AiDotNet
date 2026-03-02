@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Serving.Models;
@@ -273,6 +274,104 @@ public class ModelRegistryLoader<T, TInput, TOutput>
             // Load the latest version
             return LoadWithServableModel(modelName, null, servableModel, modelName);
         }
+    }
+
+    /// <summary>
+    /// Loads a model from the registry using automatic type detection via the AIMF envelope header.
+    /// </summary>
+    /// <param name="modelName">The name of the model in the registry.</param>
+    /// <param name="version">The version to load. If null, loads the latest version.</param>
+    /// <param name="servingName">Optional name to use in the serving repository. If null, uses modelName.</param>
+    /// <returns>True if the model was loaded successfully, false otherwise.</returns>
+    /// <remarks>
+    /// <b>For Beginners:</b> This method automatically detects the model type from the saved file
+    /// and loads it without needing to specify the model type manually. The model file must have
+    /// been saved with the AIMF envelope header (which is the default for models saved with
+    /// SaveModel() after the Model Metadata Foundation was introduced).
+    ///
+    /// For legacy model files without the AIMF header, use <see cref="LoadWithServableModel"/> instead.
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the model's storage path is not set, the file is not found, or the file
+    /// does not have an AIMF envelope header.
+    /// </exception>
+    public bool LoadFromRegistryAutoDetect(
+        string modelName,
+        int? version = null,
+        string? servingName = null)
+    {
+        Guard.NotNullOrWhiteSpace(modelName);
+
+        // Get the registered model metadata
+        RegisteredModel<T, TInput, TOutput> registeredModel;
+        try
+        {
+            registeredModel = version.HasValue
+                ? _registry.GetModel(modelName, version.Value)
+                : _registry.GetLatestModel(modelName);
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException(
+                $"Failed to load model '{modelName}' version {version?.ToString() ?? "latest"} from registry.", ex);
+        }
+
+        if (string.IsNullOrWhiteSpace(registeredModel.StoragePath))
+        {
+            throw new InvalidOperationException(
+                $"Model '{modelName}' version {registeredModel.Version} does not have a storage path. " +
+                "Cannot auto-detect model type without a file to inspect.");
+        }
+
+        if (!File.Exists(registeredModel.StoragePath))
+        {
+            throw new FileNotFoundException(
+                $"Model file not found: {registeredModel.StoragePath}", registeredModel.StoragePath);
+        }
+
+        // Load via ModelLoader which handles AIMF detection, type resolution, and deserialization
+        var model = ModelLoader.Load<T>(registeredModel.StoragePath);
+
+        // Extract shape info if the model supports it
+        int inputDimension = 0;
+        int outputDimension = 0;
+        if (model is IModelShape shapeModel)
+        {
+            var inputShape = shapeModel.GetInputShape();
+            var outputShape = shapeModel.GetOutputShape();
+            inputDimension = inputShape.Length > 0 ? inputShape[inputShape.Length - 1] : 0;
+            outputDimension = outputShape.Length > 0 ? outputShape[outputShape.Length - 1] : 0;
+        }
+
+        var name = servingName ?? modelName;
+
+        // Create a ServableModelWrapper using the deserialized model
+        // The predict function delegates to the deserialized model if it supports prediction
+        var servableModel = new ServableModelWrapper<T>(
+            name,
+            inputDimension,
+            outputDimension,
+            input =>
+            {
+                if (model is IModel<Vector<T>, Vector<T>, ModelMetadata<T>> predictableModel)
+                {
+                    return predictableModel.Predict(input);
+                }
+
+                throw new InvalidOperationException(
+                    $"Model '{name}' (type: {model.GetType().Name}) does not support Vector<T> prediction. " +
+                    "Use LoadWithServableModel() with a custom predict function instead.");
+            },
+            null,
+            enableBatching: true,
+            enableSpeculativeDecoding: false);
+
+        return _repository.LoadModelFromRegistry(
+            name,
+            servableModel,
+            registeredModel.Version,
+            registeredModel.Stage.ToString(),
+            registeredModel.StoragePath);
     }
 
     /// <summary>
