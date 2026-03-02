@@ -499,7 +499,7 @@ public class DocumentBlock<T>
     /// <summary>
     /// Bounding box of the block.
     /// </summary>
-    public BoundingBox<T> Box { get; set; } = default!;
+    public required BoundingBox<T> Box { get; set; }
 
     /// <summary>
     /// Type of document block.
@@ -509,7 +509,7 @@ public class DocumentBlock<T>
     /// <summary>
     /// Confidence score.
     /// </summary>
-    public T Confidence { get; set; } = default!;
+    public required T Confidence { get; set; }
 
     /// <summary>
     /// Text content (if applicable).

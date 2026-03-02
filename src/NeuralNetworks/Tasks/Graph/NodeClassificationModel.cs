@@ -114,6 +114,11 @@ public class NodeClassificationModel<T> : NeuralNetworkBase<T>
     /// ```
     /// </para>
     /// </remarks>
+    public NodeClassificationModel()
+        : this(new NeuralNetworkArchitecture<T>(InputType.OneDimensional, NeuralNetworkTaskType.MultiClassClassification, inputSize: 16, outputSize: 7))
+    {
+    }
+
     public NodeClassificationModel(
         NeuralNetworkArchitecture<T> architecture,
         int hiddenDim = 64,

@@ -112,6 +112,21 @@ public class AutoDiffTabGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGe
     /// <summary>
     /// Initializes a new AutoDiff-Tab generator with the specified architecture.
     /// </summary>
+    /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    public AutoDiffTabGenerator()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.OneDimensional,
+            taskType: Enums.NeuralNetworkTaskType.Regression,
+            inputSize: 10,
+            outputSize: 10))
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the AutoDiffTabGenerator.
+    /// </summary>
     /// <param name="architecture">The neural network architecture defining input/output dimensions and optional custom layers.</param>
     /// <param name="options">AutoDiffTab-specific configuration options.</param>
     /// <param name="optimizer">Gradient-based optimizer (defaults to Adam).</param>

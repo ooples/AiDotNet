@@ -52,6 +52,14 @@ public class GANDALFRegression<T> : GANDALFBase<T>
     public override int ParameterCount => base.ParameterCount + _regressionHead.ParameterCount;
 
     /// <summary>
+    /// Initializes a new instance of the GANDALFRegression class with default configuration.
+    /// </summary>
+    public GANDALFRegression()
+        : this(numFeatures: 16)
+    {
+    }
+
+    /// <summary>
     /// Initializes a new instance of the GANDALFRegression class.
     /// </summary>
     /// <param name="numFeatures">Number of input features.</param>

@@ -13,6 +13,17 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class FinRLAgentOptions<T> : TradingAgentOptions<T>
 {
+    [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
+    public FinRLAgentOptions() { }
+
+    [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
+    public FinRLAgentOptions(FinRLAgentOptions<T> other) : this()
+    {
+        if (other is null) throw new ArgumentNullException(nameof(other));
+        AutoSelectAlgorithm = other.AutoSelectAlgorithm;
+        UseEnsemble = other.UseEnsemble;
+    }
+
     /// <summary>
     /// Whether to automatically select the best algorithm based on the action space.
     /// </summary>

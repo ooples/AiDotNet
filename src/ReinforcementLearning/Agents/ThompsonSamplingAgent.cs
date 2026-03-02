@@ -21,6 +21,14 @@ public class ThompsonSamplingAgent<T> : ReinforcementLearningAgentBase<T>
     private Vector<int> _successCounts;
     private Vector<int> _failureCounts;
 
+    /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public ThompsonSamplingAgent()
+        : this(new ThompsonSamplingOptions<T>())
+    {
+    }
+
     public ThompsonSamplingAgent(ThompsonSamplingOptions<T> options) : base(options)
     {
         Guard.NotNull(options);

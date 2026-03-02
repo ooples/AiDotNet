@@ -49,6 +49,14 @@ public class SelfTrainingClassifier<T> : SemiSupervisedClassifierBase<T>
     private readonly SelectionCriterion _selectionCriterion;
 
     /// <summary>
+    /// Initializes a new instance with default settings using Gaussian Naive Bayes as the base classifier.
+    /// </summary>
+    public SelfTrainingClassifier()
+        : this(new AiDotNet.Classification.NaiveBayes.GaussianNaiveBayes<T>())
+    {
+    }
+
+    /// <summary>
     /// Gets the number of iterations performed during training.
     /// </summary>
     public int IterationsPerformed { get; private set; }

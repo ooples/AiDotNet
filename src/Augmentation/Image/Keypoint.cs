@@ -3,6 +3,8 @@ using AiDotNet.Tensors.Interfaces;
 
 namespace AiDotNet.Augmentation.Image;
 
+#pragma warning disable CS8601, CS8618 // Generic T defaults use default(T) - always used with value types
+
 /// <summary>
 /// Represents a keypoint annotation for pose estimation and landmark detection.
 /// </summary>
@@ -92,8 +94,8 @@ public class Keypoint<T>
     /// </summary>
     public Keypoint()
     {
-        X = default!;
-        Y = default!;
+        X = default;
+        Y = default;
         Visibility = 2; // Default to visible
     }
 

@@ -123,6 +123,18 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
     #region Constructors
 
     /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    public VideoCLIP()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.ThreeDimensional,
+            taskType: Enums.NeuralNetworkTaskType.MultiClassClassification,
+            inputHeight: 224, inputWidth: 224, inputDepth: 3,
+            outputSize: 400))
+    {
+    }
+
+    /// <summary>
     /// Initializes a new instance of the VideoCLIP class.
     /// </summary>
     /// <param name="architecture">The neural network architecture configuration.</param>

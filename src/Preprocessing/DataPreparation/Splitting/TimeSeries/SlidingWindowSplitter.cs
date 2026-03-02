@@ -37,6 +37,14 @@ public class SlidingWindowSplitter<T> : DataSplitterBase<T>
     private int _nSplits;
 
     /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public SlidingWindowSplitter()
+        : this(100, 20)
+    {
+    }
+
+    /// <summary>
     /// Creates a new sliding window splitter.
     /// </summary>
     /// <param name="trainSize">Fixed size of the training window.</param>

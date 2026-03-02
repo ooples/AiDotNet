@@ -1109,7 +1109,7 @@ internal static class YamlParamsHelper
     {
         public string MethodName { get; set; } = "";
         public string SectionName { get; set; } = "";
-        public ITypeSymbol ParameterType { get; set; } = null!;
+        public ITypeSymbol? ParameterType { get; set; }
         public string ParameterTypeName { get; set; } = "";
         public bool IsNullable { get; set; }
         public bool IsAbstract { get; set; }
@@ -1121,7 +1121,7 @@ internal static class YamlParamsHelper
 
     private class SectionInfo
     {
-        public ConfigureMethodInfo Method { get; set; } = null!;
+        public ConfigureMethodInfo? Method { get; set; }
         public string YamlPropertyName { get; set; } = "";
         public List<ImplementationInfo> ConcreteImplementations { get; set; } = new();
     }

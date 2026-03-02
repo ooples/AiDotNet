@@ -60,6 +60,8 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
     // Maps experience index to array of per-agent rewards
     private Dictionary<int, List<T>> _perAgentRewards;
 
+    public MADDPGAgent() : this(new MADDPGOptions<T>()) { }
+
     public MADDPGAgent(MADDPGOptions<T> options, IOptimizer<T, Vector<T>, Vector<T>>? optimizer = null)
         : base(options)
     {

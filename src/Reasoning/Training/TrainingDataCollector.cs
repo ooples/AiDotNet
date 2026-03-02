@@ -399,12 +399,12 @@ internal class TrainingSample<T>
     /// <summary>
     /// Process reward (quality of reasoning steps).
     /// </summary>
-    public T ChainReward { get; set; } = default!;
+    public required T ChainReward { get; set; }
 
     /// <summary>
     /// Outcome reward (correctness of final answer).
     /// </summary>
-    public T OutcomeReward { get; set; } = default!;
+    public required T OutcomeReward { get; set; }
 
     /// <summary>
     /// Problem category or domain.
@@ -445,12 +445,12 @@ internal class DataStatistics<T>
     /// <summary>
     /// Average reward across reasoning chains.
     /// </summary>
-    public T AverageChainReward { get; set; } = default!;
+    public required T AverageChainReward { get; set; }
 
     /// <summary>
     /// Average reward for the final outcomes.
     /// </summary>
-    public T AverageOutcomeReward { get; set; } = default!;
+    public required T AverageOutcomeReward { get; set; }
 
     /// <summary>
     /// Number of samples considered correct.

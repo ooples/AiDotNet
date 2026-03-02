@@ -98,6 +98,18 @@ public class PSENet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
     #region Constructors
 
     /// <summary>
+    /// Creates a PSENet model with default configuration for native training.
+    /// </summary>
+    public PSENet()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: InputType.TwoDimensional,
+            taskType: NeuralNetworkTaskType.BinaryClassification,
+            inputHeight: 640, inputWidth: 640,
+            outputSize: 7))
+    {
+    }
+
+    /// <summary>
     /// Creates a PSENet model using a pre-trained ONNX model for inference.
     /// </summary>
     public PSENet(

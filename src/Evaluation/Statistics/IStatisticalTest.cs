@@ -19,12 +19,12 @@ public class StatisticalTestResult<T>
     /// <summary>
     /// The test statistic value.
     /// </summary>
-    public T Statistic { get; init; } = default!;
+    public required T Statistic { get; init; }
 
     /// <summary>
     /// The p-value (probability of observing this result under null hypothesis).
     /// </summary>
-    public T PValue { get; init; } = default!;
+    public required T PValue { get; init; }
 
     /// <summary>
     /// Whether the result is statistically significant at the specified alpha level.

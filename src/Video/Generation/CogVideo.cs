@@ -224,6 +224,21 @@ public class CogVideo<T> : NeuralNetworkBase<T>
     /// </code>
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    private const int DefaultResolution = 64;
+    private const int DefaultChannels = 3;
+
+    public CogVideo()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.ThreeDimensional,
+            taskType: Enums.NeuralNetworkTaskType.Regression,
+            inputHeight: DefaultResolution, inputWidth: DefaultResolution, inputDepth: DefaultChannels,
+            outputSize: DefaultChannels))
+    {
+    }
+
     public CogVideo(
         NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,

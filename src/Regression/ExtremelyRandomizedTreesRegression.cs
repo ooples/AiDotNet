@@ -30,6 +30,14 @@ namespace AiDotNet.Regression;
 public class ExtremelyRandomizedTreesRegression<T> : AsyncDecisionTreeRegressionBase<T>
 {
     /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public ExtremelyRandomizedTreesRegression()
+        : this(new ExtremelyRandomizedTreesRegressionOptions())
+    {
+    }
+
+    /// <summary>
     /// The configuration options for the Extremely Randomized Trees algorithm.
     /// </summary>
     private readonly ExtremelyRandomizedTreesRegressionOptions _options;

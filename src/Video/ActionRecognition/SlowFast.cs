@@ -119,6 +119,18 @@ public class SlowFast<T> : NeuralNetworkBase<T>
     #region Constructors
 
     /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    public SlowFast()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.ThreeDimensional,
+            taskType: Enums.NeuralNetworkTaskType.MultiClassClassification,
+            inputHeight: 224, inputWidth: 224, inputDepth: 3,
+            outputSize: 400))
+    {
+    }
+
+    /// <summary>
     /// Creates a SlowFast model using native layers for training and inference.
     /// </summary>
     /// <param name="architecture">The network architecture configuration. If Architecture.Layers is provided,

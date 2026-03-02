@@ -139,6 +139,18 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
     /// different LSTM variants or optimizing for specific tasks.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    public LSTMNeuralNetwork()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.OneDimensional,
+            taskType: Enums.NeuralNetworkTaskType.Regression,
+            inputSize: 128,
+            outputSize: 1), outputActivation: (IActivationFunction<T>?)null)
+    {
+    }
+
     public LSTMNeuralNetwork(
         NeuralNetworkArchitecture<T> architecture,
         ILossFunction<T>? lossFunction = null,

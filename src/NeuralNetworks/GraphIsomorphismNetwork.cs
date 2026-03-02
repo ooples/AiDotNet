@@ -133,6 +133,18 @@ public class GraphIsomorphismNetwork<T> : NeuralNetworkBase<T>
     /// ```
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    public GraphIsomorphismNetwork()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.OneDimensional,
+            taskType: Enums.NeuralNetworkTaskType.MultiClassClassification,
+            inputSize: 128,
+            outputSize: 7))
+    {
+    }
+
     public GraphIsomorphismNetwork(
         NeuralNetworkArchitecture<T> architecture,
         int mlpHiddenDim = 64,

@@ -36,6 +36,14 @@ namespace AiDotNet.TimeSeries;
 public class ARMAModel<T> : TimeSeriesModelBase<T>
 {
     /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public ARMAModel()
+        : this(new ARMAOptions<T>())
+    {
+    }
+
+    /// <summary>
     /// Coefficients for the autoregressive (AR) component of the model.
     /// </summary>
     /// <remarks>

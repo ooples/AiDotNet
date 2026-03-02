@@ -41,6 +41,16 @@ public class UniformReplayBuffer<T, TState, TAction> : IReplayBuffer<T, TState, 
     public int Count => _buffer.Count;
 
     /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    private const int DefaultCapacity = 10000;
+
+    public UniformReplayBuffer()
+        : this(DefaultCapacity)
+    {
+    }
+
+    /// <summary>
     /// Initializes a new instance of the UniformReplayBuffer class.
     /// </summary>
     /// <param name="capacity">Maximum number of experiences to store.</param>

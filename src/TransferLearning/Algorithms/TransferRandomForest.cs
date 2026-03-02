@@ -27,6 +27,14 @@ public class TransferRandomForest<T> : TransferLearningBase<T, Matrix<T>, Vector
     private readonly IRegularization<T, Matrix<T>, Vector<T>> _regularization;
 
     /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public TransferRandomForest()
+        : this(new RandomForestRegressionOptions())
+    {
+    }
+
+    /// <summary>
     /// Initializes a new instance of the TransferRandomForest class.
     /// </summary>
     /// <param name="options">Configuration options for the Random Forest.</param>

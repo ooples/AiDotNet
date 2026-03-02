@@ -217,7 +217,7 @@ public class AudioEvent<T>
     /// <summary>
     /// Gets or sets the confidence score.
     /// </summary>
-    public T Confidence { get; set; } = default!;
+    public required T Confidence { get; set; }
 
     /// <summary>
     /// Gets or sets the peak confidence time within the event.
@@ -249,12 +249,12 @@ public class EventStatistics<T>
     /// <summary>
     /// Gets or sets the average confidence across occurrences.
     /// </summary>
-    public T AverageConfidence { get; set; } = default!;
+    public required T AverageConfidence { get; set; }
 
     /// <summary>
     /// Gets or sets the maximum confidence.
     /// </summary>
-    public T MaxConfidence { get; set; } = default!;
+    public required T MaxConfidence { get; set; }
 }
 
 /// <summary>

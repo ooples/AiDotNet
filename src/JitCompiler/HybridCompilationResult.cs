@@ -21,7 +21,7 @@ public class HybridCompilationResult<T>
     /// Gets or sets the compiled function.
     /// This function is always usable regardless of execution mode.
     /// </summary>
-    public Func<Tensor<T>[], Tensor<T>[]> CompiledFunc { get; set; } = null!;
+    public Func<Tensor<T>[], Tensor<T>[]>? CompiledFunc { get; set; }
 
     /// <summary>
     /// Gets or sets whether the function was fully JIT compiled.

@@ -34,6 +34,14 @@ namespace AiDotNet.Regression;
 public class SuperLearner<T> : NonLinearRegressionBase<T>
 {
     /// <summary>
+    /// Initializes a new instance with a default base model.
+    /// </summary>
+    public SuperLearner()
+        : this(new IFullModel<T, Matrix<T>, Vector<T>>[] { new AiDotNet.Regression.RidgeRegression<T>() })
+    {
+    }
+
+    /// <summary>
     /// Base models in the library.
     /// </summary>
     private List<IFullModel<T, Matrix<T>, Vector<T>>> _baseModels;

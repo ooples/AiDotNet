@@ -20,6 +20,14 @@ public class QLambdaAgent<T> : ReinforcementLearningAgentBase<T>
     private Random _random;
     private const double TraceThreshold = 1e-10;
 
+    /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public QLambdaAgent()
+        : this(new QLambdaOptions<T> { StateSize = 4, ActionSize = 2 })
+    {
+    }
+
     public QLambdaAgent(QLambdaOptions<T> options) : base(options)
     {
         Guard.NotNull(options);

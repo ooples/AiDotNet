@@ -23,6 +23,8 @@ public class DynaQAgent<T> : ReinforcementLearningAgentBase<T>
     private double _epsilon;
     private Random _random;
 
+    public DynaQAgent() : this(new DynaQOptions<T>()) { }
+
     public DynaQAgent(DynaQOptions<T> options) : base(options)
     {
         Guard.NotNull(options);

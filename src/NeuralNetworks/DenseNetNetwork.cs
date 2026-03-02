@@ -80,6 +80,19 @@ public class DenseNetNetwork<T> : NeuralNetworkBase<T>
     public int GrowthRate => _configuration.GrowthRate;
 
     /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public DenseNetNetwork()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.ThreeDimensional,
+            taskType: Enums.NeuralNetworkTaskType.MultiClassClassification,
+            inputHeight: 224, inputWidth: 224, inputDepth: 3,
+            outputSize: 1000),
+            configuration: DenseNetConfiguration.CreateDenseNet121(1000))
+    {
+    }
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="DenseNetNetwork{T}"/> class.
     /// </summary>
     /// <param name="architecture">The architecture defining the structure of the neural network.</param>

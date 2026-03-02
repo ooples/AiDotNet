@@ -140,6 +140,18 @@ public class GraphSAGENetwork<T> : NeuralNetworkBase<T>
     /// ```
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    public GraphSAGENetwork()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.OneDimensional,
+            taskType: Enums.NeuralNetworkTaskType.MultiClassClassification,
+            inputSize: 128,
+            outputSize: 7))
+    {
+    }
+
     public GraphSAGENetwork(
         NeuralNetworkArchitecture<T> architecture,
         SAGEAggregatorType aggregatorType = SAGEAggregatorType.Mean,

@@ -152,6 +152,18 @@ public class GraphClassificationModel<T> : NeuralNetworkBase<T>
     /// ```
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    public GraphClassificationModel()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.OneDimensional,
+            taskType: Enums.NeuralNetworkTaskType.MultiClassClassification,
+            inputSize: 128,
+            outputSize: 7))
+    {
+    }
+
     public GraphClassificationModel(
         NeuralNetworkArchitecture<T> architecture,
         int hiddenDim = 64,

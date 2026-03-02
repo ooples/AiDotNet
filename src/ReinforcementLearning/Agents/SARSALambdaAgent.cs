@@ -19,6 +19,14 @@ public class SARSALambdaAgent<T> : ReinforcementLearningAgentBase<T>
     private Vector<T> _lastState;
     private int _lastAction;
 
+    /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public SARSALambdaAgent()
+        : this(new SARSALambdaOptions<T> { StateSize = 4, ActionSize = 2 })
+    {
+    }
+
     public SARSALambdaAgent(SARSALambdaOptions<T> options) : base(options)
     {
         Guard.NotNull(options);

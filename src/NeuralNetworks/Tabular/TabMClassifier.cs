@@ -60,6 +60,14 @@ public class TabMClassifier<T> : TabMBase<T>
     public override int ParameterCount => base.ParameterCount + _classificationHead.ParameterCount;
 
     /// <summary>
+    /// Initializes a new instance of the TabMClassifier class with default configuration.
+    /// </summary>
+    public TabMClassifier()
+        : this(numFeatures: 16, numClasses: 2)
+    {
+    }
+
+    /// <summary>
     /// Initializes a new instance of the TabMClassifier class.
     /// </summary>
     /// <param name="numFeatures">Number of input features.</param>

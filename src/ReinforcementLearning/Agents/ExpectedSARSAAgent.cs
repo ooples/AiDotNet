@@ -39,6 +39,14 @@ public class ExpectedSARSAAgent<T> : ReinforcementLearningAgentBase<T>
     private double _epsilon;
     private Random _random;
 
+    /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public ExpectedSARSAAgent()
+        : this(new ExpectedSARSAOptions<T>(4, 2))
+    {
+    }
+
     public ExpectedSARSAAgent(ExpectedSARSAOptions<T> options)
         : base(options)
     {

@@ -106,7 +106,7 @@ public class FormField<T>
     /// <summary>
     /// Gets or sets the confidence score as generic type.
     /// </summary>
-    public T Confidence { get; set; } = default!;
+    public required T Confidence { get; set; }
 
     /// <summary>
     /// Gets or sets the confidence score as double.
@@ -138,7 +138,7 @@ public class CheckboxResult<T>
     /// <summary>
     /// Gets or sets the confidence score as generic type.
     /// </summary>
-    public T Confidence { get; set; } = default!;
+    public required T Confidence { get; set; }
 
     /// <summary>
     /// Gets or sets the confidence score as double.
@@ -165,7 +165,7 @@ public class SignatureResult<T>
     /// <summary>
     /// Gets or sets the confidence score as generic type.
     /// </summary>
-    public T Confidence { get; set; } = default!;
+    public required T Confidence { get; set; }
 
     /// <summary>
     /// Gets or sets the confidence score as double.

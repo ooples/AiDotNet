@@ -13,7 +13,7 @@ public class SSLStepResult<T>
     /// <summary>
     /// Gets or sets the primary loss value for this step.
     /// </summary>
-    public T Loss { get; set; } = default!;
+    public required T Loss { get; set; }
 
     /// <summary>
     /// Gets or sets additional metrics specific to the SSL method.

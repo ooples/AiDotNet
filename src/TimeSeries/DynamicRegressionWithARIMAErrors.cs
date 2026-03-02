@@ -42,6 +42,14 @@ namespace AiDotNet.TimeSeries;
 public class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T>
 {
     /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public DynamicRegressionWithARIMAErrors()
+        : this(new DynamicRegressionWithARIMAErrorsOptions<T>())
+    {
+    }
+
+    /// <summary>
     /// Configuration options for the Dynamic Regression with ARIMA Errors model.
     /// </summary>
     /// <remarks>

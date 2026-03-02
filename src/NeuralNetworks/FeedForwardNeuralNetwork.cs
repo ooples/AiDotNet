@@ -74,6 +74,18 @@ public class FeedForwardNeuralNetwork<T> : NeuralNetworkBase<T>
     /// If you don't specify these, it chooses reasonable defaults based on the type of task you're trying to solve.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    public FeedForwardNeuralNetwork()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.OneDimensional,
+            taskType: Enums.NeuralNetworkTaskType.Regression,
+            inputSize: 128,
+            outputSize: 1))
+    {
+    }
+
     public FeedForwardNeuralNetwork(
         NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,

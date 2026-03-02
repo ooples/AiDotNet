@@ -35,6 +35,14 @@ public class AnchoredWalkForwardSplitter<T> : DataSplitterBase<T>
     private int _nSplits;
 
     /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public AnchoredWalkForwardSplitter()
+        : this(100, 20)
+    {
+    }
+
+    /// <summary>
     /// Creates a new anchored walk-forward splitter.
     /// </summary>
     /// <param name="initialTrainSize">Initial training set size.</param>

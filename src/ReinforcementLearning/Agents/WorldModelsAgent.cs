@@ -45,11 +45,11 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
     public override ModelOptions GetOptions() => _options;
 
     // V: VAE for spatial compression
-    private NeuralNetwork<T> _vaeEncoder;
-    private NeuralNetwork<T> _vaeDecoder;
+    private INeuralNetwork<T> _vaeEncoder;
+    private INeuralNetwork<T> _vaeDecoder;
 
     // M: RNN for temporal modeling
-    private NeuralNetwork<T> _rnnNetwork;
+    private INeuralNetwork<T> _rnnNetwork;
     private Vector<T> _rnnHiddenState;
 
     // C: Controller (simple linear policy)
@@ -58,6 +58,14 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
     private UniformReplayBuffer<T, Vector<T>, Vector<T>> _replayBuffer;
     private int _updateCount;
     private Random _random;
+
+    /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public WorldModelsAgent()
+        : this(new WorldModelsOptions<T> { ActionSize = 2 })
+    {
+    }
 
     public WorldModelsAgent(WorldModelsOptions<T> options) : base(options)
     {

@@ -141,7 +141,7 @@ public class GenreClassificationResult<T>
     /// <summary>
     /// Gets or sets the confidence for the predicted genre.
     /// </summary>
-    public T Confidence { get; set; } = default!;
+    public required T Confidence { get; set; }
 
     /// <summary>
     /// Gets or sets all predicted genres (for multi-label classification).
@@ -190,7 +190,7 @@ public class GenreFeatures<T>
     /// <summary>
     /// Gets or sets the estimated tempo in BPM.
     /// </summary>
-    public T Tempo { get; set; } = default!;
+    public required T Tempo { get; set; }
 }
 
 /// <summary>
@@ -207,7 +207,7 @@ public class GenrePrediction<T>
     /// <summary>
     /// Gets or sets the probability/confidence score.
     /// </summary>
-    public T Probability { get; set; } = default!;
+    public required T Probability { get; set; }
 
     /// <summary>
     /// Gets or sets the rank (1 = most likely).
@@ -266,5 +266,5 @@ public class GenreSegment<T>
     /// <summary>
     /// Gets or sets the confidence score.
     /// </summary>
-    public T Confidence { get; set; } = default!;
+    public required T Confidence { get; set; }
 }

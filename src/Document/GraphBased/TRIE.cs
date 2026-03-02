@@ -102,6 +102,18 @@ public class TRIE<T> : DocumentNeuralNetworkBase<T>, IFormUnderstanding<T>, ITex
     #region Constructors
 
     /// <summary>
+    /// Creates a TRIE model with default configuration for native training.
+    /// </summary>
+    public TRIE()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: InputType.TwoDimensional,
+            taskType: NeuralNetworkTaskType.MultiClassClassification,
+            inputHeight: 512, inputWidth: 512,
+            outputSize: 256))
+    {
+    }
+
+    /// <summary>
     /// Creates a TRIE model using a pre-trained ONNX model for inference.
     /// </summary>
     public TRIE(

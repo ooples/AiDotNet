@@ -3,6 +3,7 @@ using AiDotNet.Interfaces;
 
 namespace AiDotNet.Models.Options;
 
+#pragma warning disable CS8618 // Generic T properties use default(T) - always used with value types
 /// <summary>
 /// Configuration options for Generalized Linear Mixed-Effects Models (GLMM).
 /// </summary>
@@ -104,7 +105,7 @@ public class GLMMOptions<T> : RegressionOptions<T>
     /// <remarks>
     /// Larger values mean less overdispersion (Poisson as theta -> infinity).
     /// </remarks>
-    public T NegBinomialTheta { get; set; } = default!;
+    public required T NegBinomialTheta { get; set; }
 
     /// <summary>
     /// Gets or sets whether to compute confidence intervals for fixed effects.
@@ -126,6 +127,7 @@ public class GLMMOptions<T> : RegressionOptions<T>
     /// <summary>
     /// Initializes a new instance of GLMMOptions with sensible defaults.
     /// </summary>
+    [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
     public GLMMOptions()
     {
         NegBinomialTheta = NumOps.One;

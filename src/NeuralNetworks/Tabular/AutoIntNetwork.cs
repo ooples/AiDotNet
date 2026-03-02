@@ -71,6 +71,18 @@ public class AutoIntNetwork<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Initializes a new AutoInt network with the specified architecture.
     /// </summary>
+    /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    public AutoIntNetwork()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.OneDimensional,
+            taskType: Enums.NeuralNetworkTaskType.Regression,
+            inputSize: 10,
+            outputSize: 10))
+    {
+    }
+
     public AutoIntNetwork(
         NeuralNetworkArchitecture<T> architecture,
         AutoIntOptions<T>? options = null,

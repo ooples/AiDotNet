@@ -70,7 +70,25 @@ namespace AiDotNet.PhysicsInformed.ScientificML
         private readonly int _stateDim;
         private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
 
-        public UniversalDifferentialEquation(
+    /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    private const int DefaultStateDim = 2;
+
+    public UniversalDifferentialEquation()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.OneDimensional,
+            taskType: Enums.NeuralNetworkTaskType.Regression,
+            inputSize: DefaultStateDim + 1,
+            outputSize: DefaultStateDim),
+            stateDim: DefaultStateDim)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the UniversalDifferentialEquation with the specified architecture.
+    /// </summary>
+    public UniversalDifferentialEquation(
             NeuralNetworkArchitecture<T> architecture,
             int stateDim,
             Func<T[], T, T[]>? knownDynamics = null,

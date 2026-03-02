@@ -16,6 +16,8 @@ using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
 using AiDotNet.Finance.Base;
 namespace AiDotNet.Finance.Forecasting.Foundation;
 
+#pragma warning disable CS8601, CS8618 // Generic T defaults use default(T) - always used with value types
+
 /// <summary>
 /// Chronos foundation model for time series forecasting using tokenization.
 /// </summary>
@@ -157,8 +159,8 @@ public class Chronos<T> : TimeSeriesFoundationModelBase<T>
     private double _dropout;
     private double _temperature;
     private FoundationModelSize _modelSize;
-    private T _lastTokenMin = default!;
-    private T _lastTokenRange = default!;
+    private T _lastTokenMin = default;
+    private T _lastTokenRange = default;
     private bool _hasTokenScale;
 
     #endregion

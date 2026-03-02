@@ -312,6 +312,10 @@ public class TrainingMemoryManager<T> : IDisposable
         // If this is a checkpointed layer, we need to recompute forward first
         if (_checkpoints.TryGetValue(layerIndex, out var checkpoint))
         {
+            if (checkpoint.Input is null)
+                throw new InvalidOperationException(
+                    $"Checkpoint at layer {layerIndex} has null input. Cannot recompute forward pass.");
+
             // Recompute forward pass from checkpoint with precision awareness
             _ = layer.ForwardWithPrecisionCheck(checkpoint.Input);
         }
@@ -530,12 +534,12 @@ internal class CheckpointedActivation<T>
     /// <summary>
     /// The input tensor that was saved at this checkpoint.
     /// </summary>
-    public Tensor<T> Input { get; set; } = null!;
+    public Tensor<T>? Input { get; set; }
 
     /// <summary>
     /// Reference to the layer for recomputation.
     /// </summary>
-    public ILayer<T> Layer { get; set; } = null!;
+    public ILayer<T>? Layer { get; set; }
 
     /// <summary>
     /// Index of this layer in the network.

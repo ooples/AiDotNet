@@ -15,7 +15,7 @@ namespace AiDotNet.Data.Quality;
 /// </remarks>
 public class ExactHashDeduplicator
 {
-    private static readonly Regex WhitespaceRegex = new Regex(@"\s+", RegexOptions.Compiled);
+    private static readonly Regex WhitespaceRegex = new Regex(@"\s+", RegexOptions.Compiled, TimeSpan.FromSeconds(1));
     private readonly ExactHashDeduplicatorOptions _options;
 
     public ExactHashDeduplicator(ExactHashDeduplicatorOptions? options = null)

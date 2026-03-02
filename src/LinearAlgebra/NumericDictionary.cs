@@ -205,7 +205,9 @@ public class NumericDictionary<TKey, TValue> : IEnumerable<KeyValuePair<TKey, TV
                 value = _values[index];
                 return true;
             }
-            value = default!;
+#pragma warning disable CS8601 // out param assigned default on failure path
+            value = default;
+#pragma warning restore CS8601
             return false;
         }
     }

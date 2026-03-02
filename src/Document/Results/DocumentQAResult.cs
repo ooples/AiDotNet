@@ -28,7 +28,7 @@ public class DocumentQAResult<T>
     /// <summary>
     /// Gets the confidence score for the answer (0-1).
     /// </summary>
-    public T Confidence { get; init; } = default!;
+    public required T Confidence { get; init; }
 
     /// <summary>
     /// Gets the confidence as a double value for comparison.
@@ -106,7 +106,7 @@ public class EvidenceRegion<T>
     /// <summary>
     /// Gets how relevant this evidence is to the answer (0-1).
     /// </summary>
-    public T Relevance { get; init; } = default!;
+    public required T Relevance { get; init; }
 
     /// <summary>
     /// Gets the page number where the evidence was found (0-indexed).
@@ -128,5 +128,5 @@ public class AlternativeAnswer<T>
     /// <summary>
     /// Gets the confidence score for this alternative.
     /// </summary>
-    public T Confidence { get; init; } = default!;
+    public required T Confidence { get; init; }
 }

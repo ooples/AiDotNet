@@ -40,19 +40,19 @@ public class OpenSora2Model<T> : VideoDiffusionModelBase<T>
     private const int DEFAULT_NUM_FRAMES = 93;
     private const int DEFAULT_FPS = 24;
 
-    private DiTNoisePredictor<T> _predictor;
-    private TemporalVAE<T> _temporalVAE;
+    private DiTNoisePredictor<T>? _predictor;
+    private TemporalVAE<T>? _temporalVAE;
     private readonly IConditioningModule<T>? _conditioner;
 
-    public override INoisePredictor<T> NoisePredictor => _predictor;
-    public override IVAEModel<T> VAE => _temporalVAE;
-    public override IVAEModel<T>? TemporalVAE => _temporalVAE;
+    public override INoisePredictor<T> NoisePredictor { get { EnsureInitialized(); return _predictor; } }
+    public override IVAEModel<T> VAE { get { EnsureInitialized(); return _temporalVAE; } }
+    public override IVAEModel<T>? TemporalVAE { get { EnsureInitialized(); return _temporalVAE; } }
     public override IConditioningModule<T>? Conditioner => _conditioner;
     public override int LatentChannels => LATENT_CHANNELS;
     public override bool SupportsImageToVideo => true;
     public override bool SupportsTextToVideo => true;
     public override bool SupportsVideoToVideo => false;
-    public override int ParameterCount => _predictor.ParameterCount + _temporalVAE.GetParameters().Length;
+    public override int ParameterCount { get { EnsureInitialized(); return _predictor.ParameterCount + _temporalVAE.GetParameters().Length; } }
 
     /// <summary>
     /// Initializes a new instance of OpenSora2Model with full customization support.
@@ -81,7 +81,15 @@ public class OpenSora2Model<T> : VideoDiffusionModelBase<T>
             architecture)
     {
         _conditioner = conditioner;
-        InitializeLayers(predictor, temporalVAE, seed);
+        if (predictor is not null || temporalVAE is not null)
+            InitializeLayers(predictor, temporalVAE, seed);
+    }
+
+    [MemberNotNull(nameof(_predictor), nameof(_temporalVAE))]
+    private void EnsureInitialized()
+    {
+        if (_predictor is null || _temporalVAE is null)
+            InitializeLayers(null, null, null);
     }
 
     [MemberNotNull(nameof(_predictor), nameof(_temporalVAE))]
@@ -115,11 +123,13 @@ public class OpenSora2Model<T> : VideoDiffusionModelBase<T>
         Tensor<T> imageEmbedding,
         Tensor<T> motionEmbedding)
     {
+        EnsureInitialized();
         return _predictor.PredictNoise(latents, timestep, imageEmbedding);
     }
 
     public override Vector<T> GetParameters()
     {
+        EnsureInitialized();
         var predParams = _predictor.GetParameters();
         var vaeParams = _temporalVAE.GetParameters();
         var combined = new Vector<T>(predParams.Length + vaeParams.Length);
@@ -130,6 +140,7 @@ public class OpenSora2Model<T> : VideoDiffusionModelBase<T>
 
     public override void SetParameters(Vector<T> parameters)
     {
+        EnsureInitialized();
         var predCount = _predictor.ParameterCount;
         var vaeCount = _temporalVAE.GetParameters().Length;
         if (parameters.Length != predCount + vaeCount)
@@ -146,6 +157,7 @@ public class OpenSora2Model<T> : VideoDiffusionModelBase<T>
 
     public override IDiffusionModel<T> Clone()
     {
+        EnsureInitialized();
         var clonedPredictor = new DiTNoisePredictor<T>(
             inputChannels: LATENT_CHANNELS,
             hiddenSize: 2048,

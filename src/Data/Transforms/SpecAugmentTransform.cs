@@ -55,7 +55,7 @@ public class SpecAugmentTransform<T> : ITransform<Tensor<T>, Tensor<T>>
         _timeMaskParam = timeMaskParam;
         _numFreqMasks = numFreqMasks;
         _numTimeMasks = numTimeMasks;
-        _random = seed.HasValue ? new Random(seed.Value) : new Random();
+        _random = seed.HasValue ? Tensors.Helpers.RandomHelper.CreateSeededRandom(seed.Value) : Tensors.Helpers.RandomHelper.CreateSecureRandom();
     }
 
     /// <summary>

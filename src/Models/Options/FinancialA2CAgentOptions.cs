@@ -13,6 +13,9 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class FinancialA2CAgentOptions<T> : TradingAgentOptions<T>
 {
+    [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
+    public FinancialA2CAgentOptions() { }
+
     /// <summary>
     /// Number of parallel environments for training.
     /// </summary>

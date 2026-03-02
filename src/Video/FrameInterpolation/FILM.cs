@@ -121,6 +121,18 @@ public class FILM<T> : FrameInterpolationBase<T>
     /// <param name="architecture">The neural network architecture configuration.</param>
     /// <param name="numScales">Number of pyramid scales for multi-scale processing.</param>
     /// <param name="numFeatures">Base number of feature channels.</param>
+    /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    public FILM()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.ThreeDimensional,
+            taskType: Enums.NeuralNetworkTaskType.Regression,
+            inputHeight: 256, inputWidth: 256, inputDepth: 6,
+            outputSize: 3))
+    {
+    }
+
     public FILM(
         NeuralNetworkArchitecture<T> architecture,
         int numScales = 7,

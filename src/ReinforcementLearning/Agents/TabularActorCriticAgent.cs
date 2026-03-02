@@ -19,6 +19,14 @@ public class TabularActorCriticAgent<T> : ReinforcementLearningAgentBase<T>
     private Dictionary<string, Dictionary<int, T>> _policy;  // Actor: π(a|s)
     private Dictionary<string, T> _valueTable;  // Critic: V(s)
 
+    /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public TabularActorCriticAgent()
+        : this(new TabularActorCriticOptions<T> { StateSize = 4, ActionSize = 2 })
+    {
+    }
+
     public TabularActorCriticAgent(TabularActorCriticOptions<T> options) : base(options)
     {
         Guard.NotNull(options);
