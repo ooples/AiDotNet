@@ -34,7 +34,7 @@ namespace AiDotNet.DistributedTraining;
 /// <typeparam name="T">The numeric type for operations</typeparam>
 /// <typeparam name="TInput">The input type for the model</typeparam>
 /// <typeparam name="TOutput">The output type for the model</typeparam>
-public abstract class ShardedModelBase<T, TInput, TOutput> : IShardedModel<T, TInput, TOutput>
+public abstract class ShardedModelBase<T, TInput, TOutput> : IShardedModel<T, TInput, TOutput>, IModelShape
 {
     /// <summary>
     /// Provides numeric operations for type T.
@@ -349,10 +349,49 @@ public abstract class ShardedModelBase<T, TInput, TOutput> : IShardedModel<T, TI
     public abstract void Deserialize(byte[] data);
 
     /// <inheritdoc/>
-    public abstract void SaveModel(string filePath);
+    public virtual int[] GetInputShape()
+    {
+        if (WrappedModel is IModelShape shapeModel)
+        {
+            return shapeModel.GetInputShape();
+        }
+
+        return new[] { ParameterCount };
+    }
 
     /// <inheritdoc/>
-    public abstract void LoadModel(string filePath);
+    public virtual int[] GetOutputShape()
+    {
+        if (WrappedModel is IModelShape shapeModel)
+        {
+            return shapeModel.GetOutputShape();
+        }
+
+        return new[] { 1 };
+    }
+
+    /// <inheritdoc/>
+    public virtual void SaveModel(string filePath)
+    {
+        byte[] data = Serialize();
+        byte[] envelopedData = ModelFileHeader.WrapWithHeader(
+            data, this, GetInputShape(), GetOutputShape(), SerializationFormat.Binary);
+        File.WriteAllBytes(filePath, envelopedData);
+    }
+
+    /// <inheritdoc/>
+    public virtual void LoadModel(string filePath)
+    {
+        byte[] data = File.ReadAllBytes(filePath);
+
+        // Strip AIMF envelope header if present, falling back to legacy format
+        if (ModelFileHeader.HasHeader(data))
+        {
+            data = ModelFileHeader.ExtractPayload(data);
+        }
+
+        Deserialize(data);
+    }
 
     /// <inheritdoc/>
     public abstract IFullModel<T, TInput, TOutput> Clone();

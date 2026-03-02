@@ -32,7 +32,7 @@ namespace AiDotNet.DistributedTraining;
 /// <typeparam name="T">The numeric type for operations</typeparam>
 /// <typeparam name="TInput">The input type for the model</typeparam>
 /// <typeparam name="TOutput">The output type for the model</typeparam>
-public abstract class ShardedOptimizerBase<T, TInput, TOutput> : IShardedOptimizer<T, TInput, TOutput>
+public abstract class ShardedOptimizerBase<T, TInput, TOutput> : IShardedOptimizer<T, TInput, TOutput>, IModelShape
 {
     /// <summary>
     /// Provides numeric operations for type T.
@@ -245,13 +245,27 @@ public abstract class ShardedOptimizerBase<T, TInput, TOutput> : IShardedOptimiz
     public abstract void Deserialize(byte[] data);
 
     /// <inheritdoc/>
+    public virtual int[] GetInputShape()
+    {
+        return Array.Empty<int>();
+    }
+
+    /// <inheritdoc/>
+    public virtual int[] GetOutputShape()
+    {
+        return Array.Empty<int>();
+    }
+
+    /// <inheritdoc/>
     public virtual void SaveModel(string filePath)
     {
         // Only rank 0 saves to avoid conflicts
         if (Rank == 0)
         {
             var data = Serialize();
-            File.WriteAllBytes(filePath, data);
+            byte[] envelopedData = ModelFileHeader.WrapWithHeader(
+                data, this, GetInputShape(), GetOutputShape(), SerializationFormat.Binary);
+            File.WriteAllBytes(filePath, envelopedData);
         }
 
         // Wait for rank 0 to finish writing
@@ -263,6 +277,13 @@ public abstract class ShardedOptimizerBase<T, TInput, TOutput> : IShardedOptimiz
     {
         // All processes read the same file
         var data = File.ReadAllBytes(filePath);
+
+        // Strip AIMF envelope header if present, falling back to legacy format
+        if (ModelFileHeader.HasHeader(data))
+        {
+            data = ModelFileHeader.ExtractPayload(data);
+        }
+
         Deserialize(data);
 
         // Ensure all processes finish loading
