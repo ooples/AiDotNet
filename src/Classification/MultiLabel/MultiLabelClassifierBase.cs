@@ -15,7 +15,7 @@ namespace AiDotNet.Classification.MultiLabel;
 /// traditional classification which assigns exactly one label.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
-public abstract class MultiLabelClassifierBase<T> : IMultiLabelClassifier<T>, IConfigurableModel<T>
+public abstract class MultiLabelClassifierBase<T> : IMultiLabelClassifier<T>, IConfigurableModel<T>, IModelShape
 {
     /// <summary>
     /// Gets the numeric operations provider for type T.
@@ -268,16 +268,37 @@ public abstract class MultiLabelClassifierBase<T> : IMultiLabelClassifier<T>, IC
     }
 
     /// <inheritdoc />
+    /// <inheritdoc/>
+    public virtual int[] GetInputShape()
+    {
+        return new[] { NumFeatures };
+    }
+
+    /// <inheritdoc/>
+    public virtual int[] GetOutputShape()
+    {
+        return new[] { NumLabels };
+    }
+
     public virtual void SaveModel(string path)
     {
         byte[] serializedData = Serialize();
-        System.IO.File.WriteAllBytes(path, serializedData);
+        byte[] envelopedData = ModelFileHeader.WrapWithHeader(
+            serializedData, this, GetInputShape(), GetOutputShape(), SerializationFormat.Json);
+        System.IO.File.WriteAllBytes(path, envelopedData);
     }
 
     /// <inheritdoc />
     public virtual void LoadModel(string path)
     {
         byte[] serializedData = System.IO.File.ReadAllBytes(path);
+
+        // Strip AIMF envelope header if present, falling back to legacy format
+        if (ModelFileHeader.HasHeader(serializedData))
+        {
+            serializedData = ModelFileHeader.ExtractPayload(serializedData);
+        }
+
         Deserialize(serializedData);
     }
 

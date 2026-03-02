@@ -28,7 +28,7 @@ namespace AiDotNet.Classification;
 /// functionality.
 /// </para>
 /// </remarks>
-public abstract class ClassifierBase<T> : IClassifier<T>, IConfigurableModel<T>
+public abstract class ClassifierBase<T> : IClassifier<T>, IConfigurableModel<T>, IModelShape
 {
     /// <summary>
     /// Gets the numeric operations for the specified type T.
@@ -619,10 +619,24 @@ public abstract class ClassifierBase<T> : IClassifier<T>, IConfigurableModel<T>
     /// Saves the classifier model to a file.
     /// </summary>
     /// <param name="filePath">The path where the model should be saved.</param>
+    /// <inheritdoc/>
+    public virtual int[] GetInputShape()
+    {
+        return new[] { NumFeatures };
+    }
+
+    /// <inheritdoc/>
+    public virtual int[] GetOutputShape()
+    {
+        return new[] { NumClasses };
+    }
+
     public virtual void SaveModel(string filePath)
     {
         byte[] serializedData = Serialize();
-        File.WriteAllBytes(filePath, serializedData);
+        byte[] envelopedData = ModelFileHeader.WrapWithHeader(
+            serializedData, this, GetInputShape(), GetOutputShape(), SerializationFormat.Json);
+        File.WriteAllBytes(filePath, envelopedData);
     }
 
     /// <summary>
@@ -632,6 +646,13 @@ public abstract class ClassifierBase<T> : IClassifier<T>, IConfigurableModel<T>
     public virtual void LoadModel(string filePath)
     {
         byte[] serializedData = File.ReadAllBytes(filePath);
+
+        // Strip AIMF envelope header if present, falling back to legacy format
+        if (ModelFileHeader.HasHeader(serializedData))
+        {
+            serializedData = ModelFileHeader.ExtractPayload(serializedData);
+        }
+
         Deserialize(serializedData);
     }
 
