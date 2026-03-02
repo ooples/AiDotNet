@@ -757,6 +757,11 @@ internal static partial class YamlConfigApplier<T, TInput, TOutput>
             builder.ConfigureRLAgent(instance);
         }
 
+        if (config.SegmentationVisualization is not null)
+        {
+            builder.ConfigureSegmentationVisualization(config.SegmentationVisualization);
+        }
+
         if (config.TimeSeriesFeatures is not null)
         {
             builder.ConfigureTimeSeriesFeatures(config.TimeSeriesFeatures);
