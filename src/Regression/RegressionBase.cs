@@ -28,7 +28,7 @@ namespace AiDotNet.Regression;
 /// functionality.
 /// </para>
 /// </remarks>
-public abstract class RegressionBase<T> : IRegression<T>, IConfigurableModel<T>
+public abstract class RegressionBase<T> : IRegression<T>, IConfigurableModel<T>, IModelShape
 {
     /// <summary>
     /// Gets the numeric operations for the specified type T.
@@ -1019,10 +1019,18 @@ public abstract class RegressionBase<T> : IRegression<T>, IConfigurableModel<T>
     /// - Avoiding the need to retrain on the same data
     /// </para>
     /// </remarks>
+    /// <inheritdoc/>
+    public virtual int[] GetInputShape() => new[] { Coefficients.Length };
+
+    /// <inheritdoc/>
+    public virtual int[] GetOutputShape() => new[] { 1 };
+
     public virtual void SaveModel(string filePath)
     {
         byte[] serializedData = Serialize();
-        File.WriteAllBytes(filePath, serializedData);
+        byte[] envelopedData = ModelFileHeader.WrapWithHeader(
+            serializedData, this, GetInputShape(), GetOutputShape(), SerializationFormat.Json);
+        File.WriteAllBytes(filePath, envelopedData);
     }
 
     /// <summary>
@@ -1050,6 +1058,13 @@ public abstract class RegressionBase<T> : IRegression<T>, IConfigurableModel<T>
     public virtual void LoadModel(string filePath)
     {
         byte[] serializedData = File.ReadAllBytes(filePath);
+
+        // Strip AIMF envelope header if present, falling back to legacy format
+        if (ModelFileHeader.HasHeader(serializedData))
+        {
+            serializedData = ModelFileHeader.ExtractPayload(serializedData);
+        }
+
         Deserialize(serializedData);
     }
 

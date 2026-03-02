@@ -27,7 +27,7 @@ namespace AiDotNet.Regression;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public abstract class DecisionTreeRegressionBase<T> : ITreeBasedRegression<T>, IConfigurableModel<T>
+public abstract class DecisionTreeRegressionBase<T> : ITreeBasedRegression<T>, IConfigurableModel<T>, IModelShape
 {
     /// <summary>
     /// Provides operations for performing numeric calculations appropriate for the type T.
@@ -962,6 +962,18 @@ public abstract class DecisionTreeRegressionBase<T> : ITreeBasedRegression<T>, I
         get { return CountNodes(Root) * 4 + 1; }
     }
 
+    /// <inheritdoc/>
+    public virtual int[] GetInputShape()
+    {
+        return new[] { FeatureImportances.Length };
+    }
+
+    /// <inheritdoc/>
+    public virtual int[] GetOutputShape()
+    {
+        return new[] { 1 };
+    }
+
     public virtual void SaveModel(string filePath)
     {
         if (string.IsNullOrWhiteSpace(filePath))
@@ -977,7 +989,9 @@ public abstract class DecisionTreeRegressionBase<T> : ITreeBasedRegression<T>, I
         }
         try
         {
-            File.WriteAllBytes(filePath, data);
+            byte[] envelopedData = ModelFileHeader.WrapWithHeader(
+                data, this, GetInputShape(), GetOutputShape(), SerializationFormat.Binary);
+            File.WriteAllBytes(filePath, envelopedData);
         }
         catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is System.Security.SecurityException)
         {
@@ -998,6 +1012,13 @@ public abstract class DecisionTreeRegressionBase<T> : ITreeBasedRegression<T>, I
         try
         {
             var data = File.ReadAllBytes(filePath);
+
+            // Strip AIMF envelope header if present, falling back to legacy format
+            if (ModelFileHeader.HasHeader(data))
+            {
+                data = ModelFileHeader.ExtractPayload(data);
+            }
+
             Deserialize(data);
         }
         catch (Exception ex)

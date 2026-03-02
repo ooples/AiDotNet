@@ -26,7 +26,7 @@ namespace AiDotNet.Regression;
 /// straight line.
 /// </para>
 /// </remarks>
-public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>, IConfigurableModel<T>
+public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>, IConfigurableModel<T>, IModelShape
 {
     /// <summary>
     /// Gets the numeric operations provider for the specified type T.
@@ -1010,6 +1010,18 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>, ICon
         get { return Alphas.Length + 1; } // Alphas + bias term
     }
 
+    /// <inheritdoc/>
+    public virtual int[] GetInputShape()
+    {
+        return new[] { SupportVectors.Columns };
+    }
+
+    /// <inheritdoc/>
+    public virtual int[] GetOutputShape()
+    {
+        return new[] { 1 };
+    }
+
     public virtual void SaveModel(string filePath)
     {
         if (string.IsNullOrWhiteSpace(filePath))
@@ -1021,7 +1033,9 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>, ICon
             var directory = Path.GetDirectoryName(filePath);
             if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
                 Directory.CreateDirectory(directory);
-            File.WriteAllBytes(filePath, data);
+            byte[] envelopedData = ModelFileHeader.WrapWithHeader(
+                data, this, GetInputShape(), GetOutputShape(), SerializationFormat.Binary);
+            File.WriteAllBytes(filePath, envelopedData);
         }
         catch (IOException ex) { throw new InvalidOperationException($"Failed to save model to '{filePath}': {ex.Message}", ex); }
         catch (UnauthorizedAccessException ex) { throw new InvalidOperationException($"Access denied when saving model to '{filePath}': {ex.Message}", ex); }
@@ -1036,6 +1050,13 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>, ICon
         try
         {
             var data = File.ReadAllBytes(filePath);
+
+            // Strip AIMF envelope header if present, falling back to legacy format
+            if (ModelFileHeader.HasHeader(data))
+            {
+                data = ModelFileHeader.ExtractPayload(data);
+            }
+
             Deserialize(data);
         }
         catch (FileNotFoundException ex) { throw new FileNotFoundException($"The specified model file does not exist: {filePath}", filePath, ex); }
