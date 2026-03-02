@@ -134,7 +134,7 @@ jobs:
         run: dotnet build -c Release --no-restore -p:UseSharedCompilation=false -p:nodeReuse=false
 
       - name: Upload build artifacts
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v4
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v4
         with:
           name: build-output-${{ github.sha }}
           path: |
@@ -146,7 +146,7 @@ jobs:
         run: dotnet pack --no-build -c Release --output ./artifacts
 
       - name: Upload NuGet package
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v4
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v4
         with:
           name: nuget-packages
           path: ./artifacts/*.nupkg
@@ -354,7 +354,7 @@ jobs:
           echo "ARTIFACT_NAME=coverage-${{ github.sha }}-$slug" >> $env:GITHUB_ENV
 
       - name: Upload coverage + test results
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v4
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v4
         if: always()
         continue-on-error: true  # Prevent transient GitHub artifact service issues from failing the job
         with:
