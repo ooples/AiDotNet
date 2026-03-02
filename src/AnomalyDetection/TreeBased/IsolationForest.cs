@@ -4,8 +4,6 @@ using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.AnomalyDetection.TreeBased;
 
-#pragma warning disable CS8601, CS8618 // Generic T defaults use default(T) - always used with value types
-
 /// <summary>
 /// Implements the Isolation Forest algorithm for anomaly detection.
 /// </summary>
@@ -323,7 +321,9 @@ public class IsolationForest<T> : AnomalyDetectorBase<T>
         public bool IsExternal { get; set; }
         public int Size { get; set; }
         public int SplitFeature { get; set; }
+#pragma warning disable CS8601, CS8618 // T defaults to default(T) - used with value types
         public T SplitValue { get; set; } = default;
+#pragma warning restore CS8601, CS8618
         public IsolationTree? Left { get; set; }
         public IsolationTree? Right { get; set; }
     }

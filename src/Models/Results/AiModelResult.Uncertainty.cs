@@ -15,8 +15,6 @@ using AiDotNet.Validation;
 
 namespace AiDotNet.Models.Results;
 
-#pragma warning disable CS8601, CS8618 // Generic T defaults use default(T) - always used with value types
-
 public partial class AiModelResult<T, TInput, TOutput>
 {
     private const string PredictiveEntropyMetricKey = "predictive_entropy";
@@ -35,14 +33,18 @@ public partial class AiModelResult<T, TInput, TOutput>
     [JsonProperty]
     internal bool HasConformalRegression { get; private set; }
 
+#pragma warning disable CS8601, CS8618 // T defaults to default(T) - used with value types
     [JsonProperty]
     internal T ConformalRegressionQuantile { get; private set; } = default;
+#pragma warning restore CS8601, CS8618
 
     [JsonProperty]
     internal bool HasConformalClassification { get; private set; }
 
+#pragma warning disable CS8601, CS8618 // T defaults to default(T) - used with value types
     [JsonProperty]
     internal T ConformalClassificationThreshold { get; private set; } = default;
+#pragma warning restore CS8601, CS8618
 
     [JsonProperty]
     internal int ConformalClassificationNumClasses { get; private set; }
@@ -59,8 +61,10 @@ public partial class AiModelResult<T, TInput, TOutput>
     [JsonProperty]
     internal bool HasTemperatureScaling { get; private set; }
 
+#pragma warning disable CS8601, CS8618 // T defaults to default(T) - used with value types
     [JsonProperty]
     internal T TemperatureScalingTemperature { get; private set; } = default;
+#pragma warning restore CS8601, CS8618
 
     [JsonProperty]
     internal bool HasPlattScaling { get; private set; }
@@ -101,8 +105,10 @@ public partial class AiModelResult<T, TInput, TOutput>
     [JsonProperty]
     internal bool HasExpectedCalibrationError { get; private set; }
 
+#pragma warning disable CS8601, CS8618 // T defaults to default(T) - used with value types
     [JsonProperty]
     internal T ExpectedCalibrationError { get; private set; } = default;
+#pragma warning restore CS8601, CS8618
 
     internal void SetUncertaintyQuantificationOptions(UncertaintyQuantificationOptions? options)
     {

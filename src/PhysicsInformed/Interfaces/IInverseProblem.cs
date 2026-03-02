@@ -335,7 +335,6 @@ namespace AiDotNet.PhysicsInformed.Interfaces
 #pragma warning disable CS8618 // Generic T properties use default(T) - always used with value types
     public class InverseProblemResult<T>
     {
-    [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
     public InverseProblemResult() { }
 
         /// <summary>
@@ -359,17 +358,17 @@ namespace AiDotNet.PhysicsInformed.Interfaces
         /// <summary>
         /// Final data loss (fit to observations).
         /// </summary>
-        public required T DataLoss { get; set; }
+        public T DataLoss { get; set; }
 
         /// <summary>
         /// Final physics loss (PDE residual).
         /// </summary>
-        public required T PhysicsLoss { get; set; }
+        public T PhysicsLoss { get; set; }
 
         /// <summary>
         /// Total loss (data + physics + regularization).
         /// </summary>
-        public required T TotalLoss { get; set; }
+        public T TotalLoss { get; set; }
 
         /// <summary>
         /// History of parameter values during training.

@@ -2,8 +2,6 @@ using AiDotNet.Models.Options;
 
 namespace AiDotNet.Regression.MixedEffects;
 
-#pragma warning disable CS8601, CS8618 // Generic T defaults use default(T) - always used with value types
-
 /// <summary>
 /// Linear Mixed-Effects Model for hierarchical and clustered data.
 /// </summary>
@@ -72,7 +70,9 @@ public class LinearMixedModel<T> : RegressionBase<T>
     /// <summary>
     /// Residual variance estimate.
     /// </summary>
+#pragma warning disable CS8601, CS8618 // T defaults to default(T) - used with value types
     private T _residualVariance = default;
+#pragma warning restore CS8601, CS8618
 
     /// <summary>
     /// Log-likelihood of the fitted model.
@@ -123,12 +123,14 @@ public class LinearMixedModel<T> : RegressionBase<T>
     /// <summary>
     /// Marginal R-squared (fixed effects only).
     /// </summary>
+#pragma warning disable CS8601, CS8618 // T defaults to default(T) - used with value types
     public T MarginalRSquared { get; private set; } = default;
 
     /// <summary>
     /// Conditional R-squared (fixed + random effects).
     /// </summary>
     public T ConditionalRSquared { get; private set; } = default;
+#pragma warning restore CS8601, CS8618
 
     /// <summary>
     /// Initializes a new Linear Mixed-Effects Model.

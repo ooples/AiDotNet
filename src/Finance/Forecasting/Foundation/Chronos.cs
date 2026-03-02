@@ -641,18 +641,16 @@ public class Chronos<T> : ForecastingModelBase<T>
     /// </remarks>
     public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
     {
-        var output = _useNativeMode ? ForecastNative(historicalData) : ForecastOnnx(historicalData);
-
-        // Detokenize to get continuous values
-        var pointPredictions = Detokenize(output);
-
-        // If quantiles requested, generate multiple samples
+        // If quantiles requested, skip point inference and go directly to quantile sampling
         if (quantiles is not null && quantiles.Length > 0)
         {
             return GenerateQuantileSamples(historicalData, quantiles);
         }
 
-        return pointPredictions;
+        var output = _useNativeMode ? ForecastNative(historicalData) : ForecastOnnx(historicalData);
+
+        // Detokenize to get continuous values
+        return Detokenize(output);
     }
 
     /// <inheritdoc/>

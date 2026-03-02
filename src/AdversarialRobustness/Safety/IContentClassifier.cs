@@ -60,7 +60,6 @@ public interface IContentClassifier<T>
 /// <typeparam name="T">The numeric data type used for calculations.</typeparam>
 public class ContentClassificationResult<T>
 {
-    [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
     public ContentClassificationResult() { }
 
     /// <summary>
@@ -71,7 +70,7 @@ public class ContentClassificationResult<T>
     /// <summary>
     /// Gets or sets the overall confidence score for the classification.
     /// </summary>
-    public required T OverallConfidence { get; set; }
+    public T OverallConfidence { get; set; }
 
     /// <summary>
     /// Gets or sets the primary detected category (the one with highest score).

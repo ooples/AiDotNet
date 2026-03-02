@@ -5,7 +5,6 @@
 // PriorityQueue was introduced in .NET 6.0
 
 #if !NET6_0_OR_GREATER
-#pragma warning disable CS8601 // Possible null reference assignment in out params
 
 using System.Collections.Generic;
 
@@ -119,6 +118,7 @@ namespace System.Collections.Generic
         /// <param name="element">When this method returns, contains the element, if the operation succeeded.</param>
         /// <param name="priority">When this method returns, contains the priority, if the operation succeeded.</param>
         /// <returns>true if an element was removed; otherwise, false.</returns>
+#pragma warning disable CS8601 // out params assigned default on failure path
         public bool TryDequeue(out TElement element, out TPriority priority)
         {
             if (_heap.Count == 0)
@@ -140,6 +140,7 @@ namespace System.Collections.Generic
 
             return true;
         }
+#pragma warning restore CS8601
 
         /// <summary>
         /// Attempts to return the element with the minimum priority without removing it.
@@ -147,6 +148,7 @@ namespace System.Collections.Generic
         /// <param name="element">When this method returns, contains the element, if the operation succeeded.</param>
         /// <param name="priority">When this method returns, contains the priority, if the operation succeeded.</param>
         /// <returns>true if an element exists; otherwise, false.</returns>
+#pragma warning disable CS8601 // out params assigned default on failure path
         public bool TryPeek(out TElement element, out TPriority priority)
         {
             if (_heap.Count == 0)
@@ -160,6 +162,7 @@ namespace System.Collections.Generic
             priority = _heap[0].Priority;
             return true;
         }
+#pragma warning restore CS8601
 
         /// <summary>
         /// Removes all elements from the priority queue.
