@@ -19,7 +19,7 @@ namespace AiDotNet.Clustering.Base;
 /// Provides a base implementation for clustering algorithms that group similar data points together.
 /// </summary>
 /// <typeparam name="T">The numeric data type used for calculations (e.g., float, double).</typeparam>
-public abstract class ClusteringBase<T> : IClustering<T>, IConfigurableModel<T>
+public abstract class ClusteringBase<T> : IClustering<T>, IConfigurableModel<T>, IModelShape
 {
     /// <summary>
     /// Gets the numeric operations for the specified type T.
@@ -374,16 +374,37 @@ public abstract class ClusteringBase<T> : IClustering<T>, IConfigurableModel<T>
     }
 
     /// <inheritdoc/>
+    public virtual int[] GetInputShape()
+    {
+        return new[] { NumFeatures };
+    }
+
+    /// <inheritdoc/>
+    public virtual int[] GetOutputShape()
+    {
+        return new[] { 1 };
+    }
+
+    /// <inheritdoc/>
     public virtual void SaveModel(string filePath)
     {
         byte[] data = Serialize();
-        File.WriteAllBytes(filePath, data);
+        byte[] envelopedData = ModelFileHeader.WrapWithHeader(
+            data, this, GetInputShape(), GetOutputShape(), SerializationFormat.Json);
+        File.WriteAllBytes(filePath, envelopedData);
     }
 
     /// <inheritdoc/>
     public virtual void LoadModel(string filePath)
     {
         byte[] data = File.ReadAllBytes(filePath);
+
+        // Strip AIMF envelope header if present, falling back to legacy format
+        if (ModelFileHeader.HasHeader(data))
+        {
+            data = ModelFileHeader.ExtractPayload(data);
+        }
+
         Deserialize(data);
     }
 

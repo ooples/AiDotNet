@@ -23,7 +23,7 @@ namespace AiDotNet.NeuralNetworks;
 /// This class provides the foundation for building different types of neural networks.
 /// </para>
 /// </remarks>
-public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpretableModel<T>, IInputGradientComputable<T>, IConfigurableModel<T>, IDisposable
+public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpretableModel<T>, IInputGradientComputable<T>, IConfigurableModel<T>, IModelShape, IDisposable
 {
     /// <summary>
     /// The internal collection of layers that make up this neural network.
@@ -2584,7 +2584,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// <remarks>
     /// <para>
     /// This method serializes the entire neural network, including all layers and parameters,
-    /// and saves it to the specified file path.
+    /// and saves it to the specified file path. The file includes an AIMF envelope header
+    /// that allows automatic model type detection when loading.
     /// </para>
     /// <para>
     /// <b>For Beginners:</b> This saves your trained neural network to a file on your computer.
@@ -2607,7 +2608,9 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         }
 
         byte[] serializedData = Serialize();
-        File.WriteAllBytes(filePath, serializedData);
+        byte[] envelopedData = ModelFileHeader.WrapWithHeader(
+            serializedData, this, GetInputShape(), GetOutputShape(), SerializationFormat.Binary);
+        File.WriteAllBytes(filePath, envelopedData);
     }
 
     /// <summary>
@@ -2636,6 +2639,13 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         }
 
         byte[] data = File.ReadAllBytes(filePath);
+
+        // Strip AIMF envelope header if present, falling back to legacy format
+        if (ModelFileHeader.HasHeader(data))
+        {
+            data = ModelFileHeader.ExtractPayload(data);
+        }
+
         Deserialize(data);
     }
 
@@ -3760,12 +3770,23 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </remarks>
     public virtual int[] GetInputShape()
     {
-        if (Layers.Count == 0)
+        if (Layers.Count > 0)
         {
-            return Array.Empty<int>();
+            return Layers[0].GetInputShape();
         }
 
-        return Layers[0].GetInputShape();
+        return new[] { Architecture.InputSize };
+    }
+
+    /// <inheritdoc/>
+    public virtual int[] GetOutputShape()
+    {
+        if (Layers.Count > 0)
+        {
+            return Layers[Layers.Count - 1].GetOutputShape();
+        }
+
+        return new[] { Architecture.OutputSize };
     }
 
     /// <summary>
