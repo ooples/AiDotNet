@@ -85,9 +85,6 @@ public class AudioVisualEventLocalizationNetwork<T> : NeuralNetworkBase<T>, IAud
     #region Constructors
 
     /// <summary>
-    /// Initializes a new instance of the AudioVisualEventLocalizationNetwork.
-    /// </summary>
-    /// <summary>
     /// Initializes a new instance with default architecture settings.
     /// </summary>
     public AudioVisualEventLocalizationNetwork()
@@ -99,6 +96,9 @@ public class AudioVisualEventLocalizationNetwork<T> : NeuralNetworkBase<T>, IAud
     {
     }
 
+    /// <summary>
+    /// Initializes a new instance of the AudioVisualEventLocalizationNetwork.
+    /// </summary>
     public AudioVisualEventLocalizationNetwork(
         NeuralNetworkArchitecture<T> architecture,
         int embeddingDimension = DEFAULT_EMBEDDING_DIM,

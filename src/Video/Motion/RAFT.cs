@@ -114,14 +114,6 @@ public class RAFT<T> : OpticalFlowBase<T>
     #region Constructors
 
     /// <summary>
-    /// Initializes a new instance of the RAFT class.
-    /// </summary>
-    /// <param name="architecture">The neural network architecture configuration.</param>
-    /// <param name="numFeatures">The number of features in intermediate layers.</param>
-    /// <param name="correlationLevels">The number of levels in the correlation pyramid.</param>
-    /// <param name="correlationRadius">The search radius for correlation lookup.</param>
-    /// <param name="numIterations">The number of GRU refinement iterations.</param>
-    /// <summary>
     /// Initializes a new instance with default architecture settings.
     /// </summary>
     public RAFT()
@@ -133,6 +125,14 @@ public class RAFT<T> : OpticalFlowBase<T>
     {
     }
 
+    /// <summary>
+    /// Initializes a new instance of the RAFT class.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="numFeatures">The number of features in intermediate layers.</param>
+    /// <param name="correlationLevels">The number of levels in the correlation pyramid.</param>
+    /// <param name="correlationRadius">The search radius for correlation lookup.</param>
+    /// <param name="numIterations">The number of GRU refinement iterations.</param>
     public RAFT(
         NeuralNetworkArchitecture<T> architecture,
         int numFeatures = DefaultNumFeatures,

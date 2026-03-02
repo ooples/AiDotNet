@@ -112,18 +112,6 @@ public class AutoDiffTabGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGe
     /// <summary>
     /// Initializes a new AutoDiff-Tab generator with the specified architecture.
     /// </summary>
-    /// <param name="architecture">The neural network architecture defining input/output dimensions and optional custom layers.</param>
-    /// <param name="options">AutoDiffTab-specific configuration options.</param>
-    /// <param name="optimizer">Gradient-based optimizer (defaults to Adam).</param>
-    /// <param name="lossFunction">Loss function (defaults based on task type).</param>
-    /// <param name="maxGradNorm">Maximum gradient norm for clipping (default 5.0).</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This constructor creates an AutoDiff-Tab network. If you provide custom
-    /// layers in the architecture, those will be used for the denoiser. Otherwise, the architecture
-    /// search discovers the best denoiser configuration automatically.
-    /// </para>
-    /// </remarks>
     /// <summary>
     /// Initializes a new instance with default architecture settings.
     /// </summary>
@@ -136,6 +124,21 @@ public class AutoDiffTabGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGe
     {
     }
 
+    /// <summary>
+    /// Initializes a new instance of the AutoDiffTabGenerator.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture defining input/output dimensions and optional custom layers.</param>
+    /// <param name="options">AutoDiffTab-specific configuration options.</param>
+    /// <param name="optimizer">Gradient-based optimizer (defaults to Adam).</param>
+    /// <param name="lossFunction">Loss function (defaults based on task type).</param>
+    /// <param name="maxGradNorm">Maximum gradient norm for clipping (default 5.0).</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This constructor creates an AutoDiff-Tab network. If you provide custom
+    /// layers in the architecture, those will be used for the denoiser. Otherwise, the architecture
+    /// search discovers the best denoiser configuration automatically.
+    /// </para>
+    /// </remarks>
     public AutoDiffTabGenerator(
         NeuralNetworkArchitecture<T> architecture,
         AutoDiffTabOptions<T>? options = null,

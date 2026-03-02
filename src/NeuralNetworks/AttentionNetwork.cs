@@ -120,6 +120,15 @@ public class AttentionNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     public T AuxiliaryLossWeight { get; set; }
 
     /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    public AttentionNetwork()
+        : this(new NeuralNetworkArchitecture<T>(InputType.OneDimensional, NeuralNetworkTaskType.Regression, inputSize: 128, outputSize: 128),
+               sequenceLength: 32, embeddingSize: 64)
+    {
+    }
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="AttentionNetwork{T}"/> class.
     /// </summary>
     /// <param name="architecture">The architecture specification for the network.</param>
@@ -134,27 +143,21 @@ public class AttentionNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     /// machine translation or text summarization.
     /// </para>
     /// <para><b>For Beginners:</b> This constructor creates a new attention network with the specified settings.
-    /// 
+    ///
     /// The parameters you provide determine:
     /// - architecture: The overall design of the network (layers, connections, etc.)
     /// - sequenceLength: How many elements (like words) the network can process at once
     /// - embeddingSize: How rich the representation of each element is
     /// - lossFunction: How the network measures its mistakes during training (optional)
-    /// 
+    ///
     /// These settings control the capacity, expressiveness, and computational requirements of the network.
     /// Larger values for sequenceLength and embeddingSize give the network more capacity to handle
     /// complex tasks but require more memory and processing power.
-    /// 
+    ///
     /// The loss function helps the network learn by measuring how far off its predictions are.
     /// Cross-Entropy Loss is used by default because it works well for many language-related tasks.
     /// </para>
     /// </remarks>
-    public AttentionNetwork()
-        : this(new NeuralNetworkArchitecture<T>(InputType.OneDimensional, NeuralNetworkTaskType.Regression, inputSize: 128, outputSize: 128),
-               sequenceLength: 32, embeddingSize: 64)
-    {
-    }
-
     public AttentionNetwork(NeuralNetworkArchitecture<T> architecture, int sequenceLength, int embeddingSize, ILossFunction<T>? lossFunction = null, AttentionNetworkOptions? options = null) :
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {

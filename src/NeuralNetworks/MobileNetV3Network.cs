@@ -53,14 +53,6 @@ public class MobileNetV3Network<T> : NeuralNetworkBase<T>
     public int NumClasses => _configuration.NumClasses;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="MobileNetV3Network{T}"/> class.
-    /// </summary>
-    /// <param name="architecture">The architecture defining the structure of the neural network.</param>
-    /// <param name="configuration">The MobileNetV3-specific configuration.</param>
-    /// <param name="optimizer">Optional optimizer for training (default: Adam).</param>
-    /// <param name="lossFunction">Optional loss function (default: based on task type).</param>
-    /// <param name="maxGradNorm">Maximum gradient norm for gradient clipping (default: 1.0).</param>
-    /// <summary>
     /// Initializes a new instance with default settings.
     /// </summary>
     public MobileNetV3Network()
@@ -73,6 +65,14 @@ public class MobileNetV3Network<T> : NeuralNetworkBase<T>
     {
     }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="MobileNetV3Network{T}"/> class.
+    /// </summary>
+    /// <param name="architecture">The architecture defining the structure of the neural network.</param>
+    /// <param name="configuration">The MobileNetV3-specific configuration.</param>
+    /// <param name="optimizer">Optional optimizer for training (default: Adam).</param>
+    /// <param name="lossFunction">Optional loss function (default: based on task type).</param>
+    /// <param name="maxGradNorm">Maximum gradient norm for gradient clipping (default: 1.0).</param>
     public MobileNetV3Network(
         NeuralNetworkArchitecture<T> architecture,
         MobileNetV3Configuration configuration,

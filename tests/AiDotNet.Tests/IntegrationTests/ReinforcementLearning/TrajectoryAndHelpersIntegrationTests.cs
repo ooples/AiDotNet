@@ -90,16 +90,16 @@ public class TrajectoryAndHelpersIntegrationTests
     [Fact]
     public void WorkerNetworks_DefaultsAndAssignments_Work()
     {
-        var worker = new WorkerNetworks<double>();
+        var policyNetwork = CreateNetwork(2, 1);
+        var valueNetwork = CreateNetwork(2, 1);
+        var worker = new WorkerNetworks<double>(policyNetwork, valueNetwork);
 
         Assert.NotNull(worker.Trajectory);
         Assert.Empty(worker.Trajectory);
-
-        worker.PolicyNetwork = CreateNetwork(2, 1);
-        worker.ValueNetwork = CreateNetwork(2, 1);
-
         Assert.NotNull(worker.PolicyNetwork);
         Assert.NotNull(worker.ValueNetwork);
+        Assert.Same(policyNetwork, worker.PolicyNetwork);
+        Assert.Same(valueNetwork, worker.ValueNetwork);
     }
 
     private static Vector<double> CreateVector(int size, double start)

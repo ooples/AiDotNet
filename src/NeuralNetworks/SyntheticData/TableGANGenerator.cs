@@ -107,9 +107,6 @@ public class TableGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
     public bool IsFitted { get; private set; }
 
     /// <summary>
-    /// Initializes a new TableGAN generator with the specified architecture.
-    /// </summary>
-    /// <summary>
     /// Initializes a new instance with default architecture settings.
     /// </summary>
     public TableGANGenerator()
@@ -121,6 +118,9 @@ public class TableGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
     {
     }
 
+    /// <summary>
+    /// Initializes a new TableGAN generator with the specified architecture.
+    /// </summary>
     public TableGANGenerator(
         NeuralNetworkArchitecture<T> architecture,
         TableGANOptions<T>? options = null,

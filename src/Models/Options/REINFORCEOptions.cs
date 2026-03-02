@@ -24,11 +24,24 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class REINFORCEOptions<T> : ModelOptions
 {
+    /// <summary>Dimension of the environment state vector.</summary>
     public int StateSize { get; set; } = 4;
+
+    /// <summary>Number of discrete actions available to the agent.</summary>
     public int ActionSize { get; set; } = 2;
+
+    /// <summary>Whether the action space is continuous (true) or discrete (false).</summary>
     public bool IsContinuous { get; set; } = false;
+
+    /// <summary>Learning rate for policy gradient updates.</summary>
+    /// <value>Default: 0.001.</value>
     public T LearningRate { get; set; }
+
+    /// <summary>Discount factor (gamma) for future rewards.</summary>
+    /// <value>Default: 0.99.</value>
     public T DiscountFactor { get; set; }
+
+    /// <summary>Hidden layer sizes for the policy network.</summary>
     public List<int> HiddenLayers { get; set; } = new List<int> { 32, 32 };
 
     public REINFORCEOptions()

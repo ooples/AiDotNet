@@ -132,6 +132,18 @@ namespace AiDotNet.NeuralNetworks
         #region Constructors
 
         /// <summary>
+        /// Initializes a new instance with default architecture settings.
+        /// </summary>
+        public TransformerEmbeddingNetwork()
+            : this(new NeuralNetworkArchitecture<T>(
+                inputType: Enums.InputType.OneDimensional,
+                taskType: Enums.NeuralNetworkTaskType.Regression,
+                inputSize: 768,
+                outputSize: 768))
+        {
+        }
+
+        /// <summary>
         /// Initializes a new instance of the TransformerEmbeddingNetwork.
         /// </summary>
         /// <param name="architecture">The architecture metadata configuration.</param>
@@ -146,19 +158,7 @@ namespace AiDotNet.NeuralNetworks
         /// <param name="poolingStrategy">The pooling method (default: Mean).</param>
         /// <param name="lossFunction">Optional loss function.</param>
         /// <param name="maxGradNorm">Maximum gradient norm for stability (default: 1.0).</param>
-        /// <summary>
-    /// Initializes a new instance with default architecture settings.
-    /// </summary>
-    public TransformerEmbeddingNetwork()
-        : this(new NeuralNetworkArchitecture<T>(
-            inputType: Enums.InputType.OneDimensional,
-            taskType: Enums.NeuralNetworkTaskType.Regression,
-            inputSize: 768,
-            outputSize: 768))
-    {
-    }
-
-    public TransformerEmbeddingNetwork(
+        public TransformerEmbeddingNetwork(
             NeuralNetworkArchitecture<T> architecture,
             ITokenizer? tokenizer = null,
             IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,

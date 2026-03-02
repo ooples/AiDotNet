@@ -20,6 +20,33 @@ public class MarketMakingOptions<T> : TradingAgentOptions<T>
     public MarketMakingOptions(MarketMakingOptions<T> other) : this()
     {
         if (other is null) throw new ArgumentNullException(nameof(other));
+
+        // Copy base class (TradingAgentOptions) properties
+        LearningRate = other.LearningRate;
+        DiscountFactor = other.DiscountFactor;
+        LossFunction = other.LossFunction;
+        Seed = other.Seed;
+        BatchSize = other.BatchSize;
+        ReplayBufferSize = other.ReplayBufferSize;
+        TargetUpdateFrequency = other.TargetUpdateFrequency;
+        WarmupSteps = other.WarmupSteps;
+        EpsilonStart = other.EpsilonStart;
+        EpsilonEnd = other.EpsilonEnd;
+        EpsilonDecay = other.EpsilonDecay;
+        StateSize = other.StateSize;
+        ActionSize = other.ActionSize;
+        ContinuousActions = other.ContinuousActions;
+        HiddenLayers = other.HiddenLayers;
+        InitialCapital = other.InitialCapital;
+        TransactionCost = other.TransactionCost;
+        MaxPositionSize = other.MaxPositionSize;
+        RiskFreeRate = other.RiskFreeRate;
+        AllowShortSelling = other.AllowShortSelling;
+        UseRiskAdjustedReward = other.UseRiskAdjustedReward;
+        VariancePenalty = other.VariancePenalty;
+        RewardScale = other.RewardScale;
+
+        // Copy MarketMaking-specific properties
         MaxInventory = other.MaxInventory;
         InventoryPenalty = other.InventoryPenalty;
         BaseSpread = other.BaseSpread;

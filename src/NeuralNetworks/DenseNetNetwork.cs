@@ -80,14 +80,6 @@ public class DenseNetNetwork<T> : NeuralNetworkBase<T>
     public int GrowthRate => _configuration.GrowthRate;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="DenseNetNetwork{T}"/> class.
-    /// </summary>
-    /// <param name="architecture">The architecture defining the structure of the neural network.</param>
-    /// <param name="configuration">The DenseNet-specific configuration.</param>
-    /// <param name="optimizer">Optional optimizer for training (default: Adam).</param>
-    /// <param name="lossFunction">Optional loss function (default: based on task type).</param>
-    /// <param name="maxGradNorm">Maximum gradient norm for gradient clipping (default: 1.0).</param>
-    /// <summary>
     /// Initializes a new instance with default settings.
     /// </summary>
     public DenseNetNetwork()
@@ -100,6 +92,14 @@ public class DenseNetNetwork<T> : NeuralNetworkBase<T>
     {
     }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="DenseNetNetwork{T}"/> class.
+    /// </summary>
+    /// <param name="architecture">The architecture defining the structure of the neural network.</param>
+    /// <param name="configuration">The DenseNet-specific configuration.</param>
+    /// <param name="optimizer">Optional optimizer for training (default: Adam).</param>
+    /// <param name="lossFunction">Optional loss function (default: based on task type).</param>
+    /// <param name="maxGradNorm">Maximum gradient norm for gradient clipping (default: 1.0).</param>
     public DenseNetNetwork(
         NeuralNetworkArchitecture<T> architecture,
         DenseNetConfiguration configuration,

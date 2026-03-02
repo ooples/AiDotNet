@@ -36,13 +36,6 @@ public class VideoFlow<T> : OpticalFlowBase<T>
     private ConvolutionalLayer<T>? _outputConv;
 
     /// <summary>
-    /// Creates a new VideoFlow model for native training and inference.
-    /// </summary>
-    /// <param name="architecture">The neural network architecture configuration.</param>
-    /// <param name="numFeatures">Number of feature channels. Default: 64.</param>
-    /// <param name="numLayers">Number of processing layers. Default: 8.</param>
-    /// <param name="options">Optional configuration options.</param>
-    /// <summary>
     /// Initializes a new instance with default architecture settings.
     /// </summary>
     public VideoFlow()
@@ -54,6 +47,13 @@ public class VideoFlow<T> : OpticalFlowBase<T>
     {
     }
 
+    /// <summary>
+    /// Creates a new VideoFlow model for native training and inference.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="numFeatures">Number of feature channels. Default: 64.</param>
+    /// <param name="numLayers">Number of processing layers. Default: 8.</param>
+    /// <param name="options">Optional configuration options.</param>
     public VideoFlow(
         NeuralNetworkArchitecture<T> architecture,
         int numFeatures = 64,

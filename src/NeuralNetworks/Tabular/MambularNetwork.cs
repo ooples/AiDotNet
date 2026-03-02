@@ -66,9 +66,6 @@ public class MambularNetwork<T> : NeuralNetworkBase<T>
     public int NumLayers => _options.NumLayers;
 
     /// <summary>
-    /// Initializes a new Mambular network with the specified architecture.
-    /// </summary>
-    /// <summary>
     /// Initializes a new instance with default architecture settings.
     /// </summary>
     public MambularNetwork()
@@ -80,6 +77,9 @@ public class MambularNetwork<T> : NeuralNetworkBase<T>
     {
     }
 
+    /// <summary>
+    /// Initializes a new Mambular network with the specified architecture.
+    /// </summary>
     public MambularNetwork(
         NeuralNetworkArchitecture<T> architecture,
         MambularOptions<T>? options = null,

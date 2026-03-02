@@ -169,6 +169,10 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
     {
     }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="NeuralNetworkModel{T}"/> class.
+    /// </summary>
+    /// <param name="architecture">The architecture defining the structure of the neural network.</param>
     public NeuralNetworkModel(NeuralNetworkArchitecture<T> architecture)
     {
         Guard.NotNull(architecture);

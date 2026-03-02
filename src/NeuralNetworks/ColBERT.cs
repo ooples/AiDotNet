@@ -62,21 +62,21 @@ namespace AiDotNet.NeuralNetworks
         #region Constructors
 
         /// <summary>
+        /// Initializes a new instance with default architecture settings.
+        /// </summary>
+        public ColBERT()
+            : this(new NeuralNetworkArchitecture<T>(
+                inputType: Enums.InputType.OneDimensional,
+                taskType: Enums.NeuralNetworkTaskType.Regression,
+                inputSize: 768,
+                outputSize: 768))
+        {
+        }
+
+        /// <summary>
         /// Initializes a new instance of the ColBERT model.
         /// </summary>
-        /// <summary>
-    /// Initializes a new instance with default architecture settings.
-    /// </summary>
-    public ColBERT()
-        : this(new NeuralNetworkArchitecture<T>(
-            inputType: Enums.InputType.OneDimensional,
-            taskType: Enums.NeuralNetworkTaskType.Regression,
-            inputSize: 768,
-            outputSize: 768))
-    {
-    }
-
-    public ColBERT(
+        public ColBERT(
             NeuralNetworkArchitecture<T> architecture,
             ITokenizer? tokenizer = null,
             IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,

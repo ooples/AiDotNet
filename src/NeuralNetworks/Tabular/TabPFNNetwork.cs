@@ -65,9 +65,6 @@ public class TabPFNNetwork<T> : NeuralNetworkBase<T>
     public int NumLayers => _options.NumLayers;
 
     /// <summary>
-    /// Initializes a new TabPFN network with the specified architecture.
-    /// </summary>
-    /// <summary>
     /// Initializes a new instance with default architecture settings.
     /// </summary>
     public TabPFNNetwork()
@@ -79,6 +76,9 @@ public class TabPFNNetwork<T> : NeuralNetworkBase<T>
     {
     }
 
+    /// <summary>
+    /// Initializes a new TabPFN network with the specified architecture.
+    /// </summary>
     public TabPFNNetwork(
         NeuralNetworkArchitecture<T> architecture,
         TabPFNOptions<T>? options = null,

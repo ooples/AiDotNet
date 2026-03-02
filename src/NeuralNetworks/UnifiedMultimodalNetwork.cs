@@ -91,9 +91,6 @@ public class UnifiedMultimodalNetwork<T> : NeuralNetworkBase<T>, IUnifiedMultimo
     #region Constructors
 
     /// <summary>
-    /// Initializes a new instance of the UnifiedMultimodalNetwork.
-    /// </summary>
-    /// <summary>
     /// Initializes a new instance with default architecture settings.
     /// </summary>
     private const int DefaultOutputSize = 100;
@@ -107,6 +104,9 @@ public class UnifiedMultimodalNetwork<T> : NeuralNetworkBase<T>, IUnifiedMultimo
     {
     }
 
+    /// <summary>
+    /// Initializes a new instance of the UnifiedMultimodalNetwork.
+    /// </summary>
     public UnifiedMultimodalNetwork(
         NeuralNetworkArchitecture<T> architecture,
         int embeddingDimension = DEFAULT_EMBEDDING_DIM,

@@ -64,9 +64,6 @@ public class TabNetNetwork<T> : NeuralNetworkBase<T>
     public int FeatureDimension => _options.FeatureDimension;
 
     /// <summary>
-    /// Initializes a new TabNet network with the specified architecture.
-    /// </summary>
-    /// <summary>
     /// Initializes a new instance with default architecture settings.
     /// </summary>
     public TabNetNetwork()
@@ -78,6 +75,9 @@ public class TabNetNetwork<T> : NeuralNetworkBase<T>
     {
     }
 
+    /// <summary>
+    /// Initializes a new TabNet network with the specified architecture.
+    /// </summary>
     public TabNetNetwork(
         NeuralNetworkArchitecture<T> architecture,
         TabNetOptions<T>? options = null,

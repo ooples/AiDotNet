@@ -203,6 +203,18 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
     #region Constructors
 
     /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    public BasicVSRPlusPlus()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.ThreeDimensional,
+            taskType: Enums.NeuralNetworkTaskType.Regression,
+            inputHeight: 256, inputWidth: 256, inputDepth: 3,
+            outputSize: 2))
+    {
+    }
+
+    /// <summary>
     /// Creates a BasicVSR++ model for native training and inference.
     /// </summary>
     /// <param name="architecture">The neural network architecture configuration.</param>
@@ -230,18 +242,6 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
     /// </code>
     /// </para>
     /// </remarks>
-    /// <summary>
-    /// Initializes a new instance with default architecture settings.
-    /// </summary>
-    public BasicVSRPlusPlus()
-        : this(new NeuralNetworkArchitecture<T>(
-            inputType: Enums.InputType.ThreeDimensional,
-            taskType: Enums.NeuralNetworkTaskType.Regression,
-            inputHeight: 256, inputWidth: 256, inputDepth: 3,
-            outputSize: 2))
-    {
-    }
-
     public BasicVSRPlusPlus(
         NeuralNetworkArchitecture<T> architecture,
         int scaleFactor = 4,

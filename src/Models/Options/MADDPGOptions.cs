@@ -53,14 +53,26 @@ public class MADDPGOptions<T> : ReinforcementLearningOptions<T>
     /// </remarks>
     public int ActionSize { get; init; } = 2;
 
+    /// <summary>Learning rate for actor network updates.</summary>
+    /// <value>Default: 0.0001.</value>
     public T ActorLearningRate { get; init; }
+
+    /// <summary>Learning rate for critic network updates.</summary>
+    /// <value>Default: 0.001.</value>
     public T CriticLearningRate { get; init; }
+
+    /// <summary>Soft update coefficient for target networks.</summary>
+    /// <value>Default: 0.001.</value>
     public T TargetUpdateTau { get; init; }
 
-    // MADDPG-specific
+    /// <summary>Standard deviation of Gaussian noise added for exploration.</summary>
+    /// <value>Default: 0.1.</value>
     public double ExplorationNoise { get; init; } = 0.1;
 
+    /// <summary>Hidden layer sizes for each agent's actor network.</summary>
     public List<int> ActorHiddenLayers { get; init; } = new List<int> { 128, 128 };
+
+    /// <summary>Hidden layer sizes for each agent's critic network.</summary>
     public List<int> CriticHiddenLayers { get; init; } = new List<int> { 128, 128 };
 
     /// <summary>
@@ -68,12 +80,47 @@ public class MADDPGOptions<T> : ReinforcementLearningOptions<T>
     /// </summary>
     public IOptimizer<T, Vector<T>, Vector<T>>? Optimizer { get; init; }
 
+    /// <summary>
+    /// Initializes a new instance with default values.
+    /// </summary>
     public MADDPGOptions()
     {
         var numOps = MathHelper.GetNumericOperations<T>();
         ActorLearningRate = numOps.FromDouble(0.0001);
         CriticLearningRate = numOps.FromDouble(0.001);
         TargetUpdateTau = numOps.FromDouble(0.001);
+    }
+
+    /// <summary>
+    /// Initializes a new instance by copying values from another instance.
+    /// </summary>
+    /// <param name="other">The options to copy from.</param>
+    public MADDPGOptions(MADDPGOptions<T> other) : this()
+    {
+        if (other is null) throw new ArgumentNullException(nameof(other));
+
+        // Copy base class properties
+        LearningRate = other.LearningRate;
+        DiscountFactor = other.DiscountFactor;
+        LossFunction = other.LossFunction;
+        BatchSize = other.BatchSize;
+        ReplayBufferSize = other.ReplayBufferSize;
+        TargetUpdateFrequency = other.TargetUpdateFrequency;
+        UsePrioritizedReplay = other.UsePrioritizedReplay;
+        EpsilonStart = other.EpsilonStart;
+        EpsilonEnd = other.EpsilonEnd;
+
+        // Copy MADDPG-specific properties
+        NumAgents = other.NumAgents;
+        StateSize = other.StateSize;
+        ActionSize = other.ActionSize;
+        ActorLearningRate = other.ActorLearningRate;
+        CriticLearningRate = other.CriticLearningRate;
+        TargetUpdateTau = other.TargetUpdateTau;
+        ExplorationNoise = other.ExplorationNoise;
+        ActorHiddenLayers = other.ActorHiddenLayers;
+        CriticHiddenLayers = other.CriticHiddenLayers;
+        Optimizer = other.Optimizer;
     }
 
     /// <summary>

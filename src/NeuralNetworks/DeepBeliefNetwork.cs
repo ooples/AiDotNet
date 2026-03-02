@@ -163,6 +163,18 @@ public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
     public override bool SupportsTraining => true;
 
     /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    public DeepBeliefNetwork()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.OneDimensional,
+            taskType: Enums.NeuralNetworkTaskType.Regression,
+            inputSize: 128,
+            outputSize: 1))
+    {
+    }
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="DeepBeliefNetwork{T}"/> class with the specified architecture.
     /// </summary>
     /// <param name="architecture">The neural network architecture configuration, which must include RBM layers.</param>
@@ -176,27 +188,15 @@ public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
     /// of the network. The constructor initializes the network by setting up these RBM layers.
     /// </para>
     /// <para><b>For Beginners:</b> This creates a new Deep Belief Network with your chosen settings.
-    /// 
+    ///
     /// When creating a Deep Belief Network:
     /// - You provide an "architecture" that defines how the network is structured
     /// - The architecture must include a set of RBM layers (the floors of our tower)
     /// - The constructor sets up the initial structure, but doesn't train the network yet
-    /// 
+    ///
     /// Think of it like designing a blueprint for the tower before construction begins.
     /// </para>
     /// </remarks>
-    /// <summary>
-    /// Initializes a new instance with default architecture settings.
-    /// </summary>
-    public DeepBeliefNetwork()
-        : this(new NeuralNetworkArchitecture<T>(
-            inputType: Enums.InputType.OneDimensional,
-            taskType: Enums.NeuralNetworkTaskType.Regression,
-            inputSize: 128,
-            outputSize: 1))
-    {
-    }
-
     public DeepBeliefNetwork(
         NeuralNetworkArchitecture<T> architecture,
         T? learningRate = default,

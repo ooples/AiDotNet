@@ -142,28 +142,32 @@ namespace AiDotNet.NeuralNetworks
         /// <param name="vocabSize">The size of the vocabulary (default: 10000).</param>
         /// <param name="embeddingDimension">The dimension of the embedding vectors (default: 100).</param>
         /// <param name="windowSize">The context window size (default: 5).</param>
+        /// </summary>
+        /// <summary>
+        /// Initializes a new instance with default architecture settings.
+        /// </summary>
+        public Word2Vec()
+            : this(new NeuralNetworkArchitecture<T>(
+                inputType: Enums.InputType.OneDimensional,
+                taskType: Enums.NeuralNetworkTaskType.Regression,
+                inputSize: 768,
+                outputSize: 768))
+        {
+        }
+
+        /// <summary>
+        /// Initializes a new instance of the Word2Vec model.
+        /// </summary>
         /// <param name="maxTokens">The maximum tokens to process per input (default: 512).</param>
         /// <param name="type">The Word2Vec architecture type (default: SkipGram).</param>
         /// <param name="lossFunction">Optional loss function. Defaults to Binary Cross Entropy.</param>
         /// <param name="maxGradNorm">Maximum gradient norm for stability (default: 1.0).</param>
         /// <remarks>
-        /// <b>For Beginners:</b> This sets up the model's brain. You can decide how many words it should 
-        /// know (vocabSize), how detailed its "mental map" should be (embeddingDimension), and which 
+        /// <b>For Beginners:</b> This sets up the model's brain. You can decide how many words it should
+        /// know (vocabSize), how detailed its "mental map" should be (embeddingDimension), and which
         /// learning strategy it should use (type).
         /// </remarks>
-        /// <summary>
-    /// Initializes a new instance with default architecture settings.
-    /// </summary>
-    public Word2Vec()
-        : this(new NeuralNetworkArchitecture<T>(
-            inputType: Enums.InputType.OneDimensional,
-            taskType: Enums.NeuralNetworkTaskType.Regression,
-            inputSize: 768,
-            outputSize: 768))
-    {
-    }
-
-    public Word2Vec(
+        public Word2Vec(
             NeuralNetworkArchitecture<T> architecture,
             ITokenizer? tokenizer = null,
             IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,

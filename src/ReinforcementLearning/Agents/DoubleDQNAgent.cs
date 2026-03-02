@@ -55,11 +55,14 @@ public class DoubleDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
     public override int FeatureCount => _options.StateSize;
 
     /// <summary>
+    /// Initializes a new instance with default options.
+    /// </summary>
+    public DoubleDQNAgent() : this(new DoubleDQNOptions<T>()) { }
+
+    /// <summary>
     /// Initializes a new instance of the DoubleDQNAgent class.
     /// </summary>
     /// <param name="options">Configuration options for the Double DQN agent.</param>
-    public DoubleDQNAgent() : this(new DoubleDQNOptions<T>()) { }
-
     public DoubleDQNAgent(DoubleDQNOptions<T> options)
         : base(CreateBaseOptions(options))
     {

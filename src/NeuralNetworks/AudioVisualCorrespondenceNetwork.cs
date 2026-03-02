@@ -114,16 +114,6 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
     #region Constructors
 
     /// <summary>
-    /// Creates a new audio-visual correspondence network.
-    /// </summary>
-    /// <param name="architecture">Network architecture configuration.</param>
-    /// <param name="embeddingDimension">Dimension of shared embedding space.</param>
-    /// <param name="audioSampleRate">Expected audio sample rate.</param>
-    /// <param name="videoFrameRate">Expected video frame rate.</param>
-    /// <param name="numEncoderLayers">Number of encoder layers per modality.</param>
-    /// <param name="optimizer">Gradient-based optimizer for training.</param>
-    /// <param name="lossFunction">Loss function for training.</param>
-    /// <summary>
     /// Initializes a new instance with default architecture settings.
     /// </summary>
     public AudioVisualCorrespondenceNetwork()
@@ -135,6 +125,16 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
     {
     }
 
+    /// <summary>
+    /// Creates a new audio-visual correspondence network.
+    /// </summary>
+    /// <param name="architecture">Network architecture configuration.</param>
+    /// <param name="embeddingDimension">Dimension of shared embedding space.</param>
+    /// <param name="audioSampleRate">Expected audio sample rate.</param>
+    /// <param name="videoFrameRate">Expected video frame rate.</param>
+    /// <param name="numEncoderLayers">Number of encoder layers per modality.</param>
+    /// <param name="optimizer">Gradient-based optimizer for training.</param>
+    /// <param name="lossFunction">Loss function for training.</param>
     public AudioVisualCorrespondenceNetwork(
         NeuralNetworkArchitecture<T> architecture,
         int embeddingDimension = DEFAULT_EMBEDDING_DIM,

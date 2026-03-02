@@ -94,28 +94,6 @@ public class UNet3D<T> : NeuralNetworkBase<T>
     public int NumClasses { get; private set; }
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="UNet3D{T}"/> class.
-    /// </summary>
-    /// <param name="architecture">The architecture defining the structure of the neural network.</param>
-    /// <param name="voxelResolution">The resolution of the voxel grid (e.g., 32 for 32x32x32). Default is 32.</param>
-    /// <param name="numEncoderBlocks">Number of encoder blocks. Default is 4.</param>
-    /// <param name="baseFilters">Base number of filters in first encoder block. Default is 32.</param>
-    /// <param name="optimizer">The optimizer for training. Defaults to Adam if not specified.</param>
-    /// <param name="lossFunction">The loss function. Defaults based on task type if not specified.</param>
-    /// <param name="maxGradNorm">Maximum gradient norm for clipping. Defaults to 1.0.</param>
-    /// <exception cref="ArgumentNullException">Thrown when architecture is null.</exception>
-    /// <exception cref="ArgumentException">Thrown when voxelResolution or numEncoderBlocks is not positive.</exception>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This constructor creates a 3D U-Net with the specified configuration.
-    ///
-    /// Key parameters explained:
-    /// - voxelResolution: The size of the 3D input grid (32 = 32×32×32 voxels)
-    /// - numEncoderBlocks: How many downsampling stages (more = deeper network)
-    /// - baseFilters: Starting number of feature detectors (32 is a good default)
-    /// </para>
-    /// </remarks>
-    /// <summary>
     /// Initializes a new instance with default architecture settings.
     /// </summary>
     public UNet3D()
@@ -127,6 +105,16 @@ public class UNet3D<T> : NeuralNetworkBase<T>
     {
     }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="UNet3D{T}"/> class.
+    /// </summary>
+    /// <param name="architecture">The architecture defining the structure of the neural network.</param>
+    /// <param name="voxelResolution">The resolution of the voxel grid (e.g., 32 for 32x32x32). Default is 32.</param>
+    /// <param name="numEncoderBlocks">Number of encoder blocks. Default is 4.</param>
+    /// <param name="baseFilters">Base number of filters in first encoder block. Default is 32.</param>
+    /// <param name="optimizer">The optimizer for training. Defaults to Adam if not specified.</param>
+    /// <param name="lossFunction">The loss function. Defaults based on task type if not specified.</param>
+    /// <param name="maxGradNorm">Maximum gradient norm for clipping. Defaults to 1.0.</param>
     public UNet3D(
         NeuralNetworkArchitecture<T> architecture,
         int voxelResolution = 32,

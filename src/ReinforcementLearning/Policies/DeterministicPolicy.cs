@@ -22,7 +22,6 @@ namespace AiDotNet.ReinforcementLearning.Policies
         private readonly bool _useTanhSquashing;
 
         /// <summary>
-        /// <summary>
         /// Initializes a new instance with default settings.
         /// </summary>
         public DeterministicPolicy()

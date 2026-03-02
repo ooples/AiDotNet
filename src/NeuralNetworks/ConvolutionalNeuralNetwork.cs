@@ -56,22 +56,6 @@ public class ConvolutionalNeuralNetwork<T> : NeuralNetworkBase<T>
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
 
     /// <summary>
-    /// Initializes a new instance of the ConvolutionalNeuralNetwork class.
-    /// </summary>
-    /// <param name="architecture">The architecture defining the structure of the neural network.</param>
-    /// <remarks>
-    /// <para>
-    /// CNNs are typically used with three-dimensional input data (height, width, and channels for images),
-    /// but this implementation accepts any rank and lets layers adapt the dimensions as needed.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> When creating a CNN, you need to provide a blueprint (architecture) 
-    /// that defines how your network will be structured. This implementation supports inputs of
-    /// different ranks (1D, 2D, 3D, or batched 4D+), and the layers will handle reshaping and
-    /// dimension adaptation internally.
-    /// </para>
-    /// </remarks>
-    /// <summary>
     /// Initializes a new instance with default architecture settings.
     /// </summary>
     public ConvolutionalNeuralNetwork()
@@ -83,6 +67,22 @@ public class ConvolutionalNeuralNetwork<T> : NeuralNetworkBase<T>
     {
     }
 
+    /// <summary>
+    /// Initializes a new instance of the ConvolutionalNeuralNetwork class.
+    /// </summary>
+    /// <param name="architecture">The architecture defining the structure of the neural network.</param>
+    /// <remarks>
+    /// <para>
+    /// CNNs are typically used with three-dimensional input data (height, width, and channels for images),
+    /// but this implementation accepts any rank and lets layers adapt the dimensions as needed.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> When creating a CNN, you need to provide a blueprint (architecture)
+    /// that defines how your network will be structured. This implementation supports inputs of
+    /// different ranks (1D, 2D, 3D, or batched 4D+), and the layers will handle reshaping and
+    /// dimension adaptation internally.
+    /// </para>
+    /// </remarks>
     public ConvolutionalNeuralNetwork(
         NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,

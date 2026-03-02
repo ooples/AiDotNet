@@ -90,6 +90,18 @@ namespace AiDotNet.NeuralNetworks
         #region Constructors
 
         /// <summary>
+        /// Initializes a new instance with default architecture settings.
+        /// </summary>
+    public FastText()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.OneDimensional,
+            taskType: Enums.NeuralNetworkTaskType.Regression,
+            inputSize: 768,
+            outputSize: 768))
+    {
+    }
+
+        /// <summary>
         /// Initializes a new instance of the FastText model.
         /// </summary>
         /// <param name="architecture">The configuration defining the model metadata.</param>
@@ -101,18 +113,6 @@ namespace AiDotNet.NeuralNetworks
         /// <param name="maxTokens">The maximum tokens per sentence (default: 512).</param>
         /// <param name="lossFunction">Optional loss function. Defaults to Binary Cross Entropy.</param>
         /// <param name="maxGradNorm">Maximum gradient norm for stability (default: 1.0).</param>
-        /// <summary>
-    /// Initializes a new instance with default architecture settings.
-    /// </summary>
-    public FastText()
-        : this(new NeuralNetworkArchitecture<T>(
-            inputType: Enums.InputType.OneDimensional,
-            taskType: Enums.NeuralNetworkTaskType.Regression,
-            inputSize: 768,
-            outputSize: 768))
-    {
-    }
-
     public FastText(
             NeuralNetworkArchitecture<T> architecture,
             ITokenizer? tokenizer = null,

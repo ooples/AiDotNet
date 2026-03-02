@@ -219,20 +219,6 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
     private ILossFunction<T> _lossFunction;
 
     /// <summary>
-    /// Initializes a new instance of the DeepBoltzmannMachine class with scalar activation.
-    /// </summary>
-    /// <param name="architecture">The neural network architecture configuration.</param>
-    /// <param name="epochs">The number of training epochs.</param>
-    /// <param name="learningRate">The learning rate for parameter updates.</param>
-    /// <param name="learningRateDecay">The learning rate decay factor per epoch. Default is 1.0 (no decay).</param>
-    /// <param name="activationFunction">The scalar activation function to use. Default is sigmoid.</param>
-    /// <param name="batchSize">The number of examples in each training batch. Default is 32.</param>
-    /// <param name="cdSteps">The number of contrastive divergence steps. Default is 1.</param>
-    /// <remarks>
-    /// This constructor creates a Deep Boltzmann Machine with the specified architecture and training parameters,
-    /// using a scalar activation function that is applied element-wise to unit activations.
-    /// </remarks>
-    /// <summary>
     /// Initializes a new instance with default settings.
     /// </summary>
     public DeepBoltzmannMachine()
@@ -246,6 +232,20 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
     {
     }
 
+    /// <summary>
+    /// Initializes a new instance of the DeepBoltzmannMachine class with scalar activation.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="epochs">The number of training epochs.</param>
+    /// <param name="learningRate">The learning rate for parameter updates.</param>
+    /// <param name="learningRateDecay">The learning rate decay factor per epoch. Default is 1.0 (no decay).</param>
+    /// <param name="activationFunction">The scalar activation function to use. Default is sigmoid.</param>
+    /// <param name="batchSize">The number of examples in each training batch. Default is 32.</param>
+    /// <param name="cdSteps">The number of contrastive divergence steps. Default is 1.</param>
+    /// <remarks>
+    /// This constructor creates a Deep Boltzmann Machine with the specified architecture and training parameters,
+    /// using a scalar activation function that is applied element-wise to unit activations.
+    /// </remarks>
     public DeepBoltzmannMachine(
         NeuralNetworkArchitecture<T> architecture,
         int epochs,
