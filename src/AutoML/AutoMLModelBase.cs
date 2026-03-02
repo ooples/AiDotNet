@@ -18,7 +18,7 @@ namespace AiDotNet.AutoML
     /// <typeparam name="T">The numeric type used for calculations</typeparam>
     /// <typeparam name="TInput">The input data type</typeparam>
     /// <typeparam name="TOutput">The output data type</typeparam>
-    public abstract class AutoMLModelBase<T, TInput, TOutput> : IAutoMLModel<T, TInput, TOutput>
+    public abstract class AutoMLModelBase<T, TInput, TOutput> : IAutoMLModel<T, TInput, TOutput>, IModelShape
     {
         /// <summary>
         /// Hardware-accelerated engine for vector/tensor operations.
@@ -627,6 +627,28 @@ namespace AiDotNet.AutoML
         /// <summary>
         /// Saves the model to a file
         /// </summary>
+        /// <inheritdoc/>
+        public virtual int[] GetInputShape()
+        {
+            if (BestModel is IModelShape shapeModel)
+            {
+                return shapeModel.GetInputShape();
+            }
+
+            return Array.Empty<int>();
+        }
+
+        /// <inheritdoc/>
+        public virtual int[] GetOutputShape()
+        {
+            if (BestModel is IModelShape shapeModel)
+            {
+                return shapeModel.GetOutputShape();
+            }
+
+            return Array.Empty<int>();
+        }
+
         public virtual void SaveModel(string filePath)
         {
             if (BestModel == null)

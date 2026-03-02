@@ -18,7 +18,7 @@ namespace AiDotNet.AdversarialRobustness.Attacks;
 /// <remarks>
 /// <para><b>For Beginners:</b> for provides AI safety functionality. Default values follow the original paper settings.</para>
 /// </remarks>
-public abstract class AdversarialAttackBase<T, TInput, TOutput> : IAdversarialAttack<T, TInput, TOutput>
+public abstract class AdversarialAttackBase<T, TInput, TOutput> : IAdversarialAttack<T, TInput, TOutput>, IModelShape
 {
     /// <summary>
     /// Gets the global execution engine for vectorized operations.
@@ -143,7 +143,21 @@ public abstract class AdversarialAttackBase<T, TInput, TOutput> : IAdversarialAt
         }
 
         var data = Serialize();
-        File.WriteAllBytes(fullPath, data);
+        byte[] envelopedData = ModelFileHeader.WrapWithHeader(
+            data, this, GetInputShape(), GetOutputShape(), SerializationFormat.Binary);
+        File.WriteAllBytes(fullPath, envelopedData);
+    }
+
+    /// <inheritdoc/>
+    public virtual int[] GetInputShape()
+    {
+        return Array.Empty<int>();
+    }
+
+    /// <inheritdoc/>
+    public virtual int[] GetOutputShape()
+    {
+        return Array.Empty<int>();
     }
 
     /// <inheritdoc/>
@@ -169,6 +183,13 @@ public abstract class AdversarialAttackBase<T, TInput, TOutput> : IAdversarialAt
         }
 
         var data = File.ReadAllBytes(fullPath);
+
+        // Strip AIMF envelope header if present, falling back to legacy format
+        if (ModelFileHeader.HasHeader(data))
+        {
+            data = ModelFileHeader.ExtractPayload(data);
+        }
+
         Deserialize(data);
     }
 

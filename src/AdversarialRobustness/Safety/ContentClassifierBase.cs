@@ -19,7 +19,7 @@ namespace AiDotNet.AdversarialRobustness.Safety;
 /// on the actual classification logic in your subclass.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for calculations.</typeparam>
-public abstract class ContentClassifierBase<T> : IContentClassifier<T>, IModelSerializer
+public abstract class ContentClassifierBase<T> : IContentClassifier<T>, IModelSerializer, IModelShape
 {
     /// <summary>
     /// Numeric operations for type T.
@@ -98,10 +98,39 @@ public abstract class ContentClassifierBase<T> : IContentClassifier<T>, IModelSe
     public abstract void Deserialize(byte[] data);
 
     /// <inheritdoc/>
-    public abstract void SaveModel(string filePath);
+    public virtual int[] GetInputShape()
+    {
+        return Array.Empty<int>();
+    }
 
     /// <inheritdoc/>
-    public abstract void LoadModel(string filePath);
+    public virtual int[] GetOutputShape()
+    {
+        return Array.Empty<int>();
+    }
+
+    /// <inheritdoc/>
+    public virtual void SaveModel(string filePath)
+    {
+        byte[] data = Serialize();
+        byte[] envelopedData = ModelFileHeader.WrapWithHeader(
+            data, this, GetInputShape(), GetOutputShape(), SerializationFormat.Binary);
+        File.WriteAllBytes(filePath, envelopedData);
+    }
+
+    /// <inheritdoc/>
+    public virtual void LoadModel(string filePath)
+    {
+        byte[] data = File.ReadAllBytes(filePath);
+
+        // Strip AIMF envelope header if present, falling back to legacy format
+        if (ModelFileHeader.HasHeader(data))
+        {
+            data = ModelFileHeader.ExtractPayload(data);
+        }
+
+        Deserialize(data);
+    }
 
     /// <summary>
     /// Converts text to a vector representation for classification.
