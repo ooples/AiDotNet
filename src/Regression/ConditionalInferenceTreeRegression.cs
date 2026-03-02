@@ -29,6 +29,14 @@ namespace AiDotNet.Regression;
 public class ConditionalInferenceTreeRegression<T> : AsyncDecisionTreeRegressionBase<T>
 {
     /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public ConditionalInferenceTreeRegression()
+        : this(new ConditionalInferenceTreeOptions())
+    {
+    }
+
+    /// <summary>
     /// The options that control the behavior of the conditional inference tree.
     /// </summary>
     /// <remarks>

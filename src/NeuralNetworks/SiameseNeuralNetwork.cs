@@ -86,6 +86,18 @@ namespace AiDotNet.NeuralNetworks
         #region Constructors
 
         /// <summary>
+        /// Initializes a new instance of the SiameseNeuralNetwork with default configuration.
+        /// </summary>
+        public SiameseNeuralNetwork()
+            : this(new NeuralNetworkArchitecture<T>(
+                inputType: InputType.OneDimensional,
+                taskType: NeuralNetworkTaskType.Regression,
+                inputSize: 768,
+                outputSize: 768))
+        {
+        }
+
+        /// <summary>
         /// Initializes a new instance of the SiameseNeuralNetwork model.
         /// </summary>
         /// <param name="architecture">The configuration defining the model's structural metadata.</param>

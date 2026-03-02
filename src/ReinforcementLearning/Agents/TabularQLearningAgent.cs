@@ -39,6 +39,14 @@ public class TabularQLearningAgent<T> : ReinforcementLearningAgentBase<T>
     private Random _random;
     private double _epsilon;
 
+    /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public TabularQLearningAgent()
+        : this(new TabularQLearningOptions<T> { StateSize = 4, ActionSize = 2 })
+    {
+    }
+
     public TabularQLearningAgent(TabularQLearningOptions<T> options)
         : base(options)
     {

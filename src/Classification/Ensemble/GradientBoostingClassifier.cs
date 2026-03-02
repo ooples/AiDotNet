@@ -5,6 +5,8 @@ using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Classification.Ensemble;
 
+#pragma warning disable CS8601, CS8618 // Generic T defaults use default(T) - always used with value types
+
 /// <summary>
 /// Gradient Boosting classifier that builds trees sequentially to correct errors.
 /// </summary>
@@ -44,7 +46,7 @@ public class GradientBoostingClassifier<T> : EnsembleClassifierBase<T>, ITreeBas
     /// <summary>
     /// Initial prediction (prior).
     /// </summary>
-    private T _initPrediction = default!;
+    private T _initPrediction = default;
 
     /// <summary>
     /// Random number generator.

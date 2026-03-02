@@ -3,6 +3,8 @@ using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Classification.Linear;
 
+#pragma warning disable CS8601, CS8618 // Generic T defaults use default(T) - always used with value types
+
 /// <summary>
 /// Provides a base implementation for linear classifiers.
 /// </summary>
@@ -47,7 +49,7 @@ public abstract class LinearClassifierBase<T> : ProbabilisticClassifierBase<T>
     /// <summary>
     /// The learned intercept (bias) term.
     /// </summary>
-    protected T Intercept { get; set; } = default!;
+    protected T Intercept { get; set; } = default;
 
     /// <summary>
     /// Random number generator for shuffling.

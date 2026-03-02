@@ -150,12 +150,16 @@ public interface ISpeechRecognizer<T> : IFullModel<T, Tensor<T>, Tensor<T>>
     IStreamingTranscriptionSession<T> StartStreamingSession(string? language = null);
 }
 
+#pragma warning disable CS8618 // Generic T properties use default(T) - always used with value types
 /// <summary>
 /// Represents the result of a transcription operation.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 public class TranscriptionResult<T>
 {
+    [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
+    public TranscriptionResult() { }
+
     /// <summary>
     /// Gets or sets the transcribed text.
     /// </summary>
@@ -169,7 +173,7 @@ public class TranscriptionResult<T>
     /// <summary>
     /// Gets or sets the confidence score for the transcription (0.0 to 1.0).
     /// </summary>
-    public T Confidence { get; set; } = default!;
+    public required T Confidence { get; set; }
 
     /// <summary>
     /// Gets or sets the word-level segments with timestamps.
@@ -206,7 +210,7 @@ public class TranscriptionSegment<T>
     /// <summary>
     /// Gets or sets the confidence score for this segment.
     /// </summary>
-    public T Confidence { get; set; } = default!;
+    public required T Confidence { get; set; }
 }
 
 /// <summary>

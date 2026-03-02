@@ -57,6 +57,18 @@ public class OctonionNeuralNetwork<T> : NeuralNetworkBase<T>
     /// Each octonion has 8 real components (1 real + 7 imaginary).
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    public OctonionNeuralNetwork()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.OneDimensional,
+            taskType: Enums.NeuralNetworkTaskType.Regression,
+            inputSize: 64,
+            outputSize: 8))
+    {
+    }
+
     public OctonionNeuralNetwork(
         NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,

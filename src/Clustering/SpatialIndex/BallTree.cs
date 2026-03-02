@@ -342,8 +342,8 @@ public class BallTree<T>
     private class BallNode
     {
         public bool IsLeaf { get; set; }
-        public Vector<T> Centroid { get; set; } = null!;
-        public T Radius { get; set; } = default!;
+        public required Vector<T> Centroid { get; set; }
+        public required T Radius { get; set; }
         public int[]? Indices { get; set; }
         public BallNode? Left { get; set; }
         public BallNode? Right { get; set; }

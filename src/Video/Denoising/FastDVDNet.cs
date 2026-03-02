@@ -77,6 +77,18 @@ public class FastDVDNet<T> : VideoDenoisingBase<T>
 
     #region Constructors
 
+    /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    public FastDVDNet()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.ThreeDimensional,
+            taskType: Enums.NeuralNetworkTaskType.Regression,
+            inputHeight: 256, inputWidth: 256, inputDepth: 3,
+            outputSize: 3))
+    {
+    }
+
     public FastDVDNet(
         NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,

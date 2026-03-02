@@ -32,6 +32,14 @@ namespace AiDotNet.TimeSeries;
 public class VectorAutoRegressionModel<T> : TimeSeriesModelBase<T>
 {
     /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public VectorAutoRegressionModel()
+        : this(new VARModelOptions<T>())
+    {
+    }
+
+    /// <summary>
     /// Configuration options specific to the VAR model.
     /// </summary>
     private readonly VARModelOptions<T> _varOptions;

@@ -75,6 +75,21 @@ public class DIFRINT<T> : VideoStabilizationBase<T>
 
     #region Constructors
 
+    /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    private const int DefaultResolution = 256;
+    private const int DefaultChannels = 3;
+
+    public DIFRINT()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.ThreeDimensional,
+            taskType: Enums.NeuralNetworkTaskType.Regression,
+            inputHeight: DefaultResolution, inputWidth: DefaultResolution, inputDepth: DefaultChannels,
+            outputSize: DefaultChannels))
+    {
+    }
+
     public DIFRINT(
         NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,

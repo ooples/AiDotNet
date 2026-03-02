@@ -5,6 +5,8 @@ using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.TimeSeries.AnomalyDetection;
 
+#pragma warning disable CS8601, CS8618 // Generic T defaults use default(T) - always used with value types
+
 /// <summary>
 /// Implements Isolation Forest for time series anomaly detection.
 /// </summary>
@@ -606,7 +608,7 @@ internal class IsolationTree<T>
     public bool IsLeaf { get; set; }
     public int Size { get; set; }
     public int FeatureIndex { get; set; }
-    public T SplitValue { get; set; } = default!;
+    public T SplitValue { get; set; } = default;
     public IsolationTree<T>? Left { get; set; }
     public IsolationTree<T>? Right { get; set; }
 }

@@ -32,6 +32,14 @@ namespace AiDotNet.TimeSeries;
 public class StateSpaceModel<T> : TimeSeriesModelBase<T>
 {
     /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public StateSpaceModel()
+        : this(new StateSpaceModelOptions<T>())
+    {
+    }
+
+    /// <summary>
     /// The state transition matrix that describes how the hidden state evolves from one time step to the next.
     /// </summary>
     private Matrix<T> _transitionMatrix;

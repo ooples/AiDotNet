@@ -40,6 +40,8 @@ public class NStepSARSAAgent<T> : ReinforcementLearningAgentBase<T>
     private double _epsilon;
     private Random _random;
 
+    public NStepSARSAAgent() : this(new NStepSARSAOptions<T>()) { }
+
     public NStepSARSAAgent(NStepSARSAOptions<T> options)
         : base(options)
     {

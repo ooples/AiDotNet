@@ -33,6 +33,14 @@ namespace AiDotNet.Classification.Meta;
 public class MultiOutputClassifier<T> : MetaClassifierBase<T>
 {
     /// <summary>
+    /// Initializes a new instance with default settings using Gaussian Naive Bayes as the base estimator.
+    /// </summary>
+    public MultiOutputClassifier()
+        : this(() => new AiDotNet.Classification.NaiveBayes.GaussianNaiveBayes<T>())
+    {
+    }
+
+    /// <summary>
     /// The classifiers, one per output.
     /// </summary>
     private IClassifier<T>[]? _classifiers;

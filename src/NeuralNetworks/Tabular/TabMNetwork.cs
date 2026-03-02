@@ -58,6 +58,14 @@ public class TabMNetwork<T> : NeuralNetworkBase<T>
     public int NumEnsembleMembers => _options.NumEnsembleMembers;
 
     /// <summary>
+    /// Initializes a new TabM network with default configuration.
+    /// </summary>
+    public TabMNetwork()
+        : this(new NeuralNetworkArchitecture<T>(InputType.OneDimensional, NeuralNetworkTaskType.Regression, inputSize: 16, outputSize: 1))
+    {
+    }
+
+    /// <summary>
     /// Initializes a new TabM network with the specified architecture.
     /// </summary>
     public TabMNetwork(

@@ -13,6 +13,17 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class FinancialPPOAgentOptions<T> : TradingAgentOptions<T>
 {
+    [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
+    public FinancialPPOAgentOptions() { }
+
+    [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
+    public FinancialPPOAgentOptions(FinancialPPOAgentOptions<T> other) : this()
+    {
+        if (other is null) throw new ArgumentNullException(nameof(other));
+        NumEpochs = other.NumEpochs;
+        NumMiniBatches = other.NumMiniBatches;
+    }
+
     /// <summary>
     /// Number of optimization epochs per batch of data.
     /// </summary>

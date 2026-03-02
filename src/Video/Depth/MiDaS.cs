@@ -90,6 +90,18 @@ public class MiDaS<T> : NeuralNetworkBase<T>
     #region Constructors
 
     /// <summary>
+    /// Creates a MiDaS model with default configuration.
+    /// </summary>
+    public MiDaS()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: InputType.TwoDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            inputHeight: 384, inputWidth: 384,
+            outputSize: 1))
+    {
+    }
+
+    /// <summary>
     /// Creates a MiDaS model using native layers for training and inference.
     /// </summary>
     public MiDaS(

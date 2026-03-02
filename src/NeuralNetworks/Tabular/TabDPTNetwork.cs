@@ -63,6 +63,18 @@ public class TabDPTNetwork<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Initializes a new TabDPT network with the specified architecture.
     /// </summary>
+    /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    public TabDPTNetwork()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.OneDimensional,
+            taskType: Enums.NeuralNetworkTaskType.Regression,
+            inputSize: 10,
+            outputSize: 10))
+    {
+    }
+
     public TabDPTNetwork(
         NeuralNetworkArchitecture<T> architecture,
         TabDPTOptions<T>? options = null,

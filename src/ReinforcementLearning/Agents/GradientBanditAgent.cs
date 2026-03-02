@@ -22,6 +22,14 @@ public class GradientBanditAgent<T> : ReinforcementLearningAgentBase<T>
     private T _averageReward;
     private int _totalSteps;
 
+    /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public GradientBanditAgent()
+        : this(new GradientBanditOptions<T>())
+    {
+    }
+
     public GradientBanditAgent(GradientBanditOptions<T> options) : base(options)
     {
         Guard.NotNull(options);

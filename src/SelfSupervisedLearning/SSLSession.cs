@@ -9,6 +9,8 @@ using JsonSerializer = System.Text.Json.JsonSerializer;
 
 namespace AiDotNet.SelfSupervisedLearning;
 
+#pragma warning disable CS8600, CS8601, CS8604, CS8618 // Generic T defaults use default(T) - always used with value types
+
 /// <summary>
 /// Manages a self-supervised learning training session.
 /// </summary>
@@ -202,7 +204,7 @@ public class SSLSession<T>
         OnEpochStart?.Invoke(_currentEpoch);
         _method.OnEpochStart(_currentEpoch);
 
-        T epochLoss = default!;
+        T epochLoss = default;
         int stepCount = 0;
 
         // Get gradient sync frequency for DDP

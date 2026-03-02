@@ -58,6 +58,18 @@ public class GRUNeuralNetwork<T> : NeuralNetworkBase<T>
     /// that will determine how information flows through your network.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    public GRUNeuralNetwork()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.OneDimensional,
+            taskType: Enums.NeuralNetworkTaskType.Regression,
+            inputSize: 128,
+            outputSize: 1))
+    {
+    }
+
     public GRUNeuralNetwork(NeuralNetworkArchitecture<T> architecture, ILossFunction<T>? lossFunction = null, GRUOptions? options = null) :
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {

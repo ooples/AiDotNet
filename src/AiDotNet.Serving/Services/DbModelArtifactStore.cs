@@ -185,7 +185,7 @@ public sealed class DbModelArtifactStore : IModelArtifactStore
         }
     }
 
-    private bool TryToArtifact(ProtectedArtifactEntity entity, out ProtectedModelArtifact artifact)
+    private bool TryToArtifact(ProtectedArtifactEntity entity, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out ProtectedModelArtifact? artifact)
     {
         try
         {
@@ -212,7 +212,7 @@ public sealed class DbModelArtifactStore : IModelArtifactStore
         }
         catch (CryptographicException)
         {
-            artifact = null!;
+            artifact = null;
             return false;
         }
     }

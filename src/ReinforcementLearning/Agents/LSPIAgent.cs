@@ -22,6 +22,14 @@ public class LSPIAgent<T> : ReinforcementLearningAgentBase<T>
     private List<(Vector<T> state, int action, T reward, Vector<T> nextState, bool done)> _samples;
     private int _iterations;
 
+    /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public LSPIAgent()
+        : this(new LSPIOptions<T> { ActionSize = 2 })
+    {
+    }
+
     public LSPIAgent(LSPIOptions<T> options) : base(options)
     {
         Guard.NotNull(options);

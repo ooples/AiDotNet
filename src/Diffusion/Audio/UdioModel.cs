@@ -107,18 +107,19 @@ public class UdioModel<T> : AudioDiffusionModelBase<T>
 
     #region Fields
 
-    private DiTNoisePredictor<T> _dit;
-    private AudioVAE<T> _audioVAE;
+    private DiTNoisePredictor<T>? _dit;
+    private AudioVAE<T>? _audioVAE;
     private readonly IConditioningModule<T>? _conditioner;
+    private readonly int? _seed;
 
     #endregion
 
     #region Properties
 
     /// <inheritdoc />
-    public override INoisePredictor<T> NoisePredictor => _dit;
+    public override INoisePredictor<T> NoisePredictor { get { EnsureInitialized(); return _dit; } }
     /// <inheritdoc />
-    public override IVAEModel<T> VAE => _audioVAE;
+    public override IVAEModel<T> VAE { get { EnsureInitialized(); return _audioVAE; } }
     /// <inheritdoc />
     public override IConditioningModule<T>? Conditioner => _conditioner;
     /// <inheritdoc />
@@ -132,7 +133,7 @@ public class UdioModel<T> : AudioDiffusionModelBase<T>
     /// <inheritdoc />
     public override bool SupportsAudioToAudio => true;
     /// <inheritdoc />
-    public override int ParameterCount => _dit.ParameterCount + _audioVAE.ParameterCount;
+    public override int ParameterCount { get { EnsureInitialized(); return _dit.ParameterCount + _audioVAE.ParameterCount; } }
 
     #endregion
 
@@ -157,12 +158,21 @@ public class UdioModel<T> : AudioDiffusionModelBase<T>
             melChannels: MEL_CHANNELS, architecture: architecture)
     {
         _conditioner = conditioner;
-        InitializeLayers(dit, audioVAE, seed);
+        _seed = seed;
+        if (dit is not null || audioVAE is not null)
+            InitializeLayers(dit, audioVAE, seed);
     }
 
     #endregion
 
     #region Layer Initialization
+
+    [MemberNotNull(nameof(_dit), nameof(_audioVAE))]
+    private void EnsureInitialized()
+    {
+        if (_dit is null || _audioVAE is null)
+            InitializeLayers(null, null, _seed);
+    }
 
     [MemberNotNull(nameof(_dit), nameof(_audioVAE))]
     private void InitializeLayers(DiTNoisePredictor<T>? dit, AudioVAE<T>? audioVAE, int? seed)
@@ -184,6 +194,7 @@ public class UdioModel<T> : AudioDiffusionModelBase<T>
     /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
+        EnsureInitialized();
         var dParams = _dit.GetParameters();
         var vaeParams = _audioVAE.GetParameters();
         var combined = new Vector<T>(dParams.Length + vaeParams.Length);
@@ -195,6 +206,7 @@ public class UdioModel<T> : AudioDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
+        EnsureInitialized();
         var dCount = _dit.ParameterCount;
         var vaeCount = _audioVAE.ParameterCount;
         if (parameters.Length != dCount + vaeCount)
@@ -217,6 +229,7 @@ public class UdioModel<T> : AudioDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
+        EnsureInitialized();
         var clonedDit = new DiTNoisePredictor<T>(
             inputChannels: LATENT_CHANNELS, hiddenSize: HIDDEN_DIM,
             numLayers: NUM_LAYERS, numHeads: NUM_HEADS,

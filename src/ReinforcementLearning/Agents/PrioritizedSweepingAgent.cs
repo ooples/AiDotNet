@@ -23,6 +23,14 @@ public class PrioritizedSweepingAgent<T> : ReinforcementLearningAgentBase<T>
     private SortedSet<(double priority, string state, int action)> _priorityQueue;
     private double _epsilon;
 
+    /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public PrioritizedSweepingAgent()
+        : this(new PrioritizedSweepingOptions<T> { StateSize = 4, ActionSize = 2 })
+    {
+    }
+
     public PrioritizedSweepingAgent(PrioritizedSweepingOptions<T> options) : base(options)
     {
         Guard.NotNull(options);

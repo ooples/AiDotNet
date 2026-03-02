@@ -114,6 +114,18 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
     #region Constructors
 
     /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    public AudioVisualCorrespondenceNetwork()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.OneDimensional,
+            taskType: Enums.NeuralNetworkTaskType.BinaryClassification,
+            inputSize: 512,
+            outputSize: 1))
+    {
+    }
+
+    /// <summary>
     /// Creates a new audio-visual correspondence network.
     /// </summary>
     /// <param name="architecture">Network architecture configuration.</param>

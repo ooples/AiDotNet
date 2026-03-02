@@ -5,6 +5,7 @@ using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.CausalInference;
 
+#pragma warning disable CS8618 // Generic T properties use default(T) - always used with value types
 /// <summary>
 /// Causal Forest for heterogeneous treatment effect estimation using random forests.
 /// </summary>
@@ -973,10 +974,13 @@ public class CausalForest<T> : CausalModelBase<T>
     /// </summary>
     private class CausalTree
     {
+        [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
+        public CausalTree() { }
+
         public bool IsLeaf { get; set; }
         public int FeatureIndex { get; set; }
         public double Threshold { get; set; }
-        public T TreatmentEffect { get; set; } = default!;
+        public required T TreatmentEffect { get; set; }
         public int NumSamples { get; set; }
         public CausalTree? Left { get; set; }
         public CausalTree? Right { get; set; }

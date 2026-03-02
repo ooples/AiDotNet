@@ -40,6 +40,16 @@ namespace AiDotNet.Classification.Meta;
 public class StackingClassifier<T> : MetaClassifierBase<T>
 {
     /// <summary>
+    /// Initializes a new instance with default settings using Gaussian Naive Bayes estimators.
+    /// </summary>
+    public StackingClassifier()
+        : this(
+            new IClassifier<T>[] { new AiDotNet.Classification.NaiveBayes.GaussianNaiveBayes<T>() },
+            () => new AiDotNet.Classification.NaiveBayes.GaussianNaiveBayes<T>())
+    {
+    }
+
+    /// <summary>
     /// Gets the stacking-specific options.
     /// </summary>
     protected new StackingClassifierOptions<T> Options => (StackingClassifierOptions<T>)base.Options;

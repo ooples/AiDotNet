@@ -23,6 +23,14 @@ public class LSTDAgent<T> : ReinforcementLearningAgentBase<T>
     private List<(Vector<T> state, int action, T reward, Vector<T> nextState, bool done)> _samples;
     private int _currentAction;
 
+    /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public LSTDAgent()
+        : this(new LSTDOptions<T> { ActionSize = 2 })
+    {
+    }
+
     public LSTDAgent(LSTDOptions<T> options) : base(options)
     {
         Guard.NotNull(options);

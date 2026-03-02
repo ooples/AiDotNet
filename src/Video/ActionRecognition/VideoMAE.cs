@@ -109,6 +109,16 @@ public class VideoMAE<T> : NeuralNetworkBase<T>
     #region Constructors
 
     /// <summary>
+    /// Initializes a new instance of VideoMAE with default architecture (224x224, 400 classes).
+    /// </summary>
+    public VideoMAE()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.ThreeDimensional,
+            taskType: Enums.NeuralNetworkTaskType.MultiClassClassification,
+            inputHeight: 224, inputWidth: 224, inputDepth: 3,
+            outputSize: 400)) { }
+
+    /// <summary>
     /// Initializes a new instance of the VideoMAE class in native (trainable) mode.
     /// </summary>
     /// <param name="architecture">The neural network architecture configuration.</param>

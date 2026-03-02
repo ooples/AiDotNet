@@ -3,12 +3,16 @@ using AiDotNet.ModelCompression;
 
 namespace AiDotNet.AutoML;
 
+#pragma warning disable CS8618 // Generic T properties use default(T) - always used with value types
 /// <summary>
 /// Represents a compression configuration to be evaluated.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 public class CompressionTrial<T>
 {
+    [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
+    public CompressionTrial() { }
+
     /// <summary>
     /// Gets or sets the compression technique used.
     /// </summary>
@@ -27,7 +31,7 @@ public class CompressionTrial<T>
     /// <summary>
     /// Gets or sets the fitness score for this trial.
     /// </summary>
-    public T FitnessScore { get; set; } = default!;
+    public required T FitnessScore { get; set; }
 
     /// <summary>
     /// Gets or sets whether this trial completed successfully.

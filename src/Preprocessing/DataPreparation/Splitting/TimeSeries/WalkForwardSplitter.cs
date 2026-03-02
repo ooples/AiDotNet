@@ -35,6 +35,14 @@ public class WalkForwardSplitter<T> : DataSplitterBase<T>
     private int _nSplits;
 
     /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public WalkForwardSplitter()
+        : this(100, 20)
+    {
+    }
+
+    /// <summary>
     /// Creates a new walk-forward validation splitter.
     /// </summary>
     /// <param name="initialTrainSize">Initial training set size.</param>

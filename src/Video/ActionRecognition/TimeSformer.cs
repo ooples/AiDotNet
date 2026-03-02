@@ -143,6 +143,18 @@ public class TimeSformer<T> : NeuralNetworkBase<T>
     /// <param name="numFrames">Number of frames to process (default: 8).</param>
     /// <param name="patchSize">Patch size for tokenization (default: 16).</param>
     /// <param name="attentionType">Type of space-time attention (default: DividedSpaceTime).</param>
+    /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    public TimeSformer()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.ThreeDimensional,
+            taskType: Enums.NeuralNetworkTaskType.MultiClassClassification,
+            inputHeight: 224, inputWidth: 224, inputDepth: 3,
+            outputSize: 400))
+    {
+    }
+
     public TimeSformer(
         NeuralNetworkArchitecture<T> architecture,
         int numClasses = 400,

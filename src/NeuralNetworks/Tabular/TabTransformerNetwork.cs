@@ -107,6 +107,11 @@ public class TabTransformerNetwork<T> : NeuralNetworkBase<T>
     /// </code>
     /// </para>
     /// </remarks>
+    public TabTransformerNetwork()
+        : this(new NeuralNetworkArchitecture<T>(InputType.OneDimensional, NeuralNetworkTaskType.Regression, inputSize: 16, outputSize: 1))
+    {
+    }
+
     public TabTransformerNetwork(
         NeuralNetworkArchitecture<T> architecture,
         TabTransformerOptions<T>? options = null,

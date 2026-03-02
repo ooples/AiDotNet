@@ -184,7 +184,7 @@ public class CurriculumEpochMetrics<T>
     /// <summary>
     /// Gets or sets the average training loss.
     /// </summary>
-    public T TrainingLoss { get; set; } = default!;
+    public required T TrainingLoss { get; set; }
 
     /// <summary>
     /// Gets or sets the validation loss (if validation data provided).

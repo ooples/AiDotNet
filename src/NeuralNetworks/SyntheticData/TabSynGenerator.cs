@@ -142,6 +142,18 @@ public class TabSynGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
     /// </code>
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    public TabSynGenerator()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.OneDimensional,
+            taskType: Enums.NeuralNetworkTaskType.Regression,
+            inputSize: 10,
+            outputSize: 10))
+    {
+    }
+
     public TabSynGenerator(
         NeuralNetworkArchitecture<T> architecture,
         TabSynOptions<T>? options = null,

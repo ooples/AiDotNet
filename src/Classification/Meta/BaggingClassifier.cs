@@ -35,6 +35,14 @@ namespace AiDotNet.Classification.Meta;
 public class BaggingClassifier<T> : MetaClassifierBase<T>
 {
     /// <summary>
+    /// Initializes a new instance with default settings using Gaussian Naive Bayes as the base estimator.
+    /// </summary>
+    public BaggingClassifier()
+        : this(() => new AiDotNet.Classification.NaiveBayes.GaussianNaiveBayes<T>())
+    {
+    }
+
+    /// <summary>
     /// Gets the bagging-specific options.
     /// </summary>
     protected new BaggingClassifierOptions<T> Options => (BaggingClassifierOptions<T>)base.Options;

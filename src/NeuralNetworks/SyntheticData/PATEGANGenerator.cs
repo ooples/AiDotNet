@@ -129,6 +129,18 @@ public class PATEGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
     /// networks are always created automatically from the options.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    public PATEGANGenerator()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.OneDimensional,
+            taskType: Enums.NeuralNetworkTaskType.Regression,
+            inputSize: 10,
+            outputSize: 10))
+    {
+    }
+
     public PATEGANGenerator(
         NeuralNetworkArchitecture<T> architecture,
         PATEGANOptions<T>? options = null,

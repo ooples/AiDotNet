@@ -414,23 +414,23 @@ public class GraphPath<T>
     /// <summary>
     /// Gets or sets the source node.
     /// </summary>
-    public GraphNode<T> SourceNode { get; set; } = null!;
+    public GraphNode<T>? SourceNode { get; set; }
 
     /// <summary>
     /// Gets or sets the edge connecting source to target.
     /// </summary>
-    public GraphEdge<T> Edge { get; set; } = null!;
+    public GraphEdge<T>? Edge { get; set; }
 
     /// <summary>
     /// Gets or sets the target node.
     /// </summary>
-    public GraphNode<T> TargetNode { get; set; } = null!;
+    public GraphNode<T>? TargetNode { get; set; }
 
     /// <summary>
     /// Returns a string representation of the path.
     /// </summary>
     public override string ToString()
     {
-        return $"({SourceNode.Label}:{SourceNode.Id})-[{Edge.RelationType}]->({TargetNode.Label}:{TargetNode.Id})";
+        return $"({SourceNode?.Label}:{SourceNode?.Id})-[{Edge?.RelationType}]->({TargetNode?.Label}:{TargetNode?.Id})";
     }
 }

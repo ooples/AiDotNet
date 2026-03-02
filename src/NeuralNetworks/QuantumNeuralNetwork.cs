@@ -88,6 +88,19 @@ public class QuantumNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </para>
     /// </remarks>
 
+    /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public QuantumNeuralNetwork()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.OneDimensional,
+            taskType: Enums.NeuralNetworkTaskType.Regression,
+            inputSize: 128,
+            outputSize: 1),
+            numQubits: 4)
+    {
+    }
+
     public QuantumNeuralNetwork(NeuralNetworkArchitecture<T> architecture, int numQubits,
         PreprocessingPipeline<T, Tensor<T>, Tensor<T>>? preprocessingPipeline = null, ILossFunction<T>? lossFunction = null,
         QuantumNeuralNetworkOptions? options = null) :

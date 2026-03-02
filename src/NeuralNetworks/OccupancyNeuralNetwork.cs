@@ -108,6 +108,18 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
     /// it will alert you that there's a mismatch.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    public OccupancyNeuralNetwork()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.OneDimensional,
+            taskType: Enums.NeuralNetworkTaskType.BinaryClassification,
+            inputSize: 3,
+            outputSize: 1))
+    {
+    }
+
     public OccupancyNeuralNetwork(
         NeuralNetworkArchitecture<T> architecture,
         bool includeTemporalData = false,

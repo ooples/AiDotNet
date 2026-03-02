@@ -48,17 +48,25 @@ public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>
     public override ModelOptions GetOptions() => _sacOptions;
     private readonly UniformReplayBuffer<T, Vector<T>, Vector<T>> _replayBuffer;
 
-    private NeuralNetwork<T> _policyNetwork;      // Actor (stochastic policy)
-    private NeuralNetwork<T> _q1Network;          // First Q-network (critic 1)
-    private NeuralNetwork<T> _q2Network;          // Second Q-network (critic 2)
-    private NeuralNetwork<T> _q1TargetNetwork;    // Target for Q1
-    private NeuralNetwork<T> _q2TargetNetwork;    // Target for Q2
+    private INeuralNetwork<T> _policyNetwork;      // Actor (stochastic policy)
+    private INeuralNetwork<T> _q1Network;          // First Q-network (critic 1)
+    private INeuralNetwork<T> _q2Network;          // Second Q-network (critic 2)
+    private INeuralNetwork<T> _q1TargetNetwork;    // Target for Q1
+    private INeuralNetwork<T> _q2TargetNetwork;    // Target for Q2
 
     private T _logAlpha;                          // Log of temperature parameter
     private int _steps;
 
     /// <inheritdoc/>
     public override int FeatureCount => _sacOptions.StateSize;
+
+    /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public SACAgent()
+        : this(new SACOptions<T> { StateSize = 4, ActionSize = 2 })
+    {
+    }
 
     /// <summary>
     /// Initializes a new instance of the SACAgent class.
@@ -485,7 +493,7 @@ public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>
         SoftUpdateNetwork(_q2Network, _q2TargetNetwork);
     }
 
-    private void SoftUpdateNetwork(NeuralNetwork<T> source, NeuralNetwork<T> target)
+    private void SoftUpdateNetwork(INeuralNetwork<T> source, INeuralNetwork<T> target)
     {
         var sourceParams = source.GetParameters();
         var targetParams = target.GetParameters();
@@ -504,10 +512,10 @@ public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>
         target.UpdateParameters(targetParams);
     }
 
-    private void UpdateNetworkParameters(NeuralNetwork<T> network, T learningRate)
+    private void UpdateNetworkParameters(INeuralNetwork<T> network, T learningRate)
     {
         var params_ = network.GetParameters();
-        var grads = network.GetGradients();
+        var grads = network.GetParameterGradients();
 
         for (int i = 0; i < params_.Length; i++)
         {
@@ -557,7 +565,7 @@ public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>
         writer.Write(_sacOptions.ActionSize);
         writer.Write(NumOps.ToDouble(_logAlpha));
 
-        void WriteNetwork(NeuralNetwork<T> net)
+        void WriteNetwork(INeuralNetwork<T> net)
         {
             var bytes = net.Serialize();
             writer.Write(bytes.Length);
@@ -583,7 +591,7 @@ public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>
         reader.ReadInt32(); // actionSize
         _logAlpha = NumOps.FromDouble(reader.ReadDouble());
 
-        void ReadNetwork(NeuralNetwork<T> net)
+        void ReadNetwork(INeuralNetwork<T> net)
         {
             var len = reader.ReadInt32();
             var bytes = reader.ReadBytes(len);
@@ -665,7 +673,7 @@ public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>
     }
 
     // Helper methods
-    private void CopyNetworkWeights(NeuralNetwork<T> source, NeuralNetwork<T> target)
+    private void CopyNetworkWeights(INeuralNetwork<T> source, INeuralNetwork<T> target)
     {
         target.UpdateParameters(source.GetParameters());
     }

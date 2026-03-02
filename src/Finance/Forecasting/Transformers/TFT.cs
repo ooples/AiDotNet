@@ -214,6 +214,18 @@ public class TFT<T> : ForecastingModelBase<T>
     #region Constructors
 
     /// <summary>
+    /// Creates a TFT model with default configuration for native training.
+    /// </summary>
+    public TFT()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            inputSize: 1,
+            outputSize: 1))
+    {
+    }
+
+    /// <summary>
     /// Creates a TFT network using pretrained ONNX model.
     /// </summary>
     /// <param name="architecture">The neural network architecture configuration.</param>

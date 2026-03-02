@@ -36,6 +36,18 @@ public class RPKNet<T> : OpticalFlowBase<T>
     private ConvolutionalLayer<T>? _outputConv;
 
     /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    public RPKNet()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.ThreeDimensional,
+            taskType: Enums.NeuralNetworkTaskType.Regression,
+            inputHeight: 256, inputWidth: 256, inputDepth: 3,
+            outputSize: 2))
+    {
+    }
+
+    /// <summary>
     /// Creates a new RPKNet model for native training and inference.
     /// </summary>
     /// <param name="architecture">The neural network architecture configuration.</param>

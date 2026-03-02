@@ -21,9 +21,10 @@ public class FinancialDQNAgent<T> : TradingAgentBase<T>
     #region Fields
 
     private readonly FinancialDQNAgentOptions<T> _options;
-    private readonly NeuralNetwork<T> _qNetwork;
-    private readonly NeuralNetwork<T> _targetNetwork;
+    private readonly INeuralNetwork<T> _qNetwork;
+    private readonly INeuralNetwork<T> _targetNetwork;
     private readonly ReplayBuffer<T> ReplayBuffer;
+    private readonly NeuralNetworkArchitecture<T> _architecture;
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
@@ -52,10 +53,24 @@ public class FinancialDQNAgent<T> : TradingAgentBase<T>
     /// <b>For Beginners:</b> In the FinancialDQNAgent model, FinancialDQNAgent sets up the architecture and options. This prepares the model for training or inference.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public FinancialDQNAgent()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: AiDotNet.Enums.InputType.OneDimensional,
+            taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression,
+            inputSize: 10,
+            outputSize: 1),
+            options: new TradingAgentOptions<T>())
+    {
+    }
+
     public FinancialDQNAgent(NeuralNetworkArchitecture<T> architecture, TradingAgentOptions<T> options)
         : base(options)
     {
         _options = options as FinancialDQNAgentOptions<T> ?? new FinancialDQNAgentOptions<T>();
+        _architecture = architecture;
 
         EnsureDefaultLayers(architecture, options.StateSize, options.ActionSize);
 
@@ -321,7 +336,7 @@ public class FinancialDQNAgent<T> : TradingAgentBase<T>
     /// </remarks>
     public override IFullModel<T, Vector<T>, Vector<T>> Clone()
     {
-        var clone = new FinancialDQNAgent<T>(_qNetwork.GetArchitecture(), TradingOptions);
+        var clone = new FinancialDQNAgent<T>(_architecture, TradingOptions);
         clone.SetParameters(GetParameters());
         return clone;
     }

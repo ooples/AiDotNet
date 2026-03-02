@@ -70,6 +70,18 @@ public class SparseNeuralNetwork<T> : NeuralNetworkBase<T>
     /// a good starting point for most applications.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    public SparseNeuralNetwork()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.OneDimensional,
+            taskType: Enums.NeuralNetworkTaskType.Regression,
+            inputSize: 128,
+            outputSize: 1))
+    {
+    }
+
     public SparseNeuralNetwork(
         NeuralNetworkArchitecture<T> architecture,
         double sparsity = 0.9,

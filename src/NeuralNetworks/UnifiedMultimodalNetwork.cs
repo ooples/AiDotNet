@@ -91,6 +91,20 @@ public class UnifiedMultimodalNetwork<T> : NeuralNetworkBase<T>, IUnifiedMultimo
     #region Constructors
 
     /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    private const int DefaultOutputSize = 100;
+
+    public UnifiedMultimodalNetwork()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.OneDimensional,
+            taskType: Enums.NeuralNetworkTaskType.MultiClassClassification,
+            inputSize: DEFAULT_EMBEDDING_DIM,
+            outputSize: DefaultOutputSize))
+    {
+    }
+
+    /// <summary>
     /// Initializes a new instance of the UnifiedMultimodalNetwork.
     /// </summary>
     public UnifiedMultimodalNetwork(
@@ -130,21 +144,6 @@ public class UnifiedMultimodalNetwork<T> : NeuralNetworkBase<T>, IUnifiedMultimo
             ModalityType.Audio
         }.AsReadOnly();
 
-        // Initialize null references
-        _textEncoder = null!;
-        _imageEncoder = null!;
-        _audioEncoder = null!;
-        _videoEncoder = null!;
-        _transformerLayers = null!;
-        _crossModalAttention = null!;
-        _textDecoder = null!;
-        _imageDecoder = null!;
-        _audioDecoder = null!;
-        _videoDecoder = null!;
-        _fusionLayer = null!;
-        _classificationHead = null!;
-        _generationHead = null!;
-
         InitializeLayers();
     }
 
@@ -153,6 +152,11 @@ public class UnifiedMultimodalNetwork<T> : NeuralNetworkBase<T>, IUnifiedMultimo
     #region Initialization
 
     /// <inheritdoc/>
+    [System.Diagnostics.CodeAnalysis.MemberNotNull(
+        nameof(_textEncoder), nameof(_imageEncoder), nameof(_audioEncoder), nameof(_videoEncoder),
+        nameof(_transformerLayers), nameof(_crossModalAttention),
+        nameof(_textDecoder), nameof(_imageDecoder), nameof(_audioDecoder), nameof(_videoDecoder),
+        nameof(_fusionLayer), nameof(_classificationHead), nameof(_generationHead))]
     protected override void InitializeLayers()
     {
         if (Architecture.Layers != null && Architecture.Layers.Count > 0)

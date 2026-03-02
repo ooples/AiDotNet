@@ -27,6 +27,14 @@ namespace AiDotNet.Regression;
 public class RandomForestRegression<T> : AsyncDecisionTreeRegressionBase<T>
 {
     /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public RandomForestRegression()
+        : this(new RandomForestRegressionOptions())
+    {
+    }
+
+    /// <summary>
     /// Configuration options for the Random Forest regression model.
     /// </summary>
     /// <value>

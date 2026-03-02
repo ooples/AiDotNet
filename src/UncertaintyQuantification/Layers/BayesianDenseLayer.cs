@@ -35,20 +35,20 @@ public class BayesianDenseLayer<T> : LayerBase<T>, IBayesianLayer<T>
     private readonly T _priorSigma;
 
     // Weight parameters (mean and log variance)
-    private Matrix<T> _weightMean = null!;
-    private Matrix<T> _weightLogVar = null!;
-    private Vector<T> _biasMean = null!;
-    private Vector<T> _biasLogVar = null!;
+    private Matrix<T> _weightMean = new Matrix<T>(0, 0);
+    private Matrix<T> _weightLogVar = new Matrix<T>(0, 0);
+    private Vector<T> _biasMean = new Vector<T>(0);
+    private Vector<T> _biasLogVar = new Vector<T>(0);
 
     // Sampled weights for current forward pass
     private Matrix<T>? _sampledWeights;
     private Vector<T>? _sampledBias;
 
     // Gradients
-    private Matrix<T> _weightMeanGradient = null!;
-    private Matrix<T> _weightLogVarGradient = null!;
-    private Vector<T> _biasMeanGradient = null!;
-    private Vector<T> _biasLogVarGradient = null!;
+    private Matrix<T> _weightMeanGradient = new Matrix<T>(0, 0);
+    private Matrix<T> _weightLogVarGradient = new Matrix<T>(0, 0);
+    private Vector<T> _biasMeanGradient = new Vector<T>(0);
+    private Vector<T> _biasLogVarGradient = new Vector<T>(0);
 
     private Tensor<T>? _lastInput;
     private Tensor<T>? _lastPreActivation;

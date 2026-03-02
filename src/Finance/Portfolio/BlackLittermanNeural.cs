@@ -47,6 +47,18 @@ public class BlackLittermanNeural<T> : PortfolioOptimizerBase<T>
     /// <b>For Beginners:</b> In the BlackLittermanNeural model, BlackLittermanNeural sets up the architecture and options. This prepares the model for training or inference.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    public BlackLittermanNeural()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: AiDotNet.Enums.InputType.OneDimensional,
+            taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression,
+            inputSize: 10,
+            outputSize: 10))
+    {
+    }
+
     public BlackLittermanNeural(
         NeuralNetworkArchitecture<T> architecture,
         BlackLittermanNeuralOptions<T>? options = null,

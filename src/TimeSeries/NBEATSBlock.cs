@@ -41,6 +41,14 @@ public class NBEATSBlock<T>
     private readonly int _polynomialDegree;
 
     /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public NBEATSBlock()
+        : this(lookbackWindow: 64, forecastHorizon: 16, hiddenLayerSize: 128, numHiddenLayers: 4, thetaSizeBackcast: 64, thetaSizeForecast: 16, useInterpretableBasis: false)
+    {
+    }
+
+    /// <summary>
     /// Weights for the fully connected layers (theta network).
     /// </summary>
     private List<Matrix<T>> _fcWeights;

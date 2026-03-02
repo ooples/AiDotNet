@@ -21,7 +21,7 @@ public class CachingDataLoader<TKey, TValue> where TKey : notnull
 
     private sealed class CacheEntry
     {
-        public TValue Value { get; set; } = default!;
+        public required TValue Value { get; set; }
         public int AccessCount { get; set; }
         public LinkedListNode<TKey>? OrderNode { get; set; }
     }

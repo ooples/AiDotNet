@@ -46,13 +46,18 @@ public class DoubleDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
     public override ModelOptions GetOptions() => _options;
     private readonly UniformReplayBuffer<T, Vector<T>, Vector<T>> _replayBuffer;
 
-    private NeuralNetwork<T> _qNetwork;
-    private NeuralNetwork<T> _targetNetwork;
+    private INeuralNetwork<T> _qNetwork;
+    private INeuralNetwork<T> _targetNetwork;
     private double _epsilon;
     private int _steps;
 
     /// <inheritdoc/>
     public override int FeatureCount => _options.StateSize;
+
+    /// <summary>
+    /// Initializes a new instance with default options.
+    /// </summary>
+    public DoubleDQNAgent() : this(new DoubleDQNOptions<T>()) { }
 
     /// <summary>
     /// Initializes a new instance of the DoubleDQNAgent class.
@@ -205,7 +210,7 @@ public class DoubleDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
             _qNetwork.Backpropagate(gradientsTensor);
 
             // Extract parameter gradients from network layers (not output-space gradients)
-            var parameterGradients = _qNetwork.GetGradients();
+            var parameterGradients = _qNetwork.GetParameterGradients();
             var parameters = _qNetwork.GetParameters();
 
             for (int i = 0; i < parameters.Length; i++)
@@ -370,7 +375,7 @@ public class DoubleDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
     }
 
     // Helper methods
-    private void CopyNetworkWeights(NeuralNetwork<T> source, NeuralNetwork<T> target)
+    private void CopyNetworkWeights(INeuralNetwork<T> source, INeuralNetwork<T> target)
     {
         target.UpdateParameters(source.GetParameters());
     }

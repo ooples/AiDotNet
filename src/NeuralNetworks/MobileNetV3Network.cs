@@ -53,6 +53,19 @@ public class MobileNetV3Network<T> : NeuralNetworkBase<T>
     public int NumClasses => _configuration.NumClasses;
 
     /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public MobileNetV3Network()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.ThreeDimensional,
+            taskType: Enums.NeuralNetworkTaskType.MultiClassClassification,
+            inputHeight: 224, inputWidth: 224, inputDepth: 3,
+            outputSize: 1000),
+            configuration: MobileNetV3Configuration.CreateLarge(1000))
+    {
+    }
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="MobileNetV3Network{T}"/> class.
     /// </summary>
     /// <param name="architecture">The architecture defining the structure of the neural network.</param>

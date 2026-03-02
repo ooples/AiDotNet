@@ -24,6 +24,14 @@ public class ValueIterationAgent<T> : ReinforcementLearningAgentBase<T>
     private Dictionary<string, Dictionary<int, List<(string nextState, T reward, T probability)>>> _model;
     private Random _random;
 
+    /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public ValueIterationAgent()
+        : this(new ValueIterationOptions<T> { StateSize = 4, ActionSize = 2 })
+    {
+    }
+
     public ValueIterationAgent(ValueIterationOptions<T> options)
         : base(options)
     {

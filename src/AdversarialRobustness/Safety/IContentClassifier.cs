@@ -53,12 +53,15 @@ public interface IContentClassifier<T>
     bool IsReady();
 }
 
+#pragma warning disable CS8618 // Generic T properties use default(T) - always used with value types
 /// <summary>
 /// Result of content classification by an ML model.
 /// </summary>
 /// <typeparam name="T">The numeric data type used for calculations.</typeparam>
 public class ContentClassificationResult<T>
 {
+    public ContentClassificationResult() { }
+
     /// <summary>
     /// Gets or sets whether any harmful content was detected.
     /// </summary>
@@ -67,7 +70,7 @@ public class ContentClassificationResult<T>
     /// <summary>
     /// Gets or sets the overall confidence score for the classification.
     /// </summary>
-    public T OverallConfidence { get; set; } = default!;
+    public T OverallConfidence { get; set; }
 
     /// <summary>
     /// Gets or sets the primary detected category (the one with highest score).

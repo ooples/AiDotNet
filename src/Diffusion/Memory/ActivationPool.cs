@@ -117,7 +117,7 @@ public class ActivationPool<T> : IDisposable
 
             while (pool.TryTake(out var pooledTensor))
             {
-                if (ShapeMatches(pooledTensor.Tensor.Shape, shape))
+                if (pooledTensor.Tensor is not null && ShapeMatches(pooledTensor.Tensor.Shape, shape))
                 {
                     // Return non-matching tensors back to pool before returning
                     foreach (var pt in toReturn)
@@ -368,7 +368,7 @@ internal class PooledTensor<T>
     /// <summary>
     /// The tensor being pooled.
     /// </summary>
-    public Tensor<T> Tensor { get; set; } = null!;
+    public Tensor<T>? Tensor { get; set; }
 
     /// <summary>
     /// Total element count for quick matching.

@@ -56,8 +56,8 @@ public class ActiveLearner<T, TInput, TOutput> : IActiveLearner<T, TInput, TOutp
     private readonly List<LearningCurvePoint<T>> _learningCurvePoints;
     private readonly Random _random;
 
-    private IDataset<T, TInput, TOutput> _labeledPool;
-    private IDataset<T, TInput, TOutput> _unlabeledPool;
+    private IDataset<T, TInput, TOutput>? _labeledPool;
+    private IDataset<T, TInput, TOutput>? _unlabeledPool;
     private IDataset<T, TInput, TOutput>? _validationSet;
     private bool _initialized;
     private int _totalQueries;
@@ -75,10 +75,10 @@ public class ActiveLearner<T, TInput, TOutput> : IActiveLearner<T, TInput, TOutp
     public IQueryStrategy<T, TInput, TOutput> QueryStrategy => _queryStrategy;
 
     /// <inheritdoc/>
-    public IDataset<T, TInput, TOutput> LabeledPool => _labeledPool;
+    public IDataset<T, TInput, TOutput>? LabeledPool => _labeledPool;
 
     /// <inheritdoc/>
-    public IDataset<T, TInput, TOutput> UnlabeledPool => _unlabeledPool;
+    public IDataset<T, TInput, TOutput>? UnlabeledPool => _unlabeledPool;
 
     /// <inheritdoc/>
     public int TotalQueries => _totalQueries;
@@ -116,8 +116,8 @@ public class ActiveLearner<T, TInput, TOutput> : IActiveLearner<T, TInput, TOutp
         _learningCurvePoints = new List<LearningCurvePoint<T>>();
         _random = _config.Seed.HasValue ? RandomHelper.CreateSeededRandom(_config.Seed.Value) : RandomHelper.Shared;
 
-        _labeledPool = null!;
-        _unlabeledPool = null!;
+        _labeledPool = null;
+        _unlabeledPool = null;
         _initialized = false;
         _totalQueries = 0;
         _iterationsCompleted = 0;
@@ -462,9 +462,10 @@ public class ActiveLearner<T, TInput, TOutput> : IActiveLearner<T, TInput, TOutp
 
     #region Private Methods
 
+    [System.Diagnostics.CodeAnalysis.MemberNotNull(nameof(_labeledPool), nameof(_unlabeledPool))]
     private void EnsureInitialized()
     {
-        if (!_initialized)
+        if (!_initialized || _labeledPool is null || _unlabeledPool is null)
         {
             throw new InvalidOperationException(
                 "ActiveLearner must be initialized before use. Call Initialize() first.");
@@ -473,6 +474,9 @@ public class ActiveLearner<T, TInput, TOutput> : IActiveLearner<T, TInput, TOutp
 
     private TrainingMetrics<T> TrainModelInternal()
     {
+        if (_labeledPool is null)
+            throw new InvalidOperationException("_labeledPool must not be null. Call Initialize() before training.");
+
         var trainingStopwatch = Stopwatch.StartNew();
 
         // Train on all labeled data
@@ -498,6 +502,9 @@ public class ActiveLearner<T, TInput, TOutput> : IActiveLearner<T, TInput, TOutp
 
     private void RecordLearningCurvePoint()
     {
+        if (_labeledPool is null)
+            return;
+
         var trainingEval = Evaluate(_labeledPool);
         var point = new LearningCurvePoint<T>(NumOps)
         {
@@ -527,8 +534,8 @@ public class ActiveLearner<T, TInput, TOutput> : IActiveLearner<T, TInput, TOutp
 
         return new ActiveLearningContext<T>
         {
-            TotalLabeled = _labeledPool.Count,
-            UnlabeledRemaining = _unlabeledPool.Count,
+            TotalLabeled = _labeledPool?.Count ?? 0,
+            UnlabeledRemaining = _unlabeledPool?.Count ?? 0,
             MaxBudget = _config.GetEffectiveMaxBudget(),
             CurrentIteration = _iterationsCompleted,
             ElapsedTime = _stopwatch.Elapsed,
@@ -560,7 +567,7 @@ public class ActiveLearner<T, TInput, TOutput> : IActiveLearner<T, TInput, TOutp
         var result = new ActiveLearningResult<T>
         {
             TotalIterations = _iterationsCompleted,
-            TotalSamplesLabeled = _labeledPool.Count,
+            TotalSamplesLabeled = _labeledPool?.Count ?? 0,
             InitialLabeledSamples = initialLabeled,
             BudgetUsed = NumOps.FromDouble((double)_totalQueries / _config.GetEffectiveMaxBudget()),
             FinalTrainingAccuracy = lastCurvePoint != null ? lastCurvePoint.Accuracy : NumOps.Zero,

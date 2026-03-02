@@ -130,6 +130,18 @@ public class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
     }
 
     /// <summary>
+    /// Initializes a new instance of the <see cref="ConditionalGAN{T}"/> class with default configuration.
+    /// </summary>
+    public ConditionalGAN()
+        : this(
+            new NeuralNetworkArchitecture<T>(InputType.OneDimensional, NeuralNetworkTaskType.Regression, inputSize: 110, outputSize: 784),
+            new NeuralNetworkArchitecture<T>(InputType.OneDimensional, NeuralNetworkTaskType.BinaryClassification, inputSize: 784, outputSize: 1),
+            numConditionClasses: 10,
+            inputType: InputType.OneDimensional)
+    {
+    }
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="ConditionalGAN{T}"/> class.
     /// </summary>
     /// <param name="generatorArchitecture">The neural network architecture for the generator.</param>
