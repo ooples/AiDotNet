@@ -45,7 +45,7 @@ public class ControlNetQRModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override int LatentChannels => LATENT_CHANNELS;
     /// <inheritdoc />
-    public override int ParameterCount => _baseUNet.ParameterCount + _controlEncoder.ParameterCount;
+    public override int ParameterCount => _baseUNet.ParameterCount + _controlEncoder.ParameterCount + _vae.ParameterCount;
 
     /// <summary>
     /// Initializes a new ControlNet QR model.
@@ -89,18 +89,32 @@ public class ControlNetQRModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
-        var allParams = new List<T>();
-        var p1 = _baseUNet.GetParameters(); for (int i = 0; i < p1.Length; i++) allParams.Add(p1[i]);
-        var p2 = _controlEncoder.GetParameters(); for (int i = 0; i < p2.Length; i++) allParams.Add(p2[i]);
-        return new Vector<T>(allParams.ToArray());
+        var unetParams = _baseUNet.GetParameters();
+        var ctrlParams = _controlEncoder.GetParameters();
+        var vaeParams = _vae.GetParameters();
+        var combined = new Vector<T>(unetParams.Length + ctrlParams.Length + vaeParams.Length);
+        int o = 0;
+        for (int i = 0; i < unetParams.Length; i++) combined[o++] = unetParams[i];
+        for (int i = 0; i < ctrlParams.Length; i++) combined[o++] = ctrlParams[i];
+        for (int i = 0; i < vaeParams.Length; i++) combined[o++] = vaeParams[i];
+        return combined;
     }
 
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
         int offset = 0;
-        var c1 = _baseUNet.ParameterCount; var a1 = new T[c1]; for (int i = 0; i < c1; i++) a1[i] = parameters[offset + i]; _baseUNet.SetParameters(new Vector<T>(a1)); offset += c1;
-        var c2 = _controlEncoder.ParameterCount; var a2 = new T[c2]; for (int i = 0; i < c2; i++) a2[i] = parameters[offset + i]; _controlEncoder.SetParameters(new Vector<T>(a2));
+        var c1 = _baseUNet.ParameterCount;
+        var a1 = new T[c1]; for (int i = 0; i < c1; i++) a1[i] = parameters[offset + i];
+        _baseUNet.SetParameters(new Vector<T>(a1)); offset += c1;
+
+        var c2 = _controlEncoder.ParameterCount;
+        var a2 = new T[c2]; for (int i = 0; i < c2; i++) a2[i] = parameters[offset + i];
+        _controlEncoder.SetParameters(new Vector<T>(a2)); offset += c2;
+
+        var c3 = _vae.ParameterCount;
+        var a3 = new T[c3]; for (int i = 0; i < c3; i++) a3[i] = parameters[offset + i];
+        _vae.SetParameters(new Vector<T>(a3));
     }
 
     /// <inheritdoc />

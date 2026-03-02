@@ -255,18 +255,27 @@ public class UViTNoisePredictor<T> : NoisePredictorBase<T>
                 // or apply to the first posLen tokens only (seqLen > posLen)
                 int applyLen = Math.Min(seqLen, posLen);
                 int hiddenDim = _posEmbed.Shape[2];
-                var slicedPosData = new T[applyLen * hiddenDim];
-                _posEmbed.AsSpan().Slice(0, applyLen * hiddenDim).CopyTo(slicedPosData);
-                var slicedPosEmbed = new Tensor<T>(new[] { 1, applyLen, hiddenDim }, new Vector<T>(slicedPosData));
+                var posEmbedSpan = _posEmbed.AsSpan();
 
-                // Extract the first applyLen tokens, add position embeddings, then recombine
+                // Copy all patch data (preserving batch dimension)
                 var patchSpan = patches.AsSpan();
-                var resultData = new T[seqLen * hiddenDim];
-                patchSpan.CopyTo(resultData);
-                var posSpan = slicedPosEmbed.AsSpan();
-                for (int i = 0; i < applyLen * hiddenDim; i++)
+                int totalLen = batch * seqLen * hiddenDim;
+                var resultData = new T[totalLen];
+                patchSpan.Slice(0, totalLen).CopyTo(resultData);
+
+                // Add position embeddings to the first applyLen tokens for each batch element
+                for (int b = 0; b < batch; b++)
                 {
-                    resultData[i] = NumOps.Add(resultData[i], posSpan[i]);
+                    int batchOffset = b * seqLen * hiddenDim;
+                    for (int s = 0; s < applyLen; s++)
+                    {
+                        int patchIdx = batchOffset + s * hiddenDim;
+                        int posIdx = s * hiddenDim; // posEmbed is [1, posLen, hidden], shared across batch
+                        for (int d = 0; d < hiddenDim; d++)
+                        {
+                            resultData[patchIdx + d] = NumOps.Add(resultData[patchIdx + d], posEmbedSpan[posIdx + d]);
+                        }
+                    }
                 }
                 patches = new Tensor<T>(patches.Shape, new Vector<T>(resultData));
             }
@@ -415,13 +424,18 @@ public class UViTNoisePredictor<T> : NoisePredictorBase<T>
         // Reshape time embedding to [batch, 1, hiddenSize] for broadcasting across [batch, seqLen, hidden]
         int batch = patches.Shape[0];
         int hiddenDim = patches.Shape.Length > 2 ? patches.Shape[2] : patches.Shape[^1];
-        int timeLen = Math.Min(timeEmbed.AsSpan().Length, hiddenDim);
-        // Replicate the time embedding for each batch element
-        var timeData = new T[batch * hiddenDim];
         var timeSpan = timeEmbed.AsSpan();
+        int totalTimeLen = timeSpan.Length;
+        int perBatchTimeLen = totalTimeLen >= batch * hiddenDim ? hiddenDim : totalTimeLen;
+        bool isBatched = totalTimeLen >= batch * hiddenDim;
+
+        // Build [batch, 1, hiddenDim] tensor with per-batch time embeddings
+        var timeData = new T[batch * hiddenDim];
         for (int b = 0; b < batch; b++)
         {
-            timeSpan.Slice(0, timeLen).CopyTo(timeData.AsSpan(b * hiddenDim, timeLen));
+            int srcOffset = isBatched ? b * perBatchTimeLen : 0;
+            int copyLen = Math.Min(perBatchTimeLen, hiddenDim);
+            timeSpan.Slice(srcOffset, copyLen).CopyTo(timeData.AsSpan(b * hiddenDim, copyLen));
         }
         var timeBroadcast = new Tensor<T>(new[] { batch, 1, hiddenDim }, new Vector<T>(timeData));
         return Engine.TensorBroadcastAdd<T>(patches, timeBroadcast);

@@ -1,5 +1,6 @@
 using AiDotNet.Engines;
 using AiDotNet.Enums;
+using AiDotNet.Helpers;
 using AiDotNet.Models;
 
 namespace AiDotNet.Diffusion.Guidance;
