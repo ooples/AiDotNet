@@ -58,7 +58,7 @@ public class TrajectoryAndHelpersIntegrationTests
             Value = 0.5
         };
 
-        node.Children[0] = new MCTSNode<double> { HiddenState = CreateVector(2, 0.3) };
+        node.Children[0] = new MCTSNode<double> { HiddenState = CreateVector(2, 0.3), Value = 0.0 };
         node.VisitCounts[0] = 1;
         node.QValues[0] = 0.25;
         node.Rewards[0] = 0.1;
