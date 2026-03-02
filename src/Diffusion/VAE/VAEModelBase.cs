@@ -21,7 +21,7 @@ namespace AiDotNet.Diffusion.VAE;
 /// They are essential for efficient latent diffusion models like Stable Diffusion.
 /// </para>
 /// </remarks>
-public abstract class VAEModelBase<T> : IVAEModel<T>
+public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
 {
     /// <summary>
     /// Provides access to the hardware-accelerated tensor engine.
@@ -239,17 +239,38 @@ public abstract class VAEModelBase<T> : IVAEModel<T>
         LoadState(stream);
     }
 
+    /// <inheritdoc/>
+    public virtual int[] GetInputShape()
+    {
+        return new[] { InputChannels };
+    }
+
+    /// <inheritdoc/>
+    public virtual int[] GetOutputShape()
+    {
+        return new[] { LatentChannels };
+    }
+
     /// <inheritdoc />
     public virtual void SaveModel(string filePath)
     {
         var data = Serialize();
-        File.WriteAllBytes(filePath, data);
+        byte[] envelopedData = ModelFileHeader.WrapWithHeader(
+            data, this, GetInputShape(), GetOutputShape(), SerializationFormat.Binary);
+        File.WriteAllBytes(filePath, envelopedData);
     }
 
     /// <inheritdoc />
     public virtual void LoadModel(string filePath)
     {
         var data = File.ReadAllBytes(filePath);
+
+        // Strip AIMF envelope header if present, falling back to legacy format
+        if (ModelFileHeader.HasHeader(data))
+        {
+            data = ModelFileHeader.ExtractPayload(data);
+        }
+
         Deserialize(data);
     }
 

@@ -34,7 +34,7 @@ namespace AiDotNet.Diffusion;
 /// Specific diffusion models (like DDPM, Latent Diffusion) extend this base to implement
 /// their unique noise prediction architectures.</para>
 /// </remarks>
-public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableModel<T>
+public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableModel<T>, IModelShape
 {
     /// <summary>
     /// Provides access to the hardware-accelerated tensor engine.
@@ -332,17 +332,38 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
         LoadState(stream);
     }
 
+    /// <inheritdoc/>
+    public virtual int[] GetInputShape()
+    {
+        return new[] { ParameterCount };
+    }
+
+    /// <inheritdoc/>
+    public virtual int[] GetOutputShape()
+    {
+        return new[] { ParameterCount };
+    }
+
     /// <inheritdoc />
     public virtual void SaveModel(string filePath)
     {
         var data = Serialize();
-        File.WriteAllBytes(filePath, data);
+        byte[] envelopedData = ModelFileHeader.WrapWithHeader(
+            data, this, GetInputShape(), GetOutputShape(), SerializationFormat.Binary);
+        File.WriteAllBytes(filePath, envelopedData);
     }
 
     /// <inheritdoc />
     public virtual void LoadModel(string filePath)
     {
         var data = File.ReadAllBytes(filePath);
+
+        // Strip AIMF envelope header if present, falling back to legacy format
+        if (ModelFileHeader.HasHeader(data))
+        {
+            data = ModelFileHeader.ExtractPayload(data);
+        }
+
         Deserialize(data);
     }
 
