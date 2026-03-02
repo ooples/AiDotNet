@@ -15,7 +15,7 @@ namespace AiDotNet.ReinforcementLearning.Policies
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
     public class ContinuousPolicy<T> : PolicyBase<T>
     {
-        private readonly NeuralNetwork<T> _policyNetwork;
+        private readonly INeuralNetwork<T> _policyNetwork;
         private readonly IExplorationStrategy<T> _explorationStrategy;
         private readonly int _actionSize;
         private readonly bool _useTanhSquashing;
@@ -32,7 +32,7 @@ namespace AiDotNet.ReinforcementLearning.Policies
         }
 
         public ContinuousPolicy(
-            NeuralNetwork<T> policyNetwork,
+            INeuralNetwork<T> policyNetwork,
             int actionSize,
             IExplorationStrategy<T> explorationStrategy,
             bool useTanhSquashing = false,

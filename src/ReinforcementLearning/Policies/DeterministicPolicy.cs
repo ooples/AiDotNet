@@ -16,7 +16,7 @@ namespace AiDotNet.ReinforcementLearning.Policies
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
     public class DeterministicPolicy<T> : PolicyBase<T>
     {
-        private readonly NeuralNetwork<T> _policyNetwork;
+        private readonly INeuralNetwork<T> _policyNetwork;
         private readonly IExplorationStrategy<T> _explorationStrategy;
         private readonly int _actionSize;
         private readonly bool _useTanhSquashing;
@@ -42,7 +42,7 @@ namespace AiDotNet.ReinforcementLearning.Policies
         /// <param name="useTanhSquashing">Whether to apply tanh squashing to bound actions to [-1, 1].</param>
         /// <param name="random">Optional random number generator.</param>
         public DeterministicPolicy(
-            NeuralNetwork<T> policyNetwork,
+            INeuralNetwork<T> policyNetwork,
             int actionSize,
             IExplorationStrategy<T> explorationStrategy,
             bool useTanhSquashing = true,

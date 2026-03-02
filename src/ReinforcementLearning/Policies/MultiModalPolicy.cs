@@ -14,7 +14,7 @@ namespace AiDotNet.ReinforcementLearning.Policies
     /// </summary>
     public class MultiModalPolicy<T> : PolicyBase<T>
     {
-        private readonly NeuralNetwork<T> _policyNetwork;
+        private readonly INeuralNetwork<T> _policyNetwork;
         private readonly IExplorationStrategy<T> _explorationStrategy;
         private readonly int _actionSize;
         private readonly int _numComponents;
@@ -32,7 +32,7 @@ namespace AiDotNet.ReinforcementLearning.Policies
         }
 
         public MultiModalPolicy(
-            NeuralNetwork<T> policyNetwork,
+            INeuralNetwork<T> policyNetwork,
             int actionSize,
             int numComponents,
             IExplorationStrategy<T> explorationStrategy,

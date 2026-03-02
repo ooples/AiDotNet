@@ -17,8 +17,8 @@ namespace AiDotNet.ReinforcementLearning.Policies
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
     public class MixedPolicy<T> : PolicyBase<T>
     {
-        private readonly NeuralNetwork<T> _discreteNetwork;
-        private readonly NeuralNetwork<T> _continuousNetwork;
+        private readonly INeuralNetwork<T> _discreteNetwork;
+        private readonly INeuralNetwork<T> _continuousNetwork;
         private readonly IExplorationStrategy<T> _discreteExploration;
         private readonly IExplorationStrategy<T> _continuousExploration;
         private readonly int _discreteActionSize;
@@ -51,8 +51,8 @@ namespace AiDotNet.ReinforcementLearning.Policies
         /// <param name="sharedFeatures">Whether networks share feature extraction layers.</param>
         /// <param name="random">Optional random number generator.</param>
         public MixedPolicy(
-            NeuralNetwork<T> discreteNetwork,
-            NeuralNetwork<T> continuousNetwork,
+            INeuralNetwork<T> discreteNetwork,
+            INeuralNetwork<T> continuousNetwork,
             int discreteActionSize,
             int continuousActionSize,
             IExplorationStrategy<T> discreteExploration,
