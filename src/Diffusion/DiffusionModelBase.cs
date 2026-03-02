@@ -1,5 +1,6 @@
 using System.Linq;
 using AiDotNet.Autodiff;
+using AiDotNet.Engines;
 using AiDotNet.Enums;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;

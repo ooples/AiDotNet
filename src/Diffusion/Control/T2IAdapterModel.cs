@@ -456,10 +456,13 @@ public class T2IAdapterModel<T> : LatentDiffusionModelBase<T>
         };
 
         metadata.SetProperty("architecture", "adapter-latent-diffusion");
+        metadata.SetProperty("base_model", "Stable Diffusion 1.5");
+        metadata.SetProperty("text_encoder", "CLIP ViT-L/14");
+        metadata.SetProperty("context_dim", ADAPTER_CROSS_ATTENTION_DIM);
         metadata.SetProperty("adapter_parameters", _adapterNetwork.ParameterCount);
         metadata.SetProperty("adapter_scale", _adapterScale);
-        metadata.SetProperty("cross_attention_dim", ADAPTER_CROSS_ATTENTION_DIM);
         metadata.SetProperty("latent_channels", ADAPTER_LATENT_CHANNELS);
+        metadata.SetProperty("guidance_scale", ADAPTER_DEFAULT_GUIDANCE_SCALE);
         metadata.SetProperty("default_resolution", DefaultWidth);
 
         return metadata;

@@ -390,7 +390,7 @@ public class DiffusionModelContractTests
     [Fact]
     public void LuminaT2XModel_DefaultConstructor_CreatesValidModel()
     {
-        var model = new LuminaT2XModel<double>();
+        var model = new AiDotNet.Diffusion.TextToImage.LuminaT2XModel<double>();
 
         Assert.NotNull(model);
         Assert.NotNull(model.NoisePredictor);
@@ -1127,6 +1127,53 @@ public class DiffusionModelContractTests
         var parameters = model.GetParameters();
 
         Assert.Equal(model.ParameterCount, parameters.Length);
+    }
+
+    #endregion
+
+    #region Missing Model Coverage Tests
+
+    [Fact]
+    public void PixArtModel_DefaultConstructor_CreatesValidModel()
+    {
+        var model = new PixArtModel<double>();
+
+        Assert.NotNull(model);
+        Assert.NotNull(model.NoisePredictor);
+        Assert.NotNull(model.VAE);
+        Assert.Equal(4, model.LatentChannels);
+        Assert.True(model.ParameterCount > 0);
+    }
+
+    [Fact]
+    public void DiffWaveModel_DefaultConstructor_CreatesValidModel()
+    {
+        var model = new DiffWaveModel<double>();
+
+        Assert.NotNull(model);
+        Assert.True(model.ParameterCount > 0);
+    }
+
+    [Fact]
+    public void RiffusionModel_DefaultConstructor_CreatesValidModel()
+    {
+        var model = new RiffusionModel<double>();
+
+        Assert.NotNull(model);
+        Assert.NotNull(model.NoisePredictor);
+        Assert.NotNull(model.VAE);
+        Assert.True(model.ParameterCount > 0);
+    }
+
+    [Fact]
+    public void Zero123Model_DefaultConstructor_CreatesValidModel()
+    {
+        var model = new Zero123Model<double>();
+
+        Assert.NotNull(model);
+        Assert.NotNull(model.NoisePredictor);
+        Assert.NotNull(model.VAE);
+        Assert.True(model.ParameterCount > 0);
     }
 
     #endregion

@@ -1,3 +1,4 @@
+using AiDotNet.Engines;
 using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
@@ -140,32 +141,14 @@ public abstract class VAEModelBase<T> : IVAEModel<T>
     public virtual Tensor<T> ScaleLatent(Tensor<T> latent)
     {
         var scaleFactor = NumOps.FromDouble(LatentScaleFactor);
-        var result = new Tensor<T>(latent.Shape);
-        var latentSpan = latent.AsSpan();
-        var resultSpan = result.AsWritableSpan();
-
-        for (int i = 0; i < resultSpan.Length; i++)
-        {
-            resultSpan[i] = NumOps.Multiply(latentSpan[i], scaleFactor);
-        }
-
-        return result;
+        return Engine.TensorMultiplyScalar(latent, scaleFactor);
     }
 
     /// <inheritdoc />
     public virtual Tensor<T> UnscaleLatent(Tensor<T> latent)
     {
         var invScaleFactor = NumOps.FromDouble(1.0 / LatentScaleFactor);
-        var result = new Tensor<T>(latent.Shape);
-        var latentSpan = latent.AsSpan();
-        var resultSpan = result.AsWritableSpan();
-
-        for (int i = 0; i < resultSpan.Length; i++)
-        {
-            resultSpan[i] = NumOps.Multiply(latentSpan[i], invScaleFactor);
-        }
-
-        return result;
+        return Engine.TensorMultiplyScalar(latent, invScaleFactor);
     }
 
     /// <inheritdoc />

@@ -385,6 +385,7 @@ public class PlaygroundV25Model<T> : LatentDiffusionModelBase<T>
         };
 
         metadata.SetProperty("architecture", "sdxl-edm-latent-diffusion");
+        metadata.SetProperty("base_model", "Playground v2.5");
         metadata.SetProperty("text_encoder_1", "CLIP ViT-L/14");
         metadata.SetProperty("text_encoder_2", "OpenCLIP ViT-bigG/14");
         metadata.SetProperty("cross_attention_dim", PG_CROSS_ATTENTION_DIM);

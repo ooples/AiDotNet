@@ -695,6 +695,25 @@ public class ControlNetModel<T> : LatentDiffusionModelBase<T>
 
         return clone;
     }
+
+    /// <inheritdoc />
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        var m = new ModelMetadata<T>
+        {
+            Name = "ControlNet", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Description = "Spatial conditioning for diffusion models via trainable encoder copy",
+            FeatureCount = ParameterCount, Complexity = ParameterCount
+        };
+        m.SetProperty("architecture", "unet-controlnet");
+        m.SetProperty("base_model", "Stable Diffusion 1.5");
+        m.SetProperty("text_encoder", "CLIP ViT-L/14");
+        m.SetProperty("context_dim", 768);
+        m.SetProperty("control_type", _controlType.ToString());
+        m.SetProperty("conditioning_strength", _conditioningStrength);
+        m.SetProperty("latent_channels", CN_LATENT_CHANNELS);
+        return m;
+    }
 }
 
 /// <summary>
@@ -725,7 +744,33 @@ public enum ControlType
     /// <summary>Shuffle/random structure.</summary>
     Shuffle,
     /// <summary>Inpaint mask.</summary>
-    Inpaint
+    Inpaint,
+    /// <summary>Tile upscaling control for detail preservation.</summary>
+    Tile,
+    /// <summary>QR code pattern control for embedding QR codes in images.</summary>
+    QR,
+    /// <summary>Brightness map control for lighting guidance.</summary>
+    Brightness,
+    /// <summary>Color palette control for color guidance.</summary>
+    Color,
+    /// <summary>Content shuffle for structure-aware style transfer.</summary>
+    ContentShuffle,
+    /// <summary>Recolor control for guided recoloring of images.</summary>
+    Recolor,
+    /// <summary>FaceID control for identity-preserving face generation.</summary>
+    FaceID,
+    /// <summary>Reference-only control using image features without explicit conditioning.</summary>
+    Reference,
+    /// <summary>DWPose whole-body keypoint detection (improved over OpenPose).</summary>
+    DWPose,
+    /// <summary>MediaPipe face mesh landmarks for facial control.</summary>
+    MediaPipeFace,
+    /// <summary>Inpainting mask for region-specific generation.</summary>
+    InpaintMask,
+    /// <summary>SAM (Segment Anything Model) segmentation maps.</summary>
+    SAMSegment,
+    /// <summary>Color palette extraction for palette-guided generation.</summary>
+    ColorPalette
 }
 
 /// <summary>

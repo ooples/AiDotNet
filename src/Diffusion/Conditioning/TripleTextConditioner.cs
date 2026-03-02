@@ -1,3 +1,4 @@
+using AiDotNet.Engines;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 
@@ -259,28 +260,6 @@ public class TripleTextConditioner<T> : IConditioningModule<T>
     /// <returns>Combined pooled embedding [batchSize, 2048].</returns>
     private Tensor<T> ConcatenatePooledEmbeddings(Tensor<T> clipLPooled, Tensor<T> clipGPooled)
     {
-        int batchSize = clipLPooled.Shape[0];
-        int clipLDim = _clipLEncoder.EmbeddingDimension;
-        int clipGDim = _clipGEncoder.EmbeddingDimension;
-        int combinedDim = clipLDim + clipGDim;
-
-        var combinedData = new Vector<T>(batchSize * combinedDim);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            // Copy CLIP-L pooled embedding
-            for (int d = 0; d < clipLDim; d++)
-            {
-                combinedData[b * combinedDim + d] = clipLPooled[b * clipLDim + d];
-            }
-
-            // Copy CLIP-G pooled embedding
-            for (int d = 0; d < clipGDim; d++)
-            {
-                combinedData[b * combinedDim + clipLDim + d] = clipGPooled[b * clipGDim + d];
-            }
-        }
-
-        return new Tensor<T>(new[] { batchSize, combinedDim }, combinedData);
+        return AiDotNetEngine.Current.TensorConcatenate<T>(new[] { clipLPooled, clipGPooled }, axis: -1);
     }
 }
