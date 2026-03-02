@@ -323,7 +323,7 @@ jobs:
             nuget-${{ runner.os }}-
 
       - name: Download build artifacts
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v4
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v4
         with:
           name: build-output-${{ github.sha }}
 
@@ -421,7 +421,7 @@ jobs:
           dotnet tool update dotnet-sonarscanner --tool-path ${{ runner.temp }}\scanner
 
       - name: Download coverage artifacts
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v4
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v4
         with:
           pattern: coverage-${{ github.sha }}-*
           path: TestResults
