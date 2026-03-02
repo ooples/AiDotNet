@@ -114,19 +114,21 @@ public class MultiTaskEvaluationHarness<T>
 
         int tp = 0, fp = 0, fn = 0;
 
-        // Use a single consistent threshold for both detection and metric binarization
-        double scoreThreshold = threshold ?? 0.5;
-
         for (int s = 0; s < testSeries.Count; s++)
         {
-            var scores = model.DetectAnomalies(testSeries[s], scoreThreshold);
+            // Pass threshold through to the model (null lets the model use its own default)
+            var scores = model.DetectAnomalies(testSeries[s], threshold);
             var labels = groundTruthLabels[s];
+
+            // For binarization: use the explicit threshold if provided,
+            // otherwise use 0.5 to binarize the model's returned scores
+            double binarizationThreshold = threshold ?? 0.5;
 
             int evalLen = Math.Min(scores.Length, labels.Length);
 
             for (int i = 0; i < evalLen; i++)
             {
-                bool predicted = NumOps.ToDouble(scores[i]) > scoreThreshold;
+                bool predicted = NumOps.ToDouble(scores[i]) > binarizationThreshold;
                 bool actual = NumOps.ToDouble(labels[i]) > 0.5;
 
                 if (predicted && actual) tp++;

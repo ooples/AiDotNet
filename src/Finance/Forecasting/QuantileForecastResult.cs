@@ -92,6 +92,18 @@ public class QuantileForecastResult<T>
         Guard.NotNull(samples);
         Guard.NotNull(quantileLevels);
 
+        // Validate quantile levels are in (0, 1) and distinct
+        var seen = new HashSet<double>();
+        for (int i = 0; i < quantileLevels.Length; i++)
+        {
+            if (quantileLevels[i] <= 0.0 || quantileLevels[i] >= 1.0)
+                throw new ArgumentOutOfRangeException(nameof(quantileLevels),
+                    $"Quantile level {quantileLevels[i]} at index {i} must be in (0, 1).");
+            if (!seen.Add(quantileLevels[i]))
+                throw new ArgumentException(
+                    $"Duplicate quantile level {quantileLevels[i]} at index {i}.", nameof(quantileLevels));
+        }
+
         if (samples.Count == 0)
             throw new ArgumentException("At least one sample is required.", nameof(samples));
 

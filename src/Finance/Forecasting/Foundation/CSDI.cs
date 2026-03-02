@@ -154,7 +154,7 @@ public class CSDI<T> : TimeSeriesFoundationModelBase<T>
     private void ComputeNoiseSchedule()
     {
         if (_numDiffusionSteps <= 0)
-            throw new ArgumentOutOfRangeException(nameof(_numDiffusionSteps), "DiffusionSteps must be positive.");
+            throw new ArgumentOutOfRangeException(nameof(CSDIOptions<T>.NumDiffusionSteps), "DiffusionSteps must be positive.");
 
         _betas = new Vector<T>(_numDiffusionSteps);
         _alphas = new Vector<T>(_numDiffusionSteps);

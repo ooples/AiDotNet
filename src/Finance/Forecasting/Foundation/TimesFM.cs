@@ -422,7 +422,7 @@ public class TimesFM<T> : TimeSeriesFoundationModelBase<T>
         if (_numQuantiles > 0 && idx < Layers.Count)
             _quantileHidden = Layers[idx++];
         if (_numQuantiles > 0 && idx < Layers.Count)
-            _quantileOutput = Layers[idx];
+            _quantileOutput = Layers[idx++];
 
         // Validate quantile head completeness when quantile mode is configured
         if (_numQuantiles > 0 && (_quantileHidden is null || _quantileOutput is null))
@@ -686,6 +686,7 @@ public class TimesFM<T> : TimeSeriesFoundationModelBase<T>
     /// hidden states and produces a forecast for each requested quantile level. This provides
     /// calibrated prediction intervals without multiple forward passes.
     /// </remarks>
+    /// <returns>A tensor of shape [horizon, numQuantiles] where each column is a quantile forecast.</returns>
     private Tensor<T> ProduceQuantileForecasts(Tensor<T> historicalData, double[] quantiles)
     {
         // Validate quantile levels are in (0, 1)
@@ -726,7 +727,7 @@ public class TimesFM<T> : TimeSeriesFoundationModelBase<T>
 
         // Now use quantile head to produce quantile-specific forecasts
         var hiddenStates = current;
-        var result = new Tensor<T>(new[] { _forecastHorizon * quantiles.Length });
+        var result = new Tensor<T>(new[] { _forecastHorizon, quantiles.Length });
 
         // For each requested quantile, condition the head and produce a forecast
         for (int q = 0; q < quantiles.Length; q++)
@@ -740,10 +741,10 @@ public class TimesFM<T> : TimeSeriesFoundationModelBase<T>
             if (_quantileOutput is not null)
                 qInput = _quantileOutput.Forward(qInput);
 
-            // Extract forecast values for this quantile
+            // Extract forecast values for this quantile into column q
             for (int t = 0; t < _forecastHorizon && t < qInput.Length; t++)
             {
-                result.Data.Span[q * _forecastHorizon + t] = qInput[t];
+                result.Data.Span[t * quantiles.Length + q] = qInput[t];
             }
         }
 
