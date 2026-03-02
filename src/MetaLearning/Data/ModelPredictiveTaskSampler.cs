@@ -57,6 +57,15 @@ public class ModelPredictiveTaskSampler<T, TInput, TOutput> : ITaskSampler<T, TI
         double ucbScale = 2.0,
         int? seed = null)
     {
+        if (dataset is null)
+            throw new ArgumentNullException(nameof(dataset));
+        if (numWays <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numWays), numWays, "Number of ways must be positive.");
+        if (numShots <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numShots), numShots, "Number of shots must be positive.");
+        if (numQueryPerClass <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numQueryPerClass), numQueryPerClass, "Number of query examples per class must be positive.");
+
         _dataset = dataset;
         NumWays = numWays;
         NumShots = numShots;
@@ -71,6 +80,9 @@ public class ModelPredictiveTaskSampler<T, TInput, TOutput> : ITaskSampler<T, TI
     /// <inheritdoc/>
     public TaskBatch<T, TInput, TOutput> SampleBatch(int batchSize)
     {
+        if (batchSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(batchSize), batchSize, "Batch size must be positive.");
+
         var tasks = new IMetaLearningTask<T, TInput, TOutput>[batchSize];
         for (int i = 0; i < batchSize; i++)
         {
@@ -173,7 +185,7 @@ public class ModelPredictiveTaskSampler<T, TInput, TOutput> : ITaskSampler<T, TI
         if (episode.Difficulty.HasValue)
             hash = hash * 31 + episode.Difficulty.Value.GetHashCode();
         // Bound the arm space to prevent unbounded growth (1024 arms)
-        return Math.Abs(hash) % 1024;
+        return (hash & int.MaxValue) % 1024;
     }
 
     /// <inheritdoc/>

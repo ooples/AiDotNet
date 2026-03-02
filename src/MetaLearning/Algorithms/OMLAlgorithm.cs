@@ -54,7 +54,7 @@ public class OMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
         _paramDim = options.MetaModel.GetParameters().Length;
         if (_paramDim == 0)
             throw new ArgumentException("MetaModel has zero parameters. OML requires a model with at least one parameter.");
-        _plnStart = Math.Min(Math.Max((int)(_paramDim * (1.0 - options.PlnFraction)), 0), _paramDim - 1);
+        _plnStart = Math.Min(Math.Max((int)(_paramDim * (1.0 - options.PlnFraction)), 0), _paramDim);
     }
 
     /// <inheritdoc/>

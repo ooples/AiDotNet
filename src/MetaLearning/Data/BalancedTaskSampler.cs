@@ -53,6 +53,12 @@ public class BalancedTaskSampler<T, TInput, TOutput> : ITaskSampler<T, TInput, T
         int requiredPerClass = numShots + numQueryPerClass;
         var counts = dataset.ClassExampleCounts;
         _allClasses = counts.Where(kvp => kvp.Value >= requiredPerClass).Select(kvp => kvp.Key).ToArray();
+
+        if (_allClasses.Length < numWays)
+            throw new ArgumentException(
+                $"Dataset has only {_allClasses.Length} feasible classes (with >= {requiredPerClass} examples each), but NumWays requires {numWays}.",
+                nameof(numWays));
+
         Shuffle(_allClasses);
         _classPointer = 0;
     }
