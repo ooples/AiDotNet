@@ -227,6 +227,9 @@ public class CCDM<T> : TimeSeriesFoundationModelBase<T>
             LastLoss = count > 0 ? NumOps.Divide(weightedLoss, NumOps.FromDouble(count)) : NumOps.Zero;
 
             var gradient = _lossFunction.CalculateDerivative(predictedScore.ToVector(), scoreTarget.ToVector());
+            // Scale gradient by sigmaSquared to match the weighted loss objective
+            for (int i = 0; i < gradient.Length; i++)
+                gradient[i] = NumOps.Multiply(sigmaSquared, gradient[i]);
             BackwardNative(Tensor<T>.FromVector(gradient, predictedScore.Shape));
             _optimizer.UpdateParameters(Layers);
         }

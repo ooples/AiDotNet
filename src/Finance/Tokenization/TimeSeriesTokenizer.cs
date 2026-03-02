@@ -128,6 +128,17 @@ public class TimeSeriesTokenizer<T>
         if (patches.Count == 0)
             return new Tensor<T>(new[] { 0 });
 
+        // Validate each patch has the expected length
+        for (int i = 0; i < patches.Count; i++)
+        {
+            if (patches[i] == null)
+                throw new ArgumentException($"Patch at index {i} is null.", nameof(patches));
+            if (patches[i].Length != PatchLength)
+                throw new ArgumentException(
+                    $"Patch at index {i} has length {patches[i].Length} but expected {PatchLength}.",
+                    nameof(patches));
+        }
+
         int totalLen = 0;
         if (Stride == PatchLength)
         {
@@ -178,6 +189,9 @@ public class TimeSeriesTokenizer<T>
         Guard.NotNull(series);
 
         int len = series.Length;
+        if (len == 0)
+            return (new Tensor<T>(series.Shape), NumOps.Zero, NumOps.One);
+
         T mean = NumOps.Zero;
         for (int i = 0; i < len; i++)
             mean = NumOps.Add(mean, series[i]);
@@ -232,6 +246,9 @@ public class TimeSeriesTokenizer<T>
         Guard.NotNull(series);
 
         int len = series.Length;
+        if (len == 0)
+            return (Array.Empty<int>(), new double[] { 0.0, 1.0 });
+
         double min = double.MaxValue, max = double.MinValue;
 
         for (int i = 0; i < len; i++)
@@ -252,7 +269,8 @@ public class TimeSeriesTokenizer<T>
         for (int i = 0; i < len; i++)
         {
             double val = NumOps.ToDouble(series[i]);
-            int bin = (int)((val - min) / range * (VocabularySize - 1));
+            // Map value to bin index [0, VocabularySize-1] using consistent binEdges spacing
+            int bin = (int)((val - min) / range * VocabularySize);
             tokens[i] = Math.Max(0, Math.Min(VocabularySize - 1, bin));
         }
 
@@ -269,6 +287,9 @@ public class TimeSeriesTokenizer<T>
     {
         Guard.NotNull(tokens);
         Guard.NotNull(binEdges);
+
+        if (binEdges.Length < 2)
+            throw new ArgumentException("binEdges must have at least 2 elements (one bin requires a lower and upper edge).", nameof(binEdges));
 
         var result = new Tensor<T>(new[] { tokens.Length });
         for (int i = 0; i < tokens.Length; i++)

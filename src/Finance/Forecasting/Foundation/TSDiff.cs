@@ -10,6 +10,7 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Validation;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
 
@@ -105,6 +106,16 @@ public class TSDiff<T> : TimeSeriesFoundationModelBase<T>
 
     private void CopyOptionsToFields(TSDiffOptions<T> options)
     {
+        Guard.Positive(options.SequenceLength, nameof(options.SequenceLength));
+        Guard.Positive(options.ForecastHorizon, nameof(options.ForecastHorizon));
+        Guard.Positive(options.HiddenDimension, nameof(options.HiddenDimension));
+        Guard.Positive(options.NumResidualBlocks, nameof(options.NumResidualBlocks));
+        Guard.Positive(options.NumDiffusionSteps, nameof(options.NumDiffusionSteps));
+        Guard.Positive(options.NumAttentionHeads, nameof(options.NumAttentionHeads));
+
+        if (options.BetaStart <= 0 || options.BetaEnd <= 0 || options.BetaEnd <= options.BetaStart)
+            throw new ArgumentOutOfRangeException(nameof(options), "BetaStart and BetaEnd must be positive, and BetaEnd must be greater than BetaStart.");
+
         _sequenceLength = options.SequenceLength; _forecastHorizon = options.ForecastHorizon;
         _hiddenDimension = options.HiddenDimension; _numResidualBlocks = options.NumResidualBlocks;
         _numDiffusionSteps = options.NumDiffusionSteps; _numAttentionHeads = options.NumAttentionHeads;

@@ -10,6 +10,7 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Validation;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
 
@@ -144,6 +145,17 @@ public class TimeMAE<T> : TimeSeriesFoundationModelBase<T>
 
     private void CopyOptionsToFields(TimeMAEOptions<T> options)
     {
+        Guard.Positive(options.ContextLength, nameof(options.ContextLength));
+        Guard.Positive(options.ForecastHorizon, nameof(options.ForecastHorizon));
+        Guard.Positive(options.PatchLength, nameof(options.PatchLength));
+        Guard.Positive(options.HiddenDimension, nameof(options.HiddenDimension));
+        Guard.Positive(options.NumEncoderLayers, nameof(options.NumEncoderLayers));
+        Guard.Positive(options.NumDecoderLayers, nameof(options.NumDecoderLayers));
+        Guard.Positive(options.NumHeads, nameof(options.NumHeads));
+
+        if (options.MaskRatio <= 0.0 || options.MaskRatio >= 1.0)
+            throw new ArgumentOutOfRangeException(nameof(options), $"MaskRatio must be between 0 and 1 (exclusive) but was {options.MaskRatio}.");
+
         _contextLength = options.ContextLength;
         _forecastHorizon = options.ForecastHorizon;
         _patchLength = options.PatchLength;
@@ -269,7 +281,7 @@ public class TimeMAE<T> : TimeSeriesFoundationModelBase<T>
     /// <inheritdoc/>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        return new TimeMAE<T>(Architecture, new TimeMAEOptions<T>
+        var opts = new TimeMAEOptions<T>
         {
             ContextLength = _contextLength,
             ForecastHorizon = _forecastHorizon,
@@ -280,7 +292,13 @@ public class TimeMAE<T> : TimeSeriesFoundationModelBase<T>
             NumHeads = _numHeads,
             MaskRatio = _maskRatio,
             DropoutRate = _dropout
-        });
+        };
+
+        // Preserve ONNX mode if the original instance was created with an ONNX model
+        if (!_useNativeMode && OnnxModelPath is not null)
+            return new TimeMAE<T>(Architecture, OnnxModelPath, opts);
+
+        return new TimeMAE<T>(Architecture, opts);
     }
 
     /// <inheritdoc/>
@@ -318,6 +336,9 @@ public class TimeMAE<T> : TimeSeriesFoundationModelBase<T>
     /// <inheritdoc/>
     public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
     {
+        if (quantiles is not null && quantiles.Length > 0)
+            throw new NotSupportedException("TimeMAE does not support quantile forecasting. Pass null for point forecasts.");
+
         return _useNativeMode ? ForwardNative(historicalData) : ForecastOnnx(historicalData);
     }
 
@@ -373,8 +394,11 @@ public class TimeMAE<T> : TimeSeriesFoundationModelBase<T>
     /// <inheritdoc/>
     public override Tensor<T> ApplyInstanceNormalization(Tensor<T> input)
     {
-        int batchSize = input.Shape[0];
-        int seqLen = input.Shape.Length > 1 ? input.Shape[1] : input.Length;
+        if (input.Length == 0)
+            return new Tensor<T>(input.Shape);
+
+        int batchSize = input.Rank > 1 ? input.Shape[0] : 1;
+        int seqLen = input.Rank > 1 ? input.Shape[1] : input.Length;
         var result = new Tensor<T>(input.Shape);
 
         for (int b = 0; b < batchSize; b++)
@@ -502,9 +526,9 @@ public class TimeMAE<T> : TimeSeriesFoundationModelBase<T>
         if (OnnxSession == null)
             throw new InvalidOperationException("ONNX session is not initialized.");
 
-        int batchSize = input.Shape[0];
-        int seqLen = input.Shape.Length > 1 ? input.Shape[1] : input.Length;
-        int features = input.Shape.Length > 2 ? input.Shape[2] : 1;
+        int batchSize = input.Rank > 1 ? input.Shape[0] : 1;
+        int seqLen = input.Rank > 1 ? input.Shape[1] : input.Length;
+        int features = input.Rank > 2 ? input.Shape[2] : 1;
 
         var inputData = new float[batchSize * seqLen * features];
         for (int i = 0; i < input.Length && i < inputData.Length; i++)

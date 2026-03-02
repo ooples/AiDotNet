@@ -39,10 +39,8 @@ public class ChronosBolt<T> : TimeSeriesFoundationModelBase<T>
     private readonly bool _useNativeMode;
     private readonly List<ILayer<T>> _encoderLayers = [];
     private readonly List<ILayer<T>> _decoderLayers = [];
-    #pragma warning disable CS0169 // Field is never directly used (extracted from Layers collection)
     private ILayer<T>? _patchEmbedding;
     private ILayer<T>? _quantileHead;
-    #pragma warning restore CS0169
 
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ILossFunction<T> _lossFunction;
@@ -182,6 +180,7 @@ public class ChronosBolt<T> : TimeSeriesFoundationModelBase<T>
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
         {
             Layers.AddRange(Architecture.Layers);
+            ExtractLayerReferences();
         }
         else if (_useNativeMode)
         {
@@ -190,7 +189,27 @@ public class ChronosBolt<T> : TimeSeriesFoundationModelBase<T>
                 _encoderHiddenDim, _decoderHiddenDim,
                 _numEncoderLayers, _numDecoderLayers, _numHeads,
                 _numQuantiles, _dropout));
+            ExtractLayerReferences();
         }
+    }
+
+    private void ExtractLayerReferences()
+    {
+        int idx = 0;
+
+        if (idx < Layers.Count)
+            _patchEmbedding = Layers[idx++];
+
+        _encoderLayers.Clear();
+        for (int i = 0; i < _numEncoderLayers && idx < Layers.Count; i++)
+            _encoderLayers.Add(Layers[idx++]);
+
+        _decoderLayers.Clear();
+        for (int i = 0; i < _numDecoderLayers && idx < Layers.Count; i++)
+            _decoderLayers.Add(Layers[idx++]);
+
+        if (idx < Layers.Count)
+            _quantileHead = Layers[idx++];
     }
 
     #endregion
@@ -386,8 +405,19 @@ public class ChronosBolt<T> : TimeSeriesFoundationModelBase<T>
         var current = ApplyInstanceNormalization(input);
         bool addedBatchDim = false;
         if (current.Rank == 1) { current = current.Reshape(new[] { 1, current.Length }); addedBatchDim = true; }
-        foreach (var layer in Layers)
+
+        if (_patchEmbedding is not null)
+            current = _patchEmbedding.Forward(current);
+
+        foreach (var layer in _encoderLayers)
             current = layer.Forward(current);
+
+        foreach (var layer in _decoderLayers)
+            current = layer.Forward(current);
+
+        if (_quantileHead is not null)
+            current = _quantileHead.Forward(current);
+
         if (addedBatchDim && current.Rank == 2 && current.Shape[0] == 1)
             current = current.Reshape(new[] { current.Shape[1] });
         return current;
@@ -408,9 +438,9 @@ public class ChronosBolt<T> : TimeSeriesFoundationModelBase<T>
     protected override Tensor<T> ForecastOnnx(Tensor<T> input)
     {
         if (OnnxSession == null) throw new InvalidOperationException("ONNX session is not initialized.");
-        int batchSize = input.Shape[0];
-        int seqLen = input.Shape.Length > 1 ? input.Shape[1] : input.Length;
-        int features = input.Shape.Length > 2 ? input.Shape[2] : 1;
+        int batchSize = input.Rank > 1 ? input.Shape[0] : 1;
+        int seqLen = input.Rank > 1 ? input.Shape[1] : input.Length;
+        int features = input.Rank > 2 ? input.Shape[2] : 1;
         var inputData = new float[batchSize * seqLen * features];
         for (int i = 0; i < input.Length && i < inputData.Length; i++) inputData[i] = (float)NumOps.ToDouble(input[i]);
         var inputTensor = new OnnxTensors.DenseTensor<float>(inputData, new[] { batchSize, seqLen, features });

@@ -387,6 +387,9 @@ public class TFC<T> : TimeSeriesFoundationModelBase<T>
     /// <inheritdoc/>
     public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
     {
+        if (quantiles is not null && quantiles.Length > 0)
+            throw new NotSupportedException("TFC does not support quantile forecasting. Pass null for point forecasts.");
+
         return _useNativeMode ? ForwardNative(historicalData) : ForecastOnnx(historicalData);
     }
 
@@ -606,9 +609,9 @@ public class TFC<T> : TimeSeriesFoundationModelBase<T>
         if (OnnxSession == null)
             throw new InvalidOperationException("ONNX session is not initialized.");
 
-        int batchSize = input.Shape[0];
-        int seqLen = input.Shape.Length > 1 ? input.Shape[1] : input.Length;
-        int features = input.Shape.Length > 2 ? input.Shape[2] : 1;
+        int batchSize = input.Rank > 1 ? input.Shape[0] : 1;
+        int seqLen = input.Rank > 1 ? input.Shape[1] : input.Length;
+        int features = input.Rank > 2 ? input.Shape[2] : 1;
 
         var inputData = new float[batchSize * seqLen * features];
         for (int i = 0; i < input.Length && i < inputData.Length; i++)
@@ -643,39 +646,44 @@ public class TFC<T> : TimeSeriesFoundationModelBase<T>
 
     /// <summary>
     /// Computes the DFT magnitude spectrum of the input time series.
-    /// Returns |X[k]| for k = 0..N/2 (one-sided spectrum), same length as input via zero-padding.
+    /// For rank-1 input, computes DFT directly. For batched input (rank > 1),
+    /// computes DFT per sample along the last dimension.
+    /// Returns |X[k]| for k = 0..N/2 (one-sided spectrum), same shape as input via mirroring.
     /// </summary>
     private Tensor<T> ComputeFrequencyRepresentation(Tensor<T> input)
     {
-        int n = input.Length;
+        // For rank-1 (unbatched), n = sequence length. For batched, n = last dimension.
+        int n = input.Rank > 1 ? input.Shape[^1] : input.Length;
+        int numSamples = input.Rank > 1 ? input.Length / n : 1;
         int halfN = n / 2 + 1;
-        var magnitudes = new Vector<T>(n); // same length as input, zero-padded after Nyquist
+        var result = new Tensor<T>(input.Shape);
         T invN = NumOps.Divide(NumOps.One, NumOps.FromDouble(n));
 
-        // DFT: X[k] = sum_{t=0}^{N-1} x[t] * exp(-2*pi*i*k*t/N)
-        for (int k = 0; k < halfN; k++)
+        for (int s = 0; s < numSamples; s++)
         {
-            T realPart = NumOps.Zero;
-            T imagPart = NumOps.Zero;
-            for (int t = 0; t < n; t++)
+            int offset = s * n;
+
+            // DFT: X[k] = sum_{t=0}^{N-1} x[t] * exp(-2*pi*i*k*t/N)
+            for (int k = 0; k < halfN; k++)
             {
-                double angle = -2.0 * Math.PI * k * t / n;
-                T cosT = NumOps.FromDouble(Math.Cos(angle));
-                T sinT = NumOps.FromDouble(Math.Sin(angle));
-                realPart = NumOps.Add(realPart, NumOps.Multiply(input[t], cosT));
-                imagPart = NumOps.Add(imagPart, NumOps.Multiply(input[t], sinT));
+                T realPart = NumOps.Zero;
+                T imagPart = NumOps.Zero;
+                for (int t = 0; t < n; t++)
+                {
+                    double angle = -2.0 * Math.PI * k * t / n;
+                    T cosT = NumOps.FromDouble(Math.Cos(angle));
+                    T sinT = NumOps.FromDouble(Math.Sin(angle));
+                    realPart = NumOps.Add(realPart, NumOps.Multiply(input[offset + t], cosT));
+                    imagPart = NumOps.Add(imagPart, NumOps.Multiply(input[offset + t], sinT));
+                }
+                T magSquared = NumOps.Add(NumOps.Multiply(realPart, realPart), NumOps.Multiply(imagPart, imagPart));
+                result.Data.Span[offset + k] = NumOps.Multiply(NumOps.Sqrt(magSquared), invN);
             }
-            T magSquared = NumOps.Add(NumOps.Multiply(realPart, realPart), NumOps.Multiply(imagPart, imagPart));
-            magnitudes[k] = NumOps.Multiply(NumOps.Sqrt(magSquared), invN);
+
+            // Mirror the one-sided spectrum for symmetric representation
+            for (int k = halfN; k < n; k++)
+                result.Data.Span[offset + k] = result[offset + (n - k)];
         }
-
-        // Mirror the one-sided spectrum for symmetric representation
-        for (int k = halfN; k < n; k++)
-            magnitudes[k] = magnitudes[n - k];
-
-        var result = new Tensor<T>(input.Shape);
-        for (int i = 0; i < n; i++)
-            result.Data.Span[i] = magnitudes[i];
 
         return result;
     }

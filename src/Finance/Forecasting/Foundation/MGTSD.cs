@@ -10,6 +10,7 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Validation;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
 
@@ -115,6 +116,17 @@ public class MGTSD<T> : TimeSeriesFoundationModelBase<T>
 
     private void CopyOptionsToFields(MGTSDOptions<T> options)
     {
+        Guard.Positive(options.ContextLength, nameof(options.ContextLength));
+        Guard.Positive(options.ForecastHorizon, nameof(options.ForecastHorizon));
+        Guard.Positive(options.HiddenDimension, nameof(options.HiddenDimension));
+        Guard.Positive(options.NumLayers, nameof(options.NumLayers));
+        Guard.Positive(options.NumHeads, nameof(options.NumHeads));
+        Guard.Positive(options.DiffusionSteps, nameof(options.DiffusionSteps));
+        Guard.Positive(options.NumGranularities, nameof(options.NumGranularities));
+
+        if (options.BetaStart <= 0 || options.BetaEnd <= 0 || options.BetaEnd <= options.BetaStart)
+            throw new ArgumentOutOfRangeException(nameof(options), "BetaStart and BetaEnd must be positive, and BetaEnd must be greater than BetaStart.");
+
         _contextLength = options.ContextLength;
         _forecastHorizon = options.ForecastHorizon;
         _hiddenDimension = options.HiddenDimension;

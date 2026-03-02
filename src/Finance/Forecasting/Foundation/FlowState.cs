@@ -377,8 +377,16 @@ public class FlowState<T> : TimeSeriesFoundationModelBase<T>
         var current = ApplyInstanceNormalization(input);
         bool addedBatchDim = false;
         if (current.Rank == 1) { current = current.Reshape(new[] { 1, current.Length }); addedBatchDim = true; }
-        foreach (var layer in Layers)
+
+        if (_inputProjection is not null)
+            current = _inputProjection.Forward(current);
+
+        foreach (var layer in _ssmLayers)
             current = layer.Forward(current);
+
+        if (_outputProjection is not null)
+            current = _outputProjection.Forward(current);
+
         if (addedBatchDim && current.Rank == 2 && current.Shape[0] == 1)
             current = current.Reshape(new[] { current.Shape[1] });
         return current;
@@ -389,8 +397,16 @@ public class FlowState<T> : TimeSeriesFoundationModelBase<T>
         var current = gradOutput;
         bool addedBatchDim = false;
         if (current.Rank == 1) { current = current.Reshape(new[] { 1, current.Length }); addedBatchDim = true; }
-        for (int i = Layers.Count - 1; i >= 0; i--)
-            current = Layers[i].Backward(current);
+
+        if (_outputProjection is not null)
+            current = _outputProjection.Backward(current);
+
+        for (int i = _ssmLayers.Count - 1; i >= 0; i--)
+            current = _ssmLayers[i].Backward(current);
+
+        if (_inputProjection is not null)
+            current = _inputProjection.Backward(current);
+
         if (addedBatchDim && current.Rank == 2 && current.Shape[0] == 1)
             current = current.Reshape(new[] { current.Shape[1] });
         return current;
@@ -399,9 +415,9 @@ public class FlowState<T> : TimeSeriesFoundationModelBase<T>
     protected override Tensor<T> ForecastOnnx(Tensor<T> input)
     {
         if (OnnxSession == null) throw new InvalidOperationException("ONNX session is not initialized.");
-        int batchSize = input.Shape[0];
-        int seqLen = input.Shape.Length > 1 ? input.Shape[1] : input.Length;
-        int features = input.Shape.Length > 2 ? input.Shape[2] : 1;
+        int batchSize = input.Rank > 1 ? input.Shape[0] : 1;
+        int seqLen = input.Rank > 1 ? input.Shape[1] : input.Length;
+        int features = input.Rank > 2 ? input.Shape[2] : 1;
         var inputData = new float[batchSize * seqLen * features];
         for (int i = 0; i < input.Length && i < inputData.Length; i++) inputData[i] = (float)NumOps.ToDouble(input[i]);
         var inputTensor = new OnnxTensors.DenseTensor<float>(inputData, new[] { batchSize, seqLen, features });

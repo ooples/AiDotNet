@@ -10,6 +10,7 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Validation;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
 
@@ -144,6 +145,21 @@ public class Kairos<T> : TimeSeriesFoundationModelBase<T>
 
     private void CopyOptionsToFields(KairosOptions<T> options)
     {
+        Guard.Positive(options.ContextLength, nameof(options.ContextLength));
+        Guard.Positive(options.ForecastHorizon, nameof(options.ForecastHorizon));
+        Guard.Positive(options.HiddenDimension, nameof(options.HiddenDimension));
+        Guard.Positive(options.NumLayers, nameof(options.NumLayers));
+        Guard.Positive(options.NumHeads, nameof(options.NumHeads));
+        Guard.Positive(options.IntermediateSize, nameof(options.IntermediateSize));
+
+        if (options.PatchSizes == null || options.PatchSizes.Length == 0)
+            throw new ArgumentException("PatchSizes must contain at least one positive patch size.", nameof(options));
+        for (int i = 0; i < options.PatchSizes.Length; i++)
+        {
+            if (options.PatchSizes[i] <= 0)
+                throw new ArgumentOutOfRangeException(nameof(options), $"PatchSizes[{i}] must be positive but was {options.PatchSizes[i]}.");
+        }
+
         _contextLength = options.ContextLength;
         _forecastHorizon = options.ForecastHorizon;
         _patchSizes = (int[])options.PatchSizes.Clone();

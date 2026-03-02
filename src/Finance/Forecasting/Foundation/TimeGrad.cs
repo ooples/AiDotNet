@@ -385,6 +385,9 @@ public class TimeGrad<T> : TimeSeriesFoundationModelBase<T>
     /// <inheritdoc/>
     public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
     {
+        if (quantiles is not null && quantiles.Length > 0)
+            throw new NotSupportedException("TimeGrad does not support quantile forecasting. Pass null for point forecasts.");
+
         return _useNativeMode ? ForwardNative(historicalData) : ForecastOnnx(historicalData);
     }
 
@@ -709,8 +712,30 @@ public class TimeGrad<T> : TimeSeriesFoundationModelBase<T>
         for (int i = _denoisingLayers.Count - 1; i >= 0; i--)
             current = _denoisingLayers[i].Backward(current);
 
+        // The denoising input is [x_t | hidden_state | timestep], so only the hidden_state
+        // portion of the gradient should be backpropagated through the RNN encoder.
         if (_rnnEncoder is not null)
-            current = _rnnEncoder.Backward(current);
+        {
+            int hiddenDim = _hiddenDimension;
+            int forecastLen = _forecastHorizon;
+            int gradLen = current.Rank > 1 ? current.Shape[^1] : current.Length;
+
+            if (gradLen > forecastLen + 1 && hiddenDim <= gradLen - forecastLen - 1)
+            {
+                // Slice hidden state gradient: skip x_t (forecastLen), take hiddenDim
+                var hiddenGrad = current.Rank > 1
+                    ? new Tensor<T>(new[] { current.Shape[0], hiddenDim })
+                    : new Tensor<T>(new[] { hiddenDim });
+                int srcOffset = current.Rank > 1 ? forecastLen : forecastLen;
+                for (int i = 0; i < hiddenDim; i++)
+                    hiddenGrad.Data.Span[i] = current[srcOffset + i];
+                current = _rnnEncoder.Backward(hiddenGrad);
+            }
+            else
+            {
+                current = _rnnEncoder.Backward(current);
+            }
+        }
 
         if (addedBatchDim && current.Rank == 2 && current.Shape[0] == 1)
             current = current.Reshape(new[] { current.Shape[1] });
@@ -723,9 +748,9 @@ public class TimeGrad<T> : TimeSeriesFoundationModelBase<T>
         if (OnnxSession == null)
             throw new InvalidOperationException("ONNX session is not initialized.");
 
-        int batchSize = input.Shape[0];
-        int seqLen = input.Shape.Length > 1 ? input.Shape[1] : input.Length;
-        int features = input.Shape.Length > 2 ? input.Shape[2] : 1;
+        int batchSize = input.Rank > 1 ? input.Shape[0] : 1;
+        int seqLen = input.Rank > 1 ? input.Shape[1] : input.Length;
+        int features = input.Rank > 2 ? input.Shape[2] : 1;
 
         var inputData = new float[batchSize * seqLen * features];
         for (int i = 0; i < input.Length && i < inputData.Length; i++)
