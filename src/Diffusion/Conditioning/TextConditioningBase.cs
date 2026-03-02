@@ -127,7 +127,7 @@ public abstract class TextConditioningBase<T> : IConditioningModule<T>
         NumLayers = numLayers;
         NumHeads = numHeads;
         MaxSequenceLength = maxSequenceLength;
-        Rng = seed.HasValue ? new Random(seed.Value) : new Random();
+        Rng = seed.HasValue ? Tensors.Helpers.RandomHelper.CreateSeededRandom(seed.Value) : Tensors.Helpers.RandomHelper.CreateSecureRandom();
 
         // Initialize weights with small random values
         TokenEmbeddings = InitializeWeights(vocabSize * hiddenSize);

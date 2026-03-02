@@ -41,7 +41,7 @@ public class LeidenCommunityDetector<T>
         if (graph == null) throw new ArgumentNullException(nameof(graph));
 
         var opts = options ?? new LeidenOptions();
-        var rng = opts.Seed.HasValue ? new Random(opts.Seed.Value) : new Random();
+        var rng = opts.Seed.HasValue ? Tensors.Helpers.RandomHelper.CreateSeededRandom(opts.Seed.Value) : Tensors.Helpers.RandomHelper.CreateSecureRandom();
         double resolution = opts.GetEffectiveResolution();
         int maxIterations = opts.GetEffectiveMaxIterations();
 
