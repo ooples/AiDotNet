@@ -54,6 +54,17 @@ public class CurriculumTaskSampler<T, TInput, TOutput> : ITaskSampler<T, TInput,
         double initialDifficulty = 0.1,
         int? seed = null)
     {
+        if (dataset is null)
+            throw new ArgumentNullException(nameof(dataset));
+        if (numWays <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numWays), numWays, "Number of ways must be positive.");
+        if (numShots <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numShots), numShots, "Number of shots must be positive.");
+        if (numQueryPerClass <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numQueryPerClass), numQueryPerClass, "Number of query examples per class must be positive.");
+        if (paceRate <= 0)
+            throw new ArgumentOutOfRangeException(nameof(paceRate), paceRate, "Pace rate must be positive.");
+
         _dataset = dataset;
         NumWays = numWays;
         NumShots = numShots;

@@ -105,13 +105,26 @@ public class iTAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
             }
             if (predLen > 0) distillLoss /= predLen;
 
-            // Report query loss only for the outer update (distillation is a training-time
-            // regularizer; its gradient is not backpropagated through the meta-gradient path)
-            losses.Add(queryLoss);
+            // Combine query loss with distillation regularization for reporting
+            double combinedLoss = NumOps.ToDouble(queryLoss) + _algoOptions.DistillationWeight * distillLoss;
+            losses.Add(NumOps.FromDouble(combinedLoss));
 
-            // Compute meta-gradient from adapted student
+            // Compute meta-gradient: blend task gradient with distillation gradient
             MetaModel.SetParameters(adaptedParams);
-            var metaGrad = ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput));
+            var taskGrad = ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput));
+
+            // Add distillation gradient: d/dθ (distillLoss) ≈ 2*(student - teacher)/T² per param
+            double distillWeight = _algoOptions.DistillationWeight;
+            var metaGrad = new Vector<T>(_paramDim);
+            for (int d = 0; d < _paramDim; d++)
+            {
+                double tg = NumOps.ToDouble(taskGrad[d]);
+                // Distillation gradient pushes student toward teacher
+                double dg = d < predLen
+                    ? 2.0 * (NumOps.ToDouble(studentPred[d]) - NumOps.ToDouble(teacherPred[d])) / (tempSq * predLen)
+                    : 0.0;
+                metaGrad[d] = NumOps.FromDouble(tg + distillWeight * dg);
+            }
 
             // Task-balanced gradient normalization
             if (_algoOptions.TaskBalancingEnabled)

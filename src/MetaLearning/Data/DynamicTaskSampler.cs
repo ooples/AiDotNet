@@ -72,28 +72,27 @@ public class DynamicTaskSampler<T, TInput, TOutput> : ITaskSampler<T, TInput, TO
         if (batchSize <= 0)
             throw new ArgumentOutOfRangeException(nameof(batchSize), batchSize, "Batch size must be positive.");
 
-        var episodes = new List<IEpisode<T, TInput, TOutput>>(batchSize);
         var tasks = new IMetaLearningTask<T, TInput, TOutput>[batchSize];
+
+        if (_feedbackCount == 0)
+        {
+            // No feedback yet — uniform sampling, no difficulty scores needed
+            for (int i = 0; i < batchSize; i++)
+                tasks[i] = SampleOne().Task;
+
+            return new TaskBatch<T, TInput, TOutput>(tasks, BatchingStrategy.Adaptive);
+        }
+
+        // With feedback: track episodes for difficulty scoring
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var difficulties = new T[batchSize];
         for (int i = 0; i < batchSize; i++)
         {
             var ep = SampleOne();
-            episodes.Add(ep);
             tasks[i] = ep.Task;
-        }
-
-        // Assign per-episode difficulty scores that vary based on individual episode losses
-        T[]? difficulties = null;
-        if (_feedbackCount > 0)
-        {
-            var numOps = MathHelper.GetNumericOperations<T>();
-            difficulties = new T[batchSize];
-            for (int i = 0; i < batchSize; i++)
-            {
-                // Use per-episode difficulty (set by SampleOne from loss history)
-                double rawDifficulty = episodes[i].Difficulty ?? _runningMeanLoss;
-                double d = Math.Max(0.0, Math.Min(1.0, rawDifficulty));
-                difficulties[i] = numOps.FromDouble(d);
-            }
+            double rawDifficulty = ep.Difficulty ?? _runningMeanLoss;
+            double d = Math.Max(0.0, Math.Min(1.0, rawDifficulty));
+            difficulties[i] = numOps.FromDouble(d);
         }
 
         return new TaskBatch<T, TInput, TOutput>(tasks, BatchingStrategy.Adaptive, difficulties);
