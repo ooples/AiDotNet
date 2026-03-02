@@ -36,7 +36,7 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// </code>
 /// </para>
 /// </remarks>
-internal class MetaCollaborativeAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
+public class MetaCollaborativeAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private readonly MetaCollaborativeOptions<T, TInput, TOutput> _algoOptions;
     private readonly int _paramDim;

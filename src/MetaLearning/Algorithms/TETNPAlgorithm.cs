@@ -27,7 +27,7 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// </para>
 /// <para><b>Reference:</b> Gridded Transformer Neural Processes for Large Unstructured Spatio-Temporal Data (2024).</para>
 /// </remarks>
-internal class TETNPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput, TOutput>
+public class TETNPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput, TOutput>
 {
     private readonly TETNPOptions<T, TInput, TOutput> _algoOptions;
     private Vector<T> _relPosParams;

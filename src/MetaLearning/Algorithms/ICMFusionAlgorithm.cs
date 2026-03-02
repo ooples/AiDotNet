@@ -38,7 +38,7 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// </code>
 /// </para>
 /// </remarks>
-internal class ICMFusionAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
+public class ICMFusionAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private readonly ICMFusionOptions<T, TInput, TOutput> _algoOptions;
 

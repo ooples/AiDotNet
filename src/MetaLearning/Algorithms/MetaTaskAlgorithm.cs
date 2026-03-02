@@ -33,7 +33,7 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// </code>
 /// </para>
 /// </remarks>
-internal class MetaTaskAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
+public class MetaTaskAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private readonly MetaTaskOptions<T, TInput, TOutput> _algoOptions;
     private readonly int _paramDim;

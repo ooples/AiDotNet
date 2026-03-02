@@ -9,7 +9,7 @@ using AiDotNet.Models.Results;
 namespace AiDotNet.MetaLearning.Algorithms;
 
 /// <summary>Implementation of Transformer Neural Process (Nguyen & Grover, ICML 2023).</summary>
-internal class TNPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput, TOutput>
+public class TNPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput, TOutput>
 {
     private readonly TNPOptions<T, TInput, TOutput> _algoOptions;
 

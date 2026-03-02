@@ -37,7 +37,7 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// </code>
 /// </para>
 /// </remarks>
-internal class FreqPriorAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
+public class FreqPriorAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private readonly FreqPriorOptions<T, TInput, TOutput> _algoOptions;
     private readonly int _paramDim;

@@ -33,7 +33,7 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// </code>
 /// </para>
 /// </remarks>
-internal class DynamicTaskSamplingAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
+public class DynamicTaskSamplingAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private readonly DynamicTaskSamplingOptions<T, TInput, TOutput> _algoOptions;
     private readonly int _paramDim;
