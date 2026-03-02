@@ -62,6 +62,9 @@ public class TabNet<T> : RiskModelBase<T>
     /// This keeps the model flexible while still following the golden pattern.
     /// </para>
     /// </remarks>
+    private const int DefaultInputSize = 50;
+    private const int DefaultOutputSize = 1;
+
     /// <summary>
     /// Initializes a new instance with default architecture settings.
     /// </summary>
@@ -69,8 +72,12 @@ public class TabNet<T> : RiskModelBase<T>
         : this(new NeuralNetworkArchitecture<T>(
             inputType: AiDotNet.Enums.InputType.OneDimensional,
             taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression,
-            inputSize: 10,
-            outputSize: 1))
+            inputSize: DefaultInputSize,
+            outputSize: DefaultOutputSize),
+            new TabNetOptions<T>
+            {
+                NumFeatures = DefaultInputSize
+            })
     {
     }
 

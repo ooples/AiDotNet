@@ -45,8 +45,8 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
         : this(new NeuralNetworkArchitecture<T>(
             inputType: Enums.InputType.OneDimensional,
             taskType: Enums.NeuralNetworkTaskType.Regression,
-            inputSize: 128,
-            outputSize: 1))
+            inputSize: 256,
+            outputSize: 256))
     {
     }
 

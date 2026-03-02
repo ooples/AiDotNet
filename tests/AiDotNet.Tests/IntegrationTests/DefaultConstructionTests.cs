@@ -112,8 +112,9 @@ public class DefaultConstructionTests
                 var task = System.Threading.Tasks.Task.Run(() => ctor.Invoke(parameters));
                 if (!task.Wait(ConstructionTimeout))
                 {
-                    // Log timeout as warning, not failure - some models are intentionally large
                     timeouts.Add(typeName);
+                    failures.Add((typeName,
+                        $"Construction timed out (>{ConstructionTimeout.TotalSeconds}s)"));
                     _output.WriteLine($"TIMEOUT: {closedType.Name} (>{ConstructionTimeout.TotalSeconds}s)");
                     continue;
                 }

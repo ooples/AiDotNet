@@ -16,6 +16,15 @@ public class MarketMakingOptions<T> : TradingAgentOptions<T>
     [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
     public MarketMakingOptions() { }
 
+    [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
+    public MarketMakingOptions(MarketMakingOptions<T> other) : this()
+    {
+        if (other is null) throw new ArgumentNullException(nameof(other));
+        MaxInventory = other.MaxInventory;
+        InventoryPenalty = other.InventoryPenalty;
+        BaseSpread = other.BaseSpread;
+    }
+
     /// <summary>
     /// The maximum inventory size the agent can hold.
     /// </summary>

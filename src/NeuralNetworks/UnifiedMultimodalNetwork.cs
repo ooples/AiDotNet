@@ -96,12 +96,14 @@ public class UnifiedMultimodalNetwork<T> : NeuralNetworkBase<T>, IUnifiedMultimo
     /// <summary>
     /// Initializes a new instance with default architecture settings.
     /// </summary>
+    private const int DefaultOutputSize = 100;
+
     public UnifiedMultimodalNetwork()
         : this(new NeuralNetworkArchitecture<T>(
             inputType: Enums.InputType.OneDimensional,
             taskType: Enums.NeuralNetworkTaskType.MultiClassClassification,
-            inputSize: 768,
-            outputSize: 100))
+            inputSize: DEFAULT_EMBEDDING_DIM,
+            outputSize: DefaultOutputSize))
     {
     }
 

@@ -32,9 +32,27 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class MADDPGOptions<T> : ReinforcementLearningOptions<T>
 {
+    /// <summary>The number of agents trained jointly.</summary>
+    /// <value>Default: 2.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Increase this when your environment has more decision-makers.</para>
+    /// </remarks>
     public int NumAgents { get; init; } = 2;
-    public int StateSize { get; init; } = 16;  // Per-agent state size
-    public int ActionSize { get; init; } = 4;  // Per-agent action size
+
+    /// <summary>The per-agent observation vector size.</summary>
+    /// <value>Default: 4.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This is how many input features each agent sees at every step.</para>
+    /// </remarks>
+    public int StateSize { get; init; } = 4;
+
+    /// <summary>The per-agent action vector size.</summary>
+    /// <value>Default: 2.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This is how many continuous action values each agent outputs per step.</para>
+    /// </remarks>
+    public int ActionSize { get; init; } = 2;
+
     public T ActorLearningRate { get; init; }
     public T CriticLearningRate { get; init; }
     public T TargetUpdateTau { get; init; }

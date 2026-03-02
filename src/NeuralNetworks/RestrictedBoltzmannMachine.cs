@@ -283,13 +283,16 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Initializes a new instance with default settings.
     /// </summary>
+    private const int DefaultVisibleSize = 128;
+    private const int DefaultHiddenSize = 64;
+
     public RestrictedBoltzmannMachine()
         : this(new NeuralNetworkArchitecture<T>(
             inputType: Enums.InputType.OneDimensional,
             taskType: Enums.NeuralNetworkTaskType.Regression,
-            inputSize: 128,
-            outputSize: 1),
-            visibleSize: 128, hiddenSize: 64,
+            inputSize: DefaultVisibleSize,
+            outputSize: DefaultHiddenSize),
+            visibleSize: DefaultVisibleSize, hiddenSize: DefaultHiddenSize,
             scalarActivation: (IActivationFunction<T>?)null)
     {
     }

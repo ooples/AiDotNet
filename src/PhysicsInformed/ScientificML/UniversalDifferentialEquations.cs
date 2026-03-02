@@ -73,13 +73,15 @@ namespace AiDotNet.PhysicsInformed.ScientificML
         /// <summary>
     /// Initializes a new instance with default settings.
     /// </summary>
+    private const int DefaultStateDim = 2;
+
     public UniversalDifferentialEquation()
         : this(new NeuralNetworkArchitecture<T>(
             inputType: Enums.InputType.OneDimensional,
             taskType: Enums.NeuralNetworkTaskType.Regression,
-            inputSize: 4,
-            outputSize: 1),
-            stateDim: 2)
+            inputSize: DefaultStateDim + 1,
+            outputSize: DefaultStateDim),
+            stateDim: DefaultStateDim)
     {
     }
 

@@ -35,7 +35,14 @@ namespace AiDotNet.Models.Options;
 public class TradingAgentOptions<T> : ModelOptions
 {
     [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
-    public TradingAgentOptions() { }
+    public TradingAgentOptions()
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        LearningRate = numOps.FromDouble(0.0003);
+        DiscountFactor = numOps.FromDouble(0.99);
+        InitialCapital = numOps.FromDouble(100000.0);
+        MaxPositionSize = numOps.FromDouble(1.0);
+    }
 
     #region RL Parameters
 

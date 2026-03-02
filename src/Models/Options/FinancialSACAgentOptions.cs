@@ -17,6 +17,14 @@ public class FinancialSACAgentOptions<T> : TradingAgentOptions<T>
     [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
     public FinancialSACAgentOptions() { }
 
+    [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
+    public FinancialSACAgentOptions(FinancialSACAgentOptions<T> other) : this()
+    {
+        if (other is null) throw new ArgumentNullException(nameof(other));
+        InitialLogAlpha = other.InitialLogAlpha;
+        TargetEntropyRatio = other.TargetEntropyRatio;
+    }
+
     /// <summary>
     /// Initial log alpha value for automatic temperature tuning.
     /// </summary>

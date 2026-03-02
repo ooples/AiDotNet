@@ -190,7 +190,8 @@ public class NOTEARSNonlinear<T> : ContinuousOptimizationBase<T>
 
     private void InitializeMLPParameters(int d, int h)
     {
-        var rng = Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
+        const int DefaultSeed = 42;
+        var rng = Tensors.Helpers.RandomHelper.CreateSeededRandom(DefaultSeed);
         double scale = Math.Sqrt(2.0 / d); // He initialization
 
         _W1 = new Matrix<T>[d];

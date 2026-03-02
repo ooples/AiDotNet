@@ -43,8 +43,10 @@ public class UniformReplayBuffer<T, TState, TAction> : IReplayBuffer<T, TState, 
     /// <summary>
     /// Initializes a new instance with default settings.
     /// </summary>
+    private const int DefaultCapacity = 10000;
+
     public UniformReplayBuffer()
-        : this(10000)
+        : this(DefaultCapacity)
     {
     }
 

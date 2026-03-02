@@ -113,7 +113,7 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </summary>
     public OccupancyNeuralNetwork()
         : this(new NeuralNetworkArchitecture<T>(
-            inputType: Enums.InputType.ThreeDimensional,
+            inputType: Enums.InputType.OneDimensional,
             taskType: Enums.NeuralNetworkTaskType.BinaryClassification,
             inputSize: 3,
             outputSize: 1))

@@ -209,13 +209,17 @@ public class NEAT<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Initializes a new instance with default settings.
     /// </summary>
+    private const int DefaultInputSize = 10;
+    private const int DefaultOutputSize = 1;
+    private const int DefaultPopulationSize = 150;
+
     public NEAT()
         : this(new NeuralNetworkArchitecture<T>(
             inputType: Enums.InputType.OneDimensional,
             taskType: Enums.NeuralNetworkTaskType.Regression,
-            inputSize: 128,
-            outputSize: 1),
-            populationSize: 150)
+            inputSize: DefaultInputSize,
+            outputSize: DefaultOutputSize),
+            populationSize: DefaultPopulationSize)
     {
     }
 

@@ -62,10 +62,10 @@ public class OctonionNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </summary>
     public OctonionNeuralNetwork()
         : this(new NeuralNetworkArchitecture<T>(
-            inputType: Enums.InputType.ThreeDimensional,
+            inputType: Enums.InputType.OneDimensional,
             taskType: Enums.NeuralNetworkTaskType.Regression,
-            inputHeight: 64, inputWidth: 64, inputDepth: 64,
-            outputSize: 1))
+            inputSize: 64,
+            outputSize: 8))
     {
     }
 

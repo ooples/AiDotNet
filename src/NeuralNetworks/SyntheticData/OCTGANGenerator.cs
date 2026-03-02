@@ -110,8 +110,10 @@ public class OCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
     /// <summary>
     /// Initializes a new OCT-GAN generator with default configuration.
     /// </summary>
+    private const int DefaultDataDimension = 128;
+
     public OCTGANGenerator()
-        : this(new NeuralNetworkArchitecture<T>(InputType.OneDimensional, NeuralNetworkTaskType.Generative, inputSize: 128, outputSize: 128))
+        : this(new NeuralNetworkArchitecture<T>(InputType.OneDimensional, NeuralNetworkTaskType.Generative, inputSize: DefaultDataDimension, outputSize: DefaultDataDimension))
     {
     }
 

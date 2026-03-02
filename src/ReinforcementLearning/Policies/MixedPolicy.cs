@@ -69,7 +69,9 @@ namespace AiDotNet.ReinforcementLearning.Policies
             _discreteExploration = discreteExploration;
             Guard.NotNull(continuousExploration);
             _continuousExploration = continuousExploration;
+            Guard.Positive(discreteActionSize);
             _discreteActionSize = discreteActionSize;
+            Guard.Positive(continuousActionSize);
             _continuousActionSize = continuousActionSize;
             _sharedFeatures = sharedFeatures;
         }

@@ -81,13 +81,15 @@ namespace AiDotNet.PhysicsInformed.ScientificML
         /// <summary>
     /// Initializes a new instance with default settings.
     /// </summary>
+    private const int DefaultStateDim = 2;
+
     public HamiltonianNeuralNetwork()
         : this(new NeuralNetworkArchitecture<T>(
             inputType: Enums.InputType.OneDimensional,
             taskType: Enums.NeuralNetworkTaskType.Regression,
-            inputSize: 4,
+            inputSize: DefaultStateDim * 2,
             outputSize: 1),
-            stateDim: 2)
+            stateDim: DefaultStateDim)
     {
     }
 
