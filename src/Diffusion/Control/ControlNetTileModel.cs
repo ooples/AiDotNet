@@ -44,7 +44,7 @@ public class ControlNetTileModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override int LatentChannels => LATENT_CHANNELS;
     /// <inheritdoc />
-    public override int ParameterCount => _baseUNet.ParameterCount + _controlEncoder.ParameterCount;
+    public override int ParameterCount => _baseUNet.ParameterCount + _controlEncoder.ParameterCount + _vae.ParameterCount;
 
     public ControlNetTileModel(
         NeuralNetworkArchitecture<T>? architecture = null,
@@ -86,6 +86,7 @@ public class ControlNetTileModel<T> : LatentDiffusionModelBase<T>
         var all = new List<T>();
         var p1 = _baseUNet.GetParameters(); for (int i = 0; i < p1.Length; i++) all.Add(p1[i]);
         var p2 = _controlEncoder.GetParameters(); for (int i = 0; i < p2.Length; i++) all.Add(p2[i]);
+        var p3 = _vae.GetParameters(); for (int i = 0; i < p3.Length; i++) all.Add(p3[i]);
         return new Vector<T>(all.ToArray());
     }
 
@@ -94,7 +95,8 @@ public class ControlNetTileModel<T> : LatentDiffusionModelBase<T>
     {
         int o = 0;
         var c1 = _baseUNet.ParameterCount; var a1 = new T[c1]; for (int i = 0; i < c1; i++) a1[i] = parameters[o + i]; _baseUNet.SetParameters(new Vector<T>(a1)); o += c1;
-        var c2 = _controlEncoder.ParameterCount; var a2 = new T[c2]; for (int i = 0; i < c2; i++) a2[i] = parameters[o + i]; _controlEncoder.SetParameters(new Vector<T>(a2));
+        var c2 = _controlEncoder.ParameterCount; var a2 = new T[c2]; for (int i = 0; i < c2; i++) a2[i] = parameters[o + i]; _controlEncoder.SetParameters(new Vector<T>(a2)); o += c2;
+        var c3 = _vae.ParameterCount; var a3 = new T[c3]; for (int i = 0; i < c3; i++) a3[i] = parameters[o + i]; _vae.SetParameters(new Vector<T>(a3));
     }
 
     /// <inheritdoc />

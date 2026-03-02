@@ -59,7 +59,7 @@ public class MotionDiffusionModel<T> : LatentDiffusionModelBase<T>
     private void InitializeLayers(SiTPredictor<T>? predictor, StandardVAE<T>? vae, int? seed)
     {
         _predictor = predictor ?? new SiTPredictor<T>(seed: seed);
-        _vae = vae ?? new StandardVAE<T>(inputChannels: 3, latentChannels: 4,
+        _vae = vae ?? new StandardVAE<T>(inputChannels: LATENT_CHANNELS, latentChannels: LATENT_CHANNELS,
             baseChannels: 128, channelMultipliers: new[] { 1, 2, 4, 4 }, numResBlocksPerLevel: 2, seed: seed);
     }
 
