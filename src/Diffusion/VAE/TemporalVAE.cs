@@ -235,108 +235,56 @@ public class TemporalVAE<T> : VAEModelBase<T>
     /// </summary>
     private void InitializeLayers()
     {
-        // Input convolution
-        _inputConv = new ConvolutionalLayer<T>(
-            inputDepth: _inputChannels,
-            outputDepth: _baseChannels,
-            kernelSize: 3,
-            inputHeight: 64,
-            inputWidth: 64,
-            stride: 1,
-            padding: 1,
-            activationFunction: new IdentityActivation<T>());
+        // Spatial encoder layers from LayerHelper (includes inputConv, resblocks, downsamples, meanConv, logVarConv, postQuantConv)
+        var allEncoderLayers = LayerHelper<T>.CreateTemporalVAEEncoderLayers(
+            _inputChannels, _latentChannels, _baseChannels,
+            _channelMultipliers).ToList();
 
-        // Build encoder
-        var inChannels = _baseChannels;
+        // First layer is the input convolution
+        _inputConv = (ConvolutionalLayer<T>)allEncoderLayers[0];
+        // Last 3 are latent projections: MeanConv, LogVarConv, PostQuantConv
+        _postQuantConv = (ConvolutionalLayer<T>)allEncoderLayers[^1];
+        _logVarConv = (ConvolutionalLayer<T>)allEncoderLayers[^2];
+        _meanConv = (ConvolutionalLayer<T>)allEncoderLayers[^3];
+        // Middle layers are the encoder spatial blocks and downsamples
+        for (int i = 1; i < allEncoderLayers.Count - 3; i++)
+        {
+            _encoderSpatialLayers.Add(allEncoderLayers[i]);
+        }
+
+        // Temporal encoder layers (parallel processing path, not in LayerHelper)
         for (int level = 0; level < _channelMultipliers.Length; level++)
         {
             var outChannels = _baseChannels * _channelMultipliers[level];
-
-            // Spatial block
-            _encoderSpatialLayers.Add(CreateSpatialBlock(inChannels, outChannels));
-
-            // Temporal block(s)
             for (int t = 0; t < _numTemporalLayers; t++)
             {
                 _encoderTemporalLayers.Add(CreateTemporalBlock(outChannels));
             }
-
-            inChannels = outChannels;
-
-            // Downsample (except last level)
-            if (level < _channelMultipliers.Length - 1)
-            {
-                _encoderSpatialLayers.Add(CreateDownsample(outChannels));
-            }
         }
 
-        // Latent projection layers
-        var lastChannels = _baseChannels * _channelMultipliers[^1];
-        _meanConv = new ConvolutionalLayer<T>(
-            inputDepth: lastChannels,
-            outputDepth: _latentChannels,
-            kernelSize: 3,
-            inputHeight: 8,
-            inputWidth: 8,
-            stride: 1,
-            padding: 1,
-            activationFunction: new IdentityActivation<T>());
+        // Spatial decoder layers from LayerHelper
+        var allDecoderLayers = LayerHelper<T>.CreateTemporalVAEDecoderLayers(
+            _inputChannels, _latentChannels, _baseChannels,
+            _channelMultipliers).ToList();
 
-        _logVarConv = new ConvolutionalLayer<T>(
-            inputDepth: lastChannels,
-            outputDepth: _latentChannels,
-            kernelSize: 3,
-            inputHeight: 8,
-            inputWidth: 8,
-            stride: 1,
-            padding: 1,
-            activationFunction: new IdentityActivation<T>());
+        // PostQuantConv already assigned above; skip first layer (duplicate postQuantConv)
+        // Last layer is output conv
+        _outputConv = (ConvolutionalLayer<T>)allDecoderLayers[^1];
+        // Middle layers are decoder spatial blocks and upsamples
+        for (int i = 1; i < allDecoderLayers.Count - 1; i++)
+        {
+            _decoderSpatialLayers.Add(allDecoderLayers[i]);
+        }
 
-        // Post-quant convolution
-        _postQuantConv = new ConvolutionalLayer<T>(
-            inputDepth: _latentChannels,
-            outputDepth: lastChannels,
-            kernelSize: 3,
-            inputHeight: 8,
-            inputWidth: 8,
-            stride: 1,
-            padding: 1,
-            activationFunction: new IdentityActivation<T>());
-
-        // Build decoder
-        inChannels = lastChannels;
+        // Temporal decoder layers (parallel processing path)
         for (int level = _channelMultipliers.Length - 1; level >= 0; level--)
         {
             var outChannels = _baseChannels * _channelMultipliers[level];
-
-            // Spatial block
-            _decoderSpatialLayers.Add(CreateSpatialBlock(inChannels, outChannels));
-
-            // Temporal block(s)
             for (int t = 0; t < _numTemporalLayers; t++)
             {
                 _decoderTemporalLayers.Add(CreateTemporalBlock(outChannels));
             }
-
-            inChannels = outChannels;
-
-            // Upsample (except first level going backwards)
-            if (level > 0)
-            {
-                _decoderSpatialLayers.Add(CreateUpsample(outChannels));
-            }
         }
-
-        // Output convolution
-        _outputConv = new ConvolutionalLayer<T>(
-            inputDepth: _baseChannels,
-            outputDepth: _inputChannels,
-            kernelSize: 3,
-            inputHeight: 64,
-            inputWidth: 64,
-            stride: 1,
-            padding: 1,
-            activationFunction: new TanhActivation<T>());
     }
 
     /// <inheritdoc />
@@ -743,73 +691,25 @@ public class TemporalVAE<T> : VAEModelBase<T>
     #endregion
 
     #region Layer Factory Methods
-
-    private ILayer<T> CreateSpatialBlock(int inChannels, int outChannels)
-    {
-        // Convolutional block that preserves spatial structure
-        var conv = new ConvolutionalLayer<T>(
-            inputDepth: inChannels,
-            outputDepth: outChannels,
-            kernelSize: 3,
-            inputHeight: 32,  // Placeholder - actual size handled dynamically
-            inputWidth: 32,
-            stride: 1,
-            padding: 1,
-            activationFunction: new SiLUActivation<T>());
-
-        if (inChannels == outChannels)
-        {
-            // Can use residual connection
-            return new ResidualLayer<T>(
-                inputShape: new[] { 1, inChannels, 32, 32 },
-                innerLayer: conv,
-                activationFunction: new SiLUActivation<T>());
-        }
-
-        return conv;
-    }
+    // Spatial layer creation moved to LayerHelper<T>.CreateTemporalVAEEncoderLayers()
+    // and LayerHelper<T>.CreateTemporalVAEDecoderLayers().
 
     private ILayer<T> CreateTemporalBlock(int channels)
     {
         // Temporal block using 3D convolution across time dimension
-        // For temporal consistency, use Conv3D with temporal kernel
+        // Kept here because temporal blocks are a parallel processing path
+        int downsampleFactor = (int)Math.Pow(2, _channelMultipliers.Length - 1);
+        int spatialSize = 64 / downsampleFactor; // Compute from input size
         return new Conv3DLayer<T>(
             inputChannels: channels,
             outputChannels: channels,
-            kernelSize: 3,
-            inputDepth: 8,   // Number of frames (temporal dimension)
-            inputHeight: 32,
-            inputWidth: 32,
+            kernelSize: _temporalKernelSize,
+            inputDepth: 8,
+            inputHeight: spatialSize,
+            inputWidth: spatialSize,
             stride: 1,
             padding: 1,
             activationFunction: new SiLUActivation<T>());
-    }
-
-    private ILayer<T> CreateDownsample(int channels)
-    {
-        return new ConvolutionalLayer<T>(
-            inputDepth: channels,
-            outputDepth: channels,
-            kernelSize: 3,
-            inputHeight: 32,
-            inputWidth: 32,
-            stride: 2,
-            padding: 1,
-            activationFunction: new IdentityActivation<T>());
-    }
-
-    private ILayer<T> CreateUpsample(int channels)
-    {
-        // Transposed convolution (deconvolution) for upsampling
-        // With stride=2, kernel=4, padding=1: output = (input - 1) * 2 + 4 - 2*1 = 2*input
-        // This doubles the spatial dimensions
-        return new DeconvolutionalLayer<T>(
-            inputShape: new[] { 1, channels, 16, 16 },  // [batch, channels, height, width]
-            outputDepth: channels,
-            kernelSize: 4,
-            stride: 2,
-            padding: 1,
-            activationFunction: new IdentityActivation<T>());
     }
 
     #endregion
