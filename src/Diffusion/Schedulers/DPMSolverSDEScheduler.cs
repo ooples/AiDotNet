@@ -45,7 +45,7 @@ public sealed class DPMSolverSDEScheduler<T> : NoiseSchedulerBase<T>
     /// <param name="seed">Optional random seed for reproducible stochastic sampling.</param>
     public DPMSolverSDEScheduler(SchedulerConfig<T> config, int? seed = null) : base(config)
     {
-        _random = seed.HasValue ? new Random(seed.Value) : new Random();
+        _random = seed.HasValue ? Tensors.Helpers.RandomHelper.CreateSeededRandom(seed.Value) : Tensors.Helpers.RandomHelper.CreateSecureRandom();
     }
 
     /// <inheritdoc />

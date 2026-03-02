@@ -158,7 +158,7 @@ public class SourceSeparationResult<T>
     /// <summary>
     /// Gets or sets the original mixed audio.
     /// </summary>
-    public Tensor<T> OriginalMix { get; set; } = default!;
+    public required Tensor<T> OriginalMix { get; set; }
 
     /// <summary>
     /// Gets or sets the sample rate of the audio.

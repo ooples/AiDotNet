@@ -173,12 +173,13 @@ public class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
     /// <summary>
     /// The Video U-Net noise predictor with temporal attention layers.
     /// </summary>
-    private VideoUNetPredictor<T> _videoUNet;
+    private VideoUNetPredictor<T>? _videoUNet;
 
     /// <summary>
     /// The temporal VAE for temporally coherent video encoding/decoding.
     /// </summary>
-    private TemporalVAE<T> _temporalVAE;
+    private TemporalVAE<T>? _temporalVAE;
+
 
     /// <summary>
     /// Optional conditioning module for guided video super-resolution.
@@ -190,13 +191,13 @@ public class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
     #region Properties
 
     /// <inheritdoc />
-    public override INoisePredictor<T> NoisePredictor => _videoUNet;
+    public override INoisePredictor<T> NoisePredictor { get { EnsureInitialized(); return _videoUNet; } }
 
     /// <inheritdoc />
-    public override IVAEModel<T> VAE => _temporalVAE;
+    public override IVAEModel<T> VAE { get { EnsureInitialized(); return _temporalVAE; } }
 
     /// <inheritdoc />
-    public override IVAEModel<T>? TemporalVAE => _temporalVAE;
+    public override IVAEModel<T>? TemporalVAE { get { EnsureInitialized(); return _temporalVAE; } }
 
     /// <inheritdoc />
     public override IConditioningModule<T>? Conditioner => _conditioner;
@@ -214,8 +215,7 @@ public class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
     public override bool SupportsVideoToVideo => true;
 
     /// <inheritdoc />
-    public override int ParameterCount =>
-        _videoUNet.GetParameters().Length + _temporalVAE.GetParameters().Length;
+    public override int ParameterCount { get { EnsureInitialized(); return _videoUNet.GetParameters().Length + _temporalVAE.GetParameters().Length; } }
 
     /// <summary>
     /// Gets the video upscale factor (4x).
@@ -268,12 +268,21 @@ public class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
     {
         _conditioner = conditioner;
 
-        InitializeLayers(videoUNet, temporalVAE, seed);
+        if (videoUNet is not null || temporalVAE is not null)
+            InitializeLayers(videoUNet, temporalVAE, seed);
     }
 
     #endregion
 
     #region Layer Initialization
+
+    [MemberNotNull(nameof(_videoUNet), nameof(_temporalVAE))]
+    private void EnsureInitialized()
+    {
+        if (_videoUNet is null || _temporalVAE is null)
+            InitializeLayers(null, null, null);
+    }
+
 
     /// <summary>
     /// Initializes the Video U-Net and Temporal VAE using custom or default configurations.
@@ -335,6 +344,7 @@ public class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
         Tensor<T> imageEmbedding,
         Tensor<T> motionEmbedding)
     {
+        EnsureInitialized();
         return _videoUNet.PredictNoiseWithImageCondition(
             latents, timestep, imageEmbedding, textConditioning: null);
     }
@@ -346,6 +356,7 @@ public class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
     /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
+        EnsureInitialized();
         var unetParams = _videoUNet.GetParameters();
         var vaeParams = _temporalVAE.GetParameters();
 
@@ -367,6 +378,7 @@ public class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
+        EnsureInitialized();
         var unetCount = _videoUNet.GetParameters().Length;
         var vaeCount = _temporalVAE.GetParameters().Length;
 
@@ -407,6 +419,7 @@ public class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
+        EnsureInitialized();
         return new UpscaleAVideoModel<T>(
             videoUNet: (VideoUNetPredictor<T>)_videoUNet.Clone(),
             temporalVAE: (TemporalVAE<T>)_temporalVAE.Clone(),

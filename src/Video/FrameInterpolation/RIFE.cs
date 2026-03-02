@@ -118,6 +118,18 @@ public class RIFE<T> : FrameInterpolationBase<T>
     /// <param name="architecture">The neural network architecture configuration.</param>
     /// <param name="numFeatures">The number of features in intermediate layers.</param>
     /// <param name="numFlowBlocks">The number of flow refinement blocks.</param>
+    /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    public RIFE()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.ThreeDimensional,
+            taskType: Enums.NeuralNetworkTaskType.Regression,
+            inputHeight: 256, inputWidth: 256, inputDepth: 6,
+            outputSize: 3))
+    {
+    }
+
     public RIFE(
         NeuralNetworkArchitecture<T> architecture,
         int numFeatures = DefaultNumFeatures,

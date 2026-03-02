@@ -230,7 +230,7 @@ public class SpeakerTurn<T>
     /// <summary>
     /// Gets or sets the confidence score for this turn.
     /// </summary>
-    public T Confidence { get; set; } = default!;
+    public required T Confidence { get; set; }
 }
 
 /// <summary>
@@ -257,7 +257,7 @@ public class SpeakerSegment<T>
     /// <summary>
     /// Gets or sets the confidence score for this segment.
     /// </summary>
-    public T Confidence { get; set; } = default!;
+    public required T Confidence { get; set; }
 
     /// <summary>
     /// Gets the duration of this segment in seconds.

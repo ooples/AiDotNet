@@ -3,6 +3,8 @@ using AiDotNet.Clustering.Interfaces;
 
 namespace AiDotNet.Clustering.SpatialIndex;
 
+#pragma warning disable CS8601, CS8618 // Generic T defaults use default(T) - always used with value types
+
 /// <summary>
 /// K-dimensional tree for efficient nearest neighbor queries.
 /// </summary>
@@ -443,7 +445,7 @@ public class KDTree<T>
         public bool IsLeaf { get; set; }
         public int[]? Indices { get; set; }  // For leaf nodes
         public int SplitDimension { get; set; }
-        public T SplitValue { get; set; } = default!;
+        public T SplitValue { get; set; } = default;
         public int PointIndex { get; set; } = -1;
         public KDNode? Left { get; set; }
         public KDNode? Right { get; set; }

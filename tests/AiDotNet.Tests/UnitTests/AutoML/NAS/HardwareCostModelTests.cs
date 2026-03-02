@@ -389,7 +389,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
         public void HardwareCost_DefaultValues()
         {
             // Arrange & Act
-            var cost = new HardwareCost<double>();
+            var cost = new HardwareCost<double> { Latency = default, Energy = default, Memory = default };
 
             // Assert
             Assert.Equal(default(double), cost.Latency);

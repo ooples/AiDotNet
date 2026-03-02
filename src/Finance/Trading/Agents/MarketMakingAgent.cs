@@ -20,8 +20,9 @@ public class MarketMakingAgent<T> : TradingAgentBase<T>
 {
     #region Fields
 
-    private readonly NeuralNetwork<T> _policyNetwork;
+    private readonly INeuralNetwork<T> _policyNetwork;
     private readonly MarketMakingOptions<T> _mmOptions;
+    private readonly NeuralNetworkArchitecture<T> _architecture;
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _mmOptions;
@@ -50,10 +51,27 @@ public class MarketMakingAgent<T> : TradingAgentBase<T>
     /// <b>For Beginners:</b> In the MarketMakingAgent model, MarketMakingAgent sets up the architecture and options. This prepares the model for training or inference.
     /// </para>
     /// </remarks>
+    private const int DefaultInputSize = 10;
+    private const int DefaultOutputSize = 1;
+
+    /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public MarketMakingAgent()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: AiDotNet.Enums.InputType.OneDimensional,
+            taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression,
+            inputSize: DefaultInputSize,
+            outputSize: DefaultOutputSize),
+            options: new MarketMakingOptions<T>())
+    {
+    }
+
     public MarketMakingAgent(NeuralNetworkArchitecture<T> architecture, MarketMakingOptions<T> options)
         : base(options)
     {
         _mmOptions = options;
+        _architecture = architecture;
         EnsureMarketMakingLayers(architecture, options.StateSize, options.ActionSize);
         _policyNetwork = new NeuralNetwork<T>(architecture, TradingOptions.LossFunction ?? new MeanSquaredErrorLoss<T>());
         ReplayBuffer = new ReplayBuffer<T>(options.ReplayBufferSize, options.Seed);
@@ -270,7 +288,7 @@ public class MarketMakingAgent<T> : TradingAgentBase<T>
     /// </remarks>
     public override IFullModel<T, Vector<T>, Vector<T>> Clone()
     {
-        var clone = new MarketMakingAgent<T>(_policyNetwork.GetArchitecture(), _mmOptions);
+        var clone = new MarketMakingAgent<T>(_architecture, _mmOptions);
         clone.SetParameters(GetParameters());
         return clone;
     }

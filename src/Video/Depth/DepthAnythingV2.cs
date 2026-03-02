@@ -127,6 +127,18 @@ public class DepthAnythingV2<T> : NeuralNetworkBase<T>
     /// Use this when you want to train or fine-tune the model on your own depth data.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    public DepthAnythingV2()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.ThreeDimensional,
+            taskType: Enums.NeuralNetworkTaskType.Regression,
+            inputHeight: 256, inputWidth: 256, inputDepth: 3,
+            outputSize: 1))
+    {
+    }
+
     public DepthAnythingV2(
         NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,

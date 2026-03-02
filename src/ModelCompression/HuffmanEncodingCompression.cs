@@ -337,7 +337,7 @@ public class HuffmanEncodingCompression<T> : ModelCompressionBase<T>
         var bits = new List<bool>();
         foreach (var weight in weights)
         {
-            if (!encodingTable.TryGetValue(weight, out string code))
+            if (!encodingTable.TryGetValue(weight, out string? code) || code is null)
             {
                 throw new InvalidOperationException($"Weight value {weight} not found in encoding table.");
             }

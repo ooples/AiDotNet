@@ -10,7 +10,7 @@ namespace AiDotNet.AutoML.NAS
         public int Depth { get; set; }
         public double WidthMultiplier { get; set; }
         public int KernelSize { get; set; }
-        public Vector<T> Embedding { get; set; } = null!;
+        public Vector<T>? Embedding { get; set; }
     }
 }
 

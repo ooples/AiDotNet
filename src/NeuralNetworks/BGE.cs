@@ -65,7 +65,19 @@ namespace AiDotNet.NeuralNetworks
         /// <param name="poolingStrategy">The strategy used to aggregate token outputs (default: ClsToken).</param>
         /// <param name="lossFunction">Optional loss function.</param>
         /// <param name="maxGradNorm">Maximum gradient norm for stability (default: 1.0).</param>
-        public BGE(
+        /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    public BGE()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.OneDimensional,
+            taskType: Enums.NeuralNetworkTaskType.Regression,
+            inputSize: 768,
+            outputSize: 768))
+    {
+    }
+
+    public BGE(
             NeuralNetworkArchitecture<T> architecture,
             ITokenizer? tokenizer = null,
             IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,

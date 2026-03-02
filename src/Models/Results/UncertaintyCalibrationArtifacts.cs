@@ -2,6 +2,8 @@ using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.Models.Results;
 
+#pragma warning disable CS8601, CS8618 // Generic T defaults use default(T) - always used with value types
+
 /// <summary>
 /// Stores uncertainty-calibration artifacts computed at build-time (not raw calibration data).
 /// </summary>
@@ -11,10 +13,10 @@ namespace AiDotNet.Models.Results;
 internal sealed class UncertaintyCalibrationArtifacts<T>
 {
     internal bool HasConformalRegression { get; set; }
-    internal T ConformalRegressionQuantile { get; set; } = default!;
+    internal T ConformalRegressionQuantile { get; set; } = default;
 
     internal bool HasConformalClassification { get; set; }
-    internal T ConformalClassificationThreshold { get; set; } = default!;
+    internal T ConformalClassificationThreshold { get; set; } = default;
     internal int ConformalClassificationNumClasses { get; set; }
 
     internal bool HasAdaptiveConformalClassification { get; set; }
@@ -22,7 +24,7 @@ internal sealed class UncertaintyCalibrationArtifacts<T>
     internal Vector<T>? ConformalClassificationAdaptiveThresholds { get; set; }
 
     internal bool HasTemperatureScaling { get; set; }
-    internal T TemperatureScalingTemperature { get; set; } = default!;
+    internal T TemperatureScalingTemperature { get; set; } = default;
 
     internal bool HasPlattScaling { get; set; }
     internal Vector<T>? PlattScalingA { get; set; }
@@ -41,5 +43,5 @@ internal sealed class UncertaintyCalibrationArtifacts<T>
     internal Vector<T>? SwagPosteriorVarianceDiag { get; set; }
 
     internal bool HasExpectedCalibrationError { get; set; }
-    internal T ExpectedCalibrationError { get; set; } = default!;
+    internal T ExpectedCalibrationError { get; set; } = default;
 }

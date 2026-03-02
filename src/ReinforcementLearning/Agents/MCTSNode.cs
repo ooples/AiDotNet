@@ -9,11 +9,11 @@ namespace AiDotNet.ReinforcementLearning.Agents.MuZero;
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 public class MCTSNode<T>
 {
-    public Vector<T> HiddenState { get; set; } = null!;
+    public Vector<T>? HiddenState { get; set; }
     public Dictionary<int, MCTSNode<T>> Children { get; set; } = new();
     public Dictionary<int, int> VisitCounts { get; set; } = new();
     public Dictionary<int, T> QValues { get; set; } = new();
     public Dictionary<int, T> Rewards { get; set; } = new();
-    public T Value { get; set; } = default!;
+    public required T Value { get; set; }
     public int TotalVisits { get; set; }
 }

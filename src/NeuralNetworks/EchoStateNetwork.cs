@@ -429,6 +429,19 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
     /// ripples interact, rather than simple rules for individual ripples.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public EchoStateNetwork()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.OneDimensional,
+            taskType: Enums.NeuralNetworkTaskType.Regression,
+            inputSize: 128,
+            outputSize: 1),
+            reservoirSize: 100, reservoirInputVectorActivation: (IVectorActivationFunction<T>?)null)
+    {
+    }
+
     public EchoStateNetwork(
         NeuralNetworkArchitecture<T> architecture,
         int reservoirSize,

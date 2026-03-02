@@ -73,7 +73,7 @@ public class DocumentRegion<T>
     /// <summary>
     /// Gets the detection confidence score (0-1).
     /// </summary>
-    public T Confidence { get; init; } = default!;
+    public required T Confidence { get; init; }
 
     /// <summary>
     /// Gets the confidence as a double value.

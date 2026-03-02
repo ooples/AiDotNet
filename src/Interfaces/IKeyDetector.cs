@@ -154,7 +154,7 @@ public class KeyDetectionResult<T>
     /// <summary>
     /// Gets or sets the confidence score (0.0 to 1.0).
     /// </summary>
-    public T Confidence { get; set; } = default!;
+    public required T Confidence { get; set; }
 
     /// <summary>
     /// Gets or sets the Camelot notation (e.g., "8B").
@@ -207,7 +207,7 @@ public class KeyHypothesis<T>
     /// <summary>
     /// Gets or sets the confidence score.
     /// </summary>
-    public T Confidence { get; set; } = default!;
+    public required T Confidence { get; set; }
 }
 
 /// <summary>
@@ -261,7 +261,7 @@ public class KeySegment<T>
     /// <summary>
     /// Gets or sets the confidence score.
     /// </summary>
-    public T Confidence { get; set; } = default!;
+    public required T Confidence { get; set; }
 }
 
 /// <summary>
@@ -288,5 +288,5 @@ public class ModulationPoint<T>
     /// <summary>
     /// Gets or sets the confidence in the modulation detection.
     /// </summary>
-    public T Confidence { get; set; } = default!;
+    public required T Confidence { get; set; }
 }

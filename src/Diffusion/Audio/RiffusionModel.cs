@@ -112,12 +112,12 @@ public class RiffusionModel<T> : LatentDiffusionModelBase<T>
     /// <summary>
     /// The U-Net noise predictor.
     /// </summary>
-    private UNetNoisePredictor<T> _unet;
+    private UNetNoisePredictor<T>? _unet;
 
     /// <summary>
     /// The VAE for encoding/decoding spectrograms.
     /// </summary>
-    private StandardVAE<T> _vae;
+    private StandardVAE<T>? _vae;
 
     /// <summary>
     /// The text conditioning module.
@@ -132,22 +132,23 @@ public class RiffusionModel<T> : LatentDiffusionModelBase<T>
     /// <summary>
     /// GPU-accelerated Griffin-Lim processor for spectrogram inversion.
     /// </summary>
-    private GriffinLim<T> _griffinLim;
+    private GriffinLim<T>? _griffinLim;
 
     /// <summary>
     /// GPU-accelerated mel spectrogram processor.
     /// </summary>
-    private MelSpectrogram<T> _melSpectrogram;
+    private MelSpectrogram<T>? _melSpectrogram;
+    private readonly int? _seed;
 
     #endregion
 
     #region Properties
 
     /// <inheritdoc />
-    public override INoisePredictor<T> NoisePredictor => _unet;
+    public override INoisePredictor<T> NoisePredictor { get { EnsureInitialized(); return _unet; } }
 
     /// <inheritdoc />
-    public override IVAEModel<T> VAE => _vae;
+    public override IVAEModel<T> VAE { get { EnsureInitialized(); return _vae; } }
 
     /// <inheritdoc />
     public override IConditioningModule<T>? Conditioner => _conditioner;
@@ -156,7 +157,7 @@ public class RiffusionModel<T> : LatentDiffusionModelBase<T>
     public override int LatentChannels => RIFF_LATENT_CHANNELS;
 
     /// <inheritdoc />
-    public override int ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
+    public override int ParameterCount { get { EnsureInitialized(); return _unet.ParameterCount + _vae.ParameterCount; } }
 
     /// <summary>
     /// Gets the spectrogram configuration.
@@ -200,13 +201,22 @@ public class RiffusionModel<T> : LatentDiffusionModelBase<T>
     {
         _conditioner = conditioner;
         _spectrogramConfig = spectrogramConfig ?? new SpectrogramConfig();
+        _seed = seed;
 
-        InitializeLayers(unet, vae, seed);
+        if (unet is not null || vae is not null)
+            InitializeLayers(unet, vae, seed);
     }
 
     #endregion
 
     #region Layer Initialization
+
+    [MemberNotNull(nameof(_unet), nameof(_vae), nameof(_griffinLim), nameof(_melSpectrogram))]
+    private void EnsureInitialized()
+    {
+        if (_unet is null || _vae is null || _griffinLim is null || _melSpectrogram is null)
+            InitializeLayers(null, null, _seed);
+    }
 
     /// <summary>
     /// Initializes the U-Net, VAE, and audio processing components.
@@ -305,6 +315,7 @@ public class RiffusionModel<T> : LatentDiffusionModelBase<T>
         double? guidanceScale,
         int? seed)
     {
+        EnsureInitialized();
         // Get text conditioning
         Tensor<T>? promptEmbedding = null;
         Tensor<T>? negativeEmbedding = null;
@@ -374,6 +385,7 @@ public class RiffusionModel<T> : LatentDiffusionModelBase<T>
     /// <returns>Audio waveform tensor.</returns>
     public virtual Tensor<T> SpectrogramToAudio(Tensor<T> spectrogram)
     {
+        EnsureInitialized();
         // Extract spectrogram dimensions
         var width = spectrogram.Shape[^1];
 
@@ -407,6 +419,7 @@ public class RiffusionModel<T> : LatentDiffusionModelBase<T>
         double? guidanceScale = null,
         int? seed = null)
     {
+        EnsureInitialized();
         alpha = MathPolyfill.Clamp(alpha, 0.0, 1.0);
 
         if (_conditioner == null)
@@ -538,6 +551,7 @@ public class RiffusionModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
+        EnsureInitialized();
         var unetParams = _unet.GetParameters();
         var vaeParams = _vae.GetParameters();
 
@@ -559,6 +573,7 @@ public class RiffusionModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
+        EnsureInitialized();
         var unetCount = _unet.ParameterCount;
         var vaeCount = _vae.ParameterCount;
 
@@ -598,6 +613,7 @@ public class RiffusionModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
+        EnsureInitialized();
         var clone = new RiffusionModel<T>(
             conditioner: _conditioner,
             spectrogramConfig: _spectrogramConfig,

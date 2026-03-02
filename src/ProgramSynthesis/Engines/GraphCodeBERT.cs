@@ -56,6 +56,18 @@ public class GraphCodeBERT<T> : CodeModelBase<T>
     public bool UsesDataFlow => CodeArchitecture.UseDataFlow;
 
     /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    public GraphCodeBERT()
+        : this(new CodeSynthesisArchitecture<T>(
+            SynthesisType.Neural,
+            ProgramLanguage.CSharp,
+            CodeTask.Completion,
+            useDataFlow: true))
+    {
+    }
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="GraphCodeBERT{T}"/> class.
     /// </summary>
     /// <param name="architecture">The architecture configuration (should have UseDataFlow=true).</param>

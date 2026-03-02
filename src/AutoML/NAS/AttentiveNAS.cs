@@ -263,7 +263,8 @@ namespace AiDotNet.AutoML.NAS
 
             // Update attention weights based on performance gradient
             // This is a simplified update; full implementation would use policy gradients
-            var embedding = config.Embedding;
+            var embedding = config.Embedding
+                ?? throw new InvalidOperationException("Config embedding must not be null when updating attention weights.");
 
             for (int i = 0; i < Math.Min(_attentionWeights.Rows, embedding.Length); i++)
             {

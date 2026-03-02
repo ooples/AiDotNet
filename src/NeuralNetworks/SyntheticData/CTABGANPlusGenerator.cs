@@ -154,6 +154,11 @@ public class CTABGANPlusGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGe
     /// The discriminator (with auxiliary classifier head) is always created internally.
     /// </para>
     /// </remarks>
+    public CTABGANPlusGenerator()
+        : this(new NeuralNetworkArchitecture<T>(InputType.OneDimensional, NeuralNetworkTaskType.Generative, inputSize: 128, outputSize: 128))
+    {
+    }
+
     public CTABGANPlusGenerator(
         NeuralNetworkArchitecture<T> architecture,
         CTABGANPlusOptions<T>? options = null,

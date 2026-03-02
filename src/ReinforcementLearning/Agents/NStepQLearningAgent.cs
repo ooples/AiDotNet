@@ -20,6 +20,14 @@ public class NStepQLearningAgent<T> : ReinforcementLearningAgentBase<T>
     private double _epsilon;
     private Random _random;
 
+    /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public NStepQLearningAgent()
+        : this(new NStepQLearningOptions<T> { StateSize = 4, ActionSize = 2 })
+    {
+    }
+
     public NStepQLearningAgent(NStepQLearningOptions<T> options)
         : base(options)
     {

@@ -10,8 +10,8 @@ internal sealed class ContinuousRequest
     public long RequestId { get; set; }
     public string ModelName { get; set; } = string.Empty;
     public string NumericType { get; set; } = string.Empty;
-    public object Input { get; set; } = null!;
-    public object CompletionSource { get; set; } = null!;
+    public object? Input { get; set; }
+    public object? CompletionSource { get; set; }
     public RequestPriority Priority { get; set; } = RequestPriority.Normal;
     public DateTime EnqueueTime { get; set; }
 }

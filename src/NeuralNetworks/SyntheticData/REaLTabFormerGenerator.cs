@@ -113,6 +113,11 @@ public class REaLTabFormerGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabular
     /// <param name="optimizer">Gradient-based optimizer (defaults to Adam).</param>
     /// <param name="lossFunction">Loss function (defaults based on task type).</param>
     /// <param name="maxGradNorm">Maximum gradient norm for clipping (default 5.0).</param>
+    public REaLTabFormerGenerator()
+        : this(new NeuralNetworkArchitecture<T>(InputType.OneDimensional, NeuralNetworkTaskType.Generative, inputSize: 128, outputSize: 128))
+    {
+    }
+
     public REaLTabFormerGenerator(
         NeuralNetworkArchitecture<T> architecture,
         REaLTabFormerOptions<T>? options = null,

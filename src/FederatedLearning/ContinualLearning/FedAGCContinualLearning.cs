@@ -68,7 +68,7 @@ public class FedAGCContinualLearning<T> : Infrastructure.FederatedLearningCompon
         // on a subset of parameters (full sweep too expensive for large models).
         double epsilon = 1e-5;
         int paramSubsample = Math.Min(d, 200); // Subsample parameters for efficiency.
-        var rng = new Random(42);
+        var rng = Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
 
         for (int s = 0; s < numSamples; s++)
         {

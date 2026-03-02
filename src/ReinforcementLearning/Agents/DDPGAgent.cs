@@ -50,14 +50,22 @@ public class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
     private readonly UniformReplayBuffer<T, Vector<T>, Vector<T>> _replayBuffer;
     private readonly OrnsteinUhlenbeckNoise<T> _noise;
 
-    private NeuralNetwork<T> _actorNetwork;
-    private NeuralNetwork<T> _actorTargetNetwork;
-    private NeuralNetwork<T> _criticNetwork;
-    private NeuralNetwork<T> _criticTargetNetwork;
+    private INeuralNetwork<T> _actorNetwork;
+    private INeuralNetwork<T> _actorTargetNetwork;
+    private INeuralNetwork<T> _criticNetwork;
+    private INeuralNetwork<T> _criticTargetNetwork;
     private int _steps;
 
     /// <inheritdoc/>
     public override int FeatureCount => _options.StateSize;
+
+    /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public DDPGAgent()
+        : this(new DDPGOptions<T> { StateSize = 4, ActionSize = 2 })
+    {
+    }
 
     public DDPGAgent(DDPGOptions<T> options)
         : base(CreateBaseOptions(options))
@@ -357,7 +365,7 @@ public class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         SoftUpdateNetwork(_criticNetwork, _criticTargetNetwork);
     }
 
-    private void SoftUpdateNetwork(NeuralNetwork<T> source, NeuralNetwork<T> target)
+    private void SoftUpdateNetwork(INeuralNetwork<T> source, INeuralNetwork<T> target)
     {
         var sourceParams = source.GetParameters();
         var targetParams = target.GetParameters();
@@ -376,11 +384,11 @@ public class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         target.UpdateParameters(targetParams);
     }
 
-    private void UpdateNetworkParameters(NeuralNetwork<T> network, T learningRate)
+    private void UpdateNetworkParameters(INeuralNetwork<T> network, T learningRate)
     {
         // Apply accumulated gradients from Backpropagate() calls
         var parameters = network.GetParameters();
-        var gradients = network.GetGradients();
+        var gradients = network.GetParameterGradients();
 
         if (gradients.Length > 0)
         {
@@ -434,7 +442,7 @@ public class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         writer.Write(_options.StateSize);
         writer.Write(_options.ActionSize);
 
-        void WriteNetwork(NeuralNetwork<T> net)
+        void WriteNetwork(INeuralNetwork<T> net)
         {
             var bytes = net.Serialize();
             writer.Write(bytes.Length);
@@ -458,7 +466,7 @@ public class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         reader.ReadInt32(); // stateSize
         reader.ReadInt32(); // actionSize
 
-        void ReadNetwork(NeuralNetwork<T> net)
+        void ReadNetwork(INeuralNetwork<T> net)
         {
             var len = reader.ReadInt32();
             var bytes = reader.ReadBytes(len);
@@ -532,7 +540,7 @@ public class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
             "Direct gradient application through this interface is not applicable.");
     }
 
-    private void CopyNetworkWeights(NeuralNetwork<T> source, NeuralNetwork<T> target)
+    private void CopyNetworkWeights(INeuralNetwork<T> source, INeuralNetwork<T> target)
     {
         target.UpdateParameters(source.GetParameters());
     }

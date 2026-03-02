@@ -251,6 +251,18 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
     /// capture relationships between different values.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    public GraphNeuralNetwork()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.OneDimensional,
+            taskType: Enums.NeuralNetworkTaskType.MultiClassClassification,
+            inputSize: 128,
+            outputSize: 7), graphConvolutionalVectorActivation: (IVectorActivationFunction<T>?)null)
+    {
+    }
+
     public GraphNeuralNetwork(NeuralNetworkArchitecture<T> architecture, ILossFunction<T>? lossFunction = null,
         IVectorActivationFunction<T>? graphConvolutionalVectorActivation = null,
         IVectorActivationFunction<T>? activationLayerVectorActivation = null, IVectorActivationFunction<T>? finalDenseLayerVectorActivation = null,

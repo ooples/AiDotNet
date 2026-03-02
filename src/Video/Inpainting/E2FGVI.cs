@@ -85,6 +85,18 @@ public class E2FGVI<T> : VideoInpaintingBase<T>
 
     #region Constructors
 
+    /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    public E2FGVI()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.ThreeDimensional,
+            taskType: Enums.NeuralNetworkTaskType.Regression,
+            inputHeight: 256, inputWidth: 256, inputDepth: 3,
+            outputSize: 2))
+    {
+    }
+
     public E2FGVI(
         NeuralNetworkArchitecture<T> architecture,
         int numFeatures = 128,

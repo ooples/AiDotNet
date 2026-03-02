@@ -144,6 +144,18 @@ public class CTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerato
     /// </code>
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    public CTGANGenerator()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.OneDimensional,
+            taskType: Enums.NeuralNetworkTaskType.Generative,
+            inputSize: 10,
+            outputSize: 10))
+    {
+    }
+
     public CTGANGenerator(
         NeuralNetworkArchitecture<T> architecture,
         CTGANOptions<T>? options = null,

@@ -22,6 +22,8 @@ public class UCBBanditAgent<T> : ReinforcementLearningAgentBase<T>
     private Vector<int> _actionCounts;
     private int _totalSteps;
 
+    public UCBBanditAgent() : this(new UCBBanditOptions<T>()) { }
+
     public UCBBanditAgent(UCBBanditOptions<T> options) : base(options)
     {
         Guard.NotNull(options);

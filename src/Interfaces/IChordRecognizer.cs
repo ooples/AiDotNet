@@ -174,7 +174,7 @@ public class ChordSegment<T>
     /// <summary>
     /// Gets or sets the confidence score for this chord.
     /// </summary>
-    public T Confidence { get; set; } = default!;
+    public required T Confidence { get; set; }
 
     /// <summary>
     /// Gets the duration of this segment.
@@ -206,5 +206,5 @@ public class ChordStatistics<T>
     /// <summary>
     /// Gets or sets the average confidence when this chord was detected.
     /// </summary>
-    public T AverageConfidence { get; set; } = default!;
+    public required T AverageConfidence { get; set; }
 }

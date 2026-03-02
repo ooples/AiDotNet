@@ -114,6 +114,18 @@ public class SAINTNetwork<T> : NeuralNetworkBase<T>
     /// </code>
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    public SAINTNetwork()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.OneDimensional,
+            taskType: Enums.NeuralNetworkTaskType.Regression,
+            inputSize: 10,
+            outputSize: 10))
+    {
+    }
+
     public SAINTNetwork(
         NeuralNetworkArchitecture<T> architecture,
         SAINTOptions<T>? options = null,

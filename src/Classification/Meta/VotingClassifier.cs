@@ -34,6 +34,14 @@ namespace AiDotNet.Classification.Meta;
 public class VotingClassifier<T> : MetaClassifierBase<T>
 {
     /// <summary>
+    /// Initializes a new instance with default settings using Gaussian Naive Bayes estimators.
+    /// </summary>
+    public VotingClassifier()
+        : this(new IClassifier<T>[] { new AiDotNet.Classification.NaiveBayes.GaussianNaiveBayes<T>() })
+    {
+    }
+
+    /// <summary>
     /// Gets the voting-specific options.
     /// </summary>
     protected new VotingClassifierOptions<T> Options => (VotingClassifierOptions<T>)base.Options;

@@ -233,7 +233,7 @@ public class SentimentResult<T>
     /// the model is 95% confident in its prediction.
     /// </para>
     /// </remarks>
-    public T Confidence { get; set; } = default!;
+    public required T Confidence { get; set; }
 
     /// <summary>
     /// Gets or sets the probability distribution over all sentiment classes.

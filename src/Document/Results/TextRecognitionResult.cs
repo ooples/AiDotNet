@@ -21,7 +21,7 @@ public class TextRecognitionResult<T>
     /// <summary>
     /// Gets the overall confidence score (0-1).
     /// </summary>
-    public T Confidence { get; init; } = default!;
+    public required T Confidence { get; init; }
 
     /// <summary>
     /// Gets the confidence as a double value.
@@ -68,7 +68,7 @@ public class CharacterRecognition<T>
     /// <summary>
     /// Gets the confidence score for this character.
     /// </summary>
-    public T Confidence { get; init; } = default!;
+    public required T Confidence { get; init; }
 
     /// <summary>
     /// Gets the confidence as a double value.

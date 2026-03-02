@@ -125,6 +125,18 @@ public class OpenSora<T> : NeuralNetworkBase<T>
     #region Constructors
 
     /// <summary>
+    /// Creates a default OpenSora video generation model with small default dimensions.
+    /// </summary>
+    public OpenSora()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: InputType.ThreeDimensional,
+            taskType: NeuralNetworkTaskType.Generative,
+            inputHeight: 256,
+            inputWidth: 256,
+            inputDepth: 3,
+            outputSize: 256 * 256 * 3)) { }
+
+    /// <summary>
     /// Creates an OpenSora video generation model.
     /// </summary>
     /// <param name="architecture">The neural network architecture configuration.</param>

@@ -41,6 +41,14 @@ namespace AiDotNet.Regression;
 public class AdaBoostR2Regression<T> : AsyncDecisionTreeRegressionBase<T>
 {
     /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public AdaBoostR2Regression()
+        : this(new AdaBoostR2RegressionOptions())
+    {
+    }
+
+    /// <summary>
     /// Options for configuring the AdaBoost.R2 regression algorithm.
     /// </summary>
     private AdaBoostR2RegressionOptions _options;

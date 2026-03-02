@@ -121,7 +121,7 @@ public class DocumentAnalysisTests
     [Fact]
     public void OCRResult_Construction_EmptyText()
     {
-        var result = new OCRResult<double>();
+        var result = new OCRResult<double> { AverageConfidence = default };
         Assert.Equal(string.Empty, result.FullText);
         Assert.Empty(result.Words);
         Assert.Empty(result.Lines);
@@ -131,7 +131,7 @@ public class DocumentAnalysisTests
     [Fact]
     public void TableStructureResult_Construction_EmptyCells()
     {
-        var result = new TableStructureResult<double>();
+        var result = new TableStructureResult<double> { Confidence = default };
         Assert.Empty(result.Cells);
         Assert.Equal(0, result.NumRows);
         Assert.Equal(0, result.NumColumns);
@@ -142,6 +142,7 @@ public class DocumentAnalysisTests
     {
         var result = new TableStructureResult<double>
         {
+            Confidence = default,
             NumRows = 0,
             NumColumns = 0
         };
@@ -152,7 +153,7 @@ public class DocumentAnalysisTests
     [Fact]
     public void TextRegion_Construction_HasDefaults()
     {
-        var region = new TextRegion<double>();
+        var region = new TextRegion<double> { Confidence = default };
         Assert.NotNull(region.BoundingBox);
         Assert.Equal(0, region.Index);
     }
@@ -160,8 +161,8 @@ public class DocumentAnalysisTests
     [Fact]
     public void LayoutRegion_ConfidenceLevel_CategorizesCorrectly()
     {
-        var lowConfidence = new LayoutRegion<double> { ConfidenceValue = 0.2 };
-        var highConfidence = new LayoutRegion<double> { ConfidenceValue = 0.95 };
+        var lowConfidence = new LayoutRegion<double> { Confidence = default, ConfidenceValue = 0.2 };
+        var highConfidence = new LayoutRegion<double> { Confidence = default, ConfidenceValue = 0.95 };
         Assert.Equal(ConfidenceLevel.VeryLow, lowConfidence.ConfidenceLevel);
         Assert.Equal(ConfidenceLevel.VeryHigh, highConfidence.ConfidenceLevel);
     }
@@ -173,9 +174,9 @@ public class DocumentAnalysisTests
         {
             Regions =
             [
-                new LayoutRegion<double> { ElementType = LayoutElementType.Text, ConfidenceValue = 0.9 },
-                new LayoutRegion<double> { ElementType = LayoutElementType.Table, ConfidenceValue = 0.8 },
-                new LayoutRegion<double> { ElementType = LayoutElementType.Text, ConfidenceValue = 0.7 },
+                new LayoutRegion<double> { Confidence = default, ElementType = LayoutElementType.Text, ConfidenceValue = 0.9 },
+                new LayoutRegion<double> { Confidence = default, ElementType = LayoutElementType.Table, ConfidenceValue = 0.8 },
+                new LayoutRegion<double> { Confidence = default, ElementType = LayoutElementType.Text, ConfidenceValue = 0.7 },
             ]
         };
 
@@ -190,9 +191,9 @@ public class DocumentAnalysisTests
         {
             Regions =
             [
-                new LayoutRegion<double> { ConfidenceValue = 0.9 },
-                new LayoutRegion<double> { ConfidenceValue = 0.5 },
-                new LayoutRegion<double> { ConfidenceValue = 0.3 },
+                new LayoutRegion<double> { Confidence = default, ConfidenceValue = 0.9 },
+                new LayoutRegion<double> { Confidence = default, ConfidenceValue = 0.5 },
+                new LayoutRegion<double> { Confidence = default, ConfidenceValue = 0.3 },
             ]
         };
 
@@ -203,7 +204,7 @@ public class DocumentAnalysisTests
     [Fact]
     public void OCRWord_Construction_HasDefaults()
     {
-        var word = new OCRWord<double>();
+        var word = new OCRWord<double> { Confidence = default };
         Assert.Equal(string.Empty, word.Text);
         Assert.NotNull(word.BoundingBox);
     }
@@ -211,7 +212,7 @@ public class DocumentAnalysisTests
     [Fact]
     public void TableCell_Construction_HasDefaults()
     {
-        var cell = new TableCell<double>();
+        var cell = new TableCell<double> { Confidence = default };
         Assert.Equal(1, cell.RowSpan);
         Assert.Equal(1, cell.ColSpan);
         Assert.Equal(string.Empty, cell.Text);

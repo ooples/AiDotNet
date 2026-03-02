@@ -81,19 +81,20 @@ public class NullTextInversionModel<T> : LatentDiffusionModelBase<T>
 
     #region Fields
 
-    private UNetNoisePredictor<T> _unet;
-    private StandardVAE<T> _vae;
+    private UNetNoisePredictor<T>? _unet;
+    private StandardVAE<T>? _vae;
     private readonly IConditioningModule<T>? _conditioner;
+    private readonly int? _seed;
 
     #endregion
 
     #region Properties
 
     /// <inheritdoc />
-    public override INoisePredictor<T> NoisePredictor => _unet;
+    public override INoisePredictor<T> NoisePredictor { get { EnsureInitialized(); return _unet; } }
 
     /// <inheritdoc />
-    public override IVAEModel<T> VAE => _vae;
+    public override IVAEModel<T> VAE { get { EnsureInitialized(); return _vae; } }
 
     /// <inheritdoc />
     public override IConditioningModule<T>? Conditioner => _conditioner;
@@ -102,7 +103,7 @@ public class NullTextInversionModel<T> : LatentDiffusionModelBase<T>
     public override int LatentChannels => LATENT_CHANNELS;
 
     /// <inheritdoc />
-    public override int ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
+    public override int ParameterCount { get { EnsureInitialized(); return _unet.ParameterCount + _vae.ParameterCount; } }
 
     /// <summary>
     /// Gets the cross-attention dimension (768 for CLIP ViT-L/14).
@@ -142,8 +143,10 @@ public class NullTextInversionModel<T> : LatentDiffusionModelBase<T>
             architecture)
     {
         _conditioner = conditioner;
+        _seed = seed;
 
-        InitializeLayers(unet, vae, seed);
+        if (unet is not null || vae is not null)
+            InitializeLayers(unet, vae, seed);
 
         SetGuidanceScale(DEFAULT_GUIDANCE_SCALE);
     }
@@ -151,6 +154,13 @@ public class NullTextInversionModel<T> : LatentDiffusionModelBase<T>
     #endregion
 
     #region Layer Initialization
+
+    [MemberNotNull(nameof(_unet), nameof(_vae))]
+    private void EnsureInitialized()
+    {
+        if (_unet is null || _vae is null)
+            InitializeLayers(null, null, _seed);
+    }
 
     /// <summary>
     /// Initializes the U-Net and VAE layers using custom layers if provided,
@@ -238,6 +248,7 @@ public class NullTextInversionModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
+        EnsureInitialized();
         var unetParams = _unet.GetParameters();
         var vaeParams = _vae.GetParameters();
 
@@ -260,6 +271,7 @@ public class NullTextInversionModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
+        EnsureInitialized();
         var unetCount = _unet.ParameterCount;
         var vaeCount = _vae.ParameterCount;
 
@@ -300,6 +312,7 @@ public class NullTextInversionModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
+        EnsureInitialized();
         var clonedUnet = new UNetNoisePredictor<T>(
             inputChannels: LATENT_CHANNELS,
             outputChannels: LATENT_CHANNELS,

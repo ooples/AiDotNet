@@ -26,6 +26,14 @@ public class MonteCarloExploringStartsAgent<T> : ReinforcementLearningAgentBase<
     private bool _isFirstAction;
     private Random _random;
 
+    /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public MonteCarloExploringStartsAgent()
+        : this(new MonteCarloExploringStartsOptions<T> { StateSize = 4, ActionSize = 2 })
+    {
+    }
+
     public MonteCarloExploringStartsAgent(MonteCarloExploringStartsOptions<T> options)
         : base(options)
     {

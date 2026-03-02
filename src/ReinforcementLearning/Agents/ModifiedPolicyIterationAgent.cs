@@ -44,6 +44,14 @@ public class ModifiedPolicyIterationAgent<T> : ReinforcementLearningAgentBase<T>
     private Dictionary<string, Dictionary<int, List<(string nextState, T reward, T probability)>>> _model;
     private Random _random;
 
+    /// <summary>
+    /// Initializes a new instance with default options (StateSize=4, ActionSize=2).
+    /// </summary>
+    public ModifiedPolicyIterationAgent()
+        : this(new ModifiedPolicyIterationOptions<T> { StateSize = 4, ActionSize = 2 })
+    {
+    }
+
     public ModifiedPolicyIterationAgent(ModifiedPolicyIterationOptions<T> options)
         : base(options)
     {

@@ -33,8 +33,8 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class DecisionTransformerOptions<T> : ReinforcementLearningOptions<T>
 {
-    public int StateSize { get; init; }
-    public int ActionSize { get; init; }
+    public int StateSize { get; init; } = 16;
+    public int ActionSize { get; init; } = 4;
 
     // Transformer architecture parameters
     public int EmbeddingDim { get; init; } = 128;

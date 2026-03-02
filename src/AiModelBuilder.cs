@@ -2063,10 +2063,13 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
 
         TInput XTrain;
         TOutput yTrain;
-        TInput XVal = default!;
-        TOutput yVal = default!;
-        TInput XTest = default!;
-        TOutput yTest = default!;
+        // These generic types are always value types (Matrix<T>, Vector<T>) at runtime,
+        // so default produces valid zero-initialized values, not null.
+#pragma warning disable CS8600, CS8604 // Generic type defaults - T is always a value type at runtime
+        TInput XVal = default;
+        TOutput yVal = default;
+        TInput XTest = default;
+        TOutput yTest = default;
 
         if (usePartitionedFederatedData)
         {

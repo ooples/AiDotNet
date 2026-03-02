@@ -101,7 +101,8 @@ public class ICALiNGAMAlgorithm<T> : FunctionalBase<T>
 
     private Matrix<T> FastICA(Matrix<T> data, int n, int d)
     {
-        var rng = new Random(42);
+        const int DefaultSeed = 42;
+        var rng = Tensors.Helpers.RandomHelper.CreateSeededRandom(DefaultSeed);
         var W = new Matrix<T>(d, d);
 
         // Initialize W as identity + small random perturbation

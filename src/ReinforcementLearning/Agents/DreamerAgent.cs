@@ -49,17 +49,25 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
     private IOptimizer<T, Vector<T>, Vector<T>> _optimizer;
 
     // World model components
-    private NeuralNetwork<T> _representationNetwork;  // Observation -> latent state
-    private NeuralNetwork<T> _dynamicsNetwork;  // (latent state, action) -> next latent state
-    private NeuralNetwork<T> _rewardNetwork;  // latent state -> reward
-    private NeuralNetwork<T> _continueNetwork;  // latent state -> continue probability
+    private INeuralNetwork<T> _representationNetwork;  // Observation -> latent state
+    private INeuralNetwork<T> _dynamicsNetwork;  // (latent state, action) -> next latent state
+    private INeuralNetwork<T> _rewardNetwork;  // latent state -> reward
+    private INeuralNetwork<T> _continueNetwork;  // latent state -> continue probability
 
     // Actor-critic for policy learning
-    private NeuralNetwork<T> _actorNetwork;
-    private NeuralNetwork<T> _valueNetwork;
+    private INeuralNetwork<T> _actorNetwork;
+    private INeuralNetwork<T> _valueNetwork;
 
     private UniformReplayBuffer<T, Vector<T>, Vector<T>> _replayBuffer;
     private int _updateCount;
+
+    /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public DreamerAgent()
+        : this(new DreamerOptions<T> { ActionSize = 2 })
+    {
+    }
 
     public DreamerAgent(DreamerOptions<T> options, IOptimizer<T, Vector<T>, Vector<T>>? optimizer = null)
         : base(options)
@@ -316,7 +324,7 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
 
             // Apply gradients using optimizer or manual gradient descent
             var valueParams = _valueNetwork.GetParameters();
-            var valueGrads = _valueNetwork.GetGradients();
+            var valueGrads = _valueNetwork.GetParameterGradients();
             var learningRate = _options.LearningRate is not null ? _options.LearningRate : NumOps.FromDouble(0.001);
             for (int i = 0; i < valueParams.Length && i < valueGrads.Length; i++)
             {
@@ -345,7 +353,7 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
 
             // Apply gradients to actor parameters
             var actorParams = _actorNetwork.GetParameters();
-            var actorGrads = _actorNetwork.GetGradients();
+            var actorGrads = _actorNetwork.GetParameterGradients();
             var actorLearningRate = _options.LearningRate is not null ? _options.LearningRate : NumOps.FromDouble(0.001);
             for (int i = 0; i < actorParams.Length && i < actorGrads.Length; i++)
             {

@@ -1075,26 +1075,26 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
     public class MMDiTBlock
     {
         // Image stream
-        public LayerNormalizationLayer<T> ImageNorm1 { get; set; } = null!;
-        public LayerNormalizationLayer<T> ImageNorm2 { get; set; } = null!;
-        public DenseLayer<T> ImageMLP1 { get; set; } = null!;
-        public DenseLayer<T> ImageMLP2 { get; set; } = null!;
-        public DenseLayer<T> ImageAdaLN { get; set; } = null!;
-        public DenseLayer<T> ImageQProj { get; set; } = null!;
-        public DenseLayer<T> ImageKProj { get; set; } = null!;
-        public DenseLayer<T> ImageVProj { get; set; } = null!;
-        public DenseLayer<T> ImageOutProj { get; set; } = null!;
+        public required LayerNormalizationLayer<T> ImageNorm1 { get; set; }
+        public required LayerNormalizationLayer<T> ImageNorm2 { get; set; }
+        public required DenseLayer<T> ImageMLP1 { get; set; }
+        public required DenseLayer<T> ImageMLP2 { get; set; }
+        public required DenseLayer<T> ImageAdaLN { get; set; }
+        public required DenseLayer<T> ImageQProj { get; set; }
+        public required DenseLayer<T> ImageKProj { get; set; }
+        public required DenseLayer<T> ImageVProj { get; set; }
+        public required DenseLayer<T> ImageOutProj { get; set; }
 
         // Text stream
-        public LayerNormalizationLayer<T> TextNorm1 { get; set; } = null!;
-        public LayerNormalizationLayer<T> TextNorm2 { get; set; } = null!;
-        public DenseLayer<T> TextMLP1 { get; set; } = null!;
-        public DenseLayer<T> TextMLP2 { get; set; } = null!;
-        public DenseLayer<T> TextAdaLN { get; set; } = null!;
-        public DenseLayer<T> TextQProj { get; set; } = null!;
-        public DenseLayer<T> TextKProj { get; set; } = null!;
-        public DenseLayer<T> TextVProj { get; set; } = null!;
-        public DenseLayer<T> TextOutProj { get; set; } = null!;
+        public required LayerNormalizationLayer<T> TextNorm1 { get; set; }
+        public required LayerNormalizationLayer<T> TextNorm2 { get; set; }
+        public required DenseLayer<T> TextMLP1 { get; set; }
+        public required DenseLayer<T> TextMLP2 { get; set; }
+        public required DenseLayer<T> TextAdaLN { get; set; }
+        public required DenseLayer<T> TextQProj { get; set; }
+        public required DenseLayer<T> TextKProj { get; set; }
+        public required DenseLayer<T> TextVProj { get; set; }
+        public required DenseLayer<T> TextOutProj { get; set; }
     }
 
     /// <summary>
@@ -1103,14 +1103,14 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
     /// </summary>
     public class MMDiTSingleBlock
     {
-        public LayerNormalizationLayer<T> Norm { get; set; } = null!;
-        public DenseLayer<T> QProj { get; set; } = null!;
-        public DenseLayer<T> KProj { get; set; } = null!;
-        public DenseLayer<T> VProj { get; set; } = null!;
-        public DenseLayer<T> OutProj { get; set; } = null!;
-        public DenseLayer<T> MLP1 { get; set; } = null!;
-        public DenseLayer<T> MLP2 { get; set; } = null!;
-        public DenseLayer<T> AdaLN { get; set; } = null!;
+        public required LayerNormalizationLayer<T> Norm { get; set; }
+        public required DenseLayer<T> QProj { get; set; }
+        public required DenseLayer<T> KProj { get; set; }
+        public required DenseLayer<T> VProj { get; set; }
+        public required DenseLayer<T> OutProj { get; set; }
+        public required DenseLayer<T> MLP1 { get; set; }
+        public required DenseLayer<T> MLP2 { get; set; }
+        public required DenseLayer<T> AdaLN { get; set; }
     }
 
     #endregion

@@ -481,17 +481,17 @@ public class PertinentFeature<T>
     /// <summary>
     /// Gets or sets the current value of the feature.
     /// </summary>
-    public T CurrentValue { get; set; } = default!;
+    public required T CurrentValue { get; set; }
 
     /// <summary>
     /// Gets or sets the contrasting value (what would lead to foil).
     /// </summary>
-    public T ContrastValue { get; set; } = default!;
+    public required T ContrastValue { get; set; }
 
     /// <summary>
     /// Gets or sets the impact on the fact prediction.
     /// </summary>
-    public T ImpactOnFact { get; set; } = default!;
+    public required T ImpactOnFact { get; set; }
 
     /// <summary>
     /// Gets or sets a human-readable explanation.
@@ -540,12 +540,12 @@ public class ContrastiveExplanation<T>
     /// <summary>
     /// Gets or sets the score for the fact class.
     /// </summary>
-    public T FactScore { get; set; } = default!;
+    public required T FactScore { get; set; }
 
     /// <summary>
     /// Gets or sets the score for the foil class.
     /// </summary>
-    public T FoilScore { get; set; } = default!;
+    public required T FoilScore { get; set; }
 
     /// <summary>
     /// Gets or sets the pertinent positives (features supporting the fact).

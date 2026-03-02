@@ -36,7 +36,7 @@ public class OCRResult<T>
     /// <summary>
     /// Gets the average confidence across all recognized text.
     /// </summary>
-    public T AverageConfidence { get; init; } = default!;
+    public required T AverageConfidence { get; init; }
 
     /// <summary>
     /// Gets the detected language code (ISO 639-1, e.g., "en", "zh").
@@ -78,7 +78,7 @@ public class OCRWord<T>
     /// <summary>
     /// Gets the confidence score (0-1).
     /// </summary>
-    public T Confidence { get; init; } = default!;
+    public required T Confidence { get; init; }
 
     /// <summary>
     /// Gets the line index this word belongs to.
@@ -115,7 +115,7 @@ public class OCRLine<T>
     /// <summary>
     /// Gets the average confidence for words in this line.
     /// </summary>
-    public T AverageConfidence { get; init; } = default!;
+    public required T AverageConfidence { get; init; }
 
     /// <summary>
     /// Gets the block index this line belongs to.
@@ -147,7 +147,7 @@ public class OCRBlock<T>
     /// <summary>
     /// Gets the average confidence for text in this block.
     /// </summary>
-    public T AverageConfidence { get; init; } = default!;
+    public required T AverageConfidence { get; init; }
 
     /// <summary>
     /// Gets the detected block type (text, table, figure, etc.).

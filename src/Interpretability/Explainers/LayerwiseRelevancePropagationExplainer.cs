@@ -521,17 +521,17 @@ public class LRPExplanation<T>
     /// <summary>
     /// Gets or sets the output value being explained.
     /// </summary>
-    public T OutputValue { get; set; } = default!;
+    public required T OutputValue { get; set; }
 
     /// <summary>
     /// Gets or sets the sum of positive relevance scores.
     /// </summary>
-    public T TotalPositiveRelevance { get; set; } = default!;
+    public required T TotalPositiveRelevance { get; set; }
 
     /// <summary>
     /// Gets or sets the sum of negative relevance scores.
     /// </summary>
-    public T TotalNegativeRelevance { get; set; } = default!;
+    public required T TotalNegativeRelevance { get; set; }
 
     /// <summary>
     /// Gets or sets the feature names.

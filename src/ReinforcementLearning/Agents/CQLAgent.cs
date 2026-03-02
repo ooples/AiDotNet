@@ -44,17 +44,25 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
     public override ModelOptions GetOptions() => _options;
     private readonly INumericOperations<T> _numOps;
 
-    private NeuralNetwork<T> _policyNetwork;
-    private NeuralNetwork<T> _q1Network;
-    private NeuralNetwork<T> _q2Network;
-    private NeuralNetwork<T> _targetQ1Network;
-    private NeuralNetwork<T> _targetQ2Network;
+    private INeuralNetwork<T> _policyNetwork;
+    private INeuralNetwork<T> _q1Network;
+    private INeuralNetwork<T> _q2Network;
+    private INeuralNetwork<T> _targetQ1Network;
+    private INeuralNetwork<T> _targetQ2Network;
 
     private UniformReplayBuffer<T, Vector<T>, Vector<T>> _offlineBuffer;  // Fixed offline dataset
     private Random _random;
     private T _logAlpha;
     private T _alpha;
     private int _updateCount;
+
+    /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public CQLAgent()
+        : this(new CQLOptions<T> { StateSize = 4, ActionSize = 2 })
+    {
+    }
 
     public CQLAgent(CQLOptions<T> options) : base(CreateBaseOptions(options))
     {
@@ -499,7 +507,7 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
         SoftUpdateNetwork(_q2Network, _targetQ2Network);
     }
 
-    private void SoftUpdateNetwork(NeuralNetwork<T> source, NeuralNetwork<T> target)
+    private void SoftUpdateNetwork(INeuralNetwork<T> source, INeuralNetwork<T> target)
     {
         var sourceParams = source.GetParameters();
         var targetParams = target.GetParameters();
@@ -516,7 +524,7 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
         target.UpdateParameters(updatedParams);
     }
 
-    private void CopyNetworkWeights(NeuralNetwork<T> source, NeuralNetwork<T> target)
+    private void CopyNetworkWeights(INeuralNetwork<T> source, INeuralNetwork<T> target)
     {
         var sourceParams = source.GetParameters();
         target.UpdateParameters(sourceParams);

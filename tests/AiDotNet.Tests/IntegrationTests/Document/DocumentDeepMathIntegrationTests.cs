@@ -207,7 +207,7 @@ public class DocumentDeepMathIntegrationTests
     [Fact]
     public void OCRResult_Defaults()
     {
-        var result = new OCRResult<double>();
+        var result = new OCRResult<double> { AverageConfidence = default };
         Assert.Equal(string.Empty, result.FullText);
         Assert.NotNull(result.Words);
         Assert.Empty(result.Words);
@@ -249,7 +249,7 @@ public class DocumentDeepMathIntegrationTests
     [Fact]
     public void OCRWord_Defaults()
     {
-        var word = new OCRWord<double>();
+        var word = new OCRWord<double> { Confidence = default };
         Assert.Equal(string.Empty, word.Text);
         Assert.Equal(0, word.LineIndex);
         Assert.Equal(0, word.BlockIndex);
@@ -279,7 +279,7 @@ public class DocumentDeepMathIntegrationTests
     [Fact]
     public void OCRLine_Defaults()
     {
-        var line = new OCRLine<double>();
+        var line = new OCRLine<double> { AverageConfidence = default };
         Assert.Equal(string.Empty, line.Text);
         Assert.NotNull(line.Words);
         Assert.Empty(line.Words);
@@ -293,7 +293,7 @@ public class DocumentDeepMathIntegrationTests
     [Fact]
     public void OCRBlock_Defaults()
     {
-        var block = new OCRBlock<double>();
+        var block = new OCRBlock<double> { AverageConfidence = default };
         Assert.Equal(string.Empty, block.Text);
         Assert.NotNull(block.Lines);
         Assert.Empty(block.Lines);
@@ -305,6 +305,7 @@ public class DocumentDeepMathIntegrationTests
     {
         var block = new OCRBlock<double>
         {
+            AverageConfidence = default,
             BlockType = LayoutElementType.Table,
             Text = "Header | Value"
         };
@@ -335,9 +336,9 @@ public class DocumentDeepMathIntegrationTests
     {
         var regions = new List<TextRegion<double>>
         {
-            new() { ConfidenceValue = 0.95, Index = 0 },
-            new() { ConfidenceValue = 0.87, Index = 1 },
-            new() { ConfidenceValue = 0.72, Index = 2 }
+            new() { Confidence = default, ConfidenceValue = 0.95, Index = 0 },
+            new() { Confidence = default, ConfidenceValue = 0.87, Index = 1 },
+            new() { Confidence = default, ConfidenceValue = 0.72, Index = 2 }
         };
 
         var result = new TextDetectionResult<double> { TextRegions = regions };
@@ -351,7 +352,7 @@ public class DocumentDeepMathIntegrationTests
     [Fact]
     public void TextRegion_Defaults()
     {
-        var region = new TextRegion<double>();
+        var region = new TextRegion<double> { Confidence = default };
         Assert.Null(region.PolygonPoints);
         Assert.Equal(0.0, region.ConfidenceValue);
         Assert.Null(region.RotationAngle);
@@ -364,6 +365,7 @@ public class DocumentDeepMathIntegrationTests
     {
         var region = new TextRegion<double>
         {
+            Confidence = default,
             ConfidenceValue = 0.92,
             RotationAngle = 5.0,
             Index = 3

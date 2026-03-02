@@ -47,6 +47,18 @@ public class HierarchicalRiskParity<T> : PortfolioOptimizerBase<T>
     /// <b>For Beginners:</b> In the HierarchicalRiskParity model, HierarchicalRiskParity sets up the architecture and options. This prepares the model for training or inference.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    public HierarchicalRiskParity()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: AiDotNet.Enums.InputType.OneDimensional,
+            taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression,
+            inputSize: 10,
+            outputSize: 1))
+    {
+    }
+
     public HierarchicalRiskParity(
         NeuralNetworkArchitecture<T> architecture,
         HierarchicalRiskParityOptions<T>? options = null,

@@ -46,6 +46,17 @@ public class SARSAAgent<T> : ReinforcementLearningAgentBase<T>
     private Vector<T>? _lastState;
     private Vector<T>? _lastAction;
 
+    /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    private const int DefaultStateSize = 4;
+    private const int DefaultActionSize = 2;
+
+    public SARSAAgent()
+        : this(new SARSAOptions<T> { StateSize = DefaultStateSize, ActionSize = DefaultActionSize })
+    {
+    }
+
     public SARSAAgent(SARSAOptions<T> options)
         : base(options)
     {

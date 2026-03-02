@@ -78,6 +78,22 @@ public class FlowFormer<T> : OpticalFlowBase<T>
 
     #region Constructors
 
+    /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    private const int DefaultResolution = 256;
+    private const int DefaultInputChannels = 6;
+    private const int DefaultOutputChannels = 2;
+
+    public FlowFormer()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.ThreeDimensional,
+            taskType: Enums.NeuralNetworkTaskType.Regression,
+            inputHeight: DefaultResolution, inputWidth: DefaultResolution, inputDepth: DefaultInputChannels,
+            outputSize: DefaultOutputChannels))
+    {
+    }
+
     public FlowFormer(
         NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,

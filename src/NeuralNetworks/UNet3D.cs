@@ -94,6 +94,18 @@ public class UNet3D<T> : NeuralNetworkBase<T>
     public int NumClasses { get; private set; }
 
     /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    public UNet3D()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.ThreeDimensional,
+            taskType: Enums.NeuralNetworkTaskType.Regression,
+            inputHeight: 32, inputWidth: 32, inputDepth: 32,
+            outputSize: 1))
+    {
+    }
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="UNet3D{T}"/> class.
     /// </summary>
     /// <param name="architecture">The architecture defining the structure of the neural network.</param>
@@ -103,18 +115,6 @@ public class UNet3D<T> : NeuralNetworkBase<T>
     /// <param name="optimizer">The optimizer for training. Defaults to Adam if not specified.</param>
     /// <param name="lossFunction">The loss function. Defaults based on task type if not specified.</param>
     /// <param name="maxGradNorm">Maximum gradient norm for clipping. Defaults to 1.0.</param>
-    /// <exception cref="ArgumentNullException">Thrown when architecture is null.</exception>
-    /// <exception cref="ArgumentException">Thrown when voxelResolution or numEncoderBlocks is not positive.</exception>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This constructor creates a 3D U-Net with the specified configuration.
-    ///
-    /// Key parameters explained:
-    /// - voxelResolution: The size of the 3D input grid (32 = 32×32×32 voxels)
-    /// - numEncoderBlocks: How many downsampling stages (more = deeper network)
-    /// - baseFilters: Starting number of feature detectors (32 is a good default)
-    /// </para>
-    /// </remarks>
     public UNet3D(
         NeuralNetworkArchitecture<T> architecture,
         int voxelResolution = 32,

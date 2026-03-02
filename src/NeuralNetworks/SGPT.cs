@@ -57,6 +57,21 @@ namespace AiDotNet.NeuralNetworks
         /// <param name="tokenizer">Optional tokenizer for text processing.</param>
         /// <param name="optimizer">Optional optimizer for training.</param>
         /// <param name="vocabSize">The size of the vocabulary (default: 50257 for GPT-2).</param>
+        /// <summary>
+        /// Initializes a new instance with default architecture settings.
+        /// </summary>
+        public SGPT()
+            : this(new NeuralNetworkArchitecture<T>(
+                inputType: Enums.InputType.OneDimensional,
+                taskType: Enums.NeuralNetworkTaskType.Regression,
+                inputSize: 768,
+                outputSize: 768))
+        {
+        }
+
+        /// <summary>
+        /// Initializes a new instance of the SGPT model.
+        /// </summary>
         /// <param name="embeddingDimension">The dimension of the embeddings (default: 768).</param>
         /// <param name="maxSequenceLength">The maximum length of input sequences (default: 1024).</param>
         /// <param name="numLayers">The number of transformer layers (default: 12).</param>

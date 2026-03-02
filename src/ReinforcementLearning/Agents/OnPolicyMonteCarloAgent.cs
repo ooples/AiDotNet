@@ -26,6 +26,14 @@ public class OnPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
     private double _epsilon;
     private Random _random;
 
+    /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public OnPolicyMonteCarloAgent()
+        : this(new OnPolicyMonteCarloOptions<T> { StateSize = 4, ActionSize = 2 })
+    {
+    }
+
     public OnPolicyMonteCarloAgent(OnPolicyMonteCarloOptions<T> options)
         : base(options)
     {

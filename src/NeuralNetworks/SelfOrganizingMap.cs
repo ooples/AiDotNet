@@ -155,6 +155,18 @@ public class SelfOrganizingMap<T> : NeuralNetworkBase<T>
     /// These weights are initially random and will be adjusted during training.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    public SelfOrganizingMap()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.OneDimensional,
+            taskType: Enums.NeuralNetworkTaskType.Clustering,
+            inputSize: 128,
+            outputSize: 64))
+    {
+    }
+
     public SelfOrganizingMap(NeuralNetworkArchitecture<T> architecture, int totalEpochs = 1000, ILossFunction<T>? lossFunction = null,
         SelfOrganizingMapNNOptions? options = null) :
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))

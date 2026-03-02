@@ -157,6 +157,22 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
     /// different types of problems.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    public NeuralNetworkModel()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.OneDimensional,
+            taskType: Enums.NeuralNetworkTaskType.Regression,
+            inputSize: 128,
+            outputSize: 1))
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="NeuralNetworkModel{T}"/> class.
+    /// </summary>
+    /// <param name="architecture">The architecture defining the structure of the neural network.</param>
     public NeuralNetworkModel(NeuralNetworkArchitecture<T> architecture)
     {
         Guard.NotNull(architecture);

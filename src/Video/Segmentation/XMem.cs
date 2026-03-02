@@ -104,6 +104,18 @@ public class XMem<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Creates an XMem model using native layers for training and inference.
     /// </summary>
+    /// <summary>
+    /// Initializes a new instance with default architecture settings.
+    /// </summary>
+    public XMem()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.ThreeDimensional,
+            taskType: Enums.NeuralNetworkTaskType.BinaryClassification,
+            inputHeight: 256, inputWidth: 256, inputDepth: 3,
+            outputSize: 1))
+    {
+    }
+
     public XMem(
         NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,

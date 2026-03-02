@@ -21,6 +21,14 @@ public class EveryVisitMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
     private double _epsilon;
     private Random _random;
 
+    /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public EveryVisitMonteCarloAgent()
+        : this(new MonteCarloOptions<T> { StateSize = 4, ActionSize = 2 })
+    {
+    }
+
     public EveryVisitMonteCarloAgent(MonteCarloOptions<T> options)
         : base(options)
     {

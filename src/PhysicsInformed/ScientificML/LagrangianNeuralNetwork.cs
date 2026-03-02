@@ -62,6 +62,16 @@ namespace AiDotNet.PhysicsInformed.ScientificML
         private readonly int _configurationDim; // Dimension of configuration space (q)
         private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
 
+        /// <summary>
+        /// Creates a default LagrangianNeuralNetwork with a 2D configuration space.
+        /// </summary>
+        public LagrangianNeuralNetwork()
+            : this(new NeuralNetworkArchitecture<T>(
+                inputType: InputType.OneDimensional,
+                taskType: NeuralNetworkTaskType.Regression,
+                inputSize: 4,
+                outputSize: 1), configurationDim: 2) { }
+
         public LagrangianNeuralNetwork(
             NeuralNetworkArchitecture<T> architecture,
             int configurationDim,

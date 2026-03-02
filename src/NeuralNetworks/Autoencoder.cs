@@ -194,6 +194,19 @@ public class Autoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     /// These parameters balance learning speed against stability and accuracy.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Initializes a new instance with default settings.
+    /// </summary>
+    public Autoencoder()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.OneDimensional,
+            taskType: Enums.NeuralNetworkTaskType.Regression,
+            inputSize: 128,
+            outputSize: 128),
+            learningRate: MathHelper.GetNumericOperations<T>().FromDouble(0.001))
+    {
+    }
+
     public Autoencoder(NeuralNetworkArchitecture<T> architecture, T learningRate, int epochs = 1, int batchSize = 32, ILossFunction<T>? lossFunction = null, AutoencoderOptions? options = null)
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
