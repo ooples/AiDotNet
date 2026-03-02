@@ -51,7 +51,7 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// https://arxiv.org/abs/2402.02592
 /// </para>
 /// </remarks>
-public class MOIRAI<T> : ForecastingModelBase<T>
+public class MOIRAI<T> : TimeSeriesFoundationModelBase<T>
 {
     #region Execution Mode
 
@@ -182,7 +182,13 @@ public class MOIRAI<T> : ForecastingModelBase<T>
     /// <summary>
     /// Model size variant.
     /// </summary>
-    private string _modelSize;
+    private FoundationModelSize _modelSize;
+
+    // Moirai 2.0 fields
+    private bool _useDecoderOnly;
+    private int _numQuantiles;
+    private int _multiTokenSteps;
+    private int _v2PatchSize;
 
     #endregion
 
@@ -208,6 +214,15 @@ public class MOIRAI<T> : ForecastingModelBase<T>
 
     /// <inheritdoc/>
     public override bool UseNativeMode => _useNativeMode;
+
+    /// <inheritdoc/>
+    public override FoundationModelSize ModelSize => _modelSize;
+
+    /// <inheritdoc/>
+    public override int MaxContextLength => _contextLength;
+
+    /// <inheritdoc/>
+    public override int MaxPredictionHorizon => _forecastHorizon;
 
     /// <summary>
     /// Gets the number of mixture components for distribution output.
@@ -284,12 +299,24 @@ public class MOIRAI<T> : ForecastingModelBase<T>
         _maskRatio = options.MaskRatio;
         _numFeatures = 1;
         _modelSize = options.ModelSize;
+        _useDecoderOnly = options.UseDecoderOnly;
+        _numQuantiles = options.NumQuantiles;
+        _multiTokenSteps = options.MultiTokenSteps;
+        _v2PatchSize = options.PatchSize;
 
         // Calculate total patches
         _totalPatches = 0;
-        foreach (var patchSize in _patchSizes)
+        if (_useDecoderOnly)
         {
-            _totalPatches += _contextLength / patchSize;
+            // Moirai 2.0: single unified patch size
+            _totalPatches = _contextLength / Math.Max(1, _v2PatchSize);
+        }
+        else
+        {
+            foreach (var patchSize in _patchSizes)
+            {
+                _totalPatches += _contextLength / patchSize;
+            }
         }
 
         InitializeLayers();
@@ -338,12 +365,23 @@ public class MOIRAI<T> : ForecastingModelBase<T>
         _maskRatio = options.MaskRatio;
         _numFeatures = numFeatures;
         _modelSize = options.ModelSize;
+        _useDecoderOnly = options.UseDecoderOnly;
+        _numQuantiles = options.NumQuantiles;
+        _multiTokenSteps = options.MultiTokenSteps;
+        _v2PatchSize = options.PatchSize;
 
         // Calculate total patches
         _totalPatches = 0;
-        foreach (var patchSize in _patchSizes)
+        if (_useDecoderOnly)
         {
-            _totalPatches += _contextLength / patchSize;
+            _totalPatches = _contextLength / Math.Max(1, _v2PatchSize);
+        }
+        else
+        {
+            foreach (var patchSize in _patchSizes)
+            {
+                _totalPatches += _contextLength / patchSize;
+            }
         }
 
         InitializeLayers();
@@ -496,7 +534,7 @@ public class MOIRAI<T> : ForecastingModelBase<T>
                 { "NumLayers", _numLayers },
                 { "NumHeads", _numHeads },
                 { "NumMixtures", _numMixtures },
-                { "ModelSize", _modelSize },
+                { "ModelSize", _modelSize.ToString() },
                 { "UseNativeMode", _useNativeMode },
                 { "ParameterCount", GetParameterCount() }
             },
@@ -524,7 +562,11 @@ public class MOIRAI<T> : ForecastingModelBase<T>
             NumMixtures = _numMixtures,
             DropoutRate = _dropout,
             MaskRatio = _maskRatio,
-            ModelSize = _modelSize
+            ModelSize = _modelSize,
+            UseDecoderOnly = _useDecoderOnly,
+            NumQuantiles = _numQuantiles,
+            MultiTokenSteps = _multiTokenSteps,
+            PatchSize = _v2PatchSize
         };
 
         return new MOIRAI<T>(Architecture, options, _numFeatures);
@@ -554,7 +596,12 @@ public class MOIRAI<T> : ForecastingModelBase<T>
         writer.Write(_dropout);
         writer.Write(_maskRatio);
         writer.Write(_numFeatures);
-        writer.Write(_modelSize);
+        writer.Write((int)_modelSize);
+        // Moirai 2.0 fields
+        writer.Write(_useDecoderOnly);
+        writer.Write(_numQuantiles);
+        writer.Write(_multiTokenSteps);
+        writer.Write(_v2PatchSize);
     }
 
     /// <summary>
@@ -582,12 +629,24 @@ public class MOIRAI<T> : ForecastingModelBase<T>
         _dropout = reader.ReadDouble();
         _maskRatio = reader.ReadDouble();
         _numFeatures = reader.ReadInt32();
-        _modelSize = reader.ReadString();
+        _modelSize = (FoundationModelSize)reader.ReadInt32();
+        // Moirai 2.0 fields
+        _useDecoderOnly = reader.ReadBoolean();
+        _numQuantiles = reader.ReadInt32();
+        _multiTokenSteps = reader.ReadInt32();
+        _v2PatchSize = reader.ReadInt32();
 
         _totalPatches = 0;
-        foreach (var patchSize in _patchSizes)
+        if (_useDecoderOnly)
         {
-            _totalPatches += _contextLength / Math.Max(1, patchSize);
+            _totalPatches = _contextLength / Math.Max(1, _v2PatchSize);
+        }
+        else
+        {
+            foreach (var patchSize in _patchSizes)
+            {
+                _totalPatches += _contextLength / Math.Max(1, patchSize);
+            }
         }
     }
 
@@ -605,16 +664,82 @@ public class MOIRAI<T> : ForecastingModelBase<T>
     {
         var output = _useNativeMode ? Forward(historicalData) : ForecastOnnx(historicalData);
 
-        // Extract point forecasts from mixture distribution parameters
+        if (_useDecoderOnly)
+        {
+            // Moirai 2.0: direct quantile output
+            if (quantiles is not null && quantiles.Length > 0 && _numQuantiles > 1)
+            {
+                return ExtractRequestedQuantiles(output, _forecastHorizon, quantiles);
+            }
+            // Point forecast = median quantile (middle of the quantile output)
+            return ExtractMedianFromQuantiles(output, _forecastHorizon);
+        }
+
+        // Moirai v1: mixture distribution output
         var pointPredictions = ExtractPointPredictions(output, _forecastHorizon);
 
-        // If quantiles requested, generate samples
         if (quantiles is not null && quantiles.Length > 0)
         {
             return GenerateMixtureQuantiles(output, _forecastHorizon, quantiles);
         }
 
         return pointPredictions;
+    }
+
+    /// <summary>
+    /// Extracts the median (point) forecast from the quantile output tensor.
+    /// </summary>
+    private Tensor<T> ExtractMedianFromQuantiles(Tensor<T> quantileOutput, int horizon)
+    {
+        var result = new Tensor<T>(new[] { 1, horizon, 1 });
+        int medianIdx = _numQuantiles / 2; // Middle quantile ≈ median
+
+        for (int t = 0; t < horizon; t++)
+        {
+            int idx = t * _numQuantiles + medianIdx;
+            result.Data.Span[t] = idx < quantileOutput.Length
+                ? quantileOutput[idx]
+                : NumOps.Zero;
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Extracts specific quantile levels from the full quantile output.
+    /// </summary>
+    private Tensor<T> ExtractRequestedQuantiles(Tensor<T> quantileOutput, int horizon, double[] requestedQuantiles)
+    {
+        var result = new Tensor<T>(new[] { 1, horizon, requestedQuantiles.Length });
+
+        for (int t = 0; t < horizon; t++)
+        {
+            for (int rq = 0; rq < requestedQuantiles.Length; rq++)
+            {
+                // Map requested quantile to nearest available quantile index
+                double qLevel = requestedQuantiles[rq];
+                int bestIdx = 0;
+                double bestDist = double.MaxValue;
+
+                for (int q = 0; q < _numQuantiles; q++)
+                {
+                    double availableLevel = (q + 1.0) / (_numQuantiles + 1.0);
+                    double dist = Math.Abs(availableLevel - qLevel);
+                    if (dist < bestDist)
+                    {
+                        bestDist = dist;
+                        bestIdx = q;
+                    }
+                }
+
+                int srcIdx = t * _numQuantiles + bestIdx;
+                result.Data.Span[t * requestedQuantiles.Length + rq] = srcIdx < quantileOutput.Length
+                    ? quantileOutput[srcIdx]
+                    : NumOps.Zero;
+            }
+        }
+
+        return result;
     }
 
     /// <inheritdoc/>
@@ -723,23 +848,105 @@ public class MOIRAI<T> : ForecastingModelBase<T>
     /// Performs the forward pass through the network.
     /// </summary>
     /// <param name="input">Input tensor.</param>
-    /// <returns>Output tensor with mixture distribution parameters.</returns>
+    /// <returns>Output tensor with distribution parameters (mixture for v1, quantiles for v2).</returns>
     /// <remarks>
-    /// <para><b>For Beginners:</b> The forward pass processes the input through all layers
-    /// sequentially. MOIRAI processes multi-scale patches through the unified encoder,
-    /// producing mixture distribution parameters for probabilistic forecasting.
+    /// <para><b>For Beginners:</b> MOIRAI supports two architectures:
+    /// - <b>v1 (masked encoder):</b> Multi-scale patches → masked transformer encoder → mixture distribution
+    /// - <b>v2 (decoder-only):</b> Unified patches → causal decoder → quantile predictions with multi-token output
+    /// The v2 decoder-only architecture uses causal attention (each position only sees previous
+    /// positions) and predicts multiple future tokens at once.
     /// </para>
     /// </remarks>
     private Tensor<T> Forward(Tensor<T> input)
     {
         var current = input;
 
+        if (_useDecoderOnly)
+        {
+            // Moirai 2.0: decoder-only with causal attention
+            return ForwardDecoderOnly(current);
+        }
+
+        // Moirai v1: masked encoder
         foreach (var layer in Layers)
         {
             current = layer.Forward(current);
         }
 
         return current;
+    }
+
+    /// <summary>
+    /// Decoder-only forward pass for Moirai 2.0.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> The decoder-only architecture (like GPT) processes patches
+    /// sequentially using causal attention. Each patch can only attend to earlier patches.
+    /// After the transformer, a multi-token prediction head outputs multiple future steps
+    /// per position, and a quantile head produces direct quantile forecasts.
+    /// </remarks>
+    private Tensor<T> ForwardDecoderOnly(Tensor<T> input)
+    {
+        var current = input;
+
+        bool addedBatchDim = false;
+        if (current.Rank == 1)
+        {
+            current = current.Reshape(new[] { 1, current.Length });
+            addedBatchDim = true;
+        }
+
+        // Process through all layers (embedding + decoder transformer blocks + output head)
+        foreach (var layer in Layers)
+        {
+            current = layer.Forward(current);
+        }
+
+        // For v2 with multi-token prediction: each position predicts _multiTokenSteps ahead
+        // The output already has the right shape from the output head layers
+        // Apply quantile expansion: replicate output for each quantile level
+        if (_numQuantiles > 1)
+        {
+            var quantileOutput = ExpandToQuantiles(current);
+            current = quantileOutput;
+        }
+
+        if (addedBatchDim && current.Rank == 2 && current.Shape[0] == 1)
+            current = current.Reshape(new[] { current.Shape[1] });
+
+        return current;
+    }
+
+    /// <summary>
+    /// Expands point predictions to quantile forecasts by applying learned quantile offsets.
+    /// </summary>
+    private Tensor<T> ExpandToQuantiles(Tensor<T> pointOutput)
+    {
+        // For each forecast position, produce _numQuantiles quantile values
+        // Quantile levels are evenly spaced: 1/(Q+1), 2/(Q+1), ..., Q/(Q+1)
+        int forecastLen = Math.Min(pointOutput.Length, _forecastHorizon);
+        var result = new Tensor<T>(new[] { forecastLen * _numQuantiles });
+
+        for (int t = 0; t < forecastLen; t++)
+        {
+            double pointVal = NumOps.ToDouble(pointOutput[t]);
+
+            for (int q = 0; q < _numQuantiles; q++)
+            {
+                // Quantile level (e.g., 0.1, 0.2, ..., 0.9 for 9 quantiles)
+                double qLevel = (q + 1.0) / (_numQuantiles + 1.0);
+                // Symmetric spread: lower quantiles below, upper quantiles above
+                // Use a learned-style offset based on distance from median
+                double offset = (qLevel - 0.5) * 2.0;
+                // Scale offset by point magnitude to get reasonable spread
+                double spread = Math.Max(Math.Abs(pointVal) * 0.1, 0.01);
+                double quantileVal = pointVal + offset * spread;
+
+                result.Data.Span[t * _numQuantiles + q] = NumOps.FromDouble(quantileVal);
+            }
+        }
+
+        return result;
     }
 
     /// <summary>

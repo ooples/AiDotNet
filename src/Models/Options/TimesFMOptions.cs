@@ -1,4 +1,5 @@
 using System;
+using AiDotNet.Enums;
 
 namespace AiDotNet.Models.Options;
 
@@ -84,6 +85,9 @@ public class TimesFMOptions<T> : TimeSeriesRegressionOptions<T>
         NumHeads = other.NumHeads;
         DropoutRate = other.DropoutRate;
         UsePretrainedWeights = other.UsePretrainedWeights;
+        MaxContextLength = other.MaxContextLength;
+        NumQuantiles = other.NumQuantiles;
+        QuantileHeadDimension = other.QuantileHeadDimension;
     }
 
     /// <summary>
@@ -179,4 +183,40 @@ public class TimesFMOptions<T> : TimeSeriesRegressionOptions<T>
     /// </para>
     /// </remarks>
     public bool UsePretrainedWeights { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets the maximum context length for TimesFM 2.5.
+    /// </summary>
+    /// <value>Defaults to 16384. TimesFM 2.5 supports up to 16K time steps.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> TimesFM 2.5 extends the context window from 512 to 16,384
+    /// time steps, allowing the model to leverage much longer historical data for improved
+    /// predictions on data with long-term dependencies.
+    /// </para>
+    /// </remarks>
+    public int MaxContextLength { get; set; } = 16384;
+
+    /// <summary>
+    /// Gets or sets the number of quantiles for TimesFM 2.5 continuous quantile forecasting.
+    /// </summary>
+    /// <value>Defaults to 9.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> TimesFM 2.5 adds a quantile forecasting head that directly
+    /// outputs quantile estimates for uncertainty quantification. More quantiles give finer
+    /// uncertainty estimation.
+    /// </para>
+    /// </remarks>
+    public int NumQuantiles { get; set; } = 9;
+
+    /// <summary>
+    /// Gets or sets the hidden dimension for the quantile forecasting head.
+    /// </summary>
+    /// <value>Defaults to 256.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> The internal dimension of the MLP that produces quantile
+    /// predictions. A larger dimension provides more capacity for learning complex
+    /// quantile functions.
+    /// </para>
+    /// </remarks>
+    public int QuantileHeadDimension { get; set; } = 256;
 }

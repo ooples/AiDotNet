@@ -72,7 +72,7 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// Create separate instances for concurrent usage scenarios.
 /// </para>
 /// </remarks>
-public class Chronos<T> : ForecastingModelBase<T>
+public class Chronos<T> : TimeSeriesFoundationModelBase<T>
 {
     #region Execution Mode
 
@@ -156,7 +156,7 @@ public class Chronos<T> : ForecastingModelBase<T>
     private int _numSamples;
     private double _dropout;
     private double _temperature;
-    private string _modelSize;
+    private FoundationModelSize _modelSize;
     private T _lastTokenMin = default!;
     private T _lastTokenRange = default!;
     private bool _hasTokenScale;
@@ -198,16 +198,19 @@ public class Chronos<T> : ForecastingModelBase<T>
     /// </remarks>
     public int NumTokens => _numTokens;
 
-    /// <summary>
-    /// Gets the model size variant.
-    /// </summary>
-    /// <value>The model size (mini, small, base, large).</value>
+    /// <inheritdoc/>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> Larger models have more capacity but require more compute.
     /// </para>
     /// </remarks>
-    public string ModelSize => _modelSize;
+    public override FoundationModelSize ModelSize => _modelSize;
+
+    /// <inheritdoc/>
+    public override int MaxContextLength => _options.MaxContextLength;
+
+    /// <inheritdoc/>
+    public override int MaxPredictionHorizon => _forecastHorizon;
 
     #endregion
 
@@ -532,7 +535,7 @@ public class Chronos<T> : ForecastingModelBase<T>
                 { "IntermediateSize", _intermediateSize },
                 { "NumSamples", _numSamples },
                 { "Temperature", _temperature },
-                { "ModelSize", _modelSize },
+                { "ModelSize", _modelSize.ToString() },
                 { "UseNativeMode", _useNativeMode },
                 { "ParameterCount", GetParameterCount() }
             },
@@ -588,7 +591,7 @@ public class Chronos<T> : ForecastingModelBase<T>
         writer.Write(_numSamples);
         writer.Write(_dropout);
         writer.Write(_temperature);
-        writer.Write(_modelSize);
+        writer.Write((int)_modelSize);
 
         // Serialize tokenization scaling state
         writer.Write(_hasTokenScale);
@@ -616,7 +619,7 @@ public class Chronos<T> : ForecastingModelBase<T>
         _numSamples = reader.ReadInt32();
         _dropout = reader.ReadDouble();
         _temperature = reader.ReadDouble();
-        _modelSize = reader.ReadString();
+        _modelSize = (FoundationModelSize)reader.ReadInt32();
 
         // Deserialize tokenization scaling state
         _hasTokenScale = reader.ReadBoolean();

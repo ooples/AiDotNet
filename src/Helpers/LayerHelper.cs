@@ -26103,4 +26103,1171 @@ public static class LayerHelper<T>
     }
 
     #endregion
+
+    #region Time Series Foundation Models
+
+    /// <summary>
+    /// Creates the default layers for MOMENT (Multi-task Optimization through Masked Encoding
+    /// for Time series) foundation model.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="contextLength">The input context length.</param>
+    /// <param name="forecastHorizon">The prediction horizon length.</param>
+    /// <param name="patchLength">The length of each input patch.</param>
+    /// <param name="hiddenDim">Hidden dimension size.</param>
+    /// <param name="numLayers">Number of transformer encoder layers.</param>
+    /// <param name="numHeads">Number of attention heads.</param>
+    /// <param name="intermediateSize">FFN intermediate size.</param>
+    /// <param name="dropout">Dropout rate.</param>
+    /// <param name="numClasses">Number of classification classes (optional).</param>
+    /// <returns>An enumerable of layers for MOMENT.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> MOMENT uses a T5-based encoder with patch input,
+    /// followed by task-specific heads for forecasting, reconstruction (anomaly/imputation),
+    /// and classification. The encoder learns general time series representations that
+    /// work across all five supported tasks.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultMOMENTLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int contextLength = 512,
+        int forecastHorizon = 96,
+        int patchLength = 64,
+        int hiddenDim = 1024,
+        int numLayers = 24,
+        int numHeads = 16,
+        int intermediateSize = 4096,
+        double dropout = 0.1,
+        int? numClasses = null)
+    {
+        // Validate parameters
+        if (contextLength < 1)
+            throw new ArgumentOutOfRangeException(nameof(contextLength), "Context length must be at least 1.");
+        if (forecastHorizon < 1)
+            throw new ArgumentOutOfRangeException(nameof(forecastHorizon), "Forecast horizon must be at least 1.");
+        if (patchLength < 1)
+            throw new ArgumentOutOfRangeException(nameof(patchLength), "Patch length must be at least 1.");
+        if (hiddenDim < 1)
+            throw new ArgumentOutOfRangeException(nameof(hiddenDim), "Hidden dimension must be at least 1.");
+        if (numLayers < 1)
+            throw new ArgumentOutOfRangeException(nameof(numLayers), "Number of layers must be at least 1.");
+        if (numHeads < 1)
+            throw new ArgumentOutOfRangeException(nameof(numHeads), "Number of heads must be at least 1.");
+        if (intermediateSize < 1)
+            throw new ArgumentOutOfRangeException(nameof(intermediateSize), "Intermediate size must be at least 1.");
+        if (dropout < 0 || dropout >= 1)
+            throw new ArgumentOutOfRangeException(nameof(dropout), "Dropout must be between 0 and 1.");
+
+        int numPatches = contextLength / patchLength;
+
+        // === Patch Embedding ===
+        // Project each patch to hidden dimension
+        yield return new DenseLayer<T>(
+            inputSize: contextLength,
+            outputSize: numPatches * hiddenDim,
+            activationFunction: null);
+
+        // === T5-Style Transformer Encoder Layers ===
+        for (int layer = 0; layer < numLayers; layer++)
+        {
+            // Layer normalization (pre-norm)
+            yield return new BatchNormalizationLayer<T>(numPatches * hiddenDim);
+
+            // Self-attention (Q, K, V, O projections)
+            yield return new DenseLayer<T>(
+                inputSize: numPatches * hiddenDim,
+                outputSize: numPatches * hiddenDim,
+                activationFunction: null);
+
+            yield return new DenseLayer<T>(
+                inputSize: numPatches * hiddenDim,
+                outputSize: numPatches * hiddenDim,
+                activationFunction: null);
+
+            yield return new DenseLayer<T>(
+                inputSize: numPatches * hiddenDim,
+                outputSize: numPatches * hiddenDim,
+                activationFunction: null);
+
+            yield return new DenseLayer<T>(
+                inputSize: numPatches * hiddenDim,
+                outputSize: numPatches * hiddenDim,
+                activationFunction: null);
+
+            if (dropout > 0)
+            {
+                yield return new DropoutLayer<T>(dropout);
+            }
+
+            // Layer normalization before FFN
+            yield return new BatchNormalizationLayer<T>(numPatches * hiddenDim);
+
+            // Feed-forward network (GeLU activation)
+            yield return new DenseLayer<T>(
+                inputSize: numPatches * hiddenDim,
+                outputSize: numPatches * intermediateSize,
+                activationFunction: new GELUActivation<T>());
+
+            yield return new DenseLayer<T>(
+                inputSize: numPatches * intermediateSize,
+                outputSize: numPatches * hiddenDim,
+                activationFunction: null);
+
+            if (dropout > 0)
+            {
+                yield return new DropoutLayer<T>(dropout);
+            }
+        }
+
+        // === Final Layer Norm ===
+        yield return new BatchNormalizationLayer<T>(numPatches * hiddenDim);
+
+        // === Forecasting Head ===
+        yield return new DenseLayer<T>(
+            inputSize: numPatches * hiddenDim,
+            outputSize: forecastHorizon,
+            activationFunction: null);
+
+        // === Reconstruction Head (for anomaly detection and imputation) ===
+        yield return new DenseLayer<T>(
+            inputSize: numPatches * hiddenDim,
+            outputSize: contextLength,
+            activationFunction: null);
+
+        // === Classification Head (optional) ===
+        int classCount = numClasses ?? 2;
+        yield return new DenseLayer<T>(
+            inputSize: hiddenDim,
+            outputSize: classCount,
+            activationFunction: null);
+    }
+
+    /// <summary>
+    /// Creates the default layers for Tiny Time Mixers (TTM) foundation model.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="contextLength">The input context length.</param>
+    /// <param name="forecastHorizon">The prediction horizon length.</param>
+    /// <param name="numFeatures">Number of input features.</param>
+    /// <param name="patchLength">The length of each input patch.</param>
+    /// <param name="hiddenDim">Hidden dimension of the mixer.</param>
+    /// <param name="numMixerLayers">Number of mixer blocks.</param>
+    /// <param name="expansionFactor">Expansion factor for mixer MLPs.</param>
+    /// <param name="dropout">Dropout rate.</param>
+    /// <returns>An enumerable of layers for TTM.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> TTM uses an MLP-Mixer architecture where each block
+    /// contains a temporal-mixing MLP (mixes across time steps) and a channel-mixing MLP
+    /// (mixes across features). This is much faster than attention-based models while
+    /// achieving competitive accuracy.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultTinyTimeMixersLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int contextLength = 512,
+        int forecastHorizon = 96,
+        int numFeatures = 1,
+        int patchLength = 64,
+        int hiddenDim = 64,
+        int numMixerLayers = 4,
+        int expansionFactor = 4,
+        double dropout = 0.1)
+    {
+        // Validate parameters
+        if (contextLength < 1)
+            throw new ArgumentOutOfRangeException(nameof(contextLength), "Context length must be at least 1.");
+        if (forecastHorizon < 1)
+            throw new ArgumentOutOfRangeException(nameof(forecastHorizon), "Forecast horizon must be at least 1.");
+        if (numFeatures < 1)
+            throw new ArgumentOutOfRangeException(nameof(numFeatures), "Number of features must be at least 1.");
+        if (patchLength < 1)
+            throw new ArgumentOutOfRangeException(nameof(patchLength), "Patch length must be at least 1.");
+        if (hiddenDim < 1)
+            throw new ArgumentOutOfRangeException(nameof(hiddenDim), "Hidden dimension must be at least 1.");
+        if (numMixerLayers < 1)
+            throw new ArgumentOutOfRangeException(nameof(numMixerLayers), "Number of mixer layers must be at least 1.");
+        if (expansionFactor < 1)
+            throw new ArgumentOutOfRangeException(nameof(expansionFactor), "Expansion factor must be at least 1.");
+        if (dropout < 0 || dropout >= 1)
+            throw new ArgumentOutOfRangeException(nameof(dropout), "Dropout must be between 0 and 1.");
+
+        int numPatches = contextLength / patchLength;
+        int expandedDim = hiddenDim * expansionFactor;
+
+        // === Patch Embedding ===
+        // Project each patch (patchLength * numFeatures) to hidden dimension
+        yield return new DenseLayer<T>(
+            inputSize: contextLength * numFeatures,
+            outputSize: numPatches * hiddenDim,
+            activationFunction: null);
+
+        // === Mixer Blocks ===
+        for (int block = 0; block < numMixerLayers; block++)
+        {
+            // --- Temporal Mixing MLP ---
+            // Mixes information across patches (time dimension)
+            yield return new DenseLayer<T>(
+                inputSize: numPatches * hiddenDim,
+                outputSize: numPatches * expandedDim,
+                activationFunction: new GELUActivation<T>());
+
+            yield return new DenseLayer<T>(
+                inputSize: numPatches * expandedDim,
+                outputSize: numPatches * hiddenDim,
+                activationFunction: null);
+
+            if (dropout > 0)
+            {
+                yield return new DropoutLayer<T>(dropout);
+            }
+
+            // --- Channel Mixing MLP ---
+            // Mixes information across hidden features at each patch position
+            yield return new DenseLayer<T>(
+                inputSize: numPatches * hiddenDim,
+                outputSize: numPatches * expandedDim,
+                activationFunction: new GELUActivation<T>());
+
+            yield return new DenseLayer<T>(
+                inputSize: numPatches * expandedDim,
+                outputSize: numPatches * hiddenDim,
+                activationFunction: null);
+
+            if (dropout > 0)
+            {
+                yield return new DropoutLayer<T>(dropout);
+            }
+        }
+
+        // === Final Layer Norm ===
+        yield return new BatchNormalizationLayer<T>(numPatches * hiddenDim);
+
+        // === Output Head ===
+        // Project to forecast horizon
+        yield return new DenseLayer<T>(
+            inputSize: numPatches * hiddenDim,
+            outputSize: forecastHorizon,
+            activationFunction: null);
+    }
+
+    /// <summary>
+    /// Creates the default layers for Sundial (decoder-only foundation model).
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultSundialLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int contextLength = 2048, int forecastHorizon = 96, int patchLength = 32,
+        int hiddenDim = 1024, int numLayers = 24, int numHeads = 16,
+        int intermediateSize = 4096, double dropout = 0.1)
+    {
+        if (contextLength < 1) throw new ArgumentOutOfRangeException(nameof(contextLength));
+        if (forecastHorizon < 1) throw new ArgumentOutOfRangeException(nameof(forecastHorizon));
+        if (patchLength < 1) throw new ArgumentOutOfRangeException(nameof(patchLength));
+        if (hiddenDim < 1) throw new ArgumentOutOfRangeException(nameof(hiddenDim));
+
+        int numPatches = contextLength / patchLength;
+
+        yield return new DenseLayer<T>(inputSize: contextLength, outputSize: numPatches * hiddenDim, activationFunction: null);
+
+        for (int layer = 0; layer < numLayers; layer++)
+        {
+            yield return new BatchNormalizationLayer<T>(numPatches * hiddenDim);
+            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDim, outputSize: numPatches * hiddenDim, activationFunction: null);
+            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDim, outputSize: numPatches * hiddenDim, activationFunction: null);
+            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDim, outputSize: numPatches * hiddenDim, activationFunction: null);
+            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDim, outputSize: numPatches * hiddenDim, activationFunction: null);
+            if (dropout > 0) yield return new DropoutLayer<T>(dropout);
+            yield return new BatchNormalizationLayer<T>(numPatches * hiddenDim);
+            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDim, outputSize: numPatches * intermediateSize, activationFunction: new GELUActivation<T>());
+            yield return new DenseLayer<T>(inputSize: numPatches * intermediateSize, outputSize: numPatches * hiddenDim, activationFunction: null);
+            if (dropout > 0) yield return new DropoutLayer<T>(dropout);
+        }
+
+        yield return new BatchNormalizationLayer<T>(numPatches * hiddenDim);
+        yield return new DenseLayer<T>(inputSize: numPatches * hiddenDim, outputSize: forecastHorizon, activationFunction: null);
+    }
+
+    /// <summary>
+    /// Creates the default layers for Time-MoE (Mixture of Experts foundation model).
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultTimeMoELayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int contextLength = 2048, int forecastHorizon = 96, int patchLength = 32,
+        int hiddenDim = 1024, int numLayers = 24, int numHeads = 16,
+        int intermediateSize = 4096, int numExperts = 8, double dropout = 0.1)
+    {
+        if (contextLength < 1) throw new ArgumentOutOfRangeException(nameof(contextLength));
+        if (forecastHorizon < 1) throw new ArgumentOutOfRangeException(nameof(forecastHorizon));
+        if (numExperts < 1) throw new ArgumentOutOfRangeException(nameof(numExperts));
+
+        int numPatches = contextLength / patchLength;
+
+        yield return new DenseLayer<T>(inputSize: contextLength, outputSize: numPatches * hiddenDim, activationFunction: null);
+
+        for (int layer = 0; layer < numLayers; layer++)
+        {
+            yield return new BatchNormalizationLayer<T>(numPatches * hiddenDim);
+            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDim, outputSize: numPatches * hiddenDim, activationFunction: null);
+            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDim, outputSize: numPatches * hiddenDim, activationFunction: null);
+            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDim, outputSize: numPatches * hiddenDim, activationFunction: null);
+            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDim, outputSize: numPatches * hiddenDim, activationFunction: null);
+            if (dropout > 0) yield return new DropoutLayer<T>(dropout);
+            yield return new BatchNormalizationLayer<T>(numPatches * hiddenDim);
+
+            // MoE: N expert FFNs
+            for (int e = 0; e < numExperts; e++)
+            {
+                yield return new DenseLayer<T>(inputSize: numPatches * hiddenDim, outputSize: numPatches * intermediateSize, activationFunction: new GELUActivation<T>());
+                yield return new DenseLayer<T>(inputSize: numPatches * intermediateSize, outputSize: numPatches * hiddenDim, activationFunction: null);
+            }
+
+            // Router
+            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDim, outputSize: numExperts, activationFunction: new SoftmaxActivation<T>());
+
+            if (dropout > 0) yield return new DropoutLayer<T>(dropout);
+        }
+
+        yield return new BatchNormalizationLayer<T>(numPatches * hiddenDim);
+        yield return new DenseLayer<T>(inputSize: numPatches * hiddenDim, outputSize: forecastHorizon, activationFunction: null);
+    }
+
+    /// <summary>
+    /// Creates the default layers for Kairos (Mixture-of-Size Encoder).
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultKairosLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int contextLength = 1024, int forecastHorizon = 96, int[] patchSizes = null!,
+        int hiddenDim = 512, int numLayers = 12, int numHeads = 8,
+        int intermediateSize = 2048, double dropout = 0.1)
+    {
+        patchSizes ??= [8, 16, 32, 64];
+        if (contextLength < 1) throw new ArgumentOutOfRangeException(nameof(contextLength));
+
+        int minPatch = patchSizes[0];
+        int numPatches = contextLength / minPatch;
+
+        // Multi-size patch embeddings
+        foreach (var ps in patchSizes)
+        {
+            int patches = contextLength / ps;
+            yield return new DenseLayer<T>(inputSize: contextLength, outputSize: patches * hiddenDim, activationFunction: null);
+        }
+
+        // Router that selects among patch sizes
+        yield return new DenseLayer<T>(inputSize: hiddenDim, outputSize: patchSizes.Length, activationFunction: new SoftmaxActivation<T>());
+
+        // Shared transformer encoder
+        for (int layer = 0; layer < numLayers; layer++)
+        {
+            yield return new BatchNormalizationLayer<T>(numPatches * hiddenDim);
+            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDim, outputSize: numPatches * hiddenDim, activationFunction: null);
+            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDim, outputSize: numPatches * hiddenDim, activationFunction: null);
+            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDim, outputSize: numPatches * hiddenDim, activationFunction: null);
+            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDim, outputSize: numPatches * hiddenDim, activationFunction: null);
+            if (dropout > 0) yield return new DropoutLayer<T>(dropout);
+            yield return new BatchNormalizationLayer<T>(numPatches * hiddenDim);
+            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDim, outputSize: numPatches * intermediateSize, activationFunction: new GELUActivation<T>());
+            yield return new DenseLayer<T>(inputSize: numPatches * intermediateSize, outputSize: numPatches * hiddenDim, activationFunction: null);
+            if (dropout > 0) yield return new DropoutLayer<T>(dropout);
+        }
+
+        yield return new BatchNormalizationLayer<T>(numPatches * hiddenDim);
+        yield return new DenseLayer<T>(inputSize: numPatches * hiddenDim, outputSize: forecastHorizon, activationFunction: null);
+    }
+
+    /// <summary>
+    /// Creates the default layers for FlowState (SSM-based foundation model).
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultFlowStateLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int contextLength = 2048, int forecastHorizon = 96,
+        int stateDim = 64, int hiddenDim = 256, int numLayers = 8,
+        double dropout = 0.1)
+    {
+        if (contextLength < 1) throw new ArgumentOutOfRangeException(nameof(contextLength));
+        if (forecastHorizon < 1) throw new ArgumentOutOfRangeException(nameof(forecastHorizon));
+
+        // Input projection
+        yield return new DenseLayer<T>(inputSize: contextLength, outputSize: hiddenDim, activationFunction: null);
+
+        // SSM blocks (approximated with dense layers for the A,B,C,D matrices)
+        for (int layer = 0; layer < numLayers; layer++)
+        {
+            yield return new BatchNormalizationLayer<T>(hiddenDim);
+            // SSM: input -> state projection (B), state dynamics (A), output projection (C), skip (D)
+            yield return new DenseLayer<T>(inputSize: hiddenDim, outputSize: stateDim, activationFunction: null); // B
+            yield return new DenseLayer<T>(inputSize: stateDim, outputSize: hiddenDim, activationFunction: new GELUActivation<T>()); // C * A
+            yield return new DenseLayer<T>(inputSize: hiddenDim, outputSize: hiddenDim, activationFunction: null); // skip connection D
+            if (dropout > 0) yield return new DropoutLayer<T>(dropout);
+        }
+
+        // Output projection
+        yield return new DenseLayer<T>(inputSize: hiddenDim, outputSize: forecastHorizon, activationFunction: null);
+    }
+
+    /// <summary>
+    /// Creates the default layers for VisionTS (Visual MAE for time series).
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultVisionTSLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int contextLength = 512, int forecastHorizon = 96, int patchLength = 16,
+        int hiddenDim = 768, int numLayers = 12, int numHeads = 12,
+        int intermediateSize = 3072, double dropout = 0.1)
+    {
+        if (contextLength < 1) throw new ArgumentOutOfRangeException(nameof(contextLength));
+        if (forecastHorizon < 1) throw new ArgumentOutOfRangeException(nameof(forecastHorizon));
+
+        int numPatches = contextLength / patchLength;
+
+        // Patch embedding (time series -> 2D patch grid -> linear projection)
+        yield return new DenseLayer<T>(inputSize: contextLength, outputSize: numPatches * hiddenDim, activationFunction: null);
+
+        // ViT encoder layers
+        for (int layer = 0; layer < numLayers; layer++)
+        {
+            yield return new BatchNormalizationLayer<T>(numPatches * hiddenDim);
+            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDim, outputSize: numPatches * hiddenDim, activationFunction: null);
+            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDim, outputSize: numPatches * hiddenDim, activationFunction: null);
+            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDim, outputSize: numPatches * hiddenDim, activationFunction: null);
+            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDim, outputSize: numPatches * hiddenDim, activationFunction: null);
+            if (dropout > 0) yield return new DropoutLayer<T>(dropout);
+            yield return new BatchNormalizationLayer<T>(numPatches * hiddenDim);
+            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDim, outputSize: numPatches * intermediateSize, activationFunction: new GELUActivation<T>());
+            yield return new DenseLayer<T>(inputSize: numPatches * intermediateSize, outputSize: numPatches * hiddenDim, activationFunction: null);
+            if (dropout > 0) yield return new DropoutLayer<T>(dropout);
+        }
+
+        yield return new BatchNormalizationLayer<T>(numPatches * hiddenDim);
+        yield return new DenseLayer<T>(inputSize: numPatches * hiddenDim, outputSize: forecastHorizon, activationFunction: null);
+    }
+
+    /// <summary>
+    /// Creates the default layers for Chronos-Bolt (encoder-decoder with direct quantile output).
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultChronosBoltLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int contextLength = 512, int forecastHorizon = 64, int patchLength = 16,
+        int encoderHiddenDim = 512, int decoderHiddenDim = 512,
+        int numEncoderLayers = 6, int numDecoderLayers = 6, int numHeads = 8,
+        int numQuantiles = 9, double dropout = 0.1)
+    {
+        if (contextLength < 1) throw new ArgumentOutOfRangeException(nameof(contextLength));
+        if (forecastHorizon < 1) throw new ArgumentOutOfRangeException(nameof(forecastHorizon));
+
+        int numPatches = contextLength / patchLength;
+        int encIntermediateSize = encoderHiddenDim * 4;
+        int decIntermediateSize = decoderHiddenDim * 4;
+
+        // Patch embedding
+        yield return new DenseLayer<T>(inputSize: contextLength, outputSize: numPatches * encoderHiddenDim, activationFunction: null);
+
+        // Encoder layers
+        for (int layer = 0; layer < numEncoderLayers; layer++)
+        {
+            yield return new BatchNormalizationLayer<T>(numPatches * encoderHiddenDim);
+            yield return new DenseLayer<T>(inputSize: numPatches * encoderHiddenDim, outputSize: numPatches * encoderHiddenDim, activationFunction: null);
+            yield return new DenseLayer<T>(inputSize: numPatches * encoderHiddenDim, outputSize: numPatches * encoderHiddenDim, activationFunction: null);
+            yield return new DenseLayer<T>(inputSize: numPatches * encoderHiddenDim, outputSize: numPatches * encoderHiddenDim, activationFunction: null);
+            yield return new DenseLayer<T>(inputSize: numPatches * encoderHiddenDim, outputSize: numPatches * encoderHiddenDim, activationFunction: null);
+            if (dropout > 0) yield return new DropoutLayer<T>(dropout);
+            yield return new BatchNormalizationLayer<T>(numPatches * encoderHiddenDim);
+            yield return new DenseLayer<T>(inputSize: numPatches * encoderHiddenDim, outputSize: numPatches * encIntermediateSize, activationFunction: new GELUActivation<T>());
+            yield return new DenseLayer<T>(inputSize: numPatches * encIntermediateSize, outputSize: numPatches * encoderHiddenDim, activationFunction: null);
+            if (dropout > 0) yield return new DropoutLayer<T>(dropout);
+        }
+
+        // Encoder-to-decoder projection
+        yield return new DenseLayer<T>(inputSize: numPatches * encoderHiddenDim, outputSize: forecastHorizon * decoderHiddenDim, activationFunction: null);
+
+        // Decoder layers
+        for (int layer = 0; layer < numDecoderLayers; layer++)
+        {
+            yield return new BatchNormalizationLayer<T>(forecastHorizon * decoderHiddenDim);
+            yield return new DenseLayer<T>(inputSize: forecastHorizon * decoderHiddenDim, outputSize: forecastHorizon * decoderHiddenDim, activationFunction: null);
+            yield return new DenseLayer<T>(inputSize: forecastHorizon * decoderHiddenDim, outputSize: forecastHorizon * decoderHiddenDim, activationFunction: null);
+            if (dropout > 0) yield return new DropoutLayer<T>(dropout);
+            yield return new BatchNormalizationLayer<T>(forecastHorizon * decoderHiddenDim);
+            yield return new DenseLayer<T>(inputSize: forecastHorizon * decoderHiddenDim, outputSize: forecastHorizon * decIntermediateSize, activationFunction: new GELUActivation<T>());
+            yield return new DenseLayer<T>(inputSize: forecastHorizon * decIntermediateSize, outputSize: forecastHorizon * decoderHiddenDim, activationFunction: null);
+            if (dropout > 0) yield return new DropoutLayer<T>(dropout);
+        }
+
+        // Direct quantile output head (non-autoregressive)
+        yield return new DenseLayer<T>(inputSize: forecastHorizon * decoderHiddenDim, outputSize: forecastHorizon * numQuantiles, activationFunction: null);
+    }
+
+    /// <summary>
+    /// Creates default layers for the Kronos financial market foundation model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultKronosLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int contextLength = 1024, int forecastHorizon = 96, int patchLength = 32,
+        int hiddenDimension = 768, int numLayers = 12, int numHeads = 12,
+        int intermediateSize = 3072, int numCandlestickFeatures = 5, double dropout = 0.1)
+    {
+        if (contextLength < 1) throw new ArgumentOutOfRangeException(nameof(contextLength));
+        if (forecastHorizon < 1) throw new ArgumentOutOfRangeException(nameof(forecastHorizon));
+
+        int numPatches = contextLength / patchLength;
+
+        // Patch embedding (multi-feature: OHLCV)
+        yield return new DenseLayer<T>(inputSize: contextLength * numCandlestickFeatures, outputSize: numPatches * hiddenDimension, activationFunction: null);
+
+        // Decoder-only transformer layers
+        for (int layer = 0; layer < numLayers; layer++)
+        {
+            yield return new BatchNormalizationLayer<T>(numPatches * hiddenDimension);
+            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: numPatches * hiddenDimension, activationFunction: null);
+            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: numPatches * hiddenDimension, activationFunction: null);
+            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: numPatches * hiddenDimension, activationFunction: null);
+            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: numPatches * hiddenDimension, activationFunction: null);
+            if (dropout > 0) yield return new DropoutLayer<T>(dropout);
+            yield return new BatchNormalizationLayer<T>(numPatches * hiddenDimension);
+            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: numPatches * intermediateSize, activationFunction: new GELUActivation<T>());
+            yield return new DenseLayer<T>(inputSize: numPatches * intermediateSize, outputSize: numPatches * hiddenDimension, activationFunction: null);
+            if (dropout > 0) yield return new DropoutLayer<T>(dropout);
+        }
+
+        // Final layer norm
+        yield return new BatchNormalizationLayer<T>(numPatches * hiddenDimension);
+
+        // Multi-feature forecast head
+        yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: forecastHorizon * numCandlestickFeatures, activationFunction: null);
+    }
+
+    /// <summary>
+    /// Creates default layers for the TOTO observability foundation model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultTOTOLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int contextLength = 2048, int forecastHorizon = 96, int patchLength = 32,
+        int hiddenDimension = 768, int numLayers = 12, int numHeads = 12,
+        int intermediateSize = 3072, double dropout = 0.1)
+    {
+        if (contextLength < 1) throw new ArgumentOutOfRangeException(nameof(contextLength));
+        if (forecastHorizon < 1) throw new ArgumentOutOfRangeException(nameof(forecastHorizon));
+
+        int numPatches = contextLength / patchLength;
+
+        // Patch embedding
+        yield return new DenseLayer<T>(inputSize: contextLength, outputSize: numPatches * hiddenDimension, activationFunction: null);
+
+        // Transformer encoder layers
+        for (int layer = 0; layer < numLayers; layer++)
+        {
+            yield return new BatchNormalizationLayer<T>(numPatches * hiddenDimension);
+            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: numPatches * hiddenDimension, activationFunction: null);
+            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: numPatches * hiddenDimension, activationFunction: null);
+            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: numPatches * hiddenDimension, activationFunction: null);
+            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: numPatches * hiddenDimension, activationFunction: null);
+            if (dropout > 0) yield return new DropoutLayer<T>(dropout);
+            yield return new BatchNormalizationLayer<T>(numPatches * hiddenDimension);
+            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: numPatches * intermediateSize, activationFunction: new GELUActivation<T>());
+            yield return new DenseLayer<T>(inputSize: numPatches * intermediateSize, outputSize: numPatches * hiddenDimension, activationFunction: null);
+            if (dropout > 0) yield return new DropoutLayer<T>(dropout);
+        }
+
+        // Final layer norm
+        yield return new BatchNormalizationLayer<T>(numPatches * hiddenDimension);
+
+        // Forecast head
+        yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: forecastHorizon, activationFunction: null);
+    }
+
+    /// <summary>
+    /// Creates default layers for the YingLong enterprise foundation model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultYingLongLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int contextLength = 1024, int forecastHorizon = 96, int patchLength = 32,
+        int hiddenDimension = 768, int numLayers = 12, int numHeads = 12,
+        int intermediateSize = 3072, double dropout = 0.1)
+    {
+        if (contextLength < 1) throw new ArgumentOutOfRangeException(nameof(contextLength));
+        if (forecastHorizon < 1) throw new ArgumentOutOfRangeException(nameof(forecastHorizon));
+
+        int numPatches = contextLength / patchLength;
+
+        // Patch embedding
+        yield return new DenseLayer<T>(inputSize: contextLength, outputSize: numPatches * hiddenDimension, activationFunction: null);
+
+        // Transformer layers
+        for (int layer = 0; layer < numLayers; layer++)
+        {
+            yield return new BatchNormalizationLayer<T>(numPatches * hiddenDimension);
+            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: numPatches * hiddenDimension, activationFunction: null);
+            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: numPatches * hiddenDimension, activationFunction: null);
+            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: numPatches * hiddenDimension, activationFunction: null);
+            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: numPatches * hiddenDimension, activationFunction: null);
+            if (dropout > 0) yield return new DropoutLayer<T>(dropout);
+            yield return new BatchNormalizationLayer<T>(numPatches * hiddenDimension);
+            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: numPatches * intermediateSize, activationFunction: new GELUActivation<T>());
+            yield return new DenseLayer<T>(inputSize: numPatches * intermediateSize, outputSize: numPatches * hiddenDimension, activationFunction: null);
+            if (dropout > 0) yield return new DropoutLayer<T>(dropout);
+        }
+
+        // Final layer norm
+        yield return new BatchNormalizationLayer<T>(numPatches * hiddenDimension);
+
+        // Forecast head
+        yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: forecastHorizon, activationFunction: null);
+    }
+
+    /// <summary>
+    /// Creates default layers for the GPT4TS model (frozen GPT-2 backbone with task heads).
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultGPT4TSLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int contextLength = 512, int forecastHorizon = 96, int patchLength = 16,
+        int hiddenDimension = 768, int numLayers = 12, int numHeads = 12,
+        double dropout = 0.1)
+    {
+        if (contextLength < 1) throw new ArgumentOutOfRangeException(nameof(contextLength));
+        if (forecastHorizon < 1) throw new ArgumentOutOfRangeException(nameof(forecastHorizon));
+
+        int numPatches = contextLength / patchLength;
+        int intermediateSize = hiddenDimension * 4;
+
+        // Patch embedding (trainable)
+        yield return new DenseLayer<T>(inputSize: contextLength, outputSize: numPatches * hiddenDimension, activationFunction: null);
+
+        // GPT-2 backbone layers (frozen during training)
+        for (int layer = 0; layer < numLayers; layer++)
+        {
+            yield return new BatchNormalizationLayer<T>(numPatches * hiddenDimension);
+            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: numPatches * hiddenDimension, activationFunction: null);
+            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: numPatches * hiddenDimension, activationFunction: null);
+            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: numPatches * hiddenDimension, activationFunction: null);
+            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: numPatches * hiddenDimension, activationFunction: null);
+            if (dropout > 0) yield return new DropoutLayer<T>(dropout);
+            yield return new BatchNormalizationLayer<T>(numPatches * hiddenDimension);
+            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: numPatches * intermediateSize, activationFunction: new GELUActivation<T>());
+            yield return new DenseLayer<T>(inputSize: numPatches * intermediateSize, outputSize: numPatches * hiddenDimension, activationFunction: null);
+            if (dropout > 0) yield return new DropoutLayer<T>(dropout);
+        }
+
+        // Final layer norm
+        yield return new BatchNormalizationLayer<T>(numPatches * hiddenDimension);
+
+        // Task-specific head (trainable)
+        yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: forecastHorizon, activationFunction: null);
+    }
+
+    /// <summary>
+    /// Creates default layers for the LLM-Time model (LLM-based zero-shot forecasting).
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultLLMTimeLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int contextLength = 512, int forecastHorizon = 96,
+        int hiddenDimension = 768, int numLayers = 12, int numHeads = 12,
+        double dropout = 0.0)
+    {
+        if (contextLength < 1) throw new ArgumentOutOfRangeException(nameof(contextLength));
+        if (forecastHorizon < 1) throw new ArgumentOutOfRangeException(nameof(forecastHorizon));
+
+        int intermediateSize = hiddenDimension * 4;
+
+        // Input projection (numeric values to hidden dim)
+        yield return new DenseLayer<T>(inputSize: contextLength, outputSize: contextLength * hiddenDimension, activationFunction: null);
+
+        // LLM backbone layers
+        for (int layer = 0; layer < numLayers; layer++)
+        {
+            yield return new BatchNormalizationLayer<T>(contextLength * hiddenDimension);
+            yield return new DenseLayer<T>(inputSize: contextLength * hiddenDimension, outputSize: contextLength * hiddenDimension, activationFunction: null);
+            yield return new DenseLayer<T>(inputSize: contextLength * hiddenDimension, outputSize: contextLength * hiddenDimension, activationFunction: null);
+            yield return new DenseLayer<T>(inputSize: contextLength * hiddenDimension, outputSize: contextLength * hiddenDimension, activationFunction: null);
+            yield return new DenseLayer<T>(inputSize: contextLength * hiddenDimension, outputSize: contextLength * hiddenDimension, activationFunction: null);
+            if (dropout > 0) yield return new DropoutLayer<T>(dropout);
+            yield return new BatchNormalizationLayer<T>(contextLength * hiddenDimension);
+            yield return new DenseLayer<T>(inputSize: contextLength * hiddenDimension, outputSize: contextLength * intermediateSize, activationFunction: new GELUActivation<T>());
+            yield return new DenseLayer<T>(inputSize: contextLength * intermediateSize, outputSize: contextLength * hiddenDimension, activationFunction: null);
+            if (dropout > 0) yield return new DropoutLayer<T>(dropout);
+        }
+
+        // Final layer norm
+        yield return new BatchNormalizationLayer<T>(contextLength * hiddenDimension);
+
+        // Output projection (hidden dim to forecast)
+        yield return new DenseLayer<T>(inputSize: contextLength * hiddenDimension, outputSize: forecastHorizon, activationFunction: null);
+    }
+
+    /// <summary>
+    /// Creates default layers for the TEST model (text-aligned time series embeddings).
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultTESTLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int contextLength = 512, int forecastHorizon = 96, int patchLength = 16,
+        int hiddenDimension = 768, int textEmbeddingDimension = 768,
+        int numLayers = 6, int numHeads = 8,
+        int numPrototypes = 64, double dropout = 0.1)
+    {
+        if (contextLength < 1) throw new ArgumentOutOfRangeException(nameof(contextLength));
+        if (forecastHorizon < 1) throw new ArgumentOutOfRangeException(nameof(forecastHorizon));
+
+        int numPatches = contextLength / patchLength;
+        int intermediateSize = hiddenDimension * 4;
+
+        // Patch embedding
+        yield return new DenseLayer<T>(inputSize: contextLength, outputSize: numPatches * hiddenDimension, activationFunction: null);
+
+        // Encoder layers
+        for (int layer = 0; layer < numLayers; layer++)
+        {
+            yield return new BatchNormalizationLayer<T>(numPatches * hiddenDimension);
+            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: numPatches * hiddenDimension, activationFunction: null);
+            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: numPatches * hiddenDimension, activationFunction: null);
+            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: numPatches * hiddenDimension, activationFunction: null);
+            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: numPatches * hiddenDimension, activationFunction: null);
+            if (dropout > 0) yield return new DropoutLayer<T>(dropout);
+            yield return new BatchNormalizationLayer<T>(numPatches * hiddenDimension);
+            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: numPatches * intermediateSize, activationFunction: new GELUActivation<T>());
+            yield return new DenseLayer<T>(inputSize: numPatches * intermediateSize, outputSize: numPatches * hiddenDimension, activationFunction: null);
+            if (dropout > 0) yield return new DropoutLayer<T>(dropout);
+        }
+
+        // Alignment projection (hidden -> text embedding space)
+        yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: numPatches * textEmbeddingDimension, activationFunction: null);
+
+        // Forecast head from text-aligned space
+        yield return new DenseLayer<T>(inputSize: numPatches * textEmbeddingDimension, outputSize: forecastHorizon, activationFunction: null);
+    }
+
+    /// <summary>
+    /// Creates default layers for the TimeBridge non-stationarity foundation model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultTimeBridgeLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int contextLength = 512, int forecastHorizon = 96, int patchLength = 16,
+        int hiddenDimension = 512, int numLayers = 6, int numHeads = 8,
+        int intermediateSize = 2048, int bridgeDimension = 128, double dropout = 0.1)
+    {
+        if (contextLength < 1) throw new ArgumentOutOfRangeException(nameof(contextLength));
+        if (forecastHorizon < 1) throw new ArgumentOutOfRangeException(nameof(forecastHorizon));
+
+        int numPatches = contextLength / patchLength;
+
+        // Patch embedding
+        yield return new DenseLayer<T>(inputSize: contextLength, outputSize: numPatches * hiddenDimension, activationFunction: null);
+
+        // Encoder layers
+        for (int layer = 0; layer < numLayers; layer++)
+        {
+            yield return new BatchNormalizationLayer<T>(numPatches * hiddenDimension);
+            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: numPatches * hiddenDimension, activationFunction: null);
+            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: numPatches * hiddenDimension, activationFunction: null);
+            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: numPatches * hiddenDimension, activationFunction: null);
+            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: numPatches * hiddenDimension, activationFunction: null);
+            if (dropout > 0) yield return new DropoutLayer<T>(dropout);
+            yield return new BatchNormalizationLayer<T>(numPatches * hiddenDimension);
+            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: numPatches * intermediateSize, activationFunction: new GELUActivation<T>());
+            yield return new DenseLayer<T>(inputSize: numPatches * intermediateSize, outputSize: numPatches * hiddenDimension, activationFunction: null);
+            if (dropout > 0) yield return new DropoutLayer<T>(dropout);
+        }
+
+        // Bridge module: encode non-stationarity stats
+        yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: bridgeDimension, activationFunction: new GELUActivation<T>());
+        // Bridge module: decode/gate non-stationarity back
+        yield return new DenseLayer<T>(inputSize: bridgeDimension, outputSize: numPatches * hiddenDimension, activationFunction: null);
+
+        // Final layer norm
+        yield return new BatchNormalizationLayer<T>(numPatches * hiddenDimension);
+
+        // Forecast head
+        yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: forecastHorizon, activationFunction: null);
+    }
+
+    // --- Diffusion-based Time Series Models ---
+
+    /// <summary>
+    /// Creates default layers for the TimeGrad diffusion model (RNN encoder + denoising network).
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultTimeGradLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int contextLength = 168, int forecastHorizon = 24, int hiddenDimension = 64,
+        int numRnnLayers = 2, int denoisingNetworkDim = 128, double dropout = 0.1)
+    {
+        if (contextLength < 1) throw new ArgumentOutOfRangeException(nameof(contextLength));
+        if (forecastHorizon < 1) throw new ArgumentOutOfRangeException(nameof(forecastHorizon));
+
+        // RNN encoder (simulated as dense projections)
+        yield return new DenseLayer<T>(inputSize: contextLength, outputSize: hiddenDimension, activationFunction: new GELUActivation<T>());
+
+        // Denoising network residual blocks
+        for (int layer = 0; layer < numRnnLayers * 2; layer++)
+        {
+            yield return new DenseLayer<T>(inputSize: hiddenDimension, outputSize: denoisingNetworkDim, activationFunction: new GELUActivation<T>());
+            if (dropout > 0) yield return new DropoutLayer<T>(dropout);
+            yield return new DenseLayer<T>(inputSize: denoisingNetworkDim, outputSize: hiddenDimension, activationFunction: null);
+            yield return new BatchNormalizationLayer<T>(hiddenDimension);
+        }
+
+        // Output projection
+        yield return new DenseLayer<T>(inputSize: hiddenDimension, outputSize: forecastHorizon, activationFunction: null);
+    }
+
+    /// <summary>
+    /// Creates default layers for the CSDI score-based diffusion model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultCSDILayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int sequenceLength = 100, int numFeatures = 1, int hiddenDimension = 64,
+        int numResidualLayers = 4, int numHeads = 8, int timeEmbeddingDim = 128,
+        double dropout = 0.1)
+    {
+        if (sequenceLength < 1) throw new ArgumentOutOfRangeException(nameof(sequenceLength));
+
+        int inputDim = sequenceLength * numFeatures;
+        int intermediateDim = hiddenDimension * 4;
+
+        // Input projection
+        yield return new DenseLayer<T>(inputSize: inputDim, outputSize: sequenceLength * hiddenDimension, activationFunction: null);
+
+        // Residual blocks with attention
+        for (int layer = 0; layer < numResidualLayers; layer++)
+        {
+            yield return new BatchNormalizationLayer<T>(sequenceLength * hiddenDimension);
+            yield return new DenseLayer<T>(inputSize: sequenceLength * hiddenDimension, outputSize: sequenceLength * hiddenDimension, activationFunction: null);
+            yield return new DenseLayer<T>(inputSize: sequenceLength * hiddenDimension, outputSize: sequenceLength * hiddenDimension, activationFunction: null);
+            if (dropout > 0) yield return new DropoutLayer<T>(dropout);
+            yield return new BatchNormalizationLayer<T>(sequenceLength * hiddenDimension);
+            yield return new DenseLayer<T>(inputSize: sequenceLength * hiddenDimension, outputSize: sequenceLength * intermediateDim, activationFunction: new GELUActivation<T>());
+            yield return new DenseLayer<T>(inputSize: sequenceLength * intermediateDim, outputSize: sequenceLength * hiddenDimension, activationFunction: null);
+            if (dropout > 0) yield return new DropoutLayer<T>(dropout);
+        }
+
+        // Output projection
+        yield return new DenseLayer<T>(inputSize: sequenceLength * hiddenDimension, outputSize: inputDim, activationFunction: null);
+    }
+
+    /// <summary>
+    /// Creates default layers for the TSDiff self-guided diffusion model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultTSDiffLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int sequenceLength = 192, int forecastHorizon = 24, int hiddenDimension = 128,
+        int numResidualBlocks = 8, int numAttentionHeads = 4, double dropout = 0.1)
+    {
+        if (sequenceLength < 1) throw new ArgumentOutOfRangeException(nameof(sequenceLength));
+        if (forecastHorizon < 1) throw new ArgumentOutOfRangeException(nameof(forecastHorizon));
+
+        int intermediateDim = hiddenDimension * 4;
+
+        // Input projection
+        yield return new DenseLayer<T>(inputSize: sequenceLength, outputSize: sequenceLength * hiddenDimension, activationFunction: null);
+
+        // Residual blocks
+        for (int block = 0; block < numResidualBlocks; block++)
+        {
+            yield return new BatchNormalizationLayer<T>(sequenceLength * hiddenDimension);
+            yield return new DenseLayer<T>(inputSize: sequenceLength * hiddenDimension, outputSize: sequenceLength * hiddenDimension, activationFunction: new GELUActivation<T>());
+            if (dropout > 0) yield return new DropoutLayer<T>(dropout);
+            yield return new DenseLayer<T>(inputSize: sequenceLength * hiddenDimension, outputSize: sequenceLength * hiddenDimension, activationFunction: null);
+        }
+
+        // Output projection
+        yield return new DenseLayer<T>(inputSize: sequenceLength * hiddenDimension, outputSize: forecastHorizon, activationFunction: null);
+    }
+
+    /// <summary>
+    /// Creates default layers for the TimeDiff non-autoregressive diffusion model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultTimeDiffLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int contextLength = 168, int forecastHorizon = 24, int hiddenDimension = 128,
+        int numLayers = 4, int numHeads = 8, double dropout = 0.1)
+    {
+        if (contextLength < 1) throw new ArgumentOutOfRangeException(nameof(contextLength));
+        if (forecastHorizon < 1) throw new ArgumentOutOfRangeException(nameof(forecastHorizon));
+
+        int totalLen = contextLength + forecastHorizon;
+        int intermediateDim = hiddenDimension * 4;
+
+        // Input projection
+        yield return new DenseLayer<T>(inputSize: contextLength, outputSize: totalLen * hiddenDimension, activationFunction: null);
+
+        // Transformer-based denoiser layers
+        for (int layer = 0; layer < numLayers; layer++)
+        {
+            yield return new BatchNormalizationLayer<T>(totalLen * hiddenDimension);
+            yield return new DenseLayer<T>(inputSize: totalLen * hiddenDimension, outputSize: totalLen * hiddenDimension, activationFunction: null);
+            yield return new DenseLayer<T>(inputSize: totalLen * hiddenDimension, outputSize: totalLen * hiddenDimension, activationFunction: null);
+            if (dropout > 0) yield return new DropoutLayer<T>(dropout);
+            yield return new BatchNormalizationLayer<T>(totalLen * hiddenDimension);
+            yield return new DenseLayer<T>(inputSize: totalLen * hiddenDimension, outputSize: totalLen * intermediateDim, activationFunction: new GELUActivation<T>());
+            yield return new DenseLayer<T>(inputSize: totalLen * intermediateDim, outputSize: totalLen * hiddenDimension, activationFunction: null);
+            if (dropout > 0) yield return new DropoutLayer<T>(dropout);
+        }
+
+        // Output projection
+        yield return new DenseLayer<T>(inputSize: totalLen * hiddenDimension, outputSize: forecastHorizon, activationFunction: null);
+    }
+
+    /// <summary>
+    /// Creates default layers for the MG-TSD multi-granularity diffusion model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultMGTSDLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int contextLength = 168, int forecastHorizon = 24, int hiddenDimension = 128,
+        int numLayers = 4, int numHeads = 8, int numGranularities = 3, double dropout = 0.1)
+    {
+        if (contextLength < 1) throw new ArgumentOutOfRangeException(nameof(contextLength));
+        if (forecastHorizon < 1) throw new ArgumentOutOfRangeException(nameof(forecastHorizon));
+
+        int intermediateDim = hiddenDimension * 4;
+
+        // Input projection (includes granularity embeddings)
+        yield return new DenseLayer<T>(inputSize: contextLength, outputSize: contextLength * hiddenDimension, activationFunction: null);
+
+        // Multi-granularity denoiser layers
+        for (int layer = 0; layer < numLayers; layer++)
+        {
+            // Per-granularity processing
+            for (int g = 0; g < numGranularities; g++)
+            {
+                yield return new BatchNormalizationLayer<T>(contextLength * hiddenDimension);
+                yield return new DenseLayer<T>(inputSize: contextLength * hiddenDimension, outputSize: contextLength * hiddenDimension, activationFunction: new GELUActivation<T>());
+            }
+            if (dropout > 0) yield return new DropoutLayer<T>(dropout);
+            // Cross-granularity fusion
+            yield return new DenseLayer<T>(inputSize: contextLength * hiddenDimension, outputSize: contextLength * hiddenDimension, activationFunction: null);
+        }
+
+        // Output projection
+        yield return new DenseLayer<T>(inputSize: contextLength * hiddenDimension, outputSize: forecastHorizon, activationFunction: null);
+    }
+
+    /// <summary>
+    /// Creates default layers for the CCDM conditional continuous diffusion model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultCCDMLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int contextLength = 168, int forecastHorizon = 24, int hiddenDimension = 128,
+        int numLayers = 4, int numHeads = 8, double dropout = 0.1)
+    {
+        if (contextLength < 1) throw new ArgumentOutOfRangeException(nameof(contextLength));
+        if (forecastHorizon < 1) throw new ArgumentOutOfRangeException(nameof(forecastHorizon));
+
+        int intermediateDim = hiddenDimension * 4;
+
+        // Input projection
+        yield return new DenseLayer<T>(inputSize: contextLength, outputSize: contextLength * hiddenDimension, activationFunction: null);
+
+        // Score network layers
+        for (int layer = 0; layer < numLayers; layer++)
+        {
+            yield return new BatchNormalizationLayer<T>(contextLength * hiddenDimension);
+            yield return new DenseLayer<T>(inputSize: contextLength * hiddenDimension, outputSize: contextLength * hiddenDimension, activationFunction: null);
+            yield return new DenseLayer<T>(inputSize: contextLength * hiddenDimension, outputSize: contextLength * hiddenDimension, activationFunction: null);
+            if (dropout > 0) yield return new DropoutLayer<T>(dropout);
+            yield return new BatchNormalizationLayer<T>(contextLength * hiddenDimension);
+            yield return new DenseLayer<T>(inputSize: contextLength * hiddenDimension, outputSize: contextLength * intermediateDim, activationFunction: new GELUActivation<T>());
+            yield return new DenseLayer<T>(inputSize: contextLength * intermediateDim, outputSize: contextLength * hiddenDimension, activationFunction: null);
+            if (dropout > 0) yield return new DropoutLayer<T>(dropout);
+        }
+
+        // Output projection
+        yield return new DenseLayer<T>(inputSize: contextLength * hiddenDimension, outputSize: forecastHorizon, activationFunction: null);
+    }
+
+    /// <summary>
+    /// Creates default layers for the TS2Vec contrastive learning model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultTS2VecLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int contextLength = 200, int forecastHorizon = 96, int hiddenDimension = 64,
+        int outputDimension = 320, int numLayers = 10, double dropout = 0.1)
+    {
+        if (contextLength < 1) throw new ArgumentOutOfRangeException(nameof(contextLength));
+        if (forecastHorizon < 1) throw new ArgumentOutOfRangeException(nameof(forecastHorizon));
+
+        // Input projection
+        yield return new DenseLayer<T>(inputSize: contextLength, outputSize: hiddenDimension, activationFunction: new ReLUActivation<T>());
+
+        // Dilated CNN encoder blocks
+        for (int layer = 0; layer < numLayers; layer++)
+        {
+            yield return new DenseLayer<T>(inputSize: hiddenDimension, outputSize: hiddenDimension, activationFunction: new ReLUActivation<T>());
+            yield return new BatchNormalizationLayer<T>(hiddenDimension);
+            if (dropout > 0) yield return new DropoutLayer<T>(dropout);
+            yield return new DenseLayer<T>(inputSize: hiddenDimension, outputSize: hiddenDimension, activationFunction: null);
+        }
+
+        // Output projection to representation space
+        yield return new DenseLayer<T>(inputSize: hiddenDimension, outputSize: outputDimension, activationFunction: null);
+
+        // Forecast head
+        yield return new DenseLayer<T>(inputSize: outputDimension, outputSize: forecastHorizon, activationFunction: null);
+    }
+
+    /// <summary>
+    /// Creates default layers for the TOTEM VQ-VAE tokenization model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultTOTEMLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int contextLength = 512, int forecastHorizon = 96, int hiddenDimension = 256,
+        int numLayers = 6, int numHeads = 8, int codebookDimension = 64, double dropout = 0.1)
+    {
+        if (contextLength < 1) throw new ArgumentOutOfRangeException(nameof(contextLength));
+        if (forecastHorizon < 1) throw new ArgumentOutOfRangeException(nameof(forecastHorizon));
+
+        int intermediateDim = hiddenDimension * 4;
+
+        // Encoder input projection
+        yield return new DenseLayer<T>(inputSize: contextLength, outputSize: contextLength * hiddenDimension, activationFunction: null);
+
+        // Transformer encoder layers
+        for (int layer = 0; layer < numLayers; layer++)
+        {
+            yield return new BatchNormalizationLayer<T>(contextLength * hiddenDimension);
+            yield return new DenseLayer<T>(inputSize: contextLength * hiddenDimension, outputSize: contextLength * hiddenDimension, activationFunction: null);
+            yield return new DenseLayer<T>(inputSize: contextLength * hiddenDimension, outputSize: contextLength * hiddenDimension, activationFunction: null);
+            if (dropout > 0) yield return new DropoutLayer<T>(dropout);
+            yield return new BatchNormalizationLayer<T>(contextLength * hiddenDimension);
+            yield return new DenseLayer<T>(inputSize: contextLength * hiddenDimension, outputSize: contextLength * intermediateDim, activationFunction: new GELUActivation<T>());
+            yield return new DenseLayer<T>(inputSize: contextLength * intermediateDim, outputSize: contextLength * hiddenDimension, activationFunction: null);
+            if (dropout > 0) yield return new DropoutLayer<T>(dropout);
+        }
+
+        // Quantization projection
+        yield return new DenseLayer<T>(inputSize: contextLength * hiddenDimension, outputSize: contextLength * codebookDimension, activationFunction: null);
+
+        // Decoder projection
+        yield return new DenseLayer<T>(inputSize: contextLength * codebookDimension, outputSize: contextLength * hiddenDimension, activationFunction: new GELUActivation<T>());
+
+        // Forecast head
+        yield return new DenseLayer<T>(inputSize: contextLength * hiddenDimension, outputSize: forecastHorizon, activationFunction: null);
+    }
+
+    /// <summary>
+    /// Creates default layers for the TimeMAE masked autoencoder model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultTimeMAELayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int contextLength = 512, int forecastHorizon = 96, int patchLength = 16,
+        int hiddenDimension = 256, int numEncoderLayers = 6, int numDecoderLayers = 2,
+        int numHeads = 8, double dropout = 0.1)
+    {
+        if (contextLength < 1) throw new ArgumentOutOfRangeException(nameof(contextLength));
+        if (forecastHorizon < 1) throw new ArgumentOutOfRangeException(nameof(forecastHorizon));
+        if (patchLength < 1) throw new ArgumentOutOfRangeException(nameof(patchLength));
+
+        int numPatches = contextLength / patchLength;
+        int intermediateDim = hiddenDimension * 4;
+
+        // Patch embedding
+        yield return new DenseLayer<T>(inputSize: contextLength, outputSize: numPatches * hiddenDimension, activationFunction: null);
+
+        // Encoder transformer layers
+        for (int layer = 0; layer < numEncoderLayers; layer++)
+        {
+            yield return new BatchNormalizationLayer<T>(numPatches * hiddenDimension);
+            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: numPatches * hiddenDimension, activationFunction: null);
+            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: numPatches * hiddenDimension, activationFunction: null);
+            if (dropout > 0) yield return new DropoutLayer<T>(dropout);
+            yield return new BatchNormalizationLayer<T>(numPatches * hiddenDimension);
+            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: numPatches * intermediateDim, activationFunction: new GELUActivation<T>());
+            yield return new DenseLayer<T>(inputSize: numPatches * intermediateDim, outputSize: numPatches * hiddenDimension, activationFunction: null);
+            if (dropout > 0) yield return new DropoutLayer<T>(dropout);
+        }
+
+        // Decoder transformer layers (lightweight)
+        for (int layer = 0; layer < numDecoderLayers; layer++)
+        {
+            yield return new BatchNormalizationLayer<T>(numPatches * hiddenDimension);
+            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: numPatches * hiddenDimension, activationFunction: null);
+            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: numPatches * hiddenDimension, activationFunction: null);
+            if (dropout > 0) yield return new DropoutLayer<T>(dropout);
+            yield return new BatchNormalizationLayer<T>(numPatches * hiddenDimension);
+            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: numPatches * intermediateDim, activationFunction: new GELUActivation<T>());
+            yield return new DenseLayer<T>(inputSize: numPatches * intermediateDim, outputSize: numPatches * hiddenDimension, activationFunction: null);
+            if (dropout > 0) yield return new DropoutLayer<T>(dropout);
+        }
+
+        // Reconstruction head
+        yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: contextLength, activationFunction: null);
+
+        // Forecast head
+        yield return new DenseLayer<T>(inputSize: contextLength, outputSize: forecastHorizon, activationFunction: null);
+    }
+
+    /// <summary>
+    /// Creates default layers for the SimMTM masked modeling with similarity model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultSimMTMLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int contextLength = 512, int forecastHorizon = 96, int patchLength = 16,
+        int hiddenDimension = 256, int numLayers = 6, int numHeads = 8, double dropout = 0.1)
+    {
+        if (contextLength < 1) throw new ArgumentOutOfRangeException(nameof(contextLength));
+        if (forecastHorizon < 1) throw new ArgumentOutOfRangeException(nameof(forecastHorizon));
+        if (patchLength < 1) throw new ArgumentOutOfRangeException(nameof(patchLength));
+
+        int numPatches = contextLength / patchLength;
+        int intermediateDim = hiddenDimension * 4;
+
+        // Patch embedding
+        yield return new DenseLayer<T>(inputSize: contextLength, outputSize: numPatches * hiddenDimension, activationFunction: null);
+
+        // Transformer layers
+        for (int layer = 0; layer < numLayers; layer++)
+        {
+            yield return new BatchNormalizationLayer<T>(numPatches * hiddenDimension);
+            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: numPatches * hiddenDimension, activationFunction: null);
+            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: numPatches * hiddenDimension, activationFunction: null);
+            if (dropout > 0) yield return new DropoutLayer<T>(dropout);
+            yield return new BatchNormalizationLayer<T>(numPatches * hiddenDimension);
+            yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: numPatches * intermediateDim, activationFunction: new GELUActivation<T>());
+            yield return new DenseLayer<T>(inputSize: numPatches * intermediateDim, outputSize: numPatches * hiddenDimension, activationFunction: null);
+            if (dropout > 0) yield return new DropoutLayer<T>(dropout);
+        }
+
+        // Reconstruction head (similarity-weighted)
+        yield return new DenseLayer<T>(inputSize: numPatches * hiddenDimension, outputSize: contextLength, activationFunction: null);
+
+        // Forecast head
+        yield return new DenseLayer<T>(inputSize: contextLength, outputSize: forecastHorizon, activationFunction: null);
+    }
+
+    /// <summary>
+    /// Creates default layers for the TF-C time-frequency consistency model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultTFCLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int contextLength = 200, int forecastHorizon = 96, int hiddenDimension = 128,
+        int projectionDimension = 64, int numTimeLayers = 4, int numFreqLayers = 4,
+        double dropout = 0.1)
+    {
+        if (contextLength < 1) throw new ArgumentOutOfRangeException(nameof(contextLength));
+        if (forecastHorizon < 1) throw new ArgumentOutOfRangeException(nameof(forecastHorizon));
+
+        // Time-domain encoder input projection
+        yield return new DenseLayer<T>(inputSize: contextLength, outputSize: hiddenDimension, activationFunction: new ReLUActivation<T>());
+
+        // Time-domain encoder layers
+        for (int layer = 0; layer < numTimeLayers; layer++)
+        {
+            yield return new DenseLayer<T>(inputSize: hiddenDimension, outputSize: hiddenDimension, activationFunction: new ReLUActivation<T>());
+            yield return new BatchNormalizationLayer<T>(hiddenDimension);
+            if (dropout > 0) yield return new DropoutLayer<T>(dropout);
+        }
+
+        // Frequency-domain encoder input projection
+        yield return new DenseLayer<T>(inputSize: contextLength, outputSize: hiddenDimension, activationFunction: new ReLUActivation<T>());
+
+        // Frequency-domain encoder layers
+        for (int layer = 0; layer < numFreqLayers; layer++)
+        {
+            yield return new DenseLayer<T>(inputSize: hiddenDimension, outputSize: hiddenDimension, activationFunction: new ReLUActivation<T>());
+            yield return new BatchNormalizationLayer<T>(hiddenDimension);
+            if (dropout > 0) yield return new DropoutLayer<T>(dropout);
+        }
+
+        // Shared projection head
+        yield return new DenseLayer<T>(inputSize: hiddenDimension, outputSize: projectionDimension, activationFunction: null);
+
+        // Forecast head
+        yield return new DenseLayer<T>(inputSize: projectionDimension, outputSize: forecastHorizon, activationFunction: null);
+    }
+
+    #endregion
 }

@@ -46,11 +46,19 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// - Handles variable sequence lengths
 /// </para>
 /// <para>
+/// <b>Timer-XL Enhancements (2024):</b>
+/// Timer-XL extends the original Timer with long-context support and a unified
+/// framework for multiple forecasting tasks. Key improvements:
+/// - Extended context length (up to 4096 time steps)
+/// - Unified multi-task forecasting framework
+/// - Improved long-horizon performance
+///
 /// <b>Reference:</b> Liu et al., "Timer: Generative Pre-Training of Time Series", 2024.
 /// https://arxiv.org/abs/2402.02368
+/// Timer-XL: "Timer-XL: Long-Context Transformers for Unified Time Series Forecasting", 2024.
 /// </para>
 /// </remarks>
-public class Timer<T> : ForecastingModelBase<T>
+public class Timer<T> : TimeSeriesFoundationModelBase<T>
 {
     #region Execution Mode
 
@@ -234,6 +242,15 @@ public class Timer<T> : ForecastingModelBase<T>
     /// </para>
     /// </remarks>
     public double GenerationTemperature => _generationTemperature;
+
+    /// <inheritdoc/>
+    public override FoundationModelSize ModelSize => FoundationModelSize.Base;
+
+    /// <inheritdoc/>
+    public override int MaxContextLength => _contextLength;
+
+    /// <inheritdoc/>
+    public override int MaxPredictionHorizon => _forecastHorizon;
 
     #endregion
 

@@ -1,4 +1,5 @@
 using System;
+using AiDotNet.Enums;
 
 namespace AiDotNet.Models.Options;
 
@@ -76,6 +77,10 @@ public class MOIRAIOptions<T> : TimeSeriesRegressionOptions<T>
         DropoutRate = other.DropoutRate;
         MaskRatio = other.MaskRatio;
         ModelSize = other.ModelSize;
+        PatchSize = other.PatchSize;
+        NumQuantiles = other.NumQuantiles;
+        MultiTokenSteps = other.MultiTokenSteps;
+        UseDecoderOnly = other.UseDecoderOnly;
     }
 
     /// <summary>
@@ -193,13 +198,59 @@ public class MOIRAIOptions<T> : TimeSeriesRegressionOptions<T>
     /// <summary>
     /// Gets or sets the model size variant.
     /// </summary>
-    /// <value>The model size, defaulting to "base".</value>
+    /// <value>The model size, defaulting to <see cref="FoundationModelSize.Base"/>.</value>
     /// <remarks>
     /// <para><b>For Beginners:</b> MOIRAI comes in different sizes:
-    /// - "small": Lightweight (~14M params)
-    /// - "base": Balanced (~91M params)
-    /// - "large": Maximum capacity (~311M params)
+    /// - Small: Lightweight (~14M params)
+    /// - Base: Balanced (~91M params)
+    /// - Large: Maximum capacity (~311M params)
     /// </para>
     /// </remarks>
-    public string ModelSize { get; set; } = "base";
+    public FoundationModelSize ModelSize { get; set; } = FoundationModelSize.Base;
+
+    /// <summary>
+    /// Gets or sets the unified patch size for Moirai 2.0.
+    /// </summary>
+    /// <value>Defaults to 32.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Moirai 2.0 uses a single patch size instead of the v1
+    /// multi-scale approach. This simplifies the architecture and improves efficiency.
+    /// </para>
+    /// </remarks>
+    public int PatchSize { get; set; } = 32;
+
+    /// <summary>
+    /// Gets or sets the number of quantiles for Moirai 2.0 quantile forecasting.
+    /// </summary>
+    /// <value>Defaults to 9.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Moirai 2.0 replaces the mixture distribution output with
+    /// direct quantile prediction, which is simpler and often more accurate. Each quantile
+    /// represents a different confidence level.
+    /// </para>
+    /// </remarks>
+    public int NumQuantiles { get; set; } = 9;
+
+    /// <summary>
+    /// Gets or sets the number of multi-token prediction steps for Moirai 2.0.
+    /// </summary>
+    /// <value>Defaults to 4.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Moirai 2.0 can predict multiple future steps at once
+    /// (multi-token prediction) instead of one step at a time, improving both speed and accuracy.
+    /// </para>
+    /// </remarks>
+    public int MultiTokenSteps { get; set; } = 4;
+
+    /// <summary>
+    /// Gets or sets whether to use the decoder-only architecture (Moirai 2.0 default).
+    /// </summary>
+    /// <value>Defaults to true (decoder-only). Set to false for the original masked-encoder architecture.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Moirai 2.0 switches from a masked encoder to a decoder-only
+    /// architecture (like GPT). This enables multi-token prediction and better handles
+    /// long-horizon forecasting. Set to false to use the original v1 masked-encoder approach.
+    /// </para>
+    /// </remarks>
+    public bool UseDecoderOnly { get; set; } = true;
 }
