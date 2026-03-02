@@ -297,6 +297,9 @@ public class FlowState<T> : TimeSeriesFoundationModelBase<T>
     /// <inheritdoc/>
     public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
     {
+        if (quantiles is not null && quantiles.Length > 0)
+            throw new NotSupportedException("FlowState does not support quantile forecasting. Pass null for point forecasts.");
+
         return _useNativeMode ? ForwardNative(historicalData) : ForecastOnnx(historicalData);
     }
 

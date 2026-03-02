@@ -187,7 +187,7 @@ public class GPT4TS<T> : TimeSeriesFoundationModelBase<T>
 
         // GPT-2 backbone layers (frozen)
         _backboneLayers.Clear();
-        int intermediateSize = _hiddenDimension * 4;
+        // GPT-2 block layout: norm(1) + attn_QKV+out(4) + norm(1) + FFN(2) = 8; with dropout: +1 = 9
         int layersPerBlock = _dropout > 0 ? 9 : 7;
         int totalBackboneLayers = _numLayers * layersPerBlock;
 
@@ -410,8 +410,8 @@ public class GPT4TS<T> : TimeSeriesFoundationModelBase<T>
     /// <inheritdoc/>
     public override Tensor<T> ApplyInstanceNormalization(Tensor<T> input)
     {
-        int batchSize = input.Shape[0];
-        int seqLen = input.Shape.Length > 1 ? input.Shape[1] : input.Length;
+        int batchSize = input.Rank > 1 ? input.Shape[0] : 1;
+        int seqLen = input.Rank > 1 ? input.Shape[1] : input.Length;
         var result = new Tensor<T>(input.Shape);
 
         for (int b = 0; b < batchSize; b++)

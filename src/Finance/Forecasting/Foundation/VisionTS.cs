@@ -265,7 +265,7 @@ public class VisionTS<T> : TimeSeriesFoundationModelBase<T>
     /// <inheritdoc/>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        return new VisionTS<T>(Architecture, new VisionTSOptions<T>
+        var opts = new VisionTSOptions<T>
         {
             ContextLength = _contextLength,
             ForecastHorizon = _forecastHorizon,
@@ -277,7 +277,12 @@ public class VisionTS<T> : TimeSeriesFoundationModelBase<T>
             DropoutRate = _dropout,
             ModelSize = _modelSize,
             MaskRatio = _maskRatio
-        });
+        };
+
+        if (!_useNativeMode && OnnxModelPath is not null)
+            return new VisionTS<T>(Architecture, OnnxModelPath, opts);
+
+        return new VisionTS<T>(Architecture, opts);
     }
 
     /// <inheritdoc/>

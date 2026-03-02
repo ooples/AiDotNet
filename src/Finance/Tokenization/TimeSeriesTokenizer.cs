@@ -76,9 +76,9 @@ public class TimeSeriesTokenizer<T>
     /// <summary>
     /// Tokenizes a time series into patches.
     /// </summary>
-    /// <param name="series">Input time series of shape [sequence_length] or [batch, sequence_length].</param>
+    /// <param name="series">Input time series of shape [sequence_length] (rank-1 only).</param>
     /// <returns>
-    /// Patched tensor of shape [num_patches, patch_length] or [batch, num_patches, patch_length].
+    /// List of patch tensors, each of shape [patch_length].
     /// </returns>
     /// <remarks>
     /// <b>For Beginners:</b> Patching splits a long series into fixed-size chunks:

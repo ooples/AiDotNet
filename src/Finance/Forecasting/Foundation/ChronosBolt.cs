@@ -279,7 +279,7 @@ public class ChronosBolt<T> : TimeSeriesFoundationModelBase<T>
     /// <inheritdoc/>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        return new ChronosBolt<T>(Architecture, new ChronosBoltOptions<T>
+        var opts = new ChronosBoltOptions<T>
         {
             ContextLength = _contextLength,
             ForecastHorizon = _forecastHorizon,
@@ -292,7 +292,12 @@ public class ChronosBolt<T> : TimeSeriesFoundationModelBase<T>
             DropoutRate = _dropout,
             ModelSize = _modelSize,
             NumQuantiles = _numQuantiles
-        });
+        };
+
+        if (!_useNativeMode && OnnxModelPath is not null)
+            return new ChronosBolt<T>(Architecture, OnnxModelPath, opts);
+
+        return new ChronosBolt<T>(Architecture, opts);
     }
 
     /// <inheritdoc/>

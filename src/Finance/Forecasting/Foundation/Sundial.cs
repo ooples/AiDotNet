@@ -207,6 +207,11 @@ public class Sundial<T> : TimeSeriesFoundationModelBase<T>
 
         if (idx < Layers.Count)
             _forecastHead = Layers[idx++];
+
+        if (_patchEmbedding is null || _forecastHead is null)
+            throw new InvalidOperationException(
+                $"Sundial layer extraction incomplete: expected at least {1 + totalTransformerLayers + 2} layers " +
+                $"but found {Layers.Count}. Ensure LayerHelper creates the correct layer structure.");
     }
 
     #endregion
@@ -277,7 +282,7 @@ public class Sundial<T> : TimeSeriesFoundationModelBase<T>
     /// <inheritdoc/>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        return new Sundial<T>(Architecture, new SundialOptions<T>
+        var opts = new SundialOptions<T>
         {
             ContextLength = _contextLength,
             ForecastHorizon = _forecastHorizon,
@@ -289,7 +294,12 @@ public class Sundial<T> : TimeSeriesFoundationModelBase<T>
             DropoutRate = _dropout,
             ModelSize = _modelSize,
             NumQuantiles = _numQuantiles
-        });
+        };
+
+        if (!_useNativeMode && OnnxModelPath is not null)
+            return new Sundial<T>(Architecture, OnnxModelPath, opts);
+
+        return new Sundial<T>(Architecture, opts);
     }
 
     /// <inheritdoc/>
@@ -329,6 +339,9 @@ public class Sundial<T> : TimeSeriesFoundationModelBase<T>
     /// <inheritdoc/>
     public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
     {
+        if (quantiles is not null && quantiles.Length > 0)
+            throw new NotSupportedException("Sundial does not support quantile forecasting. Pass null for point forecasts.");
+
         return _useNativeMode ? ForwardNative(historicalData) : ForecastOnnx(historicalData);
     }
 

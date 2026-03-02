@@ -286,7 +286,7 @@ public class Kairos<T> : TimeSeriesFoundationModelBase<T>
     /// <inheritdoc/>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        return new Kairos<T>(Architecture, new KairosOptions<T>
+        var opts = new KairosOptions<T>
         {
             ContextLength = _contextLength,
             ForecastHorizon = _forecastHorizon,
@@ -297,7 +297,12 @@ public class Kairos<T> : TimeSeriesFoundationModelBase<T>
             IntermediateSize = _intermediateSize,
             DropoutRate = _dropout,
             ModelSize = _modelSize
-        });
+        };
+
+        if (!_useNativeMode && OnnxModelPath is not null)
+            return new Kairos<T>(Architecture, OnnxModelPath, opts);
+
+        return new Kairos<T>(Architecture, opts);
     }
 
     /// <inheritdoc/>
@@ -322,6 +327,8 @@ public class Kairos<T> : TimeSeriesFoundationModelBase<T>
         _contextLength = reader.ReadInt32();
         _forecastHorizon = reader.ReadInt32();
         int numPatchSizes = reader.ReadInt32();
+        if (numPatchSizes < 0 || numPatchSizes > 1000)
+            throw new InvalidOperationException($"Invalid numPatchSizes ({numPatchSizes}) in deserialization.");
         _patchSizes = new int[numPatchSizes];
         for (int i = 0; i < numPatchSizes; i++)
             _patchSizes[i] = reader.ReadInt32();
@@ -340,6 +347,9 @@ public class Kairos<T> : TimeSeriesFoundationModelBase<T>
     /// <inheritdoc/>
     public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
     {
+        if (quantiles is not null && quantiles.Length > 0)
+            throw new NotSupportedException("Kairos does not support quantile forecasting. Pass null for point forecasts.");
+
         return _useNativeMode ? ForwardNative(historicalData) : ForecastOnnx(historicalData);
     }
 
@@ -390,8 +400,8 @@ public class Kairos<T> : TimeSeriesFoundationModelBase<T>
     /// <inheritdoc/>
     public override Tensor<T> ApplyInstanceNormalization(Tensor<T> input)
     {
-        int batchSize = input.Shape[0];
-        int seqLen = input.Shape.Length > 1 ? input.Shape[1] : input.Length;
+        int batchSize = input.Rank > 1 ? input.Shape[0] : 1;
+        int seqLen = input.Rank > 1 ? input.Shape[1] : input.Length;
         var result = new Tensor<T>(input.Shape);
         for (int b = 0; b < batchSize; b++)
         {
@@ -506,14 +516,15 @@ public class Kairos<T> : TimeSeriesFoundationModelBase<T>
     {
         if (OnnxSession == null)
             throw new InvalidOperationException("ONNX session is not initialized.");
-        int batchSize = input.Shape[0];
-        int seqLen = input.Shape.Length > 1 ? input.Shape[1] : input.Length;
-        int features = input.Shape.Length > 2 ? input.Shape[2] : 1;
+        int batchSize = input.Rank > 1 ? input.Shape[0] : 1;
+        int seqLen = input.Rank > 1 ? input.Shape[1] : input.Length;
+        int features = input.Rank > 2 ? input.Shape[2] : 1;
         var inputData = new float[batchSize * seqLen * features];
         for (int i = 0; i < input.Length && i < inputData.Length; i++)
             inputData[i] = (float)NumOps.ToDouble(input[i]);
         var inputTensor = new OnnxTensors.DenseTensor<float>(inputData, new[] { batchSize, seqLen, features });
-        var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor("input", inputTensor) };
+        string inputName = OnnxSession.InputMetadata.Keys.FirstOrDefault() ?? "input";
+        var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(inputName, inputTensor) };
         using var results = OnnxSession.Run(inputs);
         var outputTensor = results.First().AsTensor<float>();
         var outputShape = outputTensor.Dimensions.ToArray();

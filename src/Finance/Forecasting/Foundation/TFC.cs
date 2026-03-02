@@ -620,9 +620,10 @@ public class TFC<T> : TimeSeriesFoundationModelBase<T>
         var inputTensor = new OnnxTensors.DenseTensor<float>(
             inputData, new[] { batchSize, seqLen, features });
 
+        string inputName = OnnxSession.InputMetadata.Keys.FirstOrDefault() ?? "input";
         var inputs = new List<NamedOnnxValue>
         {
-            NamedOnnxValue.CreateFromTensor("input", inputTensor)
+            NamedOnnxValue.CreateFromTensor(inputName, inputTensor)
         };
 
         using var results = OnnxSession.Run(inputs);
