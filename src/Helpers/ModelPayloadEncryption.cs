@@ -197,6 +197,129 @@ public static class ModelPayloadEncryption
         return $"{typeName ?? string.Empty}|{inputStr}|{outputStr}";
     }
 
+    /// <summary>
+    /// Encrypts a model payload using AES-256-GCM with enhanced key derivation that
+    /// incorporates the build-time signing key and an optional server-side decryption token.
+    /// </summary>
+    /// <param name="payload">The plaintext model data to encrypt.</param>
+    /// <param name="licenseKey">The license key used to derive the base encryption key.</param>
+    /// <param name="aadText">Additional authenticated data for tamper detection.</param>
+    /// <param name="decryptionToken">Optional server-side escrow decryption token (Layer 2).</param>
+    /// <returns>An <see cref="EncryptedPayload"/> containing salt, nonce, tag, and ciphertext.</returns>
+    public static EncryptedPayload EncryptSigned(byte[] payload, string licenseKey, string aadText, byte[]? decryptionToken = null)
+    {
+        if (payload is null)
+        {
+            throw new ArgumentNullException(nameof(payload));
+        }
+
+        if (string.IsNullOrWhiteSpace(licenseKey))
+        {
+            throw new ArgumentException("License key cannot be null or empty.", nameof(licenseKey));
+        }
+
+#if NET471
+        throw new PlatformNotSupportedException(
+            "AIMF payload encryption requires .NET Core 3.0 or later.");
+#else
+        // Integrity check (Layer 3)
+        if (!AssemblyIntegrityChecker.VerifyIntegrity())
+        {
+            throw new CryptographicException(
+                "Assembly integrity check failed. The library may have been tampered with.");
+        }
+
+        var salt = RandomNumberGenerator.GetBytes(SaltSize);
+        var nonce = RandomNumberGenerator.GetBytes(NonceSize);
+        var tag = new byte[TagSize];
+        var ciphertext = new byte[payload.Length];
+        byte[] key = Array.Empty<byte>();
+
+        try
+        {
+            key = DeriveSignedKey(licenseKey, salt, decryptionToken);
+            var aad = string.IsNullOrEmpty(aadText)
+                ? Array.Empty<byte>()
+                : Encoding.UTF8.GetBytes(aadText);
+
+            using var aesGcm = new AesGcm(key, TagSize);
+            aesGcm.Encrypt(nonce, payload, ciphertext, tag, aad);
+
+            return new EncryptedPayload(salt, nonce, tag, ciphertext);
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(key);
+        }
+#endif
+    }
+
+    /// <summary>
+    /// Decrypts an AES-256-GCM encrypted model payload using enhanced key derivation
+    /// that incorporates the build-time signing key and an optional server-side decryption token.
+    /// </summary>
+    public static byte[] DecryptSigned(
+        byte[] ciphertext, string licenseKey, byte[] salt, byte[] nonce, byte[] tag,
+        string aadText, byte[]? decryptionToken = null)
+    {
+        if (ciphertext is null)
+        {
+            throw new ArgumentNullException(nameof(ciphertext));
+        }
+
+        if (string.IsNullOrWhiteSpace(licenseKey))
+        {
+            throw new ArgumentException("License key cannot be null or empty.", nameof(licenseKey));
+        }
+
+        if (salt is null)
+        {
+            throw new ArgumentNullException(nameof(salt));
+        }
+
+        if (nonce is null)
+        {
+            throw new ArgumentNullException(nameof(nonce));
+        }
+
+        if (tag is null)
+        {
+            throw new ArgumentNullException(nameof(tag));
+        }
+
+#if NET471
+        throw new PlatformNotSupportedException(
+            "AIMF payload encryption requires .NET Core 3.0 or later.");
+#else
+        // Integrity check (Layer 3)
+        if (!AssemblyIntegrityChecker.VerifyIntegrity())
+        {
+            throw new CryptographicException(
+                "Assembly integrity check failed. The library may have been tampered with.");
+        }
+
+        var plaintext = new byte[ciphertext.Length];
+        byte[] key = Array.Empty<byte>();
+
+        try
+        {
+            key = DeriveSignedKey(licenseKey, salt, decryptionToken);
+            var aad = string.IsNullOrEmpty(aadText)
+                ? Array.Empty<byte>()
+                : Encoding.UTF8.GetBytes(aadText);
+
+            using var aesGcm = new AesGcm(key, TagSize);
+            aesGcm.Decrypt(nonce, ciphertext, tag, plaintext, aad);
+
+            return plaintext;
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(key);
+        }
+#endif
+    }
+
 #if !NET471
     /// <summary>
     /// Derives a 256-bit AES key from a license key string and salt using PBKDF2-SHA256.
@@ -216,6 +339,56 @@ public static class ModelPayloadEncryption
         finally
         {
             CryptographicOperations.ZeroMemory(keyBytes);
+        }
+    }
+
+    /// <summary>
+    /// Derives a 256-bit AES key using enhanced derivation that incorporates the build-time
+    /// signing key (Layer 1) and optional decryption token (Layer 2).
+    /// </summary>
+    /// <remarks>
+    /// Key derivation: HMAC-SHA256(PBKDF2(licenseKey, salt), buildKey + decryptionToken)
+    /// This ensures that fork builds (no build key) derive a different final key and
+    /// cannot decrypt models encrypted by official builds.
+    /// </remarks>
+    private static byte[] DeriveSignedKey(string licenseKey, byte[] salt, byte[]? decryptionToken)
+    {
+        byte[] baseKey = Array.Empty<byte>();
+        byte[] finalKey = Array.Empty<byte>();
+
+        try
+        {
+            // Step 1: Standard PBKDF2 derivation
+            baseKey = DeriveKey(licenseKey, salt);
+
+            // Step 2: Incorporate build key and decryption token via HMAC
+            var buildKey = BuildKeyProvider.GetBuildKey();
+            var tokenBytes = decryptionToken ?? Array.Empty<byte>();
+
+            // Combine buildKey + decryptionToken as the HMAC message
+            var hmacMessage = new byte[buildKey.Length + tokenBytes.Length];
+            if (buildKey.Length > 0)
+            {
+                Buffer.BlockCopy(buildKey, 0, hmacMessage, 0, buildKey.Length);
+            }
+
+            if (tokenBytes.Length > 0)
+            {
+                Buffer.BlockCopy(tokenBytes, 0, hmacMessage, buildKey.Length, tokenBytes.Length);
+            }
+
+            using var hmac = new HMACSHA256(baseKey);
+            finalKey = hmac.ComputeHash(hmacMessage);
+
+            // Return a copy since we need to zero baseKey
+            var result = new byte[KeySize];
+            Buffer.BlockCopy(finalKey, 0, result, 0, KeySize);
+            return result;
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(baseKey);
+            CryptographicOperations.ZeroMemory(finalKey);
         }
     }
 #endif

@@ -227,6 +227,41 @@ public static class ModelFileHeader
             PayloadEncryptionScheme.AesGcm256, salt, nonce, tag);
     }
 
+    /// <summary>
+    /// Wraps an encrypted payload with an AIMF header using a specified encryption scheme.
+    /// </summary>
+    public static byte[] WrapWithHeaderEncrypted(
+        byte[] encryptedPayload,
+        IModelSerializer model,
+        int[] inputShape,
+        int[] outputShape,
+        SerializationFormat format,
+        byte[] salt,
+        byte[] nonce,
+        byte[] tag,
+        PayloadEncryptionScheme scheme,
+        DynamicShapeInfo? dynamicShapeInfo = null)
+    {
+        if (salt is null)
+        {
+            throw new ArgumentNullException(nameof(salt));
+        }
+
+        if (nonce is null)
+        {
+            throw new ArgumentNullException(nameof(nonce));
+        }
+
+        if (tag is null)
+        {
+            throw new ArgumentNullException(nameof(tag));
+        }
+
+        return WrapWithHeaderInternal(
+            encryptedPayload, model, inputShape, outputShape, format, dynamicShapeInfo,
+            scheme, salt, nonce, tag);
+    }
+
     private static byte[] WrapWithHeaderInternal(
         byte[] payload,
         IModelSerializer model,

@@ -34,4 +34,10 @@ public sealed class LicenseKeyEntity
     public string? Environment { get; set; }
 
     public string? Notes { get; set; }
+
+    /// <summary>
+    /// Server-side escrow secret (32 bytes) used to compute decryption tokens.
+    /// Generated at license creation time. Never sent to the client directly.
+    /// </summary>
+    public byte[] EscrowSecret { get; set; } = Array.Empty<byte>();
 }

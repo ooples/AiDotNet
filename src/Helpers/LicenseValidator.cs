@@ -167,7 +167,8 @@ internal sealed class LicenseValidator
             expiresAt = (DateTimeOffset?)null,
             seatsUsed = 0,
             seatsMax = (int?)null,
-            message = (string?)null
+            message = (string?)null,
+            decryptionToken = (string?)null
         });
 
         if (obj is null)
@@ -180,6 +181,20 @@ internal sealed class LicenseValidator
             status = LicenseKeyStatus.Invalid;
         }
 
+        // Parse decryption token from base64
+        byte[]? tokenBytes = null;
+        if (!string.IsNullOrWhiteSpace(obj.decryptionToken))
+        {
+            try
+            {
+                tokenBytes = Convert.FromBase64String(obj.decryptionToken);
+            }
+            catch (FormatException)
+            {
+                // Ignore malformed token — will use null
+            }
+        }
+
         return new LicenseValidationResult(
             status,
             tier: obj.tier,
@@ -187,6 +202,7 @@ internal sealed class LicenseValidator
             seatsUsed: obj.seatsUsed,
             seatsMax: obj.seatsMax,
             validatedAt: DateTimeOffset.UtcNow,
-            message: obj.message);
+            message: obj.message,
+            decryptionToken: tokenBytes);
     }
 }

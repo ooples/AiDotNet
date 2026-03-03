@@ -20,5 +20,12 @@ public enum PayloadEncryptionScheme
     /// Payload is encrypted using AES-256-GCM with a key derived from a license key via PBKDF2-SHA256.
     /// Requires .NET Core 3.0 or later (not available on .NET Framework 4.7.1).
     /// </summary>
-    AesGcm256 = 1
+    AesGcm256 = 1,
+
+    /// <summary>
+    /// Payload is encrypted using AES-256-GCM with enhanced key derivation that incorporates a
+    /// build-time signing key and optional server-side decryption token.
+    /// Files encrypted with this scheme can only be decrypted by official builds.
+    /// </summary>
+    AesGcm256Signed = 2
 }

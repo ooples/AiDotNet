@@ -16,4 +16,10 @@ public sealed class LicenseValidationResponse
     public int? SeatsMax { get; set; }
 
     public string? Message { get; set; }
+
+    /// <summary>
+    /// Base64-encoded decryption token derived from the server-side escrow secret.
+    /// Only returned when the license status is Active. Used for Layer 2 key escrow.
+    /// </summary>
+    public string? DecryptionToken { get; set; }
 }

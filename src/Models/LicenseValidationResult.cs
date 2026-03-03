@@ -48,6 +48,12 @@ public sealed class LicenseValidationResult
     public string? Message { get; }
 
     /// <summary>
+    /// Gets the server-side decryption token for Layer 2 key escrow, or null if not available.
+    /// This token is cached alongside the validation result for offline use.
+    /// </summary>
+    public byte[]? DecryptionToken { get; }
+
+    /// <summary>
     /// Creates a new <see cref="LicenseValidationResult"/>.
     /// </summary>
     public LicenseValidationResult(
@@ -57,7 +63,8 @@ public sealed class LicenseValidationResult
         int seatsUsed = 0,
         int? seatsMax = null,
         DateTimeOffset? validatedAt = null,
-        string? message = null)
+        string? message = null,
+        byte[]? decryptionToken = null)
     {
         Status = status;
         Tier = tier;
@@ -66,5 +73,6 @@ public sealed class LicenseValidationResult
         SeatsMax = seatsMax;
         ValidatedAt = validatedAt ?? DateTimeOffset.UtcNow;
         Message = message;
+        DecryptionToken = decryptionToken;
     }
 }

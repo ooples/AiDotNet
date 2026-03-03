@@ -3284,7 +3284,17 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                 ? outShape.GetOutputShape()
                 : Array.Empty<int>();
 
-            ModelLoader.SaveEncrypted(serializer, filePath, resolvedKey, inputShape, outputShape);
+            // Get decryption token from cached validation result (Layer 2)
+            byte[]? decryptionToken = null;
+            if (_licenseKey is not null && !string.IsNullOrWhiteSpace(_licenseKey.ServerUrl))
+            {
+                var validator = new LicenseValidator(_licenseKey);
+                var validationResult = validator.Validate();
+                decryptionToken = validationResult.DecryptionToken;
+            }
+
+            ModelLoader.SaveEncrypted(serializer, filePath, resolvedKey, inputShape, outputShape,
+                decryptionToken: decryptionToken);
             return;
         }
 
@@ -3312,6 +3322,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             if (info.IsEncrypted)
             {
                 // Validate license if server URL is configured
+                byte[]? decryptionToken = null;
                 if (_licenseKey is not null && !string.IsNullOrWhiteSpace(_licenseKey.ServerUrl))
                 {
                     var validator = new LicenseValidator(_licenseKey);
@@ -3324,6 +3335,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                             $"License validation failed with status '{validationResult.Status}'. " +
                             (validationResult.Message ?? "Cannot load encrypted model."));
                     }
+
+                    decryptionToken = validationResult.DecryptionToken;
                 }
 
                 string? resolvedKey = LicenseKeyResolver.Resolve(_licenseKey);
@@ -3336,7 +3349,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
 
                 // Load via ModelLoader which handles decryption
                 byte[] data = File.ReadAllBytes(filePath);
-                var model = ModelLoader.LoadFromBytes<T>(data, resolvedKey);
+                var model = ModelLoader.LoadFromBytes<T>(data, resolvedKey, decryptionToken);
 
                 // Wrap in AiModelResult — the model is the deserialized IModelSerializer
                 byte[] decryptedPayload = model.Serialize();

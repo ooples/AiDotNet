@@ -58,6 +58,9 @@ public sealed class LicenseService : ILicenseService
         int iterations = DefaultPbkdf2Iterations;
         var hash = Pbkdf2(secretBytes, salt, iterations, HashBytes);
 
+        // Generate escrow secret for Layer 2 key escrow
+        var escrowSecret = RandomNumberGenerator.GetBytes(32);
+
         var entity = new LicenseKeyEntity
         {
             Id = Guid.NewGuid(),
@@ -72,7 +75,8 @@ public sealed class LicenseService : ILicenseService
             CreatedAt = DateTimeOffset.UtcNow,
             ExpiresAt = request.ExpiresAt,
             Environment = request.Environment?.Trim(),
-            Notes = request.Notes?.Trim()
+            Notes = request.Notes?.Trim(),
+            EscrowSecret = escrowSecret
         };
 
         _db.LicenseKeys.Add(entity);
@@ -128,6 +132,16 @@ public sealed class LicenseService : ILicenseService
                         CryptographicOperations.FixedTimeEquals(entity.Hash, computed);
 
         CryptographicOperations.ZeroMemory(computed);
+
+        // Compute decryption token from escrow secret BEFORE zeroing secretBytes (Layer 2)
+        string? decryptionToken = null;
+        if (secretOk && entity.EscrowSecret is not null && entity.EscrowSecret.Length > 0)
+        {
+            using var hmac = new HMACSHA256(entity.EscrowSecret);
+            var tokenBytes = hmac.ComputeHash(secretBytes);
+            decryptionToken = Convert.ToBase64String(tokenBytes);
+        }
+
         CryptographicOperations.ZeroMemory(secretBytes);
 
         if (!secretOk)
@@ -196,7 +210,8 @@ public sealed class LicenseService : ILicenseService
             ExpiresAt = entity.ExpiresAt,
             SeatsUsed = seatsUsed,
             SeatsMax = entity.MaxSeats,
-            Message = "License is valid."
+            Message = "License is valid.",
+            DecryptionToken = decryptionToken
         };
     }
 

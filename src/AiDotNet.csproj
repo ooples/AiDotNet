@@ -170,6 +170,16 @@
 	  <PackageReference Include="AiDotNet.Native.OneDNN" Version="0.8.0" />
 	</ItemGroup>
 
+	<!-- Build-time signing key (injected by CI/CD, not present in dev builds) -->
+	<ItemGroup>
+	  <EmbeddedResource Include="BuildKey\BuildKey.bin" Condition="Exists('BuildKey\BuildKey.bin')">
+	    <LogicalName>AiDotNet.BuildKey</LogicalName>
+	  </EmbeddedResource>
+	  <EmbeddedResource Include="IntegrityHash\IntegrityHash.bin" Condition="Exists('IntegrityHash\IntegrityHash.bin')">
+	    <LogicalName>AiDotNet.IntegrityHash</LogicalName>
+	  </EmbeddedResource>
+	</ItemGroup>
+
 	<!-- Global usings for AiDotNet.Tensors namespaces -->
 	<ItemGroup>
 	  <Using Include="AiDotNet.Tensors.LinearAlgebra" />

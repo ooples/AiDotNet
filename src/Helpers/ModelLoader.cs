@@ -53,7 +53,7 @@ public static class ModelLoader
     /// <exception cref="CryptographicException">
     /// Thrown when the license key is incorrect or the encrypted data has been tampered with.
     /// </exception>
-    public static IModelSerializer Load<T>(string filePath, string? licenseKey = null)
+    public static IModelSerializer Load<T>(string filePath, string? licenseKey = null, byte[]? decryptionToken = null)
     {
         if (string.IsNullOrWhiteSpace(filePath))
         {
@@ -66,7 +66,7 @@ public static class ModelLoader
         }
 
         byte[] data = File.ReadAllBytes(filePath);
-        return LoadFromBytes<T>(data, licenseKey);
+        return LoadFromBytes<T>(data, licenseKey, decryptionToken);
     }
 
     /// <summary>
@@ -87,7 +87,7 @@ public static class ModelLoader
     /// <exception cref="CryptographicException">
     /// Thrown when the license key is incorrect or the encrypted data has been tampered with.
     /// </exception>
-    public static IModelSerializer LoadFromBytes<T>(byte[] data, string? licenseKey = null)
+    public static IModelSerializer LoadFromBytes<T>(byte[] data, string? licenseKey = null, byte[]? decryptionToken = null)
     {
         if (data is null)
         {
@@ -139,7 +139,15 @@ public static class ModelLoader
                 "Encrypted AIMF file is missing required tag parameter.");
 
             var aad = ModelPayloadEncryption.BuildAad(info.TypeName, info.InputShape, info.OutputShape);
-            payload = ModelPayloadEncryption.Decrypt(payload, licenseKey, salt, nonce, tag, aad);
+
+            if (info.EncryptionScheme == PayloadEncryptionScheme.AesGcm256Signed)
+            {
+                payload = ModelPayloadEncryption.DecryptSigned(payload, licenseKey, salt, nonce, tag, aad, decryptionToken);
+            }
+            else
+            {
+                payload = ModelPayloadEncryption.Decrypt(payload, licenseKey, salt, nonce, tag, aad);
+            }
         }
 
         model.Deserialize(payload);
@@ -173,7 +181,8 @@ public static class ModelLoader
         int[] inputShape,
         int[] outputShape,
         SerializationFormat format = SerializationFormat.Binary,
-        DynamicShapeInfo? dynamicShapeInfo = null)
+        DynamicShapeInfo? dynamicShapeInfo = null,
+        byte[]? decryptionToken = null)
     {
         if (model is null)
         {
@@ -201,8 +210,20 @@ public static class ModelLoader
         string typeName = modelType.Name;
         var aad = ModelPayloadEncryption.BuildAad(typeName, inputShape, outputShape);
 
-        // Encrypt
-        var encrypted = ModelPayloadEncryption.Encrypt(plaintext, licenseKey, aad);
+        // Choose encryption scheme based on whether this is an official build
+        EncryptedPayload encrypted;
+        PayloadEncryptionScheme scheme;
+
+        if (BuildKeyProvider.IsOfficialBuild)
+        {
+            encrypted = ModelPayloadEncryption.EncryptSigned(plaintext, licenseKey, aad, decryptionToken);
+            scheme = PayloadEncryptionScheme.AesGcm256Signed;
+        }
+        else
+        {
+            encrypted = ModelPayloadEncryption.Encrypt(plaintext, licenseKey, aad);
+            scheme = PayloadEncryptionScheme.AesGcm256;
+        }
 
         // Wrap with header
         byte[] enveloped = ModelFileHeader.WrapWithHeaderEncrypted(
@@ -214,6 +235,7 @@ public static class ModelLoader
             encrypted.Salt,
             encrypted.Nonce,
             encrypted.Tag,
+            scheme,
             dynamicShapeInfo);
 
         File.WriteAllBytes(filePath, enveloped);
