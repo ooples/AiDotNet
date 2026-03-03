@@ -44,6 +44,8 @@ public class Program
             builder.Configuration.GetSection("ServingSqlSandbox"));
         builder.Services.Configure<ServingProgramSynthesisOptions>(
             builder.Configuration.GetSection("ServingProgramSynthesis"));
+        builder.Services.Configure<StripeOptions>(
+            builder.Configuration.GetSection("StripeOptions"));
 
         // Get serving options to configure Kestrel
         var servingOptions = new ServingOptions();
@@ -113,6 +115,9 @@ public class Program
 
         // License key management
         builder.Services.AddScoped<ILicenseService, LicenseService>();
+
+        // Stripe payment integration
+        builder.Services.AddScoped<IStripeService, StripeService>();
         builder.Services.AddAuthentication(ApiKeyAuthenticationDefaults.Scheme)
             .AddScheme<ApiKeyAuthenticationOptions, ApiKeyAuthenticationHandler>(
                 ApiKeyAuthenticationDefaults.Scheme,

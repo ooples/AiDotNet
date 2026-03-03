@@ -22,6 +22,10 @@ public sealed class ServingDbContext : DbContext, IDataProtectionKeyContext
 
     public DbSet<LicenseActivationEntity> LicenseActivations => Set<LicenseActivationEntity>();
 
+    public DbSet<StripeCustomerEntity> StripeCustomers => Set<StripeCustomerEntity>();
+
+    public DbSet<StripeSubscriptionEntity> StripeSubscriptions => Set<StripeSubscriptionEntity>();
+
     public DbSet<DataProtectionKey> DataProtectionKeys => Set<DataProtectionKey>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -61,6 +65,26 @@ public sealed class ServingDbContext : DbContext, IDataProtectionKeyContext
             entity.Property(e => e.MachineId).HasMaxLength(128).IsRequired();
             entity.Property(e => e.MachineName).HasMaxLength(256);
             entity.Property(e => e.Environment).HasMaxLength(64);
+        });
+
+        modelBuilder.Entity<StripeCustomerEntity>(entity =>
+        {
+            entity.ToTable("StripeCustomers");
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.StripeCustomerId).IsUnique();
+            entity.Property(e => e.StripeCustomerId).HasMaxLength(128).IsRequired();
+            entity.Property(e => e.Email).HasMaxLength(320).IsRequired();
+            entity.Property(e => e.Name).HasMaxLength(200).IsRequired();
+        });
+
+        modelBuilder.Entity<StripeSubscriptionEntity>(entity =>
+        {
+            entity.ToTable("StripeSubscriptions");
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.StripeSubscriptionId).IsUnique();
+            entity.Property(e => e.StripeSubscriptionId).HasMaxLength(128).IsRequired();
+            entity.Property(e => e.StripeCustomerId).HasMaxLength(128).IsRequired();
+            entity.Property(e => e.StripePriceId).HasMaxLength(128).IsRequired();
         });
 
         modelBuilder.Entity<ProtectedArtifactEntity>(entity =>
