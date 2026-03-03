@@ -293,11 +293,8 @@ public abstract class MultiLabelClassifierBase<T> : IMultiLabelClassifier<T>, IC
     {
         byte[] serializedData = System.IO.File.ReadAllBytes(path);
 
-        // Strip AIMF envelope header if present, falling back to legacy format
-        if (ModelFileHeader.HasHeader(serializedData))
-        {
-            serializedData = ModelFileHeader.ExtractPayload(serializedData);
-        }
+        // Extract payload from AIMF envelope
+        serializedData = ModelFileHeader.ExtractPayload(serializedData);
 
         Deserialize(serializedData);
     }

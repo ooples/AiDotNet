@@ -244,8 +244,8 @@ public static class ModelFileHeader
         {
             throw new InvalidOperationException(
                 "Data does not contain a valid AIMF envelope header. " +
-                "This file may have been saved without the AIMF envelope (legacy format). " +
-                "Use the model's LoadModel() method directly for legacy files.");
+                "This is not a valid AIMF model file. " +
+                "Models must be saved with the AIMF envelope format.");
         }
 
         using var ms = new MemoryStream(data);

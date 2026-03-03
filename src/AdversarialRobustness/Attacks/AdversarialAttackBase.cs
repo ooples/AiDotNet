@@ -184,11 +184,8 @@ public abstract class AdversarialAttackBase<T, TInput, TOutput> : IAdversarialAt
 
         var data = File.ReadAllBytes(fullPath);
 
-        // Strip AIMF envelope header if present, falling back to legacy format
-        if (ModelFileHeader.HasHeader(data))
-        {
-            data = ModelFileHeader.ExtractPayload(data);
-        }
+        // Extract payload from AIMF envelope
+        data = ModelFileHeader.ExtractPayload(data);
 
         Deserialize(data);
     }

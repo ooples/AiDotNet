@@ -24,11 +24,8 @@ namespace AiDotNet.Helpers;
 /// Console.WriteLine($"Input shape: [{string.Join(", ", info.InputShape)}]");
 /// </code>
 ///
-/// For legacy files saved without the AIMF header, use the model's own LoadModel() method directly:
-/// <code>
-/// var network = new ConvolutionalNeuralNetwork&lt;double&gt;(architecture, lossFunction);
-/// network.LoadModel("legacy_model.bin");
-/// </code>
+/// All model files must use the AIMF envelope format. Files saved with SaveModel()
+/// automatically include the AIMF header.
 /// </remarks>
 public static class ModelLoader
 {
@@ -83,8 +80,8 @@ public static class ModelLoader
         {
             throw new InvalidOperationException(
                 "The data does not contain an AIMF envelope header. " +
-                "This file was likely saved in the legacy format (before AIMF envelopes were added). " +
-                "For legacy files, create the appropriate model instance manually and call LoadModel() or Deserialize() directly.");
+                "This is not a valid AIMF model file. " +
+                "Models must be saved with the AIMF envelope format.");
         }
 
         // Read header

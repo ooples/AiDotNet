@@ -358,11 +358,8 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
     {
         var data = File.ReadAllBytes(filePath);
 
-        // Strip AIMF envelope header if present, falling back to legacy format
-        if (ModelFileHeader.HasHeader(data))
-        {
-            data = ModelFileHeader.ExtractPayload(data);
-        }
+        // Extract payload from AIMF envelope
+        data = ModelFileHeader.ExtractPayload(data);
 
         Deserialize(data);
     }

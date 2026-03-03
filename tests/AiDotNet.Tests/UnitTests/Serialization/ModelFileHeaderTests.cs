@@ -41,10 +41,8 @@ internal sealed class StubModelSerializer : IModelSerializer, IModelShape
     public void LoadModel(string filePath)
     {
         byte[] raw = File.ReadAllBytes(filePath);
-        if (ModelFileHeader.HasHeader(raw))
-        {
-            raw = ModelFileHeader.ExtractPayload(raw);
-        }
+        // Extract payload from AIMF envelope (AIMF format required)
+        raw = ModelFileHeader.ExtractPayload(raw);
         Deserialize(raw);
     }
 
@@ -260,22 +258,21 @@ public class ModelFileHeaderTests
     }
 
     [Fact]
-    public void LoadModel_LegacyFile_FallsBackWithoutHeader()
+    public void LoadModel_NonAimfFile_Throws()
     {
-        var tempFile = Path.Combine(Path.GetTempPath(), $"legacy_test_{Guid.NewGuid():N}.bin");
+        var tempFile = Path.Combine(Path.GetTempPath(), $"non_aimf_test_{Guid.NewGuid():N}.bin");
         try
         {
-            // Write raw data WITHOUT AIMF header (simulating legacy format)
-            var legacyPayload = Encoding.UTF8.GetBytes("legacy-model-data");
-            File.WriteAllBytes(tempFile, legacyPayload);
+            // Write raw data WITHOUT AIMF header
+            var rawPayload = Encoding.UTF8.GetBytes("not-aimf-data");
+            File.WriteAllBytes(tempFile, rawPayload);
 
             Assert.False(ModelFileHeader.HasHeader(tempFile));
 
-            // LoadModel should handle legacy format
+            // LoadModel should throw because AIMF format is now required
             var model = new StubModelSerializer();
-            model.LoadModel(tempFile);
-
-            Assert.Equal(legacyPayload, model.GetDeserializedData());
+            var ex = Assert.Throws<InvalidOperationException>(() => model.LoadModel(tempFile));
+            Assert.Contains("AIMF", ex.Message);
         }
         finally
         {

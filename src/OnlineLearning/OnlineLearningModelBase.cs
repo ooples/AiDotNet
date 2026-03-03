@@ -420,11 +420,8 @@ public abstract class OnlineLearningModelBase<T> : IOnlineLearningModel<T>, IMod
     {
         byte[] serializedData = File.ReadAllBytes(filePath);
 
-        // Strip AIMF envelope header if present, falling back to legacy format
-        if (ModelFileHeader.HasHeader(serializedData))
-        {
-            serializedData = ModelFileHeader.ExtractPayload(serializedData);
-        }
+        // Extract payload from AIMF envelope
+        serializedData = ModelFileHeader.ExtractPayload(serializedData);
 
         Deserialize(serializedData);
     }
