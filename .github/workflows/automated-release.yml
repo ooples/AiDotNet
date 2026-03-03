@@ -263,6 +263,17 @@ jobs:
             echo EOF
           } >> $GITHUB_OUTPUT
 
+      - name: Inject build signing key
+        if: steps.version.outputs.should_release == 'true'
+        run: |
+          mkdir -p src/BuildKey
+          if [ -n "${{ secrets.AIDOTNET_BUILD_KEY }}" ]; then
+            echo "${{ secrets.AIDOTNET_BUILD_KEY }}" | xxd -r -p > src/BuildKey/BuildKey.bin
+            echo "Build key injected ($(wc -c < src/BuildKey/BuildKey.bin) bytes)"
+          else
+            echo "No AIDOTNET_BUILD_KEY secret configured, skipping build key injection"
+          fi
+
       - name: Restore dependencies
         if: steps.version.outputs.should_release == 'true'
         run: dotnet restore
@@ -318,6 +329,16 @@ jobs:
           key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/Directory.Build.props') }}
           restore-keys: |
             nuget-${{ runner.os }}-
+
+      - name: Inject build signing key
+        run: |
+          mkdir -p src/BuildKey
+          if [ -n "${{ secrets.AIDOTNET_BUILD_KEY }}" ]; then
+            echo "${{ secrets.AIDOTNET_BUILD_KEY }}" | xxd -r -p > src/BuildKey/BuildKey.bin
+            echo "Build key injected ($(wc -c < src/BuildKey/BuildKey.bin) bytes)"
+          else
+            echo "No AIDOTNET_BUILD_KEY secret configured, skipping build key injection"
+          fi
 
       - name: Restore and Build
         run: |
