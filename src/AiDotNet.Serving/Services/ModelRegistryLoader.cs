@@ -60,9 +60,9 @@ public class ModelRegistryLoader<T, TInput, TOutput>
     /// </param>
     /// <returns>True if the model was loaded successfully, false otherwise.</returns>
     /// <remarks>
-    /// <b>Limitation:</b> This method currently creates a placeholder wrapper that throws when prediction
-    /// is attempted. For actual inference, use <see cref="LoadWithServableModel"/> with a pre-loaded model.
-    /// Full model deserialization from StoragePath will be implemented in a future version.
+    /// <b>Note:</b> This method creates a placeholder wrapper. For automatic type detection and
+    /// fully functional prediction, use <see cref="LoadFromRegistryAutoDetect"/> instead,
+    /// or <see cref="LoadWithServableModel"/> with a pre-configured model.
     /// </remarks>
     public bool LoadFromRegistry(
         string modelName,
@@ -133,9 +133,9 @@ public class ModelRegistryLoader<T, TInput, TOutput>
     /// </param>
     /// <returns>True if the model was loaded successfully, false otherwise.</returns>
     /// <remarks>
-    /// <b>Limitation:</b> This method currently creates a placeholder wrapper that throws when prediction
-    /// is attempted. For actual inference, use <see cref="LoadWithServableModel"/> with a pre-loaded model.
-    /// Full model deserialization from StoragePath will be implemented in a future version.
+    /// <b>Note:</b> This method creates a placeholder wrapper. For automatic type detection and
+    /// fully functional prediction, use <see cref="LoadFromRegistryAutoDetect"/> instead,
+    /// or <see cref="LoadWithServableModel"/> with a pre-configured model.
     /// </remarks>
     public bool LoadFromRegistryByStage(
         string modelName,
@@ -287,9 +287,8 @@ public class ModelRegistryLoader<T, TInput, TOutput>
     /// <b>For Beginners:</b> This method automatically detects the model type from the saved file
     /// and loads it without needing to specify the model type manually. The model file must have
     /// been saved with the AIMF envelope header (which is the default for models saved with
-    /// SaveModel() after the Model Metadata Foundation was introduced).
-    ///
-    /// For legacy model files without the AIMF header, use <see cref="LoadWithServableModel"/> instead.
+    /// SaveModel()). The method auto-adapts any supported model type (Matrix, Tensor, Vector)
+    /// to the serving interface.
     /// </remarks>
     /// <exception cref="InvalidOperationException">
     /// Thrown when the model's storage path is not set, the file is not found, or the file
@@ -332,39 +331,10 @@ public class ModelRegistryLoader<T, TInput, TOutput>
         // Load via ModelLoader which handles AIMF detection, type resolution, and deserialization
         var model = ModelLoader.Load<T>(registeredModel.StoragePath);
 
-        // Extract shape info if the model supports it
-        int inputDimension = 0;
-        int outputDimension = 0;
-        if (model is IModelShape shapeModel)
-        {
-            var inputShape = shapeModel.GetInputShape();
-            var outputShape = shapeModel.GetOutputShape();
-            inputDimension = inputShape.Length > 0 ? inputShape[inputShape.Length - 1] : 0;
-            outputDimension = outputShape.Length > 0 ? outputShape[outputShape.Length - 1] : 0;
-        }
-
         var name = servingName ?? modelName;
 
-        // Create a ServableModelWrapper using the deserialized model
-        // The predict function delegates to the deserialized model if it supports prediction
-        var servableModel = new ServableModelWrapper<T>(
-            name,
-            inputDimension,
-            outputDimension,
-            input =>
-            {
-                if (model is IModel<Vector<T>, Vector<T>, ModelMetadata<T>> predictableModel)
-                {
-                    return predictableModel.Predict(input);
-                }
-
-                throw new InvalidOperationException(
-                    $"Model '{name}' (type: {model.GetType().Name}) does not support Vector<T> prediction. " +
-                    "Use LoadWithServableModel() with a custom predict function instead.");
-            },
-            null,
-            enableBatching: true,
-            enableSpeculativeDecoding: false);
+        // Auto-detect model type and create appropriate ServableModelWrapper
+        var servableModel = ServableModelWrapper<T>.FromModel(name, model);
 
         return _repository.LoadModelFromRegistry(
             name,
