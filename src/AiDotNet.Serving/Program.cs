@@ -7,6 +7,7 @@ using AiDotNet.Serving.Sandboxing.Sql;
 using AiDotNet.Serving.Security;
 using AiDotNet.Serving.Security.ApiKeys;
 using AiDotNet.Serving.Security.Attestation;
+using AiDotNet.Serving.Security.Licensing;
 using AiDotNet.Serving.Services;
 using AiDotNet.Serving.Services.Federated;
 using Microsoft.AspNetCore.DataProtection;
@@ -109,6 +110,9 @@ public class Program
 
         // API key authentication (tier enforcement)
         builder.Services.AddScoped<IApiKeyService, ApiKeyService>();
+
+        // License key management
+        builder.Services.AddScoped<ILicenseService, LicenseService>();
         builder.Services.AddAuthentication(ApiKeyAuthenticationDefaults.Scheme)
             .AddScheme<ApiKeyAuthenticationOptions, ApiKeyAuthenticationHandler>(
                 ApiKeyAuthenticationDefaults.Scheme,

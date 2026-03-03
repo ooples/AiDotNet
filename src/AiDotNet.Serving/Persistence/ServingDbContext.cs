@@ -18,6 +18,10 @@ public sealed class ServingDbContext : DbContext, IDataProtectionKeyContext
 
     public DbSet<ProtectedArtifactEntity> ProtectedArtifacts => Set<ProtectedArtifactEntity>();
 
+    public DbSet<LicenseKeyEntity> LicenseKeys => Set<LicenseKeyEntity>();
+
+    public DbSet<LicenseActivationEntity> LicenseActivations => Set<LicenseActivationEntity>();
+
     public DbSet<DataProtectionKey> DataProtectionKeys => Set<DataProtectionKey>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -33,6 +37,30 @@ public sealed class ServingDbContext : DbContext, IDataProtectionKeyContext
             entity.Property(e => e.Name).HasMaxLength(200).IsRequired();
             entity.Property(e => e.Salt).IsRequired();
             entity.Property(e => e.Hash).IsRequired();
+        });
+
+        modelBuilder.Entity<LicenseKeyEntity>(entity =>
+        {
+            entity.ToTable("LicenseKeys");
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.KeyId).IsUnique();
+            entity.Property(e => e.KeyId).HasMaxLength(64).IsRequired();
+            entity.Property(e => e.CustomerName).HasMaxLength(200).IsRequired();
+            entity.Property(e => e.CustomerEmail).HasMaxLength(320);
+            entity.Property(e => e.Salt).IsRequired();
+            entity.Property(e => e.Hash).IsRequired();
+            entity.Property(e => e.Environment).HasMaxLength(64);
+            entity.Property(e => e.Notes).HasMaxLength(2000);
+        });
+
+        modelBuilder.Entity<LicenseActivationEntity>(entity =>
+        {
+            entity.ToTable("LicenseActivations");
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => new { e.LicenseKeyId, e.MachineId }).IsUnique();
+            entity.Property(e => e.MachineId).HasMaxLength(128).IsRequired();
+            entity.Property(e => e.MachineName).HasMaxLength(256);
+            entity.Property(e => e.Environment).HasMaxLength(64);
         });
 
         modelBuilder.Entity<ProtectedArtifactEntity>(entity =>

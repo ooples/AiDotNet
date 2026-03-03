@@ -228,6 +228,9 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     private BenchmarkingOptions? _benchmarkingOptions;
     private AiDotNet.Safety.SafetyConfig? _safetyPipelineConfig;
 
+    // License key configuration
+    private AiDotNetLicenseKey? _licenseKey;
+
     // Tokenization configuration
     private ITokenizer? _tokenizer;
     private TokenizationConfig? _tokenizationConfig;
@@ -264,6 +267,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     internal AiDotNet.Configuration.InferenceOptimizationConfig? ConfiguredInferenceOptimizations => _inferenceOptimizationConfig;
     internal InterpretabilityOptions? ConfiguredInterpretability => _interpretabilityOptions;
     internal Training.Memory.TrainingMemoryConfig? ConfiguredMemoryManagement => _memoryConfig;
+    internal AiDotNetLicenseKey? ConfiguredLicenseKey => _licenseKey;
 
     /// <summary>
     /// Creates a new <see cref="AiModelBuilder{T, TInput, TOutput}"/> with configuration loaded from a YAML file.
@@ -307,12 +311,14 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// </remarks>
     /// <exception cref="ArgumentException">Thrown when <paramref name="configFilePath"/> is null or empty.</exception>
     /// <exception cref="FileNotFoundException">Thrown when the YAML file does not exist.</exception>
-    public AiModelBuilder(string configFilePath)
+    public AiModelBuilder(string configFilePath, AiDotNetLicenseKey? licenseKey = null)
     {
         if (string.IsNullOrWhiteSpace(configFilePath))
         {
             throw new ArgumentException("Config file path cannot be null or empty.", nameof(configFilePath));
         }
+
+        _licenseKey = licenseKey;
 
         var fullPath = Path.GetFullPath(configFilePath);
         if (!File.Exists(fullPath))
@@ -333,8 +339,9 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// <c>.Configure*()</c> methods in C# code.
     /// </para>
     /// </remarks>
-    public AiModelBuilder()
+    public AiModelBuilder(AiDotNetLicenseKey? licenseKey = null)
     {
+        _licenseKey = licenseKey;
     }
 
     /// <summary>
@@ -661,6 +668,14 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     public IAiModelBuilder<T, TInput, TOutput> ConfigureOptimizer(IOptimizer<T, TInput, TOutput> optimizationAlgorithm)
     {
         _optimizer = optimizationAlgorithm;
+        return this;
+    }
+
+    /// <inheritdoc />
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureLicenseKey(AiDotNetLicenseKey licenseKey)
+    {
+        Guard.NotNull(licenseKey);
+        _licenseKey = licenseKey;
         return this;
     }
 
@@ -3257,6 +3272,22 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// </remarks>
     public void SaveModel(AiModelResult<T, TInput, TOutput> modelResult, string filePath)
     {
+        // When a license key is configured and the model implements IModelSerializer,
+        // save as an encrypted AIMF file. Otherwise, save unencrypted.
+        string? resolvedKey = LicenseKeyResolver.Resolve(_licenseKey);
+        if (resolvedKey is not null && modelResult.Model is Interfaces.IModelSerializer serializer)
+        {
+            int[] inputShape = modelResult.Model is Interfaces.IModelShape shape
+                ? shape.GetInputShape()
+                : Array.Empty<int>();
+            int[] outputShape = modelResult.Model is Interfaces.IModelShape outShape
+                ? outShape.GetOutputShape()
+                : Array.Empty<int>();
+
+            ModelLoader.SaveEncrypted(serializer, filePath, resolvedKey, inputShape, outputShape);
+            return;
+        }
+
         File.WriteAllBytes(filePath, SerializeModel(modelResult));
     }
 
@@ -3274,6 +3305,45 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// </remarks>
     public AiModelResult<T, TInput, TOutput> LoadModel(string filePath)
     {
+        // Check if the file is an encrypted AIMF model
+        if (ModelFileHeader.HasHeader(filePath))
+        {
+            var info = ModelLoader.Inspect(filePath);
+            if (info.IsEncrypted)
+            {
+                // Validate license if server URL is configured
+                if (_licenseKey is not null && !string.IsNullOrWhiteSpace(_licenseKey.ServerUrl))
+                {
+                    var validator = new LicenseValidator(_licenseKey);
+                    var validationResult = validator.Validate();
+
+                    if (validationResult.Status == LicenseKeyStatus.Invalid ||
+                        validationResult.Status == LicenseKeyStatus.Revoked)
+                    {
+                        throw new InvalidOperationException(
+                            $"License validation failed with status '{validationResult.Status}'. " +
+                            (validationResult.Message ?? "Cannot load encrypted model."));
+                    }
+                }
+
+                string? resolvedKey = LicenseKeyResolver.Resolve(_licenseKey);
+                if (string.IsNullOrWhiteSpace(resolvedKey))
+                {
+                    throw new InvalidOperationException(
+                        "This model is encrypted. Provide a license key via the AiModelBuilder constructor, " +
+                        "the AIDOTNET_LICENSE_KEY environment variable, or ~/.aidotnet/license.key file.");
+                }
+
+                // Load via ModelLoader which handles decryption
+                byte[] data = File.ReadAllBytes(filePath);
+                var model = ModelLoader.LoadFromBytes<T>(data, resolvedKey);
+
+                // Wrap in AiModelResult — the model is the deserialized IModelSerializer
+                byte[] decryptedPayload = model.Serialize();
+                return DeserializeModel(decryptedPayload);
+            }
+        }
+
         byte[] modelData = File.ReadAllBytes(filePath);
         return DeserializeModel(modelData);
     }

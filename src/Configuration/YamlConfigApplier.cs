@@ -149,6 +149,19 @@ internal static partial class YamlConfigApplier<T, TInput, TOutput>
             builder.ConfigureMemoryManagement(config.MemoryManagement);
         }
 
+        // License key configuration
+        if (config.License is not null && !string.IsNullOrWhiteSpace(config.License.Key))
+        {
+            var licenseKey = new AiDotNet.Models.AiDotNetLicenseKey(config.License.Key)
+            {
+                ServerUrl = config.License.ServerUrl,
+                Environment = config.License.Environment,
+                OfflineGracePeriod = TimeSpan.FromDays(config.License.OfflineGracePeriodDays),
+                EnableTelemetry = config.License.EnableTelemetry
+            };
+            builder.ConfigureLicenseKey(licenseKey);
+        }
+
         // Apply all auto-generated sections discovered by the source generator.
         ApplyGenerated(config, builder);
     }
