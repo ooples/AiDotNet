@@ -237,8 +237,9 @@ public class ModelLoaderTests
         writer.Write("Fake.Assembly.QualifiedName");
         writer.Write(0); // input shape rank
         writer.Write(0); // output shape rank
-        writer.Write(0); // v2: dynamic input dimension count
-        writer.Write(0); // v2: dynamic output dimension count
+        writer.Write(0); // dynamic input dimension count
+        writer.Write(0); // dynamic output dimension count
+        writer.Write(0); // encryption scheme: None
         writer.Write((long)payload.Length);
         writer.Write(payload);
         writer.Flush();

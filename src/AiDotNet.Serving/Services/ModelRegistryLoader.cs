@@ -282,6 +282,10 @@ public class ModelRegistryLoader<T, TInput, TOutput>
     /// <param name="modelName">The name of the model in the registry.</param>
     /// <param name="version">The version to load. If null, loads the latest version.</param>
     /// <param name="servingName">Optional name to use in the serving repository. If null, uses modelName.</param>
+    /// <param name="licenseKey">
+    /// Optional license key for encrypted models. If the model file is encrypted and no key is
+    /// provided, loading will fail with an <see cref="InvalidOperationException"/>.
+    /// </param>
     /// <returns>True if the model was loaded successfully, false otherwise.</returns>
     /// <remarks>
     /// <b>For Beginners:</b> This method automatically detects the model type from the saved file
@@ -289,15 +293,19 @@ public class ModelRegistryLoader<T, TInput, TOutput>
     /// been saved with the AIMF envelope header (which is the default for models saved with
     /// SaveModel()). The method auto-adapts any supported model type (Matrix, Tensor, Vector)
     /// to the serving interface.
+    ///
+    /// If the model was saved with encryption via <see cref="ModelLoader.SaveEncrypted"/>,
+    /// you must provide the same license key to decrypt and load the model weights.
     /// </remarks>
     /// <exception cref="InvalidOperationException">
-    /// Thrown when the model's storage path is not set, the file is not found, or the file
-    /// does not have an AIMF envelope header.
+    /// Thrown when the model's storage path is not set, the file is not found, the file
+    /// does not have an AIMF envelope header, or the model is encrypted and no key is provided.
     /// </exception>
     public bool LoadFromRegistryAutoDetect(
         string modelName,
         int? version = null,
-        string? servingName = null)
+        string? servingName = null,
+        string? licenseKey = null)
     {
         Guard.NotNullOrWhiteSpace(modelName);
 
@@ -328,8 +336,8 @@ public class ModelRegistryLoader<T, TInput, TOutput>
                 $"Model file not found: {registeredModel.StoragePath}", registeredModel.StoragePath);
         }
 
-        // Load via ModelLoader which handles AIMF detection, type resolution, and deserialization
-        var model = ModelLoader.Load<T>(registeredModel.StoragePath);
+        // Load via ModelLoader which handles AIMF detection, type resolution, decryption, and deserialization
+        var model = ModelLoader.Load<T>(registeredModel.StoragePath, licenseKey);
 
         var name = servingName ?? modelName;
 

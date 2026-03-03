@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.Helpers;
@@ -37,13 +39,21 @@ public static class ModelLoader
     /// This must match the type the model was originally trained with.
     /// </typeparam>
     /// <param name="filePath">The path to the AIMF model file.</param>
+    /// <param name="licenseKey">
+    /// Optional license key for encrypted models. If the model is encrypted and no key is provided,
+    /// an <see cref="InvalidOperationException"/> is thrown.
+    /// </param>
     /// <returns>The deserialized model instance.</returns>
     /// <exception cref="ArgumentException">Thrown when the file path is null or empty.</exception>
     /// <exception cref="FileNotFoundException">Thrown when the file does not exist.</exception>
     /// <exception cref="InvalidOperationException">
-    /// Thrown when the file does not have an AIMF header, or the model type cannot be resolved.
+    /// Thrown when the file does not have an AIMF header, the model type cannot be resolved,
+    /// or the model is encrypted and no license key is provided.
     /// </exception>
-    public static IModelSerializer Load<T>(string filePath)
+    /// <exception cref="CryptographicException">
+    /// Thrown when the license key is incorrect or the encrypted data has been tampered with.
+    /// </exception>
+    public static IModelSerializer Load<T>(string filePath, string? licenseKey = null)
     {
         if (string.IsNullOrWhiteSpace(filePath))
         {
@@ -56,7 +66,7 @@ public static class ModelLoader
         }
 
         byte[] data = File.ReadAllBytes(filePath);
-        return LoadFromBytes<T>(data);
+        return LoadFromBytes<T>(data, licenseKey);
     }
 
     /// <summary>
@@ -64,12 +74,20 @@ public static class ModelLoader
     /// </summary>
     /// <typeparam name="T">The numeric type used by the model.</typeparam>
     /// <param name="data">The byte array containing the AIMF-enveloped model.</param>
+    /// <param name="licenseKey">
+    /// Optional license key for encrypted models. If the model is encrypted and no key is provided,
+    /// an <see cref="InvalidOperationException"/> is thrown.
+    /// </param>
     /// <returns>The deserialized model instance.</returns>
     /// <exception cref="ArgumentNullException">Thrown when data is null.</exception>
     /// <exception cref="InvalidOperationException">
-    /// Thrown when the data does not have an AIMF header, or the model type cannot be resolved.
+    /// Thrown when the data does not have an AIMF header, the model type cannot be resolved,
+    /// or the model is encrypted and no license key is provided.
     /// </exception>
-    public static IModelSerializer LoadFromBytes<T>(byte[] data)
+    /// <exception cref="CryptographicException">
+    /// Thrown when the license key is incorrect or the encrypted data has been tampered with.
+    /// </exception>
+    public static IModelSerializer LoadFromBytes<T>(byte[] data, string? licenseKey = null)
     {
         if (data is null)
         {
@@ -101,8 +119,29 @@ public static class ModelLoader
         // Create an instance
         var model = ModelTypeRegistry.CreateInstance<T>(openGenericType);
 
-        // Extract payload and deserialize
+        // Extract payload (raw bytes, possibly encrypted)
         byte[] payload = ModelFileHeader.ExtractPayload(data, info);
+
+        // Handle encryption
+        if (info.IsEncrypted)
+        {
+            if (licenseKey is null || string.IsNullOrWhiteSpace(licenseKey))
+            {
+                throw new InvalidOperationException(
+                    "This model is encrypted. Provide a license key to load it.");
+            }
+
+            byte[] salt = info.Salt ?? throw new InvalidOperationException(
+                "Encrypted AIMF file is missing required salt parameter.");
+            byte[] nonce = info.Nonce ?? throw new InvalidOperationException(
+                "Encrypted AIMF file is missing required nonce parameter.");
+            byte[] tag = info.Tag ?? throw new InvalidOperationException(
+                "Encrypted AIMF file is missing required tag parameter.");
+
+            var aad = ModelPayloadEncryption.BuildAad(info.TypeName, info.InputShape, info.OutputShape);
+            payload = ModelPayloadEncryption.Decrypt(payload, licenseKey, salt, nonce, tag, aad);
+        }
+
         model.Deserialize(payload);
 
         // Optional shape validation if the model implements IModelShape
@@ -112,6 +151,72 @@ public static class ModelLoader
         }
 
         return model;
+    }
+
+    /// <summary>
+    /// Saves a model to an encrypted AIMF file that requires a license key to load.
+    /// </summary>
+    /// <param name="model">The model to save. Must implement <see cref="IModelSerializer"/>.</param>
+    /// <param name="filePath">The output file path.</param>
+    /// <param name="licenseKey">The license key used to encrypt the model weights.</param>
+    /// <param name="inputShape">The input shape of the model. Pass empty array if unknown.</param>
+    /// <param name="outputShape">The output shape of the model. Pass empty array if unknown.</param>
+    /// <param name="format">The serialization format of the payload.</param>
+    /// <param name="dynamicShapeInfo">Optional dynamic shape information.</param>
+    /// <exception cref="ArgumentNullException">Thrown when model is null.</exception>
+    /// <exception cref="ArgumentException">Thrown when filePath or licenseKey is null/empty.</exception>
+    /// <exception cref="PlatformNotSupportedException">Thrown on .NET Framework 4.7.1.</exception>
+    public static void SaveEncrypted(
+        IModelSerializer model,
+        string filePath,
+        string licenseKey,
+        int[] inputShape,
+        int[] outputShape,
+        SerializationFormat format = SerializationFormat.Binary,
+        DynamicShapeInfo? dynamicShapeInfo = null)
+    {
+        if (model is null)
+        {
+            throw new ArgumentNullException(nameof(model));
+        }
+
+        if (string.IsNullOrWhiteSpace(filePath))
+        {
+            throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
+        }
+
+        if (string.IsNullOrWhiteSpace(licenseKey))
+        {
+            throw new ArgumentException("License key cannot be null or empty.", nameof(licenseKey));
+        }
+
+        inputShape ??= Array.Empty<int>();
+        outputShape ??= Array.Empty<int>();
+
+        // Serialize the model
+        byte[] plaintext = model.Serialize();
+
+        // Build AAD from model metadata
+        var modelType = model.GetType();
+        string typeName = modelType.Name;
+        var aad = ModelPayloadEncryption.BuildAad(typeName, inputShape, outputShape);
+
+        // Encrypt
+        var encrypted = ModelPayloadEncryption.Encrypt(plaintext, licenseKey, aad);
+
+        // Wrap with header
+        byte[] enveloped = ModelFileHeader.WrapWithHeaderEncrypted(
+            encrypted.Ciphertext,
+            model,
+            inputShape,
+            outputShape,
+            format,
+            encrypted.Salt,
+            encrypted.Nonce,
+            encrypted.Tag,
+            dynamicShapeInfo);
+
+        File.WriteAllBytes(filePath, enveloped);
     }
 
     /// <summary>

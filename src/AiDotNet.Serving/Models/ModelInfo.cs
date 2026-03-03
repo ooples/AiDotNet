@@ -92,5 +92,10 @@ public class ModelInfo
     /// Gets or sets the expected image size for multimodal models.
     /// </summary>
     public int? ImageSize { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether this model's AIMF file was encrypted with a license key.
+    /// </summary>
+    public bool IsEncrypted { get; set; }
 }
 

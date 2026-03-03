@@ -56,9 +56,33 @@ public sealed class ModelFileInfo
 
     /// <summary>
     /// Gets the dynamic shape information describing which dimensions are variable.
-    /// Available in envelope version 2+. For v1 envelopes, returns <see cref="DynamicShapeInfo.None"/>.
     /// </summary>
     public DynamicShapeInfo DynamicShapeInfo { get; }
+
+    /// <summary>
+    /// Gets the encryption scheme applied to the payload.
+    /// </summary>
+    public PayloadEncryptionScheme EncryptionScheme { get; }
+
+    /// <summary>
+    /// Gets the PBKDF2 salt used for key derivation when the payload is encrypted, or null if unencrypted.
+    /// </summary>
+    public byte[]? Salt { get; }
+
+    /// <summary>
+    /// Gets the AES-GCM nonce (IV) when the payload is encrypted, or null if unencrypted.
+    /// </summary>
+    public byte[]? Nonce { get; }
+
+    /// <summary>
+    /// Gets the AES-GCM authentication tag when the payload is encrypted, or null if unencrypted.
+    /// </summary>
+    public byte[]? Tag { get; }
+
+    /// <summary>
+    /// Gets whether the payload is encrypted and requires a license key to load.
+    /// </summary>
+    public bool IsEncrypted => EncryptionScheme != PayloadEncryptionScheme.None;
 
     /// <summary>
     /// Creates a new ModelFileInfo with the specified header values.
@@ -72,7 +96,11 @@ public sealed class ModelFileInfo
         int[] outputShape,
         long payloadLength,
         int headerLength,
-        DynamicShapeInfo? dynamicShapeInfo = null)
+        DynamicShapeInfo? dynamicShapeInfo = null,
+        PayloadEncryptionScheme encryptionScheme = PayloadEncryptionScheme.None,
+        byte[]? salt = null,
+        byte[]? nonce = null,
+        byte[]? tag = null)
     {
         EnvelopeVersion = envelopeVersion;
         Format = format;
@@ -83,6 +111,10 @@ public sealed class ModelFileInfo
         PayloadLength = payloadLength;
         HeaderLength = headerLength;
         DynamicShapeInfo = dynamicShapeInfo ?? DynamicShapeInfo.None;
+        EncryptionScheme = encryptionScheme;
+        Salt = salt;
+        Nonce = nonce;
+        Tag = tag;
     }
 }
 
@@ -95,7 +127,7 @@ public sealed class ModelFileInfo
 /// what format the data is in. This allows tools to identify and load models automatically
 /// without needing to know the model type in advance.
 ///
-/// The envelope format (v2) is:
+/// The envelope format (v1) is:
 /// <code>
 /// [Magic: 4 bytes "AIMF"]
 /// [Envelope version: int32]
@@ -104,14 +136,16 @@ public sealed class ModelFileInfo
 /// [Assembly-qualified name: length-prefixed string]
 /// [Input shape rank: int32] [Input shape dims: int32[]]
 /// [Output shape rank: int32] [Output shape dims: int32[]]
-/// [Dynamic input dim count: int32] [Dynamic input dim indices: int32[]]  (v2+)
-/// [Dynamic output dim count: int32] [Dynamic output dim indices: int32[]] (v2+)
+/// [Dynamic input dim count: int32] [Dynamic input dim indices: int32[]]
+/// [Dynamic output dim count: int32] [Dynamic output dim indices: int32[]]
+/// [Encryption scheme: int32]
+/// [If encrypted: Salt 16 bytes, Nonce 12 bytes, Tag 16 bytes]
 /// [Payload length: int64]
-/// [Payload: byte[]]
+/// [Payload: byte[] - plaintext or AES-256-GCM ciphertext]
 /// </code>
 ///
-/// The existing Serialize() output is stored unchanged as the payload.
-/// This preserves full backward compatibility with all existing model implementations.
+/// The existing Serialize() output is stored unchanged as the payload (or encrypted).
+/// The header is always plaintext, allowing Inspect() to read metadata without a key.
 /// </remarks>
 public static class ModelFileHeader
 {
@@ -121,9 +155,9 @@ public static class ModelFileHeader
     public const int AimfMagic = 0x41494D46;
 
     /// <summary>
-    /// Current envelope version. Version 2 adds dynamic shape dimension support.
+    /// Current envelope version. Version 1 includes dynamic shapes and encryption support.
     /// </summary>
-    public const int CurrentEnvelopeVersion = 2;
+    public const int CurrentEnvelopeVersion = 1;
 
     /// <summary>
     /// Wraps serialized model data with an AIMF envelope header.
@@ -142,6 +176,68 @@ public static class ModelFileHeader
         int[] outputShape,
         SerializationFormat format,
         DynamicShapeInfo? dynamicShapeInfo = null)
+    {
+        return WrapWithHeaderInternal(
+            payload, model, inputShape, outputShape, format, dynamicShapeInfo,
+            PayloadEncryptionScheme.None, null, null, null);
+    }
+
+    /// <summary>
+    /// Wraps serialized model data with an AIMF envelope header that includes encryption metadata.
+    /// The payload should already be encrypted before calling this method.
+    /// </summary>
+    /// <param name="encryptedPayload">The AES-256-GCM encrypted model data.</param>
+    /// <param name="model">The model instance, used to extract type information.</param>
+    /// <param name="inputShape">The input shape of the model.</param>
+    /// <param name="outputShape">The output shape of the model.</param>
+    /// <param name="format">The serialization format of the original (pre-encryption) payload.</param>
+    /// <param name="salt">The 16-byte PBKDF2 salt used for key derivation.</param>
+    /// <param name="nonce">The 12-byte AES-GCM nonce.</param>
+    /// <param name="tag">The 16-byte AES-GCM authentication tag.</param>
+    /// <param name="dynamicShapeInfo">Optional dynamic shape information.</param>
+    /// <returns>A byte array containing the AIMF header followed by the encrypted payload.</returns>
+    public static byte[] WrapWithHeaderEncrypted(
+        byte[] encryptedPayload,
+        IModelSerializer model,
+        int[] inputShape,
+        int[] outputShape,
+        SerializationFormat format,
+        byte[] salt,
+        byte[] nonce,
+        byte[] tag,
+        DynamicShapeInfo? dynamicShapeInfo = null)
+    {
+        if (salt is null)
+        {
+            throw new ArgumentNullException(nameof(salt));
+        }
+
+        if (nonce is null)
+        {
+            throw new ArgumentNullException(nameof(nonce));
+        }
+
+        if (tag is null)
+        {
+            throw new ArgumentNullException(nameof(tag));
+        }
+
+        return WrapWithHeaderInternal(
+            encryptedPayload, model, inputShape, outputShape, format, dynamicShapeInfo,
+            PayloadEncryptionScheme.AesGcm256, salt, nonce, tag);
+    }
+
+    private static byte[] WrapWithHeaderInternal(
+        byte[] payload,
+        IModelSerializer model,
+        int[] inputShape,
+        int[] outputShape,
+        SerializationFormat format,
+        DynamicShapeInfo? dynamicShapeInfo,
+        PayloadEncryptionScheme encryptionScheme,
+        byte[]? salt,
+        byte[]? nonce,
+        byte[]? tag)
     {
         if (payload is null)
         {
@@ -192,7 +288,7 @@ public static class ModelFileHeader
             writer.Write(outputShape[i]);
         }
 
-        // V2: Dynamic shape dimensions
+        // Dynamic shape dimensions
         var dynInfo = dynamicShapeInfo ?? DynamicShapeInfo.None;
         writer.Write(dynInfo.DynamicInputDimensions.Length);
         for (int i = 0; i < dynInfo.DynamicInputDimensions.Length; i++)
@@ -204,6 +300,17 @@ public static class ModelFileHeader
         for (int i = 0; i < dynInfo.DynamicOutputDimensions.Length; i++)
         {
             writer.Write(dynInfo.DynamicOutputDimensions[i]);
+        }
+
+        // Encryption scheme
+        writer.Write((int)encryptionScheme);
+
+        if (encryptionScheme != PayloadEncryptionScheme.None)
+        {
+            // Salt (16 bytes), Nonce (12 bytes), Tag (16 bytes)
+            writer.Write(salt ?? throw new InvalidOperationException("Salt is required for encrypted payloads."));
+            writer.Write(nonce ?? throw new InvalidOperationException("Nonce is required for encrypted payloads."));
+            writer.Write(tag ?? throw new InvalidOperationException("Tag is required for encrypted payloads."));
         }
 
         // Payload length
@@ -316,29 +423,38 @@ public static class ModelFileHeader
             outputShape[i] = reader.ReadInt32();
         }
 
-        // V2+: Dynamic shape dimensions (backward-compatible: v1 envelopes skip this)
-        DynamicShapeInfo? dynamicShapeInfo = null;
-        if (envelopeVersion >= 2)
+        // Dynamic shape dimensions
+        int dynInputCount = reader.ReadInt32();
+        var dynInputDims = new int[dynInputCount];
+        for (int i = 0; i < dynInputCount; i++)
         {
-            int dynInputCount = reader.ReadInt32();
-            var dynInputDims = new int[dynInputCount];
-            for (int i = 0; i < dynInputCount; i++)
-            {
-                dynInputDims[i] = reader.ReadInt32();
-            }
+            dynInputDims[i] = reader.ReadInt32();
+        }
 
-            int dynOutputCount = reader.ReadInt32();
-            var dynOutputDims = new int[dynOutputCount];
-            for (int i = 0; i < dynOutputCount; i++)
-            {
-                dynOutputDims[i] = reader.ReadInt32();
-            }
+        int dynOutputCount = reader.ReadInt32();
+        var dynOutputDims = new int[dynOutputCount];
+        for (int i = 0; i < dynOutputCount; i++)
+        {
+            dynOutputDims[i] = reader.ReadInt32();
+        }
 
-            dynamicShapeInfo = new DynamicShapeInfo
-            {
-                DynamicInputDimensions = dynInputDims,
-                DynamicOutputDimensions = dynOutputDims
-            };
+        var dynamicShapeInfo = new DynamicShapeInfo
+        {
+            DynamicInputDimensions = dynInputDims,
+            DynamicOutputDimensions = dynOutputDims
+        };
+
+        // Encryption scheme
+        var encryptionScheme = (PayloadEncryptionScheme)reader.ReadInt32();
+        byte[]? salt = null;
+        byte[]? nonce = null;
+        byte[]? tag = null;
+
+        if (encryptionScheme != PayloadEncryptionScheme.None)
+        {
+            salt = reader.ReadBytes(16);
+            nonce = reader.ReadBytes(12);
+            tag = reader.ReadBytes(16);
         }
 
         // Payload length
@@ -355,7 +471,11 @@ public static class ModelFileHeader
             outputShape,
             payloadLength,
             headerLength,
-            dynamicShapeInfo);
+            dynamicShapeInfo,
+            encryptionScheme,
+            salt,
+            nonce,
+            tag);
     }
 
     /// <summary>
