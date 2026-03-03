@@ -1,5 +1,3 @@
-using AiDotNet.Models;
-
 namespace AiDotNet.Interfaces;
 
 /// <summary>
@@ -61,5 +59,5 @@ public interface IModelShape
     /// This information is used by the serving infrastructure to validate incoming requests
     /// without rejecting valid inputs that simply have a different batch size.
     /// </remarks>
-    DynamicShapeInfo GetDynamicShapeInfo() => DynamicShapeInfo.None;
+    DynamicShapeInfo GetDynamicShapeInfo();
 }

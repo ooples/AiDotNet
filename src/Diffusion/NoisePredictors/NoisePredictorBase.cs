@@ -212,6 +212,13 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape
         return new[] { OutputChannels };
     }
 
+    /// <inheritdoc/>
+    public virtual DynamicShapeInfo GetDynamicShapeInfo()
+    {
+        return DynamicShapeInfo.None;
+    }
+
+
     /// <inheritdoc />
     public virtual void SaveModel(string filePath)
     {

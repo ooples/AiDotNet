@@ -130,6 +130,13 @@ public abstract class FineTuningBase<T, TInput, TOutput> : IFineTuning<T, TInput
     }
 
     /// <inheritdoc/>
+    public virtual DynamicShapeInfo GetDynamicShapeInfo()
+    {
+        return DynamicShapeInfo.None;
+    }
+
+
+    /// <inheritdoc/>
     public virtual void SaveModel(string filePath)
     {
         if (string.IsNullOrWhiteSpace(filePath))

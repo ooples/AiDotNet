@@ -386,6 +386,13 @@ public abstract class ClusteringBase<T> : IClustering<T>, IConfigurableModel<T>,
     }
 
     /// <inheritdoc/>
+    public virtual DynamicShapeInfo GetDynamicShapeInfo()
+    {
+        return DynamicShapeInfo.None;
+    }
+
+
+    /// <inheritdoc/>
     public virtual void SaveModel(string filePath)
     {
         byte[] data = Serialize();

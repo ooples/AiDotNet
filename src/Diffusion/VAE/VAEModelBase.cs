@@ -251,6 +251,13 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
         return new[] { LatentChannels };
     }
 
+    /// <inheritdoc/>
+    public virtual DynamicShapeInfo GetDynamicShapeInfo()
+    {
+        return DynamicShapeInfo.None;
+    }
+
+
     /// <inheritdoc />
     public virtual void SaveModel(string filePath)
     {

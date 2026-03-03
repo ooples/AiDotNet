@@ -6,6 +6,7 @@ using System.Text;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Models;
 using Xunit;
 
 /// <summary>
@@ -49,6 +50,8 @@ internal sealed class StubModelSerializer : IModelSerializer, IModelShape
     public int[] GetInputShape() => InputShapeValue;
 
     public int[] GetOutputShape() => OutputShapeValue;
+
+    public DynamicShapeInfo GetDynamicShapeInfo() => DynamicShapeInfo.None;
 }
 
 public class ModelFileHeaderTests

@@ -405,6 +405,13 @@ public abstract class OnlineLearningModelBase<T> : IOnlineLearningModel<T>, IMod
         return new[] { 1 };
     }
 
+    /// <inheritdoc/>
+    public virtual DynamicShapeInfo GetDynamicShapeInfo()
+    {
+        return DynamicShapeInfo.None;
+    }
+
+
     public virtual void SaveModel(string filePath)
     {
         byte[] serializedData = Serialize();

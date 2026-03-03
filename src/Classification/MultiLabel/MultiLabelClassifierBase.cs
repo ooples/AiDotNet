@@ -280,6 +280,13 @@ public abstract class MultiLabelClassifierBase<T> : IMultiLabelClassifier<T>, IC
         return new[] { NumLabels };
     }
 
+    /// <inheritdoc/>
+    public virtual DynamicShapeInfo GetDynamicShapeInfo()
+    {
+        return DynamicShapeInfo.None;
+    }
+
+
     public virtual void SaveModel(string path)
     {
         byte[] serializedData = Serialize();

@@ -668,6 +668,13 @@ public abstract class SurvivalModelBase<T> : ISurvivalModel<T>, IModelShape
         return new[] { 1 };
     }
 
+    /// <inheritdoc/>
+    public virtual DynamicShapeInfo GetDynamicShapeInfo()
+    {
+        return DynamicShapeInfo.None;
+    }
+
+
     public virtual void SaveModel(string filePath)
     {
         byte[] serializedData = Serialize();

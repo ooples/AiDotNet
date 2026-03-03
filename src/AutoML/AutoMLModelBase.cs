@@ -649,6 +649,13 @@ namespace AiDotNet.AutoML
             return Array.Empty<int>();
         }
 
+    /// <inheritdoc/>
+    public virtual DynamicShapeInfo GetDynamicShapeInfo()
+    {
+        return DynamicShapeInfo.None;
+    }
+
+
         public virtual void SaveModel(string filePath)
         {
             if (BestModel == null)

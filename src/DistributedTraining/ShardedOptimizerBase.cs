@@ -257,6 +257,13 @@ public abstract class ShardedOptimizerBase<T, TInput, TOutput> : IShardedOptimiz
     }
 
     /// <inheritdoc/>
+    public virtual DynamicShapeInfo GetDynamicShapeInfo()
+    {
+        return DynamicShapeInfo.None;
+    }
+
+
+    /// <inheritdoc/>
     public virtual void SaveModel(string filePath)
     {
         // Only rank 0 saves to avoid conflicts

@@ -161,6 +161,13 @@ public abstract class AdversarialAttackBase<T, TInput, TOutput> : IAdversarialAt
     }
 
     /// <inheritdoc/>
+    public virtual DynamicShapeInfo GetDynamicShapeInfo()
+    {
+        return DynamicShapeInfo.None;
+    }
+
+
+    /// <inheritdoc/>
     public virtual void LoadModel(string filePath)
     {
         if (string.IsNullOrWhiteSpace(filePath))

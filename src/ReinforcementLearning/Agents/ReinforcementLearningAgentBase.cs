@@ -305,6 +305,13 @@ public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IConfigur
         return new[] { 1 };
     }
 
+    /// <inheritdoc/>
+    public virtual DynamicShapeInfo GetDynamicShapeInfo()
+    {
+        return DynamicShapeInfo.None;
+    }
+
+
     /// <summary>
     /// Saves the agent's state to a file with an AIMF envelope header.
     /// </summary>

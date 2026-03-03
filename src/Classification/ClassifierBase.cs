@@ -631,6 +631,13 @@ public abstract class ClassifierBase<T> : IClassifier<T>, IConfigurableModel<T>,
         return new[] { NumClasses };
     }
 
+    /// <inheritdoc/>
+    public virtual DynamicShapeInfo GetDynamicShapeInfo()
+    {
+        return DynamicShapeInfo.None;
+    }
+
+
     public virtual void SaveModel(string filePath)
     {
         byte[] serializedData = Serialize();

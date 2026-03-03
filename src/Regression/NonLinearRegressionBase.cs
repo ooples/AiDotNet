@@ -1022,6 +1022,13 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>, ICon
         return new[] { 1 };
     }
 
+    /// <inheritdoc/>
+    public virtual DynamicShapeInfo GetDynamicShapeInfo()
+    {
+        return DynamicShapeInfo.None;
+    }
+
+
     public virtual void SaveModel(string filePath)
     {
         if (string.IsNullOrWhiteSpace(filePath))

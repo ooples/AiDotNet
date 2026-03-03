@@ -344,6 +344,13 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
         return new[] { ParameterCount };
     }
 
+    /// <inheritdoc/>
+    public virtual DynamicShapeInfo GetDynamicShapeInfo()
+    {
+        return DynamicShapeInfo.None;
+    }
+
+
     /// <inheritdoc />
     public virtual void SaveModel(string filePath)
     {

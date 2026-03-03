@@ -1025,6 +1025,13 @@ public abstract class RegressionBase<T> : IRegression<T>, IConfigurableModel<T>,
     /// <inheritdoc/>
     public virtual int[] GetOutputShape() => new[] { 1 };
 
+    /// <inheritdoc/>
+    public virtual DynamicShapeInfo GetDynamicShapeInfo()
+    {
+        return DynamicShapeInfo.None;
+    }
+
+
     public virtual void SaveModel(string filePath)
     {
         byte[] serializedData = Serialize();

@@ -371,6 +371,13 @@ public abstract class ShardedModelBase<T, TInput, TOutput> : IShardedModel<T, TI
     }
 
     /// <inheritdoc/>
+    public virtual DynamicShapeInfo GetDynamicShapeInfo()
+    {
+        return DynamicShapeInfo.None;
+    }
+
+
+    /// <inheritdoc/>
     public virtual void SaveModel(string filePath)
     {
         byte[] data = Serialize();
