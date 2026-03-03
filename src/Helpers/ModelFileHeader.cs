@@ -1,5 +1,6 @@
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
+using AiDotNet.Models;
 
 namespace AiDotNet.Helpers;
 
@@ -54,6 +55,12 @@ public sealed class ModelFileInfo
     public int HeaderLength { get; }
 
     /// <summary>
+    /// Gets the dynamic shape information describing which dimensions are variable.
+    /// Available in envelope version 2+. For v1 envelopes, returns <see cref="DynamicShapeInfo.None"/>.
+    /// </summary>
+    public DynamicShapeInfo DynamicShapeInfo { get; }
+
+    /// <summary>
     /// Creates a new ModelFileInfo with the specified header values.
     /// </summary>
     public ModelFileInfo(
@@ -64,7 +71,8 @@ public sealed class ModelFileInfo
         int[] inputShape,
         int[] outputShape,
         long payloadLength,
-        int headerLength)
+        int headerLength,
+        DynamicShapeInfo? dynamicShapeInfo = null)
     {
         EnvelopeVersion = envelopeVersion;
         Format = format;
@@ -74,6 +82,7 @@ public sealed class ModelFileInfo
         OutputShape = outputShape ?? Array.Empty<int>();
         PayloadLength = payloadLength;
         HeaderLength = headerLength;
+        DynamicShapeInfo = dynamicShapeInfo ?? DynamicShapeInfo.None;
     }
 }
 
@@ -86,7 +95,7 @@ public sealed class ModelFileInfo
 /// what format the data is in. This allows tools to identify and load models automatically
 /// without needing to know the model type in advance.
 ///
-/// The envelope format is:
+/// The envelope format (v2) is:
 /// <code>
 /// [Magic: 4 bytes "AIMF"]
 /// [Envelope version: int32]
@@ -95,6 +104,8 @@ public sealed class ModelFileInfo
 /// [Assembly-qualified name: length-prefixed string]
 /// [Input shape rank: int32] [Input shape dims: int32[]]
 /// [Output shape rank: int32] [Output shape dims: int32[]]
+/// [Dynamic input dim count: int32] [Dynamic input dim indices: int32[]]  (v2+)
+/// [Dynamic output dim count: int32] [Dynamic output dim indices: int32[]] (v2+)
 /// [Payload length: int64]
 /// [Payload: byte[]]
 /// </code>
@@ -110,9 +121,9 @@ public static class ModelFileHeader
     public const int AimfMagic = 0x41494D46;
 
     /// <summary>
-    /// Current envelope version.
+    /// Current envelope version. Version 2 adds dynamic shape dimension support.
     /// </summary>
-    public const int CurrentEnvelopeVersion = 1;
+    public const int CurrentEnvelopeVersion = 2;
 
     /// <summary>
     /// Wraps serialized model data with an AIMF envelope header.
@@ -122,13 +133,15 @@ public static class ModelFileHeader
     /// <param name="inputShape">The input shape of the model. Pass empty array if unknown.</param>
     /// <param name="outputShape">The output shape of the model. Pass empty array if unknown.</param>
     /// <param name="format">The serialization format of the payload.</param>
+    /// <param name="dynamicShapeInfo">Optional dynamic shape information. If null, no dynamic dimensions are written.</param>
     /// <returns>A byte array containing the AIMF header followed by the payload.</returns>
     public static byte[] WrapWithHeader(
         byte[] payload,
         IModelSerializer model,
         int[] inputShape,
         int[] outputShape,
-        SerializationFormat format)
+        SerializationFormat format,
+        DynamicShapeInfo? dynamicShapeInfo = null)
     {
         if (payload is null)
         {
@@ -177,6 +190,20 @@ public static class ModelFileHeader
         for (int i = 0; i < outputShape.Length; i++)
         {
             writer.Write(outputShape[i]);
+        }
+
+        // V2: Dynamic shape dimensions
+        var dynInfo = dynamicShapeInfo ?? DynamicShapeInfo.None;
+        writer.Write(dynInfo.DynamicInputDimensions.Length);
+        for (int i = 0; i < dynInfo.DynamicInputDimensions.Length; i++)
+        {
+            writer.Write(dynInfo.DynamicInputDimensions[i]);
+        }
+
+        writer.Write(dynInfo.DynamicOutputDimensions.Length);
+        for (int i = 0; i < dynInfo.DynamicOutputDimensions.Length; i++)
+        {
+            writer.Write(dynInfo.DynamicOutputDimensions[i]);
         }
 
         // Payload length
@@ -289,6 +316,31 @@ public static class ModelFileHeader
             outputShape[i] = reader.ReadInt32();
         }
 
+        // V2+: Dynamic shape dimensions (backward-compatible: v1 envelopes skip this)
+        DynamicShapeInfo? dynamicShapeInfo = null;
+        if (envelopeVersion >= 2)
+        {
+            int dynInputCount = reader.ReadInt32();
+            var dynInputDims = new int[dynInputCount];
+            for (int i = 0; i < dynInputCount; i++)
+            {
+                dynInputDims[i] = reader.ReadInt32();
+            }
+
+            int dynOutputCount = reader.ReadInt32();
+            var dynOutputDims = new int[dynOutputCount];
+            for (int i = 0; i < dynOutputCount; i++)
+            {
+                dynOutputDims[i] = reader.ReadInt32();
+            }
+
+            dynamicShapeInfo = new DynamicShapeInfo
+            {
+                DynamicInputDimensions = dynInputDims,
+                DynamicOutputDimensions = dynOutputDims
+            };
+        }
+
         // Payload length
         long payloadLength = reader.ReadInt64();
 
@@ -302,7 +354,8 @@ public static class ModelFileHeader
             inputShape,
             outputShape,
             payloadLength,
-            headerLength);
+            headerLength,
+            dynamicShapeInfo);
     }
 
     /// <summary>

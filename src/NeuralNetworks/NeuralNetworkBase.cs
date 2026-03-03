@@ -1,6 +1,7 @@
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Interpretability;
+using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.Interpretability.Explainers;
 using AiDotNet.MixedPrecision;
@@ -2609,7 +2610,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
         byte[] serializedData = Serialize();
         byte[] envelopedData = ModelFileHeader.WrapWithHeader(
-            serializedData, this, GetInputShape(), GetOutputShape(), SerializationFormat.Binary);
+            serializedData, this, GetInputShape(), GetOutputShape(), SerializationFormat.Binary,
+            GetDynamicShapeInfo());
         File.WriteAllBytes(filePath, envelopedData);
     }
 
@@ -3784,6 +3786,17 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         }
 
         return new[] { Architecture.OutputSize };
+    }
+
+    /// <inheritdoc/>
+    public virtual DynamicShapeInfo GetDynamicShapeInfo()
+    {
+        // Neural networks typically support variable batch sizes (dimension 0)
+        return new DynamicShapeInfo
+        {
+            DynamicInputDimensions = new[] { 0 },
+            DynamicOutputDimensions = new[] { 0 }
+        };
     }
 
     /// <summary>

@@ -190,6 +190,12 @@ public static class ModelLoader
 
         for (int i = 0; i < a.Length; i++)
         {
+            // -1 means dynamic dimension, always matches
+            if (a[i] == -1 || b[i] == -1)
+            {
+                continue;
+            }
+
             if (a[i] != b[i])
             {
                 return false;

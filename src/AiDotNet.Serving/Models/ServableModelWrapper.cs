@@ -1,4 +1,5 @@
 using AiDotNet.Interfaces;
+using AiDotNet.Models;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Validation;
 
@@ -16,6 +17,9 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
     private readonly string _modelName;
     private readonly int _inputDimension;
     private readonly int _outputDimension;
+    private readonly int[] _inputShape;
+    private readonly int[] _outputShape;
+    private readonly DynamicShapeInfo _dynamicShapeInfo;
     private readonly bool _enableBatching;
     private readonly bool _enableSpeculativeDecoding;
 
@@ -29,6 +33,9 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
     /// <param name="predictBatchFunc">Optional function to perform batch prediction. If not provided, batch prediction will use multiple single predictions.</param>
     /// <param name="enableBatching">Whether serving-side batching is enabled for this model.</param>
     /// <param name="enableSpeculativeDecoding">Whether speculative decoding is enabled for this model.</param>
+    /// <param name="inputShape">Optional full input shape array. If null, derived from inputDimension.</param>
+    /// <param name="outputShape">Optional full output shape array. If null, derived from outputDimension.</param>
+    /// <param name="dynamicShapeInfo">Optional dynamic shape information. If null, all dimensions are fixed.</param>
     public ServableModelWrapper(
         string modelName,
         int inputDimension,
@@ -36,12 +43,18 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
         Func<Vector<T>, Vector<T>> predictFunc,
         Func<Matrix<T>, Matrix<T>>? predictBatchFunc = null,
         bool enableBatching = true,
-        bool enableSpeculativeDecoding = false)
+        bool enableSpeculativeDecoding = false,
+        int[]? inputShape = null,
+        int[]? outputShape = null,
+        DynamicShapeInfo? dynamicShapeInfo = null)
     {
         Guard.NotNullOrWhiteSpace(modelName);
         _modelName = modelName;
         _inputDimension = inputDimension;
         _outputDimension = outputDimension;
+        _inputShape = inputShape ?? new[] { inputDimension };
+        _outputShape = outputShape ?? new[] { outputDimension };
+        _dynamicShapeInfo = dynamicShapeInfo ?? DynamicShapeInfo.None;
         Guard.NotNull(predictFunc);
         _predictFunc = predictFunc;
         _predictBatchFunc = predictBatchFunc;
@@ -68,6 +81,9 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
         _modelName = modelName;
         _inputDimension = inputDimension;
         _outputDimension = 1; // Regression models typically output a single value
+        _inputShape = new[] { inputDimension };
+        _outputShape = new[] { 1 };
+        _dynamicShapeInfo = DynamicShapeInfo.None;
         _enableBatching = enableBatching;
         _enableSpeculativeDecoding = enableSpeculativeDecoding;
 
@@ -109,6 +125,15 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
 
     /// <inheritdoc/>
     public int OutputDimension => _outputDimension;
+
+    /// <inheritdoc/>
+    public int[] InputShape => _inputShape;
+
+    /// <inheritdoc/>
+    public int[] OutputShape => _outputShape;
+
+    /// <inheritdoc/>
+    public DynamicShapeInfo DynamicShapeInfo => _dynamicShapeInfo;
 
     bool IServableModelInferenceOptions.EnableBatching => _enableBatching;
 
