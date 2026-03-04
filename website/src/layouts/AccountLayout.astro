@@ -131,7 +131,15 @@ const sidebarLinks = [
       const signOutBtn = document.getElementById('sign-out-btn');
       if (signOutBtn) {
         signOutBtn.addEventListener('click', async () => {
-          await supabase.auth.signOut();
+          try {
+            const { error } = await supabase.auth.signOut();
+            if (error) {
+              console.error('Sign out error:', error.message);
+            }
+          } catch (e) {
+            console.error('Sign out failed:', e);
+          }
+          // Always redirect regardless of sign-out result
           const base = import.meta.env.BASE_URL || '/';
           window.location.href = base;
         });

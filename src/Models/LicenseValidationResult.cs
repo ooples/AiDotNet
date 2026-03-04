@@ -66,6 +66,16 @@ public sealed class LicenseValidationResult
         string? message = null,
         byte[]? decryptionToken = null)
     {
+        if (seatsUsed < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(seatsUsed), "Seats used cannot be negative.");
+        }
+
+        if (seatsMax.HasValue && seatsMax.Value < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(seatsMax), "Seats max cannot be negative.");
+        }
+
         Status = status;
         Tier = tier;
         ExpiresAt = expiresAt;
@@ -73,6 +83,6 @@ public sealed class LicenseValidationResult
         SeatsMax = seatsMax;
         ValidatedAt = validatedAt ?? DateTimeOffset.UtcNow;
         Message = message;
-        DecryptionToken = decryptionToken;
+        DecryptionToken = decryptionToken is not null ? (byte[])decryptionToken.Clone() : null;
     }
 }

@@ -57,6 +57,11 @@ public sealed class StripeService : IStripeService
             throw new ArgumentException("CustomerName is required.", nameof(request));
         }
 
+        if (request.Seats < 1 || request.Seats > 10_000)
+        {
+            throw new ArgumentOutOfRangeException(nameof(request), "Seats must be between 1 and 10,000.");
+        }
+
         string priceId = ResolvePriceId(request.Tier, request.BillingInterval);
 
         var sessionOptions = new SessionCreateOptions
@@ -85,8 +90,8 @@ public sealed class StripeService : IStripeService
         var session = await sessionService.CreateAsync(sessionOptions, cancellationToken: ct).ConfigureAwait(false);
 
         _logger.LogInformation(
-            "Created Stripe Checkout session {SessionId} for {Email} (Tier={Tier})",
-            session.Id, request.Email, request.Tier);
+            "Created Stripe Checkout session {SessionId} (Tier={Tier}, Seats={Seats})",
+            session.Id, request.Tier, request.Seats);
 
         return session.Url;
     }
@@ -164,6 +169,11 @@ public sealed class StripeService : IStripeService
         }
 
         string stripeCustomerId = session.CustomerId ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(stripeCustomerId))
+        {
+            _logger.LogWarning("Checkout session {SessionId} has no Stripe customer ID", session.Id);
+            return;
+        }
         string email = session.CustomerEmail ?? session.CustomerDetails?.Email ?? string.Empty;
         string customerName = session.Metadata?.GetValueOrDefault("customer_name") ?? "Unknown";
         string tierStr = session.Metadata?.GetValueOrDefault("tier") ?? "Pro";

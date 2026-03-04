@@ -60,9 +60,30 @@ public static class ModelTypeRegistry
                 }
             }
         }
-        catch (ReflectionTypeLoadException)
+        catch (ReflectionTypeLoadException ex)
         {
-            // Some types may fail to load due to missing dependencies; skip them
+            // Process the types that DID load successfully
+            var loadedTypes = ex.Types
+                .Where(t => t is not null &&
+                            !t.IsAbstract && !t.IsInterface &&
+                            t.GetInterfaces().Any(i =>
+                                i == typeof(IModelSerializer) ||
+                                (i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IModelSerializer))));
+
+            foreach (var type in loadedTypes)
+            {
+                if (type is null) continue;
+                string name = type.Name;
+                TypesByName.TryAdd(name, type);
+
+                string qualifiedName = type.AssemblyQualifiedName ?? type.FullName ?? name;
+                TypesByQualifiedName.TryAdd(qualifiedName, type);
+
+                if (type.FullName is not null && type.FullName != qualifiedName)
+                {
+                    TypesByQualifiedName.TryAdd(type.FullName, type);
+                }
+            }
         }
     }
 
@@ -81,6 +102,16 @@ public static class ModelTypeRegistry
         if (type is null)
         {
             throw new ArgumentNullException(nameof(type));
+        }
+
+        bool implementsSerializer = type.GetInterfaces().Any(i =>
+            i == typeof(IModelSerializer) ||
+            (i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IModelSerializer)));
+
+        if (!implementsSerializer && !type.IsGenericTypeDefinition)
+        {
+            throw new ArgumentException(
+                $"Type '{type.FullName}' does not implement IModelSerializer.", nameof(type));
         }
 
         TypesByName[name] = type;

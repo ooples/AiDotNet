@@ -85,7 +85,7 @@ public sealed class DynamicShapeInfo
     /// </remarks>
     public bool IsValidShape(int[] concreteShape, int[] templateShape, int[] dynamicDimIndices)
     {
-        if (concreteShape is null || templateShape is null)
+        if (concreteShape is null || templateShape is null || dynamicDimIndices is null)
         {
             return false;
         }

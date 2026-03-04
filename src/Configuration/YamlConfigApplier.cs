@@ -152,7 +152,18 @@ internal static partial class YamlConfigApplier<T, TInput, TOutput>
         // License key configuration
         if (config.License is not null && !string.IsNullOrWhiteSpace(config.License.Key))
         {
-            var licenseKey = new AiDotNet.Models.AiDotNetLicenseKey(config.License.Key)
+            if (config.License.OfflineGracePeriodDays < 0)
+            {
+                throw new InvalidOperationException("YAML config: License.OfflineGracePeriodDays cannot be negative.");
+            }
+
+            if (config.License.ServerUrl is not null &&
+                !Uri.TryCreate(config.License.ServerUrl, UriKind.Absolute, out _))
+            {
+                throw new InvalidOperationException("YAML config: License.ServerUrl is not a valid absolute URL.");
+            }
+
+            var licenseKey = new AiDotNet.Models.AiDotNetLicenseKey(config.License.Key.Trim())
             {
                 ServerUrl = config.License.ServerUrl,
                 Environment = config.License.Environment,

@@ -36,21 +36,21 @@ internal static class LicenseKeyResolver
         // 1. Explicit license key object
         if (licenseKey is not null && !string.IsNullOrWhiteSpace(licenseKey.Key))
         {
-            return licenseKey.Key;
+            return licenseKey.Key.Trim();
         }
 
         // 2. Environment variable
         string? envValue = System.Environment.GetEnvironmentVariable(EnvVarName);
         if (!string.IsNullOrWhiteSpace(envValue))
         {
-            return envValue;
+            return envValue.Trim();
         }
 
         // 3. File in user home directory
         string? fileValue = ReadLicenseFile();
         if (!string.IsNullOrWhiteSpace(fileValue))
         {
-            return fileValue;
+            return fileValue.Trim();
         }
 
         return null;
@@ -82,13 +82,13 @@ internal static class LicenseKeyResolver
                 }
             }
         }
-        catch (IOException)
+        catch (IOException ex)
         {
-            // File not readable — ignore silently
+            System.Diagnostics.Debug.WriteLine($"LicenseKeyResolver: failed to read license file: {ex.Message}");
         }
-        catch (UnauthorizedAccessException)
+        catch (UnauthorizedAccessException ex)
         {
-            // Permissions issue — ignore silently
+            System.Diagnostics.Debug.WriteLine($"LicenseKeyResolver: insufficient permissions for license file: {ex.Message}");
         }
 
         return null;

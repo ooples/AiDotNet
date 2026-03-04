@@ -8,7 +8,7 @@ on:
 
 concurrency:
   group: website-deploy
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   build-and-deploy:
@@ -51,7 +51,7 @@ jobs:
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
 
       - name: Deployment summary
-        if: always()
+        if: success()
         run: |
           echo "## Marketing Website Deployment" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY

@@ -8,10 +8,13 @@ namespace AiDotNet.Serving.Security.Licensing;
 public sealed class LicenseValidateRequest
 {
     [Required(AllowEmptyStrings = false)]
+    [StringLength(512)]
     public string Key { get; set; } = string.Empty;
 
+    [StringLength(256)]
     public string? MachineId { get; set; }
 
+    [StringLength(256)]
     public string? MachineName { get; set; }
 
     [StringLength(64)]

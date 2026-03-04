@@ -102,10 +102,25 @@ internal sealed class LicenseValidator
                 }
             }
 
-            // No valid cache — return ValidationPending (allow use, don't block)
+            // No valid cache — if we have a stale cached result, return expired status
+            lock (_cacheLock)
+            {
+                if (_cached is not null)
+                {
+                    // Had a previously valid key but it's now past grace period
+                    var expired = new LicenseValidationResult(
+                        LicenseKeyStatus.Expired,
+                        tier: _cached.Tier,
+                        message: "License server unreachable and grace period exceeded.");
+                    _cached = expired;
+                    return expired;
+                }
+            }
+
+            // Never validated before — return pending for initial grace window only
             var pending = new LicenseValidationResult(
                 LicenseKeyStatus.ValidationPending,
-                message: "License server unreachable. Operating in grace mode.");
+                message: "License server unreachable. Initial validation pending.");
 
             lock (_cacheLock)
             {
@@ -193,7 +208,12 @@ internal sealed class LicenseValidator
         {
             try
             {
-                tokenBytes = Convert.FromBase64String(obj.decryptionToken);
+                byte[] decoded = Convert.FromBase64String(obj.decryptionToken);
+                // Validate minimum key length (at least 16 bytes / 128 bits)
+                if (decoded.Length >= 16)
+                {
+                    tokenBytes = decoded;
+                }
             }
             catch (FormatException)
             {

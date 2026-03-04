@@ -59,6 +59,12 @@ public class Program
         var port = Environment.GetEnvironmentVariable("PORT") is string envPort && int.TryParse(envPort, out var parsedPort)
             ? parsedPort
             : servingOptions.Port;
+
+        if (port < 1 || port > 65535)
+        {
+            throw new InvalidOperationException($"Port {port} is out of valid range (1-65535).");
+        }
+
         builder.WebHost.ConfigureKestrel(serverOptions =>
         {
             serverOptions.ListenAnyIP(port);
@@ -104,7 +110,7 @@ public class Program
             }
 
             options.ConfigureWarnings(w =>
-                w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning));
+                w.Log(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning));
         }
 
         builder.Services.AddDbContext<ServingDbContext>(

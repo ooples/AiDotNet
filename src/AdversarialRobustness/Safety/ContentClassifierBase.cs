@@ -119,6 +119,11 @@ public abstract class ContentClassifierBase<T> : IContentClassifier<T>, IModelSe
     /// <inheritdoc/>
     public virtual void SaveModel(string filePath)
     {
+        if (string.IsNullOrWhiteSpace(filePath))
+        {
+            throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
+        }
+
         byte[] data = Serialize();
         byte[] envelopedData = ModelFileHeader.WrapWithHeader(
             data, this, GetInputShape(), GetOutputShape(), SerializationFormat.Binary);
@@ -128,6 +133,11 @@ public abstract class ContentClassifierBase<T> : IContentClassifier<T>, IModelSe
     /// <inheritdoc/>
     public virtual void LoadModel(string filePath)
     {
+        if (string.IsNullOrWhiteSpace(filePath))
+        {
+            throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
+        }
+
         byte[] data = File.ReadAllBytes(filePath);
 
         // Extract payload from AIMF envelope

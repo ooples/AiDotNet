@@ -186,7 +186,12 @@ const links = [
       if (emailEl) emailEl.textContent = user.email || '';
       if (avatarEl) {
         if (user.user_metadata?.avatar_url) {
-          avatarEl.innerHTML = `<img src="${user.user_metadata.avatar_url}" alt="Avatar" class="w-8 h-8 rounded-full object-cover" />`;
+          const img = document.createElement('img');
+          img.src = user.user_metadata.avatar_url;
+          img.alt = 'Avatar';
+          img.className = 'w-8 h-8 rounded-full object-cover';
+          avatarEl.textContent = '';
+          avatarEl.appendChild(img);
         } else {
           const initial = (user.user_metadata?.full_name || user.email || '?')[0].toUpperCase();
           avatarEl.textContent = initial;

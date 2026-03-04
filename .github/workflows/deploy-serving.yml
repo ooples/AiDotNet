@@ -6,9 +6,12 @@ on:
     paths: ['src/AiDotNet.Serving/**', 'src/AiDotNet/**']
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 concurrency:
   group: serving-deploy
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   build-and-deploy:

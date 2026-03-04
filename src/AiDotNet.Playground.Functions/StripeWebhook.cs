@@ -118,8 +118,8 @@ public class StripeWebhook
         }
 
         _logger.LogInformation(
-            "Checkout completed for {Email}, customer {CustomerId}, subscription {SubscriptionId}",
-            customerEmail, customerId, session.SubscriptionId);
+            "Checkout completed for customer {CustomerId}, subscription {SubscriptionId}",
+            customerId, session.SubscriptionId);
 
         // Determine tier from the subscription
         var tier = "pro"; // Default to pro since that's our only paid tier currently

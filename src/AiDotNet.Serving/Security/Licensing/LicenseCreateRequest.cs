@@ -9,6 +9,7 @@ public sealed class LicenseCreateRequest : IValidatableObject
 {
     [Required(AllowEmptyStrings = false)]
     [StringLength(200, MinimumLength = 1)]
+    [RegularExpression(@"\S.*", ErrorMessage = "CustomerName cannot be whitespace only.")]
     public string CustomerName { get; set; } = string.Empty;
 
     [EmailAddress]
