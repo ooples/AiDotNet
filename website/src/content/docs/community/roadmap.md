@@ -11,10 +11,6 @@ Planned features and development priorities for AiDotNet.
 
 ---
 
-
-
----
-
 ## Current Focus
 
 ### Q1 2026

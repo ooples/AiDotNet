@@ -6,7 +6,7 @@ section: "Reference"
 ---
 
 
-AiDotNet supports full YAML-based configuration for `AiModelBuilder`. Define your entire model training pipeline in a single YAML file -- no code changes needed.
+AiDotNet supports full YAML-based configuration for `AiModelBuilder`. Define your entire model training pipeline in a single YAML file with minimal code.
 
 ## Quick Start
 
@@ -36,9 +36,10 @@ var result = await builder.BuildAsync();
 For IntelliSense and validation in VS Code, add the schema directive at the top of your YAML file:
 
 ```yaml
+# yaml-language-server: $schema=https://aidotnet.dev/schema/config.json
 ```
 
-This requires the [YAML Language Server](https://marketplace.visualstudio.com/items?itemName=redhat.vscode-yaml) extension.
+This requires the [YAML Server](https://marketplace.visualstudio.com/items?itemName=redhat.vscode-yaml) extension.
 
 ## Section Types
 

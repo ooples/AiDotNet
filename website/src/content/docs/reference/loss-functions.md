@@ -11,10 +11,6 @@ Complete reference for all 37+ loss functions in AiDotNet.
 
 ---
 
-
-
----
-
 ## Classification Losses
 
 ### Binary Classification

@@ -7,11 +7,7 @@ section: "Reference"
 
 
 
-Complete reference for all 42+ optimization algorithms in AiDotNet.
-
----
-
-
+Complete reference for the 40+ optimization algorithms and learning rate schedulers in AiDotNet.
 
 ---
 

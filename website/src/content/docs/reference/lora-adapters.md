@@ -1,17 +1,13 @@
 ---
 title: "LoRA Adapters"
-description: "37+ LoRA adapter variants reference."
+description: "50+ LoRA adapter variants reference."
 order: 5
 section: "Reference"
 ---
 
 
 
-Complete reference for all 37+ LoRA adapter variants in AiDotNet.
-
----
-
-
+Complete reference for all 50+ LoRA adapter and fine-tuning strategy variants in AiDotNet.
 
 ---
 

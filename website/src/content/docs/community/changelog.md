@@ -11,31 +11,7 @@ All notable changes to AiDotNet are documented here.
 
 ---
 
-
-
----
-
-## [Unreleased]
-
-### Added
-- Comprehensive documentation site with tutorials
-- 30+ sample applications covering all feature categories
-- End-to-end applications: ChatbotWithRAG, SpeechAssistant, ImageClassificationWebApp
-- Expanded "Why AiDotNet" comparison against TorchSharp, TensorFlow.NET, ML.NET
-- Navigation configuration for GitHub Pages
-- Community documentation (contributing guide, roadmap)
-
-### Changed
-- Migrated Vector/Matrix/Tensor data from T[] to Memory<T> for better performance
-- Updated GPU training infrastructure for LSTM/GRU, GNN, and activations
-
-### Fixed
-- Diffusion conv GPU training with auto eigenbasis
-- Applied dotnet format across codebase
-
----
-
-## [0.x.x] - Recent Releases
+## Latest Changes
 
 ### GPU and Performance
 - **SIMD and BLAS optimizations** for CPU tensor operations

@@ -11,10 +11,6 @@ Thank you for your interest in contributing to AiDotNet! This guide will help yo
 
 ---
 
-
-
----
-
 ## Getting Started
 
 ### Prerequisites
@@ -50,6 +46,16 @@ dotnet build
 
 ```bash
 dotnet test
+```
+
+### Website Development
+
+```bash
+cd website
+npm install
+npm run dev       # Start dev server at localhost:4321
+npm run build     # Production build
+npm run preview   # Preview production build
 ```
 
 ---
@@ -235,8 +241,9 @@ Look for issues labeled `good first issue`:
 - Does it follow the code style?
 - Are there adequate tests?
 - Is the documentation updated?
-- Does it maintain backward compatibility?
+- Does it maintain backward compatibility (no breaking changes without a major version bump)?
 - Is the performance acceptable?
+- Are version numbers properly incremented following SemVer?
 
 ---
 

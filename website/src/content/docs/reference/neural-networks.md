@@ -11,10 +11,6 @@ Complete reference for all 100+ neural network architectures in AiDotNet.
 
 ---
 
-
-
----
-
 ## Convolutional Networks (CNN)
 
 ### Standard Architectures

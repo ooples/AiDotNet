@@ -7,11 +7,7 @@ section: "Reference"
 
 
 
-Complete reference for all 10+ distributed training strategies in AiDotNet.
-
----
-
-
+Complete reference for the distributed training strategies in AiDotNet.
 
 ---
 
