@@ -652,6 +652,11 @@ namespace AiDotNet.AutoML
     /// <inheritdoc/>
     public virtual DynamicShapeInfo GetDynamicShapeInfo()
     {
+        if (BestModel is IModelShape shapedModel)
+        {
+            return shapedModel.GetDynamicShapeInfo();
+        }
+
         return DynamicShapeInfo.None;
     }
 
@@ -670,9 +675,10 @@ namespace AiDotNet.AutoML
     {
         if (BestModel == null)
         {
-            // This scenario requires a mechanism to determine the concrete type of BestModel
-            // from the serialized data. For now, we'll assume BestModel is already set or can be inferred.
-            throw new InvalidOperationException("Cannot load model: BestModel is null. AutoML models should be recreated with SearchAsync or BestModel should be initialized before loading.");
+            throw new InvalidOperationException(
+                "Cannot load model: BestModel is null. " +
+                "Initialize BestModel by running SearchAsync first, or use ModelLoader.Load " +
+                "to load the underlying model type directly from the AIMF file.");
         }
 
         BestModel.LoadModel(filePath);
@@ -696,9 +702,10 @@ namespace AiDotNet.AutoML
     {
         if (BestModel == null)
         {
-            // This scenario requires a mechanism to determine the concrete type of BestModel
-            // from the serialized data. For now, we'll assume BestModel is already set or can be inferred.
-            throw new InvalidOperationException("Cannot deserialize model: BestModel is null. AutoML models should be recreated with SearchAsync or BestModel should be initialized before deserializing.");
+            throw new InvalidOperationException(
+                "Cannot deserialize model: BestModel is null. " +
+                "Initialize BestModel by running SearchAsync first, or use ModelLoader.Load " +
+                "to load the underlying model type directly.");
         }
 
         BestModel.Deserialize(data);

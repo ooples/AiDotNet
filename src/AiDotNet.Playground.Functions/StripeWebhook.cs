@@ -239,6 +239,11 @@ public class StripeWebhook
         return $"{email[0]}***@{email[(atIndex + 1)..]}";
     }
 
+    /// <summary>
+    /// Updates the user's subscription profile in Supabase.
+    /// Throws on configuration or HTTP failures so the webhook can return 500
+    /// and Stripe will retry the event.
+    /// </summary>
     private async Task UpdateSupabaseProfile(string email, string tier, string status, string? stripeCustomerId)
     {
         var supabaseUrl = Environment.GetEnvironmentVariable("SUPABASE_URL");
@@ -247,7 +252,7 @@ public class StripeWebhook
         if (string.IsNullOrEmpty(supabaseUrl) || string.IsNullOrEmpty(supabaseKey))
         {
             _logger.LogError("SUPABASE_URL or SUPABASE_SECRET_KEY environment variables are not set");
-            return;
+            throw new InvalidOperationException("Supabase configuration is missing. Cannot update profile.");
         }
 
         // First, find the user by email in Supabase Auth
@@ -262,7 +267,7 @@ public class StripeWebhook
         if (!usersResponse.IsSuccessStatusCode)
         {
             _logger.LogError("Failed to list Supabase users: {StatusCode}", usersResponse.StatusCode);
-            return;
+            throw new InvalidOperationException($"Supabase user lookup failed with HTTP {(int)usersResponse.StatusCode}.");
         }
 
         var usersJson = await usersResponse.Content.ReadAsStringAsync();
@@ -331,6 +336,8 @@ public class StripeWebhook
             _logger.LogError(
                 "Failed to update profile for user {UserId}: {StatusCode} - {Error}",
                 userId, patchResponse.StatusCode, errorBody);
+            throw new InvalidOperationException(
+                $"Supabase profile update failed with HTTP {(int)patchResponse.StatusCode}.");
         }
     }
 }

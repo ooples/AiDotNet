@@ -242,20 +242,26 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
     /// <inheritdoc/>
     public virtual int[] GetInputShape()
     {
-        return new[] { InputChannels };
+        // VAE input is [Channels, Height, Width] where H/W are dynamic
+        return new[] { InputChannels, -1, -1 };
     }
 
     /// <inheritdoc/>
     public virtual int[] GetOutputShape()
     {
-        // Predict() returns Decode(Encode(input)), which is in input space
-        return new[] { InputChannels };
+        // Predict() returns Decode(Encode(input)), which is in input space [C, H, W]
+        return new[] { InputChannels, -1, -1 };
     }
 
     /// <inheritdoc/>
     public virtual DynamicShapeInfo GetDynamicShapeInfo()
     {
-        return DynamicShapeInfo.None;
+        // Height and Width dimensions (indices 1,2) are dynamic
+        return new DynamicShapeInfo
+        {
+            DynamicInputDimensions = new[] { 1, 2 },
+            DynamicOutputDimensions = new[] { 1, 2 }
+        };
     }
 
 

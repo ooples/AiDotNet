@@ -16,7 +16,7 @@ namespace AiDotNet.AdversarialRobustness.Attacks;
 /// <typeparam name="TInput">The input data type for the model.</typeparam>
 /// <typeparam name="TOutput">The output data type for the model.</typeparam>
 /// <remarks>
-/// <para><b>For Beginners:</b> for provides AI safety functionality. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> This provides AI safety functionality. Default values follow the original paper settings.</para>
 /// </remarks>
 public abstract class AdversarialAttackBase<T, TInput, TOutput> : IAdversarialAttack<T, TInput, TOutput>, IModelShape
 {
@@ -144,7 +144,8 @@ public abstract class AdversarialAttackBase<T, TInput, TOutput> : IAdversarialAt
 
         var data = Serialize();
         byte[] envelopedData = ModelFileHeader.WrapWithHeader(
-            data, this, GetInputShape(), GetOutputShape(), SerializationFormat.Json);
+            data, this, GetInputShape(), GetOutputShape(), SerializationFormat.Json,
+            dynamicShapeInfo: GetDynamicShapeInfo());
         File.WriteAllBytes(fullPath, envelopedData);
     }
 

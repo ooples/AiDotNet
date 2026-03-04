@@ -382,16 +382,31 @@ public abstract class ShardedModelBase<T, TInput, TOutput> : IShardedModel<T, TI
     /// <inheritdoc/>
     public virtual void SaveModel(string filePath)
     {
+        if (string.IsNullOrWhiteSpace(filePath))
+            throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
+
+        string fullPath = Path.GetFullPath(filePath);
+        string? directory = Path.GetDirectoryName(fullPath);
+        if (directory is not null && !Directory.Exists(directory))
+            Directory.CreateDirectory(directory);
+
         byte[] data = Serialize();
         byte[] envelopedData = ModelFileHeader.WrapWithHeader(
             data, this, GetInputShape(), GetOutputShape(), SerializationFormat.Binary);
-        File.WriteAllBytes(filePath, envelopedData);
+        File.WriteAllBytes(fullPath, envelopedData);
     }
 
     /// <inheritdoc/>
     public virtual void LoadModel(string filePath)
     {
-        byte[] data = File.ReadAllBytes(filePath);
+        if (string.IsNullOrWhiteSpace(filePath))
+            throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
+
+        string fullPath = Path.GetFullPath(filePath);
+        if (!File.Exists(fullPath))
+            throw new FileNotFoundException($"Model file not found: {fullPath}", fullPath);
+
+        byte[] data = File.ReadAllBytes(fullPath);
 
         // Extract payload from AIMF envelope
         data = ModelFileHeader.ExtractPayload(data);

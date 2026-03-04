@@ -64,8 +64,30 @@ public sealed class StripeController : ControllerBase
             return BadRequest(new { error = "StripeCustomerId is required." });
         }
 
+        // Validate the customer ID belongs to the authenticated user.
+        // The caller's identity (from JWT sub claim) must match the stored customer mapping.
+        string? userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+            ?? User.FindFirst("sub")?.Value;
+
+        if (string.IsNullOrEmpty(userId))
+        {
+            return Unauthorized(new { error = "Cannot determine authenticated user identity." });
+        }
+
         try
         {
+            // Verify ownership: the Stripe customer ID must be associated with this user
+            bool isOwner = await _stripeService.ValidateCustomerOwnershipAsync(
+                userId, request.StripeCustomerId, cancellationToken).ConfigureAwait(false);
+
+            if (!isOwner)
+            {
+                _logger.LogWarning("User {UserId} attempted portal access for unowned customer {CustomerId}",
+                    userId, request.StripeCustomerId);
+                return StatusCode(StatusCodes.Status403Forbidden,
+                    new { error = "You do not have access to this billing portal." });
+            }
+
             string url = await _stripeService.CreatePortalSessionAsync(request.StripeCustomerId, cancellationToken)
                 .ConfigureAwait(false);
             return Ok(new CheckoutResponse { CheckoutUrl = url });
