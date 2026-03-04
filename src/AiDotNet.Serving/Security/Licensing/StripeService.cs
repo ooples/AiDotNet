@@ -14,7 +14,7 @@ namespace AiDotNet.Serving.Security.Licensing;
 /// <summary>
 /// Stripe payment integration service that handles checkout sessions, customer portal, and webhook events.
 /// </summary>
-public sealed class StripeService : IStripeService
+internal sealed class StripeService : IStripeService
 {
     private readonly StripeOptions _options;
     private readonly ILicenseService _licenseService;
@@ -175,6 +175,12 @@ public sealed class StripeService : IStripeService
             return;
         }
         string email = session.CustomerEmail ?? session.CustomerDetails?.Email ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(email))
+        {
+            _logger.LogWarning(
+                "Checkout session {SessionId} has no customer email. An empty email will be persisted.",
+                session.Id);
+        }
         string customerName = session.Metadata?.GetValueOrDefault("customer_name") ?? "Unknown";
         string tierStr = session.Metadata?.GetValueOrDefault("tier") ?? "Pro";
         string seatsStr = session.Metadata?.GetValueOrDefault("seats") ?? "1";
@@ -236,6 +242,8 @@ public sealed class StripeService : IStripeService
                 LicenseKeyId = licenseResponse.Id,
                 StripePriceId = string.Empty, // Will be updated by subscription.updated event
                 Status = StripeSubscriptionStatus.Active,
+                // Approximate period bounds — the subscription.updated webhook event
+                // (fired immediately after checkout) will correct these to actual Stripe values.
                 CurrentPeriodStart = DateTimeOffset.UtcNow,
                 CurrentPeriodEnd = DateTimeOffset.UtcNow.AddMonths(1),
                 CreatedAt = DateTimeOffset.UtcNow
@@ -277,16 +285,12 @@ public sealed class StripeService : IStripeService
             var firstItem = subscription.Items.Data[0];
             entity.CurrentPeriodStart = firstItem.CurrentPeriodStart;
             entity.CurrentPeriodEnd = firstItem.CurrentPeriodEnd;
+            entity.StripePriceId = firstItem.Price?.Id ?? entity.StripePriceId;
         }
 
         if (subscription.CanceledAt is not null)
         {
             entity.CancelledAt = subscription.CanceledAt;
-        }
-
-        if (subscription.Items?.Data?.Count > 0)
-        {
-            entity.StripePriceId = subscription.Items.Data[0].Price?.Id ?? entity.StripePriceId;
         }
 
         await _db.SaveChangesAsync(ct).ConfigureAwait(false);

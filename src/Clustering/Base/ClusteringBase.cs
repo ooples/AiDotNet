@@ -424,8 +424,15 @@ public abstract class ClusteringBase<T> : IClustering<T>, IConfigurableModel<T>,
 
         byte[] data = File.ReadAllBytes(fullPath);
 
-        // Extract payload from AIMF envelope
-        data = ModelFileHeader.ExtractPayload(data);
+        // Extract payload from AIMF envelope if present; fall back to raw bytes for legacy files.
+        try
+        {
+            data = ModelFileHeader.ExtractPayload(data);
+        }
+        catch (InvalidOperationException)
+        {
+            // File is not in AIMF envelope format — treat raw bytes as the model payload.
+        }
 
         Deserialize(data);
     }

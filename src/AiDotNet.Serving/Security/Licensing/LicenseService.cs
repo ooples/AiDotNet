@@ -177,9 +177,27 @@ public sealed class LicenseService : ILicenseService
             .CountAsync(a => a.LicenseKeyId == entity.Id && a.IsActive, cancellationToken)
             .ConfigureAwait(false);
 
-        // Upsert activation record (advisory — does not block)
+        // Check seat limit BEFORE activation to avoid over-activating under concurrency.
+        // A machine that is already active does not consume a new seat, so check for it first.
         if (!string.IsNullOrWhiteSpace(request.MachineId))
         {
+            bool alreadyActive = await _db.LicenseActivations
+                .AnyAsync(a => a.LicenseKeyId == entity.Id && a.MachineId == request.MachineId && a.IsActive, cancellationToken)
+                .ConfigureAwait(false);
+
+            if (!alreadyActive && seatsUsed >= entity.MaxSeats)
+            {
+                return new LicenseValidationResponse
+                {
+                    Status = "SeatLimitReached",
+                    Tier = entity.Tier.ToString(),
+                    ExpiresAt = entity.ExpiresAt,
+                    SeatsUsed = seatsUsed,
+                    SeatsMax = entity.MaxSeats,
+                    Message = $"Seat limit reached ({seatsUsed}/{entity.MaxSeats}). Contact your administrator."
+                };
+            }
+
             await UpsertActivationAsync(entity.Id, request.MachineId, request.MachineName, request.Environment, cancellationToken)
                 .ConfigureAwait(false);
 
@@ -189,7 +207,7 @@ public sealed class LicenseService : ILicenseService
                 .ConfigureAwait(false);
         }
 
-        // Check seat limit
+        // Final seat-limit guard (covers edge cases where MachineId is empty)
         if (seatsUsed > entity.MaxSeats)
         {
             return new LicenseValidationResponse

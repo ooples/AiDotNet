@@ -90,8 +90,11 @@ internal sealed class LicenseValidator
 
             return result;
         }
-        catch
+        catch (Exception ex)
         {
+            System.Diagnostics.Trace.TraceWarning(
+                "LicenseValidator: online validation failed: " + ex.GetType().Name + ": " + ex.Message);
+
             // Network failure: check if we have a valid cached result within grace period
             lock (_cacheLock)
             {
@@ -167,7 +170,18 @@ internal sealed class LicenseValidator
                 try
                 {
                     byte[] payloadBytes = Encoding.UTF8.GetBytes(payloadPart);
-                    byte[] expectedSignature = Convert.FromBase64String(signaturePart);
+                    // Convert Base64URL (RFC 4648) to standard Base64 before decoding.
+                    // Base64URL uses '-' instead of '+' and '_' instead of '/'.
+                    string standardBase64 = signaturePart
+                        .Replace('-', '+')
+                        .Replace('_', '/');
+                    // Restore padding if stripped
+                    switch (standardBase64.Length % 4)
+                    {
+                        case 2: standardBase64 += "=="; break;
+                        case 3: standardBase64 += "="; break;
+                    }
+                    byte[] expectedSignature = Convert.FromBase64String(standardBase64);
 
                     using var hmac = new System.Security.Cryptography.HMACSHA256(buildKey);
                     byte[] computedSignature = hmac.ComputeHash(payloadBytes);

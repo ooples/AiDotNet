@@ -84,8 +84,10 @@ internal static class BuildKeyProvider
                 _cachedKey = buffer;
                 return (byte[])_cachedKey.Clone();
             }
-            catch
+            catch (Exception ex)
             {
+                System.Diagnostics.Trace.TraceWarning(
+                    "BuildKeyProvider: failed to load build key: " + ex.GetType().Name + ": " + ex.Message);
                 _cachedKey = null;
                 return Array.Empty<byte>();
             }

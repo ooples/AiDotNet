@@ -308,7 +308,15 @@ public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IConfigur
     /// <inheritdoc/>
     public virtual int[] GetOutputShape()
     {
-        return new[] { ActionDimension };
+        int dim = ActionDimension;
+        if (dim <= 0)
+        {
+            throw new InvalidOperationException(
+                $"ActionDimension must be positive but was {dim}. " +
+                "Override ActionDimension in the derived agent to return a valid value.");
+        }
+
+        return new[] { dim };
     }
 
     /// <inheritdoc/>

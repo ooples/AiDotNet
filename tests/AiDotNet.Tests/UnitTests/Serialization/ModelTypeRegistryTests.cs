@@ -133,8 +133,8 @@ public class ModelTypeRegistryTests
     [Fact]
     public void RegisterFactory_IsUsedByCreateInstance()
     {
-        // Use a unique type name derived from the real type to avoid global state leaks
-        string typeName = typeof(StubModelSerializer).Name;
+        // Use a unique name per test run to avoid global state leaks between tests
+        string typeName = $"FactoryTest_{Guid.NewGuid():N}";
         var stubInstance = new StubModelSerializer { Payload = new byte[] { 99 } };
 
         // Register both the type and a factory under the same key
