@@ -75,6 +75,7 @@ public sealed class ServingDbContext : DbContext, IDataProtectionKeyContext
             entity.Property(e => e.StripeCustomerId).HasMaxLength(128).IsRequired();
             entity.Property(e => e.Email).HasMaxLength(320).IsRequired();
             entity.Property(e => e.Name).HasMaxLength(200).IsRequired();
+            entity.Property(e => e.UserId).HasMaxLength(128);
         });
 
         modelBuilder.Entity<StripeSubscriptionEntity>(entity =>

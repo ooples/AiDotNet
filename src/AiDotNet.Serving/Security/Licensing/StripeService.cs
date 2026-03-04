@@ -200,6 +200,9 @@ internal sealed class StripeService : IStripeService
             .SingleOrDefaultAsync(c => c.StripeCustomerId == stripeCustomerId, ct)
             .ConfigureAwait(false);
 
+        // ClientReferenceId carries the authenticated user ID from checkout session creation.
+        string? checkoutUserId = session.ClientReferenceId;
+
         if (customer is null)
         {
             customer = new StripeCustomerEntity
@@ -208,6 +211,7 @@ internal sealed class StripeService : IStripeService
                 StripeCustomerId = stripeCustomerId,
                 Email = email,
                 Name = customerName,
+                UserId = checkoutUserId,
                 CreatedAt = DateTimeOffset.UtcNow
             };
             _db.StripeCustomers.Add(customer);
@@ -216,6 +220,10 @@ internal sealed class StripeService : IStripeService
         {
             customer.Email = email;
             customer.Name = customerName;
+            if (!string.IsNullOrWhiteSpace(checkoutUserId))
+            {
+                customer.UserId = checkoutUserId;
+            }
         }
 
         // Auto-create license key
@@ -387,9 +395,7 @@ internal sealed class StripeService : IStripeService
             return false;
         }
 
-        // Look up the Stripe customer in our database and verify it belongs to this user.
-        // The userId from JWT maps to our internal records; we match via the email associated
-        // with the Stripe customer against the license records created during checkout.
+        // Look up the Stripe customer in our database and verify it belongs to the requesting user.
         var customer = await _db.StripeCustomers
             .AsNoTracking()
             .SingleOrDefaultAsync(c => c.StripeCustomerId == stripeCustomerId, ct)
@@ -403,10 +409,16 @@ internal sealed class StripeService : IStripeService
             return false;
         }
 
-        // Check if any subscription for this customer is linked to a license owned by this user.
-        // The userId (from JWT sub claim) is matched against the customer email in our records.
-        // In a full implementation, a UserId column on StripeCustomerEntity would be the proper join key.
-        // For now, we verify the customer exists in our system (was created through our checkout flow).
+        // Match the JWT sub claim (userId) against the stored UserId on the Stripe customer record.
+        if (!string.Equals(customer.UserId, userId, StringComparison.Ordinal))
+        {
+            _logger.LogWarning(
+                "ValidateCustomerOwnership: UserId mismatch for customer {CustomerId}",
+                stripeCustomerId);
+            return false;
+        }
+
+        // Verify the customer has at least one active subscription.
         bool hasSubscription = await _db.StripeSubscriptions
             .AsNoTracking()
             .AnyAsync(s => s.StripeCustomerId == stripeCustomerId

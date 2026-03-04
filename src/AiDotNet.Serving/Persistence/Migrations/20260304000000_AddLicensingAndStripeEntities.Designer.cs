@@ -3,6 +3,7 @@ using System;
 using AiDotNet.Serving.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,9 +11,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace AiDotNet.Serving.Persistence.Migrations
 {
     [DbContext(typeof(ServingDbContext))]
-    partial class ServingDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260304000000_AddLicensingAndStripeEntities")]
+    partial class AddLicensingAndStripeEntities
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.3");

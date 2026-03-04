@@ -13,5 +13,11 @@ public sealed class StripeCustomerEntity
 
     public string Name { get; set; } = string.Empty;
 
+    /// <summary>
+    /// The application user ID (from JWT sub claim) that owns this Stripe customer record.
+    /// Set during checkout when ClientReferenceId is provided.
+    /// </summary>
+    public string? UserId { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 }
