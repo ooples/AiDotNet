@@ -1,5 +1,6 @@
 using AiDotNet.Serving.Security.Licensing;
 using AiDotNet.Validation;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace AiDotNet.Serving.Controllers;
@@ -49,9 +50,11 @@ public sealed class StripeController : ControllerBase
     /// <summary>
     /// Creates a Stripe Customer Portal session for managing subscriptions.
     /// </summary>
+    [Authorize]
     [HttpPost("checkout/portal")]
     [ProducesResponseType(typeof(CheckoutResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> CreatePortalSession(
         [FromBody] PortalRequest request,
         CancellationToken cancellationToken)

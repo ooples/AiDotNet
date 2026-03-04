@@ -218,12 +218,15 @@ public class Program
         }
 
         // Configure the HTTP request pipeline
-        app.UseSwagger();
-        app.UseSwaggerUI(options =>
+        if (app.Environment.IsDevelopment())
         {
-            options.SwaggerEndpoint("/swagger/v1/swagger.json", "AiDotNet Serving API v1");
-            options.RoutePrefix = string.Empty; // Serve Swagger UI at root
-        });
+            app.UseSwagger();
+            app.UseSwaggerUI(options =>
+            {
+                options.SwaggerEndpoint("/swagger/v1/swagger.json", "AiDotNet Serving API v1");
+                options.RoutePrefix = string.Empty; // Serve Swagger UI at root
+            });
+        }
 
         app.UseCors();
         app.UseAuthentication();

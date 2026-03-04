@@ -24,6 +24,13 @@ internal sealed class LicenseValidator
     private LicenseValidationResult? _cached;
     private readonly object _cacheLock = new();
 
+#if !NET471
+    private static readonly System.Net.Http.HttpClient SharedHttpClient = new()
+    {
+        Timeout = TimeSpan.FromSeconds(15)
+    };
+#endif
+
     /// <summary>
     /// Gets the most recent cached validation result, or null if no validation has been performed.
     /// </summary>
@@ -142,9 +149,8 @@ internal sealed class LicenseValidator
 #else
     private LicenseValidationResult ValidateOnlineModern(string url, string json)
     {
-        using var httpClient = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(15) };
         var content = new System.Net.Http.StringContent(json, Encoding.UTF8, "application/json");
-        var response = httpClient.PostAsync(url, content).ConfigureAwait(false).GetAwaiter().GetResult();
+        var response = SharedHttpClient.PostAsync(url, content).ConfigureAwait(false).GetAwaiter().GetResult();
         string responseJson = response.Content.ReadAsStringAsync().ConfigureAwait(false).GetAwaiter().GetResult();
 
         if (!response.IsSuccessStatusCode)

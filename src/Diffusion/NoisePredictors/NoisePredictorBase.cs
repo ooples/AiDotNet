@@ -222,6 +222,9 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape
     /// <inheritdoc />
     public virtual void SaveModel(string filePath)
     {
+        if (string.IsNullOrWhiteSpace(filePath))
+            throw new ArgumentException("File path cannot be null or whitespace.", nameof(filePath));
+
         var data = Serialize();
         byte[] envelopedData = ModelFileHeader.WrapWithHeader(
             data, this, GetInputShape(), GetOutputShape(), SerializationFormat.Binary);
@@ -231,6 +234,9 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape
     /// <inheritdoc />
     public virtual void LoadModel(string filePath)
     {
+        if (string.IsNullOrWhiteSpace(filePath))
+            throw new ArgumentException("File path cannot be null or whitespace.", nameof(filePath));
+
         var data = File.ReadAllBytes(filePath);
 
         // Extract payload from AIMF envelope

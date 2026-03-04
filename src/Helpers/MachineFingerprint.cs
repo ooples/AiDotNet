@@ -77,6 +77,7 @@ internal static class MachineFingerprint
         }
     }
 
+    [System.Runtime.Versioning.SupportedOSPlatform("linux")]
     private static string? ReadLinuxMachineId()
     {
         try
@@ -119,7 +120,11 @@ internal static class MachineFingerprint
             }
 
             string output = process.StandardOutput.ReadToEnd();
-            process.WaitForExit(5000);
+            if (!process.WaitForExit(5000))
+            {
+                try { process.Kill(); } catch { /* best effort */ }
+                return null;
+            }
 
             // Parse IOPlatformUUID from output
             const string marker = "\"IOPlatformUUID\" = \"";
@@ -145,8 +150,10 @@ internal static class MachineFingerprint
 
     private static string GetFallbackId()
     {
-        string hostname = System.Environment.MachineName ?? "unknown";
-        string username = System.Environment.UserName ?? "unknown";
+        string hostname;
+        string username;
+        try { hostname = System.Environment.MachineName; } catch { hostname = "unknown"; }
+        try { username = System.Environment.UserName; } catch { username = "unknown"; }
         string os = RuntimeInformation.OSDescription ?? "unknown";
         return $"{hostname}|{username}|{os}";
     }
