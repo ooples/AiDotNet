@@ -72,17 +72,27 @@ public class LicenseKeyTests
     [Fact]
     public void LicenseKeyResolver_NullLicense_FallsThrough()
     {
-        // With no env var or file, should return null (or env var if set externally)
-        string? resolved = LicenseKeyResolver.Resolve(null);
+        // Save and clear env var to ensure clean state
+        string? originalValue = System.Environment.GetEnvironmentVariable(LicenseKeyResolver.EnvVarName);
+        System.Environment.SetEnvironmentVariable(LicenseKeyResolver.EnvVarName, null);
+        try
+        {
+            string? resolved = LicenseKeyResolver.Resolve(null);
 
-        // We can't guarantee the env var is unset in CI, but explicit key should take priority
-        // This test just verifies the method doesn't throw
-        Assert.True(resolved is null || resolved.Length > 0);
+            // Without explicit key, env var, or license file, should return null
+            Assert.Null(resolved);
+        }
+        finally
+        {
+            // Restore original value
+            System.Environment.SetEnvironmentVariable(LicenseKeyResolver.EnvVarName, originalValue);
+        }
     }
 
     [Fact]
     public void LicenseKeyResolver_EnvVar_FallbackWhenNoExplicit()
     {
+        string? originalValue = System.Environment.GetEnvironmentVariable(LicenseKeyResolver.EnvVarName);
         string testKey = "env-var-test-key-" + Guid.NewGuid().ToString("N");
         System.Environment.SetEnvironmentVariable(LicenseKeyResolver.EnvVarName, testKey);
         try
@@ -92,13 +102,14 @@ public class LicenseKeyTests
         }
         finally
         {
-            System.Environment.SetEnvironmentVariable(LicenseKeyResolver.EnvVarName, null);
+            System.Environment.SetEnvironmentVariable(LicenseKeyResolver.EnvVarName, originalValue);
         }
     }
 
     [Fact]
     public void LicenseKeyResolver_ExplicitKey_TakesPriorityOverEnvVar()
     {
+        string? originalValue = System.Environment.GetEnvironmentVariable(LicenseKeyResolver.EnvVarName);
         System.Environment.SetEnvironmentVariable(LicenseKeyResolver.EnvVarName, "env-key");
         try
         {
@@ -108,7 +119,7 @@ public class LicenseKeyTests
         }
         finally
         {
-            System.Environment.SetEnvironmentVariable(LicenseKeyResolver.EnvVarName, null);
+            System.Environment.SetEnvironmentVariable(LicenseKeyResolver.EnvVarName, originalValue);
         }
     }
 

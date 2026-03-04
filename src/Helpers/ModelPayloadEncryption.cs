@@ -389,6 +389,7 @@ public static class ModelPayloadEncryption
         {
             CryptographicOperations.ZeroMemory(baseKey);
             CryptographicOperations.ZeroMemory(finalKey);
+            CryptographicOperations.ZeroMemory(hmacMessage);
         }
     }
 #endif

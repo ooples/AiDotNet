@@ -596,7 +596,7 @@ az postgres flexible-server create \
   --sku-name Standard_B1ms \
   --storage-size 32 \
   --admin-user aidotnetadmin \
-  --admin-password "REPLACE_WITH_STRONG_PASSWORD" \
+  --admin-password "$(openssl rand -base64 32)" \
   --version 16
 
 # Create the database
@@ -668,7 +668,7 @@ az webapp deployment list-publishing-profiles \
 5. Name: `AZURE_WEBAPP_PUBLISH_PROFILE`
 6. Value: paste the XML
 
-The deploy workflow file (`.github/workflows/deploy-serving.yml`) will be created by Claude.
+The deploy workflow file (`.github/workflows/deploy-serving.yml`) has been created and is checked into the repository.
 
 ### Step 6: Verify Deployment
 
