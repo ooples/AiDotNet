@@ -14,7 +14,7 @@ Mixture-of-Experts (MoE) is a neural network architecture that employs multiple 
 
 ## Standard Pattern (Same as All AiDotNet Models)
 
-MoE follows the exact same pattern as other models in AiDotNet (like ARIMAModel, NBEATSModel, FeedForwardNeuralNetwork, etc.):
+MoE follows the same pattern as other models in AiDotNet (like ARIMAModel, NBEATSModel, FeedForwardNeuralNetwork, etc.):
 
 ```csharp
 using AiDotNet;
@@ -111,11 +111,14 @@ Console.WriteLine($"Validation Accuracy: {result.ValidationAccuracy:P2}");
 var testData = new Tensor<float>(new[] { 100, numFeatures });
 var predictions = builder.Predict(testData, result);
 
-// Save model
-builder.SaveModel(result, "moe_model.bin");
+// Save model in AIMF format (includes metadata, optional encryption)
+builder.SaveModel(result, "moe_model.aimf");
+
+// Save with encryption (requires license key)
+builder.SaveModel(result, "moe_model_encrypted.aimf", encrypt: true);
 
 // Load and use later
-var loadedModel = builder.LoadModel("moe_model.bin");
+var loadedModel = builder.LoadModel("moe_model.aimf");
 var newPredictions = builder.Predict(testData, loadedModel);
 ```
 
@@ -261,7 +264,7 @@ var model = new MixtureOfExpertsNeuralNetwork<float>(options, architecture);
 
 ## Comparison with Other AiDotNet Models
 
-MoE follows the exact same pattern as other models:
+MoE follows the same pattern as other models:
 
 ### Time Series Models
 ```csharp
@@ -300,11 +303,10 @@ Console.WriteLine($"Number of Experts: {metadata.AdditionalInfo["NumExperts"]}")
 Console.WriteLine($"TopK: {metadata.AdditionalInfo["TopK"]}");
 Console.WriteLine($"Load Balancing Enabled: {metadata.AdditionalInfo["UseLoadBalancing"]}");
 
-// For more detailed diagnostics, access the underlying MoE layer
-if (model is MixtureOfExpertsNeuralNetwork<float> moeNet)
+// Access expert-level metadata
+if (metadata.AdditionalInfo.ContainsKey("ExpertUsageDistribution"))
 {
-    // Access layer-level diagnostics as needed
-    // (implementation depends on exposing layer diagnostics)
+    Console.WriteLine($"Expert Usage: {metadata.AdditionalInfo["ExpertUsageDistribution"]}");
 }
 ```
 
@@ -382,4 +384,4 @@ Mixture-of-Experts in AiDotNet follows the standard model pattern:
 3. Create a `MixtureOfExpertsNeuralNetwork<T>` model
 4. Use with `AiModelBuilder` for training and inference
 
-This is the same pattern as all other models in AiDotNet, making it easy to use and integrate into your workflows.
+This is the same pattern as all other models in AiDotNet. Trained models are saved in the AIMF (AI Model File) format with optional AES-256-GCM encryption tied to your license key.

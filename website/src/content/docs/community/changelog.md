@@ -11,7 +11,7 @@ All notable changes to AiDotNet are documented here.
 
 ---
 
-## Latest Changes
+## v0.1.0 (Platform Metadata Phase 1)
 
 ### GPU and Performance
 - **SIMD and BLAS optimizations** for CPU tensor operations

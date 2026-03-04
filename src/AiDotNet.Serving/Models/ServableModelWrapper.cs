@@ -203,6 +203,12 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
                 {
                     outputWidth = rowResults[i].Length;
                 }
+                else if (rowResults[i].Length != outputWidth)
+                {
+                    throw new InvalidOperationException(
+                        $"Batch row {i} produced output width {rowResults[i].Length} " +
+                        $"but row 0 produced {outputWidth}. All rows must have consistent output width.");
+                }
             }
 
             var batchResult = new Matrix<T>(inputs.Rows, outputWidth);
@@ -353,7 +359,7 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
     /// <param name="enableSpeculativeDecoding">Whether speculative decoding is enabled.</param>
     /// <returns>A ServableModelWrapper configured for the detected model type.</returns>
     /// <exception cref="InvalidOperationException">Thrown when the model does not implement a supported IFullModel variant.</exception>
-    public static ServableModelWrapper<T> FromModel(
+    internal static ServableModelWrapper<T> FromModel(
         string modelName,
         IModelSerializer model,
         bool enableBatching = true,
@@ -410,7 +416,7 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
     /// <param name="licenseKey">Optional license key for encrypted AIMF models.</param>
     /// <param name="decryptionToken">Optional server-side decryption token.</param>
     /// <returns>A ServableModelWrapper ready for serving.</returns>
-    public static ServableModelWrapper<T> LoadServable(
+    internal static ServableModelWrapper<T> LoadServable(
         string filePath,
         string modelName,
         bool enableBatching = true,

@@ -463,8 +463,14 @@ public static class ModelFileHeader
                 "Please update AiDotNet to the latest version.");
         }
 
-        // Serialization format
-        var format = (SerializationFormat)reader.ReadInt32();
+        // Serialization format (validate against known values)
+        int formatRaw = reader.ReadInt32();
+        if (!Enum.IsDefined(typeof(SerializationFormat), formatRaw))
+        {
+            throw new InvalidOperationException(
+                $"AIMF header contains unknown serialization format value {formatRaw}.");
+        }
+        var format = (SerializationFormat)formatRaw;
 
         // Type name
         string typeName = reader.ReadString();
@@ -534,8 +540,14 @@ public static class ModelFileHeader
             DynamicOutputDimensions = dynOutputDims
         };
 
-        // Encryption scheme
-        var encryptionScheme = (PayloadEncryptionScheme)reader.ReadInt32();
+        // Encryption scheme (validate against known values)
+        int encryptionRaw = reader.ReadInt32();
+        if (!Enum.IsDefined(typeof(PayloadEncryptionScheme), encryptionRaw))
+        {
+            throw new InvalidOperationException(
+                $"AIMF header contains unknown encryption scheme value {encryptionRaw}.");
+        }
+        var encryptionScheme = (PayloadEncryptionScheme)encryptionRaw;
         byte[]? salt = null;
         byte[]? nonce = null;
         byte[]? tag = null;

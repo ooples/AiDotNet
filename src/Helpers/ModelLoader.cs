@@ -244,6 +244,10 @@ public static class ModelLoader
             scheme,
             dynamicShapeInfo);
 
+        string? directory = Path.GetDirectoryName(filePath);
+        if (directory is not null && !Directory.Exists(directory))
+            Directory.CreateDirectory(directory);
+
         File.WriteAllBytes(filePath, enveloped);
     }
 
@@ -297,7 +301,15 @@ public static class ModelLoader
         var actualInput = model.GetInputShape();
         var actualOutput = model.GetOutputShape();
 
-        if (headerInfo.InputShape.Length > 0 && actualInput.Length > 0 && !ShapesMatch(actualInput, headerInfo.InputShape))
+        if (headerInfo.InputShape.Length > 0 && actualInput.Length == 0)
+        {
+            // Header has shape info but model returned empty - shape validation cannot verify integrity.
+            // This may indicate the model did not restore shape info correctly.
+            System.Diagnostics.Debug.WriteLine(
+                $"[AIMF] Warning: Header has input shape [{string.Join(", ", headerInfo.InputShape)}] " +
+                "but deserialized model returned empty input shape. Shape validation skipped.");
+        }
+        else if (headerInfo.InputShape.Length > 0 && actualInput.Length > 0 && !ShapesMatch(actualInput, headerInfo.InputShape))
         {
             throw new InvalidOperationException(
                 $"Input shape mismatch. " +
@@ -306,7 +318,13 @@ public static class ModelLoader
                 "The model file may be corrupted or was saved with a different configuration.");
         }
 
-        if (headerInfo.OutputShape.Length > 0 && actualOutput.Length > 0 && !ShapesMatch(actualOutput, headerInfo.OutputShape))
+        if (headerInfo.OutputShape.Length > 0 && actualOutput.Length == 0)
+        {
+            System.Diagnostics.Debug.WriteLine(
+                $"[AIMF] Warning: Header has output shape [{string.Join(", ", headerInfo.OutputShape)}] " +
+                "but deserialized model returned empty output shape. Shape validation skipped.");
+        }
+        else if (headerInfo.OutputShape.Length > 0 && actualOutput.Length > 0 && !ShapesMatch(actualOutput, headerInfo.OutputShape))
         {
             throw new InvalidOperationException(
                 $"Output shape mismatch. " +

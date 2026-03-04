@@ -271,3 +271,32 @@ var optimizer = new AdamWOptimizer<float>(
 | Beta1 (momentum) | 0.9 to 0.95 | 0.9 is standard |
 | Beta2 | 0.99 to 0.999 | 0.999 for Adam |
 | Epsilon | 1e-8 to 1e-6 | 1e-8 is standard |
+
+---
+
+## Error Handling
+
+Validate optimizer parameters before training to catch configuration issues early:
+
+```csharp
+try
+{
+    var result = await new AiModelBuilder<float, Tensor<float>, int>()
+        .ConfigureModel(model)
+        .ConfigureOptimizer(new AdamWOptimizer<float>(learningRate: 3e-4f))
+        .BuildAsync(trainData, trainLabels);
+}
+catch (ArgumentOutOfRangeException ex)
+{
+    Console.WriteLine($"Invalid optimizer parameter: {ex.Message}");
+}
+catch (InvalidOperationException ex)
+{
+    Console.WriteLine($"Training failed: {ex.Message}");
+}
+```
+
+Common issues:
+- **Learning rate too high**: Loss diverges (NaN). Try reducing by 10x.
+- **Learning rate too low**: Loss barely decreases. Try increasing by 10x.
+- **NaN gradients**: Enable gradient clipping via `maxGradNorm`.

@@ -57,28 +57,31 @@ foreach (var (step, value) in forecast.Select((v, i) => (i + 1, v)))
 | `ExponentialSmoothing` | Holt-Winters | Trend + seasonality |
 | `ProphetModel` | Facebook Prophet-style | Business forecasting |
 
-### Neural Network Models
+### Deep Learning Models
 
 | Model | Description | Best For |
 |:------|:------------|:---------|
-| `LSTMForecaster` | Long Short-Term Memory | Complex temporal dependencies |
-| `GRUForecaster` | Gated Recurrent Unit | Faster alternative to LSTM |
-| `TransformerForecaster` | Temporal Transformer | Long-range dependencies |
-| `TCNForecaster` | Temporal Convolutional Network | Parallel processing |
+| `DeepARModel` | Autoregressive RNN | Probabilistic forecasting |
+| `NBEATSModel` | Neural Basis Expansion | Univariate forecasting |
+| `TemporalFusionTransformer` | Attention-based | Multi-horizon with covariates |
+| `NHiTSModel` | Hierarchical interpolation | Long-horizon forecasting |
 
 ---
 
-## Neural Network Forecasting
+## Deep Learning Forecasting
 
 ```csharp
+using AiDotNet;
+using AiDotNet.TimeSeries;
+
+// DeepAR for probabilistic forecasting
 var result = await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
-    .ConfigureModel(new LSTMForecaster<float>(
-        inputSize: 1,
-        hiddenSize: 64,
-        numLayers: 2,
-        lookback: 24))
+    .ConfigureModel(new DeepARModel<float>(new DeepAROptions<float>()))
     .ConfigureOptimizer(new AdamOptimizer<float>(learningRate: 0.001f))
     .BuildAsync(trainSequences, trainTargets);
+
+// Forecast next 6 steps
+var forecast = result.Forecast(history, steps: 6);
 ```
 
 ---
@@ -86,17 +89,26 @@ var result = await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
 ## Anomaly Detection
 
 ```csharp
-using AiDotNet.TimeSeries;
+using AiDotNet;
+using AiDotNet.TimeSeries.AnomalyDetection;
 
-// Detect anomalies in sensor readings
-var detector = new TimeSeriesAnomalyDetector<double>(
-    method: AnomalyMethod.IsolationForest,
-    contamination: 0.05);  // Expected 5% anomalies
+// Detect anomalies in sensor readings using Isolation Forest
+var detector = new TimeSeriesIsolationForest<double>(
+    new TimeSeriesIsolationForestOptions<double>
+    {
+        NumTrees = 100,
+        ContaminationFraction = 0.05  // Expected 5% anomalies
+    });
 
-var anomalies = detector.Detect(sensorData);
-foreach (var anomaly in anomalies)
+// Fit on historical data and detect anomalies
+var sensorVector = Vector<double>.FromArray(sensorData);
+var anomalyScores = detector.DetectAnomalies(sensorVector);
+for (int i = 0; i < anomalyScores.Length; i++)
 {
-    Console.WriteLine($"Anomaly at index {anomaly.Index}: {anomaly.Value} (score: {anomaly.Score:F3})");
+    if (NumOps<double>.GreaterThan(anomalyScores[i], threshold))
+    {
+        Console.WriteLine($"Anomaly at index {i}: score {anomalyScores[i]}");
+    }
 }
 ```
 
@@ -107,16 +119,21 @@ foreach (var anomaly in anomalies)
 ### Common Time Series Features
 
 ```csharp
-// Lag features
-var lagged = TimeSeries.CreateLagFeatures(data, lags: new[] { 1, 7, 14, 30 });
+using AiDotNet.Preprocessing.TimeSeries;
 
-// Rolling statistics
-var rolling = TimeSeries.CreateRollingFeatures(data, window: 7,
-    stats: new[] { RollingStat.Mean, RollingStat.Std, RollingStat.Min, RollingStat.Max });
+// Lag features using LagLeadTransformer
+var lagTransformer = new LagLeadTransformer<double>(
+    new TimeSeriesFeatureOptions { LagSteps = new[] { 1, 7, 14, 30 } });
+var lagFeatures = lagTransformer.Transform(data);
 
-// Calendar features
-var calendar = TimeSeries.CreateCalendarFeatures(dates,
-    features: new[] { CalendarFeature.DayOfWeek, CalendarFeature.Month, CalendarFeature.IsHoliday });
+// Rolling statistics using RollingStatsTransformer
+var rollingTransformer = new RollingStatsTransformer<double>(
+    new TimeSeriesFeatureOptions
+    {
+        WindowSize = 7,
+        EnabledStatistics = new[] { RollingStat.Mean, RollingStat.Std, RollingStat.Min, RollingStat.Max }
+    });
+var rollingFeatures = rollingTransformer.Transform(data);
 ```
 
 ---

@@ -677,6 +677,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     {
         Guard.NotNull(licenseKey);
         _licenseKey = licenseKey;
+        _licenseValidator = null; // Reset cached validator when key changes
         return this;
     }
 
@@ -3273,9 +3274,16 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// </remarks>
     public void SaveModel(AiModelResult<T, TInput, TOutput> modelResult, string filePath)
     {
-        // When a license key is configured, enforce encrypted save. Don't silently
-        // downgrade to plaintext when a key is present.
+        // When a license key is configured, enforce encrypted save. Fail closed if
+        // the key cannot be resolved rather than silently downgrading to plaintext.
         string? resolvedKey = LicenseKeyResolver.Resolve(_licenseKey);
+        if (_licenseKey is not null && resolvedKey is null)
+        {
+            throw new InvalidOperationException(
+                "A license key was configured but could not be resolved. " +
+                "Verify the license key is valid. Cannot save model without a resolved key.");
+        }
+
         if (resolvedKey is not null)
         {
             if (modelResult.Model is not Interfaces.IModelSerializer serializer)

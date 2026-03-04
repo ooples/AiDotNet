@@ -234,6 +234,95 @@ internal sealed class LicenseValidator
 #endif
     }
 
+#if !NET471
+    private async System.Threading.Tasks.Task<LicenseValidationResult> ValidateOnlineAsync(
+        System.Threading.CancellationToken cancellationToken = default)
+    {
+        string serverUrl = _licenseKey.ServerUrl ?? string.Empty;
+        string url = serverUrl.TrimEnd('/') + "/api/licenses/validate";
+
+        var requestBody = new
+        {
+            key = _licenseKey.Key,
+            machineId = _licenseKey.EnableTelemetry ? MachineFingerprint.GetMachineId() : null as string,
+            machineName = _licenseKey.EnableTelemetry ? System.Environment.MachineName : null as string,
+            environment = _licenseKey.Environment
+        };
+
+        string json = JsonConvert.SerializeObject(requestBody);
+        var content = new System.Net.Http.StringContent(json, Encoding.UTF8, "application/json");
+        var response = await SharedHttpClient.PostAsync(url, content, cancellationToken).ConfigureAwait(false);
+        string responseJson = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            return new LicenseValidationResult(
+                LicenseKeyStatus.Invalid,
+                message: $"Server returned HTTP {(int)response.StatusCode}.");
+        }
+
+        return ParseResponse(responseJson);
+    }
+
+    /// <summary>
+    /// Asynchronously validates the configured license key, avoiding sync-over-async.
+    /// Prefer this over <see cref="Validate"/> in async contexts to prevent thread pool starvation.
+    /// </summary>
+    public async System.Threading.Tasks.Task<LicenseValidationResult> ValidateAsync(
+        System.Threading.CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(_licenseKey.ServerUrl))
+        {
+            var offlineResult = ValidateOffline();
+            lock (_cacheLock) { _cached = offlineResult; }
+            return offlineResult;
+        }
+
+        lock (_cacheLock)
+        {
+            if (_cached is not null &&
+                _cached.Status == LicenseKeyStatus.Active &&
+                _cached.ValidatedAt + _licenseKey.OfflineGracePeriod > DateTimeOffset.UtcNow)
+            {
+                return _cached;
+            }
+        }
+
+        try
+        {
+            var result = await ValidateOnlineAsync(cancellationToken).ConfigureAwait(false);
+            lock (_cacheLock) { _cached = result; }
+            return result;
+        }
+        catch
+        {
+            lock (_cacheLock)
+            {
+                if (_cached is not null &&
+                    _cached.ValidatedAt + _licenseKey.OfflineGracePeriod > DateTimeOffset.UtcNow)
+                {
+                    return _cached;
+                }
+
+                if (_cached is not null)
+                {
+                    var expired = new LicenseValidationResult(
+                        LicenseKeyStatus.Expired, tier: _cached.Tier,
+                        message: "License server unreachable and grace period exceeded.");
+                    _cached = expired;
+                    return expired;
+                }
+            }
+
+            var pending = new LicenseValidationResult(
+                LicenseKeyStatus.ValidationPending,
+                message: "License server unreachable. Initial validation pending.");
+            lock (_cacheLock) { _cached = pending; }
+            return pending;
+        }
+    }
+#endif
+
 #if NET471
     private LicenseValidationResult ValidateOnlineNet471(string url, string json)
     {

@@ -88,6 +88,7 @@ public class ModelTypeRegistryTests
 
         var resolved = ModelTypeRegistry.Resolve(uniqueName.ToUpperInvariant());
         Assert.NotNull(resolved);
+        Assert.Equal(typeof(StubModelSerializer), resolved);
     }
 
     [Fact]
