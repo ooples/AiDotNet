@@ -5,26 +5,21 @@ order: 9
 section: "Tutorials"
 ---
 
-
-
 Fine-tune large language models efficiently with LoRA and QLoRA.
-
----
-
-
-
----
 
 ## Overview
 
-AiDotNet provides 37+ LoRA adapters for efficient fine-tuning:
-- **LoRA**: Low-Rank Adaptation
-- **QLoRA**: 4-bit Quantized LoRA
-- **DoRA**: Weight-Decomposed LoRA
-- **AdaLoRA**: Adaptive LoRA
-- And many more!
+AiDotNet provides 34 LoRA adapter implementations for efficient fine-tuning:
 
----
+| Category | Adapters |
+|:---------|:---------|
+| Core | `StandardLoRAAdapter`, `QLoRAAdapter`, `DoRAAdapter`, `AdaLoRAAdapter` |
+| Low-Parameter | `VeRAAdapter`, `LoRAXSAdapter`, `NOLAAdapter`, `VBLoRAAdapter`, `LoRAFAAdapter` |
+| Composition | `LoHaAdapter`, `LoKrAdapter`, `DenseLoRAAdapter`, `GLoRAAdapter`, `MultiLoRAAdapter`, `ChainLoRAAdapter` |
+| Efficiency | `DyLoRAAdapter`, `FloraAdapter`, `SLoRAAdapter`, `LoftQAdapter`, `PiSSAAdapter` |
+| Advanced | `MoRAAdapter`, `DVoRAAdapter`, `DeltaLoRAAdapter`, `HRAAdapter`, `RoSAAdapter` |
+| Specialized | `LongLoRAAdapter`, `GraphConvolutionalLoRAAdapter`, `LoRETTAAdapter`, `ReLoRAAdapter` |
+| Scaling | `LoRAPlusAdapter`, `LoRADropAdapter`, `XLoRAAdapter`, `QALoRAAdapter`, `TiedLoRAAdapter` |
 
 ## Why LoRA?
 
@@ -36,213 +31,159 @@ AiDotNet provides 37+ LoRA adapters for efficient fine-tuning:
 
 ---
 
-## Basic LoRA
+## Basic LoRA with AiModelBuilder
+
+All LoRA fine-tuning uses the standard `AiModelBuilder` pattern with `.ConfigureLoRA()`:
 
 ```csharp
+using AiDotNet;
 using AiDotNet.LoRA;
-using AiDotNet.ModelLoading;
 
-// Load base model
-var model = await HuggingFaceHub.LoadModelAsync<float>("microsoft/phi-2");
+// Configure LoRA via ILoRAConfiguration
+var loraConfig = new DefaultLoRAConfiguration<float>(
+    rank: 8,
+    alpha: 16.0f,
+    dropout: 0.05f
+);
 
-// Configure LoRA
-var loraConfig = new LoRAConfig<float>
-{
-    Rank = 8,                           // Low-rank dimension
-    Alpha = 16,                         // Scaling factor
-    TargetModules = ["q_proj", "v_proj"], // Layers to adapt
-    Dropout = 0.05f
-};
+// Build model with LoRA using AiModelBuilder
+var builder = new AiModelBuilder<float, Tensor<float>, Tensor<float>>();
+var result = await builder
+    .ConfigureModel(model)
+    .ConfigureLoRA(loraConfig)
+    .ConfigureOptimizer(new AdamWOptimizer<float>(learningRate: 1e-4f))
+    .BuildAsync(trainingData, trainingLabels);
 
-// Apply LoRA adapters
-var loraModel = model.ApplyLoRA(loraConfig);
-
-Console.WriteLine($"Trainable parameters: {loraModel.GetTrainableParameterCount():N0}");
-// ~0.1% of original parameters
+// Make predictions
+var predictions = builder.Predict(testData, result);
 ```
 
 ---
 
-## Training with LoRA
+## Training Configuration
 
 ```csharp
-// Prepare training data
-var trainingData = new[]
-{
-    new TrainingSample { Input = "Translate to French: Hello", Output = "Bonjour" },
-    new TrainingSample { Input = "Translate to French: Goodbye", Output = "Au revoir" }
-};
+// Prepare training data (use realistic dataset sizes)
+var trainingData = LoadTrainingFeatures();   // Tensor<float> of shape [numSamples, inputDim]
+var trainingLabels = LoadTrainingLabels();   // Tensor<float> of shape [numSamples, outputDim]
 
-// Configure training
-var trainingConfig = new LoRATrainingConfig<float>
-{
-    LearningRate = 1e-4f,
-    BatchSize = 4,
-    GradientAccumulationSteps = 4,
-    Epochs = 3,
-    WarmupSteps = 100,
-    WeightDecay = 0.01f
-};
+// Configure LoRA
+var loraConfig = new DefaultLoRAConfiguration<float>(
+    rank: 8,
+    alpha: 16.0f,
+    dropout: 0.05f
+);
 
-// Train
-await loraModel.TrainAsync(trainingData, trainingConfig);
+// Train with AiModelBuilder
+var builder = new AiModelBuilder<float, Tensor<float>, Tensor<float>>();
+var result = await builder
+    .ConfigureModel(model)
+    .ConfigureLoRA(loraConfig)
+    .ConfigureOptimizer(new AdamWOptimizer<float>(
+        learningRate: 1e-4f,
+        weightDecay: 0.01f))
+    .ConfigureLearningRateScheduler(new CosineAnnealingLR(tMax: 100))
+    .ConfigurePreprocessing()
+    .BuildAsync(trainingData, trainingLabels);
+
+Console.WriteLine($"Training Loss: {result.TrainingLoss:F4}");
+Console.WriteLine($"Validation Loss: {result.ValidationLoss:F4}");
 ```
 
 ---
 
 ## QLoRA (4-bit Quantized)
 
-Train even larger models with minimal memory:
+QLoRA applies LoRA on top of a quantized model to reduce memory usage:
 
 ```csharp
+using AiDotNet;
 using AiDotNet.LoRA;
-using AiDotNet.Quantization;
 
-// Configure 4-bit quantization
-var quantConfig = new QuantizationConfig<float>
-{
-    QuantizationType = QuantizationType.NF4,  // 4-bit NormalFloat
-    ComputeType = DataType.BFloat16,
-    DoubleQuantization = true  // Quantize the quantization constants
-};
+// QLoRA uses the QLoRAAdapter directly
+var architecture = new NeuralNetworkArchitecture<float>(
+    inputType: InputType.OneDimensional,
+    taskType: NeuralNetworkTaskType.MultiClassClassification,
+    inputSize: inputDim,
+    outputSize: numClasses
+);
 
-// Load with quantization
-var quantizedModel = await HuggingFaceHub.LoadModelAsync<float>(
-    "meta-llama/Llama-2-7b-hf",
-    quantConfig);
+var loraConfig = new DefaultLoRAConfiguration<float>(
+    rank: 8,
+    alpha: 16.0f,
+    dropout: 0.05f
+);
 
-// Apply LoRA on quantized model
-var qloraConfig = new QLoRAConfig<float>
-{
-    Rank = 8,
-    Alpha = 16,
-    TargetModules = ["q_proj", "k_proj", "v_proj", "o_proj"],
-    Dropout = 0.05f
-};
-
-var qloraModel = quantizedModel.ApplyQLoRA(qloraConfig);
-
-// Train (uses much less memory!)
-await qloraModel.TrainAsync(trainingData, trainingConfig);
+var builder = new AiModelBuilder<float, Tensor<float>, Tensor<float>>();
+var result = await builder
+    .ConfigureModel(model)
+    .ConfigureLoRA(loraConfig)
+    .ConfigureQuantization(new QuantizationConfig { Bits = 4 })
+    .ConfigureOptimizer(new AdamWOptimizer<float>(learningRate: 1e-4f))
+    .BuildAsync(trainingData, trainingLabels);
 ```
 
 ---
 
-## Saving and Loading Adapters
+## Saving and Loading Models
 
 ```csharp
-// Save only the LoRA adapters (small file)
-await loraModel.SaveAdaptersAsync("my-lora-adapters");
+// Save trained model in AIMF format (includes LoRA weights)
+builder.SaveModel(result, "lora-finetuned.aimf");
 
-// Load adapters onto base model
-var baseModel = await HuggingFaceHub.LoadModelAsync<float>("microsoft/phi-2");
-var loadedLoraModel = baseModel.LoadLoRAAdapters("my-lora-adapters");
+// Save with encryption (requires license key)
+builder.SaveModel(result, "lora-finetuned-encrypted.aimf", encrypt: true);
 
-// Merge adapters into base model (for deployment)
-var mergedModel = loraModel.MergeAndUnload();
-await mergedModel.SaveAsync("merged-model");
+// Load and use later
+var loadedResult = builder.LoadModel("lora-finetuned.aimf");
+var predictions = builder.Predict(testData, loadedResult);
 ```
 
 ---
 
-## LoRA Variants
+## LoRA Adapter Variants
+
+AiDotNet provides specialized adapter implementations for different scenarios. Each adapter extends `LoRAAdapterBase<T>` and implements `ILoRAAdapter<T>`.
 
 ### DoRA (Weight-Decomposed LoRA)
 
-```csharp
-var doraConfig = new DoRAConfig<float>
-{
-    Rank = 8,
-    Alpha = 16,
-    TargetModules = ["q_proj", "v_proj"],
-    DecomposeMagnitude = true
-};
+Decomposes weight updates into magnitude and direction for better convergence:
 
-var doraModel = model.ApplyDoRA(doraConfig);
+```csharp
+// DoRAAdapter decomposes updates into magnitude and direction
+var doraAdapter = new DoRAAdapter<float>(
+    inputSize: 256,
+    outputSize: 256,
+    rank: 8,
+    alpha: 16.0f
+);
 ```
 
 ### AdaLoRA (Adaptive Rank)
 
-```csharp
-var adaLoraConfig = new AdaLoRAConfig<float>
-{
-    InitialRank = 12,
-    TargetRank = 8,
-    Alpha = 16,
-    BetaStart = 0.85f,
-    BetaEnd = 0.95f
-};
+Dynamically adjusts rank per layer based on importance:
 
-var adaLoraModel = model.ApplyAdaLoRA(adaLoraConfig);
+```csharp
+var adaLoraAdapter = new AdaLoRAAdapter<float>(
+    inputSize: 256,
+    outputSize: 256,
+    initialRank: 12,
+    targetRank: 8,
+    alpha: 16.0f
+);
 ```
 
 ### VeRA (Vector-based LoRA)
 
-```csharp
-var veraConfig = new VeRAConfig<float>
-{
-    Rank = 256,  // Higher rank possible due to shared matrices
-    Alpha = 16,
-    SharedAcrossLayers = true
-};
-
-var veraModel = model.ApplyVeRA(veraConfig);
-```
-
----
-
-## Multiple LoRA Adapters
-
-Switch between different adapters at inference:
+Uses shared random matrices with learned scaling vectors for extreme parameter efficiency:
 
 ```csharp
-// Load base model
-var model = await HuggingFaceHub.LoadModelAsync<float>("microsoft/phi-2");
-
-// Load multiple adapters
-model.LoadLoRAAdapters("translation-adapter", "translation");
-model.LoadLoRAAdapters("summarization-adapter", "summarization");
-
-// Use specific adapter
-model.SetActiveAdapter("translation");
-var translation = model.Generate("Translate to French: Hello");
-
-model.SetActiveAdapter("summarization");
-var summary = model.Generate("Summarize: ...");
-```
-
----
-
-## Dataset Preparation
-
-### Instruction Fine-tuning Format
-
-```csharp
-var dataset = new[]
-{
-    new InstructionSample
-    {
-        Instruction = "Summarize the following text.",
-        Input = "AiDotNet is a machine learning framework...",
-        Output = "AiDotNet is a .NET ML framework."
-    }
-};
-```
-
-### Chat Format
-
-```csharp
-var chatDataset = new[]
-{
-    new ChatSample
-    {
-        Messages = new[]
-        {
-            new Message { Role = "user", Content = "What is AI?" },
-            new Message { Role = "assistant", Content = "AI is..." }
-        }
-    }
-};
+var veraAdapter = new VeRAAdapter<float>(
+    inputSize: 256,
+    outputSize: 256,
+    rank: 256,
+    alpha: 16.0f
+);
 ```
 
 ---
@@ -257,26 +198,29 @@ var chatDataset = new[]
 | Complex tasks | 16-32 |
 | Multi-task | 32-64 |
 
-### Target Modules
-
-```csharp
-// Attention layers only (most efficient)
-TargetModules = ["q_proj", "v_proj"]
-
-// All attention layers
-TargetModules = ["q_proj", "k_proj", "v_proj", "o_proj"]
-
-// Attention + MLP (most expressive)
-TargetModules = ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
-```
-
 ### Training Tips
 
-1. **Start small**: Try rank 4-8 first
-2. **Learning rate**: Lower than full fine-tuning (1e-4 to 5e-5)
-3. **Batch size**: Use gradient accumulation if memory limited
-4. **Regularization**: Use dropout (0.05-0.1)
-5. **Early stopping**: Monitor validation loss
+1. **Start small**: Try rank 4-8 first, increase if underfitting
+2. **Learning rate**: Use lower rates than full fine-tuning (1e-4 to 5e-5)
+3. **Gradient accumulation**: Use gradient accumulation if batch size is memory-limited
+4. **Regularization**: Apply dropout (0.05-0.1) to prevent overfitting
+5. **Validation monitoring**: Split data into train/validation sets and track validation loss to detect overfitting early
+
+```csharp
+// Example with validation monitoring via AiModelBuilder
+var result = await builder
+    .ConfigureModel(model)
+    .ConfigureLoRA(loraConfig)
+    .ConfigureOptimizer(new AdamWOptimizer<float>(learningRate: 1e-4f))
+    .ConfigurePreprocessing()
+    .BuildAsync(trainingData, trainingLabels);
+
+// Check for overfitting
+if (result.ValidationLoss > result.TrainingLoss * 1.5)
+{
+    Console.WriteLine("Warning: model may be overfitting. Consider increasing dropout or reducing rank.");
+}
+```
 
 ---
 
@@ -292,6 +236,6 @@ TargetModules = ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj",
 
 ## Next Steps
 
-- [LoRA Sample](/samples/llm-fine-tuning/LoRA/)
-- [QLoRA Sample](/samples/llm-fine-tuning/QLoRA/)
-- [LoRA API Reference](/api/AiDotNet.LoRA/)
+- [LoRA/Fine-tuning Features](../../../features/lora-finetuning/)
+- [Optimizers Reference](../../reference/optimizers/)
+- [Getting Started Guide](../../getting-started/installation/)

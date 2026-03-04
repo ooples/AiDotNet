@@ -9,12 +9,6 @@ section: "Tutorials"
 
 Learn to process audio with AiDotNet's speech and audio APIs.
 
----
-
-
-
----
-
 ## What is Audio Processing?
 
 Audio processing with machine learning includes:
@@ -451,7 +445,8 @@ foreach (var segment in result.Segments)
 // From file
 var audio = AudioData.Load("input.wav");
 
-// From URL
+// From URL (validate/allowlist URLs in production to prevent SSRF;
+// enforce size limits and timeouts for untrusted sources)
 var audio = await AudioData.LoadFromUrlAsync("https://example.com/audio.wav");
 
 // From stream
@@ -508,6 +503,6 @@ var normalized = audio.Normalize();
 
 ## Next Steps
 
-- [Speech Recognition Sample](../../../samples/audio/SpeechRecognition/)
-- [Text-to-Speech Sample](../../../samples/audio/TextToSpeech/)
-- [Audio API Reference](../../api/)
+- [Getting Started Guide](../../getting-started/installation/)
+- [Audio & Speech Features](../../../features/audio-speech/)
+- [API Reference](../../reference/)

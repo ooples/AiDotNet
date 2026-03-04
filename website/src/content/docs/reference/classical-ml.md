@@ -1,13 +1,13 @@
 ---
 title: "Classical ML"
-description: "106+ classical ML algorithms reference."
+description: "95+ classical ML algorithms reference."
 order: 2
 section: "Reference"
 ---
 
 
 
-Complete reference for all 106+ classical ML algorithms in AiDotNet.
+Complete reference for the 95+ classical ML algorithms in AiDotNet.
 
 ---
 
@@ -15,7 +15,7 @@ Complete reference for all 106+ classical ML algorithms in AiDotNet.
 
 ---
 
-## Classification (28 Algorithms)
+## Classification (26 Algorithms)
 
 ### Linear Models
 
@@ -103,7 +103,7 @@ var forest = new RandomForestClassifier<double>(
 
 ---
 
-## Regression (41 Algorithms)
+## Regression (34 Algorithms)
 
 ### Linear Models
 
@@ -298,19 +298,19 @@ var kmeans = new KMeans<double>(
 
 ```csharp
 // Classification
-var result = await new AiModelBuilder<double, double[], int>()
+var classificationResult = await new AiModelBuilder<double, double[], int>()
     .ConfigureModel(new RandomForestClassifier<double>(nEstimators: 100))
     .ConfigurePreprocessing()
     .BuildAsync(features, labels);
 
 // Regression
-var result = await new AiModelBuilder<double, double[], double>()
+var regressionResult = await new AiModelBuilder<double, double[], double>()
     .ConfigureModel(new GradientBoostingRegressor<double>())
     .ConfigurePreprocessing()
     .BuildAsync(features, targets);
 
 // Clustering
-var result = await new AiModelBuilder<double, double[], int>()
+var clusteringResult = await new AiModelBuilder<double, double[], int>()
     .ConfigureModel(new HDBSCAN<double>(minClusterSize: 5))
     .BuildAsync(features);
 ```
