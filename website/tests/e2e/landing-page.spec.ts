@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-const BASE = '/AiDotNet';
+const BASE = '';
 
 test.describe('Landing Page', () => {
   test.beforeEach(async ({ page }) => {
@@ -15,7 +15,7 @@ test.describe('Landing Page', () => {
 
   test('stats badge shows correct implementation count', async ({ page }) => {
     const statsText = await page.locator('body').textContent();
-    expect(statsText).toContain('7,300');
+    expect(statsText).toContain('8,100');
   });
 
   test('NuGet badge renders', async ({ page }) => {

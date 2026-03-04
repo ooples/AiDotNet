@@ -8,16 +8,10 @@ export default defineConfig({
   workers: process.env.CI ? 1 : undefined,
   reporter: 'html',
   use: {
-    baseURL: 'http://localhost:4321',
+    baseURL: 'https://www.aidotnet.dev',
     headless: true,
     screenshot: 'only-on-failure',
     trace: 'on-first-retry',
-  },
-  webServer: {
-    command: 'npx astro dev --port 4321',
-    port: 4321,
-    reuseExistingServer: !process.env.CI,
-    timeout: 30000,
   },
   projects: [
     {

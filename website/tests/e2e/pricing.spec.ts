@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-const BASE = '/AiDotNet';
+const BASE = '';
 
 test.describe('Pricing Page', () => {
   test.beforeEach(async ({ page }) => {

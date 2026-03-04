@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-const BASE = '/AiDotNet';
+const BASE = '';
 
 test.describe('Accessibility', () => {
   test('all images have alt text or decorative role', async ({ page }) => {

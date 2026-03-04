@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-const BASE = '/AiDotNet';
+const BASE = '';
 
 const featurePages = [
   { path: '/features/neural-networks/', name: 'Neural Network Layers' },

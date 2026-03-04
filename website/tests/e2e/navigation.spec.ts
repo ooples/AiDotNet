@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-const BASE = '/AiDotNet';
+const BASE = '';
 
 test.describe('Desktop Navigation', () => {
   test.use({ viewport: { width: 1440, height: 900 } });
@@ -40,7 +40,7 @@ test.describe('Desktop Navigation', () => {
     await page.locator('nav').getByRole('link', { name: 'Features' }).click();
     await expect(page).toHaveURL(/\/features\//);
     await page.goBack();
-    await expect(page).toHaveURL(/\/AiDotNet\/?$/);
+    await expect(page).toHaveURL(/aidotnet\.dev\/?$/);
     await page.goForward();
     await expect(page).toHaveURL(/\/features\//);
   });
@@ -49,8 +49,8 @@ test.describe('Desktop Navigation', () => {
 test.describe('Navigation - All Viewports', () => {
   test('logo click returns to landing page', async ({ page }) => {
     await page.goto(`${BASE}/features/`);
-    await page.locator(`nav a[href*="AiDotNet"]`).first().click();
-    await expect(page).toHaveURL(/\/AiDotNet\/?$/);
+    await page.locator('nav a[href="/"]').first().click();
+    await expect(page).toHaveURL(/aidotnet\.dev\/?$/);
   });
 
   test('Get Started CTA navigates to docs', async ({ page }) => {

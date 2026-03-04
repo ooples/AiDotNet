@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-const BASE = '/AiDotNet';
+const BASE = '';
 
 test.describe('Solutions Hub', () => {
   test('solutions index page loads', async ({ page }) => {

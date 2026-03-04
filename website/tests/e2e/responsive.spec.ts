@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-const BASE = '/AiDotNet';
+const BASE = '';
 
 test.describe('Responsive Design - Desktop', () => {
   test.use({ viewport: { width: 1440, height: 900 } });
