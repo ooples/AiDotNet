@@ -1,27 +1,27 @@
 ---
 ---
 
-<div class="gsap-fade-up">
+<div class="gsap-fade-up code-tabs-container">
   <div class="rounded-2xl border border-slate-200 dark:border-slate-700/50 bg-white dark:bg-slate-800/50 overflow-hidden">
     <!-- Tab bar -->
-    <div class="flex border-b border-slate-200 dark:border-slate-700/50 overflow-x-auto" role="tablist">
-      <button class="code-tab active px-4 py-3 text-sm font-medium whitespace-nowrap border-b-2 border-brand-blue text-brand-blue dark:text-brand-purple dark:border-brand-purple transition-colors" data-tab="classification" role="tab" aria-selected="true">
+    <div class="flex border-b border-slate-200 dark:border-slate-700/50 overflow-x-auto" role="tablist" aria-label="Code examples">
+      <button class="code-tab active px-4 py-3 text-sm font-medium whitespace-nowrap border-b-2 border-brand-blue text-brand-blue dark:text-brand-purple dark:border-brand-purple transition-colors" data-tab="classification" role="tab" aria-selected="true" aria-controls="panel-classification" id="tab-classification">
         Classification
       </button>
-      <button class="code-tab px-4 py-3 text-sm font-medium whitespace-nowrap border-b-2 border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 transition-colors" data-tab="neural" role="tab" aria-selected="false">
+      <button class="code-tab px-4 py-3 text-sm font-medium whitespace-nowrap border-b-2 border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 transition-colors" data-tab="neural" role="tab" aria-selected="false" aria-controls="panel-neural" id="tab-neural" tabindex="-1">
         Neural Network
       </button>
-      <button class="code-tab px-4 py-3 text-sm font-medium whitespace-nowrap border-b-2 border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 transition-colors" data-tab="vision" role="tab" aria-selected="false">
+      <button class="code-tab px-4 py-3 text-sm font-medium whitespace-nowrap border-b-2 border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 transition-colors" data-tab="vision" role="tab" aria-selected="false" aria-controls="panel-vision" id="tab-vision" tabindex="-1">
         Computer Vision
       </button>
-      <button class="code-tab px-4 py-3 text-sm font-medium whitespace-nowrap border-b-2 border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 transition-colors" data-tab="serving" role="tab" aria-selected="false">
+      <button class="code-tab px-4 py-3 text-sm font-medium whitespace-nowrap border-b-2 border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 transition-colors" data-tab="serving" role="tab" aria-selected="false" aria-controls="panel-serving" id="tab-serving" tabindex="-1">
         Model Serving
       </button>
     </div>
 
     <!-- Tab panels -->
     <div class="relative">
-      <div class="code-panel active" data-panel="classification">
+      <div class="code-panel active" data-panel="classification" role="tabpanel" id="panel-classification" aria-labelledby="tab-classification">
         <pre class="p-6 overflow-x-auto text-sm leading-relaxed font-mono bg-slate-950 text-slate-300"><code><span class="text-blue-400">var</span> result = <span class="text-blue-400">await new</span> <span class="text-green-400">AiModelBuilder</span>&lt;<span class="text-yellow-300">double</span>, <span class="text-yellow-300">double</span>[], <span class="text-yellow-300">double</span>&gt;()
     .<span class="text-purple-400">ConfigureModel</span>(<span class="text-blue-400">new</span> <span class="text-green-400">RandomForestClassifier</span>&lt;<span class="text-yellow-300">double</span>&gt;(nEstimators: <span class="text-orange-400">100</span>))
     .<span class="text-purple-400">ConfigurePreprocessing</span>()
@@ -30,7 +30,7 @@
 <span class="text-blue-400">var</span> prediction = result.<span class="text-purple-400">Predict</span>(newSample); <span class="text-slate-500">// That's it.</span></code></pre>
       </div>
 
-      <div class="code-panel hidden" data-panel="neural">
+      <div class="code-panel hidden" data-panel="neural" role="tabpanel" id="panel-neural" aria-labelledby="tab-neural">
         <pre class="p-6 overflow-x-auto text-sm leading-relaxed font-mono bg-slate-950 text-slate-300"><code><span class="text-blue-400">var</span> result = <span class="text-blue-400">await new</span> <span class="text-green-400">AiModelBuilder</span>&lt;<span class="text-yellow-300">double</span>, <span class="text-yellow-300">double</span>[], <span class="text-yellow-300">double</span>&gt;()
     .<span class="text-purple-400">ConfigureModel</span>(<span class="text-blue-400">new</span> <span class="text-green-400">NeuralNetwork</span>&lt;<span class="text-yellow-300">double</span>&gt;(
         inputSize: <span class="text-orange-400">4</span>,
@@ -43,7 +43,7 @@
 <span class="text-blue-400">var</span> prediction = result.<span class="text-purple-400">Predict</span>(newSample);</code></pre>
       </div>
 
-      <div class="code-panel hidden" data-panel="vision">
+      <div class="code-panel hidden" data-panel="vision" role="tabpanel" id="panel-vision" aria-labelledby="tab-vision">
         <pre class="p-6 overflow-x-auto text-sm leading-relaxed font-mono bg-slate-950 text-slate-300"><code><span class="text-blue-400">var</span> result = <span class="text-blue-400">await new</span> <span class="text-green-400">AiModelBuilder</span>&lt;<span class="text-yellow-300">float</span>, <span class="text-yellow-300">float</span>[], <span class="text-yellow-300">float</span>&gt;()
     .<span class="text-purple-400">ConfigureModel</span>(<span class="text-blue-400">new</span> <span class="text-green-400">YoloV11</span>&lt;<span class="text-yellow-300">float</span>&gt;(
         modelPath: <span class="text-amber-300">"yolov11n.onnx"</span>,
@@ -54,7 +54,7 @@
 <span class="text-blue-400">var</span> detections = result.<span class="text-purple-400">Predict</span>(newImage);</code></pre>
       </div>
 
-      <div class="code-panel hidden" data-panel="serving">
+      <div class="code-panel hidden" data-panel="serving" role="tabpanel" id="panel-serving" aria-labelledby="tab-serving">
         <pre class="p-6 overflow-x-auto text-sm leading-relaxed font-mono bg-slate-950 text-slate-300"><code><span class="text-blue-400">var</span> result = <span class="text-blue-400">await new</span> <span class="text-green-400">AiModelBuilder</span>&lt;<span class="text-yellow-300">double</span>, <span class="text-yellow-300">double</span>[], <span class="text-yellow-300">double</span>&gt;()
     .<span class="text-purple-400">ConfigureModel</span>(<span class="text-blue-400">new</span> <span class="text-green-400">RandomForestClassifier</span>&lt;<span class="text-yellow-300">double</span>&gt;())
     .<span class="text-purple-400">ConfigurePreprocessing</span>()
@@ -67,6 +67,7 @@ result.<span class="text-purple-400">ServeAsApi</span>(app, <span class="text-am
 
       <!-- Copy button -->
       <button
+        type="button"
         class="copy-btn absolute top-3 right-3 p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors text-xs"
         aria-label="Copy code"
       >
@@ -78,44 +79,77 @@ result.<span class="text-purple-400">ServeAsApi</span>(app, <span class="text-am
 
 <script is:inline>
   document.addEventListener('DOMContentLoaded', function() {
-    // Tab switching
-    document.querySelectorAll('.code-tab').forEach(function(tab) {
-      tab.addEventListener('click', function() {
-        var tabId = this.getAttribute('data-tab');
-        // Deactivate all tabs
-        document.querySelectorAll('.code-tab').forEach(function(t) {
-          t.classList.remove('active', 'border-brand-blue', 'text-brand-blue', 'dark:text-brand-purple', 'dark:border-brand-purple');
-          t.classList.add('border-transparent', 'text-slate-500', 'dark:text-slate-400');
-          t.setAttribute('aria-selected', 'false');
+    // Scope all queries to each container to avoid collisions with multiple instances
+    document.querySelectorAll('.code-tabs-container').forEach(function(container) {
+      var tabs = container.querySelectorAll('.code-tab');
+      var panels = container.querySelectorAll('.code-panel');
+      var copyBtn = container.querySelector('.copy-btn');
+
+      // Tab switching
+      tabs.forEach(function(tab) {
+        tab.addEventListener('click', function() {
+          var tabId = this.getAttribute('data-tab');
+          // Deactivate all tabs in this container
+          tabs.forEach(function(t) {
+            t.classList.remove('active', 'border-brand-blue', 'text-brand-blue', 'dark:text-brand-purple', 'dark:border-brand-purple');
+            t.classList.add('border-transparent', 'text-slate-500', 'dark:text-slate-400');
+            t.setAttribute('aria-selected', 'false');
+            t.setAttribute('tabindex', '-1');
+          });
+          // Activate clicked tab
+          this.classList.add('active', 'border-brand-blue', 'text-brand-blue', 'dark:text-brand-purple', 'dark:border-brand-purple');
+          this.classList.remove('border-transparent', 'text-slate-500', 'dark:text-slate-400');
+          this.setAttribute('aria-selected', 'true');
+          this.removeAttribute('tabindex');
+          // Show/hide panels
+          panels.forEach(function(panel) {
+            if (panel.getAttribute('data-panel') === tabId) {
+              panel.classList.remove('hidden');
+              panel.classList.add('active');
+            } else {
+              panel.classList.add('hidden');
+              panel.classList.remove('active');
+            }
+          });
         });
-        // Activate clicked tab
-        this.classList.add('active', 'border-brand-blue', 'text-brand-blue', 'dark:text-brand-purple', 'dark:border-brand-purple');
-        this.classList.remove('border-transparent', 'text-slate-500', 'dark:text-slate-400');
-        this.setAttribute('aria-selected', 'true');
-        // Show/hide panels
-        document.querySelectorAll('.code-panel').forEach(function(panel) {
-          if (panel.getAttribute('data-panel') === tabId) {
-            panel.classList.remove('hidden');
-            panel.classList.add('active');
-          } else {
-            panel.classList.add('hidden');
-            panel.classList.remove('active');
+
+        // Keyboard navigation for tabs
+        tab.addEventListener('keydown', function(e) {
+          var tabsArray = Array.from(tabs);
+          var index = tabsArray.indexOf(this);
+          var newIndex = -1;
+          if (e.key === 'ArrowRight') {
+            newIndex = (index + 1) % tabsArray.length;
+          } else if (e.key === 'ArrowLeft') {
+            newIndex = (index - 1 + tabsArray.length) % tabsArray.length;
+          } else if (e.key === 'Home') {
+            newIndex = 0;
+          } else if (e.key === 'End') {
+            newIndex = tabsArray.length - 1;
+          }
+          if (newIndex >= 0) {
+            e.preventDefault();
+            tabsArray[newIndex].focus();
+            tabsArray[newIndex].click();
           }
         });
       });
-    });
 
-    // Copy button
-    document.querySelectorAll('.copy-btn').forEach(function(btn) {
-      btn.addEventListener('click', function() {
-        var panel = this.closest('.relative').querySelector('.code-panel.active code');
-        if (panel) {
-          navigator.clipboard.writeText(panel.textContent || '').then(function() {
-            btn.textContent = 'Copied!';
-            setTimeout(function() { btn.textContent = 'Copy'; }, 2000);
-          });
-        }
-      });
+      // Copy button with error handling
+      if (copyBtn) {
+        copyBtn.addEventListener('click', function() {
+          var panel = container.querySelector('.code-panel.active code');
+          if (panel) {
+            navigator.clipboard.writeText(panel.textContent || '').then(function() {
+              copyBtn.textContent = 'Copied!';
+              setTimeout(function() { copyBtn.textContent = 'Copy'; }, 2000);
+            }).catch(function() {
+              copyBtn.textContent = 'Failed';
+              setTimeout(function() { copyBtn.textContent = 'Copy'; }, 2000);
+            });
+          }
+        });
+      }
     });
   });
 </script>

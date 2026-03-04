@@ -268,7 +268,6 @@ public abstract class MultiLabelClassifierBase<T> : IMultiLabelClassifier<T>, IC
     }
 
     /// <inheritdoc />
-    /// <inheritdoc/>
     public virtual int[] GetInputShape()
     {
         return new[] { NumFeatures };

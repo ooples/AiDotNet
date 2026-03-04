@@ -7,7 +7,7 @@ interface Props {
 }
 
 const { title, description, image = '/AiDotNet/og-image.png', canonical } = Astro.props;
-const siteUrl = 'https://ooples.github.io/AiDotNet';
+const siteUrl = 'https://aidotnet.dev';
 const canonicalUrl = canonical || new URL(Astro.url.pathname, siteUrl).toString();
 ---
 
@@ -41,5 +41,5 @@ const canonicalUrl = canonical || new URL(Astro.url.pathname, siteUrl).toString(
     "priceCurrency": "USD"
   },
   "description": description,
-  "url": siteUrl
+  "url": canonicalUrl
 })} />
