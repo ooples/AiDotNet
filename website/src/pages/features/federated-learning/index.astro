@@ -1,0 +1,61 @@
+---
+import FeatureDetailLayout from '../../../layouts/FeatureDetailLayout.astro';
+---
+
+<FeatureDetailLayout
+  title="Federated Learning"
+  seoTitle="Federated Learning Framework for .NET - AiDotNet"
+  seoDescription="Train models across distributed clients while keeping data private. FedAvg, FedProx, differential privacy, and secure aggregation in C#."
+  count="180+"
+  tagline="Privacy-preserving distributed training across edge devices"
+  description="Train AI models across distributed clients without centralizing sensitive data. Complete federated learning framework with 9+ aggregation strategies, differential privacy, secure aggregation, and heterogeneous data handling. Perfect for healthcare, finance, and any privacy-sensitive application."
+  icon='<svg class="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"/></svg>'
+  useCases={['Healthcare Privacy', 'Financial Compliance', 'Edge AI', 'IoT Networks', 'Mobile ML', 'Cross-Organization Learning', 'GDPR Compliance', 'Regulated Industries']}
+  subcategories={[
+    {
+      name: 'Aggregation Strategies',
+      description: 'Combine model updates from distributed clients with different aggregation algorithms.',
+      items: [
+        { name: 'FedAvg', detail: 'Federated Averaging - the foundational algorithm for federated learning.' },
+        { name: 'FedProx', detail: 'Proximal term for handling heterogeneous data and systems.' },
+        { name: 'FedNova', detail: 'Normalized averaging handling variable local computation.' },
+        { name: 'Scaffold', detail: 'Stochastic Controlled Averaging correcting client drift.' },
+        { name: 'FedOpt / FedAdam', detail: 'Server-side adaptive optimization with Adam/Yogi/Adagrad.' },
+      ]
+    },
+    {
+      name: 'Privacy & Security',
+      description: 'Protect individual client data with cryptographic privacy guarantees.',
+      items: [
+        { name: 'Differential Privacy', detail: 'Add calibrated noise to gradients guaranteeing individual privacy.' },
+        { name: 'Secure Aggregation', detail: 'Cryptographic protocol ensuring server sees only aggregate updates.' },
+        { name: 'Gradient Compression', detail: 'Compress gradient updates reducing communication and potential leakage.' },
+      ]
+    },
+    {
+      name: 'Infrastructure',
+      description: 'Manage clients, coordinate rounds, and handle system heterogeneity.',
+      items: [
+        { name: 'Client Manager', detail: 'Register, authenticate, and manage federated learning participants.' },
+        { name: 'Server Coordinator', detail: 'Orchestrate training rounds, model distribution, and aggregation.' },
+        { name: 'Model Versioning', detail: 'Track global model versions and client-specific checkpoints.' },
+        { name: 'Client Selection', detail: 'Smart sampling of clients per round based on data quality and availability.' },
+      ]
+    }
+  ]}
+  codeExample={`using AiDotNet;
+
+// Train with federated learning using AiModelBuilder
+var result = await new AiModelBuilder<float, float[], float>()
+    .ConfigureModel(new NeuralNetwork<float>(
+        inputSize: 784, hiddenSize: 128, outputSize: 10))
+    .ConfigureFederatedLearning(new FederatedOptions(
+        strategy: new FedAvg<float>(),
+        rounds: 50, minClients: 2,
+        privacyBudget: new DifferentialPrivacy(epsilon: 1.0)))
+    .ConfigureOptimizer(new AdamOptimizer<float>())
+    .BuildAsync(features, labels);
+
+var prediction = result.Predict(newSample);`}
+  codeTitle="Federated learning with AiModelBuilder"
+/>

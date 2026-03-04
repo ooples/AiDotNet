@@ -1,0 +1,68 @@
+---
+import FeatureDetailLayout from '../../../layouts/FeatureDetailLayout.astro';
+---
+
+<FeatureDetailLayout
+  title="NER & NLP"
+  seoTitle="30+ NER Models for .NET - AiDotNet"
+  seoDescription="Named entity recognition and NLP models for healthcare, finance, legal, and general purpose. BERT, BioBERT, FinBERT, and more in C#."
+  count="30+"
+  tagline="Domain-specific NER and natural language understanding"
+  description="Named entity recognition models specialized for healthcare (BioBERT, ClinicalBERT), finance (FinBERT, SecBERT), legal (LegalBERT), and general purpose (BERT-NER, GLiNER). Extract entities, classify text, and understand domain-specific language in pure C#."
+  icon='<svg class="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z"/></svg>'
+  useCases={['Medical Records', 'Financial Analysis', 'Legal Document Review', 'News Processing', 'Customer Support', 'Research Papers', 'Compliance', 'Data Extraction']}
+  subcategories={[
+    {
+      name: 'General Purpose NER',
+      description: 'Extract persons, organizations, locations, and custom entities from any text.',
+      items: [
+        { name: 'BERT-NER', detail: 'BERT-based token classification for standard named entity recognition.' },
+        { name: 'GLiNER', detail: 'Generalist model for open-vocabulary NER without predefined entity types.' },
+        { name: 'UniNER', detail: 'Universal NER with instruction tuning for any entity type.' },
+        { name: 'LUKE', detail: 'Language Understanding with Knowledge-based Embeddings for entity-aware NER.' },
+        { name: 'Flair NER', detail: 'Contextual string embeddings for sequence labeling.' },
+      ]
+    },
+    {
+      name: 'Healthcare & Biomedical',
+      description: 'Extract medical entities, drug names, diseases, and clinical concepts.',
+      items: [
+        { name: 'BioBERT', detail: 'BERT pre-trained on PubMed abstracts for biomedical text mining.' },
+        { name: 'PubMedBERT', detail: 'Domain-specific pre-training on PubMed for biomedical NLP.' },
+        { name: 'ClinicalBERT', detail: 'BERT adapted for clinical notes and electronic health records.' },
+        { name: 'BioMegatron', detail: 'NVIDIA large-scale biomedical language model.' },
+      ]
+    },
+    {
+      name: 'Finance & Legal',
+      description: 'Extract financial entities, legal terms, and regulatory concepts.',
+      items: [
+        { name: 'FinBERT (NER)', detail: 'Financial entity recognition for company names, tickers, and financial terms.' },
+        { name: 'SecBERT', detail: 'NER trained on SEC filings for regulatory entity extraction.' },
+        { name: 'LegalBERT', detail: 'Pre-trained on legal corpora for legal entity and clause identification.' },
+      ]
+    },
+    {
+      name: 'Scientific & Multilingual',
+      description: 'Specialized NER for scientific text and multiple languages.',
+      items: [
+        { name: 'SciBERT', detail: 'BERT pre-trained on scientific papers for research entity extraction.' },
+        { name: 'MatSciBERT', detail: 'Materials science BERT for extracting materials, properties, and processes.' },
+        { name: 'XLM-RoBERTa NER', detail: 'Multilingual NER covering 100+ languages.' },
+        { name: 'mBERT NER', detail: 'Multilingual BERT for cross-lingual entity recognition.' },
+      ]
+    }
+  ]}
+  codeExample={`using AiDotNet;
+
+// Train an NER model with AiModelBuilder
+var result = await new AiModelBuilder<float, float[], float>()
+    .ConfigureModel(new BioBERT<float>(variant: "v1.1"))
+    .ConfigureOptimizer(new AdamOptimizer<float>())
+    .ConfigurePreprocessing()
+    .ConfigureDataLoader(nerDataLoader)
+    .BuildAsync();
+
+var entities = result.Predict(textEmbedding);`}
+  codeTitle="NER with AiModelBuilder"
+/>

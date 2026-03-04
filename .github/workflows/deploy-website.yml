@@ -1,0 +1,70 @@
+name: Deploy Marketing Website
+
+on:
+  push:
+    branches: [master]
+    paths: ['website/**']
+  workflow_dispatch:
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    defaults:
+      run:
+        working-directory: website
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: website/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build website
+        run: npm run build
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./website/dist
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+      - name: Deployment summary
+        if: always()
+        run: |
+          echo "## Marketing Website Deployment" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ steps.deployment.outcome }}" == "success" ]; then
+            echo "Website deployed successfully" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "Deployment completed with warnings" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Links" >> $GITHUB_STEP_SUMMARY
+          echo "- [Home](https://ooples.github.io/AiDotNet/)" >> $GITHUB_STEP_SUMMARY
+          echo "- [Features](https://ooples.github.io/AiDotNet/features/)" >> $GITHUB_STEP_SUMMARY
+          echo "- [Pricing](https://ooples.github.io/AiDotNet/pricing/)" >> $GITHUB_STEP_SUMMARY
+          echo "- [Playground](https://ooples.github.io/AiDotNet/playground/)" >> $GITHUB_STEP_SUMMARY

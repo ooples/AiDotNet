@@ -1,0 +1,268 @@
+---
+import AccountLayout from '../../layouts/AccountLayout.astro';
+const base = import.meta.env.BASE_URL;
+---
+
+<AccountLayout title="Dashboard - AiDotNet" description="Your AiDotNet dashboard. View subscription status, API usage, and manage your account." activeTab="dashboard">
+  <div class="space-y-8">
+    <!-- Welcome header -->
+    <div>
+      <h1 class="text-2xl font-bold text-slate-900 dark:text-white">Dashboard</h1>
+      <p id="welcome-msg" class="mt-1 text-sm text-slate-500 dark:text-slate-400">Welcome back</p>
+    </div>
+
+    <!-- Plan badge -->
+    <div id="plan-card" class="gsap-fade-up bg-gradient-to-r from-brand-blue/5 to-brand-purple/5 dark:from-brand-blue/10 dark:to-brand-purple/10 rounded-2xl border border-brand-blue/20 dark:border-brand-purple/20 p-6">
+      <div class="flex items-center justify-between">
+        <div>
+          <div class="flex items-center gap-3">
+            <span id="plan-badge" class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">
+              Free
+            </span>
+            <span id="plan-status" class="text-sm text-slate-500 dark:text-slate-400">Active</span>
+          </div>
+          <p class="mt-2 text-sm text-slate-600 dark:text-slate-300">
+            <span id="plan-description">Full access to the open-source library. Upgrade for cloud API and priority support.</span>
+          </p>
+        </div>
+        <a
+          href={`${base}pricing/`}
+          class="shrink-0 px-4 py-2 text-sm font-semibold text-white rounded-xl bg-gradient-brand hover:opacity-90 transition-opacity"
+          id="upgrade-btn"
+        >
+          Upgrade
+        </a>
+      </div>
+    </div>
+
+    <!-- Stats grid -->
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div class="gsap-fade-up bg-white dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 p-6">
+        <div class="flex items-center gap-3 mb-3">
+          <div class="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center">
+            <svg class="w-5 h-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z" />
+            </svg>
+          </div>
+          <span class="text-sm font-medium text-slate-500 dark:text-slate-400">API Calls This Month</span>
+        </div>
+        <p id="stat-api-calls" class="text-3xl font-bold text-slate-900 dark:text-white">0</p>
+      </div>
+
+      <div class="gsap-fade-up bg-white dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 p-6">
+        <div class="flex items-center gap-3 mb-3">
+          <div class="w-10 h-10 rounded-xl bg-purple-50 dark:bg-purple-900/20 flex items-center justify-center">
+            <svg class="w-5 h-5 text-purple-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25a3 3 0 0 1 3 3m3 0a6 6 0 0 1-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1 1 21.75 8.25Z" />
+            </svg>
+          </div>
+          <span class="text-sm font-medium text-slate-500 dark:text-slate-400">Active API Keys</span>
+        </div>
+        <p id="stat-api-keys" class="text-3xl font-bold text-slate-900 dark:text-white">0</p>
+      </div>
+
+      <div class="gsap-fade-up bg-white dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 p-6">
+        <div class="flex items-center gap-3 mb-3">
+          <div class="w-10 h-10 rounded-xl bg-green-50 dark:bg-green-900/20 flex items-center justify-center">
+            <svg class="w-5 h-5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+            </svg>
+          </div>
+          <span class="text-sm font-medium text-slate-500 dark:text-slate-400">Avg Latency</span>
+        </div>
+        <p id="stat-latency" class="text-3xl font-bold text-slate-900 dark:text-white">--</p>
+      </div>
+    </div>
+
+    <!-- Quick actions -->
+    <div class="gsap-fade-up">
+      <h2 class="text-lg font-semibold text-slate-900 dark:text-white mb-4">Quick Actions</h2>
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <a
+          href={`${base}account/api-keys/`}
+          class="flex items-center gap-3 p-4 bg-white dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-brand-blue/50 dark:hover:border-brand-purple/50 transition-colors"
+        >
+          <div class="w-10 h-10 rounded-lg bg-brand-blue/10 flex items-center justify-center">
+            <svg class="w-5 h-5 text-brand-blue" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+            </svg>
+          </div>
+          <div>
+            <p class="text-sm font-medium text-slate-900 dark:text-white">Generate API Key</p>
+            <p class="text-xs text-slate-500 dark:text-slate-400">Create a new key for inference</p>
+          </div>
+        </a>
+
+        <a
+          href={`${base}account/usage/`}
+          class="flex items-center gap-3 p-4 bg-white dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-brand-blue/50 dark:hover:border-brand-purple/50 transition-colors"
+        >
+          <div class="w-10 h-10 rounded-lg bg-purple-500/10 flex items-center justify-center">
+            <svg class="w-5 h-5 text-purple-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z" />
+            </svg>
+          </div>
+          <div>
+            <p class="text-sm font-medium text-slate-900 dark:text-white">View Usage</p>
+            <p class="text-xs text-slate-500 dark:text-slate-400">API calls and latency stats</p>
+          </div>
+        </a>
+
+        <a
+          href={`${base}account/billing/`}
+          class="flex items-center gap-3 p-4 bg-white dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-brand-blue/50 dark:hover:border-brand-purple/50 transition-colors"
+        >
+          <div class="w-10 h-10 rounded-lg bg-green-500/10 flex items-center justify-center">
+            <svg class="w-5 h-5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 0 0 2.25-2.25V6.75A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25v10.5A2.25 2.25 0 0 0 4.5 19.5Z" />
+            </svg>
+          </div>
+          <div>
+            <p class="text-sm font-medium text-slate-900 dark:text-white">Manage Billing</p>
+            <p class="text-xs text-slate-500 dark:text-slate-400">Upgrade plan or manage payment</p>
+          </div>
+        </a>
+      </div>
+    </div>
+
+    <!-- Recent API calls -->
+    <div class="gsap-fade-up">
+      <h2 class="text-lg font-semibold text-slate-900 dark:text-white mb-4">Recent API Calls</h2>
+      <div class="bg-white dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+        <div id="recent-calls-empty" class="p-12 text-center">
+          <svg class="w-12 h-12 mx-auto text-slate-300 dark:text-slate-600 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 0v3.75m-16.5-3.75v3.75m16.5 0v3.75C20.25 16.153 16.556 18 12 18s-8.25-1.847-8.25-4.125v-3.75m16.5 0c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125" />
+          </svg>
+          <p class="text-sm text-slate-500 dark:text-slate-400">No API calls yet</p>
+          <p class="mt-1 text-xs text-slate-400 dark:text-slate-500">Generate an API key and start making requests to see activity here.</p>
+        </div>
+        <table id="recent-calls-table" class="hidden w-full text-sm">
+          <thead>
+            <tr class="border-b border-slate-200 dark:border-slate-700">
+              <th class="text-left py-3 px-4 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Endpoint</th>
+              <th class="text-left py-3 px-4 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Model</th>
+              <th class="text-left py-3 px-4 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Status</th>
+              <th class="text-left py-3 px-4 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Latency</th>
+              <th class="text-left py-3 px-4 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Time</th>
+            </tr>
+          </thead>
+          <tbody id="recent-calls-body" class="divide-y divide-slate-100 dark:divide-slate-800">
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    import { supabase } from '../../lib/supabase';
+
+    async function loadDashboard() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Set welcome message
+      const welcomeMsg = document.getElementById('welcome-msg');
+      const name = user.user_metadata?.full_name || user.email;
+      if (welcomeMsg) welcomeMsg.textContent = `Welcome back, ${name}`;
+
+      // Load profile for plan info
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('subscription_tier, subscription_status')
+        .eq('id', user.id)
+        .single();
+
+      if (profile) {
+        const planBadge = document.getElementById('plan-badge');
+        const planDesc = document.getElementById('plan-description');
+        const upgradeBtn = document.getElementById('upgrade-btn');
+
+        if (profile.subscription_tier === 'pro' && planBadge) {
+          planBadge.textContent = 'Pro';
+          planBadge.className = 'inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-brand-blue/10 text-brand-blue';
+          if (planDesc) planDesc.textContent = 'Cloud-hosted inference API, priority support, and direct team access.';
+          if (upgradeBtn) upgradeBtn.textContent = 'Manage Plan';
+        } else if (profile.subscription_tier === 'enterprise' && planBadge) {
+          planBadge.textContent = 'Enterprise';
+          planBadge.className = 'inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400';
+          if (planDesc) planDesc.textContent = 'Dedicated support, SLA, and architecture consulting.';
+          if (upgradeBtn) upgradeBtn.textContent = 'Manage Plan';
+        }
+      }
+
+      // Load API key count
+      const { count: keyCount } = await supabase
+        .from('user_api_keys')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .eq('is_active', true);
+
+      const statKeys = document.getElementById('stat-api-keys');
+      if (statKeys) statKeys.textContent = String(keyCount || 0);
+
+      // Load API usage stats for this month
+      const monthStart = new Date();
+      monthStart.setDate(1);
+      monthStart.setHours(0, 0, 0, 0);
+
+      const { data: usageData } = await supabase
+        .from('api_usage')
+        .select('latency_ms, created_at')
+        .eq('user_id', user.id)
+        .gte('created_at', monthStart.toISOString());
+
+      const statCalls = document.getElementById('stat-api-calls');
+      const statLatency = document.getElementById('stat-latency');
+
+      if (usageData && usageData.length > 0) {
+        if (statCalls) statCalls.textContent = usageData.length.toLocaleString();
+        const avgLatency = Math.round(
+          usageData.reduce((sum, u) => sum + (u.latency_ms || 0), 0) / usageData.length
+        );
+        if (statLatency) statLatency.textContent = `${avgLatency}ms`;
+      }
+
+      // Load recent API calls
+      const { data: recentCalls } = await supabase
+        .from('api_usage')
+        .select('endpoint, model_id, status_code, latency_ms, created_at')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(10);
+
+      if (recentCalls && recentCalls.length > 0) {
+        const emptyEl = document.getElementById('recent-calls-empty');
+        const tableEl = document.getElementById('recent-calls-table');
+        const tbody = document.getElementById('recent-calls-body');
+        if (emptyEl) emptyEl.classList.add('hidden');
+        if (tableEl) tableEl.classList.remove('hidden');
+        if (tbody) {
+          tbody.innerHTML = recentCalls.map(call => {
+            const statusColor = call.status_code < 400 ? 'text-green-500' : 'text-red-500';
+            const timeAgo = getTimeAgo(new Date(call.created_at));
+            return `<tr>
+              <td class="py-3 px-4 text-slate-700 dark:text-slate-300 font-mono text-xs">${call.endpoint}</td>
+              <td class="py-3 px-4 text-slate-500 dark:text-slate-400">${call.model_id || '--'}</td>
+              <td class="py-3 px-4 ${statusColor} font-medium">${call.status_code}</td>
+              <td class="py-3 px-4 text-slate-500 dark:text-slate-400">${call.latency_ms || '--'}ms</td>
+              <td class="py-3 px-4 text-slate-400 dark:text-slate-500 text-xs">${timeAgo}</td>
+            </tr>`;
+          }).join('');
+        }
+      }
+    }
+
+    function getTimeAgo(date: Date): string {
+      const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
+      if (seconds < 60) return `${seconds}s ago`;
+      const minutes = Math.floor(seconds / 60);
+      if (minutes < 60) return `${minutes}m ago`;
+      const hours = Math.floor(minutes / 60);
+      if (hours < 24) return `${hours}h ago`;
+      const days = Math.floor(hours / 24);
+      return `${days}d ago`;
+    }
+
+    loadDashboard();
+  </script>
+</AccountLayout>

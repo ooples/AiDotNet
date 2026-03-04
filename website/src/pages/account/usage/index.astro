@@ -1,0 +1,189 @@
+---
+import AccountLayout from '../../../layouts/AccountLayout.astro';
+const base = import.meta.env.BASE_URL;
+---
+
+<AccountLayout title="Usage - AiDotNet" description="View your AiDotNet API usage statistics, call volume, and latency metrics." activeTab="usage">
+  <div class="space-y-6">
+    <div class="flex items-center justify-between">
+      <div>
+        <h1 class="text-2xl font-bold text-slate-900 dark:text-white">Usage</h1>
+        <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">API call volume, latency, and model usage</p>
+      </div>
+      <div class="flex items-center gap-2">
+        <select id="date-range" class="px-3 py-2 text-sm bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-700 dark:text-slate-300 focus:ring-2 focus:ring-brand-blue/50 outline-none">
+          <option value="7">Last 7 days</option>
+          <option value="30" selected>Last 30 days</option>
+          <option value="90">Last 90 days</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Summary stats -->
+    <div class="grid grid-cols-1 sm:grid-cols-4 gap-4">
+      <div class="gsap-fade-up bg-white dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 p-5">
+        <p class="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Total Calls</p>
+        <p id="total-calls" class="mt-2 text-2xl font-bold text-slate-900 dark:text-white">0</p>
+      </div>
+      <div class="gsap-fade-up bg-white dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 p-5">
+        <p class="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Avg Latency</p>
+        <p id="avg-latency" class="mt-2 text-2xl font-bold text-slate-900 dark:text-white">--</p>
+      </div>
+      <div class="gsap-fade-up bg-white dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 p-5">
+        <p class="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">P95 Latency</p>
+        <p id="p95-latency" class="mt-2 text-2xl font-bold text-slate-900 dark:text-white">--</p>
+      </div>
+      <div class="gsap-fade-up bg-white dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 p-5">
+        <p class="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Success Rate</p>
+        <p id="success-rate" class="mt-2 text-2xl font-bold text-green-500">--</p>
+      </div>
+    </div>
+
+    <!-- Daily calls chart (simple bar chart via CSS) -->
+    <div class="gsap-fade-up bg-white dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 p-6">
+      <h2 class="text-sm font-semibold text-slate-900 dark:text-white mb-4">API Calls Per Day</h2>
+      <div id="daily-chart" class="h-48 flex items-end gap-1">
+        <div class="flex-1 flex items-center justify-center h-full text-sm text-slate-400 dark:text-slate-500">
+          No usage data yet
+        </div>
+      </div>
+    </div>
+
+    <!-- Calls by endpoint -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div class="gsap-fade-up bg-white dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 p-6">
+        <h2 class="text-sm font-semibold text-slate-900 dark:text-white mb-4">Calls by Endpoint</h2>
+        <div id="endpoint-list" class="space-y-3">
+          <p class="text-sm text-slate-400 dark:text-slate-500">No data yet</p>
+        </div>
+      </div>
+
+      <div class="gsap-fade-up bg-white dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 p-6">
+        <h2 class="text-sm font-semibold text-slate-900 dark:text-white mb-4">Top Models Used</h2>
+        <div id="model-list" class="space-y-3">
+          <p class="text-sm text-slate-400 dark:text-slate-500">No data yet</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    import { supabase } from '../../../lib/supabase';
+
+    async function loadUsage() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const days = parseInt((document.getElementById('date-range') as HTMLSelectElement).value);
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - days);
+
+      const { data: usage } = await supabase
+        .from('api_usage')
+        .select('*')
+        .eq('user_id', user.id)
+        .gte('created_at', startDate.toISOString())
+        .order('created_at', { ascending: true });
+
+      if (!usage || usage.length === 0) return;
+
+      // Total calls
+      const totalEl = document.getElementById('total-calls');
+      if (totalEl) totalEl.textContent = usage.length.toLocaleString();
+
+      // Avg latency
+      const latencies = usage.map(u => u.latency_ms).filter(l => l > 0);
+      const avgEl = document.getElementById('avg-latency');
+      if (avgEl && latencies.length > 0) {
+        avgEl.textContent = `${Math.round(latencies.reduce((a, b) => a + b, 0) / latencies.length)}ms`;
+      }
+
+      // P95 latency
+      const p95El = document.getElementById('p95-latency');
+      if (p95El && latencies.length > 0) {
+        const sorted = [...latencies].sort((a, b) => a - b);
+        const p95Index = Math.floor(sorted.length * 0.95);
+        p95El.textContent = `${sorted[p95Index]}ms`;
+      }
+
+      // Success rate
+      const successEl = document.getElementById('success-rate');
+      if (successEl) {
+        const successful = usage.filter(u => u.status_code < 400).length;
+        const rate = Math.round((successful / usage.length) * 100);
+        successEl.textContent = `${rate}%`;
+        successEl.className = `mt-2 text-2xl font-bold ${rate >= 95 ? 'text-green-500' : rate >= 80 ? 'text-yellow-500' : 'text-red-500'}`;
+      }
+
+      // Daily chart
+      const dailyCounts: Record<string, number> = {};
+      usage.forEach(u => {
+        const day = new Date(u.created_at).toISOString().split('T')[0];
+        dailyCounts[day] = (dailyCounts[day] || 0) + 1;
+      });
+
+      const chartEl = document.getElementById('daily-chart');
+      if (chartEl) {
+        const maxCount = Math.max(...Object.values(dailyCounts));
+        const entries = Object.entries(dailyCounts);
+        chartEl.innerHTML = entries.map(([day, count]) => {
+          const height = Math.max(4, (count / maxCount) * 100);
+          const label = new Date(day).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+          return `<div class="flex-1 flex flex-col items-center gap-1">
+            <span class="text-xs text-slate-500 dark:text-slate-400">${count}</span>
+            <div class="w-full bg-gradient-to-t from-brand-blue to-brand-purple rounded-t" style="height: ${height}%"></div>
+            <span class="text-xs text-slate-400 dark:text-slate-500 whitespace-nowrap">${label}</span>
+          </div>`;
+        }).join('');
+      }
+
+      // Calls by endpoint
+      const endpointCounts: Record<string, number> = {};
+      usage.forEach(u => {
+        endpointCounts[u.endpoint] = (endpointCounts[u.endpoint] || 0) + 1;
+      });
+      const endpointEl = document.getElementById('endpoint-list');
+      if (endpointEl) {
+        const sorted = Object.entries(endpointCounts).sort((a, b) => b[1] - a[1]);
+        endpointEl.innerHTML = sorted.map(([endpoint, count]) => {
+          const pct = Math.round((count / usage.length) * 100);
+          return `<div>
+            <div class="flex items-center justify-between mb-1">
+              <span class="text-sm font-mono text-slate-700 dark:text-slate-300">${endpoint}</span>
+              <span class="text-sm text-slate-500 dark:text-slate-400">${count} (${pct}%)</span>
+            </div>
+            <div class="w-full bg-slate-100 dark:bg-slate-700 rounded-full h-2">
+              <div class="bg-gradient-to-r from-brand-blue to-brand-purple rounded-full h-2" style="width: ${pct}%"></div>
+            </div>
+          </div>`;
+        }).join('');
+      }
+
+      // Top models
+      const modelCounts: Record<string, number> = {};
+      usage.forEach(u => {
+        if (u.model_id) {
+          modelCounts[u.model_id] = (modelCounts[u.model_id] || 0) + 1;
+        }
+      });
+      const modelEl = document.getElementById('model-list');
+      if (modelEl && Object.keys(modelCounts).length > 0) {
+        const sorted = Object.entries(modelCounts).sort((a, b) => b[1] - a[1]).slice(0, 10);
+        modelEl.innerHTML = sorted.map(([model, count]) => {
+          return `<div class="flex items-center justify-between py-2 border-b border-slate-100 dark:border-slate-800 last:border-0">
+            <span class="text-sm text-slate-700 dark:text-slate-300">${model}</span>
+            <span class="text-sm font-medium text-slate-500 dark:text-slate-400">${count}</span>
+          </div>`;
+        }).join('');
+      }
+    }
+
+    // Date range change
+    const dateRange = document.getElementById('date-range');
+    if (dateRange) {
+      dateRange.addEventListener('change', loadUsage);
+    }
+
+    loadUsage();
+  </script>
+</AccountLayout>

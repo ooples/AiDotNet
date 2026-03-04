@@ -1,0 +1,69 @@
+---
+import FeatureDetailLayout from '../../../layouts/FeatureDetailLayout.astro';
+---
+
+<FeatureDetailLayout
+  title="Model Serving & Deployment"
+  seoTitle="Production Model Serving for .NET - AiDotNet.Serving"
+  seoDescription="Deploy AI models with REST API and gRPC endpoints. Encrypted model protection, license management, and Stripe billing integration. AiDotNet.Serving for .NET."
+  count="45+"
+  tagline="Production-ready model serving with encryption and license management"
+  description="Deploy trained models as production services with AiDotNet.Serving. REST API and gRPC endpoints, AES-256-GCM model encryption with three-layer obfuscation, license key management for distributing models to customers, and integrated Stripe billing. Everything you need to monetize your AI models."
+  icon='<svg class="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"/></svg>'
+  useCases={['Model APIs', 'SaaS AI Products', 'Model Marketplace', 'Enterprise Deployment', 'Edge Inference', 'A/B Testing', 'Model Monetization', 'IP Protection']}
+  subcategories={[
+    {
+      name: 'Serving Infrastructure',
+      description: 'Deploy models as scalable API endpoints with built-in monitoring.',
+      items: [
+        { name: 'REST API Endpoints', detail: 'Auto-generated REST endpoints for any trained model with OpenAPI documentation.' },
+        { name: 'gRPC Services', detail: 'High-performance gRPC endpoints for low-latency inference.' },
+        { name: 'Model Registry', detail: 'Version, tag, and manage models with metadata and lineage tracking.' },
+        { name: 'Health Checks', detail: 'Readiness and liveness probes for Kubernetes-ready deployment.' },
+        { name: 'Metrics & Monitoring', detail: 'Request latency, throughput, error rates, and model performance metrics.' },
+        { name: 'Batch Inference', detail: 'Efficient batch processing for high-throughput offline prediction.' },
+      ]
+    },
+    {
+      name: 'Model Protection (AES-256-GCM)',
+      description: 'Protect your trained models from reverse-engineering and unauthorized access.',
+      items: [
+        { name: 'AES-256-GCM Encryption', detail: 'Military-grade encryption for model weights and architecture.' },
+        { name: 'Three-Layer Obfuscation', detail: 'Architecture obfuscation, weight scrambling, and metadata encryption.' },
+        { name: 'Runtime Decryption', detail: 'Models decrypted only in memory during inference, never written to disk.' },
+        { name: 'Tamper Detection', detail: 'Integrity verification detecting unauthorized model modifications.' },
+        { name: 'Key Rotation', detail: 'Automatic encryption key rotation without model redeployment.' },
+      ]
+    },
+    {
+      name: 'License Management',
+      description: 'Distribute and monetize AI models with per-customer licensing.',
+      items: [
+        { name: 'License Key Generation', detail: 'Generate unique license keys tied to customers, features, and expiry dates.' },
+        { name: 'Self-Hosted Verification', detail: 'License verification server you control - no third-party dependency.' },
+        { name: 'Seat Management', detail: 'Multi-seat licenses for teams and enterprise customers.' },
+        { name: 'Feature Gating', detail: 'Enable/disable model features based on license tier.' },
+        { name: 'Usage Tracking', detail: 'Monitor API calls, inference counts, and usage patterns per license.' },
+        { name: 'Stripe Integration', detail: 'Built-in Stripe billing for subscriptions, usage-based pricing, and invoicing.' },
+      ]
+    }
+  ]}
+  codeExample={`using AiDotNet;
+
+// Train, encrypt, and deploy with AiModelBuilder
+var result = await new AiModelBuilder<float, float[], float>()
+    .ConfigureModel(new NeuralNetwork<float>(
+        inputSize: 768, hiddenSize: 256, outputSize: 10))
+    .ConfigureOptimizer(new AdamOptimizer<float>())
+    .ConfigurePreprocessing()
+    .ConfigureQuantization(new QuantizationConfig(bits: 8))
+    .BuildAsync(features, labels);
+
+// Serve as encrypted REST API with license management
+result.ServeAsApi(new ServingConfig(
+    port: 5000,
+    encryption: new AesGcmEncryption(encryptionKey),
+    licenseServer: licenseServerUrl,
+    stripeWebhook: "/api/webhook"));`}
+  codeTitle="Model serving with AiModelBuilder"
+/>

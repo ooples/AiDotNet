@@ -1,0 +1,115 @@
+---
+title: Installation
+description: Complete guide to installing AiDotNet and its dependencies.
+order: 1
+section: Getting Started
+---
+
+## Basic Installation
+
+### Using .NET CLI
+
+```bash
+dotnet add package AiDotNet
+```
+
+### Using Package Manager Console
+
+```powershell
+Install-Package AiDotNet
+```
+
+### Using PackageReference
+
+Add to your `.csproj` file:
+
+```xml
+<ItemGroup>
+  <PackageReference Include="AiDotNet" Version="*" />
+</ItemGroup>
+```
+
+## Platform Support
+
+| Platform | Status | Notes |
+|:---------|:-------|:------|
+| Windows x64 | Full | Recommended |
+| Linux x64 | Full | Ubuntu 20.04+ |
+| macOS x64 | Full | macOS 11+ |
+| macOS ARM64 | Full | Apple Silicon |
+
+## .NET Version Support
+
+| Version | Status |
+|:--------|:-------|
+| .NET 10.0 | Primary target |
+| .NET 8.0 | Supported |
+| .NET 7.0 | Supported |
+| .NET 6.0 | Supported |
+| .NET Framework 4.7.1+ | Supported |
+
+## GPU Acceleration
+
+### NVIDIA CUDA
+
+For GPU-accelerated training on NVIDIA GPUs:
+
+1. **Install CUDA Toolkit 12.x+** - Download from [NVIDIA CUDA Downloads](https://developer.nvidia.com/cuda-downloads)
+2. **Install cuDNN 9.x+** - Download from [NVIDIA cuDNN](https://developer.nvidia.com/cudnn)
+3. **Verify installation:**
+   ```bash
+   nvcc --version
+   ```
+
+### OpenCL
+
+For AMD/Intel GPU support:
+
+1. Install OpenCL runtime for your GPU vendor
+2. Install CLBlast for optimized BLAS operations
+
+## Optional Packages
+
+### Model Serving
+
+```bash
+dotnet add package AiDotNet.Serving
+```
+
+### Dashboard
+
+```bash
+dotnet add package AiDotNet.Dashboard
+```
+
+## Verifying Installation
+
+```csharp
+using AiDotNet;
+
+Console.WriteLine("AiDotNet installed successfully!");
+var builder = new AiModelBuilder<double, double[], double>();
+Console.WriteLine("AiModelBuilder created.");
+```
+
+## Troubleshooting
+
+### Package Not Found
+
+Ensure you have the latest NuGet sources:
+
+```bash
+dotnet nuget list source
+```
+
+### GPU Not Detected
+
+1. Verify CUDA installation: `nvcc --version`
+2. Check GPU visibility: `nvidia-smi`
+3. Ensure CUDA path is in environment variables
+
+### Build Errors
+
+1. Clear NuGet cache: `dotnet nuget locals all --clear`
+2. Restore packages: `dotnet restore`
+3. Rebuild: `dotnet build`

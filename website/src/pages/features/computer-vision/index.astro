@@ -1,0 +1,101 @@
+---
+import FeatureDetailLayout from '../../../layouts/FeatureDetailLayout.astro';
+---
+
+<FeatureDetailLayout
+  title="Computer Vision"
+  seoTitle="115+ Computer Vision Models for .NET - AiDotNet"
+  seoDescription="Object detection, instance segmentation, OCR, depth estimation, and more. YOLO, SAM, DETR, and 115+ CV implementations in pure C#."
+  count="115+"
+  tagline="End-to-end computer vision pipelines from detection to recognition"
+  description="Build complete computer vision applications in C#. From YOLO and DETR for object detection, to SAM and Mask2Former for segmentation, to PaddleOCR and TrOCR for text recognition. All models include pre-processing, inference, and post-processing pipelines."
+  icon='<svg class="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>'
+  useCases={['Autonomous Vehicles', 'Medical Imaging', 'Quality Inspection', 'Document Digitization', 'Security & Surveillance', 'Retail Analytics', 'Agricultural Monitoring', 'AR/VR']}
+  subcategories={[
+    {
+      name: 'Object Detection',
+      description: 'Locate and classify objects in images with bounding boxes and confidence scores.',
+      items: [
+        { name: 'YOLOv8', detail: 'Ultralytics YOLO v8 with anchor-free design and mosaic augmentation.' },
+        { name: 'YOLOv9', detail: 'Programmable Gradient Information and GELAN architecture.' },
+        { name: 'YOLOv10', detail: 'NMS-free design with consistent dual assignments for real-time detection.' },
+        { name: 'YOLOv11', detail: 'Latest YOLO with improved C3k2 blocks and extended task support.' },
+        { name: 'DETR', detail: 'DEtection TRansformer - end-to-end detection without NMS or anchors.' },
+        { name: 'Deformable-DETR', detail: 'DETR with deformable attention for faster convergence.' },
+        { name: 'DINO', detail: 'DETR with Improved deNoising anchor boxes for state-of-the-art detection.' },
+        { name: 'RT-DETR', detail: 'Real-Time DETR with hybrid encoder for speed-accuracy balance.' },
+        { name: 'Co-DETR', detail: 'Collaborative DETR with multiple auxiliary heads.' },
+        { name: 'EfficientDet', detail: 'Compound-scaled detection with BiFPN feature fusion.' },
+        { name: 'FasterRCNN', detail: 'Two-stage detector with Region Proposal Network.' },
+        { name: 'CascadeRCNN', detail: 'Multi-stage detection with progressively refined proposals.' },
+      ]
+    },
+    {
+      name: 'Instance & Semantic Segmentation',
+      description: 'Pixel-level classification and instance separation for precise scene understanding.',
+      items: [
+        { name: 'SAM (Segment Anything)', detail: 'Promptable segmentation model for any object in any image.' },
+        { name: 'SAM 2', detail: 'Segment Anything in images and videos with memory-based tracking.' },
+        { name: 'EfficientSAM', detail: 'Lightweight SAM variant with SAMI distillation.' },
+        { name: 'FastSAM', detail: 'Real-time segment anything using YOLO-based architecture.' },
+        { name: 'MobileSAM', detail: 'Mobile-optimized SAM with lightweight image encoder.' },
+        { name: 'Mask2Former', detail: 'Unified architecture for panoptic, instance, and semantic segmentation.' },
+        { name: 'OneFormer', detail: 'One transformer for all segmentation tasks with task-guided queries.' },
+        { name: 'SegFormer', detail: 'Simple and efficient transformer-based segmentation.' },
+        { name: 'MedSAM', detail: 'SAM fine-tuned for medical image segmentation.' },
+        { name: 'Grounded-SAM', detail: 'Combine Grounding DINO with SAM for text-prompted segmentation.' },
+        { name: 'U-Net', detail: 'Encoder-decoder with skip connections for biomedical segmentation.' },
+        { name: 'DeepLabV3', detail: 'Atrous spatial pyramid pooling for multi-scale segmentation.' },
+      ]
+    },
+    {
+      name: 'OCR & Text Detection',
+      description: 'Detect and recognize text in natural scenes, documents, and handwriting.',
+      items: [
+        { name: 'PaddleOCR', detail: 'Lightweight OCR with detection (DB), recognition (SVTR), and structure analysis.' },
+        { name: 'EasyOCR', detail: 'Multi-language OCR with CRAFT text detection and CRNN recognition.' },
+        { name: 'TrOCR', detail: 'Transformer-based OCR combining ViT encoder and text decoder.' },
+        { name: 'SVTR', detail: 'Scene Visual Text Recognition with single visual model.' },
+        { name: 'DBNet', detail: 'Differentiable Binarization for fast, accurate text detection.' },
+        { name: 'CRAFT', detail: 'Character Region Awareness for Text detection at character level.' },
+      ]
+    },
+    {
+      name: 'Depth Estimation & 3D',
+      description: 'Estimate depth, reconstruct 3D scenes, and generate 3D assets from images.',
+      items: [
+        { name: 'Depth Anything', detail: 'Foundation model for monocular depth estimation with zero-shot generalization.' },
+        { name: 'MiDaS', detail: 'Multi-dataset depth estimation with robust cross-domain performance.' },
+        { name: 'ZoeDepth', detail: 'Zero-shot metric depth estimation combining relative and metric depth.' },
+        { name: 'Marigold', detail: 'Diffusion-based depth estimation leveraging generative priors.' },
+        { name: 'NeRF', detail: 'Neural Radiance Fields for novel view synthesis from sparse images.' },
+        { name: 'Gaussian Splatting', detail: '3D Gaussian Splatting for real-time radiance field rendering.' },
+      ]
+    },
+    {
+      name: 'Image Classification',
+      description: 'Classify images into categories with state-of-the-art backbone architectures.',
+      items: [
+        { name: 'ResNet', detail: 'Residual networks with skip connections for very deep architectures.' },
+        { name: 'EfficientNet', detail: 'Compound-scaled CNN with balanced depth, width, and resolution.' },
+        { name: 'ViT', detail: 'Vision Transformer applying self-attention to image patches.' },
+        { name: 'Swin Transformer', detail: 'Hierarchical vision transformer with shifted window attention.' },
+        { name: 'ConvNeXt', detail: 'Modernized ConvNet matching transformer performance.' },
+        { name: 'DINOv2', detail: 'Self-supervised ViT with strong visual features for any task.' },
+      ]
+    }
+  ]}
+  codeExample={`using AiDotNet;
+
+// Train a computer vision model with AiModelBuilder
+var result = await new AiModelBuilder<float, float[], float>()
+    .ConfigureModel(new YOLOv11<float>(
+        modelPath: "yolov11n.weights",
+        classes: CocoClasses.Names))
+    .ConfigureOptimizer(new AdamOptimizer<float>())
+    .ConfigurePreprocessing()
+    .BuildAsync(imageData, annotations);
+
+var detections = result.Predict(newImage);`}
+  codeTitle="Computer vision with AiModelBuilder"
+/>

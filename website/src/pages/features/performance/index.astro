@@ -1,0 +1,72 @@
+---
+import FeatureDetailLayout from '../../../layouts/FeatureDetailLayout.astro';
+---
+
+<FeatureDetailLayout
+  title="Performance & Hardware"
+  seoTitle="SIMD, GPU, and AOT Performance for .NET - AiDotNet"
+  seoDescription="Hardware-accelerated AI with SIMD vectorization, CUDA GPU acceleration, and AOT compilation. Pure C# with Vector<T> operations throughout."
+  count="Hardware-accelerated"
+  tagline="No Python, no native runtimes. SIMD-optimized pure .NET"
+  description="AiDotNet is built for performance from the ground up. SIMD Vector<T> operations for CPU-level optimization throughout the codebase. GPU acceleration via CUDA and OpenCL. AOT compilation support for instant startup. Zero Python dependency means no GIL bottleneck, no interop overhead, and deployable anywhere .NET runs."
+  icon='<svg class="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"/></svg>'
+  useCases={['Real-Time Inference', 'Edge Deployment', 'Embedded Systems', 'Cloud Computing', 'Mobile AI', 'IoT Devices', 'Gaming AI', 'Latency-Critical Apps']}
+  subcategories={[
+    {
+      name: 'SIMD & CPU Vectorization',
+      description: 'Leverage CPU vector instructions for parallel numeric computation.',
+      items: [
+        { name: 'Vector<T> Operations', detail: '.NET hardware-intrinsic SIMD for tensor operations throughout the codebase.' },
+        { name: 'AVX/AVX2/AVX-512', detail: 'Automatic use of widest available SIMD instruction set.' },
+        { name: 'ARM NEON', detail: 'ARM SIMD support for mobile and edge deployment.' },
+        { name: 'Span<T> Fast Paths', detail: 'Zero-allocation memory access with Span<T> throughout the codebase.' },
+        { name: 'Memory<T> Pooling', detail: 'Pooled memory allocations reducing GC pressure during training.' },
+      ]
+    },
+    {
+      name: 'GPU Acceleration',
+      description: 'Offload compute-intensive operations to GPU hardware.',
+      items: [
+        { name: 'CUDA Support', detail: 'NVIDIA GPU acceleration for training and inference.' },
+        { name: 'OpenCL Support', detail: 'Cross-vendor GPU compute for AMD, Intel, and NVIDIA.' },
+        { name: 'Mixed Precision', detail: 'FP16 and BF16 computation for 2x GPU throughput.' },
+        { name: 'GPU Memory Management', detail: 'Smart memory pooling and gradient checkpointing for large models.' },
+      ]
+    },
+    {
+      name: 'Compilation & Deployment',
+      description: 'Compile and deploy models with maximum efficiency.',
+      items: [
+        { name: 'NativeAOT', detail: 'Ahead-of-time compilation for instant startup and small binaries.' },
+        { name: '.NET 10', detail: 'Full support for the latest .NET with cutting-edge optimizations.' },
+        { name: '.NET Framework 4.7.1', detail: 'Backward compatibility with legacy .NET Framework applications.' },
+        { name: 'Trimming Compatible', detail: 'IL trimming support for minimal deployment size.' },
+      ]
+    },
+    {
+      name: 'Zero Dependencies',
+      description: 'No Python runtime, no native libraries, no interop overhead.',
+      items: [
+        { name: 'No Python Required', detail: 'Unlike TorchSharp (700MB LibTorch) or TF.NET, zero native runtime needed.' },
+        { name: 'No GIL Bottleneck', detail: '.NET true multi-threading without Python Global Interpreter Lock.' },
+        { name: 'Cross-Platform', detail: 'Windows, Linux, macOS, ARM - anywhere .NET runs.' },
+        { name: 'Self-Contained Deploy', detail: 'Single-file deployment with everything included.' },
+      ]
+    }
+  ]}
+  codeExample={`using AiDotNet;
+
+// AiModelBuilder uses SIMD and hardware acceleration automatically
+var result = await new AiModelBuilder<float, float[], float>()
+    .ConfigureModel(new NeuralNetwork<float>(
+        inputSize: 1024, hiddenSize: 512, outputSize: 10))
+    .ConfigureOptimizer(new AdamOptimizer<float>())
+    .ConfigurePreprocessing()
+    .BuildAsync(features, labels);
+
+// All tensor operations are SIMD-vectorized via Vector<T>
+// GPU acceleration, mixed precision, and AOT compilation
+// are enabled automatically based on available hardware
+var prediction = result.Predict(newSample);`}
+  codeTitle="Hardware-accelerated training with AiModelBuilder"
+/>

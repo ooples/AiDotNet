@@ -1,0 +1,85 @@
+---
+import FeatureDetailLayout from '../../../layouts/FeatureDetailLayout.astro';
+---
+
+<FeatureDetailLayout
+  title="Reinforcement Learning"
+  seoTitle="50+ RL Agents for .NET - AiDotNet"
+  seoDescription="Complete reinforcement learning toolkit with 50+ agent implementations. PPO, SAC, MuZero, Decision Transformer, and more in pure C#."
+  count="50+"
+  tagline="From classic Q-learning to transformer-based agents"
+  description="The most comprehensive RL toolkit for .NET. 50+ agent implementations spanning policy gradient, off-policy, model-based, offline, and multi-agent methods. Includes modern architectures like Decision Transformer and MuZero alongside proven algorithms like PPO and SAC."
+  icon='<svg class="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>'
+  useCases={['Game AI', 'Robotics Control', 'Trading Strategies', 'Resource Optimization', 'Autonomous Driving', 'Recommendation Systems', 'Network Routing', 'Supply Chain']}
+  subcategories={[
+    {
+      name: 'Policy Gradient Methods',
+      description: 'Directly optimize the policy for stable, sample-efficient training.',
+      items: [
+        { name: 'PPO', detail: 'Proximal Policy Optimization with clipped surrogate objective. The workhorse of modern RL.' },
+        { name: 'TRPO', detail: 'Trust Region Policy Optimization with KL divergence constraint.' },
+        { name: 'A2C / A3C', detail: 'Advantage Actor-Critic with synchronous and asynchronous variants.' },
+        { name: 'REINFORCE', detail: 'Classic policy gradient with Monte Carlo returns.' },
+        { name: 'GRPO', detail: 'Group Relative Policy Optimization for language model alignment.' },
+        { name: 'DAPO', detail: 'Dynamic Alignment Policy Optimization for RLHF fine-tuning.' },
+      ]
+    },
+    {
+      name: 'Off-Policy Methods',
+      description: 'Learn from replay buffers for maximum sample efficiency.',
+      items: [
+        { name: 'SAC', detail: 'Soft Actor-Critic with entropy regularization for maximum exploration.' },
+        { name: 'TD3', detail: 'Twin Delayed DDPG addressing overestimation bias.' },
+        { name: 'DDPG', detail: 'Deep Deterministic Policy Gradient for continuous action spaces.' },
+        { name: 'DQN', detail: 'Deep Q-Network with experience replay and target network.' },
+        { name: 'Rainbow DQN', detail: 'Combining 6 DQN improvements: Double, Dueling, PER, C51, NoisyNets, n-step.' },
+        { name: 'IQN', detail: 'Implicit Quantile Networks for full return distribution modeling.' },
+      ]
+    },
+    {
+      name: 'Model-Based Methods',
+      description: 'Learn world models for planning and imagination-based training.',
+      items: [
+        { name: 'MuZero', detail: 'Learn dynamics model for planning without environment rules (AlphaGo evolution).' },
+        { name: 'AlphaZero', detail: 'Self-play with MCTS for perfect information games.' },
+        { name: 'Dreamer / DreamerV3', detail: 'World model with latent imagination for sample-efficient learning.' },
+        { name: 'MBPO', detail: 'Model-Based Policy Optimization with short model rollouts.' },
+        { name: 'World Models', detail: 'VAE + RNN world model for learning in imagination.' },
+      ]
+    },
+    {
+      name: 'Offline & Transformer RL',
+      description: 'Learn from fixed datasets and use sequence modeling for decision-making.',
+      items: [
+        { name: 'Decision Transformer', detail: 'Cast RL as sequence modeling with return-conditioned generation.' },
+        { name: 'CQL', detail: 'Conservative Q-Learning preventing overestimation on unseen actions.' },
+        { name: 'IQL', detail: 'Implicit Q-Learning without querying out-of-distribution actions.' },
+        { name: 'TD3+BC', detail: 'TD3 with behavior cloning regularization for offline RL.' },
+      ]
+    },
+    {
+      name: 'Multi-Agent RL',
+      description: 'Coordinate multiple agents in cooperative and competitive environments.',
+      items: [
+        { name: 'MAPPO', detail: 'Multi-Agent PPO with centralized training, decentralized execution.' },
+        { name: 'MADDPG', detail: 'Multi-Agent DDPG for mixed cooperative-competitive scenarios.' },
+        { name: 'QMIX', detail: 'Monotonic value factorization for cooperative multi-agent tasks.' },
+        { name: 'COMA', detail: 'Counterfactual Multi-Agent policy gradients.' },
+      ]
+    }
+  ]}
+  codeExample={`using AiDotNet;
+
+// Train an RL agent with AiModelBuilder
+var result = await new AiModelBuilder<float, float[], float>()
+    .ConfigureModel(new PPOAgent<float>(
+        stateDim: 4, actionDim: 2,
+        clipRange: 0.2f))
+    .ConfigureReinforcementLearning(new RLOptions(
+        totalTimesteps: 100_000))
+    .ConfigureOptimizer(new AdamOptimizer<float>(lr: 3e-4f))
+    .BuildAsync();
+
+var action = result.Predict(observation);`}
+  codeTitle="RL agent with AiModelBuilder"
+/>
