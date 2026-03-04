@@ -266,13 +266,13 @@ jobs:
       - name: Inject build signing key
         if: steps.version.outputs.should_release == 'true'
         run: |
-          mkdir -p src/BuildKey
-          if [ -n "${{ secrets.AIDOTNET_BUILD_KEY }}" ]; then
-            echo "${{ secrets.AIDOTNET_BUILD_KEY }}" | xxd -r -p > src/BuildKey/BuildKey.bin
-            echo "Build key injected ($(wc -c < src/BuildKey/BuildKey.bin) bytes)"
-          else
-            echo "No AIDOTNET_BUILD_KEY secret configured, skipping build key injection"
+          if [ -z "${{ secrets.AIDOTNET_BUILD_KEY }}" ]; then
+            echo "::error::AIDOTNET_BUILD_KEY secret is not configured. Cannot publish unsigned artifacts."
+            exit 1
           fi
+          mkdir -p src/BuildKey
+          echo "${{ secrets.AIDOTNET_BUILD_KEY }}" | xxd -r -p > src/BuildKey/BuildKey.bin
+          echo "Build key injected ($(wc -c < src/BuildKey/BuildKey.bin) bytes)"
 
       - name: Restore dependencies
         if: steps.version.outputs.should_release == 'true'
@@ -332,13 +332,13 @@ jobs:
 
       - name: Inject build signing key
         run: |
-          mkdir -p src/BuildKey
-          if [ -n "${{ secrets.AIDOTNET_BUILD_KEY }}" ]; then
-            echo "${{ secrets.AIDOTNET_BUILD_KEY }}" | xxd -r -p > src/BuildKey/BuildKey.bin
-            echo "Build key injected ($(wc -c < src/BuildKey/BuildKey.bin) bytes)"
-          else
-            echo "No AIDOTNET_BUILD_KEY secret configured, skipping build key injection"
+          if [ -z "${{ secrets.AIDOTNET_BUILD_KEY }}" ]; then
+            echo "::error::AIDOTNET_BUILD_KEY secret is not configured. Cannot publish unsigned artifacts."
+            exit 1
           fi
+          mkdir -p src/BuildKey
+          echo "${{ secrets.AIDOTNET_BUILD_KEY }}" | xxd -r -p > src/BuildKey/BuildKey.bin
+          echo "Build key injected ($(wc -c < src/BuildKey/BuildKey.bin) bytes)"
 
       - name: Restore and Build
         run: |

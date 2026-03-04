@@ -33,15 +33,8 @@ public class StripeWebhook
     public async Task<IActionResult> Run(
         [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = null)] HttpRequest req)
     {
-        // Add CORS headers
-        req.HttpContext.Response.Headers.Append("Access-Control-Allow-Origin", "*");
-        req.HttpContext.Response.Headers.Append("Access-Control-Allow-Methods", "POST, OPTIONS");
-        req.HttpContext.Response.Headers.Append("Access-Control-Allow-Headers", "Content-Type, Stripe-Signature");
-
-        if (req.Method == "OPTIONS")
-        {
-            return new OkResult();
-        }
+        // Stripe calls webhooks server-to-server; CORS is not needed.
+        // If browser-origin calls are needed later, configure CORS in host.json instead.
 
         var webhookSecret = Environment.GetEnvironmentVariable("STRIPE_WEBHOOK_SECRET");
         if (string.IsNullOrEmpty(webhookSecret))

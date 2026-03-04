@@ -172,6 +172,9 @@
 
 	<!-- Build-time signing key (injected by CI/CD, not present in dev builds) -->
 	<ItemGroup>
+	  <!-- Build verification key: intentionally embedded for runtime model file validation.
+	       This is a public verification key (not a signing secret) used by BuildKeyProvider
+	       to validate AIMF model file integrity at load time. -->
 	  <EmbeddedResource Include="BuildKey\BuildKey.bin" Condition="Exists('BuildKey\BuildKey.bin')">
 	    <LogicalName>AiDotNet.BuildKey</LogicalName>
 	  </EmbeddedResource>

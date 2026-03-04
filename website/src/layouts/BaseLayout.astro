@@ -39,15 +39,19 @@ const { title, description, image } = Astro.props;
 
     <Footer />
 
-    <!-- GSAP -->
+    <!-- GSAP: only initializes when page contains animated elements -->
     <script type="module">
-      import { gsap } from 'gsap';
-      import { ScrollTrigger } from 'gsap/ScrollTrigger';
+      document.addEventListener('DOMContentLoaded', async () => {
+        const hasAnimatedElements =
+          document.querySelector('.gsap-fade-up') ||
+          document.querySelector('.counter') ||
+          document.getElementById('hero-network');
 
-      gsap.registerPlugin(ScrollTrigger);
+        if (!hasAnimatedElements) return;
 
-      // Scroll-triggered fade-up animations
-      document.addEventListener('DOMContentLoaded', () => {
+        const { gsap } = await import('gsap');
+        const { ScrollTrigger } = await import('gsap/ScrollTrigger');
+        gsap.registerPlugin(ScrollTrigger);
         const fadeElements = document.querySelectorAll('.gsap-fade-up');
         fadeElements.forEach((el, i) => {
           gsap.fromTo(

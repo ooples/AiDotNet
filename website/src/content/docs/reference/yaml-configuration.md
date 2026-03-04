@@ -37,6 +37,16 @@ For IntelliSense and validation in VS Code, add the schema directive at the top 
 
 ```yaml
 # yaml-language-server: $schema=https://aidotnet.dev/schema/config.json
+
+model:
+  type: NeuralNetwork
+  layers:
+    - type: Dense
+      units: 128
+      activation: ReLU
+optimizer:
+  type: Adam
+  learningRate: 0.001
 ```
 
 This requires the [YAML Server](https://marketplace.visualstudio.com/items?itemName=redhat.vscode-yaml) extension.
