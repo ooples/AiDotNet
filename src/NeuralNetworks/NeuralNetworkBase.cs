@@ -3791,7 +3791,13 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// <inheritdoc/>
     public virtual DynamicShapeInfo GetDynamicShapeInfo()
     {
-        // Neural networks typically support variable batch sizes (dimension 0)
+        // Only declare batch dimension as dynamic if the network has layers
+        // that support batched input. Networks with no layers have no dynamic dims.
+        if (Layers.Count == 0)
+        {
+            return DynamicShapeInfo.None;
+        }
+
         return new DynamicShapeInfo
         {
             DynamicInputDimensions = new[] { 0 },

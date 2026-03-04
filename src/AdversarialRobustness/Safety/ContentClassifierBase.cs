@@ -100,13 +100,17 @@ public abstract class ContentClassifierBase<T> : IContentClassifier<T>, IModelSe
     /// <inheritdoc/>
     public virtual int[] GetInputShape()
     {
+        // Subclasses should override with the actual feature dimension
         return Array.Empty<int>();
     }
 
     /// <inheritdoc/>
     public virtual int[] GetOutputShape()
     {
-        return Array.Empty<int>();
+        // Output is a classification result per supported category
+        return SupportedCategories is not null && SupportedCategories.Length > 0
+            ? new[] { SupportedCategories.Length }
+            : Array.Empty<int>();
     }
 
     /// <inheritdoc/>
@@ -126,7 +130,7 @@ public abstract class ContentClassifierBase<T> : IContentClassifier<T>, IModelSe
 
         byte[] data = Serialize();
         byte[] envelopedData = ModelFileHeader.WrapWithHeader(
-            data, this, GetInputShape(), GetOutputShape(), SerializationFormat.Binary);
+            data, this, GetInputShape(), GetOutputShape(), SerializationFormat.Json);
         File.WriteAllBytes(filePath, envelopedData);
     }
 

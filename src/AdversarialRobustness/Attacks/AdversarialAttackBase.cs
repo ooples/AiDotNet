@@ -144,7 +144,7 @@ public abstract class AdversarialAttackBase<T, TInput, TOutput> : IAdversarialAt
 
         var data = Serialize();
         byte[] envelopedData = ModelFileHeader.WrapWithHeader(
-            data, this, GetInputShape(), GetOutputShape(), SerializationFormat.Binary);
+            data, this, GetInputShape(), GetOutputShape(), SerializationFormat.Json);
         File.WriteAllBytes(fullPath, envelopedData);
     }
 

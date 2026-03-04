@@ -248,7 +248,8 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
     /// <inheritdoc/>
     public virtual int[] GetOutputShape()
     {
-        return new[] { LatentChannels };
+        // Predict() returns Decode(Encode(input)), which is in input space
+        return new[] { InputChannels };
     }
 
     /// <inheritdoc/>

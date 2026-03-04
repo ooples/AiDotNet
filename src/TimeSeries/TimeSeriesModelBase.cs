@@ -1556,12 +1556,18 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
     /// <inheritdoc/>
     public virtual int[] GetInputShape()
     {
-        return new[] { Options.LagOrder };
+        // LagOrder defines the lookback window. Exogenous features are handled
+        // as additional columns in the input matrix, so effective input width
+        // equals LagOrder * (1 + exogenousFeatureCount). Since the exogenous
+        // count varies per dataset, we report the lag dimension here; subclasses
+        // with known exogenous counts should override.
+        return Options.LagOrder > 0 ? new[] { Options.LagOrder } : Array.Empty<int>();
     }
 
     /// <inheritdoc/>
     public virtual int[] GetOutputShape()
     {
+        // Forecasts one value per step; multi-horizon models should override
         return new[] { 1 };
     }
 

@@ -382,7 +382,8 @@ public abstract class ClusteringBase<T> : IClustering<T>, IConfigurableModel<T>,
     /// <inheritdoc/>
     public virtual int[] GetOutputShape()
     {
-        return new[] { 1 };
+        // Clustering assigns one cluster label per sample
+        return new[] { NumClusters > 0 ? NumClusters : 1 };
     }
 
     /// <inheritdoc/>

@@ -855,7 +855,11 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
     /// <inheritdoc/>
     public virtual int[] GetInputShape()
     {
-        return new[] { FeatureImportances.Length };
+        // FeatureImportances is populated after training; guard against pre-training calls
+        int featureCount = FeatureImportances is not null && FeatureImportances.Length > 0
+            ? FeatureImportances.Length
+            : 0;
+        return featureCount > 0 ? new[] { featureCount } : Array.Empty<int>();
     }
 
     /// <inheritdoc/>

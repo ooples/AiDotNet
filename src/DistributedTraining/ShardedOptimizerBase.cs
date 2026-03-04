@@ -247,12 +247,23 @@ public abstract class ShardedOptimizerBase<T, TInput, TOutput> : IShardedOptimiz
     /// <inheritdoc/>
     public virtual int[] GetInputShape()
     {
+        // Delegate to the wrapped optimizer's model if it exposes shape
+        if (WrappedOptimizer is IModelShape shapeProvider)
+        {
+            return shapeProvider.GetInputShape();
+        }
+
         return Array.Empty<int>();
     }
 
     /// <inheritdoc/>
     public virtual int[] GetOutputShape()
     {
+        if (WrappedOptimizer is IModelShape shapeProvider)
+        {
+            return shapeProvider.GetOutputShape();
+        }
+
         return Array.Empty<int>();
     }
 

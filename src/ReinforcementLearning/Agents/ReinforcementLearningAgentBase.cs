@@ -214,6 +214,12 @@ public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IConfigur
     public abstract int FeatureCount { get; }
 
     /// <summary>
+    /// Gets the number of action dimensions. Override in agents with multi-dimensional action spaces.
+    /// Default is 1 (scalar action).
+    /// </summary>
+    public virtual int ActionDimension => 1;
+
+    /// <summary>
     /// Gets the names of input features.
     /// </summary>
     public virtual string[] FeatureNames => Enumerable.Range(0, FeatureCount)
@@ -302,7 +308,7 @@ public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IConfigur
     /// <inheritdoc/>
     public virtual int[] GetOutputShape()
     {
-        return new[] { 1 };
+        return new[] { ActionDimension };
     }
 
     /// <inheritdoc/>
