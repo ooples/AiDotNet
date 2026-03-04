@@ -1,13 +1,13 @@
 ---
 title: "Neural Networks"
-description: "Complete reference for 100+ neural network architectures."
+description: "Complete reference for 110+ neural network architectures."
 order: 1
 section: "Reference"
 ---
 
 
 
-Complete reference for all 100+ neural network architectures in AiDotNet.
+Complete reference for all 110+ neural network architectures in AiDotNet.
 
 ---
 

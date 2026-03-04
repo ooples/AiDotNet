@@ -136,9 +136,9 @@ var fsdpModel = FSDP<float>.Wrap(model, fsdpConfig);
 | Strategy | 7B Model Memory/GPU (4 GPUs) |
 |:---------|:-----------------------------|
 | DDP | 28+ GB (OOM) |
-| SHARD_GRAD_OP | ~14 GB |
-| FULL_SHARD | ~8 GB |
-| FULL_SHARD + Checkpointing | ~5 GB |
+| ShardGradOp | ~14 GB |
+| FullShard | ~8 GB |
+| FullShard + Checkpointing | ~5 GB |
 
 ### Wrapping Policies
 

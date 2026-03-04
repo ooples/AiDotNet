@@ -11,7 +11,7 @@ Scale your training across multiple GPUs and nodes.
 
 ## Overview
 
-AiDotNet provides 10+ distributed training strategies:
+AiDotNet provides 12 distributed training strategies:
 - **DDP**: Distributed Data Parallel - replicate model, split data
 - **FSDP**: Fully Sharded Data Parallel - shard model across GPUs
 - **ZeRO**: Zero Redundancy Optimizer (1/2/3) - memory optimization

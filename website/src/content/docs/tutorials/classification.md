@@ -144,6 +144,7 @@ Validate model performance with cross-validation:
 ```
 
 Access results:
+
 ```csharp
 var cv = result.CrossValidationResult;
 Console.WriteLine($"Mean: {cv.MeanScore:P2}");

@@ -18,12 +18,15 @@ Regression is a supervised learning task where the goal is to predict continuous
 ## Types of Regression
 
 ### Simple Regression
+
 One input feature predicts one output. Example: Predict house price from square footage.
 
 ### Multiple Regression
+
 Multiple input features predict one output. Example: Predict house price from square footage, bedrooms, and location.
 
 ### Polynomial Regression
+
 Non-linear relationships using polynomial features.
 
 ---

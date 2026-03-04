@@ -290,7 +290,7 @@ model.SetActiveAdapter("translation");
 var translation = model.Generate("Translate to French: Hello");
 
 model.SetActiveAdapter("summarization");
-var summary = model.Generate("Summarize: ...");
+var summary = model.Generate("Summarize: The quick brown fox jumps over the lazy dog near the river bank.");
 ```
 
 ### Merge Multiple Adapters

@@ -24,7 +24,7 @@ Complete reference for all 37+ loss functions in AiDotNet.
 
 ```csharp
 var loss = new BinaryCrossEntropyLoss<float>();
-var value = loss.Compute(predictions, targets);
+var value = loss.CalculateLoss(predictions, targets);
 ```
 
 ### Multi-Class Classification
