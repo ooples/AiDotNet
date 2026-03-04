@@ -9,12 +9,6 @@ section: "Tutorials"
 
 Scale your training across multiple GPUs and nodes.
 
----
-
-
-
----
-
 ## Overview
 
 AiDotNet provides 10+ distributed training strategies:

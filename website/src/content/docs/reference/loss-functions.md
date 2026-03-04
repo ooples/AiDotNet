@@ -15,12 +15,12 @@ Complete reference for all 37+ loss functions in AiDotNet.
 
 ### Binary Classification
 
-| Loss Function | Formula | Use Case |
-|:--------------|:--------|:---------|
+| Loss Function | Description | Use Case |
+|:--------------|:------------|:---------|
 | `BinaryCrossEntropyLoss<T>` | -[y·log(p) + (1-y)·log(1-p)] | Binary classification |
-| `BCEWithLogitsLoss<T>` | BCELoss with sigmoid | Numerically stable |
-| `HingeLoss<T>` | max(0, 1 - y·p) | SVM-style |
-| `SquaredHingeLoss<T>` | (max(0, 1 - y·p))² | Smooth hinge |
+| `BCEWithLogitsLoss<T>` | BCELoss with built-in sigmoid | Numerically stable binary classification |
+| `HingeLoss<T>` | max(0, 1 - y·p) | SVM-style binary classification |
+| `SquaredHingeLoss<T>` | (max(0, 1 - y·p))^2 | Smooth differentiable hinge |
 
 ```csharp
 var loss = new BinaryCrossEntropyLoss<float>();
@@ -60,13 +60,13 @@ var loss = new FocalLoss<float>(
 
 ### Standard Losses
 
-| Loss Function | Formula | Use Case |
-|:--------------|:--------|:---------|
-| `MSELoss<T>` | (y - p)² | General regression |
-| `MAELoss<T>` | \|y - p\| | Robust to outliers |
-| `HuberLoss<T>` | Quadratic near 0, linear elsewhere | Balanced |
-| `SmoothL1Loss<T>` | Huber with delta=1 | Object detection |
-| `LogCoshLoss<T>` | log(cosh(y - p)) | Smooth approximation |
+| Loss Function | Description | Use Case |
+|:--------------|:------------|:---------|
+| `MSELoss<T>` | Mean squared error: (y - p)^2 | General regression |
+| `MAELoss<T>` | Mean absolute error: \|y - p\| | Robust to outliers |
+| `HuberLoss<T>` | Quadratic near 0, linear elsewhere | Balanced robustness |
+| `SmoothL1Loss<T>` | Huber variant with delta=1 | Object detection |
+| `LogCoshLoss<T>` | log(cosh(y - p)) | Smooth L1 approximation |
 
 ```csharp
 var loss = new HuberLoss<float>(delta: 1.0f);
@@ -143,7 +143,7 @@ var loss = new VAELoss<float>(
 |:--------------|:------------|:---------|
 | `AdversarialLoss<T>` | Standard GAN loss | Basic GANs |
 | `WassersteinLoss<T>` | Wasserstein distance | WGAN |
-| `HingeLoss<T>` | GAN hinge loss | Spectral normalization |
+| `GANHingeLoss<T>` | Hinge loss for GANs | Spectral normalization |
 | `LSGANLoss<T>` | Least squares GAN | Stable training |
 | `NonSaturatingLoss<T>` | Non-saturating | Better gradients |
 

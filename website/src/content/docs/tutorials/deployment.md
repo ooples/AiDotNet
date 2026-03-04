@@ -9,12 +9,6 @@ section: "Tutorials"
 
 Deploy your trained models to production with AiDotNet.
 
----
-
-
-
----
-
 ## Overview
 
 AiDotNet provides multiple deployment options:
@@ -51,9 +45,10 @@ builder.Services.AddControllers();
 
 var app = builder.Build();
 
-// Load model
+// Load model from saved AIMF file
 var repository = app.Services.GetRequiredService<IModelRepository>();
-repository.LoadModel("my-model", servableModel, modelPath);
+var modelPath = "models/my-model.aimf";
+repository.LoadModel("my-model", modelPath);
 
 app.MapControllers();
 app.Run();

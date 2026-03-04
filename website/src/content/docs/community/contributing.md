@@ -23,12 +23,13 @@ Thank you for your interest in contributing to AiDotNet! This guide will help yo
 ### Fork and Clone
 
 1. Fork the repository on GitHub
+
 2. Clone your fork:
 
-```bash
-git clone https://github.com/YOUR_USERNAME/AiDotNet.git
-cd AiDotNet
-```
+   ```bash
+   git clone https://github.com/YOUR_USERNAME/AiDotNet.git
+   cd AiDotNet
+   ```
 
 3. Add the upstream remote:
 
@@ -104,9 +105,9 @@ Types: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `chore`
 
 1. Push your branch:
 
-```bash
-git push origin feature/your-feature-name
-```
+   ```bash
+   git push origin feature/your-feature-name
+   ```
 
 2. Open a PR on GitHub
 3. Fill out the PR template

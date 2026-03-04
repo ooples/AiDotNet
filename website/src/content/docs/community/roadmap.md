@@ -141,7 +141,7 @@ Want to help implement a roadmap item?
 2. Discuss your approach
 3. Submit a PR when ready
 
-See the [Contributing Guide](/community/contributing/) for details.
+See the [Contributing Guide](/docs/community/contributing/) for details.
 
 ---
 
