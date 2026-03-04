@@ -63,3 +63,4 @@ jobs:
           echo "- **App Name**: ${{ env.AZURE_FUNCTIONAPP_NAME }}" >> $GITHUB_STEP_SUMMARY
           echo "- **URL**: https://aidotnet-playground-emfxa0abhzdqfyh3.westeurope-01.azurewebsites.net" >> $GITHUB_STEP_SUMMARY
           echo "- **API Endpoint**: https://aidotnet-playground-emfxa0abhzdqfyh3.westeurope-01.azurewebsites.net/api/execute" >> $GITHUB_STEP_SUMMARY
+          echo "- **Stripe Webhook**: https://aidotnet-playground-emfxa0abhzdqfyh3.westeurope-01.azurewebsites.net/api/stripe-webhook" >> $GITHUB_STEP_SUMMARY
