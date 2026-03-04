@@ -112,8 +112,13 @@ public class InferenceController : ControllerBase
             {
                 int featureLength = request.Features[i].Length;
 
-                // If model has dynamic shape info, use shape-aware validation
-                if (modelInfo.DynamicShapeInfo.HasDynamicInput && modelInfo.InputShape.Length > 0)
+                // If model has dynamic shape info, use shape-aware validation.
+                // Only validate for 1D or 2D shapes (flat/tabular vectors).
+                // Multi-dimensional shapes (e.g., [3,-1,-1] for C,H,W) are typically
+                // flattened for transport, so product-of-fixed-dims validation would
+                // incorrectly reject valid requests.
+                if (modelInfo.DynamicShapeInfo.HasDynamicInput && modelInfo.InputShape.Length > 0
+                    && modelInfo.InputShape.Length <= 2)
                 {
                     // For flat feature vectors, validate against the product of non-dynamic input dims.
                     // If ALL dims are dynamic (-1), skip validation entirely.

@@ -4,7 +4,7 @@
 
 ### The Most Comprehensive AI/ML Framework for .NET
 
-**8,100+ classes across 139 modules - the most complete AI/ML platform for .NET**
+**8,100+ public classes (`grep -c` verified) across 139 modules - the most complete AI/ML platform for .NET**
 
 [![Build Status](https://github.com/ooples/AiDotNet/actions/workflows/sonarcloud.yml/badge.svg)](https://github.com/ooples/AiDotNet/actions/workflows/sonarcloud.yml)
 [![CodeQL](https://github.com/ooples/AiDotNet/security/code-scanning/badge.svg)](https://github.com/ooples/AiDotNet/security/code-scanning)
@@ -104,6 +104,7 @@ var prediction = result.Predict(newSample);
 ---
 
 ## Complete Feature Reference
+<!-- Counts audited via grep against src/ directory - see PR #924 plan for methodology -->
 
 ### Neural Networks (160+ Architectures)
 

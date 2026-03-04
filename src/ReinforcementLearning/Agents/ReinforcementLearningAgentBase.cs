@@ -330,7 +330,7 @@ public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IConfigur
     /// Saves the agent's state to a file with an AIMF envelope header.
     /// </summary>
     /// <param name="filepath">Path to save the agent.</param>
-    /// <exception cref="ArgumentException">Thrown when the path is null, empty, or contains directory traversal.</exception>
+    /// <exception cref="ArgumentException">Thrown when the path is null or empty.</exception>
     public virtual void SaveModel(string filepath)
     {
         if (string.IsNullOrWhiteSpace(filepath))
@@ -356,7 +356,7 @@ public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IConfigur
     /// Loads the agent's state from a file, stripping the AIMF header if present.
     /// </summary>
     /// <param name="filepath">Path to load the agent from.</param>
-    /// <exception cref="ArgumentException">Thrown when the path is null, empty, or contains directory traversal.</exception>
+    /// <exception cref="ArgumentException">Thrown when the path is null or empty.</exception>
     /// <exception cref="FileNotFoundException">Thrown when the file does not exist.</exception>
     public virtual void LoadModel(string filepath)
     {

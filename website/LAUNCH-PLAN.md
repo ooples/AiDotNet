@@ -12,7 +12,7 @@
 | Supabase Client | **INSTALLED** | `@supabase/supabase-js` added, `src/lib/supabase.ts` created |
 | Supabase DB | **NOT SET UP** | Need correct SUPABASE_ACCESS_TOKEN (current one is wrong/too short) |
 | Navbar Auth | **BUILT & DEPLOYED** | Shows Sign In when logged out, avatar dropdown when logged in |
-| Azure API | **App created** | `aidotnet-api.azurewebsites.net` on F1 (Free), CORS configured, needs code deploy |
+| Azure API | **App created** | `aidotnet-serving.azurewebsites.net` on F1 (Free), CORS configured, needs code deploy |
 | Vercel Env Vars | **Partial** | `PUBLIC_SUPABASE_URL` set. Still need `PUBLIC_SUPABASE_ANON_KEY`, Stripe links |
 | DNS / Domains | **NOT CONFIGURED** | All 3 domains still at registrar defaults. Need A/CNAME records for Vercel |
 | Stripe | Code exists, not connected | Payment Links need to be created |
@@ -40,13 +40,13 @@
 | `VERCEL_TOKEN` | Get from https://vercel.com/account/tokens | Website deploy workflow |
 | `VERCEL_ORG_ID` | `team_5HDGYIA59nu3JwRl3ZYCMGYV` | Website deploy workflow |
 | `VERCEL_PROJECT_ID` | `prj_JyDpz7IdLTf5WcEWHyxUKq7TcCSH` | Website deploy workflow |
-| `AZURE_WEBAPP_PUBLISH_PROFILE` | Run: `az webapp deployment list-publishing-profiles --name aidotnet-api --resource-group crowdtrainer-rg --xml` | Serving API deploy |
+| `AZURE_WEBAPP_PUBLISH_PROFILE` | Run: `az webapp deployment list-publishing-profiles --name aidotnet-serving --resource-group aidotnet-rg --xml` | Serving API deploy |
 
 ### What's Already Done (Automated)
 
 - [x] Website code deployed to Vercel production (67 pages)
-- [x] Azure resource group exists (`crowdtrainer-rg`)
-- [x] Azure App Service created (`aidotnet-api.azurewebsites.net`, F1 tier)
+- [x] Azure resource group exists (`aidotnet-rg`)
+- [x] Azure App Service created (`aidotnet-serving.azurewebsites.net`, F1 tier)
 - [x] Azure CORS configured for all 3 domains + vercel
 - [x] Vercel `PUBLIC_SUPABASE_URL` env var set
 - [x] Logo JPEG created for Stripe (`public/logo.jpg`)
@@ -169,7 +169,7 @@ In Namecheap > `aidotnet.dev` > **Advanced DNS**, set these records:
 
 1. In Namecheap > `aidotnet.dev` > **Nameservers**, select **Custom DNS**
 2. Enter:
-   ```
+   ```text
    ns1.vercel-dns.com
    ns2.vercel-dns.com
    ```
@@ -624,13 +624,13 @@ az webapp config appsettings set \
   --resource-group aidotnet-rg \
   --settings \
     "ServingPersistenceOptions__Provider=PostgreSql" \
-    "ServingPersistenceOptions__ConnectionString=Host=aidotnet-db.postgres.database.azure.com;Database=aidotnet_serving;Username=aidotnetadmin;Password=<DB_PASSWORD>;SSL Mode=Require" \
+    "ServingPersistenceOptions__ConnectionString=@Microsoft.KeyVault(SecretUri=https://aidotnet-kv.vault.azure.net/secrets/ServingDbConnectionString)" \
     "ServingPersistenceOptions__MigrateOnStartup=true" \
     "ServingOptions__Port=8080" \
-    "StripeOptions__SecretKey=<sk_live_YOUR_KEY>" \
-    "StripeOptions__WebhookSigningSecret=<whsec_YOUR_SECRET>" \
-    "StripeOptions__ProPriceId=<price_YOUR_MONTHLY_ID>" \
-    "StripeOptions__ProAnnualPriceId=<price_YOUR_ANNUAL_ID>" \
+    "StripeOptions__SecretKey=@Microsoft.KeyVault(SecretUri=https://aidotnet-kv.vault.azure.net/secrets/StripeSecretKey)" \
+    "StripeOptions__WebhookSigningSecret=@Microsoft.KeyVault(SecretUri=https://aidotnet-kv.vault.azure.net/secrets/StripeWebhookSecret)" \
+    "StripeOptions__ProPriceId=@Microsoft.KeyVault(SecretUri=https://aidotnet-kv.vault.azure.net/secrets/StripeProPriceId)" \
+    "StripeOptions__ProAnnualPriceId=@Microsoft.KeyVault(SecretUri=https://aidotnet-kv.vault.azure.net/secrets/StripeProAnnualPriceId)" \
     "StripeOptions__SuccessUrl=https://aidotnet.dev/pricing/?success=true" \
     "StripeOptions__CancelUrl=https://aidotnet.dev/pricing/?cancelled=true" \
     "ASPNETCORE_ENVIRONMENT=Production"

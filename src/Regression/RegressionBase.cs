@@ -1066,8 +1066,9 @@ public abstract class RegressionBase<T> : IRegression<T>, IConfigurableModel<T>,
     {
         byte[] serializedData = File.ReadAllBytes(filePath);
 
-        // Extract payload from AIMF envelope
-        serializedData = ModelFileHeader.ExtractPayload(serializedData);
+        // Extract payload from AIMF envelope; fall back to raw bytes for legacy files
+        try { serializedData = ModelFileHeader.ExtractPayload(serializedData); }
+        catch (InvalidOperationException) { /* legacy file without AIMF header - use raw bytes */ }
 
         Deserialize(serializedData);
     }

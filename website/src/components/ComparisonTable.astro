@@ -1,3 +1,49 @@
+---
+interface ComparisonRow {
+  feature: string;
+  aidotnet: string;
+  mlnet: string;
+  torchsharp: string;
+  pytorch: string;
+  /** "positive" highlights AiDotNet cell in green, "metric" uses brand gradient, "neutral" uses default text */
+  aidotnetStyle?: "positive" | "metric" | "neutral";
+}
+
+const rows: ComparisonRow[] = [
+  { feature: "Language", aidotnet: "Pure C#", mlnet: "C# + ONNX", torchsharp: "C# wrapper", pytorch: "Python", aidotnetStyle: "positive" },
+  { feature: "Neural Network Layers", aidotnet: "160+", mlnet: "~10", torchsharp: "50+", pytorch: "100+", aidotnetStyle: "metric" },
+  { feature: "Classical ML Algorithms", aidotnet: "155+", mlnet: "~30", torchsharp: "None", pytorch: "None", aidotnetStyle: "metric" },
+  { feature: "Computer Vision Models", aidotnet: "115+", mlnet: "Limited", torchsharp: "Via LibTorch", pytorch: "Via torchvision", aidotnetStyle: "metric" },
+  { feature: "Vision-Language Models", aidotnet: "165+", mlnet: "None", torchsharp: "None", pytorch: "Via HF", aidotnetStyle: "metric" },
+  { feature: "Diffusion Models", aidotnet: "75+", mlnet: "None", torchsharp: "None", pytorch: "Via diffusers", aidotnetStyle: "metric" },
+  { feature: "Audio / Speech / TTS", aidotnet: "250+", mlnet: "None", torchsharp: "Limited", pytorch: "Via torchaudio", aidotnetStyle: "metric" },
+  { feature: "Reinforcement Learning", aidotnet: "50+", mlnet: "None", torchsharp: "Manual", pytorch: "Via SB3", aidotnetStyle: "metric" },
+  { feature: "GPU Support", aidotnet: "Any GPU (6 backends)", mlnet: "ONNX only", torchsharp: "CUDA only", pytorch: "CUDA only", aidotnetStyle: "positive" },
+  { feature: "Federated Learning", aidotnet: "180+", mlnet: "None", torchsharp: "None", pytorch: "Via Flower", aidotnetStyle: "metric" },
+  { feature: "Model Serving", aidotnet: "Built-in", mlnet: "Manual", torchsharp: "None", pytorch: "TorchServe", aidotnetStyle: "positive" },
+  { feature: "Runtime Dependency", aidotnet: "None", mlnet: "None", torchsharp: "~700MB LibTorch", pytorch: "Python runtime", aidotnetStyle: "positive" },
+];
+
+function aidotnetCellClass(style?: string): string {
+  switch (style) {
+    case "positive": return "py-3 px-4 font-semibold text-green-500";
+    case "metric": return "py-3 px-4 font-semibold text-brand-blue dark:text-brand-purple";
+    default: return "py-3 px-4 text-slate-500 dark:text-slate-400";
+  }
+}
+
+function competitorCellClass(value: string): string {
+  const lower = value.toLowerCase();
+  if (lower === "none" || lower === "limited" || lower === "manual") {
+    return "py-3 px-4 text-slate-400 dark:text-slate-500";
+  }
+  if (lower.includes("700mb") || lower.includes("python runtime")) {
+    return "py-3 px-4 text-red-400 dark:text-red-500";
+  }
+  return "py-3 px-4 text-slate-500 dark:text-slate-400";
+}
+---
+
 <div class="gsap-fade-up overflow-x-auto">
   <table class="w-full text-sm text-left">
     <caption class="sr-only">Feature comparison between AiDotNet, ML.NET, TorchSharp, and PyTorch</caption>
@@ -11,90 +57,15 @@
       </tr>
     </thead>
     <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
-      <tr>
-        <td class="py-3 pr-4 text-slate-600 dark:text-slate-300">Language</td>
-        <td class="py-3 px-4 font-semibold text-green-500">Pure C#</td>
-        <td class="py-3 px-4 text-slate-500 dark:text-slate-400">C# + ONNX</td>
-        <td class="py-3 px-4 text-slate-500 dark:text-slate-400">C# wrapper</td>
-        <td class="py-3 px-4 text-slate-500 dark:text-slate-400">Python</td>
-      </tr>
-      <tr>
-        <td class="py-3 pr-4 text-slate-600 dark:text-slate-300">Neural Network Layers</td>
-        <td class="py-3 px-4 font-semibold text-brand-blue dark:text-brand-purple">160+</td>
-        <td class="py-3 px-4 text-slate-500 dark:text-slate-400">~10</td>
-        <td class="py-3 px-4 text-slate-500 dark:text-slate-400">50+</td>
-        <td class="py-3 px-4 text-slate-500 dark:text-slate-400">100+</td>
-      </tr>
-      <tr>
-        <td class="py-3 pr-4 text-slate-600 dark:text-slate-300">Classical ML Algorithms</td>
-        <td class="py-3 px-4 font-semibold text-brand-blue dark:text-brand-purple">155+</td>
-        <td class="py-3 px-4 text-slate-500 dark:text-slate-400">~30</td>
-        <td class="py-3 px-4 text-slate-400">None</td>
-        <td class="py-3 px-4 text-slate-400">None</td>
-      </tr>
-      <tr>
-        <td class="py-3 pr-4 text-slate-600 dark:text-slate-300">Computer Vision Models</td>
-        <td class="py-3 px-4 font-semibold text-brand-blue dark:text-brand-purple">115+</td>
-        <td class="py-3 px-4 text-slate-400">Limited</td>
-        <td class="py-3 px-4 text-slate-500 dark:text-slate-400">Via LibTorch</td>
-        <td class="py-3 px-4 text-slate-500 dark:text-slate-400">Via torchvision</td>
-      </tr>
-      <tr>
-        <td class="py-3 pr-4 text-slate-600 dark:text-slate-300">Vision-Language Models</td>
-        <td class="py-3 px-4 font-semibold text-brand-blue dark:text-brand-purple">165+</td>
-        <td class="py-3 px-4 text-slate-400">None</td>
-        <td class="py-3 px-4 text-slate-400">None</td>
-        <td class="py-3 px-4 text-slate-500 dark:text-slate-400">Via HF</td>
-      </tr>
-      <tr>
-        <td class="py-3 pr-4 text-slate-600 dark:text-slate-300">Diffusion Models</td>
-        <td class="py-3 px-4 font-semibold text-brand-blue dark:text-brand-purple">75+</td>
-        <td class="py-3 px-4 text-slate-400">None</td>
-        <td class="py-3 px-4 text-slate-400">None</td>
-        <td class="py-3 px-4 text-slate-500 dark:text-slate-400">Via diffusers</td>
-      </tr>
-      <tr>
-        <td class="py-3 pr-4 text-slate-600 dark:text-slate-300">Audio / Speech / TTS</td>
-        <td class="py-3 px-4 font-semibold text-brand-blue dark:text-brand-purple">250+</td>
-        <td class="py-3 px-4 text-slate-400">None</td>
-        <td class="py-3 px-4 text-slate-400">Limited</td>
-        <td class="py-3 px-4 text-slate-500 dark:text-slate-400">Via torchaudio</td>
-      </tr>
-      <tr>
-        <td class="py-3 pr-4 text-slate-600 dark:text-slate-300">Reinforcement Learning</td>
-        <td class="py-3 px-4 font-semibold text-brand-blue dark:text-brand-purple">50+</td>
-        <td class="py-3 px-4 text-slate-400">None</td>
-        <td class="py-3 px-4 text-slate-400">Manual</td>
-        <td class="py-3 px-4 text-slate-500 dark:text-slate-400">Via SB3</td>
-      </tr>
-      <tr>
-        <td class="py-3 pr-4 text-slate-600 dark:text-slate-300">GPU Support</td>
-        <td class="py-3 px-4 font-semibold text-green-500">Any GPU (6 backends)</td>
-        <td class="py-3 px-4 text-slate-400">ONNX only</td>
-        <td class="py-3 px-4 text-slate-500 dark:text-slate-400">CUDA only</td>
-        <td class="py-3 px-4 text-slate-500 dark:text-slate-400">CUDA only</td>
-      </tr>
-      <tr>
-        <td class="py-3 pr-4 text-slate-600 dark:text-slate-300">Federated Learning</td>
-        <td class="py-3 px-4 font-semibold text-brand-blue dark:text-brand-purple">180+</td>
-        <td class="py-3 px-4 text-slate-400">None</td>
-        <td class="py-3 px-4 text-slate-400">None</td>
-        <td class="py-3 px-4 text-slate-500 dark:text-slate-400">Via Flower</td>
-      </tr>
-      <tr>
-        <td class="py-3 pr-4 text-slate-600 dark:text-slate-300">Model Serving</td>
-        <td class="py-3 px-4 font-semibold text-green-500">Built-in</td>
-        <td class="py-3 px-4 text-slate-400">Manual</td>
-        <td class="py-3 px-4 text-slate-400">None</td>
-        <td class="py-3 px-4 text-slate-500 dark:text-slate-400">TorchServe</td>
-      </tr>
-      <tr>
-        <td class="py-3 pr-4 text-slate-600 dark:text-slate-300">Runtime Dependency</td>
-        <td class="py-3 px-4 font-semibold text-green-500">None</td>
-        <td class="py-3 px-4 text-green-500">None</td>
-        <td class="py-3 px-4 text-red-400">~700MB LibTorch</td>
-        <td class="py-3 px-4 text-red-400">Python runtime</td>
-      </tr>
+      {rows.map((row) => (
+        <tr>
+          <th scope="row" class="py-3 pr-4 text-slate-600 dark:text-slate-300 font-normal">{row.feature}</th>
+          <td class={aidotnetCellClass(row.aidotnetStyle)}>{row.aidotnet}</td>
+          <td class={competitorCellClass(row.mlnet)}>{row.mlnet}</td>
+          <td class={competitorCellClass(row.torchsharp)}>{row.torchsharp}</td>
+          <td class={competitorCellClass(row.pytorch)}>{row.pytorch}</td>
+        </tr>
+      ))}
     </tbody>
   </table>
 </div>
