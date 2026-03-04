@@ -57,17 +57,28 @@ for (int epoch = 0; epoch < epochs; epoch++)
 ### Multi-Node Setup
 
 ```bash
-export MASTER_ADDR=192.168.1.100
+# Example: 2 nodes x 4 GPUs each (WORLD_SIZE = 8)
+# Run on Node 0 (master):
+export MASTER_ADDR=<master-node-ip>
 export MASTER_PORT=29500
 export WORLD_SIZE=8
-export RANK=0
-dotnet run
+export NODE_RANK=0
+export LOCAL_WORLD_SIZE=4
+for LOCAL_RANK in 0 1 2 3; do
+  RANK=$((NODE_RANK * LOCAL_WORLD_SIZE + LOCAL_RANK)) dotnet run &
+done
+wait
 
-export MASTER_ADDR=192.168.1.100
+# Run on Node 1:
+export MASTER_ADDR=<master-node-ip>
 export MASTER_PORT=29500
 export WORLD_SIZE=8
-export RANK=4
-dotnet run
+export NODE_RANK=1
+export LOCAL_WORLD_SIZE=4
+for LOCAL_RANK in 0 1 2 3; do
+  RANK=$((NODE_RANK * LOCAL_WORLD_SIZE + LOCAL_RANK)) dotnet run &
+done
+wait
 ```
 
 ---
@@ -108,8 +119,8 @@ var fsdpModel = FSDP<float>.Wrap(model, fsdpConfig);
 |:---------|:--------------------|
 | Single GPU | 28+ GB (OOM) |
 | DDP (4 GPU) | 28+ GB (OOM) |
-| FSDP SHARD_GRAD_OP | ~14 GB |
-| FSDP FULL_SHARD | ~8 GB |
+| FSDP ShardGradOp | ~14 GB |
+| FSDP FullShard | ~8 GB |
 | FSDP + Checkpointing | ~5 GB |
 
 ---
@@ -198,10 +209,10 @@ var result = await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
 var config = new DistributedConfig
 {
     Backend = DistributedBackend.NCCL,
-    WorldSize = Environment.GetEnvironmentVariable("WORLD_SIZE"),
-    Rank = Environment.GetEnvironmentVariable("RANK"),
-    MasterAddress = Environment.GetEnvironmentVariable("MASTER_ADDR"),
-    MasterPort = Environment.GetEnvironmentVariable("MASTER_PORT")
+    WorldSize = int.Parse(Environment.GetEnvironmentVariable("WORLD_SIZE") ?? "1"),
+    Rank = int.Parse(Environment.GetEnvironmentVariable("RANK") ?? "0"),
+    MasterAddress = Environment.GetEnvironmentVariable("MASTER_ADDR") ?? "localhost",
+    MasterPort = int.Parse(Environment.GetEnvironmentVariable("MASTER_PORT") ?? "29500")
 };
 ```
 

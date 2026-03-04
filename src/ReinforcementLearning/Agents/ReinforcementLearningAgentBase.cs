@@ -339,14 +339,7 @@ public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IConfigur
         }
 
         var fullPath = Path.GetFullPath(filepath);
-        // Ensure the resolved path is under the intended directory (prevents traversal via "..", symlinks, etc.)
         var resolvedDir = Path.GetDirectoryName(fullPath) ?? string.Empty;
-        var currentDir = Path.GetFullPath(".");
-        if (!resolvedDir.StartsWith(currentDir, StringComparison.OrdinalIgnoreCase) &&
-            !Path.IsPathRooted(filepath))
-        {
-            throw new ArgumentException("File path resolves outside the current directory.", nameof(filepath));
-        }
 
         if (!string.IsNullOrEmpty(resolvedDir) && !Directory.Exists(resolvedDir))
         {

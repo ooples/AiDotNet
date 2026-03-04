@@ -343,6 +343,15 @@ Console.WriteLine($"Training completed on: {result.TrainingDevice}");
 ```csharp
 using AiDotNet;
 
+// Sample image classification data (28x28 grayscale images, 10 classes)
+var images = new double[1000][];
+var labels = new double[1000];
+for (int i = 0; i < 1000; i++)
+{
+    images[i] = new double[784]; // 28x28 flattened
+    labels[i] = i % 10;         // 10-class labels
+}
+
 // Train with checkpoints
 var result = await new AiModelBuilder<double, double[][], double[]>()
     .ConfigureNeuralNetwork(config =>

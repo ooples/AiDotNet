@@ -293,11 +293,6 @@ public abstract class MultiLabelClassifierBase<T> : IMultiLabelClassifier<T>, IC
             throw new ArgumentException("File path cannot be null or empty.", nameof(path));
         }
 
-        if (path.Contains(".."))
-        {
-            throw new ArgumentException("File path cannot contain directory traversal sequences.", nameof(path));
-        }
-
         var fullPath = System.IO.Path.GetFullPath(path);
         var directory = System.IO.Path.GetDirectoryName(fullPath);
         if (!string.IsNullOrEmpty(directory) && !System.IO.Directory.Exists(directory))
@@ -317,11 +312,6 @@ public abstract class MultiLabelClassifierBase<T> : IMultiLabelClassifier<T>, IC
         if (string.IsNullOrWhiteSpace(path))
         {
             throw new ArgumentException("File path cannot be null or empty.", nameof(path));
-        }
-
-        if (path.Contains(".."))
-        {
-            throw new ArgumentException("File path cannot contain directory traversal sequences.", nameof(path));
         }
 
         var fullPath = System.IO.Path.GetFullPath(path);

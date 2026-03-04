@@ -95,9 +95,17 @@ public sealed class DynamicShapeInfo
             return false;
         }
 
+        // Pre-compute a lookup mask for O(1) per-dimension checks instead of O(n*m) linear scans.
+        var dynamicLookup = new Dictionary<int, int>(dynamicDimIndices.Length);
+        for (int d = 0; d < dynamicDimIndices.Length; d++)
+        {
+            dynamicLookup[dynamicDimIndices[d]] = d;
+        }
+
         for (int i = 0; i < concreteShape.Length; i++)
         {
-            bool isDynamic = Array.IndexOf(dynamicDimIndices, i) >= 0 || templateShape[i] == -1;
+            bool hasDynamicIndex = dynamicLookup.TryGetValue(i, out int dynamicIndex);
+            bool isDynamic = hasDynamicIndex || templateShape[i] == -1;
 
             if (isDynamic)
             {
@@ -108,8 +116,7 @@ public sealed class DynamicShapeInfo
                 }
 
                 // Check min/max constraints if available
-                int dynamicIndex = Array.IndexOf(dynamicDimIndices, i);
-                if (dynamicIndex >= 0)
+                if (hasDynamicIndex)
                 {
                     if (dynamicIndex < MinInputDimensions.Length && MinInputDimensions[dynamicIndex] > 0)
                     {

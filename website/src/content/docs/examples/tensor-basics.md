@@ -200,6 +200,14 @@ var result = await new AiModelBuilder<double, double[][], double[]>()
 ```csharp
 using AiDotNet;
 
+// Sample regression data
+var features = new double[][] {
+    new[] { 1.0, 2.0 }, new[] { 2.0, 3.0 },
+    new[] { 3.0, 4.0 }, new[] { 4.0, 5.0 },
+    new[] { 5.0, 6.0 }, new[] { 6.0, 7.0 }
+};
+var targets = new double[] { 3.0, 5.0, 7.0, 9.0, 11.0, 13.0 };
+
 var result = await new AiModelBuilder<double, double[][], double[]>()
     .ConfigureRegression()
     .ConfigurePreprocessing()
@@ -303,6 +311,14 @@ for (int i = 0; i < predictions.Length; i++)
 
 ```csharp
 using AiDotNet;
+
+// Sample dataset for comparison
+var features = new double[][] {
+    new[] { 1.0 }, new[] { 2.0 }, new[] { 3.0 },
+    new[] { 4.0 }, new[] { 5.0 }, new[] { 6.0 },
+    new[] { 7.0 }, new[] { 8.0 }, new[] { 9.0 }, new[] { 10.0 }
+};
+var targets = new double[] { 2.1, 4.0, 5.9, 8.1, 10.0, 12.1, 14.0, 15.9, 18.1, 20.0 };
 
 // Compare different model types
 var models = new[]
