@@ -18,9 +18,15 @@ AiDotNet provides powerful neural network capabilities through the `AiModelBuild
 using AiDotNet;
 using System.Linq;
 
-// Load image data (28x28 grayscale images as flat arrays)
-var images = LoadMnistImages();  // double[][] with 784 features each
-var labels = LoadMnistLabels();  // double[] with values 0-9
+// Prepare image data (28x28 grayscale images as flat arrays of 784 features)
+// In production, load from MNIST dataset files or a DataLoader
+var images = new double[100][];  // 100 training samples
+var labels = new double[100];    // labels 0-9
+for (int i = 0; i < 100; i++)
+{
+    images[i] = new double[784]; // 28x28 pixels
+    labels[i] = i % 10;         // cycle through digits
+}
 
 // Build and train a neural network
 var result = await new AiModelBuilder<double, double[][], double[]>()
@@ -40,7 +46,7 @@ var result = await new AiModelBuilder<double, double[][], double[]>()
     .BuildAsync(images, labels);
 
 // Make predictions
-var newImage = LoadTestImage();
+var newImage = new double[784]; // 28x28 test image
 var prediction = result.Predict(new[] { newImage });
 var probabilities = result.PredictProbability(new[] { newImage });
 

@@ -135,13 +135,15 @@ using AiDotNet;
 // Iris flower classification
 var irisFeatures = new double[][]
 {
-    new[] { 5.1, 3.5, 1.4, 0.2 },
-    new[] { 7.0, 3.2, 4.7, 1.4 },
-    new[] { 6.3, 3.3, 6.0, 2.5 },
-    // ... more samples
+    new[] { 5.1, 3.5, 1.4, 0.2 }, // setosa
+    new[] { 4.9, 3.0, 1.4, 0.2 }, // setosa
+    new[] { 7.0, 3.2, 4.7, 1.4 }, // versicolor
+    new[] { 6.4, 3.2, 4.5, 1.5 }, // versicolor
+    new[] { 6.3, 3.3, 6.0, 2.5 }, // virginica
+    new[] { 5.8, 2.7, 5.1, 1.9 }, // virginica
 };
 
-var species = new double[] { 0, 1, 2 }; // 0=setosa, 1=versicolor, 2=virginica
+var species = new double[] { 0, 0, 1, 1, 2, 2 }; // 0=setosa, 1=versicolor, 2=virginica
 
 // Build model
 var result = await new AiModelBuilder<double, double[][], double[]>()
@@ -246,6 +248,7 @@ Console.WriteLine("Model saved!");
 
 // Load and use later
 var loadedModel = AiModelResult<double>.Load("my_model.aimodel");
+var newData = new double[][] { new[] { 1.0, 2.0, 3.0 } };
 var prediction = loadedModel.Predict(newData);
 Console.WriteLine($"Prediction: {prediction[0]}");
 ```

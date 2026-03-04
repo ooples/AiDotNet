@@ -81,6 +81,7 @@ var result = await new AiModelBuilder<double, double[], double>()
     .ConfigurePreprocessing()
     .BuildAsync(features, labels);
 
+var newSample = new double[] { 5.1, 3.5, 1.4, 0.2 };
 var prediction = result.Predict(newSample);
 ```
 
@@ -107,6 +108,11 @@ if (result.CrossValidationResult != null)
 ## Example 5: With GPU Acceleration
 
 ```csharp
+using AiDotNet;
+using AiDotNet.Optimizers;
+using AiDotNet.ComputerVision;
+
+var cnnModel = new ResNet18<float>();
 var result = await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
     .ConfigureModel(cnnModel)
     .ConfigureOptimizer(new AdamOptimizer<float>())

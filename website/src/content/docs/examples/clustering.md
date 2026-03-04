@@ -30,7 +30,8 @@ var customers = new double[][]
     new[] { 23.0, 18.0, 94.0 },
     new[] { 64.0, 19.0, 3.0 },
     new[] { 30.0, 19.0, 72.0 },
-    // ... more customers
+    new[] { 45.0, 20.0, 50.0 },
+    new[] { 50.0, 21.0, 15.0 },
 };
 
 // Build clustering model
@@ -147,6 +148,13 @@ Console.WriteLine($"\nOutlier samples: {string.Join(", ", outlierIndices)}");
 using AiDotNet;
 
 // Hierarchical clustering with dendrogram
+var data = new double[][]
+{
+    new[] { 1.0, 2.0 }, new[] { 1.5, 1.8 },
+    new[] { 5.0, 8.0 }, new[] { 8.0, 8.0 },
+    new[] { 1.0, 0.6 }, new[] { 9.0, 11.0 },
+};
+
 var result = await new AiModelBuilder<double, double[][], int[]>()
     .ConfigureClustering(config =>
     {

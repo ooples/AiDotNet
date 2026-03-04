@@ -57,6 +57,7 @@ For GPU-accelerated training on NVIDIA GPUs:
 1. **Install CUDA Toolkit 12.x+** - Download from [NVIDIA CUDA Downloads](https://developer.nvidia.com/cuda-downloads)
 2. **Install cuDNN 9.x+** - Download from [NVIDIA cuDNN](https://developer.nvidia.com/cudnn)
 3. **Verify installation:**
+
    ```bash
    nvcc --version
    ```
