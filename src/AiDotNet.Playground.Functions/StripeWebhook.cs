@@ -18,6 +18,12 @@ public class StripeWebhook
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase
     };
 
+    // Shared HttpClient to avoid socket exhaustion from per-request instantiation
+    private static readonly HttpClient SharedHttpClient = new()
+    {
+        Timeout = TimeSpan.FromSeconds(30)
+    };
+
     public StripeWebhook(ILogger<StripeWebhook> logger)
     {
         _logger = logger;
@@ -245,12 +251,14 @@ public class StripeWebhook
         }
 
         // First, find the user by email in Supabase Auth
-        using var httpClient = new HttpClient();
-        httpClient.DefaultRequestHeaders.Add("apikey", supabaseKey);
-        httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {supabaseKey}");
+        // Use per-request message headers instead of DefaultRequestHeaders to avoid thread-safety issues
+        var httpClient = SharedHttpClient;
 
         // Look up user by email via auth admin API
-        var usersResponse = await httpClient.GetAsync($"{supabaseUrl}/auth/v1/admin/users");
+        var usersRequest = new HttpRequestMessage(HttpMethod.Get, $"{supabaseUrl}/auth/v1/admin/users");
+        usersRequest.Headers.Add("apikey", supabaseKey);
+        usersRequest.Headers.Add("Authorization", $"Bearer {supabaseKey}");
+        var usersResponse = await httpClient.SendAsync(usersRequest);
         if (!usersResponse.IsSuccessStatusCode)
         {
             _logger.LogError("Failed to list Supabase users: {StatusCode}", usersResponse.StatusCode);

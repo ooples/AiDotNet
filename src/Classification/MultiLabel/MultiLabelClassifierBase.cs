@@ -288,16 +288,49 @@ public abstract class MultiLabelClassifierBase<T> : IMultiLabelClassifier<T>, IC
 
     public virtual void SaveModel(string path)
     {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            throw new ArgumentException("File path cannot be null or empty.", nameof(path));
+        }
+
+        if (path.Contains(".."))
+        {
+            throw new ArgumentException("File path cannot contain directory traversal sequences.", nameof(path));
+        }
+
+        var fullPath = System.IO.Path.GetFullPath(path);
+        var directory = System.IO.Path.GetDirectoryName(fullPath);
+        if (!string.IsNullOrEmpty(directory) && !System.IO.Directory.Exists(directory))
+        {
+            System.IO.Directory.CreateDirectory(directory);
+        }
+
         byte[] serializedData = Serialize();
         byte[] envelopedData = ModelFileHeader.WrapWithHeader(
             serializedData, this, GetInputShape(), GetOutputShape(), SerializationFormat.Json);
-        System.IO.File.WriteAllBytes(path, envelopedData);
+        System.IO.File.WriteAllBytes(fullPath, envelopedData);
     }
 
     /// <inheritdoc />
     public virtual void LoadModel(string path)
     {
-        byte[] serializedData = System.IO.File.ReadAllBytes(path);
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            throw new ArgumentException("File path cannot be null or empty.", nameof(path));
+        }
+
+        if (path.Contains(".."))
+        {
+            throw new ArgumentException("File path cannot contain directory traversal sequences.", nameof(path));
+        }
+
+        var fullPath = System.IO.Path.GetFullPath(path);
+        if (!System.IO.File.Exists(fullPath))
+        {
+            throw new System.IO.FileNotFoundException($"Model file not found: {fullPath}", fullPath);
+        }
+
+        byte[] serializedData = System.IO.File.ReadAllBytes(fullPath);
 
         // Extract payload from AIMF envelope
         serializedData = ModelFileHeader.ExtractPayload(serializedData);

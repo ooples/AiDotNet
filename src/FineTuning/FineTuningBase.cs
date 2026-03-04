@@ -153,7 +153,7 @@ public abstract class FineTuningBase<T, TInput, TOutput> : IFineTuning<T, TInput
 
         byte[] data = Serialize();
         byte[] envelopedData = ModelFileHeader.WrapWithHeader(
-            data, this, GetInputShape(), GetOutputShape(), SerializationFormat.Binary);
+            data, this, GetInputShape(), GetOutputShape(), SerializationFormat.Json);
         File.WriteAllBytes(fullPath, envelopedData);
     }
 

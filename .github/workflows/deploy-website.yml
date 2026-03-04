@@ -6,6 +6,9 @@ on:
     paths: ['website/**']
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 concurrency:
   group: website-deploy
   cancel-in-progress: true
