@@ -127,6 +127,12 @@ const base = import.meta.env.BASE_URL;
 
     let currentUserId: string | null = null;
 
+    function escapeHtml(text: string): string {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
     async function loadKeys() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
@@ -151,9 +157,9 @@ const base = import.meta.env.BASE_URL;
             const lastUsed = key.last_used_at ? new Date(key.last_used_at).toLocaleDateString() : 'Never';
             const statusClass = key.is_active ? 'text-green-500' : 'text-red-500';
             return `<tr>
-              <td class="py-3 px-4 text-slate-700 dark:text-slate-300 font-medium">${key.key_name}</td>
-              <td class="py-3 px-4 font-mono text-xs text-slate-500 dark:text-slate-400">${key.key_prefix}...</td>
-              <td class="py-3 px-4 text-slate-500 dark:text-slate-400 text-xs">${scopes}</td>
+              <td class="py-3 px-4 text-slate-700 dark:text-slate-300 font-medium">${escapeHtml(key.key_name)}</td>
+              <td class="py-3 px-4 font-mono text-xs text-slate-500 dark:text-slate-400">${escapeHtml(key.key_prefix)}...</td>
+              <td class="py-3 px-4 text-slate-500 dark:text-slate-400 text-xs">${escapeHtml(scopes)}</td>
               <td class="py-3 px-4 text-slate-500 dark:text-slate-400">${created}</td>
               <td class="py-3 px-4 text-slate-500 dark:text-slate-400">${lastUsed}</td>
               <td class="py-3 px-4 text-right">
@@ -214,7 +220,8 @@ const base = import.meta.env.BASE_URL;
         const fullKey = 'adn_' + Array.from(array, b => b.toString(16).padStart(2, '0')).join('');
         const keyPrefix = fullKey.substring(0, 12);
 
-        // Hash the key for storage (simple hash for demo - in production use server-side bcrypt)
+        // Hash the key for storage using SHA-256 via Web Crypto API
+        // Note: For additional security, implement server-side bcrypt hashing via an API endpoint
         const encoder = new TextEncoder();
         const hashBuffer = await crypto.subtle.digest('SHA-256', encoder.encode(fullKey));
         const keyHash = Array.from(new Uint8Array(hashBuffer), b => b.toString(16).padStart(2, '0')).join('');
