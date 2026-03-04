@@ -6,7 +6,7 @@ namespace AiDotNet.Helpers;
 /// <summary>
 /// Contains the result of encrypting a model payload with AES-256-GCM.
 /// </summary>
-public sealed class EncryptedPayload
+internal sealed class EncryptedPayload
 {
     /// <summary>Gets the random salt used for key derivation.</summary>
     public byte[] Salt { get; }
@@ -46,7 +46,7 @@ public sealed class EncryptedPayload
 /// <b>Note:</b> AES-GCM requires .NET Core 3.0 or later. On .NET Framework 4.7.1,
 /// both Encrypt and Decrypt throw <see cref="PlatformNotSupportedException"/>.
 /// </remarks>
-public static class ModelPayloadEncryption
+internal static class ModelPayloadEncryption
 {
     private const int SaltSize = 16;
     private const int NonceSize = 12;

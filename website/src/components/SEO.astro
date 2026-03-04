@@ -6,9 +6,14 @@ interface Props {
   canonical?: string;
 }
 
-const { title, description, image = '/AiDotNet/og-image.png', canonical } = Astro.props;
-const siteUrl = 'https://aidotnet.dev';
-const canonicalUrl = canonical || new URL(Astro.url.pathname, siteUrl).toString();
+const { title, description, image = '/og-image.png', canonical } = Astro.props;
+const siteUrl = import.meta.env.SITE || 'https://aidotnet.dev';
+const base = import.meta.env.BASE_URL || '/';
+// Strip the base path prefix from pathname to get the clean path for canonical URLs
+const cleanPath = Astro.url.pathname.startsWith(base) && base !== '/'
+  ? Astro.url.pathname.slice(base.length - 1)
+  : Astro.url.pathname;
+const canonicalUrl = canonical || new URL(cleanPath, siteUrl).toString();
 ---
 
 <title>{title}</title>

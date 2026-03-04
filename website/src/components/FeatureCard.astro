@@ -1,8 +1,14 @@
 ---
+/**
+ * Feature card displaying a category with icon, count badge, title, and description.
+ * @prop icon - SVG markup for the card icon. MUST be a trusted static string from page source
+ *              (never user-generated content) since it is rendered with set:html.
+ */
 interface Props {
   title: string;
   description: string;
   count: string;
+  /** SVG icon markup. Must be a trusted static string, not user input. */
   icon: string;
 }
 

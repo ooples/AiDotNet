@@ -3325,9 +3325,11 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// <remarks>
     /// <b>For Beginners:</b> This method lets you load a model that you previously saved using the SaveModel method.
     /// Once loaded, you can immediately use the model to make predictions without having to train it again.
-    /// 
-    /// This is useful when you want to use your model in different applications or at different times
-    /// without the time and computational cost of retraining.
+    ///
+    /// <b>Design Note:</b> SaveModel requires the model to implement <c>IModelSerializer</c> for encrypted saves,
+    /// while LoadModel auto-detects the model type from the AIMF header via <c>ModelTypeRegistry</c>.
+    /// This asymmetry is intentional: the save path needs the serializer to produce bytes,
+    /// while the load path uses the type name embedded in the header to reconstruct the model.
     /// </remarks>
     public AiModelResult<T, TInput, TOutput> LoadModel(string filePath)
     {

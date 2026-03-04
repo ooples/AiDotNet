@@ -547,6 +547,4 @@ jobs:
           echo "### Artifacts" >> $GITHUB_STEP_SUMMARY
           echo "- Publish size: ${{ steps.size.outputs.current_mb }} MB" >> $GITHUB_STEP_SUMMARY
 
-  # NOTE: GitHub Pages deployment has moved to deploy-website.yml
-  # The marketing Astro website is now the primary GitHub Pages deployment
-  # DocFX API docs and Blazor Playground have been replaced by the Astro site
+  # NOTE: Website deployment has moved to deploy-website.yml (deploys to Vercel at aidotnet.dev)
