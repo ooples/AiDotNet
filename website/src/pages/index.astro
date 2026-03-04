@@ -10,7 +10,7 @@ const base = import.meta.env.BASE_URL;
 const features = [
   {
     title: 'GPU Acceleration',
-    description: 'Custom GPU kernels via ILGPU for NVIDIA, AMD, and Intel GPUs. Up to 500x GEMM speedup, 200x Conv2D. Adaptive CPU/GPU routing.',
+    description: 'Custom GPU kernels for NVIDIA, AMD, Intel, and Apple GPUs via CUDA, OpenCL, HIP, Metal, Vulkan, and WebGPU. Up to 500x GEMM speedup. Faster than PyTorch.',
     count: 'Any GPU',
     icon: '<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"/></svg>',
   },
@@ -118,8 +118,8 @@ const features = [
           Faster than PyTorch. On any GPU.
         </h2>
         <p class="gsap-fade-up text-lg text-slate-500 dark:text-slate-400 max-w-3xl mx-auto">
-          AiDotNet.Tensors ships custom GPU kernels built on ILGPU &mdash; no CUDA lock-in.
-          Your code runs on NVIDIA, AMD, and Intel GPUs with zero configuration.
+          AiDotNet.Tensors ships hand-tuned GPU kernels via CUDA, OpenCL, HIP, Metal, Vulkan, and WebGPU &mdash; no CUDA lock-in, no third-party GPU libraries.
+          Your code runs on NVIDIA, AMD, Intel, and Apple GPUs with zero configuration.
         </p>
       </div>
 
@@ -342,8 +342,8 @@ const features = [
           <div class="text-sm text-slate-500 dark:text-slate-400">Ahead-of-time compilation support</div>
         </div>
         <div class="gsap-fade-up text-center p-6 rounded-2xl border border-slate-200 dark:border-slate-700/50 bg-white dark:bg-slate-800/50">
-          <div class="text-3xl font-bold bg-gradient-to-r from-brand-blue to-brand-purple bg-clip-text text-transparent mb-2">ILGPU</div>
-          <div class="text-sm text-slate-500 dark:text-slate-400">Custom GPU kernels for any GPU vendor</div>
+          <div class="text-3xl font-bold bg-gradient-to-r from-brand-blue to-brand-purple bg-clip-text text-transparent mb-2">6 GPU APIs</div>
+          <div class="text-sm text-slate-500 dark:text-slate-400">CUDA, OpenCL, HIP, Metal, Vulkan, WebGPU</div>
         </div>
       </div>
     </div>
@@ -381,10 +381,10 @@ const features = [
               <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"/></svg>
             </div>
             <h3 class="text-lg font-semibold text-slate-900 dark:text-white mb-2">AiDotNet.Tensors</h3>
-            <p class="text-sm text-slate-500 dark:text-slate-400 mb-3">Custom GPU kernels via ILGPU. Works on NVIDIA, AMD, and Intel GPUs. Adaptive CPU/GPU routing for optimal performance.</p>
+            <p class="text-sm text-slate-500 dark:text-slate-400 mb-3">Hand-tuned GPU kernels via P/Invoke. CUDA, OpenCL, HIP, Metal, Vulkan, and WebGPU backends. Adaptive CPU/GPU routing for optimal performance.</p>
             <div class="flex flex-wrap gap-1.5">
               <span class="px-2 py-0.5 text-xs rounded bg-slate-100 dark:bg-slate-900/50 text-slate-600 dark:text-slate-300">GPU Kernels</span>
-              <span class="px-2 py-0.5 text-xs rounded bg-slate-100 dark:bg-slate-900/50 text-slate-600 dark:text-slate-300">ILGPU</span>
+              <span class="px-2 py-0.5 text-xs rounded bg-slate-100 dark:bg-slate-900/50 text-slate-600 dark:text-slate-300">6 Backends</span>
               <span class="px-2 py-0.5 text-xs rounded bg-slate-100 dark:bg-slate-900/50 text-slate-600 dark:text-slate-300">Any GPU</span>
             </div>
           </div>

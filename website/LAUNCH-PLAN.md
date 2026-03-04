@@ -5,7 +5,7 @@
 | Component | Status | Notes |
 |-----------|--------|-------|
 | AiDotNet (NuGet) | v0.0.5-preview | 7,300+ classes, 139 modules. Needs 1.0.0 release |
-| AiDotNet.Tensors (NuGet) | v0.8.0 | Separate repo. Custom GPU kernels via ILGPU |
+| AiDotNet.Tensors (NuGet) | v0.8.0 | Separate repo. Custom GPU kernels via P/Invoke (CUDA, OpenCL, HIP, Metal, Vulkan, WebGPU) |
 | AiDotNet.Serving | Code only, NOT deployed | 193 files, 11 controllers, Stripe/auth/licensing built in |
 | Website | **DEPLOYED to Vercel** | **67 pages** built & deployed. Project: `franklins-projects-02a0b5a0/website` |
 | Auth Pages | **BUILT & DEPLOYED** | Login, signup, callback, dashboard, API keys, usage, billing, settings |
