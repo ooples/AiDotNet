@@ -194,11 +194,13 @@ const base = import.meta.env.BASE_URL;
 
       // If customer has Stripe ID, link portal buttons
       if (profile.stripe_customer_id) {
-        const portalUrl = `https://billing.stripe.com/p/login/test_YOUR_PORTAL_ID`;
-        const manageBtn = document.getElementById('manage-subscription-btn');
-        const invoicesBtn = document.getElementById('view-invoices-btn');
-        if (manageBtn) manageBtn.setAttribute('href', portalUrl);
-        if (invoicesBtn) invoicesBtn.setAttribute('href', portalUrl);
+        const portalUrl = import.meta.env.PUBLIC_STRIPE_PORTAL_URL || '';
+        if (portalUrl) {
+          const manageBtn = document.getElementById('manage-subscription-btn');
+          const invoicesBtn = document.getElementById('view-invoices-btn');
+          if (manageBtn) manageBtn.setAttribute('href', portalUrl);
+          if (invoicesBtn) invoicesBtn.setAttribute('href', portalUrl);
+        }
       }
     }
 
