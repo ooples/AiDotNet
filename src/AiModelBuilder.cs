@@ -3372,11 +3372,35 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                         "the AIDOTNET_LICENSE_KEY environment variable, or ~/.aidotnet/license.key file.");
                 }
 
-                // Load via ModelLoader which handles decryption
+                // Load via ModelLoader which handles decryption and deserialization.
+                // The returned model is already deserialized from the encrypted AIMF payload.
                 byte[] data = File.ReadAllBytes(filePath);
                 var model = ModelLoader.LoadFromBytes<T>(data, resolvedKey, decryptionToken);
 
-                // Wrap in AiModelResult — the model is the deserialized IModelSerializer
+                // Cast to the full model type. IModelSerializer guarantees Serialize/Deserialize,
+                // but the model should also be a full model we can use for predictions.
+                if (model is Interfaces.IFullModel<T, TInput, TOutput> fullModel)
+                {
+                    var result = new AiModelResult<T, TInput, TOutput>();
+                    result.Model = fullModel;
+
+                    // Reattach Graph RAG components if configured
+                    if (_knowledgeGraph != null || _graphStore != null || _hybridGraphRetriever != null)
+                    {
+                        result.AttachGraphComponents(_knowledgeGraph, _graphStore, _hybridGraphRetriever);
+                    }
+
+                    // Reattach tokenizer if configured
+                    if (_tokenizer != null)
+                    {
+                        result.AttachTokenizer(_tokenizer, _tokenizationConfig);
+                    }
+
+                    return result;
+                }
+
+                // Fallback: serialize through the builder's format for non-IFullModel serializers.
+                // This preserves backwards compatibility but may lose model-specific state.
                 byte[] decryptedPayload = model.Serialize();
                 return DeserializeModel(decryptedPayload);
             }

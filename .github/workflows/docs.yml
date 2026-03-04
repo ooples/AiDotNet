@@ -1,8 +1,8 @@
-name: Documentation (Manual)
+name: Marketing Website (Manual Rebuild)
 
-# Manual documentation rebuild - triggers the marketing website deployment
-# NOTE: Primary automatic deployment happens in deploy-website.yml on master pushes
-# This workflow is for manual rebuilds when needed
+# Manual-only rebuild of the marketing website to GitHub Pages.
+# Use this when you need to force a rebuild without pushing to master.
+# The primary automatic deployment runs via deploy-website.yml on pushes to master.
 on:
   workflow_dispatch:
 
