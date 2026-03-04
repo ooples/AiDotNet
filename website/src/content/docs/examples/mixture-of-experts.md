@@ -137,7 +137,7 @@ options.NumExperts = 8;  // Default: 4
 - 2-4: Small models, limited compute
 - 4-8: Most applications (recommended)
 - 8-16: Larger, more complex tasks
-- 16+: Very large models (use with TopK routing)
+- 16+: High-capacity models with sparse routing (set TopK to 2-4)
 
 ### TopK
 Determines how many experts process each input (sparse routing).
@@ -267,6 +267,7 @@ var model = new MixtureOfExpertsNeuralNetwork<float>(options, architecture);
 MoE follows the same pattern as other models:
 
 ### Time Series Models
+
 ```csharp
 // ARIMA Model
 var arimaOptions = new ARIMAOptions<float> { P = 2, D = 1, Q = 2 };
@@ -280,6 +281,7 @@ var result = builder.ConfigureModel(moeModel).Build(data, labels);
 ```
 
 ### Neural Network Models
+
 ```csharp
 // Feed-Forward Network
 var ffnn = new FeedForwardNeuralNetwork<float>(architecture);
@@ -343,6 +345,7 @@ if (metadata.AdditionalInfo.ContainsKey("ExpertUsageDistribution"))
 ## Common Use Cases
 
 ### Image Classification
+
 ```csharp
 var options = new MixtureOfExpertsOptions<float>
 {
@@ -354,6 +357,7 @@ var options = new MixtureOfExpertsOptions<float>
 ```
 
 ### Natural Language Processing
+
 ```csharp
 var options = new MixtureOfExpertsOptions<float>
 {
@@ -365,6 +369,7 @@ var options = new MixtureOfExpertsOptions<float>
 ```
 
 ### Tabular Data
+
 ```csharp
 var options = new MixtureOfExpertsOptions<float>
 {

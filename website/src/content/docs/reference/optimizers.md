@@ -17,9 +17,10 @@ Complete reference for the 40+ optimization algorithms and learning rate schedul
 
 | Optimizer | Description | Use Case |
 |:----------|:------------|:---------|
-| `SGDOptimizer<T>` | Stochastic Gradient Descent | General purpose |
+| `StochasticGradientDescentOptimizer<T>` | Stochastic Gradient Descent | General purpose |
 | `MomentumOptimizer<T>` | SGD with momentum | Faster convergence |
-| `NesterovOptimizer<T>` | Nesterov Accelerated Gradient | Look-ahead momentum |
+| `NesterovAcceleratedGradientOptimizer<T>` | Nesterov Accelerated Gradient | Look-ahead momentum |
+| `MiniBatchGradientDescentOptimizer<T>` | Mini-batch SGD | Large datasets |
 
 ```csharp
 var optimizer = new SGDOptimizer<float>(
@@ -36,9 +37,9 @@ var optimizer = new SGDOptimizer<float>(
 | `AdamOptimizer<T>` | Adaptive Moment Estimation | General deep learning |
 | `AdamWOptimizer<T>` | Adam with decoupled weight decay | Transformers, large models |
 | `AdaMaxOptimizer<T>` | Adam with infinity norm | Sparse gradients |
-| `NAdamOptimizer<T>` | Nesterov Adam | Improved convergence |
-| `RAdam<T>` | Rectified Adam | Stable training |
-| `AdamP<T>` | Adam with projection | Vision models |
+| `NadamOptimizer<T>` | Nesterov Adam | Improved convergence |
+| `AMSGradOptimizer<T>` | AMSGrad variant | Stable training |
+| `PrototypeAdamOptimizer<T>` | Prototype Adam | Experimental |
 
 ```csharp
 var optimizer = new AdamWOptimizer<float>(
@@ -53,10 +54,10 @@ var optimizer = new AdamWOptimizer<float>(
 
 | Optimizer | Description | Use Case |
 |:----------|:------------|:---------|
-| `AdaGradOptimizer<T>` | Adaptive gradient | Sparse features |
+| `AdagradOptimizer<T>` | Adaptive gradient | Sparse features |
 | `AdaDeltaOptimizer<T>` | Adaptive delta | No learning rate tuning |
-| `RMSpropOptimizer<T>` | Root Mean Square propagation | RNNs |
-| `AdaFactorOptimizer<T>` | Memory-efficient adaptive | Large models |
+| `RootMeanSquarePropagationOptimizer<T>` | Root Mean Square propagation | RNNs |
+| `FTRLOptimizer<T>` | Follow-the-Regularized-Leader | Online learning |
 
 ### LAMB/LARS
 
@@ -78,10 +79,9 @@ var optimizer = new LAMBOptimizer<float>(
 | Optimizer | Description | Use Case |
 |:----------|:------------|:---------|
 | `LionOptimizer<T>` | Evolved Sign Momentum | Vision, language models |
-| `Prodigy<T>` | Automatic learning rate | No tuning needed |
-| `ScheduleFree<T>` | No schedule needed | Simplified training |
-| `Sophia<T>` | Second-order information | LLM training |
-| `Muon<T>` | Momentum-based | Research |
+| `ADMMOptimizer<T>` | Alternating Direction Method of Multipliers | Constrained optimization |
+| `ConjugateGradientOptimizer<T>` | Conjugate gradient | Large sparse systems |
+| `TrustRegionOptimizer<T>` | Trust region method | Robust convergence |
 
 ```csharp
 var optimizer = new LionOptimizer<float>(
@@ -98,9 +98,10 @@ var optimizer = new LionOptimizer<float>(
 | Optimizer | Description | Use Case |
 |:----------|:------------|:---------|
 | `LBFGSOptimizer<T>` | Limited-memory BFGS | Small models, full batch |
-| `NewtonOptimizer<T>` | Newton's method | Convex optimization |
-| `KFACOptimizer<T>` | Kronecker-factored curvature | Deep networks |
-| `ShampooOptimizer<T>` | Preconditioning | Large-scale training |
+| `BFGSOptimizer<T>` | Broyden-Fletcher-Goldfarb-Shanno | Convex optimization |
+| `NewtonMethodOptimizer<T>` | Newton's method | Quadratic convergence |
+| `LevenbergMarquardtOptimizer<T>` | Levenberg-Marquardt | Nonlinear least squares |
+| `DFPOptimizer<T>` | Davidon-Fletcher-Powell | Quasi-Newton method |
 
 ```csharp
 var optimizer = new LBFGSOptimizer<double>(
@@ -111,12 +112,13 @@ var optimizer = new LBFGSOptimizer<double>(
 
 ---
 
-## Sparse Optimizers
+## Gradient Descent Variants
 
 | Optimizer | Description | Use Case |
 |:----------|:------------|:---------|
-| `SparseAdamOptimizer<T>` | Adam for sparse gradients | Embeddings |
-| `LazyAdamOptimizer<T>` | Lazy parameter updates | Large sparse models |
+| `GradientDescentOptimizer<T>` | Standard gradient descent | Simple problems |
+| `ProximalGradientDescentOptimizer<T>` | Proximal gradient | L1 regularization |
+| `CoordinateDescentOptimizer<T>` | Coordinate descent | Feature selection |
 
 ---
 
@@ -125,10 +127,13 @@ var optimizer = new LBFGSOptimizer<double>(
 | Optimizer | Description | Use Case |
 |:----------|:------------|:---------|
 | `GeneticOptimizer<T>` | Genetic Algorithm | Hyperparameter search |
-| `EvolutionStrategy<T>` | Evolution strategies | Neural architecture |
+| `GeneticAlgorithmOptimizer<T>` | Full GA implementation | Complex search spaces |
 | `CMAESOptimizer<T>` | Covariance Matrix Adaptation | Black-box optimization |
 | `ParticleSwarmOptimizer<T>` | Particle Swarm | Global optimization |
-| `DifferentialEvolution<T>` | Differential evolution | Continuous optimization |
+| `DifferentialEvolutionOptimizer<T>` | Differential evolution | Continuous optimization |
+| `SimulatedAnnealingOptimizer<T>` | Simulated Annealing | Combinatorial optimization |
+| `GreyWolfOptimizer<T>` | Grey Wolf optimization | Metaheuristic search |
+| `AntColonyOptimizer<T>` | Ant Colony optimization | Discrete optimization |
 
 ```csharp
 var optimizer = new GeneticOptimizer<double>(
