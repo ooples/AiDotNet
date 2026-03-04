@@ -55,10 +55,13 @@ public class Program
         var persistenceOptions = new ServingPersistenceOptions();
         builder.Configuration.GetSection("ServingPersistenceOptions").Bind(persistenceOptions);
 
-        // Configure Kestrel to use the specified port
+        // Configure Kestrel to use the specified port (or PORT env var for Azure/container hosting)
+        var port = Environment.GetEnvironmentVariable("PORT") is string envPort && int.TryParse(envPort, out var parsedPort)
+            ? parsedPort
+            : servingOptions.Port;
         builder.WebHost.ConfigureKestrel(serverOptions =>
         {
-            serverOptions.ListenAnyIP(servingOptions.Port);
+            serverOptions.ListenAnyIP(port);
         });
 
         // Persistence (DB-backed): API keys, protected artifact keys, and ASP.NET Core Data Protection keys.
@@ -99,6 +102,9 @@ public class Program
                     options.UseSqlite(connectionString);
                     break;
             }
+
+            options.ConfigureWarnings(w =>
+                w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning));
         }
 
         builder.Services.AddDbContext<ServingDbContext>(
@@ -212,21 +218,21 @@ public class Program
         }
 
         // Configure the HTTP request pipeline
-        if (app.Environment.IsDevelopment())
+        app.UseSwagger();
+        app.UseSwaggerUI(options =>
         {
-            app.UseSwagger();
-            app.UseSwaggerUI(options =>
-            {
-                options.SwaggerEndpoint("/swagger/v1/swagger.json", "AiDotNet Serving API v1");
-                options.RoutePrefix = string.Empty; // Serve Swagger UI at root
-            });
-        }
+            options.SwaggerEndpoint("/swagger/v1/swagger.json", "AiDotNet Serving API v1");
+            options.RoutePrefix = string.Empty; // Serve Swagger UI at root
+        });
 
         app.UseCors();
         app.UseAuthentication();
         app.UseMiddleware<ServingRequestContextMiddleware>();
         app.UseAuthorization();
         app.MapControllers();
+
+        // Health check endpoint for Azure warmup probes
+        app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
 
         // Log startup information
         var logger = app.Services.GetRequiredService<ILogger<Program>>();

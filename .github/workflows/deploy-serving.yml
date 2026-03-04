@@ -3,7 +3,7 @@ name: Deploy AiDotNet Serving API
 on:
   push:
     branches: [master]
-    paths: ['src/AiDotNet.Serving/**']
+    paths: ['src/AiDotNet.Serving/**', 'src/AiDotNet/**']
   workflow_dispatch:
 
 concurrency:
@@ -21,14 +21,20 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
-      - name: Restore dependencies
-        run: dotnet restore src/AiDotNet.Serving/AiDotNet.Serving.csproj
-
-      - name: Build
-        run: dotnet build src/AiDotNet.Serving/AiDotNet.Serving.csproj -c Release --no-restore
-
       - name: Publish
-        run: dotnet publish src/AiDotNet.Serving/AiDotNet.Serving.csproj -c Release -o ./publish --no-build
+        run: |
+          dotnet publish src/AiDotNet.Serving/AiDotNet.Serving.csproj \
+            -c Release \
+            -o ./publish \
+            -r linux-x64 \
+            --self-contained false \
+            -p:DebugType=none \
+            -p:DebugSymbols=false
+
+      - name: Remove unnecessary localization resources
+        run: |
+          cd publish
+          rm -rf cs de es fr it ja ko pl pt-BR ru tr zh-Hans zh-Hant
 
       - name: Deploy to Azure App Service
         uses: azure/webapps-deploy@v3
