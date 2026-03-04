@@ -270,8 +270,14 @@ public sealed class StripeService : IStripeService
         }
 
         entity.Status = MapStripeStatus(subscription.Status);
-        entity.CurrentPeriodStart = subscription.CurrentPeriodStart;
-        entity.CurrentPeriodEnd = subscription.CurrentPeriodEnd;
+
+        // In Stripe.net v48+, CurrentPeriodStart/End moved from Subscription to SubscriptionItem level.
+        if (subscription.Items?.Data?.Count > 0)
+        {
+            var firstItem = subscription.Items.Data[0];
+            entity.CurrentPeriodStart = firstItem.CurrentPeriodStart;
+            entity.CurrentPeriodEnd = firstItem.CurrentPeriodEnd;
+        }
 
         if (subscription.CanceledAt is not null)
         {
@@ -340,7 +346,7 @@ public sealed class StripeService : IStripeService
 
         _logger.LogWarning(
             "Invoice payment failed for customer {CustomerId}, subscription {SubscriptionId}, amount {Amount} {Currency}",
-            invoice.CustomerId, invoice.SubscriptionId, invoice.AmountDue, invoice.Currency);
+            invoice.CustomerId, invoice.Parent?.SubscriptionDetails?.SubscriptionId, invoice.AmountDue, invoice.Currency);
     }
 
     private string ResolvePriceId(SubscriptionTier tier, string? billingInterval)
@@ -356,7 +362,7 @@ public sealed class StripeService : IStripeService
         };
     }
 
-    private static StripeSubscriptionStatus MapStripeStatus(string stripeStatus)
+    private StripeSubscriptionStatus MapStripeStatus(string stripeStatus)
     {
         return stripeStatus switch
         {
@@ -366,7 +372,16 @@ public sealed class StripeService : IStripeService
             "incomplete" => StripeSubscriptionStatus.Incomplete,
             "trialing" => StripeSubscriptionStatus.Trialing,
             "paused" => StripeSubscriptionStatus.Paused,
-            _ => StripeSubscriptionStatus.Active
+            _ => LogAndReturnUnknown(stripeStatus)
         };
+    }
+
+    private StripeSubscriptionStatus LogAndReturnUnknown(string stripeStatus)
+    {
+        _logger.LogWarning(
+            "Unknown Stripe subscription status '{StripeStatus}'. Treating as Unknown instead of Active. " +
+            "Update MapStripeStatus to handle this status explicitly.",
+            stripeStatus);
+        return StripeSubscriptionStatus.Unknown;
     }
 }

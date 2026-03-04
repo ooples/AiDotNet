@@ -21,7 +21,7 @@ namespace AiDotNet.Helpers;
 ///
 /// This follows the same pattern as <see cref="DeserializationHelper"/> which auto-discovers layer types.
 /// </remarks>
-public static class ModelTypeRegistry
+internal static class ModelTypeRegistry
 {
     private static readonly ConcurrentDictionary<string, Type> TypesByName = new(StringComparer.OrdinalIgnoreCase);
     private static readonly ConcurrentDictionary<string, Type> TypesByQualifiedName = new(StringComparer.OrdinalIgnoreCase);
@@ -118,6 +118,12 @@ public static class ModelTypeRegistry
 
         string qualifiedName = type.AssemblyQualifiedName ?? type.FullName ?? name;
         TypesByQualifiedName[qualifiedName] = type;
+
+        // Also register by FullName for consistency with DiscoverModelTypes
+        if (type.FullName is not null && type.FullName != qualifiedName)
+        {
+            TypesByQualifiedName[type.FullName] = type;
+        }
     }
 
     /// <summary>
@@ -128,7 +134,7 @@ public static class ModelTypeRegistry
     /// A factory that takes the closed generic type (e.g., ConvolutionalNeuralNetwork&lt;double&gt;)
     /// and returns an IModelSerializer instance.
     /// </param>
-    public static void RegisterFactory(string name, Func<Type, IModelSerializer> factory)
+    public static void RegisterFactory(string name, Func<Type, IModelSerializer>? factory)
     {
         if (string.IsNullOrWhiteSpace(name))
         {
@@ -137,7 +143,9 @@ public static class ModelTypeRegistry
 
         if (factory is null)
         {
-            throw new ArgumentNullException(nameof(factory));
+            // Passing null removes the factory registration (useful for test cleanup)
+            Factories.TryRemove(name, out _);
+            return;
         }
 
         Factories[name] = factory;
@@ -189,9 +197,16 @@ public static class ModelTypeRegistry
             type = Type.GetType(qualifiedKey, throwOnError: false);
             if (type is not null)
             {
-                // Cache for future lookups
-                TypesByName.TryAdd(typeName, type);
+                // Only cache by qualified name to prevent a malformed header from
+                // permanently aliasing an unrelated short name in the process-wide registry.
                 TypesByQualifiedName.TryAdd(qualifiedKey, type);
+
+                // Only cache by short name if the resolved type's Name actually matches
+                if (string.Equals(type.Name, typeName, StringComparison.OrdinalIgnoreCase))
+                {
+                    TypesByName.TryAdd(typeName, type);
+                }
+
                 return type;
             }
         }

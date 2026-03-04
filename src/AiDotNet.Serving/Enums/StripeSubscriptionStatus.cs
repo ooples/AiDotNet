@@ -10,5 +10,6 @@ public enum StripeSubscriptionStatus
     Cancelled,
     Incomplete,
     Trialing,
-    Paused
+    Paused,
+    Unknown
 }

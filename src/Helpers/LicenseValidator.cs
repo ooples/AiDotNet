@@ -56,10 +56,10 @@ internal sealed class LicenseValidator
     /// <returns>A <see cref="LicenseValidationResult"/> describing the current key status.</returns>
     public LicenseValidationResult Validate()
     {
-        // Offline-only mode: no server URL means always active
+        // Offline-only mode: validate key format before accepting
         if (string.IsNullOrWhiteSpace(_licenseKey.ServerUrl))
         {
-            var offlineResult = new LicenseValidationResult(LicenseKeyStatus.Active, message: "Offline-only mode.");
+            var offlineResult = ValidateOffline();
             lock (_cacheLock)
             {
                 _cached = offlineResult;
@@ -129,6 +129,87 @@ internal sealed class LicenseValidator
 
             return pending;
         }
+    }
+
+    /// <summary>
+    /// Validates the license key offline using format checks and HMAC signature verification
+    /// when a build key is available. This prevents garbage or empty keys from being accepted.
+    /// </summary>
+    private LicenseValidationResult ValidateOffline()
+    {
+        // Reject empty or whitespace-only keys
+        if (string.IsNullOrWhiteSpace(_licenseKey.Key))
+        {
+            return new LicenseValidationResult(
+                LicenseKeyStatus.Invalid,
+                message: "License key is empty or missing.");
+        }
+
+        // Reject keys that are too short to be valid (minimum 16 characters)
+        if (_licenseKey.Key.Length < 16)
+        {
+            return new LicenseValidationResult(
+                LicenseKeyStatus.Invalid,
+                message: "License key format is invalid (too short).");
+        }
+
+        // When an official build key is available, verify the license key's HMAC signature.
+        // The key is expected to be in the format: payload.signature (base64url-encoded).
+        var buildKey = BuildKeyProvider.GetBuildKey();
+        if (buildKey.Length > 0)
+        {
+            var dotIndex = _licenseKey.Key.LastIndexOf('.');
+            if (dotIndex > 0 && dotIndex < _licenseKey.Key.Length - 1)
+            {
+                string payloadPart = _licenseKey.Key[..dotIndex];
+                string signaturePart = _licenseKey.Key[(dotIndex + 1)..];
+
+                try
+                {
+                    byte[] payloadBytes = Encoding.UTF8.GetBytes(payloadPart);
+                    byte[] expectedSignature = Convert.FromBase64String(signaturePart);
+
+                    using var hmac = new System.Security.Cryptography.HMACSHA256(buildKey);
+                    byte[] computedSignature = hmac.ComputeHash(payloadBytes);
+
+                    if (!CryptographicEquals(computedSignature, expectedSignature))
+                    {
+                        return new LicenseValidationResult(
+                            LicenseKeyStatus.Invalid,
+                            message: "License key signature verification failed.");
+                    }
+                }
+                catch (FormatException)
+                {
+                    return new LicenseValidationResult(
+                        LicenseKeyStatus.Invalid,
+                        message: "License key signature is malformed.");
+                }
+            }
+            // Keys without a dot separator are accepted for backwards compatibility
+            // when no server URL is configured (legacy keys).
+        }
+
+        return new LicenseValidationResult(LicenseKeyStatus.Active, message: "Offline-only mode.");
+    }
+
+    /// <summary>
+    /// Constant-time comparison to prevent timing attacks on signature verification.
+    /// </summary>
+    private static bool CryptographicEquals(byte[] a, byte[] b)
+    {
+        if (a.Length != b.Length)
+        {
+            return false;
+        }
+
+        int result = 0;
+        for (int i = 0; i < a.Length; i++)
+        {
+            result |= a[i] ^ b[i];
+        }
+
+        return result == 0;
     }
 
     private LicenseValidationResult ValidateOnline()

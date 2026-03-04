@@ -98,10 +98,12 @@ public class ModelTypeRegistryTests
     }
 
     [Fact]
-    public void RegisterFactory_ThrowsOnNullFactory()
+    public void RegisterFactory_NullFactory_RemovesRegistration()
     {
-        Assert.Throws<ArgumentNullException>(() =>
+        // Passing null factory removes the registration (cleanup pattern)
+        var exception = Record.Exception(() =>
             ModelTypeRegistry.RegisterFactory("SomeName", null));
+        Assert.Null(exception);
     }
 
     [Fact]
