@@ -69,10 +69,10 @@ var emailFeatures = new double[][]
     new[] { 0.1, 0.8, 0.0, 0.9 },  // high frequency of spam words
     new[] { 0.9, 0.1, 0.7, 0.0 },  // normal email
     new[] { 0.2, 0.7, 0.1, 0.8 },
-    // ... more samples
+    new[] { 0.3, 0.6, 0.2, 0.7 }
 };
 
-var isSpam = new double[] { 1, 0, 1 };
+var isSpam = new double[] { 1, 0, 1, 1 };
 
 // Build neural network for binary classification
 var result = await new AiModelBuilder<double, double[][], double[]>()
@@ -110,10 +110,10 @@ var productFeatures = new double[][]
     new[] { 100.0, 4.5, 1000.0, 2.0 },  // weight, rating, reviews, category
     new[] { 250.0, 4.2, 500.0, 1.0 },
     new[] { 50.0, 4.8, 2000.0, 3.0 },
-    // ... more samples
+    new[] { 150.0, 3.9, 750.0, 2.0 }
 };
 
-var prices = new double[] { 29.99, 59.99, 19.99 };
+var prices = new double[] { 29.99, 59.99, 19.99, 39.99 };
 
 // Build neural network for regression
 var result = await new AiModelBuilder<double, double[][], double[]>()
@@ -156,10 +156,10 @@ var historicalData = new double[][]
     new[] { 100.0, 110.0, 105.0, 115.0, 120.0 },  // past 5 days
     new[] { 110.0, 105.0, 115.0, 120.0, 125.0 },
     new[] { 105.0, 115.0, 120.0, 125.0, 130.0 },
-    // ... more sequences
+    new[] { 115.0, 120.0, 125.0, 130.0, 135.0 }
 };
 
-var nextDaySales = new double[] { 125, 130, 135 };
+var nextDaySales = new double[] { 125, 130, 135, 140 };
 
 // Build neural network for time series
 var result = await new AiModelBuilder<double, double[][], double[]>()

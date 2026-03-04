@@ -74,6 +74,14 @@ using AiDotNet;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Optimizers;
 
+var features = new double[][]
+{
+    new[] { 5.1, 3.5, 1.4, 0.2 }, new[] { 4.9, 3.0, 1.4, 0.2 },
+    new[] { 7.0, 3.2, 4.7, 1.4 }, new[] { 6.4, 3.2, 4.5, 1.5 },
+    new[] { 6.3, 3.3, 6.0, 2.5 }, new[] { 5.8, 2.7, 5.1, 1.9 }
+};
+var labels = new double[] { 0, 0, 1, 1, 2, 2 };
+
 var result = await new AiModelBuilder<double, double[], double>()
     .ConfigureModel(new NeuralNetwork<double>(
         inputSize: 4, hiddenSize: 16, outputSize: 3))
@@ -91,6 +99,14 @@ var prediction = result.Predict(newSample);
 using AiDotNet;
 using AiDotNet.Classification;
 using AiDotNet.CrossValidation;
+
+var features = new double[][]
+{
+    new[] { 5.1, 3.5, 1.4, 0.2 }, new[] { 4.9, 3.0, 1.4, 0.2 },
+    new[] { 7.0, 3.2, 4.7, 1.4 }, new[] { 6.4, 3.2, 4.5, 1.5 },
+    new[] { 6.3, 3.3, 6.0, 2.5 }, new[] { 5.8, 2.7, 5.1, 1.9 }
+};
+var labels = new double[] { 0, 0, 1, 1, 2, 2 };
 
 var result = await new AiModelBuilder<double, double[], double>()
     .ConfigureModel(new RandomForestClassifier<double>(nEstimators: 100))

@@ -220,6 +220,13 @@ Console.WriteLine($"Validation R-Squared: {result.ValidationRSquared:F4}");
 ```csharp
 using AiDotNet;
 
+// Sample classification data
+var features = new double[][] {
+    new[] { 1.0, 2.0 }, new[] { 3.0, 4.0 },
+    new[] { 5.0, 6.0 }, new[] { 7.0, 8.0 }
+};
+var labels = new double[] { 0, 1, 0, 1 };
+
 var result = await new AiModelBuilder<double, double[][], double[]>()
     .ConfigureClassification()
     .ConfigurePreprocessing()
@@ -238,7 +245,13 @@ Console.WriteLine($"CV Std Dev: {result.CrossValidationStdDev:F4}");
 ```csharp
 using AiDotNet;
 
-// Train and save
+// Train and save (3 features per sample)
+var features = new double[][] {
+    new[] { 1.0, 2.0, 3.0 }, new[] { 4.0, 5.0, 6.0 },
+    new[] { 7.0, 8.0, 9.0 }, new[] { 10.0, 11.0, 12.0 }
+};
+var targets = new double[] { 10.0, 20.0, 30.0, 40.0 };
+
 var result = await new AiModelBuilder<double, double[][], double[]>()
     .ConfigureRegression()
     .BuildAsync(features, targets);
@@ -246,7 +259,7 @@ var result = await new AiModelBuilder<double, double[][], double[]>()
 result.SaveModel("my_model.aimodel");
 Console.WriteLine("Model saved!");
 
-// Load and use later
+// Load and predict - new data must have the same 3 features per sample
 var loadedModel = AiModelResult<double>.Load("my_model.aimodel");
 var newData = new double[][] { new[] { 1.0, 2.0, 3.0 } };
 var prediction = loadedModel.Predict(newData);
@@ -257,6 +270,16 @@ Console.WriteLine($"Prediction: {prediction[0]}");
 
 ```csharp
 using AiDotNet;
+
+// Train a model first
+var trainingFeatures = new double[][] {
+    new[] { 1.0 }, new[] { 2.0 }, new[] { 3.0 }, new[] { 4.0 }, new[] { 5.0 }
+};
+var trainingTargets = new double[] { 2.0, 4.0, 6.0, 8.0, 10.0 };
+
+var result = await new AiModelBuilder<double, double[][], double[]>()
+    .ConfigureRegression()
+    .BuildAsync(trainingFeatures, trainingTargets);
 
 // Make predictions on multiple samples at once
 var testData = new double[][]
