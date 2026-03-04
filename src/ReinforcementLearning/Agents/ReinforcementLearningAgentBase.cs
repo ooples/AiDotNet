@@ -330,16 +330,19 @@ public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IConfigur
             throw new ArgumentException("File path cannot be null or empty.", nameof(filepath));
         }
 
-        if (filepath.Contains(".."))
+        var fullPath = Path.GetFullPath(filepath);
+        // Ensure the resolved path is under the intended directory (prevents traversal via "..", symlinks, etc.)
+        var resolvedDir = Path.GetDirectoryName(fullPath) ?? string.Empty;
+        var currentDir = Path.GetFullPath(".");
+        if (!resolvedDir.StartsWith(currentDir, StringComparison.OrdinalIgnoreCase) &&
+            !Path.IsPathRooted(filepath))
         {
-            throw new ArgumentException("File path cannot contain directory traversal sequences.", nameof(filepath));
+            throw new ArgumentException("File path resolves outside the current directory.", nameof(filepath));
         }
 
-        var fullPath = Path.GetFullPath(filepath);
-        var directory = Path.GetDirectoryName(fullPath);
-        if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+        if (!string.IsNullOrEmpty(resolvedDir) && !Directory.Exists(resolvedDir))
         {
-            Directory.CreateDirectory(directory);
+            Directory.CreateDirectory(resolvedDir);
         }
 
         byte[] serializedData = Serialize();
@@ -361,12 +364,8 @@ public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IConfigur
             throw new ArgumentException("File path cannot be null or empty.", nameof(filepath));
         }
 
-        if (filepath.Contains(".."))
-        {
-            throw new ArgumentException("File path cannot contain directory traversal sequences.", nameof(filepath));
-        }
-
         var fullPath = Path.GetFullPath(filepath);
+
         if (!File.Exists(fullPath))
         {
             throw new FileNotFoundException($"Model file not found: {fullPath}", fullPath);

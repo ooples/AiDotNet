@@ -39,14 +39,15 @@ internal static class BuildKeyProvider
     {
         if (_loaded)
         {
-            return _cachedKey ?? Array.Empty<byte>();
+            // Return defensive copy to prevent callers from mutating the cached key
+            return _cachedKey is not null ? (byte[])_cachedKey.Clone() : Array.Empty<byte>();
         }
 
         lock (_lock)
         {
             if (_loaded)
             {
-                return _cachedKey ?? Array.Empty<byte>();
+                return _cachedKey is not null ? (byte[])_cachedKey.Clone() : Array.Empty<byte>();
             }
 
             try
@@ -81,7 +82,7 @@ internal static class BuildKeyProvider
 
                 // Publish to cache after full read to avoid exposing partial data
                 _cachedKey = buffer;
-                return _cachedKey;
+                return (byte[])_cachedKey.Clone();
             }
             catch
             {

@@ -11,7 +11,12 @@ interface Props {
   stripeTier?: string;
 }
 
-const { tier, price, interval, description, features, cta, ctaHref = '#', highlighted = false, stripeTier } = Astro.props;
+const { tier, price, interval, description, features, cta, ctaHref, highlighted = false, stripeTier } = Astro.props;
+
+// Warn at build time if ctaHref is missing for a non-Stripe card
+if (!ctaHref && !stripeTier) {
+  console.warn(`[PricingCard] Missing ctaHref for tier "${tier}". The CTA link will be non-functional.`);
+}
 ---
 
 <div class:list={[
@@ -62,7 +67,7 @@ const { tier, price, interval, description, features, cta, ctaHref = '#', highli
     </button>
   ) : (
     <a
-      href={ctaHref}
+      href={ctaHref || '#'}
       class:list={[
         'block w-full text-center py-3 px-6 rounded-lg text-sm font-semibold transition-all duration-200',
         highlighted

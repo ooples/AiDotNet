@@ -70,7 +70,7 @@ Console.WriteLine($"Predicted price: ${predictedPrice:N0}");
 | Regressor | Description | Best For |
 |:----------|:------------|:---------|
 | `RandomForestRegressor` | Ensemble of decision trees | General purpose, robust |
-| `GradientBoostingRegressor` | Boosted decision trees | High accuracy |
+| `GradientBoostingRegression` | Boosted decision trees | High accuracy |
 | `DecisionTreeRegressor` | Single decision tree | Interpretability |
 
 ### Linear Methods

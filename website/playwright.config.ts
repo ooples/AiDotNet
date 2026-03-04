@@ -8,7 +8,7 @@ export default defineConfig({
   workers: process.env.CI ? 1 : undefined,
   reporter: process.env.CI ? 'github' : 'html',
   use: {
-    baseURL: process.env.PLAYWRIGHT_BASE_URL || 'https://www.aidotnet.dev',
+    baseURL: process.env.PLAYWRIGHT_BASE_URL || 'https://aidotnet.dev',
     headless: true,
     screenshot: 'only-on-failure',
     trace: 'on-first-retry',

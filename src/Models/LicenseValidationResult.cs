@@ -48,10 +48,13 @@ public sealed class LicenseValidationResult
     public string? Message { get; }
 
     /// <summary>
-    /// Gets the server-side decryption token for Layer 2 key escrow, or null if not available.
+    /// Gets a copy of the server-side decryption token for Layer 2 key escrow, or null if not available.
     /// This token is cached alongside the validation result for offline use.
+    /// Returns a defensive copy to prevent external mutation of the cached token.
     /// </summary>
-    public byte[]? DecryptionToken { get; }
+    public byte[]? DecryptionToken => _decryptionToken is not null ? (byte[])_decryptionToken.Clone() : null;
+
+    private readonly byte[]? _decryptionToken;
 
     /// <summary>
     /// Creates a new <see cref="LicenseValidationResult"/>.
@@ -83,6 +86,6 @@ public sealed class LicenseValidationResult
         SeatsMax = seatsMax;
         ValidatedAt = validatedAt ?? DateTimeOffset.UtcNow;
         Message = message;
-        DecryptionToken = decryptionToken is not null ? (byte[])decryptionToken.Clone() : null;
+        _decryptionToken = decryptionToken is not null ? (byte[])decryptionToken.Clone() : null;
     }
 }

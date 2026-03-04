@@ -382,7 +382,7 @@ public abstract class ClusteringBase<T> : IClustering<T>, IConfigurableModel<T>,
     /// <inheritdoc/>
     public virtual int[] GetOutputShape()
     {
-        // Clustering assigns one cluster label per sample
+        // Output dimension equals the number of clusters (e.g., for soft assignment probabilities)
         return new[] { NumClusters > 0 ? NumClusters : 1 };
     }
 
