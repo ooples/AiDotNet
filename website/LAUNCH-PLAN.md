@@ -7,27 +7,51 @@
 | AiDotNet (NuGet) | v0.0.5-preview | 7,300+ classes, 139 modules. Needs 1.0.0 release |
 | AiDotNet.Tensors (NuGet) | v0.8.0 | Separate repo. Custom GPU kernels via ILGPU |
 | AiDotNet.Serving | Code only, NOT deployed | 193 files, 11 controllers, Stripe/auth/licensing built in |
-| Website | Live on Vercel (temp URL) | **67 pages**, 352 E2E tests passing |
-| Auth Pages | **BUILT** | Login, signup, callback, dashboard, API keys, usage, billing, settings |
+| Website | **DEPLOYED to Vercel** | **67 pages** built & deployed. Project: `franklins-projects-02a0b5a0/website` |
+| Auth Pages | **BUILT & DEPLOYED** | Login, signup, callback, dashboard, API keys, usage, billing, settings |
 | Supabase Client | **INSTALLED** | `@supabase/supabase-js` added, `src/lib/supabase.ts` created |
-| Navbar Auth | **BUILT** | Shows Sign In when logged out, avatar dropdown when logged in |
-| Domains | **aidotnet.dev, .ai, .io PURCHASED** | Need DNS configuration |
+| Supabase DB | **NOT SET UP** | Need correct SUPABASE_ACCESS_TOKEN (current one is wrong/too short) |
+| Navbar Auth | **BUILT & DEPLOYED** | Shows Sign In when logged out, avatar dropdown when logged in |
+| Azure API | **App created** | `aidotnet-api.azurewebsites.net` on F1 (Free), CORS configured, needs code deploy |
+| Vercel Env Vars | **Partial** | `PUBLIC_SUPABASE_URL` set. Still need `PUBLIC_SUPABASE_ANON_KEY`, Stripe links |
+| DNS / Domains | **NOT CONFIGURED** | All 3 domains still at registrar defaults. Need A/CNAME records for Vercel |
 | Stripe | Code exists, not connected | Payment Links need to be created |
 | Email | NONE | Need email forwarding for all 3 domains |
 
 ### What YOU Need To Do (Manual Steps)
 
-These are things that require your credentials/accounts and can't be automated:
+**CRITICAL - DNS must be done first** so the website is accessible:
 
+- [ ] **Configure DNS for all 3 domains** (Section 2) - A record: `76.76.21.21`, CNAME www: `cname.vercel-dns.com`
+- [ ] **Add domains in Vercel dashboard** (Settings > Domains) - the CLI lacks permission
+- [ ] **Fix SUPABASE_ACCESS_TOKEN** - get from https://supabase.com/dashboard/account/tokens (current one is wrong)
 - [ ] Set up ImprovMX email forwarding (Section 1)
-- [ ] Configure DNS for all 3 domains (Section 2)
-- [ ] Connect domains to Vercel (Section 3)
 - [ ] Create Stripe products and payment links (Section 4)
-- [ ] Create Supabase project and run SQL (Section 5)
+- [ ] Run Supabase SQL migration (Section 5) - I can do this once token is fixed
 - [ ] Set up GitHub OAuth app (Section 6)
-- [ ] Set Vercel environment variables (Section 7)
-- [ ] Deploy AiDotNet.Serving to Azure (Section 8)
+- [ ] Add remaining Vercel env vars: `PUBLIC_SUPABASE_ANON_KEY`, Stripe links (Section 7)
+- [ ] Deploy AiDotNet.Serving code to Azure (Section 8) - App Service already created
 - [ ] Set up monitoring (Section 9)
+
+### GitHub Secrets Needed (repo Settings > Secrets and variables > Actions)
+
+| Secret | Value | For |
+|--------|-------|-----|
+| `VERCEL_TOKEN` | Get from https://vercel.com/account/tokens | Website deploy workflow |
+| `VERCEL_ORG_ID` | `team_5HDGYIA59nu3JwRl3ZYCMGYV` | Website deploy workflow |
+| `VERCEL_PROJECT_ID` | `prj_JyDpz7IdLTf5WcEWHyxUKq7TcCSH` | Website deploy workflow |
+| `AZURE_WEBAPP_PUBLISH_PROFILE` | Run: `az webapp deployment list-publishing-profiles --name aidotnet-api --resource-group crowdtrainer-rg --xml` | Serving API deploy |
+
+### What's Already Done (Automated)
+
+- [x] Website code deployed to Vercel production (67 pages)
+- [x] Azure resource group exists (`crowdtrainer-rg`)
+- [x] Azure App Service created (`aidotnet-api.azurewebsites.net`, F1 tier)
+- [x] Azure CORS configured for all 3 domains + vercel
+- [x] Vercel `PUBLIC_SUPABASE_URL` env var set
+- [x] Logo JPEG created for Stripe (`public/logo.jpg`)
+- [x] GitHub Actions workflow: `deploy-website.yml` (Vercel)
+- [x] GitHub Actions workflow: `deploy-serving.yml` (Azure App Service)
 
 ---
 

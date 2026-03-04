@@ -1,0 +1,38 @@
+name: Deploy AiDotNet Serving API
+
+on:
+  push:
+    branches: [master]
+    paths: ['src/AiDotNet.Serving/**']
+  workflow_dispatch:
+
+concurrency:
+  group: serving-deploy
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore src/AiDotNet.Serving/AiDotNet.Serving.csproj
+
+      - name: Build
+        run: dotnet build src/AiDotNet.Serving/AiDotNet.Serving.csproj -c Release --no-restore
+
+      - name: Publish
+        run: dotnet publish src/AiDotNet.Serving/AiDotNet.Serving.csproj -c Release -o ./publish --no-build
+
+      - name: Deploy to Azure App Service
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: aidotnet-api
+          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+          package: ./publish

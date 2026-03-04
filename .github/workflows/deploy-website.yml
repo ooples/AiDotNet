@@ -7,20 +7,12 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: pages
+  group: website-deploy
   cancel-in-progress: false
-
-permissions:
-  contents: read
-  pages: write
-  id-token: write
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     defaults:
       run:
         working-directory: website
@@ -37,34 +29,35 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build website
-        run: npm run build
+      - name: Install Vercel CLI
+        run: npm i -g vercel@latest
 
-      - name: Setup Pages
-        uses: actions/configure-pages@v5
+      - name: Pull Vercel Environment
+        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
 
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: ./website/dist
+      - name: Build with Vercel
+        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
 
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+      - name: Deploy to Vercel Production
+        run: vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
 
       - name: Deployment summary
         if: always()
         run: |
           echo "## Marketing Website Deployment" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          if [ "${{ steps.deployment.outcome }}" == "success" ]; then
-            echo "Website deployed successfully" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "Deployment completed with warnings" >> $GITHUB_STEP_SUMMARY
-          fi
+          echo "Deployed to Vercel Production" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Links" >> $GITHUB_STEP_SUMMARY
-          echo "- [Home](https://ooples.github.io/AiDotNet/)" >> $GITHUB_STEP_SUMMARY
-          echo "- [Features](https://ooples.github.io/AiDotNet/features/)" >> $GITHUB_STEP_SUMMARY
-          echo "- [Pricing](https://ooples.github.io/AiDotNet/pricing/)" >> $GITHUB_STEP_SUMMARY
-          echo "- [Playground](https://ooples.github.io/AiDotNet/playground/)" >> $GITHUB_STEP_SUMMARY
+          echo "- [Home](https://aidotnet.dev/)" >> $GITHUB_STEP_SUMMARY
+          echo "- [Features](https://aidotnet.dev/features/)" >> $GITHUB_STEP_SUMMARY
+          echo "- [Pricing](https://aidotnet.dev/pricing/)" >> $GITHUB_STEP_SUMMARY
