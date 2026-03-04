@@ -387,14 +387,18 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
     /// <param name="modelName">The name for the servable model.</param>
     /// <param name="enableBatching">Whether serving-side batching is enabled.</param>
     /// <param name="enableSpeculativeDecoding">Whether speculative decoding is enabled.</param>
+    /// <param name="licenseKey">Optional license key for encrypted AIMF models.</param>
+    /// <param name="decryptionToken">Optional server-side decryption token.</param>
     /// <returns>A ServableModelWrapper ready for serving.</returns>
     public static ServableModelWrapper<T> LoadServable(
         string filePath,
         string modelName,
         bool enableBatching = true,
-        bool enableSpeculativeDecoding = false)
+        bool enableSpeculativeDecoding = false,
+        string? licenseKey = null,
+        byte[]? decryptionToken = null)
     {
-        var model = ModelLoader.Load<T>(filePath);
+        var model = ModelLoader.Load<T>(filePath, licenseKey, decryptionToken);
         return FromModel(modelName, model, enableBatching, enableSpeculativeDecoding);
     }
 
@@ -408,10 +412,10 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
     public int OutputDimension => _outputDimension;
 
     /// <inheritdoc/>
-    public int[] InputShape => _inputShape;
+    public int[] InputShape => (int[])_inputShape.Clone();
 
     /// <inheritdoc/>
-    public int[] OutputShape => _outputShape;
+    public int[] OutputShape => (int[])_outputShape.Clone();
 
     /// <inheritdoc/>
     public DynamicShapeInfo DynamicShapeInfo => _dynamicShapeInfo;

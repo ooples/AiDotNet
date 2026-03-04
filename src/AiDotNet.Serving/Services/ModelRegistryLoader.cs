@@ -4,6 +4,7 @@ using AiDotNet.Models;
 using AiDotNet.Serving.Models;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Validation;
+using Microsoft.Extensions.Logging;
 
 namespace AiDotNet.Serving.Services;
 
@@ -31,6 +32,7 @@ public class ModelRegistryLoader<T, TInput, TOutput>
 {
     private readonly IModelRegistry<T, TInput, TOutput> _registry;
     private readonly IModelRepository _repository;
+    private readonly ILogger<ModelRegistryLoader<T, TInput, TOutput>> _logger;
     private readonly object _refreshLock = new();
 
     /// <summary>
@@ -38,12 +40,18 @@ public class ModelRegistryLoader<T, TInput, TOutput>
     /// </summary>
     /// <param name="registry">The model registry to load models from.</param>
     /// <param name="repository">The model repository to load models into.</param>
-    public ModelRegistryLoader(IModelRegistry<T, TInput, TOutput> registry, IModelRepository repository)
+    /// <param name="logger">The logger instance.</param>
+    public ModelRegistryLoader(
+        IModelRegistry<T, TInput, TOutput> registry,
+        IModelRepository repository,
+        ILogger<ModelRegistryLoader<T, TInput, TOutput>> logger)
     {
         Guard.NotNull(registry);
         _registry = registry;
         Guard.NotNull(repository);
         _repository = repository;
+        Guard.NotNull(logger);
+        _logger = logger;
     }
 
     /// <summary>
@@ -97,15 +105,43 @@ public class ModelRegistryLoader<T, TInput, TOutput>
         // Note: The actual model loading from StoragePath would require the model to implement IModelSerializer
         // For now, we create a wrapper that uses the registered model metadata
         var name = servingName ?? modelName;
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            throw new ArgumentException("Serving name cannot be null or whitespace.", nameof(servingName));
+        }
 
-        // Create a placeholder predict function that throws if the model isn't properly loaded
-        // In a full implementation, you would load the serialized model from StoragePath
+        // Try auto-loading the model from the registry storage path if available
+        if (!string.IsNullOrWhiteSpace(registeredModel.StoragePath) && File.Exists(registeredModel.StoragePath))
+        {
+            try
+            {
+                var autoWrapper = ServableModelWrapper<T>.LoadServable(
+                    registeredModel.StoragePath, name, enableBatching: true);
+                return _repository.LoadModelFromRegistry(
+                    name,
+                    autoWrapper,
+                    registeredModel.Version,
+                    registeredModel.Stage.ToString(),
+                    registeredModel.StoragePath);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex,
+                    "Auto-load from StoragePath failed for model '{ModelName}'. Falling back to placeholder.",
+                    name);
+            }
+        }
+
+        // Placeholder wrapper when auto-load is not possible.
+        // Use LoadFromRegistryAutoDetect or LoadWithServableModel for full prediction support.
         var servableModel = new ServableModelWrapper<T>(
             name,
             inputDimension,
             outputDimension,
             input => throw new InvalidOperationException(
-                $"Model '{name}' requires proper deserialization from storage path: {registeredModel.StoragePath}"),
+                $"Model '{name}' was loaded as a placeholder. Use LoadFromRegistryAutoDetect() " +
+                $"or LoadWithServableModel() to enable prediction. " +
+                $"Storage path: {registeredModel.StoragePath}"),
             null,
             enableBatching: true,
             enableSpeculativeDecoding: false);

@@ -40,4 +40,29 @@ public sealed class LicenseKeyEntity
     /// Generated at license creation time. Never sent to the client directly.
     /// </summary>
     public byte[] EscrowSecret { get; set; } = Array.Empty<byte>();
+
+    /// <summary>
+    /// Validates crypto field invariants before persistence.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">Thrown when crypto fields are invalid.</exception>
+    public void ValidateCryptoFields()
+    {
+        if (Pbkdf2Iterations < 100_000)
+        {
+            throw new InvalidOperationException(
+                $"Pbkdf2Iterations must be at least 100,000, got {Pbkdf2Iterations}.");
+        }
+
+        if (EscrowSecret.Length > 0 && EscrowSecret.Length != 32)
+        {
+            throw new InvalidOperationException(
+                $"EscrowSecret must be exactly 32 bytes when set, got {EscrowSecret.Length}.");
+        }
+
+        if (Salt.Length > 0 && Salt.Length < 16)
+        {
+            throw new InvalidOperationException(
+                $"Salt must be at least 16 bytes, got {Salt.Length}.");
+        }
+    }
 }

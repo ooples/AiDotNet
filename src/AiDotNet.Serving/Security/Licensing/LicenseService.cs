@@ -239,20 +239,19 @@ public sealed class LicenseService : ILicenseService
 
     public async Task<List<LicenseInfo>> ListAsync(CancellationToken cancellationToken = default)
     {
-        var entities = await _db.LicenseKeys
-            .AsNoTracking()
-            .OrderByDescending(k => k.CreatedAt)
-            .ToListAsync(cancellationToken)
-            .ConfigureAwait(false);
+        // Single query with group join to avoid N+1 activation count queries
+        var query = from k in _db.LicenseKeys.AsNoTracking()
+                    join a in _db.LicenseActivations.AsNoTracking().Where(a => a.IsActive)
+                        on k.Id equals a.LicenseKeyId into activations
+                    orderby k.CreatedAt descending
+                    select new { Key = k, SeatsUsed = activations.Count() };
 
-        var result = new List<LicenseInfo>(entities.Count);
-        foreach (var entity in entities)
+        var rows = await query.ToListAsync(cancellationToken).ConfigureAwait(false);
+
+        var result = new List<LicenseInfo>(rows.Count);
+        foreach (var row in rows)
         {
-            int seatsUsed = await _db.LicenseActivations
-                .CountAsync(a => a.LicenseKeyId == entity.Id && a.IsActive, cancellationToken)
-                .ConfigureAwait(false);
-
-            result.Add(MapToInfo(entity, seatsUsed));
+            result.Add(MapToInfo(row.Key, row.SeatsUsed));
         }
 
         return result;
