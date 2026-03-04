@@ -56,7 +56,7 @@
       toggle.addEventListener('click', function() {
         const current = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
         const next = current === 'dark' ? 'light' : 'dark';
-        localStorage.setItem('theme', next);
+        try { localStorage.setItem('theme', next); } catch (_) { /* Safari private mode or restricted environment */ }
         applyTheme(next);
       });
     }

@@ -104,7 +104,7 @@ public class ModelRegistryLoader<T, TInput, TOutput>
         // Create the servable model wrapper
         // Note: The actual model loading from StoragePath would require the model to implement IModelSerializer
         // For now, we create a wrapper that uses the registered model metadata
-        var name = servingName ?? modelName;
+        var name = string.IsNullOrWhiteSpace(servingName) ? modelName : servingName;
         if (string.IsNullOrWhiteSpace(name))
         {
             throw new ArgumentException("Serving name cannot be null or whitespace.", nameof(servingName));
@@ -197,7 +197,7 @@ public class ModelRegistryLoader<T, TInput, TOutput>
         }
 
         // Create the servable model wrapper
-        var name = servingName ?? modelName;
+        var name = string.IsNullOrWhiteSpace(servingName) ? modelName : servingName;
 
         var servableModel = new ServableModelWrapper<T>(
             name,
@@ -249,7 +249,7 @@ public class ModelRegistryLoader<T, TInput, TOutput>
                 $"Failed to get model '{modelName}' metadata from registry.", ex);
         }
 
-        var name = servingName ?? modelName;
+        var name = string.IsNullOrWhiteSpace(servingName) ? modelName : servingName;
         return _repository.LoadModelFromRegistry(
             name,
             servableModel,
@@ -375,7 +375,7 @@ public class ModelRegistryLoader<T, TInput, TOutput>
         // Load via ModelLoader which handles AIMF detection, type resolution, decryption, and deserialization
         var model = ModelLoader.Load<T>(registeredModel.StoragePath, licenseKey);
 
-        var name = servingName ?? modelName;
+        var name = string.IsNullOrWhiteSpace(servingName) ? modelName : servingName;
 
         // Auto-detect model type and create appropriate ServableModelWrapper
         var servableModel = ServableModelWrapper<T>.FromModel(name, model);

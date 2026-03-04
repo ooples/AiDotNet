@@ -1,11 +1,35 @@
+using System.Text.Json.Serialization;
+
 namespace AiDotNet.Serving.Security.Licensing;
+
+/// <summary>
+/// The possible statuses of a license validation result.
+/// </summary>
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum LicenseKeyStatus
+{
+    /// <summary>License is valid and active.</summary>
+    Active,
+
+    /// <summary>License key is invalid or not found.</summary>
+    Invalid,
+
+    /// <summary>License has been revoked.</summary>
+    Revoked,
+
+    /// <summary>License has expired.</summary>
+    Expired,
+
+    /// <summary>All available seats are already in use.</summary>
+    SeatLimitReached
+}
 
 /// <summary>
 /// Response returned by the license validation endpoint.
 /// </summary>
 public sealed class LicenseValidationResponse
 {
-    public string Status { get; set; } = string.Empty;
+    public LicenseKeyStatus Status { get; set; }
 
     public string? Tier { get; set; }
 

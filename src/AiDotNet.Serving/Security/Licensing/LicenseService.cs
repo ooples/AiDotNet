@@ -154,7 +154,7 @@ public sealed class LicenseService : ILicenseService
         {
             return new LicenseValidationResponse
             {
-                Status = "Revoked",
+                Status = LicenseKeyStatus.Revoked,
                 Tier = entity.Tier.ToString(),
                 Message = "This license key has been revoked."
             };
@@ -165,7 +165,7 @@ public sealed class LicenseService : ILicenseService
         {
             return new LicenseValidationResponse
             {
-                Status = "Expired",
+                Status = LicenseKeyStatus.Expired,
                 Tier = entity.Tier.ToString(),
                 ExpiresAt = entity.ExpiresAt,
                 Message = "This license key has expired."
@@ -189,7 +189,7 @@ public sealed class LicenseService : ILicenseService
             {
                 return new LicenseValidationResponse
                 {
-                    Status = "SeatLimitReached",
+                    Status = LicenseKeyStatus.SeatLimitReached,
                     Tier = entity.Tier.ToString(),
                     ExpiresAt = entity.ExpiresAt,
                     SeatsUsed = seatsUsed,
@@ -212,7 +212,7 @@ public sealed class LicenseService : ILicenseService
         {
             return new LicenseValidationResponse
             {
-                Status = "SeatLimitReached",
+                Status = LicenseKeyStatus.SeatLimitReached,
                 Tier = entity.Tier.ToString(),
                 ExpiresAt = entity.ExpiresAt,
                 SeatsUsed = seatsUsed,
@@ -223,7 +223,7 @@ public sealed class LicenseService : ILicenseService
 
         return new LicenseValidationResponse
         {
-            Status = "Active",
+            Status = LicenseKeyStatus.Active,
             Tier = entity.Tier.ToString(),
             ExpiresAt = entity.ExpiresAt,
             SeatsUsed = seatsUsed,
@@ -377,7 +377,7 @@ public sealed class LicenseService : ILicenseService
     {
         return new LicenseValidationResponse
         {
-            Status = "Invalid",
+            Status = LicenseKeyStatus.Invalid,
             Message = message
         };
     }

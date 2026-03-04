@@ -374,8 +374,9 @@ public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IConfigur
 
         byte[] data = File.ReadAllBytes(fullPath);
 
-        // Extract payload from AIMF envelope
-        data = ModelFileHeader.ExtractPayload(data);
+        // Extract payload from AIMF envelope; fall back to raw bytes for legacy files
+        try { data = ModelFileHeader.ExtractPayload(data); }
+        catch (InvalidOperationException) { /* legacy file without AIMF header - use raw bytes */ }
 
         Deserialize(data);
     }

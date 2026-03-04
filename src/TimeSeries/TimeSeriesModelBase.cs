@@ -1607,8 +1607,9 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
         {
             var data = File.ReadAllBytes(filePath);
 
-            // Extract payload from AIMF envelope
-            data = ModelFileHeader.ExtractPayload(data);
+            // Extract payload from AIMF envelope; fall back to raw bytes for legacy files
+            try { data = ModelFileHeader.ExtractPayload(data); }
+            catch (InvalidOperationException) { /* legacy file without AIMF header - use raw bytes */ }
 
             Deserialize(data);
         }

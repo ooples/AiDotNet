@@ -74,6 +74,10 @@ public sealed class DynamicShapeInfo
     /// <param name="concreteShape">The actual shape to validate (e.g., from user input).</param>
     /// <param name="templateShape">The expected shape from the model definition. Dynamic dimensions use -1.</param>
     /// <param name="dynamicDimIndices">Indices of dimensions that are dynamic (variable).</param>
+    /// <param name="minDimensions">Optional minimum allowed values for dynamic dimensions.
+    /// When null, defaults to <see cref="MinInputDimensions"/>.</param>
+    /// <param name="maxDimensions">Optional maximum allowed values for dynamic dimensions.
+    /// When null, defaults to <see cref="MaxInputDimensions"/>.</param>
     /// <returns>True if the concrete shape is compatible with the template.</returns>
     /// <remarks>
     /// <b>For Beginners:</b> When a model has input shape [-1, 784], and you send data with shape [32, 784],
@@ -82,8 +86,12 @@ public sealed class DynamicShapeInfo
     /// - Fixed dimensions match exactly (784 == 784)
     /// - Dynamic dimensions (-1) accept any positive value (32 > 0)
     /// - Min/max constraints are respected if configured
+    ///
+    /// When validating output shapes, pass the output-specific min/max arrays so that
+    /// the input min/max constraints are not incorrectly applied.
     /// </remarks>
-    public bool IsValidShape(int[] concreteShape, int[] templateShape, int[] dynamicDimIndices)
+    public bool IsValidShape(int[] concreteShape, int[] templateShape, int[] dynamicDimIndices,
+        int[]? minDimensions = null, int[]? maxDimensions = null)
     {
         if (concreteShape is null || templateShape is null || dynamicDimIndices is null)
         {
@@ -118,17 +126,20 @@ public sealed class DynamicShapeInfo
                 // Check min/max constraints if available
                 if (hasDynamicIndex)
                 {
-                    if (dynamicIndex < MinInputDimensions.Length && MinInputDimensions[dynamicIndex] > 0)
+                    var minArray = minDimensions ?? MinInputDimensions;
+                    var maxArray = maxDimensions ?? MaxInputDimensions;
+
+                    if (dynamicIndex < minArray.Length && minArray[dynamicIndex] > 0)
                     {
-                        if (concreteShape[i] < MinInputDimensions[dynamicIndex])
+                        if (concreteShape[i] < minArray[dynamicIndex])
                         {
                             return false;
                         }
                     }
 
-                    if (dynamicIndex < MaxInputDimensions.Length && MaxInputDimensions[dynamicIndex] > 0)
+                    if (dynamicIndex < maxArray.Length && maxArray[dynamicIndex] > 0)
                     {
-                        if (concreteShape[i] > MaxInputDimensions[dynamicIndex])
+                        if (concreteShape[i] > maxArray[dynamicIndex])
                         {
                             return false;
                         }

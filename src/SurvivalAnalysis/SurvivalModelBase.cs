@@ -690,8 +690,9 @@ public abstract class SurvivalModelBase<T> : ISurvivalModel<T>, IModelShape
     {
         byte[] serializedData = File.ReadAllBytes(filePath);
 
-        // Extract payload from AIMF envelope
-        serializedData = ModelFileHeader.ExtractPayload(serializedData);
+        // Extract payload from AIMF envelope; fall back to raw bytes for legacy files
+        try { serializedData = ModelFileHeader.ExtractPayload(serializedData); }
+        catch (InvalidOperationException) { /* legacy file without AIMF header - use raw bytes */ }
 
         Deserialize(serializedData);
     }
