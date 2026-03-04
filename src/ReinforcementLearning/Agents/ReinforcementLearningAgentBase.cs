@@ -322,21 +322,57 @@ public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IConfigur
     /// Saves the agent's state to a file with an AIMF envelope header.
     /// </summary>
     /// <param name="filepath">Path to save the agent.</param>
+    /// <exception cref="ArgumentException">Thrown when the path is null, empty, or contains directory traversal.</exception>
     public virtual void SaveModel(string filepath)
     {
+        if (string.IsNullOrWhiteSpace(filepath))
+        {
+            throw new ArgumentException("File path cannot be null or empty.", nameof(filepath));
+        }
+
+        if (filepath.Contains(".."))
+        {
+            throw new ArgumentException("File path cannot contain directory traversal sequences.", nameof(filepath));
+        }
+
+        var fullPath = Path.GetFullPath(filepath);
+        var directory = Path.GetDirectoryName(fullPath);
+        if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
+
         byte[] serializedData = Serialize();
         byte[] envelopedData = ModelFileHeader.WrapWithHeader(
             serializedData, this, GetInputShape(), GetOutputShape(), SerializationFormat.Binary);
-        File.WriteAllBytes(filepath, envelopedData);
+        File.WriteAllBytes(fullPath, envelopedData);
     }
 
     /// <summary>
     /// Loads the agent's state from a file, stripping the AIMF header if present.
     /// </summary>
     /// <param name="filepath">Path to load the agent from.</param>
+    /// <exception cref="ArgumentException">Thrown when the path is null, empty, or contains directory traversal.</exception>
+    /// <exception cref="FileNotFoundException">Thrown when the file does not exist.</exception>
     public virtual void LoadModel(string filepath)
     {
-        byte[] data = File.ReadAllBytes(filepath);
+        if (string.IsNullOrWhiteSpace(filepath))
+        {
+            throw new ArgumentException("File path cannot be null or empty.", nameof(filepath));
+        }
+
+        if (filepath.Contains(".."))
+        {
+            throw new ArgumentException("File path cannot contain directory traversal sequences.", nameof(filepath));
+        }
+
+        var fullPath = Path.GetFullPath(filepath);
+        if (!File.Exists(fullPath))
+        {
+            throw new FileNotFoundException($"Model file not found: {fullPath}", fullPath);
+        }
+
+        byte[] data = File.ReadAllBytes(fullPath);
 
         // Extract payload from AIMF envelope
         data = ModelFileHeader.ExtractPayload(data);

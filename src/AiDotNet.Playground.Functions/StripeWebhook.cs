@@ -92,8 +92,9 @@ public class StripeWebhook
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error processing Stripe event {EventType} ({EventId})", stripeEvent.Type, stripeEvent.Id);
-            // Return 200 so Stripe doesn't retry - we logged the error for debugging
-            return new OkResult();
+            // Return 500 so Stripe retries - transient errors (DB down, network) should be retried.
+            // Stripe retries with exponential backoff up to 72 hours.
+            return new StatusCodeResult(StatusCodes.Status500InternalServerError);
         }
 
         return new OkResult();
@@ -118,8 +119,8 @@ public class StripeWebhook
         }
 
         _logger.LogInformation(
-            "Checkout completed for customer {CustomerId}, subscription {SubscriptionId}",
-            customerId, session.SubscriptionId);
+            "Checkout completed for customer {CustomerId}, email {EmailDomain}, subscription {SubscriptionId}",
+            customerId, MaskEmail(customerEmail), session.SubscriptionId);
 
         // Determine tier from the subscription
         var tier = "pro"; // Default to pro since that's our only paid tier currently
@@ -157,8 +158,8 @@ public class StripeWebhook
         var tier = status == "canceled" ? "free" : "pro";
 
         _logger.LogInformation(
-            "Subscription updated for {Email}: status={Status}, tier={Tier}",
-            customerEmail, status, tier);
+            "Subscription updated for {EmailDomain}: status={Status}, tier={Tier}",
+            MaskEmail(customerEmail), status, tier);
 
         await UpdateSupabaseProfile(customerEmail, tier, status, subscription.CustomerId);
     }
@@ -179,7 +180,7 @@ public class StripeWebhook
             return;
         }
 
-        _logger.LogInformation("Subscription deleted for {Email}, reverting to free tier", customerEmail);
+        _logger.LogInformation("Subscription deleted for {EmailDomain}, reverting to free tier", MaskEmail(customerEmail));
 
         await UpdateSupabaseProfile(customerEmail, "free", "canceled", subscription.CustomerId);
     }
@@ -211,6 +212,25 @@ public class StripeWebhook
             _logger.LogError(ex, "Failed to retrieve customer {CustomerId} from Stripe", customerId);
             return null;
         }
+    }
+
+    /// <summary>
+    /// Masks an email address for safe logging (e.g., "j***@example.com").
+    /// </summary>
+    private static string MaskEmail(string? email)
+    {
+        if (string.IsNullOrEmpty(email))
+        {
+            return "[no-email]";
+        }
+
+        var atIndex = email.IndexOf('@');
+        if (atIndex <= 0)
+        {
+            return "***";
+        }
+
+        return $"{email[0]}***@{email[(atIndex + 1)..]}";
     }
 
     private async Task UpdateSupabaseProfile(string email, string tier, string status, string? stripeCustomerId)
@@ -256,7 +276,7 @@ public class StripeWebhook
 
         if (string.IsNullOrEmpty(userId))
         {
-            _logger.LogWarning("No Supabase user found with email {Email}", email);
+            _logger.LogWarning("No Supabase user found with email {EmailDomain}", MaskEmail(email));
             return;
         }
 
@@ -294,8 +314,8 @@ public class StripeWebhook
         if (patchResponse.IsSuccessStatusCode)
         {
             _logger.LogInformation(
-                "Updated profile for user {UserId} ({Email}): tier={Tier}, status={Status}, stripe_customer={CustomerId}",
-                userId, email, tier, status, stripeCustomerId);
+                "Updated profile for user {UserId} ({EmailDomain}): tier={Tier}, status={Status}, stripe_customer={CustomerId}",
+                userId, MaskEmail(email), tier, status, stripeCustomerId);
         }
         else
         {

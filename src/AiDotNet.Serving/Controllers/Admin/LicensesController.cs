@@ -54,7 +54,12 @@ public sealed class LicensesController : ControllerBase
         var result = await _licenses.GetAsync(id, cancellationToken).ConfigureAwait(false);
         if (result is null)
         {
-            return NotFound(new { error = "License not found." });
+            return NotFound(new ProblemDetails
+            {
+                Status = StatusCodes.Status404NotFound,
+                Title = "License not found.",
+                Detail = $"No license with ID '{id}' exists."
+            });
         }
 
         return Ok(result);
@@ -71,7 +76,12 @@ public sealed class LicensesController : ControllerBase
         var revoked = await _licenses.RevokeAsync(id, cancellationToken).ConfigureAwait(false);
         if (!revoked)
         {
-            return NotFound(new { error = "License not found." });
+            return NotFound(new ProblemDetails
+            {
+                Status = StatusCodes.Status404NotFound,
+                Title = "License not found.",
+                Detail = $"No license with ID '{id}' exists."
+            });
         }
 
         return Ok(new { success = true });

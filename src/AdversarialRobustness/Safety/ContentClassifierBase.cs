@@ -128,10 +128,22 @@ public abstract class ContentClassifierBase<T> : IContentClassifier<T>, IModelSe
             throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
         }
 
+        if (filePath.Contains(".."))
+        {
+            throw new ArgumentException("File path cannot contain directory traversal sequences.", nameof(filePath));
+        }
+
+        var fullPath = Path.GetFullPath(filePath);
+        var directory = Path.GetDirectoryName(fullPath);
+        if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
+
         byte[] data = Serialize();
         byte[] envelopedData = ModelFileHeader.WrapWithHeader(
             data, this, GetInputShape(), GetOutputShape(), SerializationFormat.Json);
-        File.WriteAllBytes(filePath, envelopedData);
+        File.WriteAllBytes(fullPath, envelopedData);
     }
 
     /// <inheritdoc/>
@@ -142,7 +154,12 @@ public abstract class ContentClassifierBase<T> : IContentClassifier<T>, IModelSe
             throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
         }
 
-        byte[] data = File.ReadAllBytes(filePath);
+        if (filePath.Contains(".."))
+        {
+            throw new ArgumentException("File path cannot contain directory traversal sequences.", nameof(filePath));
+        }
+
+        byte[] data = File.ReadAllBytes(Path.GetFullPath(filePath));
 
         // Extract payload from AIMF envelope
         data = ModelFileHeader.ExtractPayload(data);

@@ -173,36 +173,47 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
 
         _predictBatchFunc = inputs =>
         {
-            var predictions = model.Predict(inputs);
-            var result = new Matrix<T>(inputs.Rows, predictions.Length / Math.Max(inputs.Rows, 1));
-            // If predictions is a single Vector from batch, wrap it appropriately
+            // Matrix→Vector models: Predict(Matrix) returns a single Vector for the whole batch.
+            // For single-row input this is the output directly; for multi-row, use row-by-row.
             if (inputs.Rows == 1)
             {
+                var predictions = model.Predict(inputs);
+                var result = new Matrix<T>(1, predictions.Length);
                 for (int j = 0; j < predictions.Length; j++)
                 {
                     result[0, j] = predictions[j];
                 }
+                return result;
             }
-            else
-            {
-                // For batch processing, call predict for each row
-                for (int i = 0; i < inputs.Rows; i++)
-                {
-                    var row = inputs.GetRow(i);
-                    var rowMatrix = new Matrix<T>(1, row.Length);
-                    for (int j = 0; j < row.Length; j++)
-                    {
-                        rowMatrix[0, j] = row[j];
-                    }
 
-                    var pred = model.Predict(rowMatrix);
-                    for (int j = 0; j < pred.Length; j++)
-                    {
-                        result[i, j] = pred[j];
-                    }
+            // Multi-row: process each row individually to get per-row Vector outputs
+            int outputWidth = 0;
+            var rowResults = new Vector<T>[inputs.Rows];
+            for (int i = 0; i < inputs.Rows; i++)
+            {
+                var row = inputs.GetRow(i);
+                var rowMatrix = new Matrix<T>(1, row.Length);
+                for (int j = 0; j < row.Length; j++)
+                {
+                    rowMatrix[0, j] = row[j];
+                }
+
+                rowResults[i] = model.Predict(rowMatrix);
+                if (i == 0)
+                {
+                    outputWidth = rowResults[i].Length;
                 }
             }
-            return result;
+
+            var batchResult = new Matrix<T>(inputs.Rows, outputWidth);
+            for (int i = 0; i < inputs.Rows; i++)
+            {
+                for (int j = 0; j < outputWidth; j++)
+                {
+                    batchResult[i, j] = rowResults[i][j];
+                }
+            }
+            return batchResult;
         };
     }
 
@@ -262,6 +273,15 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
 
         _predictFunc = input =>
         {
+            // Validate input length matches expected flat dimension before reshape
+            if (input.Length != _inputDimension)
+            {
+                throw new ArgumentException(
+                    $"Input vector length {input.Length} does not match expected flat dimension {_inputDimension} " +
+                    $"(shape: [{string.Join(", ", _inputShape)}]).",
+                    nameof(input));
+            }
+
             // Reshape flat Vector into Tensor using inputShape
             var tensor = new Tensor<T>(_inputShape, input);
             var result = model.Predict(tensor);

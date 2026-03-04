@@ -130,13 +130,18 @@ public class ModelTypeRegistryTests
     [Fact]
     public void RegisterFactory_IsUsedByCreateInstance()
     {
-        string factoryName = $"FactoryModel_{Guid.NewGuid():N}";
+        // Use a unique type name derived from the real type to avoid global state leaks
+        string typeName = typeof(StubModelSerializer).Name;
         var stubInstance = new StubModelSerializer { Payload = new byte[] { 99 } };
 
-        ModelTypeRegistry.Register(factoryName, typeof(StubModelSerializer));
-        ModelTypeRegistry.RegisterFactory(typeof(StubModelSerializer).Name, t => stubInstance);
+        // Register both the type and a factory under the same key
+        ModelTypeRegistry.Register(typeName, typeof(StubModelSerializer));
+        ModelTypeRegistry.RegisterFactory(typeName, t => stubInstance);
 
         var result = ModelTypeRegistry.CreateInstance<double>(typeof(StubModelSerializer));
         Assert.Same(stubInstance, result);
+
+        // Clean up: remove the factory so other tests aren't affected
+        ModelTypeRegistry.RegisterFactory(typeName, null);
     }
 }

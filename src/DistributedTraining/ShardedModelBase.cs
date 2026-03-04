@@ -356,7 +356,9 @@ public abstract class ShardedModelBase<T, TInput, TOutput> : IShardedModel<T, TI
             return shapeModel.GetInputShape();
         }
 
-        return new[] { ParameterCount };
+        // Cannot infer input shape without the wrapped model implementing IModelShape.
+        // Return empty to avoid persisting misleading metadata.
+        return Array.Empty<int>();
     }
 
     /// <inheritdoc/>
@@ -367,7 +369,7 @@ public abstract class ShardedModelBase<T, TInput, TOutput> : IShardedModel<T, TI
             return shapeModel.GetOutputShape();
         }
 
-        return new[] { 1 };
+        return Array.Empty<int>();
     }
 
     /// <inheritdoc/>

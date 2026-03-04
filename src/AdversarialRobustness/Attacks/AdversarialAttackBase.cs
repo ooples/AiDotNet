@@ -148,13 +148,21 @@ public abstract class AdversarialAttackBase<T, TInput, TOutput> : IAdversarialAt
         File.WriteAllBytes(fullPath, envelopedData);
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Returns the input shape for this attack configuration.
+    /// Attacks are config/strategy objects rather than inference models, so shape is typically empty.
+    /// Subclasses that wrap a target model should override to delegate to the target model's shape.
+    /// </summary>
     public virtual int[] GetInputShape()
     {
         return Array.Empty<int>();
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Returns the output shape for this attack configuration.
+    /// Attacks are config/strategy objects rather than inference models, so shape is typically empty.
+    /// Subclasses that wrap a target model should override to delegate to the target model's shape.
+    /// </summary>
     public virtual int[] GetOutputShape()
     {
         return Array.Empty<int>();

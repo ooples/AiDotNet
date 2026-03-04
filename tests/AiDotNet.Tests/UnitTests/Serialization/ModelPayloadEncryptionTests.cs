@@ -594,9 +594,10 @@ public class ModelPayloadEncryptionTests
     }
 
     [Fact]
-    public void Different_Keys_Produce_Different_Ciphertexts_With_Same_Salt()
+    public void Different_Keys_Produce_Different_Ciphertexts()
     {
-        // Even with the same plaintext, different keys should produce different output
+        // Even with the same plaintext, different keys should produce different ciphertexts.
+        // Note: salt and nonce are independently generated per Encrypt call.
         var payload = new byte[] { 42, 42, 42, 42, 42, 42, 42, 42 };
         var aad = "key-difference-test";
 
