@@ -274,6 +274,15 @@ jobs:
           echo "${{ secrets.AIDOTNET_BUILD_KEY }}" | xxd -r -p > src/BuildKey/BuildKey.bin
           echo "Build key injected ($(wc -c < src/BuildKey/BuildKey.bin) bytes)"
 
+      - name: Generate integrity hash
+        if: steps.version.outputs.should_release == 'true'
+        run: |
+          mkdir -p src/IntegrityHash
+          BUILD_KEY_HEX=$(xxd -p -c 256 src/BuildKey/BuildKey.bin | tr -d '\n')
+          # HMAC-SHA256(buildKey, buildKey) — matches AssemblyIntegrityChecker.VerifyIntegrity()
+          openssl dgst -sha256 -mac HMAC -macopt "hexkey:${BUILD_KEY_HEX}" -binary < src/BuildKey/BuildKey.bin > src/IntegrityHash/IntegrityHash.bin
+          echo "Integrity hash generated ($(wc -c < src/IntegrityHash/IntegrityHash.bin) bytes)"
+
       - name: Restore dependencies
         if: steps.version.outputs.should_release == 'true'
         run: dotnet restore
@@ -339,6 +348,14 @@ jobs:
           mkdir -p src/BuildKey
           echo "${{ secrets.AIDOTNET_BUILD_KEY }}" | xxd -r -p > src/BuildKey/BuildKey.bin
           echo "Build key injected ($(wc -c < src/BuildKey/BuildKey.bin) bytes)"
+
+      - name: Generate integrity hash
+        run: |
+          mkdir -p src/IntegrityHash
+          BUILD_KEY_HEX=$(xxd -p -c 256 src/BuildKey/BuildKey.bin | tr -d '\n')
+          # HMAC-SHA256(buildKey, buildKey) — matches AssemblyIntegrityChecker.VerifyIntegrity()
+          openssl dgst -sha256 -mac HMAC -macopt "hexkey:${BUILD_KEY_HEX}" -binary < src/BuildKey/BuildKey.bin > src/IntegrityHash/IntegrityHash.bin
+          echo "Integrity hash generated ($(wc -c < src/IntegrityHash/IntegrityHash.bin) bytes)"
 
       - name: Restore and Build
         run: |
