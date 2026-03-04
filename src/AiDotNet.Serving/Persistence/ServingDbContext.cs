@@ -62,7 +62,7 @@ public sealed class ServingDbContext : DbContext, IDataProtectionKeyContext
             entity.ToTable("LicenseActivations");
             entity.HasKey(e => e.Id);
             entity.HasIndex(e => new { e.LicenseKeyId, e.MachineId }).IsUnique();
-            entity.Property(e => e.MachineId).HasMaxLength(128).IsRequired();
+            entity.Property(e => e.MachineId).HasMaxLength(256).IsRequired();
             entity.Property(e => e.MachineName).HasMaxLength(256);
             entity.Property(e => e.Environment).HasMaxLength(64);
         });

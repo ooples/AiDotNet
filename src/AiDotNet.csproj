@@ -170,12 +170,13 @@
 	  <PackageReference Include="AiDotNet.Native.OneDNN" Version="0.8.0" />
 	</ItemGroup>
 
-	<!-- Asymmetric build verification (injected by CI/CD, not present in dev builds).
-	     The signing secret stays in CI/CD; only the public verification key is embedded.
-	     This key is intentionally extractable - it verifies integrity, not enforces secrecy. -->
+	<!-- Build-time key derivation resource (injected by CI/CD, not present in dev builds).
+	     BuildKeyProvider uses this to derive encryption keys for AIMF model files.
+	     Fork/dev builds without this key derive different keys and cannot decrypt official models.
+	     See BuildKeyProvider.cs for the three-layer obfuscation system documentation. -->
 	<ItemGroup>
-	  <!-- Public verification key used by BuildKeyProvider to validate AIMF model file
-	       integrity at load time. NOT a secret - asymmetric design keeps signing key in CI. -->
+	  <!-- Build key used by BuildKeyProvider to derive encryption keys for AIMF model file
+	       protection. Injected during official CI/CD builds only. -->
 	  <EmbeddedResource Include="BuildKey\BuildKey.bin" Condition="Exists('BuildKey\BuildKey.bin')">
 	    <LogicalName>AiDotNet.BuildKey</LogicalName>
 	  </EmbeddedResource>

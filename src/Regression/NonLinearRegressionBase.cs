@@ -1058,8 +1058,15 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>, ICon
         {
             var data = File.ReadAllBytes(filePath);
 
-            // Extract payload from AIMF envelope
-            data = ModelFileHeader.ExtractPayload(data);
+            // Extract payload from AIMF envelope (fall back to raw data for legacy files without header)
+            try
+            {
+                data = ModelFileHeader.ExtractPayload(data);
+            }
+            catch (InvalidOperationException)
+            {
+                // Legacy file without AIMF envelope — use raw bytes as-is
+            }
 
             Deserialize(data);
         }
