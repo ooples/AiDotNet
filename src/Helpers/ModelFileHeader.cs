@@ -212,14 +212,29 @@ public static class ModelFileHeader
             throw new ArgumentNullException(nameof(salt));
         }
 
+        if (salt.Length != 16)
+        {
+            throw new ArgumentException($"Salt must be exactly 16 bytes, got {salt.Length}.", nameof(salt));
+        }
+
         if (nonce is null)
         {
             throw new ArgumentNullException(nameof(nonce));
         }
 
+        if (nonce.Length != 12)
+        {
+            throw new ArgumentException($"Nonce must be exactly 12 bytes, got {nonce.Length}.", nameof(nonce));
+        }
+
         if (tag is null)
         {
             throw new ArgumentNullException(nameof(tag));
+        }
+
+        if (tag.Length != 16)
+        {
+            throw new ArgumentException($"Tag must be exactly 16 bytes, got {tag.Length}.", nameof(tag));
         }
 
         return WrapWithHeaderInternal(
@@ -247,14 +262,29 @@ public static class ModelFileHeader
             throw new ArgumentNullException(nameof(salt));
         }
 
+        if (salt.Length != 16)
+        {
+            throw new ArgumentException($"Salt must be exactly 16 bytes, got {salt.Length}.", nameof(salt));
+        }
+
         if (nonce is null)
         {
             throw new ArgumentNullException(nameof(nonce));
         }
 
+        if (nonce.Length != 12)
+        {
+            throw new ArgumentException($"Nonce must be exactly 12 bytes, got {nonce.Length}.", nameof(nonce));
+        }
+
         if (tag is null)
         {
             throw new ArgumentNullException(nameof(tag));
+        }
+
+        if (tag.Length != 16)
+        {
+            throw new ArgumentException($"Tag must be exactly 16 bytes, got {tag.Length}.", nameof(tag));
         }
 
         return WrapWithHeaderInternal(
@@ -442,8 +472,15 @@ public static class ModelFileHeader
         // Assembly-qualified name
         string assemblyQualifiedName = reader.ReadString();
 
-        // Input shape
+        // Input shape (bounded to prevent DoS from malicious files)
+        const int MaxShapeRank = 32;
         int inputRank = reader.ReadInt32();
+        if (inputRank < 0 || inputRank > MaxShapeRank)
+        {
+            throw new InvalidOperationException(
+                $"AIMF header has invalid input shape rank {inputRank}. Maximum supported rank is {MaxShapeRank}.");
+        }
+
         var inputShape = new int[inputRank];
         for (int i = 0; i < inputRank; i++)
         {
@@ -452,6 +489,12 @@ public static class ModelFileHeader
 
         // Output shape
         int outputRank = reader.ReadInt32();
+        if (outputRank < 0 || outputRank > MaxShapeRank)
+        {
+            throw new InvalidOperationException(
+                $"AIMF header has invalid output shape rank {outputRank}. Maximum supported rank is {MaxShapeRank}.");
+        }
+
         var outputShape = new int[outputRank];
         for (int i = 0; i < outputRank; i++)
         {
@@ -460,6 +503,12 @@ public static class ModelFileHeader
 
         // Dynamic shape dimensions
         int dynInputCount = reader.ReadInt32();
+        if (dynInputCount < 0 || dynInputCount > MaxShapeRank)
+        {
+            throw new InvalidOperationException(
+                $"AIMF header has invalid dynamic input dimension count {dynInputCount}.");
+        }
+
         var dynInputDims = new int[dynInputCount];
         for (int i = 0; i < dynInputCount; i++)
         {
@@ -467,6 +516,12 @@ public static class ModelFileHeader
         }
 
         int dynOutputCount = reader.ReadInt32();
+        if (dynOutputCount < 0 || dynOutputCount > MaxShapeRank)
+        {
+            throw new InvalidOperationException(
+                $"AIMF header has invalid dynamic output dimension count {dynOutputCount}.");
+        }
+
         var dynOutputDims = new int[dynOutputCount];
         for (int i = 0; i < dynOutputCount; i++)
         {

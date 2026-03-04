@@ -72,6 +72,14 @@ internal static class BuildKeyProvider
                     bytesRead += read;
                 }
 
+                // Guard against partial reads — treat as missing key
+                if (bytesRead < buffer.Length)
+                {
+                    _cachedKey = null;
+                    return Array.Empty<byte>();
+                }
+
+                // Publish to cache after full read to avoid exposing partial data
                 _cachedKey = buffer;
                 return _cachedKey;
             }

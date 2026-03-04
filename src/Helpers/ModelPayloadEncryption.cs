@@ -355,6 +355,7 @@ public static class ModelPayloadEncryption
     {
         byte[] baseKey = Array.Empty<byte>();
         byte[] finalKey = Array.Empty<byte>();
+        byte[] hmacMessage = Array.Empty<byte>();
 
         try
         {
@@ -366,7 +367,7 @@ public static class ModelPayloadEncryption
             var tokenBytes = decryptionToken ?? Array.Empty<byte>();
 
             // Combine buildKey + decryptionToken as the HMAC message
-            var hmacMessage = new byte[buildKey.Length + tokenBytes.Length];
+            hmacMessage = new byte[buildKey.Length + tokenBytes.Length];
             if (buildKey.Length > 0)
             {
                 Buffer.BlockCopy(buildKey, 0, hmacMessage, 0, buildKey.Length);

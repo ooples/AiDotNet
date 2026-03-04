@@ -230,6 +230,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
 
     // License key configuration
     private AiDotNetLicenseKey? _licenseKey;
+    private LicenseValidator? _licenseValidator;
 
     // Tokenization configuration
     private ITokenizer? _tokenizer;
@@ -3272,11 +3273,19 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// </remarks>
     public void SaveModel(AiModelResult<T, TInput, TOutput> modelResult, string filePath)
     {
-        // When a license key is configured and the model implements IModelSerializer,
-        // save as an encrypted AIMF file. Otherwise, save unencrypted.
+        // When a license key is configured, enforce encrypted save. Don't silently
+        // downgrade to plaintext when a key is present.
         string? resolvedKey = LicenseKeyResolver.Resolve(_licenseKey);
-        if (resolvedKey is not null && modelResult.Model is Interfaces.IModelSerializer serializer)
+        if (resolvedKey is not null)
         {
+            if (modelResult.Model is not Interfaces.IModelSerializer serializer)
+            {
+                throw new InvalidOperationException(
+                    "A license key is configured but the model does not implement IModelSerializer. " +
+                    "Cannot save as encrypted AIMF. Either remove the license key to save unencrypted, " +
+                    "or use a model that implements IModelSerializer.");
+            }
+
             int[] inputShape = modelResult.Model is Interfaces.IModelShape shape
                 ? shape.GetInputShape()
                 : Array.Empty<int>();
@@ -3284,12 +3293,19 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                 ? outShape.GetOutputShape()
                 : Array.Empty<int>();
 
-            // Get decryption token from cached validation result (Layer 2)
+            // Validate license status before saving (allow-list: only Active and ValidationPending)
             byte[]? decryptionToken = null;
             if (_licenseKey is not null && !string.IsNullOrWhiteSpace(_licenseKey.ServerUrl))
             {
-                var validator = new LicenseValidator(_licenseKey);
-                var validationResult = validator.Validate();
+                var validationResult = ValidateLicense();
+                if (validationResult.Status != LicenseKeyStatus.Active &&
+                    validationResult.Status != LicenseKeyStatus.ValidationPending)
+                {
+                    throw new InvalidOperationException(
+                        $"License validation failed with status '{validationResult.Status}'. " +
+                        (validationResult.Message ?? "Cannot save encrypted model."));
+                }
+
                 decryptionToken = validationResult.DecryptionToken;
             }
 
@@ -3321,15 +3337,14 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             var info = ModelLoader.Inspect(filePath);
             if (info.IsEncrypted)
             {
-                // Validate license if server URL is configured
+                // Validate license if server URL is configured (allow-list: Active or ValidationPending only)
                 byte[]? decryptionToken = null;
                 if (_licenseKey is not null && !string.IsNullOrWhiteSpace(_licenseKey.ServerUrl))
                 {
-                    var validator = new LicenseValidator(_licenseKey);
-                    var validationResult = validator.Validate();
+                    var validationResult = ValidateLicense();
 
-                    if (validationResult.Status == LicenseKeyStatus.Invalid ||
-                        validationResult.Status == LicenseKeyStatus.Revoked)
+                    if (validationResult.Status != LicenseKeyStatus.Active &&
+                        validationResult.Status != LicenseKeyStatus.ValidationPending)
                     {
                         throw new InvalidOperationException(
                             $"License validation failed with status '{validationResult.Status}'. " +
@@ -3359,6 +3374,21 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
 
         byte[] modelData = File.ReadAllBytes(filePath);
         return DeserializeModel(modelData);
+    }
+
+    /// <summary>
+    /// Validates the configured license key, reusing a cached validator to preserve
+    /// in-memory state (e.g., offline grace period tracking).
+    /// </summary>
+    private LicenseValidationResult ValidateLicense()
+    {
+        if (_licenseKey is null)
+        {
+            throw new InvalidOperationException("No license key configured.");
+        }
+
+        _licenseValidator ??= new LicenseValidator(_licenseKey);
+        return _licenseValidator.Validate();
     }
 
     /// <summary>

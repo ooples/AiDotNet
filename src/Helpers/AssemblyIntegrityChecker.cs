@@ -96,15 +96,16 @@ internal static class AssemblyIntegrityChecker
             bytesRead += read;
         }
 
-        // Compute HMAC of the build key itself (simple self-consistency check)
-        // The CI/CD pipeline embeds HMAC-SHA256(buildKey, SHA256(dllBytes))
-        // For runtime, we verify that the build key and integrity hash are consistent
+        // Self-consistency check: verify the embedded resource was produced from this build key.
+        // The CI/CD pipeline computes HMAC-SHA256(buildKey, buildKey) and embeds the result.
+        // At runtime we recompute the same HMAC and compare. This confirms the build key
+        // resource has not been swapped without also replacing the key itself.
+        // NOTE: This does NOT verify the DLL contents at runtime — that would require
+        // hashing the entire assembly on every load. Full DLL integrity is verified at
+        // build time by CI/CD.
         try
         {
             using var hmac = new HMACSHA256(buildKey);
-
-            // We hash the build key as a self-consistency check
-            // (the full DLL hash is verified at build time in CI/CD)
             var selfCheck = hmac.ComputeHash(buildKey);
 
             // Verify the first 32 bytes match (HMAC-SHA256 output)

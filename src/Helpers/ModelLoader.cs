@@ -144,9 +144,15 @@ public static class ModelLoader
             {
                 payload = ModelPayloadEncryption.DecryptSigned(payload, licenseKey, salt, nonce, tag, aad, decryptionToken);
             }
-            else
+            else if (info.EncryptionScheme == PayloadEncryptionScheme.AesGcm256)
             {
                 payload = ModelPayloadEncryption.Decrypt(payload, licenseKey, salt, nonce, tag, aad);
+            }
+            else
+            {
+                throw new InvalidOperationException(
+                    $"Unknown encryption scheme '{info.EncryptionScheme}'. " +
+                    "Cannot decrypt this model. Please update AiDotNet to the latest version.");
             }
         }
 
@@ -278,7 +284,7 @@ public static class ModelLoader
 
     /// <summary>
     /// Validates that the deserialized model's shapes match those stored in the header.
-    /// Issues a diagnostic warning if they don't match (does not throw).
+    /// Throws if shapes don't match to prevent loading corrupted or mismatched models.
     /// </summary>
     private static void ValidateShapes(IModelShape model, ModelFileInfo headerInfo)
     {
@@ -291,20 +297,22 @@ public static class ModelLoader
         var actualInput = model.GetInputShape();
         var actualOutput = model.GetOutputShape();
 
-        if (headerInfo.InputShape.Length > 0 && !ShapesMatch(actualInput, headerInfo.InputShape))
+        if (headerInfo.InputShape.Length > 0 && actualInput.Length > 0 && !ShapesMatch(actualInput, headerInfo.InputShape))
         {
-            System.Diagnostics.Debug.WriteLine(
-                $"[ModelLoader] Warning: Input shape mismatch. " +
+            throw new InvalidOperationException(
+                $"Input shape mismatch. " +
                 $"Header: [{string.Join(", ", headerInfo.InputShape)}], " +
-                $"Model: [{string.Join(", ", actualInput)}]");
+                $"Model: [{string.Join(", ", actualInput)}]. " +
+                "The model file may be corrupted or was saved with a different configuration.");
         }
 
-        if (headerInfo.OutputShape.Length > 0 && !ShapesMatch(actualOutput, headerInfo.OutputShape))
+        if (headerInfo.OutputShape.Length > 0 && actualOutput.Length > 0 && !ShapesMatch(actualOutput, headerInfo.OutputShape))
         {
-            System.Diagnostics.Debug.WriteLine(
-                $"[ModelLoader] Warning: Output shape mismatch. " +
+            throw new InvalidOperationException(
+                $"Output shape mismatch. " +
                 $"Header: [{string.Join(", ", headerInfo.OutputShape)}], " +
-                $"Model: [{string.Join(", ", actualOutput)}]");
+                $"Model: [{string.Join(", ", actualOutput)}]. " +
+                "The model file may be corrupted or was saved with a different configuration.");
         }
     }
 
