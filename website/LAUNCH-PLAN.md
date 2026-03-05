@@ -627,12 +627,12 @@ az webapp config appsettings set \
     "ServingPersistenceOptions__ConnectionString=@Microsoft.KeyVault(SecretUri=https://aidotnet-kv.vault.azure.net/secrets/ServingDbConnectionString)" \
     "ServingPersistenceOptions__MigrateOnStartup=true" \
     "ServingOptions__Port=8080" \
-    "StripeOptions__SecretKey=@Microsoft.KeyVault(SecretUri=https://aidotnet-kv.vault.azure.net/secrets/StripeSecretKey)" \
-    "StripeOptions__WebhookSigningSecret=@Microsoft.KeyVault(SecretUri=https://aidotnet-kv.vault.azure.net/secrets/StripeWebhookSecret)" \
-    "StripeOptions__ProPriceId=@Microsoft.KeyVault(SecretUri=https://aidotnet-kv.vault.azure.net/secrets/StripeProPriceId)" \
-    "StripeOptions__ProAnnualPriceId=@Microsoft.KeyVault(SecretUri=https://aidotnet-kv.vault.azure.net/secrets/StripeProAnnualPriceId)" \
-    "StripeOptions__SuccessUrl=https://aidotnet.dev/pricing/?success=true" \
-    "StripeOptions__CancelUrl=https://aidotnet.dev/pricing/?cancelled=true" \
+    "Stripe__SecretKey=@Microsoft.KeyVault(SecretUri=https://aidotnet-kv.vault.azure.net/secrets/StripeSecretKey)" \
+    "Stripe__WebhookSigningSecret=@Microsoft.KeyVault(SecretUri=https://aidotnet-kv.vault.azure.net/secrets/StripeWebhookSecret)" \
+    "Stripe__ProPriceId=@Microsoft.KeyVault(SecretUri=https://aidotnet-kv.vault.azure.net/secrets/StripeProPriceId)" \
+    "Stripe__ProAnnualPriceId=@Microsoft.KeyVault(SecretUri=https://aidotnet-kv.vault.azure.net/secrets/StripeProAnnualPriceId)" \
+    "Stripe__SuccessUrl=https://aidotnet.dev/pricing/?success=true" \
+    "Stripe__CancelUrl=https://aidotnet.dev/pricing/?cancelled=true" \
     "ASPNETCORE_ENVIRONMENT=Production"
 ```
 

@@ -252,32 +252,49 @@ public class StripeWebhook
         // Use per-request message headers instead of DefaultRequestHeaders to avoid thread-safety issues
         var httpClient = SharedHttpClient;
 
-        // Look up user by email via auth admin API
-        var usersRequest = new HttpRequestMessage(HttpMethod.Get, $"{supabaseUrl}/auth/v1/admin/users");
-        usersRequest.Headers.Add("apikey", supabaseKey);
-        usersRequest.Headers.Add("Authorization", $"Bearer {supabaseKey}");
-        var usersResponse = await httpClient.SendAsync(usersRequest);
-        if (!usersResponse.IsSuccessStatusCode)
-        {
-            _logger.LogError("Failed to list Supabase users: {StatusCode}", usersResponse.StatusCode);
-            throw new InvalidOperationException($"Supabase user lookup failed with HTTP {(int)usersResponse.StatusCode}.");
-        }
-
-        var usersJson = await usersResponse.Content.ReadAsStringAsync();
-        var usersData = JsonDocument.Parse(usersJson);
-
+        // Look up user by email via auth admin API (paginated to avoid truncation)
         string? userId = null;
-        if (usersData.RootElement.TryGetProperty("users", out var usersArray))
+        int page = 1;
+        const int perPage = 100;
+
+        while (userId is null)
         {
-            foreach (var user in usersArray.EnumerateArray())
+            var usersRequest = new HttpRequestMessage(HttpMethod.Get,
+                $"{supabaseUrl}/auth/v1/admin/users?page={page}&per_page={perPage}");
+            usersRequest.Headers.Add("apikey", supabaseKey);
+            usersRequest.Headers.Add("Authorization", $"Bearer {supabaseKey}");
+            var usersResponse = await httpClient.SendAsync(usersRequest);
+            if (!usersResponse.IsSuccessStatusCode)
             {
-                if (user.TryGetProperty("email", out var emailProp) &&
-                    string.Equals(emailProp.GetString(), email, StringComparison.OrdinalIgnoreCase))
+                _logger.LogError("Failed to list Supabase users: {StatusCode}", usersResponse.StatusCode);
+                throw new InvalidOperationException($"Supabase user lookup failed with HTTP {(int)usersResponse.StatusCode}.");
+            }
+
+            var usersJson = await usersResponse.Content.ReadAsStringAsync();
+            using var usersData = JsonDocument.Parse(usersJson);
+
+            int count = 0;
+            if (usersData.RootElement.TryGetProperty("users", out var usersArray))
+            {
+                foreach (var user in usersArray.EnumerateArray())
                 {
-                    userId = user.GetProperty("id").GetString();
-                    break;
+                    count++;
+                    if (user.TryGetProperty("email", out var emailProp) &&
+                        string.Equals(emailProp.GetString(), email, StringComparison.OrdinalIgnoreCase))
+                    {
+                        userId = user.GetProperty("id").GetString();
+                        break;
+                    }
                 }
             }
+
+            // No more pages if fewer results than page size
+            if (count < perPage)
+            {
+                break;
+            }
+
+            page++;
         }
 
         if (string.IsNullOrEmpty(userId))

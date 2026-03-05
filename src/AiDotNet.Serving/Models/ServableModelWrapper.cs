@@ -453,7 +453,7 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
     /// <inheritdoc/>
     public Vector<T> Predict(Vector<T> input)
     {
-        if (input.Length != _inputDimension)
+        if (_inputDimension > 0 && input.Length != _inputDimension)
         {
             throw new ArgumentException(
                 $"Input dimension mismatch. Expected {_inputDimension}, got {input.Length}",
@@ -466,7 +466,7 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
     /// <inheritdoc/>
     public Matrix<T> PredictBatch(Matrix<T> inputs)
     {
-        if (inputs.Columns != _inputDimension)
+        if (_inputDimension > 0 && inputs.Columns != _inputDimension)
         {
             throw new ArgumentException(
                 $"Input dimension mismatch. Expected {_inputDimension}, got {inputs.Columns}",
@@ -480,12 +480,20 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
         }
 
         // Otherwise, fall back to multiple single predictions
-        var result = new Matrix<T>(inputs.Rows, _outputDimension);
-        for (int i = 0; i < inputs.Rows; i++)
+        // Predict first row to discover output dimension when it's unknown (0)
+        var firstOutput = Predict(inputs.GetRow(0));
+        int outDim = _outputDimension > 0 ? _outputDimension : firstOutput.Length;
+        var result = new Matrix<T>(inputs.Rows, outDim);
+        for (int j = 0; j < outDim; j++)
+        {
+            result[0, j] = firstOutput[j];
+        }
+
+        for (int i = 1; i < inputs.Rows; i++)
         {
             var inputVector = inputs.GetRow(i);
             var outputVector = Predict(inputVector);
-            for (int j = 0; j < _outputDimension; j++)
+            for (int j = 0; j < outDim; j++)
             {
                 result[i, j] = outputVector[j];
             }

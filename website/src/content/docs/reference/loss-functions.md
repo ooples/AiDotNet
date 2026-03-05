@@ -7,7 +7,7 @@ section: "Reference"
 
 
 
-Complete reference for all 37 loss functions in AiDotNet.
+Complete reference for all 41 loss functions in AiDotNet.
 
 ---
 

@@ -302,7 +302,8 @@ public abstract class MultiLabelClassifierBase<T> : IMultiLabelClassifier<T>, IC
 
         byte[] serializedData = Serialize();
         byte[] envelopedData = ModelFileHeader.WrapWithHeader(
-            serializedData, this, GetInputShape(), GetOutputShape(), SerializationFormat.Json);
+            serializedData, this, GetInputShape(), GetOutputShape(), SerializationFormat.Json,
+            GetDynamicShapeInfo());
         System.IO.File.WriteAllBytes(fullPath, envelopedData);
     }
 
@@ -322,8 +323,11 @@ public abstract class MultiLabelClassifierBase<T> : IMultiLabelClassifier<T>, IC
 
         byte[] serializedData = System.IO.File.ReadAllBytes(fullPath);
 
-        // Extract payload from AIMF envelope
-        serializedData = ModelFileHeader.ExtractPayload(serializedData);
+        // Extract payload from AIMF envelope if present; use raw bytes for legacy files
+        if (ModelFileHeader.HasHeader(serializedData))
+        {
+            serializedData = ModelFileHeader.ExtractPayload(serializedData);
+        }
 
         Deserialize(serializedData);
     }

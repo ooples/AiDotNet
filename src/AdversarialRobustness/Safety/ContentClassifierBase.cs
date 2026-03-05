@@ -133,6 +133,11 @@ public abstract class ContentClassifierBase<T> : IContentClassifier<T>, IModelSe
         // Verify the resolved path hasn't escaped the intended base directory
         // via "..", symlinks, or other traversal techniques
         var baseDir = Path.GetFullPath(AppDomain.CurrentDomain.BaseDirectory);
+        if (!baseDir.EndsWith(Path.DirectorySeparatorChar.ToString(), StringComparison.Ordinal))
+        {
+            baseDir += Path.DirectorySeparatorChar;
+        }
+
         if (!fullPath.StartsWith(baseDir, StringComparison.OrdinalIgnoreCase))
         {
             throw new ArgumentException(

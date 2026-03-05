@@ -302,6 +302,13 @@ public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IConfigur
     /// <inheritdoc/>
     public virtual int[] GetInputShape()
     {
+        if (FeatureCount <= 0)
+        {
+            throw new InvalidOperationException(
+                $"FeatureCount must be positive but was {FeatureCount}. " +
+                "Ensure the agent is initialized with a valid state/feature dimension.");
+        }
+
         return new[] { FeatureCount };
     }
 
@@ -374,9 +381,11 @@ public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IConfigur
 
         byte[] data = File.ReadAllBytes(fullPath);
 
-        // Extract payload from AIMF envelope; fall back to raw bytes for legacy files
-        try { data = ModelFileHeader.ExtractPayload(data); }
-        catch (InvalidOperationException) { /* legacy file without AIMF header - use raw bytes */ }
+        // Extract payload from AIMF envelope if present; use raw bytes for legacy files
+        if (ModelFileHeader.HasHeader(data))
+        {
+            data = ModelFileHeader.ExtractPayload(data);
+        }
 
         Deserialize(data);
     }

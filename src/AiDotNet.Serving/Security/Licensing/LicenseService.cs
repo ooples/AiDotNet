@@ -50,53 +50,58 @@ public sealed class LicenseService : ILicenseService
         // Generate key in the same format as API keys: aidn.{keyId}.{secret}
         var keyId = Base64Url.Encode(RandomNumberGenerator.GetBytes(KeyIdBytes));
         var secretBytes = RandomNumberGenerator.GetBytes(SecretBytes);
-        var secretText = Base64Url.Encode(secretBytes);
-        var licenseKey = ApiKeyFormat.Create(keyId, secretText);
-
-        // Hash the secret for storage
-        var salt = RandomNumberGenerator.GetBytes(SaltBytes);
-        int iterations = DefaultPbkdf2Iterations;
-        var hash = Pbkdf2(secretBytes, salt, iterations, HashBytes);
-
-        // Generate escrow secret for Layer 2 key escrow
-        var escrowSecret = RandomNumberGenerator.GetBytes(32);
-
-        var entity = new LicenseKeyEntity
+        try
         {
-            Id = Guid.NewGuid(),
-            KeyId = keyId,
-            Salt = salt,
-            Hash = hash,
-            Pbkdf2Iterations = iterations,
-            CustomerName = request.CustomerName.Trim(),
-            CustomerEmail = request.CustomerEmail?.Trim(),
-            Tier = request.Tier,
-            MaxSeats = request.MaxSeats,
-            CreatedAt = DateTimeOffset.UtcNow,
-            ExpiresAt = request.ExpiresAt,
-            Environment = request.Environment?.Trim(),
-            Notes = request.Notes?.Trim(),
-            EscrowSecret = escrowSecret
-        };
+            var secretText = Base64Url.Encode(secretBytes);
+            var licenseKey = ApiKeyFormat.Create(keyId, secretText);
 
-        _db.LicenseKeys.Add(entity);
-        await _db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            // Hash the secret for storage
+            var salt = RandomNumberGenerator.GetBytes(SaltBytes);
+            int iterations = DefaultPbkdf2Iterations;
+            var hash = Pbkdf2(secretBytes, salt, iterations, HashBytes);
 
-        CryptographicOperations.ZeroMemory(secretBytes);
+            // Generate escrow secret for Layer 2 key escrow
+            var escrowSecret = RandomNumberGenerator.GetBytes(32);
 
-        _logger.LogInformation(
-            "Created license key {KeyId} for {CustomerName} (Tier={Tier}, MaxSeats={MaxSeats})",
-            entity.KeyId, entity.CustomerName, entity.Tier, entity.MaxSeats);
+            var entity = new LicenseKeyEntity
+            {
+                Id = Guid.NewGuid(),
+                KeyId = keyId,
+                Salt = salt,
+                Hash = hash,
+                Pbkdf2Iterations = iterations,
+                CustomerName = request.CustomerName.Trim(),
+                CustomerEmail = request.CustomerEmail?.Trim(),
+                Tier = request.Tier,
+                MaxSeats = request.MaxSeats,
+                CreatedAt = DateTimeOffset.UtcNow,
+                ExpiresAt = request.ExpiresAt,
+                Environment = request.Environment?.Trim(),
+                Notes = request.Notes?.Trim(),
+                EscrowSecret = escrowSecret
+            };
 
-        return new LicenseCreateResponse
+            _db.LicenseKeys.Add(entity);
+            await _db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+            _logger.LogInformation(
+                "Created license key {KeyId} for {CustomerName} (Tier={Tier}, MaxSeats={MaxSeats})",
+                entity.KeyId, entity.CustomerName, entity.Tier, entity.MaxSeats);
+
+            return new LicenseCreateResponse
+            {
+                Id = entity.Id,
+                LicenseKey = licenseKey,
+                Tier = entity.Tier,
+                MaxSeats = entity.MaxSeats,
+                ExpiresAt = entity.ExpiresAt,
+                CreatedAt = entity.CreatedAt
+            };
+        }
+        finally
         {
-            Id = entity.Id,
-            LicenseKey = licenseKey,
-            Tier = entity.Tier,
-            MaxSeats = entity.MaxSeats,
-            ExpiresAt = entity.ExpiresAt,
-            CreatedAt = entity.CreatedAt
-        };
+            CryptographicOperations.ZeroMemory(secretBytes);
+        }
     }
 
     public async Task<LicenseValidationResponse> ValidateAsync(LicenseValidateRequest request, CancellationToken cancellationToken = default)

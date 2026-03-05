@@ -268,26 +268,39 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
     /// <inheritdoc />
     public virtual void SaveModel(string filePath)
     {
+        if (string.IsNullOrWhiteSpace(filePath))
+        {
+            throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
+        }
+
+        var fullPath = Path.GetFullPath(filePath);
+        var directory = Path.GetDirectoryName(fullPath);
+        if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
+
         var data = Serialize();
         byte[] envelopedData = ModelFileHeader.WrapWithHeader(
             data, this, GetInputShape(), GetOutputShape(), SerializationFormat.Binary,
             GetDynamicShapeInfo());
-        File.WriteAllBytes(filePath, envelopedData);
+        File.WriteAllBytes(fullPath, envelopedData);
     }
 
     /// <inheritdoc />
     public virtual void LoadModel(string filePath)
     {
+        if (string.IsNullOrWhiteSpace(filePath))
+        {
+            throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
+        }
+
         var data = File.ReadAllBytes(filePath);
 
-        // Extract payload from AIMF envelope (fall back to raw data for legacy files without header)
-        try
+        // Extract payload from AIMF envelope if present; use raw bytes for legacy files
+        if (ModelFileHeader.HasHeader(data))
         {
             data = ModelFileHeader.ExtractPayload(data);
-        }
-        catch (InvalidOperationException)
-        {
-            // Legacy file without AIMF envelope — use raw bytes as-is
         }
 
         Deserialize(data);

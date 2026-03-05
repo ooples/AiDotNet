@@ -48,7 +48,7 @@
 | RAG Components | **50+** | None | None | None | None |
 | Distributed Training | **DDP, FSDP, ZeRO** | DDP only | MirroredStrategy | None | None |
 | HuggingFace Integration | **Native** | Partial | Partial | None | None |
-| GPU Acceleration | **CUDA, OpenCL, Vulkan, Metal, WebGPU** | Via LibTorch | Via TF Runtime | Limited | None |
+| GPU Acceleration | **CUDA, OpenCL, Vulkan** | Via LibTorch | Via TF Runtime | Limited | None |
 | Pure .NET (No Runtime) | **Yes** | No (LibTorch) | No (TF Runtime) | Yes | Yes |
 | Startup Time | **Fast** | Slow | Slow | Fast | Fast |
 | Memory<T>/Span<T> Support | **Full** | Limited | Limited | Limited | None |

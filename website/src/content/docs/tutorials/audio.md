@@ -16,7 +16,8 @@ Audio processing with machine learning includes:
 - Text-to-Speech (synthesis)
 - Speaker recognition and diarization
 - Audio classification
-- Music generation and analysis
+- Music analysis (beat tracking, chord recognition, key detection)
+- Music generation (requires pre-trained model weights)
 
 ## AiDotNet Audio Capabilities
 

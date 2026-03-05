@@ -677,10 +677,23 @@ public abstract class SurvivalModelBase<T> : ISurvivalModel<T>, IModelShape
 
     public virtual void SaveModel(string filePath)
     {
+        if (string.IsNullOrWhiteSpace(filePath))
+        {
+            throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
+        }
+
+        var fullPath = Path.GetFullPath(filePath);
+        var directory = Path.GetDirectoryName(fullPath);
+        if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
+
         byte[] serializedData = Serialize();
         byte[] envelopedData = ModelFileHeader.WrapWithHeader(
-            serializedData, this, GetInputShape(), GetOutputShape(), SerializationFormat.Json);
-        File.WriteAllBytes(filePath, envelopedData);
+            serializedData, this, GetInputShape(), GetOutputShape(), SerializationFormat.Json,
+            GetDynamicShapeInfo());
+        File.WriteAllBytes(fullPath, envelopedData);
     }
 
     /// <summary>
@@ -688,11 +701,18 @@ public abstract class SurvivalModelBase<T> : ISurvivalModel<T>, IModelShape
     /// </summary>
     public virtual void LoadModel(string filePath)
     {
+        if (string.IsNullOrWhiteSpace(filePath))
+        {
+            throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
+        }
+
         byte[] serializedData = File.ReadAllBytes(filePath);
 
-        // Extract payload from AIMF envelope; fall back to raw bytes for legacy files
-        try { serializedData = ModelFileHeader.ExtractPayload(serializedData); }
-        catch (InvalidOperationException) { /* legacy file without AIMF header - use raw bytes */ }
+        // Extract payload from AIMF envelope if present; use raw bytes for legacy files
+        if (ModelFileHeader.HasHeader(serializedData))
+        {
+            serializedData = ModelFileHeader.ExtractPayload(serializedData);
+        }
 
         Deserialize(serializedData);
     }

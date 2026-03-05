@@ -305,9 +305,9 @@ public static class ModelLoader
         {
             // Header has shape info but model returned empty - shape validation cannot verify integrity.
             // This may indicate the model did not restore shape info correctly.
-            System.Diagnostics.Debug.WriteLine(
-                $"[AIMF] Warning: Header has input shape [{string.Join(", ", headerInfo.InputShape)}] " +
-                "but deserialized model returned empty input shape. Shape validation skipped.");
+            System.Diagnostics.Trace.TraceWarning(
+                "[AIMF] Header has input shape [{0}] but deserialized model returned empty input shape. Shape validation skipped.",
+                string.Join(", ", headerInfo.InputShape));
         }
         else if (headerInfo.InputShape.Length > 0 && actualInput.Length > 0 && !ShapesMatch(actualInput, headerInfo.InputShape))
         {
@@ -320,9 +320,9 @@ public static class ModelLoader
 
         if (headerInfo.OutputShape.Length > 0 && actualOutput.Length == 0)
         {
-            System.Diagnostics.Debug.WriteLine(
-                $"[AIMF] Warning: Header has output shape [{string.Join(", ", headerInfo.OutputShape)}] " +
-                "but deserialized model returned empty output shape. Shape validation skipped.");
+            System.Diagnostics.Trace.TraceWarning(
+                "[AIMF] Header has output shape [{0}] but deserialized model returned empty output shape. Shape validation skipped.",
+                string.Join(", ", headerInfo.OutputShape));
         }
         else if (headerInfo.OutputShape.Length > 0 && actualOutput.Length > 0 && !ShapesMatch(actualOutput, headerInfo.OutputShape))
         {

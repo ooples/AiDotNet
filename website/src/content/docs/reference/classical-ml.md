@@ -1,13 +1,13 @@
 ---
 title: "Classical ML"
-description: "95+ classical ML algorithms reference."
+description: "98 classical ML algorithms reference."
 order: 2
 section: "Reference"
 ---
 
 
 
-Complete reference for the 95+ classical ML algorithms in AiDotNet.
+Complete reference for the 98 classical ML algorithms in AiDotNet.
 
 ---
 
@@ -15,7 +15,7 @@ Complete reference for the 95+ classical ML algorithms in AiDotNet.
 
 ---
 
-## Classification (26 Algorithms)
+## Classification (25 Algorithms)
 
 ### Linear Models
 
@@ -40,7 +40,6 @@ var classifier = new LogisticRegression<double>(
 |:----------|:------------|:-------|
 | `SVC<T>` | Support Vector Classifier | Multiple |
 | `NuSVC<T>` | Nu-Support Vector Classifier | Multiple |
-| `LinearSVC<T>` | Linear SVC | Linear |
 
 Supported kernels: `Linear`, `Polynomial`, `RBF`, `Sigmoid`, `Precomputed`
 
@@ -193,7 +192,7 @@ var model = new ElasticNet<double>(
 
 ---
 
-## Clustering (20+ Algorithms)
+## Clustering (39 Algorithms)
 
 ### Centroid-Based
 

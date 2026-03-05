@@ -289,7 +289,7 @@ var result = builder.ConfigureModel(ffnn).Build(data, labels);
 
 // MoE Network (same pattern!)
 var moeModel = new MixtureOfExpertsNeuralNetwork<float>(options, architecture);
-var result = builder.ConfigureModel(moeModel).Build(data, labels);
+var moeResult = builder.ConfigureModel(moeModel).Build(data, labels);
 ```
 
 ## Monitoring Expert Usage

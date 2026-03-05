@@ -817,13 +817,10 @@ namespace AiDotNet.AutoML
     /// Creates a memberwise clone of the AutoML model using MemberwiseClone().
     /// This performs a shallow copy where reference types are shared between the original and clone.
     /// </summary>
-    /// <returns>A memberwise clone of the current AutoML model</returns>
-    /// <remarks>
-    /// For a deep copy with independent collections and state, use DeepCopy() instead.
-    /// </remarks>
+    /// <returns>A deep copy of the current AutoML model with independent state.</returns>
     public virtual IFullModel<T, TInput, TOutput> Clone()
     {
-        return (AutoMLModelBase<T, TInput, TOutput>)MemberwiseClone();
+        return DeepCopy();
     }
 
     /// <summary>

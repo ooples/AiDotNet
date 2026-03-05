@@ -1590,7 +1590,8 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
             if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
                 Directory.CreateDirectory(directory);
             byte[] envelopedData = ModelFileHeader.WrapWithHeader(
-                data, this, GetInputShape(), GetOutputShape(), SerializationFormat.Binary);
+                data, this, GetInputShape(), GetOutputShape(), SerializationFormat.Binary,
+                GetDynamicShapeInfo());
             File.WriteAllBytes(filePath, envelopedData);
         }
         catch (IOException ex) { throw new InvalidOperationException($"Failed to save model to '{filePath}': {ex.Message}", ex); }
@@ -1607,9 +1608,11 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
         {
             var data = File.ReadAllBytes(filePath);
 
-            // Extract payload from AIMF envelope; fall back to raw bytes for legacy files
-            try { data = ModelFileHeader.ExtractPayload(data); }
-            catch (InvalidOperationException) { /* legacy file without AIMF header - use raw bytes */ }
+            // Extract payload from AIMF envelope if present; use raw bytes for legacy files
+            if (ModelFileHeader.HasHeader(data))
+            {
+                data = ModelFileHeader.ExtractPayload(data);
+            }
 
             Deserialize(data);
         }

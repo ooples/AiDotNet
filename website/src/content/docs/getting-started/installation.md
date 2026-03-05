@@ -71,6 +71,8 @@ For AMD/Intel GPU support:
 
 ## Optional Packages
 
+These packages are part of the AiDotNet ecosystem and will be available on NuGet when published:
+
 ### Model Serving
 
 ```bash

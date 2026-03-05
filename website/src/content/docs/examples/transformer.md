@@ -184,6 +184,7 @@ var result = await new AiModelBuilder<double, string[], string[]>()
     .BuildAsync(inputs, answers);
 
 // Answer new questions
+// The [SEP] token separates context from question (convention used by BERT-style models)
 var newContext = "Albert Einstein developed the theory of relativity.";
 var newQuestion = "What did Einstein develop?";
 var newInput = new[] { $"{newContext} [SEP] {newQuestion}" };

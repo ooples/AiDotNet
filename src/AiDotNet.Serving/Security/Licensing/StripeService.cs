@@ -238,8 +238,8 @@ internal sealed class StripeService : IStripeService
 
         var licenseResponse = await _licenseService.CreateAsync(createRequest, ct).ConfigureAwait(false);
 
-        // Store subscription mapping
-        string subscriptionId = session.SubscriptionId ?? string.Empty;
+        // Store subscription mapping (null for one-time payments — skip subscription record)
+        string? subscriptionId = session.SubscriptionId;
         if (!string.IsNullOrWhiteSpace(subscriptionId))
         {
             var subscription = new StripeSubscriptionEntity

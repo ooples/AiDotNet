@@ -77,6 +77,7 @@ const base = import.meta.env.BASE_URL;
         <span class="text-slate-400">$</span>
         <span class="text-green-400">dotnet add package AiDotNet</span>
         <button
+          type="button"
           id="copy-install"
           class="p-1.5 rounded-md hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"
           aria-label="Copy install command"
@@ -124,13 +125,19 @@ const base = import.meta.env.BASE_URL;
     if (copyBtn) {
       copyBtn.addEventListener('click', function() {
         var originalIcon = copyBtn.innerHTML;
-        navigator.clipboard.writeText('dotnet add package AiDotNet').then(function() {
+        var showSuccess = function() {
           copyBtn.innerHTML = '<svg class="w-4 h-4 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg>';
           setTimeout(function() { copyBtn.innerHTML = originalIcon; }, 2000);
-        }).catch(function() {
+        };
+        var showError = function() {
           copyBtn.innerHTML = '<svg class="w-4 h-4 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>';
           setTimeout(function() { copyBtn.innerHTML = originalIcon; }, 2000);
-        });
+        };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText('dotnet add package AiDotNet').then(showSuccess).catch(showError);
+        } else {
+          showError();
+        }
       });
     }
   });
