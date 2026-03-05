@@ -148,14 +148,6 @@ internal sealed class LicenseValidator
                 message: "License key is empty or missing.");
         }
 
-        // Reject keys that are too short to be valid (minimum 16 characters)
-        if (_licenseKey.Key.Length < 16)
-        {
-            return new LicenseValidationResult(
-                LicenseKeyStatus.Invalid,
-                message: "License key format is invalid (too short).");
-        }
-
         // When an official build key is available, verify the license key's HMAC signature.
         // The key is expected to be in the format: payload.signature (base64url-encoded).
         var buildKey = BuildKeyProvider.GetBuildKey();

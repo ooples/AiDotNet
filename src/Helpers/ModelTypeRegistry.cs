@@ -252,8 +252,23 @@ internal static class ModelTypeRegistry
         }
 
         // Strategy 1: Try registered factory
+        // Look up by the type's short name first, then check any registered alias
+        // that maps to the same type (e.g., plugin-registered names).
         string typeName = openGenericType.Name;
-        if (Factories.TryGetValue(typeName, out var factory))
+        Func<Type, IModelSerializer>? factory = null;
+        if (!Factories.TryGetValue(typeName, out factory))
+        {
+            // Search for any registered name that maps to this type
+            foreach (var kvp in TypesByName)
+            {
+                if (kvp.Value == openGenericType && Factories.TryGetValue(kvp.Key, out factory))
+                {
+                    break;
+                }
+            }
+        }
+
+        if (factory is not null)
         {
             var factoryResult = factory(closedType);
             if (factoryResult is not null)
