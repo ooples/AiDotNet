@@ -1,0 +1,95 @@
+<Project>
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- AiDotNet ecosystem -->
+    <PackageVersion Include="AiDotNet" Version="0.67.0" />
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.9.1" />
+    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.9.1" />
+    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.9.1" />
+    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.9.1" />
+
+    <!-- Microsoft / .NET -->
+    <PackageVersion Include="Microsoft.CSharp" Version="4.7.0" />
+    <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.3" />
+    <PackageVersion Include="Microsoft.ML" Version="3.0.1" />
+    <PackageVersion Include="Microsoft.ML.OnnxRuntime" Version="1.24.3" />
+    <PackageVersion Include="Microsoft.Research.SEALNet" Version="4.1.1" />
+    <PackageVersion Include="Microsoft.Bcl.Numerics" Version="10.0.3" />
+    <PackageVersion Include="System.Net.Http" Version="4.3.4" />
+    <PackageVersion Include="System.Text.RegularExpressions" Version="4.3.1" />
+    <PackageVersion Include="System.ValueTuple" Version="4.6.2" />
+
+    <!-- ASP.NET Core -->
+    <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.3" />
+    <PackageVersion Include="Microsoft.AspNetCore.Components.WebAssembly" Version="10.0.0-preview.1.25120.3" />
+    <PackageVersion Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" Version="10.0.0-preview.1.25120.3" />
+    <PackageVersion Include="Microsoft.AspNetCore.DataProtection.EntityFrameworkCore" Version="10.0.3" />
+    <PackageVersion Include="Microsoft.AspNetCore.Mvc.NewtonsoftJson" Version="10.0.3" />
+    <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.3" />
+    <PackageVersion Include="System.IdentityModel.Tokens.Jwt" Version="8.16.0" />
+
+    <!-- Entity Framework Core -->
+    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.3" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.3" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.3" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.3" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.3" />
+    <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.0" />
+    <PackageVersion Include="Pomelo.EntityFrameworkCore.MySql" Version="9.0.0" />
+    <PackageVersion Include="MySqlConnector" Version="2.5.0" />
+
+    <!-- Azure -->
+    <PackageVersion Include="Azure.Search.Documents" Version="11.7.0" />
+    <PackageVersion Include="Microsoft.ApplicationInsights.WorkerService" Version="2.23.0" />
+    <PackageVersion Include="Microsoft.Azure.Functions.Worker" Version="2.51.0" />
+    <PackageVersion Include="Microsoft.Azure.Functions.Worker.ApplicationInsights" Version="2.50.0" />
+    <PackageVersion Include="Microsoft.Azure.Functions.Worker.Extensions.Http.AspNetCore" Version="2.1.0" />
+    <PackageVersion Include="Microsoft.Azure.Functions.Worker.Sdk" Version="2.0.7" />
+
+    <!-- Serialization and data -->
+    <PackageVersion Include="Google.Protobuf" Version="3.34.0" />
+    <PackageVersion Include="Newtonsoft.Json" Version="13.0.4" />
+    <PackageVersion Include="Parquet.Net" Version="5.5.0" />
+    <PackageVersion Include="YamlDotNet" Version="16.3.0" />
+
+    <!-- Infrastructure -->
+    <PackageVersion Include="Elastic.Clients.Elasticsearch" Version="9.3.1" />
+    <PackageVersion Include="Pinecone.Client" Version="4.0.2" />
+    <PackageVersion Include="StackExchange.Redis" Version="2.11.8" />
+    <PackageVersion Include="Stripe.net" Version="50.4.0" />
+    <PackageVersion Include="Swashbuckle.AspNetCore" Version="10.1.4" />
+
+    <!-- Code analysis (default version; source generators may override) -->
+    <PackageVersion Include="Microsoft.CodeAnalysis.Analyzers" Version="3.11.0" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="5.0.0" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.Common" Version="4.14.0" />
+    <PackageVersion Include="Basic.Reference.Assemblies.Net100" Version="1.8.3" />
+
+    <!-- Media and visualization -->
+    <PackageVersion Include="SixLabors.ImageSharp" Version="3.1.12" />
+    <PackageVersion Include="FftSharp" Version="2.2.0" />
+    <PackageVersion Include="TreeSitter.DotNet" Version="1.3.0" />
+    <PackageVersion Include="BlazorMonaco" Version="3.2.0" />
+
+    <!-- ML frameworks (samples) -->
+    <PackageVersion Include="Accord" Version="3.8.0" />
+    <PackageVersion Include="Accord.MachineLearning" Version="3.8.0" />
+    <PackageVersion Include="Accord.Math" Version="3.8.0" />
+    <PackageVersion Include="Accord.Statistics" Version="3.8.0" />
+    <PackageVersion Include="TensorFlow.NET" Version="0.150.0" />
+    <PackageVersion Include="SciSharp.TensorFlow.Redist" Version="2.16.0" />
+    <PackageVersion Include="TorchSharp" Version="0.106.0" />
+    <PackageVersion Include="TorchSharp-cuda-windows" Version="0.106.0" />
+
+    <!-- Testing -->
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.3.0" />
+    <PackageVersion Include="xunit" Version="2.9.3" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="2.8.2" />
+    <PackageVersion Include="coverlet.collector" Version="8.0.0" />
+    <PackageVersion Include="BenchmarkDotNet" Version="0.15.8" />
+    <PackageVersion Include="Moq" Version="4.20.72" />
+  </ItemGroup>
+</Project>

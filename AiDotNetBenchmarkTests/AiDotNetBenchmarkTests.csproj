@@ -14,19 +14,19 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="BenchmarkDotNet" Version="0.15.8" />
+    <PackageReference Include="BenchmarkDotNet" />
 
     <!-- Competitor Libraries for Benchmarking -->
-    <PackageReference Include="Accord" Version="3.8.0" />
-    <PackageReference Include="Accord.Math" Version="3.8.0" />
-    <PackageReference Include="Accord.Statistics" Version="3.8.0" />
-    <PackageReference Include="Accord.MachineLearning" Version="3.8.0" />
+    <PackageReference Include="Accord" />
+    <PackageReference Include="Accord.Math" />
+    <PackageReference Include="Accord.Statistics" />
+    <PackageReference Include="Accord.MachineLearning" />
     <!-- Microsoft.ML only supports x64/x86 architectures, limit to net10.0 for CI compatibility -->
-    <PackageReference Include="Microsoft.ML" Version="3.0.1" Condition="'$(TargetFramework)' == 'net10.0'" />
-    <PackageReference Include="TensorFlow.NET" Version="0.150.0" Condition="'$(TargetFramework)' == 'net10.0'" />
-    <PackageReference Include="SciSharp.TensorFlow.Redist" Version="2.16.0" Condition="'$(TargetFramework)' == 'net10.0'" />
-    <PackageReference Include="TorchSharp" Version="0.106.0" Condition="'$(TargetFramework)' == 'net10.0'" />
-    <PackageReference Include="TorchSharp-cuda-windows" Version="0.106.0" Condition="'$(TargetFramework)' == 'net10.0'" />
+    <PackageReference Include="Microsoft.ML" Condition="'$(TargetFramework)' == 'net10.0'" />
+    <PackageReference Include="TensorFlow.NET" Condition="'$(TargetFramework)' == 'net10.0'" />
+    <PackageReference Include="SciSharp.TensorFlow.Redist" Condition="'$(TargetFramework)' == 'net10.0'" />
+    <PackageReference Include="TorchSharp" Condition="'$(TargetFramework)' == 'net10.0'" />
+    <PackageReference Include="TorchSharp-cuda-windows" Condition="'$(TargetFramework)' == 'net10.0'" />
   </ItemGroup>
 
   <ItemGroup>
