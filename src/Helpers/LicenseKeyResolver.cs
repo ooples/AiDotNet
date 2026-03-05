@@ -34,21 +34,22 @@ internal static class LicenseKeyResolver
     public static string? Resolve(AiDotNetLicenseKey? licenseKey)
     {
         // 1. Explicit license key object
-        if (licenseKey is not null && !string.IsNullOrWhiteSpace(licenseKey.Key))
+        string? explicitKey = licenseKey?.Key;
+        if (explicitKey is not null && explicitKey.Trim().Length > 0)
         {
-            return licenseKey.Key.Trim();
+            return explicitKey.Trim();
         }
 
         // 2. Environment variable
         string? envValue = System.Environment.GetEnvironmentVariable(EnvVarName);
-        if (!string.IsNullOrWhiteSpace(envValue))
+        if (envValue is not null && envValue.Trim().Length > 0)
         {
             return envValue.Trim();
         }
 
         // 3. File in user home directory
         string? fileValue = ReadLicenseFile();
-        if (!string.IsNullOrWhiteSpace(fileValue))
+        if (fileValue is not null && fileValue.Trim().Length > 0)
         {
             return fileValue.Trim();
         }
@@ -84,11 +85,11 @@ internal static class LicenseKeyResolver
         }
         catch (IOException ex)
         {
-            System.Diagnostics.Debug.WriteLine($"LicenseKeyResolver: failed to read license file: {ex.Message}");
+            System.Diagnostics.Trace.TraceWarning("LicenseKeyResolver: failed to read license file: {0}", ex.Message);
         }
         catch (UnauthorizedAccessException ex)
         {
-            System.Diagnostics.Debug.WriteLine($"LicenseKeyResolver: insufficient permissions for license file: {ex.Message}");
+            System.Diagnostics.Trace.TraceWarning("LicenseKeyResolver: insufficient permissions for license file: {0}", ex.Message);
         }
 
         return null;
