@@ -83,7 +83,12 @@ internal static class AssemblyIntegrityChecker
         }
 
         // Read the expected HMAC from the embedded resource
-        var expectedHmac = new byte[stream.Length];
+        if (stream.Length > int.MaxValue)
+        {
+            return false;
+        }
+
+        var expectedHmac = new byte[checked((int)stream.Length)];
         int bytesRead = 0;
         while (bytesRead < expectedHmac.Length)
         {

@@ -1024,8 +1024,11 @@ public abstract class DecisionTreeRegressionBase<T> : ITreeBasedRegression<T>, I
         {
             var data = File.ReadAllBytes(filePath);
 
-            // Extract payload from AIMF envelope
-            data = ModelFileHeader.ExtractPayload(data);
+            // Extract payload from AIMF envelope if present; use raw bytes for legacy files
+            if (ModelFileHeader.HasHeader(data))
+            {
+                data = ModelFileHeader.ExtractPayload(data);
+            }
 
             Deserialize(data);
         }

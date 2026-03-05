@@ -16,7 +16,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
-using LicenseKeyStatus = AiDotNet.Serving.Security.Licensing.LicenseKeyStatus;
+using AiDotNet.Enums;
 
 /// <summary>
 /// Integration tests for LicenseService using in-memory SQLite.

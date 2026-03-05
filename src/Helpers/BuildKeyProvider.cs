@@ -60,7 +60,13 @@ internal static class BuildKeyProvider
                     return Array.Empty<byte>();
                 }
 
-                var buffer = new byte[stream.Length];
+                if (stream.Length > int.MaxValue)
+                {
+                    _cachedKey = null;
+                    return Array.Empty<byte>();
+                }
+
+                var buffer = new byte[checked((int)stream.Length)];
                 int bytesRead = 0;
                 while (bytesRead < buffer.Length)
                 {

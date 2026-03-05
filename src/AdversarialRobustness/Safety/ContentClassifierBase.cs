@@ -129,20 +129,6 @@ public abstract class ContentClassifierBase<T> : IContentClassifier<T>, IModelSe
         }
 
         var fullPath = Path.GetFullPath(filePath);
-
-        // Verify the resolved path hasn't escaped the intended base directory
-        // via "..", symlinks, or other traversal techniques
-        var baseDir = Path.GetFullPath(AppDomain.CurrentDomain.BaseDirectory);
-        if (!baseDir.EndsWith(Path.DirectorySeparatorChar.ToString(), StringComparison.Ordinal))
-        {
-            baseDir += Path.DirectorySeparatorChar;
-        }
-
-        if (!fullPath.StartsWith(baseDir, StringComparison.OrdinalIgnoreCase))
-        {
-            throw new ArgumentException(
-                "File path resolves outside the application base directory.", nameof(filePath));
-        }
         var directory = Path.GetDirectoryName(fullPath);
         if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
         {
@@ -163,15 +149,13 @@ public abstract class ContentClassifierBase<T> : IContentClassifier<T>, IModelSe
             throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
         }
 
-        if (filePath.Contains(".."))
-        {
-            throw new ArgumentException("File path cannot contain directory traversal sequences.", nameof(filePath));
-        }
-
         byte[] data = File.ReadAllBytes(Path.GetFullPath(filePath));
 
-        // Extract payload from AIMF envelope
-        data = ModelFileHeader.ExtractPayload(data);
+        // Extract payload from AIMF envelope if present; use raw bytes for legacy files
+        if (ModelFileHeader.HasHeader(data))
+        {
+            data = ModelFileHeader.ExtractPayload(data);
+        }
 
         Deserialize(data);
     }

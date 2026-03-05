@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using AiDotNet.Enums;
 using AiDotNet.Serving.Persistence;
 using AiDotNet.Serving.Persistence.Entities;
 using AiDotNet.Serving.Security.ApiKeys;
