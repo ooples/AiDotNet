@@ -1623,8 +1623,11 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     {
         byte[] serializedData = File.ReadAllBytes(filePath);
 
-        // Extract payload from AIMF envelope
-        serializedData = ModelFileHeader.ExtractPayload(serializedData);
+        // Extract payload from AIMF envelope if present, otherwise assume legacy raw format
+        if (ModelFileHeader.HasHeader(serializedData))
+        {
+            serializedData = ModelFileHeader.ExtractPayload(serializedData);
+        }
 
         Deserialize(serializedData);
     }

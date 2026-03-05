@@ -45,7 +45,7 @@ public class Program
         builder.Services.Configure<ServingProgramSynthesisOptions>(
             builder.Configuration.GetSection("ServingProgramSynthesis"));
         builder.Services.Configure<StripeOptions>(
-            builder.Configuration.GetSection("StripeOptions"));
+            builder.Configuration.GetSection("Stripe"));
 
         // Get serving options to configure Kestrel
         var servingOptions = new ServingOptions();

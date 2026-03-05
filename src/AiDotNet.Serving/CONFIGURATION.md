@@ -74,7 +74,7 @@ SQLite is the default provider. The database file is created automatically.
 1. Create a [Stripe test account](https://dashboard.stripe.com/test/dashboard)
 2. Copy the test secret key from Developers > API keys
 3. Create test products and prices in the Stripe dashboard
-4. Set up a webhook endpoint pointing to `https://localhost:{port}/api/stripe/webhook`
+4. Set up a webhook endpoint pointing to `https://localhost:{port}/api/webhooks/stripe`
 5. Copy the webhook signing secret
 
 ### 3. User Secrets

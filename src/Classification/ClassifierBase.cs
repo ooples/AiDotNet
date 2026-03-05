@@ -654,8 +654,11 @@ public abstract class ClassifierBase<T> : IClassifier<T>, IConfigurableModel<T>,
     {
         byte[] serializedData = File.ReadAllBytes(filePath);
 
-        // Extract payload from AIMF envelope
-        serializedData = ModelFileHeader.ExtractPayload(serializedData);
+        // Extract payload from AIMF envelope if present, otherwise assume legacy raw format
+        if (ModelFileHeader.HasHeader(serializedData))
+        {
+            serializedData = ModelFileHeader.ExtractPayload(serializedData);
+        }
 
         Deserialize(serializedData);
     }
