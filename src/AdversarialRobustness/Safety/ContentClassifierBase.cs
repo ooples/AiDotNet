@@ -19,7 +19,7 @@ namespace AiDotNet.AdversarialRobustness.Safety;
 /// on the actual classification logic in your subclass.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for calculations.</typeparam>
-public abstract class ContentClassifierBase<T> : IContentClassifier<T>, IModelSerializer
+public abstract class ContentClassifierBase<T> : IContentClassifier<T>, IModelSerializer, IModelShape
 {
     /// <summary>
     /// Numeric operations for type T.
@@ -98,10 +98,67 @@ public abstract class ContentClassifierBase<T> : IContentClassifier<T>, IModelSe
     public abstract void Deserialize(byte[] data);
 
     /// <inheritdoc/>
-    public abstract void SaveModel(string filePath);
+    public virtual int[] GetInputShape()
+    {
+        // Subclasses should override with the actual feature dimension
+        return Array.Empty<int>();
+    }
 
     /// <inheritdoc/>
-    public abstract void LoadModel(string filePath);
+    public virtual int[] GetOutputShape()
+    {
+        // Output is a classification result per supported category
+        return SupportedCategories is not null && SupportedCategories.Length > 0
+            ? new[] { SupportedCategories.Length }
+            : Array.Empty<int>();
+    }
+
+    /// <inheritdoc/>
+    public virtual DynamicShapeInfo GetDynamicShapeInfo()
+    {
+        return DynamicShapeInfo.None;
+    }
+
+
+    /// <inheritdoc/>
+    public virtual void SaveModel(string filePath)
+    {
+        if (string.IsNullOrWhiteSpace(filePath))
+        {
+            throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
+        }
+
+        var fullPath = Path.GetFullPath(filePath);
+        var directory = Path.GetDirectoryName(fullPath);
+        if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
+
+        byte[] data = Serialize();
+        byte[] envelopedData = ModelFileHeader.WrapWithHeader(
+            data, this, GetInputShape(), GetOutputShape(), SerializationFormat.Json);
+        File.WriteAllBytes(fullPath, envelopedData);
+    }
+
+    /// <inheritdoc/>
+    public virtual void LoadModel(string filePath)
+    {
+        if (string.IsNullOrWhiteSpace(filePath))
+        {
+            throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
+        }
+
+        byte[] data = File.ReadAllBytes(Path.GetFullPath(filePath));
+
+        // Extract payload from AIMF envelope if present; use raw bytes for legacy files
+        if (ModelFileHeader.HasHeader(data))
+        {
+            data = ModelFileHeader.ExtractPayload(data);
+        }
+
+        Deserialize(data);
+    }
 
     /// <summary>
     /// Converts text to a vector representation for classification.

@@ -109,7 +109,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// </para>
     /// </remarks>
     [JsonIgnore]
-    internal IFullModel<T, TInput, TOutput>? Model { get; private set; }
+    internal IFullModel<T, TInput, TOutput>? Model { get; set; }
 
     /// <summary>
     /// Gets the options used to create this model result.

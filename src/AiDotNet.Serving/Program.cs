@@ -7,6 +7,7 @@ using AiDotNet.Serving.Sandboxing.Sql;
 using AiDotNet.Serving.Security;
 using AiDotNet.Serving.Security.ApiKeys;
 using AiDotNet.Serving.Security.Attestation;
+using AiDotNet.Serving.Security.Licensing;
 using AiDotNet.Serving.Services;
 using AiDotNet.Serving.Services.Federated;
 using Microsoft.AspNetCore.DataProtection;
@@ -43,6 +44,8 @@ public class Program
             builder.Configuration.GetSection("ServingSqlSandbox"));
         builder.Services.Configure<ServingProgramSynthesisOptions>(
             builder.Configuration.GetSection("ServingProgramSynthesis"));
+        builder.Services.Configure<StripeOptions>(
+            builder.Configuration.GetSection("Stripe"));
 
         // Get serving options to configure Kestrel
         var servingOptions = new ServingOptions();
@@ -52,10 +55,19 @@ public class Program
         var persistenceOptions = new ServingPersistenceOptions();
         builder.Configuration.GetSection("ServingPersistenceOptions").Bind(persistenceOptions);
 
-        // Configure Kestrel to use the specified port
+        // Configure Kestrel to use the specified port (or PORT env var for Azure/container hosting)
+        var port = Environment.GetEnvironmentVariable("PORT") is string envPort && int.TryParse(envPort, out var parsedPort)
+            ? parsedPort
+            : servingOptions.Port;
+
+        if (port < 1 || port > 65535)
+        {
+            throw new InvalidOperationException($"Port {port} is out of valid range (1-65535).");
+        }
+
         builder.WebHost.ConfigureKestrel(serverOptions =>
         {
-            serverOptions.ListenAnyIP(servingOptions.Port);
+            serverOptions.ListenAnyIP(port);
         });
 
         // Persistence (DB-backed): API keys, protected artifact keys, and ASP.NET Core Data Protection keys.
@@ -96,6 +108,9 @@ public class Program
                     options.UseSqlite(connectionString);
                     break;
             }
+
+            options.ConfigureWarnings(w =>
+                w.Log(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning));
         }
 
         builder.Services.AddDbContext<ServingDbContext>(
@@ -109,6 +124,12 @@ public class Program
 
         // API key authentication (tier enforcement)
         builder.Services.AddScoped<IApiKeyService, ApiKeyService>();
+
+        // License key management
+        builder.Services.AddScoped<ILicenseService, LicenseService>();
+
+        // Stripe payment integration
+        builder.Services.AddScoped<IStripeService, StripeService>();
         builder.Services.AddAuthentication(ApiKeyAuthenticationDefaults.Scheme)
             .AddScheme<ApiKeyAuthenticationOptions, ApiKeyAuthenticationHandler>(
                 ApiKeyAuthenticationDefaults.Scheme,
@@ -218,6 +239,9 @@ public class Program
         app.UseMiddleware<ServingRequestContextMiddleware>();
         app.UseAuthorization();
         app.MapControllers();
+
+        // Health check endpoint for Azure warmup probes
+        app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
 
         // Log startup information
         var logger = app.Services.GetRequiredService<ILogger<Program>>();

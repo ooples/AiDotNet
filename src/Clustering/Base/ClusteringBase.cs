@@ -19,7 +19,7 @@ namespace AiDotNet.Clustering.Base;
 /// Provides a base implementation for clustering algorithms that group similar data points together.
 /// </summary>
 /// <typeparam name="T">The numeric data type used for calculations (e.g., float, double).</typeparam>
-public abstract class ClusteringBase<T> : IClustering<T>, IConfigurableModel<T>
+public abstract class ClusteringBase<T> : IClustering<T>, IConfigurableModel<T>, IModelShape
 {
     /// <summary>
     /// Gets the numeric operations for the specified type T.
@@ -374,16 +374,66 @@ public abstract class ClusteringBase<T> : IClustering<T>, IConfigurableModel<T>
     }
 
     /// <inheritdoc/>
+    public virtual int[] GetInputShape()
+    {
+        return new[] { NumFeatures };
+    }
+
+    /// <inheritdoc/>
+    public virtual int[] GetOutputShape()
+    {
+        // Output dimension equals the number of clusters (e.g., for soft assignment probabilities)
+        return new[] { NumClusters > 0 ? NumClusters : 1 };
+    }
+
+    /// <inheritdoc/>
+    public virtual DynamicShapeInfo GetDynamicShapeInfo()
+    {
+        return DynamicShapeInfo.None;
+    }
+
+
+    /// <inheritdoc/>
     public virtual void SaveModel(string filePath)
     {
+        if (string.IsNullOrWhiteSpace(filePath))
+            throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
+
+        string fullPath = Path.GetFullPath(filePath);
+
         byte[] data = Serialize();
-        File.WriteAllBytes(filePath, data);
+        byte[] envelopedData = ModelFileHeader.WrapWithHeader(
+            data, this, GetInputShape(), GetOutputShape(), SerializationFormat.Json);
+
+        string? directory = Path.GetDirectoryName(fullPath);
+        if (directory is not null && !Directory.Exists(directory))
+            Directory.CreateDirectory(directory);
+
+        File.WriteAllBytes(fullPath, envelopedData);
     }
 
     /// <inheritdoc/>
     public virtual void LoadModel(string filePath)
     {
-        byte[] data = File.ReadAllBytes(filePath);
+        if (string.IsNullOrWhiteSpace(filePath))
+            throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
+
+        string fullPath = Path.GetFullPath(filePath);
+        if (!File.Exists(fullPath))
+            throw new FileNotFoundException($"Model file not found: {fullPath}", fullPath);
+
+        byte[] data = File.ReadAllBytes(fullPath);
+
+        // Extract payload from AIMF envelope if present; fall back to raw bytes for legacy files.
+        try
+        {
+            data = ModelFileHeader.ExtractPayload(data);
+        }
+        catch (InvalidOperationException)
+        {
+            // File is not in AIMF envelope format — treat raw bytes as the model payload.
+        }
+
         Deserialize(data);
     }
 

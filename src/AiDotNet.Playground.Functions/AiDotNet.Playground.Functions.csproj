@@ -19,6 +19,7 @@
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.14.0" />
     <PackageReference Include="Microsoft.CodeAnalysis.Common" Version="4.14.0" />
     <PackageReference Include="Basic.Reference.Assemblies.Net100" Version="1.8.3" />
+    <PackageReference Include="Stripe.net" Version="50.4.0" />
   </ItemGroup>
 
   <!-- AiDotNet packages for runtime code execution -->

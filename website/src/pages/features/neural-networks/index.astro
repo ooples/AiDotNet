@@ -1,0 +1,113 @@
+---
+import FeatureDetailLayout from '../../../layouts/FeatureDetailLayout.astro';
+---
+
+<FeatureDetailLayout
+  title="Neural Network Layers"
+  seoTitle="160+ Neural Network Layers for .NET - AiDotNet"
+  seoDescription="Build any neural network architecture in pure C#. 160+ layer types including CNN, RNN, Transformer, GAN, VAE, GNN, and more. No Python required."
+  count="160+"
+  tagline="Every major neural network architecture, from classic to cutting-edge, in pure C#"
+  description="AiDotNet provides the most comprehensive collection of neural network layer types available in any .NET library. Build any architecture from individual layers or compose pre-built models. Every layer supports automatic differentiation, GPU acceleration, SIMD vectorization, and mixed-precision training."
+  icon='<svg class="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>'
+  useCases={['Image Classification', 'Object Detection', 'Language Modeling', 'Speech Recognition', 'Recommendation Systems', 'Drug Discovery', 'Protein Folding', 'Time Series Forecasting']}
+  subcategories={[
+    {
+      name: 'Convolutional Layers',
+      description: 'Standard and advanced convolutional layers for spatial feature extraction in images, video, and 1D signals.',
+      items: [
+        { name: 'Conv1D', detail: 'One-dimensional convolution for sequence and time-series data processing.' },
+        { name: 'Conv2D', detail: 'Standard 2D convolution with configurable kernel size, stride, padding, and dilation.' },
+        { name: 'Conv3D', detail: 'Three-dimensional convolution for volumetric data and video processing.' },
+        { name: 'DepthwiseSeparableConv', detail: 'Factored convolution (MobileNet-style) that reduces parameters and compute.' },
+        { name: 'DilatedConv', detail: 'Atrous convolution for capturing larger receptive fields without pooling.' },
+        { name: 'DeformableConv', detail: 'Convolution with learnable offsets for geometric transformations (DCNv2).' },
+        { name: 'GroupConv', detail: 'Grouped convolution for channel-wise feature separation (ResNeXt-style).' },
+        { name: 'TransposedConv', detail: 'Learnable upsampling via transposed convolution for decoders and generators.' },
+        { name: 'CausalConv', detail: 'Causal convolution for autoregressive models like WaveNet.' },
+      ]
+    },
+    {
+      name: 'Recurrent Layers',
+      description: 'Sequence modeling layers with memory for natural language, time series, and sequential data.',
+      items: [
+        { name: 'LSTM', detail: 'Long Short-Term Memory with forget, input, and output gates for long-range dependencies.' },
+        { name: 'GRU', detail: 'Gated Recurrent Unit with reset and update gates for efficient sequence modeling.' },
+        { name: 'BiLSTM', detail: 'Bidirectional LSTM processing sequences in both forward and backward directions.' },
+        { name: 'BiGRU', detail: 'Bidirectional GRU for context-aware sequence encoding.' },
+        { name: 'IndRNN', detail: 'Independently Recurrent Neural Network for stable long-range learning.' },
+        { name: 'QRNN', detail: 'Quasi-Recurrent Neural Network combining CNN and RNN for parallelizable sequence modeling.' },
+        { name: 'SRU', detail: 'Simple Recurrent Unit with highway connections for fast training.' },
+        { name: 'FastGRNN', detail: 'Fast, Accurate, Stable and Tiny GRU variant optimized for edge devices.' },
+        { name: 'LiGRU', detail: 'Light GRU with fewer parameters and competitive performance.' },
+      ]
+    },
+    {
+      name: 'Attention & Transformer Layers',
+      description: 'Self-attention, cross-attention, and transformer building blocks for state-of-the-art architectures.',
+      items: [
+        { name: 'MultiHeadAttention', detail: 'Standard multi-head scaled dot-product attention (Vaswani et al.).' },
+        { name: 'SelfAttention', detail: 'Single-head self-attention for intra-sequence relationships.' },
+        { name: 'CrossAttention', detail: 'Attention between two different sequences (encoder-decoder).' },
+        { name: 'FlashAttention', detail: 'IO-aware exact attention with tiling for O(N) memory and faster speed.' },
+        { name: 'LinearAttention', detail: 'Linearized attention with O(N) complexity via kernel feature maps.' },
+        { name: 'SlidingWindowAttention', detail: 'Local attention with fixed window size for long sequences (Longformer-style).' },
+        { name: 'GroupedQueryAttention', detail: 'GQA with shared key-value heads for efficient inference (LLaMA 2).' },
+        { name: 'MultiQueryAttention', detail: 'MQA with single key-value head for maximum inference speed.' },
+        { name: 'RotaryEmbedding', detail: 'Rotary Position Embeddings (RoPE) for relative position encoding.' },
+        { name: 'ALiBi', detail: 'Attention with Linear Biases for length extrapolation without position embeddings.' },
+      ]
+    },
+    {
+      name: 'Normalization Layers',
+      description: 'Normalization techniques for stable and faster training across architectures.',
+      items: [
+        { name: 'BatchNorm', detail: 'Batch normalization for mini-batch statistics normalization.' },
+        { name: 'LayerNorm', detail: 'Layer normalization used in transformers and RNNs.' },
+        { name: 'GroupNorm', detail: 'Group normalization for small batch sizes and detection tasks.' },
+        { name: 'InstanceNorm', detail: 'Instance normalization for style transfer and image generation.' },
+        { name: 'RMSNorm', detail: 'Root Mean Square normalization used in LLaMA and modern LLMs.' },
+        { name: 'AdaptiveNorm', detail: 'Adaptive normalization with learned scale/shift for conditional generation.' },
+      ]
+    },
+    {
+      name: 'Graph Neural Network Layers',
+      description: 'Layers for learning on graph-structured data: molecules, social networks, point clouds.',
+      items: [
+        { name: 'GCN', detail: 'Graph Convolutional Network layer with spectral-based convolutions.' },
+        { name: 'GAT', detail: 'Graph Attention Network with attention-weighted neighbor aggregation.' },
+        { name: 'GraphSAGE', detail: 'Inductive representation learning on large graphs with neighbor sampling.' },
+        { name: 'GIN', detail: 'Graph Isomorphism Network for maximally powerful GNNs.' },
+        { name: 'EdgeConv', detail: 'Edge convolution for dynamic graph construction (DGCNN).' },
+        { name: 'PointNet', detail: 'Direct point cloud processing without graph construction.' },
+        { name: 'SchNet', detail: 'Continuous-filter convolutional network for molecular modeling.' },
+        { name: 'EGNN', detail: 'E(n) Equivariant Graph Neural Network for 3D geometric data.' },
+      ]
+    },
+    {
+      name: 'Generative Layers',
+      description: 'Building blocks for VAEs, GANs, normalizing flows, and other generative models.',
+      items: [
+        { name: 'VAE Encoder/Decoder', detail: 'Variational autoencoder with reparameterization trick for latent generation.' },
+        { name: 'VQ-VAE', detail: 'Vector Quantized VAE with discrete latent representations.' },
+        { name: 'GAN Generator/Discriminator', detail: 'Adversarial training framework building blocks.' },
+        { name: 'WGAN Critic', detail: 'Wasserstein GAN critic with gradient penalty for stable training.' },
+        { name: 'StyleGAN Layers', detail: 'Style modulation, noise injection, and progressive growing layers.' },
+        { name: 'Normalizing Flow', detail: 'Invertible transformations for exact density estimation.' },
+      ]
+    }
+  ]}
+  codeExample={`using AiDotNet;
+
+// Train a neural network with the AiModelBuilder facade
+var result = await new AiModelBuilder<float, float[], float>()
+    .ConfigureModel(new NeuralNetwork<float>(
+        inputSize: 784, hiddenSize: 128, outputSize: 10))
+    .ConfigureOptimizer(new AdamWOptimizer<float>(lr: 1e-3))
+    .ConfigurePreprocessing()
+    .BuildAsync(features, labels);
+
+// Inference
+var prediction = result.Predict(newSample);`}
+  codeTitle="Train a neural network in C#"
+/>

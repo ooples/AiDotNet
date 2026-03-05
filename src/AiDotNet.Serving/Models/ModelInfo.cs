@@ -1,3 +1,4 @@
+using AiDotNet.Models;
 using AiDotNet.Serving.Configuration;
 
 namespace AiDotNet.Serving.Models;
@@ -18,14 +19,29 @@ public class ModelInfo
     public NumericType NumericType { get; set; } = NumericType.Double;
 
     /// <summary>
-    /// Gets or sets the expected number of input features.
+    /// Gets or sets the expected number of input features (product of non-dynamic dimensions).
     /// </summary>
     public int InputDimension { get; set; }
 
     /// <summary>
-    /// Gets or sets the number of output dimensions.
+    /// Gets or sets the number of output dimensions (product of non-dynamic dimensions).
     /// </summary>
     public int OutputDimension { get; set; }
+
+    /// <summary>
+    /// Gets or sets the full input shape array. Use -1 for dynamic dimensions.
+    /// </summary>
+    public int[] InputShape { get; set; } = Array.Empty<int>();
+
+    /// <summary>
+    /// Gets or sets the full output shape array. Use -1 for dynamic dimensions.
+    /// </summary>
+    public int[] OutputShape { get; set; } = Array.Empty<int>();
+
+    /// <summary>
+    /// Gets or sets the dynamic shape information describing which dimensions are variable.
+    /// </summary>
+    public DynamicShapeInfo DynamicShapeInfo { get; set; } = DynamicShapeInfo.None;
 
     /// <summary>
     /// Gets or sets the timestamp when the model was loaded.
@@ -76,5 +92,10 @@ public class ModelInfo
     /// Gets or sets the expected image size for multimodal models.
     /// </summary>
     public int? ImageSize { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether this model's AIMF file was encrypted with a license key.
+    /// </summary>
+    public bool IsEncrypted { get; set; }
 }
 

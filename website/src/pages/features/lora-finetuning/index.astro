@@ -1,0 +1,67 @@
+---
+import FeatureDetailLayout from '../../../layouts/FeatureDetailLayout.astro';
+---
+
+<FeatureDetailLayout
+  title="LoRA & Fine-Tuning"
+  seoTitle="50+ PEFT Adapters for .NET - AiDotNet"
+  seoDescription="Parameter-efficient fine-tuning with 50+ adapter methods and strategies. LoRA, QLoRA, DoRA, AdaLoRA, VeRA, and more in pure C#. Adapt large models with minimal compute."
+  count="50+"
+  tagline="Every major parameter-efficient fine-tuning method in pure C#"
+  description="Adapt large language models and vision transformers with minimal compute. 50+ parameter-efficient fine-tuning methods and strategies from classic LoRA to cutting-edge techniques like GaLore and MoRA. Train only 0.1-1% of parameters while matching full fine-tuning performance."
+  icon='<svg class="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/></svg>'
+  useCases={['LLM Customization', 'Domain Adaptation', 'Task-Specific Models', 'Low-Resource Languages', 'Edge Deployment', 'Instruction Tuning', 'Style Transfer', 'Medical AI']}
+  subcategories={[
+    {
+      name: 'LoRA Variants',
+      description: 'Core LoRA family with different rank adaptation strategies.',
+      items: [
+        { name: 'LoRA', detail: 'Low-Rank Adaptation freezing pretrained weights and training rank decomposition matrices.' },
+        { name: 'QLoRA', detail: '4-bit quantized LoRA reducing memory to fine-tune 65B models on single GPU.' },
+        { name: 'DoRA', detail: 'Weight-Decomposed LoRA separating magnitude and direction for better accuracy.' },
+        { name: 'AdaLoRA', detail: 'Adaptive budget allocation pruning less important singular values during training.' },
+        { name: 'LoRA+', detail: 'Different learning rates for A and B matrices improving convergence.' },
+        { name: 'rsLoRA', detail: 'Rank-stabilized LoRA with scaling factor for higher-rank training.' },
+        { name: 'PiSSA', detail: 'Principal Singular values and Singular vectors Adaptation for faster convergence.' },
+        { name: 'Delta-LoRA', detail: 'Update pretrained weights using delta of LoRA products.' },
+      ]
+    },
+    {
+      name: 'Advanced PEFT Methods',
+      description: 'Next-generation parameter-efficient methods beyond standard LoRA.',
+      items: [
+        { name: 'VeRA', detail: 'Vector-based Random Matrix Adaptation sharing frozen random matrices across layers.' },
+        { name: 'MoRA', detail: 'Employing high-rank updating with same parameter budget as LoRA.' },
+        { name: 'GaLore', detail: 'Gradient Low-Rank Projection enabling full-parameter learning with LoRA-level memory.' },
+        { name: 'LoftQ', detail: 'LoRA-Fine-Tuning-aware Quantization for better quantized starting point.' },
+        { name: 'LongLoRA', detail: 'Efficient fine-tuning for long context with shifted sparse attention.' },
+        { name: 'LoRAMoE', detail: 'Mixture of LoRA experts for multi-task adaptation.' },
+        { name: 'CorDA', detail: 'Context-Oriented Decomposition Adaptation leveraging world knowledge.' },
+      ]
+    },
+    {
+      name: 'Other PEFT Methods',
+      description: 'Alternative approaches to parameter-efficient adaptation.',
+      items: [
+        { name: 'Prefix Tuning', detail: 'Prepend trainable continuous prompts to transformer layers.' },
+        { name: 'Prompt Tuning', detail: 'Soft prompts in input embedding space for task adaptation.' },
+        { name: 'IA3', detail: 'Infused Adapter by Inhibiting and Amplifying Inner Activations.' },
+        { name: 'Adapter (Houlsby)', detail: 'Bottleneck adapter layers inserted between transformer sub-layers.' },
+        { name: 'UniPELT', detail: 'Unified framework combining LoRA, prefix tuning, and adapters.' },
+      ]
+    }
+  ]}
+  codeExample={`using AiDotNet;
+
+// Fine-tune with LoRA using AiModelBuilder
+var result = await new AiModelBuilder<float, float[], float>()
+    .ConfigureModel(new NeuralNetwork<float>(
+        inputSize: 768, hiddenSize: 256, outputSize: 10))
+    .ConfigureLoRA(new QLoRAConfig(
+        rank: 16, alpha: 32, quantBits: 4))
+    .ConfigureOptimizer(new AdamOptimizer<float>(lr: 2e-4f))
+    .BuildAsync(features, labels);
+
+var prediction = result.Predict(newSample);`}
+  codeTitle="LoRA fine-tuning with AiModelBuilder"
+/>

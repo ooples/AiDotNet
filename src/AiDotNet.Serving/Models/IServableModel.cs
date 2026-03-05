@@ -1,3 +1,4 @@
+using AiDotNet.Models;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Serving.Models;
@@ -30,12 +31,30 @@ public interface IServableModel<T>
     string ModelName { get; }
 
     /// <summary>
-    /// Gets the expected number of input features.
+    /// Gets the expected number of input features (product of non-dynamic shape dimensions).
     /// </summary>
     int InputDimension { get; }
 
     /// <summary>
-    /// Gets the number of output dimensions.
+    /// Gets the number of output dimensions (product of non-dynamic shape dimensions).
     /// </summary>
     int OutputDimension { get; }
+
+    /// <summary>
+    /// Gets the full input shape array. Use -1 for dynamic dimensions.
+    /// Default implementation returns a single-element array from InputDimension.
+    /// </summary>
+    int[] InputShape => new[] { InputDimension };
+
+    /// <summary>
+    /// Gets the full output shape array. Use -1 for dynamic dimensions.
+    /// Default implementation returns a single-element array from OutputDimension.
+    /// </summary>
+    int[] OutputShape => new[] { OutputDimension };
+
+    /// <summary>
+    /// Gets the dynamic shape information describing which dimensions are variable.
+    /// Default implementation returns no dynamic dimensions.
+    /// </summary>
+    DynamicShapeInfo DynamicShapeInfo => DynamicShapeInfo.None;
 }

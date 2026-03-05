@@ -1,0 +1,82 @@
+---
+import FeatureDetailLayout from '../../../layouts/FeatureDetailLayout.astro';
+---
+
+<FeatureDetailLayout
+  title="Vision-Language Models"
+  seoTitle="165+ Vision-Language Models for .NET - AiDotNet"
+  seoDescription="Multimodal AI combining vision and language. LLaVA, InternVL, CLIP, DINOv2, Florence-2, and 165+ VLM implementations in pure C#."
+  count="165+"
+  tagline="Bridge vision and language with state-of-the-art multimodal models"
+  description="The most comprehensive collection of vision-language models in any .NET library. Instruction-tuned VLMs for image understanding and conversation, vision encoders for feature extraction, plus grounding models, document understanding, and visual question answering."
+  icon='<svg class="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>'
+  useCases={['Image Captioning', 'Visual Q&A', 'Document Understanding', 'Visual Search', 'Content Moderation', 'Accessibility', 'Medical Image Analysis', 'Retail Product Recognition']}
+  subcategories={[
+    {
+      name: 'Instruction-Tuned VLMs (46 models)',
+      description: 'Multimodal chatbots that understand images and follow complex instructions.',
+      items: [
+        { name: 'LLaVA / LLaVA-NeXT', detail: 'Visual instruction tuning with strong visual reasoning and conversation.' },
+        { name: 'LLaVA-OneVision', detail: 'Unified vision model for images, videos, and multi-image understanding.' },
+        { name: 'InternVL / InternVL2', detail: 'Scaling up vision foundation model with dynamic resolution and 108B scale.' },
+        { name: 'CogVLM / CogVLM2', detail: 'Deep visual expert integration with 6B vision-language model.' },
+        { name: 'DeepSeekVL / DeepSeekVL2', detail: 'Mixture-of-experts VLM with strong real-world understanding.' },
+        { name: 'Qwen-VL / Qwen2-VL', detail: 'Alibaba multimodal model with bounding box and multi-image support.' },
+        { name: 'Phi-3-Vision / Phi-3.5-Vision', detail: 'Microsoft compact VLM with strong performance at small scale.' },
+        { name: 'MiniCPM-V', detail: 'Efficient VLM with OCR capability in 3B parameters.' },
+        { name: 'Idefics2 / Idefics3', detail: 'HuggingFace open VLM with native multi-image and document support.' },
+        { name: 'Molmo', detail: 'Allen AI open VLM family with pointing and counting capabilities.' },
+        { name: 'Pixtral', detail: 'Mistral multimodal model with native image understanding.' },
+      ]
+    },
+    {
+      name: 'Vision Encoders (27 models)',
+      description: 'Extract powerful visual features for retrieval, classification, and multimodal alignment.',
+      items: [
+        { name: 'CLIP / OpenCLIP', detail: 'Contrastive Language-Image Pre-training for zero-shot visual understanding.' },
+        { name: 'SigLIP / SigLIP-2', detail: 'Sigmoid loss for language-image pre-training with improved scalability.' },
+        { name: 'DINOv2 / DINOv3', detail: 'Self-supervised ViT producing strong universal visual features.' },
+        { name: 'Florence-2', detail: 'Microsoft foundation model for multiple vision tasks from a single backbone.' },
+        { name: 'EVA-CLIP', detail: 'Improved CLIP with EVA pre-training for better visual representations.' },
+        { name: 'MetaCLIP', detail: 'CLIP trained with metadata-curated data for improved distribution balance.' },
+        { name: 'BLIP / BLIP-2', detail: 'Bootstrapping Language-Image Pre-training with Q-Former bridging module.' },
+        { name: 'ALIGN', detail: 'Google large-scale noisy image-text alignment for visual representation.' },
+        { name: 'InternViT', detail: 'Scaling vision transformer to 6B parameters for universal visual encoding.' },
+      ]
+    },
+    {
+      name: 'Visual Grounding & Detection',
+      description: 'Locate objects in images using natural language descriptions.',
+      items: [
+        { name: 'Grounding DINO', detail: 'Open-set object detection with text prompts for any object category.' },
+        { name: 'KOSMOS-2', detail: 'Microsoft multimodal model with grounding and referring capabilities.' },
+        { name: 'GLaMM', detail: 'Grounding Large Multimodal Model for pixel-level understanding.' },
+        { name: 'Ferret', detail: 'Apple model for referring and grounding in visual conversations.' },
+        { name: 'CogAgent', detail: 'Visual agent for GUI understanding and web interaction.' },
+      ]
+    },
+    {
+      name: 'Document Understanding',
+      description: 'Extract structure, text, and semantics from documents, forms, and tables.',
+      items: [
+        { name: 'LayoutLMv3', detail: 'Pre-trained model for document AI combining text, layout, and image.' },
+        { name: 'DocFormer', detail: 'Multi-modal transformer for document understanding tasks.' },
+        { name: 'Donut', detail: 'OCR-free document understanding transformer for end-to-end extraction.' },
+        { name: 'Nougat', detail: 'Neural Optical Understanding for Academic documents (PDF-to-Markdown).' },
+        { name: 'GOT-OCR', detail: 'General OCR Theory model for unified optical character recognition.' },
+      ]
+    }
+  ]}
+  codeExample={`using AiDotNet;
+
+// Train a vision-language model with AiModelBuilder
+var result = await new AiModelBuilder<float, float[], float>()
+    .ConfigureModel(new LLaVA<float>(variant: "v1.6-mistral-7b"))
+    .ConfigureOptimizer(new AdamOptimizer<float>())
+    .ConfigurePreprocessing()
+    .ConfigureDataLoader(multimodalLoader)
+    .BuildAsync();
+
+var description = result.Predict(imageFeatures);`}
+  codeTitle="Vision-language with AiModelBuilder"
+/>

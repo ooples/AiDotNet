@@ -23,7 +23,7 @@ namespace AiDotNet.Diffusion.NoisePredictors;
 /// extend this base class.
 /// </para>
 /// </remarks>
-public abstract class NoisePredictorBase<T> : INoisePredictor<T>
+public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape
 {
     /// <summary>
     /// Provides access to the hardware-accelerated tensor engine.
@@ -200,17 +200,48 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>
         LoadState(stream);
     }
 
+    /// <inheritdoc/>
+    public virtual int[] GetInputShape()
+    {
+        return new[] { InputChannels };
+    }
+
+    /// <inheritdoc/>
+    public virtual int[] GetOutputShape()
+    {
+        return new[] { OutputChannels };
+    }
+
+    /// <inheritdoc/>
+    public virtual DynamicShapeInfo GetDynamicShapeInfo()
+    {
+        return DynamicShapeInfo.None;
+    }
+
+
     /// <inheritdoc />
     public virtual void SaveModel(string filePath)
     {
+        if (string.IsNullOrWhiteSpace(filePath))
+            throw new ArgumentException("File path cannot be null or whitespace.", nameof(filePath));
+
         var data = Serialize();
-        File.WriteAllBytes(filePath, data);
+        byte[] envelopedData = ModelFileHeader.WrapWithHeader(
+            data, this, GetInputShape(), GetOutputShape(), SerializationFormat.Binary);
+        File.WriteAllBytes(filePath, envelopedData);
     }
 
     /// <inheritdoc />
     public virtual void LoadModel(string filePath)
     {
+        if (string.IsNullOrWhiteSpace(filePath))
+            throw new ArgumentException("File path cannot be null or whitespace.", nameof(filePath));
+
         var data = File.ReadAllBytes(filePath);
+
+        // Extract payload from AIMF envelope
+        data = ModelFileHeader.ExtractPayload(data);
+
         Deserialize(data);
     }
 

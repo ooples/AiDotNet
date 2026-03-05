@@ -21,7 +21,7 @@ namespace AiDotNet.Diffusion.VAE;
 /// They are essential for efficient latent diffusion models like Stable Diffusion.
 /// </para>
 /// </remarks>
-public abstract class VAEModelBase<T> : IVAEModel<T>
+public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
 {
     /// <summary>
     /// Provides access to the hardware-accelerated tensor engine.
@@ -239,17 +239,70 @@ public abstract class VAEModelBase<T> : IVAEModel<T>
         LoadState(stream);
     }
 
+    /// <inheritdoc/>
+    public virtual int[] GetInputShape()
+    {
+        // VAE input is [Channels, Height, Width] where H/W are dynamic
+        return new[] { InputChannels, -1, -1 };
+    }
+
+    /// <inheritdoc/>
+    public virtual int[] GetOutputShape()
+    {
+        // Predict() returns Decode(Encode(input)), which is in input space [C, H, W]
+        return new[] { InputChannels, -1, -1 };
+    }
+
+    /// <inheritdoc/>
+    public virtual DynamicShapeInfo GetDynamicShapeInfo()
+    {
+        // Height and Width dimensions (indices 1,2) are dynamic
+        return new DynamicShapeInfo
+        {
+            DynamicInputDimensions = new[] { 1, 2 },
+            DynamicOutputDimensions = new[] { 1, 2 }
+        };
+    }
+
+
     /// <inheritdoc />
     public virtual void SaveModel(string filePath)
     {
+        if (string.IsNullOrWhiteSpace(filePath))
+        {
+            throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
+        }
+
+        var fullPath = Path.GetFullPath(filePath);
+        var directory = Path.GetDirectoryName(fullPath);
+        if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
+
         var data = Serialize();
-        File.WriteAllBytes(filePath, data);
+        byte[] envelopedData = ModelFileHeader.WrapWithHeader(
+            data, this, GetInputShape(), GetOutputShape(), SerializationFormat.Binary,
+            GetDynamicShapeInfo());
+        File.WriteAllBytes(fullPath, envelopedData);
     }
 
     /// <inheritdoc />
     public virtual void LoadModel(string filePath)
     {
+        if (string.IsNullOrWhiteSpace(filePath))
+        {
+            throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
+        }
+
         var data = File.ReadAllBytes(filePath);
+
+        // Extract payload from AIMF envelope if present; use raw bytes for legacy files
+        if (ModelFileHeader.HasHeader(data))
+        {
+            data = ModelFileHeader.ExtractPayload(data);
+        }
+
         Deserialize(data);
     }
 

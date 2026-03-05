@@ -18,7 +18,7 @@ namespace AiDotNet.AutoML
     /// <typeparam name="T">The numeric type used for calculations</typeparam>
     /// <typeparam name="TInput">The input data type</typeparam>
     /// <typeparam name="TOutput">The output data type</typeparam>
-    public abstract class AutoMLModelBase<T, TInput, TOutput> : IAutoMLModel<T, TInput, TOutput>
+    public abstract class AutoMLModelBase<T, TInput, TOutput> : IAutoMLModel<T, TInput, TOutput>, IModelShape
     {
         /// <summary>
         /// Hardware-accelerated engine for vector/tensor operations.
@@ -627,236 +627,270 @@ namespace AiDotNet.AutoML
         /// <summary>
         /// Saves the model to a file
         /// </summary>
-        public virtual void SaveModel(string filePath)
+        /// <inheritdoc/>
+        public virtual int[] GetInputShape()
         {
-            if (BestModel == null)
-                throw new InvalidOperationException("No best model to save.");
-
-            BestModel.SaveModel(filePath);
-        }
-
-        /// <summary>
-        /// Loads the model from a file
-        /// </summary>
-        public virtual void LoadModel(string filePath)
-        {
-            if (BestModel == null)
+            if (BestModel is IModelShape shapeModel)
             {
-                // This scenario requires a mechanism to determine the concrete type of BestModel
-                // from the serialized data. For now, we'll assume BestModel is already set or can be inferred.
-                throw new InvalidOperationException("Cannot load model: BestModel is null. AutoML models should be recreated with SearchAsync or BestModel should be initialized before loading.");
-            }
-            BestModel.LoadModel(filePath);
-        }
-
-        /// <summary>
-        /// Serializes the model to bytes
-        /// </summary>
-        public virtual byte[] Serialize()
-        {
-            if (BestModel == null)
-                throw new InvalidOperationException("No best model to serialize.");
-
-            return BestModel.Serialize();
-        }
-
-        /// <summary>
-        /// Deserializes the model from bytes
-        /// </summary>
-        public virtual void Deserialize(byte[] data)
-        {
-            if (BestModel == null)
-            {
-                // This scenario requires a mechanism to determine the concrete type of BestModel
-                // from the serialized data. For now, we'll assume BestModel is already set or can be inferred.
-                throw new InvalidOperationException("Cannot deserialize model: BestModel is null. AutoML models should be recreated with SearchAsync or BestModel should be initialized before deserializing.");
-            }
-            BestModel.Deserialize(data);
-        }
-
-        #endregion
-
-        #region IParameterizable Implementation
-
-        /// <summary>
-        /// Gets the model parameters
-        /// </summary>
-        public virtual Vector<T> GetParameters()
-        {
-            if (BestModel == null)
-                throw new InvalidOperationException("No best model found.");
-
-            return BestModel.GetParameters();
-        }
-
-        /// <summary>
-        /// Sets the model parameters
-        /// </summary>
-        public virtual void SetParameters(Vector<T> parameters)
-        {
-            if (BestModel == null)
-                throw new InvalidOperationException("No best model found.");
-
-            BestModel.SetParameters(parameters);
-        }
-
-        /// <summary>
-        /// Gets the number of parameters
-        /// </summary>
-        public virtual int ParameterCount => BestModel?.ParameterCount ?? 0;
-
-        /// <summary>
-        /// Creates a new instance with the given parameters
-        /// </summary>
-        public virtual IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
-        {
-            if (BestModel == null)
-                throw new InvalidOperationException("No best model found. Run SearchAsync, Search, or SearchBestModel first.");
-
-            // Create a deep copy and set the new parameters
-            var copy = DeepCopy();
-            copy.SetParameters(parameters);
-            return copy;
-        }
-
-        #endregion
-
-        #region IFeatureAware Implementation
-
-        /// <summary>
-        /// Gets the feature names
-        /// </summary>
-        public virtual string[] FeatureNames { get; set; } = Array.Empty<string>();
-
-        /// <summary>
-        /// Gets the feature importance scores
-        /// </summary>
-        public virtual Dictionary<string, T> GetFeatureImportance()
-        {
-            if (BestModel == null)
-                throw new InvalidOperationException("No best model found.");
-
-            return BestModel.GetFeatureImportance();
-        }
-
-        /// <summary>
-        /// Gets the indices of active features
-        /// </summary>
-        public virtual IEnumerable<int> GetActiveFeatureIndices()
-        {
-            if (BestModel == null)
-                throw new InvalidOperationException("No best model found.");
-
-            return BestModel.GetActiveFeatureIndices();
-        }
-
-        /// <summary>
-        /// Checks if a feature is used
-        /// </summary>
-        public virtual bool IsFeatureUsed(int featureIndex)
-        {
-            if (BestModel == null)
-                throw new InvalidOperationException("No best model found.");
-
-            return BestModel.IsFeatureUsed(featureIndex);
-        }
-
-        /// <summary>
-        /// Sets the active feature indices
-        /// </summary>
-        public virtual void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
-        {
-            if (BestModel == null)
-                throw new InvalidOperationException("No best model found.");
-
-            BestModel.SetActiveFeatureIndices(featureIndices);
-        }
-
-        #endregion
-
-        #region ICloneable Implementation
-
-        /// <summary>
-        /// Creates a memberwise clone of the AutoML model using MemberwiseClone().
-        /// This performs a shallow copy where reference types are shared between the original and clone.
-        /// </summary>
-        /// <returns>A memberwise clone of the current AutoML model</returns>
-        /// <remarks>
-        /// For a deep copy with independent collections and state, use DeepCopy() instead.
-        /// </remarks>
-        public virtual IFullModel<T, TInput, TOutput> Clone()
-        {
-            return (AutoMLModelBase<T, TInput, TOutput>)MemberwiseClone();
-        }
-
-        /// <summary>
-        /// Creates a deep copy of the AutoML model
-        /// </summary>
-        public virtual IFullModel<T, TInput, TOutput> DeepCopy()
-        {
-            // Create a new instance using the factory method to avoid sharing readonly collections
-            var copy = CreateInstanceForCopy();
-
-            // Deep copy collections under lock to ensure thread safety
-            lock (_lock)
-            {
-                // Deep copy trial history
-                foreach (var t in _trialHistory)
-                {
-                    copy._trialHistory.Add(t.Clone());
-                }
-
-                // Deep copy search space parameters
-                // ParameterRange implements ICloneable, so we always call Clone()
-                foreach (var kvp in _searchSpace)
-                {
-                    copy._searchSpace[kvp.Key] = (ParameterRange)kvp.Value.Clone();
-                }
-
-                // Copy candidate models (ModelType is an enum, so no deep copy needed)
-                foreach (var model in _candidateModels)
-                {
-                    copy._candidateModels.Add(model);
-                }
-
-                // Deep copy constraints
-                // SearchConstraint implements ICloneable, so we always call Clone()
-                foreach (var constraint in _constraints)
-                {
-                    copy._constraints.Add((SearchConstraint)constraint.Clone());
-                }
+                return shapeModel.GetInputShape();
             }
 
-            // Deep copy the best model if it exists
-            copy.BestModel = BestModel?.DeepCopy();
-
-            // Copy value types and other properties
-            copy._optimizationMetric = _optimizationMetric;
-            copy._maximize = _maximize;
-            copy._earlyStoppingPatience = _earlyStoppingPatience;
-            copy._earlyStoppingMinDelta = _earlyStoppingMinDelta;
-            copy._trialsSinceImprovement = _trialsSinceImprovement;
-            copy.BestScore = BestScore;
-            copy.TimeLimit = TimeLimit;
-            copy.TrialLimit = TrialLimit;
-            copy.Status = Status;
-            copy.FeatureNames = (string[])FeatureNames.Clone();
-
-            return copy;
+            return Array.Empty<int>();
         }
 
-        /// <summary>
-        /// Factory method for creating a new instance for deep copy.
-        /// Derived classes must implement this to return a new instance of themselves.
-        /// This ensures each copy has its own collections and lock object.
-        /// </summary>
-        /// <returns>A fresh instance of the derived class with default parameters</returns>
-        /// <remarks>
-        /// When implementing this method, derived classes should create a fresh instance with default parameters,
-        /// and should not attempt to preserve runtime or initialization state from the original instance.
-        /// The deep copy logic will transfer relevant state (trial history, search space, etc.) after construction.
-        /// </remarks>
-        protected abstract AutoMLModelBase<T, TInput, TOutput> CreateInstanceForCopy();
+        /// <inheritdoc/>
+        public virtual int[] GetOutputShape()
+        {
+            if (BestModel is IModelShape shapeModel)
+            {
+                return shapeModel.GetOutputShape();
+            }
+
+            return Array.Empty<int>();
+        }
+
+    /// <inheritdoc/>
+    public virtual DynamicShapeInfo GetDynamicShapeInfo()
+    {
+        if (BestModel is IModelShape shapedModel)
+        {
+            return shapedModel.GetDynamicShapeInfo();
+        }
+
+        return DynamicShapeInfo.None;
+    }
+
+    public virtual void SaveModel(string filePath)
+    {
+        if (BestModel == null)
+            throw new InvalidOperationException("No best model to save.");
+
+        BestModel.SaveModel(filePath);
+    }
+
+    /// <summary>
+    /// Loads the model from a file
+    /// </summary>
+    public virtual void LoadModel(string filePath)
+    {
+        if (BestModel == null)
+        {
+            throw new InvalidOperationException(
+                "Cannot load model: BestModel is null. " +
+                "Initialize BestModel by running SearchAsync first, or use ModelLoader.Load " +
+                "to load the underlying model type directly from the AIMF file.");
+        }
+
+        BestModel.LoadModel(filePath);
+    }
+
+    /// <summary>
+    /// Serializes the model to bytes
+    /// </summary>
+    public virtual byte[] Serialize()
+    {
+        if (BestModel == null)
+            throw new InvalidOperationException("No best model to serialize.");
+
+        return BestModel.Serialize();
+    }
+
+    /// <summary>
+    /// Deserializes the model from bytes
+    /// </summary>
+    public virtual void Deserialize(byte[] data)
+    {
+        if (BestModel == null)
+        {
+            throw new InvalidOperationException(
+                "Cannot deserialize model: BestModel is null. " +
+                "Initialize BestModel by running SearchAsync first, or use ModelLoader.Load " +
+                "to load the underlying model type directly.");
+        }
+
+        BestModel.Deserialize(data);
+    }
+
+    #endregion
+
+    #region IParameterizable Implementation
+
+    /// <summary>
+    /// Gets the model parameters
+    /// </summary>
+    public virtual Vector<T> GetParameters()
+    {
+        if (BestModel == null)
+            throw new InvalidOperationException("No best model found.");
+
+        return BestModel.GetParameters();
+    }
+
+    /// <summary>
+    /// Sets the model parameters
+    /// </summary>
+    public virtual void SetParameters(Vector<T> parameters)
+    {
+        if (BestModel == null)
+            throw new InvalidOperationException("No best model found.");
+
+        BestModel.SetParameters(parameters);
+    }
+
+    /// <summary>
+    /// Gets the number of parameters
+    /// </summary>
+    public virtual int ParameterCount => BestModel?.ParameterCount ?? 0;
+
+    /// <summary>
+    /// Creates a new instance with the given parameters
+    /// </summary>
+    public virtual IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
+    {
+        if (BestModel == null)
+            throw new InvalidOperationException("No best model found. Run SearchAsync, Search, or SearchBestModel first.");
+
+        // Create a deep copy and set the new parameters
+        var copy = DeepCopy();
+        copy.SetParameters(parameters);
+        return copy;
+    }
+
+    #endregion
+
+    #region IFeatureAware Implementation
+
+    /// <summary>
+    /// Gets the feature names
+    /// </summary>
+    public virtual string[] FeatureNames { get; set; } = Array.Empty<string>();
+
+    /// <summary>
+    /// Gets the feature importance scores
+    /// </summary>
+    public virtual Dictionary<string, T> GetFeatureImportance()
+    {
+        if (BestModel == null)
+            throw new InvalidOperationException("No best model found.");
+
+        return BestModel.GetFeatureImportance();
+    }
+
+    /// <summary>
+    /// Gets the indices of active features
+    /// </summary>
+    public virtual IEnumerable<int> GetActiveFeatureIndices()
+    {
+        if (BestModel == null)
+            throw new InvalidOperationException("No best model found.");
+
+        return BestModel.GetActiveFeatureIndices();
+    }
+
+    /// <summary>
+    /// Checks if a feature is used
+    /// </summary>
+    public virtual bool IsFeatureUsed(int featureIndex)
+    {
+        if (BestModel == null)
+            throw new InvalidOperationException("No best model found.");
+
+        return BestModel.IsFeatureUsed(featureIndex);
+    }
+
+    /// <summary>
+    /// Sets the active feature indices
+    /// </summary>
+    public virtual void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
+    {
+        if (BestModel == null)
+            throw new InvalidOperationException("No best model found.");
+
+        BestModel.SetActiveFeatureIndices(featureIndices);
+    }
+
+    #endregion
+
+    #region ICloneable Implementation
+
+    /// <summary>
+    /// Creates a memberwise clone of the AutoML model using MemberwiseClone().
+    /// This performs a shallow copy where reference types are shared between the original and clone.
+    /// </summary>
+    /// <returns>A deep copy of the current AutoML model with independent state.</returns>
+    public virtual IFullModel<T, TInput, TOutput> Clone()
+    {
+        return DeepCopy();
+    }
+
+    /// <summary>
+    /// Creates a deep copy of the AutoML model
+    /// </summary>
+    public virtual IFullModel<T, TInput, TOutput> DeepCopy()
+    {
+        // Create a new instance using the factory method to avoid sharing readonly collections
+        var copy = CreateInstanceForCopy();
+
+        // Deep copy collections under lock to ensure thread safety
+        lock (_lock)
+        {
+            // Deep copy trial history
+            foreach (var t in _trialHistory)
+            {
+                copy._trialHistory.Add(t.Clone());
+            }
+
+            // Deep copy search space parameters
+            // ParameterRange implements ICloneable, so we always call Clone()
+            foreach (var kvp in _searchSpace)
+            {
+                copy._searchSpace[kvp.Key] = (ParameterRange)kvp.Value.Clone();
+            }
+
+            // Copy candidate models (ModelType is an enum, so no deep copy needed)
+            foreach (var model in _candidateModels)
+            {
+                copy._candidateModels.Add(model);
+            }
+
+            // Deep copy constraints
+            // SearchConstraint implements ICloneable, so we always call Clone()
+            foreach (var constraint in _constraints)
+            {
+                copy._constraints.Add((SearchConstraint)constraint.Clone());
+            }
+        }
+
+        // Deep copy the best model if it exists
+        copy.BestModel = BestModel?.DeepCopy();
+
+        // Copy value types and other properties
+        copy._optimizationMetric = _optimizationMetric;
+        copy._maximize = _maximize;
+        copy._earlyStoppingPatience = _earlyStoppingPatience;
+        copy._earlyStoppingMinDelta = _earlyStoppingMinDelta;
+        copy._trialsSinceImprovement = _trialsSinceImprovement;
+        copy.BestScore = BestScore;
+        copy.TimeLimit = TimeLimit;
+        copy.TrialLimit = TrialLimit;
+        copy.Status = Status;
+        copy.FeatureNames = (string[])FeatureNames.Clone();
+
+        return copy;
+    }
+
+    /// <summary>
+    /// Factory method for creating a new instance for deep copy.
+    /// Derived classes must implement this to return a new instance of themselves.
+    /// This ensures each copy has its own collections and lock object.
+    /// </summary>
+    /// <returns>A fresh instance of the derived class with default parameters</returns>
+    /// <remarks>
+    /// When implementing this method, derived classes should create a fresh instance with default parameters,
+    /// and should not attempt to preserve runtime or initialization state from the original instance.
+    /// The deep copy logic will transfer relevant state (trial history, search space, etc.) after construction.
+    /// </remarks>
+    protected abstract AutoMLModelBase<T, TInput, TOutput> CreateInstanceForCopy();
 
 
         #endregion

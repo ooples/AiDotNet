@@ -1,0 +1,149 @@
+---
+import '../styles/global.css';
+import SEO from '../components/SEO.astro';
+import Navbar from '../components/Navbar.astro';
+import ThemeToggle from '../components/ThemeToggle.astro';
+import Footer from '../components/Footer.astro';
+import '@fontsource/inter/400.css';
+import '@fontsource/inter/500.css';
+import '@fontsource/inter/600.css';
+import '@fontsource/inter/700.css';
+import '@fontsource/inter/800.css';
+import '@fontsource/jetbrains-mono/400.css';
+
+interface Props {
+  title: string;
+  description: string;
+  image?: string;
+}
+
+const { title, description, image } = Astro.props;
+---
+
+<!doctype html>
+<html lang="en" class="scroll-smooth">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" type="image/svg+xml" href={`${import.meta.env.BASE_URL}favicon.svg`} />
+    <SEO title={title} description={description} image={image} />
+  </head>
+  <body class="min-h-screen bg-white dark:bg-surface-dark text-slate-900 dark:text-slate-100 font-sans antialiased">
+    <Navbar>
+      <ThemeToggle slot="theme-toggle" />
+    </Navbar>
+
+    <main>
+      <slot />
+    </main>
+
+    <Footer />
+
+    <!-- GSAP: only initializes when page contains animated elements -->
+    <script type="module">
+      document.addEventListener('DOMContentLoaded', async () => {
+        const hasAnimatedElements =
+          document.querySelector('.gsap-fade-up') ||
+          document.querySelector('.counter') ||
+          document.getElementById('hero-network');
+
+        if (!hasAnimatedElements) return;
+
+        const { gsap } = await import('gsap');
+        const { ScrollTrigger } = await import('gsap/ScrollTrigger');
+        gsap.registerPlugin(ScrollTrigger);
+        const fadeElements = document.querySelectorAll('.gsap-fade-up');
+        fadeElements.forEach((el, i) => {
+          gsap.fromTo(
+            el,
+            { opacity: 0, y: 40 },
+            {
+              opacity: 1,
+              y: 0,
+              duration: 0.8,
+              ease: 'power3.out',
+              scrollTrigger: {
+                trigger: el,
+                start: 'top 85%',
+                once: true,
+              },
+              delay: (i % 3) * 0.1,
+            }
+          );
+        });
+
+        // Animated counters
+        const counters = document.querySelectorAll('.counter');
+        counters.forEach((counter) => {
+          const target = parseInt(counter.getAttribute('data-target') || '0', 10);
+          const suffix = target > 100 ? '+' : '';
+
+          ScrollTrigger.create({
+            trigger: counter,
+            start: 'top 85%',
+            once: true,
+            onEnter: () => {
+              const obj = { val: 0 };
+              gsap.to(obj, {
+                val: target,
+                duration: 2,
+                ease: 'power2.out',
+                onUpdate: () => {
+                  counter.textContent = Math.round(obj.val).toLocaleString() + suffix;
+                },
+              });
+            },
+          });
+        });
+
+        // Hero network SVG particle animation
+        const svg = document.getElementById('hero-network');
+        if (svg) {
+          const w = window.innerWidth;
+          const h = window.innerHeight;
+          const nodes: { x: number; y: number; r: number }[] = [];
+
+          for (let i = 0; i < 30; i++) {
+            const x = Math.random() * w;
+            const y = Math.random() * h;
+            const r = 2 + Math.random() * 3;
+            nodes.push({ x, y, r });
+            const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            circle.setAttribute('cx', String(x));
+            circle.setAttribute('cy', String(y));
+            circle.setAttribute('r', String(r));
+            circle.setAttribute('fill', 'url(#heroGrad)');
+            svg.appendChild(circle);
+
+            gsap.to(circle, {
+              cx: x + (Math.random() - 0.5) * 100,
+              cy: y + (Math.random() - 0.5) * 100,
+              duration: 4 + Math.random() * 4,
+              repeat: -1,
+              yoyo: true,
+              ease: 'sine.inOut',
+            });
+          }
+
+          // Draw connections between nearby nodes
+          for (let i = 0; i < nodes.length; i++) {
+            for (let j = i + 1; j < nodes.length; j++) {
+              const dist = Math.hypot(nodes[i].x - nodes[j].x, nodes[i].y - nodes[j].y);
+              if (dist < 200) {
+                const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                line.setAttribute('x1', String(nodes[i].x));
+                line.setAttribute('y1', String(nodes[i].y));
+                line.setAttribute('x2', String(nodes[j].x));
+                line.setAttribute('y2', String(nodes[j].y));
+                line.setAttribute('stroke', 'url(#heroGrad)');
+                line.setAttribute('stroke-width', '0.5');
+                line.setAttribute('opacity', String(0.3 * (1 - dist / 200)));
+                svg.appendChild(line);
+              }
+            }
+          }
+        }
+      });
+    </script>
+  </body>
+</html>

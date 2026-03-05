@@ -4,7 +4,7 @@
 
 ### The Most Comprehensive AI/ML Framework for .NET
 
-**4,300+ implementations across 60+ feature categories - bringing cutting-edge AI to the .NET ecosystem**
+**8,100+ public classes (`grep -c` verified) across 139 modules - the most complete AI/ML platform for .NET**
 
 [![Build Status](https://github.com/ooples/AiDotNet/actions/workflows/sonarcloud.yml/badge.svg)](https://github.com/ooples/AiDotNet/actions/workflows/sonarcloud.yml)
 [![CodeQL](https://github.com/ooples/AiDotNet/security/code-scanning/badge.svg)](https://github.com/ooples/AiDotNet/security/code-scanning)
@@ -12,15 +12,15 @@
 [![NuGet](https://img.shields.io/nuget/v/AiDotNet.svg)](https://www.nuget.org/packages/AiDotNet/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
-![Neural Networks](https://img.shields.io/badge/Neural_Networks-100+-blue)
-![Classical ML](https://img.shields.io/badge/Classical_ML-106+-green)
-![Computer Vision](https://img.shields.io/badge/Vision-50+-orange)
-![Audio](https://img.shields.io/badge/Audio-90+-purple)
-![Video](https://img.shields.io/badge/Video-34+-red)
-![RL Agents](https://img.shields.io/badge/RL_Agents-80+-yellow)
-![Diffusion](https://img.shields.io/badge/Diffusion-20+-pink)
+![Neural Networks](https://img.shields.io/badge/Neural_Networks-160+-blue)
+![Classical ML](https://img.shields.io/badge/Classical_ML-155+-green)
+![Computer Vision](https://img.shields.io/badge/Vision-115+-orange)
+![Audio](https://img.shields.io/badge/Audio-250+-purple)
+![Video](https://img.shields.io/badge/Video-80+-red)
+![RL Agents](https://img.shields.io/badge/RL_Agents-50+-yellow)
+![Diffusion](https://img.shields.io/badge/Diffusion-75+-pink)
 ![RAG](https://img.shields.io/badge/RAG-50+-cyan)
-![LoRA](https://img.shields.io/badge/LoRA-37+-teal)
+![LoRA](https://img.shields.io/badge/LoRA-50+-teal)
 ![HuggingFace](https://img.shields.io/badge/HuggingFace-Compatible-ff6f00)
 ![Multi-GPU](https://img.shields.io/badge/Multi--GPU-DDP|FSDP|ZeRO-00bcd4)
 
@@ -38,17 +38,17 @@
 
 | Feature | AiDotNet | TorchSharp | TensorFlow.NET | ML.NET | Accord.NET |
 |---------|----------|------------|----------------|--------|------------|
-| Neural Network Architectures | **100+** | 50+ | 30+ | ~10 | ~20 |
-| Classical ML Algorithms | **106+** | None | None | ~30 | ~50 |
-| Computer Vision Models | **50+** | Via PyTorch | Via TF | Limited | Limited |
-| Audio Processing | **90+** | Limited | Limited | None | Basic |
-| Reinforcement Learning | **80+ agents** | Manual | Limited | None | None |
-| Diffusion Models | **20+** | Manual | None | None | None |
-| LoRA Fine-tuning | **37 adapters** | Manual | None | None | None |
+| Neural Network Architectures | **160+** | 50+ | 30+ | ~10 | ~20 |
+| Classical ML Algorithms | **155+** | None | None | ~30 | ~50 |
+| Computer Vision Models | **115+** | Via PyTorch | Via TF | Limited | Limited |
+| Audio Processing | **250+** | Limited | Limited | None | Basic |
+| Reinforcement Learning | **50+ agents** | Manual | Limited | None | None |
+| Diffusion Models | **75+** | Manual | None | None | None |
+| LoRA Fine-tuning | **50+ adapters** | Manual | None | None | None |
 | RAG Components | **50+** | None | None | None | None |
 | Distributed Training | **DDP, FSDP, ZeRO** | DDP only | MirroredStrategy | None | None |
 | HuggingFace Integration | **Native** | Partial | Partial | None | None |
-| GPU Acceleration | **CUDA, OpenCL** | Via LibTorch | Via TF Runtime | Limited | None |
+| GPU Acceleration | **CUDA, OpenCL, Vulkan** | Via LibTorch | Via TF Runtime | Limited | None |
 | Pure .NET (No Runtime) | **Yes** | No (LibTorch) | No (TF Runtime) | Yes | Yes |
 | Startup Time | **Fast** | Slow | Slow | Fast | Fast |
 | Memory<T>/Span<T> Support | **Full** | Limited | Limited | Limited | None |
@@ -104,8 +104,9 @@ var prediction = result.Predict(newSample);
 ---
 
 ## Complete Feature Reference
+<!-- Counts audited via grep against src/ directory - see PR #924 plan for methodology -->
 
-### Neural Networks (100+ Architectures)
+### Neural Networks (160+ Architectures)
 
 <details>
 <summary><strong>Click to expand all neural network types</strong></summary>
@@ -185,7 +186,7 @@ var model = new AiModelBuilder<double, Tensor<double>, Tensor<double>>()
 
 ---
 
-### Classification (28+ Algorithms)
+### Classification (50 Algorithms)
 
 <details>
 <summary><strong>Click to expand all classification algorithms</strong></summary>
@@ -247,7 +248,7 @@ Console.WriteLine($"Accuracy: {result.CrossValidationResult?.MeanAccuracy:P2}");
 
 ---
 
-### Regression (41+ Algorithms)
+### Regression (57 Algorithms)
 
 <details>
 <summary><strong>Click to expand all regression algorithms</strong></summary>
@@ -314,7 +315,7 @@ var result = await new AiModelBuilder<double, double[], double>()
 
 ---
 
-### Clustering (20+ Algorithms)
+### Clustering (48 Algorithms)
 
 <details>
 <summary><strong>Click to expand all clustering algorithms</strong></summary>
@@ -377,7 +378,7 @@ Console.WriteLine($"Silhouette Score: {result.ClusteringMetrics?.SilhouetteScore
 
 ---
 
-### Computer Vision (50+ Models)
+### Computer Vision (115+ Models)
 
 <details>
 <summary><strong>Click to expand all computer vision capabilities</strong></summary>
@@ -440,7 +441,7 @@ foreach (var det in detections)
 
 ---
 
-### Audio Processing (90+ Models)
+### Audio Processing (250+ Models)
 
 <details>
 <summary><strong>Click to expand all audio capabilities</strong></summary>
@@ -511,7 +512,7 @@ await audio.SaveAsync("output.wav");
 
 ---
 
-### Video Processing (34+ Models)
+### Video Processing (80+ Models)
 
 <details>
 <summary><strong>Click to expand all video capabilities</strong></summary>
@@ -553,7 +554,7 @@ await video.SaveAsync("output.mp4");
 
 ---
 
-### Reinforcement Learning (80+ Agents)
+### Reinforcement Learning (50+ Agents)
 
 <details>
 <summary><strong>Click to expand all RL agents</strong></summary>
@@ -769,7 +770,7 @@ var answer = await result.Model.QueryAsync("What is the capital of France?", doc
 
 ---
 
-### LoRA Fine-tuning (37+ Adapters)
+### LoRA Fine-tuning (50+ Adapters)
 
 <details>
 <summary><strong>Click to expand all LoRA variants</strong></summary>
@@ -834,7 +835,7 @@ var result = await new AiModelBuilder<float, string, string>()
 
 ---
 
-### Diffusion Models (20+ Models)
+### Diffusion Models (75+ Models)
 
 <details>
 <summary><strong>Click to expand all diffusion models</strong></summary>
@@ -1017,7 +1018,7 @@ var predictions = adapted.Predict(querySet);
 
 ---
 
-### Optimizers (42+)
+### Optimizers (40+)
 
 <details>
 <summary><strong>Click to expand all optimizers</strong></summary>

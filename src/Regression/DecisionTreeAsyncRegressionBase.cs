@@ -24,7 +24,7 @@ namespace AiDotNet.Regression;
 /// questions and answers based on numerical data.
 /// </para>
 /// </remarks>
-public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<T>, IConfigurableModel<T>
+public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<T>, IConfigurableModel<T>, IModelShape
 {
     /// <summary>
     /// Gets the numeric operations for the type T.
@@ -852,6 +852,29 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
     /// Saves the model to a file.
     /// </summary>
     /// <param name="filePath">The path where the model should be saved.</param>
+    /// <inheritdoc/>
+    public virtual int[] GetInputShape()
+    {
+        // FeatureImportances is populated after training; guard against pre-training calls
+        int featureCount = FeatureImportances is not null && FeatureImportances.Length > 0
+            ? FeatureImportances.Length
+            : 0;
+        return featureCount > 0 ? new[] { featureCount } : Array.Empty<int>();
+    }
+
+    /// <inheritdoc/>
+    public virtual int[] GetOutputShape()
+    {
+        return new[] { 1 };
+    }
+
+    /// <inheritdoc/>
+    public virtual DynamicShapeInfo GetDynamicShapeInfo()
+    {
+        return DynamicShapeInfo.None;
+    }
+
+
     public virtual void SaveModel(string filePath)
     {
         if (string.IsNullOrWhiteSpace(filePath))
@@ -867,7 +890,9 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
         }
         try
         {
-            File.WriteAllBytes(filePath, data);
+            byte[] envelopedData = ModelFileHeader.WrapWithHeader(
+                data, this, GetInputShape(), GetOutputShape(), SerializationFormat.Binary);
+            File.WriteAllBytes(filePath, envelopedData);
         }
         catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is System.Security.SecurityException)
         {
@@ -892,6 +917,13 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
         try
         {
             var data = File.ReadAllBytes(filePath);
+
+            // Extract payload from AIMF envelope if present, otherwise assume legacy raw format
+            if (ModelFileHeader.HasHeader(data))
+            {
+                data = ModelFileHeader.ExtractPayload(data);
+            }
+
             Deserialize(data);
         }
         catch (Exception ex)

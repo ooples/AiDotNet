@@ -15,7 +15,7 @@ namespace AiDotNet.Classification.MultiLabel;
 /// traditional classification which assigns exactly one label.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
-public abstract class MultiLabelClassifierBase<T> : IMultiLabelClassifier<T>, IConfigurableModel<T>
+public abstract class MultiLabelClassifierBase<T> : IMultiLabelClassifier<T>, IConfigurableModel<T>, IModelShape
 {
     /// <summary>
     /// Gets the numeric operations provider for type T.
@@ -268,16 +268,67 @@ public abstract class MultiLabelClassifierBase<T> : IMultiLabelClassifier<T>, IC
     }
 
     /// <inheritdoc />
+    public virtual int[] GetInputShape()
+    {
+        return new[] { NumFeatures };
+    }
+
+    /// <inheritdoc/>
+    public virtual int[] GetOutputShape()
+    {
+        return new[] { NumLabels };
+    }
+
+    /// <inheritdoc/>
+    public virtual DynamicShapeInfo GetDynamicShapeInfo()
+    {
+        return DynamicShapeInfo.None;
+    }
+
+
     public virtual void SaveModel(string path)
     {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            throw new ArgumentException("File path cannot be null or empty.", nameof(path));
+        }
+
+        var fullPath = System.IO.Path.GetFullPath(path);
+        var directory = System.IO.Path.GetDirectoryName(fullPath);
+        if (!string.IsNullOrEmpty(directory) && !System.IO.Directory.Exists(directory))
+        {
+            System.IO.Directory.CreateDirectory(directory);
+        }
+
         byte[] serializedData = Serialize();
-        System.IO.File.WriteAllBytes(path, serializedData);
+        byte[] envelopedData = ModelFileHeader.WrapWithHeader(
+            serializedData, this, GetInputShape(), GetOutputShape(), SerializationFormat.Json,
+            GetDynamicShapeInfo());
+        System.IO.File.WriteAllBytes(fullPath, envelopedData);
     }
 
     /// <inheritdoc />
     public virtual void LoadModel(string path)
     {
-        byte[] serializedData = System.IO.File.ReadAllBytes(path);
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            throw new ArgumentException("File path cannot be null or empty.", nameof(path));
+        }
+
+        var fullPath = System.IO.Path.GetFullPath(path);
+        if (!System.IO.File.Exists(fullPath))
+        {
+            throw new System.IO.FileNotFoundException($"Model file not found: {fullPath}", fullPath);
+        }
+
+        byte[] serializedData = System.IO.File.ReadAllBytes(fullPath);
+
+        // Extract payload from AIMF envelope if present; use raw bytes for legacy files
+        if (ModelFileHeader.HasHeader(serializedData))
+        {
+            serializedData = ModelFileHeader.ExtractPayload(serializedData);
+        }
+
         Deserialize(serializedData);
     }
 

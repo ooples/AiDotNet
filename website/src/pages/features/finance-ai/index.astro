@@ -1,0 +1,74 @@
+---
+import FeatureDetailLayout from '../../../layouts/FeatureDetailLayout.astro';
+---
+
+<FeatureDetailLayout
+  title="Financial AI"
+  seoTitle="95+ Financial AI Models for .NET - AiDotNet"
+  seoDescription="Purpose-built AI for quantitative finance. FinBERT, DeepAR, Chronos, N-BEATS, and 95+ financial AI models for time series, NLP, and risk in C#."
+  count="95+"
+  tagline="Purpose-built AI models for quantitative finance and trading"
+  description="Specialized AI models designed for financial applications. From FinBERT sentiment analysis to Chronos time series forecasting, from GARCH volatility modeling to portfolio optimization. Build trading strategies, risk models, and financial analytics entirely in .NET."
+  icon='<svg class="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>'
+  useCases={['Algorithmic Trading', 'Risk Assessment', 'Sentiment Analysis', 'Price Forecasting', 'Portfolio Optimization', 'Fraud Detection', 'Credit Scoring', 'Market Microstructure']}
+  subcategories={[
+    {
+      name: 'Financial NLP',
+      description: 'Understand financial text, earnings calls, SEC filings, and market sentiment.',
+      items: [
+        { name: 'FinBERT', detail: 'BERT fine-tuned on financial text for sentiment analysis of earnings calls and news.' },
+        { name: 'FinGPT', detail: 'Open-source financial LLM for robo-advising, analysis, and report generation.' },
+        { name: 'BloombergGPT', detail: 'Financial domain LLM trained on Bloomberg financial data corpus.' },
+        { name: 'SecBERT', detail: 'BERT pre-trained on SEC filings for regulatory document understanding.' },
+        { name: 'FinMA', detail: 'Financial domain instruction-tuned model for complex financial reasoning.' },
+      ]
+    },
+    {
+      name: 'Time Series Forecasting',
+      description: 'Predict prices, volumes, and financial metrics with specialized time series models.',
+      items: [
+        { name: 'DeepAR', detail: 'Autoregressive RNN for probabilistic forecasting with uncertainty estimates.' },
+        { name: 'Chronos', detail: 'Foundation model for zero-shot time series forecasting via tokenization.' },
+        { name: 'TimesFM', detail: 'Google time series foundation model with decoder-only architecture.' },
+        { name: 'N-BEATS', detail: 'Neural Basis Expansion for interpretable time series forecasting.' },
+        { name: 'N-HiTS', detail: 'Neural Hierarchical Interpolation for multi-scale temporal patterns.' },
+        { name: 'TFT', detail: 'Temporal Fusion Transformer with interpretable multi-horizon forecasting.' },
+        { name: 'PatchTST', detail: 'Channel-independent patch tokenization for long-range time series.' },
+        { name: 'iTransformer', detail: 'Inverted transformer treating each variate as a token.' },
+        { name: 'Autoformer', detail: 'Auto-correlation mechanism for long-term time series forecasting.' },
+        { name: 'Informer', detail: 'ProbSparse self-attention for efficient long sequence forecasting.' },
+      ]
+    },
+    {
+      name: 'Risk & Portfolio Models',
+      description: 'Quantitative risk assessment, portfolio optimization, and derivatives pricing.',
+      items: [
+        { name: 'GARCH', detail: 'Generalized Autoregressive Conditional Heteroskedasticity for volatility modeling.' },
+        { name: 'VaR Models', detail: 'Value at Risk estimation with historical, parametric, and Monte Carlo methods.' },
+        { name: 'Black-Scholes', detail: 'Options pricing model with Greeks calculation.' },
+        { name: 'Monte Carlo', detail: 'Simulation-based pricing for exotic derivatives and portfolio risk.' },
+        { name: 'Portfolio Optimization', detail: 'Mean-variance, Black-Litterman, and risk parity portfolio construction.' },
+        { name: 'Factor Models', detail: 'Multi-factor risk models (Fama-French, Barra) for return attribution.' },
+      ]
+    }
+  ]}
+  codeExample={`using AiDotNet;
+
+// Financial sentiment analysis with AiModelBuilder
+var sentimentModel = await new AiModelBuilder<float, float[], float>()
+    .ConfigureModel(new FinBERT<float>())
+    .ConfigureOptimizer(new AdamOptimizer<float>())
+    .ConfigurePreprocessing()
+    .BuildAsync(financialTexts, sentimentLabels);
+
+var sentiment = sentimentModel.Predict(earningsCallText);
+
+// Time series forecasting with AiModelBuilder
+var forecastModel = await new AiModelBuilder<float, float[], float>()
+    .ConfigureModel(new Chronos<float>("chronos-t5-large"))
+    .ConfigurePreprocessing()
+    .BuildAsync(historicalPrices, futureValues);
+
+var forecast = forecastModel.Predict(recentPrices);`}
+  codeTitle="Financial AI with AiModelBuilder"
+/>

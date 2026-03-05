@@ -1,0 +1,36 @@
+---
+/**
+ * Feature card displaying a category with icon, count badge, title, and description.
+ * @prop icon - SVG markup for the card icon. MUST be a trusted static string from page source
+ *              (never user-generated content) since it is rendered with set:html.
+ */
+interface Props {
+  title: string;
+  description: string;
+  count: string;
+  /** SVG icon markup. Must be a trusted static string, not user input. */
+  icon: string;
+}
+
+const { title, description, count, icon } = Astro.props;
+---
+
+<div class="gsap-fade-up group relative p-6 rounded-2xl border border-slate-200 dark:border-slate-700/50 bg-white dark:bg-slate-800/50 hover:border-brand-blue/50 dark:hover:border-brand-purple/50 transition-all duration-300 hover:shadow-lg hover:shadow-brand-blue/5 dark:hover:shadow-brand-purple/5">
+  <!-- Gradient glow on hover -->
+  <div class="absolute inset-0 rounded-2xl bg-gradient-brand opacity-0 group-hover:opacity-[0.03] transition-opacity duration-300"></div>
+
+  <div class="relative">
+    <!-- Icon -->
+    <div class="w-10 h-10 mb-4 flex items-center justify-center rounded-lg bg-gradient-brand text-white text-lg">
+      <Fragment set:html={icon} />
+    </div>
+
+    <!-- Count badge -->
+    <span class="inline-block mb-2 px-2 py-0.5 text-xs font-bold rounded-full bg-brand-blue/10 dark:bg-brand-purple/10 text-brand-blue dark:text-brand-purple">
+      {count}
+    </span>
+
+    <h3 class="text-lg font-semibold text-slate-900 dark:text-white mb-2">{title}</h3>
+    <p class="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">{description}</p>
+  </div>
+</div>

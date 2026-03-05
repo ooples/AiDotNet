@@ -1,0 +1,911 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+const base = import.meta.env.BASE_URL;
+
+// All feature categories with actual model/algorithm names from codebase audit
+const categories = [
+  {
+    id: 'neural-networks',
+    title: 'Neural Network Layers',
+    count: '160+',
+    tagline: 'Every major architecture, from classic to cutting-edge',
+    icon: '<svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>',
+    description: 'The most comprehensive collection of neural network layer types available in any .NET library. Build any architecture from individual layers or use pre-built models.',
+    subcategories: [
+      {
+        name: 'Convolutional',
+        items: ['Conv1D', 'Conv2D', 'Conv3D', 'DepthwiseSeparableConv', 'DilatedConv', 'DeformableConv', 'GroupConv', 'TransposedConv', 'CausalConv']
+      },
+      {
+        name: 'Recurrent',
+        items: ['LSTM', 'GRU', 'BiLSTM', 'BiGRU', 'IndRNN', 'MinimalRNN', 'QRNN', 'SRU', 'FastGRNN', 'LiGRU']
+      },
+      {
+        name: 'Attention & Transformer',
+        items: ['MultiHeadAttention', 'SelfAttention', 'CrossAttention', 'FlashAttention', 'LinearAttention', 'SlidingWindowAttention', 'GroupedQueryAttention', 'MultiQueryAttention', 'RotaryEmbedding', 'ALiBi']
+      },
+      {
+        name: 'Normalization',
+        items: ['BatchNorm', 'LayerNorm', 'GroupNorm', 'InstanceNorm', 'RMSNorm', 'AdaptiveNorm', 'PowerNorm', 'SwitchNorm']
+      },
+      {
+        name: 'Pooling',
+        items: ['MaxPool', 'AvgPool', 'AdaptiveAvgPool', 'GlobalAvgPool', 'StochasticPool', 'MixedPool', 'AttentionPool', 'GeM']
+      },
+      {
+        name: 'Regularization',
+        items: ['Dropout', 'SpatialDropout', 'DropBlock', 'DropPath', 'StochasticDepth', 'Shake-Shake', 'Mixup', 'CutMix']
+      },
+      {
+        name: 'Graph Neural Networks',
+        items: ['GCN', 'GAT', 'GraphSAGE', 'GIN', 'EdgeConv', 'PointNet', 'SchNet', 'DimeNet', 'PaiNN', 'EGNN']
+      },
+      {
+        name: 'Generative',
+        items: ['VAE', 'VQ-VAE', 'GAN', 'WGAN', 'StyleGAN', 'Progressive Growing', 'Normalizing Flow', 'Glow']
+      }
+    ]
+  },
+  {
+    id: 'diffusion-image',
+    title: 'Diffusion Models - Image',
+    count: '40+',
+    tagline: 'State-of-the-art image generation and editing',
+    icon: '<svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>',
+    description: 'Complete implementations of every major image diffusion architecture. Generate, edit, inpaint, and style images with the latest models.',
+    subcategories: [
+      {
+        name: 'Stable Diffusion Family',
+        items: ['StableDiffusion 1.5', 'StableDiffusion 2.0/2.1', 'SDXL', 'SDXL Turbo', 'SD3', 'SD3.5', 'StableCascade', 'StableDiffusionSAG', 'StableDiffusionGLIGEN', 'StableDiffusionDiffEdit', 'StableDiffusionAttendExcite', 'StableDiffusionSelf']
+      },
+      {
+        name: 'ControlNet & Adapters',
+        items: ['ControlNet', 'ControlNetXS', 'ControlNetUnion', 'T2I-Adapter', 'IP-Adapter', 'IP-AdapterFaceID', 'IP-AdapterPlus', 'InstantID', 'PhotoMaker', 'InstantStyle']
+      },
+      {
+        name: 'Flux & Latest',
+        items: ['Flux', 'FluxControlNet', 'FluxImg2Img', 'FluxInpaint', 'FluxControlInpaint', 'FluxPrior', 'FluxFill']
+      },
+      {
+        name: 'Other Architectures',
+        items: ['DALL-E 2/3', 'Imagen', 'Kandinsky 2.2/3.0', 'PixArt-Alpha/Sigma', 'Playground v2/2.5', 'DeepFloyd IF', 'Wuerstchen', 'Consistency Models', 'LCM', 'SDXL Lightning', 'Hyper-SD', 'DMD2']
+      },
+      {
+        name: 'Inpainting & Editing',
+        items: ['StableDiffusionInpaint', 'SDXLInpaint', 'RunwayInpainting', 'BlendedDiffusion', 'Paint-by-Example', 'InstructPix2Pix', 'MagicBrush', 'BrushNet', 'PowerPaint']
+      },
+      {
+        name: 'Img2Img & Upscaling',
+        items: ['StableDiffusionImg2Img', 'SDXLImg2Img', 'StableDiffusionUpscale', 'RealESRGAN', 'SwinIR', 'StableUnCLIP']
+      }
+    ]
+  },
+  {
+    id: 'diffusion-video',
+    title: 'Diffusion Models - Video',
+    count: '29',
+    tagline: 'Text-to-video, image-to-video, and video editing',
+    icon: '<svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>',
+    description: 'Generate, edit, and transform videos using the latest diffusion-based architectures. From short clips to long-form content.',
+    subcategories: [
+      {
+        name: 'Text-to-Video',
+        items: ['Sora', 'CogVideoX', 'HunyuanVideo', 'Kling', 'Veo', 'Wan', 'LTX Video', 'Mochi', 'Allegro', 'Pyramid Flow', 'Open-Sora', 'Open-Sora Plan']
+      },
+      {
+        name: 'Image-to-Video',
+        items: ['AnimateDiff', 'AnimateDiffLightning', 'StableVideoDiffusion', 'SVD-XT', 'DynamiCrafter', 'I2VGen-XL', 'ConsistI2V']
+      },
+      {
+        name: 'Video Editing',
+        items: ['TokenFlow', 'FateZero', 'Video-P2P', 'Tune-A-Video', 'Text2Video-Zero', 'ControlVideo', 'VideoComposer']
+      }
+    ]
+  },
+  {
+    id: 'diffusion-audio',
+    title: 'Diffusion Models - Audio',
+    count: '7',
+    tagline: 'Music, speech, and sound effect generation',
+    icon: '<svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"/></svg>',
+    description: 'Generate music, speech, and audio effects from text descriptions using diffusion-based models.',
+    subcategories: [
+      {
+        name: 'Audio Generation',
+        items: ['AudioLDM', 'AudioLDM2', 'Bark', 'MusicGen', 'MusicLDM', 'Riffusion', 'Noise2Music', 'AudioGen', 'MAGNeT', 'Stable Audio', 'JEN-1', 'Make-An-Audio']
+      }
+    ]
+  },
+  {
+    id: 'computer-vision',
+    title: 'Computer Vision',
+    count: '115+',
+    tagline: 'Detection, segmentation, OCR, and recognition',
+    icon: '<svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>',
+    description: 'End-to-end computer vision pipelines. From object detection to instance segmentation to text recognition, all in pure C#.',
+    subcategories: [
+      {
+        name: 'Object Detection',
+        items: ['DETR', 'Deformable-DETR', 'DINO', 'RT-DETR', 'FasterRCNN', 'CascadeRCNN', 'YOLOv8', 'YOLOv9', 'YOLOv10', 'YOLOv11', 'Co-DETR', 'EfficientDet']
+      },
+      {
+        name: 'Segmentation',
+        items: ['SAM', 'SAM 2', 'EfficientSAM', 'FastSAM', 'MobileSAM', 'Mask2Former', 'OneFormer', 'SegFormer', 'MedSAM', 'U-Net', 'DeepLabV3', 'PSPNet', 'HRNet', 'SegGPT', 'Grounded-SAM']
+      },
+      {
+        name: 'OCR & Text Detection',
+        items: ['PaddleOCR', 'EasyOCR', 'TrOCR', 'SVTR', 'DBNet', 'EAST', 'CRAFT', 'TextFuseNet']
+      },
+      {
+        name: 'Image Classification',
+        items: ['ResNet', 'EfficientNet', 'ViT', 'DeiT', 'Swin Transformer', 'ConvNeXt', 'MaxViT', 'BEiT', 'EVA', 'DINOv2']
+      },
+      {
+        name: 'Depth & 3D',
+        items: ['MiDaS', 'Depth Anything', 'ZoeDepth', 'Marigold', 'NeRF', 'Gaussian Splatting', 'Point-E', 'Shap-E']
+      }
+    ]
+  },
+  {
+    id: 'vision-language',
+    title: 'Vision-Language Models',
+    count: '165+',
+    tagline: 'Multimodal understanding and generation',
+    icon: '<svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>',
+    description: 'Bridge vision and language with instruction-tuned VLMs, vision encoders, and multimodal architectures.',
+    subcategories: [
+      {
+        name: 'Instruction-Tuned VLMs',
+        items: ['LLaVA', 'LLaVA-NeXT', 'LLaVA-OneVision', 'InternVL', 'InternVL2', 'CogVLM', 'CogVLM2', 'DeepSeekVL', 'DeepSeekVL2', 'Qwen-VL', 'Qwen2-VL', 'Phi-3-Vision', 'Phi-3.5-Vision', 'MiniCPM-V', 'Idefics2', 'Idefics3', 'Molmo', 'Pixtral']
+      },
+      {
+        name: 'Vision Encoders',
+        items: ['CLIP', 'OpenCLIP', 'SigLIP', 'ALIGN', 'BLIP', 'BLIP-2', 'DINOv2', 'DINOv3', 'Florence-2', 'InternViT', 'EVA-CLIP', 'MetaCLIP', 'SigLIP-2']
+      },
+      {
+        name: 'Grounding & Detection',
+        items: ['Grounding DINO', 'KOSMOS-2', 'GLaMM', 'Ferret', 'Shikra', 'CogAgent', 'OmniParser']
+      },
+      {
+        name: 'Document Understanding',
+        items: ['LayoutLM', 'LayoutLMv2', 'LayoutLMv3', 'DocFormer', 'Donut', 'Nougat', 'GOT-OCR']
+      }
+    ]
+  },
+  {
+    id: 'audio-speech',
+    title: 'Audio, Speech & TTS',
+    count: '250+',
+    tagline: 'Full audio AI pipeline from recognition to generation',
+    icon: '<svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/></svg>',
+    description: 'From speech recognition to text-to-speech to audio classification. The most comprehensive audio AI implementation in any .NET library.',
+    subcategories: [
+      {
+        name: 'Speech Recognition (ASR)',
+        items: ['Whisper', 'Whisper v3', 'wav2vec 2.0', 'HuBERT', 'WavLM', 'Conformer', 'Canary', 'USM', 'MMS', 'SeamlessM4T']
+      },
+      {
+        name: 'Text-to-Speech (TTS)',
+        items: ['VITS', 'VITS2', 'Tacotron 2', 'FastSpeech 2', 'Grad-TTS', 'NaturalSpeech', 'VoiceCraft', 'StyleTTS2', 'XTTS', 'Tortoise TTS', 'Bark', 'Piper', 'MetaVoice']
+      },
+      {
+        name: 'Audio Classification',
+        items: ['AST', 'BEATs', 'CLAP', 'Audio Spectrogram Transformer', 'PANNs', 'Whisper (classification)', 'HuBERT (classification)']
+      },
+      {
+        name: 'Voice Conversion & Cloning',
+        items: ['RVC', 'So-VITS-SVC', 'OpenVoice', 'VALL-E', 'VALL-E X', 'Vocos', 'FreeVC']
+      },
+      {
+        name: 'Music & Sound',
+        items: ['MusicGen', 'AudioCraft', 'Riffusion', 'Stable Audio', 'JEN-1', 'AudioLDM', 'MusicLDM', 'MAGNeT']
+      }
+    ]
+  },
+  {
+    id: 'video-processing',
+    title: 'Video Processing',
+    count: '80+',
+    tagline: 'Enhancement, interpolation, tracking, and understanding',
+    icon: '<svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M7 4V2m5 2V2m5 2V2M3 10h18M5 4h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V6a2 2 0 012-2z"/></svg>',
+    description: 'Complete video understanding and processing pipeline. Super-resolution, frame interpolation, tracking, action recognition, and more.',
+    subcategories: [
+      {
+        name: 'Super-Resolution',
+        items: ['BasicVSR', 'BasicVSR++', 'RealBasicVSR', 'EDVR', 'IconVSR', 'VRT', 'RVRT', 'ESPCN', 'RealESRGAN (Video)']
+      },
+      {
+        name: 'Frame Interpolation',
+        items: ['RIFE', 'IFRNet', 'AMT', 'EMA-VFI', 'M2M', 'FLAVR', 'FILM', 'SuperSloMo', 'XVFI']
+      },
+      {
+        name: 'Object Tracking',
+        items: ['ByteTrack', 'BoT-SORT', 'DeepSORT', 'OC-SORT', 'StrongSORT', 'MOTR', 'TrackFormer']
+      },
+      {
+        name: 'Action Recognition',
+        items: ['VideoMAE', 'TimeSformer', 'SlowFast', 'X3D', 'MViTv2', 'VideoSwin', 'UniFormer']
+      },
+      {
+        name: 'Video Understanding',
+        items: ['InternVideo', 'VideoChatGPT', 'Video-LLaVA', 'PLLaVA', 'VideoLLaMA', 'LLaVA-Video']
+      }
+    ]
+  },
+  {
+    id: 'classical-ml',
+    title: 'Classical Machine Learning',
+    count: '155+',
+    tagline: 'Complete traditional ML toolkit',
+    icon: '<svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>',
+    description: 'Every classical ML algorithm you need. Classification, regression, clustering, anomaly detection, dimensionality reduction, and more.',
+    subcategories: [
+      {
+        name: 'Classification (50)',
+        items: ['RandomForest', 'GradientBoosting', 'XGBoost', 'LightGBM', 'CatBoost', 'SVM', 'KNN', 'LogisticRegression', 'NaiveBayes', 'DecisionTree', 'ExtraTrees', 'AdaBoost', 'BaggingClassifier', 'VotingClassifier', 'StackingClassifier', 'SGDClassifier']
+      },
+      {
+        name: 'Regression (57)',
+        items: ['LinearRegression', 'Ridge', 'Lasso', 'ElasticNet', 'RandomForestRegressor', 'GradientBoostingRegressor', 'SVR', 'KNeighborsRegressor', 'DecisionTreeRegressor', 'BayesianRidge', 'HuberRegressor', 'QuantileRegression', 'PLSRegression', 'IsotonicRegression']
+      },
+      {
+        name: 'Clustering (48)',
+        items: ['KMeans', 'DBSCAN', 'HDBSCAN', 'AgglomerativeClustering', 'SpectralClustering', 'GaussianMixture', 'OPTICS', 'MeanShift', 'Birch', 'AffinityPropagation', 'MiniBatchKMeans', 'BisectingKMeans', 'VBGMM', 'DPGMM']
+      },
+      {
+        name: 'Anomaly Detection',
+        items: ['IsolationForest', 'LocalOutlierFactor', 'OneClassSVM', 'EllipticEnvelope', 'AutoEncoder', 'COPOD', 'ECOD', 'SUOD', 'DeepSVDD', 'DAGMM', 'AnoGAN', 'USAD', 'TranAD']
+      },
+      {
+        name: 'Dimensionality Reduction',
+        items: ['PCA', 'KernelPCA', 't-SNE', 'UMAP', 'LDA', 'ICA', 'NMF', 'TruncatedSVD', 'FactorAnalysis', 'Isomap', 'SpectralEmbedding', 'MDS']
+      }
+    ]
+  },
+  {
+    id: 'reinforcement-learning',
+    title: 'Reinforcement Learning',
+    count: '50+',
+    tagline: 'From classic to state-of-the-art RL algorithms',
+    icon: '<svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>',
+    description: 'Complete RL toolkit with 50+ agent implementations. From classic Q-learning to modern transformer-based agents.',
+    subcategories: [
+      {
+        name: 'Policy Gradient',
+        items: ['PPO', 'TRPO', 'A2C', 'A3C', 'REINFORCE', 'GRPO', 'DAPO']
+      },
+      {
+        name: 'Off-Policy',
+        items: ['SAC', 'TD3', 'DDPG', 'DQN', 'Double DQN', 'Dueling DQN', 'Rainbow DQN', 'C51', 'QR-DQN', 'IQN']
+      },
+      {
+        name: 'Model-Based',
+        items: ['MuZero', 'AlphaZero', 'Dreamer', 'DreamerV2', 'DreamerV3', 'MBPO', 'PETS', 'World Models']
+      },
+      {
+        name: 'Offline & Transformer',
+        items: ['DecisionTransformer', 'CQL', 'BCQ', 'BEAR', 'IQL', 'TD3+BC', 'AWAC']
+      },
+      {
+        name: 'Multi-Agent',
+        items: ['MAPPO', 'MADDPG', 'QMIX', 'VDN', 'COMA', 'CommNet']
+      }
+    ]
+  },
+  {
+    id: 'lora-finetuning',
+    title: 'LoRA & Fine-Tuning',
+    count: '50+',
+    tagline: 'Parameter-efficient fine-tuning methods',
+    icon: '<svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/></svg>',
+    description: 'Every major parameter-efficient fine-tuning method. Adapt large models with minimal compute using LoRA variants and beyond.',
+    subcategories: [
+      {
+        name: 'LoRA Variants',
+        items: ['LoRA', 'QLoRA', 'DoRA', 'AdaLoRA', 'LoRA+', 'rsLoRA', 'PiSSA', 'OLoRA', 'LoRA-FA', 'Delta-LoRA', 'LoRA-XS']
+      },
+      {
+        name: 'Advanced PEFT',
+        items: ['VeRA', 'MoRA', 'GaLore', 'LoftQ', 'QA-LoRA', 'LongLoRA', 'LoRAMoE', 'MELoRA', 'PeriodicLoRA', 'CorDA']
+      },
+      {
+        name: 'Other Methods',
+        items: ['Prefix Tuning', 'Prompt Tuning', 'P-Tuning v2', 'IA3', 'BitFit', 'Adapter (Houlsby)', 'Adapter (Pfeiffer)', 'UniPELT', 'MAM Adapter', 'Compacter']
+      }
+    ]
+  },
+  {
+    id: 'ner-nlp',
+    title: 'NER & NLP',
+    count: '30+',
+    tagline: 'Named entity recognition and natural language processing',
+    icon: '<svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z"/></svg>',
+    description: 'Domain-specific NER models for healthcare, finance, legal, and general-purpose text understanding.',
+    subcategories: [
+      {
+        name: 'General Purpose',
+        items: ['BERT-NER', 'SpaCy NER', 'Flair NER', 'LUKE', 'GLiNER', 'UniNER']
+      },
+      {
+        name: 'Domain-Specific',
+        items: ['BioBERT', 'PubMedBERT', 'BioMegatron', 'ClinicalBERT', 'FinBERT', 'SecBERT', 'LegalBERT', 'SciBERT', 'MatSciBERT']
+      },
+      {
+        name: 'Multilingual',
+        items: ['XLM-RoBERTa NER', 'mBERT NER', 'RemBERT NER', 'GlotNER']
+      }
+    ]
+  },
+  {
+    id: 'optimizers',
+    title: 'Optimizers',
+    count: '40+',
+    tagline: 'Every optimization algorithm you need',
+    icon: '<svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>',
+    description: 'From classic SGD to cutting-edge optimizers. All with learning rate scheduling and weight decay support.',
+    subcategories: [
+      {
+        name: 'Adaptive',
+        items: ['Adam', 'AdamW', 'AdaGrad', 'AdaDelta', 'RMSProp', 'NAdam', 'RAdam', 'AdaBound', 'AdaBelief', 'Adan', 'Lion', 'Prodigy', 'CAME', 'Sophia']
+      },
+      {
+        name: 'Large-Batch',
+        items: ['LAMB', 'LARS', 'NovoGrad', 'NVLAMB']
+      },
+      {
+        name: 'Memory Efficient',
+        items: ['Adafactor', 'SM3', '8-bit Adam', 'CAME', 'GaLore Optimizer']
+      },
+      {
+        name: 'Classic',
+        items: ['SGD', 'SGD+Momentum', 'Nesterov', 'ASGD', 'Rprop']
+      }
+    ]
+  },
+  {
+    id: 'loss-functions',
+    title: 'Loss Functions',
+    count: '37',
+    tagline: 'Comprehensive loss function library',
+    icon: '<svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>',
+    description: 'Loss functions for classification, regression, segmentation, generation, and specialized tasks.',
+    subcategories: [
+      {
+        name: 'Classification',
+        items: ['CrossEntropy', 'BinaryCrossEntropy', 'FocalLoss', 'LabelSmoothing', 'ArcFace', 'CosFace', 'PolyLoss']
+      },
+      {
+        name: 'Regression',
+        items: ['MSE', 'MAE', 'Huber', 'LogCosh', 'Quantile', 'Tukey Biweight']
+      },
+      {
+        name: 'Segmentation',
+        items: ['Dice', 'Tversky', 'Lovasz', 'Boundary', 'Combo']
+      },
+      {
+        name: 'Generative',
+        items: ['Perceptual (VGG)', 'LPIPS', 'SSIM', 'Wasserstein', 'Hinge', 'Contrastive', 'Triplet', 'InfoNCE', 'NT-Xent']
+      }
+    ]
+  },
+  {
+    id: 'activations',
+    title: 'Activation Functions',
+    count: '40',
+    tagline: 'Every activation function in the literature',
+    icon: '<svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>',
+    description: 'From classic ReLU to modern gating mechanisms. Every activation function used in contemporary deep learning.',
+    subcategories: [
+      {
+        name: 'Standard',
+        items: ['ReLU', 'LeakyReLU', 'PReLU', 'ELU', 'SELU', 'GELU', 'SiLU/Swish', 'Mish', 'Softmax', 'Sigmoid', 'Tanh']
+      },
+      {
+        name: 'Advanced',
+        items: ['GLU', 'SwiGLU', 'GeGLU', 'ReGLU', 'Maxout', 'ACON', 'FReLU', 'TanhExp', 'Squareplus', 'Softplus', 'Softsign']
+      },
+      {
+        name: 'Specialized',
+        items: ['Hardswish', 'Hardshrink', 'Softshrink', 'Tanhshrink', 'CELU', 'LogSigmoid', 'Threshold', 'RReLU', 'ReLU6']
+      }
+    ]
+  },
+  {
+    id: 'federated-learning',
+    title: 'Federated Learning',
+    count: '180+',
+    tagline: 'Privacy-preserving distributed training',
+    icon: '<svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"/></svg>',
+    description: 'Train models across distributed clients while keeping data private. Full federated learning framework with aggregation strategies.',
+    subcategories: [
+      {
+        name: 'Aggregation Strategies',
+        items: ['FedAvg', 'FedProx', 'FedMA', 'FedNova', 'Scaffold', 'FedOpt', 'FedAdam', 'FedYogi', 'FedAdagrad']
+      },
+      {
+        name: 'Privacy',
+        items: ['Differential Privacy', 'Secure Aggregation', 'Homomorphic Encryption', 'Gradient Compression', 'Gradient Quantization']
+      },
+      {
+        name: 'Infrastructure',
+        items: ['Client Manager', 'Server Coordinator', 'Model Versioning', 'Client Selection', 'Heterogeneous Data Handling']
+      }
+    ]
+  },
+  {
+    id: 'finance-ai',
+    title: 'Financial AI',
+    count: '95+',
+    tagline: 'Purpose-built for quantitative finance',
+    icon: '<svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>',
+    description: 'Specialized AI models for financial analysis, time series forecasting, risk assessment, and market prediction.',
+    subcategories: [
+      {
+        name: 'Financial NLP',
+        items: ['FinBERT', 'FinGPT', 'BloombergGPT', 'SecBERT', 'FinMA']
+      },
+      {
+        name: 'Time Series',
+        items: ['DeepAR', 'Chronos', 'TimesFM', 'N-BEATS', 'N-HiTS', 'TFT', 'PatchTST', 'TimesNet', 'iTransformer', 'Autoformer', 'FEDformer', 'Informer']
+      },
+      {
+        name: 'Risk & Portfolio',
+        items: ['GARCH', 'VaR Models', 'Black-Scholes', 'Monte Carlo Simulation', 'Portfolio Optimization', 'Factor Models']
+      }
+    ]
+  },
+  {
+    id: 'model-serving',
+    title: 'Model Serving & Deployment',
+    count: '45+',
+    tagline: 'Production-ready model serving infrastructure',
+    icon: '<svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"/></svg>',
+    description: 'Deploy models with REST API and gRPC endpoints. Includes encrypted model protection, license management, and billing integration.',
+    subcategories: [
+      {
+        name: 'Serving Infrastructure',
+        items: ['REST API Endpoints', 'gRPC Services', 'Model Registry', 'Version Management', 'Health Checks', 'Metrics & Monitoring']
+      },
+      {
+        name: 'Model Protection',
+        items: ['AES-256-GCM Encryption', 'Three-Layer Obfuscation', 'Runtime Decryption', 'Tamper Detection', 'Key Rotation']
+      },
+      {
+        name: 'License Management',
+        items: ['License Key Generation', 'Self-Hosted Verification Server', 'Seat Management', 'Feature Gating', 'Usage Tracking', 'Stripe Integration']
+      }
+    ]
+  },
+  {
+    id: 'distributed-training',
+    title: 'Distributed & Parallel Training',
+    count: '30+',
+    tagline: 'Scale training across multiple GPUs and nodes',
+    icon: '<svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>',
+    description: 'Scale model training from single GPU to multi-node clusters. Supports data parallelism, model parallelism, and hybrid strategies.',
+    subcategories: [
+      {
+        name: 'Data Parallelism',
+        items: ['DDP (Distributed Data Parallel)', 'FSDP (Fully Sharded Data Parallel)', 'ZeRO Stage 1/2/3', 'Gradient Accumulation', 'Mixed Precision Training']
+      },
+      {
+        name: 'Model Parallelism',
+        items: ['Tensor Parallelism', 'Pipeline Parallelism', 'Expert Parallelism', 'Sequence Parallelism']
+      },
+      {
+        name: 'Optimization',
+        items: ['Gradient Checkpointing', 'Activation Recomputation', 'Communication Overlap', 'Bucket Gradient AllReduce']
+      }
+    ]
+  },
+  {
+    id: 'automl-nas',
+    title: 'AutoML & Neural Architecture Search',
+    count: '4',
+    tagline: 'Automated model design and hyperparameter optimization',
+    icon: '<svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>',
+    description: 'Let the algorithm find the best architecture and hyperparameters. Supports evolutionary search, Bayesian optimization, and differentiable NAS.',
+    subcategories: [
+      {
+        name: 'Architecture Search',
+        items: ['DARTS', 'ENAS', 'ProxylessNAS', 'FBNet', 'Once-for-All', 'EfficientNAS']
+      },
+      {
+        name: 'Hyperparameter Optimization',
+        items: ['Bayesian Optimization', 'Random Search', 'Grid Search', 'Hyperband', 'BOHB', 'Optuna-style TPE']
+      },
+      {
+        name: 'AutoML Pipeline',
+        items: ['Feature Selection', 'Model Selection', 'Ensemble Building', 'Cross-Validation', 'Early Stopping']
+      }
+    ]
+  },
+  {
+    id: 'performance',
+    title: 'Performance & Hardware',
+    count: 'Hardware-accelerated',
+    tagline: 'SIMD-optimized, zero-dependency performance',
+    icon: '<svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"/></svg>',
+    description: 'No Python, no native runtimes. Pure .NET with SIMD vectorization, GPU acceleration, and AOT compilation support.',
+    subcategories: [
+      {
+        name: 'SIMD & Vectorization',
+        items: ['Vector<T> Operations', 'AVX/AVX2/AVX-512', 'SSE4.2', 'ARM NEON', 'Span<T> Fast Paths', 'Memory<T> Pooling']
+      },
+      {
+        name: 'GPU Acceleration',
+        items: ['CUDA Support', 'OpenCL Support', 'GPU Memory Management', 'Kernel Fusion', 'Mixed Precision (FP16/BF16)']
+      },
+      {
+        name: 'Compilation',
+        items: ['AOT Compilation', '.NET 10 Support', '.NET Framework 4.7.1', 'NativeAOT Ready', 'Trimming Compatible']
+      }
+    ]
+  }
+];
+
+// Total count for hero
+const totalModels = categories.reduce((sum, cat) => {
+  const num = parseInt(cat.count.replace(/[^0-9]/g, ''));
+  return sum + (isNaN(num) ? 0 : num);
+}, 0);
+---
+
+<BaseLayout
+  title="Features - AiDotNet | Complete AI/ML Catalog"
+  description="Explore 8,100+ classes across 139 modules covering neural networks, classical ML, computer vision, diffusion models, audio, reinforcement learning, and more. The complete AI/ML platform for .NET."
+>
+  <!-- Hero -->
+  <section class="pt-32 pb-16 relative overflow-hidden">
+    <div class="absolute inset-0 -z-10">
+      <div class="absolute inset-0 bg-white dark:bg-surface-dark"></div>
+      <div class="absolute top-0 left-1/4 w-96 h-96 bg-brand-blue/10 rounded-full blur-3xl"></div>
+      <div class="absolute bottom-0 right-1/4 w-96 h-96 bg-brand-purple/10 rounded-full blur-3xl"></div>
+      <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-brand-blue/5 rounded-full blur-3xl"></div>
+    </div>
+
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+      <span class="gsap-fade-up inline-block px-4 py-1.5 rounded-full text-xs font-semibold tracking-wide uppercase bg-brand-blue/10 dark:bg-brand-purple/10 text-brand-blue dark:text-brand-purple mb-6">
+        8,100+ Classes &bull; 139 Modules
+      </span>
+      <h1 class="gsap-fade-up text-4xl sm:text-5xl lg:text-6xl font-bold text-slate-900 dark:text-white mb-6">
+        Every AI/ML algorithm.<br/>
+        <span class="text-transparent bg-gradient-to-r from-brand-blue to-brand-purple bg-clip-text">
+          Pure .NET.
+        </span>
+      </h1>
+      <p class="gsap-fade-up text-lg text-slate-500 dark:text-slate-400 max-w-3xl mx-auto mb-8">
+        The most comprehensive AI and machine learning library for .NET. {categories.length} categories spanning neural networks, diffusion models, computer vision, NLP, audio, reinforcement learning, and more.
+      </p>
+
+      <!-- Search bar -->
+      <div class="gsap-fade-up max-w-xl mx-auto mb-8">
+        <div class="relative">
+          <svg class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+          </svg>
+          <input
+            id="feature-search"
+            type="text"
+            placeholder="Search models, algorithms, and features..."
+            class="w-full pl-12 pr-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-blue/50 dark:focus:ring-brand-purple/50 focus:border-transparent text-sm"
+          />
+          <span id="search-count" class="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-slate-400 hidden"></span>
+        </div>
+      </div>
+
+      <!-- Quick stats -->
+      <div class="gsap-fade-up flex flex-wrap justify-center gap-6 text-sm">
+        <div class="flex items-center gap-2 text-slate-500 dark:text-slate-400">
+          <span class="w-2 h-2 rounded-full bg-green-500"></span>
+          <span><strong class="text-slate-900 dark:text-white">{categories.length}</strong> Categories</span>
+        </div>
+        <div class="flex items-center gap-2 text-slate-500 dark:text-slate-400">
+          <span class="w-2 h-2 rounded-full bg-brand-blue"></span>
+          <span><strong class="text-slate-900 dark:text-white">0</strong> Python Dependencies</span>
+        </div>
+        <div class="flex items-center gap-2 text-slate-500 dark:text-slate-400">
+          <span class="w-2 h-2 rounded-full bg-brand-purple"></span>
+          <span><strong class="text-slate-900 dark:text-white">Apache 2.0</strong> Licensed</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Category sections -->
+  <section class="pb-20 relative">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="space-y-4" id="categories-container">
+        {categories.map((category, idx) => (
+          <div class="feature-category gsap-fade-up" data-category-id={category.id}>
+            <button
+              class="category-toggle w-full flex items-center justify-between p-6 rounded-2xl border border-slate-200 dark:border-slate-700/50 bg-white dark:bg-slate-800/50 hover:border-brand-blue/30 dark:hover:border-brand-purple/30 transition-all duration-300 group text-left"
+              aria-expanded="false"
+              data-target={`cat-${category.id}`}
+            >
+              <div class="flex items-center gap-4 min-w-0">
+                <!-- Icon -->
+                <div class="flex-shrink-0 w-12 h-12 flex items-center justify-center rounded-xl bg-gradient-brand text-white">
+                  <Fragment set:html={category.icon} />
+                </div>
+
+                <div class="min-w-0">
+                  <div class="flex items-center gap-3 flex-wrap">
+                    <h3 class="text-lg font-bold text-slate-900 dark:text-white">{category.title}</h3>
+                    <span class="inline-block px-2.5 py-0.5 text-xs font-bold rounded-full bg-brand-blue/10 dark:bg-brand-purple/10 text-brand-blue dark:text-brand-purple">
+                      {category.count}
+                    </span>
+                  </div>
+                  <p class="text-sm text-slate-500 dark:text-slate-400 mt-0.5">{category.tagline}</p>
+                </div>
+              </div>
+
+              <!-- Expand icon -->
+              <svg class="category-chevron flex-shrink-0 w-5 h-5 text-slate-400 group-hover:text-brand-blue dark:group-hover:text-brand-purple transition-all duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
+              </svg>
+            </button>
+
+            <!-- Expandable content -->
+            <div id={`cat-${category.id}`} class="category-content hidden">
+              <div class="px-6 pb-6 pt-2 border-x border-b border-slate-200 dark:border-slate-700/50 rounded-b-2xl bg-white dark:bg-slate-800/50 -mt-3">
+                <!-- Description -->
+                <p class="text-sm text-slate-600 dark:text-slate-300 mb-6 max-w-3xl">{category.description}</p>
+
+                <!-- Subcategories -->
+                <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {category.subcategories.map((sub) => (
+                    <div class="subcategory-card p-4 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-700/30">
+                      <h4 class="text-sm font-semibold text-slate-900 dark:text-white mb-3 flex items-center gap-2">
+                        <span class="w-1.5 h-1.5 rounded-full bg-gradient-brand flex-shrink-0"></span>
+                        {sub.name}
+                      </h4>
+                      <div class="flex flex-wrap gap-1.5">
+                        {sub.items.map((item) => (
+                          <span class="model-tag inline-block px-2 py-0.5 text-xs rounded-md bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-brand-blue/50 dark:hover:border-brand-purple/50 hover:text-brand-blue dark:hover:text-brand-purple transition-colors cursor-default">
+                            {item}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <!-- Link to detail page -->
+                <div class="mt-6 pt-4 border-t border-slate-100 dark:border-slate-700/30 flex items-center justify-between">
+                  <a
+                    href={`${base}features/${category.id}/`}
+                    class="text-sm font-medium text-brand-blue dark:text-brand-purple hover:underline inline-flex items-center gap-1"
+                  >
+                    View full {category.title.toLowerCase()} documentation
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/>
+                    </svg>
+                  </a>
+                  <span class="text-xs text-slate-400">{category.count} implementations</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <!-- No results message -->
+      <div id="no-results" class="hidden py-16 text-center">
+        <svg class="w-16 h-16 mx-auto text-slate-300 dark:text-slate-600 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+        </svg>
+        <p class="text-lg font-medium text-slate-500 dark:text-slate-400">No matching features found</p>
+        <p class="text-sm text-slate-400 dark:text-slate-500 mt-1">Try a different search term or browse all categories below</p>
+        <button id="clear-search" class="mt-4 px-4 py-2 text-sm font-medium text-brand-blue dark:text-brand-purple hover:underline">
+          Clear search
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="py-20 relative overflow-hidden">
+    <div class="absolute inset-0 bg-gradient-to-br from-brand-blue/5 to-brand-purple/5"></div>
+    <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center relative">
+      <h2 class="gsap-fade-up text-3xl sm:text-4xl font-bold text-slate-900 dark:text-white mb-6">
+        Ready to build with the most complete<br/>AI/ML library for .NET?
+      </h2>
+      <p class="gsap-fade-up text-slate-500 dark:text-slate-400 mb-8 max-w-2xl mx-auto">
+        Install AiDotNet for free and start building. The full library is open-source under Apache 2.0.
+      </p>
+      <div class="gsap-fade-up flex flex-col sm:flex-row items-center justify-center gap-4">
+        <a
+          href={`${base}docs/getting-started/installation/`}
+          class="px-8 py-3 text-base font-semibold text-white rounded-xl bg-gradient-brand hover:opacity-90 transition-opacity shadow-lg shadow-brand-blue/25"
+        >
+          Get Started Free
+        </a>
+        <a
+          href={`${base}pricing/`}
+          class="px-8 py-3 text-base font-semibold text-slate-700 dark:text-slate-200 rounded-xl border border-slate-300 dark:border-slate-600 hover:border-brand-blue/50 dark:hover:border-brand-purple/50 transition-colors"
+        >
+          View Pricing
+        </a>
+      </div>
+      <!-- Install command -->
+      <div class="gsap-fade-up mt-8 inline-flex items-center gap-3 px-5 py-3 rounded-xl bg-slate-900 dark:bg-slate-800 border border-slate-700">
+        <code class="text-sm text-green-400 font-mono">dotnet add package AiDotNet</code>
+        <button
+          class="copy-btn p-1 text-slate-400 hover:text-white transition-colors"
+          data-copy="dotnet add package AiDotNet"
+          aria-label="Copy install command"
+        >
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      // Accordion toggle logic
+      const toggles = document.querySelectorAll('.category-toggle');
+      toggles.forEach((toggle) => {
+        toggle.addEventListener('click', () => {
+          const targetId = toggle.getAttribute('data-target');
+          if (!targetId) return;
+          const content = document.getElementById(targetId);
+          if (!content) return;
+
+          const isExpanded = toggle.getAttribute('aria-expanded') === 'true';
+          const chevron = toggle.querySelector('.category-chevron');
+
+          if (isExpanded) {
+            content.classList.add('hidden');
+            toggle.setAttribute('aria-expanded', 'false');
+            toggle.classList.remove('rounded-b-none', 'border-b-0');
+            if (chevron) chevron.style.transform = '';
+          } else {
+            content.classList.remove('hidden');
+            toggle.setAttribute('aria-expanded', 'true');
+            toggle.classList.add('rounded-b-none', 'border-b-0');
+            if (chevron) chevron.style.transform = 'rotate(180deg)';
+          }
+        });
+      });
+
+      // Search logic
+      const searchInput = document.getElementById('feature-search') as HTMLInputElement;
+      const searchCount = document.getElementById('search-count');
+      const noResults = document.getElementById('no-results');
+      const categoriesContainer = document.getElementById('categories-container');
+      const clearSearch = document.getElementById('clear-search');
+
+      if (searchInput) {
+        searchInput.addEventListener('input', () => {
+          const query = searchInput.value.toLowerCase().trim();
+          const categories = document.querySelectorAll('.feature-category');
+          let visibleCount = 0;
+
+          if (!query) {
+            // Show all categories, collapse them
+            categories.forEach((cat) => {
+              (cat as HTMLElement).style.display = '';
+              const toggle = cat.querySelector('.category-toggle');
+              const targetId = toggle?.getAttribute('data-target');
+              if (targetId) {
+                const content = document.getElementById(targetId);
+                if (content) content.classList.add('hidden');
+                toggle?.setAttribute('aria-expanded', 'false');
+                toggle?.classList.remove('rounded-b-none', 'border-b-0');
+                const chevron = toggle?.querySelector('.category-chevron') as HTMLElement;
+                if (chevron) chevron.style.transform = '';
+              }
+            });
+            if (searchCount) searchCount.classList.add('hidden');
+            if (noResults) noResults.classList.add('hidden');
+            return;
+          }
+
+          categories.forEach((cat) => {
+            const toggle = cat.querySelector('.category-toggle');
+            const targetId = toggle?.getAttribute('data-target');
+            const content = targetId ? document.getElementById(targetId) : null;
+            const allText = cat.textContent?.toLowerCase() || '';
+            const tags = cat.querySelectorAll('.model-tag');
+
+            // Check if any tag matches
+            let hasMatchingTag = false;
+            tags.forEach((tag) => {
+              const tagText = tag.textContent?.toLowerCase() || '';
+              if (tagText.includes(query)) {
+                hasMatchingTag = true;
+                (tag as HTMLElement).classList.add('!border-brand-blue', 'dark:!border-brand-purple', '!text-brand-blue', 'dark:!text-brand-purple', '!bg-brand-blue/5', 'dark:!bg-brand-purple/5');
+              } else {
+                (tag as HTMLElement).classList.remove('!border-brand-blue', 'dark:!border-brand-purple', '!text-brand-blue', 'dark:!text-brand-purple', '!bg-brand-blue/5', 'dark:!bg-brand-purple/5');
+              }
+            });
+
+            if (allText.includes(query)) {
+              (cat as HTMLElement).style.display = '';
+              visibleCount++;
+
+              // Auto-expand matching categories
+              if (content && hasMatchingTag) {
+                content.classList.remove('hidden');
+                toggle?.setAttribute('aria-expanded', 'true');
+                toggle?.classList.add('rounded-b-none', 'border-b-0');
+                const chevron = toggle?.querySelector('.category-chevron') as HTMLElement;
+                if (chevron) chevron.style.transform = 'rotate(180deg)';
+              }
+            } else {
+              (cat as HTMLElement).style.display = 'none';
+            }
+          });
+
+          if (searchCount) {
+            searchCount.textContent = `${visibleCount} categories`;
+            searchCount.classList.remove('hidden');
+          }
+          if (noResults) {
+            noResults.classList.toggle('hidden', visibleCount > 0);
+          }
+        });
+      }
+
+      if (clearSearch && searchInput) {
+        clearSearch.addEventListener('click', () => {
+          searchInput.value = '';
+          searchInput.dispatchEvent(new Event('input'));
+          searchInput.focus();
+        });
+      }
+
+      // Copy button
+      document.querySelectorAll('.copy-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const text = (btn as HTMLElement).dataset.copy;
+          if (text) {
+            navigator.clipboard.writeText(text);
+            const svg = btn.querySelector('svg');
+            if (svg) {
+              svg.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>';
+              setTimeout(() => {
+                svg.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>';
+              }, 2000);
+            }
+          }
+        });
+      });
+
+      // Expand All / Collapse All with keyboard shortcut
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'e' && (e.metaKey || e.ctrlKey)) {
+          e.preventDefault();
+          const allToggles = document.querySelectorAll('.category-toggle');
+          const anyCollapsed = Array.from(allToggles).some(
+            (t) => t.getAttribute('aria-expanded') !== 'true'
+          );
+          allToggles.forEach((toggle) => {
+            const targetId = toggle.getAttribute('data-target');
+            if (!targetId) return;
+            const content = document.getElementById(targetId);
+            if (!content) return;
+            const chevron = toggle.querySelector('.category-chevron') as HTMLElement;
+
+            if (anyCollapsed) {
+              content.classList.remove('hidden');
+              toggle.setAttribute('aria-expanded', 'true');
+              toggle.classList.add('rounded-b-none', 'border-b-0');
+              if (chevron) chevron.style.transform = 'rotate(180deg)';
+            } else {
+              content.classList.add('hidden');
+              toggle.setAttribute('aria-expanded', 'false');
+              toggle.classList.remove('rounded-b-none', 'border-b-0');
+              if (chevron) chevron.style.transform = '';
+            }
+          });
+        }
+      });
+    });
+  </script>
+</BaseLayout>

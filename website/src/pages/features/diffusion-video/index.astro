@@ -1,0 +1,67 @@
+---
+import FeatureDetailLayout from '../../../layouts/FeatureDetailLayout.astro';
+---
+
+<FeatureDetailLayout
+  title="Video Diffusion Models"
+  seoTitle="29 Video Generation Models for .NET - AiDotNet"
+  seoDescription="Text-to-video, image-to-video, and video editing with 29 diffusion models. Sora, CogVideoX, AnimateDiff, and more in pure C#."
+  count="29"
+  tagline="Generate, edit, and transform videos using cutting-edge diffusion architectures"
+  description="Every major video diffusion architecture in C#. From Sora and CogVideoX for text-to-video, to AnimateDiff for image animation, to TokenFlow for video editing. Generate short clips, animate images, interpolate frames, and apply style transfer to video - all without Python."
+  icon='<svg class="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>'
+  useCases={['Marketing Videos', 'Social Media Content', 'Film Pre-visualization', 'Game Cinematics', 'Product Demos', 'Educational Content', 'Music Videos', 'Advertising']}
+  subcategories={[
+    {
+      name: 'Text-to-Video Generation',
+      description: 'Generate videos from text descriptions with cinematic quality.',
+      items: [
+        { name: 'Sora', detail: 'OpenAI spacetime transformer for up to 60-second realistic video generation.' },
+        { name: 'CogVideoX', detail: 'Expert transformer with 3D VAE for high-quality text-to-video.' },
+        { name: 'HunyuanVideo', detail: 'Tencent 13B parameter model for long-form video generation.' },
+        { name: 'Kling', detail: 'Kuaishou video generation with 3D spatiotemporal attention.' },
+        { name: 'Veo', detail: 'Google DeepMind high-fidelity video generation model.' },
+        { name: 'Wan', detail: 'Alibaba video generation with controllable motion dynamics.' },
+        { name: 'LTX Video', detail: 'Lightweight transformer for fast video generation.' },
+        { name: 'Mochi', detail: 'Genmo asymmetric DiT for high-quality motion generation.' },
+        { name: 'Allegro', detail: 'Rhymes AI text-to-video with temporal attention.' },
+        { name: 'Open-Sora', detail: 'Open-source Sora reproduction with DiT architecture.' },
+      ]
+    },
+    {
+      name: 'Image-to-Video Animation',
+      description: 'Animate static images into videos with controllable motion.',
+      items: [
+        { name: 'AnimateDiff', detail: 'Motion module for animating any personalized text-to-image model.' },
+        { name: 'AnimateDiff Lightning', detail: 'Distilled AnimateDiff for 1-4 step animation.' },
+        { name: 'Stable Video Diffusion', detail: 'Stability AI image-to-video with multi-view generation support.' },
+        { name: 'DynamiCrafter', detail: 'Animate open-domain images with video diffusion priors.' },
+        { name: 'I2VGen-XL', detail: 'Alibaba high-quality image-to-video generation.' },
+      ]
+    },
+    {
+      name: 'Video Editing & Transformation',
+      description: 'Edit, restyle, and transform existing videos using text instructions.',
+      items: [
+        { name: 'TokenFlow', detail: 'Consistent text-driven video editing via token propagation.' },
+        { name: 'FateZero', detail: 'Zero-shot video editing preserving temporal consistency.' },
+        { name: 'Text2Video-Zero', detail: 'Text-guided video generation/editing without training.' },
+        { name: 'ControlVideo', detail: 'Controllable video generation with spatial and temporal conditions.' },
+        { name: 'VideoComposer', detail: 'Compositional video generation with multiple conditions.' },
+      ]
+    }
+  ]}
+  codeExample={`using AiDotNet;
+
+// Train a video generation model with AiModelBuilder
+var result = await new AiModelBuilder<float, float[], float>()
+    .ConfigureModel(new CogVideoX<float>(
+        numFrames: 49, fps: 8))
+    .ConfigureOptimizer(new AdamOptimizer<float>())
+    .ConfigurePreprocessing()
+    .BuildAsync(videoData, labels);
+
+// Generate video from prompt embedding
+var video = result.Predict(promptEmbedding);`}
+  codeTitle="Video generation with AiModelBuilder"
+/>

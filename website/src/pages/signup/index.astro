@@ -1,0 +1,229 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+const base = import.meta.env.BASE_URL;
+---
+
+<BaseLayout title="Sign Up - AiDotNet" description="Create your free AiDotNet account. Get access to 8,100+ AI/ML classes, API keys, and the subscriber portal.">
+  <div class="pt-24 pb-16 min-h-screen flex items-center justify-center">
+    <div class="w-full max-w-md mx-auto px-4">
+      <div class="text-center mb-8">
+        <a href={base} class="inline-flex items-center gap-2 mb-6">
+          <img src={`${base}logo.svg`} alt="AiDotNet" class="w-10 h-10" />
+          <span class="text-2xl font-bold bg-gradient-to-r from-brand-blue to-brand-purple bg-clip-text text-transparent">
+            AiDotNet
+          </span>
+        </a>
+        <h1 class="text-2xl font-bold text-slate-900 dark:text-white">Create your account</h1>
+        <p class="mt-2 text-sm text-slate-500 dark:text-slate-400">
+          Start building with 8,100+ AI/ML classes for free
+        </p>
+      </div>
+
+      <div class="bg-white dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 p-8 shadow-sm">
+        <!-- OAuth buttons -->
+        <div class="space-y-3">
+          <button
+            id="github-signup"
+            class="w-full flex items-center justify-center gap-3 px-4 py-3 text-sm font-medium text-slate-700 dark:text-slate-200 bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+          >
+            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z" />
+            </svg>
+            Sign up with GitHub
+          </button>
+
+          <button
+            id="google-signup"
+            class="w-full flex items-center justify-center gap-3 px-4 py-3 text-sm font-medium text-slate-700 dark:text-slate-200 bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+          >
+            <svg class="w-5 h-5" viewBox="0 0 24 24">
+              <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4" />
+              <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
+              <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
+              <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
+            </svg>
+            Sign up with Google
+          </button>
+        </div>
+
+        <div class="relative my-6">
+          <div class="absolute inset-0 flex items-center">
+            <div class="w-full border-t border-slate-200 dark:border-slate-700"></div>
+          </div>
+          <div class="relative flex justify-center text-sm">
+            <span class="px-4 bg-white dark:bg-slate-800/50 text-slate-500 dark:text-slate-400">
+              or sign up with email
+            </span>
+          </div>
+        </div>
+
+        <!-- Registration form -->
+        <form id="signup-form" class="space-y-4">
+          <div>
+            <label for="full-name" class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+              Full name
+            </label>
+            <input
+              type="text"
+              id="full-name"
+              name="full_name"
+              required
+              class="w-full px-4 py-3 text-sm bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-brand-blue/50 focus:border-brand-blue outline-none transition-all text-slate-900 dark:text-white placeholder-slate-400"
+              placeholder="Your name"
+            />
+          </div>
+
+          <div>
+            <label for="email" class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+              Email address
+            </label>
+            <input
+              type="email"
+              id="email"
+              name="email"
+              required
+              class="w-full px-4 py-3 text-sm bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-brand-blue/50 focus:border-brand-blue outline-none transition-all text-slate-900 dark:text-white placeholder-slate-400"
+              placeholder="you@example.com"
+            />
+          </div>
+
+          <div>
+            <label for="password" class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+              Password
+            </label>
+            <input
+              type="password"
+              id="password"
+              name="password"
+              required
+              minlength="8"
+              class="w-full px-4 py-3 text-sm bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-brand-blue/50 focus:border-brand-blue outline-none transition-all text-slate-900 dark:text-white placeholder-slate-400"
+              placeholder="Minimum 8 characters"
+            />
+          </div>
+
+          <!-- Error / Success message -->
+          <div id="signup-error" class="hidden p-3 text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl">
+          </div>
+          <div id="signup-success" class="hidden p-3 text-sm text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl">
+          </div>
+
+          <button
+            type="submit"
+            class="w-full px-4 py-3 text-sm font-semibold text-white rounded-xl bg-gradient-brand hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Create Account
+          </button>
+        </form>
+
+        <p class="mt-4 text-xs text-slate-400 dark:text-slate-500 text-center">
+          By signing up, you agree to our Terms of Service and Privacy Policy.
+        </p>
+      </div>
+
+      <p class="mt-6 text-center text-sm text-slate-500 dark:text-slate-400">
+        Already have an account?
+        <a href={`${base}login/`} class="font-medium text-brand-blue hover:underline">
+          Sign in
+        </a>
+      </p>
+    </div>
+  </div>
+
+  <script>
+    import { supabase } from '../../lib/supabase';
+
+    const base = import.meta.env.BASE_URL || '/';
+
+    // Check if already logged in
+    async function checkExistingSession() {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        window.location.href = `${base}account/`;
+      }
+    }
+    checkExistingSession();
+
+    // GitHub OAuth
+    const githubBtn = document.getElementById('github-signup');
+    if (githubBtn) {
+      githubBtn.addEventListener('click', async () => {
+        const { error } = await supabase.auth.signInWithOAuth({
+          provider: 'github',
+          options: {
+            redirectTo: `${window.location.origin}${base}auth/callback/`,
+          },
+        });
+        if (error) showError(error.message);
+      });
+    }
+
+    // Google OAuth
+    const googleBtn = document.getElementById('google-signup');
+    if (googleBtn) {
+      googleBtn.addEventListener('click', async () => {
+        const { error } = await supabase.auth.signInWithOAuth({
+          provider: 'google',
+          options: {
+            redirectTo: `${window.location.origin}${base}auth/callback/`,
+          },
+        });
+        if (error) showError(error.message);
+      });
+    }
+
+    // Email/Password signup
+    const form = document.getElementById('signup-form') as HTMLFormElement;
+    if (form) {
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const fullName = (document.getElementById('full-name') as HTMLInputElement).value;
+        const email = (document.getElementById('email') as HTMLInputElement).value;
+        const password = (document.getElementById('password') as HTMLInputElement).value;
+
+        const submitBtn = form.querySelector('button[type="submit"]') as HTMLButtonElement;
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Creating account...';
+
+        const { error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            data: { full_name: fullName },
+            emailRedirectTo: `${window.location.origin}${base}auth/callback/`,
+          },
+        });
+
+        if (error) {
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Create Account';
+          showError(error.message);
+        } else {
+          showSuccess('Check your email for a confirmation link to complete signup.');
+          submitBtn.disabled = true;
+          submitBtn.textContent = 'Check your email';
+        }
+      });
+    }
+
+    function showError(message: string) {
+      const errorDiv = document.getElementById('signup-error');
+      const successDiv = document.getElementById('signup-success');
+      if (successDiv) successDiv.classList.add('hidden');
+      if (errorDiv) {
+        errorDiv.textContent = message;
+        errorDiv.classList.remove('hidden');
+      }
+    }
+
+    function showSuccess(message: string) {
+      const errorDiv = document.getElementById('signup-error');
+      const successDiv = document.getElementById('signup-success');
+      if (errorDiv) errorDiv.classList.add('hidden');
+      if (successDiv) {
+        successDiv.textContent = message;
+        successDiv.classList.remove('hidden');
+      }
+    }
+  </script>
+</BaseLayout>

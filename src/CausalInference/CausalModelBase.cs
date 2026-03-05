@@ -29,7 +29,7 @@ namespace AiDotNet.CausalInference;
 /// - Managing fitted model state
 /// </para>
 /// </remarks>
-public abstract class CausalModelBase<T> : ICausalModel<T>
+public abstract class CausalModelBase<T> : ICausalModel<T>, IModelShape
 {
     /// <summary>
     /// Numeric operations helper for generic math.
@@ -515,10 +515,31 @@ public abstract class CausalModelBase<T> : ICausalModel<T>
     /// <summary>
     /// Saves the model to a file.
     /// </summary>
+    /// <inheritdoc/>
+    public virtual int[] GetInputShape()
+    {
+        return new[] { NumFeatures };
+    }
+
+    /// <inheritdoc/>
+    public virtual int[] GetOutputShape()
+    {
+        return new[] { 1 };
+    }
+
+    /// <inheritdoc/>
+    public virtual DynamicShapeInfo GetDynamicShapeInfo()
+    {
+        return DynamicShapeInfo.None;
+    }
+
+
     public virtual void SaveModel(string filePath)
     {
         byte[] serializedData = Serialize();
-        File.WriteAllBytes(filePath, serializedData);
+        byte[] envelopedData = ModelFileHeader.WrapWithHeader(
+            serializedData, this, GetInputShape(), GetOutputShape(), SerializationFormat.Json);
+        File.WriteAllBytes(filePath, envelopedData);
     }
 
     /// <summary>
@@ -527,6 +548,10 @@ public abstract class CausalModelBase<T> : ICausalModel<T>
     public virtual void LoadModel(string filePath)
     {
         byte[] serializedData = File.ReadAllBytes(filePath);
+
+        // Extract payload from AIMF envelope
+        serializedData = ModelFileHeader.ExtractPayload(serializedData);
+
         Deserialize(serializedData);
     }
 

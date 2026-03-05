@@ -1,0 +1,62 @@
+---
+import FeatureDetailLayout from '../../../layouts/FeatureDetailLayout.astro';
+---
+
+<FeatureDetailLayout
+  title="Activation Functions"
+  seoTitle="40 Activation Functions for .NET - AiDotNet"
+  seoDescription="Every activation function in deep learning. ReLU, GELU, SiLU, SwiGLU, Mish, and 40 activations with SIMD acceleration in C#."
+  count="40"
+  tagline="Every activation function from classic ReLU to modern gating mechanisms"
+  description="40 activation functions covering all standard (ReLU, GELU, Sigmoid), gated (SwiGLU, GeGLU, GLU), and specialized (Hardswish, CELU, Mish) variants. All SIMD-vectorized for maximum throughput."
+  icon='<svg class="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>'
+  useCases={['Neural Network Design', 'LLM Architecture', 'Efficient Inference', 'Mobile AI', 'Custom Architectures']}
+  subcategories={[
+    {
+      name: 'Standard Activations',
+      description: 'Foundational activation functions used across all neural network types.',
+      items: [
+        { name: 'ReLU', detail: 'Rectified Linear Unit - the default activation for most architectures.' },
+        { name: 'GELU', detail: 'Gaussian Error Linear Unit used in BERT and GPT architectures.' },
+        { name: 'SiLU / Swish', detail: 'Sigmoid Linear Unit used in EfficientNet and modern architectures.' },
+        { name: 'Mish', detail: 'Self-regularized non-monotonic activation used in YOLOv4.' },
+        { name: 'Sigmoid', detail: 'Logistic function for binary outputs and gates.' },
+        { name: 'Softmax', detail: 'Normalized exponential for probability distributions.' },
+      ]
+    },
+    {
+      name: 'Gated Activations',
+      description: 'Gating mechanisms used in modern LLMs and efficient architectures.',
+      items: [
+        { name: 'SwiGLU', detail: 'Swish-Gated Linear Unit used in LLaMA and modern LLMs.' },
+        { name: 'GeGLU', detail: 'GELU-Gated Linear Unit for transformer feed-forward networks.' },
+        { name: 'GLU', detail: 'Gated Linear Unit with learnable gates.' },
+        { name: 'ReGLU', detail: 'ReLU-Gated Linear Unit for efficient computation.' },
+        { name: 'Maxout', detail: 'Piecewise linear activation with multiple feature maps.' },
+      ]
+    },
+    {
+      name: 'Specialized Activations',
+      description: 'Task-specific activations for mobile, quantization, and specialized needs.',
+      items: [
+        { name: 'Hardswish', detail: 'Hardware-efficient approximation of Swish for mobile deployment.' },
+        { name: 'LeakyReLU / PReLU', detail: 'Non-zero gradient for negative inputs preventing dead neurons.' },
+        { name: 'ELU / SELU', detail: 'Exponential linear units with self-normalizing properties.' },
+        { name: 'CELU', detail: 'Continuously differentiable ELU for smoother gradients.' },
+      ]
+    }
+  ]}
+  codeExample={`using AiDotNet;
+
+// Build a model with custom activations using AiModelBuilder
+var result = await new AiModelBuilder<float, float[], float>()
+    .ConfigureModel(new NeuralNetwork<float>(
+        inputSize: 768, hiddenSize: 256, outputSize: 10,
+        activation: new SwiGLU<float>()))
+    .ConfigureOptimizer(new AdamOptimizer<float>())
+    .ConfigurePreprocessing()
+    .BuildAsync(features, labels);
+
+var prediction = result.Predict(newSample);`}
+  codeTitle="Activations with AiModelBuilder"
+/>

@@ -1,0 +1,61 @@
+---
+import FeatureDetailLayout from '../../../layouts/FeatureDetailLayout.astro';
+---
+
+<FeatureDetailLayout
+  title="AutoML & Neural Architecture Search"
+  seoTitle="AutoML & NAS for .NET - AiDotNet"
+  seoDescription="Automated model design and hyperparameter optimization. DARTS, Bayesian optimization, Hyperband, and AutoML pipeline in C#."
+  count="4"
+  tagline="Automated model design and hyperparameter optimization"
+  description="Let algorithms find the best architecture and hyperparameters. Supports differentiable NAS (DARTS), evolutionary search, Bayesian optimization, Hyperband, and complete AutoML pipelines with feature selection, model selection, and ensemble building."
+  icon='<svg class="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>'
+  useCases={['Model Selection', 'Architecture Design', 'Hyperparameter Tuning', 'Feature Engineering', 'Research', 'Production ML']}
+  subcategories={[
+    {
+      name: 'Neural Architecture Search',
+      description: 'Automatically discover optimal neural network architectures.',
+      items: [
+        { name: 'DARTS', detail: 'Differentiable Architecture Search with continuous relaxation of search space.' },
+        { name: 'ENAS', detail: 'Efficient NAS with parameter sharing across candidate architectures.' },
+        { name: 'ProxylessNAS', detail: 'Direct NAS on target hardware without proxy tasks.' },
+        { name: 'Once-for-All', detail: 'Train one network that supports diverse architectural configurations.' },
+      ]
+    },
+    {
+      name: 'Hyperparameter Optimization',
+      description: 'Find optimal hyperparameters efficiently.',
+      items: [
+        { name: 'Bayesian Optimization', detail: 'Gaussian process-based optimization with acquisition functions.' },
+        { name: 'Hyperband', detail: 'Bandit-based approach with early stopping of poor configurations.' },
+        { name: 'BOHB', detail: 'Bayesian Optimization and HyperBand combining both approaches.' },
+        { name: 'TPE', detail: 'Tree-structured Parzen Estimator for efficient search.' },
+        { name: 'Random Search', detail: 'Surprisingly effective baseline for hyperparameter search.' },
+      ]
+    },
+    {
+      name: 'AutoML Pipeline',
+      description: 'End-to-end automated machine learning workflow.',
+      items: [
+        { name: 'Feature Selection', detail: 'Automatic feature importance and selection methods.' },
+        { name: 'Model Selection', detail: 'Compare and select best model from algorithm library.' },
+        { name: 'Ensemble Building', detail: 'Automatically construct optimal model ensembles.' },
+        { name: 'Cross-Validation', detail: 'Robust model evaluation with multiple CV strategies.' },
+      ]
+    }
+  ]}
+  codeExample={`using AiDotNet;
+
+// AutoML with AiModelBuilder
+var result = await new AiModelBuilder<float, float[], float>()
+    .ConfigureAutoML(new AutoMLOptions(
+        task: MLTask.Classification,
+        timeLimit: TimeSpan.FromMinutes(30),
+        metric: Metric.F1Score))
+    .ConfigurePreprocessing()
+    .BuildAsync(features, labels);
+
+// AiModelBuilder selects the best model automatically
+var prediction = result.Predict(newSample);`}
+  codeTitle="AutoML with AiModelBuilder"
+/>

@@ -1,8 +1,10 @@
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Serving.Models;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Validation;
+using Microsoft.Extensions.Logging;
 
 namespace AiDotNet.Serving.Services;
 
@@ -30,6 +32,7 @@ public class ModelRegistryLoader<T, TInput, TOutput>
 {
     private readonly IModelRegistry<T, TInput, TOutput> _registry;
     private readonly IModelRepository _repository;
+    private readonly ILogger<ModelRegistryLoader<T, TInput, TOutput>> _logger;
     private readonly object _refreshLock = new();
 
     /// <summary>
@@ -37,12 +40,18 @@ public class ModelRegistryLoader<T, TInput, TOutput>
     /// </summary>
     /// <param name="registry">The model registry to load models from.</param>
     /// <param name="repository">The model repository to load models into.</param>
-    public ModelRegistryLoader(IModelRegistry<T, TInput, TOutput> registry, IModelRepository repository)
+    /// <param name="logger">The logger instance.</param>
+    public ModelRegistryLoader(
+        IModelRegistry<T, TInput, TOutput> registry,
+        IModelRepository repository,
+        ILogger<ModelRegistryLoader<T, TInput, TOutput>> logger)
     {
         Guard.NotNull(registry);
         _registry = registry;
         Guard.NotNull(repository);
         _repository = repository;
+        Guard.NotNull(logger);
+        _logger = logger;
     }
 
     /// <summary>
@@ -59,9 +68,9 @@ public class ModelRegistryLoader<T, TInput, TOutput>
     /// </param>
     /// <returns>True if the model was loaded successfully, false otherwise.</returns>
     /// <remarks>
-    /// <b>Limitation:</b> This method currently creates a placeholder wrapper that throws when prediction
-    /// is attempted. For actual inference, use <see cref="LoadWithServableModel"/> with a pre-loaded model.
-    /// Full model deserialization from StoragePath will be implemented in a future version.
+    /// <b>Note:</b> This method creates a placeholder wrapper. For automatic type detection and
+    /// fully functional prediction, use <see cref="LoadFromRegistryAutoDetect"/> instead,
+    /// or <see cref="LoadWithServableModel"/> with a pre-configured model.
     /// </remarks>
     public bool LoadFromRegistry(
         string modelName,
@@ -95,16 +104,44 @@ public class ModelRegistryLoader<T, TInput, TOutput>
         // Create the servable model wrapper
         // Note: The actual model loading from StoragePath would require the model to implement IModelSerializer
         // For now, we create a wrapper that uses the registered model metadata
-        var name = servingName ?? modelName;
+        var name = string.IsNullOrWhiteSpace(servingName) ? modelName : servingName;
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            throw new ArgumentException("Serving name cannot be null or whitespace.", nameof(servingName));
+        }
 
-        // Create a placeholder predict function that throws if the model isn't properly loaded
-        // In a full implementation, you would load the serialized model from StoragePath
+        // Try auto-loading the model from the registry storage path if available
+        if (!string.IsNullOrWhiteSpace(registeredModel.StoragePath) && File.Exists(registeredModel.StoragePath))
+        {
+            try
+            {
+                var autoWrapper = ServableModelWrapper<T>.LoadServable(
+                    registeredModel.StoragePath, name, enableBatching: true);
+                return _repository.LoadModelFromRegistry(
+                    name,
+                    autoWrapper,
+                    registeredModel.Version,
+                    registeredModel.Stage.ToString(),
+                    registeredModel.StoragePath);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex,
+                    "Auto-load from StoragePath failed for model '{ModelName}'. Falling back to placeholder.",
+                    name);
+            }
+        }
+
+        // Placeholder wrapper when auto-load is not possible.
+        // Use LoadFromRegistryAutoDetect or LoadWithServableModel for full prediction support.
         var servableModel = new ServableModelWrapper<T>(
             name,
             inputDimension,
             outputDimension,
             input => throw new InvalidOperationException(
-                $"Model '{name}' requires proper deserialization from storage path: {registeredModel.StoragePath}"),
+                $"Model '{name}' was loaded as a placeholder. Use LoadFromRegistryAutoDetect() " +
+                $"or LoadWithServableModel() to enable prediction. " +
+                $"Storage path: {registeredModel.StoragePath}"),
             null,
             enableBatching: true,
             enableSpeculativeDecoding: false);
@@ -132,9 +169,9 @@ public class ModelRegistryLoader<T, TInput, TOutput>
     /// </param>
     /// <returns>True if the model was loaded successfully, false otherwise.</returns>
     /// <remarks>
-    /// <b>Limitation:</b> This method currently creates a placeholder wrapper that throws when prediction
-    /// is attempted. For actual inference, use <see cref="LoadWithServableModel"/> with a pre-loaded model.
-    /// Full model deserialization from StoragePath will be implemented in a future version.
+    /// <b>Note:</b> This method creates a placeholder wrapper. For automatic type detection and
+    /// fully functional prediction, use <see cref="LoadFromRegistryAutoDetect"/> instead,
+    /// or <see cref="LoadWithServableModel"/> with a pre-configured model.
     /// </remarks>
     public bool LoadFromRegistryByStage(
         string modelName,
@@ -160,7 +197,7 @@ public class ModelRegistryLoader<T, TInput, TOutput>
         }
 
         // Create the servable model wrapper
-        var name = servingName ?? modelName;
+        var name = string.IsNullOrWhiteSpace(servingName) ? modelName : servingName;
 
         var servableModel = new ServableModelWrapper<T>(
             name,
@@ -212,7 +249,7 @@ public class ModelRegistryLoader<T, TInput, TOutput>
                 $"Failed to get model '{modelName}' metadata from registry.", ex);
         }
 
-        var name = servingName ?? modelName;
+        var name = string.IsNullOrWhiteSpace(servingName) ? modelName : servingName;
         return _repository.LoadModelFromRegistry(
             name,
             servableModel,
@@ -273,6 +310,82 @@ public class ModelRegistryLoader<T, TInput, TOutput>
             // Load the latest version
             return LoadWithServableModel(modelName, null, servableModel, modelName);
         }
+    }
+
+    /// <summary>
+    /// Loads a model from the registry using automatic type detection via the AIMF envelope header.
+    /// </summary>
+    /// <param name="modelName">The name of the model in the registry.</param>
+    /// <param name="version">The version to load. If null, loads the latest version.</param>
+    /// <param name="servingName">Optional name to use in the serving repository. If null, uses modelName.</param>
+    /// <param name="licenseKey">
+    /// Optional license key for encrypted models. If the model file is encrypted and no key is
+    /// provided, loading will fail with an <see cref="InvalidOperationException"/>.
+    /// </param>
+    /// <returns>True if the model was loaded successfully, false otherwise.</returns>
+    /// <remarks>
+    /// <b>For Beginners:</b> This method automatically detects the model type from the saved file
+    /// and loads it without needing to specify the model type manually. The model file must have
+    /// been saved with the AIMF envelope header (which is the default for models saved with
+    /// SaveModel()). The method auto-adapts any supported model type (Matrix, Tensor, Vector)
+    /// to the serving interface.
+    ///
+    /// If the model was saved with encryption via <see cref="ModelLoader.SaveEncrypted"/>,
+    /// you must provide the same license key to decrypt and load the model weights.
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the model's storage path is not set, the file is not found, the file
+    /// does not have an AIMF envelope header, or the model is encrypted and no key is provided.
+    /// </exception>
+    public bool LoadFromRegistryAutoDetect(
+        string modelName,
+        int? version = null,
+        string? servingName = null,
+        string? licenseKey = null)
+    {
+        Guard.NotNullOrWhiteSpace(modelName);
+
+        // Get the registered model metadata
+        RegisteredModel<T, TInput, TOutput> registeredModel;
+        try
+        {
+            registeredModel = version.HasValue
+                ? _registry.GetModel(modelName, version.Value)
+                : _registry.GetLatestModel(modelName);
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException(
+                $"Failed to load model '{modelName}' version {version?.ToString() ?? "latest"} from registry.", ex);
+        }
+
+        if (string.IsNullOrWhiteSpace(registeredModel.StoragePath))
+        {
+            throw new InvalidOperationException(
+                $"Model '{modelName}' version {registeredModel.Version} does not have a storage path. " +
+                "Cannot auto-detect model type without a file to inspect.");
+        }
+
+        if (!File.Exists(registeredModel.StoragePath))
+        {
+            throw new FileNotFoundException(
+                $"Model file not found: {registeredModel.StoragePath}", registeredModel.StoragePath);
+        }
+
+        // Load via ModelLoader which handles AIMF detection, type resolution, decryption, and deserialization
+        var model = ModelLoader.Load<T>(registeredModel.StoragePath, licenseKey);
+
+        var name = string.IsNullOrWhiteSpace(servingName) ? modelName : servingName;
+
+        // Auto-detect model type and create appropriate ServableModelWrapper
+        var servableModel = ServableModelWrapper<T>.FromModel(name, model);
+
+        return _repository.LoadModelFromRegistry(
+            name,
+            servableModel,
+            registeredModel.Version,
+            registeredModel.Stage.ToString(),
+            registeredModel.StoragePath);
     }
 
     /// <summary>

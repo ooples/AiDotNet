@@ -28,7 +28,7 @@ namespace AiDotNet.Regression;
 /// functionality.
 /// </para>
 /// </remarks>
-public abstract class RegressionBase<T> : IRegression<T>, IConfigurableModel<T>
+public abstract class RegressionBase<T> : IRegression<T>, IConfigurableModel<T>, IModelShape
 {
     /// <summary>
     /// Gets the numeric operations for the specified type T.
@@ -1019,10 +1019,37 @@ public abstract class RegressionBase<T> : IRegression<T>, IConfigurableModel<T>
     /// - Avoiding the need to retrain on the same data
     /// </para>
     /// </remarks>
+    /// <inheritdoc/>
+    public virtual int[] GetInputShape() => new[] { Coefficients.Length };
+
+    /// <inheritdoc/>
+    public virtual int[] GetOutputShape() => new[] { 1 };
+
+    /// <inheritdoc/>
+    public virtual DynamicShapeInfo GetDynamicShapeInfo()
+    {
+        return DynamicShapeInfo.None;
+    }
+
+
     public virtual void SaveModel(string filePath)
     {
+        if (string.IsNullOrWhiteSpace(filePath))
+        {
+            throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
+        }
+
+        var fullPath = Path.GetFullPath(filePath);
+        var directory = Path.GetDirectoryName(fullPath);
+        if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
+
         byte[] serializedData = Serialize();
-        File.WriteAllBytes(filePath, serializedData);
+        byte[] envelopedData = ModelFileHeader.WrapWithHeader(
+            serializedData, this, GetInputShape(), GetOutputShape(), SerializationFormat.Json);
+        File.WriteAllBytes(fullPath, envelopedData);
     }
 
     /// <summary>
@@ -1049,7 +1076,19 @@ public abstract class RegressionBase<T> : IRegression<T>, IConfigurableModel<T>
     /// </remarks>
     public virtual void LoadModel(string filePath)
     {
+        if (string.IsNullOrWhiteSpace(filePath))
+        {
+            throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
+        }
+
         byte[] serializedData = File.ReadAllBytes(filePath);
+
+        // Extract payload from AIMF envelope if present; use raw bytes for legacy files
+        if (ModelFileHeader.HasHeader(serializedData))
+        {
+            serializedData = ModelFileHeader.ExtractPayload(serializedData);
+        }
+
         Deserialize(serializedData);
     }
 

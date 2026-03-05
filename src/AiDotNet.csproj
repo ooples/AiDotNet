@@ -170,6 +170,21 @@
 	  <PackageReference Include="AiDotNet.Native.OneDNN" Version="0.8.0" />
 	</ItemGroup>
 
+	<!-- Build-time key derivation resource (injected by CI/CD, not present in dev builds).
+	     BuildKeyProvider uses this to derive encryption keys for AIMF model files.
+	     Fork/dev builds without this key derive different keys and cannot decrypt official models.
+	     See BuildKeyProvider.cs for the three-layer obfuscation system documentation. -->
+	<ItemGroup>
+	  <!-- Build key used by BuildKeyProvider to derive encryption keys for AIMF model file
+	       protection. Injected during official CI/CD builds only. -->
+	  <EmbeddedResource Include="BuildKey\BuildKey.bin" Condition="Exists('BuildKey\BuildKey.bin')">
+	    <LogicalName>AiDotNet.BuildKey</LogicalName>
+	  </EmbeddedResource>
+	  <EmbeddedResource Include="IntegrityHash\IntegrityHash.bin" Condition="Exists('IntegrityHash\IntegrityHash.bin')">
+	    <LogicalName>AiDotNet.IntegrityHash</LogicalName>
+	  </EmbeddedResource>
+	</ItemGroup>
+
 	<!-- Global usings for AiDotNet.Tensors namespaces -->
 	<ItemGroup>
 	  <Using Include="AiDotNet.Tensors.LinearAlgebra" />

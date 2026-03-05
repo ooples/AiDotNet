@@ -1,0 +1,236 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import PricingCard from '../components/PricingCard.astro';
+
+const base = import.meta.env.BASE_URL;
+---
+
+<BaseLayout
+  title="Pricing - AiDotNet"
+  description="AiDotNet pricing plans. Free open-source library with Apache 2.0. Pro adds cloud API hosting, priority support, and direct team access. Enterprise for large organizations."
+>
+  <section class="pt-32 pb-20 lg:pb-28 relative overflow-hidden">
+    <!-- Background -->
+    <div class="absolute inset-0 -z-10">
+      <div class="absolute inset-0 bg-white dark:bg-surface-dark"></div>
+      <div class="absolute top-0 left-1/4 w-96 h-96 bg-brand-blue/10 rounded-full blur-3xl"></div>
+      <div class="absolute bottom-0 right-1/4 w-96 h-96 bg-brand-purple/10 rounded-full blur-3xl"></div>
+    </div>
+
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <!-- Header -->
+      <div class="text-center mb-16">
+        <h1 class="gsap-fade-up text-4xl sm:text-5xl lg:text-6xl font-bold text-slate-900 dark:text-white mb-6">
+          Simple, transparent pricing
+        </h1>
+        <p class="gsap-fade-up text-lg text-slate-500 dark:text-slate-400 max-w-2xl mx-auto">
+          The full AI/ML library is free and open source forever. Upgrade for cloud-hosted API access, priority support, and dedicated engineering.
+        </p>
+      </div>
+
+      <!-- Success/cancel banners -->
+      <div id="success-banner" class="hidden mb-8 p-4 rounded-xl bg-green-500/10 border border-green-500/20 text-green-600 dark:text-green-400 text-center font-medium">
+        Payment successful! Check your email for setup instructions.
+      </div>
+      <div id="cancel-banner" class="hidden mb-8 p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 text-center font-medium">
+        Checkout was cancelled. No charges were made.
+      </div>
+
+      <!-- Billing toggle -->
+      <div class="gsap-fade-up flex items-center justify-center gap-4 mb-12">
+        <span id="label-monthly" class="text-sm font-medium text-slate-900 dark:text-white">Monthly</span>
+        <button
+          id="billing-toggle"
+          type="button"
+          role="switch"
+          aria-checked="false"
+          class="relative inline-flex h-6 w-11 items-center rounded-full bg-slate-300 dark:bg-slate-600 transition-colors"
+        >
+          <span class="inline-block h-4 w-4 transform rounded-full bg-white transition-transform translate-x-1" id="toggle-dot"></span>
+        </button>
+        <span id="label-yearly" class="text-sm font-medium text-slate-500 dark:text-slate-400">
+          Yearly <span class="text-green-500 font-semibold">(Save 17%)</span>
+        </span>
+      </div>
+
+      <!-- Pricing cards -->
+      <div class="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
+        <PricingCard
+          tier="Free / Open Source"
+          price="$0"
+          interval="forever"
+          description="The complete AI/ML library. Train and run models locally with full GPU acceleration."
+          features={[
+            '8,100+ public classes across 139 modules',
+            '160+ neural network layer types',
+            '155+ classical ML algorithms',
+            '115+ computer vision models',
+            '75+ diffusion models (image, video, audio)',
+            '250+ audio/speech implementations',
+            '50+ reinforcement learning agents',
+            'GPU acceleration on any GPU (NVIDIA, AMD, Intel)',
+            'AiModelBuilder facade with 130+ config methods',
+            'SIMD/AVX-512 optimized tensors',
+            '.NET 10 + .NET Framework 4.7.1',
+            'Apache 2.0 license',
+          ]}
+          cta="Install Now"
+          ctaHref={`${base}docs/getting-started/installation/`}
+        />
+
+        <PricingCard
+          tier="Pro"
+          price="$29"
+          interval="month"
+          description="For teams shipping AI products. Cloud API hosting, priority support, and direct access to the engineering team."
+          features={[
+            'Everything in Free',
+            'Cloud-hosted inference API',
+            'Pre-built REST endpoints for your models',
+            'Model encryption (AES-256-GCM)',
+            'API key management for your customers',
+            'License key generation & verification',
+            'Stripe billing integration',
+            'Priority GitHub issues',
+            'Direct email support from engineering',
+          ]}
+          cta="Subscribe"
+          highlighted={true}
+          stripeTier="pro"
+        />
+
+        <PricingCard
+          tier="Enterprise"
+          price="Custom"
+          description="For large organizations that need dedicated support, SLAs, and custom integration."
+          features={[
+            'Everything in Pro',
+            'Dedicated support engineer',
+            'Custom SLA with guaranteed response time',
+            'On-premises deployment assistance',
+            'Custom model encryption keys',
+            'Multi-seat team licenses',
+            'Architecture review and consulting',
+            'Private Slack/Teams channel',
+          ]}
+          cta="Contact Sales"
+          ctaHref="mailto:sales@ooples.com?subject=AiDotNet%20Enterprise%20Inquiry"
+        />
+      </div>
+
+      <!-- FAQ -->
+      <div class="mt-20 max-w-3xl mx-auto">
+        <h2 class="gsap-fade-up text-2xl font-bold text-slate-900 dark:text-white text-center mb-10">
+          Frequently asked questions
+        </h2>
+        <div class="space-y-6">
+          <div class="gsap-fade-up">
+            <h3 class="text-base font-semibold text-slate-900 dark:text-white mb-2">Is the library really free?</h3>
+            <p class="text-sm text-slate-500 dark:text-slate-400">Yes. The full AiDotNet library &mdash; all 8,100+ classes, every neural network, every ML algorithm, every vision model, full GPU acceleration &mdash; is open source under the Apache 2.0 license. You can use it in any project, commercial or otherwise, forever.</p>
+          </div>
+          <div class="gsap-fade-up">
+            <h3 class="text-base font-semibold text-slate-900 dark:text-white mb-2">What does Pro add?</h3>
+            <p class="text-sm text-slate-500 dark:text-slate-400">Pro gives you cloud-hosted inference API endpoints so you can deploy your trained models without managing servers. It also includes model encryption to protect your intellectual property, API key management for distributing models to your customers, and priority support with direct access to the engineering team.</p>
+          </div>
+          <div class="gsap-fade-up">
+            <h3 class="text-base font-semibold text-slate-900 dark:text-white mb-2">Do I need Pro for GPU acceleration?</h3>
+            <p class="text-sm text-slate-500 dark:text-slate-400">No. GPU acceleration on NVIDIA, AMD, and Intel GPUs, SIMD optimizations, and all performance features are included in the free tier. Pro is for cloud deployment, model protection, and support.</p>
+          </div>
+          <div class="gsap-fade-up">
+            <h3 class="text-base font-semibold text-slate-900 dark:text-white mb-2">How is this different from Hugging Face or W&B?</h3>
+            <p class="text-sm text-slate-500 dark:text-slate-400">AiDotNet is a native .NET library &mdash; everything runs in your .NET process without Python, Docker, or external runtimes. Hugging Face and W&B are Python-centric platforms. If your stack is .NET, AiDotNet integrates directly with zero overhead.</p>
+          </div>
+          <div class="gsap-fade-up">
+            <h3 class="text-base font-semibold text-slate-900 dark:text-white mb-2">Can I switch plans?</h3>
+            <p class="text-sm text-slate-500 dark:text-slate-400">Yes. You can upgrade, downgrade, or cancel at any time. If you switch from monthly to yearly, you'll get a prorated credit for the remaining time on your current billing period.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      // Check for success/cancel URL params
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('success') === 'true') {
+        const banner = document.getElementById('success-banner');
+        if (banner) banner.classList.remove('hidden');
+      }
+      if (params.get('cancelled') === 'true') {
+        const banner = document.getElementById('cancel-banner');
+        if (banner) banner.classList.remove('hidden');
+      }
+
+      // Billing toggle
+      let isYearly = false;
+      const toggle = document.getElementById('billing-toggle');
+      const dot = document.getElementById('toggle-dot');
+      const labelMonthly = document.getElementById('label-monthly');
+      const labelYearly = document.getElementById('label-yearly');
+
+      if (toggle && dot) {
+        toggle.addEventListener('click', () => {
+          isYearly = !isYearly;
+          toggle.setAttribute('aria-checked', String(isYearly));
+
+          if (isYearly) {
+            toggle.classList.add('bg-brand-purple');
+            toggle.classList.remove('bg-slate-300', 'dark:bg-slate-600');
+            dot.classList.add('translate-x-6');
+            dot.classList.remove('translate-x-1');
+          } else {
+            toggle.classList.remove('bg-brand-purple');
+            toggle.classList.add('bg-slate-300', 'dark:bg-slate-600');
+            dot.classList.remove('translate-x-6');
+            dot.classList.add('translate-x-1');
+          }
+
+          if (labelMonthly && labelYearly) {
+            labelMonthly.classList.toggle('text-slate-500', isYearly);
+            labelMonthly.classList.toggle('dark:text-slate-400', isYearly);
+            labelMonthly.classList.toggle('text-slate-900', !isYearly);
+            labelMonthly.classList.toggle('dark:text-white', !isYearly);
+            labelYearly.classList.toggle('text-slate-900', isYearly);
+            labelYearly.classList.toggle('dark:text-white', isYearly);
+            labelYearly.classList.toggle('text-slate-500', !isYearly);
+            labelYearly.classList.toggle('dark:text-slate-400', !isYearly);
+          }
+
+          // Update price display
+          const proPriceEl = document.querySelector('[data-tier="pro"]')?.closest('[class*="gsap-fade-up"]')?.querySelector('.text-4xl');
+          if (proPriceEl) {
+            proPriceEl.textContent = isYearly ? '$290' : '$29';
+          }
+          const proIntervalEl = proPriceEl?.nextElementSibling;
+          if (proIntervalEl) {
+            proIntervalEl.textContent = isYearly ? '/year' : '/month';
+          }
+        });
+      }
+
+      // Checkout buttons - redirect to Stripe Payment Links
+      const PAYMENT_LINKS: Record<string, Record<string, string>> = {
+        pro: {
+          month: import.meta.env.PUBLIC_STRIPE_PRO_MONTHLY_LINK || '',
+          year: import.meta.env.PUBLIC_STRIPE_PRO_YEARLY_LINK || '',
+        },
+      };
+
+      document.querySelectorAll('.checkout-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const tier = (btn as HTMLElement).dataset.tier;
+          if (tier && PAYMENT_LINKS[tier]) {
+            const interval = isYearly ? 'year' : 'month';
+            const link = PAYMENT_LINKS[tier][interval];
+            if (link) {
+              window.location.href = link;
+            } else {
+              alert('Payment links are being configured. Please try again shortly or contact sales@ooples.com.');
+            }
+          }
+        });
+      });
+    });
+  </script>
+</BaseLayout>

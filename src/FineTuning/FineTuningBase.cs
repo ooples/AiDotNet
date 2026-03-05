@@ -23,7 +23,7 @@ namespace AiDotNet.FineTuning;
 /// <typeparam name="T">The numeric data type used for calculations.</typeparam>
 /// <typeparam name="TInput">The input data type for the model.</typeparam>
 /// <typeparam name="TOutput">The output data type for the model.</typeparam>
-public abstract class FineTuningBase<T, TInput, TOutput> : IFineTuning<T, TInput, TOutput>
+public abstract class FineTuningBase<T, TInput, TOutput> : IFineTuning<T, TInput, TOutput>, IModelShape
 {
     /// <summary>
     /// The numeric operations helper for type T.
@@ -118,6 +118,25 @@ public abstract class FineTuningBase<T, TInput, TOutput> : IFineTuning<T, TInput
     }
 
     /// <inheritdoc/>
+    public virtual int[] GetInputShape()
+    {
+        return Array.Empty<int>();
+    }
+
+    /// <inheritdoc/>
+    public virtual int[] GetOutputShape()
+    {
+        return Array.Empty<int>();
+    }
+
+    /// <inheritdoc/>
+    public virtual DynamicShapeInfo GetDynamicShapeInfo()
+    {
+        return DynamicShapeInfo.None;
+    }
+
+
+    /// <inheritdoc/>
     public virtual void SaveModel(string filePath)
     {
         if (string.IsNullOrWhiteSpace(filePath))
@@ -132,7 +151,10 @@ public abstract class FineTuningBase<T, TInput, TOutput> : IFineTuning<T, TInput
             Directory.CreateDirectory(directory);
         }
 
-        File.WriteAllBytes(fullPath, Serialize());
+        byte[] data = Serialize();
+        byte[] envelopedData = ModelFileHeader.WrapWithHeader(
+            data, this, GetInputShape(), GetOutputShape(), SerializationFormat.Json);
+        File.WriteAllBytes(fullPath, envelopedData);
     }
 
     /// <inheritdoc/>
@@ -149,7 +171,12 @@ public abstract class FineTuningBase<T, TInput, TOutput> : IFineTuning<T, TInput
             throw new FileNotFoundException("Fine-tuning configuration file not found.", fullPath);
         }
 
-        Deserialize(File.ReadAllBytes(fullPath));
+        byte[] data = File.ReadAllBytes(fullPath);
+
+        // Extract payload from AIMF envelope
+        data = ModelFileHeader.ExtractPayload(data);
+
+        Deserialize(data);
     }
 
     /// <summary>

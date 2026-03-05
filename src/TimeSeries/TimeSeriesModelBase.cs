@@ -40,7 +40,7 @@ namespace AiDotNet.TimeSeries;
 /// - Website traffic prediction
 /// </para>
 /// </remarks>
-public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurableModel<T>
+public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurableModel<T>, IModelShape
 {
     /// <summary>
     /// Configuration options for the time series model.
@@ -1553,6 +1553,31 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
         get { return ModelParameters.Length; }
     }
 
+    /// <inheritdoc/>
+    public virtual int[] GetInputShape()
+    {
+        // LagOrder defines the lookback window. Exogenous features are handled
+        // as additional columns in the input matrix, so effective input width
+        // equals LagOrder * (1 + exogenousFeatureCount). Since the exogenous
+        // count varies per dataset, we report the lag dimension here; subclasses
+        // with known exogenous counts should override.
+        return Options.LagOrder > 0 ? new[] { Options.LagOrder } : Array.Empty<int>();
+    }
+
+    /// <inheritdoc/>
+    public virtual int[] GetOutputShape()
+    {
+        // Forecasts one value per step; multi-horizon models should override
+        return new[] { 1 };
+    }
+
+    /// <inheritdoc/>
+    public virtual DynamicShapeInfo GetDynamicShapeInfo()
+    {
+        return DynamicShapeInfo.None;
+    }
+
+
     public virtual void SaveModel(string filePath)
     {
         if (string.IsNullOrWhiteSpace(filePath))
@@ -1564,7 +1589,10 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
             var directory = Path.GetDirectoryName(filePath);
             if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
                 Directory.CreateDirectory(directory);
-            File.WriteAllBytes(filePath, data);
+            byte[] envelopedData = ModelFileHeader.WrapWithHeader(
+                data, this, GetInputShape(), GetOutputShape(), SerializationFormat.Binary,
+                GetDynamicShapeInfo());
+            File.WriteAllBytes(filePath, envelopedData);
         }
         catch (IOException ex) { throw new InvalidOperationException($"Failed to save model to '{filePath}': {ex.Message}", ex); }
         catch (UnauthorizedAccessException ex) { throw new InvalidOperationException($"Access denied when saving model to '{filePath}': {ex.Message}", ex); }
@@ -1579,6 +1607,13 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
         try
         {
             var data = File.ReadAllBytes(filePath);
+
+            // Extract payload from AIMF envelope if present; use raw bytes for legacy files
+            if (ModelFileHeader.HasHeader(data))
+            {
+                data = ModelFileHeader.ExtractPayload(data);
+            }
+
             Deserialize(data);
         }
         catch (FileNotFoundException ex) { throw new FileNotFoundException($"The specified model file does not exist: {filePath}", filePath, ex); }

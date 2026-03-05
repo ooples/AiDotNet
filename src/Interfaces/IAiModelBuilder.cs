@@ -277,6 +277,22 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     IAiModelBuilder<T, TInput, TOutput> ConfigureOptimizer(IOptimizer<T, TInput, TOutput> optimizationAlgorithm);
 
     /// <summary>
+    /// Configures a license key for encrypted model loading and saving with optional online validation.
+    /// </summary>
+    /// <remarks>
+    /// <para>When a license key is configured, the builder can save models as encrypted AIMF files
+    /// and load encrypted models that require a key to decrypt. If the license key has a
+    /// <see cref="AiDotNetLicenseKey.ServerUrl"/>, the builder will validate the key with the
+    /// server before loading encrypted models.</para>
+    ///
+    /// <para><b>For Beginners:</b> If you have a license key, set it here so you can work with
+    /// encrypted (protected) model files. Without a license key, only unencrypted models can be loaded.</para>
+    /// </remarks>
+    /// <param name="licenseKey">The license key configuration object.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureLicenseKey(AiDotNetLicenseKey licenseKey);
+
+    /// <summary>
     /// Enables federated learning training using the provided options.
     /// </summary>
     /// <remarks>

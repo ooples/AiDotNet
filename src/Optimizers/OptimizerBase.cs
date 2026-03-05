@@ -31,7 +31,7 @@ namespace AiDotNet.Optimizers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 /// <typeparam name="TInput">The type of input data for the model.</typeparam>
 /// <typeparam name="TOutput">The type of output data for the model.</typeparam>
-public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, TOutput>
+public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, TOutput>, IModelShape
 {
     /// <summary>
     /// Gets the global execution engine for vector operations.
@@ -1573,10 +1573,33 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// - It's useful for checkpointing long-running optimizations
     /// </para>
     /// </remarks>
+    /// <inheritdoc/>
+    public virtual int[] GetInputShape()
+    {
+        var model = RequireModel();
+        return new[] { model.ParameterCount };
+    }
+
+    /// <inheritdoc/>
+    public virtual int[] GetOutputShape()
+    {
+        var model = RequireModel();
+        return new[] { model.ParameterCount };
+    }
+
+    /// <inheritdoc/>
+    public virtual DynamicShapeInfo GetDynamicShapeInfo()
+    {
+        return DynamicShapeInfo.None;
+    }
+
+
     public virtual void SaveModel(string filePath)
     {
         byte[] serializedData = Serialize();
-        File.WriteAllBytes(filePath, serializedData);
+        byte[] envelopedData = ModelFileHeader.WrapWithHeader(
+            serializedData, this, GetInputShape(), GetOutputShape(), SerializationFormat.Binary);
+        File.WriteAllBytes(filePath, envelopedData);
     }
 
     /// <summary>
@@ -1599,6 +1622,13 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     public virtual void LoadModel(string filePath)
     {
         byte[] serializedData = File.ReadAllBytes(filePath);
+
+        // Extract payload from AIMF envelope if present, otherwise assume legacy raw format
+        if (ModelFileHeader.HasHeader(serializedData))
+        {
+            serializedData = ModelFileHeader.ExtractPayload(serializedData);
+        }
+
         Deserialize(serializedData);
     }
 }

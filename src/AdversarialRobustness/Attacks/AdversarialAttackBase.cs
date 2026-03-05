@@ -16,9 +16,9 @@ namespace AiDotNet.AdversarialRobustness.Attacks;
 /// <typeparam name="TInput">The input data type for the model.</typeparam>
 /// <typeparam name="TOutput">The output data type for the model.</typeparam>
 /// <remarks>
-/// <para><b>For Beginners:</b> for provides AI safety functionality. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> This provides AI safety functionality. Default values follow the original paper settings.</para>
 /// </remarks>
-public abstract class AdversarialAttackBase<T, TInput, TOutput> : IAdversarialAttack<T, TInput, TOutput>
+public abstract class AdversarialAttackBase<T, TInput, TOutput> : IAdversarialAttack<T, TInput, TOutput>, IModelShape
 {
     /// <summary>
     /// Gets the global execution engine for vectorized operations.
@@ -143,8 +143,38 @@ public abstract class AdversarialAttackBase<T, TInput, TOutput> : IAdversarialAt
         }
 
         var data = Serialize();
-        File.WriteAllBytes(fullPath, data);
+        byte[] envelopedData = ModelFileHeader.WrapWithHeader(
+            data, this, GetInputShape(), GetOutputShape(), SerializationFormat.Json,
+            dynamicShapeInfo: GetDynamicShapeInfo());
+        File.WriteAllBytes(fullPath, envelopedData);
     }
+
+    /// <summary>
+    /// Returns the input shape for this attack configuration.
+    /// Attacks are config/strategy objects rather than inference models, so shape is typically empty.
+    /// Subclasses that wrap a target model should override to delegate to the target model's shape.
+    /// </summary>
+    public virtual int[] GetInputShape()
+    {
+        return Array.Empty<int>();
+    }
+
+    /// <summary>
+    /// Returns the output shape for this attack configuration.
+    /// Attacks are config/strategy objects rather than inference models, so shape is typically empty.
+    /// Subclasses that wrap a target model should override to delegate to the target model's shape.
+    /// </summary>
+    public virtual int[] GetOutputShape()
+    {
+        return Array.Empty<int>();
+    }
+
+    /// <inheritdoc/>
+    public virtual DynamicShapeInfo GetDynamicShapeInfo()
+    {
+        return DynamicShapeInfo.None;
+    }
+
 
     /// <inheritdoc/>
     public virtual void LoadModel(string filePath)
@@ -169,6 +199,10 @@ public abstract class AdversarialAttackBase<T, TInput, TOutput> : IAdversarialAt
         }
 
         var data = File.ReadAllBytes(fullPath);
+
+        // Extract payload from AIMF envelope
+        data = ModelFileHeader.ExtractPayload(data);
+
         Deserialize(data);
     }
 

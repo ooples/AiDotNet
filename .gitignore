@@ -181,6 +181,8 @@ DocProject/Help/html
 
 # Click-Once directory
 publish/
+publish-*/
+deploy-*.zip
 
 # Publish Web Output
 *.[Pp]ublish.xml
@@ -376,6 +378,10 @@ CLAUDE.md
 
 # Local progress tracking (not for repository)
 GPU_VECTORIZATION_TODO.md
+
+# Build-time signing key (injected by CI/CD only)
+src/BuildKey/BuildKey.bin
+src/IntegrityHash/IntegrityHash.bin
 
 # External dependencies (binaries, not source)
 external/

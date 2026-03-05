@@ -1,0 +1,88 @@
+---
+const base = import.meta.env.BASE_URL;
+const year = new Date().getFullYear();
+
+const columns = [
+  {
+    title: 'Product',
+    links: [
+      { label: 'Features', href: `${base}#features` },
+      { label: 'Pricing', href: `${base}pricing/` },
+      { label: 'Playground', href: `${base}playground/` },
+      { label: 'Changelog', href: `${base}docs/community/changelog/` },
+    ],
+  },
+  {
+    title: 'Documentation',
+    links: [
+      { label: 'Getting Started', href: `${base}docs/getting-started/installation/` },
+      { label: 'Tutorials', href: `${base}docs/tutorials/classification/` },
+      { label: 'API Reference', href: `${base}docs/reference/neural-networks/` },
+      { label: 'Examples', href: `${base}docs/examples/tensor-basics/` },
+    ],
+  },
+  {
+    title: 'Community',
+    links: [
+      { label: 'GitHub', href: 'https://github.com/ooples/AiDotNet', external: true },
+      { label: 'NuGet', href: 'https://www.nuget.org/packages/AiDotNet/', external: true },
+      { label: 'Discussions', href: 'https://github.com/ooples/AiDotNet/discussions', external: true },
+      { label: 'Contributing', href: `${base}docs/community/contributing/` },
+    ],
+  },
+];
+---
+
+<footer class="border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 lg:py-16">
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-8">
+      <!-- Brand column -->
+      <div class="col-span-2 md:col-span-1">
+        <a href={base} class="flex items-center gap-2 mb-4">
+          <img src={`${base}logo.svg`} alt="AiDotNet" class="w-8 h-8" />
+          <span class="text-lg font-bold bg-gradient-to-r from-brand-blue to-brand-purple bg-clip-text text-transparent">
+            AiDotNet
+          </span>
+        </a>
+        <p class="text-sm text-slate-500 dark:text-slate-400 mb-4">
+          The most comprehensive AI/ML framework for .NET. Pure C#, no Python required.
+        </p>
+        <div class="flex items-center gap-2">
+          <a href="https://www.nuget.org/packages/AiDotNet/" target="_blank" rel="noopener noreferrer">
+            <img src="https://img.shields.io/nuget/dt/AiDotNet?style=flat-square&label=NuGet%20Downloads&color=4A90D9" alt="NuGet Downloads" loading="lazy" />
+          </a>
+        </div>
+      </div>
+
+      <!-- Link columns -->
+      {columns.map((col) => (
+        <div>
+          <h3 class="text-sm font-semibold text-slate-900 dark:text-white mb-3">{col.title}</h3>
+          <ul class="space-y-2">
+            {col.links.map((link) => (
+              <li>
+                <a
+                  href={link.href}
+                  class="text-sm text-slate-500 dark:text-slate-400 hover:text-brand-blue dark:hover:text-brand-blue transition-colors"
+                  {...('external' in link && link.external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
+                >
+                  {link.label}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </div>
+
+    <!-- Bottom bar -->
+    <div class="mt-12 pt-8 border-t border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4">
+      <p class="text-sm text-slate-500 dark:text-slate-400">
+        &copy; {year} Ooples Finance. Apache License 2.0.
+      </p>
+      <p class="text-xs text-slate-400 dark:text-slate-500">
+        Built with Astro &amp; Tailwind CSS
+      </p>
+    </div>
+  </div>
+</footer>

@@ -34,7 +34,7 @@ namespace AiDotNet.DistributedTraining;
 /// <typeparam name="T">The numeric type for operations</typeparam>
 /// <typeparam name="TInput">The input type for the model</typeparam>
 /// <typeparam name="TOutput">The output type for the model</typeparam>
-public abstract class ShardedModelBase<T, TInput, TOutput> : IShardedModel<T, TInput, TOutput>
+public abstract class ShardedModelBase<T, TInput, TOutput> : IShardedModel<T, TInput, TOutput>, IModelShape
 {
     /// <summary>
     /// Provides numeric operations for type T.
@@ -349,10 +349,70 @@ public abstract class ShardedModelBase<T, TInput, TOutput> : IShardedModel<T, TI
     public abstract void Deserialize(byte[] data);
 
     /// <inheritdoc/>
-    public abstract void SaveModel(string filePath);
+    public virtual int[] GetInputShape()
+    {
+        if (WrappedModel is IModelShape shapeModel)
+        {
+            return shapeModel.GetInputShape();
+        }
+
+        // Cannot infer input shape without the wrapped model implementing IModelShape.
+        // Return empty to avoid persisting misleading metadata.
+        return Array.Empty<int>();
+    }
 
     /// <inheritdoc/>
-    public abstract void LoadModel(string filePath);
+    public virtual int[] GetOutputShape()
+    {
+        if (WrappedModel is IModelShape shapeModel)
+        {
+            return shapeModel.GetOutputShape();
+        }
+
+        return Array.Empty<int>();
+    }
+
+    /// <inheritdoc/>
+    public virtual DynamicShapeInfo GetDynamicShapeInfo()
+    {
+        return DynamicShapeInfo.None;
+    }
+
+
+    /// <inheritdoc/>
+    public virtual void SaveModel(string filePath)
+    {
+        if (string.IsNullOrWhiteSpace(filePath))
+            throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
+
+        string fullPath = Path.GetFullPath(filePath);
+        string? directory = Path.GetDirectoryName(fullPath);
+        if (directory is not null && !Directory.Exists(directory))
+            Directory.CreateDirectory(directory);
+
+        byte[] data = Serialize();
+        byte[] envelopedData = ModelFileHeader.WrapWithHeader(
+            data, this, GetInputShape(), GetOutputShape(), SerializationFormat.Binary);
+        File.WriteAllBytes(fullPath, envelopedData);
+    }
+
+    /// <inheritdoc/>
+    public virtual void LoadModel(string filePath)
+    {
+        if (string.IsNullOrWhiteSpace(filePath))
+            throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
+
+        string fullPath = Path.GetFullPath(filePath);
+        if (!File.Exists(fullPath))
+            throw new FileNotFoundException($"Model file not found: {fullPath}", fullPath);
+
+        byte[] data = File.ReadAllBytes(fullPath);
+
+        // Extract payload from AIMF envelope
+        data = ModelFileHeader.ExtractPayload(data);
+
+        Deserialize(data);
+    }
 
     /// <inheritdoc/>
     public abstract IFullModel<T, TInput, TOutput> Clone();

@@ -1,0 +1,91 @@
+---
+import SolutionLayout from '../../../layouts/SolutionLayout.astro';
+---
+
+<SolutionLayout
+  title="Document AI"
+  seoTitle="Document AI for .NET - AiDotNet"
+  seoDescription="Extract text, tables, and structure from documents. PaddleOCR, LayoutLMv3, Donut, TrOCR, and vision-language models for document processing in C#."
+  headline="Intelligent document processing. Zero Python."
+  subheadline="Extract text, tables, layouts, and semantics from any document type. From invoices to contracts, from medical records to financial statements. End-to-end document understanding pipeline in pure .NET."
+  icon='<svg class="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>'
+  painPoints={[
+    { problem: 'Manual data entry from paper documents', solution: 'PaddleOCR and TrOCR extract text from scanned documents, handwriting, and photos with 99%+ accuracy.' },
+    { problem: 'Unstructured documents with complex layouts', solution: 'LayoutLMv3 understands document structure - tables, headers, key-value pairs, and multi-column layouts.' },
+    { problem: 'Domain-specific document understanding', solution: 'Fine-tune on your document types: invoices, contracts, medical records, insurance claims. LoRA adapters keep models small.' },
+    { problem: 'Python OCR pipelines in .NET applications', solution: 'Full OCR and document AI pipeline in C#. No Tesseract binary, no Python subprocess, no cross-language complexity.' },
+  ]}
+  capabilities={[
+    {
+      title: 'OCR & Text Extraction',
+      description: 'Extract text from scanned documents, photos, and PDFs with multi-language support.',
+      models: ['PaddleOCR', 'EasyOCR', 'TrOCR', 'SVTR', 'GOT-OCR'],
+      icon: '<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>'
+    },
+    {
+      title: 'Document Layout Analysis',
+      description: 'Understand document structure including tables, headers, paragraphs, and figures.',
+      models: ['LayoutLMv3', 'DocFormer', 'LayoutLMv2', 'DINO'],
+      icon: '<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z"/></svg>'
+    },
+    {
+      title: 'Key-Value Extraction',
+      description: 'Extract structured data from invoices, receipts, forms, and contracts automatically.',
+      models: ['Donut', 'LayoutLMv3', 'Florence-2', 'Nougat'],
+      icon: '<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>'
+    },
+    {
+      title: 'Visual Question Answering',
+      description: 'Ask questions about documents in natural language and get accurate answers.',
+      models: ['LLaVA', 'InternVL', 'CogVLM', 'Phi-3-Vision', 'Qwen2-VL'],
+      icon: '<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>'
+    },
+    {
+      title: 'Table Extraction',
+      description: 'Detect and extract tables from documents with cell-level accuracy.',
+      models: ['DETR', 'Mask2Former', 'LayoutLMv3', 'Donut'],
+      icon: '<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>'
+    },
+    {
+      title: 'Document Classification',
+      description: 'Automatically classify and route documents by type, urgency, and department.',
+      models: ['ViT', 'CLIP', 'EfficientNet', 'DINOv2', 'BERT'],
+      icon: '<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/></svg>'
+    },
+  ]}
+  workflow={[
+    { step: 'Document ingestion', detail: 'Scan, upload, or receive documents via email/API integration.' },
+    { step: 'OCR & text extraction', detail: 'PaddleOCR extracts text, TrOCR handles handwriting, DBNet detects text regions.' },
+    { step: 'Layout analysis', detail: 'LayoutLMv3 identifies tables, headers, paragraphs, and key-value pairs.' },
+    { step: 'Structured extraction', detail: 'Donut extracts invoice numbers, dates, amounts. Fine-tuned models handle custom fields.' },
+    { step: 'Validation & QA', detail: 'Confidence scores flag uncertain extractions for human review.' },
+    { step: 'Integration', detail: 'Output structured JSON/XML for downstream ERP, CRM, and database systems.' },
+  ]}
+  codeExample={`using AiDotNet;
+
+// OCR model with AiModelBuilder
+var ocrModel = await new AiModelBuilder<float, float[], float>()
+    .ConfigureModel(new PaddleOCR<float>())
+    .ConfigurePreprocessing()
+    .BuildAsync(documentImages, textLabels);
+
+var text = ocrModel.Predict(scannedDocument);
+
+// Layout understanding with AiModelBuilder
+var layoutModel = await new AiModelBuilder<float, float[], float>()
+    .ConfigureModel(new LayoutLMv3<float>("layoutlmv3-base"))
+    .ConfigureOptimizer(new AdamOptimizer<float>())
+    .ConfigurePreprocessing()
+    .BuildAsync(documentImages, layoutLabels);
+
+var structure = layoutModel.Predict(invoiceImage);
+
+// Document VQA with AiModelBuilder
+var vqaModel = await new AiModelBuilder<float, float[], float>()
+    .ConfigureModel(new Phi3Vision<float>("phi-3.5-vision"))
+    .ConfigurePreprocessing()
+    .BuildAsync(documentImages, answerLabels);
+
+var answer = vqaModel.Predict(contractImage);`}
+  codeTitle="Document AI with AiModelBuilder"
+/>

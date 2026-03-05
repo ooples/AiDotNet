@@ -115,6 +115,11 @@ public partial class YamlModelConfig
     /// Training memory management configuration (gradient checkpointing, activation pooling, model sharding).
     /// </summary>
     public TrainingMemoryConfig? MemoryManagement { get; set; }
+
+    /// <summary>
+    /// License key configuration for encrypted model loading/saving and online validation.
+    /// </summary>
+    public YamlLicenseSection? License { get; set; }
 }
 
 /// <summary>

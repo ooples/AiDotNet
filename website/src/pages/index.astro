@@ -1,0 +1,439 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import Hero from '../components/Hero.astro';
+import FeatureCard from '../components/FeatureCard.astro';
+import ComparisonTable from '../components/ComparisonTable.astro';
+import CodeTabs from '../components/CodeTabs.astro';
+
+const base = import.meta.env.BASE_URL;
+
+const features = [
+  {
+    title: 'GPU Acceleration',
+    description: 'Custom GPU kernels for NVIDIA, AMD, Intel, and Apple GPUs via CUDA, OpenCL, HIP, Metal, Vulkan, and WebGPU. Up to 500x GEMM speedup. Faster than PyTorch.',
+    count: 'Any GPU',
+    icon: '<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"/></svg>',
+  },
+  {
+    title: 'Neural Networks',
+    description: 'CNN, RNN, Transformer, GAN, VAE, GNN, Diffusion, NeRF and more. 160 layer types covering every major architecture.',
+    count: '160+',
+    icon: '<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>',
+  },
+  {
+    title: 'Computer Vision',
+    description: 'YOLO v8-11, DETR, RT-DETR, SAM/SAM2, segmentation, OCR, text detection. Full detection-to-recognition pipeline.',
+    count: '115+',
+    icon: '<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>',
+  },
+  {
+    title: 'Diffusion & Generation',
+    description: '40+ image diffusion models (SD, SDXL, SD3, Flux, ControlNet), 29 video generation models, 7 audio diffusion models.',
+    count: '75+',
+    icon: '<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>',
+  },
+  {
+    title: 'Classical ML',
+    description: '50 classifiers, 57 regressors, 48 clustering algorithms. Complete traditional ML toolkit with AutoML and NAS.',
+    count: '155+',
+    icon: '<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>',
+  },
+  {
+    title: 'Audio & Speech',
+    description: 'Speech recognition, text-to-speech, music generation, audio classification. 250+ implementations across the full audio pipeline.',
+    count: '250+',
+    icon: '<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/></svg>',
+  },
+  {
+    title: 'Vision-Language Models',
+    description: 'LLaVA, InternVL, CLIP, DINOv2/v3, Florence2, Qwen-VL. Instruction-tuned VLMs and vision encoders.',
+    count: '165+',
+    icon: '<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>',
+  },
+  {
+    title: 'Reinforcement Learning',
+    description: 'DQN, PPO, SAC, A3C, TD3, MuZero, Decision Transformer, MADDPG. 50+ agents for games, robotics and optimization.',
+    count: '50+ agents',
+    icon: '<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>',
+  },
+  {
+    title: 'Model Serving & API',
+    description: 'Production REST API with AiDotNet.Serving. Model encryption, license management, API key auth, Stripe billing. Deploy your AI as a product.',
+    count: 'Full stack',
+    icon: '<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"/></svg>',
+  },
+  {
+    title: 'LoRA Fine-tuning',
+    description: 'LoRA, QLoRA, DoRA, AdaLoRA, VeRA, MoRA and more adapters plus training strategies. Fine-tune models with minimal compute.',
+    count: '50+ adapters',
+    icon: '<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/></svg>',
+  },
+  {
+    title: 'Federated & Distributed',
+    description: 'FedAvg, FedProx, scaffold, and 30+ distributed training strategies. Train across hospitals, banks, or edge devices while keeping data private.',
+    count: '180+',
+    icon: '<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>',
+  },
+  {
+    title: 'NER & NLP',
+    description: 'BERT, BioBERT, FinBERT, LegalBERT, DeBERTa and 30+ named entity recognition models. BiLSTM-CRF, span-based and transformer NER.',
+    count: '30+ models',
+    icon: '<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>',
+  },
+];
+---
+
+<BaseLayout
+  title="AiDotNet - The Complete AI/ML Platform for .NET"
+  description="Train, serve, and monetize AI models entirely in C#. 8,100+ classes, 139 modules, custom GPU kernels up to 500x faster than PyTorch. Neural networks, computer vision, RAG, reinforcement learning, model serving &mdash; all in pure .NET."
+>
+  <!-- Hero -->
+  <Hero />
+
+  <!-- Social proof bar -->
+  <section class="py-8 border-y border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-wrap items-center justify-center gap-6 sm:gap-10">
+        <a href="https://www.nuget.org/packages/AiDotNet/" target="_blank" rel="noopener noreferrer">
+          <img src="https://img.shields.io/nuget/dt/AiDotNet?style=for-the-badge&label=NuGet%20Downloads&color=4A90D9" alt="NuGet Downloads" loading="lazy" class="h-7" />
+        </a>
+        <a href="https://github.com/ooples/AiDotNet" target="_blank" rel="noopener noreferrer">
+          <img src="https://img.shields.io/github/stars/ooples/AiDotNet?style=for-the-badge&label=GitHub%20Stars&color=7B61FF" alt="GitHub Stars" loading="lazy" class="h-7" />
+        </a>
+        <span class="px-4 py-1.5 rounded-full bg-green-500/10 text-green-600 dark:text-green-400 text-sm font-semibold">
+          .NET 10 + .NET Framework 4.7.1
+        </span>
+        <span class="px-4 py-1.5 rounded-full bg-brand-blue/10 text-brand-blue dark:text-brand-purple text-sm font-semibold">
+          Apache 2.0 Licensed
+        </span>
+      </div>
+    </div>
+  </section>
+
+  <!-- GPU Performance Showcase -->
+  <section class="py-20 lg:py-28">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="text-center mb-16">
+        <h2 class="gsap-fade-up text-3xl sm:text-4xl lg:text-5xl font-bold text-slate-900 dark:text-white mb-4">
+          Faster than PyTorch. On any GPU.
+        </h2>
+        <p class="gsap-fade-up text-lg text-slate-500 dark:text-slate-400 max-w-3xl mx-auto">
+          AiDotNet.Tensors ships hand-tuned GPU kernels via CUDA, OpenCL, HIP, Metal, Vulkan, and WebGPU &mdash; no CUDA lock-in, no third-party GPU libraries.
+          Your code runs on NVIDIA, AMD, Intel, and Apple GPUs with zero configuration.
+        </p>
+      </div>
+
+      <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
+        <div class="gsap-fade-up text-center p-6 rounded-2xl border border-slate-200 dark:border-slate-700/50 bg-white dark:bg-slate-800/50">
+          <div class="text-4xl font-bold bg-gradient-to-r from-brand-blue to-brand-purple bg-clip-text text-transparent mb-2">500x</div>
+          <div class="text-sm font-medium text-slate-900 dark:text-white mb-1">GEMM (2048x2048)</div>
+          <div class="text-xs text-slate-500 dark:text-slate-400">Matrix multiplication speedup vs CPU</div>
+        </div>
+        <div class="gsap-fade-up text-center p-6 rounded-2xl border border-slate-200 dark:border-slate-700/50 bg-white dark:bg-slate-800/50">
+          <div class="text-4xl font-bold bg-gradient-to-r from-brand-blue to-brand-purple bg-clip-text text-transparent mb-2">200x</div>
+          <div class="text-sm font-medium text-slate-900 dark:text-white mb-1">Conv2D</div>
+          <div class="text-xs text-slate-500 dark:text-slate-400">Convolution speedup for vision models</div>
+        </div>
+        <div class="gsap-fade-up text-center p-6 rounded-2xl border border-slate-200 dark:border-slate-700/50 bg-white dark:bg-slate-800/50">
+          <div class="text-4xl font-bold bg-gradient-to-r from-brand-blue to-brand-purple bg-clip-text text-transparent mb-2">100x</div>
+          <div class="text-sm font-medium text-slate-900 dark:text-white mb-1">GEMV</div>
+          <div class="text-xs text-slate-500 dark:text-slate-400">Matrix-vector multiply speedup</div>
+        </div>
+        <div class="gsap-fade-up text-center p-6 rounded-2xl border border-slate-200 dark:border-slate-700/50 bg-white dark:bg-slate-800/50">
+          <div class="text-4xl font-bold bg-gradient-to-r from-brand-blue to-brand-purple bg-clip-text text-transparent mb-2">40x</div>
+          <div class="text-sm font-medium text-slate-900 dark:text-white mb-1">MaxPool2D</div>
+          <div class="text-xs text-slate-500 dark:text-slate-400">Pooling layer speedup</div>
+        </div>
+      </div>
+
+      <div class="gsap-fade-up text-center">
+        <p class="text-sm text-slate-500 dark:text-slate-400 mb-4">
+          Adaptive thresholds automatically route small operations to CPU and large operations to GPU for optimal performance.
+        </p>
+        <div class="inline-flex items-center gap-4 flex-wrap justify-center">
+          <span class="px-3 py-1 rounded-full bg-green-500/10 text-green-600 dark:text-green-400 text-xs font-medium">NVIDIA (CUDA)</span>
+          <span class="px-3 py-1 rounded-full bg-red-500/10 text-red-600 dark:text-red-400 text-xs font-medium">AMD (OpenCL)</span>
+          <span class="px-3 py-1 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 text-xs font-medium">Intel (OpenCL)</span>
+          <span class="px-3 py-1 rounded-full bg-purple-500/10 text-purple-600 dark:text-purple-400 text-xs font-medium">CPU (SIMD/AVX-512)</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Features grid -->
+  <section id="features" class="py-20 lg:py-28 bg-slate-50 dark:bg-slate-900/50">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="text-center mb-16">
+        <h2 class="gsap-fade-up text-3xl sm:text-4xl lg:text-5xl font-bold text-slate-900 dark:text-white mb-4">
+          Every AI domain. One NuGet package.
+        </h2>
+        <p class="gsap-fade-up text-lg text-slate-500 dark:text-slate-400 max-w-2xl mx-auto">
+          139 modules covering neural networks, classical ML, computer vision, audio, NLP, reinforcement learning, model serving, and more.
+        </p>
+      </div>
+
+      <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        {features.map((f) => (
+          <FeatureCard {...f} />
+        ))}
+      </div>
+
+      <!-- Browse all features CTA -->
+      <div class="gsap-fade-up text-center mt-10">
+        <a
+          href={`${base}features/`}
+          class="inline-flex items-center gap-2 px-6 py-3 text-sm font-semibold text-brand-blue dark:text-brand-purple rounded-xl border border-brand-blue/20 dark:border-brand-purple/20 hover:bg-brand-blue/5 dark:hover:bg-brand-purple/5 transition-colors"
+        >
+          Browse all 20+ categories
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/>
+          </svg>
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- One API for Everything -->
+  <section class="py-20 lg:py-28">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="text-center mb-16">
+        <h2 class="gsap-fade-up text-3xl sm:text-4xl lg:text-5xl font-bold text-slate-900 dark:text-white mb-4">
+          One API for everything
+        </h2>
+        <p class="gsap-fade-up text-lg text-slate-500 dark:text-slate-400 max-w-2xl mx-auto">
+          <code class="text-brand-blue dark:text-brand-purple font-mono">AiModelBuilder</code> is a single fluent API with 130+ configuration methods.
+          Simple for beginners, fully customizable for experts.
+        </p>
+      </div>
+
+      <div class="max-w-3xl mx-auto">
+        <CodeTabs />
+      </div>
+    </div>
+  </section>
+
+  <!-- Industry Solutions -->
+  <section class="py-20 lg:py-28 bg-slate-50 dark:bg-slate-900/50">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="text-center mb-12">
+        <h2 class="gsap-fade-up text-3xl sm:text-4xl font-bold text-slate-900 dark:text-white mb-4">
+          Built for your industry
+        </h2>
+        <p class="gsap-fade-up text-lg text-slate-500 dark:text-slate-400 max-w-2xl mx-auto">
+          Purpose-built AI pipelines for regulated industries. Complete workflows from data ingestion to production deployment.
+        </p>
+      </div>
+
+      <div class="grid md:grid-cols-3 gap-6">
+        <a href={`${base}solutions/finance/`} class="gsap-fade-up group p-6 rounded-2xl border border-slate-200 dark:border-slate-700/50 bg-white dark:bg-slate-800/50 hover:border-brand-blue/50 dark:hover:border-brand-purple/50 transition-all duration-300 hover:shadow-lg">
+          <div class="w-10 h-10 mb-4 flex items-center justify-center rounded-lg bg-gradient-brand text-white">
+            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          </div>
+          <h3 class="text-lg font-semibold text-slate-900 dark:text-white mb-2 group-hover:text-brand-blue dark:group-hover:text-brand-purple transition-colors">Financial Services</h3>
+          <p class="text-sm text-slate-500 dark:text-slate-400 mb-3">FinBERT sentiment, DeepAR forecasting, GARCH volatility, fraud detection. Native .NET performance for trading systems.</p>
+          <div class="flex flex-wrap gap-1.5">
+            <span class="px-2 py-0.5 text-xs rounded bg-slate-100 dark:bg-slate-900/50 text-slate-600 dark:text-slate-300">FinBERT</span>
+            <span class="px-2 py-0.5 text-xs rounded bg-slate-100 dark:bg-slate-900/50 text-slate-600 dark:text-slate-300">Chronos</span>
+            <span class="px-2 py-0.5 text-xs rounded bg-slate-100 dark:bg-slate-900/50 text-slate-600 dark:text-slate-300">IsolationForest</span>
+          </div>
+        </a>
+
+        <a href={`${base}solutions/healthcare/`} class="gsap-fade-up group p-6 rounded-2xl border border-slate-200 dark:border-slate-700/50 bg-white dark:bg-slate-800/50 hover:border-brand-blue/50 dark:hover:border-brand-purple/50 transition-all duration-300 hover:shadow-lg">
+          <div class="w-10 h-10 mb-4 flex items-center justify-center rounded-lg bg-gradient-brand text-white">
+            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/></svg>
+          </div>
+          <h3 class="text-lg font-semibold text-slate-900 dark:text-white mb-2 group-hover:text-brand-blue dark:group-hover:text-brand-purple transition-colors">Healthcare</h3>
+          <p class="text-sm text-slate-500 dark:text-slate-400 mb-3">Medical imaging with MedSAM, clinical NLP with BioBERT, and federated learning for HIPAA-compliant cross-hospital training.</p>
+          <div class="flex flex-wrap gap-1.5">
+            <span class="px-2 py-0.5 text-xs rounded bg-slate-100 dark:bg-slate-900/50 text-slate-600 dark:text-slate-300">MedSAM</span>
+            <span class="px-2 py-0.5 text-xs rounded bg-slate-100 dark:bg-slate-900/50 text-slate-600 dark:text-slate-300">BioBERT</span>
+            <span class="px-2 py-0.5 text-xs rounded bg-slate-100 dark:bg-slate-900/50 text-slate-600 dark:text-slate-300">FedAvg</span>
+          </div>
+        </a>
+
+        <a href={`${base}solutions/document-ai/`} class="gsap-fade-up group p-6 rounded-2xl border border-slate-200 dark:border-slate-700/50 bg-white dark:bg-slate-800/50 hover:border-brand-blue/50 dark:hover:border-brand-purple/50 transition-all duration-300 hover:shadow-lg">
+          <div class="w-10 h-10 mb-4 flex items-center justify-center rounded-lg bg-gradient-brand text-white">
+            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+          </div>
+          <h3 class="text-lg font-semibold text-slate-900 dark:text-white mb-2 group-hover:text-brand-blue dark:group-hover:text-brand-purple transition-colors">Document AI</h3>
+          <p class="text-sm text-slate-500 dark:text-slate-400 mb-3">OCR, layout analysis, key-value extraction from invoices, contracts, and medical records. Full pipeline in pure .NET.</p>
+          <div class="flex flex-wrap gap-1.5">
+            <span class="px-2 py-0.5 text-xs rounded bg-slate-100 dark:bg-slate-900/50 text-slate-600 dark:text-slate-300">PaddleOCR</span>
+            <span class="px-2 py-0.5 text-xs rounded bg-slate-100 dark:bg-slate-900/50 text-slate-600 dark:text-slate-300">LayoutLMv3</span>
+            <span class="px-2 py-0.5 text-xs rounded bg-slate-100 dark:bg-slate-900/50 text-slate-600 dark:text-slate-300">Donut</span>
+          </div>
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- "Why Not..." Comparison -->
+  <section class="py-20 lg:py-28">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="text-center mb-16">
+        <h2 class="gsap-fade-up text-3xl sm:text-4xl lg:text-5xl font-bold text-slate-900 dark:text-white mb-4">
+          How we compare
+        </h2>
+        <p class="gsap-fade-up text-lg text-slate-500 dark:text-slate-400 max-w-2xl mx-auto">
+          AiDotNet is the only .NET platform that covers training, serving, and monetization. No compromises.
+        </p>
+      </div>
+
+      <div class="rounded-2xl border border-slate-200 dark:border-slate-700/50 bg-white dark:bg-slate-800/50 p-6 sm:p-8">
+        <ComparisonTable />
+      </div>
+
+      <!-- Why not cards -->
+      <div class="mt-12 grid md:grid-cols-3 gap-6">
+        <div class="gsap-fade-up p-6 rounded-2xl border border-slate-200 dark:border-slate-700/50 bg-white dark:bg-slate-800/50">
+          <h3 class="text-lg font-semibold text-slate-900 dark:text-white mb-3">Why not TorchSharp?</h3>
+          <ul class="space-y-2 text-sm text-slate-500 dark:text-slate-400">
+            <li>~700MB LibTorch runtime dependency</li>
+            <li>Slow startup loading PyTorch runtime</li>
+            <li>Array copying between .NET and LibTorch</li>
+            <li>No classical ML, no AutoML, no serving</li>
+          </ul>
+        </div>
+        <div class="gsap-fade-up p-6 rounded-2xl border border-slate-200 dark:border-slate-700/50 bg-white dark:bg-slate-800/50">
+          <h3 class="text-lg font-semibold text-slate-900 dark:text-white mb-3">Why not ML.NET?</h3>
+          <ul class="space-y-2 text-sm text-slate-500 dark:text-slate-400">
+            <li>Only ~10 neural network architectures</li>
+            <li>No computer vision, audio, VLMs, or RL</li>
+            <li>No GPU acceleration or custom kernels</li>
+            <li>No model serving or monetization tools</li>
+          </ul>
+        </div>
+        <div class="gsap-fade-up p-6 rounded-2xl border border-slate-200 dark:border-slate-700/50 bg-white dark:bg-slate-800/50">
+          <h3 class="text-lg font-semibold text-slate-900 dark:text-white mb-3">Why not Python?</h3>
+          <ul class="space-y-2 text-sm text-slate-500 dark:text-slate-400">
+            <li>GIL limits real concurrency</li>
+            <li>Separate runtime in production stack</li>
+            <li>No native .NET type safety or AOT</li>
+            <li>Separate team/skills from your .NET devs</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Performance section -->
+  <section class="py-20 lg:py-28 bg-slate-50 dark:bg-slate-900/50">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="text-center mb-16">
+        <h2 class="gsap-fade-up text-3xl sm:text-4xl lg:text-5xl font-bold text-slate-900 dark:text-white mb-4">
+          Native .NET performance
+        </h2>
+        <p class="gsap-fade-up text-lg text-slate-500 dark:text-slate-400 max-w-2xl mx-auto">
+          No Python runtime. No C++ interop. Pure .NET speed with hardware-level optimizations.
+        </p>
+      </div>
+
+      <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div class="gsap-fade-up text-center p-6 rounded-2xl border border-slate-200 dark:border-slate-700/50 bg-white dark:bg-slate-800/50">
+          <div class="text-3xl font-bold bg-gradient-to-r from-brand-blue to-brand-purple bg-clip-text text-transparent mb-2">SIMD</div>
+          <div class="text-sm text-slate-500 dark:text-slate-400">AVX2/AVX-512 vectorized tensor operations</div>
+        </div>
+        <div class="gsap-fade-up text-center p-6 rounded-2xl border border-slate-200 dark:border-slate-700/50 bg-white dark:bg-slate-800/50">
+          <div class="text-3xl font-bold bg-gradient-to-r from-brand-blue to-brand-purple bg-clip-text text-transparent mb-2">Span&lt;T&gt;</div>
+          <div class="text-sm text-slate-500 dark:text-slate-400">Zero-copy memory operations throughout</div>
+        </div>
+        <div class="gsap-fade-up text-center p-6 rounded-2xl border border-slate-200 dark:border-slate-700/50 bg-white dark:bg-slate-800/50">
+          <div class="text-3xl font-bold bg-gradient-to-r from-brand-blue to-brand-purple bg-clip-text text-transparent mb-2">AOT</div>
+          <div class="text-sm text-slate-500 dark:text-slate-400">Ahead-of-time compilation support</div>
+        </div>
+        <div class="gsap-fade-up text-center p-6 rounded-2xl border border-slate-200 dark:border-slate-700/50 bg-white dark:bg-slate-800/50">
+          <div class="text-3xl font-bold bg-gradient-to-r from-brand-blue to-brand-purple bg-clip-text text-transparent mb-2">6 GPU APIs</div>
+          <div class="text-sm text-slate-500 dark:text-slate-400">CUDA, OpenCL, HIP, Metal, Vulkan, WebGPU</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Platform Architecture -->
+  <section class="py-20 lg:py-28">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="text-center mb-12">
+        <h2 class="gsap-fade-up text-3xl sm:text-4xl font-bold text-slate-900 dark:text-white mb-4">
+          From training to production
+        </h2>
+        <p class="gsap-fade-up text-lg text-slate-500 dark:text-slate-400 max-w-2xl mx-auto">
+          AiDotNet covers the entire lifecycle. Train models, deploy as APIs, and manage customers &mdash; all in .NET.
+        </p>
+      </div>
+
+      <div class="gsap-fade-up max-w-5xl mx-auto">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div class="p-6 rounded-2xl border border-slate-200 dark:border-slate-700/50 bg-white dark:bg-slate-800/50">
+            <div class="w-12 h-12 mb-4 flex items-center justify-center rounded-xl bg-brand-blue/10 dark:bg-brand-purple/10 text-brand-blue dark:text-brand-purple">
+              <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"/></svg>
+            </div>
+            <h3 class="text-lg font-semibold text-slate-900 dark:text-white mb-2">AiDotNet</h3>
+            <p class="text-sm text-slate-500 dark:text-slate-400 mb-3">The core library. 8,100+ classes for training, inference, and experimentation. Install from NuGet and start building.</p>
+            <div class="flex flex-wrap gap-1.5">
+              <span class="px-2 py-0.5 text-xs rounded bg-slate-100 dark:bg-slate-900/50 text-slate-600 dark:text-slate-300">Training</span>
+              <span class="px-2 py-0.5 text-xs rounded bg-slate-100 dark:bg-slate-900/50 text-slate-600 dark:text-slate-300">Inference</span>
+              <span class="px-2 py-0.5 text-xs rounded bg-slate-100 dark:bg-slate-900/50 text-slate-600 dark:text-slate-300">AiModelBuilder</span>
+            </div>
+          </div>
+
+          <div class="p-6 rounded-2xl border border-slate-200 dark:border-slate-700/50 bg-white dark:bg-slate-800/50">
+            <div class="w-12 h-12 mb-4 flex items-center justify-center rounded-xl bg-brand-blue/10 dark:bg-brand-purple/10 text-brand-blue dark:text-brand-purple">
+              <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"/></svg>
+            </div>
+            <h3 class="text-lg font-semibold text-slate-900 dark:text-white mb-2">AiDotNet.Tensors</h3>
+            <p class="text-sm text-slate-500 dark:text-slate-400 mb-3">Hand-tuned GPU kernels via P/Invoke. CUDA, OpenCL, HIP, Metal, Vulkan, and WebGPU backends. Adaptive CPU/GPU routing for optimal performance.</p>
+            <div class="flex flex-wrap gap-1.5">
+              <span class="px-2 py-0.5 text-xs rounded bg-slate-100 dark:bg-slate-900/50 text-slate-600 dark:text-slate-300">GPU Kernels</span>
+              <span class="px-2 py-0.5 text-xs rounded bg-slate-100 dark:bg-slate-900/50 text-slate-600 dark:text-slate-300">6 Backends</span>
+              <span class="px-2 py-0.5 text-xs rounded bg-slate-100 dark:bg-slate-900/50 text-slate-600 dark:text-slate-300">Any GPU</span>
+            </div>
+          </div>
+
+          <div class="p-6 rounded-2xl border border-brand-blue/20 dark:border-brand-purple/20 bg-brand-blue/5 dark:bg-brand-purple/5">
+            <div class="w-12 h-12 mb-4 flex items-center justify-center rounded-xl bg-gradient-brand text-white">
+              <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"/></svg>
+            </div>
+            <h3 class="text-lg font-semibold text-slate-900 dark:text-white mb-2">AiDotNet.Serving</h3>
+            <p class="text-sm text-slate-500 dark:text-slate-400 mb-3">Deploy models as REST APIs. Encrypted model protection, API key auth, license management, and Stripe billing built in.</p>
+            <div class="flex flex-wrap gap-1.5">
+              <span class="px-2 py-0.5 text-xs rounded bg-slate-100 dark:bg-slate-900/50 text-slate-600 dark:text-slate-300">REST API</span>
+              <span class="px-2 py-0.5 text-xs rounded bg-slate-100 dark:bg-slate-900/50 text-slate-600 dark:text-slate-300">Encryption</span>
+              <span class="px-2 py-0.5 text-xs rounded bg-slate-100 dark:bg-slate-900/50 text-slate-600 dark:text-slate-300">Stripe</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA Banner -->
+  <section class="py-20 lg:py-28 relative overflow-hidden">
+    <!-- Gradient background -->
+    <div class="absolute inset-0 bg-gradient-brand opacity-[0.03] dark:opacity-[0.08]"></div>
+    <div class="absolute top-0 left-1/4 w-96 h-96 bg-brand-blue/10 rounded-full blur-3xl"></div>
+    <div class="absolute bottom-0 right-1/4 w-96 h-96 bg-brand-purple/10 rounded-full blur-3xl"></div>
+
+    <div class="relative max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+      <h2 class="gsap-fade-up text-3xl sm:text-4xl lg:text-5xl font-bold text-slate-900 dark:text-white mb-6">
+        Ready to build AI in .NET?
+      </h2>
+      <p class="gsap-fade-up text-lg text-slate-500 dark:text-slate-400 mb-10 max-w-xl mx-auto">
+        Install from NuGet and start training models in minutes. The full library is free and open source.
+      </p>
+      <div class="gsap-fade-up flex flex-col sm:flex-row items-center justify-center gap-4">
+        <a
+          href={`${base}docs/getting-started/installation/`}
+          class="w-full sm:w-auto px-8 py-4 text-base font-semibold text-white rounded-xl bg-gradient-brand hover:opacity-90 hover:shadow-xl hover:shadow-brand-purple/25 transition-all duration-200"
+        >
+          Get Started Free
+        </a>
+        <a
+          href={`${base}pricing/`}
+          class="w-full sm:w-auto px-8 py-4 text-base font-semibold text-slate-700 dark:text-slate-200 rounded-xl border border-slate-300 dark:border-slate-600 hover:border-brand-blue dark:hover:border-brand-purple transition-all duration-200"
+        >
+          View Pricing
+        </a>
+      </div>
+    </div>
+  </section>
+</BaseLayout>

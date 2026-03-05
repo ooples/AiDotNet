@@ -107,14 +107,47 @@ public class InferenceController : ControllerBase
                 });
             }
 
-            // Validate feature dimensions
+            // Validate feature dimensions (shape-aware: respects dynamic dimensions)
             for (int i = 0; i < request.Features.Length; i++)
             {
-                if (request.Features[i].Length != modelInfo.InputDimension)
+                int featureLength = request.Features[i].Length;
+
+                // If model has dynamic shape info, use shape-aware validation.
+                // Only validate for 1D or 2D shapes (flat/tabular vectors).
+                // Multi-dimensional shapes (e.g., [3,-1,-1] for C,H,W) are typically
+                // flattened for transport, so product-of-fixed-dims validation would
+                // incorrectly reject valid requests.
+                if (modelInfo.DynamicShapeInfo.HasDynamicInput && modelInfo.InputShape.Length > 0
+                    && modelInfo.InputShape.Length <= 2)
+                {
+                    // For flat feature vectors, validate against the product of non-dynamic input dims.
+                    // If ALL dims are dynamic (-1), skip validation entirely.
+                    bool hasFixedDim = false;
+                    int expectedFeatures = 1;
+                    for (int d = 0; d < modelInfo.InputShape.Length; d++)
+                    {
+                        if (modelInfo.InputShape[d] > 0)
+                        {
+                            expectedFeatures *= modelInfo.InputShape[d];
+                            hasFixedDim = true;
+                        }
+                    }
+
+                    if (hasFixedDim && featureLength != expectedFeatures)
+                    {
+                        return BadRequest(new
+                        {
+                            error = $"Feature vector at index {i} has {featureLength} dimensions, " +
+                                    $"but model '{effectiveModelName}' expects {expectedFeatures} dimensions " +
+                                    $"(input shape: [{string.Join(", ", modelInfo.InputShape)}])"
+                        });
+                    }
+                }
+                else if (featureLength != modelInfo.InputDimension)
                 {
                     return BadRequest(new
                     {
-                        error = $"Feature vector at index {i} has {request.Features[i].Length} dimensions, " +
+                        error = $"Feature vector at index {i} has {featureLength} dimensions, " +
                                 $"but model '{effectiveModelName}' expects {modelInfo.InputDimension} dimensions"
                     });
                 }

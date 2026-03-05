@@ -228,6 +228,10 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     private BenchmarkingOptions? _benchmarkingOptions;
     private AiDotNet.Safety.SafetyConfig? _safetyPipelineConfig;
 
+    // License key configuration
+    private AiDotNetLicenseKey? _licenseKey;
+    private LicenseValidator? _licenseValidator;
+
     // Tokenization configuration
     private ITokenizer? _tokenizer;
     private TokenizationConfig? _tokenizationConfig;
@@ -264,6 +268,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     internal AiDotNet.Configuration.InferenceOptimizationConfig? ConfiguredInferenceOptimizations => _inferenceOptimizationConfig;
     internal InterpretabilityOptions? ConfiguredInterpretability => _interpretabilityOptions;
     internal Training.Memory.TrainingMemoryConfig? ConfiguredMemoryManagement => _memoryConfig;
+    internal AiDotNetLicenseKey? ConfiguredLicenseKey => _licenseKey;
 
     /// <summary>
     /// Creates a new <see cref="AiModelBuilder{T, TInput, TOutput}"/> with configuration loaded from a YAML file.
@@ -307,12 +312,14 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// </remarks>
     /// <exception cref="ArgumentException">Thrown when <paramref name="configFilePath"/> is null or empty.</exception>
     /// <exception cref="FileNotFoundException">Thrown when the YAML file does not exist.</exception>
-    public AiModelBuilder(string configFilePath)
+    public AiModelBuilder(string configFilePath, AiDotNetLicenseKey? licenseKey = null)
     {
         if (string.IsNullOrWhiteSpace(configFilePath))
         {
             throw new ArgumentException("Config file path cannot be null or empty.", nameof(configFilePath));
         }
+
+        _licenseKey = licenseKey;
 
         var fullPath = Path.GetFullPath(configFilePath);
         if (!File.Exists(fullPath))
@@ -333,8 +340,9 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// <c>.Configure*()</c> methods in C# code.
     /// </para>
     /// </remarks>
-    public AiModelBuilder()
+    public AiModelBuilder(AiDotNetLicenseKey? licenseKey = null)
     {
+        _licenseKey = licenseKey;
     }
 
     /// <summary>
@@ -661,6 +669,15 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     public IAiModelBuilder<T, TInput, TOutput> ConfigureOptimizer(IOptimizer<T, TInput, TOutput> optimizationAlgorithm)
     {
         _optimizer = optimizationAlgorithm;
+        return this;
+    }
+
+    /// <inheritdoc />
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureLicenseKey(AiDotNetLicenseKey licenseKey)
+    {
+        Guard.NotNull(licenseKey);
+        _licenseKey = licenseKey;
+        _licenseValidator = null; // Reset cached validator when key changes
         return this;
     }
 
@@ -3257,6 +3274,54 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// </remarks>
     public void SaveModel(AiModelResult<T, TInput, TOutput> modelResult, string filePath)
     {
+        // When a license key is configured, enforce encrypted save. Fail closed if
+        // the key cannot be resolved rather than silently downgrading to plaintext.
+        string? resolvedKey = LicenseKeyResolver.Resolve(_licenseKey);
+        if (_licenseKey is not null && resolvedKey is null)
+        {
+            throw new InvalidOperationException(
+                "A license key was configured but could not be resolved. " +
+                "Verify the license key is valid. Cannot save model without a resolved key.");
+        }
+
+        if (resolvedKey is not null)
+        {
+            if (modelResult.Model is not Interfaces.IModelSerializer serializer)
+            {
+                throw new InvalidOperationException(
+                    "A license key is configured but the model does not implement IModelSerializer. " +
+                    "Cannot save as encrypted AIMF. Either remove the license key to save unencrypted, " +
+                    "or use a model that implements IModelSerializer.");
+            }
+
+            int[] inputShape = modelResult.Model is Interfaces.IModelShape shape
+                ? shape.GetInputShape()
+                : Array.Empty<int>();
+            int[] outputShape = modelResult.Model is Interfaces.IModelShape outShape
+                ? outShape.GetOutputShape()
+                : Array.Empty<int>();
+
+            // Validate license status before saving (allow-list: only Active and ValidationPending)
+            byte[]? decryptionToken = null;
+            if (_licenseKey is not null && !string.IsNullOrWhiteSpace(_licenseKey.ServerUrl))
+            {
+                var validationResult = ValidateLicense();
+                if (validationResult.Status != LicenseKeyStatus.Active &&
+                    validationResult.Status != LicenseKeyStatus.ValidationPending)
+                {
+                    throw new InvalidOperationException(
+                        $"License validation failed with status '{validationResult.Status}'. " +
+                        (validationResult.Message ?? "Cannot save encrypted model."));
+                }
+
+                decryptionToken = validationResult.DecryptionToken;
+            }
+
+            ModelLoader.SaveEncrypted(serializer, filePath, resolvedKey, inputShape, outputShape,
+                decryptionToken: decryptionToken);
+            return;
+        }
+
         File.WriteAllBytes(filePath, SerializeModel(modelResult));
     }
 
@@ -3268,14 +3333,96 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// <remarks>
     /// <b>For Beginners:</b> This method lets you load a model that you previously saved using the SaveModel method.
     /// Once loaded, you can immediately use the model to make predictions without having to train it again.
-    /// 
-    /// This is useful when you want to use your model in different applications or at different times
-    /// without the time and computational cost of retraining.
+    ///
+    /// <b>Design Note:</b> SaveModel requires the model to implement <c>IModelSerializer</c> for encrypted saves,
+    /// while LoadModel auto-detects the model type from the AIMF header via <c>ModelTypeRegistry</c>.
+    /// This asymmetry is intentional: the save path needs the serializer to produce bytes,
+    /// while the load path uses the type name embedded in the header to reconstruct the model.
     /// </remarks>
     public AiModelResult<T, TInput, TOutput> LoadModel(string filePath)
     {
+        // Check if the file is an encrypted AIMF model
+        if (ModelFileHeader.HasHeader(filePath))
+        {
+            var info = ModelLoader.Inspect(filePath);
+            if (info.IsEncrypted)
+            {
+                // Validate license if server URL is configured (allow-list: Active or ValidationPending only)
+                byte[]? decryptionToken = null;
+                if (_licenseKey is not null && !string.IsNullOrWhiteSpace(_licenseKey.ServerUrl))
+                {
+                    var validationResult = ValidateLicense();
+
+                    if (validationResult.Status != LicenseKeyStatus.Active &&
+                        validationResult.Status != LicenseKeyStatus.ValidationPending)
+                    {
+                        throw new InvalidOperationException(
+                            $"License validation failed with status '{validationResult.Status}'. " +
+                            (validationResult.Message ?? "Cannot load encrypted model."));
+                    }
+
+                    decryptionToken = validationResult.DecryptionToken;
+                }
+
+                string? resolvedKey = LicenseKeyResolver.Resolve(_licenseKey);
+                if (string.IsNullOrWhiteSpace(resolvedKey))
+                {
+                    throw new InvalidOperationException(
+                        "This model is encrypted. Provide a license key via the AiModelBuilder constructor, " +
+                        "the AIDOTNET_LICENSE_KEY environment variable, or ~/.aidotnet/license.key file.");
+                }
+
+                // Load via ModelLoader which handles decryption and deserialization.
+                // The returned model is already deserialized from the encrypted AIMF payload.
+                byte[] data = File.ReadAllBytes(filePath);
+                var model = ModelLoader.LoadFromBytes<T>(data, resolvedKey, decryptionToken);
+
+                // Cast to the full model type. IModelSerializer guarantees Serialize/Deserialize,
+                // but the model should also be a full model we can use for predictions.
+                if (model is Interfaces.IFullModel<T, TInput, TOutput> fullModel)
+                {
+                    var result = new AiModelResult<T, TInput, TOutput>();
+                    result.Model = fullModel;
+
+                    // Reattach Graph RAG components if configured
+                    if (_knowledgeGraph != null || _graphStore != null || _hybridGraphRetriever != null)
+                    {
+                        result.AttachGraphComponents(_knowledgeGraph, _graphStore, _hybridGraphRetriever);
+                    }
+
+                    // Reattach tokenizer if configured
+                    if (_tokenizer != null)
+                    {
+                        result.AttachTokenizer(_tokenizer, _tokenizationConfig);
+                    }
+
+                    return result;
+                }
+
+                // Fallback: serialize through the builder's format for non-IFullModel serializers.
+                // This preserves backwards compatibility but may lose model-specific state.
+                byte[] decryptedPayload = model.Serialize();
+                return DeserializeModel(decryptedPayload);
+            }
+        }
+
         byte[] modelData = File.ReadAllBytes(filePath);
         return DeserializeModel(modelData);
+    }
+
+    /// <summary>
+    /// Validates the configured license key, reusing a cached validator to preserve
+    /// in-memory state (e.g., offline grace period tracking).
+    /// </summary>
+    private LicenseValidationResult ValidateLicense()
+    {
+        if (_licenseKey is null)
+        {
+            throw new InvalidOperationException("No license key configured.");
+        }
+
+        _licenseValidator ??= new LicenseValidator(_licenseKey);
+        return _licenseValidator.Validate();
     }
 
     /// <summary>

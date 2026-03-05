@@ -32,7 +32,7 @@ namespace AiDotNet.ReinforcementLearning.Agents;
 /// their own unique learning logic while sharing common functionality.
 /// </para>
 /// </remarks>
-public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IConfigurableModel<T>, IDisposable
+public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IConfigurableModel<T>, IModelShape, IDisposable
 {
     /// <summary>
     /// Numeric operations provider for type T.
@@ -214,6 +214,12 @@ public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IConfigur
     public abstract int FeatureCount { get; }
 
     /// <summary>
+    /// Gets the number of action dimensions. Override in agents with multi-dimensional action spaces.
+    /// Default is 1 (scalar action).
+    /// </summary>
+    public virtual int ActionDimension => 1;
+
+    /// <summary>
     /// Gets the names of input features.
     /// </summary>
     public virtual string[] FeatureNames => Enumerable.Range(0, FeatureCount)
@@ -293,17 +299,96 @@ public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IConfigur
     /// </summary>
     public abstract void ApplyGradients(Vector<T> gradients, T learningRate);
 
-    /// <summary>
-    /// Saves the agent's state to a file.
-    /// </summary>
-    /// <param name="filepath">Path to save the agent.</param>
-    public abstract void SaveModel(string filepath);
+    /// <inheritdoc/>
+    public virtual int[] GetInputShape()
+    {
+        if (FeatureCount <= 0)
+        {
+            throw new InvalidOperationException(
+                $"FeatureCount must be positive but was {FeatureCount}. " +
+                "Ensure the agent is initialized with a valid state/feature dimension.");
+        }
+
+        return new[] { FeatureCount };
+    }
+
+    /// <inheritdoc/>
+    public virtual int[] GetOutputShape()
+    {
+        int dim = ActionDimension;
+        if (dim <= 0)
+        {
+            throw new InvalidOperationException(
+                $"ActionDimension must be positive but was {dim}. " +
+                "Override ActionDimension in the derived agent to return a valid value.");
+        }
+
+        return new[] { dim };
+    }
+
+    /// <inheritdoc/>
+    public virtual DynamicShapeInfo GetDynamicShapeInfo()
+    {
+        return DynamicShapeInfo.None;
+    }
+
 
     /// <summary>
-    /// Loads the agent's state from a file.
+    /// Saves the agent's state to a file with an AIMF envelope header.
+    /// </summary>
+    /// <param name="filepath">Path to save the agent.</param>
+    /// <exception cref="ArgumentException">Thrown when the path is null or empty.</exception>
+    public virtual void SaveModel(string filepath)
+    {
+        if (string.IsNullOrWhiteSpace(filepath))
+        {
+            throw new ArgumentException("File path cannot be null or empty.", nameof(filepath));
+        }
+
+        var fullPath = Path.GetFullPath(filepath);
+        var resolvedDir = Path.GetDirectoryName(fullPath) ?? string.Empty;
+
+        if (!string.IsNullOrEmpty(resolvedDir) && !Directory.Exists(resolvedDir))
+        {
+            Directory.CreateDirectory(resolvedDir);
+        }
+
+        byte[] serializedData = Serialize();
+        byte[] envelopedData = ModelFileHeader.WrapWithHeader(
+            serializedData, this, GetInputShape(), GetOutputShape(), SerializationFormat.Binary);
+        File.WriteAllBytes(fullPath, envelopedData);
+    }
+
+    /// <summary>
+    /// Loads the agent's state from a file, stripping the AIMF header if present.
     /// </summary>
     /// <param name="filepath">Path to load the agent from.</param>
-    public abstract void LoadModel(string filepath);
+    /// <exception cref="ArgumentException">Thrown when the path is null or empty.</exception>
+    /// <exception cref="FileNotFoundException">Thrown when the file does not exist.</exception>
+    public virtual void LoadModel(string filepath)
+    {
+        if (string.IsNullOrWhiteSpace(filepath))
+        {
+            throw new ArgumentException("File path cannot be null or empty.", nameof(filepath));
+        }
+
+        var fullPath = Path.GetFullPath(filepath);
+
+        if (!File.Exists(fullPath))
+        {
+            throw new FileNotFoundException($"Model file not found: {fullPath}", fullPath);
+        }
+
+        byte[] data = File.ReadAllBytes(fullPath);
+
+        // Extract payload from AIMF envelope if present; use raw bytes for legacy files
+        if (ModelFileHeader.HasHeader(data))
+        {
+            data = ModelFileHeader.ExtractPayload(data);
+        }
+
+        Deserialize(data);
+    }
 
     /// <summary>
     /// Gets the current training metrics.
