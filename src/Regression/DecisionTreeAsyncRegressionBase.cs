@@ -918,8 +918,11 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
         {
             var data = File.ReadAllBytes(filePath);
 
-            // Extract payload from AIMF envelope
-            data = ModelFileHeader.ExtractPayload(data);
+            // Extract payload from AIMF envelope if present, otherwise assume legacy raw format
+            if (ModelFileHeader.HasHeader(data))
+            {
+                data = ModelFileHeader.ExtractPayload(data);
+            }
 
             Deserialize(data);
         }
