@@ -181,12 +181,12 @@ public class Program
 
         builder.Services.AddSwaggerGen(options =>
         {
-            options.SwaggerDoc("v1", new Microsoft.OpenApi.Models.OpenApiInfo
+            options.SwaggerDoc("v1", new Microsoft.OpenApi.OpenApiInfo
             {
                 Title = "AiDotNet Model Serving API",
                 Version = "v1",
                 Description = "Production-ready REST API for serving trained AiDotNet models with dynamic request batching",
-                Contact = new Microsoft.OpenApi.Models.OpenApiContact
+                Contact = new Microsoft.OpenApi.OpenApiContact
                 {
                     Name = "AiDotNet",
                     Url = new Uri("https://github.com/ooples/AiDotNet")
