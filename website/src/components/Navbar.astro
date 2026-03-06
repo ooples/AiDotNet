@@ -210,18 +210,22 @@ const links = [
         }
       }
 
-      // Check if user is admin and show admin links
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', user.id)
-        .single();
+      // Check if user is admin and show admin links — fail silently on error
+      try {
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', user.id)
+          .single();
 
-      if (profile && profile.role === 'admin') {
-        const adminLink = document.getElementById('nav-admin-link');
-        const mobileAdminLink = document.getElementById('mobile-admin-link');
-        if (adminLink) adminLink.classList.remove('hidden');
-        if (mobileAdminLink) mobileAdminLink.classList.remove('hidden');
+        if (!profileError && profile && profile.role === 'admin') {
+          const adminLink = document.getElementById('nav-admin-link');
+          const mobileAdminLink = document.getElementById('mobile-admin-link');
+          if (adminLink) adminLink.classList.remove('hidden');
+          if (mobileAdminLink) mobileAdminLink.classList.remove('hidden');
+        }
+      } catch {
+        // Admin link stays hidden on error — safe default
       }
     }
 

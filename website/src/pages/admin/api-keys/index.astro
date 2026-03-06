@@ -93,12 +93,17 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
       }
 
       // Load all API keys
-      const { data: keys } = await supabase
+      const { data: keys, error: keysError } = await supabase
         .from('user_api_keys')
         .select('id, user_id, key_name, key_prefix, scopes, is_active, last_used_at, created_at')
         .order('created_at', { ascending: false });
 
-      if (!keys) return;
+      if (keysError || !keys) {
+        const loading = document.getElementById('keys-loading');
+        if (loading) loading.innerHTML = '<p class="text-sm text-red-500">Failed to load API keys.</p>';
+        console.error('Keys load error:', keysError);
+        return;
+      }
 
       allKeys = keys.map(k => ({
         ...k,
@@ -161,9 +166,9 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
 
         return `<tr>
           <td class="py-3 px-4 text-slate-900 dark:text-white font-medium">${escapeHtml(k.key_name)}</td>
-          <td class="py-3 px-4 font-mono text-xs text-slate-500 dark:text-slate-400">${k.key_prefix}...</td>
+          <td class="py-3 px-4 font-mono text-xs text-slate-500 dark:text-slate-400">${escapeHtml(k.key_prefix)}...</td>
           <td class="py-3 px-4 text-slate-700 dark:text-slate-300">${escapeHtml(k.ownerName || 'Unknown')}</td>
-          <td class="py-3 px-4 text-slate-500 dark:text-slate-400 text-xs">${scopes}</td>
+          <td class="py-3 px-4 text-slate-500 dark:text-slate-400 text-xs">${escapeHtml(scopes)}</td>
           <td class="py-3 px-4">${statusBadge}</td>
           <td class="py-3 px-4 text-slate-400 dark:text-slate-500 text-sm">${created}</td>
           <td class="py-3 px-4 text-slate-400 dark:text-slate-500 text-sm">${lastUsed}</td>

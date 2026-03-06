@@ -119,24 +119,30 @@ const sidebarLinks = [
     <script>
       import { supabase } from '../lib/supabase';
 
-      // Admin auth guard - redirect non-admins
+      // Admin auth guard - fail closed on any error
       async function checkAdmin() {
-        const { data: { session } } = await supabase.auth.getSession();
         const base = import.meta.env.BASE_URL || '/';
 
-        if (!session) {
+        try {
+          const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+
+          if (sessionError || !session) {
+            window.location.href = `${base}login/?redirect=${encodeURIComponent(window.location.pathname)}`;
+            return;
+          }
+
+          const { data: profile, error: profileError } = await supabase
+            .from('profiles')
+            .select('role')
+            .eq('id', session.user.id)
+            .single();
+
+          if (profileError || !profile || profile.role !== 'admin') {
+            window.location.href = `${base}account/`;
+            return;
+          }
+        } catch {
           window.location.href = `${base}login/?redirect=${encodeURIComponent(window.location.pathname)}`;
-          return;
-        }
-
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('role')
-          .eq('id', session.user.id)
-          .single();
-
-        if (!profile || profile.role !== 'admin') {
-          window.location.href = `${base}account/`;
           return;
         }
       }

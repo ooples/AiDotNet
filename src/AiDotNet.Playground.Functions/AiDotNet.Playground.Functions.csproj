@@ -14,7 +14,7 @@
     <PackageReference Include="Microsoft.Azure.Functions.Worker" />
     <PackageReference Include="Microsoft.Azure.Functions.Worker.ApplicationInsights" />
     <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.Http.AspNetCore" />
-    <PackageReference Include="Microsoft.Azure.Functions.Worker.Sdk" />
+    <PackageReference Include="Microsoft.Azure.Functions.Worker.Sdk" PrivateAssets="all" />
     <!-- Roslyn for runtime compilation - pinned for .NET 10 / C# 14 compat -->
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" VersionOverride="4.14.0" />
     <PackageReference Include="Microsoft.CodeAnalysis.Common" />

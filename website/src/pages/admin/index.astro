@@ -137,12 +137,17 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
 
     async function loadAdminOverview() {
       // Load all profiles (admin RLS policy allows this)
-      const { data: profiles } = await supabase
+      const { data: profiles, error: profilesError } = await supabase
         .from('profiles')
         .select('id, full_name, role, subscription_tier, subscription_status, created_at')
         .order('created_at', { ascending: false });
 
-      if (!profiles) return;
+      if (profilesError || !profiles) {
+        showError('signups-empty', 'Failed to load profiles.');
+        showError('activity-empty', 'Failed to load activity.');
+        console.error('Profiles load error:', profilesError);
+        return;
+      }
 
       // Stats
       const totalUsers = profiles.length;
@@ -166,23 +171,28 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
 
       setEl('stat-active-keys', String(keyCount || 0));
 
-      // API usage stats (last 30 days)
+      // API usage stats (last 30 days) — use count + avg via limited fetch
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-      const { data: usageData } = await supabase
+      const { count: usageCount } = await supabase
         .from('api_usage')
-        .select('latency_ms, user_id, created_at')
+        .select('*', { count: 'exact', head: true })
         .gte('created_at', thirtyDaysAgo.toISOString());
 
+      const { data: usageData } = await supabase
+        .from('api_usage')
+        .select('latency_ms')
+        .gte('created_at', thirtyDaysAgo.toISOString())
+        .limit(10000);
+
+      setEl('stat-api-calls', (usageCount || 0).toLocaleString());
       if (usageData && usageData.length > 0) {
-        setEl('stat-api-calls', usageData.length.toLocaleString());
         const avgLatency = Math.round(
           usageData.reduce((sum, u) => sum + (u.latency_ms || 0), 0) / usageData.length
         );
         setEl('stat-avg-latency', `${avgLatency}ms`);
       } else {
-        setEl('stat-api-calls', '0');
         setEl('stat-avg-latency', '--');
       }
 
@@ -220,12 +230,12 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
               <p class="font-medium text-slate-900 dark:text-white">${escapeHtml(p.full_name || 'Unnamed')}</p>
             </td>
             <td class="py-3 px-4">
-              <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${roleColors[role] || roleColors['user']}">${role}</span>
+              <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${roleColors[role] || roleColors['user']}">${escapeHtml(role)}</span>
             </td>
             <td class="py-3 px-4">
-              <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${tierColors[tier] || tierColors['free']}">${tier}</span>
+              <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${tierColors[tier] || tierColors['free']}">${escapeHtml(tier)}</span>
             </td>
-            <td class="py-3 px-4 text-sm ${statusColors[status] || 'text-slate-500'} font-medium">${status}</td>
+            <td class="py-3 px-4 text-sm ${statusColors[status] || 'text-slate-500'} font-medium">${escapeHtml(status)}</td>
             <td class="py-3 px-4 text-sm text-slate-400 dark:text-slate-500">${date}</td>
           </tr>`;
         }).join('');
@@ -255,16 +265,21 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
           const timeAgo = getTimeAgo(new Date(a.created_at));
           return `<tr>
             <td class="py-3 px-4 text-slate-700 dark:text-slate-300 text-sm">${escapeHtml(userName)}</td>
-            <td class="py-3 px-4 text-slate-700 dark:text-slate-300 font-mono text-xs">${a.endpoint}</td>
-            <td class="py-3 px-4 text-slate-500 dark:text-slate-400 text-sm">${a.model_id || '--'}</td>
-            <td class="py-3 px-4 ${statusColor} font-medium text-sm">${a.status_code}</td>
-            <td class="py-3 px-4 text-slate-500 dark:text-slate-400 text-sm">${a.latency_ms || '--'}ms</td>
+            <td class="py-3 px-4 text-slate-700 dark:text-slate-300 font-mono text-xs">${escapeHtml(a.endpoint || '--')}</td>
+            <td class="py-3 px-4 text-slate-500 dark:text-slate-400 text-sm">${escapeHtml(a.model_id || '--')}</td>
+            <td class="py-3 px-4 ${statusColor} font-medium text-sm">${escapeHtml(String(a.status_code))}</td>
+            <td class="py-3 px-4 text-slate-500 dark:text-slate-400 text-sm">${escapeHtml(String(a.latency_ms || '--'))}ms</td>
             <td class="py-3 px-4 text-slate-400 dark:text-slate-500 text-xs">${timeAgo}</td>
           </tr>`;
         }).join('');
       } else if (activityEmpty) {
         activityEmpty.innerHTML = '<p class="text-sm text-slate-500 dark:text-slate-400">No API activity yet</p>';
       }
+    }
+
+    function showError(elementId: string, message: string) {
+      const el = document.getElementById(elementId);
+      if (el) el.innerHTML = `<p class="text-sm text-red-500">${escapeHtml(message)}</p>`;
     }
 
     function escapeHtml(str: string): string {

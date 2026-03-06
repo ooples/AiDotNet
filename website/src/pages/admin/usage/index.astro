@@ -115,11 +115,19 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
       const since = new Date();
       since.setDate(since.getDate() - days);
 
-      const { data: usage } = await supabase
+      const { data: usage, error: usageError } = await supabase
         .from('api_usage')
         .select('user_id, endpoint, model_id, status_code, latency_ms, created_at')
         .gte('created_at', since.toISOString())
-        .order('created_at', { ascending: true });
+        .order('created_at', { ascending: true })
+        .limit(50000);
+
+      if (usageError) {
+        console.error('Usage load error:', usageError);
+        const container = document.getElementById('chart-container');
+        if (container) container.innerHTML = '<p class="text-sm text-red-500 w-full text-center">Failed to load analytics.</p>';
+        return;
+      }
 
       allUsage = usage || [];
       renderAll(days);
@@ -142,7 +150,8 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
           const avg = Math.round(latencies.reduce((a, b) => a + b, 0) / latencies.length);
           setEl('stat-avg-latency', `${avg}ms`);
           const sorted = [...latencies].sort((a, b) => a - b);
-          const p95 = sorted[Math.floor(sorted.length * 0.95)];
+          const p95Index = Math.min(Math.ceil(sorted.length * 0.95) - 1, sorted.length - 1);
+          const p95 = sorted[p95Index];
           setEl('stat-p95', `${p95}ms`);
         }
         const successCount = data.filter(d => d.status_code >= 200 && d.status_code < 400).length;
@@ -271,7 +280,7 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
         const pct = Math.round((count / maxCount) * 100);
         return `<div>
           <div class="flex items-center justify-between mb-1">
-            <span class="text-sm font-mono text-slate-700 dark:text-slate-300">${name}</span>
+            <span class="text-sm font-mono text-slate-700 dark:text-slate-300">${escapeHtml(name)}</span>
             <span class="text-sm text-slate-500 dark:text-slate-400">${count}</span>
           </div>
           <div class="w-full bg-slate-100 dark:bg-slate-700 rounded-full h-2">

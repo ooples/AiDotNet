@@ -20,7 +20,7 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
         <input
           id="search-input"
           type="text"
-          placeholder="Search by name or email..."
+          placeholder="Search by name or user ID..."
           class="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/50 text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
         />
       </div>
@@ -130,24 +130,28 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
     const pageSize = 20;
 
     async function loadUsers() {
-      const { data: profiles } = await supabase
+      const { data: profiles, error: profilesError } = await supabase
         .from('profiles')
         .select('id, full_name, role, subscription_tier, subscription_status, created_at')
         .order('created_at', { ascending: false });
 
-      if (!profiles) return;
+      if (profilesError || !profiles) {
+        const loading = document.getElementById('users-loading');
+        if (loading) loading.innerHTML = '<p class="text-sm text-red-500">Failed to load users.</p>';
+        console.error('Profiles load error:', profilesError);
+        return;
+      }
 
-      // Load API key counts per user
+      // Load API key counts per user — use count grouped by user_id
       const { data: keys } = await supabase
         .from('user_api_keys')
-        .select('user_id, is_active');
+        .select('user_id')
+        .eq('is_active', true);
 
       const keyCounts = new Map<string, number>();
       if (keys) {
         for (const k of keys) {
-          if (k.is_active) {
-            keyCounts.set(k.user_id, (keyCounts.get(k.user_id) || 0) + 1);
-          }
+          keyCounts.set(k.user_id, (keyCounts.get(k.user_id) || 0) + 1);
         }
       }
 
@@ -217,16 +221,16 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
               <p class="text-xs text-slate-400 dark:text-slate-500 font-mono">${u.id.slice(0, 8)}...</p>
             </td>
             <td class="py-3 px-4">
-              <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${roleColors[role] || roleColors['user']}">${role}</span>
+              <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${roleColors[role] || roleColors['user']}">${escapeHtml(role)}</span>
             </td>
             <td class="py-3 px-4">
-              <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${tierColors[tier] || tierColors['free']}">${tier}</span>
+              <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${tierColors[tier] || tierColors['free']}">${escapeHtml(tier)}</span>
             </td>
-            <td class="py-3 px-4 text-sm ${statusColors[status] || 'text-slate-500'} font-medium">${status}</td>
+            <td class="py-3 px-4 text-sm ${statusColors[status] || 'text-slate-500'} font-medium">${escapeHtml(status)}</td>
             <td class="py-3 px-4 text-sm text-slate-600 dark:text-slate-400">${u.keyCount || 0}</td>
             <td class="py-3 px-4 text-sm text-slate-400 dark:text-slate-500">${new Date(u.created_at).toLocaleDateString()}</td>
             <td class="py-3 px-4">
-              <button class="edit-user-btn text-sm font-medium text-brand-blue hover:underline" data-id="${u.id}" data-name="${escapeHtml(u.full_name || 'Unnamed')}" data-role="${role}" data-tier="${tier}">Edit</button>
+              <button class="edit-user-btn text-sm font-medium text-brand-blue hover:underline" data-id="${escapeAttr(u.id)}" data-name="${escapeAttr(u.full_name || 'Unnamed')}" data-role="${escapeAttr(role)}" data-tier="${escapeAttr(tier)}">Edit</button>
             </td>
           </tr>`;
         }).join('');
@@ -310,6 +314,10 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
       const div = document.createElement('div');
       div.appendChild(document.createTextNode(str));
       return div.innerHTML;
+    }
+
+    function escapeAttr(str: string): string {
+      return str.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
 
     // Event listeners

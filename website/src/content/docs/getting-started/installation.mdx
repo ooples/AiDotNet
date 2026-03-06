@@ -4,9 +4,13 @@ description: Complete guide to installing AiDotNet and its dependencies.
 order: 1
 section: Getting Started
 ---
-export const latestVersion = await fetch('https://api.nuget.org/v3-flatcontainer/aidotnet/index.json')
-  .then(r => r.json())
-  .then(d => d.versions[d.versions.length - 1])
+export const latestVersion = await fetch('https://api.nuget.org/v3-flatcontainer/aidotnet/index.json', { signal: AbortSignal.timeout(5000) })
+  .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
+  .then(d => {
+    const versions = d?.versions;
+    if (!Array.isArray(versions) || versions.length === 0) return 'latest';
+    return versions[versions.length - 1];
+  })
   .catch(() => 'latest');
 
 ## Basic Installation
