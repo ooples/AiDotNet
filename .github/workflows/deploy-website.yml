@@ -56,8 +56,16 @@ jobs:
       - name: Install Vercel CLI
         run: npm i -g vercel@latest
 
-      - name: Deploy to Vercel Production
-        run: vercel deploy --prod ./dist --token=${{ secrets.VERCEL_TOKEN }} --yes
+      - name: Prepare and deploy to Vercel Production
+        working-directory: /tmp
+        run: |
+          mkdir -p vercel-deploy/website
+          cp -r $GITHUB_WORKSPACE/website/dist/* vercel-deploy/website/
+          cat > vercel-deploy/website/package.json << 'PKGJSON'
+          {"scripts":{"build":"echo already built"}}
+          PKGJSON
+          cd vercel-deploy
+          vercel deploy --prod --token=${{ secrets.VERCEL_TOKEN }} --yes
         env:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
