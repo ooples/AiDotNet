@@ -120,63 +120,62 @@ alter table public.api_usage enable row level security;
 
 -- ---- PROFILES ----
 
--- Users can read their own profile
+drop policy if exists "Users can read own profile" on public.profiles;
 create policy "Users can read own profile"
   on public.profiles for select
   using (auth.uid() = id);
 
--- Users can update their own profile (name only; role/tier changes require admin)
+drop policy if exists "Users can update own profile" on public.profiles;
 create policy "Users can update own profile"
   on public.profiles for update
   using (auth.uid() = id)
   with check (auth.uid() = id);
 
--- Admins can read all profiles
+drop policy if exists "Admins can read all profiles" on public.profiles;
 create policy "Admins can read all profiles"
   on public.profiles for select
   using (public.is_admin());
 
--- Admins can update all profiles (role, tier, status)
+drop policy if exists "Admins can update all profiles" on public.profiles;
 create policy "Admins can update all profiles"
   on public.profiles for update
   using (public.is_admin());
 
 -- ---- USER API KEYS ----
 
--- Users can read their own keys
+drop policy if exists "Users can read own keys" on public.user_api_keys;
 create policy "Users can read own keys"
   on public.user_api_keys for select
   using (auth.uid() = user_id);
 
--- Users can create their own keys
+drop policy if exists "Users can create own keys" on public.user_api_keys;
 create policy "Users can create own keys"
   on public.user_api_keys for insert
   with check (auth.uid() = user_id);
 
--- Users can update (revoke) their own keys
+drop policy if exists "Users can update own keys" on public.user_api_keys;
 create policy "Users can update own keys"
   on public.user_api_keys for update
   using (auth.uid() = user_id);
 
--- Admins can read all keys
+drop policy if exists "Admins can read all keys" on public.user_api_keys;
 create policy "Admins can read all keys"
   on public.user_api_keys for select
   using (public.is_admin());
 
--- Admins can update all keys
+drop policy if exists "Admins can update all keys" on public.user_api_keys;
 create policy "Admins can update all keys"
   on public.user_api_keys for update
   using (public.is_admin());
 
 -- ---- API USAGE ----
 
--- Users can read their own usage
+drop policy if exists "Users can read own usage" on public.api_usage;
 create policy "Users can read own usage"
   on public.api_usage for select
   using (auth.uid() = user_id);
 
--- Service role inserts usage (no user-facing insert policy needed)
--- Admins can read all usage
+drop policy if exists "Admins can read all usage" on public.api_usage;
 create policy "Admins can read all usage"
   on public.api_usage for select
   using (public.is_admin());
