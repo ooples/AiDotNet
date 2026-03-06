@@ -129,11 +129,14 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
     let currentPage = 0;
     const pageSize = 20;
 
+    const MAX_USERS = 1000;
+
     async function loadUsers() {
       const { data: profiles, error: profilesError } = await supabase
         .from('profiles')
         .select('id, full_name, role, subscription_tier, subscription_status, created_at')
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .range(0, MAX_USERS - 1);
 
       if (profilesError || !profiles) {
         const loading = document.getElementById('users-loading');
@@ -142,11 +145,13 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
         return;
       }
 
-      // Load API key counts per user — use count grouped by user_id
+      // Load API key counts only for users on the current page
+      const userIds = profiles.map(p => p.id);
       const { data: keys } = await supabase
         .from('user_api_keys')
         .select('user_id')
-        .eq('is_active', true);
+        .eq('is_active', true)
+        .in('user_id', userIds);
 
       const keyCounts = new Map<string, number>();
       if (keys) {

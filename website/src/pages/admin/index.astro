@@ -187,9 +187,10 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
         .limit(10000);
 
       setEl('stat-api-calls', (usageCount || 0).toLocaleString());
-      if (usageData && usageData.length > 0) {
+      const validLatencies = (usageData || []).filter(u => u.latency_ms != null);
+      if (validLatencies.length > 0) {
         const avgLatency = Math.round(
-          usageData.reduce((sum, u) => sum + (u.latency_ms || 0), 0) / usageData.length
+          validLatencies.reduce((sum, u) => sum + (u.latency_ms ?? 0), 0) / validLatencies.length
         );
         setEl('stat-avg-latency', `${avgLatency}ms`);
       } else {
@@ -268,7 +269,7 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
             <td class="py-3 px-4 text-slate-700 dark:text-slate-300 font-mono text-xs">${escapeHtml(a.endpoint || '--')}</td>
             <td class="py-3 px-4 text-slate-500 dark:text-slate-400 text-sm">${escapeHtml(a.model_id || '--')}</td>
             <td class="py-3 px-4 ${statusColor} font-medium text-sm">${escapeHtml(String(a.status_code))}</td>
-            <td class="py-3 px-4 text-slate-500 dark:text-slate-400 text-sm">${escapeHtml(String(a.latency_ms || '--'))}ms</td>
+            <td class="py-3 px-4 text-slate-500 dark:text-slate-400 text-sm">${a.latency_ms != null ? escapeHtml(String(a.latency_ms)) + 'ms' : '--'}</td>
             <td class="py-3 px-4 text-slate-400 dark:text-slate-500 text-xs">${timeAgo}</td>
           </tr>`;
         }).join('');

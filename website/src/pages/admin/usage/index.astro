@@ -112,15 +112,19 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
     let allUsage: UsageRow[] = [];
 
     async function loadAnalytics(days: number) {
+      const MAX_DAYS = 30;
+      const MAX_ROWS = 10000;
+      const effectiveDays = Math.min(days, MAX_DAYS);
+
       const since = new Date();
-      since.setDate(since.getDate() - days);
+      since.setDate(since.getDate() - effectiveDays);
 
       const { data: usage, error: usageError } = await supabase
         .from('api_usage')
         .select('user_id, endpoint, model_id, status_code, latency_ms, created_at')
         .gte('created_at', since.toISOString())
         .order('created_at', { ascending: true })
-        .limit(50000);
+        .limit(MAX_ROWS);
 
       if (usageError) {
         console.error('Usage load error:', usageError);
@@ -307,10 +311,16 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
         if (row.status_code >= 200 && row.status_code < 400) stats.successes++;
       }
 
-      // Get user names
+      const sorted = Array.from(userStats.entries())
+        .sort((a, b) => b[1].calls - a[1].calls)
+        .slice(0, 10);
+
+      // Fetch only the profiles needed for top-10 users
+      const topUserIds = sorted.map(([uid]) => uid);
       const { data: profiles } = await supabase
         .from('profiles')
-        .select('id, full_name');
+        .select('id, full_name')
+        .in('id', topUserIds);
 
       const nameMap = new Map<string, string>();
       if (profiles) {
@@ -318,10 +328,6 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
           nameMap.set(p.id, p.full_name || 'Unknown');
         }
       }
-
-      const sorted = Array.from(userStats.entries())
-        .sort((a, b) => b[1].calls - a[1].calls)
-        .slice(0, 10);
 
       if (sorted.length === 0) {
         tbody.innerHTML = '<tr><td colspan="4" class="py-4 text-center text-sm text-slate-400">No data</td></tr>';
