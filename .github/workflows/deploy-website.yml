@@ -33,10 +33,17 @@ jobs:
         run: npm ci
 
       - name: Install Supabase CLI
-        run: npm i -g supabase@2.77.0
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Link Supabase project
+        run: supabase link --project-ref yfkqwpgjahoamlgckjib
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
 
       - name: Apply Supabase migrations
-        run: supabase db push --linked
+        run: supabase db push
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
