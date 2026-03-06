@@ -59,8 +59,8 @@ jobs:
       - name: Prepare and deploy to Vercel Production
         working-directory: /tmp
         run: |
-          mkdir -p vercel-deploy/website
-          cp -r $GITHUB_WORKSPACE/website/dist/* vercel-deploy/website/
+          mkdir -p vercel-deploy/website/dist
+          cp -r $GITHUB_WORKSPACE/website/dist/* vercel-deploy/website/dist/
           cat > vercel-deploy/website/package.json << 'PKGJSON'
           {"scripts":{"build":"echo already built"}}
           PKGJSON
