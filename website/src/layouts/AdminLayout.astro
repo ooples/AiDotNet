@@ -12,6 +12,7 @@ import '@fontsource/inter/800.css';
 import '@fontsource/jetbrains-mono/400.css';
 import Analytics from '@vercel/analytics/astro';
 import SpeedInsights from '@vercel/speed-insights/astro';
+import DevBanner from '../components/DevBanner.astro';
 
 interface Props {
   title: string;
@@ -46,6 +47,7 @@ const sidebarLinks = [
     <SEO title={title} description={description} />
   </head>
   <body class="min-h-screen bg-white dark:bg-surface-dark text-slate-900 dark:text-slate-100 font-sans antialiased">
+    <DevBanner />
     <Navbar>
       <ThemeToggle slot="theme-toggle" />
     </Navbar>
