@@ -25,7 +25,7 @@ Add to your `.csproj` file:
 
 ```xml
 <ItemGroup>
-  <PackageReference Include="AiDotNet" Version="0.0.5-preview" />
+  <PackageReference Include="AiDotNet" Version="0.105.0" />
 </ItemGroup>
 ```
 
