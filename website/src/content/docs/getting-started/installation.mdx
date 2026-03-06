@@ -4,6 +4,10 @@ description: Complete guide to installing AiDotNet and its dependencies.
 order: 1
 section: Getting Started
 ---
+export const latestVersion = await fetch('https://api.nuget.org/v3-flatcontainer/aidotnet/index.json')
+  .then(r => r.json())
+  .then(d => d.versions[d.versions.length - 1])
+  .catch(() => 'latest');
 
 ## Basic Installation
 
@@ -23,11 +27,11 @@ Install-Package AiDotNet
 
 Add to your `.csproj` file:
 
-```xml
-<ItemGroup>
-  <PackageReference Include="AiDotNet" Version="0.105.0" />
-</ItemGroup>
-```
+<pre><code class="language-xml">{`<ItemGroup>
+  <PackageReference Include="AiDotNet" Version="${latestVersion}" />
+</ItemGroup>`}</code></pre>
+
+> The version above ({latestVersion}) is fetched automatically from NuGet at build time. Running `dotnet add package AiDotNet` always installs the latest version.
 
 ## Platform Support
 
