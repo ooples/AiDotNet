@@ -194,7 +194,7 @@ const base = import.meta.env.BASE_URL;
 
       // If customer has Stripe ID, link portal buttons
       if (profile.stripe_customer_id) {
-        const portalUrl = import.meta.env.PUBLIC_STRIPE_PORTAL_URL || '';
+        const portalUrl = (import.meta.env.PUBLIC_STRIPE_PORTAL_URL || '').trim();
         if (portalUrl) {
           const manageBtn = document.getElementById('manage-subscription-btn');
           const invoicesBtn = document.getElementById('view-invoices-btn');
