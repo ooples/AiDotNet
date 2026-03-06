@@ -3,7 +3,7 @@ name: Deploy Marketing Website
 on:
   push:
     branches: [master]
-    paths: ['website/**']
+    paths: ['website/**', 'website/supabase/migrations/**']
   workflow_dispatch:
 
 permissions:
@@ -31,6 +31,15 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Install Supabase CLI
+        run: npm i -g supabase@2.77.0
+
+      - name: Apply Supabase migrations
+        run: supabase db push --linked
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
 
       - name: Install Vercel CLI
         run: npm i -g vercel@39.3.0

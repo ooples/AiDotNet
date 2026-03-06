@@ -120,9 +120,8 @@ const sidebarLinks = [
       import { supabase } from '../lib/supabase';
 
       // Admin auth guard - fail closed on any error
-      // Prerequisites: profiles table must have a `role` column (text, default 'user'),
-      // an `is_admin()` SQL function, and RLS policies granting admin read access.
-      // These are applied via Supabase migrations (see supabase/migrations/).
+      // Prerequisites: see supabase/migrations/20260306000000_initial_schema.sql
+      // for profiles.role column, is_admin() function, and RLS policies.
       async function checkAdmin() {
         const base = import.meta.env.BASE_URL || '/';
 
