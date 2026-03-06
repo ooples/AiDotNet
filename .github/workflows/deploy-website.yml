@@ -48,24 +48,16 @@ jobs:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
 
+      - name: Build website
+        run: npx astro build
+        env:
+          VERCEL: '1'
+
       - name: Install Vercel CLI
-        run: npm i -g vercel@39.3.0
-
-      - name: Pull Vercel Environment
-        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
-        env:
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-
-      - name: Build with Vercel
-        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
-        env:
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-          NODE_VERSION: '22'
+        run: npm i -g vercel@latest
 
       - name: Deploy to Vercel Production
-        run: vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
+        run: vercel deploy --prod ./dist --token=${{ secrets.VERCEL_TOKEN }} --yes
         env:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
