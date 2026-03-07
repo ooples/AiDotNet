@@ -379,8 +379,8 @@ Timing:
         var maxLoss = maxAccuracyLossPercentage;
         var minRatio = minCompressionRatio;
 
-        return NumOps.ToDouble(accuracyLossPercentage) <= NumOps.ToDouble(maxLoss) &&
-               NumOps.ToDouble(CompressionRatio) >= NumOps.ToDouble(minRatio);
+        return NumOps.LessThanOrEquals(accuracyLossPercentage, maxLoss) &&
+               NumOps.GreaterThanOrEquals(CompressionRatio, minRatio);
     }
 
     /// <summary>

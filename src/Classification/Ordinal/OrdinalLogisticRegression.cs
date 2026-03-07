@@ -312,7 +312,7 @@ public class OrdinalLogisticRegression<T> : OrdinalClassifierBase<T>
             // Ensure thresholds are monotonically increasing
             for (int k = 1; k < K - 1; k++)
             {
-                if (NumOps.ToDouble(_thresholds[k]) <= NumOps.ToDouble(_thresholds[k - 1]))
+                if (NumOps.LessThanOrEquals(_thresholds[k], _thresholds[k - 1]))
                 {
                     _thresholds[k] = NumOps.FromDouble(NumOps.ToDouble(_thresholds[k - 1]) + 0.001);
                 }
@@ -683,7 +683,7 @@ public class OrdinalLogisticRegression<T> : OrdinalClassifierBase<T>
         // Ensure thresholds are monotonically increasing
         for (int k = 1; k < _thresholds.Length; k++)
         {
-            if (NumOps.ToDouble(_thresholds[k]) <= NumOps.ToDouble(_thresholds[k - 1]))
+            if (NumOps.LessThanOrEquals(_thresholds[k], _thresholds[k - 1]))
             {
                 _thresholds[k] = NumOps.FromDouble(NumOps.ToDouble(_thresholds[k - 1]) + 0.001);
             }

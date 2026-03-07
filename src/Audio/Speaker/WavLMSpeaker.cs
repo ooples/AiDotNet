@@ -113,7 +113,7 @@ public class WavLMSpeaker<T> : SpeakerRecognitionBase<T>, ISpeakerVerifier<T>, I
         ThrowIfDisposed();
         var testEmbedding = ExtractEmbedding(audio);
         var score = ComputeCosineSimilarity(testEmbedding, referenceEmbedding);
-        bool isAccepted = NumOps.ToDouble(score) >= NumOps.ToDouble(threshold);
+        bool isAccepted = NumOps.GreaterThanOrEquals(score, threshold);
         var confidence = NumOps.Abs(NumOps.Subtract(score, threshold));
         return new SpeakerVerificationResult<T> { IsAccepted = isAccepted, Score = score, Threshold = threshold, Confidence = confidence };
     }

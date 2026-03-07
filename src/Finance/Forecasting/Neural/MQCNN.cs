@@ -1025,8 +1025,8 @@ public class MQCNN<T> : ForecastingModelBase<T>
             T lower = lowerPred[t];
             T upper = upperPred[t];
 
-            if (NumOps.ToDouble(actual) >= NumOps.ToDouble(lower) &&
-                NumOps.ToDouble(actual) <= NumOps.ToDouble(upper))
+            if (NumOps.GreaterThanOrEquals(actual, lower) &&
+                NumOps.LessThanOrEquals(actual, upper))
             {
                 covered++;
             }
