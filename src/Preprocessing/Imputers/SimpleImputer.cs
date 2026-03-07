@@ -68,21 +68,25 @@ public class SimpleImputer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <summary>
     /// Gets the imputation strategy used.
     /// </summary>
+    [JsonIgnore]
     public ImputationStrategy Strategy => _strategy;
 
     /// <summary>
     /// Gets the fill value used for Constant strategy.
     /// </summary>
+    [JsonIgnore]
     public T? FillValue => _fillValue;
 
     /// <summary>
     /// Gets the value considered as missing.
     /// </summary>
+    [JsonIgnore]
     public T MissingValue => _missingValue;
 
     /// <summary>
     /// Gets the computed statistics for each feature.
     /// </summary>
+    [JsonIgnore]
     public Vector<T>? Statistics => _statistics;
 
     /// <summary>

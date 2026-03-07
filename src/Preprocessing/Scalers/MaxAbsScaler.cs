@@ -33,6 +33,7 @@ public class MaxAbsScaler<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <summary>
     /// Gets the maximum absolute value of each feature computed during fitting.
     /// </summary>
+    [JsonIgnore]
     public Vector<T>? MaxAbsolute => _maxAbs;
 
     /// <summary>

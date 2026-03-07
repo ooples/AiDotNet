@@ -29,6 +29,7 @@ public class DecimalScaler<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <summary>
     /// Gets the power-of-10 scale factor for each feature computed during fitting.
     /// </summary>
+    [JsonIgnore]
     public Vector<T>? Scale => _scale;
 
     /// <summary>

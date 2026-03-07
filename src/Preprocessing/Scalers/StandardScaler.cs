@@ -36,21 +36,25 @@ public class StandardScaler<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <summary>
     /// Gets the mean of each feature computed during fitting.
     /// </summary>
+    [JsonIgnore]
     public Vector<T>? Mean => _mean;
 
     /// <summary>
     /// Gets the standard deviation of each feature computed during fitting.
     /// </summary>
+    [JsonIgnore]
     public Vector<T>? StandardDeviation => _stdDev;
 
     /// <summary>
     /// Gets whether this scaler centers the data (subtracts mean).
     /// </summary>
+    [JsonIgnore]
     public bool WithMean => _withMean;
 
     /// <summary>
     /// Gets whether this scaler scales the data (divides by std).
     /// </summary>
+    [JsonIgnore]
     public bool WithStd => _withStd;
 
     /// <summary>

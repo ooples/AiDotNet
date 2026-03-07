@@ -38,21 +38,25 @@ public class MinMaxScaler<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <summary>
     /// Gets the minimum value of each feature computed during fitting.
     /// </summary>
+    [JsonIgnore]
     public Vector<T>? DataMin => _dataMin;
 
     /// <summary>
     /// Gets the maximum value of each feature computed during fitting.
     /// </summary>
+    [JsonIgnore]
     public Vector<T>? DataMax => _dataMax;
 
     /// <summary>
     /// Gets the minimum value of the target feature range.
     /// </summary>
+    [JsonIgnore]
     public T FeatureRangeMin => _featureRangeMin;
 
     /// <summary>
     /// Gets the maximum value of the target feature range.
     /// </summary>
+    [JsonIgnore]
     public T FeatureRangeMax => _featureRangeMax;
 
     /// <summary>

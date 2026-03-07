@@ -44,21 +44,25 @@ public class RobustScaler<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <summary>
     /// Gets the median of each feature computed during fitting.
     /// </summary>
+    [JsonIgnore]
     public Vector<T>? Median => _median;
 
     /// <summary>
     /// Gets the interquartile range (IQR) of each feature computed during fitting.
     /// </summary>
+    [JsonIgnore]
     public Vector<T>? InterquartileRange => _iqr;
 
     /// <summary>
     /// Gets whether this scaler centers the data (subtracts median).
     /// </summary>
+    [JsonIgnore]
     public bool WithCentering => _withCentering;
 
     /// <summary>
     /// Gets whether this scaler scales the data (divides by IQR).
     /// </summary>
+    [JsonIgnore]
     public bool WithScaling => _withScaling;
 
     /// <summary>

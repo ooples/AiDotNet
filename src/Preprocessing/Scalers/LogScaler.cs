@@ -33,6 +33,7 @@ public class LogScaler<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <summary>
     /// Gets the shift applied to each feature to ensure positive values.
     /// </summary>
+    [JsonIgnore]
     public Vector<T>? Shift => _shift;
 
     /// <summary>

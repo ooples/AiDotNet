@@ -51,6 +51,7 @@ public class Normalizer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <summary>
     /// Gets the norm type used for normalization.
     /// </summary>
+    [JsonIgnore]
     public NormType NormType => _normType;
 
     /// <summary>

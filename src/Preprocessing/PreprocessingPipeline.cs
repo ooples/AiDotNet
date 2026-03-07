@@ -30,7 +30,7 @@ public class PipelineStep<T, TInput>
     /// Set via the constructor or JSON deserialization. Guaranteed non-null after
     /// construction through the parameterized constructor or successful deserialization.
     /// </remarks>
-    [JsonProperty(TypeNameHandling = TypeNameHandling.Auto)]
+    [JsonProperty]
     public IDataTransformer<T, TInput, TInput> Transformer { get; private set; }
 
     /// <summary>
@@ -51,6 +51,16 @@ public class PipelineStep<T, TInput>
         Name = name;
         Transformer = transformer ?? throw new ArgumentNullException(nameof(transformer),
             "Pipeline step transformer cannot be null.");
+    }
+
+    /// <summary>
+    /// Deconstructs this step into its name and transformer components,
+    /// allowing tuple-style destructuring for backward compatibility.
+    /// </summary>
+    public void Deconstruct(out string name, out IDataTransformer<T, TInput, TInput> transformer)
+    {
+        name = Name;
+        transformer = Transformer;
     }
 }
 
@@ -80,7 +90,7 @@ public class PreprocessingPipeline<T, TInput, TOutput> : IDataTransformer<T, TIn
     [JsonProperty]
     private readonly List<PipelineStep<T, TInput>> _steps;
 
-    [JsonProperty(TypeNameHandling = TypeNameHandling.Auto)]
+    [JsonProperty]
     private IDataTransformer<T, TInput, TOutput>? _finalTransformer;
 
     [JsonProperty]

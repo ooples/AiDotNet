@@ -32,11 +32,13 @@ public class GlobalContrastScaler<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <summary>
     /// Gets the mean for each feature computed during fitting.
     /// </summary>
+    [JsonIgnore]
     public Vector<T>? Mean => _mean;
 
     /// <summary>
     /// Gets the standard deviation for each feature computed during fitting.
     /// </summary>
+    [JsonIgnore]
     public Vector<T>? StdDev => _stdDev;
 
     /// <summary>
