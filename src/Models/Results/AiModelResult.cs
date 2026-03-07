@@ -1909,7 +1909,8 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// Applies feature selection to prediction input if the optimizer selected a subset of features.
     /// Skips selection only when the indices are the identity mapping (0, 1, 2, ..., N-1).
     /// </summary>
-    private bool _featureIndicesValidated;
+    // Cached feature selection state: 0 = not yet computed, 1 = identity (skip), 2 = needs selection
+    private volatile int _featureSelectionState;
 
     private TInput ApplySelectedFeaturesForPrediction(TInput input)
     {
@@ -1919,29 +1920,48 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             return input;
         }
 
-        int inputSize = Helpers.InputHelper<T, TInput>.GetInputSize(input);
-
-        // Only skip when the indices are the identity mapping for the current width.
-        // A reordered selection like [2, 0, 1] has the same count but still needs reordering.
-        bool isIdentitySelection =
-            inputSize == featureIndices.Count &&
-            featureIndices.SequenceEqual(Enumerable.Range(0, inputSize));
-
-        if (isIdentitySelection)
+        // Use cached identity check result if available (thread-safe via volatile int)
+        int state = _featureSelectionState;
+        if (state == 1) // identity — skip selection
         {
             return input;
         }
 
-        // One-time bounds validation — SelectedFeatureIndices are set by the optimizer
-        // and don't change between calls, so we only need to check once.
-        if (!_featureIndicesValidated)
+        if (state == 0) // not yet computed
         {
-            if (featureIndices.Any(i => i < 0 || i >= inputSize))
+            int inputSize = Helpers.InputHelper<T, TInput>.GetInputSize(input);
+
+            // Check if indices are the identity mapping [0, 1, 2, ..., N-1]
+            bool isIdentity = inputSize == featureIndices.Count;
+            if (isIdentity)
             {
-                throw new InvalidOperationException(
-                    $"Selected feature indices are out of range for input with {inputSize} features.");
+                for (int i = 0; i < featureIndices.Count; i++)
+                {
+                    if (featureIndices[i] != i)
+                    {
+                        isIdentity = false;
+                        break;
+                    }
+                }
             }
-            _featureIndicesValidated = true;
+
+            if (isIdentity)
+            {
+                _featureSelectionState = 1;
+                return input;
+            }
+
+            // Validate bounds once
+            for (int i = 0; i < featureIndices.Count; i++)
+            {
+                if (featureIndices[i] < 0 || featureIndices[i] >= inputSize)
+                {
+                    throw new InvalidOperationException(
+                        $"Selected feature indices are out of range for input with {inputSize} features.");
+                }
+            }
+
+            _featureSelectionState = 2;
         }
 
         return Helpers.OptimizerHelper<T, TInput, TOutput>.SelectFeatures(input, featureIndices);

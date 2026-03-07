@@ -477,6 +477,14 @@ public class AiModelBuilderPredictIntegrationTests
 
         var model = new AiDotNet.NeuralNetworks.FeedForwardNeuralNetwork<float>(architecture);
 
+        // Set explicit non-uniform weights to ensure permutation produces different output.
+        // DenseLayer weights shape: [outputSize, inputSize] = [1, 3], stored in row-major order.
+        var denseLayer = (AiDotNet.NeuralNetworks.Layers.DenseLayer<float>)layers[1];
+        var weights = denseLayer.GetWeights();
+        weights[0] = 1.0f;  // weight for feature 0
+        weights[1] = 2.0f;  // weight for feature 1
+        weights[2] = 3.0f;  // weight for feature 2
+
         // Permutation [2, 0, 1]: same count as input but different order
         var permutedIndices = new List<int> { 2, 0, 1 };
         var optimization = new OptimizationResult<float, Tensor<float>, Tensor<float>>
