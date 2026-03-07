@@ -1833,16 +1833,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         // Apply feature selection if the optimizer selected a subset of features during training.
         // Without this, the model receives all columns but was trained on a subset, causing
         // dimension mismatch errors (e.g., "Number of columns must equal length of vector").
-        var featureIndices = OptimizationResult?.SelectedFeatureIndices;
-        if (featureIndices != null && featureIndices.Count > 0)
-        {
-            int inputSize = Helpers.InputHelper<T, TInput>.GetInputSize(normalizedNewData);
-            if (inputSize != featureIndices.Count)
-            {
-                normalizedNewData = Helpers.OptimizerHelper<T, TInput, TOutput>
-                    .SelectFeatures(normalizedNewData, featureIndices);
-            }
-        }
+        normalizedNewData = ApplySelectedFeaturesForPrediction(normalizedNewData);
 
         // Use JIT-compiled function if available for 5-10x faster predictions
         TOutput normalizedPredictions;
@@ -1912,6 +1903,40 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         }
 
         return denormalized;
+    }
+
+    /// <summary>
+    /// Applies feature selection to prediction input if the optimizer selected a subset of features.
+    /// Skips selection only when the indices are the identity mapping (0, 1, 2, ..., N-1).
+    /// </summary>
+    private TInput ApplySelectedFeaturesForPrediction(TInput input)
+    {
+        var featureIndices = OptimizationResult?.SelectedFeatureIndices;
+        if (featureIndices is null || featureIndices.Count == 0)
+        {
+            return input;
+        }
+
+        int inputSize = Helpers.InputHelper<T, TInput>.GetInputSize(input);
+
+        // Only skip when the indices are the identity mapping for the current width.
+        // A reordered selection like [2, 0, 1] has the same count but still needs reordering.
+        bool isIdentitySelection =
+            inputSize == featureIndices.Count &&
+            featureIndices.SequenceEqual(Enumerable.Range(0, inputSize));
+
+        if (isIdentitySelection)
+        {
+            return input;
+        }
+
+        if (featureIndices.Any(i => i < 0 || i >= inputSize))
+        {
+            throw new InvalidOperationException(
+                $"Selected feature indices are out of range for input with {inputSize} features.");
+        }
+
+        return Helpers.OptimizerHelper<T, TInput, TOutput>.SelectFeatures(input, featureIndices);
     }
 
     private Matrix<T> ValidateAndSanitizeMatrix(Matrix<T> input)

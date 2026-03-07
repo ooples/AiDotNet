@@ -216,9 +216,9 @@ public class AiModelBuilderPredictIntegrationTests
     }
 
     [Fact]
-    public async Task BuildAsync_FeatureSelectionReducesColumns_PredictHandlesIt()
+    public async Task BuildAsync_WithManyFeatures_PredictHandlesFeatureSelection()
     {
-        // Arrange: Create dataset with many features to ensure feature selection kicks in
+        // Arrange: Create dataset with many features to test feature selection handling
         var (x, y) = CreateLinearDataset(samples: 60, features: 10, seed: 42);
         var loader = DataLoaders.FromMatrixVector(x, y);
         var model = new RidgeRegression<double>();
@@ -232,10 +232,11 @@ public class AiModelBuilderPredictIntegrationTests
         var optimizationResult = result.OptimizationResult;
         Assert.NotNull(optimizationResult);
 
-        // The optimizer should have selected fewer features than the total
+        // The optimizer may select any subset of features; verify the count is valid
         int selectedCount = optimizationResult.SelectedFeatureIndices.Count;
         Assert.True(selectedCount > 0, "Should have selected at least 1 feature");
         Assert.True(selectedCount <= 10, "Should not select more features than available");
+        Assert.True(selectedCount < 10, "Optimizer should reduce the feature count");
 
         // Predict with full 10-column input
         var newData = new Matrix<double>(3, 10);
@@ -381,14 +382,13 @@ public class AiModelBuilderPredictIntegrationTests
 
     #endregion
 
-    #region InferenceSession Feature Selection Tests
+    #region Tensor Feature Selection Tests
 
     [Fact]
-    public void InferenceSession_Predict_AppliesFeatureSelection()
+    public void AiModelResult_Predict_AppliesTensorFeatureSelection()
     {
         // Arrange: Create a neural network model with SelectedFeatureIndices set.
-        // InferenceSession.Predict() should apply feature selection before calling the model,
-        // just like AiModelResult.Predict() does.
+        // AiModelResult.Predict() should apply feature selection before calling the model.
         const int inputSize = 4;
         const int selectedSize = 2;
         const int outputSize = 2;
@@ -439,6 +439,8 @@ public class AiModelBuilderPredictIntegrationTests
 
         // Assert: Should get output without errors (feature selection applied)
         Assert.NotNull(prediction);
+        // Verify output has expected dimensions
+        Assert.Equal(outputSize, prediction.Shape[0]);
     }
 
     #endregion
