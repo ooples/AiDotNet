@@ -953,15 +953,18 @@ For each category, indicate if it's flagged (YES/NO) and confidence level (HIGH/
 
     private Matrix<T> EncodeImageNative(Tensor<T> image)
     {
+        if (_visionPatchEmbedding is null || _visionLayerNorm is null || _visionClsToken is null || _visionPositionalEmbeddings is null)
+            throw new InvalidOperationException("Gpt4VisionNeuralNetwork: Vision model not initialized.");
+
         // Patch embedding
-        var patchEmbeddings = _visionPatchEmbedding!.Forward(image);
+        var patchEmbeddings = _visionPatchEmbedding.Forward(image);
         int numPatches = patchEmbeddings.Shape[0];
 
         // Create tensor for transformer processing
         var embeddings = Tensor<T>.CreateDefault([numPatches + 1, _visionEmbeddingDim], NumOps.Zero);
 
         // Add CLS token
-        for (int j = 0; j < _visionEmbeddingDim && j < _visionClsToken!.Columns; j++)
+        for (int j = 0; j < _visionEmbeddingDim && j < _visionClsToken.Columns; j++)
         {
             embeddings[0, j] = _visionClsToken[0, j];
         }
@@ -976,7 +979,7 @@ For each category, indicate if it's flagged (YES/NO) and confidence level (HIGH/
         }
 
         // Add positional embeddings
-        for (int i = 0; i < embeddings.Shape[0] && i < _visionPositionalEmbeddings!.Rows; i++)
+        for (int i = 0; i < embeddings.Shape[0] && i < _visionPositionalEmbeddings.Rows; i++)
         {
             for (int j = 0; j < _visionEmbeddingDim && j < _visionPositionalEmbeddings.Columns; j++)
             {
@@ -992,7 +995,7 @@ For each category, indicate if it's flagged (YES/NO) and confidence level (HIGH/
         }
 
         // Layer norm
-        current = _visionLayerNorm!.Forward(current);
+        current = _visionLayerNorm.Forward(current);
 
         return TensorToMatrix(current);
     }

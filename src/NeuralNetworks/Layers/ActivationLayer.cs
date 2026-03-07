@@ -369,7 +369,10 @@ public class ActivationLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T> ApplyScalarActivation(Tensor<T> input)
     {
-        return ScalarActivation!.Activate(input);
+        if (ScalarActivation is null)
+            throw new InvalidOperationException("ActivationLayer: ScalarActivation not configured.");
+
+        return ScalarActivation.Activate(input);
     }
 
     /// <summary>
@@ -384,7 +387,10 @@ public class ActivationLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T> ApplyVectorActivation(Tensor<T> input)
     {
-        return VectorActivation!.Activate(input);
+        if (VectorActivation is null)
+            throw new InvalidOperationException("ActivationLayer: VectorActivation not configured.");
+
+        return VectorActivation.Activate(input);
     }
 
     /// <summary>
@@ -399,7 +405,12 @@ public class ActivationLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T> BackwardScalarActivation(Tensor<T> outputGradient)
     {
-        return ScalarActivation!.Backward(_lastInput!, outputGradient);
+        if (ScalarActivation is null)
+            throw new InvalidOperationException("ActivationLayer: ScalarActivation not configured.");
+        if (_lastInput is null)
+            throw new InvalidOperationException("ActivationLayer: No cached input. Call Forward() before Backward().");
+
+        return ScalarActivation.Backward(_lastInput, outputGradient);
     }
 
 
@@ -434,7 +445,12 @@ public class ActivationLayer<T> : LayerBase<T>
     private Tensor<T> BackwardVectorActivation(Tensor<T> outputGradient)
     {
         // Now unified via IVectorActivationFunction.Backward
-        return VectorActivation!.Backward(_lastInput!, outputGradient);
+        if (VectorActivation is null)
+            throw new InvalidOperationException("ActivationLayer: VectorActivation not configured.");
+        if (_lastInput is null)
+            throw new InvalidOperationException("ActivationLayer: No cached input. Call Forward() before Backward().");
+
+        return VectorActivation.Backward(_lastInput, outputGradient);
     }
 
     /// <summary>
@@ -719,23 +735,26 @@ public class ActivationLayer<T> : LayerBase<T>
         if (Engine is not DirectGpuTensorEngine gpuEngine)
             throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine");
 
-        if (_lastInputGpu == null)
+        if (_lastInputGpu is null)
             throw new InvalidOperationException("ForwardGpu must be called before BackwardGpu");
 
         if (!TryGetFusedActivationType(out var fusedType))
             throw new InvalidOperationException(
                 $"Activation function '{GetActivationTypeName()}' does not support GPU backward pass.");
 
+        if (_lastOutputGpu is null && fusedType is FusedActivationType.Sigmoid or FusedActivationType.Tanh or FusedActivationType.Softmax)
+            throw new InvalidOperationException("ActivationLayer: Cached GPU output not available for backward pass.");
+
         // Apply appropriate activation backward based on type
         return fusedType switch
         {
             FusedActivationType.ReLU => gpuEngine.ReluBackwardGpu<T>(outputGradient, _lastInputGpu),
-            FusedActivationType.Sigmoid => gpuEngine.SigmoidBackwardGpu<T>(outputGradient, _lastOutputGpu!),
-            FusedActivationType.Tanh => gpuEngine.TanhBackwardGpu<T>(outputGradient, _lastOutputGpu!),
+            FusedActivationType.Sigmoid => gpuEngine.SigmoidBackwardGpu<T>(outputGradient, _lastOutputGpu),
+            FusedActivationType.Tanh => gpuEngine.TanhBackwardGpu<T>(outputGradient, _lastOutputGpu),
             FusedActivationType.GELU => gpuEngine.GeluBackwardGpu<T>(outputGradient, _lastInputGpu),
             FusedActivationType.Swish => gpuEngine.SwishBackwardGpu<T>(outputGradient, _lastInputGpu),
             FusedActivationType.LeakyReLU => gpuEngine.LeakyReluBackwardGpu<T>(outputGradient, _lastInputGpu, 0.01f),
-            FusedActivationType.Softmax => gpuEngine.SoftmaxBackwardGpu<T>(outputGradient, _lastOutputGpu!),
+            FusedActivationType.Softmax => gpuEngine.SoftmaxBackwardGpu<T>(outputGradient, _lastOutputGpu),
             _ => outputGradient // Fallback: gradient passes through unchanged
         };
     }

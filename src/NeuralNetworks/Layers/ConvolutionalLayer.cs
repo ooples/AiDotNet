@@ -1166,7 +1166,9 @@ public class ConvolutionalLayer<T> : LayerBase<T>
         int totalElements = gradOutput.ElementCount;
         var flat2DShape = new[] { totalElements, 1 };
         var flatGrad = gradOutput.CreateView(0, flat2DShape);
-        var flatOutput = _lastOutputGpu!.CreateView(0, flat2DShape);
+        if (_lastOutputGpu is null)
+            throw new InvalidOperationException("ConvolutionalLayer: No cached GPU output. Call ForwardGpu() before BackwardGpu().");
+        var flatOutput = _lastOutputGpu.CreateView(0, flat2DShape);
 
         IGpuTensor<T> flatResult = activation switch
         {

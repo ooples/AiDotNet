@@ -1674,6 +1674,9 @@ public class ConvLSTMLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
+        if (_lastInput is null || _lastHiddenState is null || _lastCellState is null)
+            throw new InvalidOperationException("ConvLSTMLayer: No cached state. Call Forward() before Backward().");
+
         // Normalize outputGradient to 5D to match canonical _lastInput shape
         var outGrad5D = outputGradient;
         if (_originalInputShape != null && _originalInputShape.Length == 4)
@@ -1690,7 +1693,7 @@ public class ConvLSTMLayer<T> : LayerBase<T>
             outGrad5D = outputGradient.Reshape([flatBatch, outputGradient.Shape[_originalInputShape.Length - 4], outputGradient.Shape[_originalInputShape.Length - 3], outputGradient.Shape[_originalInputShape.Length - 2], outputGradient.Shape[_originalInputShape.Length - 1]]);
         }
 
-        int batchSize = _lastInput!.Shape[0];
+        int batchSize = _lastInput.Shape[0];
         int timeSteps = _lastInput.Shape[1];
 
         var dInput = new Tensor<T>(_lastInput.Shape);
@@ -1707,8 +1710,8 @@ public class ConvLSTMLayer<T> : LayerBase<T>
         var dBiasC = new Tensor<T>(_biasC.Shape);
         var dBiasO = new Tensor<T>(_biasO.Shape);
 
-        var dNextH = new Tensor<T>(_lastHiddenState!.Shape);
-        var dNextC = new Tensor<T>(_lastCellState!.Shape);
+        var dNextH = new Tensor<T>(_lastHiddenState.Shape);
+        var dNextC = new Tensor<T>(_lastCellState.Shape);
 
         for (int t = timeSteps - 1; t >= 0; t--)
         {
@@ -1792,11 +1795,15 @@ public class ConvLSTMLayer<T> : LayerBase<T>
     {
         if (UsingVectorActivation)
         {
-            return VectorActivation!.Derivative(input);
+            if (VectorActivation is null)
+                throw new InvalidOperationException("ConvLSTMLayer: VectorActivation not configured.");
+            return VectorActivation.Derivative(input);
         }
         else
         {
-            return input.Transform((x, _) => ScalarActivation!.Derivative(x));
+            if (ScalarActivation is null)
+                throw new InvalidOperationException("ConvLSTMLayer: ScalarActivation not configured.");
+            return input.Transform((x, _) => ScalarActivation.Derivative(x));
         }
     }
 

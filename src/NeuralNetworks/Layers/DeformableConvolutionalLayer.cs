@@ -414,16 +414,19 @@ public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputati
 
     private Tensor<T> PredictMaskViaEngine(Tensor<T> input)
     {
+        if (_maskWeights is null || _maskBias is null)
+            throw new InvalidOperationException("DeformableConvolutionalLayer: Mask weights/bias not initialized.");
+
         // Use IEngine Conv2D for mask prediction
         var maskOutput = _engine.Conv2D(
             input,
-            _maskWeights!,
+            _maskWeights,
             new[] { _stride, _stride },
             new[] { _padding, _padding },
             new[] { 1, 1 });
 
         // Add bias
-        maskOutput = AddBiasToTensor(maskOutput, _maskBias!);
+        maskOutput = AddBiasToTensor(maskOutput, _maskBias);
 
         // Apply sigmoid activation for modulation weights
         maskOutput = _engine.Sigmoid(maskOutput);
@@ -517,8 +520,10 @@ public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputati
 
         if (_useModulation)
         {
-            _maskWeightGradients = new Tensor<T>(_maskWeights!.Shape);
-            _maskBiasGradients = new Tensor<T>(_maskBias!.Shape);
+            if (_maskWeights is null || _maskBias is null)
+                throw new InvalidOperationException("DeformableConvolutionalLayer: Mask weights/bias not initialized for modulation.");
+            _maskWeightGradients = new Tensor<T>(_maskWeights.Shape);
+            _maskBiasGradients = new Tensor<T>(_maskBias.Shape);
         }
 
         // 1. Compute bias gradients (sum over batch and spatial dimensions)
@@ -589,8 +594,10 @@ public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputati
         Tensor<T>? gradInputFromMask = null;
         if (_useModulation && gradMask != null)
         {
+            if (_maskWeights is null || _maskWeightGradients is null || _maskBiasGradients is null)
+                throw new InvalidOperationException("DeformableConvolutionalLayer: Mask gradients not initialized.");
             gradInputFromMask = BackpropConvolution(
-                input4D, _maskWeights!, gradMask, _maskWeightGradients!, _maskBiasGradients!);
+                input4D, _maskWeights, gradMask, _maskWeightGradients, _maskBiasGradients);
         }
 
         // 8. Sum all input gradient contributions using Engine tensor ops
@@ -625,7 +632,9 @@ public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputati
                     }
                 }
             }
-            _biasGradients!.Data.Span[c] = sum;
+            if (_biasGradients is null)
+                throw new InvalidOperationException("DeformableConvolutionalLayer: Bias gradients not initialized.");
+            _biasGradients.Data.Span[c] = sum;
         }
     }
 
