@@ -1,5 +1,6 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.AnomalyDetection.ClusterBased;
@@ -159,7 +160,7 @@ public class CBLOFDetector<T> : AnomalyDetectorBase<T>
 
             // Find nearest cluster and distance
             int nearestCluster = 0;
-            double nearestDist = double.MaxValue;
+            T nearestDist = NumOps.MaxValue;
 
             var centroids = _centroids;
             var isLargeCluster = _isLargeCluster;
@@ -177,24 +178,24 @@ public class CBLOFDetector<T> : AnomalyDetectorBase<T>
                     centroid[j] = centroids[c, j];
                 }
 
-                double dist = NumOps.ToDouble(StatisticsHelper<T>.EuclideanDistance(point, centroid));
-                if (dist < nearestDist)
+                T dist = StatisticsHelper<T>.EuclideanDistance(point, centroid);
+                if (NumOps.LessThan(dist, nearestDist))
                 {
                     nearestDist = dist;
                     nearestCluster = c;
                 }
             }
 
-            double cblof;
+            T cblof;
             if (isLargeCluster[nearestCluster])
             {
                 // Large cluster: CBLOF = size * distance_to_centroid
-                cblof = clusterSizes[nearestCluster] * nearestDist;
+                cblof = NumOps.Multiply(NumOps.FromDouble(clusterSizes[nearestCluster]), nearestDist);
             }
             else
             {
                 // Small cluster: CBLOF = size * distance_to_nearest_large_cluster
-                double minLargeDist = double.MaxValue;
+                T minLargeDist = NumOps.MaxValue;
                 for (int c = 0; c < _nClusters; c++)
                 {
                     if (!isLargeCluster[c]) continue;
@@ -205,17 +206,17 @@ public class CBLOFDetector<T> : AnomalyDetectorBase<T>
                         centroid[j] = centroids[c, j];
                     }
 
-                    double dist = NumOps.ToDouble(StatisticsHelper<T>.EuclideanDistance(point, centroid));
-                    if (dist < minLargeDist)
+                    T dist = StatisticsHelper<T>.EuclideanDistance(point, centroid);
+                    if (NumOps.LessThan(dist, minLargeDist))
                     {
                         minLargeDist = dist;
                     }
                 }
 
-                cblof = clusterSizes[nearestCluster] * minLargeDist;
+                cblof = NumOps.Multiply(NumOps.FromDouble(clusterSizes[nearestCluster]), minLargeDist);
             }
 
-            scores[i] = NumOps.FromDouble(cblof);
+            scores[i] = cblof;
         }
 
         return scores;
@@ -254,7 +255,7 @@ public class CBLOFDetector<T> : AnomalyDetectorBase<T>
 
     private (Matrix<T> centroids, int[] assignments) RunKMeans(Matrix<T> X)
     {
-        var random = new Random(_randomSeed);
+        var random = RandomHelper.CreateSeededRandom(_randomSeed);
         int n = X.Rows;
         int d = X.Columns;
 
@@ -288,7 +289,7 @@ public class CBLOFDetector<T> : AnomalyDetectorBase<T>
             for (int i = 0; i < n; i++)
             {
                 int nearest = 0;
-                double minDist = double.MaxValue;
+                T minDist = NumOps.MaxValue;
 
                 var point = new Vector<T>(d);
                 for (int j = 0; j < d; j++)
@@ -304,8 +305,8 @@ public class CBLOFDetector<T> : AnomalyDetectorBase<T>
                         centroid[j] = centroids[c, j];
                     }
 
-                    double dist = NumOps.ToDouble(StatisticsHelper<T>.EuclideanDistance(point, centroid));
-                    if (dist < minDist)
+                    T dist = StatisticsHelper<T>.EuclideanDistance(point, centroid);
+                    if (NumOps.LessThan(dist, minDist))
                     {
                         minDist = dist;
                         nearest = c;
