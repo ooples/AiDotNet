@@ -220,6 +220,7 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
     document.getElementById('search-input')?.addEventListener('input', applyFilters);
     document.getElementById('filter-status')?.addEventListener('change', applyFilters);
 
+    await (window as any).__adminReady;
     loadKeys();
   </script>
 </AdminLayout>

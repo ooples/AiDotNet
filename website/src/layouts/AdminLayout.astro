@@ -103,8 +103,8 @@ const sidebarLinks = [
             </nav>
           </aside>
 
-          <!-- Main content -->
-          <div class="flex-1 min-w-0">
+          <!-- Main content: hidden until auth guard passes -->
+          <div id="admin-content" class="flex-1 min-w-0" style="visibility: hidden;">
             <slot />
           </div>
         </div>
@@ -119,10 +119,11 @@ const sidebarLinks = [
     <script>
       import { supabase } from '../lib/supabase';
 
-      // Admin auth guard - fail closed on any error
-      // Prerequisites: see supabase/migrations/20260306000000_initial_schema.sql
-      // for profiles.role column, is_admin() function, and RLS policies.
-      async function checkAdmin() {
+      // Admin auth guard runs BEFORE page content is visible.
+      // Content starts hidden (visibility: hidden) and is revealed only after
+      // the admin check passes. Page scripts can await window.__adminReady
+      // to ensure they don't fire Supabase queries before auth is confirmed.
+      const adminReady = (async () => {
         const base = import.meta.env.BASE_URL || '/';
 
         try {
@@ -143,13 +144,17 @@ const sidebarLinks = [
             window.location.href = `${base}account/`;
             return;
           }
+
+          // Auth passed — reveal content
+          const el = document.getElementById('admin-content');
+          if (el) el.style.visibility = 'visible';
         } catch {
           window.location.href = `${base}login/?redirect=${encodeURIComponent(window.location.pathname)}`;
           return;
         }
-      }
+      })();
 
-      checkAdmin();
+      (window as any).__adminReady = adminReady;
     </script>
 
     <!-- GSAP -->

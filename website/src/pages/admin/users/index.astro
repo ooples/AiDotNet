@@ -145,8 +145,20 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
         return;
       }
 
-      // Load API key counts only for users on the current page
-      const userIds = profiles.map(p => p.id);
+      allUsers = profiles.map(p => ({
+        ...p,
+        keyCount: 0,
+      }));
+
+      applyFilters();
+    }
+
+    async function loadKeyCountsForPage() {
+      const startIndex = currentPage * pageSize;
+      const pageUsers = filteredUsers.slice(startIndex, startIndex + pageSize);
+      const userIds = pageUsers.map(p => p.id);
+      if (userIds.length === 0) return;
+
       const { data: keys } = await supabase
         .from('user_api_keys')
         .select('user_id')
@@ -160,12 +172,11 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
         }
       }
 
-      allUsers = profiles.map(p => ({
-        ...p,
-        keyCount: keyCounts.get(p.id) || 0,
-      }));
-
-      applyFilters();
+      for (const u of allUsers) {
+        if (keyCounts.has(u.id)) {
+          u.keyCount = keyCounts.get(u.id) || 0;
+        }
+      }
     }
 
     function applyFilters() {
@@ -186,7 +197,9 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
       renderTable();
     }
 
-    function renderTable() {
+    async function renderTable() {
+      await loadKeyCountsForPage();
+
       const loading = document.getElementById('users-loading');
       const table = document.getElementById('users-table');
       const tbody = document.getElementById('users-body');
@@ -342,6 +355,7 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
       if (currentPage < totalPages - 1) { currentPage++; renderTable(); }
     });
 
+    await (window as any).__adminReady;
     loadUsers();
   </script>
 </AdminLayout>

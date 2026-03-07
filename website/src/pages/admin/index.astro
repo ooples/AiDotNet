@@ -136,32 +136,43 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
     import { supabase } from '../../lib/supabase';
 
     async function loadAdminOverview() {
-      // Load all profiles (admin RLS policy allows this)
-      const { data: profiles, error: profilesError } = await supabase
-        .from('profiles')
-        .select('id, full_name, role, subscription_tier, subscription_status, created_at')
-        .order('created_at', { ascending: false });
-
-      if (profilesError || !profiles) {
-        showError('signups-empty', 'Failed to load profiles.');
-        showError('activity-empty', 'Failed to load activity.');
-        console.error('Profiles load error:', profilesError);
-        return;
-      }
-
-      // Stats
-      const totalUsers = profiles.length;
-      const proUsers = profiles.filter(p => p.subscription_tier === 'pro').length;
-      const enterpriseUsers = profiles.filter(p => p.subscription_tier === 'enterprise').length;
-
       const setEl = (id: string, val: string) => {
         const el = document.getElementById(id);
         if (el) el.textContent = val;
       };
 
-      setEl('stat-total-users', totalUsers.toLocaleString());
-      setEl('stat-pro-users', proUsers.toLocaleString());
-      setEl('stat-enterprise-users', enterpriseUsers.toLocaleString());
+      // Use server-side count queries instead of fetching all profiles
+      const { count: totalUsers, error: totalError } = await supabase
+        .from('profiles')
+        .select('*', { count: 'exact', head: true });
+
+      if (totalError) {
+        showError('signups-empty', 'Failed to load profiles.');
+        showError('activity-empty', 'Failed to load activity.');
+        console.error('Profiles count error:', totalError);
+        return;
+      }
+
+      const { count: proUsers } = await supabase
+        .from('profiles')
+        .select('*', { count: 'exact', head: true })
+        .eq('subscription_tier', 'pro');
+
+      const { count: enterpriseUsers } = await supabase
+        .from('profiles')
+        .select('*', { count: 'exact', head: true })
+        .eq('subscription_tier', 'enterprise');
+
+      setEl('stat-total-users', (totalUsers || 0).toLocaleString());
+      setEl('stat-pro-users', (proUsers || 0).toLocaleString());
+      setEl('stat-enterprise-users', (enterpriseUsers || 0).toLocaleString());
+
+      // Fetch only recent signups for the table (not all profiles)
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id, full_name, role, subscription_tier, subscription_status, created_at')
+        .order('created_at', { ascending: false })
+        .limit(10);
 
       // Active API keys count
       const { count: keyCount } = await supabase
@@ -197,8 +208,8 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
         setEl('stat-avg-latency', '--');
       }
 
-      // Recent signups table
-      const recentSignups = profiles.slice(0, 10);
+      // Recent signups table (already limited to 10 by query)
+      const recentSignups = profiles || [];
       const emptyEl = document.getElementById('signups-empty');
       const tableEl = document.getElementById('signups-table');
       const tbody = document.getElementById('signups-body');
@@ -257,8 +268,13 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
         activityEmpty.classList.add('hidden');
         activityTable.classList.remove('hidden');
 
-        // Build user lookup
-        const userMap = new Map(profiles.map(p => [p.id, p.full_name || 'Unknown']));
+        // Build user lookup — fetch names for users in recent activity
+        const activityUserIds = [...new Set(recentActivity.map(a => a.user_id))];
+        const { data: activityProfiles } = await supabase
+          .from('profiles')
+          .select('id, full_name')
+          .in('id', activityUserIds);
+        const userMap = new Map((activityProfiles || []).map(p => [p.id, p.full_name || 'Unknown']));
 
         activityBody.innerHTML = recentActivity.map(a => {
           const statusColor = a.status_code < 400 ? 'text-green-500' : 'text-red-500';
@@ -300,6 +316,7 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
       return `${days}d ago`;
     }
 
+    await (window as any).__adminReady;
     loadAdminOverview();
   </script>
 </AdminLayout>

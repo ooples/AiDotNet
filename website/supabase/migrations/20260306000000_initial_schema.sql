@@ -71,7 +71,7 @@ create or replace function public.is_admin()
 returns boolean
 language sql
 security definer
-set search_path = 'public'
+set search_path = 'pg_catalog, public'
 stable
 as $$
   select exists (
@@ -129,7 +129,12 @@ drop policy if exists "Users can update own profile" on public.profiles;
 create policy "Users can update own profile"
   on public.profiles for update
   using (auth.uid() = id)
-  with check (auth.uid() = id);
+  with check (
+    auth.uid() = id
+    and role = (select p.role from public.profiles p where p.id = auth.uid())
+    and subscription_tier = (select p.subscription_tier from public.profiles p where p.id = auth.uid())
+    and subscription_status = (select p.subscription_status from public.profiles p where p.id = auth.uid())
+  );
 
 drop policy if exists "Admins can read all profiles" on public.profiles;
 create policy "Admins can read all profiles"
@@ -156,7 +161,8 @@ create policy "Users can create own keys"
 drop policy if exists "Users can update own keys" on public.user_api_keys;
 create policy "Users can update own keys"
   on public.user_api_keys for update
-  using (auth.uid() = user_id);
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
 
 drop policy if exists "Admins can read all keys" on public.user_api_keys;
 create policy "Admins can read all keys"
