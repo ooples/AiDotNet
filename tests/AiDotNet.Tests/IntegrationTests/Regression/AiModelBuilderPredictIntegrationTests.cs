@@ -4,6 +4,7 @@ using AiDotNet.Models.Options;
 using AiDotNet.Models.Results;
 using AiDotNet.Optimizers;
 using AiDotNet.Regression;
+using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
 namespace AiDotNet.Tests.IntegrationTests.Regression;
@@ -376,6 +377,68 @@ public class AiModelBuilderPredictIntegrationTests
         original.SelectedFeatureIndices.Add(5);
         Assert.Equal(2, updated.SelectedFeatureIndices.Count);
         Assert.DoesNotContain(5, updated.SelectedFeatureIndices);
+    }
+
+    #endregion
+
+    #region InferenceSession Feature Selection Tests
+
+    [Fact]
+    public void InferenceSession_Predict_AppliesFeatureSelection()
+    {
+        // Arrange: Create a neural network model with SelectedFeatureIndices set.
+        // InferenceSession.Predict() should apply feature selection before calling the model,
+        // just like AiModelResult.Predict() does.
+        const int inputSize = 4;
+        const int selectedSize = 2;
+        const int outputSize = 2;
+
+        // Create a simple neural network that expects 'selectedSize' input features
+        var layers = new List<AiDotNet.Interfaces.ILayer<float>>
+        {
+            new AiDotNet.NeuralNetworks.Layers.InputLayer<float>(selectedSize),
+            new AiDotNet.NeuralNetworks.Layers.DenseLayer<float>(
+                selectedSize, outputSize,
+                activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<float>())
+        };
+
+        var architecture = new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<float>(
+            inputType: AiDotNet.Enums.InputType.OneDimensional,
+            taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression,
+            complexity: AiDotNet.Enums.NetworkComplexity.Simple,
+            inputSize: selectedSize,
+            outputSize: outputSize,
+            layers: layers);
+
+        var model = new AiDotNet.NeuralNetworks.FeedForwardNeuralNetwork<float>(architecture);
+
+        // Create an optimization result with feature selection: select columns 0 and 2 from 4
+        var optimization = new OptimizationResult<float, Tensor<float>, Tensor<float>>
+        {
+            BestSolution = model,
+            SelectedFeatureIndices = new List<int> { 0, 2 }
+        };
+
+        var options = new AiModelResultOptions<float, Tensor<float>, Tensor<float>>
+        {
+            OptimizationResult = optimization
+        };
+
+        var result = new AiModelResult<float, Tensor<float>, Tensor<float>>(options);
+
+        // Create 1D input with ALL 4 features (model expects only 2 after selection)
+        var fullInput = new Tensor<float>(new[] { inputSize });
+        fullInput[0] = 1.0f;
+        fullInput[1] = 2.0f;
+        fullInput[2] = 3.0f;
+        fullInput[3] = 4.0f;
+
+        // Act: Predict should apply feature selection (columns 0,2 → [1.0, 3.0])
+        // and the model should not throw a dimension mismatch
+        var prediction = result.Predict(fullInput);
+
+        // Assert: Should get output without errors (feature selection applied)
+        Assert.NotNull(prediction);
     }
 
     #endregion

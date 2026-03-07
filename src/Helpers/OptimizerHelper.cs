@@ -218,9 +218,15 @@ public static class OptimizerHelper<T, TInput, TOutput>
     /// </remarks>
     private static Tensor<T> SelectFeaturesTensor(Tensor<T> X, List<int> selectedFeatures)
     {
-        if (X.Shape.Length < 2)
+        // Handle 1D tensors: select elements at the specified indices
+        if (X.Shape.Length == 1)
         {
-            throw new ArgumentException("Input tensor must have at least 2 dimensions", nameof(X));
+            var selected = new Tensor<T>(new[] { selectedFeatures.Count });
+            for (int j = 0; j < selectedFeatures.Count; j++)
+            {
+                selected[j] = X[selectedFeatures[j]];
+            }
+            return selected;
         }
 
         // Create a new shape with the updated feature dimension
