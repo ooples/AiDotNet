@@ -152,10 +152,25 @@ public class PreprocessingSerializationIntegrationTests
         // Assert
         Assert.NotNull(deserialized);
 
-        // Verify transform produces same results with custom range
+        // Verify the custom range [-1, 1] is preserved
         var originalResult = scaler.Transform(data);
         var deserializedResult = deserialized.Transform(data);
 
+        // With range [-1, 1], min values should map to -1 and max to 1
+        for (int j = 0; j < originalResult.Columns; j++)
+        {
+            // Find min and max in each column of transformed data
+            double colMin = double.MaxValue, colMax = double.MinValue;
+            for (int i = 0; i < deserializedResult.Rows; i++)
+            {
+                colMin = Math.Min(colMin, deserializedResult[i, j]);
+                colMax = Math.Max(colMax, deserializedResult[i, j]);
+            }
+            Assert.Equal(-1.0, colMin, 1e-10);
+            Assert.Equal(1.0, colMax, 1e-10);
+        }
+
+        // Verify transform produces same results
         for (int i = 0; i < originalResult.Rows; i++)
         {
             for (int j = 0; j < originalResult.Columns; j++)
@@ -255,6 +270,18 @@ public class PreprocessingSerializationIntegrationTests
         Assert.True(deserialized.IsFitted);
         Assert.Equal(ImputationStrategy.Mean, deserialized.Strategy);
         Assert.NotNull(deserialized.Statistics);
+
+        // Verify transform produces same results
+        var originalResult = imputer.Transform(data);
+        var deserializedResult = deserialized.Transform(data);
+
+        for (int i = 0; i < originalResult.Rows; i++)
+        {
+            for (int j = 0; j < originalResult.Columns; j++)
+            {
+                Assert.Equal(originalResult[i, j], deserializedResult[i, j], 1e-10);
+            }
+        }
     }
 
     // ===================== Pipeline Tests =====================
@@ -513,6 +540,107 @@ public class PreprocessingSerializationIntegrationTests
         Assert.NotNull(deserialized);
         Assert.True(deserialized.IsFitted);
         Assert.NotNull(deserialized.Shift);
+
+        var originalResult = scaler.Transform(data);
+        var deserializedResult = deserialized.Transform(data);
+
+        for (int i = 0; i < originalResult.Rows; i++)
+        {
+            for (int j = 0; j < originalResult.Columns; j++)
+            {
+                Assert.Equal(originalResult[i, j], deserializedResult[i, j], 1e-10);
+            }
+        }
+    }
+
+    // ===================== LpNormScaler Tests =====================
+
+    [Fact]
+    public void LpNormScaler_RoundTrip_PreservesFittedState()
+    {
+        // Arrange
+        var scaler = new LpNormScaler<double>(p: 2.0);
+        var data = CreateTestMatrix();
+        scaler.Fit(data);
+
+        var settings = CreateSettings();
+
+        // Act
+        var json = JsonConvert.SerializeObject(scaler, settings);
+        var deserialized = JsonConvert.DeserializeObject<LpNormScaler<double>>(json, settings);
+
+        // Assert
+        Assert.NotNull(deserialized);
+        Assert.True(deserialized.IsFitted);
+        Assert.Equal(2.0, deserialized.P);
+
+        var originalResult = scaler.Transform(data);
+        var deserializedResult = deserialized.Transform(data);
+
+        for (int i = 0; i < originalResult.Rows; i++)
+        {
+            for (int j = 0; j < originalResult.Columns; j++)
+            {
+                Assert.Equal(originalResult[i, j], deserializedResult[i, j], 1e-10);
+            }
+        }
+    }
+
+    // ===================== Normalizer Tests =====================
+
+    [Fact]
+    public void Normalizer_RoundTrip_PreservesFittedState()
+    {
+        // Arrange
+        var normalizer = new Normalizer<double>(NormType.L2);
+        var data = CreateTestMatrix();
+        normalizer.Fit(data);
+
+        var settings = CreateSettings();
+
+        // Act
+        var json = JsonConvert.SerializeObject(normalizer, settings);
+        var deserialized = JsonConvert.DeserializeObject<Normalizer<double>>(json, settings);
+
+        // Assert
+        Assert.NotNull(deserialized);
+        Assert.True(deserialized.IsFitted);
+        Assert.Equal(NormType.L2, deserialized.NormType);
+
+        var originalResult = normalizer.Transform(data);
+        var deserializedResult = deserialized.Transform(data);
+
+        for (int i = 0; i < originalResult.Rows; i++)
+        {
+            for (int j = 0; j < originalResult.Columns; j++)
+            {
+                Assert.Equal(originalResult[i, j], deserializedResult[i, j], 1e-10);
+            }
+        }
+    }
+
+    // ===================== LogMeanVarianceScaler Tests =====================
+
+    [Fact]
+    public void LogMeanVarianceScaler_RoundTrip_PreservesFittedState()
+    {
+        // Arrange
+        var scaler = new LogMeanVarianceScaler<double>();
+        var data = CreateTestMatrix();
+        scaler.Fit(data);
+
+        var settings = CreateSettings();
+
+        // Act
+        var json = JsonConvert.SerializeObject(scaler, settings);
+        var deserialized = JsonConvert.DeserializeObject<LogMeanVarianceScaler<double>>(json, settings);
+
+        // Assert
+        Assert.NotNull(deserialized);
+        Assert.True(deserialized.IsFitted);
+        Assert.NotNull(deserialized.Shift);
+        Assert.NotNull(deserialized.LogMean);
+        Assert.NotNull(deserialized.LogStdDev);
 
         var originalResult = scaler.Transform(data);
         var deserializedResult = deserialized.Transform(data);

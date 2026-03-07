@@ -24,28 +24,24 @@ public class PipelineStep<T, TInput>
     public string Name { get; set; }
 
     /// <summary>
-    /// Gets or sets the transformer for this pipeline step.
+    /// Gets the transformer for this pipeline step.
     /// </summary>
+    /// <remarks>
+    /// Set via the constructor or JSON deserialization. Guaranteed non-null after
+    /// construction through the parameterized constructor or successful deserialization.
+    /// </remarks>
     [JsonProperty(TypeNameHandling = TypeNameHandling.Auto)]
-    public IDataTransformer<T, TInput, TInput> Transformer { get; set; }
-
-    /// <summary>
-    /// Creates a new empty pipeline step (required for deserialization).
-    /// </summary>
-    public PipelineStep()
-    {
-        Name = string.Empty;
-        Transformer = null!;
-    }
+    public IDataTransformer<T, TInput, TInput> Transformer { get; private set; }
 
     /// <summary>
     /// Creates a new pipeline step with the specified name and transformer.
     /// </summary>
     /// <param name="name">The step name.</param>
     /// <param name="transformer">The transformer.</param>
+    [JsonConstructor]
     public PipelineStep(string name, IDataTransformer<T, TInput, TInput> transformer)
     {
-        Name = name;
+        Name = name ?? string.Empty;
         Transformer = transformer;
     }
 }
@@ -123,10 +119,9 @@ public class PreprocessingPipeline<T, TInput, TOutput> : IDataTransformer<T, TIn
     public int Count => _steps.Count + (_finalTransformer is not null ? 1 : 0);
 
     /// <summary>
-    /// Gets the named steps in the pipeline.
+    /// Gets the pipeline steps as a read-only list.
     /// </summary>
-    public IReadOnlyList<(string Name, IDataTransformer<T, TInput, TInput> Transformer)> Steps =>
-        _steps.Select(s => (s.Name, s.Transformer)).ToList().AsReadOnly();
+    public IReadOnlyList<PipelineStep<T, TInput>> Steps => _steps.AsReadOnly();
 
     /// <summary>
     /// Creates a new empty preprocessing pipeline.

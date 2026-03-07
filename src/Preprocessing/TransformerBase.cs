@@ -47,7 +47,7 @@ public abstract class TransformerBase<T, TInput, TOutput> : IDataTransformer<T, 
     /// Gets the column indices this transformer operates on.
     /// </summary>
     [JsonProperty]
-    public int[]? ColumnIndices { get; }
+    public int[]? ColumnIndices { get; private set; }
 
     /// <summary>
     /// Gets whether this transformer supports inverse transformation.
