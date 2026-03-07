@@ -1115,15 +1115,23 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Determine activation type and apply appropriate backward
         var fusedActivation = GetFusedActivationType();
 
+        if (fusedActivation is not FusedActivationType.None)
+        {
+            if (_lastPreActivationGpu is null && fusedActivation is FusedActivationType.ReLU or FusedActivationType.GELU or FusedActivationType.Swish or FusedActivationType.LeakyReLU)
+                throw new InvalidOperationException("DenseLayer: Cached GPU pre-activation not available for backward pass.");
+            if (_lastOutputGpu is null && fusedActivation is FusedActivationType.Sigmoid or FusedActivationType.Tanh or FusedActivationType.Softmax)
+                throw new InvalidOperationException("DenseLayer: Cached GPU output not available for backward pass.");
+        }
+
         return fusedActivation switch
         {
-            FusedActivationType.ReLU => gpuEngine.ReluBackwardGpu<T>(gradOutput, _lastPreActivationGpu!),
-            FusedActivationType.Sigmoid => gpuEngine.SigmoidBackwardGpu<T>(gradOutput, _lastOutputGpu!),
-            FusedActivationType.Tanh => gpuEngine.TanhBackwardGpu<T>(gradOutput, _lastOutputGpu!),
-            FusedActivationType.GELU => gpuEngine.GeluBackwardGpu<T>(gradOutput, _lastPreActivationGpu!),
-            FusedActivationType.Swish => gpuEngine.SwishBackwardGpu<T>(gradOutput, _lastPreActivationGpu!),
-            FusedActivationType.LeakyReLU => gpuEngine.LeakyReluBackwardGpu<T>(gradOutput, _lastPreActivationGpu!, 0.01f),
-            FusedActivationType.Softmax => gpuEngine.SoftmaxBackwardGpu<T>(gradOutput, _lastOutputGpu!),
+            FusedActivationType.ReLU => gpuEngine.ReluBackwardGpu<T>(gradOutput, _lastPreActivationGpu),
+            FusedActivationType.Sigmoid => gpuEngine.SigmoidBackwardGpu<T>(gradOutput, _lastOutputGpu),
+            FusedActivationType.Tanh => gpuEngine.TanhBackwardGpu<T>(gradOutput, _lastOutputGpu),
+            FusedActivationType.GELU => gpuEngine.GeluBackwardGpu<T>(gradOutput, _lastPreActivationGpu),
+            FusedActivationType.Swish => gpuEngine.SwishBackwardGpu<T>(gradOutput, _lastPreActivationGpu),
+            FusedActivationType.LeakyReLU => gpuEngine.LeakyReluBackwardGpu<T>(gradOutput, _lastPreActivationGpu, 0.01f),
+            FusedActivationType.Softmax => gpuEngine.SoftmaxBackwardGpu<T>(gradOutput, _lastOutputGpu),
             FusedActivationType.None => gradOutput, // Identity activation - gradient passes through unchanged
             _ => gradOutput // Fallback for unsupported activations
         };

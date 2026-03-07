@@ -696,11 +696,15 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
     {
         if (UsingVectorActivation)
         {
-            return VectorActivation!.Activate(new Vector<T>([value]))[0];
+            if (VectorActivation is null)
+                throw new InvalidOperationException("DepthwiseSeparableConvolutionalLayer: VectorActivation not configured.");
+            return VectorActivation.Activate(new Vector<T>([value]))[0];
         }
         else
         {
-            return ScalarActivation!.Activate(value);
+            if (ScalarActivation is null)
+                throw new InvalidOperationException("DepthwiseSeparableConvolutionalLayer: ScalarActivation not configured.");
+            return ScalarActivation.Activate(value);
         }
     }
 
@@ -1181,7 +1185,7 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
         if (_addedBatchDimension)
         {
             // 3D input [C, H, W] - remove batch dimension
-            return inputGradient.Reshape(_originalInputShape!);
+            return inputGradient.Reshape((_originalInputShape ?? throw new InvalidOperationException("DepthwiseSeparableConvolutionalLayer: Original input shape not cached.")));
         }
         else if (_originalInputShape != null && _originalInputShape.Length > 4)
         {
@@ -1331,7 +1335,7 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
         if (_addedBatchDimension)
         {
             // 3D input [C, H, W] - remove batch dimension
-            return inputGradient.Reshape(_originalInputShape!);
+            return inputGradient.Reshape((_originalInputShape ?? throw new InvalidOperationException("DepthwiseSeparableConvolutionalLayer: Original input shape not cached.")));
         }
         else if (_originalInputShape != null && _originalInputShape.Length > 4)
         {

@@ -1045,14 +1045,18 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
     {
         if (UsingVectorActivation)
         {
-            return VectorActivation!.Derivative(lastOutput).PointwiseMultiply(outputGradient);
+            if (VectorActivation is null)
+                throw new InvalidOperationException("SubpixelConvolutionalLayer: VectorActivation not configured.");
+            return VectorActivation.Derivative(lastOutput).PointwiseMultiply(outputGradient);
         }
         else
         {
+            if (ScalarActivation is null)
+                throw new InvalidOperationException("SubpixelConvolutionalLayer: ScalarActivation not configured.");
             var result = new Tensor<T>(outputGradient.Shape);
             for (int i = 0; i < outputGradient.Length; i++)
             {
-                result[i] = NumOps.Multiply(ScalarActivation!.Derivative(lastOutput[i]), outputGradient[i]);
+                result[i] = NumOps.Multiply(ScalarActivation.Derivative(lastOutput[i]), outputGradient[i]);
             }
 
             return result;

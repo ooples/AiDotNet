@@ -749,11 +749,11 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
         {
             case PNAAggregator.Sum:
                 // Sum aggregation: A @ X (message passing via adjacency matrix)
-                return Engine.TensorMatMul(_adjacencyMatrix!, transformed);
+                return Engine.TensorMatMul((_adjacencyMatrix ?? throw new InvalidOperationException("PNALayer: Adjacency matrix not set.")), transformed);
 
             case PNAAggregator.Mean:
                 // Mean aggregation: (A @ X) / degree
-                var sumAgg = Engine.TensorMatMul(_adjacencyMatrix!, transformed);
+                var sumAgg = Engine.TensorMatMul((_adjacencyMatrix ?? throw new InvalidOperationException("PNALayer: Adjacency matrix not set.")), transformed);
                 // Expand degrees for broadcasting: [batch, nodes] -> [batch, nodes, 1]
                 var degreesExpanded = safeDegrees.Reshape([batchSize, numNodes, 1]);
                 return Engine.TensorBroadcastDivide(sumAgg, degreesExpanded);
@@ -771,7 +771,7 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
                 return ComputeStdDevAggregation(transformed, safeDegrees, numNodes);
 
             default:
-                return Engine.TensorMatMul(_adjacencyMatrix!, transformed);
+                return Engine.TensorMatMul((_adjacencyMatrix ?? throw new InvalidOperationException("PNALayer: Adjacency matrix not set.")), transformed);
         }
     }
 
@@ -790,7 +790,7 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
         var tiled = Engine.TensorTile(expanded, [1, numNodes, 1, 1]);
 
         // Create mask from adjacency: [batch, nodes, nodes, 1]
-        var adjExpanded = _adjacencyMatrix!.Reshape([batchSize, numNodes, numNodes, 1]);
+        var adjExpanded = (_adjacencyMatrix ?? throw new InvalidOperationException("PNALayer: Adjacency matrix not set.")).Reshape([batchSize, numNodes, numNodes, 1]);
 
         // Mask non-neighbors with -inf
         var negInf = new Tensor<T>(tiled.Shape);
@@ -824,7 +824,7 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
         var tiled = Engine.TensorTile(expanded, [1, numNodes, 1, 1]);
 
         // Create mask from adjacency: [batch, nodes, nodes, 1]
-        var adjExpanded = _adjacencyMatrix!.Reshape([batchSize, numNodes, numNodes, 1]);
+        var adjExpanded = (_adjacencyMatrix ?? throw new InvalidOperationException("PNALayer: Adjacency matrix not set.")).Reshape([batchSize, numNodes, numNodes, 1]);
 
         // Mask non-neighbors with +inf
         var posInf = new Tensor<T>(tiled.Shape);
@@ -853,13 +853,13 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
         int batchSize = transformed.Shape[0];
 
         // Mean: E[X] = (A @ X) / degree
-        var sumAgg = Engine.TensorMatMul(_adjacencyMatrix!, transformed);
+        var sumAgg = Engine.TensorMatMul((_adjacencyMatrix ?? throw new InvalidOperationException("PNALayer: Adjacency matrix not set.")), transformed);
         var degreesExpanded = safeDegrees.Reshape([batchSize, numNodes, 1]);
         var mean = Engine.TensorBroadcastDivide(sumAgg, degreesExpanded);
 
         // E[X^2] = (A @ X^2) / degree
         var transformedSquared = Engine.TensorMultiply(transformed, transformed);
-        var sumSquared = Engine.TensorMatMul(_adjacencyMatrix!, transformedSquared);
+        var sumSquared = Engine.TensorMatMul((_adjacencyMatrix ?? throw new InvalidOperationException("PNALayer: Adjacency matrix not set.")), transformedSquared);
         var meanSquared = Engine.TensorBroadcastDivide(sumSquared, degreesExpanded);
 
         // Variance = E[X^2] - E[X]^2
@@ -1089,7 +1089,7 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
 
                 // Backprop through aggregation
                 // For mean/sum: gradient flows back through adjacency transpose
-                var adjT = SwapLastTwoAxes(_adjacencyMatrix!);
+                var adjT = SwapLastTwoAxes((_adjacencyMatrix ?? throw new InvalidOperationException("PNALayer: Adjacency matrix not set.")));
                 var aggGrad = Engine.TensorMatMul(adjT, scalerGrad);
 
                 // For mean, also divide by degree
@@ -1381,7 +1381,7 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
         var mlpHiddenGradPre = Engine.TensorMatMul(activationGradient, weights2T);
 
         // ReLU derivative
-        var zeroTensor = new Tensor<T>(_lastMlpHiddenPreRelu!.Shape);
+        var zeroTensor = new Tensor<T>((_lastMlpHiddenPreRelu ?? throw new InvalidOperationException("PNALayer: No cached state. Call Forward() before Backward().")).Shape);
         zeroTensor.Fill(NumOps.Zero);
         var reluMask = Engine.TensorGreaterThan(_lastMlpHiddenPreRelu, zeroTensor);
         var oneTensor = new Tensor<T>(_lastMlpHiddenPreRelu.Shape);
