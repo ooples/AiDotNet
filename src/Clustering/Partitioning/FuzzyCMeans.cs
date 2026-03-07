@@ -44,7 +44,7 @@ public class FuzzyCMeans<T> : ClusteringBase<T>
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
-    private double[,]? _membershipMatrix;
+    private T[,]? _membershipMatrix;
 
     /// <summary>
     /// Initializes a new FuzzyCMeans instance.
@@ -63,7 +63,7 @@ public class FuzzyCMeans<T> : ClusteringBase<T>
     /// Each row sums to 1. membershipMatrix[i, k] is the degree to which
     /// point i belongs to cluster k.
     /// </remarks>
-    public double[,]? MembershipMatrix => _membershipMatrix;
+    public T[,]? MembershipMatrix => _membershipMatrix;
 
     /// <inheritdoc />
     protected override ModelType GetModelType() => ModelType.Clustering;
@@ -110,11 +110,11 @@ public class FuzzyCMeans<T> : ClusteringBase<T>
         var metric = _options.DistanceMetric ?? new EuclideanDistance<T>();
 
         // Initialize membership matrix randomly
-        _membershipMatrix = new double[n, k];
+        _membershipMatrix = new T[n, k];
         InitializeMembership(n, k, rand);
 
         // Cluster centers
-        var centers = new double[k, d];
+        var centers = new T[k, d];
 
         // Iterative optimization
         for (int iter = 0; iter < Options.MaxIterations; iter++)
@@ -123,10 +123,10 @@ public class FuzzyCMeans<T> : ClusteringBase<T>
             UpdateCenters(x, centers, n, d, k, m);
 
             // Step 2: Update memberships
-            double maxChange = UpdateMemberships(x, centers, n, d, k, m, metric);
+            T maxChange = UpdateMemberships(x, centers, n, d, k, m, metric);
 
             // Check convergence
-            if (maxChange < Options.Tolerance)
+            if (NumOps.LessThan(maxChange, NumOps.FromDouble(Options.Tolerance)))
             {
                 break;
             }
@@ -138,7 +138,7 @@ public class FuzzyCMeans<T> : ClusteringBase<T>
         {
             for (int j = 0; j < d; j++)
             {
-                ClusterCenters[c, j] = NumOps.FromDouble(centers[c, j]);
+                ClusterCenters[c, j] = centers[c, j];
             }
         }
 
@@ -147,11 +147,11 @@ public class FuzzyCMeans<T> : ClusteringBase<T>
         for (int i = 0; i < n; i++)
         {
             int bestCluster = 0;
-            double maxMembership = _membershipMatrix[i, 0];
+            T maxMembership = _membershipMatrix[i, 0];
 
             for (int c = 1; c < k; c++)
             {
-                if (_membershipMatrix[i, c] > maxMembership)
+                if (NumOps.GreaterThan(_membershipMatrix[i, c], maxMembership))
                 {
                     maxMembership = _membershipMatrix[i, c];
                     bestCluster = c;
@@ -168,53 +168,56 @@ public class FuzzyCMeans<T> : ClusteringBase<T>
     {
         for (int i = 0; i < n; i++)
         {
-            double sum = 0;
+            T sum = NumOps.Zero;
             for (int c = 0; c < k; c++)
             {
-                _membershipMatrix![i, c] = rand.NextDouble();
-                sum += _membershipMatrix[i, c];
+                _membershipMatrix![i, c] = NumOps.FromDouble(rand.NextDouble());
+                sum = NumOps.Add(sum, _membershipMatrix[i, c]);
             }
 
             // Normalize to sum to 1
             for (int c = 0; c < k; c++)
             {
-                _membershipMatrix![i, c] /= sum;
+                _membershipMatrix![i, c] = NumOps.Divide(_membershipMatrix[i, c], sum);
             }
         }
     }
 
-    private void UpdateCenters(Matrix<T> x, double[,] centers, int n, int d, int k, double m)
+    private void UpdateCenters(Matrix<T> x, T[,] centers, int n, int d, int k, double m)
     {
         for (int c = 0; c < k; c++)
         {
             for (int j = 0; j < d; j++)
             {
-                double numerator = 0;
-                double denominator = 0;
+                T numerator = NumOps.Zero;
+                T denominator = NumOps.Zero;
 
                 for (int i = 0; i < n; i++)
                 {
-                    double membership = Math.Pow(_membershipMatrix![i, c], m);
-                    numerator += membership * NumOps.ToDouble(x[i, j]);
-                    denominator += membership;
+                    T membership = NumOps.FromDouble(Math.Pow(NumOps.ToDouble(_membershipMatrix![i, c]), m));
+                    numerator = NumOps.Add(numerator, NumOps.Multiply(membership, x[i, j]));
+                    denominator = NumOps.Add(denominator, membership);
                 }
 
-                centers[c, j] = denominator > 0 ? numerator / denominator : 0;
+                centers[c, j] = NumOps.GreaterThan(denominator, NumOps.Zero)
+                    ? NumOps.Divide(numerator, denominator)
+                    : NumOps.Zero;
             }
         }
     }
 
-    private double UpdateMemberships(Matrix<T> x, double[,] centers, int n, int d, int k, double m, IDistanceMetric<T> metric)
+    private T UpdateMemberships(Matrix<T> x, T[,] centers, int n, int d, int k, double m, IDistanceMetric<T> metric)
     {
-        double maxChange = 0;
+        T maxChange = NumOps.Zero;
         double exponent = 2.0 / (m - 1);
+        T epsilon = NumOps.FromDouble(1e-10);
 
         for (int i = 0; i < n; i++)
         {
             var point = GetRow(x, i);
 
             // Compute distances to all centers
-            var distances = new double[k];
+            var distances = new T[k];
             bool hasZeroDistance = false;
             int zeroCluster = -1;
 
@@ -223,12 +226,12 @@ public class FuzzyCMeans<T> : ClusteringBase<T>
                 var center = new Vector<T>(d);
                 for (int j = 0; j < d; j++)
                 {
-                    center[j] = NumOps.FromDouble(centers[c, j]);
+                    center[j] = centers[c, j];
                 }
 
-                distances[c] = NumOps.ToDouble(metric.Compute(point, center));
+                distances[c] = metric.Compute(point, center);
 
-                if (distances[c] < 1e-10)
+                if (NumOps.LessThan(distances[c], epsilon))
                 {
                     hasZeroDistance = true;
                     zeroCluster = c;
@@ -238,27 +241,30 @@ public class FuzzyCMeans<T> : ClusteringBase<T>
             // Update memberships
             for (int c = 0; c < k; c++)
             {
-                double oldMembership = _membershipMatrix![i, c];
-                double newMembership;
+                T oldMembership = _membershipMatrix![i, c];
+                T newMembership;
 
                 if (hasZeroDistance)
                 {
                     // Point is exactly at a center
-                    newMembership = (c == zeroCluster) ? 1.0 : 0.0;
+                    newMembership = (c == zeroCluster) ? NumOps.One : NumOps.Zero;
                 }
                 else
                 {
-                    // Standard update formula
+                    // Standard update formula — Math.Pow at double boundary
+                    double distC = NumOps.ToDouble(distances[c]);
                     double sum = 0;
                     for (int j = 0; j < k; j++)
                     {
-                        sum += Math.Pow(distances[c] / distances[j], exponent);
+                        sum += Math.Pow(distC / NumOps.ToDouble(distances[j]), exponent);
                     }
-                    newMembership = 1.0 / sum;
+                    newMembership = NumOps.FromDouble(1.0 / sum);
                 }
 
                 _membershipMatrix[i, c] = newMembership;
-                maxChange = Math.Max(maxChange, Math.Abs(newMembership - oldMembership));
+                T change = NumOps.Abs(NumOps.Subtract(newMembership, oldMembership));
+                if (NumOps.GreaterThan(change, maxChange))
+                    maxChange = change;
             }
         }
 
@@ -276,7 +282,7 @@ public class FuzzyCMeans<T> : ClusteringBase<T>
         for (int i = 0; i < x.Rows; i++)
         {
             var point = GetRow(x, i);
-            double minDist = double.MaxValue;
+            T minDist = NumOps.MaxValue;
             int nearestCluster = 0;
 
             if (ClusterCenters is not null)
@@ -284,9 +290,9 @@ public class FuzzyCMeans<T> : ClusteringBase<T>
                 for (int c = 0; c < NumClusters; c++)
                 {
                     var center = GetRow(ClusterCenters, c);
-                    double dist = NumOps.ToDouble(metric.Compute(point, center));
+                    T dist = metric.Compute(point, center);
 
-                    if (dist < minDist)
+                    if (NumOps.LessThan(dist, minDist))
                     {
                         minDist = dist;
                         nearestCluster = c;
@@ -305,7 +311,7 @@ public class FuzzyCMeans<T> : ClusteringBase<T>
     /// </summary>
     /// <param name="x">The data matrix.</param>
     /// <returns>Membership matrix (n_samples x n_clusters).</returns>
-    public double[,] PredictMembership(Matrix<T> x)
+    public T[,] PredictMembership(Matrix<T> x)
     {
         ValidateIsTrained();
 
@@ -313,27 +319,31 @@ public class FuzzyCMeans<T> : ClusteringBase<T>
         int k = NumClusters;
         double m = _options.Fuzziness;
         var metric = _options.DistanceMetric ?? new EuclideanDistance<T>();
+        T epsilon = NumOps.FromDouble(1e-10);
 
-        var memberships = new double[n, k];
+        var memberships = new T[n, k];
         double exponent = 2.0 / (m - 1);
 
         for (int i = 0; i < n; i++)
         {
             var point = GetRow(x, i);
 
-            var distances = new double[k];
+            var distances = new T[k];
             bool hasZeroDistance = false;
             int zeroCluster = -1;
 
-            for (int c = 0; c < k; c++)
+            if (ClusterCenters is not null)
             {
-                var center = GetRow(ClusterCenters!, c);
-                distances[c] = NumOps.ToDouble(metric.Compute(point, center));
-
-                if (distances[c] < 1e-10)
+                for (int c = 0; c < k; c++)
                 {
-                    hasZeroDistance = true;
-                    zeroCluster = c;
+                    var center = GetRow(ClusterCenters, c);
+                    distances[c] = metric.Compute(point, center);
+
+                    if (NumOps.LessThan(distances[c], epsilon))
+                    {
+                        hasZeroDistance = true;
+                        zeroCluster = c;
+                    }
                 }
             }
 
@@ -341,16 +351,17 @@ public class FuzzyCMeans<T> : ClusteringBase<T>
             {
                 if (hasZeroDistance)
                 {
-                    memberships[i, c] = (c == zeroCluster) ? 1.0 : 0.0;
+                    memberships[i, c] = (c == zeroCluster) ? NumOps.One : NumOps.Zero;
                 }
                 else
                 {
+                    double distC = NumOps.ToDouble(distances[c]);
                     double sum = 0;
                     for (int j = 0; j < k; j++)
                     {
-                        sum += Math.Pow(distances[c] / distances[j], exponent);
+                        sum += Math.Pow(distC / NumOps.ToDouble(distances[j]), exponent);
                     }
-                    memberships[i, c] = 1.0 / sum;
+                    memberships[i, c] = NumOps.FromDouble(1.0 / sum);
                 }
             }
         }
@@ -362,6 +373,6 @@ public class FuzzyCMeans<T> : ClusteringBase<T>
     public override Vector<T> FitPredict(Matrix<T> x)
     {
         Train(x);
-        return Labels!;
+        return Labels ?? new Vector<T>(0);
     }
 }
