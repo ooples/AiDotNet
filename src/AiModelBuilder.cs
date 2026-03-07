@@ -1809,42 +1809,44 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             Console.WriteLine("AutoML configured - starting model search...");
             var searchStartedUtc = DateTimeOffset.UtcNow;
 
-            // Step 1: Apply data preparation (outlier removal, augmentation) - changes row count
+            // Step 1: Split data FIRST to prevent data leakage
             TInput autoMLPreparedX = x;
             TOutput autoMLPreparedY = y;
-            if (_dataPreparationPipeline != null && _dataPreparationPipeline.Count > 0)
-            {
-                if (x is Matrix<T> xMatrix && y is Vector<T> yVector)
-                {
-                    var (prepX, prepY) = _dataPreparationPipeline.FitResample(xMatrix, yVector);
-                    autoMLPreparedX = (TInput)(object)prepX;
-                    autoMLPreparedY = (TOutput)(object)prepY;
-                }
-                else if (x is Tensor<T> xTensor && y is Tensor<T> yTensor)
-                {
-                    var (prepX, prepY) = _dataPreparationPipeline.FitResampleTensor(xTensor, yTensor);
-                    autoMLPreparedX = (TInput)(object)prepX;
-                    autoMLPreparedY = (TOutput)(object)prepY;
-                }
-            }
 
-            // Step 2: Apply preprocessing pipeline (scaling, encoding, etc.) - doesn't change row count
-            TInput autoMLPreprocessedX = autoMLPreparedX;
-            if (_preprocessingPipeline != null)
-            {
-                autoMLPreprocessedX = _preprocessingPipeline.FitTransform(autoMLPreparedX);
-            }
-
-            // Step 3: Split data for AutoML search
             bool shuffleBeforeSplit = !(_autoMLOptions?.TaskFamilyOverride == AutoMLTaskFamily.TimeSeriesForecasting
                 || _autoMLOptions?.TaskFamilyOverride == AutoMLTaskFamily.TimeSeriesAnomalyDetection);
 
             var splitResult = DataSplitter.Split<T, TInput, TOutput>(
-                autoMLPreprocessedX, autoMLPreparedY, trainRatio: 0.7, validationRatio: 0.15, shuffle: shuffleBeforeSplit);
+                autoMLPreparedX, autoMLPreparedY, trainRatio: 0.7, validationRatio: 0.15, shuffle: shuffleBeforeSplit);
             var autoMLXTrain = splitResult.XTrain;
             var autoMLYTrain = splitResult.yTrain;
             var autoMLXVal = splitResult.XVal;
             var autoMLYVal = splitResult.yVal;
+
+            // Step 2: Apply data preparation (SMOTE, outlier removal) to training data ONLY after split.
+            // Applying before split would leak test/validation information via synthetic samples.
+            if (_dataPreparationPipeline != null && _dataPreparationPipeline.Count > 0)
+            {
+                if (autoMLXTrain is Matrix<T> xMatrix && autoMLYTrain is Vector<T> yVector)
+                {
+                    var (prepX, prepY) = _dataPreparationPipeline.FitResample(xMatrix, yVector);
+                    autoMLXTrain = (TInput)(object)prepX;
+                    autoMLYTrain = (TOutput)(object)prepY;
+                }
+                else if (autoMLXTrain is Tensor<T> xTensor && autoMLYTrain is Tensor<T> yTensor)
+                {
+                    var (prepX, prepY) = _dataPreparationPipeline.FitResampleTensor(xTensor, yTensor);
+                    autoMLXTrain = (TInput)(object)prepX;
+                    autoMLYTrain = (TOutput)(object)prepY;
+                }
+            }
+
+            // Step 3: Apply preprocessing pipeline (scaling, encoding, etc.) to training only
+            if (_preprocessingPipeline != null)
+            {
+                autoMLXTrain = _preprocessingPipeline.FitTransform(autoMLXTrain);
+                autoMLXVal = _preprocessingPipeline.Transform(autoMLXVal);
+            }
 
             if (_autoMLOptions?.TaskFamilyOverride is AutoMLTaskFamily taskFamilyOverride)
             {
@@ -2019,24 +2021,12 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         TOutput preprocessedY;
         PreprocessingInfo<T, TInput, TOutput>? preprocessingInfo = null;
 
-        // Step 1: Apply data preparation (outlier removal, augmentation) - changes row count
-        if (_dataPreparationPipeline != null && _dataPreparationPipeline.Count > 0)
-        {
-            if (x is Matrix<T> xMatrix && y is Vector<T> yVector)
-            {
-                var (prepX, prepY) = _dataPreparationPipeline.FitResample(xMatrix, yVector);
-                preparedX = (TInput)(object)prepX;
-                preparedY = (TOutput)(object)prepY;
-            }
-            else if (x is Tensor<T> xTensor && y is Tensor<T> yTensor)
-            {
-                var (prepX, prepY) = _dataPreparationPipeline.FitResampleTensor(xTensor, yTensor);
-                preparedX = (TInput)(object)prepX;
-                preparedY = (TOutput)(object)prepY;
-            }
-        }
+        // Data preparation (outlier removal, augmentation via SMOTE, etc.) is applied AFTER
+        // splitting to prevent data leakage. Applying FitResample before split would allow
+        // synthetic samples derived from test/validation data to leak into the training set.
+        // See the split paths below where FitResample is applied to training data only.
 
-        // Step 2: Split and preprocess
+        // Step 1: Split and preprocess
         // CRITICAL: To prevent data leakage, the preprocessing pipeline must be fitted ONLY on
         // training data. Fitting on the full dataset (before splitting) leaks test/validation
         // statistics (mean, std dev, etc.) into the training pipeline, artificially inflating
@@ -2058,6 +2048,23 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
 
         if (usePartitionedFederatedData)
         {
+            // Federated path: all data is training data — FitResample on everything is correct.
+            if (_dataPreparationPipeline != null && _dataPreparationPipeline.Count > 0)
+            {
+                if (preparedX is Matrix<T> fedMatrix && preparedY is Vector<T> fedVector)
+                {
+                    var (prepX, prepY) = _dataPreparationPipeline.FitResample(fedMatrix, fedVector);
+                    preparedX = (TInput)(object)prepX;
+                    preparedY = (TOutput)(object)prepY;
+                }
+                else if (preparedX is Tensor<T> fedTensor && preparedY is Tensor<T> fedYTensor)
+                {
+                    var (prepX, prepY) = _dataPreparationPipeline.FitResampleTensor(fedTensor, fedYTensor);
+                    preparedX = (TInput)(object)prepX;
+                    preparedY = (TOutput)(object)prepY;
+                }
+            }
+
             // Federated path: all data is training data — FitTransform on everything is correct.
             if (_preprocessingPipeline is not null)
             {
@@ -2105,6 +2112,24 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             // This prevents data leakage from test/validation sets into the preprocessing pipeline.
             (XTrain, yTrain, XVal, yVal, XTest, yTest) = DataSplitter.Split<T, TInput, TOutput>(
                 preparedX, preparedY, trainRatio: 0.7, validationRatio: 0.15, shuffle: true);
+
+            // Apply data preparation (SMOTE, outlier removal, etc.) to training data ONLY after split.
+            // Applying before split would leak test/validation information via synthetic samples.
+            if (_dataPreparationPipeline != null && _dataPreparationPipeline.Count > 0)
+            {
+                if (XTrain is Matrix<T> trainMatrix && yTrain is Vector<T> trainVector)
+                {
+                    var (prepX, prepY) = _dataPreparationPipeline.FitResample(trainMatrix, trainVector);
+                    XTrain = (TInput)(object)prepX;
+                    yTrain = (TOutput)(object)prepY;
+                }
+                else if (XTrain is Tensor<T> trainTensor && yTrain is Tensor<T> trainYTensor)
+                {
+                    var (prepX, prepY) = _dataPreparationPipeline.FitResampleTensor(trainTensor, trainYTensor);
+                    XTrain = (TInput)(object)prepX;
+                    yTrain = (TOutput)(object)prepY;
+                }
+            }
 
             if (_preprocessingPipeline is not null)
             {
