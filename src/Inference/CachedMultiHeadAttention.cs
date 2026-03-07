@@ -269,6 +269,12 @@ internal class CachedMultiHeadAttention<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> ForwardWithCache(Tensor<T> input)
     {
+        if (_cache is null)
+        {
+            throw new InvalidOperationException(
+                $"{nameof(CachedMultiHeadAttention<T>)}: KV cache not attached. Call AttachCache() before using cached inference.");
+        }
+
         int batchSize = input.Shape[0];
         int seqLen = input.Shape[1];
 
@@ -285,12 +291,12 @@ internal class CachedMultiHeadAttention<T> : LayerBase<T>
         // Apply RoPE with position offset for incremental decoding
         if (_ropeLayer != null)
         {
-            int startPosition = _cache!.CurrentLength;
+            int startPosition = _cache.CurrentLength;
             (queries, newKeys) = _ropeLayer.ApplyRoPE(queries, newKeys, startPosition);
         }
 
         // Append to cache and get full K, V
-        var (keys, values) = _cache!.Append(_layerIndex, newKeys, newValues);
+        var (keys, values) = _cache.Append(_layerIndex, newKeys, newValues);
 
         // Compute attention using cached K, V
         Tensor<T> attentionOutput;
@@ -493,16 +499,20 @@ internal class CachedMultiHeadAttention<T> : LayerBase<T>
     /// </summary>
     public override void UpdateParameters(T learningRate)
     {
-        if (_queryWeightsGradient == null)
+        if (_queryWeightsGradient is null ||
+            _keyWeightsGradient is null ||
+            _valueWeightsGradient is null ||
+            _outputWeightsGradient is null ||
+            _outputBiasGradient is null)
         {
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
         }
 
-        _queryWeights = _queryWeights.Subtract(_queryWeightsGradient!.Multiply(learningRate));
-        _keyWeights = _keyWeights.Subtract(_keyWeightsGradient!.Multiply(learningRate));
-        _valueWeights = _valueWeights.Subtract(_valueWeightsGradient!.Multiply(learningRate));
-        _outputWeights = _outputWeights.Subtract(_outputWeightsGradient!.Multiply(learningRate));
-        _outputBias = _outputBias.Subtract(_outputBiasGradient!.Multiply(learningRate));
+        _queryWeights = _queryWeights.Subtract(_queryWeightsGradient.Multiply(learningRate));
+        _keyWeights = _keyWeights.Subtract(_keyWeightsGradient.Multiply(learningRate));
+        _valueWeights = _valueWeights.Subtract(_valueWeightsGradient.Multiply(learningRate));
+        _outputWeights = _outputWeights.Subtract(_outputWeightsGradient.Multiply(learningRate));
+        _outputBias = _outputBias.Subtract(_outputBiasGradient.Multiply(learningRate));
     }
 
     /// <summary>
