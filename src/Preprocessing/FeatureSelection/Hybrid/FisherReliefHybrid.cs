@@ -151,7 +151,7 @@ public class FisherReliefHybrid<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                     dist += diff * diff;
                 }
 
-                bool sameClass = NumOps.LessThan(NumOps.Abs(NumOps.Subtract(target[i], NumOps.FromDouble(targetVal))), NumOps.FromDouble(0.5));
+                bool sameClass = NumOps.Compare(target[i], NumOps.FromDouble(targetVal)) == 0;
                 distances.Add((i, dist, sameClass));
             }
 
