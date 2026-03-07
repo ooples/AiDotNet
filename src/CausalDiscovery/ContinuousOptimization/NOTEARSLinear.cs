@@ -479,7 +479,12 @@ public class NOTEARSLinear<T> : ContinuousOptimizationBase<T>
 
     private static double DotProduct(double[] a, double[] b)
     {
-        return VectorHelper.DotProduct(new Vector<double>(a), new Vector<double>(b));
+        double sum = 0;
+        for (int i = 0; i < a.Length; i++)
+        {
+            sum += a[i] * b[i];
+        }
+        return sum;
     }
 
     private double[] FlattenMatrix(Matrix<T> matrix, int d)

@@ -535,8 +535,15 @@ public class Word2VecVectorizer<T> : TextVectorizerBase<T>
         {
             if (kvp.Key == normalizedWord) continue;
 
-            double similarity = VectorHelper.CosineSimilarity(
-                new Vector<double>(targetVector), new Vector<double>(kvp.Value));
+            double dot = 0, normA = 0, normB = 0;
+            for (int i = 0; i < targetVector.Length; i++)
+            {
+                dot += targetVector[i] * kvp.Value[i];
+                normA += targetVector[i] * targetVector[i];
+                normB += kvp.Value[i] * kvp.Value[i];
+            }
+            double denomSim = Math.Sqrt(normA) * Math.Sqrt(normB);
+            double similarity = denomSim > 1e-10 ? dot / denomSim : 0;
             similarities.Add((kvp.Key, similarity));
         }
 

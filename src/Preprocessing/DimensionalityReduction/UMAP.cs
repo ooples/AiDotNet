@@ -271,18 +271,42 @@ public class UMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// </summary>
     private double ComputeDistance(double[] pointA, double[] pointB)
     {
-        var va = new Vector<double>(pointA);
-        var vb = new Vector<double>(pointB);
+        int len = pointA.Length;
         switch (_metric)
         {
             case UMAPMetric.Euclidean:
-                return VectorHelper.EuclideanDistance(va, vb);
+            {
+                double sum = 0;
+                for (int k = 0; k < len; k++)
+                {
+                    double d = pointA[k] - pointB[k];
+                    sum += d * d;
+                }
+                return Math.Sqrt(sum);
+            }
 
             case UMAPMetric.Manhattan:
-                return VectorHelper.ManhattanDistance(va, vb);
+            {
+                double sum = 0;
+                for (int k = 0; k < len; k++)
+                {
+                    sum += Math.Abs(pointA[k] - pointB[k]);
+                }
+                return sum;
+            }
 
             case UMAPMetric.Cosine:
-                return 1.0 - VectorHelper.CosineSimilarity(va, vb);
+            {
+                double dot = 0, nA = 0, nB = 0;
+                for (int k = 0; k < len; k++)
+                {
+                    dot += pointA[k] * pointB[k];
+                    nA += pointA[k] * pointA[k];
+                    nB += pointB[k] * pointB[k];
+                }
+                double denom = Math.Sqrt(nA) * Math.Sqrt(nB);
+                return denom > 1e-10 ? 1.0 - dot / denom : 1.0;
+            }
 
             case UMAPMetric.Correlation:
                 int dim = pointA.Length;

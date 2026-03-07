@@ -1,6 +1,5 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
-using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.AnomalyDetection.TreeBased;
@@ -316,7 +315,12 @@ public class SCiForest<T> : AnomalyDetectorBase<T>
 
         private static double DotProduct(double[] a, double[] b)
         {
-            return VectorHelper.DotProduct(new Vector<double>(a), new Vector<double>(b));
+            double sum = 0;
+            for (int i = 0; i < a.Length; i++)
+            {
+                sum += a[i] * b[i];
+            }
+            return sum;
         }
 
         private static double EstimateC(int n)

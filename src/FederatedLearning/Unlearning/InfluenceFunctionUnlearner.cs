@@ -212,8 +212,15 @@ public class InfluenceFunctionUnlearner<T> : FederatedLearningComponentBase<T>, 
     private static double EstimateMembershipScore(double[] gradient, double[] correction)
     {
         // How well the correction aligns with the original gradient
-        double alignment = VectorHelper.CosineSimilarity(
-            new Vector<double>(gradient), new Vector<double>(correction));
+        double dot = 0, normA = 0, normB = 0;
+        for (int i = 0; i < gradient.Length; i++)
+        {
+            dot += gradient[i] * correction[i];
+            normA += gradient[i] * gradient[i];
+            normB += correction[i] * correction[i];
+        }
+        double denomCS = Math.Sqrt(normA) * Math.Sqrt(normB);
+        double alignment = denomCS > 1e-10 ? dot / denomCS : 0;
 
         // Good unlearning: correction aligns well with gradient (removes it)
         return 0.5 + Math.Abs(alignment) * 0.4;

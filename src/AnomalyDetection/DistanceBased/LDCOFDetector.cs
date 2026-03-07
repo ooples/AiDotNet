@@ -314,6 +314,12 @@ public class LDCOFDetector<T> : AnomalyDetectorBase<T>
 
     private static double EuclideanDistance(double[] a, double[] b)
     {
-        return VectorHelper.EuclideanDistance(new Vector<double>(a), new Vector<double>(b));
+        double sum = 0;
+        for (int i = 0; i < a.Length; i++)
+        {
+            double diff = a[i] - b[i];
+            sum += diff * diff;
+        }
+        return Math.Sqrt(sum);
     }
 }

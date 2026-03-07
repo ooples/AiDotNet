@@ -188,8 +188,15 @@ public class ExactRetrainingUnlearner<T> : FederatedLearningComponentBase<T>, IF
             }
         }
 
-        return VectorHelper.CosineSimilarity(
-            new Vector<double>(diff), new Vector<double>(update));
+        double dot = 0, normA = 0, normB = 0;
+        for (int i = 0; i < diff.Length; i++)
+        {
+            dot += diff[i] * update[i];
+            normA += diff[i] * diff[i];
+            normB += update[i] * update[i];
+        }
+        double denom = Math.Sqrt(normA) * Math.Sqrt(normB);
+        return denom > 1e-10 ? dot / denom : 0;
     }
 
     private string ComputeModelHash(Tensor<T> model)
