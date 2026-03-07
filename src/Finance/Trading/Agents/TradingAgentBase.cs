@@ -349,7 +349,7 @@ public abstract class TradingAgentBase<T> : ReinforcementLearningAgentBase<T>, I
         {
             TradeHistory.Add(pnl);
             _totalTrades++;
-            if (NumOps.ToDouble(pnl) > 0)
+            if (NumOps.GreaterThan(pnl, NumOps.Zero))
             {
                 _winningTrades++;
             }
@@ -403,7 +403,7 @@ public abstract class TradingAgentBase<T> : ReinforcementLearningAgentBase<T>, I
         {
             T prevValue = PortfolioHistory[i - 1];
             T currValue = PortfolioHistory[i];
-            if (NumOps.ToDouble(prevValue) > 0)
+            if (NumOps.GreaterThan(prevValue, NumOps.Zero))
             {
                 T ret = NumOps.Divide(NumOps.Subtract(currValue, prevValue), prevValue);
                 returns.Add(ret);
@@ -465,7 +465,7 @@ public abstract class TradingAgentBase<T> : ReinforcementLearningAgentBase<T>, I
                 peak = value;
             }
 
-            if (NumOps.ToDouble(peak) > 0)
+            if (NumOps.GreaterThan(peak, NumOps.Zero))
             {
                 T drawdown = NumOps.Divide(NumOps.Subtract(peak, value), peak);
                 if (NumOps.GreaterThan(drawdown, maxDrawdown))
@@ -491,7 +491,7 @@ public abstract class TradingAgentBase<T> : ReinforcementLearningAgentBase<T>, I
     /// </remarks>
     protected virtual T CalculateCumulativeReturn()
     {
-        if (NumOps.ToDouble(_initialCapital) <= 0) return NumOps.Zero;
+        if (!NumOps.GreaterThan(_initialCapital, NumOps.Zero)) return NumOps.Zero;
 
         return NumOps.Divide(
             NumOps.Subtract(_portfolioValue, _initialCapital),
@@ -547,7 +547,7 @@ public abstract class TradingAgentBase<T> : ReinforcementLearningAgentBase<T>, I
             if (NumOps.GreaterThan(absValue, maxPositionSize))
             {
                 // Scale down to max position size
-                T sign = NumOps.ToDouble(value) >= 0 ? NumOps.One : NumOps.FromDouble(-1);
+                T sign = !NumOps.LessThan(value, NumOps.Zero) ? NumOps.One : NumOps.FromDouble(-1);
                 constrainedAction[i] = NumOps.Multiply(sign, maxPositionSize);
             }
             else

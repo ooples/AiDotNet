@@ -712,7 +712,7 @@ internal class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
         {
             sum = NumOps.Add(sum, importances[f]);
         }
-        if (NumOps.ToDouble(sum) > 0)
+        if (NumOps.GreaterThan(sum, NumOps.Zero))
         {
             for (int f = 0; f < _numFeatures; f++)
             {

@@ -498,7 +498,7 @@ public class AnomalyTransformerDetector<T> : AnomalyDetectorBase<T>
             // ReLU derivative
             for (int i = 0; i < ffDim; i++)
             {
-                if (NumOps.ToDouble(ffHidden[t, i]) <= 0) dH[i] = 0;
+                if (!NumOps.GreaterThan(ffHidden[t, i], NumOps.Zero)) dH[i] = 0;
             }
 
             // Gradient through first layer

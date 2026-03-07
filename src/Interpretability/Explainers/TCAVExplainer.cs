@@ -546,7 +546,7 @@ public class TCAVExplainer<T> : IGPUAcceleratedExplainer<T>
         {
             var input = testInputs.GetRow(i);
             var derivative = ComputeDirectionalDerivative(input, cav, targetClass);
-            if (NumOps.ToDouble(derivative) > 0)
+            if (NumOps.GreaterThan(derivative, NumOps.Zero))
             {
                 positiveCount++;
             }
@@ -741,7 +741,7 @@ public class TCAVExplainer<T> : IGPUAcceleratedExplainer<T>
             directionalDerivative: derivative,
             conceptProjection: NumOps.FromDouble(projectionMagnitude),
             prediction: prediction[targetClass],
-            influenceDirection: NumOps.ToDouble(derivative) > 0 ? "positive" : "negative");
+            influenceDirection: NumOps.GreaterThan(derivative, NumOps.Zero) ? "positive" : "negative");
     }
 
     /// <summary>

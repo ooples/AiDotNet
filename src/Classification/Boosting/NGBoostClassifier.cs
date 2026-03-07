@@ -513,7 +513,7 @@ public class NGBoostClassifier<T> : EnsembleClassifierBase<T>
         {
             sum = NumOps.Add(sum, importances[i]);
         }
-        if (NumOps.ToDouble(sum) > 0)
+        if (NumOps.GreaterThan(sum, NumOps.Zero))
         {
             for (int i = 0; i < featureCount; i++)
             {

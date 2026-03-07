@@ -665,7 +665,7 @@ public class TreeSHAPExplanation<T>
     public List<(string name, T value, T shapValue)> GetPositiveContributions()
     {
         return GetSortedAttributions()
-            .Where(x => NumOps.ToDouble(x.shapValue) > 0)
+            .Where(x => NumOps.GreaterThan(x.shapValue, NumOps.Zero))
             .ToList();
     }
 
@@ -681,7 +681,7 @@ public class TreeSHAPExplanation<T>
     public List<(string name, T value, T shapValue)> GetNegativeContributions()
     {
         return GetSortedAttributions()
-            .Where(x => NumOps.ToDouble(x.shapValue) < 0)
+            .Where(x => NumOps.LessThan(x.shapValue, NumOps.Zero))
             .OrderBy(x => NumOps.ToDouble(x.shapValue))
             .ToList();
     }

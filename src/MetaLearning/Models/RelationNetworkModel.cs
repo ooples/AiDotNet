@@ -367,7 +367,7 @@ public class RelationNetworkModel<T, TInput, TOutput> : IModel<TInput, TOutput, 
         }
 
         // Normalize
-        if (NumOps.ToDouble(sum) > 0)
+        if (NumOps.GreaterThan(sum, NumOps.Zero))
         {
             for (int i = 0; i < probabilities.Length; i++)
             {

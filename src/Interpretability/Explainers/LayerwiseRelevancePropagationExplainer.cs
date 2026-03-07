@@ -562,7 +562,7 @@ public class LRPExplanation<T>
     public List<(string name, T relevance)> GetPositiveRelevance()
     {
         return GetSortedRelevance()
-            .Where(x => NumOps.ToDouble(x.relevance) > 0)
+            .Where(x => NumOps.GreaterThan(x.relevance, NumOps.Zero))
             .ToList();
     }
 
@@ -572,7 +572,7 @@ public class LRPExplanation<T>
     public List<(string name, T relevance)> GetNegativeRelevance()
     {
         return GetSortedRelevance()
-            .Where(x => NumOps.ToDouble(x.relevance) < 0)
+            .Where(x => NumOps.LessThan(x.relevance, NumOps.Zero))
             .OrderBy(x => NumOps.ToDouble(x.relevance))
             .ToList();
     }

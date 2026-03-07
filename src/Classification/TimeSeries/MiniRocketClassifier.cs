@@ -182,7 +182,7 @@ public class MiniRocketClassifier<T> : ClassifierBase<T>, ITimeSeriesClassifier<
             {
                 // Binary classification
                 T score = ComputeScore(input, i, _weights);
-                predictions[i] = NumOps.ToDouble(score) >= 0
+                predictions[i] = !NumOps.LessThan(score, NumOps.Zero)
                     ? ClassLabels![1]
                     : ClassLabels![0];
             }

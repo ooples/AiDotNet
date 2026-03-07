@@ -514,7 +514,7 @@ public class AnoGANDetector<T> : AnomalyDetectorBase<T>
         // LeakyReLU derivative for h2
         for (int i = 0; i < _hiddenDim; i++)
         {
-            if (NumOps.ToDouble(h2[i]) < 0)
+            if (NumOps.LessThan(h2[i], NumOps.Zero))
                 dH2[i] = NumOps.Multiply(dH2[i], NumOps.FromDouble(0.2));
         }
 
@@ -541,7 +541,7 @@ public class AnoGANDetector<T> : AnomalyDetectorBase<T>
         // LeakyReLU derivative for h1
         for (int i = 0; i < _hiddenDim; i++)
         {
-            if (NumOps.ToDouble(h1[i]) < 0)
+            if (NumOps.LessThan(h1[i], NumOps.Zero))
                 dH1[i] = NumOps.Multiply(dH1[i], NumOps.FromDouble(0.2));
         }
 
@@ -659,7 +659,7 @@ public class AnoGANDetector<T> : AnomalyDetectorBase<T>
         // LeakyReLU derivative for h2
         for (int i = 0; i < _hiddenDim; i++)
         {
-            if (NumOps.ToDouble(h2[i]) < 0)
+            if (NumOps.LessThan(h2[i], NumOps.Zero))
                 dH2[i] = NumOps.Multiply(dH2[i], NumOps.FromDouble(0.2));
         }
 
@@ -690,7 +690,7 @@ public class AnoGANDetector<T> : AnomalyDetectorBase<T>
         // LeakyReLU derivative for h1
         for (int i = 0; i < _hiddenDim; i++)
         {
-            if (NumOps.ToDouble(h1[i]) < 0)
+            if (NumOps.LessThan(h1[i], NumOps.Zero))
                 dH1[i] = NumOps.Multiply(dH1[i], NumOps.FromDouble(0.2));
         }
 
@@ -768,7 +768,7 @@ public class AnoGANDetector<T> : AnomalyDetectorBase<T>
         // LeakyReLU derivative for h2
         for (int i = 0; i < _hiddenDim; i++)
         {
-            if (NumOps.ToDouble(h2[i]) < 0)
+            if (NumOps.LessThan(h2[i], NumOps.Zero))
                 dH2[i] = NumOps.Multiply(dH2[i], NumOps.FromDouble(0.2));
         }
 
@@ -795,7 +795,7 @@ public class AnoGANDetector<T> : AnomalyDetectorBase<T>
         // LeakyReLU derivative for h1
         for (int i = 0; i < _hiddenDim; i++)
         {
-            if (NumOps.ToDouble(h1[i]) < 0)
+            if (NumOps.LessThan(h1[i], NumOps.Zero))
                 dH1[i] = NumOps.Multiply(dH1[i], NumOps.FromDouble(0.2));
         }
 
