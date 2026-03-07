@@ -387,9 +387,6 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                 new StandardScaler<T>());
         }
 
-        // Set global registry so all models automatically use this pipeline
-        PreprocessingRegistry<T, TInput>.Current = _preprocessingPipeline;
-
         return this;
     }
 
@@ -430,9 +427,6 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             _preprocessingPipeline.Add((IDataTransformer<T, TInput, TInput>)(object)
                 new StandardScaler<T>());
         }
-
-        // Set global registry so all models automatically use this pipeline
-        PreprocessingRegistry<T, TInput>.Current = _preprocessingPipeline;
 
         return this;
     }
@@ -476,9 +470,6 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                 new StandardScaler<T>());
         }
 
-        // Set global registry so all models automatically use this pipeline
-        PreprocessingRegistry<T, TInput>.Current = _preprocessingPipeline;
-
         return this;
     }
 
@@ -514,9 +505,6 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         // because the appropriate postprocessing depends heavily on the model type
         // (classification vs regression vs generation, etc.)
 
-        // Set global registry so all models automatically use this pipeline
-        PostprocessingRegistry<T, TOutput>.Current = _postprocessingPipeline;
-
         return this;
     }
 
@@ -546,9 +534,6 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         }
         // Note: Unlike preprocessing, postprocessing doesn't have universal defaults
         // because the appropriate postprocessing depends heavily on the model type
-
-        // Set global registry so all models automatically use this pipeline
-        PostprocessingRegistry<T, TOutput>.Current = _postprocessingPipeline;
 
         return this;
     }
@@ -583,9 +568,6 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             // because appropriate postprocessing depends on model type
             _postprocessingPipeline = new PostprocessingPipeline<T, TOutput, TOutput>();
         }
-
-        // Set global registry so all models automatically use this pipeline
-        PostprocessingRegistry<T, TOutput>.Current = _postprocessingPipeline;
 
         return this;
     }

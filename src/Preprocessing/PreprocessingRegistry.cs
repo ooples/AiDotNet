@@ -7,6 +7,13 @@ namespace AiDotNet.Preprocessing;
 /// </summary>
 /// <remarks>
 /// <para>
+/// <b>Deprecated:</b> This static registry causes race conditions when multiple
+/// <c>AiModelBuilder</c> instances build models concurrently, because they overwrite
+/// each other's pipeline. Use instance-based preprocessing via
+/// <c>AiModelBuilder.ConfigurePreprocessing()</c> instead, which stores the pipeline
+/// per-builder and flows it to <c>AiModelResult</c> via <c>PreprocessingInfo</c>.
+/// </para>
+/// <para>
 /// PreprocessingRegistry provides a singleton pattern for managing the active preprocessing pipeline.
 /// By default, a standard pipeline with imputation and scaling is used. Users can configure
 /// custom preprocessing via AiModelBuilder.ConfigurePreprocessing().
@@ -28,6 +35,8 @@ namespace AiDotNet.Preprocessing;
 /// </remarks>
 /// <typeparam name="T">The numeric type for calculations (e.g., float, double).</typeparam>
 /// <typeparam name="TInput">The input data type.</typeparam>
+[Obsolete("Use instance-based preprocessing via AiModelBuilder.ConfigurePreprocessing() instead. " +
+    "This static registry causes race conditions in concurrent model building and will be removed in a future version.")]
 public static class PreprocessingRegistry<T, TInput>
 {
     private static IDataTransformer<T, TInput, TInput>? _current;

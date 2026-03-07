@@ -6,7 +6,6 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Onnx;
 using AiDotNet.Postprocessing;
-using AiDotNet.Preprocessing;
 
 namespace AiDotNet.Document;
 
@@ -108,6 +107,26 @@ public abstract class DocumentNeuralNetworkBase<T> : NeuralNetworkBase<T>
 
     #endregion
 
+    #region Preprocessing
+
+    /// <summary>
+    /// Gets or sets the instance-level preprocessing transformer for this document model.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// When set, <see cref="PreprocessDocument"/> uses this transformer instead of
+    /// <see cref="ApplyDefaultPreprocessing"/>. This replaces the former static
+    /// <c>PreprocessingRegistry</c> approach, which caused race conditions when
+    /// multiple models were built concurrently.
+    /// </para>
+    /// <para><b>For Beginners:</b> If you want to customize how images are processed
+    /// before being fed into this model, set this property. Otherwise, the model
+    /// uses its own industry-standard defaults automatically.</para>
+    /// </remarks>
+    protected IDataTransformer<T, Tensor<T>, Tensor<T>>? PreprocessingTransformer { get; set; }
+
+    #endregion
+
     #region Constructor
 
     /// <summary>
@@ -148,8 +167,8 @@ public abstract class DocumentNeuralNetworkBase<T> : NeuralNetworkBase<T>
     /// <remarks>
     /// <para>
     /// <b>Priority Order:</b>
-    /// 1. If user configured a pipeline via AiModelBuilder.ConfigurePreprocessing() → use it
-    /// 2. Otherwise → use industry-standard defaults for this specific model type
+    /// 1. If an instance-level <see cref="PreprocessingTransformer"/> has been set, use it
+    /// 2. Otherwise, use industry-standard defaults for this specific model type
     /// </para>
     /// <para>
     /// <b>For Beginners:</b> Raw images need to be transformed before the model can process them.
@@ -166,10 +185,11 @@ public abstract class DocumentNeuralNetworkBase<T> : NeuralNetworkBase<T>
     /// </remarks>
     protected Tensor<T> PreprocessDocument(Tensor<T> rawImage)
     {
-        // Priority 1: User-configured pipeline via AiModelBuilder
-        if (PreprocessingRegistry<T, Tensor<T>>.IsConfigured)
+        // Priority 1: Instance-level transformer (set explicitly on this model)
+        var transformer = PreprocessingTransformer;
+        if (transformer is not null && transformer.IsFitted)
         {
-            return PreprocessingRegistry<T, Tensor<T>>.Transform(rawImage);
+            return transformer.Transform(rawImage);
         }
 
         // Priority 2: Model-specific industry-standard defaults
