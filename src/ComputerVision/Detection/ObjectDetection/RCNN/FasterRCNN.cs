@@ -108,10 +108,10 @@ public class FasterRCNN<T> : ObjectDetectorBase<T>
         int imageWidth = input.Shape[3];
 
         // Extract backbone features
-        var backboneFeatures = Backbone!.ExtractFeatures(input);
+        var backboneFeatures = EnsureBackbone.ExtractFeatures(input);
 
         // Apply FPN neck to get multi-scale features
-        var fpnFeatures = Neck!.Forward(backboneFeatures);
+        var fpnFeatures = EnsureNeck.Forward(backboneFeatures);
 
         // Use P4 level for RPN (good balance of resolution and receptive field)
         var rpnFeatures = fpnFeatures.Count > 1 ? fpnFeatures[1] : fpnFeatures[0];
@@ -312,10 +312,10 @@ public class FasterRCNN<T> : ObjectDetectorBase<T>
         }
 
         // Read backbone parameters
-        Backbone!.ReadParameters(reader);
+        EnsureBackbone.ReadParameters(reader);
 
         // Read neck parameters
-        Neck!.ReadParameters(reader);
+        EnsureNeck.ReadParameters(reader);
 
         // Read RPN parameters
         _rpn.ReadParameters(reader);
@@ -341,10 +341,10 @@ public class FasterRCNN<T> : ObjectDetectorBase<T>
         writer.Write(Name);
 
         // Write backbone parameters
-        Backbone!.WriteParameters(writer);
+        EnsureBackbone.WriteParameters(writer);
 
         // Write neck parameters
-        Neck!.WriteParameters(writer);
+        EnsureNeck.WriteParameters(writer);
 
         // Write RPN parameters
         _rpn.WriteParameters(writer);
