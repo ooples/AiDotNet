@@ -1,5 +1,6 @@
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
+using Newtonsoft.Json;
 
 namespace AiDotNet.Preprocessing.Scalers;
 
@@ -22,11 +23,13 @@ namespace AiDotNet.Preprocessing.Scalers;
 /// <typeparam name="T">The numeric type for calculations (e.g., float, double).</typeparam>
 public class DecimalScaler<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 {
+    [JsonProperty]
     private Vector<T>? _scale;
 
     /// <summary>
     /// Gets the power-of-10 scale factor for each feature computed during fitting.
     /// </summary>
+    [JsonIgnore]
     public Vector<T>? Scale => _scale;
 
     /// <summary>
