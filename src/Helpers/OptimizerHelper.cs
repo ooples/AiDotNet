@@ -35,7 +35,8 @@ public static class OptimizerHelper<T, TInput, TOutput>
         OptimizationResult<T, TInput, TOutput>.DatasetResult validationResult,
         OptimizationResult<T, TInput, TOutput>.DatasetResult testResult,
         FitDetectorResult<T> bestFitDetectionResult,
-        int iterationCount)
+        int iterationCount,
+        List<int>? bestSelectedFeatureIndices = null)
     {
         return new OptimizationResult<T, TInput, TOutput>
         {
@@ -44,6 +45,7 @@ public static class OptimizerHelper<T, TInput, TOutput>
             Iterations = iterationCount,
             FitnessHistory = new Vector<T>([.. fitnessHistory]),
             SelectedFeatures = bestSelectedFeatures,
+            SelectedFeatureIndices = bestSelectedFeatureIndices ?? new List<int>(),
             TrainingResult = trainingResult,
             ValidationResult = validationResult,
             TestResult = testResult,

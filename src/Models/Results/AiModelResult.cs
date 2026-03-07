@@ -1830,6 +1830,20 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             ? PreprocessingInfo.TransformFeatures(dataForPrediction)
             : dataForPrediction;
 
+        // Apply feature selection if the optimizer selected a subset of features during training.
+        // Without this, the model receives all columns but was trained on a subset, causing
+        // dimension mismatch errors (e.g., "Number of columns must equal length of vector").
+        var featureIndices = OptimizationResult?.SelectedFeatureIndices;
+        if (featureIndices != null && featureIndices.Count > 0)
+        {
+            int inputSize = Helpers.InputHelper<T, TInput>.GetInputSize(normalizedNewData);
+            if (inputSize > featureIndices.Count)
+            {
+                normalizedNewData = Helpers.OptimizerHelper<T, TInput, TOutput>
+                    .SelectFeatures(normalizedNewData, featureIndices);
+            }
+        }
+
         // Use JIT-compiled function if available for 5-10x faster predictions
         TOutput normalizedPredictions;
 

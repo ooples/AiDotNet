@@ -163,4 +163,9 @@ public struct ModelResult<T, TInput, TOutput>
     /// </para>
     /// </remarks>
     public List<Vector<T>> SelectedFeatures { get; set; }
+
+    /// <summary>
+    /// Gets or sets the column indices of features selected during optimization.
+    /// </summary>
+    public List<int> SelectedFeatureIndices { get; set; }
 }

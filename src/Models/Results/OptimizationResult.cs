@@ -224,6 +224,18 @@ public class OptimizationResult<T, TInput, TOutput>
     public List<Vector<T>> SelectedFeatures { get; set; }
 
     /// <summary>
+    /// Gets or sets the column indices of features selected during optimization.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// These are the actual column indices selected during the optimization process.
+    /// They must be applied to new input data before calling Model.Predict() to ensure
+    /// the input dimensions match what the model was trained on.
+    /// </para>
+    /// </remarks>
+    public List<int> SelectedFeatureIndices { get; set; } = new List<int>();
+
+    /// <summary>
     /// Gets or sets the detailed results for the training dataset.
     /// </summary>
     /// <value>A DatasetResult object containing detailed statistics for the training dataset.</value>
@@ -447,6 +459,7 @@ public class OptimizationResult<T, TInput, TOutput>
         _numOps = MathHelper.GetNumericOperations<T>();
         FitnessHistory = Vector<T>.Empty();
         SelectedFeatures = new List<Vector<T>>();
+        SelectedFeatureIndices = new List<int>();
         TrainingResult = new DatasetResult();
         ValidationResult = new DatasetResult();
         TestResult = new DatasetResult();
@@ -471,6 +484,7 @@ public class OptimizationResult<T, TInput, TOutput>
             Iterations = Iterations,
             FitnessHistory = new Vector<T>(FitnessHistory.ToArray()),
             SelectedFeatures = SelectedFeatures.Select(v => new Vector<T>(v.ToArray())).ToList(),
+            SelectedFeatureIndices = new List<int>(SelectedFeatureIndices),
             TrainingResult = TrainingResult,
             ValidationResult = ValidationResult,
             TestResult = TestResult,
@@ -495,6 +509,7 @@ public class OptimizationResult<T, TInput, TOutput>
             Iterations = Iterations,
             FitnessHistory = FitnessHistory,
             SelectedFeatures = SelectedFeatures,
+            SelectedFeatureIndices = SelectedFeatureIndices,
             TrainingResult = TrainingResult,
             ValidationResult = ValidationResult,
             TestResult = TestResult,
