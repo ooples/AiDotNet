@@ -554,6 +554,10 @@ public class S4DLayer<T> : LayerBase<T>
     private Tensor<T> ComplexRecurrentScanBackward(
         Tensor<T> dOutput, Tensor<T> x, int batchSize, int seqLen)
     {
+        var hiddenStatesReal = _lastHiddenStatesReal
+            ?? throw new InvalidOperationException("Forward pass must be called before backward pass.");
+        var hiddenStatesImag = _lastHiddenStatesImag
+            ?? throw new InvalidOperationException("Forward pass must be called before backward pass.");
         var dX = new Tensor<T>(new[] { batchSize, seqLen, _innerDimension });
 
         // Initialize gradient accumulators
@@ -599,10 +603,10 @@ public class S4DLayer<T> : LayerBase<T>
         {
             var x_t = x.GetSliceAlongDimension(t, 1);
             var dOut_t = dOutput.GetSliceAlongDimension(t, 1);
-            var hReal_t = _lastHiddenStatesReal!.GetSliceAlongDimension(t + 1, 1);
-            var hImag_t = _lastHiddenStatesImag!.GetSliceAlongDimension(t + 1, 1);
-            var hReal_prev = _lastHiddenStatesReal.GetSliceAlongDimension(t, 1);
-            var hImag_prev = _lastHiddenStatesImag.GetSliceAlongDimension(t, 1);
+            var hReal_t = hiddenStatesReal.GetSliceAlongDimension(t + 1, 1);
+            var hImag_t = hiddenStatesImag.GetSliceAlongDimension(t + 1, 1);
+            var hReal_prev = hiddenStatesReal.GetSliceAlongDimension(t, 1);
+            var hImag_prev = hiddenStatesImag.GetSliceAlongDimension(t, 1);
 
             var dOut_t_3D = Engine.TensorExpandDims(dOut_t, 2);
 

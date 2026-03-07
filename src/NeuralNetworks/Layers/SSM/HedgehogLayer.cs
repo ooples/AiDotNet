@@ -744,6 +744,15 @@ public class HedgehogLayer<T> : LayerBase<T>
         Tensor<T> dPhi, Tensor<T> inputQK, Tensor<T> hidden, Tensor<T> preActivation,
         Tensor<T> dInput, int bi, int t, int hi, int dimStart)
     {
+        if (_featureMapW2Gradient is null || _featureMapB2Gradient is null ||
+            _featureMapB1Gradient is null || _featureMapW1Gradient is null)
+            throw new InvalidOperationException("Gradients must be initialized before backward pass.");
+
+        var fmW2Grad = _featureMapW2Gradient;
+        var fmB2Grad = _featureMapB2Gradient;
+        var fmB1Grad = _featureMapB1Gradient;
+        var fmW1Grad = _featureMapW1Gradient;
+
         // dPhi -> W2 backward: dHidden = W2^T * dPhi, dW2 += dPhi * hidden^T
         var dHidden = new T[_featureMapHiddenDim];
 
@@ -756,12 +765,12 @@ public class HedgehogLayer<T> : LayerBase<T>
                 T hVal = hidden[new[] { bi, t, hi, fi }];
 
                 // dW2[hi, fi, di] += dPhiVal * hVal
-                _featureMapW2Gradient![new[] { hi, fi, di }] = NumOps.Add(
+                fmW2Grad[new[] { hi, fi, di }] = NumOps.Add(
                     _featureMapW2Gradient[new[] { hi, fi, di }],
                     NumOps.Multiply(dPhiVal, hVal));
 
                 // dB2[hi, di] += dPhiVal
-                _featureMapB2Gradient![new[] { hi, di }] = NumOps.Add(
+                fmB2Grad[new[] { hi, di }] = NumOps.Add(
                     _featureMapB2Gradient[new[] { hi, di }], dPhiVal);
 
                 dH = NumOps.Add(dH,
@@ -784,7 +793,7 @@ public class HedgehogLayer<T> : LayerBase<T>
             dPreAct[fi] = NumOps.Multiply(dHidden[fi], geluDeriv);
 
             // dB1[hi, fi] += dPreAct
-            _featureMapB1Gradient![new[] { hi, fi }] = NumOps.Add(
+            fmB1Grad[new[] { hi, fi }] = NumOps.Add(
                 _featureMapB1Gradient[new[] { hi, fi }], dPreAct[fi]);
         }
 
@@ -797,7 +806,7 @@ public class HedgehogLayer<T> : LayerBase<T>
             for (int fi = 0; fi < _featureMapHiddenDim; fi++)
             {
                 // dW1[hi, di, fi] += dPreAct[fi] * input[di]
-                _featureMapW1Gradient![new[] { hi, di, fi }] = NumOps.Add(
+                fmW1Grad[new[] { hi, di, fi }] = NumOps.Add(
                     _featureMapW1Gradient[new[] { hi, di, fi }],
                     NumOps.Multiply(dPreAct[fi], inputVal));
 
@@ -831,16 +840,27 @@ public class HedgehogLayer<T> : LayerBase<T>
 
         T negLR = NumOps.Negate(learningRate);
         _queryWeights = Engine.TensorAdd(_queryWeights, Engine.TensorMultiplyScalar(_queryWeightsGradient, negLR));
-        _keyWeights = Engine.TensorAdd(_keyWeights, Engine.TensorMultiplyScalar(_keyWeightsGradient!, negLR));
-        _valueWeights = Engine.TensorAdd(_valueWeights, Engine.TensorMultiplyScalar(_valueWeightsGradient!, negLR));
-        _featureMapW1 = Engine.TensorAdd(_featureMapW1, Engine.TensorMultiplyScalar(_featureMapW1Gradient!, negLR));
-        _featureMapB1 = Engine.TensorAdd(_featureMapB1, Engine.TensorMultiplyScalar(_featureMapB1Gradient!, negLR));
-        _featureMapW2 = Engine.TensorAdd(_featureMapW2, Engine.TensorMultiplyScalar(_featureMapW2Gradient!, negLR));
-        _featureMapB2 = Engine.TensorAdd(_featureMapB2, Engine.TensorMultiplyScalar(_featureMapB2Gradient!, negLR));
-        _outputGateWeights = Engine.TensorAdd(_outputGateWeights, Engine.TensorMultiplyScalar(_outputGateWeightsGradient!, negLR));
-        _outputGateBias = Engine.TensorAdd(_outputGateBias, Engine.TensorMultiplyScalar(_outputGateBiasGradient!, negLR));
-        _outputProjectionWeights = Engine.TensorAdd(_outputProjectionWeights, Engine.TensorMultiplyScalar(_outputProjectionWeightsGradient!, negLR));
-        _outputProjectionBias = Engine.TensorAdd(_outputProjectionBias, Engine.TensorMultiplyScalar(_outputProjectionBiasGradient!, negLR));
+        var keyGrad = _keyWeightsGradient ?? throw new InvalidOperationException("Backward pass must be called before updating parameters.");
+        var valueGrad = _valueWeightsGradient ?? throw new InvalidOperationException("Backward pass must be called before updating parameters.");
+        var w1Grad = _featureMapW1Gradient ?? throw new InvalidOperationException("Backward pass must be called before updating parameters.");
+        var b1Grad = _featureMapB1Gradient ?? throw new InvalidOperationException("Backward pass must be called before updating parameters.");
+        var w2Grad = _featureMapW2Gradient ?? throw new InvalidOperationException("Backward pass must be called before updating parameters.");
+        var b2Grad = _featureMapB2Gradient ?? throw new InvalidOperationException("Backward pass must be called before updating parameters.");
+        var outGateWGrad = _outputGateWeightsGradient ?? throw new InvalidOperationException("Backward pass must be called before updating parameters.");
+        var outGateBGrad = _outputGateBiasGradient ?? throw new InvalidOperationException("Backward pass must be called before updating parameters.");
+        var outProjWGrad = _outputProjectionWeightsGradient ?? throw new InvalidOperationException("Backward pass must be called before updating parameters.");
+        var outProjBGrad = _outputProjectionBiasGradient ?? throw new InvalidOperationException("Backward pass must be called before updating parameters.");
+
+        _keyWeights = Engine.TensorAdd(_keyWeights, Engine.TensorMultiplyScalar(keyGrad, negLR));
+        _valueWeights = Engine.TensorAdd(_valueWeights, Engine.TensorMultiplyScalar(valueGrad, negLR));
+        _featureMapW1 = Engine.TensorAdd(_featureMapW1, Engine.TensorMultiplyScalar(w1Grad, negLR));
+        _featureMapB1 = Engine.TensorAdd(_featureMapB1, Engine.TensorMultiplyScalar(b1Grad, negLR));
+        _featureMapW2 = Engine.TensorAdd(_featureMapW2, Engine.TensorMultiplyScalar(w2Grad, negLR));
+        _featureMapB2 = Engine.TensorAdd(_featureMapB2, Engine.TensorMultiplyScalar(b2Grad, negLR));
+        _outputGateWeights = Engine.TensorAdd(_outputGateWeights, Engine.TensorMultiplyScalar(outGateWGrad, negLR));
+        _outputGateBias = Engine.TensorAdd(_outputGateBias, Engine.TensorMultiplyScalar(outGateBGrad, negLR));
+        _outputProjectionWeights = Engine.TensorAdd(_outputProjectionWeights, Engine.TensorMultiplyScalar(outProjWGrad, negLR));
+        _outputProjectionBias = Engine.TensorAdd(_outputProjectionBias, Engine.TensorMultiplyScalar(outProjBGrad, negLR));
     }
 
     /// <inheritdoc />

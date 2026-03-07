@@ -773,6 +773,14 @@ public class BASEDLayer<T> : LayerBase<T>
     private (Tensor<T> dQ, Tensor<T> dK, Tensor<T> dV) SlidingWindowAttentionBackward(
         Tensor<T> dOutput, int batchSize, int seqLen)
     {
+        if (_lastWindowValue is null || _lastWindowScores is null || _lastWindowKey is null || _lastWindowQuery is null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass. Cached window state is not available.");
+
+        var lastWindowValue = _lastWindowValue;
+        var lastWindowScores = _lastWindowScores;
+        var lastWindowKey = _lastWindowKey;
+        var lastWindowQuery = _lastWindowQuery;
+
         var dQ = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
         var dK = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
         var dV = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
@@ -802,7 +810,7 @@ public class BASEDLayer<T> : LayerBase<T>
                             ds = NumOps.Add(ds,
                                 NumOps.Multiply(
                                     dOutput[new[] { bi, t, flatD }],
-                                    _lastWindowValue![new[] { bi, srcT, flatD }]));
+                                    lastWindowValue[new[] { bi, srcT, flatD }]));
                         }
                         dScores[wi] = ds;
                     }
@@ -811,14 +819,14 @@ public class BASEDLayer<T> : LayerBase<T>
                     T dotAS = NumOps.Zero;
                     for (int wi = 0; wi < windowLen; wi++)
                     {
-                        T attnW = wi < _windowSize ? _lastWindowScores![new[] { bi, t, hi, wi }] : NumOps.Zero;
+                        T attnW = wi < _windowSize ? lastWindowScores[new[] { bi, t, hi, wi }] : NumOps.Zero;
                         dotAS = NumOps.Add(dotAS, NumOps.Multiply(attnW, dScores[wi]));
                     }
 
                     for (int wi = 0; wi < windowLen; wi++)
                     {
                         int srcT = windowStart + wi;
-                        T attnW = wi < _windowSize ? _lastWindowScores![new[] { bi, t, hi, wi }] : NumOps.Zero;
+                        T attnW = wi < _windowSize ? lastWindowScores[new[] { bi, t, hi, wi }] : NumOps.Zero;
                         T dRaw = NumOps.Multiply(attnW, NumOps.Subtract(dScores[wi], dotAS));
                         T dRawScaled = NumOps.Multiply(dRaw, scale);
 
@@ -829,10 +837,10 @@ public class BASEDLayer<T> : LayerBase<T>
                             int flatD = dimStart + d;
                             dQ[new[] { bi, t, flatD }] = NumOps.Add(
                                 dQ[new[] { bi, t, flatD }],
-                                NumOps.Multiply(dRawScaled, _lastWindowKey![new[] { bi, srcT, flatD }]));
+                                NumOps.Multiply(dRawScaled, lastWindowKey[new[] { bi, srcT, flatD }]));
                             dK[new[] { bi, srcT, flatD }] = NumOps.Add(
                                 dK[new[] { bi, srcT, flatD }],
-                                NumOps.Multiply(dRawScaled, _lastWindowQuery![new[] { bi, t, flatD }]));
+                                NumOps.Multiply(dRawScaled, lastWindowQuery[new[] { bi, t, flatD }]));
                         }
 
                         // dV[srcT] += attn[wi] * dOutput[t]
@@ -858,6 +866,16 @@ public class BASEDLayer<T> : LayerBase<T>
     private (Tensor<T> dQ, Tensor<T> dK, Tensor<T> dV) LinearAttentionBackward(
         Tensor<T> dOutput, int batchSize, int seqLen)
     {
+        if (_lastLinearFeatureK is null || _lastLinearFeatureQ is null || _lastLinearValue is null ||
+            _lastLinearQuery is null || _lastLinearKey is null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass. Cached linear attention state is not available.");
+
+        var lastLinearFeatureK = _lastLinearFeatureK;
+        var lastLinearFeatureQ = _lastLinearFeatureQ;
+        var lastLinearValue = _lastLinearValue;
+        var lastLinearQuery = _lastLinearQuery;
+        var lastLinearKey = _lastLinearKey;
+
         var dQ = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
         var dK = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
         var dV = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
@@ -903,14 +921,14 @@ public class BASEDLayer<T> : LayerBase<T>
                     // Update state with phi(k) * v^T
                     for (int fi = 0; fi < featureDim; fi++)
                     {
-                        T phiKVal = _lastLinearFeatureK![new[] { bi, t, hi, fi }];
+                        T phiKVal = lastLinearFeatureK[new[] { bi, t, hi, fi }];
                         norms[t + 1, fi] = NumOps.Add(norms[t + 1, fi], phiKVal);
                         for (int di = 0; di < _headDimension; di++)
                         {
                             int flatD = dimStart + di;
                             states[t + 1, fi, di] = NumOps.Add(
                                 states[t + 1, fi, di],
-                                NumOps.Multiply(phiKVal, _lastLinearValue![new[] { bi, t, flatD }]));
+                                NumOps.Multiply(phiKVal, lastLinearValue[new[] { bi, t, flatD }]));
                         }
                     }
 
@@ -918,7 +936,7 @@ public class BASEDLayer<T> : LayerBase<T>
                     T denom = epsilon;
                     for (int fi = 0; fi < featureDim; fi++)
                     {
-                        T phiQVal = _lastLinearFeatureQ![new[] { bi, t, hi, fi }];
+                        T phiQVal = lastLinearFeatureQ[new[] { bi, t, hi, fi }];
                         denom = NumOps.Add(denom, NumOps.Multiply(norms[t + 1, fi], phiQVal));
                     }
                     denoms[t] = denom;
@@ -952,11 +970,11 @@ public class BASEDLayer<T> : LayerBase<T>
                         for (int fi = 0; fi < featureDim; fi++)
                             numVal = NumOps.Add(numVal,
                                 NumOps.Multiply(states[t + 1, fi, di],
-                                    _lastLinearFeatureQ![new[] { bi, t, hi, fi }]));
+                                    lastLinearFeatureQ[new[] { bi, t, hi, fi }]));
 
                         for (int fi = 0; fi < featureDim; fi++)
                         {
-                            T phiQVal = _lastLinearFeatureQ![new[] { bi, t, hi, fi }];
+                            T phiQVal = lastLinearFeatureQ[new[] { bi, t, hi, fi }];
 
                             // dS[f,d] += dO * phiQ[f] / denom
                             dS[fi, di] = NumOps.Add(dS[fi, di],
@@ -983,9 +1001,9 @@ public class BASEDLayer<T> : LayerBase<T>
                             for (int fj = 0; fj < featureDim; fj++)
                                 numVal = NumOps.Add(numVal,
                                     NumOps.Multiply(states[t + 1, fj, di],
-                                        _lastLinearFeatureQ![new[] { bi, t, hi, fj }]));
+                                        lastLinearFeatureQ[new[] { bi, t, hi, fj }]));
 
-                            T phiQVal = _lastLinearFeatureQ![new[] { bi, t, hi, fi }];
+                            T phiQVal = lastLinearFeatureQ[new[] { bi, t, hi, fi }];
                             dZ[fi] = NumOps.Subtract(dZ[fi],
                                 NumOps.Divide(
                                     NumOps.Multiply(NumOps.Multiply(dO, numVal), phiQVal),
@@ -1004,9 +1022,9 @@ public class BASEDLayer<T> : LayerBase<T>
                         {
                             int flatD = dimStart + di;
                             dPhiK[fi] = NumOps.Add(dPhiK[fi],
-                                NumOps.Multiply(dS[fi, di], _lastLinearValue![new[] { bi, t, flatD }]));
+                                NumOps.Multiply(dS[fi, di], lastLinearValue[new[] { bi, t, flatD }]));
 
-                            T phiKVal = _lastLinearFeatureK![new[] { bi, t, hi, fi }];
+                            T phiKVal = lastLinearFeatureK[new[] { bi, t, hi, fi }];
                             dV[new[] { bi, t, flatD }] = NumOps.Add(
                                 dV[new[] { bi, t, flatD }],
                                 NumOps.Multiply(dS[fi, di], phiKVal));
@@ -1022,8 +1040,8 @@ public class BASEDLayer<T> : LayerBase<T>
                         int flatD = dimStart + d;
                         T scaleVal = _featureMapScale[new[] { hi, d }];
 
-                        T qVal = NumOps.Multiply(_lastLinearQuery![new[] { bi, t, flatD }], keyScale);
-                        T kVal = NumOps.Multiply(_lastLinearKey![new[] { bi, t, flatD }], keyScale);
+                        T qVal = NumOps.Multiply(lastLinearQuery[new[] { bi, t, flatD }], keyScale);
+                        T kVal = NumOps.Multiply(lastLinearKey[new[] { bi, t, flatD }], keyScale);
 
                         // First order: dphi/dx = scale
                         T dQ_d = NumOps.Multiply(dPhiQ[d], scaleVal);

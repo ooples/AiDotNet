@@ -802,6 +802,13 @@ public class MegalodonLayer<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> TimestepNormBackward(Tensor<T> dNormOutput, int batchSize, int seqLen)
     {
+        if (_lastEmaStdInv is null || _tsNormGammaGradient is null || _tsNormBetaGradient is null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass. Cached norm state is not available.");
+
+        var lastEmaStdInv = _lastEmaStdInv;
+        var tsNormGammaGrad = _tsNormGammaGradient;
+        var tsNormBetaGrad = _tsNormBetaGradient;
+
         var dPreNorm = new Tensor<T>(new[] { batchSize, seqLen, _emaDimension });
         T eps = NumOps.FromDouble(1e-5);
         var emaPreNorm = _lastEmaOutputPreNorm
@@ -817,7 +824,7 @@ public class MegalodonLayer<T> : LayerBase<T>
                     mean = NumOps.Add(mean, emaPreNorm[new[] { bi, t, d }]);
                 mean = NumOps.Divide(mean, NumOps.FromDouble(_emaDimension));
 
-                T invStd = _lastEmaStdInv![new[] { bi, t }];
+                T invStd = lastEmaStdInv[new[] { bi, t }];
                 T invN = NumOps.FromDouble(1.0 / _emaDimension);
 
                 // Compute normalized values and gradient sums
@@ -836,9 +843,9 @@ public class MegalodonLayer<T> : LayerBase<T>
                     sumDGammaXhat = NumOps.Add(sumDGammaXhat, NumOps.Multiply(gammaDOut, xHat));
 
                     // Accumulate norm parameter gradients
-                    _tsNormGammaGradient![d] = NumOps.Add(_tsNormGammaGradient[d],
+                    tsNormGammaGrad[d] = NumOps.Add(_tsNormGammaGradient[d],
                         NumOps.Multiply(dOut, xHat));
-                    _tsNormBetaGradient![d] = NumOps.Add(_tsNormBetaGradient[d], dOut);
+                    tsNormBetaGrad[d] = NumOps.Add(_tsNormBetaGradient[d], dOut);
                 }
 
                 // Input gradient: invStd * (gamma * dOut - invN * sumDGamma - invN * xHat * sumDGammaXhat)
@@ -864,6 +871,15 @@ public class MegalodonLayer<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> CEMABackward(Tensor<T> dPreNorm, int batchSize, int seqLen)
     {
+        if (_lastEmaStatesReal is null || _lastEmaStatesImag is null ||
+            _emaAlphaRealGradient is null || _emaAlphaImagGradient is null)
+            throw new InvalidOperationException("Forward pass must be called before backward pass. Cached CEMA state is not available.");
+
+        var lastEmaStatesReal = _lastEmaStatesReal;
+        var lastEmaStatesImag = _lastEmaStatesImag;
+        var emaAlphaRealGrad = _emaAlphaRealGradient;
+        var emaAlphaImagGrad = _emaAlphaImagGradient;
+
         var dEmaInput = new Tensor<T>(new[] { batchSize, seqLen, _emaDimension });
 
         // Gradient flows backward through real part of the state
@@ -889,21 +905,21 @@ public class MegalodonLayer<T> : LayerBase<T>
                     // Output was the real part of state: dStateR += dPreNorm
                     dStateR[d] = NumOps.Add(dStateR[d], dPreNorm[new[] { bi, t, d }]);
 
-                    T hPrevR = _lastEmaStatesReal![new[] { bi, t, d }];
-                    T hPrevI = _lastEmaStatesImag![new[] { bi, t, d }];
+                    T hPrevR = lastEmaStatesReal[new[] { bi, t, d }];
+                    T hPrevI = lastEmaStatesImag[new[] { bi, t, d }];
 
                     // h_t = alpha * h_{t-1} + (1-alpha) * x
                     // dAlphaR += dStateR * hPrevR + dStateI * hPrevI  (partial of complex mult)
                     // Actually: d/dAlphaR of (alphaR*hPrevR - alphaI*hPrevI) = hPrevR for real part
                     // d/dAlphaR of (alphaR*hPrevI + alphaI*hPrevR) = hPrevI for imag part
-                    _emaAlphaRealGradient![d] = NumOps.Add(_emaAlphaRealGradient[d],
+                    emaAlphaRealGrad[d] = NumOps.Add(_emaAlphaRealGradient[d],
                         NumOps.Add(
                             NumOps.Multiply(dStateR[d], hPrevR),
                             NumOps.Multiply(dStateI[d], hPrevI)));
 
                     // d/dAlphaI of (alphaR*hPrevR - alphaI*hPrevI) = -hPrevI for real part
                     // d/dAlphaI of (alphaR*hPrevI + alphaI*hPrevR) = hPrevR for imag part
-                    _emaAlphaImagGradient![d] = NumOps.Add(_emaAlphaImagGradient[d],
+                    emaAlphaImagGrad[d] = NumOps.Add(_emaAlphaImagGradient[d],
                         NumOps.Add(
                             NumOps.Multiply(dStateR[d], NumOps.Negate(hPrevI)),
                             NumOps.Multiply(dStateI[d], hPrevR)));
@@ -949,21 +965,37 @@ public class MegalodonLayer<T> : LayerBase<T>
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
 
         T negLR = NumOps.Negate(learningRate);
+
+        var alphaImagGrad = _emaAlphaImagGradient ?? throw new InvalidOperationException("Backward pass must be called before updating parameters.");
+        var emaInWGrad = _emaInputWeightsGradient ?? throw new InvalidOperationException("Backward pass must be called before updating parameters.");
+        var emaInBGrad = _emaInputBiasGradient ?? throw new InvalidOperationException("Backward pass must be called before updating parameters.");
+        var emaOutWGrad = _emaOutputWeightsGradient ?? throw new InvalidOperationException("Backward pass must be called before updating parameters.");
+        var emaOutBGrad = _emaOutputBiasGradient ?? throw new InvalidOperationException("Backward pass must be called before updating parameters.");
+        var normGammaGrad = _tsNormGammaGradient ?? throw new InvalidOperationException("Backward pass must be called before updating parameters.");
+        var normBetaGrad = _tsNormBetaGradient ?? throw new InvalidOperationException("Backward pass must be called before updating parameters.");
+        var qWGrad = _queryWeightsGradient ?? throw new InvalidOperationException("Backward pass must be called before updating parameters.");
+        var kWGrad = _keyWeightsGradient ?? throw new InvalidOperationException("Backward pass must be called before updating parameters.");
+        var vWGrad = _valueWeightsGradient ?? throw new InvalidOperationException("Backward pass must be called before updating parameters.");
+        var gateWGrad = _gateWeightsGradient ?? throw new InvalidOperationException("Backward pass must be called before updating parameters.");
+        var gateBGrad = _gateBiasGradient ?? throw new InvalidOperationException("Backward pass must be called before updating parameters.");
+        var outProjWGrad = _outputProjectionWeightsGradient ?? throw new InvalidOperationException("Backward pass must be called before updating parameters.");
+        var outProjBGrad = _outputProjectionBiasGradient ?? throw new InvalidOperationException("Backward pass must be called before updating parameters.");
+
         _emaAlphaReal = Engine.TensorAdd(_emaAlphaReal, Engine.TensorMultiplyScalar(_emaAlphaRealGradient, negLR));
-        _emaAlphaImag = Engine.TensorAdd(_emaAlphaImag, Engine.TensorMultiplyScalar(_emaAlphaImagGradient!, negLR));
-        _emaInputWeights = Engine.TensorAdd(_emaInputWeights, Engine.TensorMultiplyScalar(_emaInputWeightsGradient!, negLR));
-        _emaInputBias = Engine.TensorAdd(_emaInputBias, Engine.TensorMultiplyScalar(_emaInputBiasGradient!, negLR));
-        _emaOutputWeights = Engine.TensorAdd(_emaOutputWeights, Engine.TensorMultiplyScalar(_emaOutputWeightsGradient!, negLR));
-        _emaOutputBias = Engine.TensorAdd(_emaOutputBias, Engine.TensorMultiplyScalar(_emaOutputBiasGradient!, negLR));
-        _tsNormGamma = Engine.TensorAdd(_tsNormGamma, Engine.TensorMultiplyScalar(_tsNormGammaGradient!, negLR));
-        _tsNormBeta = Engine.TensorAdd(_tsNormBeta, Engine.TensorMultiplyScalar(_tsNormBetaGradient!, negLR));
-        _queryWeights = Engine.TensorAdd(_queryWeights, Engine.TensorMultiplyScalar(_queryWeightsGradient!, negLR));
-        _keyWeights = Engine.TensorAdd(_keyWeights, Engine.TensorMultiplyScalar(_keyWeightsGradient!, negLR));
-        _valueWeights = Engine.TensorAdd(_valueWeights, Engine.TensorMultiplyScalar(_valueWeightsGradient!, negLR));
-        _gateWeights = Engine.TensorAdd(_gateWeights, Engine.TensorMultiplyScalar(_gateWeightsGradient!, negLR));
-        _gateBias = Engine.TensorAdd(_gateBias, Engine.TensorMultiplyScalar(_gateBiasGradient!, negLR));
-        _outputProjectionWeights = Engine.TensorAdd(_outputProjectionWeights, Engine.TensorMultiplyScalar(_outputProjectionWeightsGradient!, negLR));
-        _outputProjectionBias = Engine.TensorAdd(_outputProjectionBias, Engine.TensorMultiplyScalar(_outputProjectionBiasGradient!, negLR));
+        _emaAlphaImag = Engine.TensorAdd(_emaAlphaImag, Engine.TensorMultiplyScalar(alphaImagGrad, negLR));
+        _emaInputWeights = Engine.TensorAdd(_emaInputWeights, Engine.TensorMultiplyScalar(emaInWGrad, negLR));
+        _emaInputBias = Engine.TensorAdd(_emaInputBias, Engine.TensorMultiplyScalar(emaInBGrad, negLR));
+        _emaOutputWeights = Engine.TensorAdd(_emaOutputWeights, Engine.TensorMultiplyScalar(emaOutWGrad, negLR));
+        _emaOutputBias = Engine.TensorAdd(_emaOutputBias, Engine.TensorMultiplyScalar(emaOutBGrad, negLR));
+        _tsNormGamma = Engine.TensorAdd(_tsNormGamma, Engine.TensorMultiplyScalar(normGammaGrad, negLR));
+        _tsNormBeta = Engine.TensorAdd(_tsNormBeta, Engine.TensorMultiplyScalar(normBetaGrad, negLR));
+        _queryWeights = Engine.TensorAdd(_queryWeights, Engine.TensorMultiplyScalar(qWGrad, negLR));
+        _keyWeights = Engine.TensorAdd(_keyWeights, Engine.TensorMultiplyScalar(kWGrad, negLR));
+        _valueWeights = Engine.TensorAdd(_valueWeights, Engine.TensorMultiplyScalar(vWGrad, negLR));
+        _gateWeights = Engine.TensorAdd(_gateWeights, Engine.TensorMultiplyScalar(gateWGrad, negLR));
+        _gateBias = Engine.TensorAdd(_gateBias, Engine.TensorMultiplyScalar(gateBGrad, negLR));
+        _outputProjectionWeights = Engine.TensorAdd(_outputProjectionWeights, Engine.TensorMultiplyScalar(outProjWGrad, negLR));
+        _outputProjectionBias = Engine.TensorAdd(_outputProjectionBias, Engine.TensorMultiplyScalar(outProjBGrad, negLR));
     }
 
     /// <inheritdoc />
