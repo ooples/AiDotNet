@@ -2153,9 +2153,9 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             }
             else
             {
-                // No preprocessing pipeline configured - pass through
-                preprocessedX = preparedX;
-                preprocessedY = preparedY;
+                // No preprocessing pipeline configured - pass through, but keep any training-only data preparation
+                preprocessedX = XTrain;
+                preprocessedY = yTrain;
             }
         }
 
