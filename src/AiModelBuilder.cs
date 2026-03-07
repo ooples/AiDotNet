@@ -387,9 +387,6 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                 new StandardScaler<T>());
         }
 
-        // Set global registry so all models automatically use this pipeline
-        PreprocessingRegistry<T, TInput>.Current = _preprocessingPipeline;
-
         return this;
     }
 
@@ -430,9 +427,6 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             _preprocessingPipeline.Add((IDataTransformer<T, TInput, TInput>)(object)
                 new StandardScaler<T>());
         }
-
-        // Set global registry so all models automatically use this pipeline
-        PreprocessingRegistry<T, TInput>.Current = _preprocessingPipeline;
 
         return this;
     }
@@ -476,9 +470,6 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                 new StandardScaler<T>());
         }
 
-        // Set global registry so all models automatically use this pipeline
-        PreprocessingRegistry<T, TInput>.Current = _preprocessingPipeline;
-
         return this;
     }
 
@@ -514,9 +505,6 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         // because the appropriate postprocessing depends heavily on the model type
         // (classification vs regression vs generation, etc.)
 
-        // Set global registry so all models automatically use this pipeline
-        PostprocessingRegistry<T, TOutput>.Current = _postprocessingPipeline;
-
         return this;
     }
 
@@ -546,9 +534,6 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         }
         // Note: Unlike preprocessing, postprocessing doesn't have universal defaults
         // because the appropriate postprocessing depends heavily on the model type
-
-        // Set global registry so all models automatically use this pipeline
-        PostprocessingRegistry<T, TOutput>.Current = _postprocessingPipeline;
 
         return this;
     }
@@ -583,9 +568,6 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             // because appropriate postprocessing depends on model type
             _postprocessingPipeline = new PostprocessingPipeline<T, TOutput, TOutput>();
         }
-
-        // Set global registry so all models automatically use this pipeline
-        PostprocessingRegistry<T, TOutput>.Current = _postprocessingPipeline;
 
         return this;
     }
@@ -1265,6 +1247,9 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                 "Either fit the pipeline on training data first, preprocess data externally, or omit ConfigurePreprocessing().");
         }
 
+        // Wire document transformers for inference-only builds
+        ConfigureDocumentTransformers(_model);
+
         // Ensure inference-only builds still honor configured GPU acceleration.
         ApplyGpuConfiguration();
 
@@ -1885,6 +1870,11 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         // Validate model is set (either by user, agent, or AutoML)
         if (_model == null)
             throw new InvalidOperationException("Model implementation must be specified. Use ConfigureModel() to set a model, ConfigureAutoML() for automatic model selection, or enable agent assistance.");
+
+        // Wire instance-level preprocessing/postprocessing onto DocumentNeuralNetworkBase models.
+        // This replaces the former static PreprocessingRegistry/PostprocessingRegistry approach,
+        // which caused race conditions when multiple models were built concurrently.
+        ConfigureDocumentTransformers(_model);
 
         // Use defaults for the optimizer if not set
         var optimizer = _optimizer ?? new NormalOptimizer<T, TInput, TOutput>(_model);
@@ -6301,6 +6291,22 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// - <b>CPU</b>: Force CPU-only execution (equivalent to UsageLevel.AlwaysCpu)
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Wires instance-level preprocessing/postprocessing transformers onto DocumentNeuralNetworkBase models.
+    /// Always passes the current pipeline values so prior state is cleared on reuse.
+    /// </summary>
+    private void ConfigureDocumentTransformers(IFullModel<T, TInput, TOutput>? model)
+    {
+        if (model is not Document.DocumentNeuralNetworkBase<T> documentModel)
+        {
+            return;
+        }
+
+        var preTransformer = _preprocessingPipeline as IDataTransformer<T, Tensor<T>, Tensor<T>>;
+        var postTransformer = _postprocessingPipeline as IDataTransformer<T, Tensor<T>, Tensor<T>>;
+        documentModel.ConfigureTransformers(preTransformer, postTransformer);
+    }
+
     private void ApplyGpuConfiguration()
     {
         // Skip if no GPU configuration was provided (null = default = auto-detect with CPU fallback)
