@@ -148,12 +148,8 @@ public class CrossValidationResult<T, TInput, TOutput>
         if (foldsWithClustering.Any())
         {
             // Silhouette Score
-            var silhouetteScores = foldsWithClustering
-                .Select(r => r.ClusteringMetrics?.SilhouetteScore)
-                .Where(v => v.HasValue)
-                .Select(v => v.GetValueOrDefault())
-                .ToArray();
-            if (silhouetteScores.Any())
+            var silhouetteScores = ExtractClusteringMetricValues(foldsWithClustering, m => m.SilhouetteScore);
+            if (silhouetteScores.Length > 0)
             {
                 SilhouetteScoreStats = new BasicStats<T>(new BasicStatsInputs<T>
                 {
@@ -162,12 +158,8 @@ public class CrossValidationResult<T, TInput, TOutput>
             }
 
             // Calinski-Harabasz Index
-            var calinskiHarabaszScores = foldsWithClustering
-                .Select(r => r.ClusteringMetrics?.CalinskiHarabaszIndex)
-                .Where(v => v.HasValue)
-                .Select(v => v.GetValueOrDefault())
-                .ToArray();
-            if (calinskiHarabaszScores.Any())
+            var calinskiHarabaszScores = ExtractClusteringMetricValues(foldsWithClustering, m => m.CalinskiHarabaszIndex);
+            if (calinskiHarabaszScores.Length > 0)
             {
                 CalinskiHarabaszIndexStats = new BasicStats<T>(new BasicStatsInputs<T>
                 {
@@ -176,12 +168,8 @@ public class CrossValidationResult<T, TInput, TOutput>
             }
 
             // Davies-Bouldin Index
-            var daviesBouldinScores = foldsWithClustering
-                .Select(r => r.ClusteringMetrics?.DaviesBouldinIndex)
-                .Where(v => v.HasValue)
-                .Select(v => v.GetValueOrDefault())
-                .ToArray();
-            if (daviesBouldinScores.Any())
+            var daviesBouldinScores = ExtractClusteringMetricValues(foldsWithClustering, m => m.DaviesBouldinIndex);
+            if (daviesBouldinScores.Length > 0)
             {
                 DaviesBouldinIndexStats = new BasicStats<T>(new BasicStatsInputs<T>
                 {
@@ -190,12 +178,8 @@ public class CrossValidationResult<T, TInput, TOutput>
             }
 
             // Adjusted Rand Index
-            var adjustedRandIndexScores = foldsWithClustering
-                .Select(r => r.ClusteringMetrics?.AdjustedRandIndex)
-                .Where(v => v.HasValue)
-                .Select(v => v.GetValueOrDefault())
-                .ToArray();
-            if (adjustedRandIndexScores.Any())
+            var adjustedRandIndexScores = ExtractClusteringMetricValues(foldsWithClustering, m => m.AdjustedRandIndex);
+            if (adjustedRandIndexScores.Length > 0)
             {
                 AdjustedRandIndexStats = new BasicStats<T>(new BasicStatsInputs<T>
                 {
@@ -345,5 +329,28 @@ public class CrossValidationResult<T, TInput, TOutput>
         }
 
         return report.ToString();
+    }
+
+    /// <summary>
+    /// Extracts non-null clustering metric values from fold results using a selector function.
+    /// </summary>
+    private static T[] ExtractClusteringMetricValues(
+        List<FoldResult<T, TInput, TOutput>> folds,
+        Func<ClusteringMetrics<T>, T?> selector)
+    {
+        var values = new List<T>();
+        foreach (var fold in folds)
+        {
+            if (fold.ClusteringMetrics is not null)
+            {
+                var metricValue = selector(fold.ClusteringMetrics);
+                if (metricValue is T value)
+                {
+                    values.Add(value);
+                }
+            }
+        }
+
+        return values.ToArray();
     }
 }
