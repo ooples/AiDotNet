@@ -56,7 +56,7 @@ public class NegativeLikelihoodRatioMetric<T> : IClassificationMetric<T>
         double specificity = (tn + fp) > 0 ? (double)tn / (tn + fp) : 0;
         double fnr = 1 - sensitivity;
 
-        if (specificity < 1e-10) return NumOps.FromDouble(double.MaxValue);
+        if (specificity < 1e-10) return NumOps.MaxValue;
         return NumOps.FromDouble(fnr / specificity);
     }
 

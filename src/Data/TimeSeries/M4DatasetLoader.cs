@@ -493,7 +493,7 @@ public class M4DatasetLoader<T> : DataLoaderBase<T>
             scalingCount++;
         }
 
-        if (scalingCount == 0) return NumOps.FromDouble(double.PositiveInfinity);
+        if (scalingCount == 0) return NumOps.MaxValue;
 
         var scalingFactor = NumOps.Divide(scalingSum, NumOps.FromDouble(scalingCount));
 
@@ -507,7 +507,7 @@ public class M4DatasetLoader<T> : DataLoaderBase<T>
 
         // MASE = MAE / scaling factor
         if (NumOps.ToDouble(scalingFactor) < 1e-10)
-            return NumOps.FromDouble(double.PositiveInfinity);
+            return NumOps.MaxValue;
 
         return NumOps.Divide(mae, scalingFactor);
     }

@@ -957,7 +957,7 @@ public class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
                                 : _adjacencyMatrix[new int[] { b, i, j }];
                             if (NumOps.Equals(adjValue, NumOps.Zero))
                             {
-                                score = NumOps.FromDouble(double.NegativeInfinity);
+                                score = NumOps.MinValue;
                             }
                         }
 
@@ -965,7 +965,7 @@ public class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
                     }
 
                     // Softmax over attention scores for row i
-                    T maxScore = NumOps.FromDouble(double.NegativeInfinity);
+                    T maxScore = NumOps.MinValue;
                     for (int j = 0; j < numNodes; j++)
                     {
                         if (NumOps.GreaterThan(_lastAttentionWeights[b, h, i, j], maxScore))

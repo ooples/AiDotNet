@@ -606,7 +606,7 @@ public class ImageBindNeuralNetwork<T> : NeuralNetworkBase<T>, IImageBindModel<T
 
         var queryEmbedding = GetEmbedding(queryModality, queryData);
 
-        T bestScore = NumOps.FromDouble(double.MinValue);
+        T bestScore = NumOps.MinValue;
         int bestIndex = 0;
 
         for (int i = 0; i < candidateList.Count; i++)

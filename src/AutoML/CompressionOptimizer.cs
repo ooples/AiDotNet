@@ -65,7 +65,7 @@ public class CompressionOptimizer<T>
             ? RandomHelper.CreateSeededRandom(_options.RandomSeed.Value)
             : RandomHelper.CreateSecureRandom();
         _trialHistory = new List<CompressionTrial<T>>();
-        _bestFitness = NumOps.FromDouble(double.NegativeInfinity);
+        _bestFitness = NumOps.MinValue;
     }
 
     /// <summary>

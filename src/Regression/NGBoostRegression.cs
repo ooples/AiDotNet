@@ -117,7 +117,7 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
         _trees = [];
         FeatureImportances = new Vector<T>(x.Columns);
 
-        T bestScore = NumOps.FromDouble(double.MaxValue);
+        T bestScore = NumOps.MaxValue;
         int roundsWithoutImprovement = 0;
 
         for (int iter = 0; iter < _options.NumberOfIterations; iter++)

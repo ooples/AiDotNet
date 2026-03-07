@@ -58,7 +58,7 @@ public class ValueIterationAgent<T> : ReinforcementLearningAgentBase<T>
 
         // Select action greedily with respect to value function
         int bestAction = 0;
-        T bestValue = NumOps.FromDouble(double.NegativeInfinity);
+        T bestValue = NumOps.MinValue;
 
         for (int a = 0; a < _options.ActionSize; a++)
         {
@@ -136,7 +136,7 @@ public class ValueIterationAgent<T> : ReinforcementLearningAgentBase<T>
                 T oldValue = _valueTable[stateKey];
 
                 // Find max action value (Bellman optimality equation)
-                T maxActionValue = NumOps.FromDouble(double.NegativeInfinity);
+                T maxActionValue = NumOps.MinValue;
 
                 for (int a = 0; a < _options.ActionSize; a++)
                 {

@@ -56,7 +56,7 @@ public class PositiveLikelihoodRatioMetric<T> : IClassificationMetric<T>
         double specificity = (tn + fp) > 0 ? (double)tn / (tn + fp) : 0;
         double fpr = 1 - specificity;
 
-        if (fpr < 1e-10) return NumOps.FromDouble(double.MaxValue);
+        if (fpr < 1e-10) return NumOps.MaxValue;
         return NumOps.FromDouble(sensitivity / fpr);
     }
 

@@ -513,7 +513,7 @@ public class MegalodonLayer<T> : LayerBase<T>
                     // Compute attention scores for query at position t
                     // Only attend to positions <= t (causal)
                     var scores = new T[t + 1];
-                    T maxScore = NumOps.FromDouble(double.NegativeInfinity);
+                    T maxScore = NumOps.MinValue;
 
                     for (int s = 0; s <= t; s++)
                     {
@@ -721,7 +721,7 @@ public class MegalodonLayer<T> : LayerBase<T>
                 {
                     // Recompute attention weights for this position
                     var scores = new T[t + 1];
-                    T maxScore = NumOps.FromDouble(double.NegativeInfinity);
+                    T maxScore = NumOps.MinValue;
 
                     for (int s = 0; s <= t; s++)
                     {

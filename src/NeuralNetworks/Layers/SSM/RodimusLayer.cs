@@ -400,7 +400,7 @@ public class RodimusLayer<T> : LayerBase<T>
                     // Here k_i are the individual key dimension values, and the softmax
                     // distributes attention across the head dimensions
                     var scores = new T[_headDimension];
-                    T maxScore = NumOps.FromDouble(double.NegativeInfinity);
+                    T maxScore = NumOps.MinValue;
                     for (int ki = 0; ki < _headDimension; ki++)
                     {
                         int flatKi = dimStart + ki;

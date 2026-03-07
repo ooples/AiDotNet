@@ -370,7 +370,7 @@ public class ABCLayer<T> : LayerBase<T>
 
                     // Step 1: Compute write scores using key against slot keys
                     var wScores = new T[_numSlots];
-                    T maxWScore = NumOps.FromDouble(double.NegativeInfinity);
+                    T maxWScore = NumOps.MinValue;
                     for (int si = 0; si < _numSlots; si++)
                     {
                         T dot = NumOps.Zero;
@@ -418,7 +418,7 @@ public class ABCLayer<T> : LayerBase<T>
 
                     // Step 4: Compute read scores using query against current slot content
                     var rScores = new T[_numSlots];
-                    T maxRScore = NumOps.FromDouble(double.NegativeInfinity);
+                    T maxRScore = NumOps.MinValue;
                     for (int si = 0; si < _numSlots; si++)
                     {
                         T dot = NumOps.Zero;

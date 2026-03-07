@@ -157,7 +157,7 @@ public class ModifiedPolicyIterationAgent<T> : ReinforcementLearningAgentBase<T>
             int oldAction = _policy[stateKey];
 
             int bestAction = 0;
-            T bestValue = NumOps.FromDouble(double.NegativeInfinity);
+            T bestValue = NumOps.MinValue;
 
             for (int a = 0; a < _options.ActionSize; a++)
             {

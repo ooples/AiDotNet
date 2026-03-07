@@ -434,7 +434,7 @@ public class DARTRegression<T> : AsyncDecisionTreeRegressionBase<T>
     {
         int bestFeature = -1;
         T bestThreshold = NumOps.Zero;
-        T bestGain = NumOps.FromDouble(double.MinValue);
+        T bestGain = NumOps.MinValue;
         T epsilon = NumOps.FromDouble(1e-10);
         T two = NumOps.FromDouble(2);
 

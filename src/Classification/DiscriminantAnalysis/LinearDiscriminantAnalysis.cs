@@ -395,7 +395,7 @@ public class LinearDiscriminantAnalysis<T> : ProbabilisticClassifierBase<T>
         for (int i = 0; i < input.Rows; i++)
         {
             // Compute log posterior for each class
-            T maxLogProb = NumOps.FromDouble(double.NegativeInfinity);
+            T maxLogProb = NumOps.MinValue;
 
             for (int c = 0; c < NumClasses; c++)
             {

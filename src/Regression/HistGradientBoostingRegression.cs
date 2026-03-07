@@ -1109,7 +1109,7 @@ public class HistGradientBoostingRegression<T> : IFullModel<T, Matrix<T>, Vector
         {
             // Find the node with the best potential gain
             int bestIdx = -1;
-            T bestGain = NumOps.FromDouble(double.MinValue);
+            T bestGain = NumOps.MinValue;
             SplitInfo? bestSplit = null;
 
             for (int i = 0; i < queue.Count; i++)
@@ -1405,7 +1405,7 @@ public class HistGradientBoostingRegression<T> : IFullModel<T, Matrix<T>, Vector
         }
         else
         {
-            node.Threshold = NumOps.FromDouble(double.MaxValue);
+            node.Threshold = NumOps.MaxValue;
         }
 
         node.Left = new HistTreeNode(NumOps.Zero)

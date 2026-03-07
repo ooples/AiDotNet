@@ -335,7 +335,7 @@ public class MixedEffectsModel<T> : NonLinearRegressionBase<T>
     {
         if (_fixedEffects == null)
         {
-            return NumOps.FromDouble(double.NegativeInfinity);
+            return NumOps.MinValue;
         }
 
         var predictions = Predict(x, groupIndices);

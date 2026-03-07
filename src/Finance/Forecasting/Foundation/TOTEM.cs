@@ -596,7 +596,7 @@ public class TOTEM<T> : TimeSeriesFoundationModelBase<T>
 
                 // Find nearest codebook entry
                 int bestIdx = 0;
-                T bestDist = NumOps.FromDouble(double.MaxValue);
+                T bestDist = NumOps.MaxValue;
                 for (int k = 0; k < _codebookSize; k++)
                 {
                     T dist = NumOps.Zero;

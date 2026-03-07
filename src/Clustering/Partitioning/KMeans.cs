@@ -106,7 +106,7 @@ public class KMeans<T> : ClusteringBase<T>
 
         Matrix<T>? bestCenters = null;
         Vector<T>? bestLabels = null;
-        T bestInertia = NumOps.FromDouble(double.MaxValue);
+        T bestInertia = NumOps.MaxValue;
 
         // Run multiple initializations and keep the best
         int numInits = _options.InitMethod == KMeansInitMethod.Custom ? 1 : _options.NumInitializations;

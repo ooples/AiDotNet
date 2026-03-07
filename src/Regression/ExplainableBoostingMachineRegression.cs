@@ -602,8 +602,8 @@ public class ExplainableBoostingMachineRegression<T> : AsyncDecisionTreeRegressi
         for (int f = 0; f < _numFeatures; f++)
         {
             // Importance = range of shape function values
-            T min = NumOps.FromDouble(double.MaxValue);
-            T max = NumOps.FromDouble(double.MinValue);
+            T min = NumOps.MaxValue;
+            T max = NumOps.MinValue;
 
             for (int b = 0; b < _shapeFunctions[f].Length; b++)
             {

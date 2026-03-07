@@ -866,7 +866,7 @@ public class AnoGANDetector<T> : AnomalyDetectorBase<T>
             var bestZ = new Vector<T>(_latentDim);
             for (int j = 0; j < _latentDim; j++) bestZ[j] = z[j];
 
-            T bestLoss = NumOps.FromDouble(double.MaxValue);
+            T bestLoss = NumOps.MaxValue;
             double zLr = 0.1;
 
             for (int step = 0; step < _inferenceSteps; step++)

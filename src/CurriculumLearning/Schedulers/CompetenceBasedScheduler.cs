@@ -120,7 +120,7 @@ public class CompetenceBasedScheduler<T> : CurriculumSchedulerBase<T>, ICompeten
         _smoothingFactor = ResolveDefault(smoothingFactor, 0.3);
 
         _currentCompetence = NumOps.Zero;
-        _bestLoss = NumOps.FromDouble(double.MaxValue);
+        _bestLoss = NumOps.MaxValue;
         _epochsWithoutImprovement = 0;
         _competenceHistory = new List<T>();
 
@@ -226,7 +226,7 @@ public class CompetenceBasedScheduler<T> : CurriculumSchedulerBase<T>, ICompeten
     {
         base.Reset();
         _currentCompetence = NumOps.Zero;
-        _bestLoss = NumOps.FromDouble(double.MaxValue);
+        _bestLoss = NumOps.MaxValue;
         _epochsWithoutImprovement = 0;
         _competenceHistory.Clear();
     }

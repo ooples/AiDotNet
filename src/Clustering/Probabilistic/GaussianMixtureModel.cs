@@ -123,7 +123,7 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
             throw new ArgumentException($"Number of samples ({n}) must be >= number of components ({k}).");
         }
 
-        T bestLowerBound = NumOps.FromDouble(double.NegativeInfinity);
+        T bestLowerBound = NumOps.MinValue;
         T[]? bestWeights = null;
         T[,]? bestMeans = null;
         T[,,]? bestCovariances = null;
@@ -135,7 +135,7 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
             // Initialize parameters
             InitializeParameters(x, n, d, k);
 
-            T prevLowerBound = NumOps.FromDouble(double.NegativeInfinity);
+            T prevLowerBound = NumOps.MinValue;
 
             // EM iterations
             for (int iter = 0; iter < _options.MaxIterations; iter++)

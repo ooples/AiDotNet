@@ -129,7 +129,7 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
         // Convert times to bin indices
         var timeBinIndices = ConvertTimesToBins(times);
 
-        T bestLoss = NumOps.FromDouble(double.MaxValue);
+        T bestLoss = NumOps.MaxValue;
         int patienceCounter = 0;
         var bestWeights = SaveWeights();
         T lossThreshold = NumOps.FromDouble(1e-6);

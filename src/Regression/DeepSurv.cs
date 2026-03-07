@@ -111,7 +111,7 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
         // Sort by time (required for Cox partial likelihood)
         var sortedIndices = GetSortedIndices(times);
 
-        T bestLoss = NumOps.FromDouble(double.MaxValue);
+        T bestLoss = NumOps.MaxValue;
         int patienceCounter = 0;
         T earlyStopThreshold = NumOps.FromDouble(1e-6);
 
@@ -596,7 +596,7 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
             riskSum = NumOps.Add(riskSum, NumOps.Exp(riskScores[i]));
         }
 
-        T lastTime = NumOps.FromDouble(double.MinValue);
+        T lastTime = NumOps.MinValue;
 
         for (int i = 0; i < sortedIndices.Length; i++)
         {
@@ -654,7 +654,7 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
     private T FindTimeForHazard(T targetH0)
     {
         if (_baselineHazardTimes == null || _baselineHazardTimes.Length == 0)
-            return NumOps.FromDouble(double.PositiveInfinity);
+            return NumOps.MaxValue;
 
         if (_baselineHazardValues is null)
         {
@@ -669,7 +669,7 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
             }
         }
 
-        return NumOps.FromDouble(double.PositiveInfinity);
+        return NumOps.MaxValue;
     }
 
     /// <summary>

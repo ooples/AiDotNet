@@ -58,7 +58,7 @@ public class MASEMetric<T> : ITimeSeriesMetric<T>
         }
 
         if (naiveCount == 0 || maeNaive < 1e-10)
-            return mae < 1e-10 ? NumOps.Zero : NumOps.FromDouble(double.MaxValue);
+            return mae < 1e-10 ? NumOps.Zero : NumOps.MaxValue;
 
         maeNaive /= naiveCount;
         return NumOps.FromDouble(mae / maeNaive);

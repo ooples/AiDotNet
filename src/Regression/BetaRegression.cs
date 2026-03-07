@@ -126,7 +126,7 @@ public class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
         // Initialize parameters
         InitializeParameters(y);
 
-        T prevLogLik = NumOps.FromDouble(double.MinValue);
+        T prevLogLik = NumOps.MinValue;
         T tolerance = NumOps.FromDouble(_options.Tolerance);
 
         // Fisher scoring / IRLS
