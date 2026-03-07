@@ -941,7 +941,9 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
 
         if (hasVectorActivation)
         {
-            writer.Write(_vectorActivation!.GetType().FullName ?? "Unknown");
+            if (_vectorActivation is null)
+                throw new InvalidOperationException("SpikingNeuralNetwork: Vector activation is null despite hasVectorActivation flag.");
+            writer.Write(_vectorActivation.GetType().FullName ?? "Unknown");
         }
         else if (_scalarActivation != null)
         {

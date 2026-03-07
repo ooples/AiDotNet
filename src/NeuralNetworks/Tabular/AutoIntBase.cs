@@ -197,7 +197,9 @@ public abstract class AutoIntBase<T>
                 for (int f = 0; f < NumCategoricalFeatures; f++)
                 {
                     int catIdx = categoricalIndices[b, f];
-                    int cardinality = Options.CategoricalCardinalities![f];
+                    if (Options.CategoricalCardinalities is null)
+                        throw new InvalidOperationException("AutoIntBase: CategoricalCardinalities not configured.");
+                    int cardinality = Options.CategoricalCardinalities[f];
                     if ((uint)catIdx >= (uint)cardinality)
                     {
                         throw new ArgumentOutOfRangeException(

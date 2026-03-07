@@ -195,7 +195,7 @@ public abstract class TabDPTBase<T>
                 var oneHot = CreateOneHotEncoding(
                     categoricalIndices,
                     catIdx,
-                    Options.CategoricalCardinalities![catIdx]);
+                    (Options.CategoricalCardinalities ?? throw new InvalidOperationException("TabDPTBase: CategoricalCardinalities not configured."))[catIdx]);
                 var catEmb = _categoricalEmbeddings[catIdx].Forward(oneHot);
 
                 // Add to embeddings

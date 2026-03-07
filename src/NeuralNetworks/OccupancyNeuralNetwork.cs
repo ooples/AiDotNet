@@ -235,7 +235,9 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
 
         if (_includeTemporalData)
         {
-            sensorHistory!.Enqueue(currentReading);
+            if (sensorHistory is null)
+                throw new InvalidOperationException("OccupancyNeuralNetwork: Sensor history is required for temporal data processing.");
+            sensorHistory.Enqueue(currentReading);
             if (sensorHistory.Count > _historyWindowSize)
             {
                 sensorHistory.Dequeue();

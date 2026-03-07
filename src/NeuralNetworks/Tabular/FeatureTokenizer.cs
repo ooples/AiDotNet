@@ -309,7 +309,7 @@ public class FeatureTokenizer<T>
         for (int i = 0; i < _categoricalEmbeddingsGrad.Count; i++)
         {
             _categoricalEmbeddingsGrad[i] = new Tensor<T>(_categoricalEmbeddings[i].Shape);
-            _categoricalEmbeddingsGrad[i]!.Fill(_numOps.Zero);
+            _categoricalEmbeddingsGrad[i].Fill(_numOps.Zero);
         }
 
         for (int b = 0; b < batchSize; b++)

@@ -573,7 +573,9 @@ public class TransNormerLLMLayer<T> : LayerBase<T>
                             T dS = dState[new[] { bi, hi, di, dj }];
                             T prevS = _lastStates[new[] { bi, t, hi, di, dj }];
 
-                            _gammasGradient![hi] = NumOps.Add(
+                            if (_gammasGradient is null)
+                                throw new InvalidOperationException("TransNormerLLMLayer: Gradient tensor not initialized.");
+                            _gammasGradient[hi] = NumOps.Add(
                                 _gammasGradient[hi],
                                 NumOps.Multiply(dS, prevS));
 

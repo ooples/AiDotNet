@@ -149,7 +149,7 @@ public class RetrievalModule<T>
             {
                 var diff = NumOps.Subtract(
                     queryKeys[batchIdx * _embeddingDim + d],
-                    _trainingKeys![t * _embeddingDim + d]);
+                    _trainingKeys[t * _embeddingDim + d]);
                 dist = NumOps.Add(dist, NumOps.Multiply(diff, diff));
             }
             distances[t] = dist;

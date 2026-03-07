@@ -175,7 +175,9 @@ public class DenseBlock<T> : LayerBase<T>
             // Cache for backward pass
             if (IsTrainingMode)
             {
-                _gpuFeatureMaps!.Add(currentFeatures);
+                if (_gpuFeatureMaps is null)
+                    throw new InvalidOperationException("DenseBlock: GPU feature maps not initialized.");
+                _gpuFeatureMaps.Add(currentFeatures);
             }
         }
 
