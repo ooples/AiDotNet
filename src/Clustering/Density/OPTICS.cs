@@ -48,10 +48,10 @@ public class OPTICS<T> : ClusteringBase<T>
     private int[]? _ordering;
     private int[]? _predecessor;
 
-    [System.Diagnostics.CodeAnalysis.MemberNotNull(nameof(_ordering), nameof(_reachabilityDistances), nameof(_coreDistances))]
+    [System.Diagnostics.CodeAnalysis.MemberNotNull(nameof(_ordering), nameof(_reachabilityDistances), nameof(_coreDistances), nameof(_predecessor))]
     private void EnsureOPTICSState()
     {
-        if (_ordering is null || _reachabilityDistances is null || _coreDistances is null)
+        if (_ordering is null || _reachabilityDistances is null || _coreDistances is null || _predecessor is null)
             throw new InvalidOperationException("OPTICS has not been fitted. Call Train() before using this method.");
     }
 
@@ -272,6 +272,7 @@ public class OPTICS<T> : ClusteringBase<T>
     private void ExtractDbscanStyle(int n)
     {
         EnsureOPTICSState();
+        var labels = Labels ?? throw new InvalidOperationException("Labels must be initialized before extracting clusters.");
 
         double eps = _options.ClusterEpsilon ?? _options.MaxEpsilon;
         int currentCluster = 0;
@@ -285,7 +286,7 @@ public class OPTICS<T> : ClusteringBase<T>
                 // Start new cluster or noise
                 if (!double.IsPositiveInfinity(_coreDistances[pointIdx]) && _coreDistances[pointIdx] <= eps)
                 {
-                    Labels[pointIdx] = NumOps.FromDouble(currentCluster);
+                    labels[pointIdx] = NumOps.FromDouble(currentCluster);
                     currentCluster++;
                 }
             }
@@ -294,7 +295,7 @@ public class OPTICS<T> : ClusteringBase<T>
                 // Assign to current cluster
                 if (currentCluster > 0)
                 {
-                    Labels[pointIdx] = NumOps.FromDouble(currentCluster - 1);
+                    labels[pointIdx] = NumOps.FromDouble(currentCluster - 1);
                 }
             }
         }
@@ -305,6 +306,7 @@ public class OPTICS<T> : ClusteringBase<T>
     private void ExtractXiMethod(int n)
     {
         EnsureOPTICSState();
+        var labels = Labels ?? throw new InvalidOperationException("Labels must be initialized before extracting clusters.");
 
         double xi = _options.Xi;
         int minClusterSize = Math.Max(2, (int)(n * _options.MinClusterSizeFraction));
@@ -390,9 +392,9 @@ public class OPTICS<T> : ClusteringBase<T>
             for (int i = start; i <= end && i < n; i++)
             {
                 int pointIdx = _ordering[i];
-                if (NumOps.ToDouble(Labels[pointIdx]) < 0)
+                if (NumOps.ToDouble(labels[pointIdx]) < 0)
                 {
-                    Labels[pointIdx] = NumOps.FromDouble(currentCluster);
+                    labels[pointIdx] = NumOps.FromDouble(currentCluster);
                 }
             }
             currentCluster++;
@@ -551,7 +553,7 @@ public class OPTICS<T> : ClusteringBase<T>
     public override Vector<T> FitPredict(Matrix<T> x)
     {
         Train(x);
-        return Labels!;
+        return Labels ?? throw new InvalidOperationException("Training failed to produce cluster labels.");
     }
 
     /// <summary>

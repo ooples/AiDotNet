@@ -258,7 +258,7 @@ public class KDTree<T>
 
         for (int i = left; i < right; i++)
         {
-            if (_numOps.ToDouble(_data[indices[i], dimension]) < _numOps.ToDouble(pivotValue))
+            if (_numOps.ToDouble(Data[indices[i], dimension]) < _numOps.ToDouble(pivotValue))
             {
                 Swap(indices, i, storeIndex);
                 storeIndex++;
@@ -272,7 +272,7 @@ public class KDTree<T>
     private int Compare(int idx1, int idx2, int dimension)
     {
         double v1 = _numOps.ToDouble(Data[idx1, dimension]);
-        double v2 = _numOps.ToDouble(_data[idx2, dimension]);
+        double v2 = _numOps.ToDouble(Data[idx2, dimension]);
         return v1.CompareTo(v2);
     }
 

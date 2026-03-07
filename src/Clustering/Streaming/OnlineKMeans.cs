@@ -125,6 +125,7 @@ public class OnlineKMeans<T> : ClusteringBase<T>
         {
             InitializeCenters(x, k, d, rand);
         }
+        EnsureOnlineKMeansState();
 
         var labels = new int[n];
         CurrentLearningRate = _options.LearningRate;
@@ -240,11 +241,7 @@ public class OnlineKMeans<T> : ClusteringBase<T>
     {
         int d = point.Length;
 
-        if (_centers is null)
-        {
-            throw new InvalidOperationException("Model must be initialized before calling PartialFit. " +
-                "Call Train with initial data first, or use InitializeWithRandom.");
-        }
+        EnsureOnlineKMeansState();
 
         var pointArray = new double[d];
         for (int j = 0; j < d; j++)
@@ -331,6 +328,6 @@ public class OnlineKMeans<T> : ClusteringBase<T>
     public override Vector<T> FitPredict(Matrix<T> x)
     {
         Train(x);
-        return Labels!;
+        return Labels ?? throw new InvalidOperationException("Training failed to produce cluster labels.");
     }
 }

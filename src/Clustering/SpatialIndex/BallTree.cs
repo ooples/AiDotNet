@@ -165,7 +165,7 @@ public class BallTree<T>
 
         // Sort indices by split dimension
         Array.Sort(indices, start, count, Comparer<int>.Create((a, b) =>
-            _numOps.ToDouble(Data[a, splitDim]).CompareTo(_numOps.ToDouble(_data[b, splitDim]))));
+            _numOps.ToDouble(Data[a, splitDim]).CompareTo(_numOps.ToDouble(Data[b, splitDim]))));
 
         int mid = start + count / 2;
 

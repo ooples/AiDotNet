@@ -54,6 +54,7 @@ public class SelfOrganizingMap<T> : ClusteringBase<T>
     private double[,][]? _weights;
     private int[]? _neuronLabels;
 
+    [System.Diagnostics.CodeAnalysis.MemberNotNull(nameof(_weights), nameof(_neuronLabels))]
     private void EnsureSOMState()
     {
         if (_weights is null || _neuronLabels is null)
@@ -182,6 +183,7 @@ public class SelfOrganizingMap<T> : ClusteringBase<T>
 
         // Cluster the neurons using K-Means on weight vectors
         ClusterNeurons(width, height, d);
+        EnsureSOMState();
 
         // Set labels for each training sample
         Labels = new Vector<T>(n);
@@ -489,6 +491,6 @@ public class SelfOrganizingMap<T> : ClusteringBase<T>
     public override Vector<T> FitPredict(Matrix<T> x)
     {
         Train(x);
-        return Labels!;
+        return Labels ?? throw new InvalidOperationException("Training failed to produce cluster labels.");
     }
 }

@@ -189,6 +189,8 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
         _responsibilities = bestResponsibilities;
         _lowerBound = bestLowerBound;
 
+        EnsureGMMState();
+
         // Assign labels based on maximum responsibility
         Labels = new Vector<T>(n);
         for (int i = 0; i < n; i++)
@@ -253,6 +255,7 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
 
     private void InitializeWithKMeans(double[,] data, int n, int d, int k)
     {
+        EnsureGMMState();
         // Convert to Matrix<T> for KMeans
         var dataMatrix = new Matrix<T>(n, d);
         for (int i = 0; i < n; i++)
@@ -286,6 +289,7 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
 
     private void InitializeWithKMeansPlusPlus(double[,] data, int n, int d, int k)
     {
+        EnsureGMMState();
         var rand = Random ?? RandomHelper.CreateSecureRandom();
 
         // First center: random
@@ -342,6 +346,7 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
 
     private void InitializeRandom(double[,] data, int n, int d, int k)
     {
+        EnsureGMMState();
         var rand = Random ?? RandomHelper.CreateSecureRandom();
         var selectedIndices = new HashSet<int>();
 
@@ -363,6 +368,7 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
 
     private void InitializeCovariances(double[,] data, int n, int d, int k)
     {
+        EnsureGMMState();
         double reg = _options.RegularizationCovariance;
 
         switch (_options.CovarianceType)
@@ -1054,7 +1060,7 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
     public override Vector<T> FitPredict(Matrix<T> x)
     {
         Train(x);
-        return Labels!;
+        return Labels ?? throw new InvalidOperationException("Training failed to produce cluster labels.");
     }
 
     /// <summary>

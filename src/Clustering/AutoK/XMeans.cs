@@ -107,8 +107,10 @@ public class XMeans<T> : ClusteringBase<T>
         });
 
         kmeans.Train(x);
-        var currentLabels = kmeans.Labels!;
-        var currentCenters = kmeans.ClusterCenters!;
+        var currentLabels = kmeans.Labels
+            ?? throw new InvalidOperationException("KMeans training failed to produce labels.");
+        var currentCenters = kmeans.ClusterCenters
+            ?? throw new InvalidOperationException("KMeans training failed to produce cluster centers.");
 
         // Iteratively try to split clusters
         bool improved = true;
@@ -407,6 +409,6 @@ public class XMeans<T> : ClusteringBase<T>
     public override Vector<T> FitPredict(Matrix<T> x)
     {
         Train(x);
-        return Labels!;
+        return Labels ?? throw new InvalidOperationException("Training failed to produce cluster labels.");
     }
 }

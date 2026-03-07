@@ -336,7 +336,7 @@ public class FuzzyCMeans<T> : ClusteringBase<T>
 
             for (int c = 0; c < k; c++)
             {
-                var center = GetRow(ClusterCenters!, c);
+                var center = GetRow((ClusterCenters ?? throw new InvalidOperationException("Cluster centers not initialized.")), c);
                 distances[c] = NumOps.ToDouble(metric.Compute(point, center));
 
                 if (distances[c] < 1e-10)
@@ -371,6 +371,6 @@ public class FuzzyCMeans<T> : ClusteringBase<T>
     public override Vector<T> FitPredict(Matrix<T> x)
     {
         Train(x);
-        return Labels!;
+        return Labels ?? throw new InvalidOperationException("Training failed to produce cluster labels.");
     }
 }
