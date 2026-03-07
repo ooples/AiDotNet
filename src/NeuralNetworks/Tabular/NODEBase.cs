@@ -149,8 +149,10 @@ public abstract class NODEBase<T>
     protected Tensor<T> ForwardBackbone(Tensor<T> features)
     {
         int batchSize = features.Shape[0];
-        _splitProbabilitiesCache = [];
-        _leafWeightsCache = [];
+        var splitProbsCache = new List<Tensor<T>>();
+        _splitProbabilitiesCache = splitProbsCache;
+        var leafWtsCache = new List<Tensor<T>>();
+        _leafWeightsCache = leafWtsCache;
 
         // Optional feature preprocessing
         var processed = features;
@@ -218,7 +220,7 @@ public abstract class NODEBase<T>
                 splitProbs[d] = Sigmoid(scaledDiff);
             }
 
-            _splitProbabilitiesCache!.Add(splitProbs);
+            (_splitProbabilitiesCache ?? throw new InvalidOperationException("Split probabilities cache not initialized.")).Add(splitProbs);
 
             // Compute leaf weights using the product of split probabilities
             // Each leaf corresponds to a binary path through the tree
@@ -246,7 +248,7 @@ public abstract class NODEBase<T>
             }
         }
 
-        _leafWeightsCache!.Add(leafWeights);
+        (_leafWeightsCache ?? throw new InvalidOperationException("Leaf weights cache not initialized.")).Add(leafWeights);
 
         // Compute tree output as weighted sum of leaf values
         var output = new Tensor<T>(new[] { batchSize, Options.TreeOutputDimension });

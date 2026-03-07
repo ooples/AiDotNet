@@ -411,8 +411,9 @@ public abstract class TabTransformerBase<T>
             // Update embedding gradients
             for (int c = 0; c < NumCategoricalFeatures; c++)
             {
-                _categoricalEmbeddingsGrad[c] = new Tensor<T>(_categoricalEmbeddings[c].Shape);
-                _categoricalEmbeddingsGrad[c]!.Fill(NumOps.Zero);
+                var catEmbGrad = new Tensor<T>(_categoricalEmbeddings[c].Shape);
+                catEmbGrad.Fill(NumOps.Zero);
+                _categoricalEmbeddingsGrad[c] = catEmbGrad;
             }
 
             if (_columnEmbeddings != null)
@@ -426,11 +427,13 @@ public abstract class TabTransformerBase<T>
                 for (int c = 0; c < NumCategoricalFeatures; c++)
                 {
                     int catIdx = _categoricalIndicesCache[b, c];
+                    var embGrad = _categoricalEmbeddingsGrad[c]
+                        ?? throw new InvalidOperationException("Categorical embedding gradient not initialized.");
                     for (int d = 0; d < Options.EmbeddingDimension; d++)
                     {
                         var g = catGrad[b * NumCategoricalFeatures * Options.EmbeddingDimension + c * Options.EmbeddingDimension + d];
-                        _categoricalEmbeddingsGrad[c]![catIdx * Options.EmbeddingDimension + d] =
-                            NumOps.Add(_categoricalEmbeddingsGrad[c]![catIdx * Options.EmbeddingDimension + d], g);
+                        embGrad[catIdx * Options.EmbeddingDimension + d] =
+                            NumOps.Add(embGrad[catIdx * Options.EmbeddingDimension + d], g);
 
                         if (_columnEmbeddingsGrad != null)
                         {
