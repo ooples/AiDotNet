@@ -1,5 +1,6 @@
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
+using Newtonsoft.Json;
 
 namespace AiDotNet.Preprocessing.Scalers;
 
@@ -25,9 +26,13 @@ namespace AiDotNet.Preprocessing.Scalers;
 /// <typeparam name="T">The numeric type for calculations (e.g., float, double).</typeparam>
 public class MinMaxScaler<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 {
+    [JsonProperty]
     private Vector<T>? _dataMin;
+    [JsonProperty]
     private Vector<T>? _dataMax;
+    [JsonProperty]
     private readonly T _featureRangeMin;
+    [JsonProperty]
     private readonly T _featureRangeMax;
 
     /// <summary>
@@ -59,6 +64,7 @@ public class MinMaxScaler<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// Creates a new instance of <see cref="MinMaxScaler{T}"/> with default range [0, 1].
     /// </summary>
     /// <param name="columnIndices">The column indices to scale, or null for all columns.</param>
+    [JsonConstructor]
     public MinMaxScaler(int[]? columnIndices = null)
         : this(0.0, 1.0, columnIndices)
     {

@@ -1,5 +1,6 @@
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
+using Newtonsoft.Json;
 
 namespace AiDotNet.Preprocessing.Scalers;
 
@@ -27,11 +28,17 @@ namespace AiDotNet.Preprocessing.Scalers;
 /// <typeparam name="T">The numeric type for calculations (e.g., float, double).</typeparam>
 public class RobustScaler<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 {
+    [JsonProperty]
     private Vector<T>? _median;
+    [JsonProperty]
     private Vector<T>? _iqr;
+    [JsonProperty]
     private readonly double _quantileRangeMin;
+    [JsonProperty]
     private readonly double _quantileRangeMax;
+    [JsonProperty]
     private readonly bool _withCentering;
+    [JsonProperty]
     private readonly bool _withScaling;
 
     /// <summary>
@@ -65,6 +72,7 @@ public class RobustScaler<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <param name="withCentering">If true, center the data by subtracting the median. Default is true.</param>
     /// <param name="withScaling">If true, scale the data by dividing by the IQR. Default is true.</param>
     /// <param name="columnIndices">The column indices to scale, or null for all columns.</param>
+    [JsonConstructor]
     public RobustScaler(bool withCentering = true, bool withScaling = true, int[]? columnIndices = null)
         : this(25.0, 75.0, withCentering, withScaling, columnIndices)
     {

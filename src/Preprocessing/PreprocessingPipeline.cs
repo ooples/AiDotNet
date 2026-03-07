@@ -1,7 +1,54 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Validation;
+using Newtonsoft.Json;
 
 namespace AiDotNet.Preprocessing;
+
+/// <summary>
+/// Represents a named step in a preprocessing pipeline.
+/// </summary>
+/// <remarks>
+/// <para>
+/// This class replaces ValueTuple to ensure reliable JSON serialization
+/// of pipeline steps, since ValueTuples do not serialize properly with Newtonsoft.Json.
+/// </para>
+/// </remarks>
+/// <typeparam name="T">The numeric type for calculations.</typeparam>
+/// <typeparam name="TInput">The input data type.</typeparam>
+public class PipelineStep<T, TInput>
+{
+    /// <summary>
+    /// Gets or sets the name of this pipeline step.
+    /// </summary>
+    [JsonProperty]
+    public string Name { get; set; }
+
+    /// <summary>
+    /// Gets or sets the transformer for this pipeline step.
+    /// </summary>
+    [JsonProperty(TypeNameHandling = TypeNameHandling.Auto)]
+    public IDataTransformer<T, TInput, TInput> Transformer { get; set; }
+
+    /// <summary>
+    /// Creates a new empty pipeline step (required for deserialization).
+    /// </summary>
+    public PipelineStep()
+    {
+        Name = string.Empty;
+        Transformer = null!;
+    }
+
+    /// <summary>
+    /// Creates a new pipeline step with the specified name and transformer.
+    /// </summary>
+    /// <param name="name">The step name.</param>
+    /// <param name="transformer">The transformer.</param>
+    public PipelineStep(string name, IDataTransformer<T, TInput, TInput> transformer)
+    {
+        Name = name;
+        Transformer = transformer;
+    }
+}
 
 /// <summary>
 /// Chains multiple data transformers into a sequential pipeline.
@@ -26,8 +73,13 @@ namespace AiDotNet.Preprocessing;
 /// <typeparam name="TOutput">The output data type.</typeparam>
 public class PreprocessingPipeline<T, TInput, TOutput> : IDataTransformer<T, TInput, TOutput>
 {
-    private readonly List<(string Name, IDataTransformer<T, TInput, TInput> Transformer)> _steps;
+    [JsonProperty]
+    private readonly List<PipelineStep<T, TInput>> _steps;
+
+    [JsonProperty(TypeNameHandling = TypeNameHandling.Auto)]
     private IDataTransformer<T, TInput, TOutput>? _finalTransformer;
+
+    [JsonProperty]
     private bool _isFitted;
 
     /// <summary>
@@ -73,14 +125,15 @@ public class PreprocessingPipeline<T, TInput, TOutput> : IDataTransformer<T, TIn
     /// <summary>
     /// Gets the named steps in the pipeline.
     /// </summary>
-    public IReadOnlyList<(string Name, IDataTransformer<T, TInput, TInput> Transformer)> Steps => _steps.AsReadOnly();
+    public IReadOnlyList<(string Name, IDataTransformer<T, TInput, TInput> Transformer)> Steps =>
+        _steps.Select(s => (s.Name, s.Transformer)).ToList().AsReadOnly();
 
     /// <summary>
     /// Creates a new empty preprocessing pipeline.
     /// </summary>
     public PreprocessingPipeline()
     {
-        _steps = new List<(string, IDataTransformer<T, TInput, TInput>)>();
+        _steps = new List<PipelineStep<T, TInput>>();
         _isFitted = false;
     }
 
@@ -121,7 +174,7 @@ public class PreprocessingPipeline<T, TInput, TOutput> : IDataTransformer<T, TIn
             }
         }
 
-        _steps.Add((name, transformer));
+        _steps.Add(new PipelineStep<T, TInput>(name, transformer));
         _isFitted = false;
 
         return this;
