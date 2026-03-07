@@ -165,7 +165,21 @@ public struct ModelResult<T, TInput, TOutput>
     public List<Vector<T>> SelectedFeatures { get; set; }
 
     /// <summary>
-    /// Gets or sets the column indices of features selected during optimization.
+    /// Gets or sets the zero-based column indices of features selected during optimization.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// When an optimizer performs feature selection (e.g., <c>NormalOptimizer</c> calls
+    /// <c>RandomlySelectFeatures</c>), this list records which columns from the original
+    /// input matrix were used to train the best model.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> If you trained with 10 input columns but the optimizer
+    /// determined that only columns 0, 3, and 7 were useful, this list would contain
+    /// <c>{0, 3, 7}</c>. The <see cref="AiModelResult{T, TInput, TOutput}.Predict"/>
+    /// method uses these indices to automatically extract the correct columns from new
+    /// data before passing it to the model.
+    /// </para>
+    /// </remarks>
     public List<int> SelectedFeatureIndices { get; set; }
 }

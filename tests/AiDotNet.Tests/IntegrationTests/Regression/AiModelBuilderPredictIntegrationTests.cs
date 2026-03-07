@@ -21,7 +21,6 @@ namespace AiDotNet.Tests.IntegrationTests.Regression;
 public class AiModelBuilderPredictIntegrationTests
 {
     private const double Tolerance = 1e-6;
-    private const double LooseTolerance = 0.5;
 
     #region Core Bug Fix Tests
 
@@ -370,8 +369,13 @@ public class AiModelBuilderPredictIntegrationTests
         // Act
         var updated = original.WithParameters(new Vector<double>(new[] { 1.0, 2.0 }));
 
-        // Assert
+        // Assert: Values are preserved
         Assert.Equal(new List<int> { 1, 3 }, updated.SelectedFeatureIndices);
+
+        // Assert: Copy independence — mutating original should not affect the copy
+        original.SelectedFeatureIndices.Add(5);
+        Assert.Equal(2, updated.SelectedFeatureIndices.Count);
+        Assert.DoesNotContain(5, updated.SelectedFeatureIndices);
     }
 
     #endregion

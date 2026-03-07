@@ -507,15 +507,15 @@ public class OptimizationResult<T, TInput, TOutput>
             BestIntercept = BestIntercept,
             BestFitnessScore = BestFitnessScore,
             Iterations = Iterations,
-            FitnessHistory = FitnessHistory,
-            SelectedFeatures = SelectedFeatures,
-            SelectedFeatureIndices = SelectedFeatureIndices,
+            FitnessHistory = new Vector<T>(FitnessHistory.ToArray()),
+            SelectedFeatures = SelectedFeatures.Select(v => new Vector<T>(v.ToArray())).ToList(),
+            SelectedFeatureIndices = new List<int>(SelectedFeatureIndices),
             TrainingResult = TrainingResult,
             ValidationResult = ValidationResult,
             TestResult = TestResult,
             FitDetectionResult = FitDetectionResult,
-            CoefficientLowerBounds = CoefficientLowerBounds,
-            CoefficientUpperBounds = CoefficientUpperBounds
+            CoefficientLowerBounds = new Vector<T>(CoefficientLowerBounds.ToArray()),
+            CoefficientUpperBounds = new Vector<T>(CoefficientUpperBounds.ToArray())
         };
     }
 

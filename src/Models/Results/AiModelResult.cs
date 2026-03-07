@@ -1837,7 +1837,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         if (featureIndices != null && featureIndices.Count > 0)
         {
             int inputSize = Helpers.InputHelper<T, TInput>.GetInputSize(normalizedNewData);
-            if (inputSize > featureIndices.Count)
+            if (inputSize != featureIndices.Count)
             {
                 normalizedNewData = Helpers.OptimizerHelper<T, TInput, TOutput>
                     .SelectFeatures(normalizedNewData, featureIndices);
@@ -2193,6 +2193,18 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             var normalizedNewData = _result.PreprocessingInfo?.IsFitted == true
                 ? _result.PreprocessingInfo.TransformFeatures(newData)
                 : newData;
+
+            // Apply feature selection if the optimizer selected a subset of features during training.
+            var featureIndices = _result.OptimizationResult?.SelectedFeatureIndices;
+            if (featureIndices != null && featureIndices.Count > 0)
+            {
+                int inputSize = Helpers.InputHelper<T, TInput>.GetInputSize(normalizedNewData);
+                if (inputSize != featureIndices.Count)
+                {
+                    normalizedNewData = Helpers.OptimizerHelper<T, TInput, TOutput>
+                        .SelectFeatures(normalizedNewData, featureIndices);
+                }
+            }
 
             // Session inference: use configured inference optimizations, including stateful ones, if applicable.
             if (_config != null &&
