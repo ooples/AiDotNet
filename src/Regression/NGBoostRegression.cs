@@ -36,6 +36,12 @@ namespace AiDotNet.Regression;
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
 {
+    private const double MinVariance = 1e-6;
+    private const double MaxStdDevMultiplier = 4.0;
+    private const double MatrixRegularization = 1e-4;
+    private const double DeterminantThreshold = 1e-10;
+    private const double PivotThreshold = 1e-10;
+
     /// <summary>
     /// Base learners for each distribution parameter.
     /// </summary>
@@ -390,7 +396,7 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
             variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
         }
         variance = NumOps.Divide(variance, NumOps.FromDouble(y.Length));
-        T minVariance = NumOps.FromDouble(1e-6);
+        T minVariance = NumOps.FromDouble(MinVariance);
         if (NumOps.LessThan(variance, minVariance))
         {
             variance = minVariance;
@@ -407,10 +413,10 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
             NGBoostDistributionType.Laplace => new LaplaceDistribution<T>(
                 mean, NumOps.FromDouble(Math.Sqrt(varianceD / 2))),
             NGBoostDistributionType.StudentT => new StudentTDistribution<T>(
-                mean, NumOps.Sqrt(variance), NumOps.FromDouble(4.0)),
+                mean, NumOps.Sqrt(variance), NumOps.FromDouble(MaxStdDevMultiplier)),
             NGBoostDistributionType.LogNormal => new LogNormalDistribution<T>(
-                NumOps.FromDouble(Math.Log(Math.Max(meanD, 1e-6))),
-                NumOps.FromDouble(Math.Sqrt(Math.Log(1 + varianceD / (meanD * meanD + 1e-6))))),
+                NumOps.FromDouble(Math.Log(Math.Max(meanD, MinVariance))),
+                NumOps.FromDouble(Math.Sqrt(Math.Log(1 + varianceD / (meanD * meanD + MinVariance))))),
             NGBoostDistributionType.Exponential => new ExponentialDistribution<T>(
                 NumOps.Divide(NumOps.One, EnsurePositive(mean))),
             NGBoostDistributionType.Gamma => new GammaDistribution<T>(
@@ -458,7 +464,7 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// </summary>
     private T EnsurePositive(T value)
     {
-        T minVal = NumOps.FromDouble(1e-6);
+        T minVal = NumOps.FromDouble(MinVariance);
         return NumOps.LessThan(value, minVal) ? minVal : value;
     }
 
@@ -511,8 +517,8 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
     private Matrix<T> InvertMatrix(Matrix<T> matrix)
     {
         int n = matrix.Rows;
-        T reg = NumOps.FromDouble(1e-4);
-        T detThreshold = NumOps.FromDouble(1e-10);
+        T reg = NumOps.FromDouble(MatrixRegularization);
+        T detThreshold = NumOps.FromDouble(DeterminantThreshold);
 
         // Add small regularization for numerical stability
         for (int i = 0; i < n; i++)
@@ -553,7 +559,7 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// </summary>
     private Matrix<T> GaussianElimination(Matrix<T> matrix, int n)
     {
-        T pivotThreshold = NumOps.FromDouble(1e-10);
+        T pivotThreshold = NumOps.FromDouble(PivotThreshold);
 
         // Create augmented matrix [A | I]
         var augmented = new Matrix<T>(n, 2 * n);
@@ -633,7 +639,7 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
             return Enumerable.Range(0, n).ToArray();
         }
 
-        int sampleSize = (int)(n * _options.SubsampleRatio);
+        int sampleSize = Math.Max(1, (int)(n * _options.SubsampleRatio));
         return SamplingHelper.SampleWithoutReplacement(n, sampleSize);
     }
 

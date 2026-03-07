@@ -39,6 +39,11 @@ namespace AiDotNet.Regression;
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 public class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
 {
+    private const double MuFloor = 1e-10;
+    private const double MuCeiling = 1.0 - 1e-10;
+    private const double MinFisherValue = 0.1;
+    private const double PivotThreshold = 1e-10;
+
     /// <summary>
     /// Coefficients for the mean (μ) model.
     /// </summary>
@@ -258,8 +263,10 @@ public class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
                 }
             }
 
-            // Apply link function inverse (boundary conversion for special math)
-            mus[i] = NumOps.FromDouble(InverseLinkFunction(NumOps.ToDouble(etaMu)));
+            // Apply link function inverse and clamp away from beta distribution endpoints
+            double muRaw = InverseLinkFunction(NumOps.ToDouble(etaMu));
+            double muClamped = Math.Max(MuFloor, Math.Min(MuCeiling, muRaw));
+            mus[i] = NumOps.FromDouble(muClamped);
 
             // Linear predictor for precision
             T etaPhi = _precisionIntercept;
@@ -329,8 +336,6 @@ public class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
     private void UpdatePrecisionModel(Matrix<T> x, Vector<T> y, Vector<T> mus, Vector<T> phis)
     {
         int n = x.Rows;
-        T minFisher = NumOps.FromDouble(0.1);
-
         var weights = new Vector<T>(n);
         var z = new Vector<T>(n);
 
@@ -349,7 +354,7 @@ public class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
             // Fisher information for log(phi)
             double trigammaTerm = muD * muD * Trigamma(muD * phiD) + (1 - muD) * (1 - muD) * Trigamma((1 - muD) * phiD);
             double fisherInfo = phiD * phiD * trigammaTerm;
-            fisherInfo = Math.Max(fisherInfo, 0.1);
+            fisherInfo = Math.Max(fisherInfo, MinFisherValue);
 
             T fisherInfoT = NumOps.FromDouble(fisherInfo);
             weights[i] = fisherInfoT;
@@ -461,7 +466,7 @@ public class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// </summary>
     private double LinkFunction(double mu)
     {
-        mu = Math.Max(1e-10, Math.Min(1 - 1e-10, mu));
+        mu = Math.Max(MuFloor, Math.Min(MuCeiling, mu));
 
         return _options.LinkFunction switch
         {
@@ -493,7 +498,7 @@ public class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// </summary>
     private double LinkFunctionDerivative(double mu)
     {
-        mu = Math.Max(1e-10, Math.Min(1 - 1e-10, mu));
+        mu = Math.Max(MuFloor, Math.Min(MuCeiling, mu));
 
         return _options.LinkFunction switch
         {
@@ -585,7 +590,7 @@ public class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
             aug[i, n] = b[i];
         }
 
-        T pivotThreshold = NumOps.FromDouble(1e-10);
+        T pivotThreshold = NumOps.FromDouble(PivotThreshold);
 
         for (int col = 0; col < n; col++)
         {

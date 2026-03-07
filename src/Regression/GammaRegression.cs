@@ -38,6 +38,9 @@ namespace AiDotNet.Regression;
 /// </remarks>
 public class GammaRegression<T> : RegressionBase<T>
 {
+    private const double MuFloor = 1e-10;
+    private const double MuCeiling = 1e10;
+
     /// <summary>
     /// Configuration options for the Gamma regression model.
     /// </summary>
@@ -304,8 +307,8 @@ public class GammaRegression<T> : RegressionBase<T>
     private Vector<T> ClampMu(Vector<T> mu)
     {
         var result = new Vector<T>(mu.Length);
-        T minValue = NumOps.FromDouble(1e-10);
-        T maxValue = NumOps.FromDouble(1e10);
+        T minValue = NumOps.FromDouble(MuFloor);
+        T maxValue = NumOps.FromDouble(MuCeiling);
 
         for (int i = 0; i < mu.Length; i++)
         {
