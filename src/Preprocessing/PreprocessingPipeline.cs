@@ -18,10 +18,10 @@ namespace AiDotNet.Preprocessing;
 public class PipelineStep<T, TInput>
 {
     /// <summary>
-    /// Gets or sets the name of this pipeline step.
+    /// Gets the name of this pipeline step.
     /// </summary>
     [JsonProperty]
-    public string Name { get; set; }
+    public string Name { get; private set; }
 
     /// <summary>
     /// Gets the transformer for this pipeline step.
@@ -36,13 +36,21 @@ public class PipelineStep<T, TInput>
     /// <summary>
     /// Creates a new pipeline step with the specified name and transformer.
     /// </summary>
-    /// <param name="name">The step name.</param>
-    /// <param name="transformer">The transformer.</param>
+    /// <param name="name">The step name. Must not be null or whitespace.</param>
+    /// <param name="transformer">The transformer. Must not be null.</param>
+    /// <exception cref="ArgumentException">Thrown if name is null or whitespace.</exception>
+    /// <exception cref="ArgumentNullException">Thrown if transformer is null.</exception>
     [JsonConstructor]
     public PipelineStep(string name, IDataTransformer<T, TInput, TInput> transformer)
     {
-        Name = name ?? string.Empty;
-        Transformer = transformer;
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            throw new ArgumentException("Pipeline step name cannot be null or whitespace.", nameof(name));
+        }
+
+        Name = name;
+        Transformer = transformer ?? throw new ArgumentNullException(nameof(transformer),
+            "Pipeline step transformer cannot be null.");
     }
 }
 

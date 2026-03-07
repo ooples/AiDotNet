@@ -687,4 +687,135 @@ public class PreprocessingSerializationIntegrationTests
             }
         }
     }
+
+    // ===================== ColumnIndices Round-Trip Test =====================
+
+    [Fact]
+    public void StandardScaler_WithColumnIndices_RoundTripPreservesIndices()
+    {
+        // Arrange: Create a scaler that only operates on columns 0 and 2
+        var scaler = new StandardScaler<double>(columnIndices: new[] { 0, 2 });
+        var data = CreateTestMatrix(); // 5 rows x 3 columns
+        scaler.Fit(data);
+
+        var settings = CreateSettings();
+
+        // Act
+        var json = JsonConvert.SerializeObject(scaler, settings);
+        var deserialized = JsonConvert.DeserializeObject<StandardScaler<double>>(json, settings);
+
+        // Assert: ColumnIndices round-tripped correctly
+        Assert.NotNull(deserialized);
+        Assert.NotNull(deserialized.ColumnIndices);
+        Assert.Equal(new[] { 0, 2 }, deserialized.ColumnIndices);
+        Assert.True(deserialized.IsFitted);
+
+        // Transform should produce identical results
+        var originalResult = scaler.Transform(data);
+        var deserializedResult = deserialized.Transform(data);
+
+        for (int i = 0; i < originalResult.Rows; i++)
+        {
+            for (int j = 0; j < originalResult.Columns; j++)
+            {
+                Assert.Equal(originalResult[i, j], deserializedResult[i, j], 1e-10);
+            }
+        }
+
+        // Column 1 (not in ColumnIndices) should be unchanged
+        for (int i = 0; i < data.Rows; i++)
+        {
+            Assert.Equal(data[i, 1], deserializedResult[i, 1], 1e-10);
+        }
+    }
+
+    // ===================== TargetPipeline Round-Trip Test =====================
+
+    [Fact]
+    public void PreprocessingInfo_WithNullTargetPipeline_RoundTripPreservesNullTarget()
+    {
+        // Arrange: PreprocessingInfo with feature pipeline but null target pipeline
+        var featurePipeline = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();
+        featurePipeline.Add("scaler", new StandardScaler<double>());
+        var data = CreateTestMatrix();
+        featurePipeline.Fit(data);
+
+        var info = new PreprocessingInfo<double, Matrix<double>, Vector<double>>(
+            featurePipeline,
+            targetPipeline: null
+        );
+
+        var settings = CreateSettings();
+
+        // Act
+        var json = JsonConvert.SerializeObject(info, settings);
+        var deserialized = JsonConvert.DeserializeObject<PreprocessingInfo<double, Matrix<double>, Vector<double>>>(json, settings);
+
+        // Assert: null TargetPipeline preserved
+        Assert.NotNull(deserialized);
+        Assert.True(deserialized.IsFitted);
+        Assert.Null(deserialized.TargetPipeline);
+        Assert.False(deserialized.IsTargetFitted);
+
+        // Feature pipeline still works
+        var originalResult = info.TransformFeatures(data);
+        var deserializedResult = deserialized.TransformFeatures(data);
+
+        for (int i = 0; i < originalResult.Rows; i++)
+        {
+            for (int j = 0; j < originalResult.Columns; j++)
+            {
+                Assert.Equal(originalResult[i, j], deserializedResult[i, j], 1e-10);
+            }
+        }
+    }
+
+    [Fact]
+    public void PreprocessingInfo_WithTargetPipeline_RoundTripPreservesTarget()
+    {
+        // Arrange: Create PreprocessingInfo where TOutput is also Matrix<double>
+        // so we can use a StandardScaler as the target pipeline transformer
+        var featurePipeline = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();
+        featurePipeline.Add("feature_scaler", new StandardScaler<double>());
+
+        var targetPipeline = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();
+        targetPipeline.Add("target_scaler", new MinMaxScaler<double>());
+
+        var featureData = CreateTestMatrix();
+        var targetData = new Matrix<double>(new double[,] { { 10 }, { 20 }, { 30 }, { 40 }, { 50 } });
+
+        featurePipeline.Fit(featureData);
+        targetPipeline.Fit(targetData);
+
+        var info = new PreprocessingInfo<double, Matrix<double>, Matrix<double>>(
+            featurePipeline,
+            targetPipeline
+        );
+
+        var settings = CreateSettings();
+
+        // Act
+        var json = JsonConvert.SerializeObject(info, settings);
+        var deserialized = JsonConvert.DeserializeObject<PreprocessingInfo<double, Matrix<double>, Matrix<double>>>(json, settings);
+
+        // Assert: Both pipelines survive round-trip
+        Assert.NotNull(deserialized);
+        Assert.True(deserialized.IsFitted);
+        Assert.NotNull(deserialized.TargetPipeline);
+        Assert.True(deserialized.IsTargetFitted);
+
+        // Verify feature transform
+        var originalFeature = info.TransformFeatures(featureData);
+        var deserializedFeature = deserialized.TransformFeatures(featureData);
+        for (int i = 0; i < originalFeature.Rows; i++)
+            for (int j = 0; j < originalFeature.Columns; j++)
+                Assert.Equal(originalFeature[i, j], deserializedFeature[i, j], 1e-10);
+
+        // Verify target transform
+        var originalTarget = targetPipeline.Transform(targetData);
+        var deserializedTarget = deserialized.TargetPipeline.Transform(targetData);
+        for (int i = 0; i < originalTarget.Rows; i++)
+            for (int j = 0; j < originalTarget.Columns; j++)
+                Assert.Equal(originalTarget[i, j], deserializedTarget[i, j], 1e-10);
+    }
 }
