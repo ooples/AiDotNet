@@ -316,7 +316,7 @@ public class DAGMALinear<T> : ContinuousOptimizationBase<T>
             // Find pivot
             int maxRow = k;
             for (int i = k + 1; i < d; i++)
-                if (Math.Abs(NumOps.ToDouble(LU[i, k])) > Math.Abs(NumOps.ToDouble(LU[maxRow, k])))
+                if (NumOps.GreaterThan(NumOps.Abs(LU[i, k]), NumOps.Abs(LU[maxRow, k])))
                     maxRow = i;
 
             if (maxRow != k)
@@ -357,7 +357,7 @@ public class DAGMALinear<T> : ContinuousOptimizationBase<T>
         {
             int maxRow = col;
             for (int row = col + 1; row < d; row++)
-                if (Math.Abs(NumOps.ToDouble(aug[row, col])) > Math.Abs(NumOps.ToDouble(aug[maxRow, col])))
+                if (NumOps.GreaterThan(NumOps.Abs(aug[row, col]), NumOps.Abs(aug[maxRow, col])))
                     maxRow = row;
 
             if (NumOps.LessThan(NumOps.Abs(aug[maxRow, col]), NumOps.FromDouble(1e-12)))

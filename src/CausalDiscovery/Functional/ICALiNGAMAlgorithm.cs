@@ -198,7 +198,7 @@ public class ICALiNGAMAlgorithm<T> : FunctionalBase<T>
         {
             int maxRow = col;
             for (int row = col + 1; row < d; row++)
-                if (Math.Abs(NumOps.ToDouble(aug[row, col])) > Math.Abs(NumOps.ToDouble(aug[maxRow, col])))
+                if (NumOps.GreaterThan(NumOps.Abs(aug[row, col]), NumOps.Abs(aug[maxRow, col])))
                     maxRow = row;
             if (NumOps.LessThan(NumOps.Abs(aug[maxRow, col]), NumOps.FromDouble(1e-12))) return null;
             if (maxRow != col)
