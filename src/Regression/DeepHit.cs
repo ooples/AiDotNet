@@ -129,15 +129,16 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
         // Convert times to bin indices
         var timeBinIndices = ConvertTimesToBins(times);
 
-        double bestLoss = double.MaxValue;
+        T bestLoss = NumOps.FromDouble(double.MaxValue);
         int patienceCounter = 0;
         var bestWeights = SaveWeights();
+        T lossThreshold = NumOps.FromDouble(1e-6);
 
         for (int epoch = 0; epoch < _options.Epochs; epoch++)
         {
             // Mini-batch training
             var shuffledIndices = ShuffleArray(Enumerable.Range(0, n).ToArray());
-            double epochLoss = 0;
+            T epochLoss = NumOps.Zero;
             int numBatches = 0;
 
             for (int b = 0; b < n; b += _options.BatchSize)
@@ -149,22 +150,22 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
                 var (pmfs, sharedOutputs, causeOutputs) = ForwardPass(x, batchIndices);
 
                 // Compute loss and gradients
-                var (loss, gradients) = ComputeLossAndGradients(
+                var (loss, gradients) = ComputeLossAndGradients(  // loss is T
                     pmfs, timeBinIndices, events, batchIndices);
 
-                epochLoss += loss;
+                epochLoss = NumOps.Add(epochLoss, loss);
                 numBatches++;
 
                 // Backward pass and update
                 BackwardPass(x, batchIndices, sharedOutputs, causeOutputs, gradients);
             }
 
-            epochLoss /= numBatches;
+            epochLoss = NumOps.Divide(epochLoss, NumOps.FromDouble(numBatches));
 
             // Early stopping
             if (_options.EarlyStoppingPatience.HasValue)
             {
-                if (epochLoss < bestLoss - 1e-6)
+                if (NumOps.LessThan(epochLoss, NumOps.Subtract(bestLoss, lossThreshold)))
                 {
                     bestLoss = epochLoss;
                     patienceCounter = 0;
@@ -245,20 +246,20 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
         {
             for (int j = 0; j < times.Length; j++)
             {
-                double t = NumOps.ToDouble(times[j]);
-                int binIndex = GetTimeBinIndex(t);
+                int binIndex = GetTimeBinIndex(times[j]);
 
                 // S(t) = 1 - sum of PMF up to time bin
-                double cumProb = 0;
+                T cumProb = NumOps.Zero;
                 for (int k = 0; k < _options.NumRisks; k++)
                 {
                     for (int b = 0; b <= binIndex && b < _options.NumTimeBins; b++)
                     {
-                        cumProb += NumOps.ToDouble(pmf[i, k, b]);
+                        cumProb = NumOps.Add(cumProb, pmf[i, k, b]);
                     }
                 }
 
-                survivalProbs[i, j] = NumOps.FromDouble(Math.Max(0, 1 - cumProb));
+                T survival = NumOps.Subtract(NumOps.One, cumProb);
+                survivalProbs[i, j] = NumOps.LessThan(survival, NumOps.Zero) ? NumOps.Zero : survival;
             }
         }
 
@@ -287,17 +288,16 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
         {
             for (int j = 0; j < times.Length; j++)
             {
-                double t = NumOps.ToDouble(times[j]);
-                int binIndex = GetTimeBinIndex(t);
+                int binIndex = GetTimeBinIndex(times[j]);
 
                 // CIF(t, k) = sum of PMF_k up to time bin
-                double cumProb = 0;
+                T cumProb = NumOps.Zero;
                 for (int b = 0; b <= binIndex && b < _options.NumTimeBins; b++)
                 {
-                    cumProb += NumOps.ToDouble(pmf[i, riskIndex, b]);
+                    cumProb = NumOps.Add(cumProb, pmf[i, riskIndex, b]);
                 }
 
-                cif[i, j] = NumOps.FromDouble(cumProb);
+                cif[i, j] = cumProb;
             }
         }
 
@@ -316,24 +316,24 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
 
         for (int i = 0; i < input.Rows; i++)
         {
-            double expected = 0;
-            double totalProb = 0;
+            T expected = NumOps.Zero;
+            T totalProb = NumOps.Zero;
 
             for (int k = 0; k < _options.NumRisks; k++)
             {
                 for (int t = 0; t < _options.NumTimeBins; t++)
                 {
-                    double prob = NumOps.ToDouble(pmf[i, k, t]);
-                    double time = GetTimeBinCenter(t);
-                    expected += prob * time;
-                    totalProb += prob;
+                    T prob = pmf[i, k, t];
+                    T time = GetTimeBinCenterT(t);
+                    expected = NumOps.Add(expected, NumOps.Multiply(prob, time));
+                    totalProb = NumOps.Add(totalProb, prob);
                 }
             }
 
             // Normalize by total probability (may be < 1 for censored observations)
-            expectedTimes[i] = totalProb > 0
-                ? NumOps.FromDouble(expected / totalProb)
-                : NumOps.FromDouble(GetTimeBinCenter(_options.NumTimeBins - 1));
+            expectedTimes[i] = NumOps.GreaterThan(totalProb, NumOps.Zero)
+                ? NumOps.Divide(expected, totalProb)
+                : GetTimeBinCenterT(_options.NumTimeBins - 1);
         }
 
         return expectedTimes;
@@ -349,28 +349,31 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
         var pmf = PredictPMF(input);
         var medianTimes = new Vector<T>(input.Rows);
 
+        T half = NumOps.FromDouble(0.5);
         for (int i = 0; i < input.Rows; i++)
         {
-            double cumProb = 0;
+            T cumProb = NumOps.Zero;
+            bool found = false;
 
             // Find time bin where cumulative probability crosses 0.5
             for (int t = 0; t < _options.NumTimeBins; t++)
             {
                 for (int k = 0; k < _options.NumRisks; k++)
                 {
-                    cumProb += NumOps.ToDouble(pmf[i, k, t]);
+                    cumProb = NumOps.Add(cumProb, pmf[i, k, t]);
                 }
 
-                if (cumProb >= 0.5)
+                if (!NumOps.LessThan(cumProb, half))
                 {
-                    medianTimes[i] = NumOps.FromDouble(GetTimeBinCenter(t));
+                    medianTimes[i] = GetTimeBinCenterT(t);
+                    found = true;
                     break;
                 }
             }
 
-            if (cumProb < 0.5)
+            if (!found)
             {
-                medianTimes[i] = NumOps.FromDouble(GetTimeBinCenter(_options.NumTimeBins - 1));
+                medianTimes[i] = GetTimeBinCenterT(_options.NumTimeBins - 1);
             }
         }
 
@@ -489,19 +492,24 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
     /// </summary>
     private void InitializeTimeBins(Vector<T> times)
     {
-        double minTime = times.Min(t => NumOps.ToDouble(t));
-        double maxTime = times.Max(t => NumOps.ToDouble(t));
+        T minTime = times[0];
+        T maxTime = times[0];
+        for (int i = 1; i < times.Length; i++)
+        {
+            if (NumOps.LessThan(times[i], minTime)) minTime = times[i];
+            if (NumOps.GreaterThan(times[i], maxTime)) maxTime = times[i];
+        }
 
         // Add small buffer
-        double range = maxTime - minTime;
-        maxTime += range * 0.01;
+        T range = NumOps.Subtract(maxTime, minTime);
+        maxTime = NumOps.Add(maxTime, NumOps.Multiply(range, NumOps.FromDouble(0.01)));
 
         _timeBinEdges = new Vector<T>(_options.NumTimeBins + 1);
-        double binWidth = (maxTime - minTime) / _options.NumTimeBins;
+        T binWidth = NumOps.Divide(NumOps.Subtract(maxTime, minTime), NumOps.FromDouble(_options.NumTimeBins));
 
         for (int i = 0; i <= _options.NumTimeBins; i++)
         {
-            _timeBinEdges[i] = NumOps.FromDouble(minTime + i * binWidth);
+            _timeBinEdges[i] = NumOps.Add(minTime, NumOps.Multiply(NumOps.FromDouble(i), binWidth));
         }
     }
 
@@ -514,7 +522,7 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
 
         for (int i = 0; i < times.Length; i++)
         {
-            binIndices[i] = GetTimeBinIndex(NumOps.ToDouble(times[i]));
+            binIndices[i] = GetTimeBinIndex(times[i]);
         }
 
         return binIndices;
@@ -523,7 +531,7 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Gets the bin index for a given time.
     /// </summary>
-    private int GetTimeBinIndex(double time)
+    private int GetTimeBinIndex(T time)
     {
         if (_timeBinEdges == null)
         {
@@ -532,7 +540,7 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
 
         for (int i = 1; i < _timeBinEdges.Length; i++)
         {
-            if (time < NumOps.ToDouble(_timeBinEdges[i]))
+            if (NumOps.LessThan(time, _timeBinEdges[i]))
             {
                 return i - 1;
             }
@@ -542,18 +550,26 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
     }
 
     /// <summary>
-    /// Gets the center time of a bin.
+    /// Gets the center time of a bin as T.
     /// </summary>
-    private double GetTimeBinCenter(int binIndex)
+    private T GetTimeBinCenterT(int binIndex)
     {
         if (_timeBinEdges == null)
         {
-            return binIndex;
+            return NumOps.FromDouble(binIndex);
         }
 
-        double left = NumOps.ToDouble(_timeBinEdges[binIndex]);
-        double right = NumOps.ToDouble(_timeBinEdges[Math.Min(binIndex + 1, _timeBinEdges.Length - 1)]);
-        return (left + right) / 2;
+        T left = _timeBinEdges[binIndex];
+        T right = _timeBinEdges[Math.Min(binIndex + 1, _timeBinEdges.Length - 1)];
+        return NumOps.Divide(NumOps.Add(left, right), NumOps.FromDouble(2));
+    }
+
+    /// <summary>
+    /// Gets the center time of a bin as double (for evaluation metrics).
+    /// </summary>
+    private double GetTimeBinCenter(int binIndex)
+    {
+        return NumOps.ToDouble(GetTimeBinCenterT(binIndex));
     }
 
     /// <summary>
@@ -701,20 +717,25 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
         int outputSize = weights.Columns;
 
         var output = new Vector<T>[n];
+        T dropoutScale = _options.DropoutRate > 0
+            ? NumOps.Divide(NumOps.One, NumOps.FromDouble(1 - _options.DropoutRate))
+            : NumOps.One;
+
         for (int i = 0; i < n; i++)
         {
             output[i] = new Vector<T>(outputSize);
             for (int j = 0; j < outputSize; j++)
             {
-                double sum = NumOps.ToDouble(biases[j]);
+                T sum = biases[j];
                 for (int k = 0; k < input[i].Length; k++)
                 {
-                    sum += NumOps.ToDouble(input[i][k]) * NumOps.ToDouble(weights[k, j]);
+                    sum = NumOps.Add(sum, NumOps.Multiply(input[i][k], weights[k, j]));
                 }
 
+                // Activation functions are calibrated numerical recipes — boundary conversion
                 output[i][j] = applyActivation
-                    ? NumOps.FromDouble(ApplyActivation(sum))
-                    : NumOps.FromDouble(sum);
+                    ? NumOps.FromDouble(ApplyActivation(NumOps.ToDouble(sum)))
+                    : sum;
             }
         }
 
@@ -731,8 +752,7 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
                     }
                     else
                     {
-                        output[i][j] = NumOps.FromDouble(
-                            NumOps.ToDouble(output[i][j]) / (1 - _options.DropoutRate));
+                        output[i][j] = NumOps.Multiply(output[i][j], dropoutScale);
                     }
                 }
             }
@@ -747,38 +767,40 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
     private void ApplySoftmaxAcrossAll(Vector<T>[][] pmfs)
     {
         int n = pmfs.Length;
+        T tiny = NumOps.FromDouble(1e-10);
 
         for (int i = 0; i < n; i++)
         {
-            // Collect all logits
-            double maxLogit = double.MinValue;
+            // Find max logit for numerical stability
+            T maxLogit = pmfs[i][0][0];
             for (int k = 0; k < _options.NumRisks; k++)
             {
                 for (int t = 0; t < _options.NumTimeBins; t++)
                 {
-                    double logit = NumOps.ToDouble(pmfs[i][k][t]);
-                    if (logit > maxLogit) maxLogit = logit;
+                    if (NumOps.GreaterThan(pmfs[i][k][t], maxLogit))
+                        maxLogit = pmfs[i][k][t];
                 }
             }
 
             // Softmax with numerical stability
-            double sumExp = 0;
+            T sumExp = NumOps.Zero;
             for (int k = 0; k < _options.NumRisks; k++)
             {
                 for (int t = 0; t < _options.NumTimeBins; t++)
                 {
-                    double expVal = Math.Exp(NumOps.ToDouble(pmfs[i][k][t]) - maxLogit);
-                    pmfs[i][k][t] = NumOps.FromDouble(expVal);
-                    sumExp += expVal;
+                    T expVal = NumOps.Exp(NumOps.Subtract(pmfs[i][k][t], maxLogit));
+                    pmfs[i][k][t] = expVal;
+                    sumExp = NumOps.Add(sumExp, expVal);
                 }
             }
 
             // Normalize
+            T denom = NumOps.Add(sumExp, tiny);
             for (int k = 0; k < _options.NumRisks; k++)
             {
                 for (int t = 0; t < _options.NumTimeBins; t++)
                 {
-                    pmfs[i][k][t] = NumOps.FromDouble(NumOps.ToDouble(pmfs[i][k][t]) / (sumExp + 1e-10));
+                    pmfs[i][k][t] = NumOps.Divide(pmfs[i][k][t], denom);
                 }
             }
         }
@@ -787,12 +809,13 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Computes loss and gradients.
     /// </summary>
-    private (double loss, Vector<T>[][]) ComputeLossAndGradients(
+    private (T loss, Vector<T>[][]) ComputeLossAndGradients(
         Vector<T>[][] pmfs, int[] timeBinIndices, Vector<T> events, int[] batchIndices)
     {
         int n = batchIndices.Length;
-        double logLikeLoss = 0;
-        double rankingLoss = 0;
+        T logLikeLoss = NumOps.Zero;
+        T rankingLoss = NumOps.Zero;
+        T tiny = NumOps.FromDouble(1e-10);
 
         var gradients = new Vector<T>[n][];
         for (int i = 0; i < n; i++)
@@ -817,17 +840,16 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
                 int k = eventType - 1;  // Event types are 1-indexed
                 if (k < _options.NumRisks && timeBin < _options.NumTimeBins)
                 {
-                    double prob = NumOps.ToDouble(pmfs[bi][k][timeBin]);
-                    logLikeLoss -= Math.Log(prob + 1e-10);
+                    T prob = pmfs[bi][k][timeBin];
+                    logLikeLoss = NumOps.Subtract(logLikeLoss, NumOps.Log(NumOps.Add(prob, tiny)));
 
                     // Gradient for softmax cross-entropy
                     for (int kk = 0; kk < _options.NumRisks; kk++)
                     {
                         for (int tt = 0; tt < _options.NumTimeBins; tt++)
                         {
-                            double target = (kk == k && tt == timeBin) ? 1.0 : 0.0;
-                            double pred = NumOps.ToDouble(pmfs[bi][kk][tt]);
-                            gradients[bi][kk][tt] = NumOps.FromDouble(pred - target);
+                            T target = (kk == k && tt == timeBin) ? NumOps.One : NumOps.Zero;
+                            gradients[bi][kk][tt] = NumOps.Subtract(pmfs[bi][kk][tt], target);
                         }
                     }
                 }
@@ -835,28 +857,27 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
             else
             {
                 // Censored - maximize survival probability up to censoring time
-                // i.e., minimize sum of probabilities before censoring
-                double cumProb = 0;
+                T cumProb = NumOps.Zero;
                 for (int k = 0; k < _options.NumRisks; k++)
                 {
                     for (int t = 0; t < timeBin && t < _options.NumTimeBins; t++)
                     {
-                        cumProb += NumOps.ToDouble(pmfs[bi][k][t]);
+                        cumProb = NumOps.Add(cumProb, pmfs[bi][k][t]);
                     }
                 }
 
-                logLikeLoss -= Math.Log(1 - cumProb + 1e-10);
+                logLikeLoss = NumOps.Subtract(logLikeLoss,
+                    NumOps.Log(NumOps.Add(NumOps.Subtract(NumOps.One, cumProb), tiny)));
 
                 // Gradients
+                T survDenom = NumOps.Add(NumOps.Subtract(NumOps.One, cumProb), tiny);
                 for (int k = 0; k < _options.NumRisks; k++)
                 {
                     for (int t = 0; t < _options.NumTimeBins; t++)
                     {
                         if (t < timeBin)
                         {
-                            // Encourage smaller probabilities before censoring
-                            gradients[bi][k][t] = NumOps.FromDouble(
-                                NumOps.ToDouble(pmfs[bi][k][t]) / (1 - cumProb + 1e-10));
+                            gradients[bi][k][t] = NumOps.Divide(pmfs[bi][k][t], survDenom);
                         }
                     }
                 }
@@ -866,6 +887,10 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
         // Ranking loss
         if (_options.RankingWeight > 0)
         {
+            T sigma = NumOps.FromDouble(_options.RankingSigma);
+            T rankWeight = NumOps.FromDouble(_options.RankingWeight);
+            T nT = NumOps.FromDouble(n);
+
             for (int i = 0; i < n; i++)
             {
                 int idxI = batchIndices[i];
@@ -885,32 +910,30 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
                     if (timeBinI < timeBinJ)
                     {
                         // Compute CIF up to timeBinI
-                        double cifI = 0, cifJ = 0;
+                        T cifI = NumOps.Zero;
+                        T cifJ = NumOps.Zero;
                         for (int k = 0; k < _options.NumRisks; k++)
                         {
                             for (int t = 0; t <= timeBinI && t < _options.NumTimeBins; t++)
                             {
-                                cifI += NumOps.ToDouble(pmfs[i][k][t]);
-                                cifJ += NumOps.ToDouble(pmfs[j][k][t]);
+                                cifI = NumOps.Add(cifI, pmfs[i][k][t]);
+                                cifJ = NumOps.Add(cifJ, pmfs[j][k][t]);
                             }
                         }
 
                         // Ranking loss: i should have higher CIF at timeBinI
-                        double diff = cifJ - cifI;  // We want cifI > cifJ
-                        double sigma = _options.RankingSigma;
-                        double eta = Math.Exp(-diff / sigma);
-                        rankingLoss += eta;
+                        T diff = NumOps.Subtract(cifJ, cifI);
+                        T eta = NumOps.Exp(NumOps.Negate(NumOps.Divide(diff, sigma)));
+                        rankingLoss = NumOps.Add(rankingLoss, eta);
 
                         // Gradient contribution
-                        double gradScale = eta / sigma * _options.RankingWeight / n;
+                        T gradScale = NumOps.Divide(NumOps.Multiply(NumOps.Divide(eta, sigma), rankWeight), nT);
                         for (int k = 0; k < _options.NumRisks; k++)
                         {
                             for (int t = 0; t <= timeBinI && t < _options.NumTimeBins; t++)
                             {
-                                gradients[i][k][t] = NumOps.FromDouble(
-                                    NumOps.ToDouble(gradients[i][k][t]) - gradScale);
-                                gradients[j][k][t] = NumOps.FromDouble(
-                                    NumOps.ToDouble(gradients[j][k][t]) + gradScale);
+                                gradients[i][k][t] = NumOps.Subtract(gradients[i][k][t], gradScale);
+                                gradients[j][k][t] = NumOps.Add(gradients[j][k][t], gradScale);
                             }
                         }
                     }
@@ -918,7 +941,9 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
             }
         }
 
-        double totalLoss = (logLikeLoss + _options.RankingWeight * rankingLoss) / n;
+        T totalLoss = NumOps.Divide(
+            NumOps.Add(logLikeLoss, NumOps.Multiply(NumOps.FromDouble(_options.RankingWeight), rankingLoss)),
+            NumOps.FromDouble(n));
         return (totalLoss, gradients);
     }
 
@@ -930,8 +955,8 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
         List<Vector<T>[]> causeOutputs, Vector<T>[][] gradients)
     {
         int n = batchIndices.Length;
-        double lr = _options.LearningRate / n;
-        double l2 = _options.L2Regularization;
+        T lr = NumOps.Divide(NumOps.FromDouble(_options.LearningRate), NumOps.FromDouble(n));
+        T l2 = NumOps.FromDouble(_options.L2Regularization);
 
         // Update output layers and cause-specific layers
         for (int k = 0; k < _options.NumRisks; k++)
@@ -946,31 +971,28 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
             // Output layer gradients
             for (int j = 0; j < _options.NumTimeBins; j++)
             {
-                double biasGrad = 0;
+                T biasGrad = NumOps.Zero;
                 for (int i = 0; i < n; i++)
                 {
-                    biasGrad += NumOps.ToDouble(gradients[i][k][j]);
+                    biasGrad = NumOps.Add(biasGrad, gradients[i][k][j]);
                 }
-                _outputBiases[k][j] = NumOps.FromDouble(
-                    NumOps.ToDouble(_outputBiases[k][j]) - lr * biasGrad);
+                _outputBiases[k][j] = NumOps.Subtract(_outputBiases[k][j], NumOps.Multiply(lr, biasGrad));
 
                 for (int m = 0; m < _options.HiddenLayerSize; m++)
                 {
-                    double wGrad = 0;
+                    T wGrad = NumOps.Zero;
                     for (int i = 0; i < n; i++)
                     {
-                        double inp = NumOps.ToDouble(causeOutputs[k][i][m]);
-                        wGrad += NumOps.ToDouble(gradients[i][k][j]) * inp;
+                        T inp = causeOutputs[k][i][m];
+                        wGrad = NumOps.Add(wGrad, NumOps.Multiply(gradients[i][k][j], inp));
 
                         // Accumulate gradient for cause layer
-                        causeGrad[i][m] = NumOps.FromDouble(
-                            NumOps.ToDouble(causeGrad[i][m]) +
-                            NumOps.ToDouble(gradients[i][k][j]) * NumOps.ToDouble(_outputWeights[k][m, j]));
+                        causeGrad[i][m] = NumOps.Add(causeGrad[i][m],
+                            NumOps.Multiply(gradients[i][k][j], _outputWeights[k][m, j]));
                     }
 
-                    wGrad += l2 * NumOps.ToDouble(_outputWeights[k][m, j]);
-                    _outputWeights[k][m, j] = NumOps.FromDouble(
-                        NumOps.ToDouble(_outputWeights[k][m, j]) - lr * wGrad);
+                    wGrad = NumOps.Add(wGrad, NumOps.Multiply(l2, _outputWeights[k][m, j]));
+                    _outputWeights[k][m, j] = NumOps.Subtract(_outputWeights[k][m, j], NumOps.Multiply(lr, wGrad));
                 }
             }
 
@@ -994,36 +1016,36 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
 
                 for (int j = 0; j < outputSize; j++)
                 {
-                    double biasGrad = 0;
+                    T biasGrad = NumOps.Zero;
                     for (int i = 0; i < n; i++)
                     {
-                        double actDeriv = ApplyActivationDerivative(
-                            NumOps.ToDouble(causeOutputs[k][i][j]));
-                        biasGrad += NumOps.ToDouble(currentGrad[i][j]) * actDeriv;
+                        // Activation derivative is a calibrated recipe — boundary conversion
+                        T actDeriv = NumOps.FromDouble(ApplyActivationDerivative(
+                            NumOps.ToDouble(causeOutputs[k][i][j])));
+                        biasGrad = NumOps.Add(biasGrad, NumOps.Multiply(currentGrad[i][j], actDeriv));
                     }
-                    b[j] = NumOps.FromDouble(NumOps.ToDouble(b[j]) - lr * biasGrad);
+                    b[j] = NumOps.Subtract(b[j], NumOps.Multiply(lr, biasGrad));
 
                     for (int m = 0; m < inputSize; m++)
                     {
-                        double wGrad = 0;
+                        T wGrad = NumOps.Zero;
                         for (int i = 0; i < n; i++)
                         {
                             var input = layer == 0 ? sharedOutputs : causeOutputs[k];
-                            double actDeriv = ApplyActivationDerivative(
-                                NumOps.ToDouble(causeOutputs[k][i][j]));
-                            double inp = NumOps.ToDouble(input[i][m]);
-                            wGrad += NumOps.ToDouble(currentGrad[i][j]) * actDeriv * inp;
+                            T actDeriv = NumOps.FromDouble(ApplyActivationDerivative(
+                                NumOps.ToDouble(causeOutputs[k][i][j])));
+                            T gradActDeriv = NumOps.Multiply(currentGrad[i][j], actDeriv);
+                            wGrad = NumOps.Add(wGrad, NumOps.Multiply(gradActDeriv, input[i][m]));
 
                             if (nextGrad != null)
                             {
-                                nextGrad[i][m] = NumOps.FromDouble(
-                                    NumOps.ToDouble(nextGrad[i][m]) +
-                                    NumOps.ToDouble(currentGrad[i][j]) * actDeriv * NumOps.ToDouble(w[m, j]));
+                                nextGrad[i][m] = NumOps.Add(nextGrad[i][m],
+                                    NumOps.Multiply(gradActDeriv, w[m, j]));
                             }
                         }
 
-                        wGrad += l2 * NumOps.ToDouble(w[m, j]);
-                        w[m, j] = NumOps.FromDouble(NumOps.ToDouble(w[m, j]) - lr * wGrad);
+                        wGrad = NumOps.Add(wGrad, NumOps.Multiply(l2, w[m, j]));
+                        w[m, j] = NumOps.Subtract(w[m, j], NumOps.Multiply(lr, wGrad));
                     }
                 }
 
@@ -1148,25 +1170,25 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
             var firstLayerWeights = _sharedWeights[0];
             for (int f = 0; f < _numFeatures; f++)
             {
-                double sumAbsWeight = 0;
+                T sumAbsWeight = NumOps.Zero;
                 for (int j = 0; j < firstLayerWeights.Columns; j++)
                 {
-                    sumAbsWeight += Math.Abs(NumOps.ToDouble(firstLayerWeights[f, j]));
+                    sumAbsWeight = NumOps.Add(sumAbsWeight, NumOps.Abs(firstLayerWeights[f, j]));
                 }
-                importances[f] = NumOps.FromDouble(sumAbsWeight);
+                importances[f] = sumAbsWeight;
             }
         }
 
-        double sum = 0;
+        T sum = NumOps.Zero;
         for (int f = 0; f < _numFeatures; f++)
         {
-            sum += NumOps.ToDouble(importances[f]);
+            sum = NumOps.Add(sum, importances[f]);
         }
-        if (sum > 0)
+        if (NumOps.GreaterThan(sum, NumOps.Zero))
         {
             for (int f = 0; f < _numFeatures; f++)
             {
-                importances[f] = NumOps.Divide(importances[f], NumOps.FromDouble(sum));
+                importances[f] = NumOps.Divide(importances[f], sum);
             }
         }
 
