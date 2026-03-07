@@ -1,5 +1,6 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.AnomalyDetection.DistanceBased;
@@ -215,7 +216,7 @@ public class LOCIDetector<T> : AnomalyDetectorBase<T>
         // For efficiency, sample a subset
         double maxDist = 0;
         int sampleSize = Math.Min(100, X.Rows);
-        var random = new Random(_randomSeed);
+        var random = RandomHelper.CreateSeededRandom(_randomSeed);
 
         for (int i = 0; i < sampleSize; i++)
         {

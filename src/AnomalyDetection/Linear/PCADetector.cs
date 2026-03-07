@@ -1,5 +1,6 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.AnomalyDetection.Linear;
@@ -249,7 +250,7 @@ public class PCADetector<T> : AnomalyDetectorBase<T>
     private (Vector<T> eigenvalues, Matrix<T> eigenvectors) ComputeEigenDecomposition(Matrix<T> matrix, int d)
     {
         // Simplified power iteration method for eigendecomposition
-        var random = new Random(_randomSeed);
+        var random = RandomHelper.CreateSeededRandom(_randomSeed);
         var eigenvalues = new Vector<T>(d);
         var eigenvectors = new Matrix<T>(d, d);
         var A = CopyMatrix(matrix, d);

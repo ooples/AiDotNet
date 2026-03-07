@@ -1,5 +1,6 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.AnomalyDetection.TreeBased;
@@ -121,7 +122,7 @@ public class SCiForest<T> : AnomalyDetectorBase<T>
         // Build trees
         for (int t = 0; t < _numTrees; t++)
         {
-            var random = new Random(_randomSeed + t);
+            var random = RandomHelper.CreateSeededRandom(_randomSeed + t);
 
             // Sample data
             var sampleIndices = SampleIndices(X.Rows, nSamples, random);
