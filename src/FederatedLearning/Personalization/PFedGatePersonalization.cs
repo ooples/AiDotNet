@@ -81,10 +81,13 @@ public class PFedGatePersonalization<T> : Infrastructure.FederatedLearningCompon
             InitializeGates(globalParams);
         }
 
+        var gates = _gates ?? throw new InvalidOperationException(
+            "Gates were not initialized after calling InitializeGates.");
+
         var mixed = new Dictionary<string, T[]>(globalParams.Count);
         foreach (var layerName in globalParams.Keys)
         {
-            double gate = _gates!.GetValueOrDefault(layerName, _gateInitValue);
+            double gate = gates.GetValueOrDefault(layerName, _gateInitValue);
             var gT = NumOps.FromDouble(gate);
             var oneMinusG = NumOps.FromDouble(1.0 - gate);
 
