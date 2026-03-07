@@ -341,7 +341,7 @@ public class Denclue<T> : ClusteringBase<T>
     {
         ValidateIsTrained();
 
-        if (ClusterCenters is null) return 0;
+        if (ClusterCenters is null || _attractors is null || _attractorDensities is null) return 0;
 
         int d = NumFeatures;
         var p = new double[d];
@@ -361,11 +361,11 @@ public class Denclue<T> : ClusteringBase<T>
             double dist2 = 0;
             for (int j = 0; j < d; j++)
             {
-                double diff = p[j] - _attractors![c][j];
+                double diff = p[j] - _attractors[c][j];
                 dist2 += diff * diff;
             }
 
-            sum += _attractorDensities![c] * Math.Exp(-dist2 / (2 * h2));
+            sum += _attractorDensities[c] * Math.Exp(-dist2 / (2 * h2));
         }
 
         return sum;

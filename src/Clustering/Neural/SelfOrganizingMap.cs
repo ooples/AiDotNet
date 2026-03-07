@@ -54,6 +54,12 @@ public class SelfOrganizingMap<T> : ClusteringBase<T>
     private double[,][]? _weights;
     private int[]? _neuronLabels;
 
+    private void EnsureSOMState()
+    {
+        if (_weights is null || _neuronLabels is null)
+            throw new InvalidOperationException("SelfOrganizingMap: Weights and neuron labels not initialized. Call Train() first.");
+    }
+
     /// <summary>
     /// Initializes a new SOM instance.
     /// </summary>
@@ -189,7 +195,7 @@ public class SelfOrganizingMap<T> : ClusteringBase<T>
 
             var (bmuRow, bmuCol) = FindBMU(sample, d);
             int neuronIdx = bmuRow * width + bmuCol;
-            Labels[i] = NumOps.FromDouble(_neuronLabels![neuronIdx]);
+            Labels[i] = NumOps.FromDouble(_neuronLabels[neuronIdx]);
         }
 
         IsTrained = true;
@@ -197,6 +203,8 @@ public class SelfOrganizingMap<T> : ClusteringBase<T>
 
     private (int row, int col) FindBMU(double[] sample, int d)
     {
+        EnsureSOMState();
+
         int bmuRow = 0;
         int bmuCol = 0;
         double minDist = double.MaxValue;
@@ -208,7 +216,7 @@ public class SelfOrganizingMap<T> : ClusteringBase<T>
                 double dist = 0;
                 for (int j = 0; j < d; j++)
                 {
-                    double diff = sample[j] - _weights![r, c][j];
+                    double diff = sample[j] - _weights[r, c][j];
                     dist += diff * diff;
                 }
 
@@ -270,6 +278,8 @@ public class SelfOrganizingMap<T> : ClusteringBase<T>
 
     private void ClusterNeurons(int width, int height, int d)
     {
+        EnsureSOMState();
+
         // Flatten weights to a list for clustering
         int numNeurons = width * height;
         var neuronWeights = new double[numNeurons][];
@@ -278,7 +288,7 @@ public class SelfOrganizingMap<T> : ClusteringBase<T>
         {
             for (int c = 0; c < width; c++)
             {
-                neuronWeights[r * width + c] = _weights![r, c];
+                neuronWeights[r * width + c] = _weights[r, c];
             }
         }
 
@@ -395,6 +405,7 @@ public class SelfOrganizingMap<T> : ClusteringBase<T>
     public double[,] GetUMatrix()
     {
         ValidateIsTrained();
+        EnsureSOMState();
 
         int width = _options.GridWidth;
         int height = _options.GridHeight;
@@ -431,7 +442,7 @@ public class SelfOrganizingMap<T> : ClusteringBase<T>
                         double dist = 0;
                         for (int j = 0; j < d; j++)
                         {
-                            double diff = _weights![r, c][j] - _weights[nr, nc][j];
+                            double diff = _weights[r, c][j] - _weights[nr, nc][j];
                             dist += diff * diff;
                         }
 
@@ -451,6 +462,7 @@ public class SelfOrganizingMap<T> : ClusteringBase<T>
     public override Vector<T> Predict(Matrix<T> x)
     {
         ValidateIsTrained();
+        EnsureSOMState();
 
         int n = x.Rows;
         int d = NumFeatures;
@@ -467,7 +479,7 @@ public class SelfOrganizingMap<T> : ClusteringBase<T>
 
             var (bmuRow, bmuCol) = FindBMU(sample, d);
             int neuronIdx = bmuRow * width + bmuCol;
-            labels[i] = NumOps.FromDouble(_neuronLabels![neuronIdx]);
+            labels[i] = NumOps.FromDouble(_neuronLabels[neuronIdx]);
         }
 
         return labels;

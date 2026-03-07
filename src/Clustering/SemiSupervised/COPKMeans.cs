@@ -311,8 +311,11 @@ public class COPKMeans<T> : ClusteringBase<T>
 
     private bool ViolatesConstraints(int pointIdx, int cluster, int[] labels)
     {
+        if (_mustLinkClosure is null || _cannotLinkClosure is null)
+            throw new InvalidOperationException("COPKMeans: Constraints not initialized. Call Train() first.");
+
         // Check must-link constraints
-        foreach (var (i, j) in _mustLinkClosure!)
+        foreach (var (i, j) in _mustLinkClosure)
         {
             if (i == pointIdx || j == pointIdx)
             {
@@ -325,7 +328,7 @@ public class COPKMeans<T> : ClusteringBase<T>
         }
 
         // Check cannot-link constraints
-        foreach (var (i, j) in _cannotLinkClosure!)
+        foreach (var (i, j) in _cannotLinkClosure)
         {
             if (i == pointIdx || j == pointIdx)
             {
@@ -342,9 +345,12 @@ public class COPKMeans<T> : ClusteringBase<T>
 
     private int CountViolations(int[] labels)
     {
+        if (_mustLinkClosure is null || _cannotLinkClosure is null)
+            throw new InvalidOperationException("COPKMeans: Constraints not initialized. Call Train() first.");
+
         int violations = 0;
 
-        foreach (var (i, j) in _mustLinkClosure!)
+        foreach (var (i, j) in _mustLinkClosure)
         {
             if (labels[i] != labels[j])
             {
@@ -352,7 +358,7 @@ public class COPKMeans<T> : ClusteringBase<T>
             }
         }
 
-        foreach (var (i, j) in _cannotLinkClosure!)
+        foreach (var (i, j) in _cannotLinkClosure)
         {
             if (labels[i] == labels[j])
             {

@@ -53,6 +53,13 @@ public class OnlineKMeans<T> : ClusteringBase<T>
     public override ModelOptions GetOptions() => _options;
     private double[,]? _centers;
     private int[]? _clusterCounts;
+
+    [System.Diagnostics.CodeAnalysis.MemberNotNull(nameof(_centers), nameof(_clusterCounts))]
+    private void EnsureOnlineKMeansState()
+    {
+        if (_centers is null || _clusterCounts is null)
+            throw new InvalidOperationException("OnlineKMeans: Centers not initialized. Call Train() or InitializeCenters() first.");
+    }
     private long _totalPointsSeen;
 
     /// <summary>
@@ -139,7 +146,7 @@ public class OnlineKMeans<T> : ClusteringBase<T>
             UpdateCenter(point, nearest, d);
 
             _totalPointsSeen++;
-            _clusterCounts![nearest]++;
+            _clusterCounts[nearest]++;
 
             // Decay learning rate
             if (_options.DecayLearningRate)
@@ -159,7 +166,7 @@ public class OnlineKMeans<T> : ClusteringBase<T>
         {
             for (int j = 0; j < d; j++)
             {
-                ClusterCenters[c, j] = NumOps.FromDouble(_centers![c, j]);
+                ClusterCenters[c, j] = NumOps.FromDouble(_centers[c, j]);
             }
         }
 
@@ -190,6 +197,8 @@ public class OnlineKMeans<T> : ClusteringBase<T>
 
     private int FindNearestCenter(double[] point, int d, int k)
     {
+        EnsureOnlineKMeansState();
+
         int nearest = 0;
         double minDist = double.MaxValue;
 
@@ -198,7 +207,7 @@ public class OnlineKMeans<T> : ClusteringBase<T>
             double dist = 0;
             for (int j = 0; j < d; j++)
             {
-                double diff = point[j] - _centers![c, j];
+                double diff = point[j] - _centers[c, j];
                 dist += diff * diff;
             }
 
@@ -214,9 +223,11 @@ public class OnlineKMeans<T> : ClusteringBase<T>
 
     private void UpdateCenter(double[] point, int clusterIdx, int d)
     {
+        EnsureOnlineKMeansState();
+
         for (int j = 0; j < d; j++)
         {
-            _centers![clusterIdx, j] += CurrentLearningRate * (point[j] - _centers[clusterIdx, j]);
+            _centers[clusterIdx, j] += CurrentLearningRate * (point[j] - _centers[clusterIdx, j]);
         }
     }
 
@@ -245,7 +256,7 @@ public class OnlineKMeans<T> : ClusteringBase<T>
         UpdateCenter(pointArray, nearest, d);
 
         _totalPointsSeen++;
-        _clusterCounts![nearest]++;
+        _clusterCounts[nearest]++;
 
         if (_options.DecayLearningRate)
         {

@@ -336,6 +336,9 @@ public class AgglomerativeClustering<T> : ClusteringBase<T>
 
     private Vector<T> AssignLabels(int n, HashSet<int> finalClusters)
     {
+        if (_dendrogram is null)
+            throw new InvalidOperationException("AgglomerativeClustering: Dendrogram not initialized. Call Train() first.");
+
         var labels = new int[n];
         for (int i = 0; i < n; i++)
         {
@@ -363,7 +366,7 @@ public class AgglomerativeClustering<T> : ClusteringBase<T>
         }
 
         int nextId = n;
-        foreach (var (c1, c2, dist, size) in _dendrogram!)
+        foreach (var (c1, c2, dist, size) in _dendrogram)
         {
             parent[c1] = nextId;
             parent[c2] = nextId;

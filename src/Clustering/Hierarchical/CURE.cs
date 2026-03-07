@@ -261,10 +261,13 @@ public class CURE<T> : ClusteringBase<T>
 
     private (int, int) FindClosestClusters()
     {
+        if (_clusters is null)
+            throw new InvalidOperationException("CURE: Clusters not initialized. Call Train() first.");
+
         int bestI = -1, bestJ = -1;
         double minDistance = double.MaxValue;
 
-        for (int i = 0; i < _clusters!.Count; i++)
+        for (int i = 0; i < _clusters.Count; i++)
         {
             for (int j = i + 1; j < _clusters.Count; j++)
             {
@@ -457,10 +460,13 @@ public class CURE<T> : ClusteringBase<T>
 
     private int FindNearestCluster(double[] point)
     {
+        if (_clusters is null)
+            throw new InvalidOperationException("CURE: Clusters not initialized. Call Train() first.");
+
         int nearest = 0;
         double minDist = double.MaxValue;
 
-        for (int i = 0; i < _clusters!.Count; i++)
+        for (int i = 0; i < _clusters.Count; i++)
         {
             foreach (var rep in _clusters[i].Representatives)
             {
@@ -489,9 +495,12 @@ public class CURE<T> : ClusteringBase<T>
         ClusterCenters = new Matrix<T>(NumClusters, d);
         var counts = new int[NumClusters];
 
+        if (Labels is null)
+            throw new InvalidOperationException("CURE: Labels not initialized. Call Train() first.");
+
         for (int i = 0; i < n; i++)
         {
-            int label = (int)NumOps.ToDouble(Labels![i]);
+            int label = (int)NumOps.ToDouble(Labels[i]);
             if (label >= 0 && label < NumClusters)
             {
                 counts[label]++;

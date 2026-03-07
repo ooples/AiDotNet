@@ -324,6 +324,9 @@ public class MiniBatchKMeans<T> : ClusteringBase<T>
             ? RandomHelper.CreateSeededRandom(Options.Seed.Value)
             : RandomHelper.CreateSecureRandom();
 
+        if (ClusterCenters is null || _centerCounts is null)
+            throw new InvalidOperationException("MiniBatchKMeans: Not initialized. Call Train() first.");
+
         // Get current centers
         var centers = new double[k][];
         for (int c = 0; c < k; c++)
@@ -331,7 +334,7 @@ public class MiniBatchKMeans<T> : ClusteringBase<T>
             centers[c] = new double[d];
             for (int j = 0; j < d; j++)
             {
-                centers[c][j] = NumOps.ToDouble(ClusterCenters![c, j]);
+                centers[c][j] = NumOps.ToDouble(ClusterCenters[c, j]);
             }
         }
 
@@ -363,7 +366,7 @@ public class MiniBatchKMeans<T> : ClusteringBase<T>
                 }
 
                 // Update center
-                _centerCounts![bestCluster]++;
+                _centerCounts[bestCluster]++;
                 double eta = 1.0 / _centerCounts[bestCluster];
 
                 for (int j = 0; j < d; j++)
@@ -379,7 +382,7 @@ public class MiniBatchKMeans<T> : ClusteringBase<T>
         {
             for (int j = 0; j < d; j++)
             {
-                ClusterCenters![c, j] = NumOps.FromDouble(centers[c][j]);
+                ClusterCenters[c, j] = NumOps.FromDouble(centers[c][j]);
             }
         }
     }

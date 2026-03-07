@@ -558,9 +558,12 @@ public class SUBCLU<T> : ClusteringBase<T>
         ClusterCenters = new Matrix<T>(NumClusters, d);
         var counts = new int[NumClusters];
 
+        if (Labels is null)
+            throw new InvalidOperationException("SUBCLU: Labels not initialized. Call Train() first.");
+
         for (int i = 0; i < n; i++)
         {
-            int label = (int)NumOps.ToDouble(Labels![i]);
+            int label = (int)NumOps.ToDouble(Labels[i]);
             if (label >= 0 && label < NumClusters)
             {
                 counts[label]++;

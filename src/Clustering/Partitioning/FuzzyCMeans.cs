@@ -166,25 +166,31 @@ public class FuzzyCMeans<T> : ClusteringBase<T>
 
     private void InitializeMembership(int n, int k, Random rand)
     {
+        if (_membershipMatrix is null)
+            throw new InvalidOperationException("FuzzyCMeans: Membership matrix not initialized.");
+
         for (int i = 0; i < n; i++)
         {
             double sum = 0;
             for (int c = 0; c < k; c++)
             {
-                _membershipMatrix![i, c] = rand.NextDouble();
+                _membershipMatrix[i, c] = rand.NextDouble();
                 sum += _membershipMatrix[i, c];
             }
 
             // Normalize to sum to 1
             for (int c = 0; c < k; c++)
             {
-                _membershipMatrix![i, c] /= sum;
+                _membershipMatrix[i, c] /= sum;
             }
         }
     }
 
     private void UpdateCenters(Matrix<T> x, double[,] centers, int n, int d, int k, double m)
     {
+        if (_membershipMatrix is null)
+            throw new InvalidOperationException("FuzzyCMeans: Membership matrix not initialized.");
+
         for (int c = 0; c < k; c++)
         {
             for (int j = 0; j < d; j++)
@@ -194,7 +200,7 @@ public class FuzzyCMeans<T> : ClusteringBase<T>
 
                 for (int i = 0; i < n; i++)
                 {
-                    double membership = Math.Pow(_membershipMatrix![i, c], m);
+                    double membership = Math.Pow(_membershipMatrix[i, c], m);
                     numerator += membership * NumOps.ToDouble(x[i, j]);
                     denominator += membership;
                 }
@@ -206,6 +212,9 @@ public class FuzzyCMeans<T> : ClusteringBase<T>
 
     private double UpdateMemberships(Matrix<T> x, double[,] centers, int n, int d, int k, double m, IDistanceMetric<T> metric)
     {
+        if (_membershipMatrix is null)
+            throw new InvalidOperationException("FuzzyCMeans: Membership matrix not initialized.");
+
         double maxChange = 0;
         double exponent = 2.0 / (m - 1);
 
@@ -238,7 +247,7 @@ public class FuzzyCMeans<T> : ClusteringBase<T>
             // Update memberships
             for (int c = 0; c < k; c++)
             {
-                double oldMembership = _membershipMatrix![i, c];
+                double oldMembership = _membershipMatrix[i, c];
                 double newMembership;
 
                 if (hasZeroDistance)

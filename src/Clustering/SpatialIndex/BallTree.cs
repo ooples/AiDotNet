@@ -35,6 +35,8 @@ public class BallTree<T>
     private Matrix<T>? _data;
     private int _dimensions;
 
+    private Matrix<T> Data => _data ?? throw new InvalidOperationException("BallTree: Data not initialized. Call Build() first.");
+
     /// <summary>
     /// Initializes a new Ball Tree instance.
     /// </summary>
@@ -163,7 +165,7 @@ public class BallTree<T>
 
         // Sort indices by split dimension
         Array.Sort(indices, start, count, Comparer<int>.Create((a, b) =>
-            _numOps.ToDouble(_data![a, splitDim]).CompareTo(_numOps.ToDouble(_data[b, splitDim]))));
+            _numOps.ToDouble(Data[a, splitDim]).CompareTo(_numOps.ToDouble(_data[b, splitDim]))));
 
         int mid = start + count / 2;
 
@@ -193,7 +195,7 @@ public class BallTree<T>
             T sum = _numOps.Zero;
             for (int i = start; i < end; i++)
             {
-                sum = _numOps.Add(sum, _data![indices[i], j]);
+                sum = _numOps.Add(sum, Data[indices[i], j]);
             }
             centroid[j] = _numOps.Divide(sum, _numOps.FromDouble(count));
         }
@@ -230,7 +232,7 @@ public class BallTree<T>
 
             for (int i = start; i < end; i++)
             {
-                double val = _numOps.ToDouble(_data![indices[i], d]);
+                double val = _numOps.ToDouble(Data[indices[i], d]);
                 min = Math.Min(min, val);
                 max = Math.Max(max, val);
             }
@@ -264,9 +266,12 @@ public class BallTree<T>
 
         if (node.IsLeaf)
         {
-            foreach (int idx in node.Indices!)
+            if (node.Indices is null)
+                throw new InvalidOperationException("BallTree: Leaf node has null indices.");
+
+            foreach (int idx in node.Indices)
             {
-                var point = GetRow(_data!, idx);
+                var point = GetRow(Data, idx);
                 T dist = _distanceMetric.Compute(query, point);
                 results.Add((idx, dist));
             }
@@ -281,8 +286,11 @@ public class BallTree<T>
         }
 
         // Visit children (closer one first)
-        T distToLeft = _distanceMetric.Compute(query, node.Left!.Centroid);
-        T distToRight = _distanceMetric.Compute(query, node.Right!.Centroid);
+        if (node.Left is null || node.Right is null)
+            throw new InvalidOperationException("BallTree: Non-leaf node missing child nodes.");
+
+        T distToLeft = _distanceMetric.Compute(query, node.Left.Centroid);
+        T distToRight = _distanceMetric.Compute(query, node.Right.Centroid);
 
         if (_numOps.ToDouble(distToLeft) <= _numOps.ToDouble(distToRight))
         {
@@ -310,9 +318,12 @@ public class BallTree<T>
 
         if (node.IsLeaf)
         {
-            foreach (int idx in node.Indices!)
+            if (node.Indices is null)
+                throw new InvalidOperationException("BallTree: Leaf node has null indices.");
+
+            foreach (int idx in node.Indices)
             {
-                var point = GetRow(_data!, idx);
+                var point = GetRow(Data, idx);
                 T dist = _distanceMetric.Compute(query, point);
                 if (_numOps.ToDouble(dist) <= _numOps.ToDouble(radius))
                 {

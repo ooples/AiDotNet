@@ -100,10 +100,14 @@ public class GMeans<T> : ClusteringBase<T>
         });
 
         kmeans.Train(x);
+
+        if (kmeans.Labels is null || kmeans.ClusterCenters is null)
+            throw new InvalidOperationException("GMeans: KMeans training failed to produce labels or cluster centers.");
+
         var currentLabels = new int[n];
         for (int i = 0; i < n; i++)
         {
-            currentLabels[i] = (int)NumOps.ToDouble(kmeans.Labels![i]);
+            currentLabels[i] = (int)NumOps.ToDouble(kmeans.Labels[i]);
         }
 
         var currentCenters = new List<double[]>();
@@ -112,7 +116,7 @@ public class GMeans<T> : ClusteringBase<T>
             var center = new double[d];
             for (int j = 0; j < d; j++)
             {
-                center[j] = NumOps.ToDouble(kmeans.ClusterCenters![c, j]);
+                center[j] = NumOps.ToDouble(kmeans.ClusterCenters[c, j]);
             }
             currentCenters.Add(center);
         }
@@ -171,13 +175,16 @@ public class GMeans<T> : ClusteringBase<T>
 
                     subKMeans.Train(subMatrix);
 
+                    if (subKMeans.ClusterCenters is null || subKMeans.Labels is null)
+                        throw new InvalidOperationException("GMeans: Sub-KMeans training failed to produce labels or cluster centers.");
+
                     // Add both children
                     for (int sc = 0; sc < 2; sc++)
                     {
                         var center = new double[d];
                         for (int j = 0; j < d; j++)
                         {
-                            center[j] = NumOps.ToDouble(subKMeans.ClusterCenters![sc, j]);
+                            center[j] = NumOps.ToDouble(subKMeans.ClusterCenters[sc, j]);
                         }
                         newCenters.Add(center);
                     }
@@ -185,7 +192,7 @@ public class GMeans<T> : ClusteringBase<T>
                     // Update labels for points in this cluster
                     for (int i = 0; i < clusterPoints.Count; i++)
                     {
-                        int subLabel = (int)NumOps.ToDouble(subKMeans.Labels![i]);
+                        int subLabel = (int)NumOps.ToDouble(subKMeans.Labels[i]);
                         newLabels[clusterPoints[i]] = newCenters.Count - 2 + subLabel;
                     }
 

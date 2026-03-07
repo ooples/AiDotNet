@@ -161,7 +161,10 @@ public class MiniBatchKMeans<T> : ClusteringBase<T>
         ValidateIsTrained();
         ValidatePredictInput(x);
 
-        return AssignLabels(x, ClusterCenters!);
+        if (ClusterCenters is null)
+            throw new InvalidOperationException("MiniBatchKMeans: ClusterCenters not initialized. Call Train() first.");
+
+        return AssignLabels(x, ClusterCenters);
     }
 
     /// <inheritdoc />
@@ -170,7 +173,10 @@ public class MiniBatchKMeans<T> : ClusteringBase<T>
         ValidateIsTrained();
         ValidatePredictInput(x);
 
-        return ComputeDistancesToCenters(x, ClusterCenters!);
+        if (ClusterCenters is null)
+            throw new InvalidOperationException("MiniBatchKMeans: ClusterCenters not initialized. Call Train() first.");
+
+        return ComputeDistancesToCenters(x, ClusterCenters);
     }
 
     /// <inheritdoc />

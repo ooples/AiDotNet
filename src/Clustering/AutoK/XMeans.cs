@@ -167,8 +167,11 @@ public class XMeans<T> : ClusteringBase<T>
 
                 subKMeans.Train(subMatrix);
 
+                if (subKMeans.Labels is null || subKMeans.ClusterCenters is null)
+                    throw new InvalidOperationException("XMeans: Sub-KMeans training failed to produce labels or cluster centers.");
+
                 // Compute BIC for children
-                double childBIC = ComputeSplitBIC(subMatrix, subKMeans.Labels!, subKMeans.ClusterCenters!, d);
+                double childBIC = ComputeSplitBIC(subMatrix, subKMeans.Labels, subKMeans.ClusterCenters, d);
 
                 if (childBIC < parentBIC && newCenters.Count + 1 < _options.MaxClusters)
                 {
@@ -178,13 +181,13 @@ public class XMeans<T> : ClusteringBase<T>
                         var center = new double[d];
                         for (int j = 0; j < d; j++)
                         {
-                            center[j] = NumOps.ToDouble(subKMeans.ClusterCenters![sc, j]);
+                            center[j] = NumOps.ToDouble(subKMeans.ClusterCenters[sc, j]);
                         }
 
                         var subClusterPoints = new List<int>();
                         for (int i = 0; i < clusterPoints.Count; i++)
                         {
-                            if ((int)NumOps.ToDouble(subKMeans.Labels![i]) == sc)
+                            if ((int)NumOps.ToDouble(subKMeans.Labels[i]) == sc)
                             {
                                 subClusterPoints.Add(clusterPoints[i]);
                             }
