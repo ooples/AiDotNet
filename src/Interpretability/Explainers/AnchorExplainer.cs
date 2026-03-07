@@ -184,7 +184,7 @@ public class AnchorExplainer<T> : ILocalExplainer<T, AnchorExplanation<T>>
                 {
                     if (bestAnchor == null ||
                         NumOps.GreaterThan(coverage, bestAnchor.Coverage) ||
-                        (NumOps.ToDouble(coverage) == NumOps.ToDouble(bestAnchor.Coverage) &&
+                        (NumOps.Compare(coverage, bestAnchor.Coverage) == 0 &&
                          features.Count < bestAnchor.AnchorFeatures.Count))
                     {
                         bestAnchor = CreateExplanation(features, rules, precision, coverage);
