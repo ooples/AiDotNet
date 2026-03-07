@@ -1247,6 +1247,9 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                 "Either fit the pipeline on training data first, preprocess data externally, or omit ConfigurePreprocessing().");
         }
 
+        // Wire document transformers for inference-only builds
+        ConfigureDocumentTransformers(_model);
+
         // Ensure inference-only builds still honor configured GPU acceleration.
         ApplyGpuConfiguration();
 
@@ -1871,15 +1874,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         // Wire instance-level preprocessing/postprocessing onto DocumentNeuralNetworkBase models.
         // This replaces the former static PreprocessingRegistry/PostprocessingRegistry approach,
         // which caused race conditions when multiple models were built concurrently.
-        if (_model is Document.DocumentNeuralNetworkBase<T> documentModel)
-        {
-            var preTransformer = _preprocessingPipeline as IDataTransformer<T, Tensor<T>, Tensor<T>>;
-            var postTransformer = _postprocessingPipeline as IDataTransformer<T, Tensor<T>, Tensor<T>>;
-            if (preTransformer is not null || postTransformer is not null)
-            {
-                documentModel.ConfigureTransformers(preTransformer, postTransformer);
-            }
-        }
+        ConfigureDocumentTransformers(_model);
 
         // Use defaults for the optimizer if not set
         var optimizer = _optimizer ?? new NormalOptimizer<T, TInput, TOutput>(_model);
@@ -6296,6 +6291,22 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// - <b>CPU</b>: Force CPU-only execution (equivalent to UsageLevel.AlwaysCpu)
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Wires instance-level preprocessing/postprocessing transformers onto DocumentNeuralNetworkBase models.
+    /// Always passes the current pipeline values so prior state is cleared on reuse.
+    /// </summary>
+    private void ConfigureDocumentTransformers(IFullModel<T, TInput, TOutput>? model)
+    {
+        if (model is not Document.DocumentNeuralNetworkBase<T> documentModel)
+        {
+            return;
+        }
+
+        var preTransformer = _preprocessingPipeline as IDataTransformer<T, Tensor<T>, Tensor<T>>;
+        var postTransformer = _postprocessingPipeline as IDataTransformer<T, Tensor<T>, Tensor<T>>;
+        documentModel.ConfigureTransformers(preTransformer, postTransformer);
+    }
+
     private void ApplyGpuConfiguration()
     {
         // Skip if no GPU configuration was provided (null = default = auto-detect with CPU fallback)

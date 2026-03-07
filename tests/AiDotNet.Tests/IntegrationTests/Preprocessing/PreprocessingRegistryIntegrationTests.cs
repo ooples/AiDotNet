@@ -117,7 +117,12 @@ public class PreprocessingRegistryIntegrationTests
         // Assert: the model was built successfully
         Assert.NotNull(result);
 
-        // Assert: the static registry was NOT set
+        // Assert: preprocessing was actually applied via instance-level PreprocessingInfo
+        Assert.NotNull(result.PreprocessingInfo);
+        Assert.True(result.PreprocessingInfo?.IsFitted ?? false,
+            "Preprocessing should be fitted via instance-level flow");
+
+        // Assert: the static registry was NOT set (proves instance-level, not static)
 #pragma warning disable CS0618
         Assert.False(PreprocessingRegistry<double, Matrix<double>>.IsConfigured,
             "PreprocessingRegistry should NOT be set by AiModelBuilder.");
