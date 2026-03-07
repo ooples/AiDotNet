@@ -123,7 +123,7 @@ public abstract class DocumentNeuralNetworkBase<T> : NeuralNetworkBase<T>
     /// customize how images are processed before the model processes them. Otherwise, the model
     /// uses its own industry-standard defaults automatically.</para>
     /// </remarks>
-    protected IDataTransformer<T, Tensor<T>, Tensor<T>>? PreprocessingTransformer { get; set; }
+    protected internal IDataTransformer<T, Tensor<T>, Tensor<T>>? PreprocessingTransformer { get; set; }
 
     /// <summary>
     /// Gets or sets the instance-level postprocessing transformer for this model.
@@ -136,7 +136,7 @@ public abstract class DocumentNeuralNetworkBase<T> : NeuralNetworkBase<T>
     /// multiple models were built concurrently.
     /// </para>
     /// </remarks>
-    protected IDataTransformer<T, Tensor<T>, Tensor<T>>? PostprocessingTransformer { get; set; }
+    protected internal IDataTransformer<T, Tensor<T>, Tensor<T>>? PostprocessingTransformer { get; set; }
 
     #endregion
 
