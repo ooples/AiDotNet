@@ -85,8 +85,8 @@ public class FBetaScoreMetric<T> : IClassificationMetric<T>
         int tp = 0, pp = 0, ap = 0;
         for (int i = 0; i < pred.Length; i++)
         {
-            bool isPred = NumOps.LessThan(NumOps.Abs(NumOps.Subtract(pred[i], NumOps.FromDouble(posVal))), NumOps.FromDouble(1e-10));
-            bool isActual = NumOps.LessThan(NumOps.Abs(NumOps.Subtract(actual[i], NumOps.FromDouble(posVal))), NumOps.FromDouble(1e-10));
+            bool isPred = NumOps.Compare(pred[i], NumOps.FromDouble(posVal)) == 0;
+            bool isActual = NumOps.Compare(actual[i], NumOps.FromDouble(posVal)) == 0;
             if (isPred) pp++;
             if (isActual) ap++;
             if (isPred && isActual) tp++;
@@ -106,8 +106,8 @@ public class FBetaScoreMetric<T> : IClassificationMetric<T>
         {
             for (int i = 0; i < pred.Length; i++)
             {
-                bool isPred = NumOps.LessThan(NumOps.Abs(NumOps.Subtract(pred[i], NumOps.FromDouble(cls))), NumOps.FromDouble(1e-10));
-                bool isActual = NumOps.LessThan(NumOps.Abs(NumOps.Subtract(actual[i], NumOps.FromDouble(cls))), NumOps.FromDouble(1e-10));
+                bool isPred = NumOps.Compare(pred[i], NumOps.FromDouble(cls)) == 0;
+                bool isActual = NumOps.Compare(actual[i], NumOps.FromDouble(cls)) == 0;
                 if (isPred) totalPp++;
                 if (isActual) totalAp++;
                 if (isPred && isActual) totalTp++;
@@ -131,7 +131,7 @@ public class FBetaScoreMetric<T> : IClassificationMetric<T>
     private static int CountClass(ReadOnlySpan<T> vals, double cls)
     {
         int c = 0;
-        for (int i = 0; i < vals.Length; i++) if (NumOps.LessThan(NumOps.Abs(NumOps.Subtract(vals[i], NumOps.FromDouble(cls))), NumOps.FromDouble(1e-10))) c++;
+        for (int i = 0; i < vals.Length; i++) if (NumOps.Compare(vals[i], NumOps.FromDouble(cls)) == 0) c++;
         return c;
     }
 

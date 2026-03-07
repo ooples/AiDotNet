@@ -244,7 +244,7 @@ public class RandomSurvivalForest<T> : SurvivalModelBase<T>
         foreach (double t in uniqueTimes)
         {
             int atRisk = indices.Count(i => NumOps.ToDouble(times[i]) >= t);
-            int eventsAtT = indices.Count(i => NumOps.LessThan(NumOps.Abs(NumOps.Subtract(times[i], NumOps.FromDouble(t))), NumOps.FromDouble(1e-10)) && events[i] == 1);
+            int eventsAtT = indices.Count(i => NumOps.Compare(times[i], NumOps.FromDouble(t)) == 0 && events[i] == 1);
 
             if (atRisk > 0)
                 survival *= (double)(atRisk - eventsAtT) / atRisk;
@@ -292,8 +292,8 @@ public class RandomSurvivalForest<T> : SurvivalModelBase<T>
             if (totalAtRisk <= 1)
                 continue;
 
-            int leftEvents = leftIndices.Count(i => NumOps.LessThan(NumOps.Abs(NumOps.Subtract(times[i], NumOps.FromDouble(t))), NumOps.FromDouble(1e-10)) && events[i] == 1);
-            int rightEvents = rightIndices.Count(i => NumOps.LessThan(NumOps.Abs(NumOps.Subtract(times[i], NumOps.FromDouble(t))), NumOps.FromDouble(1e-10)) && events[i] == 1);
+            int leftEvents = leftIndices.Count(i => NumOps.Compare(times[i], NumOps.FromDouble(t)) == 0 && events[i] == 1);
+            int rightEvents = rightIndices.Count(i => NumOps.Compare(times[i], NumOps.FromDouble(t)) == 0 && events[i] == 1);
             int totalEvents = leftEvents + rightEvents;
 
             // Expected events in left group under null

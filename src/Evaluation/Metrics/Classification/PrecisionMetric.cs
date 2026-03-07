@@ -140,10 +140,10 @@ public class PrecisionMetric<T> : IClassificationMetric<T>
 
         for (int i = 0; i < predictions.Length; i++)
         {
-            if (NumOps.LessThan(NumOps.Abs(NumOps.Subtract(predictions[i], NumOps.FromDouble(positiveLabelValue))), NumOps.FromDouble(1e-10)))
+            if (NumOps.Compare(predictions[i], NumOps.FromDouble(positiveLabelValue)) == 0)
             {
                 predictedPositives++;
-                if (NumOps.LessThan(NumOps.Abs(NumOps.Subtract(actuals[i], NumOps.FromDouble(positiveLabelValue))), NumOps.FromDouble(1e-10)))
+                if (NumOps.Compare(actuals[i], NumOps.FromDouble(positiveLabelValue)) == 0)
                 {
                     truePositives++;
                 }
@@ -162,10 +162,10 @@ public class PrecisionMetric<T> : IClassificationMetric<T>
         {
             for (int i = 0; i < predictions.Length; i++)
             {
-                if (NumOps.LessThan(NumOps.Abs(NumOps.Subtract(predictions[i], NumOps.FromDouble(cls))), NumOps.FromDouble(1e-10)))
+                if (NumOps.Compare(predictions[i], NumOps.FromDouble(cls)) == 0)
                 {
                     totalPredictedPositives++;
-                    if (NumOps.LessThan(NumOps.Abs(NumOps.Subtract(actuals[i], NumOps.FromDouble(cls))), NumOps.FromDouble(1e-10)))
+                    if (NumOps.Compare(actuals[i], NumOps.FromDouble(cls)) == 0)
                     {
                         totalTruePositives++;
                     }
@@ -195,7 +195,7 @@ public class PrecisionMetric<T> : IClassificationMetric<T>
         int count = 0;
         for (int i = 0; i < values.Length; i++)
         {
-            if (NumOps.LessThan(NumOps.Abs(NumOps.Subtract(values[i], NumOps.FromDouble(cls))), NumOps.FromDouble(1e-10)))
+            if (NumOps.Compare(values[i], NumOps.FromDouble(cls)) == 0)
             {
                 count++;
             }

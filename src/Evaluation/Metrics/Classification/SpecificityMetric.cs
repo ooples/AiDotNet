@@ -56,8 +56,8 @@ public class SpecificityMetric<T> : IClassificationMetric<T>
 
         for (int i = 0; i < actuals.Length; i++)
         {
-            bool isActualPositive = NumOps.LessThan(NumOps.Abs(NumOps.Subtract(actuals[i], NumOps.FromDouble(positiveLabelValue))), NumOps.FromDouble(1e-10));
-            bool isPredictedPositive = NumOps.LessThan(NumOps.Abs(NumOps.Subtract(predictions[i], NumOps.FromDouble(positiveLabelValue))), NumOps.FromDouble(1e-10));
+            bool isActualPositive = NumOps.Compare(actuals[i], NumOps.FromDouble(positiveLabelValue)) == 0;
+            bool isPredictedPositive = NumOps.Compare(predictions[i], NumOps.FromDouble(positiveLabelValue)) == 0;
 
             if (!isActualPositive)
             {

@@ -146,8 +146,8 @@ public class F1ScoreMetric<T> : IClassificationMetric<T>
 
         for (int i = 0; i < predictions.Length; i++)
         {
-            bool predicted = NumOps.LessThan(NumOps.Abs(NumOps.Subtract(predictions[i], NumOps.FromDouble(positiveLabelValue))), NumOps.FromDouble(1e-10));
-            bool actual = NumOps.LessThan(NumOps.Abs(NumOps.Subtract(actuals[i], NumOps.FromDouble(positiveLabelValue))), NumOps.FromDouble(1e-10));
+            bool predicted = NumOps.Compare(predictions[i], NumOps.FromDouble(positiveLabelValue)) == 0;
+            bool actual = NumOps.Compare(actuals[i], NumOps.FromDouble(positiveLabelValue)) == 0;
 
             if (predicted) predictedPositives++;
             if (actual) actualPositives++;
@@ -180,8 +180,8 @@ public class F1ScoreMetric<T> : IClassificationMetric<T>
         {
             for (int i = 0; i < predictions.Length; i++)
             {
-                bool predicted = NumOps.LessThan(NumOps.Abs(NumOps.Subtract(predictions[i], NumOps.FromDouble(cls))), NumOps.FromDouble(1e-10));
-                bool actual = NumOps.LessThan(NumOps.Abs(NumOps.Subtract(actuals[i], NumOps.FromDouble(cls))), NumOps.FromDouble(1e-10));
+                bool predicted = NumOps.Compare(predictions[i], NumOps.FromDouble(cls)) == 0;
+                bool actual = NumOps.Compare(actuals[i], NumOps.FromDouble(cls)) == 0;
 
                 if (predicted) totalPredictedPositives++;
                 if (actual) totalActualPositives++;
@@ -219,7 +219,7 @@ public class F1ScoreMetric<T> : IClassificationMetric<T>
         int count = 0;
         for (int i = 0; i < values.Length; i++)
         {
-            if (NumOps.LessThan(NumOps.Abs(NumOps.Subtract(values[i], NumOps.FromDouble(cls))), NumOps.FromDouble(1e-10)))
+            if (NumOps.Compare(values[i], NumOps.FromDouble(cls)) == 0)
             {
                 count++;
             }

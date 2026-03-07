@@ -90,10 +90,10 @@ public class BalancedAccuracyMetric<T> : IClassificationMetric<T>
 
             for (int i = 0; i < actuals.Length; i++)
             {
-                if (NumOps.LessThan(NumOps.Abs(NumOps.Subtract(actuals[i], NumOps.FromDouble(cls))), NumOps.FromDouble(1e-10)))
+                if (NumOps.Compare(actuals[i], NumOps.FromDouble(cls)) == 0)
                 {
                     actualPositives++;
-                    if (NumOps.LessThan(NumOps.Abs(NumOps.Subtract(predictions[i], NumOps.FromDouble(cls))), NumOps.FromDouble(1e-10)))
+                    if (NumOps.Compare(predictions[i], NumOps.FromDouble(cls)) == 0)
                     {
                         truePositives++;
                     }
