@@ -325,7 +325,7 @@ public class MelSpectrogram<T>
             var dbVal = NumOps.Multiply(factor, logVal);
 
             // Clamp to minimum dB
-            if (NumOps.ToDouble(dbVal) < NumOps.ToDouble(minDbT))
+            if (NumOps.LessThan(dbVal, minDbT))
             {
                 dbVal = minDbT;
             }

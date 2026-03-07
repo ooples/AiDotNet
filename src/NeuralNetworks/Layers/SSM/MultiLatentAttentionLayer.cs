@@ -332,7 +332,7 @@ public class MultiLatentAttentionLayer<T> : LayerBase<T>
                                     k[new[] { bi, tk, flatD }]));
                         }
                         scores[tk] = NumOps.Multiply(dot, scale);
-                        if (NumOps.ToDouble(scores[tk]) > NumOps.ToDouble(maxScore))
+                        if (NumOps.GreaterThan(scores[tk], maxScore))
                             maxScore = scores[tk];
                     }
 

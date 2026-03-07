@@ -410,7 +410,7 @@ public class RodimusLayer<T> : LayerBase<T>
                         T score = NumOps.Divide(
                             NumOps.Multiply(NumOps.Multiply(qVal, kVal), baseScale), tau);
                         scores[ki] = score;
-                        if (NumOps.ToDouble(score) > NumOps.ToDouble(maxScore))
+                        if (NumOps.GreaterThan(score, maxScore))
                             maxScore = score;
                     }
 

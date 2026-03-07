@@ -893,7 +893,7 @@ public class AnoGANDetector<T> : AnomalyDetectorBase<T>
 
                 T loss = NumOps.Add(reconLoss, NumOps.Multiply(NumOps.FromDouble(0.1), featLoss));
 
-                if (NumOps.ToDouble(loss) < NumOps.ToDouble(bestLoss))
+                if (NumOps.LessThan(loss, bestLoss))
                 {
                     bestLoss = loss;
                     for (int j = 0; j < _latentDim; j++) bestZ[j] = z[j];

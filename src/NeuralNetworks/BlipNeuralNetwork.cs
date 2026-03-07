@@ -662,7 +662,7 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
         T maxSim = similarities[0];
         for (int i = 1; i < similarities.Length; i++)
         {
-            if (NumOps.ToDouble(similarities[i]) > NumOps.ToDouble(maxSim))
+            if (NumOps.GreaterThan(similarities[i], maxSim))
             {
                 maxSim = similarities[i];
             }
@@ -1026,7 +1026,7 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
             T logit1 = logits.Shape.Length == 3 ? logits[0, 0, 1] : logits[0, 1];
 
             // Softmax
-            T maxLogit = NumOps.ToDouble(logit0) > NumOps.ToDouble(logit1) ? logit0 : logit1;
+            T maxLogit = NumOps.GreaterThan(logit0, logit1) ? logit0 : logit1;
             T exp0 = NumOps.Exp(NumOps.Subtract(logit0, maxLogit));
             T exp1 = NumOps.Exp(NumOps.Subtract(logit1, maxLogit));
             T sum = NumOps.Add(exp0, exp1);
@@ -1436,7 +1436,7 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
         for (int i = 1; i < lastDim; i++)
         {
             T val = logits.Shape.Length == 3 ? logits[0, seqPos, i] : logits[0, i];
-            if (NumOps.ToDouble(val) > NumOps.ToDouble(bestVal))
+            if (NumOps.GreaterThan(val, bestVal))
             {
                 bestVal = val;
                 bestIdx = i;

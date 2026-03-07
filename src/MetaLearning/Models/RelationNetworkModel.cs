@@ -351,7 +351,7 @@ public class RelationNetworkModel<T, TInput, TOutput> : IModel<TInput, TOutput, 
         T maxScore = scores[0];
         for (int i = 1; i < scores.Length; i++)
         {
-            if (NumOps.ToDouble(scores[i]) > NumOps.ToDouble(maxScore))
+            if (NumOps.GreaterThan(scores[i], maxScore))
             {
                 maxScore = scores[i];
             }
@@ -399,7 +399,7 @@ public class RelationNetworkModel<T, TInput, TOutput> : IModel<TInput, TOutput, 
         T maxProb = probabilities[0];
         for (int i = 1; i < probabilities.Length; i++)
         {
-            if (NumOps.ToDouble(probabilities[i]) > NumOps.ToDouble(maxProb))
+            if (NumOps.GreaterThan(probabilities[i], maxProb))
             {
                 maxProb = probabilities[i];
                 predictedClass = i;

@@ -121,7 +121,7 @@ public class MiniBatchKMeans<T> : ClusteringBase<T>
         {
             var (centers, labels, inertia, iterations) = FitSingle(x);
 
-            if (NumOps.ToDouble(inertia) < NumOps.ToDouble(bestInertia))
+            if (NumOps.LessThan(inertia, bestInertia))
             {
                 bestCenters = centers;
                 bestLabels = labels;

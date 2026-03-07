@@ -115,7 +115,7 @@ public class KMeans<T> : ClusteringBase<T>
         {
             var (centers, labels, inertia, iterations) = FitSingle(x);
 
-            if (NumOps.ToDouble(inertia) < NumOps.ToDouble(bestInertia))
+            if (NumOps.LessThan(inertia, bestInertia))
             {
                 bestCenters = centers;
                 bestLabels = labels;
@@ -382,7 +382,7 @@ public class KMeans<T> : ClusteringBase<T>
             var newCenter = GetRow(newCenters, k);
             T shift = distanceMetric.Compute(oldCenter, newCenter);
 
-            if (NumOps.ToDouble(shift) > NumOps.ToDouble(maxShift))
+            if (NumOps.GreaterThan(shift, maxShift))
             {
                 maxShift = shift;
             }

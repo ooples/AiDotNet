@@ -466,6 +466,6 @@ Timing:
         var thisFitness = CalculateCompositeFitness(accuracyWeight, compressionWeight, speedWeight);
         var otherFitness = other.CalculateCompositeFitness(accuracyWeight, compressionWeight, speedWeight);
 
-        return NumOps.ToDouble(thisFitness) > NumOps.ToDouble(otherFitness);
+        return NumOps.GreaterThan(thisFitness, otherFitness);
     }
 }

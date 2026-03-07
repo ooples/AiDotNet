@@ -360,7 +360,7 @@ public abstract class TradingAgentBase<T> : ReinforcementLearningAgentBase<T>, I
         PortfolioHistory.Add(_portfolioValue);
 
         // Update peak for drawdown calculation
-        if (NumOps.ToDouble(_portfolioValue) > NumOps.ToDouble(_peakValue))
+        if (NumOps.GreaterThan(_portfolioValue, _peakValue))
         {
             _peakValue = _portfolioValue;
         }
@@ -460,7 +460,7 @@ public abstract class TradingAgentBase<T> : ReinforcementLearningAgentBase<T>, I
 
         foreach (var value in PortfolioHistory)
         {
-            if (NumOps.ToDouble(value) > NumOps.ToDouble(peak))
+            if (NumOps.GreaterThan(value, peak))
             {
                 peak = value;
             }
@@ -468,7 +468,7 @@ public abstract class TradingAgentBase<T> : ReinforcementLearningAgentBase<T>, I
             if (NumOps.ToDouble(peak) > 0)
             {
                 T drawdown = NumOps.Divide(NumOps.Subtract(peak, value), peak);
-                if (NumOps.ToDouble(drawdown) > NumOps.ToDouble(maxDrawdown))
+                if (NumOps.GreaterThan(drawdown, maxDrawdown))
                 {
                     maxDrawdown = drawdown;
                 }
@@ -544,7 +544,7 @@ public abstract class TradingAgentBase<T> : ReinforcementLearningAgentBase<T>, I
             T value = action[i];
             T absValue = NumOps.FromDouble(Math.Abs(NumOps.ToDouble(value)));
 
-            if (NumOps.ToDouble(absValue) > NumOps.ToDouble(maxPositionSize))
+            if (NumOps.GreaterThan(absValue, maxPositionSize))
             {
                 // Scale down to max position size
                 T sign = NumOps.ToDouble(value) >= 0 ? NumOps.One : NumOps.FromDouble(-1);

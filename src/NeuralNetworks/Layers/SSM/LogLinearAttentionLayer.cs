@@ -377,7 +377,7 @@ public class LogLinearAttentionLayer<T> : LayerBase<T>
             for (int l = 1; l < _numLevels; l++)
             {
                 T w = _levelMixWeights[new[] { hi, l }];
-                if (NumOps.ToDouble(w) > NumOps.ToDouble(maxVal))
+                if (NumOps.GreaterThan(w, maxVal))
                     maxVal = w;
             }
 
@@ -660,7 +660,7 @@ public class LogLinearAttentionLayer<T> : LayerBase<T>
             for (int l = 1; l < _numLevels; l++)
             {
                 T w = _levelMixWeights[new[] { hi, l }];
-                if (NumOps.ToDouble(w) > NumOps.ToDouble(maxVal))
+                if (NumOps.GreaterThan(w, maxVal))
                     maxVal = w;
             }
 

@@ -161,7 +161,7 @@ public class CompressionOptimizer<T>
 
                 // Check if this is the best trial that meets quality thresholds
                 if (trial.Metrics.MeetsQualityThreshold(_options.MaxAccuracyLoss * 100, _options.MinCompressionRatio)
-                    && (_bestTrial == null || NumOps.ToDouble(trial.FitnessScore) > NumOps.ToDouble(_bestFitness)))
+                    && (_bestTrial == null || NumOps.GreaterThan(trial.FitnessScore, _bestFitness)))
                 {
                     _bestTrial = trial;
                     _bestFitness = trial.FitnessScore;

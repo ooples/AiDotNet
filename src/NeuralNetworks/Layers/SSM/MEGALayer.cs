@@ -436,7 +436,7 @@ public class MEGALayer<T> : LayerBase<T>
                                 NumOps.Multiply(q[new[] { bi, i, flatD }], k[new[] { bi, j, flatD }]));
                         }
                         rawScores[j] = NumOps.Multiply(dot, headScale);
-                        if (NumOps.ToDouble(rawScores[j]) > NumOps.ToDouble(maxScore))
+                        if (NumOps.GreaterThan(rawScores[j], maxScore))
                             maxScore = rawScores[j];
                     }
 

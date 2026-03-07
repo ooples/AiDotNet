@@ -183,7 +183,7 @@ public class AnchorExplainer<T> : ILocalExplainer<T, AnchorExplanation<T>>
                 if (NumOps.ToDouble(precision) >= NumOps.ToDouble(_precisionThreshold))
                 {
                     if (bestAnchor == null ||
-                        NumOps.ToDouble(coverage) > NumOps.ToDouble(bestAnchor.Coverage) ||
+                        NumOps.GreaterThan(coverage, bestAnchor.Coverage) ||
                         (NumOps.ToDouble(coverage) == NumOps.ToDouble(bestAnchor.Coverage) &&
                          features.Count < bestAnchor.AnchorFeatures.Count))
                     {

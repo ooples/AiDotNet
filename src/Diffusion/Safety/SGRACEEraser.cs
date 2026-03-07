@@ -97,7 +97,7 @@ public class SGRACEEraser<T>
             {
                 var diff = NumOps.Subtract(result[i], baseParameters[i]);
                 var absDiff = NumOps.FromDouble(Math.Abs(NumOps.ToDouble(diff)));
-                if (NumOps.ToDouble(absDiff) > NumOps.ToDouble(threshold))
+                if (NumOps.GreaterThan(absDiff, threshold))
                 {
                     // Clamp deviation
                     var sign = NumOps.ToDouble(diff) >= 0 ? 1.0 : -1.0;

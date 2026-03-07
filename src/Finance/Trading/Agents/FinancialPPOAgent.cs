@@ -99,7 +99,7 @@ public class FinancialPPOAgent<T> : TradingAgentBase<T>
         T maxProb = probs[0];
         for (int i = 1; i < probs.Length; i++)
         {
-            if (NumOps.ToDouble(probs[i]) > NumOps.ToDouble(maxProb))
+            if (NumOps.GreaterThan(probs[i], maxProb))
             {
                 maxProb = probs[i];
                 bestIdx = i;

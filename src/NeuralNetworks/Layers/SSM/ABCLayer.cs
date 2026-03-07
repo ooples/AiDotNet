@@ -382,7 +382,7 @@ public class ABCLayer<T> : LayerBase<T>
                                     _slotKeys[new[] { hi, si, d }]));
                         }
                         wScores[si] = NumOps.Multiply(dot, scale);
-                        if (NumOps.ToDouble(wScores[si]) > NumOps.ToDouble(maxWScore))
+                        if (NumOps.GreaterThan(wScores[si], maxWScore))
                             maxWScore = wScores[si];
                     }
 
@@ -430,7 +430,7 @@ public class ABCLayer<T> : LayerBase<T>
                                     slotValues[new[] { bi, hi, si, d }]));
                         }
                         rScores[si] = NumOps.Multiply(dot, scale);
-                        if (NumOps.ToDouble(rScores[si]) > NumOps.ToDouble(maxRScore))
+                        if (NumOps.GreaterThan(rScores[si], maxRScore))
                             maxRScore = rScores[si];
                     }
 

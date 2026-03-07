@@ -801,7 +801,7 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
         var maxScore = NumOps.Zero;
         for (int i = 0; i < numPositions; i++)
         {
-            if (NumOps.ToDouble(attentionScores.Data.Span[i]) > NumOps.ToDouble(maxScore))
+            if (NumOps.GreaterThan(attentionScores.Data.Span[i], maxScore))
             {
                 maxScore = attentionScores.Data.Span[i];
             }

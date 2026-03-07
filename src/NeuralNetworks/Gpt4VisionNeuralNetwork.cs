@@ -1432,9 +1432,9 @@ For each category, indicate if it's flagged (YES/NO) and confidence level (HIGH/
         {
             for (int j = 0; j < tensor.Shape[1]; j++)
             {
-                if (NumOps.ToDouble(tensor[i, j]) < NumOps.ToDouble(min))
+                if (NumOps.LessThan(tensor[i, j], min))
                     min = tensor[i, j];
-                if (NumOps.ToDouble(tensor[i, j]) > NumOps.ToDouble(max))
+                if (NumOps.GreaterThan(tensor[i, j], max))
                     max = tensor[i, j];
             }
         }
