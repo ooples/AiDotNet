@@ -206,7 +206,7 @@ public class NOTEARSLinear<T> : ContinuousOptimizationBase<T>
         bool hasEdges = false;
         for (int i = 0; i < d && !hasEdges; i++)
             for (int j = 0; j < d && !hasEdges; j++)
-                if (i != j && Math.Abs(NumOps.ToDouble(result[i, j])) > 0)
+                if (i != j && NumOps.GreaterThan(NumOps.Abs(result[i, j]), NumOps.Zero))
                     hasEdges = true;
 
         return hasEdges ? result : FallbackCorrelationGraph(data);
