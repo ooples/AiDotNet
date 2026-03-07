@@ -251,20 +251,14 @@ public abstract class DocumentNeuralNetworkBase<T> : NeuralNetworkBase<T>
     /// <remarks>
     /// <para>
     /// <b>Priority Order:</b>
-    /// 1. If user configured a pipeline via AiModelBuilder.ConfigurePostprocessing() → use it
+    /// 1. If an instance-level PostprocessingTransformer is set (via ConfigureTransformers) → use it
     /// 2. Otherwise → use industry-standard defaults for this specific model type
     /// </para>
     /// <para>
     /// <b>For Beginners:</b> Model outputs often need to be transformed into a usable format.
     /// You can either let the model use its industry-standard defaults (recommended for most cases),
-    /// or configure custom postprocessing:
-    /// <code>
-    /// var result = new AiModelBuilder&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;()
-    ///     .ConfigurePostprocessing(pipeline => pipeline
-    ///         .Add(new SoftmaxTransformer&lt;double&gt;())
-    ///         .Add(new LabelDecoder&lt;double&gt;(labels)))
-    ///     .Build(X, y);
-    /// </code>
+    /// or configure custom postprocessing via AiModelBuilder.ConfigurePostprocessing().
+    /// The builder will automatically wire the postprocessing transformer onto the model.
     /// </para>
     /// </remarks>
     protected Tensor<T> PostprocessOutput(Tensor<T> modelOutput)
@@ -273,12 +267,6 @@ public abstract class DocumentNeuralNetworkBase<T> : NeuralNetworkBase<T>
         var transformer = PostprocessingTransformer;
         if (transformer is not null)
         {
-            if (!transformer.IsFitted)
-            {
-                throw new InvalidOperationException(
-                    "A postprocessing transformer was configured but has not been fitted. " +
-                    "Call Fit() or FitTransform() on the transformer before using it for prediction.");
-            }
             return transformer.Transform(modelOutput);
         }
 

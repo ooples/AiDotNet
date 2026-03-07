@@ -72,9 +72,17 @@ public class PreprocessingRegistryIntegrationTests
 
         var results = await Task.WhenAll(task1, task2);
 
-        // Assert: both builds succeed
+        // Assert: both builds succeed with preprocessing applied
         Assert.NotNull(results[0]);
         Assert.NotNull(results[1]);
+
+        // Assert: each result has its own fitted preprocessing
+        Assert.NotNull(results[0].PreprocessingInfo);
+        Assert.True(results[0].PreprocessingInfo?.IsFitted ?? false,
+            "First build's preprocessing should be fitted");
+        Assert.NotNull(results[1].PreprocessingInfo);
+        Assert.True(results[1].PreprocessingInfo?.IsFitted ?? false,
+            "Second build's preprocessing should be fitted");
 
         // Assert: the static registry was NOT set by either builder
 #pragma warning disable CS0618
@@ -195,9 +203,17 @@ public class PreprocessingRegistryIntegrationTests
             .ConfigurePreprocessing(new MinMaxScaler<double>())
             .BuildAsync();
 
-        // Assert: both succeeded
+        // Assert: both succeeded with preprocessing applied
         Assert.NotNull(result1);
         Assert.NotNull(result2);
+
+        // Assert: each result has its own fitted preprocessing
+        Assert.NotNull(result1.PreprocessingInfo);
+        Assert.True(result1.PreprocessingInfo?.IsFitted ?? false,
+            "First build's preprocessing should be fitted");
+        Assert.NotNull(result2.PreprocessingInfo);
+        Assert.True(result2.PreprocessingInfo?.IsFitted ?? false,
+            "Second build's preprocessing should be fitted");
 
         // Assert: registry was never set
 #pragma warning disable CS0618
