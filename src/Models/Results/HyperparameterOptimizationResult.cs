@@ -88,8 +88,8 @@ public class HyperparameterOptimizationResult<T>
     public List<(int TrialNumber, T ObjectiveValue)> GetOptimizationHistory()
     {
         return AllTrials
-            .Where(t => t.Status == TrialStatus.Complete && t.ObjectiveValue != null)
-            .Select(t => (t.TrialNumber, t.ObjectiveValue!))
+            .Where(t => t.Status == TrialStatus.Complete && t.ObjectiveValue.HasValue)
+            .Select(t => (t.TrialNumber, ObjectiveValue: t.ObjectiveValue.GetValueOrDefault()))
             .OrderBy(t => t.TrialNumber)
             .ToList();
     }

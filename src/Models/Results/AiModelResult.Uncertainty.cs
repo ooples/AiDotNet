@@ -304,7 +304,7 @@ public partial class AiModelResult<T, TInput, TOutput>
 
         if (HasConformalClassification)
         {
-            var probsTensor = ConversionsHelper.ConvertToTensor<T>(deterministic!).Clone();
+            var probsTensor = ConvertToTensorSafe(deterministic, "deterministic prediction");
             var (batch, classes) = InferBatchAndClasses(probsTensor, ConformalClassificationNumClasses);
             if (batch > 0 && classes > 1)
             {
@@ -364,7 +364,7 @@ public partial class AiModelResult<T, TInput, TOutput>
         for (int i = 0; i < _deepEnsembleModels.Count; i++)
         {
             var normalizedPrediction = _deepEnsembleModels[i].Predict(normalizedNewData);
-            samples.Add(ConversionsHelper.ConvertToTensor<T>(normalizedPrediction!).Clone());
+            samples.Add(ConvertToTensorSafe(normalizedPrediction, "normalized prediction"));
         }
 
         var first = samples[0];
@@ -377,7 +377,7 @@ public partial class AiModelResult<T, TInput, TOutput>
             {
                 var sampleOutput = ConvertFromTensor(samples[i]);
                 var calibratedOutput = ApplyProbabilityCalibrationIfEnabled(sampleOutput, uq);
-                samples[i] = ConversionsHelper.ConvertToTensor<T>(calibratedOutput!).Clone();
+                samples[i] = ConvertToTensorSafe(calibratedOutput, "calibrated output");
             }
         }
 
@@ -478,7 +478,7 @@ public partial class AiModelResult<T, TInput, TOutput>
 
         lock (_parameterSamplingLock)
         {
-            var originalParameters = Model!.GetParameters().Clone();
+            var originalParameters = EnsureModel.GetParameters().Clone();
             try
             {
                 for (int s = 0; s < effectiveSamples; s++)
@@ -494,7 +494,7 @@ public partial class AiModelResult<T, TInput, TOutput>
 
                     Model.SetParameters(sampledParams);
                     var normalizedPrediction = Model.Predict(normalizedNewData);
-                    samples.Add(ConversionsHelper.ConvertToTensor<T>(normalizedPrediction!).Clone());
+                    samples.Add(ConvertToTensorSafe(normalizedPrediction, "normalized prediction"));
                 }
             }
             finally
@@ -513,7 +513,7 @@ public partial class AiModelResult<T, TInput, TOutput>
             {
                 var sampleOutput = ConvertFromTensor(samples[i]);
                 var calibratedOutput = ApplyProbabilityCalibrationIfEnabled(sampleOutput, uq);
-                samples[i] = ConversionsHelper.ConvertToTensor<T>(calibratedOutput!).Clone();
+                samples[i] = ConvertToTensorSafe(calibratedOutput, "calibrated output");
             }
         }
 
@@ -601,7 +601,7 @@ public partial class AiModelResult<T, TInput, TOutput>
         var normalizedNewData = PreprocessingInfo?.IsFitted == true
             ? PreprocessingInfo.TransformFeatures(newData)
             : newData;
-        var inputTensor = ConversionsHelper.ConvertToTensor<T>(normalizedNewData!).Clone();
+        var inputTensor = ConvertToTensorSafe(normalizedNewData, "normalized input data");
 
         var uqResult = estimator.PredictWithUncertainty(inputTensor);
 
@@ -776,7 +776,7 @@ public partial class AiModelResult<T, TInput, TOutput>
 
     private TOutput AddScalarToOutput(TOutput output, T scalar)
     {
-        var tensor = ConversionsHelper.ConvertToTensor<T>(output!).Clone();
+        var tensor = ConvertToTensorSafe(output, "model output");
         var vec = tensor.ToVector();
         for (int i = 0; i < vec.Length; i++)
         {
@@ -789,7 +789,7 @@ public partial class AiModelResult<T, TInput, TOutput>
 
     private TOutput ApplyTemperatureScalingToOutputProbabilities(TOutput output, T temperature)
     {
-        var probsTensor = ConversionsHelper.ConvertToTensor<T>(output!).Clone();
+        var probsTensor = ConvertToTensorSafe(output, "model output");
         var probsVector = probsTensor.ToVector();
         var (treatAsProbabilities, batch, classes) = InferProbabilityDistributionLayout(probsTensor, probsVector);
         if (!treatAsProbabilities || classes <= 1)
@@ -809,7 +809,7 @@ public partial class AiModelResult<T, TInput, TOutput>
             return output;
         }
 
-        var probsTensor = ConversionsHelper.ConvertToTensor<T>(output!).Clone();
+        var probsTensor = ConvertToTensorSafe(output, "model output");
         var probsVector = probsTensor.ToVector();
         var (treatAsProbabilities, batch, classes) = InferProbabilityDistributionLayout(probsTensor, probsVector);
         if (classes <= 1)
@@ -864,7 +864,7 @@ public partial class AiModelResult<T, TInput, TOutput>
             return output;
         }
 
-        var probsTensor = ConversionsHelper.ConvertToTensor<T>(output!).Clone();
+        var probsTensor = ConvertToTensorSafe(output, "model output");
         var probsVector = probsTensor.ToVector();
         var (treatAsProbabilities, batch, classes) = InferProbabilityDistributionLayout(probsTensor, probsVector);
         if (!treatAsProbabilities || classes != 2 || batch <= 0)
@@ -905,7 +905,7 @@ public partial class AiModelResult<T, TInput, TOutput>
             return output;
         }
 
-        var probsTensor = ConversionsHelper.ConvertToTensor<T>(output!).Clone();
+        var probsTensor = ConvertToTensorSafe(output, "model output");
         var probsVector = probsTensor.ToVector();
         var (treatAsProbabilities, batch, classes) = InferProbabilityDistributionLayout(probsTensor, probsVector);
         if (!treatAsProbabilities || classes != 2 || batch <= 0)
@@ -1058,10 +1058,28 @@ public partial class AiModelResult<T, TInput, TOutput>
         if (output is T)
         {
             var zero = MathHelper.GetNumericOperations<T>().Zero;
-            return (TOutput)(object)zero!;
+            object boxedZero = zero ?? throw new InvalidOperationException("Numeric zero value was unexpectedly null.");
+            return (TOutput)boxedZero;
         }
 
         return default;
+    }
+
+    /// <summary>
+    /// Safely converts a potentially nullable output value to a Tensor, throwing if the value is null.
+    /// </summary>
+    /// <param name="value">The value to convert.</param>
+    /// <param name="context">Description of the value for error reporting.</param>
+    /// <returns>The converted Tensor.</returns>
+    private static Tensor<T> ConvertToTensorSafe<TValue>(TValue value, string context = "value")
+    {
+        if (value is null)
+        {
+            throw new InvalidOperationException(
+                $"Cannot convert null {context} to Tensor. The model prediction returned null.");
+        }
+
+        return ConversionsHelper.ConvertToTensor<T>(value).Clone();
     }
 
     private static Tensor<T> CreateZeroVectorTensor(int length)
@@ -1155,7 +1173,7 @@ public partial class AiModelResult<T, TInput, TOutput>
 
         for (int i = 0; i < batch; i++)
         {
-            var maxLogit = default(T)!;
+            var maxLogit = numOps.Zero;
             for (int c = 0; c < classes; c++)
             {
                 var p = flat[i * classes + c];
@@ -1281,8 +1299,8 @@ public partial class AiModelResult<T, TInput, TOutput>
                 }
             }
 
-            var normalizedPrediction = Model!.Predict(normalizedInput);
-            samples.Add(ConversionsHelper.ConvertToTensor<T>(normalizedPrediction!).Clone());
+            var normalizedPrediction = EnsureModel.Predict(normalizedInput);
+            samples.Add(ConvertToTensorSafe(normalizedPrediction, "normalized prediction"));
         }
 
         var (meanTensor, varianceTensor) = ComputeMeanAndVariance(samples);
