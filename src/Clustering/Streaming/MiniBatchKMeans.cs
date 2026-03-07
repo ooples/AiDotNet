@@ -65,7 +65,7 @@ public class MiniBatchKMeans<T> : ClusteringBase<T>
     /// <summary>
     /// Gets the final inertia (sum of squared distances to nearest center).
     /// </summary>
-    public double FinalInertia { get; private set; }
+    public T FinalInertia { get; private set; } = MathHelper.GetNumericOperations<T>().Zero;
 
     /// <summary>
     /// Gets the number of iterations performed.
@@ -114,7 +114,8 @@ public class MiniBatchKMeans<T> : ClusteringBase<T>
         var centers = InitializeCentersKMeansPlusPlus(x, k, n, d, rand);
         _centerCounts = new int[k];
         var noImprovementCount = 0;
-        double prevInertia = double.MaxValue;
+        T prevInertia = NumOps.MaxValue;
+        T convergenceFactor = NumOps.FromDouble(0.9999);
 
         // Mini-batch training
         for (int iter = 0; iter < Options.MaxIterations; iter++)
@@ -125,26 +126,26 @@ public class MiniBatchKMeans<T> : ClusteringBase<T>
             var batchIndices = Enumerable.Range(0, n).OrderBy(_ => rand.Next()).Take(batchSize).ToArray();
 
             // Cache distances for batch
-            var batchDistances = new double[batchSize, k];
+            var batchDistances = new T[batchSize, k];
             var batchAssignments = new int[batchSize];
 
             for (int b = 0; b < batchSize; b++)
             {
                 int pointIdx = batchIndices[b];
-                double minDist = double.MaxValue;
+                T minDist = NumOps.MaxValue;
                 int bestCluster = 0;
 
                 for (int c = 0; c < k; c++)
                 {
-                    double dist = 0;
+                    T dist = NumOps.Zero;
                     for (int j = 0; j < d; j++)
                     {
-                        double diff = NumOps.ToDouble(x[pointIdx, j]) - centers[c][j];
-                        dist += diff * diff;
+                        T diff = NumOps.Subtract(x[pointIdx, j], centers[c][j]);
+                        dist = NumOps.Add(dist, NumOps.Multiply(diff, diff));
                     }
 
                     batchDistances[b, c] = dist;
-                    if (dist < minDist)
+                    if (NumOps.LessThan(dist, minDist))
                     {
                         minDist = dist;
                         bestCluster = c;
@@ -161,23 +162,25 @@ public class MiniBatchKMeans<T> : ClusteringBase<T>
                 int c = batchAssignments[b];
                 _centerCounts[c]++;
 
-                double eta = 1.0 / _centerCounts[c];
+                T eta = NumOps.Divide(NumOps.One, NumOps.FromDouble(_centerCounts[c]));
+                T oneMinusEta = NumOps.Subtract(NumOps.One, eta);
 
                 for (int j = 0; j < d; j++)
                 {
-                    double pointVal = NumOps.ToDouble(x[pointIdx, j]);
-                    centers[c][j] = (1 - eta) * centers[c][j] + eta * pointVal;
+                    centers[c][j] = NumOps.Add(
+                        NumOps.Multiply(oneMinusEta, centers[c][j]),
+                        NumOps.Multiply(eta, x[pointIdx, j]));
                 }
             }
 
             // Compute inertia on batch for convergence check
-            double batchInertia = 0;
+            T batchInertia = NumOps.Zero;
             for (int b = 0; b < batchSize; b++)
             {
-                batchInertia += batchDistances[b, batchAssignments[b]];
+                batchInertia = NumOps.Add(batchInertia, batchDistances[b, batchAssignments[b]]);
             }
 
-            if (batchInertia >= prevInertia * 0.9999)
+            if (!NumOps.LessThan(batchInertia, NumOps.Multiply(prevInertia, convergenceFactor)))
             {
                 noImprovementCount++;
                 if (noImprovementCount >= _options.MaxNoImprovement)
@@ -195,23 +198,23 @@ public class MiniBatchKMeans<T> : ClusteringBase<T>
 
         // Final assignment and inertia computation
         var labels = new int[n];
-        FinalInertia = 0;
+        FinalInertia = NumOps.Zero;
 
         for (int i = 0; i < n; i++)
         {
-            double minDist = double.MaxValue;
+            T minDist = NumOps.MaxValue;
             int bestCluster = 0;
 
             for (int c = 0; c < k; c++)
             {
-                double dist = 0;
+                T dist = NumOps.Zero;
                 for (int j = 0; j < d; j++)
                 {
-                    double diff = NumOps.ToDouble(x[i, j]) - centers[c][j];
-                    dist += diff * diff;
+                    T diff = NumOps.Subtract(x[i, j], centers[c][j]);
+                    dist = NumOps.Add(dist, NumOps.Multiply(diff, diff));
                 }
 
-                if (dist < minDist)
+                if (NumOps.LessThan(dist, minDist))
                 {
                     minDist = dist;
                     bestCluster = c;
@@ -219,7 +222,7 @@ public class MiniBatchKMeans<T> : ClusteringBase<T>
             }
 
             labels[i] = bestCluster;
-            FinalInertia += minDist;
+            FinalInertia = NumOps.Add(FinalInertia, minDist);
         }
 
         // Set results
@@ -230,7 +233,7 @@ public class MiniBatchKMeans<T> : ClusteringBase<T>
         {
             for (int j = 0; j < d; j++)
             {
-                ClusterCenters[c, j] = NumOps.FromDouble(centers[c][j]);
+                ClusterCenters[c, j] = centers[c][j];
             }
         }
 
@@ -239,23 +242,24 @@ public class MiniBatchKMeans<T> : ClusteringBase<T>
             Labels[i] = NumOps.FromDouble(labels[i]);
         }
 
-        Inertia = NumOps.FromDouble(FinalInertia);
+        Inertia = FinalInertia;
         IsTrained = true;
     }
 
-    private double[][] InitializeCentersKMeansPlusPlus(Matrix<T> x, int k, int n, int d, Random rand)
+    private T[][] InitializeCentersKMeansPlusPlus(Matrix<T> x, int k, int n, int d, Random rand)
     {
-        var centers = new double[k][];
+        var centers = new T[k][];
 
         // First center: random
         int firstIdx = rand.Next(n);
-        centers[0] = new double[d];
+        centers[0] = new T[d];
         for (int j = 0; j < d; j++)
         {
-            centers[0][j] = NumOps.ToDouble(x[firstIdx, j]);
+            centers[0][j] = x[firstIdx, j];
         }
 
         // Remaining centers: probabilistic based on distance
+        // Keep distances as double at random selection boundary
         var distances = new double[n];
         for (int i = 0; i < n; i++)
         {
@@ -268,13 +272,14 @@ public class MiniBatchKMeans<T> : ClusteringBase<T>
 
             for (int i = 0; i < n; i++)
             {
-                double dist = 0;
+                T distT = NumOps.Zero;
                 for (int j = 0; j < d; j++)
                 {
-                    double diff = NumOps.ToDouble(x[i, j]) - centers[c - 1][j];
-                    dist += diff * diff;
+                    T diff = NumOps.Subtract(x[i, j], centers[c - 1][j]);
+                    distT = NumOps.Add(distT, NumOps.Multiply(diff, diff));
                 }
 
+                double dist = NumOps.ToDouble(distT);
                 distances[i] = Math.Min(distances[i], dist);
                 totalWeight += distances[i];
             }
@@ -293,10 +298,10 @@ public class MiniBatchKMeans<T> : ClusteringBase<T>
                 }
             }
 
-            centers[c] = new double[d];
+            centers[c] = new T[d];
             for (int j = 0; j < d; j++)
             {
-                centers[c][j] = NumOps.ToDouble(x[selected, j]);
+                centers[c][j] = x[selected, j];
             }
         }
 
@@ -324,14 +329,16 @@ public class MiniBatchKMeans<T> : ClusteringBase<T>
             ? RandomHelper.CreateSeededRandom(Options.Seed.Value)
             : RandomHelper.CreateSecureRandom();
 
+        if (ClusterCenters is null || _centerCounts is null) return;
+
         // Get current centers
-        var centers = new double[k][];
+        var centers = new T[k][];
         for (int c = 0; c < k; c++)
         {
-            centers[c] = new double[d];
+            centers[c] = new T[d];
             for (int j = 0; j < d; j++)
             {
-                centers[c][j] = NumOps.ToDouble(ClusterCenters![c, j]);
+                centers[c][j] = ClusterCenters[c, j];
             }
         }
 
@@ -343,19 +350,19 @@ public class MiniBatchKMeans<T> : ClusteringBase<T>
             for (int i = start; i < end; i++)
             {
                 // Find nearest center
-                double minDist = double.MaxValue;
+                T minDist = NumOps.MaxValue;
                 int bestCluster = 0;
 
                 for (int c = 0; c < k; c++)
                 {
-                    double dist = 0;
+                    T dist = NumOps.Zero;
                     for (int j = 0; j < d; j++)
                     {
-                        double diff = NumOps.ToDouble(x[i, j]) - centers[c][j];
-                        dist += diff * diff;
+                        T diff = NumOps.Subtract(x[i, j], centers[c][j]);
+                        dist = NumOps.Add(dist, NumOps.Multiply(diff, diff));
                     }
 
-                    if (dist < minDist)
+                    if (NumOps.LessThan(dist, minDist))
                     {
                         minDist = dist;
                         bestCluster = c;
@@ -363,13 +370,15 @@ public class MiniBatchKMeans<T> : ClusteringBase<T>
                 }
 
                 // Update center
-                _centerCounts![bestCluster]++;
-                double eta = 1.0 / _centerCounts[bestCluster];
+                _centerCounts[bestCluster]++;
+                T eta = NumOps.Divide(NumOps.One, NumOps.FromDouble(_centerCounts[bestCluster]));
+                T oneMinusEta = NumOps.Subtract(NumOps.One, eta);
 
                 for (int j = 0; j < d; j++)
                 {
-                    double pointVal = NumOps.ToDouble(x[i, j]);
-                    centers[bestCluster][j] = (1 - eta) * centers[bestCluster][j] + eta * pointVal;
+                    centers[bestCluster][j] = NumOps.Add(
+                        NumOps.Multiply(oneMinusEta, centers[bestCluster][j]),
+                        NumOps.Multiply(eta, x[i, j]));
                 }
             }
         }
@@ -379,7 +388,7 @@ public class MiniBatchKMeans<T> : ClusteringBase<T>
         {
             for (int j = 0; j < d; j++)
             {
-                ClusterCenters![c, j] = NumOps.FromDouble(centers[c][j]);
+                ClusterCenters[c, j] = centers[c][j];
             }
         }
     }
@@ -394,21 +403,21 @@ public class MiniBatchKMeans<T> : ClusteringBase<T>
 
         for (int i = 0; i < x.Rows; i++)
         {
-            double minDist = double.MaxValue;
+            T minDist = NumOps.MaxValue;
             int nearestCluster = 0;
 
             if (ClusterCenters is not null)
             {
                 for (int c = 0; c < NumClusters; c++)
                 {
-                    double dist = 0;
+                    T dist = NumOps.Zero;
                     for (int j = 0; j < d; j++)
                     {
-                        double diff = NumOps.ToDouble(x[i, j]) - NumOps.ToDouble(ClusterCenters[c, j]);
-                        dist += diff * diff;
+                        T diff = NumOps.Subtract(x[i, j], ClusterCenters[c, j]);
+                        dist = NumOps.Add(dist, NumOps.Multiply(diff, diff));
                     }
 
-                    if (dist < minDist)
+                    if (NumOps.LessThan(dist, minDist))
                     {
                         minDist = dist;
                         nearestCluster = c;
@@ -426,6 +435,6 @@ public class MiniBatchKMeans<T> : ClusteringBase<T>
     public override Vector<T> FitPredict(Matrix<T> x)
     {
         Train(x);
-        return Labels!;
+        return Labels ?? new Vector<T>(0);
     }
 }
