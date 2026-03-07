@@ -3,9 +3,7 @@ using AiDotNet.Clustering.DistanceMetrics;
 using AiDotNet.Clustering.Interfaces;
 using AiDotNet.Clustering.Options;
 using AiDotNet.Enums;
-using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
-using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Clustering.Density;
 
@@ -50,8 +48,8 @@ public class Denclue<T> : ClusteringBase<T>
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
-    private double[][]? _attractors;
-    private double[]? _attractorDensities;
+    private T[][]? _attractors;
+    private T[]? _attractorDensities;
 
     /// <summary>
     /// Initializes a new DENCLUE instance.
@@ -66,12 +64,12 @@ public class Denclue<T> : ClusteringBase<T>
     /// <summary>
     /// Gets the density attractors (cluster centers).
     /// </summary>
-    public double[][]? Attractors => _attractors;
+    public T[][]? Attractors => _attractors;
 
     /// <summary>
     /// Gets the density values at each attractor.
     /// </summary>
-    public double[]? AttractorDensities => _attractorDensities;
+    public T[]? AttractorDensities => _attractorDensities;
 
     /// <inheritdoc />
     protected override ModelType GetModelType() => ModelType.Clustering;
@@ -105,41 +103,36 @@ public class Denclue<T> : ClusteringBase<T>
         int d = x.Columns;
         NumFeatures = d;
 
-        // Convert data to double array for efficient computation
-        var data = new double[n][];
-        for (int i = 0; i < n; i++)
-        {
-            data[i] = new double[d];
-            for (int j = 0; j < d; j++)
-            {
-                data[i][j] = NumOps.ToDouble(x[i, j]);
-            }
-        }
+        T minDensity = NumOps.FromDouble(_options.MinDensity);
+        T mergeThreshold = NumOps.FromDouble(_options.AttractorMergeThreshold);
 
         // Find attractors for each point via hill climbing
-        var pointAttractors = new double[n][];
-        var pointDensities = new double[n];
+        var pointAttractors = new T[n][];
+        var pointDensities = new T[n];
 
         for (int i = 0; i < n; i++)
         {
-            var result = HillClimb(data[i], data, d);
+            var point = new T[d];
+            for (int j = 0; j < d; j++)
+            {
+                point[j] = x[i, j];
+            }
+            var result = HillClimb(point, x, n, d);
             pointAttractors[i] = result.attractor;
             pointDensities[i] = result.density;
         }
 
         // Merge similar attractors and assign cluster labels
-        var attractorList = new List<double[]>();
-        var densityList = new List<double>();
+        var attractorList = new List<T[]>();
+        var densityList = new List<T>();
         var labels = new int[n];
-        var attractorMapping = new int[n];
 
         for (int i = 0; i < n; i++)
         {
-            if (pointDensities[i] < _options.MinDensity)
+            if (NumOps.LessThan(pointDensities[i], minDensity))
             {
                 // Noise point
                 labels[i] = -1;
-                attractorMapping[i] = -1;
                 continue;
             }
 
@@ -147,8 +140,8 @@ public class Denclue<T> : ClusteringBase<T>
             int matchedAttractor = -1;
             for (int a = 0; a < attractorList.Count; a++)
             {
-                double dist = EuclideanDistance(pointAttractors[i], attractorList[a]);
-                if (dist < _options.AttractorMergeThreshold)
+                T dist = EuclideanDistanceT(pointAttractors[i], attractorList[a], d);
+                if (NumOps.LessThan(dist, mergeThreshold))
                 {
                     matchedAttractor = a;
                     break;
@@ -165,7 +158,7 @@ public class Denclue<T> : ClusteringBase<T>
             else
             {
                 // Update attractor density if this one is higher
-                if (pointDensities[i] > densityList[matchedAttractor])
+                if (NumOps.GreaterThan(pointDensities[i], densityList[matchedAttractor]))
                 {
                     attractorList[matchedAttractor] = pointAttractors[i];
                     densityList[matchedAttractor] = pointDensities[i];
@@ -173,7 +166,6 @@ public class Denclue<T> : ClusteringBase<T>
             }
 
             labels[i] = matchedAttractor;
-            attractorMapping[i] = matchedAttractor;
         }
 
         // Store attractors
@@ -189,7 +181,7 @@ public class Denclue<T> : ClusteringBase<T>
         {
             for (int j = 0; j < d; j++)
             {
-                ClusterCenters[c, j] = NumOps.FromDouble(_attractors[c][j]);
+                ClusterCenters[c, j] = _attractors[c][j];
             }
         }
 
@@ -201,24 +193,22 @@ public class Denclue<T> : ClusteringBase<T>
         IsTrained = true;
     }
 
-    private (double[] attractor, double density) HillClimb(double[] point, double[][] data, int d)
+    private (T[] attractor, T density) HillClimb(T[] point, Matrix<T> data, int n, int d)
     {
-        var current = (double[])point.Clone();
-        double currentDensity = ComputeDensity(current, data, d);
+        var current = (T[])point.Clone();
+        T currentDensity = ComputeDensity(current, data, n, d);
+        T convergenceThreshold = NumOps.FromDouble(_options.ConvergenceThreshold);
 
         for (int iter = 0; iter < Options.MaxIterations; iter++)
         {
-            // Compute gradient of density
-            var gradient = ComputeDensityGradient(current, data, d);
-
             // Compute step size using mean shift update
-            var next = ComputeMeanShiftUpdate(current, data, d);
+            var next = ComputeMeanShiftUpdate(current, data, n, d);
 
-            double nextDensity = ComputeDensity(next, data, d);
+            T nextDensity = ComputeDensity(next, data, n, d);
 
             // Check convergence
-            double movement = EuclideanDistance(current, next);
-            if (movement < _options.ConvergenceThreshold)
+            T movement = EuclideanDistanceT(current, next, d);
+            if (NumOps.LessThan(movement, convergenceThreshold))
             {
                 return (current, currentDensity);
             }
@@ -230,106 +220,87 @@ public class Denclue<T> : ClusteringBase<T>
         return (current, currentDensity);
     }
 
-    private double[] ComputeMeanShiftUpdate(double[] point, double[][] data, int d)
+    private T[] ComputeMeanShiftUpdate(T[] point, Matrix<T> data, int n, int d)
     {
-        double h = _options.Bandwidth;
-        double h2 = h * h;
+        T h = NumOps.FromDouble(_options.Bandwidth);
+        T h2 = NumOps.Multiply(h, h);
+        T twoH2 = NumOps.Multiply(NumOps.FromDouble(2.0), h2);
 
-        var numerator = new double[d];
-        double denominator = 0;
-
-        for (int i = 0; i < data.Length; i++)
+        var numerator = new T[d];
+        T denominator = NumOps.Zero;
+        for (int j = 0; j < d; j++)
         {
-            double dist2 = 0;
-            for (int j = 0; j < d; j++)
-            {
-                double diff = point[j] - data[i][j];
-                dist2 += diff * diff;
-            }
-
-            double weight = Math.Exp(-dist2 / (2 * h2));
-
-            for (int j = 0; j < d; j++)
-            {
-                numerator[j] += weight * data[i][j];
-            }
-            denominator += weight;
+            numerator[j] = NumOps.Zero;
         }
 
-        var result = new double[d];
-        if (denominator > 0)
+        for (int i = 0; i < n; i++)
+        {
+            T dist2 = NumOps.Zero;
+            for (int j = 0; j < d; j++)
+            {
+                T diff = NumOps.Subtract(point[j], data[i, j]);
+                dist2 = NumOps.Add(dist2, NumOps.Multiply(diff, diff));
+            }
+
+            T weight = NumOps.Exp(NumOps.Negate(NumOps.Divide(dist2, twoH2)));
+
+            for (int j = 0; j < d; j++)
+            {
+                numerator[j] = NumOps.Add(numerator[j], NumOps.Multiply(weight, data[i, j]));
+            }
+            denominator = NumOps.Add(denominator, weight);
+        }
+
+        var result = new T[d];
+        if (NumOps.GreaterThan(denominator, NumOps.Zero))
         {
             for (int j = 0; j < d; j++)
             {
-                result[j] = numerator[j] / denominator;
+                result[j] = NumOps.Divide(numerator[j], denominator);
             }
         }
         else
         {
-            result = (double[])point.Clone();
+            result = (T[])point.Clone();
         }
 
         return result;
     }
 
-    private double ComputeDensity(double[] point, double[][] data, int d)
+    private T ComputeDensity(T[] point, Matrix<T> data, int n, int d)
     {
-        double h = _options.Bandwidth;
-        double h2 = h * h;
-        double normalization = Math.Pow(2 * Math.PI * h2, -d / 2.0);
+        T h = NumOps.FromDouble(_options.Bandwidth);
+        T h2 = NumOps.Multiply(h, h);
+        T twoH2 = NumOps.Multiply(NumOps.FromDouble(2.0), h2);
+        // Normalization: (2*PI*h^2)^(-d/2)
+        double normDouble = Math.Pow(2 * Math.PI * _options.Bandwidth * _options.Bandwidth, -d / 2.0);
+        T normalization = NumOps.FromDouble(normDouble);
 
-        double sum = 0;
-        for (int i = 0; i < data.Length; i++)
+        T sum = NumOps.Zero;
+        for (int i = 0; i < n; i++)
         {
-            double dist2 = 0;
+            T dist2 = NumOps.Zero;
             for (int j = 0; j < d; j++)
             {
-                double diff = point[j] - data[i][j];
-                dist2 += diff * diff;
+                T diff = NumOps.Subtract(point[j], data[i, j]);
+                dist2 = NumOps.Add(dist2, NumOps.Multiply(diff, diff));
             }
 
-            sum += Math.Exp(-dist2 / (2 * h2));
+            sum = NumOps.Add(sum, NumOps.Exp(NumOps.Negate(NumOps.Divide(dist2, twoH2))));
         }
 
-        return normalization * sum / data.Length;
+        return NumOps.Divide(NumOps.Multiply(normalization, sum), NumOps.FromDouble(n));
     }
 
-    private double[] ComputeDensityGradient(double[] point, double[][] data, int d)
+    private T EuclideanDistanceT(T[] a, T[] b, int d)
     {
-        double h = _options.Bandwidth;
-        double h2 = h * h;
-        double normalization = Math.Pow(2 * Math.PI * h2, -d / 2.0) / h2;
-
-        var gradient = new double[d];
-
-        for (int i = 0; i < data.Length; i++)
-        {
-            double dist2 = 0;
-            for (int j = 0; j < d; j++)
-            {
-                double diff = point[j] - data[i][j];
-                dist2 += diff * diff;
-            }
-
-            double weight = Math.Exp(-dist2 / (2 * h2));
-
-            for (int j = 0; j < d; j++)
-            {
-                gradient[j] += weight * (data[i][j] - point[j]);
-            }
-        }
-
+        T sum = NumOps.Zero;
         for (int j = 0; j < d; j++)
         {
-            gradient[j] *= normalization / data.Length;
+            T diff = NumOps.Subtract(a[j], b[j]);
+            sum = NumOps.Add(sum, NumOps.Multiply(diff, diff));
         }
-
-        return gradient;
-    }
-
-    private double EuclideanDistance(double[] a, double[] b)
-    {
-        return VectorHelper.EuclideanDistance(new Vector<double>(a), new Vector<double>(b));
+        return NumOps.Sqrt(sum);
     }
 
     /// <summary>
@@ -337,35 +308,30 @@ public class Denclue<T> : ClusteringBase<T>
     /// </summary>
     /// <param name="point">The point to evaluate.</param>
     /// <returns>The estimated density.</returns>
-    public double GetDensity(Vector<T> point)
+    public T GetDensity(Vector<T> point)
     {
         ValidateIsTrained();
 
-        if (ClusterCenters is null) return 0;
+        if (ClusterCenters is null) return NumOps.Zero;
 
         int d = NumFeatures;
-        var p = new double[d];
-        for (int j = 0; j < d; j++)
-        {
-            p[j] = NumOps.ToDouble(point[j]);
-        }
+        T h = NumOps.FromDouble(_options.Bandwidth);
+        T h2 = NumOps.Multiply(h, h);
+        T twoH2 = NumOps.Multiply(NumOps.FromDouble(2.0), h2);
 
-        // Use attractors as representative points for density
-        double h = _options.Bandwidth;
-        double h2 = h * h;
-        double normalization = Math.Pow(2 * Math.PI * h2, -d / 2.0);
-
-        double sum = 0;
+        T sum = NumOps.Zero;
         for (int c = 0; c < NumClusters; c++)
         {
-            double dist2 = 0;
+            T dist2 = NumOps.Zero;
             for (int j = 0; j < d; j++)
             {
-                double diff = p[j] - _attractors![c][j];
-                dist2 += diff * diff;
+                T diff = NumOps.Subtract(point[j], _attractors![c][j]);
+                dist2 = NumOps.Add(dist2, NumOps.Multiply(diff, diff));
             }
 
-            sum += _attractorDensities![c] * Math.Exp(-dist2 / (2 * h2));
+            sum = NumOps.Add(sum,
+                NumOps.Multiply(_attractorDensities![c],
+                    NumOps.Exp(NumOps.Negate(NumOps.Divide(dist2, twoH2)))));
         }
 
         return sum;
@@ -382,7 +348,7 @@ public class Denclue<T> : ClusteringBase<T>
         for (int i = 0; i < x.Rows; i++)
         {
             var point = GetRow(x, i);
-            double minDist = double.MaxValue;
+            T minDist = NumOps.MaxValue;
             int nearestCluster = -1;
 
             if (ClusterCenters is not null)
@@ -390,9 +356,9 @@ public class Denclue<T> : ClusteringBase<T>
                 for (int c = 0; c < NumClusters; c++)
                 {
                     var center = GetRow(ClusterCenters, c);
-                    double dist = NumOps.ToDouble(metric.Compute(point, center));
+                    T dist = metric.Compute(point, center);
 
-                    if (dist < minDist)
+                    if (NumOps.LessThan(dist, minDist))
                     {
                         minDist = dist;
                         nearestCluster = c;
@@ -410,6 +376,6 @@ public class Denclue<T> : ClusteringBase<T>
     public override Vector<T> FitPredict(Matrix<T> x)
     {
         Train(x);
-        return Labels!;
+        return Labels ?? new Vector<T>(0);
     }
 }
