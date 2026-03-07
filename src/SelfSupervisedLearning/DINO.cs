@@ -112,7 +112,7 @@ public class DINO<T> : TeacherStudentSSL<T>
                 var (_, gradStudent) = _loss.ComputeLossWithGradients(
                     studentOutputs[s], teacherOutputs[t]);
 
-                var gradH = _projector!.Backward(gradStudent);
+                var gradH = Projector.Backward(gradStudent);
                 _encoder.Backpropagate(gradH);
             }
         }

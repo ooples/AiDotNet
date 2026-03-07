@@ -78,6 +78,16 @@ public class SymmetricProjector<T> : IProjectorHead<T>
     private T[]? _predBn1GammaGrad;
     private T[]? _predBn1BetaGrad;
 
+    private T[] PredWeight1 => _predWeight1 ?? throw new InvalidOperationException("Predictor weight1 not initialized. Ensure _hasPredictor is true.");
+    private T[] PredBias1 => _predBias1 ?? throw new InvalidOperationException("Predictor bias1 not initialized.");
+    private T[] PredBn1Gamma => _predBn1Gamma ?? throw new InvalidOperationException("Predictor BN1 gamma not initialized.");
+    private T[] PredBn1Beta => _predBn1Beta ?? throw new InvalidOperationException("Predictor BN1 beta not initialized.");
+    private T[] PredWeight2 => _predWeight2 ?? throw new InvalidOperationException("Predictor weight2 not initialized.");
+    private T[] PredBias2 => _predBias2 ?? throw new InvalidOperationException("Predictor bias2 not initialized.");
+
+    private Tensor<T> CachedInput => _cachedInput ?? throw new InvalidOperationException("Cached input not available. Call Project() before Backward().");
+    private Tensor<T> CachedH1Relu => _cachedH1Relu ?? throw new InvalidOperationException("Cached H1 ReLU not available. Call Project() before Backward().");
+
     /// <inheritdoc />
     public int InputDimension => _inputDim;
 
@@ -170,11 +180,11 @@ public class SymmetricProjector<T> : IProjectorHead<T>
             return projection;
 
         // Predictor: Linear → BN → ReLU → Linear
-        _cachedPredH1 = Linear(projection, _predWeight1!, _predBias1!, _projectionDim, _predictorHiddenDim);
-        _cachedPredH1Bn = BatchNorm(_cachedPredH1, _predBn1Gamma!, _predBn1Beta!,
+        _cachedPredH1 = Linear(projection, PredWeight1, PredBias1, _projectionDim, _predictorHiddenDim);
+        _cachedPredH1Bn = BatchNorm(_cachedPredH1, PredBn1Gamma, PredBn1Beta,
             out _predBn1Mean, out _predBn1Var, out _predBn1Normalized);
         _cachedPredH1Relu = ReLU(_cachedPredH1Bn);
-        var output = Linear(_cachedPredH1Relu, _predWeight2!, _predBias2!, _predictorHiddenDim, _projectionDim);
+        var output = Linear(_cachedPredH1Relu, PredWeight2, PredBias2, _predictorHiddenDim, _projectionDim);
 
         return output;
     }
@@ -197,14 +207,14 @@ public class SymmetricProjector<T> : IProjectorHead<T>
         if (_hasPredictor && _cachedPredH1Relu is not null)
         {
             // Backward through final linear layer of predictor
-            grad = LinearBackward(grad, _predWeight2!, _predictorHiddenDim, _projectionDim);
+            grad = LinearBackward(grad, PredWeight2, _predictorHiddenDim, _projectionDim);
             // Backward through ReLU
             grad = ReLUBackward(grad, _cachedPredH1Bn!);
             // Backward through BN with full gradient computation
-            grad = BatchNormBackward(grad, _predBn1Gamma!, _predBn1Var, _predBn1Normalized,
+            grad = BatchNormBackward(grad, PredBn1Gamma, _predBn1Var, _predBn1Normalized,
                 out _predBn1GammaGrad, out _predBn1BetaGrad);
             // Backward through first linear layer of predictor
-            grad = LinearBackward(grad, _predWeight1!, _projectionDim, _predictorHiddenDim);
+            grad = LinearBackward(grad, PredWeight1, _projectionDim, _predictorHiddenDim);
         }
 
         // Backward through projector BN2 with full gradient computation
@@ -213,7 +223,7 @@ public class SymmetricProjector<T> : IProjectorHead<T>
         // Backward through linear2
         grad = LinearBackward(grad, _projWeight2, _hiddenDim, _projectionDim);
         // Backward through ReLU
-        grad = ReLUBackward(grad, _cachedH1Bn!);
+        grad = ReLUBackward(grad, (_cachedH1Bn ?? throw new InvalidOperationException("Cached H1 BN not available. Call Project() before Backward().")));
         // Backward through BN1 with full gradient computation
         grad = BatchNormBackward(grad, _projBn1Gamma, _projBn1Var, _projBn1Normalized,
             out _projBn1GammaGrad, out _projBn1BetaGrad);
@@ -366,7 +376,7 @@ public class SymmetricProjector<T> : IProjectorHead<T>
                 T sum = NumOps.Zero;
                 for (int b = 0; b < batchSize; b++)
                 {
-                    sum = NumOps.Add(sum, NumOps.Multiply(_cachedH1Relu![b, i], gradBeforeBn2[b, j]));
+                    sum = NumOps.Add(sum, NumOps.Multiply(CachedH1Relu[b, i], gradBeforeBn2[b, j]));
                 }
                 grads[offset + _projWeight1.Length + _projBias1.Length + _projBn1Gamma.Length + _projBn1Beta.Length + i * _projectionDim + j] =
                     NumOps.Multiply(sum, invBatchSize);
@@ -389,7 +399,7 @@ public class SymmetricProjector<T> : IProjectorHead<T>
         var gradAtH1Relu = LinearBackward(gradBeforeBn2, _projWeight2, _hiddenDim, _projectionDim);
 
         // Backprop through ReLU
-        var gradAtH1Bn = ReLUBackward(gradAtH1Relu, _cachedH1Bn!);
+        var gradAtH1Bn = ReLUBackward(gradAtH1Relu, (_cachedH1Bn ?? throw new InvalidOperationException("Cached H1 BN not available. Call Project() before Backward().")));
 
         // Backprop through BN1
         var gradAtH1 = BatchNormBackward(gradAtH1Bn, _projBn1Gamma, _projBn1Var, _projBn1Normalized,
@@ -403,7 +413,7 @@ public class SymmetricProjector<T> : IProjectorHead<T>
                 T sum = NumOps.Zero;
                 for (int b = 0; b < batchSize; b++)
                 {
-                    sum = NumOps.Add(sum, NumOps.Multiply(_cachedInput![b, i], gradAtH1[b, j]));
+                    sum = NumOps.Add(sum, NumOps.Multiply(CachedInput[b, i], gradAtH1[b, j]));
                 }
                 grads[offset + i * _hiddenDim + j] = NumOps.Multiply(sum, invBatchSize);
             }
@@ -450,9 +460,9 @@ public class SymmetricProjector<T> : IProjectorHead<T>
             // Calculate predictor offset
             int predOffset = bn2BetaOffset + _projBn2Beta.Length;
             int predWeight1Offset = predOffset;
-            int predBias1Offset = predWeight1Offset + _predWeight1!.Length;
-            int predBn1GammaOffset = predBias1Offset + _predBias1!.Length;
-            int predBn1BetaOffset = predBn1GammaOffset + _predBn1Gamma!.Length;
+            int predBias1Offset = predWeight1Offset + PredWeight1.Length;
+            int predBn1GammaOffset = predBias1Offset + PredBias1.Length;
+            int predBn1BetaOffset = predBn1GammaOffset + PredBn1Gamma.Length;
 
             for (int j = 0; j < _predictorHiddenDim; j++)
             {
@@ -482,12 +492,12 @@ public class SymmetricProjector<T> : IProjectorHead<T>
         // Predictor parameters
         if (_hasPredictor)
         {
-            allParams.AddRange(_predWeight1!);
-            allParams.AddRange(_predBias1!);
-            allParams.AddRange(_predBn1Gamma!);
-            allParams.AddRange(_predBn1Beta!);
-            allParams.AddRange(_predWeight2!);
-            allParams.AddRange(_predBias2!);
+            allParams.AddRange(PredWeight1);
+            allParams.AddRange(PredBias1);
+            allParams.AddRange(PredBn1Gamma);
+            allParams.AddRange(PredBn1Beta);
+            allParams.AddRange(PredWeight2);
+            allParams.AddRange(PredBias2);
         }
 
         return new Vector<T>([.. allParams]);
@@ -519,17 +529,23 @@ public class SymmetricProjector<T> : IProjectorHead<T>
         // Predictor parameters
         if (_hasPredictor)
         {
-            Array.Copy(parameters.ToArray(), offset, _predWeight1!, 0, _predWeight1!.Length);
-            offset += _predWeight1.Length;
-            Array.Copy(parameters.ToArray(), offset, _predBias1!, 0, _predBias1!.Length);
-            offset += _predBias1.Length;
-            Array.Copy(parameters.ToArray(), offset, _predBn1Gamma!, 0, _predBn1Gamma!.Length);
-            offset += _predBn1Gamma.Length;
-            Array.Copy(parameters.ToArray(), offset, _predBn1Beta!, 0, _predBn1Beta!.Length);
-            offset += _predBn1Beta.Length;
-            Array.Copy(parameters.ToArray(), offset, _predWeight2!, 0, _predWeight2!.Length);
-            offset += _predWeight2.Length;
-            Array.Copy(parameters.ToArray(), offset, _predBias2!, 0, _predBias2!.Length);
+            var pw1 = PredWeight1;
+            var pb1 = PredBias1;
+            var pg1 = PredBn1Gamma;
+            var pbe1 = PredBn1Beta;
+            var pw2 = PredWeight2;
+            var pb2 = PredBias2;
+            Array.Copy(parameters.ToArray(), offset, pw1, 0, pw1.Length);
+            offset += pw1.Length;
+            Array.Copy(parameters.ToArray(), offset, pb1, 0, pb1.Length);
+            offset += pb1.Length;
+            Array.Copy(parameters.ToArray(), offset, pg1, 0, pg1.Length);
+            offset += pg1.Length;
+            Array.Copy(parameters.ToArray(), offset, pbe1, 0, pbe1.Length);
+            offset += pbe1.Length;
+            Array.Copy(parameters.ToArray(), offset, pw2, 0, pw2.Length);
+            offset += pw2.Length;
+            Array.Copy(parameters.ToArray(), offset, pb2, 0, pb2.Length);
         }
     }
 

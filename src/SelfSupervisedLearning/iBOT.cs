@@ -134,7 +134,7 @@ public class iBOT<T> : TeacherStudentSSL<T>
 
         // Backward pass
         var (_, gradStudent) = _clsLoss.ComputeLossWithGradients(studentOut1, teacherOut2);
-        var gradH = _projector!.Backward(gradStudent);
+        var gradH = Projector.Backward(gradStudent);
         _encoder.Backpropagate(gradH);
 
         // Update networks

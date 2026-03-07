@@ -92,15 +92,16 @@ public class SimCLR<T> : SSLMethodBase<T>
         var h2 = _encoder.ForwardWithMemory(view2);
 
         // Project to contrastive space
-        var z1 = _projector!.Project(h1);
-        var z2 = _projector.Project(h2);
+        var proj = Projector;
+        var z1 = proj.Project(h1);
+        var z2 = proj.Project(h2);
 
         // Compute NT-Xent loss with gradients
         var (loss, gradZ1, gradZ2) = _loss.ComputeLossWithGradients(z1, z2);
 
         // Backward pass through projector
-        var gradH1 = _projector.Backward(gradZ1);
-        var gradH2 = _projector.Backward(gradZ2);
+        var gradH1 = proj.Backward(gradZ1);
+        var gradH2 = proj.Backward(gradZ2);
 
         // Combine gradients from both views (average)
         var combinedGrad = CombineGradients(gradH1, gradH2);
@@ -111,7 +112,7 @@ public class SimCLR<T> : SSLMethodBase<T>
         // Update parameters with learning rate
         var learningRate = NumOps.FromDouble(GetEffectiveLearningRate());
         var encoderGradients = _encoder.GetParameterGradients();
-        var projectorGradients = _projector.GetParameterGradients();
+        var projectorGradients = proj.GetParameterGradients();
 
         // Simple SGD update (in practice, use optimizer)
         UpdateWithGradients(learningRate, encoderGradients, projectorGradients);
@@ -134,8 +135,9 @@ public class SimCLR<T> : SSLMethodBase<T>
         _encoder.UpdateParameters(Engine.Subtract(encoderParams, Engine.Multiply(encoderGrads, learningRate)));
 
         // SGD update for projector
-        var projectorParams = _projector!.GetParameters();
-        _projector.SetParameters(Engine.Subtract(projectorParams, Engine.Multiply(projectorGrads, learningRate)));
+        var proj = Projector;
+        var projectorParams = proj.GetParameters();
+        proj.SetParameters(Engine.Subtract(projectorParams, Engine.Multiply(projectorGrads, learningRate)));
     }
 
     private T ComputeAverageNorm(Tensor<T> embeddings)

@@ -86,23 +86,25 @@ public class BarlowTwins<T> : SSLMethodBase<T>
         // Create two augmented views
         var (view1, view2) = _augmentation.ApplySimCLR(batch);
 
+        var proj = Projector;
+
         // Forward pass for view 1
         var h1 = _encoder.ForwardWithMemory(view1);
-        var z1 = _projector!.Project(h1);
+        var z1 = proj.Project(h1);
 
         // Forward pass for view 2
         var h2 = _encoder.ForwardWithMemory(view2);
-        var z2 = _projector.Project(h2);
+        var z2 = proj.Project(h2);
 
         // Compute Barlow Twins loss with gradients
         var (loss, gradZ1, gradZ2) = _loss.ComputeLossWithGradients(z1, z2);
 
         // Backward pass for first view
-        var gradH1 = _projector.Backward(gradZ1);
+        var gradH1 = proj.Backward(gradZ1);
         _encoder.Backpropagate(gradH1);
 
         // Backward pass for second view (accumulates gradients)
-        var gradH2 = _projector.Backward(gradZ2);
+        var gradH2 = proj.Backward(gradZ2);
         _encoder.Backpropagate(gradH2);
 
         // Update parameters

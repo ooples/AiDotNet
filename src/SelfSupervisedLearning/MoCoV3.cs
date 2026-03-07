@@ -106,22 +106,26 @@ public class MoCoV3<T> : SSLMethodBase<T>
         // Create two augmented views
         var (view1, view2) = _augmentation.ApplySimCLR(batch);
 
+        var proj = Projector;
+
         // Forward pass for view 1 through online encoder
         var h1 = _encoder.ForwardWithMemory(view1);
-        var z1 = _projector!.Project(h1);
+        var z1 = proj.Project(h1);
         var q1 = _predictor?.Project(z1) ?? z1;
 
         // Forward pass for view 2 through online encoder
         var h2 = _encoder.ForwardWithMemory(view2);
-        var z2 = _projector.Project(h2);
+        var z2 = proj.Project(h2);
         var q2 = _predictor?.Project(z2) ?? z2;
 
         // Forward pass through momentum encoder (no gradients)
+        var momentumProj = _momentumProjector ?? throw new InvalidOperationException(
+            $"{GetType().Name}: Momentum projector not initialized.");
         var hk1 = _momentumEncoder.Encode(view1);
-        var k1 = _momentumProjector!.Project(hk1);
+        var k1 = momentumProj.Project(hk1);
 
         var hk2 = _momentumEncoder.Encode(view2);
-        var k2 = _momentumProjector.Project(hk2);
+        var k2 = momentumProj.Project(hk2);
 
         // Detach keys (stop gradient)
         k1 = StopGradient<T>.Detach(k1);
@@ -139,12 +143,12 @@ public class MoCoV3<T> : SSLMethodBase<T>
 
         // Backward pass through predictor (if present) and projector for view 1
         var gradZ1 = _predictor?.Backward(gradQ1) ?? gradQ1;
-        var gradH1 = _projector!.Backward(gradZ1);
+        var gradH1 = proj.Backward(gradZ1);
         _encoder.Backpropagate(gradH1);
 
         // Backward pass through predictor (if present) and projector for view 2
         var gradZ2 = _predictor?.Backward(gradQ2) ?? gradQ2;
-        var gradH2 = _projector.Backward(gradZ2);
+        var gradH2 = proj.Backward(gradZ2);
         _encoder.Backpropagate(gradH2);
 
         // Update momentum encoder

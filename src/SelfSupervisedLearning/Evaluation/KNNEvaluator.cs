@@ -219,7 +219,9 @@ public class KNNEvaluator<T>
 
     private int PredictSingle(Tensor<T> testFeatures, int testIdx)
     {
-        var numTrain = _trainFeatures!.Shape[0];
+        var trainFeatures = _trainFeatures ?? throw new InvalidOperationException(
+            $"{GetType().Name}: Training features not available. Call Fit() before Predict().");
+        var numTrain = trainFeatures.Shape[0];
         var dim = testFeatures.Shape[1];
 
         // Compute distances to all training samples
@@ -227,7 +229,7 @@ public class KNNEvaluator<T>
 
         for (int j = 0; j < numTrain; j++)
         {
-            distances[j] = (j, ComputeDistance(testFeatures, testIdx, _trainFeatures, j, dim));
+            distances[j] = (j, ComputeDistance(testFeatures, testIdx, trainFeatures, j, dim));
         }
 
         // Sort by distance
@@ -250,12 +252,15 @@ public class KNNEvaluator<T>
 
     private int VotePrediction((int index, T distance)[] neighbors)
     {
+        var trainLabels = _trainLabels ?? throw new InvalidOperationException(
+            $"{GetType().Name}: Training labels not available. Call Fit() before Predict().");
+
         // Weighted voting based on distance
         var votes = new T[_numClasses];
 
         foreach (var (index, distance) in neighbors)
         {
-            var label = _trainLabels![index];
+            var label = trainLabels[index];
             T weight;
 
             if (_useCosine)

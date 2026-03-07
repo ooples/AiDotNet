@@ -127,7 +127,7 @@ public abstract class TeacherStudentSSL<T> : SSLMethodBase<T>
     protected virtual Tensor<T> ForwardStudent(Tensor<T> view)
     {
         var h = _encoder.ForwardWithMemory(view);
-        return _projector!.Project(h);
+        return Projector.Project(h);
     }
 
     /// <summary>
@@ -152,7 +152,7 @@ public abstract class TeacherStudentSSL<T> : SSLMethodBase<T>
         var momentum = NumOps.FromDouble(TeacherEncoder.Momentum);
         var oneMinusMomentum = NumOps.Subtract(NumOps.One, momentum);
 
-        var studentParams = _projector!.GetParameters();
+        var studentParams = Projector.GetParameters();
         var teacherParams = TeacherProjector.GetParameters();
         TeacherProjector.SetParameters(Engine.Add(
             Engine.Multiply(teacherParams, momentum),
