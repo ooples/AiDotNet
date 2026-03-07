@@ -178,6 +178,15 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
 
     #region Properties
 
+    private ConvolutionalLayer<T> FeatExtract => _featExtract ?? throw new InvalidOperationException(
+        $"{GetType().Name}: Feature extraction layer not initialized. Call InitializeLayers() first.");
+
+    private ConvolutionalLayer<T> OutputConv => _outputConv ?? throw new InvalidOperationException(
+        $"{GetType().Name}: Output convolution layer not initialized. Call InitializeLayers() first.");
+
+    private SpyNetLayer<T> FlowEstimator => _flowEstimator ?? throw new InvalidOperationException(
+        $"{GetType().Name}: Flow estimator not initialized. Call InitializeLayers() first.");
+
     /// <summary>
     /// Gets whether this model uses native mode (true) or ONNX mode (false).
     /// </summary>
@@ -495,7 +504,7 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
         for (int i = 0; i < numFrames; i++)
         {
             var frame = ExtractFrameBatch(frames, i);
-            var feat = _featExtract!.Forward(frame);
+            var feat = FeatExtract.Forward(frame);
             frameFeatures.Add(feat);
             _cachedInitialFeatures.Add(feat);
         }
@@ -537,7 +546,7 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
             _cachedOutputConvInputs.Add(feat);
 
             // Final output convolution
-            var output = _outputConv!.Forward(feat);
+            var output = OutputConv.Forward(feat);
 
             // Store in output tensor
             StoreFrameBatch(outputFrames, output, i);
@@ -576,10 +585,10 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
             var frame2 = ExtractFrameBatch(frames, i + 1);
 
             // Forward flow: frame i -> frame i+1
-            var forwardFlow = _flowEstimator!.EstimateFlow(frame1, frame2);
+            var forwardFlow = FlowEstimator.EstimateFlow(frame1, frame2);
 
             // Backward flow: frame i+1 -> frame i
-            var backwardFlow = _flowEstimator.EstimateFlow(frame2, frame1);
+            var backwardFlow = FlowEstimator.EstimateFlow(frame2, frame1);
 
             flows.Add((forwardFlow, backwardFlow));
         }
@@ -1014,7 +1023,7 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
             var frameGrad = ExtractFrameBatch(gradient, f);
 
             // Backward through output convolution
-            var grad = _outputConv!.Backward(frameGrad);
+            var grad = OutputConv.Backward(frameGrad);
 
             // Backward through upsampling layers (in reverse order)
             for (int i = _upsampleLayers.Count - 1; i >= 0; i--)
@@ -1038,7 +1047,7 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
         // Backward through initial feature extraction for each frame
         for (int f = 0; f < numFrames; f++)
         {
-            _featExtract!.Backward(propagationGradients[f]);
+            FeatExtract.Backward(propagationGradients[f]);
         }
     }
 
@@ -1091,7 +1100,8 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
                 // Backward through warping: gradients go to previous frame features and flow
                 var (unwarpedGrad, flowGrad) = WarpBackward(
                     warpedGrad, _cachedFlows[i - 1].forward,
-                    _cachedForwardPropFeatures![iter][i - 1]);
+                    (_cachedForwardPropFeatures ?? throw new InvalidOperationException(
+                        $"{GetType().Name}: Forward propagation features not cached. Call Forward() before Backward()."))[iter][i - 1]);
 
                 // Accumulate gradients
                 AccumulateGradient(backwardPhaseGradients[i], currentPartGrad);
@@ -1135,7 +1145,8 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
                 // Backward through warping: gradients go to next frame features and flow
                 var (unwarpedGrad, flowGrad) = WarpBackward(
                     warpedGrad, _cachedFlows[i].backward,
-                    _cachedBackwardPropFeatures![iter][i + 1]);
+                    (_cachedBackwardPropFeatures ?? throw new InvalidOperationException(
+                        $"{GetType().Name}: Backward propagation features not cached. Call Forward() before Backward()."))[iter][i + 1]);
 
                 // Accumulate gradients
                 AccumulateGradient(inputGradients[i], origPartGrad);
@@ -1347,8 +1358,8 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
     {
         T lr = NumOps.FromDouble(_learningRate);
 
-        _featExtract!.UpdateParameters(lr);
-        _outputConv!.UpdateParameters(lr);
+        FeatExtract.UpdateParameters(lr);
+        OutputConv.UpdateParameters(lr);
 
         foreach (var block in _residualBlocks)
         {
@@ -1564,8 +1575,8 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
         writer.Write(_learningRate);
 
         // Serialize layer parameters
-        SerializeLayerParameters(writer, _featExtract!.GetParameters());
-        SerializeLayerParameters(writer, _outputConv!.GetParameters());
+        SerializeLayerParameters(writer, FeatExtract.GetParameters());
+        SerializeLayerParameters(writer, OutputConv.GetParameters());
 
         foreach (var block in _residualBlocks)
         {
@@ -1596,8 +1607,8 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
         _ = reader.ReadDouble(); // learningRate
 
         // Load layer parameters
-        _featExtract!.SetParameters(DeserializeLayerParameters(reader));
-        _outputConv!.SetParameters(DeserializeLayerParameters(reader));
+        FeatExtract.SetParameters(DeserializeLayerParameters(reader));
+        OutputConv.SetParameters(DeserializeLayerParameters(reader));
 
         foreach (var block in _residualBlocks)
         {

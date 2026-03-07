@@ -88,6 +88,18 @@ public class RIFE<T> : FrameInterpolationBase<T>
 
     #region Properties
 
+    private ConvolutionalLayer<T> Fusion => _fusion ?? throw new InvalidOperationException(
+        $"{GetType().Name}: Fusion layer not initialized. Call InitializeLayers() first.");
+
+    private ConvolutionalLayer<T> RifeOutputConv => _outputConv ?? throw new InvalidOperationException(
+        $"{GetType().Name}: Output convolution layer not initialized. Call InitializeLayers() first.");
+
+    private Tensor<T> CachedFlow => _cachedFlow ?? throw new InvalidOperationException(
+        $"{GetType().Name}: Cached flow not available. Call Forward() before Backward().");
+
+    private Tensor<T> CachedContext => _cachedContext ?? throw new InvalidOperationException(
+        $"{GetType().Name}: Cached context not available. Call Forward() before Backward().");
+
     /// <summary>
     /// Gets whether training is supported.
     /// </summary>
@@ -352,7 +364,7 @@ public class RIFE<T> : FrameInterpolationBase<T>
             ConcatenateChannels(_cachedFrame1Warped, _cachedFrame2Warped),
             ConcatenateChannels(_cachedContext, _cachedFlow));
 
-        _cachedFused = _fusion!.Forward(_cachedFusionInput);
+        _cachedFused = Fusion.Forward(_cachedFusionInput);
 
         // Flow blocks with caching
         var fused = _cachedFused;
@@ -364,7 +376,7 @@ public class RIFE<T> : FrameInterpolationBase<T>
             _cachedFlowBlockOutputs.Add(fused);
         }
 
-        return _outputConv!.Forward(fused);
+        return RifeOutputConv.Forward(fused);
     }
 
     /// <summary>
@@ -383,10 +395,10 @@ public class RIFE<T> : FrameInterpolationBase<T>
     private void BackwardPass(Tensor<T> gradient)
     {
         // 1. Backward through output convolution
-        gradient = _outputConv!.Backward(gradient);
+        gradient = RifeOutputConv.Backward(gradient);
 
         // 2. Backward through flow blocks with gradient accumulation for flow
-        var flowGradAccumulator = new Tensor<T>(_cachedFlow!.Shape);
+        var flowGradAccumulator = new Tensor<T>(CachedFlow.Shape);
         var fusedGradient = gradient;
 
         for (int i = _flowBlocks.Count - 1; i >= 0; i--)
@@ -398,7 +410,7 @@ public class RIFE<T> : FrameInterpolationBase<T>
             var (fusedGrad, flowGrad) = SplitConcatenatedGradient(
                 blockGradient,
                 _cachedFlowBlockOutputs[Math.Max(0, i - 1)].Shape[1],
-                _cachedFlow.Shape[1]);
+                CachedFlow.Shape[1]);
 
             // Accumulate flow gradients
             flowGradAccumulator = AddTensors(flowGradAccumulator, flowGrad);
@@ -408,12 +420,12 @@ public class RIFE<T> : FrameInterpolationBase<T>
         }
 
         // 3. Backward through fusion layer
-        var fusionGradient = _fusion!.Backward(fusedGradient);
+        var fusionGradient = Fusion.Backward(fusedGradient);
 
         // Split fusion gradient: [frame1_warped, frame2_warped, context, flow]
         int warpedChannels = _channels;
-        int contextChannels = _cachedContext!.Shape[1];
-        int flowChannels = _cachedFlow.Shape[1];
+        int contextChannels = CachedContext.Shape[1];
+        int flowChannels = CachedFlow.Shape[1];
 
         var (warpedGradients, contextFlowGrad) = SplitConcatenatedGradient(
             fusionGradient,

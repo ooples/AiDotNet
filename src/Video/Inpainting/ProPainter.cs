@@ -74,6 +74,9 @@ public class ProPainter<T> : VideoInpaintingBase<T>
 
     #region Properties
 
+    private ConvolutionalLayer<T> ProPainterOutputConv => _outputConv ?? throw new InvalidOperationException(
+        $"{GetType().Name}: Output convolution layer not initialized. Call InitializeLayers() first.");
+
     /// <summary>
     /// Gets whether training is supported.
     /// </summary>
@@ -357,7 +360,7 @@ public class ProPainter<T> : VideoInpaintingBase<T>
             decoded = BilinearUpsample(decoded, 2);
         }
 
-        var output = _outputConv!.Forward(decoded);
+        var output = ProPainterOutputConv.Forward(decoded);
 
         // Step 6: Blend original and inpainted regions using mask
         return BlendWithMask(frame, output, mask);
@@ -823,7 +826,7 @@ public class ProPainter<T> : VideoInpaintingBase<T>
 
     private void BackwardPass(Tensor<T> gradient)
     {
-        gradient = _outputConv!.Backward(gradient);
+        gradient = ProPainterOutputConv.Backward(gradient);
 
         for (int i = _imageDecoder.Count - 1; i >= 0; i--)
         {
