@@ -7,13 +7,13 @@ namespace AiDotNet.Postprocessing;
 /// </summary>
 /// <remarks>
 /// <para>
-/// PostprocessingRegistry provides a singleton pattern for managing the active postprocessing pipeline.
-/// By default, no postprocessing is applied (pass-through). Users can configure
-/// custom postprocessing via AiModelBuilder.ConfigurePostprocessing().
+/// <b>Deprecated:</b> This static registry causes race conditions when multiple
+/// <c>AiModelBuilder</c> instances build models concurrently, because they overwrite
+/// each other's pipeline. Use instance-based postprocessing via
+/// <c>AiModelBuilder.ConfigurePostprocessing()</c> instead, which stores the pipeline
+/// per-builder and flows it to <c>AiModelResult</c>.
 /// </para>
-/// <para><b>For Beginners:</b> This is like a global settings panel for output processing.
-/// You don't need to interact with this directly - just use AiModelBuilder:
-///
+/// <para><b>For Beginners:</b> You don't need to interact with this directly — just use AiModelBuilder:
 /// <code>
 /// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
 ///     .ConfigurePostprocessing(pipeline => pipeline
@@ -22,12 +22,12 @@ namespace AiDotNet.Postprocessing;
 ///     .ConfigureModel(new LogisticRegression&lt;double&gt;())
 ///     .Build(X, y);
 /// </code>
-///
-/// The configured postprocessing is automatically applied to all model outputs.
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for calculations (e.g., float, double).</typeparam>
 /// <typeparam name="TOutput">The output data type.</typeparam>
+[Obsolete("Use instance-based postprocessing via AiModelBuilder.ConfigurePostprocessing() instead. " +
+    "This static registry causes race conditions in concurrent model building and will be removed in a future version.")]
 public static class PostprocessingRegistry<T, TOutput>
 {
     private static IDataTransformer<T, TOutput, TOutput>? _current;
@@ -38,11 +38,9 @@ public static class PostprocessingRegistry<T, TOutput>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This is set automatically when you call AiModelBuilder.ConfigurePostprocessing().
-    /// The pipeline is global and thread-safe.
-    /// </para>
-    /// <para><b>For Beginners:</b> You typically don't set this directly.
-    /// Use AiModelBuilder.ConfigurePostprocessing() instead.
+    /// <b>Deprecated:</b> This property is no longer set by <c>AiModelBuilder.ConfigurePostprocessing()</c>.
+    /// The builder now stores the pipeline per-instance and flows it to <c>AiModelResult</c>.
+    /// This property remains only for backward compatibility with external code that sets it directly.
     /// </para>
     /// </remarks>
     public static IDataTransformer<T, TOutput, TOutput>? Current

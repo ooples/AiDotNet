@@ -6,7 +6,6 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Onnx;
 using AiDotNet.Postprocessing;
-using AiDotNet.Preprocessing;
 
 namespace AiDotNet.Document;
 
@@ -108,6 +107,51 @@ public abstract class DocumentNeuralNetworkBase<T> : NeuralNetworkBase<T>
 
     #endregion
 
+    #region Preprocessing
+
+    /// <summary>
+    /// Gets or sets the instance-level preprocessing transformer for this document model.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// When set, <see cref="PreprocessDocument"/> uses this transformer instead of
+    /// <see cref="ApplyDefaultPreprocessing"/>. This replaces the former static
+    /// <c>PreprocessingRegistry</c> approach, which caused race conditions when
+    /// multiple models were built concurrently.
+    /// </para>
+    /// <para><b>For Beginners:</b> Subclasses can assign this property in their constructor to
+    /// customize how images are processed before the model processes them. Otherwise, the model
+    /// uses its own industry-standard defaults automatically.</para>
+    /// </remarks>
+    protected IDataTransformer<T, Tensor<T>, Tensor<T>>? PreprocessingTransformer { get; set; }
+
+    /// <summary>
+    /// Gets or sets the instance-level postprocessing transformer for this model.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// When set, <see cref="PostprocessOutput"/> uses this transformer instead of
+    /// <see cref="ApplyDefaultPostprocessing"/>. This replaces the former static
+    /// <c>PostprocessingRegistry</c> approach, which caused race conditions when
+    /// multiple models were built concurrently.
+    /// </para>
+    /// </remarks>
+    protected IDataTransformer<T, Tensor<T>, Tensor<T>>? PostprocessingTransformer { get; set; }
+
+    /// <summary>
+    /// Configures the preprocessing and postprocessing transformers for this model.
+    /// Called by <c>AiModelBuilder</c> to wire instance-level transformers.
+    /// </summary>
+    internal void ConfigureTransformers(
+        IDataTransformer<T, Tensor<T>, Tensor<T>>? preprocessing,
+        IDataTransformer<T, Tensor<T>, Tensor<T>>? postprocessing)
+    {
+        PreprocessingTransformer = preprocessing;
+        PostprocessingTransformer = postprocessing;
+    }
+
+    #endregion
+
     #region Constructor
 
     /// <summary>
@@ -148,8 +192,8 @@ public abstract class DocumentNeuralNetworkBase<T> : NeuralNetworkBase<T>
     /// <remarks>
     /// <para>
     /// <b>Priority Order:</b>
-    /// 1. If user configured a pipeline via AiModelBuilder.ConfigurePreprocessing() → use it
-    /// 2. Otherwise → use industry-standard defaults for this specific model type
+    /// 1. If an instance-level <see cref="PreprocessingTransformer"/> has been set, use it
+    /// 2. Otherwise, use industry-standard defaults for this specific model type
     /// </para>
     /// <para>
     /// <b>For Beginners:</b> Raw images need to be transformed before the model can process them.
@@ -166,10 +210,17 @@ public abstract class DocumentNeuralNetworkBase<T> : NeuralNetworkBase<T>
     /// </remarks>
     protected Tensor<T> PreprocessDocument(Tensor<T> rawImage)
     {
-        // Priority 1: User-configured pipeline via AiModelBuilder
-        if (PreprocessingRegistry<T, Tensor<T>>.IsConfigured)
+        // Priority 1: Instance-level transformer (set explicitly on this model)
+        var transformer = PreprocessingTransformer;
+        if (transformer is not null)
         {
-            return PreprocessingRegistry<T, Tensor<T>>.Transform(rawImage);
+            if (!transformer.IsFitted)
+            {
+                throw new InvalidOperationException(
+                    "A preprocessing transformer was configured but has not been fitted. " +
+                    "Call Fit() or FitTransform() on the transformer before using it for prediction.");
+            }
+            return transformer.Transform(rawImage);
         }
 
         // Priority 2: Model-specific industry-standard defaults
@@ -200,28 +251,23 @@ public abstract class DocumentNeuralNetworkBase<T> : NeuralNetworkBase<T>
     /// <remarks>
     /// <para>
     /// <b>Priority Order:</b>
-    /// 1. If user configured a pipeline via AiModelBuilder.ConfigurePostprocessing() → use it
+    /// 1. If an instance-level PostprocessingTransformer is set (via ConfigureTransformers) → use it
     /// 2. Otherwise → use industry-standard defaults for this specific model type
     /// </para>
     /// <para>
     /// <b>For Beginners:</b> Model outputs often need to be transformed into a usable format.
     /// You can either let the model use its industry-standard defaults (recommended for most cases),
-    /// or configure custom postprocessing:
-    /// <code>
-    /// var result = new AiModelBuilder&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;()
-    ///     .ConfigurePostprocessing(pipeline => pipeline
-    ///         .Add(new SoftmaxTransformer&lt;double&gt;())
-    ///         .Add(new LabelDecoder&lt;double&gt;(labels)))
-    ///     .Build(X, y);
-    /// </code>
+    /// or configure custom postprocessing via AiModelBuilder.ConfigurePostprocessing().
+    /// The builder will automatically wire the postprocessing transformer onto the model.
     /// </para>
     /// </remarks>
     protected Tensor<T> PostprocessOutput(Tensor<T> modelOutput)
     {
-        // Priority 1: User-configured pipeline via AiModelBuilder
-        if (PostprocessingRegistry<T, Tensor<T>>.IsConfigured)
+        // Priority 1: Instance-level transformer (set explicitly on this model)
+        var transformer = PostprocessingTransformer;
+        if (transformer is not null)
         {
-            return PostprocessingRegistry<T, Tensor<T>>.Transform(modelOutput);
+            return transformer.Transform(modelOutput);
         }
 
         // Priority 2: Model-specific industry-standard defaults
