@@ -122,7 +122,7 @@ public class AUCROCMetric<T> : IProbabilisticClassificationMetric<T>
             for (int i = 0; i < n; i++)
             {
                 classProbs[i] = probs[i * numClasses + c];
-                classLabels[i] = Math.Abs(NumOps.ToDouble(actuals[i]) - c) < 0.5 ? NumOps.One : NumOps.Zero;
+                classLabels[i] = NumOps.LessThan(NumOps.Abs(NumOps.Subtract(actuals[i], NumOps.FromDouble(c))), NumOps.FromDouble(0.5)) ? NumOps.One : NumOps.Zero;
             }
 
             // Check if we have both classes

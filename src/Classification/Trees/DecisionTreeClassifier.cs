@@ -430,10 +430,10 @@ public class DecisionTreeClassifier<T> : ProbabilisticClassifierBase<T>, ITreeBa
             throw new InvalidOperationException("Model must be trained before getting class index.");
         }
 
-        double labelValue = NumOps.ToDouble(label);
+        T epsilon = NumOps.FromDouble(1e-10);
         for (int i = 0; i < ClassLabels.Length; i++)
         {
-            if (Math.Abs(NumOps.ToDouble(ClassLabels[i]) - labelValue) < 1e-10)
+            if (NumOps.LessThan(NumOps.Abs(NumOps.Subtract(ClassLabels[i], label)), epsilon))
             {
                 return i;
             }

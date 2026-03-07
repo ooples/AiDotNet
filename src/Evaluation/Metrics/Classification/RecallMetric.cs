@@ -140,10 +140,10 @@ public class RecallMetric<T> : IClassificationMetric<T>
 
         for (int i = 0; i < actuals.Length; i++)
         {
-            if (Math.Abs(NumOps.ToDouble(actuals[i]) - positiveLabelValue) < 1e-10)
+            if (NumOps.LessThan(NumOps.Abs(NumOps.Subtract(actuals[i], NumOps.FromDouble(positiveLabelValue))), NumOps.FromDouble(1e-10)))
             {
                 actualPositives++;
-                if (Math.Abs(NumOps.ToDouble(predictions[i]) - positiveLabelValue) < 1e-10)
+                if (NumOps.LessThan(NumOps.Abs(NumOps.Subtract(predictions[i], NumOps.FromDouble(positiveLabelValue))), NumOps.FromDouble(1e-10)))
                 {
                     truePositives++;
                 }
@@ -162,10 +162,10 @@ public class RecallMetric<T> : IClassificationMetric<T>
         {
             for (int i = 0; i < actuals.Length; i++)
             {
-                if (Math.Abs(NumOps.ToDouble(actuals[i]) - cls) < 1e-10)
+                if (NumOps.LessThan(NumOps.Abs(NumOps.Subtract(actuals[i], NumOps.FromDouble(cls))), NumOps.FromDouble(1e-10)))
                 {
                     totalActualPositives++;
-                    if (Math.Abs(NumOps.ToDouble(predictions[i]) - cls) < 1e-10)
+                    if (NumOps.LessThan(NumOps.Abs(NumOps.Subtract(predictions[i], NumOps.FromDouble(cls))), NumOps.FromDouble(1e-10)))
                     {
                         totalTruePositives++;
                     }
@@ -195,7 +195,7 @@ public class RecallMetric<T> : IClassificationMetric<T>
         int count = 0;
         for (int i = 0; i < values.Length; i++)
         {
-            if (Math.Abs(NumOps.ToDouble(values[i]) - cls) < 1e-10)
+            if (NumOps.LessThan(NumOps.Abs(NumOps.Subtract(values[i], NumOps.FromDouble(cls))), NumOps.FromDouble(1e-10)))
             {
                 count++;
             }
