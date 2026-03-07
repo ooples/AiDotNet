@@ -33,6 +33,7 @@ namespace AiDotNet.Audio.MusicAnalysis;
 /// </remarks>
 public class ChordRecognizer<T> : MusicAnalysisBase<T>
 {
+    private const double CosineEpsilon = 1e-10;
     private readonly ChromaExtractor<T> _chromaExtractor;
     private readonly ChordRecognizerOptions _options;
     private readonly Dictionary<string, double[]> _chordTemplates;
@@ -229,7 +230,7 @@ public class ChordRecognizer<T> : MusicAnalysisBase<T>
             normB += b[i] * b[i];
         }
         double denom = Math.Sqrt(normA) * Math.Sqrt(normB);
-        return denom > 1e-10 ? dot / denom : 0;
+        return denom > CosineEpsilon ? dot / denom : 0;
     }
 
     private List<ChordSegment> MergeIntoSegments(List<(string chord, double confidence)> frameChords)

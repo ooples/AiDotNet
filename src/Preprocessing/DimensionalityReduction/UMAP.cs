@@ -35,6 +35,7 @@ namespace AiDotNet.Preprocessing.DimensionalityReduction;
 /// <typeparam name="T">The numeric type for calculations (e.g., float, double).</typeparam>
 public class UMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 {
+    private const double DistanceEpsilon = 1e-10;
     private readonly int _nComponents;
     private readonly int _nNeighbors;
     private readonly double _minDist;
@@ -305,7 +306,7 @@ public class UMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                     nB += pointB[k] * pointB[k];
                 }
                 double denom = Math.Sqrt(nA) * Math.Sqrt(nB);
-                return denom > 1e-10 ? 1.0 - dot / denom : 1.0;
+                return denom > DistanceEpsilon ? 1.0 - dot / denom : 1.0;
             }
 
             case UMAPMetric.Correlation:
@@ -329,7 +330,7 @@ public class UMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                     varB += diffB * diffB;
                 }
                 double denomCorr = Math.Sqrt(varA * varB);
-                return denomCorr > 1e-10 ? 1 - cov / denomCorr : 1;
+                return denomCorr > DistanceEpsilon ? 1 - cov / denomCorr : 1;
 
             default:
                 throw new NotSupportedException($"Metric {_metric} is not supported.");
@@ -706,7 +707,7 @@ public class UMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
             for (int k = 0; k < _nNeighbors; k++)
             {
-                double weight = 1.0 / (distances[k].dist + 1e-10);
+                double weight = 1.0 / (distances[k].dist + DistanceEpsilon);
                 totalWeight += weight;
                 int idx = distances[k].idx;
 

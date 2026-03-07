@@ -385,7 +385,7 @@ public class QueryByCommitteeStrategy<T, TInput, TOutput> : ICommitteeStrategy<T
         }
         if (prediction is T numValue)
         {
-            return !NumOps.LessThan(numValue, NumOps.FromDouble(0.5)) ? 1 : 0;
+            return NumOps.Compare(numValue, NumOps.One) == 0 ? 1 : 0;
         }
         return 0;
     }

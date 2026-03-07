@@ -286,11 +286,6 @@ internal class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
                 }
             }
 
-            if (_options.Verbose && _options.VerboseEval > 0 && (outer + 1) % _options.VerboseEval == 0)
-            {
-                T loss = ComputeLogLoss(runningLogOdds, yBinary);
-                Console.WriteLine($"[{outer + 1}] Log Loss: {NumOps.ToDouble(loss):F6}");
-            }
         }
 
         // Detect and add interaction terms if enabled

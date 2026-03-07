@@ -260,11 +260,6 @@ public class DARTClassifier<T> : EnsembleClassifierBase<T>
                 }
             }
 
-            if (_options.Verbose && (iter + 1) % _options.VerboseEval == 0)
-            {
-                T loss = ComputeLoss(predictions, yBinary);
-                Console.WriteLine($"[{iter + 1}] Loss: {NumOps.ToDouble(loss):F6}");
-            }
         }
 
         CalculateFeatureImportances(x.Columns);

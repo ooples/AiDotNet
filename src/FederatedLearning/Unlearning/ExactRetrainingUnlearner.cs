@@ -28,6 +28,7 @@ namespace AiDotNet.FederatedLearning.Unlearning;
 /// <typeparam name="T">The numeric type used for model parameters.</typeparam>
 public class ExactRetrainingUnlearner<T> : FederatedLearningComponentBase<T>, IFederatedUnlearner<T>
 {
+    private const double CosineEpsilon = 1e-10;
     private readonly FederatedUnlearningOptions _options;
 
     /// <inheritdoc/>
@@ -196,7 +197,7 @@ public class ExactRetrainingUnlearner<T> : FederatedLearningComponentBase<T>, IF
             normB += update[i] * update[i];
         }
         double denom = Math.Sqrt(normA) * Math.Sqrt(normB);
-        return denom > 1e-10 ? dot / denom : 0;
+        return denom > CosineEpsilon ? dot / denom : 0;
     }
 
     private string ComputeModelHash(Tensor<T> model)

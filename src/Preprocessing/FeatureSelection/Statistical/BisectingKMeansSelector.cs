@@ -150,8 +150,8 @@ public class BisectingKMeansSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
             // Assign
             foreach (int j in cluster)
             {
-                double d1 = ComputeDistance(featureVectors[j], centroid1, dim);
-                double d2 = ComputeDistance(featureVectors[j], centroid2, dim);
+                double d1 = ComputeDistance(featureVectors[j], centroid1);
+                double d2 = ComputeDistance(featureVectors[j], centroid2);
                 if (d1 <= d2)
                     c1.Add(j);
                 else
@@ -174,7 +174,7 @@ public class BisectingKMeansSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         return (c1, c2);
     }
 
-    private double ComputeDistance(double[] a, double[] b, int dim)
+    private double ComputeDistance(double[] a, double[] b)
     {
         double sum = 0;
         for (int i = 0; i < a.Length; i++)

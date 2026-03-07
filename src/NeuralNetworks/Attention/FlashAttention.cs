@@ -218,7 +218,7 @@ internal static class FlashAttention<T>
             var outputAcc = new T[qBlockSize, headDim];  // O_i accumulator
 
             // Initialize to -infinity for max, 0 for sum
-            T negInf = NumOps.MinValue;
+            T negInf = NumOps.FromDouble(double.NegativeInfinity);
             for (int i = 0; i < qBlockSize; i++)
             {
                 rowMax[i] = negInf;
@@ -395,7 +395,7 @@ internal static class FlashAttention<T>
         int numBlocksQ = (seqLenQ + blockSizeQ - 1) / blockSizeQ;
         int numBlocksKV = (seqLenKV + blockSizeKV - 1) / blockSizeKV;
 
-        T negInf = NumOps.MinValue;
+        T negInf = NumOps.FromDouble(double.NegativeInfinity);
 
         for (int qBlock = 0; qBlock < numBlocksQ; qBlock++)
         {
@@ -624,7 +624,7 @@ internal static class FlashAttention<T>
         FlashAttentionConfig config,
         Tensor<T>? attentionBias = null)
     {
-        T negInf = NumOps.MinValue;
+        T negInf = NumOps.FromDouble(double.NegativeInfinity);
 
         // Recompute attention weights and compute gradients
         // This is the memory-efficient approach from Flash Attention 2
@@ -815,7 +815,7 @@ internal static class FlashAttention<T>
         FlashAttentionConfig config,
         Tensor<T>? attentionBias = null)
     {
-        T negInf = NumOps.MinValue;
+        T negInf = NumOps.FromDouble(double.NegativeInfinity);
 
         // Compute D = rowsum(dO * O)
         var D = new T[seqLenQ];

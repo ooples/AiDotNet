@@ -123,7 +123,7 @@ internal class NegativeBinomialDistribution<T> : DistributionBase<T>
     /// </summary>
     public T LogPmf(int k)
     {
-        if (k < 0) return NumOps.MinValue;
+        if (k < 0) return NumOps.FromDouble(double.NegativeInfinity);
 
         double r = NumOps.ToDouble(_r);
         double p = NumOps.ToDouble(_prob);

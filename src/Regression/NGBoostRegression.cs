@@ -232,12 +232,6 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
                 }
             }
 
-            // Verbose output
-            if (_options.Verbose && (iter + 1) % _options.VerboseEval == 0)
-            {
-                T score = ComputeMeanScore(currentParams, y);
-                Console.WriteLine($"[{iter + 1}] {_scoringRule.Name}: {NumOps.ToDouble(score):F6}");
-            }
         }
 
         await CalculateFeatureImportancesAsync(x.Columns);

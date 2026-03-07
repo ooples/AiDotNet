@@ -386,7 +386,7 @@ internal class CachedMultiHeadAttention<T> : LayerBase<T>
         int headDim = query.Shape[3];
 
         T scale = NumOps.FromDouble(1.0 / Math.Sqrt(headDim));
-        T negInf = NumOps.MinValue;
+        T negInf = NumOps.FromDouble(double.NegativeInfinity);
 
         var output = new Tensor<T>(new[] { batchSize, numHeads, seqLenQ, headDim });
 

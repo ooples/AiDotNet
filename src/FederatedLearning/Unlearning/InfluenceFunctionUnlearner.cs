@@ -30,6 +30,7 @@ namespace AiDotNet.FederatedLearning.Unlearning;
 /// <typeparam name="T">The numeric type used for model parameters.</typeparam>
 public class InfluenceFunctionUnlearner<T> : FederatedLearningComponentBase<T>, IFederatedUnlearner<T>
 {
+    private const double CosineEpsilon = 1e-10;
     private readonly FederatedUnlearningOptions _options;
 
     /// <inheritdoc/>
@@ -220,7 +221,7 @@ public class InfluenceFunctionUnlearner<T> : FederatedLearningComponentBase<T>, 
             normB += correction[i] * correction[i];
         }
         double denomCS = Math.Sqrt(normA) * Math.Sqrt(normB);
-        double alignment = denomCS > 1e-10 ? dot / denomCS : 0;
+        double alignment = denomCS > CosineEpsilon ? dot / denomCS : 0;
 
         // Good unlearning: correction aligns well with gradient (removes it)
         return 0.5 + Math.Abs(alignment) * 0.4;

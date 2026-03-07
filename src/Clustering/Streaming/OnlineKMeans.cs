@@ -323,6 +323,10 @@ public class OnlineKMeans<T> : ClusteringBase<T>
     public override Vector<T> FitPredict(Matrix<T> x)
     {
         Train(x);
-        return Labels ?? new Vector<T>(0);
+        if (Labels is null)
+        {
+            throw new InvalidOperationException("Train did not produce labels. This indicates a bug in the training implementation.");
+        }
+        return Labels;
     }
 }
