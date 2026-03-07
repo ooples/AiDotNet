@@ -2453,7 +2453,8 @@ public class LSTMLayer<T> : LayerBase<T>
                     _velocities[paramName] = velocity;
                 }
 
-                gpuEngine.SgdMomentumUpdateGpu(param, gradient, velocity, lr, 0.0f, 0.0f);
+                (gpuEngine ?? throw new InvalidOperationException("LSTMLayer: GPU engine is null despite useGpu being true."))
+                    .SgdMomentumUpdateGpu(param, gradient, velocity, lr, 0.0f, 0.0f);
             }
             else
             {

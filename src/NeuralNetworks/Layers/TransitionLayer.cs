@@ -312,7 +312,8 @@ public class TransitionLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         var poolBackwardGpu = poolType.GetMethod("BackwardGpu", new[] { typeof(IGpuTensor<T>) });
         if (poolBackwardGpu != null)
         {
-            grad = (IGpuTensor<T>)poolBackwardGpu.Invoke(_pool, new object[] { grad })!;
+            grad = (IGpuTensor<T>)(poolBackwardGpu.Invoke(_pool, new object[] { grad })
+                ?? throw new InvalidOperationException("BackwardGpu returned null."));
         }
         else
         {
@@ -326,7 +327,8 @@ public class TransitionLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         var convBackwardGpu = convType.GetMethod("BackwardGpu", new[] { typeof(IGpuTensor<T>) });
         if (convBackwardGpu != null)
         {
-            grad = (IGpuTensor<T>)convBackwardGpu.Invoke(_conv, new object[] { grad })!;
+            grad = (IGpuTensor<T>)(convBackwardGpu.Invoke(_conv, new object[] { grad })
+                ?? throw new InvalidOperationException("BackwardGpu returned null."));
         }
         else
         {
@@ -343,7 +345,8 @@ public class TransitionLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         var bnBackwardGpu = bnType.GetMethod("BackwardGpu", new[] { typeof(IGpuTensor<T>) });
         if (bnBackwardGpu != null)
         {
-            grad = (IGpuTensor<T>)bnBackwardGpu.Invoke(_bn, new object[] { grad })!;
+            grad = (IGpuTensor<T>)(bnBackwardGpu.Invoke(_bn, new object[] { grad })
+                ?? throw new InvalidOperationException("BackwardGpu returned null."));
         }
         else
         {

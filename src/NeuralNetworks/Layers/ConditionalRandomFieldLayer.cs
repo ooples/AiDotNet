@@ -136,7 +136,8 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
         // This generates [B*C] indices.
         // Gather -> [B*C]. Reshape [B, C].
 
-        var backend = gpuEngine.GetBackend()!;
+        var backend = gpuEngine.GetBackend()
+            ?? throw new InvalidOperationException("GPU backend not available.");
 
         // Cache transition matrix on GPU (persistent?)
         // _transitionMatrix is CPU Tensor. Register/Upload.

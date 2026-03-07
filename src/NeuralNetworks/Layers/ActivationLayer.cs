@@ -746,15 +746,18 @@ public class ActivationLayer<T> : LayerBase<T>
             throw new InvalidOperationException("ActivationLayer: Cached GPU output not available for backward pass.");
 
         // Apply appropriate activation backward based on type
+        var cachedInput = _lastInputGpu;
+        var cachedOutput = _lastOutputGpu;
+
         return fusedType switch
         {
-            FusedActivationType.ReLU => gpuEngine.ReluBackwardGpu<T>(outputGradient, _lastInputGpu),
-            FusedActivationType.Sigmoid => gpuEngine.SigmoidBackwardGpu<T>(outputGradient, _lastOutputGpu),
-            FusedActivationType.Tanh => gpuEngine.TanhBackwardGpu<T>(outputGradient, _lastOutputGpu),
-            FusedActivationType.GELU => gpuEngine.GeluBackwardGpu<T>(outputGradient, _lastInputGpu),
-            FusedActivationType.Swish => gpuEngine.SwishBackwardGpu<T>(outputGradient, _lastInputGpu),
-            FusedActivationType.LeakyReLU => gpuEngine.LeakyReluBackwardGpu<T>(outputGradient, _lastInputGpu, 0.01f),
-            FusedActivationType.Softmax => gpuEngine.SoftmaxBackwardGpu<T>(outputGradient, _lastOutputGpu),
+            FusedActivationType.ReLU => gpuEngine.ReluBackwardGpu<T>(outputGradient, cachedInput ?? throw new InvalidOperationException("Cached GPU input not available.")),
+            FusedActivationType.Sigmoid => gpuEngine.SigmoidBackwardGpu<T>(outputGradient, cachedOutput ?? throw new InvalidOperationException("Cached GPU output not available.")),
+            FusedActivationType.Tanh => gpuEngine.TanhBackwardGpu<T>(outputGradient, cachedOutput ?? throw new InvalidOperationException("Cached GPU output not available.")),
+            FusedActivationType.GELU => gpuEngine.GeluBackwardGpu<T>(outputGradient, cachedInput ?? throw new InvalidOperationException("Cached GPU input not available.")),
+            FusedActivationType.Swish => gpuEngine.SwishBackwardGpu<T>(outputGradient, cachedInput ?? throw new InvalidOperationException("Cached GPU input not available.")),
+            FusedActivationType.LeakyReLU => gpuEngine.LeakyReluBackwardGpu<T>(outputGradient, cachedInput ?? throw new InvalidOperationException("Cached GPU input not available."), 0.01f),
+            FusedActivationType.Softmax => gpuEngine.SoftmaxBackwardGpu<T>(outputGradient, cachedOutput ?? throw new InvalidOperationException("Cached GPU output not available.")),
             _ => outputGradient // Fallback: gradient passes through unchanged
         };
     }

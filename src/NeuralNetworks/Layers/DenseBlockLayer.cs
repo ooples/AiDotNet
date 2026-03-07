@@ -146,7 +146,8 @@ internal class DenseBlockLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         IGpuTensor<T> grad;
         if (conv3x3BackwardGpu != null)
         {
-            grad = (IGpuTensor<T>)conv3x3BackwardGpu.Invoke(_conv3x3, new object[] { outputGradient })!;
+            grad = (IGpuTensor<T>)(conv3x3BackwardGpu.Invoke(_conv3x3, new object[] { outputGradient })
+                ?? throw new InvalidOperationException("BackwardGpu returned null."));
         }
         else
         {
@@ -163,7 +164,8 @@ internal class DenseBlockLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         var bn2BackwardGpu = bn2Type.GetMethod("BackwardGpu", new[] { typeof(IGpuTensor<T>) });
         if (bn2BackwardGpu != null)
         {
-            grad = (IGpuTensor<T>)bn2BackwardGpu.Invoke(_bn2, new object[] { grad })!;
+            grad = (IGpuTensor<T>)(bn2BackwardGpu.Invoke(_bn2, new object[] { grad })
+                ?? throw new InvalidOperationException("BackwardGpu returned null."));
         }
         else
         {
@@ -177,7 +179,8 @@ internal class DenseBlockLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         var conv1x1BackwardGpu = conv1x1Type.GetMethod("BackwardGpu", new[] { typeof(IGpuTensor<T>) });
         if (conv1x1BackwardGpu != null)
         {
-            grad = (IGpuTensor<T>)conv1x1BackwardGpu.Invoke(_conv1x1, new object[] { grad })!;
+            grad = (IGpuTensor<T>)(conv1x1BackwardGpu.Invoke(_conv1x1, new object[] { grad })
+                ?? throw new InvalidOperationException("BackwardGpu returned null."));
         }
         else
         {
@@ -194,7 +197,8 @@ internal class DenseBlockLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         var bn1BackwardGpu = bn1Type.GetMethod("BackwardGpu", new[] { typeof(IGpuTensor<T>) });
         if (bn1BackwardGpu != null)
         {
-            grad = (IGpuTensor<T>)bn1BackwardGpu.Invoke(_bn1, new object[] { grad })!;
+            grad = (IGpuTensor<T>)(bn1BackwardGpu.Invoke(_bn1, new object[] { grad })
+                ?? throw new InvalidOperationException("BackwardGpu returned null."));
         }
         else
         {

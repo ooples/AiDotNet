@@ -845,7 +845,8 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         if (backwardGpuMethod != null)
         {
-            return (IGpuTensor<T>)backwardGpuMethod.Invoke(layer, new object[] { grad })!;
+            return (IGpuTensor<T>)(backwardGpuMethod.Invoke(layer, new object[] { grad })
+                ?? throw new InvalidOperationException("BackwardGpu returned null."));
         }
         else
         {

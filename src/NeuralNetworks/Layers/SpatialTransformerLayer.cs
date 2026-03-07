@@ -841,7 +841,8 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             var thetaGradFlat = thetaNode.Gradient.Reshape([batchSize, 6]);
 
             // Gradients for second layer
-            var lastLoc1 = _lastLocalization1!;
+            var lastLoc1 = _lastLocalization1
+                ?? throw new InvalidOperationException("Forward pass must be called before backward pass.");
             var loc1T = Engine.TensorTranspose(lastLoc1);
             _localizationWeights2Gradient = Engine.TensorMatMul(loc1T, thetaGradFlat);
             _localizationBias2Gradient = Engine.ReduceSum(thetaGradFlat, new[] { 0 }, keepDims: false);
@@ -870,7 +871,8 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             var loc1Grad = Engine.TensorMultiply(loc1Back, activationDeriv);
 
             // Gradients for first layer
-            var lastFlat = _lastFlattenedInput!;
+            var lastFlat = _lastFlattenedInput
+                ?? throw new InvalidOperationException("Forward pass must be called before backward pass.");
             var flatInputT = Engine.TensorTranspose(lastFlat);
             _localizationWeights1Gradient = Engine.TensorMatMul(flatInputT, loc1Grad);
             _localizationBias1Gradient = Engine.ReduceSum(loc1Grad, new[] { 0 }, keepDims: false);

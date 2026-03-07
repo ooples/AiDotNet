@@ -222,7 +222,8 @@ public class TimeDistributedLayer<T> : LayerBase<T>
         var backwardGpuMethod = innerLayerType.GetMethod("BackwardGpu", new[] { typeof(IGpuTensor<T>) });
         if (backwardGpuMethod != null)
         {
-            innerGrad = (IGpuTensor<T>)backwardGpuMethod.Invoke(_innerLayer, new object[] { reshapedGrad })!;
+            innerGrad = (IGpuTensor<T>)(backwardGpuMethod.Invoke(_innerLayer, new object[] { reshapedGrad })
+                ?? throw new InvalidOperationException("BackwardGpu returned null."));
         }
         else
         {

@@ -269,7 +269,8 @@ public class ResidualLayer<T> : LayerBase<T>
             var backwardGpuMethod = innerLayerType.GetMethod("BackwardGpu", new[] { typeof(IGpuTensor<T>) });
             if (backwardGpuMethod != null)
             {
-                var innerGrad = (IGpuTensor<T>)backwardGpuMethod.Invoke(_innerLayer, new object[] { gradAfterActivation })!;
+                var innerGrad = (IGpuTensor<T>)(backwardGpuMethod.Invoke(_innerLayer, new object[] { gradAfterActivation })
+                    ?? throw new InvalidOperationException("BackwardGpu returned null."));
                 // Total gradient = direct gradient + inner layer gradient
                 var result = gpuEngine.AddGpu(gradAfterActivation, innerGrad);
                 innerGrad.Dispose();

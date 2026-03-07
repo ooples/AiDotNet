@@ -312,7 +312,8 @@ public class BasicBlock<T> : LayerBase<T>
 
         if (backwardGpuMethod is not null)
         {
-            return (IGpuTensor<T>)backwardGpuMethod.Invoke(layer, new object[] { gradient })!;
+            return (IGpuTensor<T>)(backwardGpuMethod.Invoke(layer, new object[] { gradient })
+                ?? throw new InvalidOperationException("BackwardGpu returned null."));
         }
         else
         {

@@ -1050,7 +1050,8 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         int height = input.Shape[2];
         int width = input.Shape[3];
 
-        var backend = gpuEngine.GetBackend()!;
+        var backend = gpuEngine.GetBackend()
+            ?? throw new InvalidOperationException("GPU backend not available.");
         var cleanup = new List<IDisposable>();
 
         try
