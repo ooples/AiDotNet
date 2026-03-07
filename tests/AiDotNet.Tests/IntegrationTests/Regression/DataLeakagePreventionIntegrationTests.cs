@@ -25,153 +25,11 @@ public class DataLeakagePreventionIntegrationTests
     #region Data Leakage Prevention Tests
 
     [Fact]
-    public async Task BuildAsync_WithPreprocessing_FitsOnlyOnTrainingData()
-    {
-        // Arrange: Create a dataset where the training and test distributions differ significantly.
-        // If preprocessing is fitted on ALL data (the bug), the scaler mean/std will be a blend.
-        // If correctly fitted on ONLY training data, the scaler learns training-only statistics.
-        //
-        // Strategy: Create data where features have very different means in the first 70% vs last 30%.
-        // The StandardScaler fitted on train-only data will have a different mean than one fitted on all data.
-        int samples = 100;
-        int features = 3;
-        var x = new Matrix<double>(samples, features);
-        var y = new Vector<double>(samples);
-
-        // First 70 samples: features centered around 10
-        for (int i = 0; i < 70; i++)
-        {
-            for (int j = 0; j < features; j++)
-            {
-                x[i, j] = 10.0 + (i * 0.1) + (j * 0.5);
-            }
-            y[i] = x[i, 0] * 2.0 + x[i, 1] * 3.0 + 1.0;
-        }
-
-        // Last 30 samples: features centered around 1000 (very different distribution)
-        for (int i = 70; i < samples; i++)
-        {
-            for (int j = 0; j < features; j++)
-            {
-                x[i, j] = 1000.0 + (i * 0.1) + (j * 0.5);
-            }
-            y[i] = x[i, 0] * 2.0 + x[i, 1] * 3.0 + 1.0;
-        }
-
-        var loader = DataLoaders.FromMatrixVector(x, y);
-        var model = new RidgeRegression<double>();
-
-        // Act: Build with StandardScaler preprocessing
-        var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
-            .ConfigureDataLoader(loader)
-            .ConfigureModel(model)
-            .ConfigurePreprocessing(pipeline => pipeline
-                .Add(new StandardScaler<double>()))
-            .BuildAsync();
-
-        // Assert: The model was built successfully with preprocessing
-        Assert.NotNull(result);
-
-        // The PreprocessingInfo should be set and fitted (on training data only)
-        var preprocessingInfo = result.PreprocessingInfo;
-        Assert.NotNull(preprocessingInfo);
-        Assert.True(preprocessingInfo.IsFitted,
-            "PreprocessingInfo pipeline should be fitted after training");
-    }
-
-    [Fact]
-    public async Task BuildAsync_WithPreprocessing_ModelTrainsSuccessfully()
-    {
-        // Arrange: Build a model with preprocessing and verify it trains without errors.
-        var (x, y) = CreateLinearDataset(samples: 60, features: 4, seed: 42);
-        var loader = DataLoaders.FromMatrixVector(x, y);
-        var model = new RidgeRegression<double>();
-
-        // Act
-        var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
-            .ConfigureDataLoader(loader)
-            .ConfigureModel(model)
-            .ConfigurePreprocessing(pipeline => pipeline
-                .Add(new StandardScaler<double>()))
-            .BuildAsync();
-
-        // Assert: The model was built successfully with preprocessing fitted on training data
-        Assert.NotNull(result);
-        Assert.NotNull(result.PreprocessingInfo);
-        Assert.True(result.PreprocessingInfo.IsFitted,
-            "Preprocessing pipeline should be fitted after training");
-
-        // The model should have valid training stats
-        Assert.NotNull(result.OptimizationResult);
-    }
-
-    [Fact]
-    public async Task BuildAsync_WithPreprocessing_PipelineInResultCanTransformNewData()
-    {
-        // Arrange: Verify the fitted pipeline stored in AiModelResult can transform new data
-        var (x, y) = CreateLinearDataset(samples: 50, features: 3, seed: 77);
-        var loader = DataLoaders.FromMatrixVector(x, y);
-        var model = new RidgeRegression<double>();
-
-        // Act
-        var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
-            .ConfigureDataLoader(loader)
-            .ConfigureModel(model)
-            .ConfigurePreprocessing(pipeline => pipeline
-                .Add(new StandardScaler<double>()))
-            .BuildAsync();
-
-        // Assert: The pipeline stored in PreprocessingInfo is fitted and can transform data
-        var preprocessingInfo = result.PreprocessingInfo;
-        Assert.NotNull(preprocessingInfo);
-        Assert.NotNull(preprocessingInfo.Pipeline);
-        Assert.True(preprocessingInfo.Pipeline.IsFitted,
-            "The pipeline should be fitted and ready to transform new data");
-
-        // Transform new data using the stored pipeline (should not throw)
-        var newData = new Matrix<double>(2, 3);
-        newData[0, 0] = 5.0; newData[0, 1] = 6.0; newData[0, 2] = 7.0;
-        newData[1, 0] = 8.0; newData[1, 1] = 9.0; newData[1, 2] = 10.0;
-
-        var transformed = preprocessingInfo.Pipeline.Transform(newData);
-        Assert.NotNull(transformed);
-    }
-
-    [Fact]
-    public async Task BuildAsync_WithoutPreprocessing_StillWorksCorrectly()
-    {
-        // Arrange: Ensure the fix doesn't break the path where no preprocessing is configured
-        var (x, y) = CreateLinearDataset(samples: 50, features: 3, seed: 55);
-        var loader = DataLoaders.FromMatrixVector(x, y);
-        var model = new RidgeRegression<double>();
-
-        // Act: Build WITHOUT preprocessing
-        var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
-            .ConfigureDataLoader(loader)
-            .ConfigureModel(model)
-            .BuildAsync();
-
-        // Assert: Model should build without preprocessing
-        Assert.NotNull(result);
-        Assert.NotNull(result.OptimizationResult);
-
-        // PreprocessingInfo should be null (no preprocessing configured)
-        // The model trains on the split data without any transformation
-        Assert.Null(result.PreprocessingInfo);
-    }
-
-    [Fact]
     public async Task BuildAsync_WithPreprocessing_ScalerStatisticsReflectTrainingDataOnly()
     {
-        // Arrange: Create a dataset with known, predictable structure.
-        // The key insight: if we create data where the first 70% of samples have features
-        // with mean ~5.0 and the last 30% have features with mean ~100.0, and the scaler
-        // is correctly fitted on only the training split, the scaler's learned mean should
-        // be close to 5.0 (since DataSplitter shuffles, the mix will differ from fitting on all).
-        //
-        // Rather than testing exact statistics (which depend on shuffle ordering),
-        // we verify the pipeline is fitted and produces different results than a pipeline
-        // fitted on ALL data would produce.
+        // Arrange: Create a dataset where the first 70% and last 30% have very different
+        // distributions. The DataSplitter shuffles, but with 100 samples the training split
+        // will be a mix — critically different from fitting on ALL data.
         int samples = 100;
         int features = 2;
         var x = new Matrix<double>(samples, features);
@@ -231,6 +89,184 @@ public class DataLeakagePreventionIntegrationTests
         Assert.True(areDifferent,
             "Scaler fitted on training split should produce different results than scaler fitted on all data, " +
             "confirming preprocessing is NOT fitted on the full dataset (data leakage prevention).");
+    }
+
+    [Fact]
+    public async Task BuildAsync_WithPreprocessing_TransformProducesCorrectShape()
+    {
+        // Arrange: Build a model with preprocessing and verify the fitted pipeline
+        // can transform new data and produces output with the correct dimensions.
+        var (x, y) = CreateLinearDataset(samples: 50, features: 3, seed: 77);
+        var loader = DataLoaders.FromMatrixVector(x, y);
+        var model = new RidgeRegression<double>();
+
+        // Act
+        var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+            .ConfigureDataLoader(loader)
+            .ConfigureModel(model)
+            .ConfigurePreprocessing(pipeline => pipeline
+                .Add(new StandardScaler<double>()))
+            .BuildAsync();
+
+        // Assert: The pipeline stored in PreprocessingInfo is fitted and can transform data
+        var preprocessingInfo = result.PreprocessingInfo;
+        Assert.NotNull(preprocessingInfo);
+        Assert.NotNull(preprocessingInfo.Pipeline);
+        Assert.True(preprocessingInfo.Pipeline.IsFitted,
+            "The pipeline should be fitted and ready to transform new data");
+
+        // Transform new data using the stored pipeline
+        var newData = new Matrix<double>(2, 3);
+        newData[0, 0] = 5.0; newData[0, 1] = 6.0; newData[0, 2] = 7.0;
+        newData[1, 0] = 8.0; newData[1, 1] = 9.0; newData[1, 2] = 10.0;
+
+        var transformed = preprocessingInfo.Pipeline.Transform(newData);
+        Assert.NotNull(transformed);
+
+        // Verify output shape matches input shape
+        Assert.Equal(2, transformed.Rows);
+        Assert.Equal(3, transformed.Columns);
+
+        // Verify values are actually transformed (not passthrough)
+        // StandardScaler centers data, so at least some values should differ from input
+        bool anyDifferent = false;
+        for (int i = 0; i < 2; i++)
+        {
+            for (int j = 0; j < 3; j++)
+            {
+                if (Math.Abs(transformed[i, j] - newData[i, j]) > Tolerance)
+                {
+                    anyDifferent = true;
+                    break;
+                }
+            }
+            if (anyDifferent) break;
+        }
+
+        Assert.True(anyDifferent,
+            "StandardScaler should transform values (center and scale), not return input unchanged");
+    }
+
+    [Fact]
+    public async Task BuildAsync_WithPreprocessing_PredictEndToEndWorks()
+    {
+        // Arrange: Verify the full pipeline: build with preprocessing, then predict on new data.
+        // This ensures preprocessing is fitted, stored, and correctly applied during prediction.
+        var (x, y) = CreateLinearDataset(samples: 60, features: 4, seed: 42);
+        var loader = DataLoaders.FromMatrixVector(x, y);
+        var model = new RidgeRegression<double>();
+
+        // Act
+        var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+            .ConfigureDataLoader(loader)
+            .ConfigureModel(model)
+            .ConfigurePreprocessing(pipeline => pipeline
+                .Add(new StandardScaler<double>()))
+            .BuildAsync();
+
+        Assert.NotNull(result);
+        Assert.NotNull(result.PreprocessingInfo);
+        Assert.True(result.PreprocessingInfo.IsFitted);
+        Assert.NotNull(result.OptimizationResult);
+
+        // Predict on new data — this exercises the full chain:
+        // preprocessing transform -> feature selection -> model predict
+        var newData = new Matrix<double>(3, 4);
+        var rng = new Random(99);
+        for (int i = 0; i < 3; i++)
+            for (int j = 0; j < 4; j++)
+                newData[i, j] = rng.NextDouble() * 10;
+
+        var predictions = result.Predict(newData);
+        Assert.NotNull(predictions);
+        Assert.Equal(3, predictions.Length);
+        foreach (var pred in predictions)
+        {
+            Assert.False(double.IsNaN(pred), "Prediction should not be NaN");
+            Assert.False(double.IsInfinity(pred), "Prediction should not be Infinity");
+        }
+    }
+
+    [Fact]
+    public async Task BuildAsync_WithoutPreprocessing_StillWorksCorrectly()
+    {
+        // Arrange: Ensure the fix doesn't break the path where no preprocessing is configured
+        var (x, y) = CreateLinearDataset(samples: 50, features: 3, seed: 55);
+        var loader = DataLoaders.FromMatrixVector(x, y);
+        var model = new RidgeRegression<double>();
+
+        // Act: Build WITHOUT preprocessing
+        var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+            .ConfigureDataLoader(loader)
+            .ConfigureModel(model)
+            .BuildAsync();
+
+        // Assert: Model should build without preprocessing
+        Assert.NotNull(result);
+        Assert.NotNull(result.OptimizationResult);
+
+        // PreprocessingInfo should be null (no preprocessing configured)
+        Assert.Null(result.PreprocessingInfo);
+
+        // Predict should still work without preprocessing
+        var newData = new Matrix<double>(2, 3);
+        var rng = new Random(66);
+        for (int i = 0; i < 2; i++)
+            for (int j = 0; j < 3; j++)
+                newData[i, j] = rng.NextDouble() * 10;
+
+        var predictions = result.Predict(newData);
+        Assert.NotNull(predictions);
+        Assert.Equal(2, predictions.Length);
+    }
+
+    [Fact]
+    public async Task BuildAsync_WithPreprocessing_TransformIsNotIdentity()
+    {
+        // Arrange: Create data with known non-zero mean and non-unit variance.
+        // After StandardScaler, the training data should be centered (mean ~0) and scaled (std ~1).
+        // If the pipeline wasn't fitted at all, transform would be identity.
+        int samples = 80;
+        int features = 2;
+        var x = new Matrix<double>(samples, features);
+        var y = new Vector<double>(samples);
+
+        var rng = new Random(123);
+        for (int i = 0; i < samples; i++)
+        {
+            x[i, 0] = 100.0 + rng.NextDouble() * 10.0; // mean ~105
+            x[i, 1] = 500.0 + rng.NextDouble() * 50.0; // mean ~525
+            y[i] = x[i, 0] * 2.0 + x[i, 1] * 0.5;
+        }
+
+        var loader = DataLoaders.FromMatrixVector(x, y);
+        var model = new RidgeRegression<double>();
+
+        // Act
+        var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+            .ConfigureDataLoader(loader)
+            .ConfigureModel(model)
+            .ConfigurePreprocessing(pipeline => pipeline
+                .Add(new StandardScaler<double>()))
+            .BuildAsync();
+
+        var pipeline = result.PreprocessingInfo?.Pipeline;
+        Assert.NotNull(pipeline);
+
+        // Transform the mean point — after StandardScaler, the mean of training data
+        // maps to approximately 0. A point at ~105, ~525 should be near the mean.
+        var meanPoint = new Matrix<double>(1, features);
+        meanPoint[0, 0] = 105.0;
+        meanPoint[0, 1] = 525.0;
+
+        var transformed = pipeline.Transform(meanPoint);
+
+        // The transformed values should be close to 0 (since input is near training mean)
+        // and definitely not 105/525 (which would indicate identity/unfitted transform)
+        Assert.True(Math.Abs(transformed[0, 0]) < 10.0,
+            $"Transformed value {transformed[0, 0]} should be centered near 0, not raw value ~105");
+        Assert.True(Math.Abs(transformed[0, 1]) < 10.0,
+            $"Transformed value {transformed[0, 1]} should be centered near 0, not raw value ~525");
     }
 
     #endregion

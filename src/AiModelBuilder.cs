@@ -387,6 +387,10 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                 new StandardScaler<T>());
         }
 
+        // Keep PreprocessingRegistry in sync for components that use the static accessor
+        // (e.g., DocumentNeuralNetworkBase uses PreprocessingRegistry.Transform during inference).
+        PreprocessingRegistry<T, TInput>.Current = _preprocessingPipeline;
+
         return this;
     }
 
@@ -427,6 +431,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             _preprocessingPipeline.Add((IDataTransformer<T, TInput, TInput>)(object)
                 new StandardScaler<T>());
         }
+
+        PreprocessingRegistry<T, TInput>.Current = _preprocessingPipeline;
 
         return this;
     }
@@ -469,6 +475,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             _preprocessingPipeline.Add((IDataTransformer<T, TInput, TInput>)(object)
                 new StandardScaler<T>());
         }
+
+        PreprocessingRegistry<T, TInput>.Current = _preprocessingPipeline;
 
         return this;
     }
@@ -2040,7 +2048,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         TInput XTrain;
         TOutput yTrain;
         // These generic types are always value types (Matrix<T>, Vector<T>) at runtime,
-        // so default produces valid zero-initialized values, not null.
+        // so default produces valid zero-initialized values, not null. The suppression covers
+        // both the declarations and all downstream usage sites in this method.
 #pragma warning disable CS8600, CS8604 // Generic type defaults - T is always a value type at runtime
         TInput XVal = default;
         TOutput yVal = default;
@@ -2801,6 +2810,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         // Build and attach the composable safety pipeline if configured
         AttachSafetyPipeline(finalResult);
 
+#pragma warning restore CS8600, CS8604
         return finalResult;
     }
 

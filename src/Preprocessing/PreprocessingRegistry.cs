@@ -7,13 +7,18 @@ namespace AiDotNet.Preprocessing;
 /// </summary>
 /// <remarks>
 /// <para>
-/// PreprocessingRegistry provides a singleton pattern for managing the active preprocessing pipeline.
-/// By default, a standard pipeline with imputation and scaling is used. Users can configure
-/// custom preprocessing via AiModelBuilder.ConfigurePreprocessing().
+/// PreprocessingRegistry provides a static accessor for the active preprocessing pipeline.
+/// It is kept in sync by <c>AiModelBuilder.ConfigurePreprocessing()</c> so that components
+/// outside the builder (e.g., <c>DocumentNeuralNetworkBase</c>) can access the current pipeline
+/// without holding a direct reference.
 /// </para>
-/// <para><b>For Beginners:</b> This is like a global settings panel for data preprocessing.
-/// You don't need to interact with this directly - just use AiModelBuilder:
-///
+/// <para>
+/// <b>Thread safety:</b> The static <see cref="Current"/> property is guarded by a lock, but
+/// concurrent builders will overwrite each other's pipeline. For concurrent builds, each builder
+/// stores its own <c>_preprocessingPipeline</c> instance and passes it directly to
+/// <c>PreprocessingInfo</c>; the registry is a convenience accessor, not the authoritative source.
+/// </para>
+/// <para><b>For Beginners:</b> You don't need to interact with this directly — just use AiModelBuilder:
 /// <code>
 /// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
 ///     .ConfigurePreprocessing(pipeline => pipeline
@@ -22,8 +27,6 @@ namespace AiDotNet.Preprocessing;
 ///     .ConfigureModel(new LogisticRegression&lt;double&gt;())
 ///     .Build(X, y);
 /// </code>
-///
-/// The configured preprocessing is automatically applied to all models.
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for calculations (e.g., float, double).</typeparam>
