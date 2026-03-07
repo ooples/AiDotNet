@@ -58,25 +58,25 @@ internal class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>
     /// Platt scaling parameters (A, B) for sigmoid calibration.
     /// P_calibrated = 1 / (1 + exp(-(A * logit(P) + B)))
     /// </summary>
-    private double _plattA = 1.0;
-    private double _plattB = 0.0;
+    private T _plattA;
+    private T _plattB;
 
     /// <summary>
     /// Beta calibration parameters (a, b, c).
     /// </summary>
-    private double _betaA = 1.0;
-    private double _betaB = 1.0;
-    private double _betaC = 0.0;
+    private T _betaA;
+    private T _betaB;
+    private T _betaC;
 
     /// <summary>
     /// Temperature scaling parameter.
     /// </summary>
-    private double _temperature = 1.0;
+    private T _temperature;
 
     /// <summary>
     /// Isotonic regression mapping (sorted by probability).
     /// </summary>
-    private (double prob, double calibrated)[]? _isotonicMapping;
+    private (T prob, T calibrated)[]? _isotonicMapping;
 
     /// <summary>
     /// Random number generator.
@@ -98,22 +98,40 @@ internal class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>
         IProbabilisticClassifier<T> baseClassifier,
         CalibratedClassifierOptions<T>? options = null,
         IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
-        : base(options ?? new CalibratedClassifierOptions<T>(), regularization)
+        : base(options ??= new CalibratedClassifierOptions<T>(), regularization, new CrossEntropyLoss<T>())
     {
-        Guard.NotNull(baseClassifier);
         _baseClassifier = baseClassifier;
-        _options = options ?? new CalibratedClassifierOptions<T>();
-
+        _options = options;
         _random = _options.Seed.HasValue
             ? RandomHelper.CreateSeededRandom(_options.Seed.Value)
             : RandomHelper.CreateSecureRandom();
+        _isTrained = false;
+        _plattA = NumOps.One;
+        _plattB = NumOps.Zero;
+        _betaA = NumOps.One;
+        _betaB = NumOps.One;
+        _betaC = NumOps.Zero;
+        _temperature = NumOps.One;
     }
 
     /// <summary>
-    /// Trains the base classifier and fits the calibration model.
+    /// Gets the base classifier.
     /// </summary>
-    /// <param name="x">The feature matrix where each row is a sample.</param>
-    /// <param name="y">The target labels.</param>
+    public IProbabilisticClassifier<T> BaseClassifier => _baseClassifier;
+
+    /// <summary>
+    /// Gets the calibration method.
+    /// </summary>
+    public ProbabilityCalibrationMethod CalibrationMethod => _options.CalibrationMethod;
+
+    /// <summary>
+    /// Gets whether the model is trained.
+    /// </summary>
+    public bool IsTrained => _isTrained;
+
+    /// <summary>
+    /// Trains the base classifier and fits calibration.
+    /// </summary>
     public override void Train(Matrix<T> x, Vector<T> y)
     {
         if (x.Rows != y.Length)
@@ -121,14 +139,16 @@ internal class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>
             throw new ArgumentException("Number of samples in X must match length of y.");
         }
 
-        NumFeatures = x.Columns;
+        // Extract class labels
         ClassLabels = ExtractClassLabels(y);
         NumClasses = ClassLabels.Length;
+        NumFeatures = x.Columns;
         TaskType = InferTaskType(y);
 
         if (_options.CalibrationMethod == ProbabilityCalibrationMethod.None
             || _options.CalibrationMethod == ProbabilityCalibrationMethod.Auto)
         {
+            // No calibration - just train base
             _baseClassifier.Train(x, y);
             _isTrained = true;
             return;
@@ -136,155 +156,66 @@ internal class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>
 
         int n = x.Rows;
 
-        if (_options.CrossValidationFolds > 1)
+        if (_options.CrossValidationFolds > 1 && n >= _options.CrossValidationFolds * 2)
         {
-            // Use cross-validation to get out-of-fold predictions for calibration
+            // K-fold cross-validation approach
             TrainWithCrossValidation(x, y);
         }
         else
         {
-            // Split data: train base model on part, calibrate on holdout
-            TrainWithHoldout(x, y);
+            // Simple holdout approach
+            int calibSize = Math.Max(2, (int)(n * _options.CalibrationSetFraction));
+            int trainSize = n - calibSize;
+
+            // Create shuffled indices
+            var indices = Enumerable.Range(0, n).ToArray();
+            for (int i = n - 1; i > 0; i--)
+            {
+                int j = _random.Next(i + 1);
+                (indices[i], indices[j]) = (indices[j], indices[i]);
+            }
+
+            // Split data
+            var trainX = new Matrix<T>(trainSize, x.Columns);
+            var trainY = new Vector<T>(trainSize);
+            var calibX = new Matrix<T>(calibSize, x.Columns);
+            var calibY = new Vector<T>(calibSize);
+
+            for (int i = 0; i < trainSize; i++)
+            {
+                for (int j = 0; j < x.Columns; j++)
+                    trainX[i, j] = x[indices[i], j];
+                trainY[i] = y[indices[i]];
+            }
+            for (int i = 0; i < calibSize; i++)
+            {
+                for (int j = 0; j < x.Columns; j++)
+                    calibX[i, j] = x[indices[trainSize + i], j];
+                calibY[i] = y[indices[trainSize + i]];
+            }
+
+            // Train base classifier
+            _baseClassifier.Train(trainX, trainY);
+
+            // Get uncalibrated predictions on calibration set
+            var uncalibrated = _baseClassifier.PredictProbabilities(calibX);
+
+            // Fit calibration
+            FitCalibration(uncalibrated, calibY);
         }
 
+        // Retrain base classifier on all data for final model
+        _baseClassifier.Train(x, y);
         _isTrained = true;
     }
 
     /// <summary>
-    /// Trains using cross-validation for calibration (preferred approach).
+    /// Trains with cross-validation to use all data for calibration.
     /// </summary>
     private void TrainWithCrossValidation(Matrix<T> x, Vector<T> y)
     {
         int n = x.Rows;
-        int numFolds = _options.CrossValidationFolds;
-        if (numFolds > n)
-            throw new ArgumentException(
-                $"CrossValidationFolds ({numFolds}) exceeds the number of samples ({n}). " +
-                "Reduce folds or provide more data.");
-
-        // Create fold assignments
-        var foldAssignments = new int[n];
-        for (int i = 0; i < n; i++)
-        {
-            foldAssignments[i] = i % numFolds;
-        }
-
-        // Shuffle fold assignments
-        for (int i = n - 1; i > 0; i--)
-        {
-            int j = _random.Next(i + 1);
-            (foldAssignments[i], foldAssignments[j]) = (foldAssignments[j], foldAssignments[i]);
-        }
-
-        // Store OOF predictions
-        var oofProbabilities = new Matrix<T>(n, NumClasses);
-
-        // Process each fold
-        for (int fold = 0; fold < numFolds; fold++)
-        {
-            // Count samples in train and test
-            int trainCount = 0;
-            int testCount = 0;
-            for (int i = 0; i < n; i++)
-            {
-                if (foldAssignments[i] == fold)
-                    testCount++;
-                else
-                    trainCount++;
-            }
-
-            // Create train and test splits
-            var xTrain = new Matrix<T>(trainCount, NumFeatures);
-            var yTrain = new Vector<T>(trainCount);
-            var xTest = new Matrix<T>(testCount, NumFeatures);
-            var testIndices = new int[testCount];
-
-            int trainIdx = 0;
-            int testIdx = 0;
-            for (int i = 0; i < n; i++)
-            {
-                if (foldAssignments[i] == fold)
-                {
-                    for (int j = 0; j < NumFeatures; j++)
-                    {
-                        xTest[testIdx, j] = x[i, j];
-                    }
-                    testIndices[testIdx] = i;
-                    testIdx++;
-                }
-                else
-                {
-                    for (int j = 0; j < NumFeatures; j++)
-                    {
-                        xTrain[trainIdx, j] = x[i, j];
-                    }
-                    yTrain[trainIdx] = y[i];
-                    trainIdx++;
-                }
-            }
-
-            // Clone and train on this fold
-            IProbabilisticClassifier<T> foldClassifier;
-            if (_baseClassifier is IFullModel<T, Matrix<T>, Vector<T>> fullModel)
-            {
-                foldClassifier = (IProbabilisticClassifier<T>)fullModel.Clone();
-            }
-            else
-            {
-                throw new InvalidOperationException(
-                    "Base classifier does not implement IFullModel and cannot be cloned. " +
-                    "Cross-validation requires clonable classifiers. " +
-                    "Set CrossValidationFolds=1 to use holdout validation instead.");
-            }
-
-            foldClassifier.Train(xTrain, yTrain);
-
-            // Get predictions for test fold
-            var foldProbs = foldClassifier.PredictProbabilities(xTest);
-
-            // Store OOF predictions at original indices
-            for (int t = 0; t < testCount; t++)
-            {
-                int origIdx = testIndices[t];
-                for (int c = 0; c < NumClasses; c++)
-                {
-                    oofProbabilities[origIdx, c] = foldProbs[t, c];
-                }
-            }
-        }
-
-        // Train final base model on all data (for prediction time)
-        _baseClassifier.Train(x, y);
-
-        // Fit calibration model on OOF predictions
-        FitCalibration(oofProbabilities, y);
-    }
-
-    /// <summary>
-    /// Trains using holdout set for calibration.
-    /// </summary>
-    private void TrainWithHoldout(Matrix<T> x, Vector<T> y)
-    {
-        int n = x.Rows;
-        if (_options.CalibrationSetFraction <= 0 || _options.CalibrationSetFraction >= 1)
-        {
-            throw new ArgumentOutOfRangeException(nameof(_options.CalibrationSetFraction),
-                "CalibrationSetFraction must be between 0 and 1 (exclusive).");
-        }
-        int calibSize = (int)(n * _options.CalibrationSetFraction);
-        int trainSize = n - calibSize;
-
-        if (trainSize < 1)
-        {
-            throw new ArgumentException("Training set too small after calibration split.");
-        }
-
-        if (calibSize < 10)
-        {
-            throw new ArgumentException(
-                $"Calibration set too small ({calibSize} samples). " +
-                $"Use more data or increase CalibrationSetFraction.");
-        }
+        int k = _options.CrossValidationFolds;
 
         // Create shuffled indices
         var indices = Enumerable.Range(0, n).ToArray();
@@ -294,38 +225,63 @@ internal class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>
             (indices[i], indices[j]) = (indices[j], indices[i]);
         }
 
-        // Split into train and calibration sets
-        var trainX = new Matrix<T>(trainSize, NumFeatures);
-        var trainY = new Vector<T>(trainSize);
-        var calibX = new Matrix<T>(calibSize, NumFeatures);
-        var calibY = new Vector<T>(calibSize);
+        // Collect out-of-fold predictions
+        var allPredictions = new Matrix<T>(n, NumClasses);
+        int foldSize = n / k;
 
-        for (int i = 0; i < trainSize; i++)
+        for (int fold = 0; fold < k; fold++)
         {
-            for (int j = 0; j < NumFeatures; j++)
+            int foldStart = fold * foldSize;
+            int foldEnd = (fold == k - 1) ? n : (fold + 1) * foldSize;
+            int testSize = foldEnd - foldStart;
+            int trainSize = n - testSize;
+
+            var trainX = new Matrix<T>(trainSize, x.Columns);
+            var trainY = new Vector<T>(trainSize);
+            var testX = new Matrix<T>(testSize, x.Columns);
+
+            int trainIdx = 0;
+            for (int i = 0; i < n; i++)
             {
-                trainX[i, j] = x[indices[i], j];
+                if (i >= foldStart && i < foldEnd)
+                {
+                    int testIdx = i - foldStart;
+                    for (int j = 0; j < x.Columns; j++)
+                        testX[testIdx, j] = x[indices[i], j];
+                }
+                else
+                {
+                    for (int j = 0; j < x.Columns; j++)
+                        trainX[trainIdx, j] = x[indices[i], j];
+                    trainY[trainIdx] = y[indices[i]];
+                    trainIdx++;
+                }
             }
-            trainY[i] = y[indices[i]];
+
+            // Clone and train on this fold's training data
+            IFullModel<T, Matrix<T>, Vector<T>> foldModel;
+            if (_baseClassifier is IFullModel<T, Matrix<T>, Vector<T>> fullModel)
+            {
+                foldModel = fullModel.Clone();
+            }
+            else
+            {
+                throw new InvalidOperationException("Base classifier must implement IFullModel for cross-validation.");
+            }
+
+            foldModel.Train(trainX, trainY);
+
+            // Get predictions on test fold
+            var foldPreds = ((IProbabilisticClassifier<T>)foldModel).PredictProbabilities(testX);
+            for (int i = foldStart; i < foldEnd; i++)
+            {
+                for (int c = 0; c < NumClasses; c++)
+                    allPredictions[indices[i], c] = foldPreds[i - foldStart, c];
+            }
         }
 
-        for (int i = 0; i < calibSize; i++)
-        {
-            for (int j = 0; j < NumFeatures; j++)
-            {
-                calibX[i, j] = x[indices[trainSize + i], j];
-            }
-            calibY[i] = y[indices[trainSize + i]];
-        }
-
-        // Train base classifier on training set
-        _baseClassifier.Train(trainX, trainY);
-
-        // Get uncalibrated predictions on calibration set
-        var uncalibrated = _baseClassifier.PredictProbabilities(calibX);
-
-        // Fit calibration model
-        FitCalibration(uncalibrated, calibY);
+        // Fit calibration on all out-of-fold predictions
+        FitCalibration(allPredictions, y);
     }
 
     /// <summary>
@@ -342,8 +298,8 @@ internal class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>
         }
 
         // For binary classification, use probability of positive class (last column)
-        var probs = new Vector<double>(n);
-        var targets = new Vector<double>(n);
+        var probs = new Vector<T>(n);
+        var targets = new Vector<T>(n);
 
         // Use last class as the "positive" class for calibration
         int positiveClassIdx = NumClasses - 1;
@@ -352,8 +308,8 @@ internal class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>
 
         for (int i = 0; i < n; i++)
         {
-            probs[i] = NumOps.ToDouble(uncalibrated[i, positiveClassIdx]);
-            targets[i] = NumOps.Compare(actuals[i], positiveLabel) == 0 ? 1.0 : 0.0;
+            probs[i] = uncalibrated[i, positiveClassIdx];
+            targets[i] = NumOps.Compare(actuals[i], positiveLabel) == 0 ? NumOps.One : NumOps.Zero;
         }
 
         switch (_options.CalibrationMethod)
@@ -380,44 +336,56 @@ internal class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>
     /// <summary>
     /// Fits Platt scaling (sigmoid calibration).
     /// </summary>
-    private void FitPlattScaling(Vector<double> probs, Vector<double> targets)
+    private void FitPlattScaling(Vector<T> probs, Vector<T> targets)
     {
         // Fit sigmoid: P_calibrated = 1 / (1 + exp(-(A * logit(P) + B)))
-        double a = 0.0, b = 0.0;
-        double lr = 0.01;
+        T a = NumOps.Zero;
+        T b = NumOps.Zero;
+        T lr = NumOps.FromDouble(0.01);
         int maxIter = 1000;
-        double tolerance = 1e-8;
-        double prevLoss = double.MaxValue;
+        T tolerance = NumOps.FromDouble(1e-8);
+        T prevLoss = NumOps.MaxValue;
+        T eps = NumOps.FromDouble(1e-10);
+        T oneMinusEps = NumOps.Subtract(NumOps.One, eps);
+        T nT = NumOps.FromDouble(probs.Length);
 
         for (int iter = 0; iter < maxIter; iter++)
         {
-            double gradA = 0, gradB = 0;
-            double loss = 0;
+            T gradA = NumOps.Zero, gradB = NumOps.Zero;
+            T loss = NumOps.Zero;
 
             for (int i = 0; i < probs.Length; i++)
             {
                 // Clamp probability to avoid log(0)
-                double p = Math.Max(1e-10, Math.Min(1 - 1e-10, probs[i]));
-                double logit = Math.Log(p / (1 - p));
+                T p = probs[i];
+                if (NumOps.LessThan(p, eps)) p = eps;
+                if (NumOps.GreaterThan(p, oneMinusEps)) p = oneMinusEps;
+                T logit = NumOps.Log(NumOps.Divide(p, NumOps.Subtract(NumOps.One, p)));
 
-                double z = a * logit + b;
-                double sigmoid = 1.0 / (1.0 + Math.Exp(-z));
+                T z = NumOps.Add(NumOps.Multiply(a, logit), b);
+                T sigmoid = SigmoidT(z);
 
-                double error = sigmoid - targets[i];
-                gradA += error * logit;
-                gradB += error;
+                T error = NumOps.Subtract(sigmoid, targets[i]);
+                gradA = NumOps.Add(gradA, NumOps.Multiply(error, logit));
+                gradB = NumOps.Add(gradB, error);
 
                 // Cross-entropy loss
-                double clampedSigmoid = Math.Max(1e-10, Math.Min(1 - 1e-10, sigmoid));
-                loss += -targets[i] * Math.Log(clampedSigmoid)
-                       - (1 - targets[i]) * Math.Log(1 - clampedSigmoid);
+                T clampedSigmoid = sigmoid;
+                if (NumOps.LessThan(clampedSigmoid, eps)) clampedSigmoid = eps;
+                if (NumOps.GreaterThan(clampedSigmoid, oneMinusEps)) clampedSigmoid = oneMinusEps;
+                loss = NumOps.Subtract(loss,
+                    NumOps.Add(
+                        NumOps.Multiply(targets[i], NumOps.Log(clampedSigmoid)),
+                        NumOps.Multiply(NumOps.Subtract(NumOps.One, targets[i]),
+                            NumOps.Log(NumOps.Subtract(NumOps.One, clampedSigmoid)))));
             }
 
-            a -= lr * gradA / probs.Length;
-            b -= lr * gradB / probs.Length;
+            a = NumOps.Subtract(a, NumOps.Multiply(lr, NumOps.Divide(gradA, nT)));
+            b = NumOps.Subtract(b, NumOps.Multiply(lr, NumOps.Divide(gradB, nT)));
 
             // Check convergence
-            if (Math.Abs(loss - prevLoss) < tolerance)
+            T lossDiff = NumOps.Abs(NumOps.Subtract(loss, prevLoss));
+            if (NumOps.LessThan(lossDiff, tolerance))
             {
                 break;
             }
@@ -431,29 +399,28 @@ internal class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>
     /// <summary>
     /// Fits isotonic regression calibration using PAVA.
     /// </summary>
-    private void FitIsotonicRegression(Vector<double> probs, Vector<double> targets)
+    private void FitIsotonicRegression(Vector<T> probs, Vector<T> targets)
     {
         int n = probs.Length;
 
         // Sort by predicted probability
-        var indexed = new (double prob, double target)[n];
+        var indexed = new (T prob, T target)[n];
         for (int i = 0; i < n; i++)
         {
             indexed[i] = (probs[i], targets[i]);
         }
-        Array.Sort(indexed, (a, b) => a.prob.CompareTo(b.prob));
+        Array.Sort(indexed, (a, b) => NumOps.Compare(a.prob, b.prob));
 
         // Pool Adjacent Violators Algorithm (PAVA) - block-based implementation
-        // Each block tracks: weighted sum, weight, and start/end indices
-        var blockValues = new Vector<double>(n);
-        var blockWeights = new Vector<double>(n);
-        var blockEnds = new int[n]; // blockEnds[i] = last index in block starting at i
+        var blockValues = new Vector<T>(n);
+        var blockWeights = new Vector<T>(n);
+        var blockEnds = new int[n];
         int numBlocks = n;
 
         for (int i = 0; i < n; i++)
         {
             blockValues[i] = indexed[i].target;
-            blockWeights[i] = 1.0;
+            blockWeights[i] = NumOps.One;
             blockEnds[i] = i;
         }
 
@@ -466,12 +433,15 @@ internal class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>
             int next = blockEnds[current] + 1;
             if (next >= n) break;
 
-            if (blockValues[current] > blockValues[next])
+            if (NumOps.GreaterThan(blockValues[current], blockValues[next]))
             {
                 // Merge current and next blocks
-                double totalWeight = blockWeights[current] + blockWeights[next];
-                blockValues[current] = (blockValues[current] * blockWeights[current]
-                                      + blockValues[next] * blockWeights[next]) / totalWeight;
+                T totalWeight = NumOps.Add(blockWeights[current], blockWeights[next]);
+                blockValues[current] = NumOps.Divide(
+                    NumOps.Add(
+                        NumOps.Multiply(blockValues[current], blockWeights[current]),
+                        NumOps.Multiply(blockValues[next], blockWeights[next])),
+                    totalWeight);
                 blockWeights[current] = totalWeight;
                 blockEnds[current] = blockEnds[next];
 
@@ -479,12 +449,14 @@ internal class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>
                 while (blockStarts.Count > 1)
                 {
                     int prev = blockStarts[^2];
-                    if (blockValues[prev] > blockValues[current])
+                    if (NumOps.GreaterThan(blockValues[prev], blockValues[current]))
                     {
-                        // Merge prev and current
-                        double tw = blockWeights[prev] + blockWeights[current];
-                        blockValues[prev] = (blockValues[prev] * blockWeights[prev]
-                                           + blockValues[current] * blockWeights[current]) / tw;
+                        T tw = NumOps.Add(blockWeights[prev], blockWeights[current]);
+                        blockValues[prev] = NumOps.Divide(
+                            NumOps.Add(
+                                NumOps.Multiply(blockValues[prev], blockWeights[prev]),
+                                NumOps.Multiply(blockValues[current], blockWeights[current])),
+                            tw);
                         blockWeights[prev] = tw;
                         blockEnds[prev] = blockEnds[current];
                         blockStarts.RemoveAt(blockStarts.Count - 1);
@@ -504,7 +476,7 @@ internal class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>
         }
 
         // Expand blocks to per-element calibrated values
-        var calibrated = new Vector<double>(n);
+        var calibrated = new Vector<T>(n);
         foreach (int start in blockStarts)
         {
             int end = blockEnds[start];
@@ -515,11 +487,12 @@ internal class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>
         }
 
         // Store mapping for prediction (remove duplicates, keep unique probability bins)
-        var uniqueMapping = new List<(double prob, double calibrated)>();
-        double lastProb = double.MinValue;
+        var uniqueMapping = new List<(T prob, T calibrated)>();
+        T lastProb = NumOps.MinValue;
+        T threshold = NumOps.FromDouble(1e-10);
         for (int i = 0; i < n; i++)
         {
-            if (indexed[i].prob > lastProb + 1e-10)
+            if (NumOps.GreaterThan(NumOps.Subtract(indexed[i].prob, lastProb), threshold))
             {
                 uniqueMapping.Add((indexed[i].prob, calibrated[i]));
                 lastProb = indexed[i].prob;
@@ -531,47 +504,58 @@ internal class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>
     /// <summary>
     /// Fits beta calibration.
     /// </summary>
-    private void FitBetaCalibration(Vector<double> probs, Vector<double> targets)
+    private void FitBetaCalibration(Vector<T> probs, Vector<T> targets)
     {
         // Beta calibration: P_calibrated = sigmoid(a * log(P) - b * log(1-P) + c)
-        double a = 1.0, b = 1.0, c = 0.0;
-        double lr = 0.01;
+        T a = NumOps.One, b = NumOps.One, c = NumOps.Zero;
+        T lr = NumOps.FromDouble(0.01);
         int maxIter = 1000;
-        double tolerance = 1e-8;
-        double prevLoss = double.MaxValue;
+        T tolerance = NumOps.FromDouble(1e-8);
+        T prevLoss = NumOps.MaxValue;
+        T eps = NumOps.FromDouble(1e-10);
+        T oneMinusEps = NumOps.Subtract(NumOps.One, eps);
+        T nT = NumOps.FromDouble(probs.Length);
 
         for (int iter = 0; iter < maxIter; iter++)
         {
-            double gradA = 0, gradB = 0, gradC = 0;
-            double loss = 0;
+            T gradA = NumOps.Zero, gradB = NumOps.Zero, gradC = NumOps.Zero;
+            T loss = NumOps.Zero;
 
             for (int i = 0; i < probs.Length; i++)
             {
-                double p = Math.Max(1e-10, Math.Min(1 - 1e-10, probs[i]));
+                T p = probs[i];
+                if (NumOps.LessThan(p, eps)) p = eps;
+                if (NumOps.GreaterThan(p, oneMinusEps)) p = oneMinusEps;
 
-                double logP = Math.Log(p);
-                double log1mP = Math.Log(1 - p);
-                double z = a * logP - b * log1mP + c;
-                double calibrated = 1.0 / (1.0 + Math.Exp(-z));
+                T logP = NumOps.Log(p);
+                T log1mP = NumOps.Log(NumOps.Subtract(NumOps.One, p));
+                T z = NumOps.Add(NumOps.Subtract(NumOps.Multiply(a, logP),
+                    NumOps.Multiply(b, log1mP)), c);
+                T calibratedP = SigmoidT(z);
 
-                // Cross-entropy gradient through sigmoid: dL/dz = sigma(z) - target
-                double error = calibrated - targets[i];
+                T error = NumOps.Subtract(calibratedP, targets[i]);
 
-                gradA += error * logP;
-                gradB += error * (-log1mP);
-                gradC += error;
+                gradA = NumOps.Add(gradA, NumOps.Multiply(error, logP));
+                gradB = NumOps.Add(gradB, NumOps.Multiply(error, NumOps.Negate(log1mP)));
+                gradC = NumOps.Add(gradC, error);
 
                 // Cross-entropy loss
-                double clampedCalib = Math.Max(1e-10, Math.Min(1 - 1e-10, calibrated));
-                loss += -targets[i] * Math.Log(clampedCalib)
-                       - (1 - targets[i]) * Math.Log(1 - clampedCalib);
+                T clampedCalib = calibratedP;
+                if (NumOps.LessThan(clampedCalib, eps)) clampedCalib = eps;
+                if (NumOps.GreaterThan(clampedCalib, oneMinusEps)) clampedCalib = oneMinusEps;
+                loss = NumOps.Subtract(loss,
+                    NumOps.Add(
+                        NumOps.Multiply(targets[i], NumOps.Log(clampedCalib)),
+                        NumOps.Multiply(NumOps.Subtract(NumOps.One, targets[i]),
+                            NumOps.Log(NumOps.Subtract(NumOps.One, clampedCalib)))));
             }
 
-            a -= lr * gradA / probs.Length;
-            b -= lr * gradB / probs.Length;
-            c -= lr * gradC / probs.Length;
+            a = NumOps.Subtract(a, NumOps.Multiply(lr, NumOps.Divide(gradA, nT)));
+            b = NumOps.Subtract(b, NumOps.Multiply(lr, NumOps.Divide(gradB, nT)));
+            c = NumOps.Subtract(c, NumOps.Multiply(lr, NumOps.Divide(gradC, nT)));
 
-            if (Math.Abs(loss - prevLoss) < tolerance)
+            T lossDiff = NumOps.Abs(NumOps.Subtract(loss, prevLoss));
+            if (NumOps.LessThan(lossDiff, tolerance))
             {
                 break;
             }
@@ -586,28 +570,38 @@ internal class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>
     /// <summary>
     /// Fits temperature scaling.
     /// </summary>
-    private void FitTemperatureScaling(Vector<double> probs, Vector<double> targets)
+    private void FitTemperatureScaling(Vector<T> probs, Vector<T> targets)
     {
-        // Find temperature T that minimizes NLL
-        double bestTemp = 1.0;
-        double bestLoss = double.MaxValue;
+        // Find temperature T that minimizes NLL via grid search
+        T bestTemp = NumOps.One;
+        T bestLoss = NumOps.MaxValue;
+        T eps = NumOps.FromDouble(1e-10);
+        T oneMinusEps = NumOps.Subtract(NumOps.One, eps);
 
         // Grid search over temperature
-        for (double t = 0.1; t <= 10.0; t += 0.05)
+        for (double tVal = 0.1; tVal <= 10.0; tVal += 0.05)
         {
-            double loss = 0;
+            T t = NumOps.FromDouble(tVal);
+            T loss = NumOps.Zero;
             for (int i = 0; i < probs.Length; i++)
             {
-                double p = Math.Max(1e-10, Math.Min(1 - 1e-10, probs[i]));
-                double logit = Math.Log(p / (1 - p));
-                double calibrated = 1.0 / (1.0 + Math.Exp(-logit / t));
+                T p = probs[i];
+                if (NumOps.LessThan(p, eps)) p = eps;
+                if (NumOps.GreaterThan(p, oneMinusEps)) p = oneMinusEps;
+                T logit = NumOps.Log(NumOps.Divide(p, NumOps.Subtract(NumOps.One, p)));
+                T calibratedP = SigmoidT(NumOps.Divide(logit, t));
 
-                double clampedCalib = Math.Max(1e-10, Math.Min(1 - 1e-10, calibrated));
-                loss += -targets[i] * Math.Log(clampedCalib)
-                       - (1 - targets[i]) * Math.Log(1 - clampedCalib);
+                T clampedCalib = calibratedP;
+                if (NumOps.LessThan(clampedCalib, eps)) clampedCalib = eps;
+                if (NumOps.GreaterThan(clampedCalib, oneMinusEps)) clampedCalib = oneMinusEps;
+                loss = NumOps.Subtract(loss,
+                    NumOps.Add(
+                        NumOps.Multiply(targets[i], NumOps.Log(clampedCalib)),
+                        NumOps.Multiply(NumOps.Subtract(NumOps.One, targets[i]),
+                            NumOps.Log(NumOps.Subtract(NumOps.One, clampedCalib)))));
             }
 
-            if (loss < bestLoss)
+            if (NumOps.LessThan(loss, bestLoss))
             {
                 bestLoss = loss;
                 bestTemp = t;
@@ -615,6 +609,23 @@ internal class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>
         }
 
         _temperature = bestTemp;
+    }
+
+    /// <summary>
+    /// Numerically stable sigmoid in type T.
+    /// </summary>
+    private T SigmoidT(T x)
+    {
+        if (NumOps.GreaterThanOrEquals(x, NumOps.Zero))
+        {
+            T ez = NumOps.Exp(NumOps.Negate(x));
+            return NumOps.Divide(NumOps.One, NumOps.Add(NumOps.One, ez));
+        }
+        else
+        {
+            T ez = NumOps.Exp(x);
+            return NumOps.Divide(ez, NumOps.Add(NumOps.One, ez));
+        }
     }
 
     /// <summary>
@@ -648,11 +659,11 @@ internal class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>
         for (int i = 0; i < input.Rows; i++)
         {
             // Binary classification: calibrate positive class
-            double p = NumOps.ToDouble(uncalibrated[i, 1]);
-            double calibP = CalibrateProb(p);
+            T p = uncalibrated[i, 1];
+            T calibP = CalibrateProb(p);
 
-            calibrated[i, 0] = NumOps.FromDouble(1 - calibP);
-            calibrated[i, 1] = NumOps.FromDouble(calibP);
+            calibrated[i, 0] = NumOps.Subtract(NumOps.One, calibP);
+            calibrated[i, 1] = calibP;
         }
 
         return calibrated;
@@ -661,25 +672,34 @@ internal class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>
     /// <summary>
     /// Applies the fitted calibration to a single probability.
     /// </summary>
-    private double CalibrateProb(double p)
+    private T CalibrateProb(T p)
     {
-        p = Math.Max(1e-10, Math.Min(1 - 1e-10, p));
+        T eps = NumOps.FromDouble(1e-10);
+        T oneMinusEps = NumOps.Subtract(NumOps.One, eps);
+        if (NumOps.LessThan(p, eps)) p = eps;
+        if (NumOps.GreaterThan(p, oneMinusEps)) p = oneMinusEps;
 
         return _options.CalibrationMethod switch
         {
             ProbabilityCalibrationMethod.PlattScaling =>
-                1.0 / (1.0 + Math.Exp(-(_plattA * Math.Log(p / (1 - p)) + _plattB))),
+                SigmoidT(NumOps.Add(NumOps.Multiply(_plattA,
+                    NumOps.Log(NumOps.Divide(p, NumOps.Subtract(NumOps.One, p)))), _plattB)),
 
             ProbabilityCalibrationMethod.IsotonicRegression =>
                 InterpolateIsotonic(p),
 
             ProbabilityCalibrationMethod.BetaCalibration =>
-                1.0 / (1.0 + Math.Exp(-(_betaA * Math.Log(p) - _betaB * Math.Log(1 - p) + _betaC))),
+                SigmoidT(NumOps.Add(NumOps.Subtract(
+                    NumOps.Multiply(_betaA, NumOps.Log(p)),
+                    NumOps.Multiply(_betaB, NumOps.Log(NumOps.Subtract(NumOps.One, p)))),
+                    _betaC)),
 
             ProbabilityCalibrationMethod.TemperatureScaling =>
-                1.0 / (1.0 + Math.Exp(-Math.Log(p / (1 - p)) / _temperature)),
+                SigmoidT(NumOps.Divide(
+                    NumOps.Log(NumOps.Divide(p, NumOps.Subtract(NumOps.One, p))),
+                    _temperature)),
 
-            ProbabilityCalibrationMethod.Auto => p, // Auto defaults to no transformation at predict time
+            ProbabilityCalibrationMethod.Auto => p,
             ProbabilityCalibrationMethod.None => p,
             _ => p
         };
@@ -688,7 +708,7 @@ internal class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>
     /// <summary>
     /// Interpolates isotonic regression mapping.
     /// </summary>
-    private double InterpolateIsotonic(double p)
+    private T InterpolateIsotonic(T p)
     {
         if (_isotonicMapping == null || _isotonicMapping.Length == 0)
             return p;
@@ -696,28 +716,31 @@ internal class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>
         int low = 0, high = _isotonicMapping.Length - 1;
 
         // Boundary cases
-        if (p <= _isotonicMapping[low].prob)
+        if (NumOps.LessThanOrEquals(p, _isotonicMapping[low].prob))
             return _isotonicMapping[low].calibrated;
-        if (p >= _isotonicMapping[high].prob)
+        if (NumOps.GreaterThanOrEquals(p, _isotonicMapping[high].prob))
             return _isotonicMapping[high].calibrated;
 
         // Binary search for bracketing points
         while (high - low > 1)
         {
             int mid = (low + high) / 2;
-            if (_isotonicMapping[mid].prob <= p)
+            if (NumOps.LessThanOrEquals(_isotonicMapping[mid].prob, p))
                 low = mid;
             else
                 high = mid;
         }
 
         // Linear interpolation
-        double range = _isotonicMapping[high].prob - _isotonicMapping[low].prob;
-        if (range < 1e-10)
+        T range = NumOps.Subtract(_isotonicMapping[high].prob, _isotonicMapping[low].prob);
+        T rangeEps = NumOps.FromDouble(1e-10);
+        if (NumOps.LessThan(range, rangeEps))
             return _isotonicMapping[low].calibrated;
 
-        double t = (p - _isotonicMapping[low].prob) / range;
-        return _isotonicMapping[low].calibrated * (1 - t) + _isotonicMapping[high].calibrated * t;
+        T t = NumOps.Divide(NumOps.Subtract(p, _isotonicMapping[low].prob), range);
+        return NumOps.Add(
+            NumOps.Multiply(_isotonicMapping[low].calibrated, NumOps.Subtract(NumOps.One, t)),
+            NumOps.Multiply(_isotonicMapping[high].calibrated, t));
     }
 
     /// <summary>
@@ -767,7 +790,7 @@ internal class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>
 
         if (_isotonicMapping != null)
         {
-            clone._isotonicMapping = new (double, double)[_isotonicMapping.Length];
+            clone._isotonicMapping = new (T, T)[_isotonicMapping.Length];
             Array.Copy(_isotonicMapping, clone._isotonicMapping, _isotonicMapping.Length);
         }
 
@@ -789,12 +812,12 @@ internal class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>
         // Return calibration parameters
         return new Vector<T>(new[]
         {
-            NumOps.FromDouble(_plattA),
-            NumOps.FromDouble(_plattB),
-            NumOps.FromDouble(_betaA),
-            NumOps.FromDouble(_betaB),
-            NumOps.FromDouble(_betaC),
-            NumOps.FromDouble(_temperature)
+            _plattA,
+            _plattB,
+            _betaA,
+            _betaB,
+            _betaC,
+            _temperature
         });
     }
 
@@ -807,12 +830,12 @@ internal class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>
                 $"Expected at least 6 parameters, but received {parameters.Length}.", nameof(parameters));
         }
 
-        _plattA = NumOps.ToDouble(parameters[0]);
-        _plattB = NumOps.ToDouble(parameters[1]);
-        _betaA = NumOps.ToDouble(parameters[2]);
-        _betaB = NumOps.ToDouble(parameters[3]);
-        _betaC = NumOps.ToDouble(parameters[4]);
-        _temperature = NumOps.ToDouble(parameters[5]);
+        _plattA = parameters[0];
+        _plattB = parameters[1];
+        _betaA = parameters[2];
+        _betaB = parameters[3];
+        _betaC = parameters[4];
+        _temperature = parameters[5];
     }
 
     /// <inheritdoc/>
@@ -847,12 +870,12 @@ internal class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>
         var metadata = base.GetModelMetadata();
         metadata.AdditionalInfo["CalibrationMethod"] = _options.CalibrationMethod.ToString();
         metadata.AdditionalInfo["CrossValidationFolds"] = _options.CrossValidationFolds;
-        metadata.AdditionalInfo["PlattA"] = _plattA;
-        metadata.AdditionalInfo["PlattB"] = _plattB;
-        metadata.AdditionalInfo["BetaA"] = _betaA;
-        metadata.AdditionalInfo["BetaB"] = _betaB;
-        metadata.AdditionalInfo["BetaC"] = _betaC;
-        metadata.AdditionalInfo["Temperature"] = _temperature;
+        metadata.AdditionalInfo["PlattA"] = NumOps.ToDouble(_plattA);
+        metadata.AdditionalInfo["PlattB"] = NumOps.ToDouble(_plattB);
+        metadata.AdditionalInfo["BetaA"] = NumOps.ToDouble(_betaA);
+        metadata.AdditionalInfo["BetaB"] = NumOps.ToDouble(_betaB);
+        metadata.AdditionalInfo["BetaC"] = NumOps.ToDouble(_betaC);
+        metadata.AdditionalInfo["Temperature"] = NumOps.ToDouble(_temperature);
         return metadata;
     }
 }
