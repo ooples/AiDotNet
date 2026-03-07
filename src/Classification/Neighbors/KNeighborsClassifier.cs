@@ -298,10 +298,9 @@ public class KNeighborsClassifier<T> : ProbabilisticClassifierBase<T>
             throw new InvalidOperationException("Model must be trained before getting class index.");
         }
 
-        T epsilon = NumOps.FromDouble(1e-10);
         for (int i = 0; i < ClassLabels.Length; i++)
         {
-            if (NumOps.LessThan(NumOps.Abs(NumOps.Subtract(ClassLabels[i], label)), epsilon))
+            if (NumOps.Compare(ClassLabels[i], label) == 0)
             {
                 return i;
             }

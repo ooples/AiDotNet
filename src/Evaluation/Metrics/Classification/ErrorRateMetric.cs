@@ -40,8 +40,8 @@ public class ErrorRateMetric<T> : IClassificationMetric<T>
         int incorrect = 0;
         for (int i = 0; i < predictions.Length; i++)
         {
-            bool pred = !NumOps.LessThan(predictions[i], NumOps.FromDouble(0.5));
-            bool actual = !NumOps.LessThan(actuals[i], NumOps.FromDouble(0.5));
+            bool pred = NumOps.Compare(predictions[i], NumOps.One) == 0;
+            bool actual = NumOps.Compare(actuals[i], NumOps.One) == 0;
             if (pred != actual) incorrect++;
         }
 

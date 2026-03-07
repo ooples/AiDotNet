@@ -69,7 +69,7 @@ public class CalibrationEngine<T>
                 if (prob >= binStart && (prob < binEnd || (i == numBins - 1 && prob <= binEnd)))
                 {
                     binProbs.Add(prob);
-                    binActuals.Add(!NumOps.LessThan(actuals[j], NumOps.FromDouble(0.5)) ? 1 : 0);
+                    binActuals.Add(NumOps.Compare(actuals[j], NumOps.One) == 0 ? 1 : 0);
                 }
             }
 
@@ -105,7 +105,7 @@ public class CalibrationEngine<T>
         for (int i = 0; i < n; i++)
         {
             double prob = NumOps.ToDouble(probabilities[i]);
-            double actual = !NumOps.LessThan(actuals[i], NumOps.FromDouble(0.5)) ? 1 : 0;
+            double actual = NumOps.Compare(actuals[i], NumOps.One) == 0 ? 1 : 0;
             brier += (prob - actual) * (prob - actual);
         }
         brier /= n;
@@ -137,7 +137,7 @@ public class CalibrationEngine<T>
         for (int i = 0; i < n; i++)
         {
             probs[i] = NumOps.ToDouble(probabilities[i]);
-            targets[i] = !NumOps.LessThan(actuals[i], NumOps.FromDouble(0.5)) ? 1 : 0;
+            targets[i] = NumOps.Compare(actuals[i], NumOps.One) == 0 ? 1 : 0;
         }
 
         // Fit sigmoid: P_calibrated = 1 / (1 + exp(A * P_uncalibrated + B))
@@ -187,7 +187,7 @@ public class CalibrationEngine<T>
         var indexed = new (double prob, double actual, int idx)[n];
         for (int i = 0; i < n; i++)
         {
-            indexed[i] = (NumOps.ToDouble(probabilities[i]), !NumOps.LessThan(actuals[i], NumOps.FromDouble(0.5)) ? 1 : 0, i);
+            indexed[i] = (NumOps.ToDouble(probabilities[i]), NumOps.Compare(actuals[i], NumOps.One) == 0 ? 1 : 0, i);
         }
         Array.Sort(indexed, (a, b) => a.prob.CompareTo(b.prob));
 

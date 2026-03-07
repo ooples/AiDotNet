@@ -317,10 +317,9 @@ public abstract class ClassifierBase<T> : IClassifier<T>, IConfigurableModel<T>,
             return -1;
         }
 
-        T epsilon = NumOps.FromDouble(1e-10);
         for (int i = 0; i < ClassLabels.Length; i++)
         {
-            if (NumOps.LessThan(NumOps.Abs(NumOps.Subtract(ClassLabels[i], label)), epsilon))
+            if (NumOps.Compare(ClassLabels[i], label) == 0)
             {
                 return i;
             }
