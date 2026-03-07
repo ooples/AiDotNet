@@ -482,15 +482,15 @@ public class OptimizationResult<T, TInput, TOutput>
             BestIntercept = BestIntercept,
             BestFitnessScore = BestFitnessScore,
             Iterations = Iterations,
-            FitnessHistory = new Vector<T>(FitnessHistory.ToArray()),
-            SelectedFeatures = SelectedFeatures.Select(v => new Vector<T>(v.ToArray())).ToList(),
-            SelectedFeatureIndices = new List<int>(SelectedFeatureIndices),
+            FitnessHistory = FitnessHistory != null ? new Vector<T>(FitnessHistory.ToArray()) : Vector<T>.Empty(),
+            SelectedFeatures = SelectedFeatures?.Select(v => new Vector<T>(v.ToArray())).ToList() ?? new List<Vector<T>>(),
+            SelectedFeatureIndices = SelectedFeatureIndices != null ? new List<int>(SelectedFeatureIndices) : new List<int>(),
             TrainingResult = TrainingResult,
             ValidationResult = ValidationResult,
             TestResult = TestResult,
             FitDetectionResult = FitDetectionResult,
-            CoefficientLowerBounds = new Vector<T>(CoefficientLowerBounds.ToArray()),
-            CoefficientUpperBounds = new Vector<T>(CoefficientUpperBounds.ToArray())
+            CoefficientLowerBounds = CoefficientLowerBounds != null ? new Vector<T>(CoefficientLowerBounds.ToArray()) : Vector<T>.Empty(),
+            CoefficientUpperBounds = CoefficientUpperBounds != null ? new Vector<T>(CoefficientUpperBounds.ToArray()) : Vector<T>.Empty()
         };
     }
 
@@ -507,15 +507,15 @@ public class OptimizationResult<T, TInput, TOutput>
             BestIntercept = BestIntercept,
             BestFitnessScore = BestFitnessScore,
             Iterations = Iterations,
-            FitnessHistory = new Vector<T>(FitnessHistory.ToArray()),
-            SelectedFeatures = SelectedFeatures.Select(v => new Vector<T>(v.ToArray())).ToList(),
-            SelectedFeatureIndices = new List<int>(SelectedFeatureIndices),
+            FitnessHistory = FitnessHistory != null ? new Vector<T>(FitnessHistory.ToArray()) : Vector<T>.Empty(),
+            SelectedFeatures = SelectedFeatures?.Select(v => new Vector<T>(v.ToArray())).ToList() ?? new List<Vector<T>>(),
+            SelectedFeatureIndices = SelectedFeatureIndices != null ? new List<int>(SelectedFeatureIndices) : new List<int>(),
             TrainingResult = TrainingResult,
             ValidationResult = ValidationResult,
             TestResult = TestResult,
             FitDetectionResult = FitDetectionResult,
-            CoefficientLowerBounds = new Vector<T>(CoefficientLowerBounds.ToArray()),
-            CoefficientUpperBounds = new Vector<T>(CoefficientUpperBounds.ToArray())
+            CoefficientLowerBounds = CoefficientLowerBounds != null ? new Vector<T>(CoefficientLowerBounds.ToArray()) : Vector<T>.Empty(),
+            CoefficientUpperBounds = CoefficientUpperBounds != null ? new Vector<T>(CoefficientUpperBounds.ToArray()) : Vector<T>.Empty()
         };
     }
 
