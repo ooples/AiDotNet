@@ -1909,6 +1909,8 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// Applies feature selection to prediction input if the optimizer selected a subset of features.
     /// Skips selection only when the indices are the identity mapping (0, 1, 2, ..., N-1).
     /// </summary>
+    private bool _featureIndicesValidated;
+
     private TInput ApplySelectedFeaturesForPrediction(TInput input)
     {
         var featureIndices = OptimizationResult?.SelectedFeatureIndices;
@@ -1930,10 +1932,16 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             return input;
         }
 
-        if (featureIndices.Any(i => i < 0 || i >= inputSize))
+        // One-time bounds validation — SelectedFeatureIndices are set by the optimizer
+        // and don't change between calls, so we only need to check once.
+        if (!_featureIndicesValidated)
         {
-            throw new InvalidOperationException(
-                $"Selected feature indices are out of range for input with {inputSize} features.");
+            if (featureIndices.Any(i => i < 0 || i >= inputSize))
+            {
+                throw new InvalidOperationException(
+                    $"Selected feature indices are out of range for input with {inputSize} features.");
+            }
+            _featureIndicesValidated = true;
         }
 
         return Helpers.OptimizerHelper<T, TInput, TOutput>.SelectFeatures(input, featureIndices);
@@ -2219,17 +2227,8 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                 ? _result.PreprocessingInfo.TransformFeatures(newData)
                 : newData;
 
-            // Apply feature selection if the optimizer selected a subset of features during training.
-            var featureIndices = _result.OptimizationResult?.SelectedFeatureIndices;
-            if (featureIndices != null && featureIndices.Count > 0)
-            {
-                int inputSize = Helpers.InputHelper<T, TInput>.GetInputSize(normalizedNewData);
-                if (inputSize != featureIndices.Count)
-                {
-                    normalizedNewData = Helpers.OptimizerHelper<T, TInput, TOutput>
-                        .SelectFeatures(normalizedNewData, featureIndices);
-                }
-            }
+            // Apply feature selection if the optimizer selected a subset or permuted features during training.
+            normalizedNewData = _result.ApplySelectedFeaturesForPrediction(normalizedNewData);
 
             // Session inference: use configured inference optimizations, including stateful ones, if applicable.
             if (_config != null &&

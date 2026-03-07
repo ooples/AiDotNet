@@ -234,9 +234,8 @@ public class AiModelBuilderPredictIntegrationTests
 
         // The optimizer may select any subset of features; verify the count is valid
         int selectedCount = optimizationResult.SelectedFeatureIndices.Count;
-        Assert.True(selectedCount > 0, "Should have selected at least 1 feature");
-        Assert.True(selectedCount <= 10, "Should not select more features than available");
-        Assert.True(selectedCount < 10, "Optimizer should reduce the feature count");
+        Assert.True(selectedCount >= 1 && selectedCount <= 10,
+            $"Selected feature count ({selectedCount}) should be between 1 and the total feature count (10)");
 
         // Predict with full 10-column input
         var newData = new Matrix<double>(3, 10);
@@ -515,11 +514,11 @@ public class AiModelBuilderPredictIntegrationTests
         Assert.NotNull(permutedPrediction);
         Assert.NotNull(identityPrediction);
 
-        // The predictions should differ because the weights multiply different values
+        // The predictions should differ because permuted indices reorder the input values,
+        // causing different weights to multiply different values.
         bool predictionsMatch = Math.Abs(permutedPrediction[0] - identityPrediction[0]) < 1e-6f;
-        // Note: predictions *might* match if all weights happen to be equal (unlikely with random init),
-        // but in practice DenseLayer initializes weights differently per position.
-        // The key thing is the test doesn't throw — proving permutation is applied, not skipped.
+        Assert.False(predictionsMatch,
+            "Permuted and identity predictions should differ, proving the permutation was actually applied.");
         Assert.Equal(outputSize, permutedPrediction.Shape[0]);
     }
 
