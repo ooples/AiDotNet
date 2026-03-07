@@ -382,6 +382,10 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>
 
     private Tensor<T> ForwardStateless(Tensor<T> input)
     {
+        var activation = ScalarActivation
+            ?? throw new InvalidOperationException(
+                $"{nameof(PagedCachedMultiHeadAttention<T>)}: ScalarActivation not initialized.");
+
         // Stateless fallback using FlashAttention.
         // Compute Q,K,V projections.
         var (q, k, v) = ComputeQkv(input);

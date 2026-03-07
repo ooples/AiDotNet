@@ -492,14 +492,14 @@ public partial class AiModelResult<T, TInput, TOutput>
                         sampledParams[i] = numOps.Add(posteriorMean[i], noise);
                     }
 
-                    Model.SetParameters(sampledParams);
-                    var normalizedPrediction = Model.Predict(normalizedNewData);
+                    EnsureModel.SetParameters(sampledParams);
+                    var normalizedPrediction = EnsureModel.Predict(normalizedNewData);
                     samples.Add(ConvertToTensorSafe(normalizedPrediction, "normalized prediction"));
                 }
             }
             finally
             {
-                Model.SetParameters(originalParameters);
+                EnsureModel.SetParameters(originalParameters);
             }
         }
 
