@@ -113,19 +113,21 @@ public class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
         int n = x.Rows;
 
         // Validate response values are in (0, 1)
+        T zero = NumOps.Zero;
+        T one = NumOps.One;
         for (int i = 0; i < n; i++)
         {
-            double yi = NumOps.ToDouble(y[i]);
-            if (yi <= 0 || yi >= 1)
+            if (!NumOps.GreaterThan(y[i], zero) || !NumOps.LessThan(y[i], one))
             {
-                throw new ArgumentException($"Response values must be in (0, 1). Found: {yi} at index {i}");
+                throw new ArgumentException($"Response values must be in (0, 1). Found: {NumOps.ToDouble(y[i])} at index {i}");
             }
         }
 
         // Initialize parameters
         InitializeParameters(y);
 
-        double prevLogLik = double.MinValue;
+        T prevLogLik = NumOps.FromDouble(double.MinValue);
+        T tolerance = NumOps.FromDouble(_options.Tolerance);
 
         // Fisher scoring / IRLS
         for (int iter = 0; iter < _options.MaxIterations; iter++)
@@ -144,9 +146,9 @@ public class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
 
             // Check convergence
             (mus, phis) = ComputePredictions(x);
-            double logLik = ComputeLogLikelihood(y, mus, phis);
+            T logLik = ComputeLogLikelihood(y, mus, phis);
 
-            if (Math.Abs(logLik - prevLogLik) < _options.Tolerance)
+            if (NumOps.LessThan(NumOps.Abs(NumOps.Subtract(logLik, prevLogLik)), tolerance))
             {
                 break;
             }
@@ -176,14 +178,10 @@ public class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
         for (int i = 0; i < input.Rows; i++)
         {
             // Convert (μ, φ) to (α, β) parameterization
-            double mu = NumOps.ToDouble(mus[i]);
-            double phi = NumOps.ToDouble(phis[i]);
-            double alpha = mu * phi;
-            double beta = (1 - mu) * phi;
+            T alpha = NumOps.Multiply(mus[i], phis[i]);
+            T beta = NumOps.Multiply(NumOps.Subtract(NumOps.One, mus[i]), phis[i]);
 
-            distributions[i] = new BetaDistribution<T>(
-                NumOps.FromDouble(alpha),
-                NumOps.FromDouble(beta));
+            distributions[i] = new BetaDistribution<T>(alpha, beta);
         }
 
         return distributions;
@@ -220,13 +218,13 @@ public class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
     private void InitializeParameters(Vector<T> y)
     {
         // Initialize mean intercept using empirical logit
-        double sumLogit = 0;
+        T sumLogit = NumOps.Zero;
         for (int i = 0; i < y.Length; i++)
         {
-            double yi = NumOps.ToDouble(y[i]);
-            sumLogit += Math.Log(yi / (1 - yi));
+            T yi = y[i];
+            sumLogit = NumOps.Add(sumLogit, NumOps.Log(NumOps.Divide(yi, NumOps.Subtract(NumOps.One, yi))));
         }
-        _meanIntercept = NumOps.FromDouble(sumLogit / y.Length);
+        _meanIntercept = NumOps.Divide(sumLogit, NumOps.FromDouble(y.Length));
 
         // Initialize mean coefficients to zero
         _meanCoefficients = new Vector<T>(_numFeatures);
@@ -246,37 +244,40 @@ public class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
         int n = x.Rows;
         var mus = new Vector<T>(n);
         var phis = new Vector<T>(n);
+        T minPhi = NumOps.FromDouble(0.1);
 
         for (int i = 0; i < n; i++)
         {
             // Linear predictor for mean
-            double etaMu = NumOps.ToDouble(_meanIntercept);
+            T etaMu = _meanIntercept;
             if (_meanCoefficients != null)
             {
                 for (int j = 0; j < _numFeatures; j++)
                 {
-                    etaMu += NumOps.ToDouble(_meanCoefficients[j]) * NumOps.ToDouble(x[i, j]);
+                    etaMu = NumOps.Add(etaMu, NumOps.Multiply(_meanCoefficients[j], x[i, j]));
                 }
             }
 
-            // Apply link function inverse
-            double mu = InverseLinkFunction(etaMu);
-            mus[i] = NumOps.FromDouble(mu);
+            // Apply link function inverse (boundary conversion for special math)
+            mus[i] = NumOps.FromDouble(InverseLinkFunction(NumOps.ToDouble(etaMu)));
 
             // Linear predictor for precision
-            double etaPhi = NumOps.ToDouble(_precisionIntercept);
+            T etaPhi = _precisionIntercept;
             if (_options.ModelVariablePrecision && _precisionCoefficients != null)
             {
                 for (int j = 0; j < _numFeatures; j++)
                 {
-                    etaPhi += NumOps.ToDouble(_precisionCoefficients[j]) * NumOps.ToDouble(x[i, j]);
+                    etaPhi = NumOps.Add(etaPhi, NumOps.Multiply(_precisionCoefficients[j], x[i, j]));
                 }
             }
 
             // Precision uses log link
-            double phi = Math.Exp(etaPhi);
-            phi = Math.Max(phi, 0.1);  // Ensure positive
-            phis[i] = NumOps.FromDouble(phi);
+            T phi = NumOps.Exp(etaPhi);
+            if (NumOps.LessThan(phi, minPhi))
+            {
+                phi = minPhi;
+            }
+            phis[i] = phi;
         }
 
         return (mus, phis);
@@ -288,34 +289,38 @@ public class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
     private void UpdateMeanModel(Matrix<T> x, Vector<T> y, Vector<T> mus, Vector<T> phis)
     {
         int n = x.Rows;
-        int p = _numFeatures;
 
         // Working weights and adjusted dependent variable
-        var weights = new Vector<double>(n);
-        var z = new Vector<double>(n);
+        var weights = new Vector<T>(n);
+        var z = new Vector<T>(n);
 
         for (int i = 0; i < n; i++)
         {
-            double yi = NumOps.ToDouble(y[i]);
-            double mu = NumOps.ToDouble(mus[i]);
-            double phi = NumOps.ToDouble(phis[i]);
+            T mu = mus[i];
+            T phi = phis[i];
+            double muD = NumOps.ToDouble(mu);
 
-            // Derivative of link function at mu
-            double dmu = LinkFunctionDerivative(mu);
+            // Derivative of link function at mu (boundary: special math)
+            double dmu = LinkFunctionDerivative(muD);
+            T dmuT = NumOps.FromDouble(dmu);
 
             // Fisher weight: w = φ * mu * (1-mu) / g'(mu)²
-            double v = mu * (1 - mu);
-            double w = phi * v / (dmu * dmu);
+            T v = NumOps.Multiply(mu, NumOps.Subtract(NumOps.One, mu));
+            T w = NumOps.Divide(NumOps.Multiply(phi, v), NumOps.Multiply(dmuT, dmuT));
             weights[i] = w;
 
             // Working response
-            double eta = LinkFunction(mu);
-            double residual = yi - mu;
-            z[i] = eta + residual * dmu / v;
+            double eta = LinkFunction(muD);
+            T residual = NumOps.Subtract(y[i], mu);
+            z[i] = NumOps.Add(NumOps.FromDouble(eta), NumOps.Divide(NumOps.Multiply(residual, dmuT), v));
         }
 
         // Weighted least squares
-        UpdateCoefficientsWLS(x, z, weights, ref _meanCoefficients!, ref _meanIntercept);
+        if (_meanCoefficients is null)
+        {
+            throw new InvalidOperationException("Mean coefficients not initialized.");
+        }
+        UpdateCoefficientsWLS(x, z, weights, ref _meanCoefficients, ref _meanIntercept);
     }
 
     /// <summary>
@@ -324,29 +329,32 @@ public class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
     private void UpdatePrecisionModel(Matrix<T> x, Vector<T> y, Vector<T> mus, Vector<T> phis)
     {
         int n = x.Rows;
+        T minFisher = NumOps.FromDouble(0.1);
 
-        var weights = new Vector<double>(n);
-        var z = new Vector<double>(n);
+        var weights = new Vector<T>(n);
+        var z = new Vector<T>(n);
 
         for (int i = 0; i < n; i++)
         {
-            double yi = NumOps.ToDouble(y[i]);
-            double mu = NumOps.ToDouble(mus[i]);
-            double phi = NumOps.ToDouble(phis[i]);
+            // Boundary conversion for special functions (Digamma, Trigamma)
+            double muD = NumOps.ToDouble(mus[i]);
+            double phiD = NumOps.ToDouble(phis[i]);
+            double yiD = NumOps.ToDouble(y[i]);
 
             // Score for phi: d log L / d log(phi)
-            double ystar = Math.Log(yi / (1 - yi));
-            double mustar = Digamma(mu * phi) - Digamma((1 - mu) * phi);
-            double score = mu * (ystar - mustar);
+            double ystar = Math.Log(yiD / (1 - yiD));
+            double mustar = Digamma(muD * phiD) - Digamma((1 - muD) * phiD);
+            double score = muD * (ystar - mustar);
 
             // Fisher information for log(phi)
-            double trigammaTerm = mu * mu * Trigamma(mu * phi) + (1 - mu) * (1 - mu) * Trigamma((1 - mu) * phi);
-            double fisherInfo = phi * phi * trigammaTerm;
+            double trigammaTerm = muD * muD * Trigamma(muD * phiD) + (1 - muD) * (1 - muD) * Trigamma((1 - muD) * phiD);
+            double fisherInfo = phiD * phiD * trigammaTerm;
             fisherInfo = Math.Max(fisherInfo, 0.1);
 
-            weights[i] = fisherInfo;
-            double logPhi = Math.Log(phi);
-            z[i] = logPhi + score / fisherInfo;
+            T fisherInfoT = NumOps.FromDouble(fisherInfo);
+            weights[i] = fisherInfoT;
+            T logPhi = NumOps.Log(phis[i]);
+            z[i] = NumOps.Add(logPhi, NumOps.Divide(NumOps.FromDouble(score), fisherInfoT));
         }
 
         if (_precisionCoefficients != null)
@@ -358,80 +366,92 @@ public class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Updates coefficients using weighted least squares.
     /// </summary>
-    private void UpdateCoefficientsWLS(Matrix<T> x, Vector<double> z, Vector<double> weights, ref Vector<T> coefficients, ref T intercept)
+    private void UpdateCoefficientsWLS(Matrix<T> x, Vector<T> z, Vector<T> weights, ref Vector<T> coefficients, ref T intercept)
     {
         int n = x.Rows;
         int p = _numFeatures;
 
         // X'WX and X'Wz
-        var xtwx = new Matrix<double>(p + 1, p + 1);
-        var xtwz = new Vector<double>(p + 1);
+        var xtwx = new Matrix<T>(p + 1, p + 1);
+        var xtwz = new Vector<T>(p + 1);
 
         for (int i = 0; i < n; i++)
         {
-            double w = weights[i];
+            T w = weights[i];
 
-            xtwx[0, 0] += w;
-            xtwz[0] += w * z[i];
+            xtwx[0, 0] = NumOps.Add(xtwx[0, 0], w);
+            xtwz[0] = NumOps.Add(xtwz[0], NumOps.Multiply(w, z[i]));
 
             for (int j = 0; j < p; j++)
             {
-                double xij = NumOps.ToDouble(x[i, j]);
-                xtwx[0, j + 1] += w * xij;
-                xtwx[j + 1, 0] += w * xij;
-                xtwz[j + 1] += w * xij * z[i];
+                T wxij = NumOps.Multiply(w, x[i, j]);
+                xtwx[0, j + 1] = NumOps.Add(xtwx[0, j + 1], wxij);
+                xtwx[j + 1, 0] = NumOps.Add(xtwx[j + 1, 0], wxij);
+                xtwz[j + 1] = NumOps.Add(xtwz[j + 1], NumOps.Multiply(wxij, z[i]));
 
                 for (int k = 0; k <= j; k++)
                 {
-                    double xik = NumOps.ToDouble(x[i, k]);
-                    xtwx[j + 1, k + 1] += w * xij * xik;
-                    if (k < j) xtwx[k + 1, j + 1] = xtwx[j + 1, k + 1];
+                    T val = NumOps.Add(xtwx[j + 1, k + 1], NumOps.Multiply(wxij, x[i, k]));
+                    xtwx[j + 1, k + 1] = val;
+                    if (k < j) xtwx[k + 1, j + 1] = val;
                 }
             }
         }
 
         // Regularization
-        double lambda = _options.UseRegularization ? _options.RegularizationStrength : 0;
-        for (int j = 1; j <= p; j++)
+        if (_options.UseRegularization)
         {
-            xtwx[j, j] += lambda;
+            T lambda = NumOps.FromDouble(_options.RegularizationStrength);
+            for (int j = 1; j <= p; j++)
+            {
+                xtwx[j, j] = NumOps.Add(xtwx[j, j], lambda);
+            }
         }
 
         // Solve
         var solution = SolveSystem(xtwx, xtwz, p + 1);
 
         // Update with learning rate
-        double lr = _options.LearningRate;
+        T lr = NumOps.FromDouble(_options.LearningRate);
+        T oneMinusLr = NumOps.Subtract(NumOps.One, lr);
         intercept = NumOps.Add(
-            NumOps.Multiply(NumOps.FromDouble(1 - lr), intercept),
-            NumOps.FromDouble(lr * solution[0]));
+            NumOps.Multiply(oneMinusLr, intercept),
+            NumOps.Multiply(lr, solution[0]));
 
         for (int j = 0; j < p; j++)
         {
             coefficients[j] = NumOps.Add(
-                NumOps.Multiply(NumOps.FromDouble(1 - lr), coefficients[j]),
-                NumOps.FromDouble(lr * solution[j + 1]));
+                NumOps.Multiply(oneMinusLr, coefficients[j]),
+                NumOps.Multiply(lr, solution[j + 1]));
         }
     }
 
     /// <summary>
     /// Computes the log-likelihood.
     /// </summary>
-    private double ComputeLogLikelihood(Vector<T> y, Vector<T> mus, Vector<T> phis)
+    private T ComputeLogLikelihood(Vector<T> y, Vector<T> mus, Vector<T> phis)
     {
-        double ll = 0;
+        T ll = NumOps.Zero;
         for (int i = 0; i < y.Length; i++)
         {
-            double yi = NumOps.ToDouble(y[i]);
-            double mu = NumOps.ToDouble(mus[i]);
-            double phi = NumOps.ToDouble(phis[i]);
+            T mu = mus[i];
+            T phi = phis[i];
+            T alpha = NumOps.Multiply(mu, phi);
+            T beta = NumOps.Multiply(NumOps.Subtract(NumOps.One, mu), phi);
 
-            double alpha = mu * phi;
-            double beta = (1 - mu) * phi;
+            // Log Beta PDF — LogGamma stays double (numerical recipe)
+            double lgPhi = LogGamma(NumOps.ToDouble(phi));
+            double lgAlpha = LogGamma(NumOps.ToDouble(alpha));
+            double lgBeta = LogGamma(NumOps.ToDouble(beta));
 
-            // Log Beta PDF
-            ll += LogGamma(phi) - LogGamma(alpha) - LogGamma(beta);
-            ll += (alpha - 1) * Math.Log(yi) + (beta - 1) * Math.Log(1 - yi);
+            T logPdf = NumOps.FromDouble(lgPhi - lgAlpha - lgBeta);
+            T logYi = NumOps.Log(y[i]);
+            T logOneMinusYi = NumOps.Log(NumOps.Subtract(NumOps.One, y[i]));
+
+            logPdf = NumOps.Add(logPdf, NumOps.Multiply(NumOps.Subtract(alpha, NumOps.One), logYi));
+            logPdf = NumOps.Add(logPdf, NumOps.Multiply(NumOps.Subtract(beta, NumOps.One), logOneMinusYi));
+
+            ll = NumOps.Add(ll, logPdf);
         }
         return ll;
     }
@@ -556,39 +576,47 @@ public class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
         return result;
     }
 
-    private Vector<double> SolveSystem(Matrix<double> a, Vector<double> b, int n)
+    private Vector<T> SolveSystem(Matrix<T> a, Vector<T> b, int n)
     {
-        var aug = new Matrix<double>(n, n + 1);
+        var aug = new Matrix<T>(n, n + 1);
         for (int i = 0; i < n; i++)
         {
             for (int j = 0; j < n; j++) aug[i, j] = a[i, j];
             aug[i, n] = b[i];
         }
 
+        T pivotThreshold = NumOps.FromDouble(1e-10);
+
         for (int col = 0; col < n; col++)
         {
+            // Partial pivoting
             int maxRow = col;
             for (int row = col + 1; row < n; row++)
-                if (Math.Abs(aug[row, col]) > Math.Abs(aug[maxRow, col])) maxRow = row;
+            {
+                if (NumOps.GreaterThan(NumOps.Abs(aug[row, col]), NumOps.Abs(aug[maxRow, col])))
+                    maxRow = row;
+            }
 
             for (int j = 0; j <= n; j++)
                 (aug[col, j], aug[maxRow, j]) = (aug[maxRow, j], aug[col, j]);
 
-            double pivot = aug[col, col];
-            if (Math.Abs(pivot) < 1e-10) pivot = 1e-10;
-            for (int j = 0; j <= n; j++) aug[col, j] /= pivot;
+            T pivot = aug[col, col];
+            if (NumOps.LessThan(NumOps.Abs(pivot), pivotThreshold))
+                pivot = pivotThreshold;
+            for (int j = 0; j <= n; j++) aug[col, j] = NumOps.Divide(aug[col, j], pivot);
 
             for (int row = 0; row < n; row++)
             {
                 if (row != col)
                 {
-                    double factor = aug[row, col];
-                    for (int j = 0; j <= n; j++) aug[row, j] -= factor * aug[col, j];
+                    T factor = aug[row, col];
+                    for (int j = 0; j <= n; j++)
+                        aug[row, j] = NumOps.Subtract(aug[row, j], NumOps.Multiply(factor, aug[col, j]));
                 }
             }
         }
 
-        var sol = new Vector<double>(n);
+        var sol = new Vector<T>(n);
         for (int i = 0; i < n; i++) sol[i] = aug[i, n];
         return sol;
     }
@@ -600,21 +628,21 @@ public class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
 
         for (int f = 0; f < _numFeatures; f++)
         {
-            double imp = 0;
+            T imp = NumOps.Zero;
             if (_meanCoefficients != null)
-                imp += Math.Abs(NumOps.ToDouble(_meanCoefficients[f]));
+                imp = NumOps.Add(imp, NumOps.Abs(_meanCoefficients[f]));
             if (_precisionCoefficients != null)
-                imp += Math.Abs(NumOps.ToDouble(_precisionCoefficients[f]));
-            importances[f] = NumOps.FromDouble(imp);
+                imp = NumOps.Add(imp, NumOps.Abs(_precisionCoefficients[f]));
+            importances[f] = imp;
         }
 
-        double sum = 0;
+        T sum = NumOps.Zero;
         for (int f = 0; f < _numFeatures; f++)
-            sum += NumOps.ToDouble(importances[f]);
-        if (sum > 0)
+            sum = NumOps.Add(sum, importances[f]);
+        if (NumOps.GreaterThan(sum, NumOps.Zero))
         {
             for (int f = 0; f < _numFeatures; f++)
-                importances[f] = NumOps.Divide(importances[f], NumOps.FromDouble(sum));
+                importances[f] = NumOps.Divide(importances[f], sum);
         }
 
         FeatureImportances = importances;
