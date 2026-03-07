@@ -133,69 +133,59 @@ public class MixedEffectsModel<T> : NonLinearRegressionBase<T>
             _numRandomEffects += slopeFeatures.Length;
         }
 
-        // Convert to double arrays
-        var xData = ConvertToDoubleMatrix(x);
-        var yData = new Vector<double>(y.Length);
-        for (int i = 0; i < y.Length; i++)
-        {
-            yData[i] = NumOps.ToDouble(y[i]);
-        }
-
         // Get unique groups
         var uniqueGroups = groupIndices.Distinct().OrderBy(g => g).ToArray();
         int numGroups = uniqueGroups.Length;
+        T tolerance = NumOps.FromDouble(_options.Tolerance);
 
         // Initialize parameters
-        var beta = new Vector<double>(_numFeatures + 1);  // +1 for intercept
-        var sigma2 = 1.0;  // Residual variance
+        var beta = new Vector<T>(_numFeatures + 1);  // +1 for intercept
+        T sigma2 = NumOps.One;  // Residual variance
         var D = InitializeRandomEffectVariance(_numRandomEffects);  // Random effect variance
 
         // EM-style optimization
         for (int iter = 0; iter < _options.MaxIterations; iter++)
         {
             // E-step: Compute conditional modes of random effects (BLUPs)
-            var u = ComputeBLUPs(xData, yData, groupIndices, uniqueGroups, beta, sigma2, D);
+            var u = ComputeBLUPs(x, y, groupIndices, uniqueGroups, beta, sigma2, D);
 
             // M-step: Update fixed effects and variance components
-            var oldBeta = new Vector<double>(beta.Length);
+            var oldBeta = new Vector<T>(beta.Length);
             for (int i = 0; i < beta.Length; i++) oldBeta[i] = beta[i];
-            var oldSigma2 = sigma2;
+            T oldSigma2 = sigma2;
 
             // Update fixed effects
-            beta = UpdateFixedEffects(xData, yData, groupIndices, u, sigma2, D);
+            beta = UpdateFixedEffects(x, y, groupIndices, u, sigma2, D);
 
             // Update variance components
-            (sigma2, D) = UpdateVarianceComponents(xData, yData, groupIndices, uniqueGroups, beta, u);
+            (sigma2, D) = UpdateVarianceComponents(x, y, groupIndices, uniqueGroups, beta, u);
 
             // Check convergence
-            double betaChange = 0;
+            T betaChange = NumOps.Zero;
             for (int i = 0; i < beta.Length; i++)
             {
-                betaChange += Math.Abs(beta[i] - oldBeta[i]);
+                betaChange = NumOps.Add(betaChange, NumOps.Abs(NumOps.Subtract(beta[i], oldBeta[i])));
             }
 
-            if (betaChange < _options.Tolerance && Math.Abs(sigma2 - oldSigma2) < _options.Tolerance)
+            if (NumOps.LessThan(betaChange, tolerance) &&
+                NumOps.LessThan(NumOps.Abs(NumOps.Subtract(sigma2, oldSigma2)), tolerance))
             {
                 break;
             }
         }
 
         // Compute final random effects
-        var finalU = ComputeBLUPs(xData, yData, groupIndices, uniqueGroups, beta, sigma2, D);
+        var finalU = ComputeBLUPs(x, y, groupIndices, uniqueGroups, beta, sigma2, D);
 
         // Store results
-        _fixedEffects = new Vector<T>(beta.Length);
-        for (int i = 0; i < beta.Length; i++)
-        {
-            _fixedEffects[i] = NumOps.FromDouble(beta[i]);
-        }
-        _residualVariance = NumOps.FromDouble(sigma2);
+        _fixedEffects = new Vector<T>(beta);
+        _residualVariance = sigma2;
         _randomEffectVariance = new Matrix<T>(D.Rows, D.Columns);
         for (int i = 0; i < D.Rows; i++)
         {
             for (int j = 0; j < D.Columns; j++)
             {
-                _randomEffectVariance[i, j] = NumOps.FromDouble(D[i, j]);
+                _randomEffectVariance[i, j] = D[i, j];
             }
         }
 
@@ -204,17 +194,12 @@ public class MixedEffectsModel<T> : NonLinearRegressionBase<T>
         {
             if (finalU.TryGetValue(group, out var uGroup))
             {
-                var reVec = new Vector<T>(uGroup.Length);
-                for (int i = 0; i < uGroup.Length; i++)
-                {
-                    reVec[i] = NumOps.FromDouble(uGroup[i]);
-                }
-                _randomEffects[group] = reVec;
+                _randomEffects[group] = new Vector<T>(uGroup);
             }
         }
 
         // Compute standard errors
-        _fixedEffectStdErrors = ComputeStandardErrors(xData, yData, groupIndices, uniqueGroups, beta, sigma2, D);
+        _fixedEffectStdErrors = ComputeStandardErrors(x, y, groupIndices, uniqueGroups, beta, sigma2, D);
     }
 
     /// <inheritdoc/>
@@ -256,10 +241,10 @@ public class MixedEffectsModel<T> : NonLinearRegressionBase<T>
         for (int i = 0; i < input.Rows; i++)
         {
             // Fixed effects prediction
-            double pred = NumOps.ToDouble(_fixedEffects[0]);  // Intercept
+            T pred = _fixedEffects[0];  // Intercept
             for (int j = 0; j < _numFeatures; j++)
             {
-                pred += NumOps.ToDouble(input[i, j]) * NumOps.ToDouble(_fixedEffects[j + 1]);
+                pred = NumOps.Add(pred, NumOps.Multiply(input[i, j], _fixedEffects[j + 1]));
             }
 
             // Add random effects if group is known
@@ -268,11 +253,11 @@ public class MixedEffectsModel<T> : NonLinearRegressionBase<T>
                 int group = groupIndices[i];
                 if (_randomEffects.TryGetValue(group, out var u))
                 {
-                    pred += GetRandomEffectContribution(input, i, u);
+                    pred = NumOps.Add(pred, GetRandomEffectContribution(input, i, u));
                 }
             }
 
-            result[i] = NumOps.FromDouble(pred);
+            result[i] = pred;
         }
 
         return result;
@@ -327,19 +312,16 @@ public class MixedEffectsModel<T> : NonLinearRegressionBase<T>
     /// ICC measures what proportion of total variance is attributable to between-group differences.
     /// Higher ICC means groups are more different from each other.
     /// </remarks>
-    public double ComputeICC()
+    public T ComputeICC()
     {
-        if (_randomEffectVariance == null)
+        if (_randomEffectVariance == null || _randomEffectVariance.Rows == 0)
         {
-            return 0;
+            return NumOps.Zero;
         }
 
         // For simple random intercept model: ICC = var(intercept) / (var(intercept) + var(residual))
-        if (_randomEffectVariance.Rows == 0) return 0;
-        double interceptVar = NumOps.ToDouble(_randomEffectVariance[0, 0]);
-        double residVar = NumOps.ToDouble(_residualVariance);
-
-        return interceptVar / (interceptVar + residVar);
+        T interceptVar = _randomEffectVariance[0, 0];
+        return NumOps.Divide(interceptVar, NumOps.Add(interceptVar, _residualVariance));
     }
 
     /// <summary>
@@ -349,21 +331,24 @@ public class MixedEffectsModel<T> : NonLinearRegressionBase<T>
     /// <param name="y">Target values.</param>
     /// <param name="groupIndices">Group indicators.</param>
     /// <returns>Log-likelihood value.</returns>
-    public double GetLogLikelihood(Matrix<T> x, Vector<T> y, int[] groupIndices)
+    public T GetLogLikelihood(Matrix<T> x, Vector<T> y, int[] groupIndices)
     {
         if (_fixedEffects == null)
         {
-            return double.NegativeInfinity;
+            return NumOps.FromDouble(double.NegativeInfinity);
         }
 
         var predictions = Predict(x, groupIndices);
-        double logLik = 0;
-        double sigma2 = NumOps.ToDouble(_residualVariance);
+        T logLik = NumOps.Zero;
+        T half = NumOps.FromDouble(0.5);
+        T twoPi = NumOps.FromDouble(2.0 * Math.PI);
+        T logTerm = NumOps.Log(NumOps.Multiply(twoPi, _residualVariance));
 
         for (int i = 0; i < y.Length; i++)
         {
-            double residual = NumOps.ToDouble(y[i]) - NumOps.ToDouble(predictions[i]);
-            logLik -= 0.5 * (Math.Log(2 * Math.PI * sigma2) + residual * residual / sigma2);
+            T residual = NumOps.Subtract(y[i], predictions[i]);
+            T residualSq = NumOps.Divide(NumOps.Multiply(residual, residual), _residualVariance);
+            logLik = NumOps.Subtract(logLik, NumOps.Multiply(half, NumOps.Add(logTerm, residualSq)));
         }
 
         return logLik;
@@ -376,20 +361,20 @@ public class MixedEffectsModel<T> : NonLinearRegressionBase<T>
     {
         _featureMeans = new Vector<T>(x.Columns);
         var centered = new Matrix<T>(x.Rows, x.Columns);
+        T nT = NumOps.FromDouble(x.Rows);
 
         for (int j = 0; j < x.Columns; j++)
         {
-            double sum = 0;
+            T sum = NumOps.Zero;
             for (int i = 0; i < x.Rows; i++)
             {
-                sum += NumOps.ToDouble(x[i, j]);
+                sum = NumOps.Add(sum, x[i, j]);
             }
-            double mean = sum / x.Rows;
-            _featureMeans[j] = NumOps.FromDouble(mean);
+            _featureMeans[j] = NumOps.Divide(sum, nT);
 
             for (int i = 0; i < x.Rows; i++)
             {
-                centered[i, j] = NumOps.FromDouble(NumOps.ToDouble(x[i, j]) - mean);
+                centered[i, j] = NumOps.Subtract(x[i, j], _featureMeans[j]);
             }
         }
 
@@ -401,14 +386,18 @@ public class MixedEffectsModel<T> : NonLinearRegressionBase<T>
     /// </summary>
     private Matrix<T> CenterFeaturesForPrediction(Matrix<T> x)
     {
+        if (_featureMeans is null)
+        {
+            throw new InvalidOperationException("Feature means not computed. Model must be trained first.");
+        }
+
         var centered = new Matrix<T>(x.Rows, x.Columns);
 
         for (int j = 0; j < x.Columns; j++)
         {
-            double mean = NumOps.ToDouble(_featureMeans![j]);
             for (int i = 0; i < x.Rows; i++)
             {
-                centered[i, j] = NumOps.FromDouble(NumOps.ToDouble(x[i, j]) - mean);
+                centered[i, j] = NumOps.Subtract(x[i, j], _featureMeans[j]);
             }
         }
 
@@ -418,9 +407,9 @@ public class MixedEffectsModel<T> : NonLinearRegressionBase<T>
     /// <summary>
     /// Initializes the random effect variance matrix.
     /// </summary>
-    private Matrix<double> InitializeRandomEffectVariance(int dim)
+    private Matrix<T> InitializeRandomEffectVariance(int dim)
     {
-        var D = new Matrix<double>(dim, dim);
+        var D = new Matrix<T>(dim, dim);
 
         return _options.CovarianceStructure switch
         {
@@ -431,45 +420,46 @@ public class MixedEffectsModel<T> : NonLinearRegressionBase<T>
         };
     }
 
-    private Matrix<double> InitializeIdentityCovariance(Matrix<double> D, int dim)
+    private Matrix<T> InitializeIdentityCovariance(Matrix<T> D, int dim)
     {
         for (int i = 0; i < dim; i++)
         {
-            D[i, i] = 1.0;
+            D[i, i] = NumOps.One;
         }
         return D;
     }
 
-    private Matrix<double> InitializeDiagonalCovariance(Matrix<double> D, int dim)
+    private Matrix<T> InitializeDiagonalCovariance(Matrix<T> D, int dim)
     {
         for (int i = 0; i < dim; i++)
         {
-            D[i, i] = 1.0;
+            D[i, i] = NumOps.One;
         }
         return D;
     }
 
-    private Matrix<double> InitializeCompoundSymmetryCovariance(Matrix<double> D, int dim)
+    private Matrix<T> InitializeCompoundSymmetryCovariance(Matrix<T> D, int dim)
     {
-        double rho = 0.5;
+        T rho = NumOps.FromDouble(0.5);
         for (int i = 0; i < dim; i++)
         {
             for (int j = 0; j < dim; j++)
             {
-                D[i, j] = i == j ? 1.0 : rho;
+                D[i, j] = i == j ? NumOps.One : rho;
             }
         }
         return D;
     }
 
-    private Matrix<double> InitializeUnstructuredCovariance(Matrix<double> D, int dim)
+    private Matrix<T> InitializeUnstructuredCovariance(Matrix<T> D, int dim)
     {
+        T offDiag = NumOps.FromDouble(0.1);
         for (int i = 0; i < dim; i++)
         {
-            D[i, i] = 1.0;
+            D[i, i] = NumOps.One;
             for (int j = 0; j < i; j++)
             {
-                D[i, j] = D[j, i] = 0.1;
+                D[i, j] = D[j, i] = offDiag;
             }
         }
         return D;
@@ -478,11 +468,11 @@ public class MixedEffectsModel<T> : NonLinearRegressionBase<T>
     /// <summary>
     /// Computes Best Linear Unbiased Predictors (BLUPs) for random effects.
     /// </summary>
-    private Dictionary<int, Vector<double>> ComputeBLUPs(
-        Matrix<double> xData, Vector<double> yData, int[] groupIndices,
-        int[] uniqueGroups, Vector<double> beta, double sigma2, Matrix<double> D)
+    private Dictionary<int, Vector<T>> ComputeBLUPs(
+        Matrix<T> xData, Vector<T> yData, int[] groupIndices,
+        int[] uniqueGroups, Vector<T> beta, T sigma2, Matrix<T> D)
     {
-        var blups = new Dictionary<int, Vector<double>>();
+        var blups = new Dictionary<int, Vector<T>>();
 
         foreach (var group in uniqueGroups)
         {
@@ -490,7 +480,7 @@ public class MixedEffectsModel<T> : NonLinearRegressionBase<T>
 
             if (groupObs.Length < _options.MinObservationsPerGroup)
             {
-                blups[group] = new Vector<double>(_numRandomEffects);
+                blups[group] = new Vector<T>(_numRandomEffects);
                 continue;
             }
 
@@ -498,15 +488,14 @@ public class MixedEffectsModel<T> : NonLinearRegressionBase<T>
             var Z = BuildRandomEffectDesignMatrix(xData, groupObs);
 
             // Compute residuals
-            var residuals = new Vector<double>(groupObs.Length);
+            var residuals = new Vector<T>(groupObs.Length);
             for (int i = 0; i < groupObs.Length; i++)
             {
                 int idx = groupObs[i];
-                residuals[i] = yData[idx] - ComputeFixedPrediction(xData, idx, beta);
+                residuals[i] = NumOps.Subtract(yData[idx], ComputeFixedPrediction(xData, idx, beta));
             }
 
             // BLUP = D * Z' * V^(-1) * residuals
-            // Simplified: D * Z' * (Z * D * Z' + sigma2 * I)^(-1) * residuals
             var u = ComputeGroupBLUP(Z, residuals, D, sigma2);
             blups[group] = u;
         }
@@ -517,47 +506,47 @@ public class MixedEffectsModel<T> : NonLinearRegressionBase<T>
     /// <summary>
     /// Computes BLUP for a single group.
     /// </summary>
-    private Vector<double> ComputeGroupBLUP(Matrix<double> Z, Vector<double> residuals, Matrix<double> D, double sigma2)
+    private Vector<T> ComputeGroupBLUP(Matrix<T> Z, Vector<T> residuals, Matrix<T> D, T sigma2)
     {
         int n = residuals.Length;
         int q = _numRandomEffects;
 
         // V = Z * D * Z' + sigma2 * I
-        var V = new Matrix<double>(n, n);
+        var V = new Matrix<T>(n, n);
         for (int i = 0; i < n; i++)
         {
             for (int j = 0; j < n; j++)
             {
-                double sum = 0;
+                T sum = NumOps.Zero;
                 for (int k = 0; k < q; k++)
                 {
                     for (int l = 0; l < q; l++)
                     {
-                        sum += Z[i, k] * D[k, l] * Z[j, l];
+                        sum = NumOps.Add(sum, NumOps.Multiply(NumOps.Multiply(Z[i, k], D[k, l]), Z[j, l]));
                     }
                 }
-                V[i, j] = sum + (i == j ? sigma2 : 0);
+                V[i, j] = i == j ? NumOps.Add(sum, sigma2) : sum;
             }
         }
 
-        // Invert V (simplified - use Cholesky or iterative for large matrices)
+        // Invert V
         var Vinv = InvertMatrix(V);
 
         // D * Z' * V^(-1) * residuals
-        var u = new Vector<double>(q);
+        var u = new Vector<T>(q);
         for (int k = 0; k < q; k++)
         {
             for (int i = 0; i < n; i++)
             {
-                double vInvRes = 0;
+                T vInvRes = NumOps.Zero;
                 for (int j = 0; j < n; j++)
                 {
-                    vInvRes += Vinv[i, j] * residuals[j];
+                    vInvRes = NumOps.Add(vInvRes, NumOps.Multiply(Vinv[i, j], residuals[j]));
                 }
 
                 for (int l = 0; l < q; l++)
                 {
-                    u[k] += D[k, l] * Z[i, l] * vInvRes;
+                    u[k] = NumOps.Add(u[k], NumOps.Multiply(NumOps.Multiply(D[k, l], Z[i, l]), vInvRes));
                 }
             }
         }
@@ -568,54 +557,54 @@ public class MixedEffectsModel<T> : NonLinearRegressionBase<T>
     /// <summary>
     /// Updates fixed effects using weighted least squares.
     /// </summary>
-    private Vector<double> UpdateFixedEffects(
-        Matrix<double> xData, Vector<double> yData, int[] groupIndices,
-        Dictionary<int, Vector<double>> u, double sigma2, Matrix<double> D)
+    private Vector<T> UpdateFixedEffects(
+        Matrix<T> xData, Vector<T> yData, int[] groupIndices,
+        Dictionary<int, Vector<T>> u, T sigma2, Matrix<T> D)
     {
         int n = xData.Rows;
         int p = _numFeatures + 1;  // +1 for intercept
 
         // X'X
-        var XtX = new Matrix<double>(p, p);
-        var Xty = new Vector<double>(p);
+        var XtX = new Matrix<T>(p, p);
+        var Xty = new Vector<T>(p);
 
         for (int i = 0; i < n; i++)
         {
             int group = groupIndices[i];
-            double yi = yData[i];
+            T yi = yData[i];
 
             // Subtract random effect contribution
             if (u.TryGetValue(group, out var uGroup))
             {
-                yi -= GetRandomEffectContribution(xData, i, uGroup);
+                yi = NumOps.Subtract(yi, GetRandomEffectContribution(xData, i, uGroup));
             }
 
             // Intercept
-            XtX[0, 0] += 1;
-            Xty[0] += yi;
+            XtX[0, 0] = NumOps.Add(XtX[0, 0], NumOps.One);
+            Xty[0] = NumOps.Add(Xty[0], yi);
 
             for (int j = 0; j < _numFeatures; j++)
             {
-                XtX[0, j + 1] += xData[i, j];
-                XtX[j + 1, 0] += xData[i, j];
-                Xty[j + 1] += xData[i, j] * yi;
+                XtX[0, j + 1] = NumOps.Add(XtX[0, j + 1], xData[i, j]);
+                XtX[j + 1, 0] = NumOps.Add(XtX[j + 1, 0], xData[i, j]);
+                Xty[j + 1] = NumOps.Add(Xty[j + 1], NumOps.Multiply(xData[i, j], yi));
 
                 for (int k = 0; k < _numFeatures; k++)
                 {
-                    XtX[j + 1, k + 1] += xData[i, j] * xData[i, k];
+                    XtX[j + 1, k + 1] = NumOps.Add(XtX[j + 1, k + 1], NumOps.Multiply(xData[i, j], xData[i, k]));
                 }
             }
         }
 
         // Solve (X'X)^(-1) * X'y
         var XtXinv = InvertMatrix(XtX);
-        var beta = new Vector<double>(p);
+        var beta = new Vector<T>(p);
 
         for (int j = 0; j < p; j++)
         {
             for (int k = 0; k < p; k++)
             {
-                beta[j] += XtXinv[j, k] * Xty[k];
+                beta[j] = NumOps.Add(beta[j], NumOps.Multiply(XtXinv[j, k], Xty[k]));
             }
         }
 
@@ -625,43 +614,47 @@ public class MixedEffectsModel<T> : NonLinearRegressionBase<T>
     /// <summary>
     /// Updates variance components.
     /// </summary>
-    private (double sigma2, Matrix<double> D) UpdateVarianceComponents(
-        Matrix<double> xData, Vector<double> yData, int[] groupIndices,
-        int[] uniqueGroups, Vector<double> beta, Dictionary<int, Vector<double>> u)
+    private (T sigma2, Matrix<T> D) UpdateVarianceComponents(
+        Matrix<T> xData, Vector<T> yData, int[] groupIndices,
+        int[] uniqueGroups, Vector<T> beta, Dictionary<int, Vector<T>> u)
     {
         int n = xData.Rows;
+        T epsilon = NumOps.FromDouble(1e-10);
 
         // Update residual variance
-        double rss = 0;
+        T rss = NumOps.Zero;
         for (int i = 0; i < n; i++)
         {
             int group = groupIndices[i];
-            double pred = ComputeFixedPrediction(xData, i, beta);
+            T pred = ComputeFixedPrediction(xData, i, beta);
 
             if (u.TryGetValue(group, out var uGroup))
             {
-                pred += GetRandomEffectContribution(xData, i, uGroup);
+                pred = NumOps.Add(pred, GetRandomEffectContribution(xData, i, uGroup));
             }
 
-            double residual = yData[i] - pred;
-            rss += residual * residual;
+            T residual = NumOps.Subtract(yData[i], pred);
+            rss = NumOps.Add(rss, NumOps.Multiply(residual, residual));
         }
 
-        double sigma2;
+        T sigma2;
         if (_options.OptimizationMethod == MixedEffectsOptimization.REML)
         {
             // REML adjustment
-            sigma2 = rss / (n - _numFeatures - 1);
+            sigma2 = NumOps.Divide(rss, NumOps.FromDouble(n - _numFeatures - 1));
         }
         else
         {
-            sigma2 = rss / n;
+            sigma2 = NumOps.Divide(rss, NumOps.FromDouble(n));
         }
 
-        sigma2 = Math.Max(1e-10, sigma2);
+        if (NumOps.LessThan(sigma2, epsilon))
+        {
+            sigma2 = epsilon;
+        }
 
         // Update random effect variance
-        var D = new Matrix<double>(_numRandomEffects, _numRandomEffects);
+        var D = new Matrix<T>(_numRandomEffects, _numRandomEffects);
         int numGroups = 0;
 
         foreach (var group in uniqueGroups)
@@ -671,7 +664,7 @@ public class MixedEffectsModel<T> : NonLinearRegressionBase<T>
                 bool hasNonZero = false;
                 for (int i = 0; i < uGroup.Length; i++)
                 {
-                    if (Math.Abs(uGroup[i]) > 1e-10) { hasNonZero = true; break; }
+                    if (NumOps.GreaterThan(NumOps.Abs(uGroup[i]), epsilon)) { hasNonZero = true; break; }
                 }
 
                 if (hasNonZero)
@@ -681,7 +674,7 @@ public class MixedEffectsModel<T> : NonLinearRegressionBase<T>
                     {
                         for (int j = 0; j < _numRandomEffects; j++)
                         {
-                            D[i, j] += uGroup[i] * uGroup[j];
+                            D[i, j] = NumOps.Add(D[i, j], NumOps.Multiply(uGroup[i], uGroup[j]));
                         }
                     }
                 }
@@ -690,14 +683,15 @@ public class MixedEffectsModel<T> : NonLinearRegressionBase<T>
 
         if (numGroups > 0)
         {
+            T numGroupsT = NumOps.FromDouble(numGroups);
             for (int i = 0; i < _numRandomEffects; i++)
             {
                 for (int j = 0; j < _numRandomEffects; j++)
                 {
-                    D[i, j] /= numGroups;
-                    if (i == j)
+                    D[i, j] = NumOps.Divide(D[i, j], numGroupsT);
+                    if (i == j && NumOps.LessThan(D[i, j], epsilon))
                     {
-                        D[i, j] = Math.Max(1e-10, D[i, j]);
+                        D[i, j] = epsilon;
                     }
                 }
             }
@@ -705,9 +699,10 @@ public class MixedEffectsModel<T> : NonLinearRegressionBase<T>
         else
         {
             // Initialize with small positive values
+            T smallVal = NumOps.FromDouble(0.1);
             for (int i = 0; i < _numRandomEffects; i++)
             {
-                D[i, i] = 0.1;
+                D[i, i] = smallVal;
             }
         }
 
@@ -718,25 +713,25 @@ public class MixedEffectsModel<T> : NonLinearRegressionBase<T>
     /// Computes standard errors of fixed effects.
     /// </summary>
     private Vector<T> ComputeStandardErrors(
-        Matrix<double> xData, Vector<double> yData, int[] groupIndices,
-        int[] uniqueGroups, Vector<double> beta, double sigma2, Matrix<double> D)
+        Matrix<T> xData, Vector<T> yData, int[] groupIndices,
+        int[] uniqueGroups, Vector<T> beta, T sigma2, Matrix<T> D)
     {
         int n = xData.Rows;
         int p = _numFeatures + 1;
 
         // X'X
-        var XtX = new Matrix<double>(p, p);
+        var XtX = new Matrix<T>(p, p);
 
         for (int i = 0; i < n; i++)
         {
-            XtX[0, 0] += 1;
+            XtX[0, 0] = NumOps.Add(XtX[0, 0], NumOps.One);
             for (int j = 0; j < _numFeatures; j++)
             {
-                XtX[0, j + 1] += xData[i, j];
-                XtX[j + 1, 0] += xData[i, j];
+                XtX[0, j + 1] = NumOps.Add(XtX[0, j + 1], xData[i, j]);
+                XtX[j + 1, 0] = NumOps.Add(XtX[j + 1, 0], xData[i, j]);
                 for (int k = 0; k < _numFeatures; k++)
                 {
-                    XtX[j + 1, k + 1] += xData[i, j] * xData[i, k];
+                    XtX[j + 1, k + 1] = NumOps.Add(XtX[j + 1, k + 1], NumOps.Multiply(xData[i, j], xData[i, k]));
                 }
             }
         }
@@ -747,7 +742,7 @@ public class MixedEffectsModel<T> : NonLinearRegressionBase<T>
 
         for (int j = 0; j < p; j++)
         {
-            stdErrors[j] = NumOps.FromDouble(Math.Sqrt(sigma2 * XtXinv[j, j]));
+            stdErrors[j] = NumOps.Sqrt(NumOps.Multiply(sigma2, XtXinv[j, j]));
         }
 
         return stdErrors;
@@ -756,9 +751,9 @@ public class MixedEffectsModel<T> : NonLinearRegressionBase<T>
     /// <summary>
     /// Builds the random effect design matrix for a group.
     /// </summary>
-    private Matrix<double> BuildRandomEffectDesignMatrix(Matrix<double> xData, int[] groupObs)
+    private Matrix<T> BuildRandomEffectDesignMatrix(Matrix<T> xData, int[] groupObs)
     {
-        var Z = new Matrix<double>(groupObs.Length, _numRandomEffects);
+        var Z = new Matrix<T>(groupObs.Length, _numRandomEffects);
 
         for (int i = 0; i < groupObs.Length; i++)
         {
@@ -768,7 +763,7 @@ public class MixedEffectsModel<T> : NonLinearRegressionBase<T>
             // Random intercept
             if (_options.IncludeRandomIntercept)
             {
-                Z[i, col++] = 1.0;
+                Z[i, col++] = NumOps.One;
             }
 
             // Random slopes
@@ -788,12 +783,12 @@ public class MixedEffectsModel<T> : NonLinearRegressionBase<T>
     /// <summary>
     /// Computes the fixed effects prediction for a row of the data matrix.
     /// </summary>
-    private double ComputeFixedPrediction(Matrix<double> xData, int rowIdx, Vector<double> beta)
+    private T ComputeFixedPrediction(Matrix<T> xData, int rowIdx, Vector<T> beta)
     {
-        double pred = beta[0];  // Intercept
+        T pred = beta[0];  // Intercept
         for (int j = 0; j < _numFeatures; j++)
         {
-            pred += xData[rowIdx, j] * beta[j + 1];
+            pred = NumOps.Add(pred, NumOps.Multiply(xData[rowIdx, j], beta[j + 1]));
         }
         return pred;
     }
@@ -801,14 +796,14 @@ public class MixedEffectsModel<T> : NonLinearRegressionBase<T>
     /// <summary>
     /// Gets the random effect contribution for an observation.
     /// </summary>
-    private double GetRandomEffectContribution(Matrix<double> xData, int obsIdx, Vector<double> u)
+    private T GetRandomEffectContribution(Matrix<T> xData, int obsIdx, Vector<T> u)
     {
-        double contrib = 0;
+        T contrib = NumOps.Zero;
         int col = 0;
 
         if (_options.IncludeRandomIntercept)
         {
-            contrib += u[col++];
+            contrib = NumOps.Add(contrib, u[col++]);
         }
 
         if (_options.IncludeRandomSlopes)
@@ -816,32 +811,7 @@ public class MixedEffectsModel<T> : NonLinearRegressionBase<T>
             var slopeFeatures = _options.RandomSlopeFeatures ?? Enumerable.Range(0, _numFeatures).ToArray();
             foreach (int f in slopeFeatures)
             {
-                contrib += u[col++] * xData[obsIdx, f];
-            }
-        }
-
-        return contrib;
-    }
-
-    /// <summary>
-    /// Gets the random effect contribution for a Matrix input row with T-typed random effects.
-    /// </summary>
-    private double GetRandomEffectContribution(Matrix<T> x, int obsIdx, Vector<T> u)
-    {
-        double contrib = 0;
-        int col = 0;
-
-        if (_options.IncludeRandomIntercept)
-        {
-            contrib += NumOps.ToDouble(u[col++]);
-        }
-
-        if (_options.IncludeRandomSlopes)
-        {
-            var slopeFeatures = _options.RandomSlopeFeatures ?? Enumerable.Range(0, _numFeatures).ToArray();
-            foreach (int f in slopeFeatures)
-            {
-                contrib += NumOps.ToDouble(u[col++]) * NumOps.ToDouble(x[obsIdx, f]);
+                contrib = NumOps.Add(contrib, NumOps.Multiply(u[col++], xData[obsIdx, f]));
             }
         }
 
@@ -861,10 +831,11 @@ public class MixedEffectsModel<T> : NonLinearRegressionBase<T>
     /// <summary>
     /// Simple matrix inversion using Gaussian elimination.
     /// </summary>
-    private Matrix<double> InvertMatrix(Matrix<double> A)
+    private Matrix<T> InvertMatrix(Matrix<T> A)
     {
         int n = A.Rows;
-        var augmented = new Matrix<double>(n, 2 * n);
+        var augmented = new Matrix<T>(n, 2 * n);
+        T epsilon = NumOps.FromDouble(1e-10);
 
         // Create augmented matrix [A | I]
         for (int i = 0; i < n; i++)
@@ -873,7 +844,7 @@ public class MixedEffectsModel<T> : NonLinearRegressionBase<T>
             {
                 augmented[i, j] = A[i, j];
             }
-            augmented[i, n + i] = 1;
+            augmented[i, n + i] = NumOps.One;
         }
 
         // Gaussian elimination with partial pivoting
@@ -883,7 +854,7 @@ public class MixedEffectsModel<T> : NonLinearRegressionBase<T>
             int maxRow = col;
             for (int row = col + 1; row < n; row++)
             {
-                if (Math.Abs(augmented[row, col]) > Math.Abs(augmented[maxRow, col]))
+                if (NumOps.GreaterThan(NumOps.Abs(augmented[row, col]), NumOps.Abs(augmented[maxRow, col])))
                 {
                     maxRow = row;
                 }
@@ -896,15 +867,15 @@ public class MixedEffectsModel<T> : NonLinearRegressionBase<T>
             }
 
             // Make pivot 1
-            double pivot = augmented[col, col];
-            if (Math.Abs(pivot) < 1e-10)
+            T pivot = augmented[col, col];
+            if (NumOps.LessThan(NumOps.Abs(pivot), epsilon))
             {
-                pivot = 1e-10;  // Prevent division by zero
+                pivot = epsilon;
             }
 
             for (int j = 0; j < 2 * n; j++)
             {
-                augmented[col, j] /= pivot;
+                augmented[col, j] = NumOps.Divide(augmented[col, j], pivot);
             }
 
             // Eliminate column
@@ -912,17 +883,17 @@ public class MixedEffectsModel<T> : NonLinearRegressionBase<T>
             {
                 if (row != col)
                 {
-                    double factor = augmented[row, col];
+                    T factor = augmented[row, col];
                     for (int j = 0; j < 2 * n; j++)
                     {
-                        augmented[row, j] -= factor * augmented[col, j];
+                        augmented[row, j] = NumOps.Subtract(augmented[row, j], NumOps.Multiply(factor, augmented[col, j]));
                     }
                 }
             }
         }
 
         // Extract inverse
-        var inverse = new Matrix<double>(n, n);
+        var inverse = new Matrix<T>(n, n);
         for (int i = 0; i < n; i++)
         {
             for (int j = 0; j < n; j++)
@@ -934,22 +905,6 @@ public class MixedEffectsModel<T> : NonLinearRegressionBase<T>
         return inverse;
     }
 
-    /// <summary>
-    /// Converts a Matrix of T to a Matrix of double.
-    /// </summary>
-    private Matrix<double> ConvertToDoubleMatrix(Matrix<T> x)
-    {
-        var result = new Matrix<double>(x.Rows, x.Columns);
-        for (int i = 0; i < x.Rows; i++)
-        {
-            for (int j = 0; j < x.Columns; j++)
-            {
-                result[i, j] = NumOps.ToDouble(x[i, j]);
-            }
-        }
-        return result;
-    }
-
     /// <inheritdoc/>
     protected override T PredictSingle(Vector<T> input)
     {
@@ -959,18 +914,18 @@ public class MixedEffectsModel<T> : NonLinearRegressionBase<T>
         }
 
         // Fixed effects prediction only (no group known)
-        double pred = NumOps.ToDouble(_fixedEffects[0]);
+        T pred = _fixedEffects[0];
         for (int j = 0; j < _numFeatures; j++)
         {
-            double x = NumOps.ToDouble(input[j]);
+            T x = input[j];
             if (_options.CenterFeatures && _featureMeans != null)
             {
-                x -= NumOps.ToDouble(_featureMeans[j]);
+                x = NumOps.Subtract(x, _featureMeans[j]);
             }
-            pred += x * NumOps.ToDouble(_fixedEffects[j + 1]);
+            pred = NumOps.Add(pred, NumOps.Multiply(x, _fixedEffects[j + 1]));
         }
 
-        return NumOps.FromDouble(pred);
+        return pred;
     }
 
     /// <inheritdoc/>
@@ -986,7 +941,7 @@ public class MixedEffectsModel<T> : NonLinearRegressionBase<T>
                 { "IncludeRandomIntercept", _options.IncludeRandomIntercept },
                 { "IncludeRandomSlopes", _options.IncludeRandomSlopes },
                 { "OptimizationMethod", _options.OptimizationMethod.ToString() },
-                { "ICC", ComputeICC() }
+                { "ICC", (object)NumOps.ToDouble(ComputeICC()) }
             }
         };
     }
