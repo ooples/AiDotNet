@@ -125,6 +125,14 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     internal AiModelResultOptions<T, TInput, TOutput>? Options { get; private set; }
 
     /// <summary>
+    /// Gets the model, throwing if it has not been set.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">Thrown when Model has not been initialized.</exception>
+    private IFullModel<T, TInput, TOutput> EnsureModel =>
+        Model ?? throw new InvalidOperationException(
+            "Model has not been initialized. Ensure the model was properly built or loaded before calling prediction methods.");
+
+    /// <summary>
     /// Gets the serialized model payload for the facade-hidden <see cref="Model"/>.
     /// </summary>
     /// <remarks>
@@ -2303,7 +2311,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                         // before applying any further inference optimizations.
                         NeuralNetworkBase<T> modelForSequence = model;
                         bool hasMultiLoRATask = !string.IsNullOrWhiteSpace(_multiLoRATask);
-                        if (hasMultiLoRATask)
+                        if (hasMultiLoRATask && _multiLoRATask is not null)
                         {
                             try
                             {
@@ -2312,7 +2320,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                                 int appliedCount = 0;
                                 foreach (var multi in modelForSequence.Layers.OfType<AiDotNet.LoRA.Adapters.MultiLoRAAdapter<T>>())
                                 {
-                                    multi.SetCurrentTask(_multiLoRATask!);
+                                    multi.SetCurrentTask(_multiLoRATask);
                                     appliedCount++;
                                 }
 
@@ -2435,8 +2443,8 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         var normalizedInput = PreprocessingInfo?.IsFitted == true
             ? PreprocessingInfo.TransformFeatures(input)
             : input;
-        var normalizedTarget = PreprocessingInfo?.IsTargetFitted == true
-            ? PreprocessingInfo.TargetPipeline!.Transform(target)
+        var normalizedTarget = PreprocessingInfo?.IsTargetFitted == true && PreprocessingInfo.TargetPipeline is not null
+            ? PreprocessingInfo.TargetPipeline.Transform(target)
             : target;
 
         // Compute gradients on normalized data (gradients are wrt parameters, no denormalization needed)
@@ -3584,7 +3592,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             {
                 var row = inputMatrix.GetRow(i);
                 var input = ConvertVectorToInput(row);
-                var output = Model!.Predict(input);
+                var output = EnsureModel.Predict(input);
                 predictions[i] = ConvertOutputToScalar(output);
             }
             return new Vector<T>(predictions);
@@ -3698,7 +3706,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         return (Vector<T> input) =>
         {
             var modelInput = ConvertVectorToInput(input);
-            var output = Model!.Predict(modelInput);
+            var output = EnsureModel.Predict(modelInput);
             return ConvertOutputToScalar(output);
         };
     }
@@ -3722,7 +3730,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                 // For saliency/attribution, we compute gradient of max output with respect to input
                 // First get the prediction to determine output size
                 var modelInput = ConvertVectorToInput(input);
-                var output = Model!.Predict(modelInput);
+                var output = EnsureModel.Predict(modelInput);
 
                 // Create output gradient: gradient of loss is 1 at predicted class
                 Vector<T> outputGradient;
@@ -3790,7 +3798,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         {
             if (typeof(TInput) == typeof(Tensor<T>))
             {
-                var output = Model!.Predict((TInput)(object)input);
+                var output = EnsureModel.Predict((TInput)(object)input);
                 if (output is Tensor<T> tensorOut)
                     return tensorOut;
                 if (output is Vector<T> vecOut)
@@ -3801,7 +3809,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             // Convert tensor to appropriate input type
             var vector = input.ToVector();
             var modelInput = ConvertVectorToInput(vector);
-            var modelOutput = Model!.Predict(modelInput);
+            var modelOutput = EnsureModel.Predict(modelInput);
 
             if (modelOutput is Tensor<T> outTensor)
                 return outTensor;
@@ -3888,7 +3896,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                 {
                     // Fallback: use prediction
                     var modelInput = ConvertVectorToInput(input);
-                    var modelOutput = Model!.Predict(modelInput);
+                    var modelOutput = EnsureModel.Predict(modelInput);
                     scalar = ConvertOutputToScalar(modelOutput);
                     layerActivs = new[] { input };
                 }
@@ -3898,7 +3906,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
 
             // Fallback: just return output with input as only "activation"
             var fallbackInput = ConvertVectorToInput(input);
-            var fallbackOutput = Model!.Predict(fallbackInput);
+            var fallbackOutput = EnsureModel.Predict(fallbackInput);
             var outputScalar = ConvertOutputToScalar(fallbackOutput);
             return (outputScalar, new[] { input });
         };
@@ -3995,7 +4003,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
 
             // Fallback: return minimal info
             var modelInput = ConvertVectorToInput(input);
-            var modelOutput = Model!.Predict(modelInput);
+            var modelOutput = EnsureModel.Predict(modelInput);
             var outputScalar = ConvertOutputToScalar(modelOutput);
 
             // Return input as activation and identity as weight
@@ -4018,7 +4026,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         {
             var numOps = MathHelper.GetNumericOperations<T>();
             var modelInput = ConvertVectorToInput(input);
-            var output = Model!.Predict(modelInput);
+            var output = EnsureModel.Predict(modelInput);
 
             // If output is a vector, return index of max
             if (output is Vector<T> probs)
@@ -4071,7 +4079,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         return (Vector<T> input) =>
         {
             var modelInput = ConvertVectorToInput(input);
-            var output = Model!.Predict(modelInput);
+            var output = EnsureModel.Predict(modelInput);
 
             if (output is Vector<T> probs)
                 return probs;
@@ -4099,7 +4107,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         return (Vector<T> input) =>
         {
             var modelInput = ConvertVectorToInput(input);
-            var output = Model!.Predict(modelInput);
+            var output = EnsureModel.Predict(modelInput);
 
             if (output is Vector<T> vec)
                 return vec;
@@ -4130,7 +4138,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             {
                 // Get output size from a forward pass
                 var modelInput = ConvertVectorToInput(input);
-                var output = Model!.Predict(modelInput);
+                var output = EnsureModel.Predict(modelInput);
                 var numOps = MathHelper.GetNumericOperations<T>();
 
                 // Create output gradient that's 1 at the specified index, 0 elsewhere

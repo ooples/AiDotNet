@@ -149,8 +149,9 @@ public class CrossValidationResult<T, TInput, TOutput>
         {
             // Silhouette Score
             var silhouetteScores = foldsWithClustering
-                .Where(r => r.ClusteringMetrics!.SilhouetteScore != null)
-                .Select(r => r.ClusteringMetrics!.SilhouetteScore!)
+                .Select(r => r.ClusteringMetrics?.SilhouetteScore)
+                .Where(v => v.HasValue)
+                .Select(v => v.GetValueOrDefault())
                 .ToArray();
             if (silhouetteScores.Any())
             {
@@ -162,8 +163,9 @@ public class CrossValidationResult<T, TInput, TOutput>
 
             // Calinski-Harabasz Index
             var calinskiHarabaszScores = foldsWithClustering
-                .Where(r => r.ClusteringMetrics!.CalinskiHarabaszIndex != null)
-                .Select(r => r.ClusteringMetrics!.CalinskiHarabaszIndex!)
+                .Select(r => r.ClusteringMetrics?.CalinskiHarabaszIndex)
+                .Where(v => v.HasValue)
+                .Select(v => v.GetValueOrDefault())
                 .ToArray();
             if (calinskiHarabaszScores.Any())
             {
@@ -175,8 +177,9 @@ public class CrossValidationResult<T, TInput, TOutput>
 
             // Davies-Bouldin Index
             var daviesBouldinScores = foldsWithClustering
-                .Where(r => r.ClusteringMetrics!.DaviesBouldinIndex != null)
-                .Select(r => r.ClusteringMetrics!.DaviesBouldinIndex!)
+                .Select(r => r.ClusteringMetrics?.DaviesBouldinIndex)
+                .Where(v => v.HasValue)
+                .Select(v => v.GetValueOrDefault())
                 .ToArray();
             if (daviesBouldinScores.Any())
             {
@@ -188,8 +191,9 @@ public class CrossValidationResult<T, TInput, TOutput>
 
             // Adjusted Rand Index
             var adjustedRandIndexScores = foldsWithClustering
-                .Where(r => r.ClusteringMetrics!.AdjustedRandIndex != null)
-                .Select(r => r.ClusteringMetrics!.AdjustedRandIndex!)
+                .Select(r => r.ClusteringMetrics?.AdjustedRandIndex)
+                .Where(v => v.HasValue)
+                .Select(v => v.GetValueOrDefault())
                 .ToArray();
             if (adjustedRandIndexScores.Any())
             {
