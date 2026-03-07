@@ -47,11 +47,10 @@ public static class PreprocessingRegistry<T, TInput>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This is set automatically when you call AiModelBuilder.ConfigurePreprocessing().
-    /// The pipeline is global and thread-safe.
-    /// </para>
-    /// <para><b>For Beginners:</b> You typically don't set this directly.
-    /// Use AiModelBuilder.ConfigurePreprocessing() instead.
+    /// <b>Deprecated:</b> This property is no longer set by <c>AiModelBuilder.ConfigurePreprocessing()</c>.
+    /// The builder now stores the pipeline per-instance and flows it to <c>AiModelResult</c>
+    /// via <c>PreprocessingInfo</c>. This property remains only for backward compatibility
+    /// with external code that sets it directly.
     /// </para>
     /// </remarks>
     public static IDataTransformer<T, TInput, TInput>? Current

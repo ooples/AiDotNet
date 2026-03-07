@@ -119,11 +119,24 @@ public abstract class DocumentNeuralNetworkBase<T> : NeuralNetworkBase<T>
     /// <c>PreprocessingRegistry</c> approach, which caused race conditions when
     /// multiple models were built concurrently.
     /// </para>
-    /// <para><b>For Beginners:</b> If you want to customize how images are processed
-    /// before being fed into this model, set this property. Otherwise, the model
+    /// <para><b>For Beginners:</b> Subclasses can override this in their constructor to
+    /// customize how images are processed before the model processes them. Otherwise, the model
     /// uses its own industry-standard defaults automatically.</para>
     /// </remarks>
     protected IDataTransformer<T, Tensor<T>, Tensor<T>>? PreprocessingTransformer { get; set; }
+
+    /// <summary>
+    /// Gets or sets the instance-level postprocessing transformer for this model.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// When set, <see cref="PostprocessOutput"/> uses this transformer instead of
+    /// <see cref="ApplyDefaultPostprocessing"/>. This replaces the former static
+    /// <c>PostprocessingRegistry</c> approach, which caused race conditions when
+    /// multiple models were built concurrently.
+    /// </para>
+    /// </remarks>
+    protected IDataTransformer<T, Tensor<T>, Tensor<T>>? PostprocessingTransformer { get; set; }
 
     #endregion
 
@@ -238,10 +251,11 @@ public abstract class DocumentNeuralNetworkBase<T> : NeuralNetworkBase<T>
     /// </remarks>
     protected Tensor<T> PostprocessOutput(Tensor<T> modelOutput)
     {
-        // Priority 1: User-configured pipeline via AiModelBuilder
-        if (PostprocessingRegistry<T, Tensor<T>>.IsConfigured)
+        // Priority 1: Instance-level transformer (set explicitly on this model)
+        var transformer = PostprocessingTransformer;
+        if (transformer is not null && transformer.IsFitted)
         {
-            return PostprocessingRegistry<T, Tensor<T>>.Transform(modelOutput);
+            return transformer.Transform(modelOutput);
         }
 
         // Priority 2: Model-specific industry-standard defaults

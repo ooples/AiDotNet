@@ -27,18 +27,24 @@ public class PreprocessingRegistryIntegrationTests
         PreprocessingRegistry<double, Matrix<double>>.Clear();
 #pragma warning restore CS0618
 
-        var x = new Matrix<double>(new double[,]
+        // Each builder gets its own data loader to avoid thread-safety issues
+        // (DataLoaderBase.LoadAsync() is not thread-safe for shared instances)
+        static (Matrix<double> x, Vector<double> y) CreateData()
         {
-            { 1, 2 }, { 3, 4 }, { 5, 6 }, { 7, 8 }, { 9, 10 },
-            { 11, 12 }, { 13, 14 }, { 15, 16 }, { 17, 18 }, { 19, 20 }
-        });
-        var y = new Vector<double>(new double[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 });
-
-        var loader = DataLoaders.FromMatrixVector(x, y);
+            var x = new Matrix<double>(new double[,]
+            {
+                { 1, 2 }, { 3, 4 }, { 5, 6 }, { 7, 8 }, { 9, 10 },
+                { 11, 12 }, { 13, 14 }, { 15, 16 }, { 17, 18 }, { 19, 20 }
+            });
+            var y = new Vector<double>(new double[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 });
+            return (x, y);
+        }
 
         // Act: build two models concurrently, each with different preprocessing
         var task1 = Task.Run(async () =>
         {
+            var (x, y) = CreateData();
+            var loader = DataLoaders.FromMatrixVector(x, y);
             var builder = new AiModelBuilder<double, Matrix<double>, Vector<double>>()
                 .ConfigureDataLoader(loader)
                 .ConfigureModel(new MultipleRegression<double>())
@@ -50,6 +56,8 @@ public class PreprocessingRegistryIntegrationTests
 
         var task2 = Task.Run(async () =>
         {
+            var (x, y) = CreateData();
+            var loader = DataLoaders.FromMatrixVector(x, y);
             var builder = new AiModelBuilder<double, Matrix<double>, Vector<double>>()
                 .ConfigureDataLoader(loader)
                 .ConfigureModel(new MultipleRegression<double>())
