@@ -491,7 +491,7 @@ public class MelSpectrogram<T>
                 sum = NumOps.Add(sum, filterbank.Data.Span[mel * numFreqs + f]);
             }
 
-            if (NumOps.ToDouble(sum) > 1e-8)
+            if (NumOps.GreaterThan(sum, NumOps.FromDouble(1e-8)))
             {
                 for (int f = 0; f < numFreqs; f++)
                 {

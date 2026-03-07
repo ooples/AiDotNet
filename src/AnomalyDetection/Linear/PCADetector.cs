@@ -287,7 +287,7 @@ public class PCADetector<T> : AnomalyDetectorBase<T>
                 }
                 norm = NumOps.Sqrt(norm);
 
-                if (NumOps.ToDouble(norm) < 1e-10) break;
+                if (NumOps.LessThan(norm, NumOps.FromDouble(1e-10))) break;
 
                 for (int j = 0; j < d; j++)
                 {

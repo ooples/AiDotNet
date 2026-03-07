@@ -129,7 +129,7 @@ public class AUCROCMetric<T> : IProbabilisticClassificationMetric<T>
             bool hasPos = false, hasNeg = false;
             for (int i = 0; i < n; i++)
             {
-                if (NumOps.ToDouble(classLabels[i]) > 0.5) hasPos = true;
+                if (NumOps.GreaterThan(classLabels[i], NumOps.FromDouble(0.5))) hasPos = true;
                 else hasNeg = true;
             }
 

@@ -454,7 +454,7 @@ public class M4DatasetLoader<T> : DataLoaderBase<T>
             var absError = NumOps.Abs(NumOps.Subtract(forecast[i], actual[i]));
             var denominator = NumOps.Add(NumOps.Abs(forecast[i]), NumOps.Abs(actual[i]));
 
-            if (NumOps.ToDouble(denominator) > 1e-10)
+            if (NumOps.GreaterThan(denominator, NumOps.FromDouble(1e-10)))
             {
                 sum = NumOps.Add(sum, NumOps.Divide(absError, denominator));
             }
@@ -506,7 +506,7 @@ public class M4DatasetLoader<T> : DataLoaderBase<T>
         var mae = NumOps.Divide(maeSum, NumOps.FromDouble(forecast.Count));
 
         // MASE = MAE / scaling factor
-        if (NumOps.ToDouble(scalingFactor) < 1e-10)
+        if (NumOps.LessThan(scalingFactor, NumOps.FromDouble(1e-10)))
             return NumOps.MaxValue;
 
         return NumOps.Divide(mae, scalingFactor);

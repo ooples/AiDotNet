@@ -337,7 +337,7 @@ public class OMGLLaVA<T> : NeuralNetworkBase<T>, IReferringSegmentation<T>
         double area = 0, confSum = 0;
         for (int y = 0; y < h; y++)
             for (int x = 0; x < w; x++)
-                if (NumOps.ToDouble(binaryMask[y, x]) > 0.5)
+                if (NumOps.GreaterThan(binaryMask[y, x], NumOps.FromDouble(0.5)))
                 {
                     area++; confSum += NumOps.ToDouble(probs[y, x]);
                     if (y < minY) minY = y; if (y > maxY) maxY = y;

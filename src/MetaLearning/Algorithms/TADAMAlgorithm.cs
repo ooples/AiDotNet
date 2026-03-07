@@ -289,7 +289,7 @@ public class TADAMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
                 NumOps.Multiply(gradients[i], NumOps.FromDouble(learningRate)));
 
             // Ensure metric scale stays positive
-            if (NumOps.ToDouble(_metricScale[i]) < 1e-6)
+            if (NumOps.LessThan(_metricScale[i], NumOps.FromDouble(1e-6)))
             {
                 _metricScale[i] = NumOps.FromDouble(1e-6);
             }

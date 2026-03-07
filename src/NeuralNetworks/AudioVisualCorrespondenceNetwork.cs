@@ -498,7 +498,7 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
                     var visualNorm = VectorHelper.L2Norm(visualEmb);
                     T normProduct = NumOps.Multiply(audioNorm, visualNorm);
 
-                    if (NumOps.ToDouble(normProduct) > 1e-8)
+                    if (NumOps.GreaterThan(normProduct, NumOps.FromDouble(1e-8)))
                     {
                         // Gradient w.r.t. audio embedding
                         var audioGrad = new Vector<T>(_embeddingDimension);

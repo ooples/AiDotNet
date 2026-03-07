@@ -369,7 +369,7 @@ public class TCAVExplainer<T> : IGPUAcceleratedExplainer<T>
                 score += NumOps.ToDouble(X[i, j]) * NumOps.ToDouble(weights[j]);
             }
             int predicted = score > 0.5 ? 1 : 0;
-            int actual = NumOps.ToDouble(y[i]) > 0.5 ? 1 : 0;
+            int actual = NumOps.GreaterThan(y[i], NumOps.FromDouble(0.5)) ? 1 : 0;
             if (predicted == actual) correct++;
         }
         double accuracy = (double)correct / numTotal;

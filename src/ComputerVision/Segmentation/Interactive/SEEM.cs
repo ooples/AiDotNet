@@ -410,7 +410,7 @@ public class SEEM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
         for (int i = 0; i < numPts; i++)
         {
             double px = NumOps.ToDouble(points[i, 0]), py = NumOps.ToDouble(points[i, 1]);
-            double sign = NumOps.ToDouble(labels[i]) >= 0.5 ? 1.0 : -1.0;
+            double sign = !NumOps.LessThan(labels[i], NumOps.FromDouble(0.5)) ? 1.0 : -1.0;
             var g = Common.SegmentationTensorOps.GaussianMask<T>(h, w, px, py, sigma);
             for (int j = 0; j < h * w; j++)
                 attention.Data.Span[j] = NumOps.Add(attention.Data.Span[j], NumOps.FromDouble(sign * NumOps.ToDouble(g.Data.Span[j])));

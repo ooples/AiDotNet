@@ -89,14 +89,14 @@ public class MLkNNClassifier<T> : MultiLabelClassifierBase<T>
                 int neighborCount = 0;
                 foreach (int neighborIdx in neighbors)
                 {
-                    if (NumOps.ToDouble(labels[neighborIdx, l]) > 0.5)
+                    if (NumOps.GreaterThan(labels[neighborIdx, l], NumOps.FromDouble(0.5)))
                     {
                         neighborCount++;
                     }
                 }
 
                 // Check if sample i has label l
-                bool hasLabel = NumOps.ToDouble(labels[i, l]) > 0.5;
+                bool hasLabel = NumOps.GreaterThan(labels[i, l], NumOps.FromDouble(0.5));
                 if (hasLabel)
                 {
                     countPos[l, neighborCount]++;
@@ -146,7 +146,7 @@ public class MLkNNClassifier<T> : MultiLabelClassifierBase<T>
                 int neighborCount = 0;
                 foreach (int neighborIdx in neighbors)
                 {
-                    if (NumOps.ToDouble(_trainLabels![neighborIdx, l]) > 0.5)
+                    if (NumOps.GreaterThan(_trainLabels![neighborIdx, l], NumOps.FromDouble(0.5)))
                     {
                         neighborCount++;
                     }

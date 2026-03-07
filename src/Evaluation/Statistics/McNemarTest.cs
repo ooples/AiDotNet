@@ -54,8 +54,8 @@ public class McNemarTest<T> : ITwoSampleTest<T>
         int b = 0, c = 0;
         for (int i = 0; i < n; i++)
         {
-            bool aCorrect = NumOps.ToDouble(correctA[i]) >= 0.5;
-            bool bCorrect = NumOps.ToDouble(correctB[i]) >= 0.5;
+            bool aCorrect = !NumOps.LessThan(correctA[i], NumOps.FromDouble(0.5));
+            bool bCorrect = !NumOps.LessThan(correctB[i], NumOps.FromDouble(0.5));
 
             if (aCorrect && !bCorrect) b++;
             else if (!aCorrect && bCorrect) c++;

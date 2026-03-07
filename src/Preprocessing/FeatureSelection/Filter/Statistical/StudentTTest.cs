@@ -74,7 +74,7 @@ public class StudentTTest<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
         for (int i = 0; i < n; i++)
         {
-            if (NumOps.ToDouble(target[i]) < 0.5)
+            if (NumOps.LessThan(target[i], NumOps.FromDouble(0.5)))
                 group0.Add(i);
             else
                 group1.Add(i);

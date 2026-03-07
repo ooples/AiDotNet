@@ -163,7 +163,7 @@ namespace AiDotNet.ReinforcementLearning.Policies
             int discreteActionIndex = 0;
             for (int i = 0; i < _discreteActionSize; i++)
             {
-                if (NumOps.ToDouble(discreteAction[i]) > 0.5)
+                if (NumOps.GreaterThan(discreteAction[i], NumOps.FromDouble(0.5)))
                 {
                     discreteActionIndex = i;
                     break;

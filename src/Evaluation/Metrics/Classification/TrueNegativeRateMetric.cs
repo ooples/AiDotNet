@@ -40,8 +40,8 @@ public class TrueNegativeRateMetric<T> : IClassificationMetric<T>
         int tn = 0, fp = 0;
         for (int i = 0; i < predictions.Length; i++)
         {
-            bool pred = NumOps.ToDouble(predictions[i]) >= 0.5;
-            bool actual = NumOps.ToDouble(actuals[i]) >= 0.5;
+            bool pred = !NumOps.LessThan(predictions[i], NumOps.FromDouble(0.5));
+            bool actual = !NumOps.LessThan(actuals[i], NumOps.FromDouble(0.5));
 
             if (!pred && !actual) tn++;
             else if (pred && !actual) fp++;

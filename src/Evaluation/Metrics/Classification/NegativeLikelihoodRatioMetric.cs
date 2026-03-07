@@ -43,8 +43,8 @@ public class NegativeLikelihoodRatioMetric<T> : IClassificationMetric<T>
         int tp = 0, tn = 0, fp = 0, fn = 0;
         for (int i = 0; i < predictions.Length; i++)
         {
-            bool pred = NumOps.ToDouble(predictions[i]) >= 0.5;
-            bool actual = NumOps.ToDouble(actuals[i]) >= 0.5;
+            bool pred = !NumOps.LessThan(predictions[i], NumOps.FromDouble(0.5));
+            bool actual = !NumOps.LessThan(actuals[i], NumOps.FromDouble(0.5));
 
             if (pred && actual) tp++;
             else if (!pred && !actual) tn++;

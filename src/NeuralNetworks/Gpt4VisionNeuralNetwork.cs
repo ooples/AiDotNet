@@ -1440,7 +1440,7 @@ For each category, indicate if it's flagged (YES/NO) and confidence level (HIGH/
         }
 
         T range = NumOps.Subtract(max, min);
-        if (NumOps.ToDouble(range) < 1e-8)
+        if (NumOps.LessThan(range, NumOps.FromDouble(1e-8)))
         {
             return tensor;
         }

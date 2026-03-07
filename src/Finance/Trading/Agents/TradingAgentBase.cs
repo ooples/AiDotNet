@@ -430,7 +430,7 @@ public abstract class TradingAgentBase<T> : ReinforcementLearningAgentBase<T>, I
         T variance = NumOps.Divide(sumSquaredDiff, NumOps.FromDouble(returns.Count - 1));
         T stdDev = NumOps.FromDouble(Math.Sqrt(NumOps.ToDouble(variance)));
 
-        if (NumOps.ToDouble(stdDev) < 1e-10) return NumOps.Zero;
+        if (NumOps.LessThan(stdDev, NumOps.FromDouble(1e-10))) return NumOps.Zero;
 
         // Calculate Sharpe ratio (annualized, assuming risk-free rate = 0)
         T riskFreeRate = NumOps.FromDouble(TradingOptions.RiskFreeRate / 252.0); // Daily rate
@@ -557,7 +557,7 @@ public abstract class TradingAgentBase<T> : ReinforcementLearningAgentBase<T>, I
         }
 
         // Further scale based on risk budget if needed
-        T riskMultiplier = NumOps.ToDouble(riskBudget) < 1.0 ? riskBudget : NumOps.One;
+        T riskMultiplier = NumOps.LessThan(riskBudget, NumOps.One) ? riskBudget : NumOps.One;
         for (int i = 0; i < constrainedAction.Length; i++)
         {
             constrainedAction[i] = NumOps.Multiply(constrainedAction[i], riskMultiplier);

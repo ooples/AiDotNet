@@ -667,7 +667,7 @@ public class ProtoNetsAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
             T norm = NumOps.FromDouble(Math.Sqrt(NumOps.ToDouble(sumSquares)));
 
             // Normalize if norm is not zero
-            if (NumOps.ToDouble(norm) > 1e-8)
+            if (NumOps.GreaterThan(norm, NumOps.FromDouble(1e-8)))
             {
                 for (int j = 0; j < features.Columns; j++)
                 {

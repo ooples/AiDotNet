@@ -41,7 +41,7 @@ public class PrevalenceMetric<T> : IClassificationMetric<T>
         int positives = 0;
         for (int i = 0; i < actuals.Length; i++)
         {
-            if (NumOps.ToDouble(actuals[i]) >= 0.5) positives++;
+            if (!NumOps.LessThan(actuals[i], NumOps.FromDouble(0.5))) positives++;
         }
 
         return NumOps.FromDouble((double)positives / actuals.Length);
