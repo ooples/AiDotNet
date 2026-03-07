@@ -379,7 +379,7 @@ public class DBSCAN<T> : ClusteringBase<T>
     public override Vector<T> FitPredict(Matrix<T> x)
     {
         Train(x);
-        return Labels!;
+        return Labels ?? new Vector<T>(0);
     }
 
     /// <inheritdoc />
