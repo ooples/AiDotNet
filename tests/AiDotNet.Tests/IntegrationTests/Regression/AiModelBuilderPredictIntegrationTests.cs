@@ -41,6 +41,12 @@ public class AiModelBuilderPredictIntegrationTests
             .ConfigureModel(model)
             .BuildAsync();
 
+        // Verify the optimizer actually selected a feature subset (not identity)
+        var selectedIndices = result.OptimizationResult?.SelectedFeatureIndices;
+        Assert.NotNull(selectedIndices);
+        Assert.True(selectedIndices.Count > 0 && selectedIndices.Count <= 5,
+            $"Optimizer should select between 1 and 5 features, got {selectedIndices.Count}");
+
         // Create new data with ALL original features (same column count as training input)
         var newData = CreateMatrix(new double[,]
         {
