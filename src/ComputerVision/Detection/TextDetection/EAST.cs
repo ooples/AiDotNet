@@ -109,7 +109,7 @@ public class EAST<T> : TextDetectorBase<T>
     protected override List<Tensor<T>> Forward(Tensor<T> input)
     {
         // Extract multi-scale backbone features
-        var features = Backbone!.ExtractFeatures(input);
+        var features = EnsureBackbone.ExtractFeatures(input);
 
         // Feature merging (U-Net style)
         var x = _mergeConv1.Forward(features[^1]);
@@ -327,7 +327,7 @@ public class EAST<T> : TextDetectorBase<T>
         }
 
         // Read component weights
-        Backbone!.ReadParameters(reader);
+        EnsureBackbone.ReadParameters(reader);
         _mergeConv1.ReadParameters(reader);
         _mergeConv2.ReadParameters(reader);
         _mergeConv3.ReadParameters(reader);
@@ -350,7 +350,7 @@ public class EAST<T> : TextDetectorBase<T>
         writer.Write(_hiddenDim);
 
         // Write component weights
-        Backbone!.WriteParameters(writer);
+        EnsureBackbone.WriteParameters(writer);
         _mergeConv1.WriteParameters(writer);
         _mergeConv2.WriteParameters(writer);
         _mergeConv3.WriteParameters(writer);
