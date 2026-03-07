@@ -2110,8 +2110,11 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         {
             // Standard supervised learning path: split FIRST, then fit preprocessing on training only.
             // This prevents data leakage from test/validation sets into the preprocessing pipeline.
+            // Disable shuffling for time-series tasks to preserve chronological ordering.
+            bool shuffleBeforeSplit = !(_autoMLOptions?.TaskFamilyOverride == AutoMLTaskFamily.TimeSeriesForecasting
+                || _autoMLOptions?.TaskFamilyOverride == AutoMLTaskFamily.TimeSeriesAnomalyDetection);
             (XTrain, yTrain, XVal, yVal, XTest, yTest) = DataSplitter.Split<T, TInput, TOutput>(
-                preparedX, preparedY, trainRatio: 0.7, validationRatio: 0.15, shuffle: true);
+                preparedX, preparedY, trainRatio: 0.7, validationRatio: 0.15, shuffle: shuffleBeforeSplit);
 
             // Apply data preparation (SMOTE, outlier removal, etc.) to training data ONLY after split.
             // Applying before split would leak test/validation information via synthetic samples.

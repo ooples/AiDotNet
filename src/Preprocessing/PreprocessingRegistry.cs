@@ -7,16 +7,11 @@ namespace AiDotNet.Preprocessing;
 /// </summary>
 /// <remarks>
 /// <para>
-/// PreprocessingRegistry provides a static accessor for the active preprocessing pipeline.
-/// It is kept in sync by <c>AiModelBuilder.ConfigurePreprocessing()</c> so that components
-/// outside the builder (e.g., <c>DocumentNeuralNetworkBase</c>) can access the current pipeline
-/// without holding a direct reference.
-/// </para>
-/// <para>
-/// <b>Thread safety:</b> The static <see cref="Current"/> property is guarded by a lock, but
-/// concurrent builders will overwrite each other's pipeline. For concurrent builds, each builder
-/// stores its own <c>_preprocessingPipeline</c> instance and passes it directly to
-/// <c>PreprocessingInfo</c>; the registry is a convenience accessor, not the authoritative source.
+/// <b>WARNING:</b> This registry is a process-global singleton and is NOT safe for concurrent
+/// builds. Multiple <c>AiModelBuilder</c> instances will overwrite each other's pipeline.
+/// The authoritative pipeline for each build is the instance-level <c>_preprocessingPipeline</c>
+/// stored in <c>AiModelBuilder</c> and passed to <c>PreprocessingInfo</c> in the result.
+/// This registry exists only for backward compatibility with components that need static access.
 /// </para>
 /// <para><b>For Beginners:</b> You don't need to interact with this directly — just use AiModelBuilder:
 /// <code>
