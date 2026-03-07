@@ -323,7 +323,7 @@ public class DAGMALinear<T> : ContinuousOptimizationBase<T>
                 for (int j = 0; j < d; j++)
                     (LU[k, j], LU[maxRow, j]) = (LU[maxRow, j], LU[k, j]);
 
-            if (Math.Abs(NumOps.ToDouble(LU[k, k])) < 1e-15)
+            if (NumOps.LessThan(NumOps.Abs(LU[k, k]), NumOps.FromDouble(1e-15)))
                 return double.NegativeInfinity; // Singular
 
             for (int i = k + 1; i < d; i++)
@@ -360,7 +360,7 @@ public class DAGMALinear<T> : ContinuousOptimizationBase<T>
                 if (Math.Abs(NumOps.ToDouble(aug[row, col])) > Math.Abs(NumOps.ToDouble(aug[maxRow, col])))
                     maxRow = row;
 
-            if (Math.Abs(NumOps.ToDouble(aug[maxRow, col])) < 1e-12)
+            if (NumOps.LessThan(NumOps.Abs(aug[maxRow, col]), NumOps.FromDouble(1e-12)))
                 return null;
 
             if (maxRow != col)
