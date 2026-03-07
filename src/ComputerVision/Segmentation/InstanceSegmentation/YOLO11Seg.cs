@@ -374,7 +374,7 @@ public class YOLO11Seg<T> : NeuralNetworkBase<T>, IInstanceSegmentation<T>
                 {
                     for (int col = 0; col < w; col++)
                     {
-                        if (Math.Abs(NumOps.ToDouble(labelMap[row, col]) - comp) < 0.5)
+                        if (NumOps.LessThan(NumOps.Abs(NumOps.Subtract(labelMap[row, col], NumOps.FromDouble(comp))), NumOps.FromDouble(0.5)))
                         {
                             mask[row, col] = NumOps.FromDouble(1.0);
                             area++;

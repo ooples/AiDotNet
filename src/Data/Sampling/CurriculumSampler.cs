@@ -163,7 +163,7 @@ public class CurriculumSampler<T> : EpochAdaptiveSamplerBase<T>
 
             for (int i = 0; i < _difficulties.Length; i++)
             {
-                if (Math.Abs(NumOps.ToDouble(_difficulties[i]) - minDifficulty) < 1e-9)
+                if (NumOps.LessThan(NumOps.Abs(NumOps.Subtract(_difficulties[i], NumOps.FromDouble(minDifficulty))), NumOps.FromDouble(1e-9)))
                 {
                     eligibleIndices.Add(i);
                 }
