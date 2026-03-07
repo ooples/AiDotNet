@@ -387,9 +387,6 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                 new StandardScaler<T>());
         }
 
-        // Set global registry so all models automatically use this pipeline
-        PreprocessingRegistry<T, TInput>.Current = _preprocessingPipeline;
-
         return this;
     }
 
@@ -430,9 +427,6 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             _preprocessingPipeline.Add((IDataTransformer<T, TInput, TInput>)(object)
                 new StandardScaler<T>());
         }
-
-        // Set global registry so all models automatically use this pipeline
-        PreprocessingRegistry<T, TInput>.Current = _preprocessingPipeline;
 
         return this;
     }
@@ -475,9 +469,6 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             _preprocessingPipeline.Add((IDataTransformer<T, TInput, TInput>)(object)
                 new StandardScaler<T>());
         }
-
-        // Set global registry so all models automatically use this pipeline
-        PreprocessingRegistry<T, TInput>.Current = _preprocessingPipeline;
 
         return this;
     }
@@ -2037,27 +2028,44 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             }
         }
 
-        // Step 2: Apply preprocessing pipeline (scaling, encoding, etc.) - doesn't change row count
-        if (_preprocessingPipeline is not null)
-        {
-            preprocessedX = _preprocessingPipeline.FitTransform(preparedX);
-            preprocessedY = preparedY;
+        // Step 2: Split and preprocess
+        // CRITICAL: To prevent data leakage, the preprocessing pipeline must be fitted ONLY on
+        // training data. Fitting on the full dataset (before splitting) leaks test/validation
+        // statistics (mean, std dev, etc.) into the training pipeline, artificially inflating
+        // metrics and producing overly-optimistic results.
+        //
+        // For federated learning with partitioned client data, ALL data is training data
+        // (no split), so FitTransform on everything is correct.
 
-            // Create PreprocessingInfo with fitted pipeline
-            preprocessingInfo = new PreprocessingInfo<T, TInput, TOutput>(
-                _preprocessingPipeline,
-                targetPipeline: null
-            );
-        }
-        else
-        {
-            // No preprocessing pipeline configured - pass through
-            preprocessedX = preparedX;
-            preprocessedY = preparedY;
-        }
+        TInput XTrain;
+        TOutput yTrain;
+        // These generic types are always value types (Matrix<T>, Vector<T>) at runtime,
+        // so default produces valid zero-initialized values, not null.
+#pragma warning disable CS8600, CS8604 // Generic type defaults - T is always a value type at runtime
+        TInput XVal = default;
+        TOutput yVal = default;
+        TInput XTest = default;
+        TOutput yTest = default;
 
         if (usePartitionedFederatedData)
         {
+            // Federated path: all data is training data — FitTransform on everything is correct.
+            if (_preprocessingPipeline is not null)
+            {
+                preprocessedX = _preprocessingPipeline.FitTransform(preparedX);
+                preprocessedY = preparedY;
+
+                preprocessingInfo = new PreprocessingInfo<T, TInput, TOutput>(
+                    _preprocessingPipeline,
+                    targetPipeline: null
+                );
+            }
+            else
+            {
+                preprocessedX = preparedX;
+                preprocessedY = preparedY;
+            }
+
             var preprocessedMatrix = ConversionsHelper.ConvertToMatrix<T, TInput>(preprocessedX);
             var preprocessedVector = ConversionsHelper.ConvertToVector<T, TOutput>(preprocessedY);
 
@@ -2076,20 +2084,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                     "If you are using outlier removal, filtering, or other preprocessing that drops/reorders rows, disable it for partitioned federated learning or " +
                     "apply preprocessing at the per-client level before aggregating client datasets.");
             }
-        }
 
-        TInput XTrain;
-        TOutput yTrain;
-        // These generic types are always value types (Matrix<T>, Vector<T>) at runtime,
-        // so default produces valid zero-initialized values, not null.
-#pragma warning disable CS8600, CS8604 // Generic type defaults - T is always a value type at runtime
-        TInput XVal = default;
-        TOutput yVal = default;
-        TInput XTest = default;
-        TOutput yTest = default;
-
-        if (usePartitionedFederatedData)
-        {
             // For natural per-client datasets (e.g., LEAF), avoid re-splitting at the sample level so that we can
             // preserve the client boundaries through preprocessing.
             XTrain = preprocessedX;
@@ -2097,9 +2092,34 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         }
         else
         {
-            // Standard supervised learning path: split into train/validation/test.
+            // Standard supervised learning path: split FIRST, then fit preprocessing on training only.
+            // This prevents data leakage from test/validation sets into the preprocessing pipeline.
             (XTrain, yTrain, XVal, yVal, XTest, yTest) = DataSplitter.Split<T, TInput, TOutput>(
-                preprocessedX, preprocessedY, trainRatio: 0.7, validationRatio: 0.15, shuffle: true);
+                preparedX, preparedY, trainRatio: 0.7, validationRatio: 0.15, shuffle: true);
+
+            if (_preprocessingPipeline is not null)
+            {
+                // FitTransform on training data only — learns statistics from training set
+                XTrain = _preprocessingPipeline.FitTransform(XTrain);
+
+                // Transform (NOT FitTransform) validation and test data using training-fitted pipeline
+                XVal = _preprocessingPipeline.Transform(XVal);
+                XTest = _preprocessingPipeline.Transform(XTest);
+
+                preprocessingInfo = new PreprocessingInfo<T, TInput, TOutput>(
+                    _preprocessingPipeline,
+                    targetPipeline: null
+                );
+
+                preprocessedX = XTrain; // For downstream references
+                preprocessedY = yTrain;
+            }
+            else
+            {
+                // No preprocessing pipeline configured - pass through
+                preprocessedX = preparedX;
+                preprocessedY = preparedY;
+            }
         }
 
         // Cross-validation can be performed using the new evaluation framework via AiModelResult.
