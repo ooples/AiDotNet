@@ -1,6 +1,7 @@
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -267,7 +268,7 @@ public class TimeEmbeddingLayer<T> : LayerBase<T>
         _maxTimestep = NumOps.FromDouble(maxTimestep);
 
         // Initialize weights using Xavier initialization
-        // Use RandomHelper, NEVER new Random() directly
+        // Use RandomHelper, NEVER RandomHelper.CreateSecureRandom() directly
         var random = RandomHelper.CreateSeededRandom(42);
         double scale1 = Math.Sqrt(2.0 / (embeddingDim + outputDim));
         double scale2 = Math.Sqrt(2.0 / (outputDim + outputDim));

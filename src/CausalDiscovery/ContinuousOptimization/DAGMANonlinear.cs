@@ -1,5 +1,6 @@
 using AiDotNet.Enums;
 using AiDotNet.Models.Options;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.CausalDiscovery.ContinuousOptimization;
 
@@ -156,7 +157,7 @@ public class DAGMANonlinear<T> : ContinuousOptimizationBase<T>
 
     private void InitializeMLPParameters(int d, int h)
     {
-        var rng = new Random(_seed);
+        var rng = RandomHelper.CreateSeededRandom(_seed);
         double scale = Math.Sqrt(2.0 / d);
 
         _W1 = new Matrix<T>[d]; _b1 = new double[d][];

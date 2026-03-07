@@ -99,7 +99,7 @@ public class BucketingAggregationStrategy<T> : ParameterDictionaryAggregationStr
 
         // Shuffle client IDs with round-varying seed to ensure different permutations each round.
         var clientIds = clientModels.Keys.ToList();
-        var rng = new Random(_seed + _roundCounter);
+        var rng = RandomHelper.CreateSeededRandom(_seed + _roundCounter);
         _roundCounter++;
         for (int i = clientIds.Count - 1; i > 0; i--)
         {

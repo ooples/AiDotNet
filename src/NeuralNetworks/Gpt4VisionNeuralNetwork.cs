@@ -12,6 +12,7 @@ using AiDotNet.Tokenization.Interfaces;
 using Microsoft.ML.OnnxRuntime;
 using AiDotNet.Validation;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.NeuralNetworks;
 
@@ -1332,8 +1333,8 @@ For each category, indicate if it's flagged (YES/NO) and confidence level (HIGH/
 
     private int SampleFromDistribution(Vector<T> probs)
     {
-        // Use thread-safe random instead of creating new Random() per call
-        // (new Random() produces identical sequences when called rapidly)
+        // Use thread-safe random instead of creating RandomHelper.CreateSecureRandom() per call
+        // (RandomHelper.CreateSecureRandom() produces identical sequences when called rapidly)
         double random = Tensors.Helpers.RandomHelper.ThreadSafeRandom.NextDouble();
         double cumulative = 0;
 

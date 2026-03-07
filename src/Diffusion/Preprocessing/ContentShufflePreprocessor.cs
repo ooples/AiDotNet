@@ -1,5 +1,6 @@
 using AiDotNet.Diffusion.Control;
 using AiDotNet.Models;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Diffusion.Preprocessing;
 
@@ -86,7 +87,7 @@ public class ContentShufflePreprocessor<T> : DiffusionPreprocessorBase<T>
 
             // Sort by intensity then apply local shuffling within similar groups
             Array.Sort(blockMeans, (a, bm) => a.mean.CompareTo(bm.mean));
-            var rng = new Random(_seed + b);
+            var rng = RandomHelper.CreateSeededRandom(_seed + b);
 
             // Local shuffle within groups of similar blocks
             int groupSize = Math.Max(2, totalBlocks / 8);
