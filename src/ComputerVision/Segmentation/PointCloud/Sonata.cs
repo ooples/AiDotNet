@@ -307,7 +307,7 @@ public class Sonata<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
     /// </remarks>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => _useNativeMode
         ? new Sonata<T>(Architecture, _optimizer, LossFunction, _numClasses, _modelSize, _dropRate, _options)
-        : new Sonata<T>(Architecture, _onnxModelPath!, _numClasses, _modelSize, _options);
+        : new Sonata<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _modelSize, _options);
 
     /// <summary>
     /// Releases managed resources including the ONNX inference session.

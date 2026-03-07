@@ -313,7 +313,7 @@ public class FastSAM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
     /// </remarks>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => _useNativeMode
         ? new FastSAM<T>(Architecture, _optimizer, LossFunction, _numClasses, _dropRate, _options)
-        : new FastSAM<T>(Architecture, _onnxModelPath!, _numClasses, _options);
+        : new FastSAM<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _options);
 
     /// <summary>
     /// Releases managed resources including the ONNX inference session.

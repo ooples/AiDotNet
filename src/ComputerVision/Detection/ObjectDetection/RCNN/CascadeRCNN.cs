@@ -164,14 +164,24 @@ public class CascadeRCNN<T> : ObjectDetectorBase<T>
             var stage = _stages[stageIdx];
             (classLogits, boxDeltas) = stage.Forward(flattenedFeatures);
 
+            if (boxDeltas is null)
+            {
+                throw new InvalidOperationException("Cascade stage did not produce box deltas.");
+            }
+
             // Refine boxes for next stage (except for last stage)
             if (stageIdx < _numStages - 1)
             {
-                currentBoxes = RefineBoxes(currentBoxes, boxDeltas!, imageWidth, imageHeight);
+                currentBoxes = RefineBoxes(currentBoxes, boxDeltas, imageWidth, imageHeight);
             }
         }
 
-        return new List<Tensor<T>> { classLogits!, boxDeltas!, currentBoxes };
+        if (classLogits is null || boxDeltas is null)
+        {
+            throw new InvalidOperationException("Cascade RCNN requires at least one stage to produce outputs.");
+        }
+
+        return new List<Tensor<T>> { classLogits, boxDeltas, currentBoxes };
     }
 
     /// <inheritdoc/>
