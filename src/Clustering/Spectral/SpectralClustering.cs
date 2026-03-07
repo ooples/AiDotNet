@@ -40,8 +40,8 @@ public class SpectralClustering<T> : ClusteringBase<T>
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
-    private double[,]? _embedding;
-    private double[,]? _affinityMatrix;
+    private T[,]? _embedding;
+    private T[,]? _affinityMatrix;
 
     /// <summary>
     /// Initializes a new SpectralClustering instance.
@@ -57,12 +57,12 @@ public class SpectralClustering<T> : ClusteringBase<T>
     /// <summary>
     /// Gets the spectral embedding.
     /// </summary>
-    public double[,]? Embedding => _embedding;
+    public T[,]? Embedding => _embedding;
 
     /// <summary>
     /// Gets the affinity matrix.
     /// </summary>
-    public double[,]? AffinityMatrix => _affinityMatrix;
+    public T[,]? AffinityMatrix => _affinityMatrix;
 
     /// <inheritdoc />
     protected override ModelType GetModelType() => ModelType.Clustering;
@@ -127,10 +127,9 @@ public class SpectralClustering<T> : ClusteringBase<T>
         IsTrained = true;
     }
 
-    private double[,] BuildAffinityMatrix(Matrix<T> x)
+    private T[,] BuildAffinityMatrix(Matrix<T> x)
     {
         int n = x.Rows;
-        var affinity = new double[n, n];
 
         switch (_options.Affinity)
         {
@@ -142,11 +141,12 @@ public class SpectralClustering<T> : ClusteringBase<T>
 
             case AffinityType.Precomputed:
                 // Assume x is the affinity matrix
+                var affinity = new T[n, n];
                 for (int i = 0; i < n; i++)
                 {
                     for (int j = 0; j < n; j++)
                     {
-                        affinity[i, j] = NumOps.ToDouble(x[i, j]);
+                        affinity[i, j] = x[i, j];
                     }
                 }
                 return affinity;
@@ -156,26 +156,26 @@ public class SpectralClustering<T> : ClusteringBase<T>
         }
     }
 
-    private double[,] BuildRBFAffinity(Matrix<T> x, int n)
+    private T[,] BuildRBFAffinity(Matrix<T> x, int n)
     {
-        var affinity = new double[n, n];
+        var affinity = new T[n, n];
         var metric = _options.DistanceMetric ?? new EuclideanDistance<T>();
 
         // Compute gamma if not specified
-        double gamma = _options.Gamma ?? 1.0 / x.Columns;
+        T gamma = NumOps.FromDouble(_options.Gamma ?? 1.0 / x.Columns);
 
         for (int i = 0; i < n; i++)
         {
-            affinity[i, i] = 1.0; // Self-similarity
+            affinity[i, i] = NumOps.One; // Self-similarity
             var pointI = GetRow(x, i);
 
             for (int j = i + 1; j < n; j++)
             {
                 var pointJ = GetRow(x, j);
-                double dist = NumOps.ToDouble(metric.Compute(pointI, pointJ));
-                double distSq = dist * dist;
+                T dist = metric.Compute(pointI, pointJ);
+                T distSq = NumOps.Multiply(dist, dist);
 
-                double similarity = Math.Exp(-gamma * distSq);
+                T similarity = NumOps.Exp(NumOps.Negate(NumOps.Multiply(gamma, distSq)));
                 affinity[i, j] = similarity;
                 affinity[j, i] = similarity;
             }
@@ -184,21 +184,27 @@ public class SpectralClustering<T> : ClusteringBase<T>
         return affinity;
     }
 
-    private double[,] BuildNearestNeighborsAffinity(Matrix<T> x, int n)
+    private T[,] BuildNearestNeighborsAffinity(Matrix<T> x, int n)
     {
-        var affinity = new double[n, n];
+        var affinity = new T[n, n];
         var metric = _options.DistanceMetric ?? new EuclideanDistance<T>();
         int k = _options.NumNeighbors;
 
+        // Initialize to zero
+        for (int i = 0; i < n; i++)
+            for (int j = 0; j < n; j++)
+                affinity[i, j] = NumOps.Zero;
+
         // Compute all pairwise distances
-        var distances = new double[n, n];
+        var distances = new T[n, n];
         for (int i = 0; i < n; i++)
         {
             var pointI = GetRow(x, i);
+            distances[i, i] = NumOps.Zero;
             for (int j = i + 1; j < n; j++)
             {
                 var pointJ = GetRow(x, j);
-                double dist = NumOps.ToDouble(metric.Compute(pointI, pointJ));
+                T dist = metric.Compute(pointI, pointJ);
                 distances[i, j] = dist;
                 distances[j, i] = dist;
             }
@@ -212,7 +218,7 @@ public class SpectralClustering<T> : ClusteringBase<T>
             {
                 if (i != j)
                 {
-                    neighborDists.Add((j, distances[i, j]));
+                    neighborDists.Add((j, NumOps.ToDouble(distances[i, j])));
                 }
             }
 
@@ -220,27 +226,30 @@ public class SpectralClustering<T> : ClusteringBase<T>
 
             foreach (var (idx, _) in nearestNeighbors)
             {
-                affinity[i, idx] = 1.0;
-                affinity[idx, i] = 1.0; // Make symmetric
+                affinity[i, idx] = NumOps.One;
+                affinity[idx, i] = NumOps.One; // Make symmetric
             }
         }
 
         return affinity;
     }
 
-    private double[,] ComputeLaplacian(double[,] affinity, int n)
+    private T[,] ComputeLaplacian(T[,] affinity, int n)
     {
+        T epsilon = NumOps.FromDouble(1e-10);
+
         // Compute degree matrix (sum of each row)
-        var degree = new double[n];
+        var degree = new T[n];
         for (int i = 0; i < n; i++)
         {
+            degree[i] = NumOps.Zero;
             for (int j = 0; j < n; j++)
             {
-                degree[i] += affinity[i, j];
+                degree[i] = NumOps.Add(degree[i], affinity[i, j]);
             }
         }
 
-        var laplacian = new double[n, n];
+        var laplacian = new T[n, n];
 
         switch (_options.Normalization)
         {
@@ -252,50 +261,54 @@ public class SpectralClustering<T> : ClusteringBase<T>
                     {
                         if (i == j)
                         {
-                            laplacian[i, j] = degree[i] - affinity[i, j];
+                            laplacian[i, j] = NumOps.Subtract(degree[i], affinity[i, j]);
                         }
                         else
                         {
-                            laplacian[i, j] = -affinity[i, j];
+                            laplacian[i, j] = NumOps.Negate(affinity[i, j]);
                         }
                     }
                 }
                 break;
 
             case LaplacianNormalization.Normalized:
-                // L_sym = D^(-1/2) * L * D^(-1/2) = I - D^(-1/2) * W * D^(-1/2)
+                // L_sym = I - D^(-1/2) * W * D^(-1/2)
                 for (int i = 0; i < n; i++)
                 {
-                    double sqrtDi = Math.Sqrt(Math.Max(degree[i], 1e-10));
+                    T di = NumOps.LessThan(degree[i], epsilon) ? epsilon : degree[i];
+                    T sqrtDi = NumOps.Sqrt(di);
                     for (int j = 0; j < n; j++)
                     {
-                        double sqrtDj = Math.Sqrt(Math.Max(degree[j], 1e-10));
+                        T dj = NumOps.LessThan(degree[j], epsilon) ? epsilon : degree[j];
+                        T sqrtDj = NumOps.Sqrt(dj);
+                        T normalized = NumOps.Divide(affinity[i, j], NumOps.Multiply(sqrtDi, sqrtDj));
                         if (i == j)
                         {
-                            laplacian[i, j] = 1.0 - affinity[i, j] / (sqrtDi * sqrtDj);
+                            laplacian[i, j] = NumOps.Subtract(NumOps.One, normalized);
                         }
                         else
                         {
-                            laplacian[i, j] = -affinity[i, j] / (sqrtDi * sqrtDj);
+                            laplacian[i, j] = NumOps.Negate(normalized);
                         }
                     }
                 }
                 break;
 
             case LaplacianNormalization.RandomWalk:
-                // L_rw = D^(-1) * L = I - D^(-1) * W
+                // L_rw = I - D^(-1) * W
                 for (int i = 0; i < n; i++)
                 {
-                    double invDi = 1.0 / Math.Max(degree[i], 1e-10);
+                    T di = NumOps.LessThan(degree[i], epsilon) ? epsilon : degree[i];
+                    T invDi = NumOps.Divide(NumOps.One, di);
                     for (int j = 0; j < n; j++)
                     {
                         if (i == j)
                         {
-                            laplacian[i, j] = 1.0 - affinity[i, j] * invDi;
+                            laplacian[i, j] = NumOps.Subtract(NumOps.One, NumOps.Multiply(affinity[i, j], invDi));
                         }
                         else
                         {
-                            laplacian[i, j] = -affinity[i, j] * invDi;
+                            laplacian[i, j] = NumOps.Negate(NumOps.Multiply(affinity[i, j], invDi));
                         }
                     }
                 }
@@ -305,48 +318,46 @@ public class SpectralClustering<T> : ClusteringBase<T>
         return laplacian;
     }
 
-    private double[,] ComputeEigenvectors(double[,] laplacian, int n, int k)
+    private T[,] ComputeEigenvectors(T[,] laplacian, int n, int k)
     {
         // Simple power iteration method for finding smallest eigenvalues/eigenvectors
-        // Note: For production, should use proper ARPACK implementation
-        var eigenvectors = new double[n, k];
-        var eigenvalues = new double[k];
+        var eigenvectors = new T[n, k];
+        T epsilon = NumOps.FromDouble(1e-10);
 
         // Initialize with random vectors
         var rand = Random ?? RandomHelper.CreateSecureRandom();
-        var vectors = new double[k, n];
+        var vectors = new T[k, n];
 
         for (int i = 0; i < k; i++)
         {
             for (int j = 0; j < n; j++)
             {
-                vectors[i, j] = rand.NextDouble() - 0.5;
+                vectors[i, j] = NumOps.FromDouble(rand.NextDouble() - 0.5);
             }
         }
 
         // Find eigenvectors corresponding to smallest eigenvalues
-        // Using inverse power iteration with deflation
         for (int vec = 0; vec < k; vec++)
         {
-            var v = new double[n];
+            var v = new T[n];
             for (int j = 0; j < n; j++)
             {
                 v[j] = vectors[vec, j];
             }
 
             // Normalize
-            double norm = 0;
+            T norm = NumOps.Zero;
             for (int j = 0; j < n; j++)
             {
-                norm += v[j] * v[j];
+                norm = NumOps.Add(norm, NumOps.Multiply(v[j], v[j]));
             }
-            norm = Math.Sqrt(norm);
+            norm = NumOps.Sqrt(norm);
             for (int j = 0; j < n; j++)
             {
-                v[j] /= norm;
+                v[j] = NumOps.Divide(v[j], norm);
             }
 
-            // Power iteration (using shifted matrix to find smallest eigenvalues)
+            // Power iteration
             for (int iter = 0; iter < 100; iter++)
             {
                 var newV = MultiplyMatrixVector(laplacian, v, n);
@@ -354,28 +365,32 @@ public class SpectralClustering<T> : ClusteringBase<T>
                 // Orthogonalize against previous eigenvectors
                 for (int prev = 0; prev < vec; prev++)
                 {
-                    double dot = 0;
+                    T dot = NumOps.Zero;
                     for (int j = 0; j < n; j++)
                     {
-                        dot += newV[j] * eigenvectors[j, prev];
+                        dot = NumOps.Add(dot, NumOps.Multiply(newV[j], eigenvectors[j, prev]));
                     }
                     for (int j = 0; j < n; j++)
                     {
-                        newV[j] -= dot * eigenvectors[j, prev];
+                        newV[j] = NumOps.Subtract(newV[j], NumOps.Multiply(dot, eigenvectors[j, prev]));
                     }
                 }
 
                 // Normalize
-                norm = 0;
+                norm = NumOps.Zero;
                 for (int j = 0; j < n; j++)
                 {
-                    norm += newV[j] * newV[j];
+                    norm = NumOps.Add(norm, NumOps.Multiply(newV[j], newV[j]));
                 }
-                norm = Math.Sqrt(Math.Max(norm, 1e-10));
+                if (NumOps.LessThan(norm, epsilon))
+                {
+                    norm = epsilon;
+                }
+                norm = NumOps.Sqrt(norm);
 
                 for (int j = 0; j < n; j++)
                 {
-                    v[j] = newV[j] / norm;
+                    v[j] = NumOps.Divide(newV[j], norm);
                 }
             }
 
@@ -384,52 +399,49 @@ public class SpectralClustering<T> : ClusteringBase<T>
             {
                 eigenvectors[j, vec] = v[j];
             }
-
-            // Compute eigenvalue
-            var Av = MultiplyMatrixVector(laplacian, v, n);
-            double eigenval = 0;
-            for (int j = 0; j < n; j++)
-            {
-                eigenval += v[j] * Av[j];
-            }
-            eigenvalues[vec] = eigenval;
         }
 
         return eigenvectors;
     }
 
-    private double[] MultiplyMatrixVector(double[,] matrix, double[] vector, int n)
+    private T[] MultiplyMatrixVector(T[,] matrix, T[] vector, int n)
     {
-        var result = new double[n];
+        var result = new T[n];
         for (int i = 0; i < n; i++)
         {
+            result[i] = NumOps.Zero;
             for (int j = 0; j < n; j++)
             {
-                result[i] += matrix[i, j] * vector[j];
+                result[i] = NumOps.Add(result[i], NumOps.Multiply(matrix[i, j], vector[j]));
             }
         }
         return result;
     }
 
-    private void NormalizeRows(double[,] embedding, int n, int k)
+    private void NormalizeRows(T[,] embedding, int n, int k)
     {
+        T epsilon = NumOps.FromDouble(1e-10);
         for (int i = 0; i < n; i++)
         {
-            double norm = 0;
+            T norm = NumOps.Zero;
             for (int j = 0; j < k; j++)
             {
-                norm += embedding[i, j] * embedding[i, j];
+                norm = NumOps.Add(norm, NumOps.Multiply(embedding[i, j], embedding[i, j]));
             }
-            norm = Math.Sqrt(Math.Max(norm, 1e-10));
+            if (NumOps.LessThan(norm, epsilon))
+            {
+                norm = epsilon;
+            }
+            norm = NumOps.Sqrt(norm);
 
             for (int j = 0; j < k; j++)
             {
-                embedding[i, j] /= norm;
+                embedding[i, j] = NumOps.Divide(embedding[i, j], norm);
             }
         }
     }
 
-    private Vector<T> ClusterEmbedding(double[,] embedding, int n, int k)
+    private Vector<T> ClusterEmbedding(T[,] embedding, int n, int k)
     {
         // Convert embedding to Matrix<T>
         var embeddingMatrix = new Matrix<T>(n, k);
@@ -437,7 +449,7 @@ public class SpectralClustering<T> : ClusteringBase<T>
         {
             for (int j = 0; j < k; j++)
             {
-                embeddingMatrix[i, j] = NumOps.FromDouble(embedding[i, j]);
+                embeddingMatrix[i, j] = embedding[i, j];
             }
         }
 
@@ -451,7 +463,7 @@ public class SpectralClustering<T> : ClusteringBase<T>
                 Seed = Options.Seed
             });
             kmeans.Train(embeddingMatrix);
-            return kmeans.Labels!;
+            return kmeans.Labels ?? new Vector<T>(0);
         }
         else
         {
@@ -460,7 +472,7 @@ public class SpectralClustering<T> : ClusteringBase<T>
         }
     }
 
-    private Vector<T> DiscretizeEmbedding(double[,] embedding, int n, int k)
+    private Vector<T> DiscretizeEmbedding(T[,] embedding, int n, int k)
     {
         // Simple discretization: assign each point to the cluster
         // corresponding to its largest eigenvector component
@@ -469,12 +481,12 @@ public class SpectralClustering<T> : ClusteringBase<T>
         for (int i = 0; i < n; i++)
         {
             int bestCluster = 0;
-            double maxVal = Math.Abs(embedding[i, 0]);
+            T maxVal = NumOps.Abs(embedding[i, 0]);
 
             for (int j = 1; j < k; j++)
             {
-                double absVal = Math.Abs(embedding[i, j]);
-                if (absVal > maxVal)
+                T absVal = NumOps.Abs(embedding[i, j]);
+                if (NumOps.GreaterThan(absVal, maxVal))
                 {
                     maxVal = absVal;
                     bestCluster = j;
@@ -534,7 +546,7 @@ public class SpectralClustering<T> : ClusteringBase<T>
         for (int i = 0; i < x.Rows; i++)
         {
             var point = GetRow(x, i);
-            double minDist = double.MaxValue;
+            T minDist = NumOps.MaxValue;
             int nearestCluster = 0;
 
             if (ClusterCenters is not null)
@@ -542,9 +554,9 @@ public class SpectralClustering<T> : ClusteringBase<T>
                 for (int k = 0; k < NumClusters; k++)
                 {
                     var center = GetRow(ClusterCenters, k);
-                    double dist = NumOps.ToDouble(metric.Compute(point, center));
+                    T dist = metric.Compute(point, center);
 
-                    if (dist < minDist)
+                    if (NumOps.LessThan(dist, minDist))
                     {
                         minDist = dist;
                         nearestCluster = k;
@@ -562,7 +574,7 @@ public class SpectralClustering<T> : ClusteringBase<T>
     public override Vector<T> FitPredict(Matrix<T> x)
     {
         Train(x);
-        return Labels!;
+        return Labels ?? new Vector<T>(0);
     }
 
     /// <summary>
@@ -573,7 +585,9 @@ public class SpectralClustering<T> : ClusteringBase<T>
     {
         ValidateIsTrained();
 
-        int n = _embedding!.GetLength(0);
+        if (_embedding is null) return new Matrix<T>(0, 0);
+
+        int n = _embedding.GetLength(0);
         int k = _embedding.GetLength(1);
         var result = new Matrix<T>(n, k);
 
@@ -581,7 +595,7 @@ public class SpectralClustering<T> : ClusteringBase<T>
         {
             for (int j = 0; j < k; j++)
             {
-                result[i, j] = NumOps.FromDouble(_embedding[i, j]);
+                result[i, j] = _embedding[i, j];
             }
         }
 
