@@ -377,7 +377,7 @@ public class BiomedParse<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
     /// </remarks>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => _useNativeMode
         ? new BiomedParse<T>(Architecture, _optimizer, LossFunction, _numClasses, _dropRate, _options)
-        : new BiomedParse<T>(Architecture, _onnxModelPath!, _numClasses, _options);
+        : new BiomedParse<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _options);
 
     /// <summary>
     /// Releases managed resources including the ONNX inference session.
