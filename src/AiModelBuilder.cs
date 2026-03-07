@@ -1869,13 +1869,15 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             throw new InvalidOperationException("Model implementation must be specified. Use ConfigureModel() to set a model, ConfigureAutoML() for automatic model selection, or enable agent assistance.");
 
         // Wire instance-level preprocessing/postprocessing onto DocumentNeuralNetworkBase models.
-        // This replaces the former static PreprocessingRegistry approach, which caused race
-        // conditions when multiple models were built concurrently.
-        if (_model is Document.DocumentNeuralNetworkBase<T> documentModel && _preprocessingPipeline is not null)
+        // This replaces the former static PreprocessingRegistry/PostprocessingRegistry approach,
+        // which caused race conditions when multiple models were built concurrently.
+        if (_model is Document.DocumentNeuralNetworkBase<T> documentModel)
         {
-            if (_preprocessingPipeline is IDataTransformer<T, Tensor<T>, Tensor<T>> tensorTransformer)
+            var preTransformer = _preprocessingPipeline as IDataTransformer<T, Tensor<T>, Tensor<T>>;
+            var postTransformer = _postprocessingPipeline as IDataTransformer<T, Tensor<T>, Tensor<T>>;
+            if (preTransformer is not null || postTransformer is not null)
             {
-                documentModel.PreprocessingTransformer = tensorTransformer;
+                documentModel.ConfigureTransformers(preTransformer, postTransformer);
             }
         }
 

@@ -3,34 +3,20 @@ using AiDotNet.Interfaces;
 namespace AiDotNet.Preprocessing;
 
 /// <summary>
-/// Global registry for the preprocessing pipeline.
+/// Deprecated: Static registry for the preprocessing pipeline. Use instance-based
+/// <c>AiModelBuilder.ConfigurePreprocessing()</c> instead.
 /// </summary>
 /// <remarks>
 /// <para>
 /// <b>Deprecated:</b> This static registry causes race conditions when multiple
 /// <c>AiModelBuilder</c> instances build models concurrently, because they overwrite
-/// each other's pipeline. Use instance-based preprocessing via
-/// <c>AiModelBuilder.ConfigurePreprocessing()</c> instead, which stores the pipeline
-/// per-builder and flows it to <c>AiModelResult</c> via <c>PreprocessingInfo</c>.
+/// each other's pipeline. <c>AiModelBuilder</c> no longer sets this registry;
+/// it stores the pipeline per-instance and flows it to <c>AiModelResult</c>
+/// via <c>PreprocessingInfo</c>.
 /// </para>
 /// <para>
-/// PreprocessingRegistry provides a singleton pattern for managing the active preprocessing pipeline.
-/// By default, a standard pipeline with imputation and scaling is used. Users can configure
-/// custom preprocessing via AiModelBuilder.ConfigurePreprocessing().
-/// </para>
-/// <para><b>For Beginners:</b> This is like a global settings panel for data preprocessing.
-/// You don't need to interact with this directly - just use AiModelBuilder:
-///
-/// <code>
-/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
-///     .ConfigurePreprocessing(pipeline => pipeline
-///         .Add(new SimpleImputer&lt;double&gt;(ImputationStrategy.Mean))
-///         .Add(new StandardScaler&lt;double&gt;()))
-///     .ConfigureModel(new LogisticRegression&lt;double&gt;())
-///     .Build(X, y);
-/// </code>
-///
-/// The configured preprocessing is automatically applied to all models.
+/// This class remains only for backward compatibility with external code that
+/// references it directly. It will be removed in a future version.
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for calculations (e.g., float, double).</typeparam>

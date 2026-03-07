@@ -9,7 +9,10 @@ namespace AiDotNet.Tests.IntegrationTests.Preprocessing;
 /// <summary>
 /// Integration tests verifying that the static PreprocessingRegistry is no longer set
 /// by AiModelBuilder, preventing race conditions in concurrent model building.
+/// These tests mutate static global state and must not run in parallel with other tests
+/// that touch the same registry specialization.
 /// </summary>
+[Collection("PreprocessingRegistryTests")]
 public class PreprocessingRegistryIntegrationTests
 {
     /// <summary>
@@ -131,21 +134,26 @@ public class PreprocessingRegistryIntegrationTests
     public void DeprecatedRegistry_StillFunctionsForBackwardCompatibility()
     {
 #pragma warning disable CS0618 // Intentionally testing deprecated API
-        // Arrange
-        PreprocessingRegistry<double, Matrix<double>>.Clear();
-        Assert.False(PreprocessingRegistry<double, Matrix<double>>.IsConfigured);
+        try
+        {
+            // Arrange
+            PreprocessingRegistry<double, Matrix<double>>.Clear();
+            Assert.False(PreprocessingRegistry<double, Matrix<double>>.IsConfigured);
 
-        // Act: set a pipeline manually (external code might still do this)
-        var pipeline = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();
-        pipeline.Add(new StandardScaler<double>());
-        PreprocessingRegistry<double, Matrix<double>>.Current = pipeline;
+            // Act: set a pipeline manually (external code might still do this)
+            var pipeline = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();
+            pipeline.Add(new StandardScaler<double>());
+            PreprocessingRegistry<double, Matrix<double>>.Current = pipeline;
 
-        // Assert: the registry still works
-        Assert.True(PreprocessingRegistry<double, Matrix<double>>.IsConfigured);
-        Assert.NotNull(PreprocessingRegistry<double, Matrix<double>>.Current);
-
-        // Cleanup
-        PreprocessingRegistry<double, Matrix<double>>.Clear();
+            // Assert: the registry still works
+            Assert.True(PreprocessingRegistry<double, Matrix<double>>.IsConfigured);
+            Assert.NotNull(PreprocessingRegistry<double, Matrix<double>>.Current);
+        }
+        finally
+        {
+            // Always clean up static state even if assertions fail
+            PreprocessingRegistry<double, Matrix<double>>.Clear();
+        }
         Assert.False(PreprocessingRegistry<double, Matrix<double>>.IsConfigured);
 #pragma warning restore CS0618
     }

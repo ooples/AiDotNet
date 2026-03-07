@@ -119,11 +119,11 @@ public abstract class DocumentNeuralNetworkBase<T> : NeuralNetworkBase<T>
     /// <c>PreprocessingRegistry</c> approach, which caused race conditions when
     /// multiple models were built concurrently.
     /// </para>
-    /// <para><b>For Beginners:</b> Subclasses can override this in their constructor to
+    /// <para><b>For Beginners:</b> Subclasses can assign this property in their constructor to
     /// customize how images are processed before the model processes them. Otherwise, the model
     /// uses its own industry-standard defaults automatically.</para>
     /// </remarks>
-    protected internal IDataTransformer<T, Tensor<T>, Tensor<T>>? PreprocessingTransformer { get; set; }
+    protected IDataTransformer<T, Tensor<T>, Tensor<T>>? PreprocessingTransformer { get; set; }
 
     /// <summary>
     /// Gets or sets the instance-level postprocessing transformer for this model.
@@ -136,7 +136,19 @@ public abstract class DocumentNeuralNetworkBase<T> : NeuralNetworkBase<T>
     /// multiple models were built concurrently.
     /// </para>
     /// </remarks>
-    protected internal IDataTransformer<T, Tensor<T>, Tensor<T>>? PostprocessingTransformer { get; set; }
+    protected IDataTransformer<T, Tensor<T>, Tensor<T>>? PostprocessingTransformer { get; set; }
+
+    /// <summary>
+    /// Configures the preprocessing and postprocessing transformers for this model.
+    /// Called by <c>AiModelBuilder</c> to wire instance-level transformers.
+    /// </summary>
+    internal void ConfigureTransformers(
+        IDataTransformer<T, Tensor<T>, Tensor<T>>? preprocessing,
+        IDataTransformer<T, Tensor<T>, Tensor<T>>? postprocessing)
+    {
+        PreprocessingTransformer = preprocessing;
+        PostprocessingTransformer = postprocessing;
+    }
 
     #endregion
 
@@ -200,8 +212,14 @@ public abstract class DocumentNeuralNetworkBase<T> : NeuralNetworkBase<T>
     {
         // Priority 1: Instance-level transformer (set explicitly on this model)
         var transformer = PreprocessingTransformer;
-        if (transformer is not null && transformer.IsFitted)
+        if (transformer is not null)
         {
+            if (!transformer.IsFitted)
+            {
+                throw new InvalidOperationException(
+                    "A preprocessing transformer was configured but has not been fitted. " +
+                    "Call Fit() or FitTransform() on the transformer before using it for prediction.");
+            }
             return transformer.Transform(rawImage);
         }
 
@@ -253,8 +271,14 @@ public abstract class DocumentNeuralNetworkBase<T> : NeuralNetworkBase<T>
     {
         // Priority 1: Instance-level transformer (set explicitly on this model)
         var transformer = PostprocessingTransformer;
-        if (transformer is not null && transformer.IsFitted)
+        if (transformer is not null)
         {
+            if (!transformer.IsFitted)
+            {
+                throw new InvalidOperationException(
+                    "A postprocessing transformer was configured but has not been fitted. " +
+                    "Call Fit() or FitTransform() on the transformer before using it for prediction.");
+            }
             return transformer.Transform(modelOutput);
         }
 
