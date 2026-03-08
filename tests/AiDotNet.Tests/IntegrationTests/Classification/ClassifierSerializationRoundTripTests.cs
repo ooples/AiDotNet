@@ -1325,9 +1325,148 @@ public class ClassifierSerializationRoundTripTests
             $"OnlineNaiveBayesClassifier accuracy {accuracy:P1} is below 70% threshold.");
     }
 
+    [Fact]
+    public void HoeffdingTree_SerializeRoundTrip_PredictionsMatch()
+    {
+        var (trainX, trainY) = CreateBinaryData(200, 3, separation: 5.0, seed: 42);
+        var options = new HoeffdingTreeOptions<double> { GracePeriod = 20, MaxDepth = 5, RandomSeed = 42 };
+        var classifier = new HoeffdingTreeClassifier<double>(options);
+        classifier.Train(trainX, trainY);
+
+        var testX = CreateRandomMatrix(10, 3, seed: 100);
+        var original = classifier.Predict(testX);
+
+        var bytes = classifier.Serialize();
+        var restored = new HoeffdingTreeClassifier<double>(options);
+        restored.Deserialize(bytes);
+        var restoredPreds = restored.Predict(testX);
+
+        AssertPredictionsMatch(original, restoredPreds, "HoeffdingTreeClassifier");
+    }
+
+    [Fact]
+    public void HoeffdingTree_DeepCopy_PreservesTrainedState()
+    {
+        var (trainX, trainY) = CreateBinaryData(200, 3, separation: 5.0, seed: 42);
+        var options = new HoeffdingTreeOptions<double> { GracePeriod = 20, MaxDepth = 5, RandomSeed = 42 };
+        var classifier = new HoeffdingTreeClassifier<double>(options);
+        classifier.Train(trainX, trainY);
+
+        var testX = CreateRandomMatrix(10, 3, seed: 100);
+        var original = classifier.Predict(testX);
+
+        var copy = classifier.DeepCopy();
+        var copyPreds = copy.Predict(testX);
+
+        AssertPredictionsMatch(original, (Vector<double>)copyPreds, "HoeffdingTreeClassifier DeepCopy");
+    }
+
+    [Fact]
+    public void HoeffdingTree_TrainAndPredict_AchievesReasonableAccuracy()
+    {
+        // Online learners need shuffled data and relaxed Hoeffding bound (Delta)
+        // Default Delta=1e-7 is too conservative for small datasets — tree never splits
+        var (trainX, trainY) = CreateBinaryData(2000, 3, separation: 8.0, seed: 42);
+        ShuffleData(trainX, trainY, seed: 42);
+        var options = new HoeffdingTreeOptions<double>
+        {
+            GracePeriod = 50, MaxDepth = 10, RandomSeed = 42,
+            Delta = 0.1, TieThreshold = 0.1
+        };
+        var classifier = new HoeffdingTreeClassifier<double>(options);
+        classifier.Train(trainX, trainY);
+
+        var (testX, testY) = CreateBinaryData(100, 3, separation: 8.0, seed: 99);
+        var predictions = classifier.Predict(testX);
+
+        double accuracy = ComputeAccuracy(predictions, testY);
+        Assert.True(accuracy >= 0.55,
+            $"HoeffdingTreeClassifier accuracy {accuracy:P1} is below 55% threshold.");
+    }
+
+    [Fact]
+    public void AdaptiveRandomForest_SerializeRoundTrip_PredictionsMatch()
+    {
+        var (trainX, trainY) = CreateBinaryData(200, 4, separation: 5.0, seed: 42);
+        var options = new AdaptiveRandomForestOptions<double>
+        {
+            NumTrees = 5, GracePeriod = 20, MaxTreeDepth = 5, RandomSeed = 42
+        };
+        var classifier = new AdaptiveRandomForestClassifier<double>(options);
+        classifier.Train(trainX, trainY);
+
+        var testX = CreateRandomMatrix(10, 4, seed: 100);
+        var original = classifier.Predict(testX);
+
+        var bytes = classifier.Serialize();
+        var restored = new AdaptiveRandomForestClassifier<double>(options);
+        restored.Deserialize(bytes);
+        var restoredPreds = restored.Predict(testX);
+
+        AssertPredictionsMatch(original, restoredPreds, "AdaptiveRandomForestClassifier");
+    }
+
+    [Fact]
+    public void AdaptiveRandomForest_DeepCopy_PreservesTrainedState()
+    {
+        var (trainX, trainY) = CreateBinaryData(200, 4, separation: 5.0, seed: 42);
+        var options = new AdaptiveRandomForestOptions<double>
+        {
+            NumTrees = 5, GracePeriod = 20, MaxTreeDepth = 5, RandomSeed = 42
+        };
+        var classifier = new AdaptiveRandomForestClassifier<double>(options);
+        classifier.Train(trainX, trainY);
+
+        var testX = CreateRandomMatrix(10, 4, seed: 100);
+        var original = classifier.Predict(testX);
+
+        var copy = classifier.DeepCopy();
+        var copyPreds = copy.Predict(testX);
+
+        AssertPredictionsMatch(original, (Vector<double>)copyPreds, "AdaptiveRandomForestClassifier DeepCopy");
+    }
+
+    [Fact]
+    public void AdaptiveRandomForest_TrainAndPredict_AchievesReasonableAccuracy()
+    {
+        // Online learners need shuffled data and relaxed Hoeffding bound (Delta)
+        var (trainX, trainY) = CreateBinaryData(2000, 4, separation: 8.0, seed: 42);
+        ShuffleData(trainX, trainY, seed: 42);
+        var options = new AdaptiveRandomForestOptions<double>
+        {
+            NumTrees = 5, GracePeriod = 50, MaxTreeDepth = 10, RandomSeed = 42,
+            HoeffdingDelta = 0.1, TieThreshold = 0.1
+        };
+        var classifier = new AdaptiveRandomForestClassifier<double>(options);
+        classifier.Train(trainX, trainY);
+
+        var (testX, testY) = CreateBinaryData(100, 4, separation: 8.0, seed: 99);
+        var predictions = classifier.Predict(testX);
+
+        double accuracy = ComputeAccuracy(predictions, testY);
+        Assert.True(accuracy >= 0.55,
+            $"AdaptiveRandomForestClassifier accuracy {accuracy:P1} is below 55% threshold.");
+    }
+
     #endregion
 
     #region Helper Methods
+
+    private static void ShuffleData(Matrix<double> x, Vector<double> y, int seed)
+    {
+        var rng = new Random(seed);
+        int n = x.Rows;
+        for (int i = n - 1; i > 0; i--)
+        {
+            int j = rng.Next(i + 1);
+            // Swap rows i and j in both x and y
+            (y[i], y[j]) = (y[j], y[i]);
+            for (int k = 0; k < x.Columns; k++)
+            {
+                (x[i, k], x[j, k]) = (x[j, k], x[i, k]);
+            }
+        }
+    }
 
     private static (Matrix<double> x, Vector<double> y) CreateBinaryData(
         int totalSamples, int features, double separation, int seed)

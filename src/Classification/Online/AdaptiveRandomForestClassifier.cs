@@ -1,8 +1,11 @@
+using System.Text;
 using AiDotNet.DriftDetection;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors.Helpers;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace AiDotNet.Classification.Online;
 
@@ -505,5 +508,132 @@ public class AdaptiveRandomForestClassifier<T> : ClassifierBase<T>, IOnlineClass
     public override void ApplyGradients(Vector<T> gradients, T learningRate)
     {
         // Tree ensemble - no gradient application
+    }
+
+    /// <summary>
+    /// Serializes the trained ARF ensemble including all Hoeffding trees and metadata.
+    /// </summary>
+    public override byte[] Serialize()
+    {
+        var modelData = new Dictionary<string, object>
+        {
+            { "NumClasses", NumClasses },
+            { "NumFeatures", NumFeatures },
+            { "TaskType", (int)TaskType },
+            { "ClassLabels", ClassLabels?.ToArray() ?? Array.Empty<T>() },
+            { "SamplesSeen", SamplesSeen },
+            { "EnsembleCount", _ensemble.Count }
+        };
+
+        var knownClassValues = new double[_knownClasses.Count];
+        for (int i = 0; i < _knownClasses.Count; i++)
+            knownClassValues[i] = NumOps.ToDouble(_knownClasses[i]);
+        modelData["KnownClasses"] = knownClassValues;
+
+        for (int i = 0; i < _ensemble.Count; i++)
+        {
+            var member = _ensemble[i];
+            var memberDict = new Dictionary<string, object?>
+            {
+                { "SelectedFeatures", member.SelectedFeatures },
+                { "AccuracyEstimate", member.AccuracyEstimate },
+                { "CorrectCount", member.CorrectCount },
+                { "TotalCount", member.TotalCount },
+                { "InWarning", member.InWarning }
+            };
+
+            if (member.Tree is not null)
+            {
+                memberDict["TreeData"] = Convert.ToBase64String(member.Tree.Serialize());
+            }
+
+            if (member.BackgroundTree is not null)
+            {
+                memberDict["BackgroundTreeData"] = Convert.ToBase64String(member.BackgroundTree.Serialize());
+            }
+
+            modelData[$"Member_{i}"] = memberDict;
+        }
+
+        var modelMetadata = GetModelMetadata();
+        modelMetadata.ModelData = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelData));
+        return Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelMetadata));
+    }
+
+    /// <summary>
+    /// Deserializes the trained ARF ensemble including all Hoeffding trees and metadata.
+    /// </summary>
+    public override void Deserialize(byte[] modelData)
+    {
+        var jsonString = Encoding.UTF8.GetString(modelData);
+        var modelMetadata = JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString);
+        if (modelMetadata?.ModelData is null)
+            throw new InvalidOperationException("Deserialization failed: invalid model data.");
+
+        var dataString = Encoding.UTF8.GetString(modelMetadata.ModelData);
+        var dataObj = JsonConvert.DeserializeObject<JObject>(dataString);
+        if (dataObj is null)
+            throw new InvalidOperationException("Deserialization failed: invalid model data.");
+
+        NumClasses = dataObj["NumClasses"]?.ToObject<int>() ?? 0;
+        NumFeatures = dataObj["NumFeatures"]?.ToObject<int>() ?? 0;
+        TaskType = (ClassificationTaskType)(dataObj["TaskType"]?.ToObject<int>() ?? 0);
+        SamplesSeen = dataObj["SamplesSeen"]?.ToObject<long>() ?? 0;
+
+        var classLabelsToken = dataObj["ClassLabels"];
+        if (classLabelsToken is not null)
+        {
+            var arr = classLabelsToken.ToObject<double[]>() ?? Array.Empty<double>();
+            if (arr.Length > 0)
+            {
+                ClassLabels = new Vector<T>(arr.Length);
+                for (int i = 0; i < arr.Length; i++)
+                    ClassLabels[i] = NumOps.FromDouble(arr[i]);
+            }
+        }
+
+        _knownClasses.Clear();
+        var knownArr = dataObj["KnownClasses"]?.ToObject<double[]>();
+        if (knownArr is not null)
+        {
+            foreach (var val in knownArr)
+                _knownClasses.Add(NumOps.FromDouble(val));
+        }
+
+        _ensemble.Clear();
+        int ensembleCount = dataObj["EnsembleCount"]?.ToObject<int>() ?? 0;
+        for (int i = 0; i < ensembleCount; i++)
+        {
+            if (dataObj[$"Member_{i}"] is JObject memberObj)
+            {
+                var member = new TreeMember
+                {
+                    SelectedFeatures = memberObj["SelectedFeatures"]?.ToObject<int[]>(),
+                    AccuracyEstimate = memberObj["AccuracyEstimate"]?.ToObject<double>() ?? 1.0,
+                    CorrectCount = memberObj["CorrectCount"]?.ToObject<long>() ?? 0,
+                    TotalCount = memberObj["TotalCount"]?.ToObject<long>() ?? 0,
+                    InWarning = memberObj["InWarning"]?.ToObject<bool>() ?? false,
+                    DriftDetector = new DDMDriftDetector<T>(_options.WarningThreshold, _options.DriftThreshold),
+                    WarningDetector = new DDMDriftDetector<T>(
+                        _options.WarningThreshold * 0.7, _options.DriftThreshold * 0.7)
+                };
+
+                var treeDataStr = memberObj["TreeData"]?.ToObject<string>();
+                if (treeDataStr is not null)
+                {
+                    member.Tree = CreateTree();
+                    member.Tree.Deserialize(Convert.FromBase64String(treeDataStr));
+                }
+
+                var bgTreeDataStr = memberObj["BackgroundTreeData"]?.ToObject<string>();
+                if (bgTreeDataStr is not null)
+                {
+                    member.BackgroundTree = CreateTree();
+                    member.BackgroundTree.Deserialize(Convert.FromBase64String(bgTreeDataStr));
+                }
+
+                _ensemble.Add(member);
+            }
+        }
     }
 }
