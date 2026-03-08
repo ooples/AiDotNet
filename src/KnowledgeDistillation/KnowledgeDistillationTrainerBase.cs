@@ -423,7 +423,7 @@ public abstract class KnowledgeDistillationTrainerBase<T, TInput, TOutput> : IKn
                         _patienceCounter++;
                         if (_patienceCounter >= _earlyStoppingPatience)
                         {
-                            Console.WriteLine($"Early stopping triggered at epoch {epoch + 1}. Validation loss has not improved for {_earlyStoppingPatience} epochs.");
+                            System.Diagnostics.Debug.WriteLine($"Early stopping triggered at epoch {epoch + 1}. Validation loss has not improved for {_earlyStoppingPatience} epochs.");
                             OnValidationComplete(epoch, valAccuracy);
                             OnEpochEnd(epoch, avgEpochLoss);
                             onEpochComplete?.Invoke(epoch, avgEpochLoss);
@@ -435,12 +435,12 @@ public abstract class KnowledgeDistillationTrainerBase<T, TInput, TOutput> : IKn
                 OnValidationComplete(epoch, valAccuracy);
 
                 // Console output for epoch progress
-                Console.WriteLine($"  Epoch {epoch + 1}/{epochs}: Train Loss = {Convert.ToDouble(avgEpochLoss):F4}, Val Acc = {valAccuracy:F2}");
+                System.Diagnostics.Debug.WriteLine($"  Epoch {epoch + 1}/{epochs}: Train Loss = {Convert.ToDouble(avgEpochLoss):F4}, Val Acc = {valAccuracy:F2}");
             }
             else
             {
                 // Console output for epoch progress (no validation)
-                Console.WriteLine($"  Epoch {epoch + 1}/{epochs}: Train Loss = {Convert.ToDouble(avgEpochLoss):F4}");
+                System.Diagnostics.Debug.WriteLine($"  Epoch {epoch + 1}/{epochs}: Train Loss = {Convert.ToDouble(avgEpochLoss):F4}");
             }
 
             // Custom logic after epoch
@@ -453,8 +453,8 @@ public abstract class KnowledgeDistillationTrainerBase<T, TInput, TOutput> : IKn
         // Cleanup after training
         OnTrainingEnd(trainInputs, trainLabels);
 
-        Console.WriteLine();
-        Console.WriteLine("Knowledge Distillation training completed successfully!");
+        System.Diagnostics.Debug.WriteLine();
+        System.Diagnostics.Debug.WriteLine("Knowledge Distillation training completed successfully!");
     }
 
     /// <summary>
@@ -683,10 +683,10 @@ public abstract class KnowledgeDistillationTrainerBase<T, TInput, TOutput> : IKn
 
             if (bestCheckpoint != null)
             {
-                Console.WriteLine($"[Checkpointing] Loaded best checkpoint from epoch {bestCheckpoint.Epoch}");
+                System.Diagnostics.Debug.WriteLine($"[Checkpointing] Loaded best checkpoint from epoch {bestCheckpoint.Epoch}");
                 if (bestCheckpoint.Metrics.ContainsKey(_checkpointConfig!.BestMetric))
                 {
-                    Console.WriteLine($"[Checkpointing] Best {_checkpointConfig.BestMetric}: {bestCheckpoint.Metrics[_checkpointConfig.BestMetric]:F4}");
+                    System.Diagnostics.Debug.WriteLine($"[Checkpointing] Best {_checkpointConfig.BestMetric}: {bestCheckpoint.Metrics[_checkpointConfig.BestMetric]:F4}");
                 }
             }
         }
