@@ -15,7 +15,7 @@ namespace AiDotNet.Tests.IntegrationTests.Regression;
 public class AiModelBuilderAccuracyTests
 {
     [Fact]
-    public async Task RidgeRegression_KnownLinearData_R2Above050()
+    public void RidgeRegression_KnownLinearData_R2AboveZero()
     {
         // Arrange: y = 2*x1 + 3*x2 + 1 + noise(σ=0.1)
         // Note: The builder's default NormalOptimizer performs feature selection,
@@ -30,18 +30,18 @@ public class AiModelBuilderAccuracyTests
 
         var loader = DataLoaders.FromMatrixVector(trainX, trainY);
 
-        var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+        var result = new AiModelBuilder<double, Matrix<double>, Vector<double>>()
             .ConfigureDataLoader(loader)
             .ConfigureModel(new RidgeRegression<double>())
-            .BuildAsync();
+            .BuildAsync()
+            .GetAwaiter()
+            .GetResult();
 
         // Act
         var predictions = result.Predict(testX);
 
         // Assert: R² > 0.0 (with feature selection, optimizer may drop relevant features)
         // R² > 0 means the model is better than the mean baseline.
-        // Note: The default NormalOptimizer can aggressively select features,
-        // which on 2-feature data may result in only 1 feature being used.
         double r2 = CalculateR2(testY, predictions);
         Assert.True(r2 > 0.0,
             $"R² = {r2:F4} — model is worse than mean baseline for linear data. " +
@@ -58,7 +58,7 @@ public class AiModelBuilderAccuracyTests
     }
 
     [Fact]
-    public async Task DirectModel_KnownLinearData_CoefficientsRecovered()
+    public void DirectModel_KnownLinearData_CoefficientsRecovered()
     {
         // Arrange: y = 2*x1 + 3*x2 + 1, use direct model training (no builder/optimizer)
         // to verify the model itself correctly recovers coefficients.
@@ -97,7 +97,7 @@ public class AiModelBuilderAccuracyTests
     }
 
     [Fact]
-    public async Task DirectModel_PerfectLinearData_ExactPredictions()
+    public void DirectModel_PerfectLinearData_ExactPredictions()
     {
         // Arrange: y = 5*x1 - 2*x2 with ZERO noise using direct model training.
         // Direct training bypasses the optimizer's feature selection for an exact test.
@@ -132,11 +132,11 @@ public class AiModelBuilderAccuracyTests
     }
 
     [Fact]
-    public async Task RidgeRegression_SinusoidalData_R2Above050()
+    public void RidgeRegression_SinusoidalData_R2NotTerrible()
     {
         // Arrange: y = sin(x) on [0, 2π] — non-linear challenge.
         // Ridge regression can only fit a line, so R² won't be perfect,
-        // but it should capture some signal (the linear trend through sin).
+        // but it should not be catastrophically bad.
         var random = new Random(55);
         int trainSamples = 80;
         int testSamples = 20;
@@ -159,16 +159,17 @@ public class AiModelBuilderAccuracyTests
 
         var loader = DataLoaders.FromMatrixVector(trainX, trainY);
 
-        var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+        var result = new AiModelBuilder<double, Matrix<double>, Vector<double>>()
             .ConfigureDataLoader(loader)
             .ConfigureModel(new RidgeRegression<double>())
-            .BuildAsync();
+            .BuildAsync()
+            .GetAwaiter()
+            .GetResult();
 
         var predictions = result.Predict(testX);
 
-        // Assert: R² > 0.0 (better than mean baseline for sinusoidal data)
-        // A linear fit to sin(x) on [0, 2π] has negative slope, but limited R²
-        // The key assertion: predictions are finite and not garbage
+        // Assert: R² > -0.5 (not catastrophically worse than mean baseline)
+        // A linear fit to sin(x) on [0, 2π] has near-zero R²
         double r2 = CalculateR2(testY, predictions);
         Assert.True(r2 > -0.5,
             $"R² = {r2:F4} — model is performing much worse than mean baseline. " +
@@ -183,7 +184,7 @@ public class AiModelBuilderAccuracyTests
     }
 
     [Fact]
-    public async Task LargeDataset_PredictionStability()
+    public void LargeDataset_PredictionStability()
     {
         // Arrange: Train on 500 samples, verify prediction determinism
         var random = new Random(99);
@@ -200,10 +201,12 @@ public class AiModelBuilderAccuracyTests
 
         var loader = DataLoaders.FromMatrixVector(x, y);
 
-        var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+        var result = new AiModelBuilder<double, Matrix<double>, Vector<double>>()
             .ConfigureDataLoader(loader)
             .ConfigureModel(new RidgeRegression<double>())
-            .BuildAsync();
+            .BuildAsync()
+            .GetAwaiter()
+            .GetResult();
 
         var testData = new Matrix<double>(50, 4);
         var testRng = new Random(500);

@@ -16,11 +16,10 @@ namespace AiDotNet.Tests.IntegrationTests.Regression;
 public class AiModelBuilderPreprocessingPredictTests
 {
     [Fact]
-    public async Task BuildWithPreprocessing_PredictAppliesTransform()
+    public void BuildWithPreprocessing_PreprocessingInfoIsFitted()
     {
         // Arrange: Create data with very different feature scales.
         // Feature 1: 0-1 range, Feature 2: 0-10000 range
-        // Without scaling, feature 2 dominates. With StandardScaler, both contribute equally.
         var random = new Random(42);
         int samples = 80;
         var x = new Matrix<double>(samples, 2);
@@ -36,13 +35,15 @@ public class AiModelBuilderPreprocessingPredictTests
         var loader = DataLoaders.FromMatrixVector(x, y);
 
         // Train WITH preprocessing (StandardScaler)
-        var resultWithPreprocessing = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+        var resultWithPreprocessing = new AiModelBuilder<double, Matrix<double>, Vector<double>>()
             .ConfigureDataLoader(loader)
             .ConfigureModel(new RidgeRegression<double>())
             .ConfigurePreprocessing(new StandardScaler<double>())
-            .BuildAsync();
+            .BuildAsync()
+            .GetAwaiter()
+            .GetResult();
 
-        // Verify preprocessing was configured
+        // Assert: Verify preprocessing was configured and fitted
         Assert.NotNull(resultWithPreprocessing.PreprocessingInfo);
         Assert.True(resultWithPreprocessing.PreprocessingInfo.IsFitted);
 
@@ -58,7 +59,7 @@ public class AiModelBuilderPreprocessingPredictTests
         // Act: Predict through the preprocessing model
         var predictions = resultWithPreprocessing.Predict(testData);
 
-        // Assert: All predictions should be finite (not NaN or Infinity)
+        // Assert: All predictions should be finite and in a reasonable range
         Assert.Equal(5, predictions.Length);
         for (int i = 0; i < predictions.Length; i++)
         {
@@ -66,11 +67,14 @@ public class AiModelBuilderPreprocessingPredictTests
                 $"Prediction {i} is NaN — preprocessing may not have been applied");
             Assert.False(double.IsInfinity(predictions[i]),
                 $"Prediction {i} is Infinity — preprocessing may not have been applied");
+            // y = 5*x1 + 0.001*x2, x1 in [0,1], x2 in [0,10000] -> y in [0, 15]
+            // Predictions should be in a reasonable range given the data distribution
+            Assert.InRange(predictions[i], -50.0, 50.0);
         }
     }
 
     [Fact]
-    public async Task BuildWithPreprocessing_PredictAppliesInverseTransform()
+    public void BuildWithPreprocessing_PredictAppliesInverseTransform()
     {
         // Arrange: Train on known linear data y = 2*x + 3 with preprocessing.
         // Predictions should be in the ORIGINAL scale, not the standardized scale.
@@ -87,11 +91,13 @@ public class AiModelBuilderPreprocessingPredictTests
 
         var loader = DataLoaders.FromMatrixVector(x, y);
 
-        var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+        var result = new AiModelBuilder<double, Matrix<double>, Vector<double>>()
             .ConfigureDataLoader(loader)
             .ConfigureModel(new RidgeRegression<double>())
             .ConfigurePreprocessing(new StandardScaler<double>())
-            .BuildAsync();
+            .BuildAsync()
+            .GetAwaiter()
+            .GetResult();
 
         // Test: predict for x = 10 → expected y ≈ 2*10 + 3 = 23
         var testData = new Matrix<double>(1, 1);
@@ -110,7 +116,7 @@ public class AiModelBuilderPreprocessingPredictTests
     }
 
     [Fact]
-    public async Task BuildWithCustomPipeline_PredictAppliesAllSteps()
+    public void BuildWithCustomPipeline_PredictProducesFiniteOutput()
     {
         // Arrange: Use pipeline with SimpleImputer + StandardScaler.
         // Training data has some NaN values that the imputer must handle.
@@ -136,13 +142,15 @@ public class AiModelBuilderPreprocessingPredictTests
 
         var loader = DataLoaders.FromMatrixVector(x, y);
 
-        var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+        var result = new AiModelBuilder<double, Matrix<double>, Vector<double>>()
             .ConfigureDataLoader(loader)
             .ConfigureModel(new RidgeRegression<double>())
             .ConfigurePreprocessing(pipeline => pipeline
                 .Add(new SimpleImputer<double>(ImputationStrategy.Mean))
                 .Add(new StandardScaler<double>()))
-            .BuildAsync();
+            .BuildAsync()
+            .GetAwaiter()
+            .GetResult();
 
         // Test: predict with clean data (no NaN)
         var testData = new Matrix<double>(3, 3);
@@ -153,29 +161,33 @@ public class AiModelBuilderPreprocessingPredictTests
 
         var predictions = result.Predict(testData);
 
-        // Assert: All predictions must be finite (pipeline processed correctly)
+        // Assert: All predictions must be finite and in a reasonable range
+        // y = x1 + 2*x2 + 3*x3, with xi in [0,10] -> y in [0, 60]
         Assert.Equal(3, predictions.Length);
         for (int i = 0; i < predictions.Length; i++)
         {
             Assert.False(double.IsNaN(predictions[i]),
-                $"Prediction {i} is NaN after pipeline processing");
+                $"Prediction {i} is NaN — imputer or scaler may not have been applied");
             Assert.False(double.IsInfinity(predictions[i]),
-                $"Prediction {i} is Infinity after pipeline processing");
+                $"Prediction {i} is Infinity — imputer or scaler may not have been applied");
+            Assert.InRange(predictions[i], -100.0, 200.0);
         }
     }
 
     [Fact]
-    public async Task BuildWithoutPreprocessing_PredictSkipsTransform()
+    public void BuildWithoutPreprocessing_PredictSkipsTransform()
     {
         // Arrange: Train WITHOUT ConfigurePreprocessing
         var (x, y) = CreateLinearDataset(samples: 50, features: 3, seed: 88);
         var loader = DataLoaders.FromMatrixVector(x, y);
 
-        var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+        var result = new AiModelBuilder<double, Matrix<double>, Vector<double>>()
             .ConfigureDataLoader(loader)
             .ConfigureModel(new RidgeRegression<double>())
             // Note: NO ConfigurePreprocessing call
-            .BuildAsync();
+            .BuildAsync()
+            .GetAwaiter()
+            .GetResult();
 
         // Assert: PreprocessingInfo should be null or not fitted
         var preprocessingInfo = result.PreprocessingInfo;

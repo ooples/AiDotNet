@@ -236,20 +236,37 @@ public class ScalerMathTests
     public void StandardScaler_TransformDoesNotModifyOriginalCopy()
     {
         var original = CreateKnownData();
+        var backup = CloneMatrix(original);
         var copy = CloneMatrix(original);
 
         var scaler = new StandardScaler<double>();
         scaler.Fit(copy);
         scaler.Transform(copy);
 
-        // Verify a separate copy of the original data wasn't mutated
+        // Verify the original matrix wasn't mutated by transforming the copy
         for (int i = 0; i < original.Rows; i++)
         {
             for (int j = 0; j < original.Columns; j++)
             {
-                Assert.Equal(original[i, j], original[i, j], precision: 15);
+                Assert.Equal(backup[i, j], original[i, j], precision: 15);
             }
         }
+
+        // Also verify the copy was actually transformed (differs from original)
+        bool anyDifferent = false;
+        for (int i = 0; i < copy.Rows; i++)
+        {
+            for (int j = 0; j < copy.Columns; j++)
+            {
+                if (Math.Abs(copy[i, j] - original[i, j]) > 1e-10)
+                {
+                    anyDifferent = true;
+                    break;
+                }
+            }
+            if (anyDifferent) break;
+        }
+        Assert.True(anyDifferent, "Transform should have modified the copy");
     }
 
     #endregion

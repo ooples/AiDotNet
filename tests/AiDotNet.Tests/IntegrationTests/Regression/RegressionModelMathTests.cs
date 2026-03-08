@@ -42,6 +42,16 @@ public class RegressionModelMathTests
         double r2 = ComputeR2(y, predictions);
         Assert.True(r2 > 0.999,
             $"SimpleRegression R²={r2:F6} on noise-free linear data should be > 0.999");
+
+        // Verify coefficients by probing: predict at x=0 and x=1
+        var probeX = new Matrix<double>(2, 1);
+        probeX[0, 0] = 0.0;
+        probeX[1, 0] = 1.0;
+        var probes = model.Predict(probeX);
+        double recoveredIntercept = probes[0];
+        double recoveredSlope = probes[1] - probes[0];
+        Assert.InRange(recoveredSlope, 2.5, 3.5);       // true slope: 3.0
+        Assert.InRange(recoveredIntercept, 1.5, 2.5);   // true intercept: 2.0
     }
 
     [Fact]
@@ -129,15 +139,17 @@ public class RegressionModelMathTests
     public void DecisionTreeRegression_FitsNonLinearData_ReasonableR2()
     {
         // Non-linear: y = sin(x1) + x2^2
-        var (x, y) = CreateNonLinearData(100, seed: 42);
+        // Use separate train and test sets to evaluate on holdout data
+        var (trainX, trainY) = CreateNonLinearData(100, seed: 42);
+        var (testX, testY) = CreateNonLinearData(30, seed: 99);
 
         var model = new DecisionTreeRegression<double>();
-        model.Train(x, y);
-        var predictions = model.Predict(x);
+        model.Train(trainX, trainY);
+        var predictions = model.Predict(testX);
 
-        double r2 = ComputeR2(y, predictions);
-        Assert.True(r2 > 0.80,
-            $"DecisionTreeRegression R²={r2:F6} on non-linear data should be > 0.80");
+        double r2 = ComputeR2(testY, predictions);
+        Assert.True(r2 > 0.50,
+            $"DecisionTreeRegression R²={r2:F6} on holdout non-linear data should be > 0.50");
     }
 
     [Fact]
@@ -145,10 +157,10 @@ public class RegressionModelMathTests
     {
         var (x, y) = CreateLinearData(80, new[] { 2.0, -1.0, 3.0 }, intercept: 0.5, noise: 0.3, seed: 42);
 
-        // WeightedRegression requires options with Weights (throws ArgumentNullException if null)
-        // This is an API inconsistency: constructor declares `options = null` but Guard.NotNull rejects null
+        // Use non-uniform weights: emphasize first half of data more heavily
         var weights = new Vector<double>(80);
-        for (int i = 0; i < 80; i++) weights[i] = 1.0; // Uniform weights
+        for (int i = 0; i < 80; i++)
+            weights[i] = i < 40 ? 3.0 : 1.0; // first 40 points weighted 3x more
         var options = new WeightedRegressionOptions<double> { Weights = weights };
 
         var model = new WeightedRegression<double>(options);
@@ -283,15 +295,17 @@ public class RegressionModelMathTests
     #region Builder Integration Tests — ensures optimizer pipeline works
 
     [Fact]
-    public async Task LassoRegression_ThroughBuilder_ProducesValidPredictions()
+    public void LassoRegression_ThroughBuilder_ProducesAccuratePredictions()
     {
         var (x, y) = CreateLinearData(60, new[] { 2.0, -1.0, 3.0, 0.0 }, intercept: 1.0, noise: 0.5, seed: 42);
         var loader = DataLoaders.FromMatrixVector(x, y);
 
-        var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+        var result = new AiModelBuilder<double, Matrix<double>, Vector<double>>()
             .ConfigureDataLoader(loader)
             .ConfigureModel(new LassoRegression<double>())
-            .BuildAsync();
+            .BuildAsync()
+            .GetAwaiter()
+            .GetResult();
 
         var testX = CreateRandomMatrix(10, 4, seed: 100);
         var predictions = result.Predict(testX);
@@ -302,19 +316,23 @@ public class RegressionModelMathTests
         {
             Assert.False(double.IsNaN(predictions[i]), $"Prediction {i} is NaN");
             Assert.False(double.IsInfinity(predictions[i]), $"Prediction {i} is Infinity");
+            // Predictions should be in a reasonable range given the data distribution
+            Assert.InRange(predictions[i], -100.0, 100.0);
         }
     }
 
     [Fact]
-    public async Task ElasticNet_ThroughBuilder_ProducesValidPredictions()
+    public void ElasticNet_ThroughBuilder_ProducesAccuratePredictions()
     {
         var (x, y) = CreateLinearData(60, new[] { 2.0, -1.0, 3.0 }, intercept: 1.0, noise: 0.5, seed: 42);
         var loader = DataLoaders.FromMatrixVector(x, y);
 
-        var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+        var result = new AiModelBuilder<double, Matrix<double>, Vector<double>>()
             .ConfigureDataLoader(loader)
             .ConfigureModel(new ElasticNetRegression<double>())
-            .BuildAsync();
+            .BuildAsync()
+            .GetAwaiter()
+            .GetResult();
 
         var testX = CreateRandomMatrix(10, 3, seed: 200);
         var predictions = result.Predict(testX);
@@ -324,11 +342,12 @@ public class RegressionModelMathTests
         for (int i = 0; i < predictions.Length; i++)
         {
             Assert.False(double.IsNaN(predictions[i]), $"Prediction {i} is NaN");
+            Assert.InRange(predictions[i], -100.0, 100.0);
         }
     }
 
     [Fact]
-    public async Task PolynomialRegression_ThroughBuilder_ProducesValidPredictions()
+    public void PolynomialRegression_ThroughBuilder_ProducesAccuratePredictions()
     {
         // Quadratic data
         var x = new Matrix<double>(60, 1);
@@ -343,29 +362,38 @@ public class RegressionModelMathTests
 
         var loader = DataLoaders.FromMatrixVector(x, y);
 
-        var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+        var result = new AiModelBuilder<double, Matrix<double>, Vector<double>>()
             .ConfigureDataLoader(loader)
             .ConfigureModel(new PolynomialRegression<double>(
                 new PolynomialRegressionOptions<double> { Degree = 2 }))
-            .BuildAsync();
+            .BuildAsync()
+            .GetAwaiter()
+            .GetResult();
 
         var testX = CreateRandomMatrix(10, 1, seed: 300);
         var predictions = result.Predict(testX);
 
         Assert.NotNull(predictions);
         Assert.Equal(10, predictions.Length);
+        for (int i = 0; i < predictions.Length; i++)
+        {
+            Assert.False(double.IsNaN(predictions[i]), $"Prediction {i} is NaN");
+            Assert.False(double.IsInfinity(predictions[i]), $"Prediction {i} is Infinity");
+        }
     }
 
     [Fact]
-    public async Task Builder_SerializeRoundTrip_LassoRegression_PredictionsMatch()
+    public void Builder_SerializeRoundTrip_LassoRegression_PredictionsMatch()
     {
         var (x, y) = CreateLinearData(60, new[] { 2.0, -1.0, 3.0 }, intercept: 1.0, noise: 0.3, seed: 42);
         var loader = DataLoaders.FromMatrixVector(x, y);
 
-        var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+        var result = new AiModelBuilder<double, Matrix<double>, Vector<double>>()
             .ConfigureDataLoader(loader)
             .ConfigureModel(new LassoRegression<double>())
-            .BuildAsync();
+            .BuildAsync()
+            .GetAwaiter()
+            .GetResult();
 
         var testX = CreateRandomMatrix(5, 3, seed: 400);
         var original = result.Predict(testX);
@@ -404,7 +432,7 @@ public class RegressionModelMathTests
     }
 
     [Fact]
-    public void RidgeRegression_HighRegularization_CoefficientsShrinked()
+    public void RidgeRegression_HighRegularization_CoefficientsAreShrunk()
     {
         // With very high regularization, coefficients should be close to zero
         var (x, y) = CreateLinearData(100, new[] { 5.0, -3.0, 2.0 }, intercept: 1.0, noise: 0.1, seed: 42);

@@ -31,7 +31,7 @@ public class AiModelBuilderErrorTests
     }
 
     [Fact]
-    public async Task Predict_WrongDimensionInput_ThrowsOrProducesFiniteOutput()
+    public void Predict_WrongDimensionInput_ThrowsDimensionError()
     {
         // Arrange: Train on 4-feature data
         var random = new Random(42);
@@ -45,60 +45,52 @@ public class AiModelBuilderErrorTests
         }
 
         var loader = DataLoaders.FromMatrixVector(x, y);
-        var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+        var result = new AiModelBuilder<double, Matrix<double>, Vector<double>>()
             .ConfigureDataLoader(loader)
             .ConfigureModel(new RidgeRegression<double>())
-            .BuildAsync();
+            .BuildAsync()
+            .GetAwaiter()
+            .GetResult();
 
         // Act: Predict with WRONG dimension (2 features instead of 4)
         var wrongDimData = new Matrix<double>(2, 2);
         wrongDimData[0, 0] = 1.0; wrongDimData[0, 1] = 2.0;
         wrongDimData[1, 0] = 3.0; wrongDimData[1, 1] = 4.0;
 
-        // Assert: Should either throw a clear error OR handle gracefully.
-        // The key assertion is that it doesn't silently produce garbage.
-        try
-        {
-            var predictions = result.Predict(wrongDimData);
-            // If it doesn't throw, predictions should at least be finite
-            for (int i = 0; i < predictions.Length; i++)
-            {
-                Assert.False(double.IsNaN(predictions[i]),
-                    "Prediction should not be NaN for mismatched dimensions");
-            }
-        }
-        catch (Exception ex)
-        {
-            // Any of these exception types are acceptable for dimension mismatch
-            Assert.True(
-                ex is InvalidOperationException ||
-                ex is ArgumentException ||
-                ex is ArgumentOutOfRangeException ||
-                ex is IndexOutOfRangeException,
-                $"Expected a clear dimension error, got {ex.GetType().Name}: {ex.Message}");
-        }
+        // Assert: Should throw a dimension-related error.
+        // The model was trained on 4 features; predicting with 2 must fail.
+        var ex = Assert.ThrowsAny<Exception>(() => result.Predict(wrongDimData));
+        Assert.True(
+            ex is InvalidOperationException ||
+            ex is ArgumentException ||
+            ex is ArgumentOutOfRangeException ||
+            ex is IndexOutOfRangeException,
+            $"Expected a dimension-related error, got {ex.GetType().Name}: {ex.Message}");
     }
 
     [Fact]
-    public async Task BuildAsync_EmptyDataset_ThrowsMeaningfulError()
+    public void BuildAsync_EmptyDataset_ThrowsArgumentException()
     {
         // Arrange: Create an empty matrix and vector
         var x = new Matrix<double>(0, 3);
         var y = new Vector<double>(0);
         var loader = DataLoaders.FromMatrixVector(x, y);
 
-        // Act/Assert: Building with empty data should throw
-        await Assert.ThrowsAnyAsync<Exception>(async () =>
+        // Act/Assert: Building with empty data should throw an argument-related exception
+        var ex = Assert.ThrowsAny<ArgumentException>(() =>
         {
-            await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+            new AiModelBuilder<double, Matrix<double>, Vector<double>>()
                 .ConfigureDataLoader(loader)
                 .ConfigureModel(new RidgeRegression<double>())
-                .BuildAsync();
+                .BuildAsync()
+                .GetAwaiter()
+                .GetResult();
         });
+        Assert.NotEmpty(ex.Message);
     }
 
     [Fact]
-    public async Task BuildAsync_SingleSampleDataset_ThrowsOrHandles()
+    public void BuildAsync_SingleSampleDataset_ThrowsInsufficientDataError()
     {
         // Arrange: Only 1 sample — can't meaningfully split train/test
         var x = new Matrix<double>(1, 2);
@@ -107,26 +99,23 @@ public class AiModelBuilderErrorTests
         y[0] = 3.0;
         var loader = DataLoaders.FromMatrixVector(x, y);
 
-        // Act/Assert: Should either throw a meaningful error or handle gracefully
-        try
+        // Act/Assert: Should throw a meaningful error about insufficient data
+        var ex = Assert.ThrowsAny<Exception>(() =>
         {
-            var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+            new AiModelBuilder<double, Matrix<double>, Vector<double>>()
                 .ConfigureDataLoader(loader)
                 .ConfigureModel(new RidgeRegression<double>())
-                .BuildAsync();
+                .BuildAsync()
+                .GetAwaiter()
+                .GetResult();
+        });
 
-            // If it builds successfully, model should at least be usable
-            Assert.NotNull(result);
-        }
-        catch (Exception ex)
-        {
-            // Any of these are acceptable for insufficient data
-            Assert.True(
-                ex is InvalidOperationException ||
-                ex is ArgumentException ||
-                ex is ArgumentOutOfRangeException ||
-                ex is DivideByZeroException,
-                $"Expected a clear data-size error, got {ex.GetType().Name}: {ex.Message}");
-        }
+        Assert.True(
+            ex is InvalidOperationException ||
+            ex is ArgumentException ||
+            ex is ArgumentOutOfRangeException ||
+            ex is DivideByZeroException,
+            $"Expected a data-size error, got {ex.GetType().Name}: {ex.Message}");
+        Assert.NotEmpty(ex.Message);
     }
 }

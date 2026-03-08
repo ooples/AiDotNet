@@ -39,15 +39,20 @@ public class ClusteringMathTests
         {
             uniqueLabels.Add(assignments[i]);
         }
-        Assert.True(uniqueLabels.Count >= 2,
-            $"KMeans should find at least 2 clusters in well-separated data, found {uniqueLabels.Count}");
+        Assert.Equal(3, uniqueLabels.Count);
 
-        // Verify cluster assignments are consistent within known clusters
-        // Points 0-29 should mostly be in the same cluster
-        var cluster0Labels = new HashSet<double>();
-        for (int i = 0; i < 30; i++) cluster0Labels.Add(assignments[i]);
-        Assert.True(cluster0Labels.Count <= 2,
-            "Points from cluster 0 should mostly be assigned to the same cluster");
+        // Verify cluster assignments are consistent within each known cluster group
+        // Points 0-29 (cluster A), 30-59 (cluster B), 60-89 (cluster C)
+        // should each be predominantly assigned to the same cluster label
+        for (int clusterIdx = 0; clusterIdx < 3; clusterIdx++)
+        {
+            var labelsInGroup = new HashSet<double>();
+            for (int i = clusterIdx * 30; i < (clusterIdx + 1) * 30; i++)
+                labelsInGroup.Add(assignments[i]);
+            Assert.True(labelsInGroup.Count == 1,
+                $"All points from well-separated cluster {clusterIdx} should be in the same cluster, " +
+                $"but found {labelsInGroup.Count} different labels");
+        }
     }
 
     [Fact]
@@ -135,14 +140,24 @@ public class ClusteringMathTests
 
         Assert.Equal(data.Rows, assignments.Length);
 
-        // Should find at least 2 clusters (label >= 0) and possibly noise (label == -1)
-        var uniqueLabels = new HashSet<double>();
+        // Count distinct cluster labels (non-noise) and noise points
+        var clusterLabels = new HashSet<double>();
+        int noiseCount = 0;
         for (int i = 0; i < assignments.Length; i++)
         {
-            uniqueLabels.Add(assignments[i]);
+            if (assignments[i] < 0)
+                noiseCount++;
+            else
+                clusterLabels.Add(assignments[i]);
         }
-        Assert.True(uniqueLabels.Count >= 2,
-            $"DBSCAN should find at least 2 groups, found {uniqueLabels.Count}");
+
+        // Should find exactly 2 dense clusters
+        Assert.True(clusterLabels.Count >= 2,
+            $"DBSCAN should find at least 2 dense clusters, found {clusterLabels.Count}");
+
+        // Should identify some noise points (the 5 scattered points at indices 60-64)
+        Assert.True(noiseCount > 0,
+            "DBSCAN should identify at least some noise points from the scattered outliers");
     }
 
     #region Helper Methods

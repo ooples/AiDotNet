@@ -16,16 +16,18 @@ namespace AiDotNet.Tests.IntegrationTests.Regression;
 public class AiModelResultDeepCopyTests
 {
     [Fact]
-    public async Task DeepCopy_PredictionsMatchOriginal()
+    public void DeepCopy_PredictionsMatchOriginal()
     {
         // Arrange: Train model, deep copy, verify both produce identical predictions
         var (x, y) = CreateLinearDataset(samples: 60, features: 4, seed: 42);
         var loader = DataLoaders.FromMatrixVector(x, y);
 
-        var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+        var result = new AiModelBuilder<double, Matrix<double>, Vector<double>>()
             .ConfigureDataLoader(loader)
             .ConfigureModel(new RidgeRegression<double>())
-            .BuildAsync();
+            .BuildAsync()
+            .GetAwaiter()
+            .GetResult();
 
         var testData = CreateTestData(rows: 5, cols: 4, seed: 100);
         var originalPredictions = result.Predict(testData);
@@ -45,16 +47,18 @@ public class AiModelResultDeepCopyTests
     }
 
     [Fact]
-    public async Task DeepCopy_MutatingCopyDoesNotAffectOriginal()
+    public void DeepCopy_MutatingCopyDoesNotAffectOriginal()
     {
         // Arrange: Train model, deep copy
         var (x, y) = CreateLinearDataset(samples: 60, features: 3, seed: 77);
         var loader = DataLoaders.FromMatrixVector(x, y);
 
-        var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+        var result = new AiModelBuilder<double, Matrix<double>, Vector<double>>()
             .ConfigureDataLoader(loader)
             .ConfigureModel(new RidgeRegression<double>())
-            .BuildAsync();
+            .BuildAsync()
+            .GetAwaiter()
+            .GetResult();
 
         var testData = CreateTestData(rows: 3, cols: 3, seed: 200);
         var originalPredictions = result.Predict(testData);
@@ -63,12 +67,12 @@ public class AiModelResultDeepCopyTests
         var copy = (AiModelResult<double, Matrix<double>, Vector<double>>)result.DeepCopy();
 
         // Mutate the copy's SelectedFeatureIndices
-        var copyIndices = copy.OptimizationResult?.SelectedFeatureIndices;
-        if (copyIndices != null && copyIndices.Count > 0)
-        {
-            copyIndices.Clear();
-            copyIndices.Add(0); // force to only use feature 0
-        }
+        Assert.NotNull(copy.OptimizationResult);
+        var copyIndices = copy.OptimizationResult.SelectedFeatureIndices;
+        Assert.NotNull(copyIndices);
+        Assert.NotEmpty(copyIndices);
+        copyIndices.Clear();
+        copyIndices.Add(0); // force to only use feature 0
 
         // Assert: Original's predictions should be unchanged after mutating copy
         var originalPredictionsAfterMutation = result.Predict(testData);
@@ -80,17 +84,19 @@ public class AiModelResultDeepCopyTests
     }
 
     [Fact]
-    public async Task DeepCopy_PreservesPreprocessingInfo()
+    public void DeepCopy_PreservesPreprocessingInfo()
     {
         // Arrange: Train with preprocessing, deep copy, verify preprocessing works on copy
         var (x, y) = CreateLinearDataset(samples: 60, features: 3, seed: 55);
         var loader = DataLoaders.FromMatrixVector(x, y);
 
-        var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+        var result = new AiModelBuilder<double, Matrix<double>, Vector<double>>()
             .ConfigureDataLoader(loader)
             .ConfigureModel(new RidgeRegression<double>())
             .ConfigurePreprocessing(new StandardScaler<double>())
-            .BuildAsync();
+            .BuildAsync()
+            .GetAwaiter()
+            .GetResult();
 
         Assert.NotNull(result.PreprocessingInfo);
         Assert.True(result.PreprocessingInfo.IsFitted);
