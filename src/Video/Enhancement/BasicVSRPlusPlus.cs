@@ -491,11 +491,13 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
         _cachedOutputConvInputs = [];
 
         // Extract initial features for all frames (with caching)
+        var featExtract = _featExtract ?? throw new InvalidOperationException("Feature extraction layer has not been initialized.");
+        var outputConvLayer = _outputConv ?? throw new InvalidOperationException("Output convolution has not been initialized.");
         var frameFeatures = new List<Tensor<T>>();
         for (int i = 0; i < numFrames; i++)
         {
             var frame = ExtractFrameBatch(frames, i);
-            var feat = _featExtract!.Forward(frame);
+            var feat = featExtract.Forward(frame);
             frameFeatures.Add(feat);
             _cachedInitialFeatures.Add(feat);
         }
@@ -537,7 +539,7 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
             _cachedOutputConvInputs.Add(feat);
 
             // Final output convolution
-            var output = _outputConv!.Forward(feat);
+            var output = outputConvLayer.Forward(feat);
 
             // Store in output tensor
             StoreFrameBatch(outputFrames, output, i);
@@ -569,6 +571,7 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
     private List<(Tensor<T> forward, Tensor<T> backward)> ComputeFlows(Tensor<T> frames, int numFrames)
     {
         var flows = new List<(Tensor<T> forward, Tensor<T> backward)>();
+        var flowEstimator = _flowEstimator ?? throw new InvalidOperationException("Flow estimator has not been initialized.");
 
         for (int i = 0; i < numFrames - 1; i++)
         {
@@ -576,10 +579,10 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
             var frame2 = ExtractFrameBatch(frames, i + 1);
 
             // Forward flow: frame i -> frame i+1
-            var forwardFlow = _flowEstimator!.EstimateFlow(frame1, frame2);
+            var forwardFlow = flowEstimator.EstimateFlow(frame1, frame2);
 
             // Backward flow: frame i+1 -> frame i
-            var backwardFlow = _flowEstimator.EstimateFlow(frame2, frame1);
+            var backwardFlow = flowEstimator.EstimateFlow(frame2, frame1);
 
             flows.Add((forwardFlow, backwardFlow));
         }
@@ -1008,13 +1011,15 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
         }
 
         // Process each frame's gradient through output conv, upsampling, and residual blocks
+        var featExtract = _featExtract ?? throw new InvalidOperationException("Feature extraction layer has not been initialized.");
+        var outputConvLayer = _outputConv ?? throw new InvalidOperationException("Output convolution has not been initialized.");
         for (int f = 0; f < numFrames; f++)
         {
             // Extract per-frame gradient
             var frameGrad = ExtractFrameBatch(gradient, f);
 
             // Backward through output convolution
-            var grad = _outputConv!.Backward(frameGrad);
+            var grad = outputConvLayer.Backward(frameGrad);
 
             // Backward through upsampling layers (in reverse order)
             for (int i = _upsampleLayers.Count - 1; i >= 0; i--)
@@ -1038,7 +1043,7 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
         // Backward through initial feature extraction for each frame
         for (int f = 0; f < numFrames; f++)
         {
-            _featExtract!.Backward(propagationGradients[f]);
+            featExtract.Backward(propagationGradients[f]);
         }
     }
 
@@ -1091,7 +1096,7 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
                 // Backward through warping: gradients go to previous frame features and flow
                 var (unwarpedGrad, flowGrad) = WarpBackward(
                     warpedGrad, _cachedFlows[i - 1].forward,
-                    _cachedForwardPropFeatures![iter][i - 1]);
+                    (_cachedForwardPropFeatures ?? throw new InvalidOperationException("Cached forward propagation features have not been initialized."))[iter][i - 1]);
 
                 // Accumulate gradients
                 AccumulateGradient(backwardPhaseGradients[i], currentPartGrad);
@@ -1135,7 +1140,7 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
                 // Backward through warping: gradients go to next frame features and flow
                 var (unwarpedGrad, flowGrad) = WarpBackward(
                     warpedGrad, _cachedFlows[i].backward,
-                    _cachedBackwardPropFeatures![iter][i + 1]);
+                    (_cachedBackwardPropFeatures ?? throw new InvalidOperationException("Cached backward propagation features have not been initialized."))[iter][i + 1]);
 
                 // Accumulate gradients
                 AccumulateGradient(inputGradients[i], origPartGrad);
@@ -1347,8 +1352,10 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
     {
         T lr = NumOps.FromDouble(_learningRate);
 
-        _featExtract!.UpdateParameters(lr);
-        _outputConv!.UpdateParameters(lr);
+        var featExtract = _featExtract ?? throw new InvalidOperationException("Feature extraction layer has not been initialized.");
+        var outputConvLayer = _outputConv ?? throw new InvalidOperationException("Output convolution has not been initialized.");
+        featExtract.UpdateParameters(lr);
+        outputConvLayer.UpdateParameters(lr);
 
         foreach (var block in _residualBlocks)
         {
@@ -1564,8 +1571,10 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
         writer.Write(_learningRate);
 
         // Serialize layer parameters
-        SerializeLayerParameters(writer, _featExtract!.GetParameters());
-        SerializeLayerParameters(writer, _outputConv!.GetParameters());
+        var featExtract = _featExtract ?? throw new InvalidOperationException("Feature extraction layer has not been initialized.");
+        var outputConvLayer = _outputConv ?? throw new InvalidOperationException("Output convolution has not been initialized.");
+        SerializeLayerParameters(writer, featExtract.GetParameters());
+        SerializeLayerParameters(writer, outputConvLayer.GetParameters());
 
         foreach (var block in _residualBlocks)
         {
@@ -1596,8 +1605,10 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
         _ = reader.ReadDouble(); // learningRate
 
         // Load layer parameters
-        _featExtract!.SetParameters(DeserializeLayerParameters(reader));
-        _outputConv!.SetParameters(DeserializeLayerParameters(reader));
+        var featExtract = _featExtract ?? throw new InvalidOperationException("Feature extraction layer has not been initialized.");
+        var outputConvLayer = _outputConv ?? throw new InvalidOperationException("Output convolution has not been initialized.");
+        featExtract.SetParameters(DeserializeLayerParameters(reader));
+        outputConvLayer.SetParameters(DeserializeLayerParameters(reader));
 
         foreach (var block in _residualBlocks)
         {

@@ -692,15 +692,16 @@ public class SlowFast<T> : NeuralNetworkBase<T>
         writer.Write(_imageSize);
 
         // Training component type names for restoration
-        writer.Write(_lossFunction.GetType().AssemblyQualifiedName ?? typeof(CrossEntropyLoss<T>).AssemblyQualifiedName!);
-        writer.Write(_probabilityActivation.GetType().AssemblyQualifiedName ?? typeof(SoftmaxActivation<T>).AssemblyQualifiedName!);
+        writer.Write(_lossFunction.GetType().AssemblyQualifiedName ?? (typeof(CrossEntropyLoss<T>).AssemblyQualifiedName ?? string.Empty));
+        writer.Write(_probabilityActivation.GetType().AssemblyQualifiedName ?? (typeof(SoftmaxActivation<T>).AssemblyQualifiedName ?? string.Empty));
 
         // Optimizer type (can be null for ONNX mode or after certain operations)
         bool hasOptimizer = _optimizer != null;
         writer.Write(hasOptimizer);
         if (hasOptimizer)
         {
-            writer.Write(_optimizer!.GetType().AssemblyQualifiedName ?? typeof(AdamOptimizer<T, Tensor<T>, Tensor<T>>).AssemblyQualifiedName!);
+            var optimizer = _optimizer ?? throw new InvalidOperationException("Optimizer has not been initialized.");
+            writer.Write(optimizer.GetType().AssemblyQualifiedName ?? (typeof(AdamOptimizer<T, Tensor<T>, Tensor<T>>).AssemblyQualifiedName ?? string.Empty));
         }
     }
 
