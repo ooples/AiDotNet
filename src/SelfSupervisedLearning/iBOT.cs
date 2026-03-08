@@ -132,15 +132,44 @@ public class iBOT<T> : TeacherStudentSSL<T>
         var mimWeightT = NumOps.FromDouble(_mimWeight);
         var loss = NumOps.Add(clsLoss, NumOps.Multiply(mimWeightT, patchLoss));
 
-        // Backward pass
-        var (_, gradStudent) = _clsLoss.ComputeLossWithGradients(studentOut1, teacherOut2);
+        // Backward pass: compute gradients for the full iBOT objective
+        // L = 0.5*(clsLoss1 + clsLoss2) + λ * 0.5*(patchLoss1 + patchLoss2)
         var projector = _projector ?? throw new InvalidOperationException("Projector has not been initialized.");
-        var gradH = projector.Backward(gradStudent);
-        _encoder.Backpropagate(gradH);
+
+        // Compute CLS gradients for both directions
+        var (_, gradCls1) = _clsLoss.ComputeLossWithGradients(studentOut1, teacherOut2);
+        var (_, gradCls2) = _clsLoss.ComputeLossWithGradients(studentOut2, teacherOut1);
+
+        // Compute masked patch gradients for both directions
+        var gradMim1 = ComputeMaskedPatchGradient(studentOut1, teacherOut2, mask1);
+        var gradMim2 = ComputeMaskedPatchGradient(studentOut2, teacherOut1, mask2);
+
+        // Combine: gradStudent = 0.5 * gradCls + λ * 0.5 * gradMim for each view
+        var gradStudent1 = CombineLossGradients(gradCls1, gradMim1, 0.5, 0.5 * _mimWeight);
+        var gradStudent2 = CombineLossGradients(gradCls2, gradMim2, 0.5, 0.5 * _mimWeight);
+
+        // Replay view1 forward to restore projector caches, then backward
+        projector.Reset();
+        var h1 = _encoder.ForwardWithMemory(view1);
+        projector.Project(h1);
+        var gradH1 = projector.Backward(gradStudent1);
+        var view1ProjGrads = projector.GetParameterGradients();
+        _encoder.Backpropagate(gradH1);
+
+        // Replay view2 forward to restore projector caches, then backward
+        projector.Reset();
+        var h2 = _encoder.ForwardWithMemory(view2);
+        projector.Project(h2);
+        var gradH2 = projector.Backward(gradStudent2);
+        var view2ProjGrads = projector.GetParameterGradients();
+        _encoder.Backpropagate(gradH2);
+
+        // Accumulate projector gradients from both views
+        var combinedProjGrads = Engine.Add(view1ProjGrads, view2ProjGrads);
 
         // Update networks
         var learningRate = NumOps.FromDouble(GetEffectiveLearningRate());
-        UpdateStudent(learningRate);
+        UpdateStudent(learningRate, combinedProjGrads);
         UpdateTeacher();
 
         // Create result
@@ -253,6 +282,129 @@ public class iBOT<T> : TeacherStudentSSL<T>
         // Weight loss by proportion of masked patches
         var maskWeight = numMasked > 0 ? (double)numMasked / (batchSize * numPatches) : 0.0;
         return NumOps.Multiply(baseLoss, NumOps.FromDouble(maskWeight));
+    }
+
+    /// <summary>
+    /// Computes the gradient of the masked patch loss with respect to studentOut.
+    /// For MSE loss on masked patches, grad = 2*(student - teacher)/N for masked positions, 0 otherwise.
+    /// </summary>
+    private Tensor<T> ComputeMaskedPatchGradient(Tensor<T> studentOut, Tensor<T> teacherOut, Tensor<T> mask)
+    {
+        var grad = new Tensor<T>(studentOut.Shape);
+        var batchSize = studentOut.Shape[0];
+        var numPatches = mask.Shape[1];
+
+        if (studentOut.Shape.Length == 3 && studentOut.Shape[1] > 1)
+        {
+            var seqLen = studentOut.Shape[1];
+            var dim = studentOut.Shape[2];
+            var patchStartIdx = 1;
+            var numPatchTokens = Math.Min(seqLen - patchStartIdx, numPatches);
+
+            if (numPatchTokens <= 0)
+            {
+                return grad;
+            }
+
+            // Count masked patches for normalization
+            int maskedCount = 0;
+            for (int b = 0; b < batchSize; b++)
+            {
+                for (int p = 0; p < numPatchTokens; p++)
+                {
+                    if (NumOps.GreaterThan(mask[b, p], NumOps.FromDouble(0.5)))
+                    {
+                        maskedCount++;
+                    }
+                }
+            }
+
+            if (maskedCount == 0)
+            {
+                return grad;
+            }
+
+            var scale = NumOps.FromDouble(2.0 / (maskedCount * dim));
+
+            for (int b = 0; b < batchSize; b++)
+            {
+                for (int p = 0; p < numPatchTokens; p++)
+                {
+                    if (NumOps.GreaterThan(mask[b, p], NumOps.FromDouble(0.5)))
+                    {
+                        var patchIdx = patchStartIdx + p;
+                        for (int d = 0; d < dim; d++)
+                        {
+                            var diff = NumOps.Subtract(studentOut[b, patchIdx, d], teacherOut[b, patchIdx, d]);
+                            grad[b, patchIdx, d] = NumOps.Multiply(diff, scale);
+                        }
+                    }
+                }
+            }
+
+            return grad;
+        }
+
+        // For 2D outputs, use DINOLoss gradients weighted by mask ratio
+        var (_, baseGrad) = _patchLoss.ComputeLossWithGradients(studentOut, teacherOut);
+        int numMasked = 0;
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int p = 0; p < numPatches; p++)
+            {
+                if (NumOps.GreaterThan(mask[b, p], NumOps.FromDouble(0.5)))
+                {
+                    numMasked++;
+                }
+            }
+        }
+
+        var maskWeight = numMasked > 0 ? (double)numMasked / (batchSize * numPatches) : 0.0;
+        var weightT = NumOps.FromDouble(maskWeight);
+
+        for (int i = 0; i < baseGrad.Length; i++)
+        {
+            grad[i] = NumOps.Multiply(baseGrad[i], weightT);
+        }
+
+        return grad;
+    }
+
+    /// <summary>
+    /// Combines CLS and MIM loss gradients element-wise: result = clsWeight * gradCls + mimWeight * gradMim.
+    /// </summary>
+    private Tensor<T> CombineLossGradients(Tensor<T> gradCls, Tensor<T> gradMim, double clsWeight, double mimWeight)
+    {
+        var result = new Tensor<T>(gradCls.Shape);
+        var cw = NumOps.FromDouble(clsWeight);
+        var mw = NumOps.FromDouble(mimWeight);
+
+        for (int i = 0; i < gradCls.Length; i++)
+        {
+            result[i] = NumOps.Add(
+                NumOps.Multiply(gradCls[i], cw),
+                NumOps.Multiply(gradMim[i], mw));
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Updates the student network with pre-accumulated projector gradients.
+    /// </summary>
+    private void UpdateStudent(T learningRate, Vector<T> accumulatedProjGrads)
+    {
+        // Update encoder
+        var encoderGrads = new Vector<T>(_encoder.GetParameterGradients());
+        var encoderParams = _encoder.GetParameters();
+        _encoder.UpdateParameters(Engine.Subtract(encoderParams, Engine.Multiply(encoderGrads, learningRate)));
+
+        // Update projector with accumulated gradients from both views
+        if (_projector is not null)
+        {
+            var projParams = _projector.GetParameters();
+            _projector.SetParameters(Engine.Subtract(projParams, Engine.Multiply(accumulatedProjGrads, learningRate)));
+        }
     }
 
     private Tensor<T> GenerateMask(int batchSize, int numPatches)
