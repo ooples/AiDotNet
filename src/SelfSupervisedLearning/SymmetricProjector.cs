@@ -221,12 +221,32 @@ public class SymmetricProjector<T> : IProjectorHead<T>
     /// <summary>
     /// Applies the predictor head (for online branch only).
     /// </summary>
-    public Tensor<T> Predict(Tensor<T> projection)
+    /// <param name="projection">The projection tensor to predict from.</param>
+    /// <param name="branchIndex">
+    /// Explicit branch index (0 for branch1, 1 for branch2).
+    /// If not specified, selects the most recently used branch from <see cref="Project"/>,
+    /// which requires calling Predict immediately after the corresponding Project call.
+    /// </param>
+    public Tensor<T> Predict(Tensor<T> projection, int branchIndex = -1)
     {
         if (!_hasPredictor)
             return projection;
 
-        var ctx = _nextBranch == 0 ? _branch2 : _branch1;
+        ForwardContext ctx;
+        if (branchIndex >= 0)
+        {
+            if (branchIndex > 1)
+            {
+                throw new ArgumentOutOfRangeException(nameof(branchIndex),
+                    "Branch index must be 0 (branch1) or 1 (branch2).");
+            }
+            ctx = branchIndex == 0 ? _branch1 : _branch2;
+        }
+        else
+        {
+            // Legacy behavior: use the most recently used branch from Project()
+            ctx = _nextBranch == 0 ? _branch2 : _branch1;
+        }
 
         ctx.CachedPredH1 = Linear(projection, PredWeight1, PredBias1, _projectionDim, _predictorHiddenDim);
         ctx.CachedPredH1Bn = BatchNorm(ctx.CachedPredH1, PredBn1Gamma, PredBn1Beta,
@@ -379,7 +399,13 @@ public class SymmetricProjector<T> : IProjectorHead<T>
 
         if (ctx.CachedInput is null || ctx.CachedH1Relu is null || ctx.CachedProjection is null)
         {
-            return new Vector<T>(grads);
+            var missing = new List<string>();
+            if (ctx.CachedInput is null) missing.Add(nameof(ctx.CachedInput));
+            if (ctx.CachedH1Relu is null) missing.Add(nameof(ctx.CachedH1Relu));
+            if (ctx.CachedProjection is null) missing.Add(nameof(ctx.CachedProjection));
+            throw new InvalidOperationException(
+                $"Cannot compute gradients without cached forward pass data. Missing: {string.Join(", ", missing)}. " +
+                "Ensure Project() was called before Backward().");
         }
 
         var cachedInput = ctx.CachedInput;
@@ -515,6 +541,13 @@ public class SymmetricProjector<T> : IProjectorHead<T>
     /// <inheritdoc />
     public void SetParameters(Vector<T> parameters)
     {
+        if (parameters.Length != ParameterCount)
+        {
+            throw new ArgumentException(
+                $"Expected {ParameterCount} parameters, but received {parameters.Length}.",
+                nameof(parameters));
+        }
+
         var paramArray = parameters.ToArray();
         int offset = 0;
 

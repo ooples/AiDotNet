@@ -1070,6 +1070,9 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
             // --- Backward through FORWARD propagation phase ---
             // Forward propagation went from first to last (i = 1 to numFrames-1)
             // So backward goes from last to first
+            var cachedForwardFeatures = _cachedForwardPropFeatures ?? throw new InvalidOperationException(
+                "Cached forward propagation features not available. Call Forward() before Backward().");
+
             for (int i = numFrames - 1; i >= 1; i--)
             {
                 var grad = currentGradients[i];
