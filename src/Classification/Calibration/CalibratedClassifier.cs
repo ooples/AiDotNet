@@ -42,7 +42,7 @@ namespace AiDotNet.Classification.Calibration;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-internal class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>
+public class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>
 {
     /// <summary>
     /// The base classifier being calibrated.
@@ -94,6 +94,14 @@ internal class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>
     /// <param name="baseClassifier">The probabilistic classifier to calibrate.</param>
     /// <param name="options">Calibration configuration options.</param>
     /// <param name="regularization">Optional regularization.</param>
+    /// <summary>
+    /// Initializes a new instance with default settings using Gaussian Naive Bayes as the base classifier.
+    /// </summary>
+    public CalibratedClassifier()
+        : this(new AiDotNet.Classification.NaiveBayes.GaussianNaiveBayes<T>())
+    {
+    }
+
     public CalibratedClassifier(
         IProbabilisticClassifier<T> baseClassifier,
         CalibratedClassifierOptions<T>? options = null,
