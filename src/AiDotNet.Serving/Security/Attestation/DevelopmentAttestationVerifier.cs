@@ -157,6 +157,14 @@ public sealed class DevelopmentAttestationVerifier : IAttestationVerifier
         {
             return new AttestationVerificationResult(false, "Attestation token validation failed.");
         }
+        catch (ArgumentException)
+        {
+            return new AttestationVerificationResult(false, "Attestation token is malformed.");
+        }
+        catch (InvalidOperationException)
+        {
+            return new AttestationVerificationResult(false, "Attestation token validation configuration error.");
+        }
     }
 
     private static TokenValidationParameters BuildJwtValidationParameters(JwtAttestationOptions jwtOptions)
