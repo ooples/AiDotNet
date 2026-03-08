@@ -1,7 +1,10 @@
+using AiDotNet.Classification.DiscriminantAnalysis;
 using AiDotNet.Classification.Linear;
 using AiDotNet.Classification.NaiveBayes;
 using AiDotNet.Classification.SVM;
 using AiDotNet.Classification.Trees;
+using AiDotNet.Enums;
+using AiDotNet.Models.Options;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
@@ -300,6 +303,345 @@ public class ClassifierSerializationRoundTripTests
 
     #endregion
 
+    #region Discriminant Analysis — ClassMeans + Covariance + Priors
+
+    [Fact]
+    public void LDA_SerializeRoundTrip_PredictionsMatch()
+    {
+        var (trainX, trainY) = CreateBinaryData(80, 3, separation: 6.0, seed: 42);
+        var classifier = new LinearDiscriminantAnalysis<double>(new DiscriminantAnalysisOptions<double>
+        {
+            RegularizationParam = 0.01
+        });
+        classifier.Train(trainX, trainY);
+
+        var testX = CreateRandomMatrix(10, 3, seed: 1000);
+        var original = classifier.Predict(testX);
+
+        var bytes = classifier.Serialize();
+        var restored = new LinearDiscriminantAnalysis<double>(new DiscriminantAnalysisOptions<double>
+        {
+            RegularizationParam = 0.01
+        });
+        restored.Deserialize(bytes);
+        var restoredPreds = restored.Predict(testX);
+
+        AssertPredictionsMatch(original, restoredPreds, "LinearDiscriminantAnalysis");
+    }
+
+    [Fact]
+    public void QDA_SerializeRoundTrip_PredictionsMatch()
+    {
+        var (trainX, trainY) = CreateBinaryData(80, 3, separation: 6.0, seed: 42);
+        var classifier = new QuadraticDiscriminantAnalysis<double>(new DiscriminantAnalysisOptions<double>
+        {
+            RegularizationParam = 0.01
+        });
+        classifier.Train(trainX, trainY);
+
+        var testX = CreateRandomMatrix(10, 3, seed: 1100);
+        var original = classifier.Predict(testX);
+
+        var bytes = classifier.Serialize();
+        var restored = new QuadraticDiscriminantAnalysis<double>(new DiscriminantAnalysisOptions<double>
+        {
+            RegularizationParam = 0.01
+        });
+        restored.Deserialize(bytes);
+        var restoredPreds = restored.Predict(testX);
+
+        AssertPredictionsMatch(original, restoredPreds, "QuadraticDiscriminantAnalysis");
+    }
+
+    [Fact]
+    public void LDA_DeepCopy_PreservesTrainedState()
+    {
+        var (trainX, trainY) = CreateBinaryData(80, 3, separation: 6.0, seed: 42);
+        var classifier = new LinearDiscriminantAnalysis<double>(new DiscriminantAnalysisOptions<double>
+        {
+            RegularizationParam = 0.01
+        });
+        classifier.Train(trainX, trainY);
+
+        var testX = CreateRandomMatrix(10, 3, seed: 1000);
+        var original = classifier.Predict(testX);
+
+        var copy = classifier.DeepCopy();
+        var copyPreds = copy.Predict(testX);
+
+        AssertPredictionsMatch(original, (Vector<double>)copyPreds, "LDA DeepCopy");
+    }
+
+    [Fact]
+    public void QDA_DeepCopy_PreservesTrainedState()
+    {
+        var (trainX, trainY) = CreateBinaryData(80, 3, separation: 6.0, seed: 42);
+        var classifier = new QuadraticDiscriminantAnalysis<double>(new DiscriminantAnalysisOptions<double>
+        {
+            RegularizationParam = 0.01
+        });
+        classifier.Train(trainX, trainY);
+
+        var testX = CreateRandomMatrix(10, 3, seed: 1100);
+        var original = classifier.Predict(testX);
+
+        var copy = classifier.DeepCopy();
+        var copyPreds = copy.Predict(testX);
+
+        AssertPredictionsMatch(original, (Vector<double>)copyPreds, "QDA DeepCopy");
+    }
+
+    [Fact]
+    public void LDA_TrainAndPredict_AchievesReasonableAccuracy()
+    {
+        var (trainX, trainY) = CreateBinaryData(100, 3, separation: 6.0, seed: 42);
+        var classifier = new LinearDiscriminantAnalysis<double>(new DiscriminantAnalysisOptions<double>
+        {
+            RegularizationParam = 0.01
+        });
+        classifier.Train(trainX, trainY);
+
+        var (testX, testY) = CreateBinaryData(40, 3, separation: 6.0, seed: 999);
+        var predictions = classifier.Predict(testX);
+
+        double accuracy = ComputeAccuracy(predictions, testY);
+        Assert.True(accuracy > 0.85,
+            $"LDA accuracy {accuracy:P1} too low for well-separated data (expected > 85%)");
+    }
+
+    [Fact]
+    public void QDA_TrainAndPredict_AchievesReasonableAccuracy()
+    {
+        var (trainX, trainY) = CreateBinaryData(100, 3, separation: 6.0, seed: 42);
+        var classifier = new QuadraticDiscriminantAnalysis<double>(new DiscriminantAnalysisOptions<double>
+        {
+            RegularizationParam = 0.01
+        });
+        classifier.Train(trainX, trainY);
+
+        var (testX, testY) = CreateBinaryData(40, 3, separation: 6.0, seed: 999);
+        var predictions = classifier.Predict(testX);
+
+        double accuracy = ComputeAccuracy(predictions, testY);
+        Assert.True(accuracy > 0.85,
+            $"QDA accuracy {accuracy:P1} too low for well-separated data (expected > 85%)");
+    }
+
+    [Fact]
+    public void LDA_PredictProbabilities_SumsToOne()
+    {
+        var (trainX, trainY) = CreateBinaryData(80, 3, separation: 6.0, seed: 42);
+        var classifier = new LinearDiscriminantAnalysis<double>(new DiscriminantAnalysisOptions<double>
+        {
+            RegularizationParam = 0.01
+        });
+        classifier.Train(trainX, trainY);
+
+        var probs = classifier.PredictProbabilities(trainX);
+
+        for (int i = 0; i < trainX.Rows; i++)
+        {
+            double sum = 0;
+            for (int c = 0; c < probs.Columns; c++)
+            {
+                sum += probs[i, c];
+                Assert.True(probs[i, c] >= -1e-10 && probs[i, c] <= 1.0 + 1e-10,
+                    $"LDA probability at [{i},{c}] = {probs[i, c]} should be in [0,1]");
+            }
+            Assert.True(Math.Abs(sum - 1.0) < 1e-6,
+                $"LDA probabilities for sample {i} sum to {sum}, should be 1.0");
+        }
+    }
+
+    #endregion
+
+    #region Complement & Categorical Naive Bayes — complementLogProbs + categoryLogProbs
+
+    [Fact]
+    public void ComplementNaiveBayes_SerializeRoundTrip_PredictionsMatch()
+    {
+        var (trainX, trainY) = CreateNonNegativeBinaryData(80, 4, seed: 42);
+        var classifier = new ComplementNaiveBayes<double>();
+        classifier.Train(trainX, trainY);
+
+        var testX = CreateNonNegativeMatrix(10, 4, seed: 1200);
+        var original = classifier.Predict(testX);
+
+        var bytes = classifier.Serialize();
+        var restored = new ComplementNaiveBayes<double>();
+        restored.Deserialize(bytes);
+        var restoredPreds = restored.Predict(testX);
+
+        AssertPredictionsMatch(original, restoredPreds, "ComplementNaiveBayes");
+    }
+
+    [Fact]
+    public void ComplementNaiveBayes_DeepCopy_PreservesTrainedState()
+    {
+        var (trainX, trainY) = CreateNonNegativeBinaryData(80, 4, seed: 42);
+        var classifier = new ComplementNaiveBayes<double>();
+        classifier.Train(trainX, trainY);
+
+        var testX = CreateNonNegativeMatrix(10, 4, seed: 1200);
+        var original = classifier.Predict(testX);
+
+        var copy = classifier.DeepCopy();
+        var copyPreds = copy.Predict(testX);
+
+        AssertPredictionsMatch(original, (Vector<double>)copyPreds, "ComplementNB DeepCopy");
+    }
+
+    [Fact]
+    public void CategoricalNaiveBayes_SerializeRoundTrip_PredictionsMatch()
+    {
+        var (trainX, trainY) = CreateCategoricalBinaryData(80, 3, seed: 42);
+        var classifier = new CategoricalNaiveBayes<double>();
+        classifier.Train(trainX, trainY);
+
+        var testX = CreateCategoricalMatrix(10, 3, seed: 1300);
+        var original = classifier.Predict(testX);
+
+        var bytes = classifier.Serialize();
+        var restored = new CategoricalNaiveBayes<double>();
+        restored.Deserialize(bytes);
+        var restoredPreds = restored.Predict(testX);
+
+        AssertPredictionsMatch(original, restoredPreds, "CategoricalNaiveBayes");
+    }
+
+    [Fact]
+    public void CategoricalNaiveBayes_DeepCopy_PreservesTrainedState()
+    {
+        var (trainX, trainY) = CreateCategoricalBinaryData(80, 3, seed: 42);
+        var classifier = new CategoricalNaiveBayes<double>();
+        classifier.Train(trainX, trainY);
+
+        var testX = CreateCategoricalMatrix(10, 3, seed: 1300);
+        var original = classifier.Predict(testX);
+
+        var copy = classifier.DeepCopy();
+        var copyPreds = copy.Predict(testX);
+
+        AssertPredictionsMatch(original, (Vector<double>)copyPreds, "CategoricalNB DeepCopy");
+    }
+
+    #endregion
+
+    #region SVM Accuracy Validation
+
+    [Fact]
+    public void SVC_TrainAndPredict_AchievesReasonableAccuracy()
+    {
+        var (trainX, trainY) = CreateBinaryData(80, 2, separation: 5.0, seed: 42);
+        var classifier = new SupportVectorClassifier<double>(new SVMOptions<double>
+        {
+            C = 1.0,
+            Kernel = KernelType.RBF,
+            MaxIterations = 200,
+            Tolerance = 1e-3,
+            Seed = 42
+        });
+        classifier.Train(trainX, trainY);
+
+        var (testX, testY) = CreateBinaryData(40, 2, separation: 5.0, seed: 999);
+        var predictions = classifier.Predict(testX);
+
+        double accuracy = ComputeAccuracy(predictions, testY);
+        Assert.True(accuracy > 0.70,
+            $"SVC accuracy {accuracy:P1} too low for well-separated data (expected > 70%)");
+    }
+
+    [Fact]
+    public void NuSVC_TrainAndPredict_AchievesReasonableAccuracy()
+    {
+        var (trainX, trainY) = CreateBinaryData(80, 2, separation: 5.0, seed: 42);
+        var classifier = new NuSupportVectorClassifier<double>(new SVMOptions<double>
+        {
+            C = 1.0,
+            Kernel = KernelType.RBF,
+            MaxIterations = 200,
+            Tolerance = 1e-3,
+            Seed = 42
+        });
+        classifier.Train(trainX, trainY);
+
+        var (testX, testY) = CreateBinaryData(40, 2, separation: 5.0, seed: 999);
+        var predictions = classifier.Predict(testX);
+
+        double accuracy = ComputeAccuracy(predictions, testY);
+        Assert.True(accuracy > 0.60,
+            $"NuSVC accuracy {accuracy:P1} too low for well-separated data (expected > 60%)");
+    }
+
+    [Fact]
+    public void LinearSVC_TrainAndPredict_AchievesReasonableAccuracy()
+    {
+        var (trainX, trainY) = CreateBinaryData(100, 3, separation: 5.0, seed: 42);
+        var classifier = new LinearSupportVectorClassifier<double>();
+        classifier.Train(trainX, trainY);
+
+        var (testX, testY) = CreateBinaryData(40, 3, separation: 5.0, seed: 999);
+        var predictions = classifier.Predict(testX);
+
+        double accuracy = ComputeAccuracy(predictions, testY);
+        Assert.True(accuracy > 0.70,
+            $"LinearSVC accuracy {accuracy:P1} too low for linearly separable data (expected > 70%)");
+    }
+
+    #endregion
+
+    #region Multi-class Serialize Round-trips
+
+    [Fact]
+    public void LDA_MultiClass_SerializeRoundTrip()
+    {
+        var (trainX, trainY) = CreateMultiClassData(90, 3, numClasses: 3, separation: 6.0, seed: 42);
+        var classifier = new LinearDiscriminantAnalysis<double>(new DiscriminantAnalysisOptions<double>
+        {
+            RegularizationParam = 0.01
+        });
+        classifier.Train(trainX, trainY);
+
+        var testX = CreateRandomMatrix(10, 3, seed: 1400);
+        var original = classifier.Predict(testX);
+
+        var bytes = classifier.Serialize();
+        var restored = new LinearDiscriminantAnalysis<double>(new DiscriminantAnalysisOptions<double>
+        {
+            RegularizationParam = 0.01
+        });
+        restored.Deserialize(bytes);
+        var restoredPreds = restored.Predict(testX);
+
+        AssertPredictionsMatch(original, restoredPreds, "LDA MultiClass");
+    }
+
+    [Fact]
+    public void QDA_MultiClass_SerializeRoundTrip()
+    {
+        var (trainX, trainY) = CreateMultiClassData(90, 3, numClasses: 3, separation: 6.0, seed: 42);
+        var classifier = new QuadraticDiscriminantAnalysis<double>(new DiscriminantAnalysisOptions<double>
+        {
+            RegularizationParam = 0.01
+        });
+        classifier.Train(trainX, trainY);
+
+        var testX = CreateRandomMatrix(10, 3, seed: 1500);
+        var original = classifier.Predict(testX);
+
+        var bytes = classifier.Serialize();
+        var restored = new QuadraticDiscriminantAnalysis<double>(new DiscriminantAnalysisOptions<double>
+        {
+            RegularizationParam = 0.01
+        });
+        restored.Deserialize(bytes);
+        var restoredPreds = restored.Predict(testX);
+
+        AssertPredictionsMatch(original, restoredPreds, "QDA MultiClass");
+    }
+
+    #endregion
+
     #region Helper Methods
 
     private static (Matrix<double> x, Vector<double> y) CreateBinaryData(
@@ -396,6 +738,62 @@ public class ClassifierSerializationRoundTripTests
             for (int j = 0; j < cols; j++)
                 matrix[i, j] = random.NextDouble() < 0.5 ? 1.0 : 0.0;
         return matrix;
+    }
+
+    private static (Matrix<double> x, Vector<double> y) CreateCategoricalBinaryData(
+        int totalSamples, int features, int seed)
+    {
+        var random = new Random(seed);
+        int samplesPerClass = totalSamples / 2;
+        var x = new Matrix<double>(totalSamples, features);
+        var y = new Vector<double>(totalSamples);
+
+        for (int i = 0; i < totalSamples; i++)
+        {
+            int classLabel = i < samplesPerClass ? 0 : 1;
+            y[i] = classLabel;
+            for (int j = 0; j < features; j++)
+            {
+                // Class 0 leans toward category 0, class 1 toward category 2
+                x[i, j] = classLabel == 0
+                    ? (random.NextDouble() < 0.8 ? 0 : random.Next(0, 3))
+                    : (random.NextDouble() < 0.8 ? 2 : random.Next(0, 3));
+            }
+        }
+        return (x, y);
+    }
+
+    private static Matrix<double> CreateCategoricalMatrix(int rows, int cols, int seed)
+    {
+        var random = new Random(seed);
+        var matrix = new Matrix<double>(rows, cols);
+        for (int i = 0; i < rows; i++)
+            for (int j = 0; j < cols; j++)
+                matrix[i, j] = random.Next(0, 3);
+        return matrix;
+    }
+
+    private static (Matrix<double> x, Vector<double> y) CreateMultiClassData(
+        int samplesPerClass, int features, int numClasses, double separation, int seed)
+    {
+        var random = new Random(seed);
+        int totalSamples = samplesPerClass * numClasses;
+        var x = new Matrix<double>(totalSamples, features);
+        var y = new Vector<double>(totalSamples);
+
+        for (int c = 0; c < numClasses; c++)
+        {
+            for (int i = 0; i < samplesPerClass; i++)
+            {
+                int idx = c * samplesPerClass + i;
+                y[idx] = c;
+                for (int j = 0; j < features; j++)
+                {
+                    x[idx, j] = c * separation + NextGaussian(random);
+                }
+            }
+        }
+        return (x, y);
     }
 
     private static double NextGaussian(Random random)
