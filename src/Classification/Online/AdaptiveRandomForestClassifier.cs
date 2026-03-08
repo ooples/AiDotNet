@@ -287,7 +287,12 @@ public class AdaptiveRandomForestClassifier<T> : ClassifierBase<T>, IOnlineClass
     {
         if (!IsWarm || _ensemble.Count == 0 || _knownClasses.Count == 0)
         {
-            return _knownClasses.Count > 0 ? _knownClasses[0] : default!;
+            if (_knownClasses.Count > 0)
+            {
+                return _knownClasses[0];
+            }
+
+            throw new InvalidOperationException("Cannot predict: no classes have been observed yet. The model needs at least one training sample.");
         }
 
         // Weighted voting
@@ -295,8 +300,15 @@ public class AdaptiveRandomForestClassifier<T> : ClassifierBase<T>, IOnlineClass
 
         foreach (var member in _ensemble)
         {
-            var selectedFeatures = ExtractSelectedFeatures(features, member.SelectedFeatures!);
-            var treePrediction = member.Tree!.Predict(ConvertToMatrix(selectedFeatures));
+            if (member.SelectedFeatures is null || member.Tree is null)
+            {
+                throw new InvalidOperationException(
+                    "Ensemble member is in an invalid state: SelectedFeatures or Tree is null. " +
+                    "This indicates a bug in ensemble initialization or training.");
+            }
+
+            var selectedFeatures = ExtractSelectedFeatures(features, member.SelectedFeatures);
+            var treePrediction = member.Tree.Predict(ConvertToMatrix(selectedFeatures));
 
             int classIdx = GetClassIndex(treePrediction[0]);
             if (classIdx >= 0)

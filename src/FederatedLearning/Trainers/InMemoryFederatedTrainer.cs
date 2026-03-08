@@ -178,6 +178,14 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
             ? ResolveEncryptedIndices(heOptions ?? throw new InvalidOperationException("HE options null."), GetGlobalModel().ParameterCount, heMode)
             : Array.Empty<int>();
 
+
+        // Re-evaluate HE enablement based on effective encrypted indices
+        useHomomorphicEncryption = useHomomorphicEncryption && encryptedIndices.Length > 0;
+        if (!useHomomorphicEncryption)
+        {
+            heProvider = null;
+        }
+
         metadata.HomomorphicEncryptionEnabled = useHomomorphicEncryption;
         metadata.HomomorphicEncryptionSchemeUsed = useHomomorphicEncryption ? GetHomomorphicEncryptionSchemeName(heScheme) : "None";
         metadata.HomomorphicEncryptionModeUsed = useHomomorphicEncryption ? GetHomomorphicEncryptionModeName(heMode) : "None";
@@ -761,7 +769,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                     {
                         var globalParams = targetModel.GetParameters();
                         var privateGlobalParams = (dpMechanism ?? throw new InvalidOperationException("DP mechanism null.")).ApplyPrivacy(globalParams, dpEpsilon, dpDelta);
-                        (privacyAccountant ?? throw new InvalidOperationException("Privacy accountant null.")).AddRound(dpEpsilon, dpDelta, samplingRate: (double)selectedClientIds.Count / GetNumberOfClientsOrThrow());
+                        (privacyAccountant ?? throw new InvalidOperationException("Privacy accountant null.")).AddRound(dpEpsilon, dpDelta, samplingRate: (double)due.Count / GetNumberOfClientsOrThrow());
                         privacyEventsThisStep++;
                         targetModel = targetModel.WithParameters(privateGlobalParams);
                     }
@@ -820,7 +828,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                     {
                         var globalParams = newGlobalModel.GetParameters();
                         var privateGlobalParams = (dpMechanism ?? throw new InvalidOperationException("DP mechanism null.")).ApplyPrivacy(globalParams, dpEpsilon, dpDelta);
-                        (privacyAccountant ?? throw new InvalidOperationException("Privacy accountant null.")).AddRound(dpEpsilon, dpDelta, samplingRate: (double)selectedClientIds.Count / GetNumberOfClientsOrThrow());
+                        (privacyAccountant ?? throw new InvalidOperationException("Privacy accountant null.")).AddRound(dpEpsilon, dpDelta, samplingRate: (double)due.Count / GetNumberOfClientsOrThrow());
                         privacyEventsThisStep++;
                         newGlobalModel = newGlobalModel.WithParameters(privateGlobalParams);
                     }
