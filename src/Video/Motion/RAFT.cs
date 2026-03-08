@@ -244,6 +244,20 @@ public class RAFT<T> : OpticalFlowBase<T>
 
     #region Private Methods
 
+    /// <summary>
+    /// Throws if the layer fields have not been initialized via <see cref="InitializeNativeLayers"/>.
+    /// </summary>
+    private void ThrowIfNotInitialized()
+    {
+        if (_correlationConv is null || _gruConvZ is null || _gruConvR is null ||
+            _gruConvH is null || _flowHead is null || _deltaFlowHead is null ||
+            _upsampleConv is null)
+        {
+            throw new InvalidOperationException(
+                $"{nameof(RAFT<T>)} has not been initialized. Ensure the constructor completed successfully.");
+        }
+    }
+
     private void InitializeNativeLayers()
     {
         // Check for user-provided custom layers
@@ -283,6 +297,8 @@ public class RAFT<T> : OpticalFlowBase<T>
 
     private List<Tensor<T>> ForwardIterative(Tensor<T> frame1, Tensor<T> frame2)
     {
+        ThrowIfNotInitialized();
+
         int batchSize = frame1.Shape[0];
         int featHeight = _height / 8;
         int featWidth = _width / 8;
@@ -394,6 +410,8 @@ public class RAFT<T> : OpticalFlowBase<T>
 
     private Tensor<T> GRUUpdate(Tensor<T> hiddenState, Tensor<T> gruInput)
     {
+        ThrowIfNotInitialized();
+
         var z = Engine.Sigmoid(_gruConvZ!.Forward(gruInput));
         var r = Engine.Sigmoid(_gruConvR!.Forward(gruInput));
         var hNew = ApplyTanh(_gruConvH!.Forward(gruInput));
@@ -541,6 +559,8 @@ public class RAFT<T> : OpticalFlowBase<T>
 
     private void BackwardPass(Tensor<T> gradient)
     {
+        ThrowIfNotInitialized();
+
         gradient = _upsampleConv!.Backward(gradient);
         gradient = _deltaFlowHead!.Backward(gradient);
         gradient = _flowHead!.Backward(gradient);
