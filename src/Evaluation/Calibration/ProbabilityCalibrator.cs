@@ -765,7 +765,6 @@ public class ProbabilityCalibrator<T>
             // Compute bin statistics and log-likelihood
             double logLikelihood = 0;
             var probs = new double[numBins];
-            bool validScheme = true;
 
             for (int b = 0; b < numBins; b++)
             {
@@ -796,8 +795,6 @@ public class ProbabilityCalibrator<T>
                 // Binomial log-likelihood for this bin
                 logLikelihood += positiveCount * Math.Log(p) + (count - positiveCount) * Math.Log(1 - p);
             }
-
-            if (!validScheme) continue;
 
             // BIC = log-likelihood - (k/2) * log(n), where k = numBins (one parameter per bin)
             double bic = logLikelihood - (numBins / 2.0) * Math.Log(n);
