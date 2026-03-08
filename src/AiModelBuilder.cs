@@ -1255,7 +1255,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
 
         var optimizationResult = new OptimizationResult<T, TInput, TOutput>
         {
-            BestSolution = _model ?? throw new InvalidOperationException("Model has not been configured. Call WithModel() before BuildForInference().")
+            BestSolution = _model ?? throw new InvalidOperationException("Model has not been configured. Call ConfigureModel() before BuildForInference().")
         };
 
         var deploymentConfig = DeploymentConfiguration.Create(
@@ -2028,10 +2028,10 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
 
         TInput XTrain;
         TOutput yTrain;
-        // These generic types are always value types (Matrix<T>, Vector<T>) at runtime,
-        // so default produces valid zero-initialized values, not null. The suppression covers
-        // both the declarations and all downstream usage sites in this method.
-#pragma warning disable CS8600, CS8604 // Generic type defaults - T is always a value type at runtime
+        // These variables are assigned in all code paths before use (train/val/test split or
+        // federated path). The pragma suppresses nullable warnings for the initial default
+        // declarations since TInput/TOutput are reference types (Matrix<T>/Vector<T>).
+#pragma warning disable CS8600, CS8604 // Assigned in all code paths before use
         TInput XVal = default;
         TOutput yVal = default;
         TInput XTest = default;

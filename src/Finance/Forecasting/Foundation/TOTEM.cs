@@ -62,7 +62,7 @@ public class TOTEM<T> : TimeSeriesFoundationModelBase<T>
 
     // VQ codebook: [numCodebooks x codebookSize x codebookDimension]
     private Tensor<T>? _codebooks;
-    private T? _lastCommitmentLoss;
+    private T _lastCommitmentLoss;
 
     #endregion
 
@@ -119,6 +119,7 @@ public class TOTEM<T> : TimeSeriesFoundationModelBase<T>
 
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
+        _lastCommitmentLoss = NumOps.Zero;
 
         CopyOptionsToFields(options);
     }
@@ -143,6 +144,7 @@ public class TOTEM<T> : TimeSeriesFoundationModelBase<T>
 
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
+        _lastCommitmentLoss = NumOps.Zero;
 
         CopyOptionsToFields(options);
         InitializeLayers();
@@ -281,7 +283,7 @@ public class TOTEM<T> : TimeSeriesFoundationModelBase<T>
             // Note: commitment loss gradient flows via the straight-through estimator (STE) in
             // VectorQuantize — the encoder receives reconstruction gradients, and codebook entries
             // are updated via exponential moving average during the forward pass.
-            LastLoss = NumOps.Add(reconstructionLoss, _lastCommitmentLoss ?? NumOps.Zero);
+            LastLoss = NumOps.Add(reconstructionLoss, _lastCommitmentLoss);
 
             var gradient = _lossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
             BackwardNative(Tensor<T>.FromVector(gradient, output.Shape));
