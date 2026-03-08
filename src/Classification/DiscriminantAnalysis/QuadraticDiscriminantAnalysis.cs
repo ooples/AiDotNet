@@ -774,8 +774,15 @@ public class QuadraticDiscriminantAnalysis<T> : ProbabilisticClassifierBase<T>
             _classCovarianceInverses = new Matrix<T>[numCovMatrices];
             for (int c = 0; c < numCovMatrices; c++)
             {
-                _classCovariances[c] = DeserializeMatrix(modelDataObj, $"ClassCovariance_{c}")!;
-                _classCovarianceInverses[c] = DeserializeMatrix(modelDataObj, $"ClassCovarianceInverse_{c}")!;
+                var cov = DeserializeMatrix(modelDataObj, $"ClassCovariance_{c}");
+                var covInv = DeserializeMatrix(modelDataObj, $"ClassCovarianceInverse_{c}");
+                if (cov is null || covInv is null)
+                {
+                    throw new InvalidOperationException(
+                        $"Deserialization failed: ClassCovariance or ClassCovarianceInverse for class {c} is missing.");
+                }
+                _classCovariances[c] = cov;
+                _classCovarianceInverses[c] = covInv;
             }
         }
     }
@@ -801,6 +808,11 @@ public class QuadraticDiscriminantAnalysis<T> : ProbabilisticClassifierBase<T>
         int rows = obj[$"{name}Rows"]?.ToObject<int>() ?? 0;
         int cols = obj[$"{name}Cols"]?.ToObject<int>() ?? 0;
         if (rows <= 0 || cols <= 0) return null;
+        if (arr.Length < rows * cols)
+        {
+            throw new InvalidOperationException(
+                $"Deserialization failed: {name} array length {arr.Length} is less than expected {rows}x{cols}={rows * cols}.");
+        }
         var matrix = new Matrix<T>(rows, cols);
         int idx = 0;
         for (int i = 0; i < rows; i++)

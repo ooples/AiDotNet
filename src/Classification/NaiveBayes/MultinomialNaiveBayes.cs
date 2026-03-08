@@ -319,6 +319,11 @@ public class MultinomialNaiveBayes<T> : NaiveBayesBase<T>
             int cols = modelDataObj["LogFeatureProbsCols"]?.ToObject<int>() ?? 0;
             if (rows > 0 && cols > 0)
             {
+                if (featureProbsArray.Length < rows * cols)
+                {
+                    throw new InvalidOperationException(
+                        $"Deserialization failed: LogFeatureProbs array length {featureProbsArray.Length} is less than expected {rows}x{cols}={rows * cols}.");
+                }
                 _logFeatureProbs = new Matrix<T>(rows, cols);
                 int idx = 0;
                 for (int i = 0; i < rows; i++)

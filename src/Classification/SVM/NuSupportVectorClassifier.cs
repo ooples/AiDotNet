@@ -68,7 +68,7 @@ public class NuSupportVectorClassifier<T> : SVMBase<T>
     /// <summary>
     /// The nu parameter value.
     /// </summary>
-    private readonly double _nu;
+    private double _nu;
 
     /// <summary>
     /// Random number generator.
@@ -632,8 +632,21 @@ public class NuSupportVectorClassifier<T> : SVMBase<T>
             { "ClassLabels", ClassLabels?.ToArray() ?? Array.Empty<T>() },
             { "RegularizationOptions", Regularization.GetOptions() },
             { "Nu", _nu },
-            { "Rho", NumOps.ToDouble(_rho) }
+            { "Rho", NumOps.ToDouble(_rho) },
+            { "SVMOptions_C", Options.C },
+            { "SVMOptions_Kernel", (int)Options.Kernel },
+            { "SVMOptions_HasGamma", Options.Gamma.HasValue },
+            { "SVMOptions_Degree", Options.Degree },
+            { "SVMOptions_Coef0", Options.Coef0 },
+            { "SVMOptions_Tolerance", Options.Tolerance },
+            { "SVMOptions_MaxIterations", Options.MaxIterations },
+            { "SVMOptions_Shrinking", Options.Shrinking },
+            { "SVMOptions_Probability", Options.Probability },
+            { "SVMOptions_OneVsRest", Options.OneVsRest }
         };
+
+        if (Options.Gamma.HasValue)
+            modelData["SVMOptions_GammaValue"] = Options.Gamma.Value;
 
         SerializeMatrix(modelData, "XTrain", _xTrain);
         SerializeVector(modelData, "YTrain", _yTrain);
@@ -666,6 +679,34 @@ public class NuSupportVectorClassifier<T> : SVMBase<T>
         NumFeatures = modelDataObj["NumFeatures"]?.ToObject<int>() ?? 0;
         TaskType = (ClassificationTaskType)(modelDataObj["TaskType"]?.ToObject<int>() ?? 0);
         _rho = NumOps.FromDouble(modelDataObj["Rho"]?.ToObject<double>() ?? 0.0);
+
+        // Restore Nu
+        if (modelDataObj["Nu"] is not null)
+            _nu = modelDataObj["Nu"]?.ToObject<double>() ?? 0.5;
+
+        // Restore SVMOptions (kernel, C, gamma, etc.) - critical for correct predictions
+        if (modelDataObj["SVMOptions_C"] is not null)
+            Options.C = modelDataObj["SVMOptions_C"]?.ToObject<double>() ?? 1.0;
+        if (modelDataObj["SVMOptions_Kernel"] is not null)
+            Options.Kernel = (Enums.KernelType)(modelDataObj["SVMOptions_Kernel"]?.ToObject<int>() ?? 0);
+        if (modelDataObj["SVMOptions_HasGamma"]?.ToObject<bool>() == true)
+            Options.Gamma = modelDataObj["SVMOptions_GammaValue"]?.ToObject<double>();
+        else
+            Options.Gamma = null;
+        if (modelDataObj["SVMOptions_Degree"] is not null)
+            Options.Degree = modelDataObj["SVMOptions_Degree"]?.ToObject<int>() ?? 3;
+        if (modelDataObj["SVMOptions_Coef0"] is not null)
+            Options.Coef0 = modelDataObj["SVMOptions_Coef0"]?.ToObject<double>() ?? 0.0;
+        if (modelDataObj["SVMOptions_Tolerance"] is not null)
+            Options.Tolerance = modelDataObj["SVMOptions_Tolerance"]?.ToObject<double>() ?? 0.001;
+        if (modelDataObj["SVMOptions_MaxIterations"] is not null)
+            Options.MaxIterations = modelDataObj["SVMOptions_MaxIterations"]?.ToObject<int>() ?? 1000;
+        if (modelDataObj["SVMOptions_Shrinking"] is not null)
+            Options.Shrinking = modelDataObj["SVMOptions_Shrinking"]?.ToObject<bool>() ?? true;
+        if (modelDataObj["SVMOptions_Probability"] is not null)
+            Options.Probability = modelDataObj["SVMOptions_Probability"]?.ToObject<bool>() ?? false;
+        if (modelDataObj["SVMOptions_OneVsRest"] is not null)
+            Options.OneVsRest = modelDataObj["SVMOptions_OneVsRest"]?.ToObject<bool>() ?? false;
 
         var classLabelsToken = modelDataObj["ClassLabels"];
         if (classLabelsToken is not null)
@@ -708,6 +749,11 @@ public class NuSupportVectorClassifier<T> : SVMBase<T>
         int rows = obj[$"{name}Rows"]?.ToObject<int>() ?? 0;
         int cols = obj[$"{name}Cols"]?.ToObject<int>() ?? 0;
         if (rows <= 0 || cols <= 0) return null;
+        if (arr.Length < rows * cols)
+        {
+            throw new InvalidOperationException(
+                $"Deserialization failed: {name} array length {arr.Length} is less than expected {rows}x{cols}={rows * cols}.");
+        }
         var matrix = new Matrix<T>(rows, cols);
         int idx = 0;
         for (int i = 0; i < rows; i++)

@@ -603,14 +603,16 @@ public class GradientBoostingClassifier<T> : EnsembleClassifierBase<T>, ITreeBas
         for (int i = 0; i < lrmCount; i++)
         {
             var lrmToken = modelDataObj[$"LeafResidualMeans_{i}"];
-            if (lrmToken is not null)
+            if (lrmToken is null)
             {
-                var meansDouble = lrmToken.ToObject<double[]>() ?? Array.Empty<double>();
-                var means = new T[meansDouble.Length];
-                for (int j = 0; j < meansDouble.Length; j++)
-                    means[j] = NumOps.FromDouble(meansDouble[j]);
-                _leafResidualMeans.Add(means);
+                throw new InvalidOperationException(
+                    $"Deserialization failed: LeafResidualMeans_{i} is missing (expected {lrmCount} entries).");
             }
+            var meansDouble = lrmToken.ToObject<double[]>() ?? Array.Empty<double>();
+            var means = new T[meansDouble.Length];
+            for (int j = 0; j < meansDouble.Length; j++)
+                means[j] = NumOps.FromDouble(meansDouble[j]);
+            _leafResidualMeans.Add(means);
         }
 
         // Deserialize estimators
@@ -619,13 +621,15 @@ public class GradientBoostingClassifier<T> : EnsembleClassifierBase<T>, ITreeBas
         for (int i = 0; i < estimatorCount; i++)
         {
             var estToken = modelDataObj[$"Estimator_{i}"]?.ToObject<string>();
-            if (estToken is not null)
+            if (estToken is null)
             {
-                var estBytes = Convert.FromBase64String(estToken);
-                var tree = new DecisionTreeClassifier<T>();
-                tree.Deserialize(estBytes);
-                Estimators.Add(tree);
+                throw new InvalidOperationException(
+                    $"Deserialization failed: Estimator_{i} is missing (expected {estimatorCount} estimators).");
             }
+            var estBytes = Convert.FromBase64String(estToken);
+            var tree = new DecisionTreeClassifier<T>();
+            tree.Deserialize(estBytes);
+            Estimators.Add(tree);
         }
     }
 }

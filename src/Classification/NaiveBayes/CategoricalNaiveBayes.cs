@@ -316,6 +316,13 @@ public class CategoricalNaiveBayes<T> : NaiveBayesBase<T>
         if (modelDataObj == null)
             throw new InvalidOperationException("Deserialization failed: The model data is invalid or corrupted.");
 
+        // Clear previous state before deserializing
+        _categoryLogProbs = null;
+        _numCategories = null;
+        ClassLabels = new Vector<T>(0);
+        ClassCounts = null;
+        LogPriors = new Vector<T>(0);
+
         NumClasses = modelDataObj["NumClasses"]?.ToObject<int>() ?? 0;
         NumFeatures = modelDataObj["NumFeatures"]?.ToObject<int>() ?? 0;
         TaskType = (ClassificationTaskType)(modelDataObj["TaskType"]?.ToObject<int>() ?? 0);
@@ -358,7 +365,13 @@ public class CategoricalNaiveBayes<T> : NaiveBayesBase<T>
             _categoryLogProbs = new Matrix<T>[numMatrices];
             for (int c = 0; c < numMatrices; c++)
             {
-                _categoryLogProbs[c] = DeserializeMatrix(modelDataObj, $"CategoryLogProbs_{c}")!;
+                var matrix = DeserializeMatrix(modelDataObj, $"CategoryLogProbs_{c}");
+                if (matrix is null)
+                {
+                    throw new InvalidOperationException(
+                        $"Deserialization failed: CategoryLogProbs_{c} is missing or malformed.");
+                }
+                _categoryLogProbs[c] = matrix;
             }
         }
     }
@@ -384,6 +397,11 @@ public class CategoricalNaiveBayes<T> : NaiveBayesBase<T>
         int rows = obj[$"{name}Rows"]?.ToObject<int>() ?? 0;
         int cols = obj[$"{name}Cols"]?.ToObject<int>() ?? 0;
         if (rows <= 0 || cols <= 0) return null;
+        if (arr.Length < rows * cols)
+        {
+            throw new InvalidOperationException(
+                $"Deserialization failed: {name} array length {arr.Length} is less than expected {rows}x{cols}={rows * cols}.");
+        }
         var matrix = new Matrix<T>(rows, cols);
         int idx = 0;
         for (int i = 0; i < rows; i++)

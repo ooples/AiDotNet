@@ -534,13 +534,15 @@ public class AdaBoostClassifier<T> : EnsembleClassifierBase<T>
         for (int i = 0; i < estimatorCount; i++)
         {
             var estToken = modelDataObj[$"Estimator_{i}"]?.ToObject<string>();
-            if (estToken is not null)
+            if (estToken is null)
             {
-                var estBytes = Convert.FromBase64String(estToken);
-                var tree = new DecisionTreeClassifier<T>();
-                tree.Deserialize(estBytes);
-                Estimators.Add(tree);
+                throw new InvalidOperationException(
+                    $"Deserialization failed: Estimator_{i} is missing (expected {estimatorCount} estimators).");
             }
+            var estBytes = Convert.FromBase64String(estToken);
+            var tree = new DecisionTreeClassifier<T>();
+            tree.Deserialize(estBytes);
+            Estimators.Add(tree);
         }
     }
 }

@@ -54,7 +54,7 @@ public class BernoulliNaiveBayes<T> : NaiveBayesBase<T>
     /// <summary>
     /// Binarization threshold for converting continuous features to binary.
     /// </summary>
-    private readonly T _binarizeThreshold;
+    private T _binarizeThreshold;
 
     /// <summary>
     /// Initializes a new instance of the BernoulliNaiveBayes class.
@@ -321,6 +321,11 @@ public class BernoulliNaiveBayes<T> : NaiveBayesBase<T>
         NumFeatures = modelDataObj["NumFeatures"]?.ToObject<int>() ?? 0;
         TaskType = (ClassificationTaskType)(modelDataObj["TaskType"]?.ToObject<int>() ?? 0);
 
+        // Restore BinarizeThreshold
+        var binarizeToken = modelDataObj["BinarizeThreshold"];
+        if (binarizeToken is not null)
+            _binarizeThreshold = NumOps.FromDouble(binarizeToken.ToObject<double>());
+
         var classLabelsToken = modelDataObj["ClassLabels"];
         if (classLabelsToken is not null)
         {
@@ -374,6 +379,11 @@ public class BernoulliNaiveBayes<T> : NaiveBayesBase<T>
         int rows = obj[$"{name}Rows"]?.ToObject<int>() ?? 0;
         int cols = obj[$"{name}Cols"]?.ToObject<int>() ?? 0;
         if (rows <= 0 || cols <= 0) return null;
+        if (arr.Length < rows * cols)
+        {
+            throw new InvalidOperationException(
+                $"Deserialization failed: {name} array length {arr.Length} is less than expected {rows}x{cols}={rows * cols}.");
+        }
         var matrix = new Matrix<T>(rows, cols);
         int idx = 0;
         for (int i = 0; i < rows; i++)

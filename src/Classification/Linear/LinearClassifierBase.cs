@@ -434,10 +434,24 @@ public abstract class LinearClassifierBase<T> : ProbabilisticClassifierBase<T>
             throw new InvalidOperationException("Deserialization failed: The model data is invalid or corrupted.");
         }
 
-        // Deserialize base properties
-        NumClasses = modelDataObj["NumClasses"]?.ToObject<int>() ?? 0;
-        NumFeatures = modelDataObj["NumFeatures"]?.ToObject<int>() ?? 0;
+        // Deserialize base properties with validation
+        var numClassesToken = modelDataObj["NumClasses"];
+        var numFeaturesToken = modelDataObj["NumFeatures"];
+        if (numClassesToken is null || numFeaturesToken is null)
+        {
+            throw new InvalidOperationException(
+                "Deserialization failed: NumClasses or NumFeatures is missing from serialized data.");
+        }
+        NumClasses = numClassesToken.ToObject<int>();
+        NumFeatures = numFeaturesToken.ToObject<int>();
         TaskType = (ClassificationTaskType)(modelDataObj["TaskType"]?.ToObject<int>() ?? 0);
+
+        // Restore FitIntercept
+        var fitInterceptToken = modelDataObj["FitIntercept"];
+        if (fitInterceptToken is not null)
+        {
+            Options.FitIntercept = fitInterceptToken.ToObject<bool>();
+        }
 
         var classLabelsToken = modelDataObj["ClassLabels"];
         if (classLabelsToken is not null)

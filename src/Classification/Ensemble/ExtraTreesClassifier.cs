@@ -338,14 +338,16 @@ public class ExtraTreesClassifier<T> : EnsembleClassifierBase<T>, ITreeBasedClas
         }
 
         // Serialize each estimator as base64
-        modelData["EstimatorCount"] = Estimators.Count;
+        int serializedCount = 0;
         for (int i = 0; i < Estimators.Count; i++)
         {
             if (Estimators[i] is IFullModel<T, Matrix<T>, Vector<T>> fullModel)
             {
-                modelData[$"Estimator_{i}"] = Convert.ToBase64String(fullModel.Serialize());
+                modelData[$"Estimator_{serializedCount}"] = Convert.ToBase64String(fullModel.Serialize());
+                serializedCount++;
             }
         }
+        modelData["EstimatorCount"] = serializedCount;
 
         var modelMetadata = GetModelMetadata();
         modelMetadata.ModelData = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelData));
@@ -402,13 +404,15 @@ public class ExtraTreesClassifier<T> : EnsembleClassifierBase<T>, ITreeBasedClas
         for (int i = 0; i < estimatorCount; i++)
         {
             var estToken = modelDataObj[$"Estimator_{i}"]?.ToObject<string>();
-            if (estToken is not null)
+            if (estToken is null)
             {
-                var estBytes = Convert.FromBase64String(estToken);
-                var tree = new DecisionTreeClassifier<T>();
-                tree.Deserialize(estBytes);
-                Estimators.Add(tree);
+                throw new InvalidOperationException(
+                    $"Deserialization failed: Estimator_{i} is missing (expected {estimatorCount} estimators).");
             }
+            var estBytes = Convert.FromBase64String(estToken);
+            var tree = new DecisionTreeClassifier<T>();
+            tree.Deserialize(estBytes);
+            Estimators.Add(tree);
         }
     }
 }

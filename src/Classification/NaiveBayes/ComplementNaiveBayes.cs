@@ -45,7 +45,7 @@ public class ComplementNaiveBayes<T> : NaiveBayesBase<T>
     /// <summary>
     /// Whether to normalize feature weights.
     /// </summary>
-    private readonly bool _normalize;
+    private bool _normalize;
 
     /// <summary>
     /// Initializes a new instance of the ComplementNaiveBayes class.
@@ -283,6 +283,11 @@ public class ComplementNaiveBayes<T> : NaiveBayesBase<T>
             }
         }
 
+        // Restore _normalize
+        var normalizeToken = modelDataObj["Normalize"];
+        if (normalizeToken is not null)
+            _normalize = normalizeToken.ToObject<bool>();
+
         var classCountsToken = modelDataObj["ClassCounts"];
         if (classCountsToken is not null)
             ClassCounts = classCountsToken.ToObject<int[]>();
@@ -323,6 +328,11 @@ public class ComplementNaiveBayes<T> : NaiveBayesBase<T>
         int rows = obj[$"{name}Rows"]?.ToObject<int>() ?? 0;
         int cols = obj[$"{name}Cols"]?.ToObject<int>() ?? 0;
         if (rows <= 0 || cols <= 0) return null;
+        if (arr.Length < rows * cols)
+        {
+            throw new InvalidOperationException(
+                $"Deserialization failed: {name} array length {arr.Length} is less than expected {rows}x{cols}={rows * cols}.");
+        }
         var matrix = new Matrix<T>(rows, cols);
         int idx = 0;
         for (int i = 0; i < rows; i++)
