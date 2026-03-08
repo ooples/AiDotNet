@@ -1050,10 +1050,10 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
         }
         else
         {
+            var scalarAct = ScalarActivation ?? throw new InvalidOperationException("ScalarActivation has not been initialized.");
             var result = new Tensor<T>(outputGradient.Shape);
             for (int i = 0; i < outputGradient.Length; i++)
             {
-                var scalarAct = ScalarActivation ?? throw new InvalidOperationException("ScalarActivation has not been initialized.");
                 result[i] = NumOps.Multiply(scalarAct.Derivative(lastOutput[i]), outputGradient[i]);
             }
 

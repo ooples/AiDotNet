@@ -518,10 +518,10 @@ public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputati
 
         if (_useModulation)
         {
-            var mwShape = _maskWeights ?? throw new InvalidOperationException("_maskWeights has not been initialized.");
-            _maskWeightGradients = new Tensor<T>(mwShape.Shape);
-            var mbShape = _maskBias ?? throw new InvalidOperationException("_maskBias has not been initialized.");
-            _maskBiasGradients = new Tensor<T>(mbShape.Shape);
+            var maskWeights = _maskWeights ?? throw new InvalidOperationException("_maskWeights has not been initialized.");
+            _maskWeightGradients = new Tensor<T>(maskWeights.Shape);
+            var maskBias = _maskBias ?? throw new InvalidOperationException("_maskBias has not been initialized.");
+            _maskBiasGradients = new Tensor<T>(maskBias.Shape);
         }
 
         // 1. Compute bias gradients (sum over batch and spatial dimensions)
@@ -592,11 +592,11 @@ public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputati
         Tensor<T>? gradInputFromMask = null;
         if (_useModulation && gradMask != null)
         {
-            var mw2 = _maskWeights ?? throw new InvalidOperationException("_maskWeights has not been initialized.");
-            var mwg = _maskWeightGradients ?? throw new InvalidOperationException("_maskWeightGradients has not been initialized.");
-            var mbg = _maskBiasGradients ?? throw new InvalidOperationException("_maskBiasGradients has not been initialized.");
+            var maskW = _maskWeights ?? throw new InvalidOperationException("_maskWeights has not been initialized.");
+            var maskWeightGrad = _maskWeightGradients ?? throw new InvalidOperationException("_maskWeightGradients has not been initialized.");
+            var maskBiasGrad = _maskBiasGradients ?? throw new InvalidOperationException("_maskBiasGradients has not been initialized.");
             gradInputFromMask = BackpropConvolution(
-                input4D, mw2, gradMask, mwg, mbg);
+                input4D, maskW, gradMask, maskWeightGrad, maskBiasGrad);
         }
 
         // 8. Sum all input gradient contributions using Engine tensor ops

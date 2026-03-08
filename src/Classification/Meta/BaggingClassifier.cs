@@ -169,11 +169,14 @@ public class BaggingClassifier<T> : MetaClassifierBase<T>
         }
         else
         {
-            // Sample without replacement (shuffle and take first sampleSize)
-            var indices = Enumerable.Range(0, x.Rows)
-                .OrderBy(_ => random.Next())
-                .Take(sampleSize)
-                .ToArray();
+            // Sample without replacement using Fisher-Yates partial shuffle (O(sampleSize), unbiased)
+            var pool = Enumerable.Range(0, x.Rows).ToArray();
+            for (int k = 0; k < sampleSize; k++)
+            {
+                int swapIdx = k + random.Next(pool.Length - k);
+                (pool[k], pool[swapIdx]) = (pool[swapIdx], pool[k]);
+            }
+            var indices = pool[..sampleSize];
 
             for (int i = 0; i < sampleSize; i++)
             {

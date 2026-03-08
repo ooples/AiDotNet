@@ -90,7 +90,7 @@ public class OnlineFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 runningVars[j] += delta * delta2;
 
                 // Update correlation estimate incrementally
-                double correlation = ComputeOnlineCorrelation(xi, yi, j);
+                double correlation = ComputeOnlineCorrelation(xi, yi, j, runningMeans, runningVars);
                 runningScores[j] = (1 - _learningRate) * runningScores[j] + _learningRate * correlation;
             }
         }
@@ -110,7 +110,7 @@ public class OnlineFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private double _targetVar = 0;
     private double[]? _covariances;
 
-    private double ComputeOnlineCorrelation(double x, double y, int featureIdx)
+    private double ComputeOnlineCorrelation(double x, double y, int featureIdx, double[] runningMeans, double[] runningVars)
     {
         if (_covariances is null)
             _covariances = new double[_nInputFeatures];
@@ -121,12 +121,10 @@ public class OnlineFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         _targetVar += (y - oldTargetMean) * (y - _targetMean);
 
         // Update covariance
-        var runningMeansLocal = _runningMeans ?? throw new InvalidOperationException("Running means have not been initialized.");
-        _covariances[featureIdx] += (x - runningMeansLocal[featureIdx]) * (y - _targetMean);
+        _covariances[featureIdx] += (x - runningMeans[featureIdx]) * (y - _targetMean);
 
         // Compute correlation
-        var runningVarsLocal = _runningVars ?? throw new InvalidOperationException("Running variances have not been initialized.");
-        double xVar = runningVarsLocal[featureIdx];
+        double xVar = runningVars[featureIdx];
         double yVar = _targetVar;
 
         if (xVar > 1e-10 && yVar > 1e-10)
