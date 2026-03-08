@@ -60,8 +60,6 @@ public class FloraAdapter<T> : LoRAAdapterBase<T>
         _random = RandomHelper.CreateSeededRandom(seed);
 
         int outputSize = GetOutputShape()[0];
-        _compressedMomentum = new Matrix<T>(rank, outputSize);
-
         if (_useAdaptiveLearningRate)
         {
             _compressedSecondMoment = new Matrix<T>(rank, outputSize);
@@ -79,6 +77,8 @@ public class FloraAdapter<T> : LoRAAdapterBase<T>
         {
             ResampleProjectionMatrices();
         }
+
+        _compressedMomentum = new Matrix<T>(rank, outputSize);
 
         Vector<T> loraGradients = _loraLayer.GetParameterGradients();
         int inputSize = GetInputShape()[0];
