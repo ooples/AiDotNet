@@ -22,14 +22,14 @@ public class SteadyStateGeneticAlgorithm<T, TInput, TOutput> :
     {
         // Clone the current population
         var newPopulation = Population
-            .Select(p => p.Clone() as ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>)
-            .Where(p => p != null)
+            .Select(p => p.Clone())
+            .OfType<ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>>()
             .ToList();
 
         // Sort by fitness
         var sortedPopulation = newPopulation
             .OrderByDescending(i => FitnessCalculator.IsHigherScoreBetter ?
-                (i ?? throw new InvalidOperationException("i has not been initialized.")).GetFitness() : InvertFitness(i!.GetFitness()))
+                i.GetFitness() : InvertFitness(i.GetFitness()))
             .ToList();
 
         // Determine how many individuals to replace

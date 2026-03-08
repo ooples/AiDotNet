@@ -319,6 +319,9 @@ public class BayesianDetector<T> : AnomalyDetectorBase<T>
     {
         ValidateInput(X);
 
+        var posteriorMean = _posteriorMean ?? throw new InvalidOperationException("_posteriorMean has not been initialized.");
+        var posteriorPrecision = _posteriorPrecision ?? throw new InvalidOperationException("_posteriorPrecision has not been initialized.");
+
         var scores = new Vector<T>(X.Rows);
 
         for (int i = 0; i < X.Rows; i++)
@@ -333,11 +336,11 @@ public class BayesianDetector<T> : AnomalyDetectorBase<T>
             double mahalSq = 0;
             for (int j1 = 0; j1 < _nFeatures; j1++)
             {
-                double diff1 = point[j1] - (_posteriorMean ?? throw new InvalidOperationException("_posteriorMean has not been initialized."))[j1];
+                double diff1 = point[j1] - posteriorMean[j1];
                 for (int j2 = 0; j2 < _nFeatures; j2++)
                 {
-                    double diff2 = point[j2] - _posteriorMean[j2];
-                    mahalSq += diff1 * (_posteriorPrecision ?? throw new InvalidOperationException("_posteriorPrecision has not been initialized."))[j1, j2] * diff2;
+                    double diff2 = point[j2] - posteriorMean[j2];
+                    mahalSq += diff1 * posteriorPrecision[j1, j2] * diff2;
                 }
             }
 
