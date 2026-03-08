@@ -124,19 +124,19 @@ internal class KVCache<T>
             if (typeof(T) == typeof(float))
             {
                 _useInt8Storage = true;
-                _toFloat = value => { object boxed = value ?? throw new InvalidOperationException("Unexpected null value in KV cache conversion."); return (float)boxed; };
+                _toFloat = value => (float)(object)(value ?? throw new InvalidOperationException("Null value in KV cache."));
                 _fromFloat = value => (T)(object)value;
             }
             else if (typeof(T) == typeof(double))
             {
                 _useInt8Storage = true;
-                _toFloat = value => { object boxed = value ?? throw new InvalidOperationException("Unexpected null value in KV cache conversion."); return (float)(double)boxed; };
+                _toFloat = value => (float)(double)(object)(value ?? throw new InvalidOperationException("Null value in KV cache."));
                 _fromFloat = value => (T)(object)(double)value;
             }
             else if (typeof(T) == typeof(Half))
             {
                 _useInt8Storage = true;
-                _toFloat = value => { object boxed = value ?? throw new InvalidOperationException("Unexpected null value in KV cache conversion."); return (float)(Half)boxed; };
+                _toFloat = value => (float)(Half)(object)(value ?? throw new InvalidOperationException("Null value in KV cache."));
                 _fromFloat = value => (T)(object)(Half)value;
             }
         }
@@ -147,13 +147,13 @@ internal class KVCache<T>
             if (typeof(T) == typeof(float))
             {
                 _useFp16Storage = true;
-                _toHalf = value => { object boxed = value ?? throw new InvalidOperationException("Unexpected null value in KV cache conversion."); return (Half)(float)boxed; };
+                _toHalf = value => (Half)(float)(object)(value ?? throw new InvalidOperationException("Null value in KV cache."));
                 _fromHalf = value => (T)(object)(float)value;
             }
             else if (typeof(T) == typeof(double))
             {
                 _useFp16Storage = true;
-                _toHalf = value => { object boxed = value ?? throw new InvalidOperationException("Unexpected null value in KV cache conversion."); return (Half)(double)boxed; };
+                _toHalf = value => (Half)(double)(object)(value ?? throw new InvalidOperationException("Null value in KV cache."));
                 _fromHalf = value => (T)(object)(double)(float)value;
             }
         }

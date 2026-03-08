@@ -244,7 +244,7 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
 
             var input = new Tensor<T>([1, _historyWindowSize, Architecture.InputSize]);
             int timeStep = 0;
-            foreach (var reading in sensorHistory)
+            foreach (var reading in history)
             {
                 input.SetSlice(timeStep, reading);
                 timeStep++;
