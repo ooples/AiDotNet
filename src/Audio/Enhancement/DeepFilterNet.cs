@@ -525,7 +525,13 @@ public class DeepFilterNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     {
         // Update all layer parameters
         int offset = 0;
-        foreach (var layer in _erbEncoder.Concat(_gruLayers).Concat(_dfLayers).Concat(_decoder))
+        var allLayers = _erbEncoder.Concat(_gruLayers).Concat(_dfLayers).Concat(_decoder);
+        if (_gainLayer is not null)
+        {
+            allLayers = allLayers.Append(_gainLayer);
+        }
+
+        foreach (var layer in allLayers)
         {
             var layerParams = layer.GetParameters();
             var newParams = parameters.Slice(offset, layerParams.Length);
@@ -587,7 +593,9 @@ public class DeepFilterNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         }
 
         // Gain estimation
-        var gains = _gainLayer!.Forward(x);
+        var gainLayer = _gainLayer
+            ?? throw new InvalidOperationException("Gain layer has not been initialized.");
+        var gains = gainLayer.Forward(x);
 
         // Combine DF coefficients and gains
         return CombineOutputs(dfCoeffs, gains);
@@ -599,6 +607,12 @@ public class DeepFilterNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     private void BackwardNative(Tensor<T> gradient)
     {
         var grad = gradient;
+
+        // Backward through gain layer
+        if (_gainLayer is not null)
+        {
+            _gainLayer.Backward(grad);
+        }
 
         // Backward through decoder
         for (int i = _decoder.Count - 1; i >= 0; i--)

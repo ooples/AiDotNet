@@ -416,8 +416,8 @@ internal sealed class QuantizedAttentionLayer : LayerBase<float>
     {
         int outDim = proj.OutDim;
         int inDim = proj.InDim;
-        var weights = proj.Int8Weights!;
-        var scales = proj.Int8Scales!;
+        var weights = proj.Int8Weights ?? throw new InvalidOperationException("Int8 weights have not been initialized.");
+        var scales = proj.Int8Scales ?? throw new InvalidOperationException("Int8 scales have not been initialized.");
         var output = new Tensor<float>(new[] { rows, outDim });
 
         for (int r = 0; r < rows; r++)
@@ -444,8 +444,8 @@ internal sealed class QuantizedAttentionLayer : LayerBase<float>
     {
         int outDim = proj.OutDim;
         int inDim = proj.InDim;
-        var weights = proj.FP8Weights!;
-        var scales = proj.FP8Scales!;
+        var weights = proj.FP8Weights ?? throw new InvalidOperationException("FP8 weights have not been initialized.");
+        var scales = proj.FP8Scales ?? throw new InvalidOperationException("FP8 scales have not been initialized.");
         var output = new Tensor<float>(new[] { rows, outDim });
 
         for (int r = 0; r < rows; r++)
@@ -473,8 +473,8 @@ internal sealed class QuantizedAttentionLayer : LayerBase<float>
     {
         int outDim = proj.OutDim;
         int inDim = proj.InDim;
-        var packed = proj.NF4PackedWeights!;
-        var groupScales = proj.NF4GroupScales!;
+        var packed = proj.NF4PackedWeights ?? throw new InvalidOperationException("NF4 packed weights have not been initialized.");
+        var groupScales = proj.NF4GroupScales ?? throw new InvalidOperationException("NF4 group scales have not been initialized.");
         int groupSize = proj.NF4GroupSize;
         var output = new Tensor<float>(new[] { rows, outDim });
 

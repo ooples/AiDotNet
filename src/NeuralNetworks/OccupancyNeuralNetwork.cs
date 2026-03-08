@@ -235,15 +235,16 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
 
         if (_includeTemporalData)
         {
-            sensorHistory!.Enqueue(currentReading);
-            if (sensorHistory.Count > _historyWindowSize)
+            var history = sensorHistory ?? throw new InvalidOperationException("Sensor history is required when temporal data is included but was not provided.");
+            history.Enqueue(currentReading);
+            if (history.Count > _historyWindowSize)
             {
-                sensorHistory.Dequeue();
+                history.Dequeue();
             }
 
             var input = new Tensor<T>([1, _historyWindowSize, Architecture.InputSize]);
             int timeStep = 0;
-            foreach (var reading in sensorHistory)
+            foreach (var reading in history)
             {
                 input.SetSlice(timeStep, reading);
                 timeStep++;
