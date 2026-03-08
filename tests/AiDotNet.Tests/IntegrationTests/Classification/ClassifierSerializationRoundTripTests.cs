@@ -7,6 +7,7 @@ using AiDotNet.Classification.Ordinal;
 using AiDotNet.Classification.Linear;
 using AiDotNet.Classification.NaiveBayes;
 using AiDotNet.Classification.SVM;
+using AiDotNet.Classification.SemiSupervised;
 using AiDotNet.Classification.TimeSeries;
 using AiDotNet.Classification.Trees;
 using AiDotNet.Enums;
@@ -1578,6 +1579,79 @@ public class ClassifierSerializationRoundTripTests
         var copyPreds = copy.Predict(testX);
 
         AssertPredictionsMatch(original, (Vector<double>)copyPreds, "MiniRocketClassifier DeepCopy");
+    }
+
+    #endregion
+
+    #region SemiSupervised Classifiers — Graph-based with training data matrices
+
+    [Fact]
+    public void LabelPropagation_SerializeRoundTrip_PredictionsMatch()
+    {
+        // LabelPropagation stores training data + label distributions for kernel-based prediction
+        var (trainX, trainY) = CreateBinaryData(40, 3, separation: 5.0, seed: 42);
+        var classifier = new LabelPropagation<double>();
+        classifier.Train(trainX, trainY);
+
+        var testX = CreateRandomMatrix(10, 3, seed: 100);
+        var original = classifier.Predict(testX);
+
+        var bytes = classifier.Serialize();
+        var restored = new LabelPropagation<double>();
+        restored.Deserialize(bytes);
+        var restoredPreds = restored.Predict(testX);
+
+        AssertPredictionsMatch(original, restoredPreds, "LabelPropagation");
+    }
+
+    [Fact]
+    public void LabelPropagation_DeepCopy_PreservesTrainedState()
+    {
+        var (trainX, trainY) = CreateBinaryData(40, 3, separation: 5.0, seed: 42);
+        var classifier = new LabelPropagation<double>();
+        classifier.Train(trainX, trainY);
+
+        var testX = CreateRandomMatrix(10, 3, seed: 100);
+        var original = classifier.Predict(testX);
+
+        var copy = classifier.DeepCopy();
+        var copyPreds = copy.Predict(testX);
+
+        AssertPredictionsMatch(original, (Vector<double>)copyPreds, "LabelPropagation DeepCopy");
+    }
+
+    [Fact]
+    public void LabelSpreading_SerializeRoundTrip_PredictionsMatch()
+    {
+        var (trainX, trainY) = CreateBinaryData(40, 3, separation: 5.0, seed: 42);
+        var classifier = new LabelSpreading<double>();
+        classifier.Train(trainX, trainY);
+
+        var testX = CreateRandomMatrix(10, 3, seed: 100);
+        var original = classifier.Predict(testX);
+
+        var bytes = classifier.Serialize();
+        var restored = new LabelSpreading<double>();
+        restored.Deserialize(bytes);
+        var restoredPreds = restored.Predict(testX);
+
+        AssertPredictionsMatch(original, restoredPreds, "LabelSpreading");
+    }
+
+    [Fact]
+    public void LabelSpreading_DeepCopy_PreservesTrainedState()
+    {
+        var (trainX, trainY) = CreateBinaryData(40, 3, separation: 5.0, seed: 42);
+        var classifier = new LabelSpreading<double>();
+        classifier.Train(trainX, trainY);
+
+        var testX = CreateRandomMatrix(10, 3, seed: 100);
+        var original = classifier.Predict(testX);
+
+        var copy = classifier.DeepCopy();
+        var copyPreds = copy.Predict(testX);
+
+        AssertPredictionsMatch(original, (Vector<double>)copyPreds, "LabelSpreading DeepCopy");
     }
 
     #endregion
