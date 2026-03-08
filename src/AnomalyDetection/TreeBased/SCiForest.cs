@@ -93,16 +93,7 @@ public class SCiForest<T> : AnomalyDetectorBase<T>
                 "Sparsity must be between 0 (exclusive) and 1 (inclusive). Recommended is 0.2.");
         }
 
-        // SCiForest requires negative and fractional values for random projections,
-        // thresholds, and scoring. Integer types will produce incorrect results.
-        var typeCode = Type.GetTypeCode(typeof(T));
-        if (typeCode is TypeCode.Int32 or TypeCode.Int64 or TypeCode.UInt32 or TypeCode.UInt64
-            or TypeCode.Int16 or TypeCode.UInt16 or TypeCode.Byte or TypeCode.SByte)
-        {
-            throw new NotSupportedException(
-                $"SCiForest does not support integer type '{typeof(T).Name}'. " +
-                "Use a floating-point type such as float or double.");
-        }
+        NumericGuard.RejectIntegerTypes<T>("SCiForest");
 
         _numTrees = numTrees;
         _maxSamples = maxSamples;
@@ -205,7 +196,8 @@ public class SCiForest<T> : AnomalyDetectorBase<T>
             if (NumOps.GreaterThan(c, NumOps.Zero))
             {
                 T exponent = NumOps.Negate(NumOps.Divide(avgPathLength, c));
-                scores[i] = NumOps.FromDouble(Math.Pow(2, NumOps.ToDouble(exponent)));
+                T ln2 = NumOps.FromDouble(Math.Log(2));
+                scores[i] = NumOps.Exp(NumOps.Multiply(exponent, ln2));
             }
             else
             {

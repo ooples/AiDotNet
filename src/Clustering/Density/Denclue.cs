@@ -60,18 +60,8 @@ public class Denclue<T> : ClusteringBase<T>
     public Denclue(DenclueOptions<T>? options = null)
         : base(options ?? new DenclueOptions<T>())
     {
-        // DENCLUE requires fractional math (Divide, Exp, Sqrt, non-integer bandwidth).
-        // Integer types will produce incorrect results.
-        var typeCode = Type.GetTypeCode(typeof(T));
-        if (typeCode is TypeCode.Int32 or TypeCode.Int64 or TypeCode.UInt32 or TypeCode.UInt64
-            or TypeCode.Int16 or TypeCode.UInt16 or TypeCode.Byte or TypeCode.SByte)
-        {
-            throw new NotSupportedException(
-                $"DENCLUE does not support integer type '{typeof(T).Name}'. " +
-                "Use a floating-point type such as float or double.");
-        }
-
-        _options = options ?? new DenclueOptions<T>();
+        NumericGuard.RejectIntegerTypes<T>("DENCLUE");
+        _options = (DenclueOptions<T>)Options;
     }
 
     /// <summary>
@@ -231,7 +221,7 @@ public class Denclue<T> : ClusteringBase<T>
             T movement = EuclideanDistance(current, next);
             if (NumOps.LessThan(movement, convergenceThresholdT))
             {
-                return (current, currentDensity);
+                return (next, nextDensity);
             }
 
             current = next;
@@ -290,7 +280,10 @@ public class Denclue<T> : ClusteringBase<T>
         T h = NumOps.FromDouble(_options.Bandwidth);
         T h2 = NumOps.Multiply(h, h);
         T two = NumOps.FromDouble(2.0);
-        T normalization = NumOps.FromDouble(Math.Pow(2 * Math.PI * _options.Bandwidth * _options.Bandwidth, -d / 2.0));
+        T twoPi = NumOps.FromDouble(2.0 * Math.PI);
+        T normalization = NumOps.Exp(NumOps.Multiply(
+            NumOps.FromDouble(-d / 2.0),
+            NumOps.Log(NumOps.Multiply(twoPi, h2))));
 
         T sum = NumOps.Zero;
         for (int i = 0; i < data.Length; i++)
@@ -329,7 +322,11 @@ public class Denclue<T> : ClusteringBase<T>
     {
         ValidateIsTrained();
 
-        if (ClusterCenters is null) return NumOps.Zero;
+        if (ClusterCenters is null || _attractors is null || _attractorDensities is null)
+        {
+            throw new InvalidOperationException(
+                "Model is in an inconsistent state: trained but missing cluster data.");
+        }
 
         int d = NumFeatures;
         if (point.Length != d)
@@ -349,10 +346,10 @@ public class Denclue<T> : ClusteringBase<T>
         T h = NumOps.FromDouble(_options.Bandwidth);
         T h2 = NumOps.Multiply(h, h);
         T two = NumOps.FromDouble(2.0);
-        T normalization = NumOps.FromDouble(Math.Pow(2 * Math.PI * _options.Bandwidth * _options.Bandwidth, -d / 2.0));
-
-        if (_attractors is null || _attractorDensities is null)
-            return NumOps.Zero;
+        T twoPi = NumOps.FromDouble(2.0 * Math.PI);
+        T normalization = NumOps.Exp(NumOps.Multiply(
+            NumOps.FromDouble(-d / 2.0),
+            NumOps.Log(NumOps.Multiply(twoPi, h2))));
 
         T sum = NumOps.Zero;
         for (int c = 0; c < NumClusters; c++)
