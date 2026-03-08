@@ -175,7 +175,8 @@ public class ValidationCurveEngine<T>
 
     private static T Mean(List<T> values)
     {
-        if (values.Count == 0) return NumOps.Zero;
+        if (values.Count == 0)
+            throw new InvalidOperationException("Cannot compute mean of an empty sequence. No fold scores were recorded for this parameter value.");
         T sum = NumOps.Zero;
         foreach (var v in values)
         {

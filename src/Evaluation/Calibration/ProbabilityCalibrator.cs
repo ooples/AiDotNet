@@ -229,7 +229,7 @@ public class ProbabilityCalibrator<T>
     /// <param name="labels">True binary labels.</param>
     /// <param name="numBins">Number of bins for ECE calculation.</param>
     /// <returns>ECE value (lower is better, 0 is perfect calibration).</returns>
-    public T ComputeECE(Vector<T> scores, Vector<T> labels, int numBins = 10)
+    public double ComputeECE(Vector<T> scores, Vector<T> labels, int numBins = 10)
     {
         int n = scores.Length;
         T ece = NumOps.Zero;
@@ -262,13 +262,13 @@ public class ProbabilityCalibrator<T>
             }
         }
 
-        return ece;
+        return NumOps.ToDouble(ece);
     }
 
     /// <summary>
     /// Computes the Maximum Calibration Error (MCE).
     /// </summary>
-    public T ComputeMCE(Vector<T> scores, Vector<T> labels, int numBins = 10)
+    public double ComputeMCE(Vector<T> scores, Vector<T> labels, int numBins = 10)
     {
         int n = scores.Length;
         T mce = NumOps.Zero;
@@ -304,7 +304,7 @@ public class ProbabilityCalibrator<T>
             }
         }
 
-        return mce;
+        return NumOps.ToDouble(mce);
     }
 
     /// <summary>
@@ -313,7 +313,7 @@ public class ProbabilityCalibrator<T>
     /// <param name="scores">Predicted probabilities.</param>
     /// <param name="labels">True binary labels.</param>
     /// <returns>Brier score (lower is better, 0 is perfect).</returns>
-    public T ComputeBrierScore(Vector<T> scores, Vector<T> labels)
+    public double ComputeBrierScore(Vector<T> scores, Vector<T> labels)
     {
         T brier = NumOps.Zero;
         for (int i = 0; i < scores.Length; i++)
@@ -322,7 +322,7 @@ public class ProbabilityCalibrator<T>
             brier = NumOps.Add(brier, NumOps.Multiply(diff, diff));
         }
 
-        return NumOps.Divide(brier, NumOps.FromDouble(scores.Length));
+        return NumOps.ToDouble(NumOps.Divide(brier, NumOps.FromDouble(scores.Length)));
     }
 
     /// <summary>
@@ -368,7 +368,7 @@ public class ProbabilityCalibrator<T>
             else
             {
                 meanPredicted[b] = NumOps.Divide(NumOps.Add(lower, upper), NumOps.FromDouble(2));
-                fractionPositives[b] = NumOps.FromDouble(double.NaN);
+                fractionPositives[b] = NumOps.Zero;
             }
         }
 
@@ -732,44 +732,93 @@ public class ProbabilityCalibrator<T>
 
     private void FitBayesianBinning(T[] scores, T[] labels)
     {
-        // Simplified: use adaptive bin widths based on data density
-        // Sort scores and create bins with roughly equal counts
-        var sorted = scores.OrderBy(s => NumOps.ToDouble(s)).ToArray();
-        int n = sorted.Length;
-        int numBins = _options.NumBins;
-        int binSize = n / numBins;
+        // Bayesian Binning into Quantiles (BBQ):
+        // Evaluate candidate binning schemes with varying number of bins,
+        // score each by BIC (Bayesian Information Criterion),
+        // and select the scheme with the highest score.
+        int n = scores.Length;
+        int maxBins = Math.Min(_options.NumBins, n);
 
-        _binEdges = new T[numBins + 1];
-        _binEdges[0] = NumOps.Zero;
-        _binEdges[numBins] = NumOps.One;
+        double bestBic = double.NegativeInfinity;
+        T[]? bestEdges = null;
+        T[]? bestProbs = null;
 
-        for (int b = 1; b < numBins; b++)
+        // Convert scores/labels to double for BIC computation
+        var scoresDouble = scores.Select(s => NumOps.ToDouble(s)).ToArray();
+        var labelsDouble = labels.Select(l => NumOps.ToDouble(l)).ToArray();
+
+        for (int numBins = 2; numBins <= maxBins; numBins++)
         {
-            int idx = Math.Min(b * binSize, n - 1);
-            _binEdges[b] = sorted[idx];
+            // Create equal-frequency (quantile) bin edges
+            var sorted = scoresDouble.OrderBy(s => s).ToArray();
+            int binSize = n / numBins;
+
+            var edges = new double[numBins + 1];
+            edges[0] = 0.0;
+            edges[numBins] = 1.0;
+            for (int b = 1; b < numBins; b++)
+            {
+                int idx = Math.Min(b * binSize, n - 1);
+                edges[b] = sorted[idx];
+            }
+
+            // Compute bin statistics and log-likelihood
+            double logLikelihood = 0;
+            var probs = new double[numBins];
+            bool validScheme = true;
+
+            for (int b = 0; b < numBins; b++)
+            {
+                int count = 0;
+                double positiveCount = 0;
+
+                for (int i = 0; i < n; i++)
+                {
+                    bool inBin = scoresDouble[i] >= edges[b] &&
+                        (b == numBins - 1 ? scoresDouble[i] <= edges[b + 1] : scoresDouble[i] < edges[b + 1]);
+                    if (inBin)
+                    {
+                        count++;
+                        positiveCount += labelsDouble[i];
+                    }
+                }
+
+                if (count == 0)
+                {
+                    probs[b] = (edges[b] + edges[b + 1]) / 2.0;
+                    continue;
+                }
+
+                double p = positiveCount / count;
+                p = Math.Max(1e-10, Math.Min(1 - 1e-10, p));
+                probs[b] = p;
+
+                // Binomial log-likelihood for this bin
+                logLikelihood += positiveCount * Math.Log(p) + (count - positiveCount) * Math.Log(1 - p);
+            }
+
+            if (!validScheme) continue;
+
+            // BIC = log-likelihood - (k/2) * log(n), where k = numBins (one parameter per bin)
+            double bic = logLikelihood - (numBins / 2.0) * Math.Log(n);
+
+            if (bic > bestBic)
+            {
+                bestBic = bic;
+                bestEdges = edges.Select(e => NumOps.FromDouble(e)).ToArray();
+                bestProbs = probs.Select(p => NumOps.FromDouble(p)).ToArray();
+            }
         }
 
-        _binProbabilities = new T[numBins];
-        for (int b = 0; b < numBins; b++)
+        if (bestEdges is not null && bestProbs is not null)
         {
-            // Include scores == 1.0 in the last bin
-            var binIndices = Enumerable.Range(0, scores.Length)
-                .Where(i => NumOps.GreaterThanOrEquals(scores[i], _binEdges[b]) && (b == numBins - 1 ? NumOps.LessThanOrEquals(scores[i], _binEdges[b + 1]) : NumOps.LessThan(scores[i], _binEdges[b + 1])))
-                .ToList();
-
-            if (binIndices.Count > 0)
-            {
-                T sum = NumOps.Zero;
-                foreach (var i in binIndices)
-                {
-                    sum = NumOps.Add(sum, labels[i]);
-                }
-                _binProbabilities[b] = NumOps.Divide(sum, NumOps.FromDouble(binIndices.Count));
-            }
-            else
-            {
-                _binProbabilities[b] = NumOps.Divide(NumOps.Add(_binEdges[b], _binEdges[b + 1]), NumOps.FromDouble(2));
-            }
+            _binEdges = bestEdges;
+            _binProbabilities = bestProbs;
+        }
+        else
+        {
+            // Fallback to simple histogram binning
+            FitHistogramBinning(scores, labels);
         }
     }
 
@@ -784,7 +833,7 @@ public class ProbabilityCalibrator<T>
         {
             for (int b = 0; b < _binProbabilities.Length; b++)
             {
-                if (NumOps.GreaterThanOrEquals(s, _binEdges![b]) && NumOps.LessThan(s, _binEdges[b + 1]))
+                if (NumOps.GreaterThanOrEquals(s, _binEdges[b]) && NumOps.LessThan(s, _binEdges[b + 1]))
                 {
                     return _binProbabilities[b];
                 }
