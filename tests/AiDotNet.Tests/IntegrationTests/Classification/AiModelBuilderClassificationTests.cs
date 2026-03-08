@@ -19,28 +19,45 @@ namespace AiDotNet.Tests.IntegrationTests.Classification;
 public class AiModelBuilderClassificationTests
 {
     [Fact]
-    public async Task RidgeClassifier_BuildAndPredict_FailsWithParameterMismatch()
+    public async Task RidgeClassifier_BuildAndPredict_ProducesValidClassLabels()
     {
-        // BUG DETECTED: RidgeClassifier fails through the AiModelBuilder because
-        // NormalOptimizer.InitializeRandomSolution passes the wrong parameter count
-        // to LinearClassifierBase.SetParameters(). This test documents the bug.
-        // Once fixed, this test should be updated to verify actual predictions.
+        // Arrange: Generate linearly separable 2-class data
         var (x, y) = CreateBinaryClassificationData(
             samplesPerClass: 40, separation: 6.0, features: 2, seed: 42);
 
         var loader = DataLoaders.FromMatrixVector(x, y);
         var classifier = new RidgeClassifier<double>();
 
-        // Act/Assert: BuildAsync throws because optimizer sends wrong param count
-        var ex = await Assert.ThrowsAsync<ArgumentException>(async () =>
-        {
-            await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
-                .ConfigureDataLoader(loader)
-                .ConfigureModel(classifier)
-                .BuildAsync();
-        });
+        // Act: Build through the facade
+        var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+            .ConfigureDataLoader(loader)
+            .ConfigureModel(classifier)
+            .BuildAsync();
 
-        Assert.Contains("parameters", ex.Message, StringComparison.OrdinalIgnoreCase);
+        // Predict on held-out test data
+        var (testX, testY) = CreateBinaryClassificationData(
+            samplesPerClass: 15, separation: 6.0, features: 2, seed: 999);
+        var predictions = result.Predict(testX);
+
+        // Assert: Valid predictions and reasonable accuracy
+        Assert.Equal(testY.Length, predictions.Length);
+
+        int correct = 0;
+        for (int i = 0; i < predictions.Length; i++)
+        {
+            Assert.False(double.IsNaN(predictions[i]),
+                $"Prediction {i} is NaN");
+            Assert.False(double.IsInfinity(predictions[i]),
+                $"Prediction {i} is Infinity");
+
+            double rounded = Math.Round(predictions[i]);
+            if (Math.Abs(rounded - testY[i]) < 0.5)
+                correct++;
+        }
+
+        double accuracy = (double)correct / predictions.Length;
+        Assert.True(accuracy > 0.60,
+            $"Accuracy {accuracy:P1} is too low for linearly separable data (expected > 60%)");
     }
 
     [Fact]
@@ -83,25 +100,42 @@ public class AiModelBuilderClassificationTests
     }
 
     [Fact]
-    public async Task GaussianNaiveBayes_BuildAndPredict_FailsWithParameterMismatch()
+    public async Task GaussianNaiveBayes_BuildAndPredict_ProducesValidClassLabels()
     {
-        // BUG DETECTED: Same as RidgeClassifier — GaussianNaiveBayes fails through
-        // the builder because the optimizer sends wrong parameter count.
+        // Arrange: Generate Gaussian-distributed 2-class data
         var (x, y) = CreateBinaryClassificationData(
             samplesPerClass: 60, separation: 4.0, features: 2, seed: 55);
 
         var loader = DataLoaders.FromMatrixVector(x, y);
         var classifier = new GaussianNaiveBayes<double>();
 
-        var ex = await Assert.ThrowsAsync<ArgumentException>(async () =>
-        {
-            await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
-                .ConfigureDataLoader(loader)
-                .ConfigureModel(classifier)
-                .BuildAsync();
-        });
+        // Act
+        var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+            .ConfigureDataLoader(loader)
+            .ConfigureModel(classifier)
+            .BuildAsync();
 
-        Assert.Contains("parameters", ex.Message, StringComparison.OrdinalIgnoreCase);
+        var (testX, testY) = CreateBinaryClassificationData(
+            samplesPerClass: 20, separation: 4.0, features: 2, seed: 777);
+        var predictions = result.Predict(testX);
+
+        // Assert
+        Assert.Equal(testY.Length, predictions.Length);
+
+        int correct = 0;
+        for (int i = 0; i < predictions.Length; i++)
+        {
+            Assert.False(double.IsNaN(predictions[i]),
+                $"Prediction {i} is NaN");
+
+            double rounded = Math.Round(predictions[i]);
+            if (Math.Abs(rounded - testY[i]) < 0.5)
+                correct++;
+        }
+
+        double accuracy = (double)correct / predictions.Length;
+        Assert.True(accuracy > 0.55,
+            $"Accuracy {accuracy:P1} is too low for Gaussian-distributed data (expected > 55%)");
     }
 
     [Fact]

@@ -159,16 +159,25 @@ public class AiModelBuilderSerializeRoundTripTests
     }
 
     [Fact]
-    public void SerializeDeserialize_EmptyModel_SerializeThrows()
+    public void SerializeDeserialize_EmptyModel_SerializeDoesNotCrash()
     {
         // Arrange: Create an AiModelResult with no model set
         var emptyResult = new AiModelResult<double, Matrix<double>, Vector<double>>();
 
-        // Act/Assert: Serialize throws InvalidOperationException because
-        // SupportsJitCompilation property accesses Model without null check.
-        // This is actually a bug (serializer touches properties that require Model),
-        // but documenting current behavior so we don't regress.
-        Assert.Throws<InvalidOperationException>(() => emptyResult.Serialize());
+        // Act: Serialize should not throw (fixed: SupportsJitCompilation returns false for null model)
+        var bytes = emptyResult.Serialize();
+        Assert.NotNull(bytes);
+
+        // Deserialize should also not throw
+        var restored = new AiModelResult<double, Matrix<double>, Vector<double>>();
+        restored.Deserialize(bytes);
+
+        // But Predict SHOULD throw because there's no model
+        Assert.Throws<InvalidOperationException>(() =>
+        {
+            var testData = CreateTestData(rows: 1, cols: 2, seed: 1);
+            restored.Predict(testData);
+        });
     }
 
     #region Helper Methods

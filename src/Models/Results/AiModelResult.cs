@@ -6727,7 +6727,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         {
             if (Model == null)
             {
-                throw new InvalidOperationException("Model is not initialized.");
+                return false;
             }
 
             // Check if the model implements IJitCompilable and supports JIT
