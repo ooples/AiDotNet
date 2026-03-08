@@ -453,7 +453,7 @@ public abstract class KnowledgeDistillationTrainerBase<T, TInput, TOutput> : IKn
         // Cleanup after training
         OnTrainingEnd(trainInputs, trainLabels);
 
-        System.Diagnostics.Debug.WriteLine();
+        System.Diagnostics.Debug.WriteLine(string.Empty);
         System.Diagnostics.Debug.WriteLine("Knowledge Distillation training completed successfully!");
     }
 

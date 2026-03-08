@@ -275,7 +275,7 @@ public class BaggingClassifier<T> : MetaClassifierBase<T>
     /// <inheritdoc/>
     public override Matrix<T> PredictProbabilities(Matrix<T> input)
     {
-        if (_estimators is null || _featureIndicesPerEstimator is null)
+        if (_estimators is null || _featureIndicesPerEstimator is null || ClassLabels is null)
         {
             throw new InvalidOperationException("Model has not been trained.");
         }

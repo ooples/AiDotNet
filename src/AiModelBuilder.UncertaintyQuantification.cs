@@ -101,17 +101,17 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 TryComputeSwagPosteriorArtifacts(result, calibrationData.X, labels, _uncertaintyQuantificationOptions, artifacts);
             }
         }
-        else if (calibrationData is { HasTargets: true })
+        else if (calibrationData is { HasTargets: true } && calibrationData.Y is { } calibY)
         {
-            TryComputeRegressionConformalArtifacts(result, calibrationData.X, calibrationData.Y, artifacts);
+            TryComputeRegressionConformalArtifacts(result, calibrationData.X, calibY, artifacts);
 
             if (effectiveMethod == UncertaintyQuantificationMethod.LaplaceApproximation)
             {
-                TryComputeLaplacePosteriorArtifacts(result, calibrationData.X, calibrationData.Y, _uncertaintyQuantificationOptions, artifacts);
+                TryComputeLaplacePosteriorArtifacts(result, calibrationData.X, calibY, _uncertaintyQuantificationOptions, artifacts);
             }
             else if (effectiveMethod == UncertaintyQuantificationMethod.Swag)
             {
-                TryComputeSwagPosteriorArtifacts(result, calibrationData.X, calibrationData.Y, _uncertaintyQuantificationOptions, artifacts);
+                TryComputeSwagPosteriorArtifacts(result, calibrationData.X, calibY, _uncertaintyQuantificationOptions, artifacts);
             }
         }
 

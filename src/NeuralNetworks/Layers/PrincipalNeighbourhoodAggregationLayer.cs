@@ -293,7 +293,7 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
         _lastMlpHiddenPreRelu = Engine.TensorAdd(hidden, bias1Broadcast);
 
         // ReLU activation using Engine operations
-        var zeroTensor = new Tensor<T>(lastMlpHiddenPreRelu.Shape);
+        var zeroTensor = new Tensor<T>(_lastMlpHiddenPreRelu.Shape);
         zeroTensor.Fill(NumOps.Zero);
         _lastMlpHidden = Engine.TensorMax(_lastMlpHiddenPreRelu, zeroTensor);
 
@@ -994,10 +994,10 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
         var mlpHiddenGradPre = Engine.TensorMatMul(activationGradient, weights2T);
 
         // ReLU derivative
-        var zeroTensor = new Tensor<T>(lastMlpHiddenPreRelu.Shape);
+        var zeroTensor = new Tensor<T>(_lastMlpHiddenPreRelu.Shape);
         zeroTensor.Fill(NumOps.Zero);
-        var reluMask = Engine.TensorGreaterThan(lastMlpHiddenPreRelu, zeroTensor);
-        var oneTensor = new Tensor<T>(lastMlpHiddenPreRelu.Shape);
+        var reluMask = Engine.TensorGreaterThan(_lastMlpHiddenPreRelu, zeroTensor);
+        var oneTensor = new Tensor<T>(_lastMlpHiddenPreRelu.Shape);
         oneTensor.Fill(NumOps.One);
         var reluDeriv = Engine.TensorWhere(reluMask, oneTensor, zeroTensor);
         var mlpHiddenGrad = Engine.TensorMultiply(mlpHiddenGradPre, reluDeriv);
@@ -1385,11 +1385,11 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
         var mlpHiddenGradPre = Engine.TensorMatMul(activationGradient, weights2T);
 
         // ReLU derivative
-        var lastMlpHiddenPreRelu = _lastMlpHiddenPreRelu ?? throw new InvalidOperationException("_lastMlpHiddenPreRelu has not been initialized.");
-        var zeroTensor = new Tensor<T>(lastMlpHiddenPreRelu.Shape);
+        var mlpHiddenPreRelu = _lastMlpHiddenPreRelu ?? throw new InvalidOperationException("_lastMlpHiddenPreRelu has not been initialized.");
+        var zeroTensor = new Tensor<T>(mlpHiddenPreRelu.Shape);
         zeroTensor.Fill(NumOps.Zero);
-        var reluMask = Engine.TensorGreaterThan(lastMlpHiddenPreRelu, zeroTensor);
-        var oneTensor = new Tensor<T>(lastMlpHiddenPreRelu.Shape);
+        var reluMask = Engine.TensorGreaterThan(mlpHiddenPreRelu, zeroTensor);
+        var oneTensor = new Tensor<T>(mlpHiddenPreRelu.Shape);
         oneTensor.Fill(NumOps.One);
         var reluDeriv = Engine.TensorWhere(reluMask, oneTensor, zeroTensor);
         var mlpHiddenGrad = Engine.TensorMultiply(mlpHiddenGradPre, reluDeriv);

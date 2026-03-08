@@ -285,16 +285,16 @@ internal class CachedMultiHeadAttention<T> : LayerBase<T>
         newKeys = newKeys.Reshape(batchSize, seqLen, _headCount, _headDimension).Transpose([0, 2, 1, 3]);
         newValues = newValues.Reshape(batchSize, seqLen, _headCount, _headDimension).Transpose([0, 2, 1, 3]);
 
+        var cache = _cache ?? throw new InvalidOperationException("KV cache has not been initialized.");
+
         // Apply RoPE with position offset for incremental decoding
         if (_ropeLayer != null)
         {
-            var cache = _cache ?? throw new InvalidOperationException("KV cache has not been initialized.");
             int startPosition = cache.CurrentLength;
             (queries, newKeys) = _ropeLayer.ApplyRoPE(queries, newKeys, startPosition);
         }
 
         // Append to cache and get full K, V
-        var cache = _cache ?? throw new InvalidOperationException("KV cache has not been initialized.");
         var (keys, values) = cache.Append(_layerIndex, newKeys, newValues);
 
         // Compute attention using cached K, V

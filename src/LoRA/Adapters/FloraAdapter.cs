@@ -78,11 +78,11 @@ public class FloraAdapter<T> : LoRAAdapterBase<T>
             ResampleProjectionMatrices();
         }
 
-        _compressedMomentum = new Matrix<T>(rank, outputSize);
-
         Vector<T> loraGradients = _loraLayer.GetParameterGradients();
         int inputSize = GetInputShape()[0];
         int outputSize = GetOutputShape()[0];
+
+        _compressedMomentum = new Matrix<T>(_rank, outputSize);
 
         Matrix<T> gradB = new Matrix<T>(_rank, outputSize);
         int bOffset = inputSize * _rank;

@@ -1537,7 +1537,7 @@ public class ConvLSTMLayer<T> : LayerBase<T>
         var bO_T = Autodiff.TensorOperations<T>.Reshape(bO, 1, _filters, 1, 1);
 
         int batchSize = _lastInput.Shape[0];
-        int timeSteps = lastInput.Shape[1];
+        int timeSteps = _lastInput.Shape[1];
         int height = _lastInput.Shape[2];
         int width = _lastInput.Shape[3];
         int channels = _lastInput.Shape[4];
@@ -1692,7 +1692,7 @@ public class ConvLSTMLayer<T> : LayerBase<T>
 
         var lastInput = _lastInput ?? throw new InvalidOperationException("_lastInput has not been initialized.");
         int batchSize = lastInput.Shape[0];
-        int timeSteps = lastInput.Shape[1];
+        int timeSteps = _lastInput.Shape[1];
 
         var dInput = new Tensor<T>(lastInput.Shape);
         var dWeightsFi = new Tensor<T>(_weightsFi.Shape);

@@ -576,9 +576,19 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
     public ModelMetadata<T> GetModelMetadata()
     {
         T norm = Coefficients.Norm();
-        norm ??= _numOps.Zero;
+        T mean = Coefficients.Mean();
+        T max = Coefficients.Max();
+        T min = Coefficients.Min();
 
         int nonZeroCount = Coefficients.Count(c => !_numOps.Equals(c, _numOps.Zero));
+
+        object BoxOrDefault(T value)
+        {
+            if (value is object boxed)
+                return boxed;
+            object zero = _numOps.Zero ?? throw new InvalidOperationException("NumOps.Zero returned null.");
+            return zero;
+        }
 
         return new ModelMetadata<T>
         {
@@ -588,11 +598,11 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
             FeatureImportance = GetFeatureImportance(),
             AdditionalInfo = new Dictionary<string, object>
             {
-                { "CoefficientNorm", (object?)norm ?? _numOps.Zero },
+                { "CoefficientNorm", BoxOrDefault(norm) },
                 { "NonZeroCoefficients", nonZeroCount },
-                { "MeanCoefficient", (object?)Coefficients.Mean() ?? _numOps.Zero },
-                { "MaxCoefficient", (object?)Coefficients.Max() ?? _numOps.Zero },
-                { "MinCoefficient", (object?)Coefficients.Min() ?? _numOps.Zero }
+                { "MeanCoefficient", BoxOrDefault(mean) },
+                { "MaxCoefficient", BoxOrDefault(max) },
+                { "MinCoefficient", BoxOrDefault(min) }
             }
         };
     }

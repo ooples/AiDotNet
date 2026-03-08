@@ -148,11 +148,15 @@ public class CrossValidationResult<T, TInput, TOutput>
         if (foldsWithClustering.Any())
         {
             // Silhouette Score
-            var silhouetteScores = foldsWithClustering
-                .Where(r => r.ClusteringMetrics?.SilhouetteScore != null)
-                .Select(r => r.ClusteringMetrics?.SilhouetteScore)
-                .OfType<T>()
-                .ToArray();
+            var silhouetteValues = new List<T>();
+            foreach (var r in foldsWithClustering)
+            {
+                if (r.ClusteringMetrics is { } cm && cm.SilhouetteScore is { } score)
+                {
+                    silhouetteValues.Add(score);
+                }
+            }
+            var silhouetteScores = silhouetteValues.ToArray();
             if (silhouetteScores.Any())
             {
                 SilhouetteScoreStats = new BasicStats<T>(new BasicStatsInputs<T>
@@ -162,44 +166,47 @@ public class CrossValidationResult<T, TInput, TOutput>
             }
 
             // Calinski-Harabasz Index
-            var calinskiHarabaszScores = foldsWithClustering
-                .Where(r => r.ClusteringMetrics?.CalinskiHarabaszIndex != null)
-                .Select(r => r.ClusteringMetrics?.CalinskiHarabaszIndex)
-                .OfType<T>()
-                .ToArray();
-            if (calinskiHarabaszScores.Any())
+            var calinskiValues = new List<T>();
+            foreach (var r in foldsWithClustering)
+            {
+                if (r.ClusteringMetrics is { } cm2 && cm2.CalinskiHarabaszIndex is { } chi)
+                    calinskiValues.Add(chi);
+            }
+            if (calinskiValues.Count > 0)
             {
                 CalinskiHarabaszIndexStats = new BasicStats<T>(new BasicStatsInputs<T>
                 {
-                    Values = new Vector<T>(calinskiHarabaszScores)
+                    Values = new Vector<T>(calinskiValues.ToArray())
                 });
             }
 
             // Davies-Bouldin Index
-            var daviesBouldinScores = foldsWithClustering
-                .Where(r => r.ClusteringMetrics?.DaviesBouldinIndex != null)
-                .Select(r => r.ClusteringMetrics?.DaviesBouldinIndex)
-                .OfType<T>()
-                .ToArray();
-            if (daviesBouldinScores.Any())
+            var daviesValues = new List<T>();
+            foreach (var r in foldsWithClustering)
+            {
+                if (r.ClusteringMetrics is { } cm3 && cm3.DaviesBouldinIndex is { } dbi)
+                    daviesValues.Add(dbi);
+            }
+            if (daviesValues.Count > 0)
             {
                 DaviesBouldinIndexStats = new BasicStats<T>(new BasicStatsInputs<T>
                 {
-                    Values = new Vector<T>(daviesBouldinScores)
+                    Values = new Vector<T>(daviesValues.ToArray())
                 });
             }
 
             // Adjusted Rand Index
-            var adjustedRandIndexScores = foldsWithClustering
-                .Where(r => r.ClusteringMetrics?.AdjustedRandIndex != null)
-                .Select(r => r.ClusteringMetrics?.AdjustedRandIndex)
-                .OfType<T>()
-                .ToArray();
-            if (adjustedRandIndexScores.Any())
+            var ariValues = new List<T>();
+            foreach (var r in foldsWithClustering)
+            {
+                if (r.ClusteringMetrics is { } cm4 && cm4.AdjustedRandIndex is { } ari)
+                    ariValues.Add(ari);
+            }
+            if (ariValues.Count > 0)
             {
                 AdjustedRandIndexStats = new BasicStats<T>(new BasicStatsInputs<T>
                 {
-                    Values = new Vector<T>(adjustedRandIndexScores)
+                    Values = new Vector<T>(ariValues.ToArray())
                 });
             }
         }

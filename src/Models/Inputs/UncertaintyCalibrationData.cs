@@ -26,8 +26,9 @@ public sealed class UncertaintyCalibrationData<TInput, TOutput>
 
     /// <summary>
     /// Gets the calibration targets (regression-style calibration).
+    /// May be <c>default</c> when <see cref="HasTargets"/> is <c>false</c>.
     /// </summary>
-    public TOutput Y { get; }
+    public TOutput? Y { get; }
 
     /// <summary>
     /// Gets whether regression targets were provided.
@@ -54,7 +55,7 @@ public sealed class UncertaintyCalibrationData<TInput, TOutput>
     /// <param name="hasTargets">Whether regression targets are present.</param>
     /// <param name="y">Calibration targets (used only when <paramref name="hasTargets"/> is true).</param>
     /// <param name="labels">Calibration labels (used only for classification calibration).</param>
-    private UncertaintyCalibrationData(TInput x, bool hasTargets, TOutput y, Vector<int>? labels)
+    private UncertaintyCalibrationData(TInput x, bool hasTargets, TOutput? y, Vector<int>? labels)
     {
         X = x;
         Y = y;

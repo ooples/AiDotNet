@@ -1156,7 +1156,7 @@ public partial class AiModelResult<T, TInput, TOutput>
 
         for (int i = 0; i < batch; i++)
         {
-            var maxLogit = default(T);
+            var maxLogit = numOps.Zero;
             for (int c = 0; c < classes; c++)
             {
                 var p = flat[i * classes + c];

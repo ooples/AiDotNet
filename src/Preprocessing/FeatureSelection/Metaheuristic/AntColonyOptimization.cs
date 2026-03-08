@@ -255,8 +255,6 @@ public class AntColonyOptimization<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         }
 
         // Ensure minimum pheromone level
-        var pheromones = _pheromones ?? throw new InvalidOperationException("Pheromones have not been initialized.");
-
         for (int j = 0; j < p; j++)
             if (pheromones[j] < 0.01) pheromones[j] = 0.01;
     }
