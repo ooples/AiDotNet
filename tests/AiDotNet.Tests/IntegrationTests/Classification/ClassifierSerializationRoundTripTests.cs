@@ -2,6 +2,7 @@ using AiDotNet.Classification.Boosting;
 using AiDotNet.Classification.DiscriminantAnalysis;
 using AiDotNet.Classification.Ensemble;
 using AiDotNet.Classification.ImbalancedEnsemble;
+using AiDotNet.Classification.Online;
 using AiDotNet.Classification.Ordinal;
 using AiDotNet.Classification.Linear;
 using AiDotNet.Classification.NaiveBayes;
@@ -1266,6 +1267,62 @@ public class ClassifierSerializationRoundTripTests
         double accuracy = ComputeAccuracy(predictions, testY);
         Assert.True(accuracy >= 0.60,
             $"EasyEnsembleClassifier accuracy {accuracy:P1} is below 60% threshold.");
+    }
+
+    #endregion
+
+    #region Online Classifiers — Per-class running statistics
+
+    [Fact]
+    public void OnlineNaiveBayes_SerializeRoundTrip_PredictionsMatch()
+    {
+        var (trainX, trainY) = CreateBinaryData(60, 3, separation: 5.0, seed: 42);
+        var options = new OnlineNaiveBayesOptions<double> { RandomSeed = 42 };
+        var classifier = new OnlineNaiveBayesClassifier<double>(options);
+        classifier.Train(trainX, trainY);
+
+        var testX = CreateRandomMatrix(10, 3, seed: 100);
+        var original = classifier.Predict(testX);
+
+        var bytes = classifier.Serialize();
+        var restored = new OnlineNaiveBayesClassifier<double>(options);
+        restored.Deserialize(bytes);
+        var restoredPreds = restored.Predict(testX);
+
+        AssertPredictionsMatch(original, restoredPreds, "OnlineNaiveBayesClassifier");
+    }
+
+    [Fact]
+    public void OnlineNaiveBayes_DeepCopy_PreservesTrainedState()
+    {
+        var (trainX, trainY) = CreateBinaryData(60, 3, separation: 5.0, seed: 42);
+        var options = new OnlineNaiveBayesOptions<double> { RandomSeed = 42 };
+        var classifier = new OnlineNaiveBayesClassifier<double>(options);
+        classifier.Train(trainX, trainY);
+
+        var testX = CreateRandomMatrix(10, 3, seed: 100);
+        var original = classifier.Predict(testX);
+
+        var copy = classifier.DeepCopy();
+        var copyPreds = copy.Predict(testX);
+
+        AssertPredictionsMatch(original, (Vector<double>)copyPreds, "OnlineNaiveBayesClassifier DeepCopy");
+    }
+
+    [Fact]
+    public void OnlineNaiveBayes_TrainAndPredict_AchievesReasonableAccuracy()
+    {
+        var (trainX, trainY) = CreateBinaryData(100, 3, separation: 5.0, seed: 42);
+        var options = new OnlineNaiveBayesOptions<double> { RandomSeed = 42 };
+        var classifier = new OnlineNaiveBayesClassifier<double>(options);
+        classifier.Train(trainX, trainY);
+
+        var (testX, testY) = CreateBinaryData(40, 3, separation: 5.0, seed: 99);
+        var predictions = classifier.Predict(testX);
+
+        double accuracy = ComputeAccuracy(predictions, testY);
+        Assert.True(accuracy >= 0.70,
+            $"OnlineNaiveBayesClassifier accuracy {accuracy:P1} is below 70% threshold.");
     }
 
     #endregion
