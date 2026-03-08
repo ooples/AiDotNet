@@ -289,7 +289,8 @@ public class SymmetricProjector<T> : IProjectorHead<T>
     {
         var grads = new T[ParameterCount]; var batchSize = gradOutput.Shape[0];
         var invBatchSize = NumOps.FromDouble(1.0 / batchSize); int offset = 0;
-        if (ctx.CachedInput is null || ctx.CachedH1Relu is null || ctx.CachedProjection is null) return new Vector<T>(grads);
+        if (ctx.CachedInput is null || ctx.CachedH1Relu is null || ctx.CachedProjection is null)
+            throw new InvalidOperationException("Forward pass caches (CachedInput, CachedH1Relu, CachedProjection) must be populated before computing parameter gradients. Call Project() before Backward().");
         var cachedInput = ctx.CachedInput; var cachedH1Relu = ctx.CachedH1Relu;
 
         // When predictor was used, compute predictor parameter gradients first using the original gradOutput.
