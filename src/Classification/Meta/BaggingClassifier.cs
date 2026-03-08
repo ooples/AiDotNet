@@ -143,15 +143,38 @@ public class BaggingClassifier<T> : MetaClassifierBase<T>
         var xSample = new Matrix<T>(sampleSize, NumFeatures);
         var ySample = new Vector<T>(sampleSize);
 
-        for (int i = 0; i < sampleSize; i++)
-        {
-            int idx = _random!.Next(x.Rows);
+        var random = _random ?? throw new InvalidOperationException("Random number generator has not been initialized.");
 
-            for (int j = 0; j < NumFeatures; j++)
+        if (Options.Bootstrap)
+        {
+            // Sample with replacement
+            for (int i = 0; i < sampleSize; i++)
             {
-                xSample[i, j] = x[idx, j];
+                int idx = random.Next(x.Rows);
+                for (int j = 0; j < NumFeatures; j++)
+                {
+                    xSample[i, j] = x[idx, j];
+                }
+                ySample[i] = y[idx];
             }
-            ySample[i] = y[idx];
+        }
+        else
+        {
+            // Sample without replacement (shuffle and take first sampleSize)
+            var indices = Enumerable.Range(0, x.Rows)
+                .OrderBy(_ => random.Next())
+                .Take(sampleSize)
+                .ToArray();
+
+            for (int i = 0; i < sampleSize; i++)
+            {
+                int idx = indices[i];
+                for (int j = 0; j < NumFeatures; j++)
+                {
+                    xSample[i, j] = x[idx, j];
+                }
+                ySample[i] = y[idx];
+            }
         }
 
         return (xSample, ySample);
@@ -268,7 +291,35 @@ public class BaggingClassifier<T> : MetaClassifierBase<T>
 
             if (_estimators[e] is IProbabilisticClassifier<T> probClassifier)
             {
-                estProbs = probClassifier.PredictProbabilities(filteredInput);
+                var rawProbs = probClassifier.PredictProbabilities(filteredInput);
+
+                // Align estimator probabilities to ensemble label space
+                if (rawProbs.Columns == NumClasses)
+                {
+                    estProbs = rawProbs;
+                }
+                else
+                {
+                    estProbs = new Matrix<T>(input.Rows, NumClasses);
+                    var estClassLabels = _estimators[e].ClassLabels;
+                    if (estClassLabels is not null)
+                    {
+                        for (int ec = 0; ec < estClassLabels.Length && ec < rawProbs.Columns; ec++)
+                        {
+                            for (int ensC = 0; ensC < NumClasses; ensC++)
+                            {
+                                if (NumOps.Compare(estClassLabels[ec], ClassLabels[ensC]) == 0)
+                                {
+                                    for (int i = 0; i < input.Rows; i++)
+                                    {
+                                        estProbs[i, ensC] = rawProbs[i, ec];
+                                    }
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
             }
             else
             {
