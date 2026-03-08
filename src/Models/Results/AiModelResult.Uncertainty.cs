@@ -304,7 +304,7 @@ public partial class AiModelResult<T, TInput, TOutput>
 
         if (HasConformalClassification)
         {
-            var probsTensor = ConversionsHelper.ConvertToTensor<T>(deterministic!).Clone();
+            var probsTensor = ConversionsHelper.ConvertToTensor<T>(deterministic ?? throw new InvalidOperationException("Deterministic output was null.")).Clone();
             var (batch, classes) = InferBatchAndClasses(probsTensor, ConformalClassificationNumClasses);
             if (batch > 0 && classes > 1)
             {
@@ -364,7 +364,7 @@ public partial class AiModelResult<T, TInput, TOutput>
         for (int i = 0; i < _deepEnsembleModels.Count; i++)
         {
             var normalizedPrediction = _deepEnsembleModels[i].Predict(normalizedNewData);
-            samples.Add(ConversionsHelper.ConvertToTensor<T>(normalizedPrediction!).Clone());
+            samples.Add(ConversionsHelper.ConvertToTensor<T>(normalizedPrediction ?? throw new InvalidOperationException("Normalized prediction was null.")).Clone());
         }
 
         var first = samples[0];
@@ -377,7 +377,7 @@ public partial class AiModelResult<T, TInput, TOutput>
             {
                 var sampleOutput = ConvertFromTensor(samples[i]);
                 var calibratedOutput = ApplyProbabilityCalibrationIfEnabled(sampleOutput, uq);
-                samples[i] = ConversionsHelper.ConvertToTensor<T>(calibratedOutput!).Clone();
+                samples[i] = ConversionsHelper.ConvertToTensor<T>(calibratedOutput ?? throw new InvalidOperationException("Calibrated output was null.")).Clone();
             }
         }
 
@@ -478,7 +478,7 @@ public partial class AiModelResult<T, TInput, TOutput>
 
         lock (_parameterSamplingLock)
         {
-            var originalParameters = Model!.GetParameters().Clone();
+            var originalParameters = (Model ?? throw new InvalidOperationException("Model has not been initialized.")).GetParameters().Clone();
             try
             {
                 for (int s = 0; s < effectiveSamples; s++)
@@ -494,7 +494,7 @@ public partial class AiModelResult<T, TInput, TOutput>
 
                     Model.SetParameters(sampledParams);
                     var normalizedPrediction = Model.Predict(normalizedNewData);
-                    samples.Add(ConversionsHelper.ConvertToTensor<T>(normalizedPrediction!).Clone());
+                    samples.Add(ConversionsHelper.ConvertToTensor<T>(normalizedPrediction ?? throw new InvalidOperationException("Normalized prediction was null.")).Clone());
                 }
             }
             finally
@@ -513,7 +513,7 @@ public partial class AiModelResult<T, TInput, TOutput>
             {
                 var sampleOutput = ConvertFromTensor(samples[i]);
                 var calibratedOutput = ApplyProbabilityCalibrationIfEnabled(sampleOutput, uq);
-                samples[i] = ConversionsHelper.ConvertToTensor<T>(calibratedOutput!).Clone();
+                samples[i] = ConversionsHelper.ConvertToTensor<T>(calibratedOutput ?? throw new InvalidOperationException("Calibrated output was null.")).Clone();
             }
         }
 
@@ -601,7 +601,7 @@ public partial class AiModelResult<T, TInput, TOutput>
         var normalizedNewData = PreprocessingInfo?.IsFitted == true
             ? PreprocessingInfo.TransformFeatures(newData)
             : newData;
-        var inputTensor = ConversionsHelper.ConvertToTensor<T>(normalizedNewData!).Clone();
+        var inputTensor = ConversionsHelper.ConvertToTensor<T>(normalizedNewData ?? throw new InvalidOperationException("Normalized new data was null.")).Clone();
 
         var uqResult = estimator.PredictWithUncertainty(inputTensor);
 
@@ -776,7 +776,7 @@ public partial class AiModelResult<T, TInput, TOutput>
 
     private TOutput AddScalarToOutput(TOutput output, T scalar)
     {
-        var tensor = ConversionsHelper.ConvertToTensor<T>(output!).Clone();
+        var tensor = ConversionsHelper.ConvertToTensor<T>(output ?? throw new InvalidOperationException("Output was null.")).Clone();
         var vec = tensor.ToVector();
         for (int i = 0; i < vec.Length; i++)
         {
@@ -789,7 +789,7 @@ public partial class AiModelResult<T, TInput, TOutput>
 
     private TOutput ApplyTemperatureScalingToOutputProbabilities(TOutput output, T temperature)
     {
-        var probsTensor = ConversionsHelper.ConvertToTensor<T>(output!).Clone();
+        var probsTensor = ConversionsHelper.ConvertToTensor<T>(output ?? throw new InvalidOperationException("Output was null.")).Clone();
         var probsVector = probsTensor.ToVector();
         var (treatAsProbabilities, batch, classes) = InferProbabilityDistributionLayout(probsTensor, probsVector);
         if (!treatAsProbabilities || classes <= 1)
@@ -809,7 +809,7 @@ public partial class AiModelResult<T, TInput, TOutput>
             return output;
         }
 
-        var probsTensor = ConversionsHelper.ConvertToTensor<T>(output!).Clone();
+        var probsTensor = ConversionsHelper.ConvertToTensor<T>(output ?? throw new InvalidOperationException("Output was null.")).Clone();
         var probsVector = probsTensor.ToVector();
         var (treatAsProbabilities, batch, classes) = InferProbabilityDistributionLayout(probsTensor, probsVector);
         if (classes <= 1)
@@ -864,7 +864,7 @@ public partial class AiModelResult<T, TInput, TOutput>
             return output;
         }
 
-        var probsTensor = ConversionsHelper.ConvertToTensor<T>(output!).Clone();
+        var probsTensor = ConversionsHelper.ConvertToTensor<T>(output ?? throw new InvalidOperationException("Output was null.")).Clone();
         var probsVector = probsTensor.ToVector();
         var (treatAsProbabilities, batch, classes) = InferProbabilityDistributionLayout(probsTensor, probsVector);
         if (!treatAsProbabilities || classes != 2 || batch <= 0)
@@ -905,7 +905,7 @@ public partial class AiModelResult<T, TInput, TOutput>
             return output;
         }
 
-        var probsTensor = ConversionsHelper.ConvertToTensor<T>(output!).Clone();
+        var probsTensor = ConversionsHelper.ConvertToTensor<T>(output ?? throw new InvalidOperationException("Output was null.")).Clone();
         var probsVector = probsTensor.ToVector();
         var (treatAsProbabilities, batch, classes) = InferProbabilityDistributionLayout(probsTensor, probsVector);
         if (!treatAsProbabilities || classes != 2 || batch <= 0)
@@ -1058,7 +1058,8 @@ public partial class AiModelResult<T, TInput, TOutput>
         if (output is T)
         {
             var zero = MathHelper.GetNumericOperations<T>().Zero;
-            return (TOutput)(object)zero!;
+            object boxedZero = zero ?? throw new InvalidOperationException("Zero value was unexpectedly null.");
+            return (TOutput)boxedZero;
         }
 
         return default;
@@ -1155,7 +1156,7 @@ public partial class AiModelResult<T, TInput, TOutput>
 
         for (int i = 0; i < batch; i++)
         {
-            var maxLogit = default(T)!;
+            var maxLogit = default(T);
             for (int c = 0; c < classes; c++)
             {
                 var p = flat[i * classes + c];
@@ -1281,8 +1282,8 @@ public partial class AiModelResult<T, TInput, TOutput>
                 }
             }
 
-            var normalizedPrediction = Model!.Predict(normalizedInput);
-            samples.Add(ConversionsHelper.ConvertToTensor<T>(normalizedPrediction!).Clone());
+            var normalizedPrediction = (Model ?? throw new InvalidOperationException("Model has not been initialized.")).Predict(normalizedInput);
+            samples.Add(ConversionsHelper.ConvertToTensor<T>(normalizedPrediction ?? throw new InvalidOperationException("Normalized prediction was null.")).Clone());
         }
 
         var (meanTensor, varianceTensor) = ComputeMeanAndVariance(samples);

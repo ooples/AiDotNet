@@ -2312,7 +2312,8 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                                 int appliedCount = 0;
                                 foreach (var multi in modelForSequence.Layers.OfType<AiDotNet.LoRA.Adapters.MultiLoRAAdapter<T>>())
                                 {
-                                    multi.SetCurrentTask(_multiLoRATask!);
+                                    var loraTask = _multiLoRATask ?? throw new InvalidOperationException("Multi-LoRA task has not been set.");
+                                    multi.SetCurrentTask(loraTask);
                                     appliedCount++;
                                 }
 
@@ -2435,9 +2436,17 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         var normalizedInput = PreprocessingInfo?.IsFitted == true
             ? PreprocessingInfo.TransformFeatures(input)
             : input;
-        var normalizedTarget = PreprocessingInfo?.IsTargetFitted == true
-            ? PreprocessingInfo.TargetPipeline!.Transform(target)
-            : target;
+        TOutput normalizedTarget;
+        if (PreprocessingInfo?.IsTargetFitted == true)
+        {
+            if (PreprocessingInfo.TargetPipeline is null)
+                throw new InvalidOperationException("IsTargetFitted is true but TargetPipeline is null. The preprocessing pipeline is in an inconsistent state.");
+            normalizedTarget = PreprocessingInfo.TargetPipeline.Transform(target);
+        }
+        else
+        {
+            normalizedTarget = target;
+        }
 
         // Compute gradients on normalized data (gradients are wrt parameters, no denormalization needed)
         return Model.ComputeGradients(normalizedInput, normalizedTarget, lossFunction);
@@ -3584,7 +3593,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             {
                 var row = inputMatrix.GetRow(i);
                 var input = ConvertVectorToInput(row);
-                var output = Model!.Predict(input);
+                var output = (Model ?? throw new InvalidOperationException("Model has not been initialized.")).Predict(input);
                 predictions[i] = ConvertOutputToScalar(output);
             }
             return new Vector<T>(predictions);
@@ -3698,7 +3707,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         return (Vector<T> input) =>
         {
             var modelInput = ConvertVectorToInput(input);
-            var output = Model!.Predict(modelInput);
+            var output = (Model ?? throw new InvalidOperationException("Model has not been initialized.")).Predict(modelInput);
             return ConvertOutputToScalar(output);
         };
     }
@@ -3722,7 +3731,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                 // For saliency/attribution, we compute gradient of max output with respect to input
                 // First get the prediction to determine output size
                 var modelInput = ConvertVectorToInput(input);
-                var output = Model!.Predict(modelInput);
+                var output = (Model ?? throw new InvalidOperationException("Model has not been initialized.")).Predict(modelInput);
 
                 // Create output gradient: gradient of loss is 1 at predicted class
                 Vector<T> outputGradient;
@@ -3790,7 +3799,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         {
             if (typeof(TInput) == typeof(Tensor<T>))
             {
-                var output = Model!.Predict((TInput)(object)input);
+                var output = (Model ?? throw new InvalidOperationException("Model has not been initialized.")).Predict((TInput)(object)input);
                 if (output is Tensor<T> tensorOut)
                     return tensorOut;
                 if (output is Vector<T> vecOut)
@@ -3801,7 +3810,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             // Convert tensor to appropriate input type
             var vector = input.ToVector();
             var modelInput = ConvertVectorToInput(vector);
-            var modelOutput = Model!.Predict(modelInput);
+            var modelOutput = (Model ?? throw new InvalidOperationException("Model has not been initialized.")).Predict(modelInput);
 
             if (modelOutput is Tensor<T> outTensor)
                 return outTensor;
@@ -3888,7 +3897,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                 {
                     // Fallback: use prediction
                     var modelInput = ConvertVectorToInput(input);
-                    var modelOutput = Model!.Predict(modelInput);
+                    var modelOutput = (Model ?? throw new InvalidOperationException("Model has not been initialized.")).Predict(modelInput);
                     scalar = ConvertOutputToScalar(modelOutput);
                     layerActivs = new[] { input };
                 }
@@ -3898,7 +3907,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
 
             // Fallback: just return output with input as only "activation"
             var fallbackInput = ConvertVectorToInput(input);
-            var fallbackOutput = Model!.Predict(fallbackInput);
+            var fallbackOutput = (Model ?? throw new InvalidOperationException("Model has not been initialized.")).Predict(fallbackInput);
             var outputScalar = ConvertOutputToScalar(fallbackOutput);
             return (outputScalar, new[] { input });
         };
@@ -3995,7 +4004,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
 
             // Fallback: return minimal info
             var modelInput = ConvertVectorToInput(input);
-            var modelOutput = Model!.Predict(modelInput);
+            var modelOutput = (Model ?? throw new InvalidOperationException("Model has not been initialized.")).Predict(modelInput);
             var outputScalar = ConvertOutputToScalar(modelOutput);
 
             // Return input as activation and identity as weight
@@ -4018,7 +4027,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         {
             var numOps = MathHelper.GetNumericOperations<T>();
             var modelInput = ConvertVectorToInput(input);
-            var output = Model!.Predict(modelInput);
+            var output = (Model ?? throw new InvalidOperationException("Model has not been initialized.")).Predict(modelInput);
 
             // If output is a vector, return index of max
             if (output is Vector<T> probs)
@@ -4071,7 +4080,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         return (Vector<T> input) =>
         {
             var modelInput = ConvertVectorToInput(input);
-            var output = Model!.Predict(modelInput);
+            var output = (Model ?? throw new InvalidOperationException("Model has not been initialized.")).Predict(modelInput);
 
             if (output is Vector<T> probs)
                 return probs;
@@ -4099,7 +4108,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         return (Vector<T> input) =>
         {
             var modelInput = ConvertVectorToInput(input);
-            var output = Model!.Predict(modelInput);
+            var output = (Model ?? throw new InvalidOperationException("Model has not been initialized.")).Predict(modelInput);
 
             if (output is Vector<T> vec)
                 return vec;
@@ -4130,7 +4139,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             {
                 // Get output size from a forward pass
                 var modelInput = ConvertVectorToInput(input);
-                var output = Model!.Predict(modelInput);
+                var output = (Model ?? throw new InvalidOperationException("Model has not been initialized.")).Predict(modelInput);
                 var numOps = MathHelper.GetNumericOperations<T>();
 
                 // Create output gradient that's 1 at the specified index, 0 elsewhere

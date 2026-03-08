@@ -81,7 +81,7 @@ internal class CachedMultiHeadAttention<T> : LayerBase<T>
     /// CachedMultiHeadAttention supports training, but KV-Cache is only used during inference.
     /// During training, it behaves like standard MultiHeadAttention.
     /// </remarks>
-    public override bool SupportsTraining => true;
+    public override bool SupportsTraining => false;
 
     /// <summary>
     /// Gets or sets whether the layer is in inference mode (uses cache).
@@ -254,7 +254,10 @@ internal class CachedMultiHeadAttention<T> : LayerBase<T>
     {
         _lastInput = input;
 
-        if (InferenceMode && _cache != null)
+        if (InferenceMode && _cache == null)
+            throw new InvalidOperationException("InferenceMode is enabled but no KV cache has been set. Call SetCache() before running inference.");
+
+        if (InferenceMode)
         {
             return ForwardWithCache(input);
         }

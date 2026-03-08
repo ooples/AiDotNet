@@ -201,7 +201,10 @@ internal class CachedGroupedQueryAttention<T> : LayerBase<T>
     {
         _lastInput = input;
 
-        return InferenceMode && _cache != null
+        if (InferenceMode && _cache == null)
+            throw new InvalidOperationException("InferenceMode is enabled but no KV cache has been set. Call SetCache() before running inference.");
+
+        return InferenceMode
             ? ForwardWithCache(input)
             : ForwardStandard(input);
     }

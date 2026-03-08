@@ -396,9 +396,10 @@ internal class KVCache<T>
         int batchSize = keys.Shape[0];
         int numPositions = positions.Length;
 
+        EnsureCacheAllocated(layerIndex);
+
         if (_useInt8Storage)
         {
-            EnsureCacheAllocated(layerIndex);
             EnsureInt8Scales(layerIndex, keys, values, batchSize, numPositions);
         }
 

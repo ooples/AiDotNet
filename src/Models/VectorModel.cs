@@ -588,11 +588,11 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
             FeatureImportance = GetFeatureImportance(),
             AdditionalInfo = new Dictionary<string, object>
             {
-                { "CoefficientNorm", norm! },
+                { "CoefficientNorm", (object?)norm ?? _numOps.Zero },
                 { "NonZeroCoefficients", nonZeroCount },
-                { "MeanCoefficient", Coefficients.Mean()! },
-                { "MaxCoefficient", Coefficients.Max()! },
-                { "MinCoefficient", Coefficients.Min()! }
+                { "MeanCoefficient", (object?)Coefficients.Mean() ?? _numOps.Zero },
+                { "MaxCoefficient", (object?)Coefficients.Max() ?? _numOps.Zero },
+                { "MinCoefficient", (object?)Coefficients.Min() ?? _numOps.Zero }
             }
         };
     }

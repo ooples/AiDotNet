@@ -89,7 +89,7 @@ public class HyperparameterOptimizationResult<T>
     {
         return AllTrials
             .Where(t => t.Status == TrialStatus.Complete && t.ObjectiveValue != null)
-            .Select(t => (t.TrialNumber, t.ObjectiveValue!))
+            .Select(t => (t.TrialNumber, t.ObjectiveValue ?? throw new InvalidOperationException("ObjectiveValue was null after filtering.")))
             .OrderBy(t => t.TrialNumber)
             .ToList();
     }

@@ -97,12 +97,18 @@ public class BarlowTwins<T> : SSLMethodBase<T>
         // Compute Barlow Twins loss with gradients
         var (loss, gradZ1, gradZ2) = _loss.ComputeLossWithGradients(z1, z2);
 
-        // Backward pass for first view
-        var gradH1 = _projector.Backward(gradZ1);
+        // Replay forward for view 1 to restore projector caches before backward
+        // (view 2 forward overwrites shared projector caches)
+        var proj = _projector ?? throw new InvalidOperationException("Projector not initialized.");
+        proj.Reset();
+        proj.Project(h1);
+        var gradH1 = proj.Backward(gradZ1);
         _encoder.Backpropagate(gradH1);
 
-        // Backward pass for second view (accumulates gradients)
-        var gradH2 = _projector.Backward(gradZ2);
+        // Replay forward for view 2 to restore projector caches before backward
+        proj.Reset();
+        proj.Project(h2);
+        var gradH2 = proj.Backward(gradZ2);
         _encoder.Backpropagate(gradH2);
 
         // Update parameters

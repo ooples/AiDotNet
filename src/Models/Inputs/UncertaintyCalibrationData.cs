@@ -78,5 +78,10 @@ public sealed class UncertaintyCalibrationData<TInput, TOutput>
     /// <param name="labels">True class labels for calibration samples.</param>
     /// <returns>A calibration data instance.</returns>
     public static UncertaintyCalibrationData<TInput, TOutput> ForClassification(TInput xCalibration, Vector<int> labels)
-        => new(xCalibration, hasTargets: false, y: default!, labels: labels);
+    {
+        if (labels == null)
+            throw new ArgumentNullException(nameof(labels), "Labels must be provided for classification calibration data.");
+
+        return new(xCalibration, hasTargets: false, y: default, labels: labels);
+    }
 }
