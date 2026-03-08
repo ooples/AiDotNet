@@ -297,44 +297,6 @@ public class Denclue<T> : ClusteringBase<T>
         return NumOps.Divide(NumOps.Multiply(normalization, sum), NumOps.FromDouble(data.Length));
     }
 
-    private T[] ComputeDensityGradient(T[] point, T[][] data, int d)
-    {
-        T h = NumOps.FromDouble(_options.Bandwidth);
-        T h2 = NumOps.Multiply(h, h);
-        T two = NumOps.FromDouble(2.0);
-        T normalization = NumOps.Divide(
-            NumOps.FromDouble(Math.Pow(2 * Math.PI * _options.Bandwidth * _options.Bandwidth, -d / 2.0)),
-            h2);
-
-        var gradient = new T[d];
-        for (int j = 0; j < d; j++) gradient[j] = NumOps.Zero;
-
-        for (int i = 0; i < data.Length; i++)
-        {
-            T dist2 = NumOps.Zero;
-            for (int j = 0; j < d; j++)
-            {
-                T diff = NumOps.Subtract(point[j], data[i][j]);
-                dist2 = NumOps.Add(dist2, NumOps.Multiply(diff, diff));
-            }
-
-            T weight = NumOps.Exp(NumOps.Negate(NumOps.Divide(dist2, NumOps.Multiply(two, h2))));
-
-            for (int j = 0; j < d; j++)
-            {
-                gradient[j] = NumOps.Add(gradient[j], NumOps.Multiply(weight, NumOps.Subtract(data[i][j], point[j])));
-            }
-        }
-
-        T scale = NumOps.Divide(normalization, NumOps.FromDouble(data.Length));
-        for (int j = 0; j < d; j++)
-        {
-            gradient[j] = NumOps.Multiply(gradient[j], scale);
-        }
-
-        return gradient;
-    }
-
     private T EuclideanDistance(T[] a, T[] b)
     {
         return VectorHelper.EuclideanDistance(new Vector<T>(a), new Vector<T>(b));
@@ -364,21 +326,24 @@ public class Denclue<T> : ClusteringBase<T>
         T two = NumOps.FromDouble(2.0);
         T normalization = NumOps.FromDouble(Math.Pow(2 * Math.PI * _options.Bandwidth * _options.Bandwidth, -d / 2.0));
 
+        if (_attractors is null || _attractorDensities is null)
+            return NumOps.Zero;
+
         T sum = NumOps.Zero;
         for (int c = 0; c < NumClusters; c++)
         {
             T dist2 = NumOps.Zero;
             for (int j = 0; j < d; j++)
             {
-                T diff = NumOps.Subtract(p[j], _attractors![c][j]);
+                T diff = NumOps.Subtract(p[j], _attractors[c][j]);
                 dist2 = NumOps.Add(dist2, NumOps.Multiply(diff, diff));
             }
 
-            sum = NumOps.Add(sum, NumOps.Multiply(_attractorDensities![c],
+            sum = NumOps.Add(sum, NumOps.Multiply(_attractorDensities[c],
                 NumOps.Exp(NumOps.Negate(NumOps.Divide(dist2, NumOps.Multiply(two, h2))))));
         }
 
-        return sum;
+        return NumOps.Multiply(normalization, sum);
     }
 
     /// <inheritdoc />
@@ -420,6 +385,6 @@ public class Denclue<T> : ClusteringBase<T>
     public override Vector<T> FitPredict(Matrix<T> x)
     {
         Train(x);
-        return Labels!;
+        return Labels ?? throw new InvalidOperationException("Labels has not been initialized.");
     }
 }
