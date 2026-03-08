@@ -899,7 +899,8 @@ public class DeconvolutionalLayer<T> : LayerBase<T>
         // Restore original shape if 3D input
         if (_gpuAddedBatchDimension)
         {
-            return gradInput.CreateView(0, [(_gpuInputShape4D ?? throw new InvalidOperationException("_gpuInputShape4D has not been initialized."))[1], _gpuInputShape4D[2], _gpuInputShape4D[3]]);
+            var inputShape = _gpuInputShape4D ?? throw new InvalidOperationException("_gpuInputShape4D has not been initialized.");
+            return gradInput.CreateView(0, [inputShape[1], inputShape[2], inputShape[3]]);
         }
 
         return gradInput;

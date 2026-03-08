@@ -622,8 +622,8 @@ public static class DeserializationHelper
 
         static string[] ParseList(string? raw)
         {
-            if (string.IsNullOrWhiteSpace(raw)) return Array.Empty<string>();
-            return (raw ?? throw new InvalidOperationException("raw has not been initialized.")).Split(new[] { '|' }, StringSplitOptions.RemoveEmptyEntries);
+            if (string.IsNullOrWhiteSpace(raw) || raw is null) return Array.Empty<string>();
+            return raw.Split(new[] { '|' }, StringSplitOptions.RemoveEmptyEntries);
         }
 
         static int[] ParseIntList(string? raw)

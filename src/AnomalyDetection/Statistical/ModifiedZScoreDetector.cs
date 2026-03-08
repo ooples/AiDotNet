@@ -167,6 +167,9 @@ public class ModifiedZScoreDetector<T> : AnomalyDetectorBase<T>
                 nameof(X));
         }
 
+        var mads = _mads ?? throw new InvalidOperationException("_mads has not been initialized.");
+        var medians = _medians ?? throw new InvalidOperationException("_medians has not been initialized.");
+
         var scores = new Vector<T>(X.Rows);
         T scaleFactor = NumOps.FromDouble(MAD_SCALE_FACTOR);
 
@@ -178,17 +181,17 @@ public class ModifiedZScoreDetector<T> : AnomalyDetectorBase<T>
             for (int j = 0; j < X.Columns; j++)
             {
                 // Skip features with zero MAD (constant features)
-                if (NumOps.Equals((_mads ?? throw new InvalidOperationException("_mads has not been initialized."))[j], NumOps.Zero))
+                if (NumOps.Equals(mads[j], NumOps.Zero))
                 {
                     continue;
                 }
 
                 // Modified Z = k * (x - median) / MAD
                 // where k = 0.6745 (scaling factor)
-                T deviation = NumOps.Subtract(X[i, j], (_medians ?? throw new InvalidOperationException("_medians has not been initialized."))[j]);
+                T deviation = NumOps.Subtract(X[i, j], medians[j]);
                 T modifiedZ = NumOps.Divide(
                     NumOps.Multiply(scaleFactor, deviation),
-                    _mads[j]);
+                    mads[j]);
 
                 T absModifiedZ = NumOps.Abs(modifiedZ);
 

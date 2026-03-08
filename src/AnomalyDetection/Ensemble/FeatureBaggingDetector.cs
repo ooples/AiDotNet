@@ -149,13 +149,26 @@ public class FeatureBaggingDetector<T> : AnomalyDetectorBase<T>
     {
         ValidateInput(X);
 
+        var featureSubsets = _featureSubsets ?? throw new InvalidOperationException("_featureSubsets has not been initialized.");
+        var baseDetectors = _baseDetectors ?? throw new InvalidOperationException("_baseDetectors has not been initialized.");
+
+        // Validate feature indices are within bounds of input data
+        foreach (var subset in featureSubsets)
+        {
+            if (subset.Any(idx => idx >= X.Columns))
+            {
+                throw new ArgumentException(
+                    $"Input data has {X.Columns} columns but trained feature subsets reference column indices up to {subset.Max()}.");
+            }
+        }
+
         var allScores = new List<Vector<T>>();
 
         // Get scores from each base detector
         for (int e = 0; e < _nEstimators; e++)
         {
-            var subsetData = ExtractFeatureSubset(X, (_featureSubsets ?? throw new InvalidOperationException("_featureSubsets has not been initialized."))[e]);
-            var detectorScores = (_baseDetectors ?? throw new InvalidOperationException("_baseDetectors has not been initialized."))[e].ScoreAnomalies(subsetData);
+            var subsetData = ExtractFeatureSubset(X, featureSubsets[e]);
+            var detectorScores = baseDetectors[e].ScoreAnomalies(subsetData);
             allScores.Add(detectorScores);
         }
 

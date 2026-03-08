@@ -111,6 +111,16 @@ public class ZScoreDetector<T> : AnomalyDetectorBase<T>
     {
         ValidateInput(X);
 
+        var stds = _stds ?? throw new InvalidOperationException("_stds has not been initialized.");
+        var means = _means ?? throw new InvalidOperationException("_means has not been initialized.");
+
+        if (X.Columns != stds.Length)
+        {
+            throw new ArgumentException(
+                $"Input has {X.Columns} features, but model was fitted with {stds.Length} features.",
+                nameof(X));
+        }
+
         var scores = new Vector<T>(X.Rows);
 
         for (int i = 0; i < X.Rows; i++)
@@ -121,15 +131,15 @@ public class ZScoreDetector<T> : AnomalyDetectorBase<T>
             for (int j = 0; j < X.Columns; j++)
             {
                 // Skip features with zero standard deviation (constant features)
-                if (NumOps.Equals((_stds ?? throw new InvalidOperationException("_stds has not been initialized."))[j], NumOps.Zero))
+                if (NumOps.Equals(stds[j], NumOps.Zero))
                 {
                     continue;
                 }
 
                 // Z = (x - mean) / std
                 T zScore = NumOps.Divide(
-                    NumOps.Subtract(X[i, j], (_means ?? throw new InvalidOperationException("_means has not been initialized."))[j]),
-                    _stds[j]);
+                    NumOps.Subtract(X[i, j], means[j]),
+                    stds[j]);
 
                 T absZScore = NumOps.Abs(zScore);
 
