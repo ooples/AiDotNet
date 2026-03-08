@@ -224,10 +224,10 @@ public class CBLOFDetector<T> : AnomalyDetectorBase<T>
     private bool[] DetermineLargeClusters(int totalPoints)
     {
         var isLarge = new bool[_nClusters];
+        var clusterSizes = _clusterSizes ?? throw new InvalidOperationException("_clusterSizes has not been initialized.");
 
         // Sort clusters by size (descending)
         var sortedClusters = Enumerable.Range(0, _nClusters)
-            var clusterSizes = _clusterSizes ?? throw new InvalidOperationException("_clusterSizes has not been initialized.");
             .OrderByDescending(c => clusterSizes[c])
             .ToList();
 
@@ -240,7 +240,7 @@ public class CBLOFDetector<T> : AnomalyDetectorBase<T>
             if (clusterSizes[c] >= _beta && cumulativeSize < threshold)
             {
                 isLarge[c] = true;
-                cumulativeSize += _clusterSizes[c];
+                cumulativeSize += clusterSizes[c];
             }
         }
 

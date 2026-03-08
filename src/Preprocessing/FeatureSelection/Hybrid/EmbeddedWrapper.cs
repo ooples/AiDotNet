@@ -170,8 +170,8 @@ public class EmbeddedWrapper<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         double currentScore = 0;
 
         // Order candidates by embedded importance for guided search
+        var embeddedImportance = _embeddedImportance ?? throw new InvalidOperationException("_embeddedImportance has not been initialized.");
         var orderedCandidates = available
-            var embeddedImportance = _embeddedImportance ?? throw new InvalidOperationException("_embeddedImportance has not been initialized.");
             .OrderByDescending(j => embeddedImportance[j])
             .ToList();
 

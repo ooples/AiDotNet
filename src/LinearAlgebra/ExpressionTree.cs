@@ -359,12 +359,14 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     /// </remarks>
     public T Evaluate(Vector<T> input)
     {
+        if (Type == ExpressionNodeType.Constant) return Value;
+        if (Type == ExpressionNodeType.Variable) return input[_numOps.ToInt32(Value)];
+
+        var left = Left ?? throw new InvalidOperationException("Left has not been initialized.");
+        var right = Right ?? throw new InvalidOperationException("Right has not been initialized.");
+
         return Type switch
         {
-            ExpressionNodeType.Constant => Value,
-            ExpressionNodeType.Variable => input[_numOps.ToInt32(Value)],
-            var left = Left ?? throw new InvalidOperationException("Left has not been initialized.");
-            var right = Right ?? throw new InvalidOperationException("Right has not been initialized.");
             ExpressionNodeType.Add => _numOps.Add(left.Evaluate(input), right.Evaluate(input)),
             ExpressionNodeType.Subtract => _numOps.Subtract(left.Evaluate(input), right.Evaluate(input)),
             ExpressionNodeType.Multiply => _numOps.Multiply(left.Evaluate(input), right.Evaluate(input)),

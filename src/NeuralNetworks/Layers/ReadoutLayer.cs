@@ -279,10 +279,17 @@ public class ReadoutLayer<T> : LayerBase<T>
 
         _lastPreActivation = withBias;
 
-        Tensor<T> activated = UsingVectorActivation
+        Tensor<T> activated;
+        if (UsingVectorActivation)
+        {
             var vectorActivation = VectorActivation ?? throw new InvalidOperationException("VectorActivation has not been initialized.");
-            ? vectorActivation.Activate(withBias)
-            : (ScalarActivation ?? throw new InvalidOperationException("ScalarActivation has not been initialized.")).Activate(withBias);
+            activated = vectorActivation.Activate(withBias);
+        }
+        else
+        {
+            var scalarActivation = ScalarActivation ?? throw new InvalidOperationException("ScalarActivation has not been initialized.");
+            activated = scalarActivation.Activate(withBias);
+        }
 
         _lastOutput = activated;
 

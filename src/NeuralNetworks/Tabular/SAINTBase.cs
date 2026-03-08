@@ -233,9 +233,9 @@ public abstract class SAINTBase<T>
                 for (int d = 0; d < Options.EmbeddingDimension; d++)
                 {
                     int idx = (b * TotalEmbeddedFeatures + f) * Options.EmbeddingDimension + d;
+                    var columnEmbeddings = _columnEmbeddings ?? throw new InvalidOperationException("_columnEmbeddings has not been initialized.");
                     embedded[idx] = NumOps.Add(
                         embeddedFeature[d],
-                        var columnEmbeddings = _columnEmbeddings ?? throw new InvalidOperationException("_columnEmbeddings has not been initialized.");
                         columnEmbeddings[f * Options.EmbeddingDimension + d]);
                 }
             }

@@ -796,9 +796,9 @@ namespace AiDotNet.PhysicsInformed.ScientificML
                     return unaryOperator.Apply(left.Evaluate(variables, numOps));
                 case SymbolicExpressionType.BinaryOperation:
                     var binaryOperator = BinaryOperator ?? throw new InvalidOperationException("BinaryOperator has not been initialized.");
+                    var right = Right ?? throw new InvalidOperationException("Right has not been initialized.");
                     return binaryOperator.Apply(
                         left.Evaluate(variables, numOps),
-                        var right = Right ?? throw new InvalidOperationException("Right has not been initialized.");
                         right.Evaluate(variables, numOps));
                 default:
                     return numOps.Zero;

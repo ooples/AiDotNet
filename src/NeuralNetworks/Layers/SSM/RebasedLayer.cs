@@ -526,9 +526,9 @@ public class RebasedLayer<T> : LayerBase<T>
                         for (int di = 0; di < _headDimension; di++)
                         {
                             int flatD = dimStart + di;
+                            var lastValue = _lastValue ?? throw new InvalidOperationException("_lastValue has not been initialized.");
                             states[t + 1, fi, di] = NumOps.Add(
                                 states[t + 1, fi, di],
-                                var lastValue = _lastValue ?? throw new InvalidOperationException("_lastValue has not been initialized.");
                                 NumOps.Multiply(phiKVal, lastValue[new[] { bi, t, flatD }]));
                         }
                     }
@@ -552,11 +552,11 @@ public class RebasedLayer<T> : LayerBase<T>
                         T dO = dOutput[new[] { bi, t, flatD }];
 
                         // Numerator for this dimension
+                        var lastPhiQ = _lastPhiQ ?? throw new InvalidOperationException("_lastPhiQ has not been initialized.");
                         T numVal = NumOps.Zero;
                         for (int fi = 0; fi < _headDimension; fi++)
                             numVal = NumOps.Add(numVal,
                                 NumOps.Multiply(states[t + 1, fi, di],
-                                    var lastPhiQ = _lastPhiQ ?? throw new InvalidOperationException("_lastPhiQ has not been initialized.");
                                     lastPhiQ[new[] { bi, t, hi, fi }]));
 
                         for (int fi = 0; fi < _headDimension; fi++)

@@ -910,9 +910,9 @@ public class BASEDLayer<T> : LayerBase<T>
                         for (int di = 0; di < _headDimension; di++)
                         {
                             int flatD = dimStart + di;
+                            var lastLinearValue = _lastLinearValue ?? throw new InvalidOperationException("_lastLinearValue has not been initialized.");
                             states[t + 1, fi, di] = NumOps.Add(
                                 states[t + 1, fi, di],
-                                var lastLinearValue = _lastLinearValue ?? throw new InvalidOperationException("_lastLinearValue has not been initialized.");
                                 NumOps.Multiply(phiKVal, lastLinearValue[new[] { bi, t, flatD }]));
                         }
                     }

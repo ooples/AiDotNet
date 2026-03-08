@@ -171,6 +171,7 @@ public class EnsembleTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
     {
         int n = teacherLogits[0].Length;
         var result = new Vector<T>(n);
+        var weights = _weights ?? throw new InvalidOperationException("_weights has not been initialized.");
 
         switch (_aggregationMode)
         {
@@ -183,7 +184,6 @@ public class EnsembleTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
                     {
                         var weighted = NumOps.Multiply(
                             teacherLogits[t][i],
-                            var weights = _weights ?? throw new InvalidOperationException("_weights has not been initialized.");
                             NumOps.FromDouble(weights[t]));
                         sum = NumOps.Add(sum, weighted);
                     }

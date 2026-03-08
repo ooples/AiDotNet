@@ -175,6 +175,7 @@ public class MiniRocketClassifier<T> : ClassifierBase<T>, ITimeSeriesClassifier<
         }
 
         var predictions = new Vector<T>(input.Rows);
+        var classLabels = ClassLabels ?? throw new InvalidOperationException("ClassLabels has not been initialized.");
 
         for (int i = 0; i < input.Rows; i++)
         {
@@ -183,7 +184,6 @@ public class MiniRocketClassifier<T> : ClassifierBase<T>, ITimeSeriesClassifier<
                 // Binary classification
                 T score = ComputeScore(input, i, _weights);
                 predictions[i] = NumOps.ToDouble(score) >= 0
-                    var classLabels = ClassLabels ?? throw new InvalidOperationException("ClassLabels has not been initialized.");
                     ? classLabels[1]
                     : classLabels[0];
             }
