@@ -1,7 +1,10 @@
+using System.Text;
 using AiDotNet.Classification;
 using AiDotNet.Classification.Trees;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors.Helpers;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace AiDotNet.Classification.Ensemble;
 
@@ -466,6 +469,14 @@ public class GradientBoostingClassifier<T> : EnsembleClassifierBase<T>, ITreeBas
             }
         }
 
+        // Clone leaf residual means
+        foreach (var means in _leafResidualMeans)
+        {
+            var clonedMeans = new T[means.Length];
+            Array.Copy(means, clonedMeans, means.Length);
+            clone._leafResidualMeans.Add(clonedMeans);
+        }
+
         // Clone all estimators
         foreach (var estimator in Estimators)
         {
@@ -490,5 +501,131 @@ public class GradientBoostingClassifier<T> : EnsembleClassifierBase<T>, ITreeBas
         metadata.AdditionalInfo["TotalNodes"] = NodeCount;
         metadata.AdditionalInfo["TotalLeaves"] = LeafCount;
         return metadata;
+    }
+
+    /// <inheritdoc/>
+    public override byte[] Serialize()
+    {
+        var modelData = new Dictionary<string, object>
+        {
+            { "NumClasses", NumClasses },
+            { "NumFeatures", NumFeatures },
+            { "TaskType", (int)TaskType },
+            { "ClassLabels", ClassLabels?.ToArray() ?? Array.Empty<T>() },
+            { "RegularizationOptions", Regularization.GetOptions() },
+            { "InitPrediction", NumOps.ToDouble(_initPrediction) }
+        };
+
+        // Serialize FeatureImportances
+        if (FeatureImportances is not null)
+        {
+            var fiArray = new double[FeatureImportances.Length];
+            for (int i = 0; i < FeatureImportances.Length; i++)
+                fiArray[i] = NumOps.ToDouble(FeatureImportances[i]);
+            modelData["FeatureImportances"] = fiArray;
+        }
+
+        // Serialize leaf residual means
+        modelData["LeafResidualMeansCount"] = _leafResidualMeans.Count;
+        for (int i = 0; i < _leafResidualMeans.Count; i++)
+        {
+            var means = _leafResidualMeans[i];
+            var meansDouble = new double[means.Length];
+            for (int j = 0; j < means.Length; j++)
+                meansDouble[j] = NumOps.ToDouble(means[j]);
+            modelData[$"LeafResidualMeans_{i}"] = meansDouble;
+        }
+
+        // Serialize each estimator as base64
+        modelData["EstimatorCount"] = Estimators.Count;
+        for (int i = 0; i < Estimators.Count; i++)
+        {
+            if (Estimators[i] is IFullModel<T, Matrix<T>, Vector<T>> fullModel)
+            {
+                modelData[$"Estimator_{i}"] = Convert.ToBase64String(fullModel.Serialize());
+            }
+        }
+
+        var modelMetadata = GetModelMetadata();
+        modelMetadata.ModelData = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelData));
+        return Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelMetadata));
+    }
+
+    /// <inheritdoc/>
+    public override void Deserialize(byte[] modelData)
+    {
+        var jsonString = Encoding.UTF8.GetString(modelData);
+        var modelMetadata = JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString);
+
+        if (modelMetadata == null || modelMetadata.ModelData == null)
+            throw new InvalidOperationException("Deserialization failed: The model data is invalid or corrupted.");
+
+        var modelDataString = Encoding.UTF8.GetString(modelMetadata.ModelData);
+        var modelDataObj = JsonConvert.DeserializeObject<JObject>(modelDataString);
+
+        if (modelDataObj == null)
+            throw new InvalidOperationException("Deserialization failed: The model data is invalid or corrupted.");
+
+        NumClasses = modelDataObj["NumClasses"]?.ToObject<int>() ?? 0;
+        NumFeatures = modelDataObj["NumFeatures"]?.ToObject<int>() ?? 0;
+        TaskType = (ClassificationTaskType)(modelDataObj["TaskType"]?.ToObject<int>() ?? 0);
+
+        var classLabelsToken = modelDataObj["ClassLabels"];
+        if (classLabelsToken is not null)
+        {
+            var classLabelsAsDoubles = classLabelsToken.ToObject<double[]>() ?? Array.Empty<double>();
+            if (classLabelsAsDoubles.Length > 0)
+            {
+                ClassLabels = new Vector<T>(classLabelsAsDoubles.Length);
+                for (int i = 0; i < classLabelsAsDoubles.Length; i++)
+                    ClassLabels[i] = NumOps.FromDouble(classLabelsAsDoubles[i]);
+            }
+        }
+
+        _initPrediction = NumOps.FromDouble(modelDataObj["InitPrediction"]?.ToObject<double>() ?? 0.0);
+
+        // Deserialize FeatureImportances
+        var fiToken = modelDataObj["FeatureImportances"];
+        if (fiToken is not null)
+        {
+            var fiArray = fiToken.ToObject<double[]>() ?? Array.Empty<double>();
+            if (fiArray.Length > 0)
+            {
+                FeatureImportances = new Vector<T>(fiArray.Length);
+                for (int i = 0; i < fiArray.Length; i++)
+                    FeatureImportances[i] = NumOps.FromDouble(fiArray[i]);
+            }
+        }
+
+        // Deserialize leaf residual means
+        _leafResidualMeans.Clear();
+        int lrmCount = modelDataObj["LeafResidualMeansCount"]?.ToObject<int>() ?? 0;
+        for (int i = 0; i < lrmCount; i++)
+        {
+            var lrmToken = modelDataObj[$"LeafResidualMeans_{i}"];
+            if (lrmToken is not null)
+            {
+                var meansDouble = lrmToken.ToObject<double[]>() ?? Array.Empty<double>();
+                var means = new T[meansDouble.Length];
+                for (int j = 0; j < meansDouble.Length; j++)
+                    means[j] = NumOps.FromDouble(meansDouble[j]);
+                _leafResidualMeans.Add(means);
+            }
+        }
+
+        // Deserialize estimators
+        int estimatorCount = modelDataObj["EstimatorCount"]?.ToObject<int>() ?? 0;
+        Estimators.Clear();
+        for (int i = 0; i < estimatorCount; i++)
+        {
+            var estToken = modelDataObj[$"Estimator_{i}"]?.ToObject<string>();
+            if (estToken is not null)
+            {
+                var estBytes = Convert.FromBase64String(estToken);
+                var tree = new DecisionTreeClassifier<T>();
+                tree.Deserialize(estBytes);
+                Estimators.Add(tree);
+            }
+        }
     }
 }

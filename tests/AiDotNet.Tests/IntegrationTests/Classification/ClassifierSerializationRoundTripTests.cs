@@ -1,4 +1,5 @@
 using AiDotNet.Classification.DiscriminantAnalysis;
+using AiDotNet.Classification.Ensemble;
 using AiDotNet.Classification.Linear;
 using AiDotNet.Classification.NaiveBayes;
 using AiDotNet.Classification.SVM;
@@ -677,6 +678,250 @@ public class ClassifierSerializationRoundTripTests
         double accuracy = ComputeAccuracy(predictions, testY);
         Assert.True(accuracy > 0.70,
             $"LinearSVC accuracy {accuracy:P1} too low for linearly separable data (expected > 70%)");
+    }
+
+    #endregion
+
+    #region Ensemble Classifiers — Estimators + FeatureImportances + weights
+
+    [Fact]
+    public void RandomForest_SerializeRoundTrip_PredictionsMatch()
+    {
+        var (trainX, trainY) = CreateBinaryData(80, 3, separation: 4.0, seed: 42);
+        var classifier = new RandomForestClassifier<double>(new RandomForestClassifierOptions<double>
+        {
+            NEstimators = 5,
+            MaxDepth = 4,
+            Seed = 42
+        });
+        classifier.Train(trainX, trainY);
+
+        var testX = CreateRandomMatrix(10, 3, seed: 2000);
+        var original = classifier.Predict(testX);
+
+        var bytes = classifier.Serialize();
+        var restored = new RandomForestClassifier<double>(new RandomForestClassifierOptions<double>
+        {
+            NEstimators = 5,
+            MaxDepth = 4,
+            Seed = 42
+        });
+        restored.Deserialize(bytes);
+        var restoredPreds = restored.Predict(testX);
+
+        AssertPredictionsMatch(original, restoredPreds, "RandomForestClassifier");
+    }
+
+    [Fact]
+    public void RandomForest_DeepCopy_PreservesTrainedState()
+    {
+        var (trainX, trainY) = CreateBinaryData(80, 3, separation: 4.0, seed: 42);
+        var classifier = new RandomForestClassifier<double>(new RandomForestClassifierOptions<double>
+        {
+            NEstimators = 5,
+            MaxDepth = 4,
+            Seed = 42
+        });
+        classifier.Train(trainX, trainY);
+
+        var testX = CreateRandomMatrix(10, 3, seed: 2000);
+        var original = classifier.Predict(testX);
+
+        var copy = classifier.DeepCopy();
+        var copyPreds = copy.Predict(testX);
+
+        AssertPredictionsMatch(original, (Vector<double>)copyPreds, "RandomForest DeepCopy");
+    }
+
+    [Fact]
+    public void RandomForest_TrainAndPredict_AchievesReasonableAccuracy()
+    {
+        var (trainX, trainY) = CreateBinaryData(100, 3, separation: 4.0, seed: 42);
+        var classifier = new RandomForestClassifier<double>(new RandomForestClassifierOptions<double>
+        {
+            NEstimators = 10,
+            MaxDepth = 5,
+            Seed = 42
+        });
+        classifier.Train(trainX, trainY);
+
+        var (testX, testY) = CreateBinaryData(40, 3, separation: 4.0, seed: 999);
+        var predictions = classifier.Predict(testX);
+
+        double accuracy = ComputeAccuracy(predictions, testY);
+        Assert.True(accuracy > 0.70,
+            $"RandomForest accuracy {accuracy:P1} too low for separable data (expected > 70%)");
+    }
+
+    [Fact]
+    public void AdaBoost_SerializeRoundTrip_PredictionsMatch()
+    {
+        var (trainX, trainY) = CreateBinaryData(80, 3, separation: 5.0, seed: 42);
+        var classifier = new AdaBoostClassifier<double>(new AdaBoostClassifierOptions<double>
+        {
+            NEstimators = 10,
+            LearningRate = 1.0,
+            Seed = 42
+        });
+        classifier.Train(trainX, trainY);
+
+        var testX = CreateRandomMatrix(10, 3, seed: 2100);
+        var original = classifier.Predict(testX);
+
+        var bytes = classifier.Serialize();
+        var restored = new AdaBoostClassifier<double>(new AdaBoostClassifierOptions<double>
+        {
+            NEstimators = 10,
+            LearningRate = 1.0,
+            Seed = 42
+        });
+        restored.Deserialize(bytes);
+        var restoredPreds = restored.Predict(testX);
+
+        AssertPredictionsMatch(original, restoredPreds, "AdaBoostClassifier");
+    }
+
+    [Fact]
+    public void AdaBoost_DeepCopy_PreservesTrainedState()
+    {
+        var (trainX, trainY) = CreateBinaryData(80, 3, separation: 5.0, seed: 42);
+        var classifier = new AdaBoostClassifier<double>(new AdaBoostClassifierOptions<double>
+        {
+            NEstimators = 10,
+            LearningRate = 1.0,
+            Seed = 42
+        });
+        classifier.Train(trainX, trainY);
+
+        var testX = CreateRandomMatrix(10, 3, seed: 2100);
+        var original = classifier.Predict(testX);
+
+        var copy = classifier.DeepCopy();
+        var copyPreds = copy.Predict(testX);
+
+        AssertPredictionsMatch(original, (Vector<double>)copyPreds, "AdaBoost DeepCopy");
+    }
+
+    [Fact]
+    public void ExtraTrees_SerializeRoundTrip_PredictionsMatch()
+    {
+        var (trainX, trainY) = CreateBinaryData(80, 3, separation: 4.0, seed: 42);
+        var classifier = new ExtraTreesClassifier<double>(new ExtraTreesClassifierOptions<double>
+        {
+            NEstimators = 5,
+            MaxDepth = 4,
+            Seed = 42
+        });
+        classifier.Train(trainX, trainY);
+
+        var testX = CreateRandomMatrix(10, 3, seed: 2200);
+        var original = classifier.Predict(testX);
+
+        var bytes = classifier.Serialize();
+        var restored = new ExtraTreesClassifier<double>(new ExtraTreesClassifierOptions<double>
+        {
+            NEstimators = 5,
+            MaxDepth = 4,
+            Seed = 42
+        });
+        restored.Deserialize(bytes);
+        var restoredPreds = restored.Predict(testX);
+
+        AssertPredictionsMatch(original, restoredPreds, "ExtraTreesClassifier");
+    }
+
+    [Fact]
+    public void ExtraTrees_DeepCopy_PreservesTrainedState()
+    {
+        var (trainX, trainY) = CreateBinaryData(80, 3, separation: 4.0, seed: 42);
+        var classifier = new ExtraTreesClassifier<double>(new ExtraTreesClassifierOptions<double>
+        {
+            NEstimators = 5,
+            MaxDepth = 4,
+            Seed = 42
+        });
+        classifier.Train(trainX, trainY);
+
+        var testX = CreateRandomMatrix(10, 3, seed: 2200);
+        var original = classifier.Predict(testX);
+
+        var copy = classifier.DeepCopy();
+        var copyPreds = copy.Predict(testX);
+
+        AssertPredictionsMatch(original, (Vector<double>)copyPreds, "ExtraTrees DeepCopy");
+    }
+
+    [Fact]
+    public void GradientBoosting_SerializeRoundTrip_PredictionsMatch()
+    {
+        var (trainX, trainY) = CreateBinaryData(80, 3, separation: 5.0, seed: 42);
+        var classifier = new GradientBoostingClassifier<double>(new GradientBoostingClassifierOptions<double>
+        {
+            NEstimators = 10,
+            LearningRate = 0.1,
+            MaxDepth = 3,
+            Seed = 42
+        });
+        classifier.Train(trainX, trainY);
+
+        var testX = CreateRandomMatrix(10, 3, seed: 2300);
+        var original = classifier.Predict(testX);
+
+        var bytes = classifier.Serialize();
+        var restored = new GradientBoostingClassifier<double>(new GradientBoostingClassifierOptions<double>
+        {
+            NEstimators = 10,
+            LearningRate = 0.1,
+            MaxDepth = 3,
+            Seed = 42
+        });
+        restored.Deserialize(bytes);
+        var restoredPreds = restored.Predict(testX);
+
+        AssertPredictionsMatch(original, restoredPreds, "GradientBoostingClassifier");
+    }
+
+    [Fact]
+    public void GradientBoosting_DeepCopy_PreservesTrainedState()
+    {
+        var (trainX, trainY) = CreateBinaryData(80, 3, separation: 5.0, seed: 42);
+        var classifier = new GradientBoostingClassifier<double>(new GradientBoostingClassifierOptions<double>
+        {
+            NEstimators = 10,
+            LearningRate = 0.1,
+            MaxDepth = 3,
+            Seed = 42
+        });
+        classifier.Train(trainX, trainY);
+
+        var testX = CreateRandomMatrix(10, 3, seed: 2300);
+        var original = classifier.Predict(testX);
+
+        var copy = classifier.DeepCopy();
+        var copyPreds = copy.Predict(testX);
+
+        AssertPredictionsMatch(original, (Vector<double>)copyPreds, "GradientBoosting DeepCopy");
+    }
+
+    [Fact]
+    public void GradientBoosting_TrainAndPredict_AchievesReasonableAccuracy()
+    {
+        var (trainX, trainY) = CreateBinaryData(100, 3, separation: 5.0, seed: 42);
+        var classifier = new GradientBoostingClassifier<double>(new GradientBoostingClassifierOptions<double>
+        {
+            NEstimators = 20,
+            LearningRate = 0.1,
+            MaxDepth = 3,
+            Seed = 42
+        });
+        classifier.Train(trainX, trainY);
+
+        var (testX, testY) = CreateBinaryData(40, 3, separation: 5.0, seed: 999);
+        var predictions = classifier.Predict(testX);
+
+        double accuracy = ComputeAccuracy(predictions, testY);
+        Assert.True(accuracy > 0.70,
+            $"GradientBoosting accuracy {accuracy:P1} too low for separable data (expected > 70%)");
     }
 
     #endregion
