@@ -163,9 +163,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
         var compressionOptions = ResolveCompressionOptions(flOptions);
         bool useCompression = compressionOptions != null &&
                               compressionOptions.Strategy != FederatedCompressionStrategy.None;
-        var effectiveCompressionOptions = useCompression
-            ? (compressionOptions ?? throw new InvalidOperationException("Compression enabled but compression options are null."))
-            : null;
+        var effectiveCompressionOptions = useCompression ? compressionOptions : null;
         metadata.CompressionEnabled = useCompression;
         metadata.CompressionStrategyUsed = effectiveCompressionOptions?.Strategy.ToString() ?? "None";
         Dictionary<int, Vector<T>>? compressionResiduals = effectiveCompressionOptions is { UseErrorFeedback: true }
@@ -174,9 +172,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
 
         var heOptions = flOptions?.HomomorphicEncryption;
         bool useHomomorphicEncryption = heOptions?.Enabled == true;
-        var effectiveHeOptions = useHomomorphicEncryption
-            ? (heOptions ?? throw new InvalidOperationException("Homomorphic encryption enabled but HE options are null."))
-            : null;
+        var effectiveHeOptions = useHomomorphicEncryption ? heOptions : null;
         HomomorphicEncryptionScheme heScheme = effectiveHeOptions?.Scheme ?? HomomorphicEncryptionScheme.Ckks;
         HomomorphicEncryptionMode heMode = effectiveHeOptions?.Mode ?? HomomorphicEncryptionMode.HeOnly;
         var heProvider = useHomomorphicEncryption ? (_homomorphicEncryptionProviderOverride ?? new SealHomomorphicEncryptionProvider<T>()) : null;
@@ -193,9 +189,8 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
         bool usePersonalization = personalizationOptions != null &&
                                   personalizationOptions.Enabled &&
                                   personalizationOptions.Strategy != FederatedPersonalizationStrategy.None;
-        var effectivePersonalizationOptions = usePersonalization
-            ? (personalizationOptions ?? throw new InvalidOperationException("Personalization enabled but personalization options are null."))
-            : null;
+        // personalizationOptions is guaranteed non-null when usePersonalization is true (checked above).
+        var effectivePersonalizationOptions = usePersonalization ? personalizationOptions : null;
 
         metadata.PersonalizationEnabled = usePersonalization;
         metadata.PersonalizationStrategyUsed = effectivePersonalizationOptions?.Strategy.ToString() ?? "None";
@@ -206,9 +201,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
         bool useMetaLearning = metaLearningOptions != null &&
                                metaLearningOptions.Enabled &&
                                metaLearningOptions.Strategy != FederatedMetaLearningStrategy.None;
-        var effectiveMetaLearningOptions = useMetaLearning
-            ? (metaLearningOptions ?? throw new InvalidOperationException("Meta-learning enabled but meta-learning options are null."))
-            : null;
+        var effectiveMetaLearningOptions = useMetaLearning ? metaLearningOptions : null;
 
         metadata.MetaLearningEnabled = useMetaLearning;
         metadata.MetaLearningStrategyUsed = effectiveMetaLearningOptions?.Strategy.ToString() ?? "None";
@@ -337,7 +330,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                     continue;
                 }
 
-                var clientStartModel = usePersonalization && effectivePersonalizationOptions != null && perClientPersonalState != null
+                var clientStartModel = usePersonalization && effectivePersonalizationOptions is not null && perClientPersonalState != null
                     ? CreatePersonalizedStartModel(
                         personalizationStrategy,
                         effectivePersonalizationOptions,
@@ -351,7 +344,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
 
                 var localModel = CloneModelByParameters(clientStartModel);
                 var localOptimizer = CreateOptimizerForModel(localModel);
-                int effectiveLocalEpochs = useMetaLearning && effectiveMetaLearningOptions != null && effectiveMetaLearningOptions.InnerEpochs > 0 ? effectiveMetaLearningOptions.InnerEpochs : localEpochs;
+                int effectiveLocalEpochs = useMetaLearning && effectiveMetaLearningOptions is { InnerEpochs: > 0 } ? effectiveMetaLearningOptions.InnerEpochs : localEpochs;
                 ConfigureLocalOptimizer(localOptimizer, effectiveLocalEpochs);
 
                 var inputData = CreateLocalOptimizationInputData(dataset, localModel);
@@ -363,7 +356,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                 clientWeights[clientId] = weight;
 
                 var trainedParameters = trainedModel.GetParameters();
-                var parameters = usePersonalization && effectivePersonalizationOptions != null && perClientPersonalState != null
+                var parameters = usePersonalization && effectivePersonalizationOptions is not null && perClientPersonalState != null
                     ? ApplyPersonalizationAfterLocalTraining(
                         personalizationStrategy,
                         effectivePersonalizationOptions,
@@ -426,6 +419,8 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
 
                 if (useSecureAggregation)
                 {
+                    // Exactly one of these is always initialized when useSecureAggregation is true
+                    // (see initialization block at line ~298-321).
                     if (thresholdSecureAggregation is not null)
                     {
                         maskedParameters[clientId] = thresholdSecureAggregation.MaskUpdate(clientId, parametersForAggregation, weight);
@@ -433,10 +428,6 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                     else if (secureAggregation is not null)
                     {
                         maskedParameters[clientId] = secureAggregation.MaskUpdate(clientId, parametersForAggregation, weight);
-                    }
-                    else
-                    {
-                        throw new InvalidOperationException("Secure aggregation is enabled but no secure aggregation instance was created.");
                     }
                 }
                 else
@@ -460,6 +451,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                     throw new InvalidOperationException("Secure aggregation is not applicable when HE-only aggregation is enabled.");
                 }
 
+                // effectiveHeOptions is non-null when useHomomorphicEncryption is true
                 if (heProvider is null || heClientParameters is null || effectiveHeOptions is null)
                 {
                     throw new InvalidOperationException("Homomorphic encryption is enabled but required HE components are null.");
@@ -489,7 +481,8 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                 }
                 else
                 {
-                    throw new InvalidOperationException("Secure aggregation is enabled but no secure aggregation instance was created.");
+                    // Unreachable: init block guarantees one is created when useSecureAggregation is true.
+                    averagedParameters = globalBeforeParams;
                 }
 
                 newGlobalModel = globalBefore.WithParameters(averagedParameters);

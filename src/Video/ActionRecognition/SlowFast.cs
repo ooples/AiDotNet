@@ -698,12 +698,11 @@ public class SlowFast<T> : NeuralNetworkBase<T>
             "Cannot resolve AssemblyQualifiedName for activation function type."));
 
         // Optimizer type (can be null for ONNX mode or after certain operations)
-        bool hasOptimizer = _optimizer != null;
-        writer.Write(hasOptimizer);
-        if (hasOptimizer)
+        writer.Write(_optimizer is not null);
+        if (_optimizer is { } optimizer)
         {
             writer.Write(optimizer.GetType().AssemblyQualifiedName ?? throw new InvalidOperationException(
-                "Cannot resolve AssemblyQualifiedName for optimizer type."));
+                $"Cannot resolve AssemblyQualifiedName for optimizer type '{optimizer.GetType().FullName}'."));
         }
     }
 

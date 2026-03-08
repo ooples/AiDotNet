@@ -1091,7 +1091,7 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
                 // Backward through warping: gradients go to previous frame features and flow
                 var (unwarpedGrad, flowGrad) = WarpBackward(
                     warpedGrad, _cachedFlows[i - 1].forward,
-                    cachedForwardFeatures[iter][i - 1]);
+                    _cachedForwardPropFeatures[iter][i - 1]);
 
                 // Accumulate gradients
                 AccumulateGradient(backwardPhaseGradients[i], currentPartGrad);
