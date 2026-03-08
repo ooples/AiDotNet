@@ -140,10 +140,19 @@ public class BaggingClassifier<T> : MetaClassifierBase<T>
     /// </summary>
     private (Matrix<T> x, Vector<T> y) CreateBootstrapSample(Matrix<T> x, Vector<T> y, int sampleSize)
     {
+        var random = _random ?? throw new InvalidOperationException(
+            $"{GetType().Name}: Random not initialized. Call Fit() first.");
+
+        if (sampleSize > x.Rows && !Options.Bootstrap)
+        {
+            throw new ArgumentException(
+                $"Sample size ({sampleSize}) exceeds data size ({x.Rows}) with Bootstrap=false. " +
+                "Either enable Bootstrap or reduce MaxSamples.",
+                nameof(sampleSize));
+        }
+
         var xSample = new Matrix<T>(sampleSize, NumFeatures);
         var ySample = new Vector<T>(sampleSize);
-
-        var random = _random ?? throw new InvalidOperationException("Random number generator has not been initialized.");
 
         if (Options.Bootstrap)
         {

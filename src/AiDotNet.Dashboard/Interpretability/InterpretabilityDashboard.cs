@@ -472,23 +472,29 @@ public class InterpretabilityDashboard : IDisposable
                 var featureNames = attributions[0].FeatureNames!;
                 var meanAttr = new double[featureNames.Length];
 
+                var validAttributions = new List<InterpretabilityExplanation>();
                 foreach (var exp in attributions)
                 {
                     if (exp.Attributions is not { Length: > 0 } expAttributions)
                     {
-                        SysConsole.WriteLine($"[WARNING] Skipping explanation '{exp.InstanceId}' in session '{session.Name}': attribution values are empty or missing.");
                         continue;
                     }
 
+                    validAttributions.Add(exp);
                     for (int i = 0; i < featureNames.Length && i < expAttributions.Length; i++)
                     {
                         meanAttr[i] += expAttributions[i];
                     }
                 }
 
-                for (int i = 0; i < meanAttr.Length; i++)
+                int validCount = validAttributions.Count;
+
+                if (validCount > 0)
                 {
-                    meanAttr[i] /= attributions.Count;
+                    for (int i = 0; i < meanAttr.Length; i++)
+                    {
+                        meanAttr[i] /= validCount;
+                    }
                 }
 
                 if (format == "all" || format == "json")

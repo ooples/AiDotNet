@@ -399,6 +399,7 @@ public class SelfOrganizingMap<T> : ClusteringBase<T>
         int width = _options.GridWidth;
         int height = _options.GridHeight;
         int d = NumFeatures;
+        var weights = _weights ?? throw new InvalidOperationException("Weights not initialized. Call Train() first.");
         var uMatrix = new double[height, width];
 
         for (int r = 0; r < height; r++)
@@ -431,7 +432,7 @@ public class SelfOrganizingMap<T> : ClusteringBase<T>
                         double dist = 0;
                         for (int j = 0; j < d; j++)
                         {
-                            double diff = (_weights ?? throw new InvalidOperationException("SOM: Weights not initialized."))[r, c][j] - _weights[nr, nc][j];
+                            double diff = weights[r, c][j] - weights[nr, nc][j];
                             dist += diff * diff;
                         }
 
@@ -455,6 +456,7 @@ public class SelfOrganizingMap<T> : ClusteringBase<T>
         int n = x.Rows;
         int d = NumFeatures;
         int width = _options.GridWidth;
+        var neuronLabels = _neuronLabels ?? throw new InvalidOperationException("Neuron labels not initialized. Call Train() first.");
         var labels = new Vector<T>(n);
 
         for (int i = 0; i < n; i++)
@@ -467,7 +469,7 @@ public class SelfOrganizingMap<T> : ClusteringBase<T>
 
             var (bmuRow, bmuCol) = FindBMU(sample, d);
             int neuronIdx = bmuRow * width + bmuCol;
-            labels[i] = NumOps.FromDouble((_neuronLabels ?? throw new InvalidOperationException("SOM: Neuron labels not computed."))[neuronIdx]);
+            labels[i] = NumOps.FromDouble(neuronLabels[neuronIdx]);
         }
 
         return labels;

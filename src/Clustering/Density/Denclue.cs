@@ -355,17 +355,20 @@ public class Denclue<T> : ClusteringBase<T>
         double h2 = h * h;
         double normalization = Math.Pow(2 * Math.PI * h2, -d / 2.0);
 
+        var attractors = _attractors ?? throw new InvalidOperationException("Attractors not computed. Call Train() first.");
+        var attractorDensities = _attractorDensities ?? throw new InvalidOperationException("Attractor densities not computed. Call Train() first.");
+
         double sum = 0;
         for (int c = 0; c < NumClusters; c++)
         {
             double dist2 = 0;
             for (int j = 0; j < d; j++)
             {
-                double diff = p[j] - (_attractors ?? throw new InvalidOperationException("Denclue: Attractors not initialized."))[c][j];
+                double diff = p[j] - attractors[c][j];
                 dist2 += diff * diff;
             }
 
-            sum += (_attractorDensities ?? throw new InvalidOperationException("Denclue: Attractor densities not initialized."))[c] * Math.Exp(-dist2 / (2 * h2));
+            sum += attractorDensities[c] * Math.Exp(-dist2 / (2 * h2));
         }
 
         return sum;

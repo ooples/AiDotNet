@@ -559,10 +559,11 @@ public class CLIQUE<T> : ClusteringBase<T>
         ClusterCenters = new Matrix<T>(NumClusters, d);
         var counts = new int[NumClusters];
 
+        var labels = Labels ?? throw new InvalidOperationException("Labels not computed. Call Train() first.");
         int n = x.Rows;
         for (int i = 0; i < n; i++)
         {
-            int label = (int)NumOps.ToDouble((Labels ?? throw new InvalidOperationException("Labels have not been computed."))[i]);
+            int label = (int)NumOps.ToDouble(labels[i]);
             if (label >= 0 && label < NumClusters)
             {
                 counts[label]++;
