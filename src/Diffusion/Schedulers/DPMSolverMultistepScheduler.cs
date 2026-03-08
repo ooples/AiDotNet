@@ -246,8 +246,10 @@ public sealed class DPMSolverMultistepScheduler<T> : NoiseSchedulerBase<T>
         T lambda_s = _lambdas![stepIndex];
         T lambda_t = _lambdas[nextStepIndex];
         T alpha_t = _alphaTs![nextStepIndex];
-        T sigma_t = _sigmaTs![nextStepIndex];
-        T sigma_s = _sigmaTs[stepIndex];
+        var sigmaTs = _sigmaTs
+            ?? throw new InvalidOperationException("Sigma values have not been initialized. Call SetTimesteps() first.");
+        T sigma_t = sigmaTs[nextStepIndex];
+        T sigma_s = sigmaTs[stepIndex];
 
         // h = lambda_t - lambda_s
         T h = NumOps.Subtract(lambda_t, lambda_s);
@@ -273,8 +275,10 @@ public sealed class DPMSolverMultistepScheduler<T> : NoiseSchedulerBase<T>
         T lambda_s = _lambdas![stepIndex];
         T lambda_t = _lambdas[nextStepIndex];
         T alpha_t = _alphaTs![nextStepIndex];
-        T sigma_t = _sigmaTs![nextStepIndex];
-        T sigma_s = _sigmaTs[stepIndex];
+        var sigmaTs = _sigmaTs
+            ?? throw new InvalidOperationException("Sigma values have not been initialized. Call SetTimesteps() first.");
+        T sigma_t = sigmaTs[nextStepIndex];
+        T sigma_s = sigmaTs[stepIndex];
 
         T h = NumOps.Subtract(lambda_t, lambda_s);
 
@@ -308,8 +312,10 @@ public sealed class DPMSolverMultistepScheduler<T> : NoiseSchedulerBase<T>
         T lambda_s = _lambdas![stepIndex];
         T lambda_t = _lambdas[nextStepIndex];
         T alpha_t = _alphaTs![nextStepIndex];
-        T sigma_t = _sigmaTs![nextStepIndex];
-        T sigma_s = _sigmaTs[stepIndex];
+        var sigmaTs = _sigmaTs
+            ?? throw new InvalidOperationException("Sigma values have not been initialized. Call SetTimesteps() first.");
+        T sigma_t = sigmaTs[nextStepIndex];
+        T sigma_s = sigmaTs[stepIndex];
 
         T h = NumOps.Subtract(lambda_t, lambda_s);
         double hVal = NumOps.ToDouble(h);
