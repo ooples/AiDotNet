@@ -270,7 +270,13 @@ public class IncrementalPCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 $"Number of features ({p}) does not match fitted model ({_nFeaturesIn}).");
         }
 
-        int k = _components!.GetLength(0);
+        if (_components is null)
+        {
+            throw new InvalidOperationException(
+                "Internal state is inconsistent: _components is null after initialization.");
+        }
+
+        int k = _components.GetLength(0);
 
         // Convert batch to double and compute batch statistics
         var batchData = new double[nBatch, p];

@@ -162,12 +162,19 @@ public class BFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         // === Vectorized BFGS Update using IEngine (Phase B: US-GPU-015) ===
 
         var parameters = currentSolution.GetParameters();
+
+        if (_inverseHessian is null)
+        {
+            throw new InvalidOperationException(
+                "Inverse Hessian matrix has not been initialized. Ensure Initialize() is called before UpdateSolution().");
+        }
+
         if (_previousGradient != null && _previousParameters != null)
         {
             UpdateInverseHessian(parameters, gradient);
         }
 
-        var direction = _inverseHessian!.Multiply(gradient);
+        var direction = _inverseHessian.Multiply(gradient);
         // Vectorized negation
         direction = (Vector<T>)Engine.Multiply(direction, NumOps.Negate(NumOps.One));
 

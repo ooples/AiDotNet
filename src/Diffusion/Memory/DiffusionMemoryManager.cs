@@ -617,10 +617,10 @@ public class MemoryEstimate
         sb.AppendLine($"  With checkpointing:    {WithCheckpointing / (1024.0 * 1024.0):F1} MB");
         sb.AppendLine($"  Savings:               {SavingsPercent:F1}%");
 
+        sb.AppendLine($"  Total sharded:         {TotalShardedMemory.GetValueOrDefault() / (1024.0 * 1024.0):F1} MB");
         if (PerDeviceMemory.HasValue)
         {
             sb.AppendLine($"  Per device:            {PerDeviceMemory.Value / (1024.0 * 1024.0):F1} MB");
-            sb.AppendLine($"  Total sharded:         {TotalShardedMemory!.Value / (1024.0 * 1024.0):F1} MB");
         }
 
         return sb.ToString();

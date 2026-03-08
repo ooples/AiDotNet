@@ -108,6 +108,13 @@ public class TimeSeriesForestClassifier<T> : ClassifierBase<T>, ITimeSeriesClass
     /// </summary>
     public void TrainOnSequences(Tensor<T> sequences, Vector<T> labels)
     {
+        if (_options.NumTrees <= 0)
+        {
+            throw new ArgumentException(
+                $"NumTrees must be greater than 0, but was {_options.NumTrees}.",
+                nameof(_options));
+        }
+
         ValidateSequenceInput(sequences, labels);
 
         int numSamples = sequences.Shape[0];

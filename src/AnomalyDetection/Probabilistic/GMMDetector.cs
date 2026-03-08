@@ -317,6 +317,13 @@ public class GMMDetector<T> : AnomalyDetectorBase<T>
 
     private double ComputeLogLikelihood(Vector<T> point)
     {
+        if (point.Length != _nFeatures)
+        {
+            throw new ArgumentException(
+                $"Point has {point.Length} features, but model was fitted with {_nFeatures} features.",
+                nameof(point));
+        }
+
         double likelihood = 0;
 
         for (int c = 0; c < _nComponents; c++)

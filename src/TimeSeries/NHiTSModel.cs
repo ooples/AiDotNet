@@ -242,10 +242,12 @@ public class NHiTSModel<T> : TimeSeriesModelBase<T>
 
                 // Sum gradients from all batch items
                 Tensor<T>? sumGradient = null;
-                foreach (var grad in batchGradients.Where(g => g.ContainsKey(key)))
+                foreach (var grad in batchGradients)
                 {
-                    grad.TryGetValue(key, out var g);
-                    sumGradient = sumGradient is null ? g!.Clone() : Engine.TensorAdd(sumGradient, g!);
+                    if (grad.TryGetValue(key, out var g) && g is not null)
+                    {
+                        sumGradient = sumGradient is null ? g.Clone() : Engine.TensorAdd(sumGradient, g);
+                    }
                 }
 
                 if (sumGradient is not null)

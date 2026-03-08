@@ -288,9 +288,21 @@ Analyze:";
             string jsonContent = ExtractJsonFromResponse(response);
             var root = JObject.Parse(jsonContent);
 
-            if (root["contradictory"] != null)
+            var contradictoryToken = root["contradictory"];
+            if (contradictoryToken != null)
             {
-                return root["contradictory"]!.Value<bool>();
+                try
+                {
+                    return contradictoryToken.Value<bool>();
+                }
+                catch (FormatException)
+                {
+                    // Token exists but is not a boolean - fall through to text analysis
+                }
+                catch (InvalidCastException)
+                {
+                    // Token is an incompatible type - fall through to text analysis
+                }
             }
         }
         catch (JsonException)
