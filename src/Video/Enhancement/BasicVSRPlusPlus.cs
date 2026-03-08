@@ -1122,7 +1122,7 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
                 inputGradients.Add(new Tensor<T>(currentGradients[0].Shape));
             }
 
-            var cachedBackwardFeatures = _cachedBackwardPropFeatures;
+            var cachedBackwardFeatures = _cachedBackwardPropFeatures ?? throw new InvalidOperationException("_cachedBackwardPropFeatures has not been initialized.");
 
             // Backward propagation went from last to first (i = numFrames-2 to 0)
             // So backward goes from first to last
@@ -1147,7 +1147,7 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
                 // Backward through warping: gradients go to next frame features and flow
                 var (unwarpedGrad, flowGrad) = WarpBackward(
                     warpedGrad, _cachedFlows[i].backward,
-                    _cachedBackwardPropFeatures[iter][i + 1]);
+                    cachedBackwardFeatures[iter][i + 1]);
 
                 // Accumulate gradients
                 AccumulateGradient(inputGradients[i], origPartGrad);

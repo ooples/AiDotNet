@@ -305,12 +305,12 @@ public class SymmetricProjector<T> : IProjectorHead<T>
             int predOffset = bn2BetaEnd;
 
             // PredWeight2 gradients: dL/dPredWeight2 = CachedPredH1Relu^T * gradOutput
+            int pw2Offset = predOffset + PredWeight1.Length + PredBias1.Length + PredBn1Gamma.Length + PredBn1Beta.Length;
             for (int i = 0; i < _predictorHiddenDim; i++)
                 for (int j = 0; j < _projectionDim; j++)
                 {
                     T sum = NumOps.Zero;
                     for (int b = 0; b < batchSize; b++) sum = NumOps.Add(sum, NumOps.Multiply(ctx.CachedPredH1Relu[b, i], gradOutput[b, j]));
-                    int pw2Offset = predOffset + PredWeight1.Length + PredBias1.Length + PredBn1Gamma.Length + PredBn1Beta.Length;
                     grads[pw2Offset + i * _projectionDim + j] = NumOps.Multiply(sum, invBatchSize);
                 }
 

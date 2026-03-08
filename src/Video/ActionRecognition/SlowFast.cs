@@ -702,12 +702,9 @@ public class SlowFast<T> : NeuralNetworkBase<T>
             ?? nameof(SoftmaxActivation<T>));
 
         // Optimizer type (can be null for ONNX mode or after certain operations)
-        bool hasOptimizer = _optimizer != null;
-        writer.Write(hasOptimizer);
-        if (hasOptimizer)
+        writer.Write(_optimizer is not null);
+        if (_optimizer is { } optimizer)
         {
-            var optimizer = _optimizer ?? throw new InvalidOperationException(
-                $"{GetType().Name}: Optimizer not initialized but hasOptimizer flag is true.");
             writer.Write(optimizer.GetType().AssemblyQualifiedName
                 ?? typeof(AdamOptimizer<T, Tensor<T>, Tensor<T>>).AssemblyQualifiedName
                 ?? typeof(AdamOptimizer<T, Tensor<T>, Tensor<T>>).FullName
