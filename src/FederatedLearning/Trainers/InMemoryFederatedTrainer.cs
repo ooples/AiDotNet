@@ -179,11 +179,12 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
             : Array.Empty<int>();
 
 
-        // Re-evaluate HE enablement based on effective encrypted indices
-        useHomomorphicEncryption = useHomomorphicEncryption && encryptedIndices.Length > 0;
-        if (!useHomomorphicEncryption)
+        // Fail fast if HE was explicitly enabled but no indices were resolved for encryption
+        if (useHomomorphicEncryption && encryptedIndices.Length == 0)
         {
-            heProvider = null;
+            throw new InvalidOperationException(
+                "Homomorphic encryption is enabled but no parameter indices were resolved for encryption. " +
+                "Check the HE options configuration (Mode, EncryptedParameterIndices, or EncryptedParameterRatio).");
         }
 
         metadata.HomomorphicEncryptionEnabled = useHomomorphicEncryption;
@@ -769,7 +770,8 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                     {
                         var globalParams = targetModel.GetParameters();
                         var privateGlobalParams = (dpMechanism ?? throw new InvalidOperationException("DP mechanism null.")).ApplyPrivacy(globalParams, dpEpsilon, dpDelta);
-                        (privacyAccountant ?? throw new InvalidOperationException("Privacy accountant null.")).AddRound(dpEpsilon, dpDelta, samplingRate: (double)due.Count / GetNumberOfClientsOrThrow());
+                        // Each FedAsync iteration privatizes one update, so sampling rate is 1/totalClients
+                        (privacyAccountant ?? throw new InvalidOperationException("Privacy accountant null.")).AddRound(dpEpsilon, dpDelta, samplingRate: 1.0 / GetNumberOfClientsOrThrow());
                         privacyEventsThisStep++;
                         targetModel = targetModel.WithParameters(privateGlobalParams);
                     }
@@ -828,7 +830,8 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                     {
                         var globalParams = newGlobalModel.GetParameters();
                         var privateGlobalParams = (dpMechanism ?? throw new InvalidOperationException("DP mechanism null.")).ApplyPrivacy(globalParams, dpEpsilon, dpDelta);
-                        (privacyAccountant ?? throw new InvalidOperationException("Privacy accountant null.")).AddRound(dpEpsilon, dpDelta, samplingRate: (double)due.Count / GetNumberOfClientsOrThrow());
+                        // FedBuff applies DP once per buffer flush; sampling rate = bufferSize / totalClients
+                        (privacyAccountant ?? throw new InvalidOperationException("Privacy accountant null.")).AddRound(dpEpsilon, dpDelta, samplingRate: (double)bufferSize / GetNumberOfClientsOrThrow());
                         privacyEventsThisStep++;
                         newGlobalModel = newGlobalModel.WithParameters(privateGlobalParams);
                     }

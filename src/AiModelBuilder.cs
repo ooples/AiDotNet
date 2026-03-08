@@ -1813,8 +1813,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             TInput autoMLPreparedX = x;
             TOutput autoMLPreparedY = y;
 
-            bool shuffleBeforeSplit = !(_autoMLOptions?.TaskFamilyOverride == AutoMLTaskFamily.TimeSeriesForecasting
-                || _autoMLOptions?.TaskFamilyOverride == AutoMLTaskFamily.TimeSeriesAnomalyDetection);
+            bool shuffleBeforeSplit = !IsTimeSeriesTask();
 
             var splitResult = DataSplitter.Split<T, TInput, TOutput>(
                 autoMLPreparedX, autoMLPreparedY, trainRatio: 0.7, validationRatio: 0.15, shuffle: shuffleBeforeSplit);
@@ -2048,21 +2047,15 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
 
         if (usePartitionedFederatedData)
         {
-            // Federated path: all data is training data — FitResample on everything is correct.
+            // Reject row-changing data preparation in natural-client federated mode.
+            // FitResample (SMOTE, outlier removal) can change row counts, which breaks
+            // CreateFederatedClientPartitionsFromClientRanges since it uses original row ranges.
             if (_dataPreparationPipeline != null && _dataPreparationPipeline.Count > 0)
             {
-                if (preparedX is Matrix<T> fedMatrix && preparedY is Vector<T> fedVector)
-                {
-                    var (prepX, prepY) = _dataPreparationPipeline.FitResample(fedMatrix, fedVector);
-                    preparedX = (TInput)(object)prepX;
-                    preparedY = (TOutput)(object)prepY;
-                }
-                else if (preparedX is Tensor<T> fedTensor && preparedY is Tensor<T> fedYTensor)
-                {
-                    var (prepX, prepY) = _dataPreparationPipeline.FitResampleTensor(fedTensor, fedYTensor);
-                    preparedX = (TInput)(object)prepX;
-                    preparedY = (TOutput)(object)prepY;
-                }
+                throw new InvalidOperationException(
+                    "Data preparation (SMOTE, outlier removal) is not supported with natural-client federated " +
+                    "partitioning because row-changing operations break per-client row ranges. Either preprocess " +
+                    "each client's data independently before merging, or use synthetic federated partitioning instead.");
             }
 
             // Federated path: all data is training data — FitTransform on everything is correct.
@@ -2111,8 +2104,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             // Standard supervised learning path: split FIRST, then fit preprocessing on training only.
             // This prevents data leakage from test/validation sets into the preprocessing pipeline.
             // Disable shuffling for time-series tasks to preserve chronological ordering.
-            bool shuffleBeforeSplit = !(_autoMLOptions?.TaskFamilyOverride == AutoMLTaskFamily.TimeSeriesForecasting
-                || _autoMLOptions?.TaskFamilyOverride == AutoMLTaskFamily.TimeSeriesAnomalyDetection);
+            bool shuffleBeforeSplit = !IsTimeSeriesTask();
             (XTrain, yTrain, XVal, yVal, XTest, yTest) = DataSplitter.Split<T, TInput, TOutput>(
                 preparedX, preparedY, trainRatio: 0.7, validationRatio: 0.15, shuffle: shuffleBeforeSplit);
 
@@ -4106,6 +4098,34 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             AutoMLBudgetPreset.Thorough => new AutoMLEnsembleOptions { Enabled = true, MaxModelCount = 5 },
             _ => new AutoMLEnsembleOptions { Enabled = false, MaxModelCount = 3 }
         };
+    }
+
+    /// <summary>
+    /// Determines whether the current task is a time-series task that requires chronological splitting.
+    /// Checks AutoML options, and the configured model to avoid silently shuffling time-series data.
+    /// </summary>
+    private bool IsTimeSeriesTask()
+    {
+        // Check AutoML facade options
+        if (_autoMLOptions?.TaskFamilyOverride == AutoMLTaskFamily.TimeSeriesForecasting
+            || _autoMLOptions?.TaskFamilyOverride == AutoMLTaskFamily.TimeSeriesAnomalyDetection)
+        {
+            return true;
+        }
+
+        // Check if the configured model is a time-series model (when using ConfigureAutoML(IAutoMLModel)
+        // without facade options, _autoMLOptions is null but the model may still be time-series)
+        if (_model is not null)
+        {
+            var modelTypeName = _model.GetType().Name;
+            if (modelTypeName.Contains("TimeSeries", StringComparison.OrdinalIgnoreCase)
+                || modelTypeName.Contains("Forecasting", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static bool IsHigherBetter(MetricType metric)

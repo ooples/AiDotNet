@@ -37,7 +37,8 @@ public static class PreprocessingRegistry<T, TInput>
     /// <remarks>
     /// <para>
     /// This is set automatically when you call AiModelBuilder.ConfigurePreprocessing().
-    /// The pipeline is global and thread-safe.
+    /// Individual get/set operations are thread-safe (lock-protected), but concurrent
+    /// builds will still overwrite each other's pipeline. See class remarks.
     /// </para>
     /// <para><b>For Beginners:</b> You typically don't set this directly.
     /// Use AiModelBuilder.ConfigurePreprocessing() instead.
