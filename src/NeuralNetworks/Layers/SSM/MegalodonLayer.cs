@@ -843,9 +843,9 @@ public class MegalodonLayer<T> : LayerBase<T>
                     sumDGammaXhat = NumOps.Add(sumDGammaXhat, NumOps.Multiply(gammaDOut, xHat));
 
                     // Accumulate norm parameter gradients
-                    tsNormGammaGrad[d] = NumOps.Add(_tsNormGammaGradient[d],
+                    tsNormGammaGrad[d] = NumOps.Add(tsNormGammaGrad[d],
                         NumOps.Multiply(dOut, xHat));
-                    tsNormBetaGrad[d] = NumOps.Add(_tsNormBetaGradient[d], dOut);
+                    tsNormBetaGrad[d] = NumOps.Add(tsNormBetaGrad[d], dOut);
                 }
 
                 // Input gradient: invStd * (gamma * dOut - invN * sumDGamma - invN * xHat * sumDGammaXhat)
@@ -912,14 +912,14 @@ public class MegalodonLayer<T> : LayerBase<T>
                     // dAlphaR += dStateR * hPrevR + dStateI * hPrevI  (partial of complex mult)
                     // Actually: d/dAlphaR of (alphaR*hPrevR - alphaI*hPrevI) = hPrevR for real part
                     // d/dAlphaR of (alphaR*hPrevI + alphaI*hPrevR) = hPrevI for imag part
-                    emaAlphaRealGrad[d] = NumOps.Add(_emaAlphaRealGradient[d],
+                    emaAlphaRealGrad[d] = NumOps.Add(emaAlphaRealGrad[d],
                         NumOps.Add(
                             NumOps.Multiply(dStateR[d], hPrevR),
                             NumOps.Multiply(dStateI[d], hPrevI)));
 
                     // d/dAlphaI of (alphaR*hPrevR - alphaI*hPrevI) = -hPrevI for real part
                     // d/dAlphaI of (alphaR*hPrevI + alphaI*hPrevR) = hPrevR for imag part
-                    emaAlphaImagGrad[d] = NumOps.Add(_emaAlphaImagGradient[d],
+                    emaAlphaImagGrad[d] = NumOps.Add(emaAlphaImagGrad[d],
                         NumOps.Add(
                             NumOps.Multiply(dStateR[d], NumOps.Negate(hPrevI)),
                             NumOps.Multiply(dStateI[d], hPrevR)));
@@ -961,8 +961,7 @@ public class MegalodonLayer<T> : LayerBase<T>
     /// <inheritdoc />
     public override void UpdateParameters(T learningRate)
     {
-        if (_emaAlphaRealGradient == null)
-            throw new InvalidOperationException("Backward pass must be called before updating parameters.");
+        var alphaRealGrad = _emaAlphaRealGradient ?? throw new InvalidOperationException("Backward pass must be called before updating parameters.");
 
         T negLR = NumOps.Negate(learningRate);
 
@@ -981,7 +980,7 @@ public class MegalodonLayer<T> : LayerBase<T>
         var outProjWGrad = _outputProjectionWeightsGradient ?? throw new InvalidOperationException("Backward pass must be called before updating parameters.");
         var outProjBGrad = _outputProjectionBiasGradient ?? throw new InvalidOperationException("Backward pass must be called before updating parameters.");
 
-        _emaAlphaReal = Engine.TensorAdd(_emaAlphaReal, Engine.TensorMultiplyScalar(_emaAlphaRealGradient, negLR));
+        _emaAlphaReal = Engine.TensorAdd(_emaAlphaReal, Engine.TensorMultiplyScalar(alphaRealGrad, negLR));
         _emaAlphaImag = Engine.TensorAdd(_emaAlphaImag, Engine.TensorMultiplyScalar(alphaImagGrad, negLR));
         _emaInputWeights = Engine.TensorAdd(_emaInputWeights, Engine.TensorMultiplyScalar(emaInWGrad, negLR));
         _emaInputBias = Engine.TensorAdd(_emaInputBias, Engine.TensorMultiplyScalar(emaInBGrad, negLR));

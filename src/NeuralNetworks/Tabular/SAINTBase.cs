@@ -284,10 +284,12 @@ public abstract class SAINTBase<T>
         var current = embedded;
 
         // Process through transformer layers
-        // norms is only accessed inside UseLayerNorm guards, so the throw is the safe default
-        var norms = _layerNorms ?? (Options.UseLayerNorm
-            ? throw new InvalidOperationException("Layer norms not initialized when UseLayerNorm is true.")
-            : new List<LayerNormalizationLayer<T>>());
+        // Validate layer norms once upfront; norms is only indexed inside UseLayerNorm guards
+        if (Options.UseLayerNorm && _layerNorms is null)
+        {
+            throw new InvalidOperationException("Layer norms not initialized when UseLayerNorm is true.");
+        }
+        var norms = _layerNorms;
         int normIdx = 0;
         for (int layer = 0; layer < Options.NumLayers; layer++)
         {

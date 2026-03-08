@@ -100,11 +100,16 @@ public sealed class DevelopmentAttestationVerifier : IAttestationVerifier
             return new AttestationVerificationResult(false, "Attestation token is required.");
         }
 
+        if (_jwtParameters is null || _jwtOptions is null)
+        {
+            throw new InvalidOperationException("JWT attestation parameters have not been initialized.");
+        }
+
         try
         {
-            var principal = _tokenHandler.ValidateToken(evidence.AttestationToken, _jwtParameters!, out _);
+            var principal = _tokenHandler.ValidateToken(evidence.AttestationToken, _jwtParameters, out _);
 
-            if (_jwtOptions!.RequireNonceClaim)
+            if (_jwtOptions.RequireNonceClaim)
             {
                 if (string.IsNullOrWhiteSpace(evidence.Nonce))
                 {
@@ -150,8 +155,7 @@ public sealed class DevelopmentAttestationVerifier : IAttestationVerifier
         }
         catch (Exception ex) when (
             ex is SecurityTokenException ||
-            ex is ArgumentException ||
-            ex is InvalidOperationException)
+            ex is ArgumentException)
         {
             return new AttestationVerificationResult(false, "Attestation token validation failed.");
         }
