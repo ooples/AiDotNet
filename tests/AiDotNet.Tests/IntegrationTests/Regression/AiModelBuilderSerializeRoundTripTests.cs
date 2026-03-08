@@ -172,33 +172,22 @@ public class AiModelBuilderSerializeRoundTripTests
         // Arrange: Create an AiModelResult with no model set
         var emptyResult = new AiModelResult<double, Matrix<double>, Vector<double>>();
 
-        // Act/Assert: Serializing an empty model may throw or produce valid bytes.
-        // Either behavior is acceptable - what matters is consistency.
-        try
+        // Act/Assert: Serializing an empty model should throw because there's no model to serialize.
+        var ex = Assert.ThrowsAny<Exception>(() =>
         {
             var bytes = emptyResult.Serialize();
-            Assert.NotNull(bytes);
 
-            // If serialization succeeds, deserialization should also succeed
+            // If serialization somehow succeeds, deserialization + predict should fail
             var restored = new AiModelResult<double, Matrix<double>, Vector<double>>();
             restored.Deserialize(bytes);
 
-            // But Predict SHOULD throw because there's no model
-            Assert.ThrowsAny<Exception>(() =>
-            {
-                var testData = CreateTestData(rows: 1, cols: 2, seed: 1);
-                restored.Predict(testData);
-            });
-        }
-        catch (NullReferenceException)
-        {
-            // Known issue: serialization may access Model.SupportsJitCompilation without null-check.
-            // This is acceptable until the null-check is added to the serialization code.
-        }
-        catch (InvalidOperationException)
-        {
-            // Also acceptable: model may validate its state before serializing
-        }
+            var testData = CreateTestData(rows: 1, cols: 2, seed: 1);
+            restored.Predict(testData);
+        });
+
+        Assert.True(
+            ex is NullReferenceException or InvalidOperationException,
+            $"Expected NullReferenceException or InvalidOperationException, but got {ex.GetType().Name}: {ex.Message}");
     }
 
     #region Helper Methods

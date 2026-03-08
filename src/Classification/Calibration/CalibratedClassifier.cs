@@ -89,12 +89,6 @@ public class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>
     private bool _isTrained;
 
     /// <summary>
-    /// Initializes a new CalibratedClassifier.
-    /// </summary>
-    /// <param name="baseClassifier">The probabilistic classifier to calibrate.</param>
-    /// <param name="options">Calibration configuration options.</param>
-    /// <param name="regularization">Optional regularization.</param>
-    /// <summary>
     /// Initializes a new instance with default settings using Gaussian Naive Bayes as the base classifier.
     /// </summary>
     public CalibratedClassifier()
@@ -102,6 +96,12 @@ public class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>
     {
     }
 
+    /// <summary>
+    /// Initializes a new CalibratedClassifier.
+    /// </summary>
+    /// <param name="baseClassifier">The probabilistic classifier to calibrate.</param>
+    /// <param name="options">Calibration configuration options.</param>
+    /// <param name="regularization">Optional regularization.</param>
     public CalibratedClassifier(
         IProbabilisticClassifier<T> baseClassifier,
         CalibratedClassifierOptions<T>? options = null,

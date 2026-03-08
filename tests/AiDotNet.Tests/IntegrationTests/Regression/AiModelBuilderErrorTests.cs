@@ -61,10 +61,7 @@ public class AiModelBuilderErrorTests
         // The model was trained on 4 features; predicting with 2 must fail.
         var ex = Assert.ThrowsAny<Exception>(() => result.Predict(wrongDimData));
         Assert.True(
-            ex is InvalidOperationException ||
-            ex is ArgumentException ||
-            ex is ArgumentOutOfRangeException ||
-            ex is IndexOutOfRangeException,
+            ex is InvalidOperationException or ArgumentException or ArgumentOutOfRangeException,
             $"Expected a dimension-related error, got {ex.GetType().Name}: {ex.Message}");
     }
 
@@ -111,10 +108,7 @@ public class AiModelBuilderErrorTests
         });
 
         Assert.True(
-            ex is InvalidOperationException ||
-            ex is ArgumentException ||
-            ex is ArgumentOutOfRangeException ||
-            ex is DivideByZeroException,
+            ex is InvalidOperationException or ArgumentException or ArgumentOutOfRangeException,
             $"Expected a data-size error, got {ex.GetType().Name}: {ex.Message}");
         Assert.NotEmpty(ex.Message);
     }
