@@ -1060,7 +1060,10 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             {
                 mean[i] = numOps.Add(mean[i], numOps.Divide(numOps.Subtract(parameters[i], mean[i]), k));
                 var p2 = numOps.Multiply(parameters[i], parameters[i]);
-                var sqMean = sqMean ?? throw new InvalidOperationException("sqMean has not been initialized.");
+                if (sqMean is null)
+                {
+                    throw new InvalidOperationException("sqMean has not been initialized.");
+                }
                 sqMean[i] = numOps.Add(sqMean[i], numOps.Divide(numOps.Subtract(p2, sqMean[i]), k));
             }
         }

@@ -388,8 +388,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
 
                 var localModel = CloneModelByParameters(clientStartModel);
                 var localOptimizer = CreateOptimizerForModel(localModel);
-                var metaLearningOptions = metaLearningOptions ?? throw new InvalidOperationException("metaLearningOptions has not been initialized.");
-                int effectiveLocalEpochs = useMetaLearning && metaLearningOptions.InnerEpochs > 0 ? metaLearningOptions.InnerEpochs : localEpochs;
+                int effectiveLocalEpochs = useMetaLearning && metaLearningOptions is { InnerEpochs: > 0 } mlOpts ? mlOpts.InnerEpochs : localEpochs;
                 ConfigureLocalOptimizer(localOptimizer, effectiveLocalEpochs);
 
                 var inputData = CreateLocalOptimizationInputData(dataset, localModel);
@@ -442,7 +441,10 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
 
                 if (useDifferentialPrivacy && (dpMode == DifferentialPrivacyMode.Local || dpMode == DifferentialPrivacyMode.LocalAndCentral))
                 {
-                    var dpMechanism = dpMechanism ?? throw new InvalidOperationException("dpMechanism has not been initialized.");
+                    if (dpMechanism is null)
+                    {
+                        throw new InvalidOperationException("Differential privacy is enabled but dpMechanism has not been initialized.");
+                    }
                     parameters = dpMechanism.ApplyPrivacy(parameters, dpEpsilon, dpDelta);
                 }
 
@@ -464,10 +466,18 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
 
                 if (useSecureAggregation)
                 {
-                    maskedParameters[clientId] = thresholdSecureAggregation != null
-                        ? thresholdSecureAggregation.MaskUpdate(clientId, parametersForAggregation, weight)
-                        var secureAggregation = secureAggregation ?? throw new InvalidOperationException("secureAggregation has not been initialized.");
-                        : secureAggregation.MaskUpdate(clientId, parametersForAggregation, weight);
+                    if (thresholdSecureAggregation != null)
+                    {
+                        maskedParameters[clientId] = thresholdSecureAggregation.MaskUpdate(clientId, parametersForAggregation, weight);
+                    }
+                    else if (secureAggregation != null)
+                    {
+                        maskedParameters[clientId] = secureAggregation.MaskUpdate(clientId, parametersForAggregation, weight);
+                    }
+                    else
+                    {
+                        throw new InvalidOperationException("Secure aggregation is enabled but no aggregation provider is available.");
+                    }
                 }
                 else
                 {
@@ -477,7 +487,10 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
 
             if (useDifferentialPrivacy && (dpMode == DifferentialPrivacyMode.Local || dpMode == DifferentialPrivacyMode.LocalAndCentral))
             {
-                var privacyAccountant = privacyAccountant ?? throw new InvalidOperationException("privacyAccountant has not been initialized.");
+                if (privacyAccountant is null)
+                {
+                    throw new InvalidOperationException("Differential privacy is enabled but privacyAccountant has not been initialized.");
+                }
                 privacyAccountant.AddRound(dpEpsilon, dpDelta, samplingRate: (double)selectedClientIds.Count / GetNumberOfClientsOrThrow());
                 privacyEventsThisRound++;
             }
@@ -490,13 +503,24 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                     throw new InvalidOperationException("Secure aggregation is not applicable when HE-only aggregation is enabled.");
                 }
 
-                var heProvider = heProvider ?? throw new InvalidOperationException("heProvider has not been initialized.");
+                if (heProvider is null)
+                {
+                    throw new InvalidOperationException("Homomorphic encryption is enabled but heProvider has not been initialized.");
+                }
+                if (heClientParameters is null)
+                {
+                    throw new InvalidOperationException("Homomorphic encryption is enabled but heClientParameters has not been initialized.");
+                }
+                if (heOptions is null)
+                {
+                    throw new InvalidOperationException("Homomorphic encryption is enabled but heOptions has not been initialized.");
+                }
                 var heAggregated = heProvider.AggregateEncryptedWeightedAverage(
-                    heClientParameters!,
+                    heClientParameters,
                     clientWeights,
                     globalBefore.GetParameters(),
                     encryptedIndices,
-                    heOptions!);
+                    heOptions);
 
                 newGlobalModel = globalBefore.WithParameters(heAggregated);
             }
