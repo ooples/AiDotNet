@@ -444,6 +444,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         {
             Solution = solution.DeepCopy(),  // Now trained, so DeepCopy works
             SelectedFeatures = selectedFeatures,
+            SelectedFeatureIndices = new List<int>(selectedFeaturesIndices),
             XTrainSubset = XTrainSubset,
             XValSubset = XValSubset,
             XTestSubset = XTestSubset,
@@ -706,7 +707,8 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
                 PredictionStats = bestStepData.EvaluationData.TestSet.PredictionStats
             },
             bestStepData.FitDetectionResult,
-            IterationHistoryList.Count
+            IterationHistoryList.Count,
+            bestStepData.SelectedFeatureIndices
         );
     }
 
@@ -807,6 +809,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
             bestResult.FitDetectionResult = currentResult.FitDetectionResult;
             bestResult.EvaluationData = currentResult.EvaluationData;
             bestResult.SelectedFeatures = currentResult.SelectedFeatures;
+            bestResult.SelectedFeatureIndices = currentResult.SelectedFeatureIndices;
         }
     }
 
@@ -848,6 +851,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
             bestStepData.FitDetectionResult = currentStepData.FitDetectionResult;
             bestStepData.EvaluationData = currentStepData.EvaluationData;
             bestStepData.SelectedFeatures = currentStepData.SelectedFeatures;
+            bestStepData.SelectedFeatureIndices = currentStepData.SelectedFeatureIndices;
             return;
         }
 
@@ -857,7 +861,8 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
             Fitness = currentStepData.FitnessScore,
             FitDetectionResult = currentStepData.FitDetectionResult,
             EvaluationData = currentStepData.EvaluationData,
-            SelectedFeatures = currentStepData.SelectedFeatures
+            SelectedFeatures = currentStepData.SelectedFeatures,
+            SelectedFeatureIndices = currentStepData.SelectedFeatureIndices
         };
 
         var bestResult = new ModelResult<T, TInput, TOutput>
@@ -866,7 +871,8 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
             Fitness = bestStepData.FitnessScore,
             FitDetectionResult = bestStepData.FitDetectionResult,
             EvaluationData = bestStepData.EvaluationData,
-            SelectedFeatures = bestStepData.SelectedFeatures
+            SelectedFeatures = bestStepData.SelectedFeatures,
+            SelectedFeatureIndices = bestStepData.SelectedFeatureIndices
         };
 
         UpdateAndApplyBestSolution(currentResult, ref bestResult);
@@ -877,6 +883,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         bestStepData.FitDetectionResult = bestResult.FitDetectionResult;
         bestStepData.EvaluationData = bestResult.EvaluationData;
         bestStepData.SelectedFeatures = bestResult.SelectedFeatures;
+        bestStepData.SelectedFeatureIndices = bestResult.SelectedFeatureIndices;
     }
 
     /// <summary>

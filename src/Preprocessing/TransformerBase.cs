@@ -1,5 +1,6 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using Newtonsoft.Json;
 
 namespace AiDotNet.Preprocessing;
 
@@ -39,12 +40,14 @@ public abstract class TransformerBase<T, TInput, TOutput> : IDataTransformer<T, 
     /// <summary>
     /// Gets whether this transformer has been fitted to data.
     /// </summary>
+    [JsonProperty]
     public bool IsFitted { get; protected set; }
 
     /// <summary>
     /// Gets the column indices this transformer operates on.
     /// </summary>
-    public int[]? ColumnIndices { get; }
+    [JsonProperty]
+    public int[]? ColumnIndices { get; private set; }
 
     /// <summary>
     /// Gets whether this transformer supports inverse transformation.
