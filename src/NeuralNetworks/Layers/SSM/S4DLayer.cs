@@ -599,8 +599,8 @@ public class S4DLayer<T> : LayerBase<T>
         {
             var x_t = x.GetSliceAlongDimension(t, 1);
             var dOut_t = dOutput.GetSliceAlongDimension(t, 1);
-            var hReal_t = _lastHiddenStatesReal!.GetSliceAlongDimension(t + 1, 1);
-            var hImag_t = _lastHiddenStatesImag!.GetSliceAlongDimension(t + 1, 1);
+            var hReal_t = (_lastHiddenStatesReal ?? throw new InvalidOperationException("_lastHiddenStatesReal has not been initialized.")).GetSliceAlongDimension(t + 1, 1);
+            var hImag_t = (_lastHiddenStatesImag ?? throw new InvalidOperationException("_lastHiddenStatesImag has not been initialized.")).GetSliceAlongDimension(t + 1, 1);
             var hReal_prev = _lastHiddenStatesReal.GetSliceAlongDimension(t, 1);
             var hImag_prev = _lastHiddenStatesImag.GetSliceAlongDimension(t, 1);
 

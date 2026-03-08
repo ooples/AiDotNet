@@ -285,12 +285,14 @@ internal class CachedMultiHeadAttention<T> : LayerBase<T>
         // Apply RoPE with position offset for incremental decoding
         if (_ropeLayer != null)
         {
-            int startPosition = _cache!.CurrentLength;
+            var cache = _cache ?? throw new InvalidOperationException("KV cache has not been initialized.");
+            int startPosition = cache.CurrentLength;
             (queries, newKeys) = _ropeLayer.ApplyRoPE(queries, newKeys, startPosition);
         }
 
         // Append to cache and get full K, V
-        var (keys, values) = _cache!.Append(_layerIndex, newKeys, newValues);
+        var cacheForAppend = _cache ?? throw new InvalidOperationException("KV cache has not been initialized.");
+        var (keys, values) = cacheForAppend.Append(_layerIndex, newKeys, newValues);
 
         // Compute attention using cached K, V
         Tensor<T> attentionOutput;
@@ -498,11 +500,16 @@ internal class CachedMultiHeadAttention<T> : LayerBase<T>
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
         }
 
-        _queryWeights = _queryWeights.Subtract(_queryWeightsGradient!.Multiply(learningRate));
-        _keyWeights = _keyWeights.Subtract(_keyWeightsGradient!.Multiply(learningRate));
-        _valueWeights = _valueWeights.Subtract(_valueWeightsGradient!.Multiply(learningRate));
-        _outputWeights = _outputWeights.Subtract(_outputWeightsGradient!.Multiply(learningRate));
-        _outputBias = _outputBias.Subtract(_outputBiasGradient!.Multiply(learningRate));
+        var qGrad = _queryWeightsGradient ?? throw new InvalidOperationException("Query weights gradient is null.");
+        var kGrad = _keyWeightsGradient ?? throw new InvalidOperationException("Key weights gradient is null.");
+        var vGrad = _valueWeightsGradient ?? throw new InvalidOperationException("Value weights gradient is null.");
+        var oGrad = _outputWeightsGradient ?? throw new InvalidOperationException("Output weights gradient is null.");
+        var obGrad = _outputBiasGradient ?? throw new InvalidOperationException("Output bias gradient is null.");
+        _queryWeights = _queryWeights.Subtract(qGrad.Multiply(learningRate));
+        _keyWeights = _keyWeights.Subtract(kGrad.Multiply(learningRate));
+        _valueWeights = _valueWeights.Subtract(vGrad.Multiply(learningRate));
+        _outputWeights = _outputWeights.Subtract(oGrad.Multiply(learningRate));
+        _outputBias = _outputBias.Subtract(obGrad.Multiply(learningRate));
     }
 
     /// <summary>

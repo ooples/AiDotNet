@@ -226,12 +226,14 @@ internal class CachedGroupedQueryAttention<T> : LayerBase<T>
         // Apply RoPE with position offset
         if (_ropeLayer != null)
         {
-            int startPosition = _cache!.CurrentLength;
+            var cache = _cache ?? throw new InvalidOperationException("KV cache has not been initialized.");
+            int startPosition = cache.CurrentLength;
             (queries, newKeys) = _ropeLayer.ApplyRoPE(queries, newKeys, startPosition);
         }
 
         // Append to cache (cache stores numKVHeads, not numHeads!)
-        var (keys, values) = _cache!.Append(_layerIndex, newKeys, newValues);
+        var cache2 = _cache ?? throw new InvalidOperationException("KV cache has not been initialized.");
+        var (keys, values) = cache2.Append(_layerIndex, newKeys, newValues);
 
         // Expand KV heads to match Q heads
         int cachedSeqLen = keys.Shape[2];

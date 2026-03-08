@@ -293,7 +293,7 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
         _lastMlpHiddenPreRelu = Engine.TensorAdd(hidden, bias1Broadcast);
 
         // ReLU activation using Engine operations
-        var zeroTensor = new Tensor<T>(_lastMlpHiddenPreRelu.Shape);
+        var zeroTensor = new Tensor<T>(lastMlpHiddenPreRelu.Shape);
         zeroTensor.Fill(NumOps.Zero);
         _lastMlpHidden = Engine.TensorMax(_lastMlpHiddenPreRelu, zeroTensor);
 
@@ -790,7 +790,8 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
         var tiled = Engine.TensorTile(expanded, [1, numNodes, 1, 1]);
 
         // Create mask from adjacency: [batch, nodes, nodes, 1]
-        var adjExpanded = _adjacencyMatrix!.Reshape([batchSize, numNodes, numNodes, 1]);
+        var adjacencyMatrix = _adjacencyMatrix ?? throw new InvalidOperationException("_adjacencyMatrix has not been initialized.");
+        var adjExpanded = adjacencyMatrix.Reshape([batchSize, numNodes, numNodes, 1]);
 
         // Mask non-neighbors with -inf
         var negInf = new Tensor<T>(tiled.Shape);
@@ -824,7 +825,8 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
         var tiled = Engine.TensorTile(expanded, [1, numNodes, 1, 1]);
 
         // Create mask from adjacency: [batch, nodes, nodes, 1]
-        var adjExpanded = _adjacencyMatrix!.Reshape([batchSize, numNodes, numNodes, 1]);
+        var adjacencyMatrix = _adjacencyMatrix ?? throw new InvalidOperationException("_adjacencyMatrix has not been initialized.");
+        var adjExpanded = adjacencyMatrix.Reshape([batchSize, numNodes, numNodes, 1]);
 
         // Mask non-neighbors with +inf
         var posInf = new Tensor<T>(tiled.Shape);
@@ -992,10 +994,10 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
         var mlpHiddenGradPre = Engine.TensorMatMul(activationGradient, weights2T);
 
         // ReLU derivative
-        var zeroTensor = new Tensor<T>(_lastMlpHiddenPreRelu.Shape);
+        var zeroTensor = new Tensor<T>(lastMlpHiddenPreRelu.Shape);
         zeroTensor.Fill(NumOps.Zero);
-        var reluMask = Engine.TensorGreaterThan(_lastMlpHiddenPreRelu, zeroTensor);
-        var oneTensor = new Tensor<T>(_lastMlpHiddenPreRelu.Shape);
+        var reluMask = Engine.TensorGreaterThan(lastMlpHiddenPreRelu, zeroTensor);
+        var oneTensor = new Tensor<T>(lastMlpHiddenPreRelu.Shape);
         oneTensor.Fill(NumOps.One);
         var reluDeriv = Engine.TensorWhere(reluMask, oneTensor, zeroTensor);
         var mlpHiddenGrad = Engine.TensorMultiply(mlpHiddenGradPre, reluDeriv);
@@ -1089,13 +1091,15 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
 
                 // Backprop through aggregation
                 // For mean/sum: gradient flows back through adjacency transpose
-                var adjT = SwapLastTwoAxes(_adjacencyMatrix!);
+                var adjMatrix = _adjacencyMatrix ?? throw new InvalidOperationException("_adjacencyMatrix has not been initialized.");
+                var adjT = SwapLastTwoAxes(adjMatrix);
                 var aggGrad = Engine.TensorMatMul(adjT, scalerGrad);
 
                 // For mean, also divide by degree
                 if (_aggregators[aggIdx] == PNAAggregator.Mean)
                 {
-                    var safeDegrees = Engine.TensorMax(_lastDegrees!, NumOps.One);
+                    var lastDegrees = _lastDegrees ?? throw new InvalidOperationException("_lastDegrees has not been initialized.");
+                    var safeDegrees = Engine.TensorMax(lastDegrees, NumOps.One);
                     var degExpanded = safeDegrees.Reshape([batchSize, numNodes, 1]);
                     aggGrad = Engine.TensorBroadcastDivide(aggGrad, degExpanded);
                 }
@@ -1381,10 +1385,11 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
         var mlpHiddenGradPre = Engine.TensorMatMul(activationGradient, weights2T);
 
         // ReLU derivative
-        var zeroTensor = new Tensor<T>(_lastMlpHiddenPreRelu!.Shape);
+        var lastMlpHiddenPreRelu = _lastMlpHiddenPreRelu ?? throw new InvalidOperationException("_lastMlpHiddenPreRelu has not been initialized.");
+        var zeroTensor = new Tensor<T>(lastMlpHiddenPreRelu.Shape);
         zeroTensor.Fill(NumOps.Zero);
-        var reluMask = Engine.TensorGreaterThan(_lastMlpHiddenPreRelu, zeroTensor);
-        var oneTensor = new Tensor<T>(_lastMlpHiddenPreRelu.Shape);
+        var reluMask = Engine.TensorGreaterThan(lastMlpHiddenPreRelu, zeroTensor);
+        var oneTensor = new Tensor<T>(lastMlpHiddenPreRelu.Shape);
         oneTensor.Fill(NumOps.One);
         var reluDeriv = Engine.TensorWhere(reluMask, oneTensor, zeroTensor);
         var mlpHiddenGrad = Engine.TensorMultiply(mlpHiddenGradPre, reluDeriv);

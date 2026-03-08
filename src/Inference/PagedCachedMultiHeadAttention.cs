@@ -207,10 +207,10 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>
         // PagedAttentionKernel's MatVecMul expects matrices stored as [outDim, inDim] row-major.
         // Our weights are stored as [inDim, outDim], so we pass a transposed layout.
         EnsureKernelWeightCache();
-        var wQ = _cachedWQ!;
-        var wK = _cachedWK!;
-        var wV = _cachedWV!;
-        var wO = _cachedWO!;
+        var wQ = _cachedWQ ?? throw new InvalidOperationException("Cached query weights have not been initialized.");
+        var wK = _cachedWK ?? throw new InvalidOperationException("Cached key weights have not been initialized.");
+        var wV = _cachedWV ?? throw new InvalidOperationException("Cached value weights have not been initialized.");
+        var wO = _cachedWO ?? throw new InvalidOperationException("Cached output weights have not been initialized.");
 
         // Process each token sequentially to ensure causal behavior during prefill.
         var pool = ArrayPool<float>.Shared;
@@ -273,9 +273,9 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>
                         // Step 1: Project Q, K, V
                         if (useQuantized)
                         {
-                            MatVecMulInt8(hidden, wQInt8!.Value, querySpan);
-                            MatVecMulInt8(hidden, wKInt8!.Value, keySpan);
-                            MatVecMulInt8(hidden, wVInt8!.Value, valueSpan);
+                            MatVecMulInt8(hidden, wQInt8.GetValueOrDefault(), querySpan);
+                            MatVecMulInt8(hidden, wKInt8.GetValueOrDefault(), keySpan);
+                            MatVecMulInt8(hidden, wVInt8.GetValueOrDefault(), valueSpan);
                         }
                         else
                         {
@@ -301,7 +301,7 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>
                         // Step 4: Output projection
                         if (useQuantized)
                         {
-                            MatVecMulInt8(attnOutput, wOInt8!.Value, tokenOut);
+                            MatVecMulInt8(attnOutput, wOInt8.GetValueOrDefault(), tokenOut);
                         }
                         else
                         {
@@ -312,10 +312,10 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>
                     {
                         Kernel.ForwardQuantized(
                             hiddenStates: hidden,
-                            wQ: wQInt8!.Value,
-                            wK: wKInt8!.Value,
-                            wV: wVInt8!.Value,
-                            wO: wOInt8!.Value,
+                            wQ: wQInt8.GetValueOrDefault(),
+                            wK: wKInt8.GetValueOrDefault(),
+                            wV: wVInt8.GetValueOrDefault(),
+                            wO: wOInt8.GetValueOrDefault(),
                             sequenceId: SequenceId,
                             position: _currentPosition,
                             layer: LayerIndex,
@@ -340,7 +340,8 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>
                     {
                         T value = NumOps.FromDouble(tokenOut[d]);
                         value = NumOps.Add(value, _outputBias[d]);
-                        output[0, t, d] = ScalarActivation!.Activate(value);
+                        var activation = ScalarActivation ?? throw new InvalidOperationException("ScalarActivation has not been initialized.");
+                    output[0, t, d] = activation.Activate(value);
                     }
 
                     _currentPosition++;
@@ -404,7 +405,8 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>
                 for (int o = 0; o < _embeddingDimension; o++)
                 {
                     T value = NumOps.Add(projected[b, s, o], _outputBias[o]);
-                    output[b, s, o] = ScalarActivation!.Activate(value);
+                    var activation2 = ScalarActivation ?? throw new InvalidOperationException("ScalarActivation has not been initialized.");
+                    output[b, s, o] = activation2.Activate(value);
                 }
             }
         }

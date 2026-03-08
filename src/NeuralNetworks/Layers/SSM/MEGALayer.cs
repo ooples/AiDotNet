@@ -696,11 +696,11 @@ public class MEGALayer<T> : LayerBase<T>
                     dInput[new[] { bi, t, d }] = NumOps.Multiply(dH, oneMinusAlpha);
 
                     // dAlpha += dH * (h_{t-1} - x_t)
-                    T prevState = _lastEmaStates![new[] { bi, t, d }];
-                    T xVal = _lastEmaInput![new[] { bi, t, d }];
+                    T prevState = (_lastEmaStates ?? throw new InvalidOperationException("_lastEmaStates has not been initialized."))[new[] { bi, t, d }];
+                    T xVal = (_lastEmaInput ?? throw new InvalidOperationException("_lastEmaInput has not been initialized."))[new[] { bi, t, d }];
                     T dAlphaContrib = NumOps.Multiply(dH,
                         NumOps.Multiply(NumOps.Subtract(prevState, xVal), alphaDeriv));
-                    _emaAlphaLogitGradient![d] = NumOps.Add(
+                    (_emaAlphaLogitGradient ?? throw new InvalidOperationException("_emaAlphaLogitGradient has not been initialized."))[d] = NumOps.Add(
                         _emaAlphaLogitGradient[d], dAlphaContrib);
 
                     // Propagate to previous timestep

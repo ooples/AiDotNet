@@ -791,11 +791,16 @@ namespace AiDotNet.PhysicsInformed.ScientificML
                     }
                     return variables[VariableIndex];
                 case SymbolicExpressionType.UnaryOperation:
-                    return UnaryOperator!.Apply(Left!.Evaluate(variables, numOps));
+                    var uOp = UnaryOperator ?? throw new InvalidOperationException("UnaryOperator is null.");
+                    var uLeft = Left ?? throw new InvalidOperationException("Left child is null.");
+                    return uOp.Apply(uLeft.Evaluate(variables, numOps));
                 case SymbolicExpressionType.BinaryOperation:
-                    return BinaryOperator!.Apply(
-                        Left!.Evaluate(variables, numOps),
-                        Right!.Evaluate(variables, numOps));
+                    var bOp = BinaryOperator ?? throw new InvalidOperationException("BinaryOperator is null.");
+                    var bLeft = Left ?? throw new InvalidOperationException("Left child is null.");
+                    var bRight = Right ?? throw new InvalidOperationException("Right child is null.");
+                    return bOp.Apply(
+                        bLeft.Evaluate(variables, numOps),
+                        bRight.Evaluate(variables, numOps));
                 default:
                     return numOps.Zero;
             }
