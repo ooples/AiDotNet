@@ -171,15 +171,14 @@ public class FuzzyCMeans<T> : ClusteringBase<T>
             double sum = 0;
             for (int c = 0; c < k; c++)
             {
-                var membershipMatrix = _membershipMatrix ?? throw new InvalidOperationException("_membershipMatrix has not been initialized.");
-                membershipMatrix[i, c] = rand.NextDouble();
+                _membershipMatrix![i, c] = rand.NextDouble();
                 sum += _membershipMatrix[i, c];
             }
 
             // Normalize to sum to 1
             for (int c = 0; c < k; c++)
             {
-                membershipMatrix[i, c] /= sum;
+                _membershipMatrix![i, c] /= sum;
             }
         }
     }
@@ -195,7 +194,7 @@ public class FuzzyCMeans<T> : ClusteringBase<T>
 
                 for (int i = 0; i < n; i++)
                 {
-                    double membership = Math.Pow(membershipMatrix[i, c], m);
+                    double membership = Math.Pow(_membershipMatrix![i, c], m);
                     numerator += membership * NumOps.ToDouble(x[i, j]);
                     denominator += membership;
                 }
@@ -239,7 +238,7 @@ public class FuzzyCMeans<T> : ClusteringBase<T>
             // Update memberships
             for (int c = 0; c < k; c++)
             {
-                double oldMembership = membershipMatrix[i, c];
+                double oldMembership = _membershipMatrix![i, c];
                 double newMembership;
 
                 if (hasZeroDistance)

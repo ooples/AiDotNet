@@ -168,7 +168,7 @@ public class PCADetector<T> : AnomalyDetectorBase<T>
             var centered = new Vector<T>(d);
             for (int j = 0; j < d; j++)
             {
-                centered[j] = NumOps.Subtract(X[i, j], (_mean ?? throw new InvalidOperationException("_mean has not been initialized."))[j]);
+                centered[j] = NumOps.Subtract(X[i, j], _mean![j]);
             }
 
             // Project onto components
@@ -178,8 +178,7 @@ public class PCADetector<T> : AnomalyDetectorBase<T>
                 T dot = NumOps.Zero;
                 for (int j = 0; j < d; j++)
                 {
-                    var components = _components ?? throw new InvalidOperationException("_components has not been initialized.");
-                    dot = NumOps.Add(dot, NumOps.Multiply(centered[j], components[c, j]));
+                    dot = NumOps.Add(dot, NumOps.Multiply(centered[j], _components![c, j]));
                 }
                 projected[c] = dot;
             }
@@ -191,7 +190,7 @@ public class PCADetector<T> : AnomalyDetectorBase<T>
                 T sum = NumOps.Zero;
                 for (int c = 0; c < _fittedComponents; c++)
                 {
-                    sum = NumOps.Add(sum, NumOps.Multiply(projected[c], components[c, j]));
+                    sum = NumOps.Add(sum, NumOps.Multiply(projected[c], _components![c, j]));
                 }
                 reconstructed[j] = sum;
             }
@@ -210,7 +209,7 @@ public class PCADetector<T> : AnomalyDetectorBase<T>
             double mahalanobis = 0;
             for (int c = 0; c < _fittedComponents; c++)
             {
-                double eigenvalue = NumOps.ToDouble((_explainedVariance ?? throw new InvalidOperationException("_explainedVariance has not been initialized."))[c]);
+                double eigenvalue = NumOps.ToDouble(_explainedVariance![c]);
                 if (eigenvalue > EigenvalueFloor)
                 {
                     double proj = NumOps.ToDouble(projected[c]);

@@ -180,8 +180,7 @@ public class ClassWeightedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
             foreach (int label in classCounts.Keys)
             {
-                var classWeights = _classWeights ?? throw new InvalidOperationException("_classWeights has not been initialized.");
-                double weight = classWeights[label];
+                double weight = _classWeights![label];
                 overallMean += weight * classCounts[label] * classMeans[label][j];
                 totalWeight += weight * classCounts[label];
             }
@@ -191,7 +190,7 @@ public class ClassWeightedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
             foreach (int label in classCounts.Keys)
             {
-                double weight = classWeights[label];
+                double weight = _classWeights![label];
                 double meanDiff = classMeans[label][j] - overallMean;
                 betweenVar += weight * classCounts[label] * meanDiff * meanDiff;
                 withinVar += weight * classCounts[label] * classVars[label][j];

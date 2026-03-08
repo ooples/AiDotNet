@@ -671,8 +671,7 @@ public class DCCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         }
 
         // Apply mask
-        var maskLayer = _maskLayer ?? throw new InvalidOperationException("_maskLayer has not been initialized.");
-        var mask = maskLayer.Forward(x);
+        var mask = _maskLayer!.Forward(x);
 
         // Apply mask to input STFT
         return ApplyComplexMask(stft, mask);
@@ -686,7 +685,7 @@ public class DCCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         var grad = gradient;
 
         // Backward through mask
-        grad = maskLayer.Backward(grad);
+        grad = _maskLayer!.Backward(grad);
 
         // Backward through decoder
         for (int i = _decoder.Count - 1; i >= 0; i--)

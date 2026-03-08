@@ -286,8 +286,7 @@ public class OrdinalRegression<T> : ClassifierBase<T>
             double sum = 0;
             for (int j = 0; j < NumFeatures; j++)
             {
-                var coefficients = _coefficients ?? throw new InvalidOperationException("_coefficients has not been initialized.");
-                sum += NumOps.ToDouble(coefficients[j]) * NumOps.ToDouble(x[i, j]);
+                sum += NumOps.ToDouble(_coefficients![j]) * NumOps.ToDouble(x[i, j]);
             }
             eta[i] = sum;
         }
@@ -301,8 +300,7 @@ public class OrdinalRegression<T> : ClassifierBase<T>
             var cumProbs = new double[NumClasses - 1];
             for (int k = 0; k < NumClasses - 1; k++)
             {
-                var thresholds = _thresholds ?? throw new InvalidOperationException("_thresholds has not been initialized.");
-                double alpha_k = NumOps.ToDouble(thresholds[k]);
+                double alpha_k = NumOps.ToDouble(_thresholds![k]);
                 cumProbs[k] = ApplyLink(alpha_k - eta[i]);
             }
 
@@ -521,7 +519,7 @@ public class OrdinalRegression<T> : ClassifierBase<T>
                 }
             }
 
-            predictions[i] = (ClassLabels ?? throw new InvalidOperationException("ClassLabels has not been initialized."))[maxClass];
+            predictions[i] = ClassLabels![maxClass];
         }
 
         return predictions;
@@ -549,14 +547,14 @@ public class OrdinalRegression<T> : ClassifierBase<T>
         double eta = 0;
         for (int j = 0; j < NumFeatures; j++)
         {
-            eta += NumOps.ToDouble(coefficients[j]) * NumOps.ToDouble(x[sampleIndex, j]);
+            eta += NumOps.ToDouble(_coefficients![j]) * NumOps.ToDouble(x[sampleIndex, j]);
         }
 
         // Compute cumulative probabilities P(Y ≤ k)
         var cumProbs = new double[NumClasses - 1];
         for (int k = 0; k < NumClasses - 1; k++)
         {
-            double alpha_k = NumOps.ToDouble(thresholds[k]);
+            double alpha_k = NumOps.ToDouble(_thresholds![k]);
             cumProbs[k] = ApplyLink(alpha_k - eta);
         }
 

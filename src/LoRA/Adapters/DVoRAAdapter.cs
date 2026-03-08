@@ -597,8 +597,7 @@ public class DVoRAAdapter<T> : LoRAAdapterBase<T>
         {
             for (int j = 0; j < rank; j++)
             {
-                var sharedMatrixA = _sharedMatrixA ?? throw new InvalidOperationException("_sharedMatrixA has not been initialized.");
-                aScaled[i, j] = NumOps.Multiply(sharedMatrixA[i, j], _scalingVectorB[j]);
+                aScaled[i, j] = NumOps.Multiply(_sharedMatrixA![i, j], _scalingVectorB[j]);
             }
         }
 
@@ -774,7 +773,7 @@ public class DVoRAAdapter<T> : LoRAAdapterBase<T>
         }
 
         // Propagate through shared B
-        Matrix<T> gradAfterB = gradAfterSharedB.Multiply((_sharedMatrixB ?? throw new InvalidOperationException("_sharedMatrixB has not been initialized.")).Transpose());
+        Matrix<T> gradAfterB = gradAfterSharedB.Multiply(_sharedMatrixB!.Transpose());
 
         // Convert input to matrix for gradient computation
         Matrix<T> inputMatrix = new Matrix<T>(batchSize, inputSize);
@@ -813,7 +812,7 @@ public class DVoRAAdapter<T> : LoRAAdapterBase<T>
         }
 
         // Propagate through shared A
-        Matrix<T> veraInputGrad = gradAfterA.Multiply(sharedMatrixA.Transpose());
+        Matrix<T> veraInputGrad = gradAfterA.Multiply(_sharedMatrixA!.Transpose());
 
         // Backward through base layer (if not frozen)
         Tensor<T> baseInputGrad;

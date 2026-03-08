@@ -110,8 +110,7 @@ public class SimpleLinearRegression<T>
 
             // Update weights: weights -= lr * weight_gradient
             var weightUpdate = weightGrad.Multiply(lr);
-            var weights = _weights ?? throw new InvalidOperationException("_weights has not been initialized.");
-            _weights = weights.Subtract(weightUpdate);
+            _weights = _weights!.Subtract(weightUpdate);
 
             // Update bias: bias -= lr * bias_gradient
             _bias = _numOps.Subtract(_bias!, _numOps.Multiply(biasGrad, lr));
@@ -138,7 +137,7 @@ public class SimpleLinearRegression<T>
         var dotProduct = _numOps.Zero;
         for (int i = 0; i < _numFeatures; i++)
         {
-            dotProduct = _numOps.Add(dotProduct, _numOps.Multiply(weights[i], features[i]));
+            dotProduct = _numOps.Add(dotProduct, _numOps.Multiply(_weights![i], features[i]));
         }
 
         return _numOps.Add(dotProduct, _bias!);
@@ -286,7 +285,7 @@ public class SimpleLinearRegression<T>
             return $"SimpleLinearRegression<{typeof(T).Name}>(features={_numFeatures}, untrained)";
         }
 
-        var weightsStr = weights.Length <= 5
+        var weightsStr = _weights!.Length <= 5
             ? string.Join(", ", _weights.ToArray().Select(w => $"{_numOps.ToDouble(w):F4}"))
             : $"[{_weights.Length} weights]";
 

@@ -2447,12 +2447,11 @@ public class LSTMLayer<T> : LayerBase<T>
                 {
                     velocity = new Tensor<T>(param.Shape);
                     velocity.Fill(NumOps.Zero);
-                    var gpuEngine = gpuEngine ?? throw new InvalidOperationException("gpuEngine has not been initialized.");
-                    gpuEngine.RegisterPersistentTensor(velocity, PersistentTensorRole.OptimizerState);
+                    gpuEngine!.RegisterPersistentTensor(velocity, PersistentTensorRole.OptimizerState);
                     _velocities[paramName] = velocity;
                 }
 
-                gpuEngine.SgdMomentumUpdateGpu(param, gradient, velocity, lr, 0.0f, 0.0f);
+                gpuEngine!.SgdMomentumUpdateGpu(param, gradient, velocity, lr, 0.0f, 0.0f);
             }
             else
             {

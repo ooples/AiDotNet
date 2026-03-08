@@ -189,8 +189,7 @@ public class KDTree<T>
         QuickSelect(indices, start, end - 1, medianIdx, splitDim);
 
         int splitPointIndex = indices[medianIdx];
-        var data = _data ?? throw new InvalidOperationException("_data has not been initialized.");
-        T splitValue = data[splitPointIndex, splitDim];
+        T splitValue = _data![splitPointIndex, splitDim];
 
         var node = new KDNode
         {
@@ -252,7 +251,7 @@ public class KDTree<T>
             Swap(indices, mid, right);
         }
 
-        T pivotValue = data[indices[right], dimension];
+        T pivotValue = _data![indices[right], dimension];
         int storeIndex = left;
 
         for (int i = left; i < right; i++)
@@ -270,7 +269,7 @@ public class KDTree<T>
 
     private int Compare(int idx1, int idx2, int dimension)
     {
-        double v1 = _numOps.ToDouble(data[idx1, dimension]);
+        double v1 = _numOps.ToDouble(_data![idx1, dimension]);
         double v2 = _numOps.ToDouble(_data[idx2, dimension]);
         return v1.CompareTo(v2);
     }

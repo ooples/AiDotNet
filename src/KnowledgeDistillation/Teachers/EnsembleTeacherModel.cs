@@ -171,7 +171,6 @@ public class EnsembleTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
     {
         int n = teacherLogits[0].Length;
         var result = new Vector<T>(n);
-        var weights = _weights ?? throw new InvalidOperationException("_weights has not been initialized.");
 
         switch (_aggregationMode)
         {
@@ -184,7 +183,7 @@ public class EnsembleTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
                     {
                         var weighted = NumOps.Multiply(
                             teacherLogits[t][i],
-                            NumOps.FromDouble(weights[t]));
+                            NumOps.FromDouble(_weights![t]));
                         sum = NumOps.Add(sum, weighted);
                     }
                     result[i] = sum;
@@ -208,7 +207,7 @@ public class EnsembleTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
                     for (int t = 0; t < _teachers.Length; t++)
                     {
                         double logProb = Convert.ToDouble(teacherLogProbs[t][i]);
-                        logSum += weights[t] * logProb;
+                        logSum += _weights![t] * logProb;
                     }
                     // Return log-space value as logit for distillation strategies
                     result[i] = NumOps.FromDouble(logSum);
@@ -455,7 +454,7 @@ public class EnsembleTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
 
             // Scale by weight
             var weightTensor = new Tensor<T>((int[])teacherOutput.Value.Shape.Clone());
-            weightTensor.Fill(NumOps.FromDouble(weights[i]));
+            weightTensor.Fill(NumOps.FromDouble(_weights![i]));
             var weightNode = TensorOperations<T>.Constant(weightTensor, $"teacher_{i}_weight");
             var scaledOutput = TensorOperations<T>.ElementwiseMultiply(teacherOutput, weightNode);
 

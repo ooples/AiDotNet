@@ -257,7 +257,7 @@ public abstract class AudioEnhancerBase<T> : IAudioEnhancer<T>
 
         for (int i = 0; i < chunk.Length; i++)
         {
-            (_inputBuffer ?? throw new InvalidOperationException("_inputBuffer has not been initialized."))[_bufferPosition] = chunk[i];
+            _inputBuffer![_bufferPosition] = chunk[i];
             _bufferPosition++;
 
             if (_bufferPosition >= _hopSize)
@@ -278,14 +278,13 @@ public abstract class AudioEnhancerBase<T> : IAudioEnhancer<T>
                 for (int j = 0; j < _fftSize; j++)
                 {
                     var windowed = NumOps.Multiply(enhanced[j], _window[j]);
-                    var outputBuffer = _outputBuffer ?? throw new InvalidOperationException("_outputBuffer has not been initialized.");
-                    outputBuffer[j] = NumOps.Add(_outputBuffer[j], windowed);
+                    _outputBuffer![j] = NumOps.Add(_outputBuffer[j], windowed);
                 }
 
                 // Output hop samples
                 for (int j = 0; j < _hopSize && outputPos < output.Length; j++)
                 {
-                    output[outputPos++] = outputBuffer[j];
+                    output[outputPos++] = _outputBuffer![j];
                 }
 
                 // Shift output buffer

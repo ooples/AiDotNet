@@ -92,8 +92,7 @@ public class SimCLR<T> : SSLMethodBase<T>
         var h2 = _encoder.ForwardWithMemory(view2);
 
         // Project to contrastive space
-        var projector = _projector ?? throw new InvalidOperationException("_projector has not been initialized.");
-        var z1 = projector.Project(h1);
+        var z1 = _projector!.Project(h1);
         var z2 = _projector.Project(h2);
 
         // Compute NT-Xent loss with gradients
@@ -135,7 +134,7 @@ public class SimCLR<T> : SSLMethodBase<T>
         _encoder.UpdateParameters(Engine.Subtract(encoderParams, Engine.Multiply(encoderGrads, learningRate)));
 
         // SGD update for projector
-        var projectorParams = projector.GetParameters();
+        var projectorParams = _projector!.GetParameters();
         _projector.SetParameters(Engine.Subtract(projectorParams, Engine.Multiply(projectorGrads, learningRate)));
     }
 

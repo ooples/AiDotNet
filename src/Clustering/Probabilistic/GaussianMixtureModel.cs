@@ -167,14 +167,10 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
             if (_lowerBound > bestLowerBound)
             {
                 bestLowerBound = _lowerBound;
-                var weights = _weights ?? throw new InvalidOperationException("_weights has not been initialized.");
-                bestWeights = (double[])weights.Clone();
-                var means = _means ?? throw new InvalidOperationException("_means has not been initialized.");
-                bestMeans = (double[,])means.Clone();
-                var covariances = _covariances ?? throw new InvalidOperationException("_covariances has not been initialized.");
-                bestCovariances = (double[,,])covariances.Clone();
-                var responsibilities = _responsibilities ?? throw new InvalidOperationException("_responsibilities has not been initialized.");
-                bestResponsibilities = (double[,])responsibilities.Clone();
+                bestWeights = (double[])_weights!.Clone();
+                bestMeans = (double[,])_means!.Clone();
+                bestCovariances = (double[,,])_covariances!.Clone();
+                bestResponsibilities = (double[,])_responsibilities!.Clone();
             }
         }
 
@@ -190,7 +186,7 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
         for (int i = 0; i < n; i++)
         {
             int bestCluster = 0;
-            double maxResp = responsibilities[i, 0];
+            double maxResp = _responsibilities![i, 0];
             for (int c = 1; c < k; c++)
             {
                 if (_responsibilities[i, c] > maxResp)
@@ -208,7 +204,7 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
         {
             for (int j = 0; j < d; j++)
             {
-                ClusterCenters[c, j] = NumOps.FromDouble(means[c, j]);
+                ClusterCenters[c, j] = NumOps.FromDouble(_means![c, j]);
             }
         }
 
@@ -274,7 +270,7 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
             {
                 for (int j = 0; j < d; j++)
                 {
-                    means[c, j] = NumOps.ToDouble(kmeans.ClusterCenters[c, j]);
+                    _means![c, j] = NumOps.ToDouble(kmeans.ClusterCenters[c, j]);
                 }
             }
         }
@@ -288,7 +284,7 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
         int firstIdx = rand.Next(n);
         for (int j = 0; j < d; j++)
         {
-            means[0, j] = data[firstIdx, j];
+            _means![0, j] = data[firstIdx, j];
         }
 
         var distances = new double[n];
@@ -306,7 +302,7 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
                     double dist = 0;
                     for (int j = 0; j < d; j++)
                     {
-                        double diff = data[i, j] - means[prev, j];
+                        double diff = data[i, j] - _means![prev, j];
                         dist += diff * diff;
                     }
                     minDist = Math.Min(minDist, dist);
@@ -331,7 +327,7 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
 
             for (int j = 0; j < d; j++)
             {
-                means[c, j] = data[nextIdx, j];
+                _means![c, j] = data[nextIdx, j];
             }
         }
     }
@@ -352,7 +348,7 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
 
             for (int j = 0; j < d; j++)
             {
-                means[c, j] = data[idx, j];
+                _means![c, j] = data[idx, j];
             }
         }
     }
@@ -373,9 +369,9 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
                     {
                         for (int j = 0; j < d; j++)
                         {
-                            covariances[c, i, j] = globalCov[i, j];
+                            _covariances![c, i, j] = globalCov[i, j];
                         }
-                        covariances[c, i, i] += reg;
+                        _covariances![c, i, i] += reg;
                     }
                 }
                 break;
@@ -389,7 +385,7 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
                     {
                         for (int j = 0; j < d; j++)
                         {
-                            covariances[c, i, j] = (i == j) ? variances[i] + reg : 0;
+                            _covariances![c, i, j] = (i == j) ? variances[i] + reg : 0;
                         }
                     }
                 }
@@ -404,7 +400,7 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
                     {
                         for (int j = 0; j < d; j++)
                         {
-                            covariances[c, i, j] = (i == j) ? avgVar : 0;
+                            _covariances![c, i, j] = (i == j) ? avgVar : 0;
                         }
                     }
                 }
@@ -484,7 +480,7 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
 
         for (int c = 0; c < k; c++)
         {
-            double logWeight = Math.Log(weights[c]);
+            double logWeight = Math.Log(_weights![c]);
 
             // Get covariance for this component
             var cov = new double[d, d];
@@ -492,7 +488,7 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
             {
                 for (int j = 0; j < d; j++)
                 {
-                    cov[i, j] = covariances[c, i, j];
+                    cov[i, j] = _covariances![c, i, j];
                 }
             }
 
@@ -507,10 +503,10 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
                 double mahal = 0;
                 for (int p = 0; p < d; p++)
                 {
-                    double diffP = data[i, p] - means[c, p];
+                    double diffP = data[i, p] - _means![c, p];
                     for (int q = 0; q < d; q++)
                     {
-                        double diffQ = data[i, q] - means[c, q];
+                        double diffQ = data[i, q] - _means![c, q];
                         mahal += diffP * covInv[p, q] * diffQ;
                     }
                 }
@@ -540,7 +536,7 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
             // Compute responsibilities
             for (int c = 0; c < k; c++)
             {
-                responsibilities[i, c] = Math.Exp(logProbs[i, c] - logSumExp);
+                _responsibilities![i, c] = Math.Exp(logProbs[i, c] - logSumExp);
             }
         }
     }
@@ -555,7 +551,7 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
         {
             for (int i = 0; i < n; i++)
             {
-                nk[c] += responsibilities[i, c];
+                nk[c] += _responsibilities![i, c];
             }
             nk[c] = Math.Max(nk[c], 1e-10); // Prevent division by zero
         }
@@ -563,7 +559,7 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
         // Update weights
         for (int c = 0; c < k; c++)
         {
-            weights[c] = nk[c] / n;
+            _weights![c] = nk[c] / n;
             if (!_options.AllowLowWeights && _weights[c] < _options.MinWeight)
             {
                 _weights[c] = _options.MinWeight;
@@ -574,11 +570,11 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
         double sumWeights = 0;
         for (int c = 0; c < k; c++)
         {
-            sumWeights += weights[c];
+            sumWeights += _weights![c];
         }
         for (int c = 0; c < k; c++)
         {
-            weights[c] /= sumWeights;
+            _weights![c] /= sumWeights;
         }
 
         // Update means
@@ -589,9 +585,9 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
                 double sum = 0;
                 for (int i = 0; i < n; i++)
                 {
-                    sum += responsibilities[i, c] * data[i, j];
+                    sum += _responsibilities![i, c] * data[i, j];
                 }
-                means[c, j] = sum / nk[c];
+                _means![c, j] = sum / nk[c];
             }
         }
 
@@ -624,14 +620,14 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
                     double sum = 0;
                     for (int i = 0; i < n; i++)
                     {
-                        double diffP = data[i, p] - means[c, p];
-                        double diffQ = data[i, q] - means[c, q];
-                        sum += responsibilities[i, c] * diffP * diffQ;
+                        double diffP = data[i, p] - _means![c, p];
+                        double diffQ = data[i, q] - _means![c, q];
+                        sum += _responsibilities![i, c] * diffP * diffQ;
                     }
-                    covariances[c, p, q] = sum / nk[c];
+                    _covariances![c, p, q] = sum / nk[c];
                     if (p == q)
                     {
-                        covariances[c, p, q] += reg;
+                        _covariances![c, p, q] += reg;
                     }
                 }
             }
@@ -654,9 +650,9 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
                     double sum = 0;
                     for (int i = 0; i < n; i++)
                     {
-                        double diffP = data[i, p] - means[c, p];
-                        double diffQ = data[i, q] - means[c, q];
-                        sum += responsibilities[i, c] * diffP * diffQ;
+                        double diffP = data[i, p] - _means![c, p];
+                        double diffQ = data[i, q] - _means![c, q];
+                        sum += _responsibilities![i, c] * diffP * diffQ;
                     }
                     sharedCov[p, q] += sum;
                 }
@@ -670,10 +666,10 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
             {
                 for (int q = 0; q < d; q++)
                 {
-                    covariances[c, p, q] = sharedCov[p, q] / totalWeight;
+                    _covariances![c, p, q] = sharedCov[p, q] / totalWeight;
                     if (p == q)
                     {
-                        covariances[c, p, q] += reg;
+                        _covariances![c, p, q] += reg;
                     }
                 }
             }
@@ -689,17 +685,17 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
                 double sum = 0;
                 for (int i = 0; i < n; i++)
                 {
-                    double diff = data[i, p] - means[c, p];
-                    sum += responsibilities[i, c] * diff * diff;
+                    double diff = data[i, p] - _means![c, p];
+                    sum += _responsibilities![i, c] * diff * diff;
                 }
-                covariances[c, p, p] = sum / nk[c] + reg;
+                _covariances![c, p, p] = sum / nk[c] + reg;
 
                 // Zero out off-diagonal elements
                 for (int q = 0; q < d; q++)
                 {
                     if (p != q)
                     {
-                        covariances[c, p, q] = 0;
+                        _covariances![c, p, q] = 0;
                     }
                 }
             }
@@ -716,8 +712,8 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
                 double sum = 0;
                 for (int i = 0; i < n; i++)
                 {
-                    double diff = data[i, p] - means[c, p];
-                    sum += responsibilities[i, c] * diff * diff;
+                    double diff = data[i, p] - _means![c, p];
+                    sum += _responsibilities![i, c] * diff * diff;
                 }
                 totalVar += sum;
             }
@@ -727,7 +723,7 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
             {
                 for (int q = 0; q < d; q++)
                 {
-                    covariances[c, p, q] = (p == q) ? avgVar : 0;
+                    _covariances![c, p, q] = (p == q) ? avgVar : 0;
                 }
             }
         }
@@ -816,7 +812,7 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
             double sampleBound = 0;
             for (int c = 0; c < k; c++)
             {
-                if (responsibilities[i, c] > 1e-10)
+                if (_responsibilities![i, c] > 1e-10)
                 {
                     // Get covariance for this component
                     var cov = new double[d, d];
@@ -824,7 +820,7 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
                     {
                         for (int q = 0; q < d; q++)
                         {
-                            cov[p, q] = covariances[c, p, q];
+                            cov[p, q] = _covariances![c, p, q];
                         }
                     }
 
@@ -834,18 +830,18 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
                     double mahal = 0;
                     for (int p = 0; p < d; p++)
                     {
-                        double diffP = data[i, p] - means[c, p];
+                        double diffP = data[i, p] - _means![c, p];
                         for (int q = 0; q < d; q++)
                         {
-                            double diffQ = data[i, q] - means[c, q];
+                            double diffQ = data[i, q] - _means![c, q];
                             mahal += diffP * covInv[p, q] * diffQ;
                         }
                     }
 
-                    double logProb = Math.Log(weights[c]) - 0.5 * (d * Math.Log(2 * Math.PI) + logDet + mahal);
-                    double entropy = -Math.Log(responsibilities[i, c]);
+                    double logProb = Math.Log(_weights![c]) - 0.5 * (d * Math.Log(2 * Math.PI) + logDet + mahal);
+                    double entropy = -Math.Log(_responsibilities![i, c]);
 
-                    sampleBound += responsibilities[i, c] * (logProb + entropy);
+                    sampleBound += _responsibilities![i, c] * (logProb + entropy);
                 }
             }
             bound += sampleBound;
@@ -905,14 +901,14 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
 
         for (int c = 0; c < k; c++)
         {
-            double logWeight = Math.Log(weights[c]);
+            double logWeight = Math.Log(_weights![c]);
 
             var cov = new double[d, d];
             for (int i = 0; i < d; i++)
             {
                 for (int j = 0; j < d; j++)
                 {
-                    cov[i, j] = covariances[c, i, j];
+                    cov[i, j] = _covariances![c, i, j];
                 }
             }
 
@@ -924,10 +920,10 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
                 double mahal = 0;
                 for (int p = 0; p < d; p++)
                 {
-                    double diffP = data[i, p] - means[c, p];
+                    double diffP = data[i, p] - _means![c, p];
                     for (int q = 0; q < d; q++)
                     {
-                        double diffQ = data[i, q] - means[c, q];
+                        double diffQ = data[i, q] - _means![c, q];
                         mahal += diffP * covInv[p, q] * diffQ;
                     }
                 }
@@ -982,14 +978,14 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
 
             for (int c = 0; c < k; c++)
             {
-                double logWeight = Math.Log(weights[c]);
+                double logWeight = Math.Log(_weights![c]);
 
                 var cov = new double[d, d];
                 for (int p = 0; p < d; p++)
                 {
                     for (int q = 0; q < d; q++)
                     {
-                        cov[p, q] = covariances[c, p, q];
+                        cov[p, q] = _covariances![c, p, q];
                     }
                 }
 
@@ -999,10 +995,10 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
                 double mahal = 0;
                 for (int p = 0; p < d; p++)
                 {
-                    double diffP = data[i, p] - means[c, p];
+                    double diffP = data[i, p] - _means![c, p];
                     for (int q = 0; q < d; q++)
                     {
-                        double diffQ = data[i, q] - means[c, q];
+                        double diffQ = data[i, q] - _means![c, q];
                         mahal += diffP * covInv[p, q] * diffQ;
                     }
                 }
@@ -1056,7 +1052,7 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
             int component = NumClusters - 1;
             for (int c = 0; c < NumClusters; c++)
             {
-                cumulative += weights[c];
+                cumulative += _weights![c];
                 if (u < cumulative)
                 {
                     component = c;
@@ -1092,7 +1088,7 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
         {
             for (int j = 0; j <= i; j++)
             {
-                double sum = covariances[component, i, j];
+                double sum = _covariances![component, i, j];
                 for (int k = 0; k < j; k++)
                 {
                     sum -= L[i, k] * L[j, k];
@@ -1112,7 +1108,7 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
         var sample = new double[d];
         for (int i = 0; i < d; i++)
         {
-            sample[i] = means[component, i];
+            sample[i] = _means![component, i];
             for (int j = 0; j <= i; j++)
             {
                 sample[i] += L[i, j] * z[j];

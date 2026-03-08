@@ -162,8 +162,7 @@ public class StackingClassifier<T> : MetaClassifierBase<T>
     {
         int n = x.Rows;
         int numFolds = Options.CrossValidationFolds;
-        var estimators = _estimators ?? throw new InvalidOperationException("_estimators has not been initialized.");
-        int numEstimators = estimators.Count;
+        int numEstimators = _estimators!.Count;
         int metaFeaturesPerEstimator = Options.UseProbabilities ? NumClasses : 1;
 
         var random = Options.Seed.HasValue
@@ -291,7 +290,7 @@ public class StackingClassifier<T> : MetaClassifierBase<T>
     private void CreateSimpleMetaFeatures(Matrix<T> x, Vector<T> y, Matrix<T> metaFeatures)
     {
         int n = x.Rows;
-        int numEstimators = estimators.Count;
+        int numEstimators = _estimators!.Count;
         int metaFeaturesPerEstimator = Options.UseProbabilities ? NumClasses : 1;
 
         // Train each estimator and get predictions
@@ -340,7 +339,7 @@ public class StackingClassifier<T> : MetaClassifierBase<T>
     private Matrix<T> CreatePredictionMetaFeatures(Matrix<T> input)
     {
         int n = input.Rows;
-        int numEstimators = estimators.Count;
+        int numEstimators = _estimators!.Count;
         int metaFeaturesPerEstimator = Options.UseProbabilities ? NumClasses : 1;
         int totalMetaFeatures = numEstimators * metaFeaturesPerEstimator;
 
@@ -426,7 +425,7 @@ public class StackingClassifier<T> : MetaClassifierBase<T>
         {
             for (int c = 0; c < NumClasses; c++)
             {
-                if (NumOps.Compare(preds[i], (ClassLabels ?? throw new InvalidOperationException("ClassLabels has not been initialized."))[c]) == 0)
+                if (NumOps.Compare(preds[i], ClassLabels![c]) == 0)
                 {
                     probs[i, c] = NumOps.One;
                 }

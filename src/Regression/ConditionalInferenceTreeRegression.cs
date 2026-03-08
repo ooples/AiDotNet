@@ -294,7 +294,7 @@ public class ConditionalInferenceTreeRegression<T> : AsyncDecisionTreeRegression
 
         var results = await ParallelProcessingHelper.ProcessTasksInParallel(tasks, _options.MaxDegreeOfParallelism);
         return results.Where(r => r.HasValue)
-                      .OrderBy(r => (r ?? throw new InvalidOperationException("r has not been initialized.")).Value.PValue)
+                      .OrderBy(r => r!.Value.PValue)
                       .FirstOrDefault();
     }
 

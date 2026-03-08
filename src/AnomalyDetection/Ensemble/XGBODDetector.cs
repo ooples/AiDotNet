@@ -370,23 +370,21 @@ public class XGBODDetector<T> : AnomalyDetectorBase<T>
             // Original features (normalized)
             for (int j = 0; j < _nOriginalFeatures; j++)
             {
-                var featureMean = _featureMean ?? throw new InvalidOperationException("_featureMean has not been initialized.");
-                var featureStd = _featureStd ?? throw new InvalidOperationException("_featureStd has not been initialized.");
-                enhanced[j] = (NumOps.ToDouble(X[i, j]) - featureMean[j]) / featureStd[j];
+                enhanced[j] = (NumOps.ToDouble(X[i, j]) - _featureMean![j]) / _featureStd![j];
             }
 
             // TOS features (normalized)
             for (int e = 0; e < _nEstimators; e++)
             {
                 int j = _nOriginalFeatures + e;
-                enhanced[j] = (tosScores[e][i] - featureMean[j]) / featureStd[j];
+                enhanced[j] = (tosScores[e][i] - _featureMean![j]) / _featureStd![j];
             }
 
             // Weighted sum as final score
             double score = 0;
             for (int j = 0; j < nEnhancedFeatures; j++)
             {
-                score += (_weights ?? throw new InvalidOperationException("_weights has not been initialized."))[j] * enhanced[j];
+                score += _weights![j] * enhanced[j];
             }
 
             resultScores[i] = NumOps.FromDouble(score);

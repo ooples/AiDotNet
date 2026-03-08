@@ -366,7 +366,7 @@ public class SymmetricProjector<T> : IProjectorHead<T>
                 T sum = NumOps.Zero;
                 for (int b = 0; b < batchSize; b++)
                 {
-                    sum = NumOps.Add(sum, NumOps.Multiply((_cachedH1Relu ?? throw new InvalidOperationException("_cachedH1Relu has not been initialized."))[b, i], gradBeforeBn2[b, j]));
+                    sum = NumOps.Add(sum, NumOps.Multiply(_cachedH1Relu![b, i], gradBeforeBn2[b, j]));
                 }
                 grads[offset + _projWeight1.Length + _projBias1.Length + _projBn1Gamma.Length + _projBn1Beta.Length + i * _projectionDim + j] =
                     NumOps.Multiply(sum, invBatchSize);
@@ -403,7 +403,7 @@ public class SymmetricProjector<T> : IProjectorHead<T>
                 T sum = NumOps.Zero;
                 for (int b = 0; b < batchSize; b++)
                 {
-                    sum = NumOps.Add(sum, NumOps.Multiply((_cachedInput ?? throw new InvalidOperationException("_cachedInput has not been initialized."))[b, i], gradAtH1[b, j]));
+                    sum = NumOps.Add(sum, NumOps.Multiply(_cachedInput![b, i], gradAtH1[b, j]));
                 }
                 grads[offset + i * _hiddenDim + j] = NumOps.Multiply(sum, invBatchSize);
             }
@@ -450,12 +450,9 @@ public class SymmetricProjector<T> : IProjectorHead<T>
             // Calculate predictor offset
             int predOffset = bn2BetaOffset + _projBn2Beta.Length;
             int predWeight1Offset = predOffset;
-            var predWeight1 = _predWeight1 ?? throw new InvalidOperationException("_predWeight1 has not been initialized.");
-            int predBias1Offset = predWeight1Offset + predWeight1.Length;
-            var predBias1 = _predBias1 ?? throw new InvalidOperationException("_predBias1 has not been initialized.");
-            int predBn1GammaOffset = predBias1Offset + predBias1.Length;
-            var predBn1Gamma = _predBn1Gamma ?? throw new InvalidOperationException("_predBn1Gamma has not been initialized.");
-            int predBn1BetaOffset = predBn1GammaOffset + predBn1Gamma.Length;
+            int predBias1Offset = predWeight1Offset + _predWeight1!.Length;
+            int predBn1GammaOffset = predBias1Offset + _predBias1!.Length;
+            int predBn1BetaOffset = predBn1GammaOffset + _predBn1Gamma!.Length;
 
             for (int j = 0; j < _predictorHiddenDim; j++)
             {
@@ -522,17 +519,17 @@ public class SymmetricProjector<T> : IProjectorHead<T>
         // Predictor parameters
         if (_hasPredictor)
         {
-            Array.Copy(parameters.ToArray(), offset, _predWeight1!, 0, predWeight1.Length);
+            Array.Copy(parameters.ToArray(), offset, _predWeight1!, 0, _predWeight1!.Length);
             offset += _predWeight1.Length;
-            Array.Copy(parameters.ToArray(), offset, _predBias1!, 0, predBias1.Length);
+            Array.Copy(parameters.ToArray(), offset, _predBias1!, 0, _predBias1!.Length);
             offset += _predBias1.Length;
-            Array.Copy(parameters.ToArray(), offset, _predBn1Gamma!, 0, predBn1Gamma.Length);
+            Array.Copy(parameters.ToArray(), offset, _predBn1Gamma!, 0, _predBn1Gamma!.Length);
             offset += _predBn1Gamma.Length;
-            Array.Copy(parameters.ToArray(), offset, _predBn1Beta!, 0, (_predBn1Beta ?? throw new InvalidOperationException("_predBn1Beta has not been initialized.")).Length);
+            Array.Copy(parameters.ToArray(), offset, _predBn1Beta!, 0, _predBn1Beta!.Length);
             offset += _predBn1Beta.Length;
-            Array.Copy(parameters.ToArray(), offset, _predWeight2!, 0, (_predWeight2 ?? throw new InvalidOperationException("_predWeight2 has not been initialized.")).Length);
+            Array.Copy(parameters.ToArray(), offset, _predWeight2!, 0, _predWeight2!.Length);
             offset += _predWeight2.Length;
-            Array.Copy(parameters.ToArray(), offset, _predBias2!, 0, (_predBias2 ?? throw new InvalidOperationException("_predBias2 has not been initialized.")).Length);
+            Array.Copy(parameters.ToArray(), offset, _predBias2!, 0, _predBias2!.Length);
         }
     }
 

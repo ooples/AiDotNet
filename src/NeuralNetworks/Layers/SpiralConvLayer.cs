@@ -112,8 +112,7 @@ public class SpiralConvLayer<T> : LayerBase<T>
             InitializeGpuIndices(gpuEngine);
         }
 
-        var spiralIndices = _spiralIndices ?? throw new InvalidOperationException("_spiralIndices has not been initialized.");
-        int numVertices = spiralIndices.GetLength(0);
+        int numVertices = _spiralIndices!.GetLength(0);
         int inputChannels = InputChannels;
 
         bool hasBatch = input.Shape.Length == 3;
@@ -243,7 +242,7 @@ public class SpiralConvLayer<T> : LayerBase<T>
                 for (int s = 0; s < SpiralLength; s++)
                 {
                     int idx = v * SpiralLength + s;
-                    int neighbor = spiralIndices[v, s];
+                    int neighbor = _spiralIndices![v, s];
                     if (neighbor >= 0)
                     {
                         baseIndices[idx] = neighbor;
@@ -311,7 +310,7 @@ public class SpiralConvLayer<T> : LayerBase<T>
         var backend = gpuEngine.GetBackend();
         if (backend == null) return;
 
-        int numVertices = spiralIndices.GetLength(0);
+        int numVertices = _spiralIndices!.GetLength(0);
         int[] indices = new int[numVertices * SpiralLength];
         float[] mask = new float[numVertices * SpiralLength];
 

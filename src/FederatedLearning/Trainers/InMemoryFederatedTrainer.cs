@@ -164,33 +164,19 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
         bool useCompression = compressionOptions != null &&
                               compressionOptions.Strategy != FederatedCompressionStrategy.None;
         metadata.CompressionEnabled = useCompression;
-        if (useCompression && compressionOptions is not null)
-        {
-            metadata.CompressionStrategyUsed = compressionOptions.Strategy.ToString();
-        }
-        else
-        {
-            metadata.CompressionStrategyUsed = "None";
-        }
-        Dictionary<int, Vector<T>>? compressionResiduals = useCompression && compressionOptions is { UseErrorFeedback: true }
+        metadata.CompressionStrategyUsed = useCompression ? compressionOptions!.Strategy.ToString() : "None";
+        Dictionary<int, Vector<T>>? compressionResiduals = useCompression && compressionOptions!.UseErrorFeedback
             ? new Dictionary<int, Vector<T>>()
             : null;
 
         var heOptions = flOptions?.HomomorphicEncryption;
         bool useHomomorphicEncryption = heOptions?.Enabled == true;
-        HomomorphicEncryptionScheme heScheme = (useHomomorphicEncryption && heOptions is not null) ? heOptions.Scheme : HomomorphicEncryptionScheme.Ckks;
-        HomomorphicEncryptionMode heMode = (useHomomorphicEncryption && heOptions is not null) ? heOptions.Mode : HomomorphicEncryptionMode.HeOnly;
+        HomomorphicEncryptionScheme heScheme = useHomomorphicEncryption ? heOptions!.Scheme : HomomorphicEncryptionScheme.Ckks;
+        HomomorphicEncryptionMode heMode = useHomomorphicEncryption ? heOptions!.Mode : HomomorphicEncryptionMode.HeOnly;
         var heProvider = useHomomorphicEncryption ? (_homomorphicEncryptionProviderOverride ?? new SealHomomorphicEncryptionProvider<T>()) : null;
-        var encryptedIndices = (useHomomorphicEncryption && heOptions is not null)
-            ? ResolveEncryptedIndices(heOptions, GetGlobalModel().ParameterCount, heMode)
+        var encryptedIndices = useHomomorphicEncryption
+            ? ResolveEncryptedIndices(heOptions!, GetGlobalModel().ParameterCount, heMode)
             : Array.Empty<int>();
-
-        // Hybrid mode with no encrypted ranges is effectively no HE
-        if (useHomomorphicEncryption && heMode == HomomorphicEncryptionMode.Hybrid && encryptedIndices.Length == 0)
-        {
-            useHomomorphicEncryption = false;
-            heProvider = null;
-        }
 
         metadata.HomomorphicEncryptionEnabled = useHomomorphicEncryption;
         metadata.HomomorphicEncryptionSchemeUsed = useHomomorphicEncryption ? GetHomomorphicEncryptionSchemeName(heScheme) : "None";
@@ -203,54 +189,19 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                                   personalizationOptions.Strategy != FederatedPersonalizationStrategy.None;
 
         metadata.PersonalizationEnabled = usePersonalization;
-        if (usePersonalization && personalizationOptions is not null)
-        {
-            metadata.PersonalizationStrategyUsed = personalizationOptions.Strategy.ToString();
-            metadata.PersonalizedParameterFraction = personalizationOptions.PersonalizedParameterFraction;
-            metadata.PersonalizationLocalAdaptationEpochs = Math.Max(0, personalizationOptions.LocalAdaptationEpochs);
-        }
-        else
-        {
-            metadata.PersonalizationStrategyUsed = "None";
-            metadata.PersonalizedParameterFraction = 0.0;
-            metadata.PersonalizationLocalAdaptationEpochs = 0;
-        }
+        metadata.PersonalizationStrategyUsed = usePersonalization ? personalizationOptions!.Strategy.ToString() : "None";
+        metadata.PersonalizedParameterFraction = usePersonalization ? personalizationOptions!.PersonalizedParameterFraction : 0.0;
+        metadata.PersonalizationLocalAdaptationEpochs = usePersonalization ? Math.Max(0, personalizationOptions!.LocalAdaptationEpochs) : 0;
 
         var metaLearningOptions = flOptions?.MetaLearning;
         bool useMetaLearning = metaLearningOptions != null &&
                                metaLearningOptions.Enabled &&
                                metaLearningOptions.Strategy != FederatedMetaLearningStrategy.None;
 
-        if (useMetaLearning && metaLearningOptions is not null)
-        {
-            if (!Enum.IsDefined(typeof(FederatedMetaLearningStrategy), metaLearningOptions.Strategy))
-            {
-                throw new ArgumentException(
-                    $"Unknown meta-learning strategy value: {(int)metaLearningOptions.Strategy}.",
-                    nameof(metaLearningOptions));
-            }
-
-            if (double.IsNaN(metaLearningOptions.MetaLearningRate) || double.IsInfinity(metaLearningOptions.MetaLearningRate))
-            {
-                throw new ArgumentException(
-                    "MetaLearningRate must be a finite number.",
-                    nameof(metaLearningOptions));
-            }
-        }
-
         metadata.MetaLearningEnabled = useMetaLearning;
-        if (useMetaLearning && metaLearningOptions is not null)
-        {
-            metadata.MetaLearningStrategyUsed = metaLearningOptions.Strategy.ToString();
-            metadata.MetaLearningRateUsed = metaLearningOptions.MetaLearningRate;
-            metadata.MetaLearningInnerEpochsUsed = metaLearningOptions.InnerEpochs > 0 ? metaLearningOptions.InnerEpochs : localEpochs;
-        }
-        else
-        {
-            metadata.MetaLearningStrategyUsed = "None";
-            metadata.MetaLearningRateUsed = 0.0;
-            metadata.MetaLearningInnerEpochsUsed = 0;
-        }
+        metadata.MetaLearningStrategyUsed = useMetaLearning ? metaLearningOptions!.Strategy.ToString() : "None";
+        metadata.MetaLearningRateUsed = useMetaLearning ? metaLearningOptions!.MetaLearningRate : 0.0;
+        metadata.MetaLearningInnerEpochsUsed = useMetaLearning ? (metaLearningOptions!.InnerEpochs > 0 ? metaLearningOptions.InnerEpochs : localEpochs) : 0;
 
         if (usePersonalization && useMetaLearning)
         {
@@ -309,7 +260,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
             return metadata;
         }
 
-        var personalizationStrategy = usePersonalization ? (personalizationOptions ?? throw new InvalidOperationException("personalizationOptions has not been initialized.")).Strategy : FederatedPersonalizationStrategy.None;
+        var personalizationStrategy = usePersonalization ? personalizationOptions!.Strategy : FederatedPersonalizationStrategy.None;
         bool isHeadSplitPersonalization = usePersonalization && IsHeadSplitPersonalization(personalizationStrategy);
         bool isClusteredPersonalization = usePersonalization && IsClusteredPersonalization(personalizationStrategy);
         var personalizedIndices = (isHeadSplitPersonalization || isClusteredPersonalization)
@@ -388,7 +339,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
 
                 var localModel = CloneModelByParameters(clientStartModel);
                 var localOptimizer = CreateOptimizerForModel(localModel);
-                int effectiveLocalEpochs = useMetaLearning && metaLearningOptions is { InnerEpochs: > 0 } mlOpts ? mlOpts.InnerEpochs : localEpochs;
+                int effectiveLocalEpochs = useMetaLearning && metaLearningOptions!.InnerEpochs > 0 ? metaLearningOptions.InnerEpochs : localEpochs;
                 ConfigureLocalOptimizer(localOptimizer, effectiveLocalEpochs);
 
                 var inputData = CreateLocalOptimizationInputData(dataset, localModel);
@@ -441,17 +392,13 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
 
                 if (useDifferentialPrivacy && (dpMode == DifferentialPrivacyMode.Local || dpMode == DifferentialPrivacyMode.LocalAndCentral))
                 {
-                    if (dpMechanism is null)
-                    {
-                        throw new InvalidOperationException("Differential privacy is enabled but dpMechanism has not been initialized.");
-                    }
-                    parameters = dpMechanism.ApplyPrivacy(parameters, dpEpsilon, dpDelta);
+                    parameters = dpMechanism!.ApplyPrivacy(parameters, dpEpsilon, dpDelta);
                 }
 
                 var parametersForAggregation = parameters;
                 if (useHomomorphicEncryption)
                 {
-                    (heClientParameters ?? throw new InvalidOperationException("heClientParameters has not been initialized."))[clientId] = parameters;
+                    heClientParameters![clientId] = parameters;
 
                     parametersForAggregation = heMode == HomomorphicEncryptionMode.HeOnly
                         ? globalBeforeParams
@@ -466,18 +413,9 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
 
                 if (useSecureAggregation)
                 {
-                    if (thresholdSecureAggregation != null)
-                    {
-                        maskedParameters[clientId] = thresholdSecureAggregation.MaskUpdate(clientId, parametersForAggregation, weight);
-                    }
-                    else if (secureAggregation != null)
-                    {
-                        maskedParameters[clientId] = secureAggregation.MaskUpdate(clientId, parametersForAggregation, weight);
-                    }
-                    else
-                    {
-                        throw new InvalidOperationException("Secure aggregation is enabled but no aggregation provider is available.");
-                    }
+                    maskedParameters[clientId] = thresholdSecureAggregation != null
+                        ? thresholdSecureAggregation.MaskUpdate(clientId, parametersForAggregation, weight)
+                        : secureAggregation!.MaskUpdate(clientId, parametersForAggregation, weight);
                 }
                 else
                 {
@@ -487,11 +425,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
 
             if (useDifferentialPrivacy && (dpMode == DifferentialPrivacyMode.Local || dpMode == DifferentialPrivacyMode.LocalAndCentral))
             {
-                if (privacyAccountant is null)
-                {
-                    throw new InvalidOperationException("Differential privacy is enabled but privacyAccountant has not been initialized.");
-                }
-                privacyAccountant.AddRound(dpEpsilon, dpDelta, samplingRate: (double)selectedClientIds.Count / GetNumberOfClientsOrThrow());
+                privacyAccountant!.AddRound(dpEpsilon, dpDelta, samplingRate: (double)selectedClientIds.Count / GetNumberOfClientsOrThrow());
                 privacyEventsThisRound++;
             }
 
@@ -503,24 +437,12 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                     throw new InvalidOperationException("Secure aggregation is not applicable when HE-only aggregation is enabled.");
                 }
 
-                if (heProvider is null)
-                {
-                    throw new InvalidOperationException("Homomorphic encryption is enabled but heProvider has not been initialized.");
-                }
-                if (heClientParameters is null)
-                {
-                    throw new InvalidOperationException("Homomorphic encryption is enabled but heClientParameters has not been initialized.");
-                }
-                if (heOptions is null)
-                {
-                    throw new InvalidOperationException("Homomorphic encryption is enabled but heOptions has not been initialized.");
-                }
-                var heAggregated = heProvider.AggregateEncryptedWeightedAverage(
-                    heClientParameters,
+                var heAggregated = heProvider!.AggregateEncryptedWeightedAverage(
+                    heClientParameters!,
                     clientWeights,
                     globalBefore.GetParameters(),
                     encryptedIndices,
-                    heOptions);
+                    heOptions!);
 
                 newGlobalModel = globalBefore.WithParameters(heAggregated);
             }
@@ -528,7 +450,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
             {
                 var averagedParameters = thresholdSecureAggregation != null
                     ? thresholdSecureAggregation.AggregateSecurely(maskedParameters, clientWeights)
-                    : secureAggregation.AggregateSecurely(maskedParameters, clientWeights);
+                    : secureAggregation!.AggregateSecurely(maskedParameters, clientWeights);
 
                 if (thresholdSecureAggregation != null)
                 {
@@ -536,7 +458,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                 }
                 else
                 {
-                    secureAggregation.ClearSecrets();
+                    secureAggregation!.ClearSecrets();
                 }
 
                 newGlobalModel = globalBefore.WithParameters(averagedParameters);
@@ -548,7 +470,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
 
             if (useHomomorphicEncryption && heMode != HomomorphicEncryptionMode.HeOnly)
             {
-                var heAggregated = heProvider.AggregateEncryptedWeightedAverage(
+                var heAggregated = heProvider!.AggregateEncryptedWeightedAverage(
                     heClientParameters!,
                     clientWeights,
                     globalBeforeParams,
@@ -566,7 +488,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
 
             if (useMetaLearning)
             {
-                var metaRate = metaLearningOptions.MetaLearningRate;
+                var metaRate = metaLearningOptions!.MetaLearningRate;
                 var averaged = newGlobalModel.GetParameters();
                 var metaUpdated = ApplyMetaLearningUpdate(globalBeforeParams, averaged, metaRate);
                 newGlobalModel = globalBefore.WithParameters(metaUpdated);
@@ -581,8 +503,8 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
             if (useDifferentialPrivacy && (dpMode == DifferentialPrivacyMode.Central || dpMode == DifferentialPrivacyMode.LocalAndCentral))
             {
                 var globalParams = newGlobalModel.GetParameters();
-                var privateGlobalParams = dpMechanism.ApplyPrivacy(globalParams, dpEpsilon, dpDelta);
-                privacyAccountant.AddRound(dpEpsilon, dpDelta, samplingRate: (double)selectedClientIds.Count / GetNumberOfClientsOrThrow());
+                var privateGlobalParams = dpMechanism!.ApplyPrivacy(globalParams, dpEpsilon, dpDelta);
+                privacyAccountant!.AddRound(dpEpsilon, dpDelta, samplingRate: (double)selectedClientIds.Count / GetNumberOfClientsOrThrow());
                 privacyEventsThisRound++;
                 newGlobalModel = newGlobalModel.WithParameters(privateGlobalParams);
             }
@@ -763,7 +685,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
 
                 if (useDifferentialPrivacy && (dpMode == DifferentialPrivacyMode.Local || dpMode == DifferentialPrivacyMode.LocalAndCentral))
                 {
-                    parameters = dpMechanism.ApplyPrivacy(parameters, dpEpsilon, dpDelta);
+                    parameters = dpMechanism!.ApplyPrivacy(parameters, dpEpsilon, dpDelta);
                 }
 
                 int delay = 0;
@@ -778,7 +700,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
 
             if (useDifferentialPrivacy && (dpMode == DifferentialPrivacyMode.Local || dpMode == DifferentialPrivacyMode.LocalAndCentral))
             {
-                privacyAccountant.AddRound(dpEpsilon, dpDelta, samplingRate: (double)selectedClientIds.Count / GetNumberOfClientsOrThrow());
+                privacyAccountant!.AddRound(dpEpsilon, dpDelta, samplingRate: (double)selectedClientIds.Count / GetNumberOfClientsOrThrow());
                 privacyEventsThisStep++;
             }
 
@@ -810,7 +732,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                     {
                         var singleParams = new Dictionary<int, Vector<T>> { [update.ClientId] = update.Parameters };
                         var singleWeights = new Dictionary<int, double> { [update.ClientId] = update.Weight };
-                        var heAggregated = heProvider.AggregateEncryptedWeightedAverage(
+                        var heAggregated = heProvider!.AggregateEncryptedWeightedAverage(
                             singleParams,
                             singleWeights,
                             currentModel.GetParameters(),
@@ -838,8 +760,8 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                     if (useDifferentialPrivacy && (dpMode == DifferentialPrivacyMode.Central || dpMode == DifferentialPrivacyMode.LocalAndCentral))
                     {
                         var globalParams = targetModel.GetParameters();
-                        var privateGlobalParams = dpMechanism.ApplyPrivacy(globalParams, dpEpsilon, dpDelta);
-                        privacyAccountant.AddRound(dpEpsilon, dpDelta, samplingRate: (double)selectedClientIds.Count / GetNumberOfClientsOrThrow());
+                        var privateGlobalParams = dpMechanism!.ApplyPrivacy(globalParams, dpEpsilon, dpDelta);
+                        privacyAccountant!.AddRound(dpEpsilon, dpDelta, samplingRate: (double)selectedClientIds.Count / GetNumberOfClientsOrThrow());
                         privacyEventsThisStep++;
                         targetModel = targetModel.WithParameters(privateGlobalParams);
                     }
@@ -859,7 +781,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                     bufferWeights[bufferedUpdateKey] = update.Weight;
                     if (useHomomorphicEncryption)
                     {
-                        (bufferHeParameters ?? throw new InvalidOperationException("bufferHeParameters has not been initialized."))[bufferedUpdateKey] = update.Parameters;
+                        bufferHeParameters![bufferedUpdateKey] = update.Parameters;
                     }
                     bufferedUpdateKey++;
                 }
@@ -872,7 +794,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
 
                     if (useHomomorphicEncryption)
                     {
-                        var heAggregated = heProvider.AggregateEncryptedWeightedAverage(
+                        var heAggregated = heProvider!.AggregateEncryptedWeightedAverage(
                             bufferHeParameters!,
                             bufferWeights,
                             globalAtStepStart.GetParameters(),
@@ -897,8 +819,8 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                     if (useDifferentialPrivacy && (dpMode == DifferentialPrivacyMode.Central || dpMode == DifferentialPrivacyMode.LocalAndCentral))
                     {
                         var globalParams = newGlobalModel.GetParameters();
-                        var privateGlobalParams = dpMechanism.ApplyPrivacy(globalParams, dpEpsilon, dpDelta);
-                        privacyAccountant.AddRound(dpEpsilon, dpDelta, samplingRate: (double)selectedClientIds.Count / GetNumberOfClientsOrThrow());
+                        var privateGlobalParams = dpMechanism!.ApplyPrivacy(globalParams, dpEpsilon, dpDelta);
+                        privacyAccountant!.AddRound(dpEpsilon, dpDelta, samplingRate: (double)selectedClientIds.Count / GetNumberOfClientsOrThrow());
                         privacyEventsThisStep++;
                         newGlobalModel = newGlobalModel.WithParameters(privateGlobalParams);
                     }

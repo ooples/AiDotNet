@@ -577,13 +577,12 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
                 newShape[d] = _originalInputShape[d];
             newShape[_originalInputShape.Length - 2] = _numCapsules;
             newShape[_originalInputShape.Length - 1] = _capsuleDimension;
-            var output = output ?? throw new InvalidOperationException("output has not been initialized.");
-            output = output.Reshape(newShape);
+            output = output!.Reshape(newShape);
         }
         else if (_originalInputShape != null && _originalInputShape.Length == 2)
         {
             // 2D input -> 2D output (remove batch dim)
-            output = output.Reshape([_numCapsules, _capsuleDimension]);
+            output = output!.Reshape([_numCapsules, _capsuleDimension]);
         }
 
         _lastOutput = output;

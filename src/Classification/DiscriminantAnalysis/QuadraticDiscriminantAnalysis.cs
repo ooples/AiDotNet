@@ -130,8 +130,7 @@ public class QuadraticDiscriminantAnalysis<T> : ProbabilisticClassifierBase<T>
 
         for (int c = 0; c < NumClasses; c++)
         {
-            var classLabels = ClassLabels ?? throw new InvalidOperationException("ClassLabels has not been initialized.");
-            T classLabel = classLabels[c];
+            T classLabel = ClassLabels![c];
             int count = 0;
 
             for (int i = 0; i < x.Rows; i++)
@@ -169,7 +168,7 @@ public class QuadraticDiscriminantAnalysis<T> : ProbabilisticClassifierBase<T>
 
         for (int c = 0; c < NumClasses; c++)
         {
-            T classLabel = classLabels[c];
+            T classLabel = ClassLabels![c];
             int count = 0;
 
             for (int i = 0; i < n; i++)
@@ -192,14 +191,14 @@ public class QuadraticDiscriminantAnalysis<T> : ProbabilisticClassifierBase<T>
     private Matrix<T> ComputeClassCovariance(Matrix<T> x, Vector<T> y, int classIndex)
     {
         var covariance = new Matrix<T>(NumFeatures, NumFeatures);
-        T classLabel = classLabels[classIndex];
+        T classLabel = ClassLabels![classIndex];
         int count = 0;
 
         // Get class mean
         var mean = new Vector<T>(NumFeatures);
         for (int j = 0; j < NumFeatures; j++)
         {
-            mean[j] = (_classMeans ?? throw new InvalidOperationException("_classMeans has not been initialized."))[classIndex, j];
+            mean[j] = _classMeans![classIndex, j];
         }
 
         // Compute covariance for this class
@@ -435,7 +434,7 @@ public class QuadraticDiscriminantAnalysis<T> : ProbabilisticClassifierBase<T>
                 }
             }
 
-            predictions[i] = classLabels[bestClass];
+            predictions[i] = ClassLabels![bestClass];
         }
 
         return predictions;

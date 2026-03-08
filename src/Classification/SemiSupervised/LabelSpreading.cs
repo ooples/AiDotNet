@@ -436,8 +436,7 @@ public class LabelSpreading<T> : SemiSupervisedClassifierBase<T>
     /// </remarks>
     private void SpreadLabels()
     {
-        var labelDistributions = _labelDistributions ?? throw new InvalidOperationException("_labelDistributions has not been initialized.");
-        int n = labelDistributions.Rows;
+        int n = _labelDistributions!.Rows;
         T oneMinusAlpha = NumOps.Subtract(NumOps.One, _alpha);
 
         for (int iter = 0; iter < _maxIterations; iter++)
@@ -454,7 +453,7 @@ public class LabelSpreading<T> : SemiSupervisedClassifierBase<T>
                 for (int c = 0; c < NumClasses; c++)
                 {
                     _labelDistributions[i, c] = NumOps.Add(
-                        NumOps.Multiply(_alpha, (_initialDistributions ?? throw new InvalidOperationException("_initialDistributions has not been initialized."))[i, c]),
+                        NumOps.Multiply(_alpha, _initialDistributions![i, c]),
                         NumOps.Multiply(oneMinusAlpha, spread[i, c]));
                 }
             }
@@ -584,7 +583,7 @@ public class LabelSpreading<T> : SemiSupervisedClassifierBase<T>
     /// </remarks>
     private void ExtractPseudoLabels()
     {
-        int numUnlabeled = labelDistributions.Rows - _numLabeled;
+        int numUnlabeled = _labelDistributions!.Rows - _numLabeled;
         if (numUnlabeled <= 0) return;
 
         PseudoLabels = new Vector<T>(numUnlabeled);
@@ -605,8 +604,7 @@ public class LabelSpreading<T> : SemiSupervisedClassifierBase<T>
                 }
             }
 
-            var classLabels = ClassLabels ?? throw new InvalidOperationException("ClassLabels has not been initialized.");
-            PseudoLabels[i] = classLabels[bestClass];
+            PseudoLabels[i] = ClassLabels![bestClass];
             PseudoLabelConfidences[i] = bestProb;
         }
     }
@@ -658,8 +656,7 @@ public class LabelSpreading<T> : SemiSupervisedClassifierBase<T>
     /// </remarks>
     private T PredictSingle(Vector<T> sample)
     {
-        var allFeatures = _allFeatures ?? throw new InvalidOperationException("_allFeatures has not been initialized.");
-        int n = allFeatures.Rows;
+        int n = _allFeatures!.Rows;
         var similarities = new Vector<T>(n);
         T sumSim = NumOps.Zero;
 
@@ -694,7 +691,7 @@ public class LabelSpreading<T> : SemiSupervisedClassifierBase<T>
             for (int i = 0; i < n; i++)
             {
                 weightedSum = NumOps.Add(weightedSum,
-                    NumOps.Multiply(similarities[i], labelDistributions[i, c]));
+                    NumOps.Multiply(similarities[i], _labelDistributions![i, c]));
             }
             distribution[c] = weightedSum;
         }
@@ -710,7 +707,7 @@ public class LabelSpreading<T> : SemiSupervisedClassifierBase<T>
             }
         }
 
-        return classLabels[bestClass];
+        return ClassLabels![bestClass];
     }
 
     /// <summary>
@@ -759,7 +756,7 @@ public class LabelSpreading<T> : SemiSupervisedClassifierBase<T>
     /// </remarks>
     private Vector<T> PredictProbabilitiesSingle(Vector<T> sample)
     {
-        int n = allFeatures.Rows;
+        int n = _allFeatures!.Rows;
         var similarities = new Vector<T>(n);
         T sumSim = NumOps.Zero;
 
@@ -794,7 +791,7 @@ public class LabelSpreading<T> : SemiSupervisedClassifierBase<T>
             for (int i = 0; i < n; i++)
             {
                 weightedSum = NumOps.Add(weightedSum,
-                    NumOps.Multiply(similarities[i], labelDistributions[i, c]));
+                    NumOps.Multiply(similarities[i], _labelDistributions![i, c]));
             }
             distribution[c] = weightedSum;
         }
@@ -818,7 +815,7 @@ public class LabelSpreading<T> : SemiSupervisedClassifierBase<T>
     /// </remarks>
     private int GetClassIndex(T label)
     {
-        for (int i = 0; i < classLabels.Length; i++)
+        for (int i = 0; i < ClassLabels!.Length; i++)
         {
             if (NumOps.Compare(ClassLabels[i], label) == 0)
             {

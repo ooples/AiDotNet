@@ -253,8 +253,7 @@ public class LatentDirichletAllocation<T> : TransformerBase<T, Matrix<T>, Matrix
             _lambdaSums[t] = sum;
             for (int w = 0; w < _nVocab; w++)
             {
-                var components = _components ?? throw new InvalidOperationException("_components has not been initialized.");
-                components[t, w] = lambda[t, w] / sum;
+                _components![t, w] = lambda[t, w] / sum;
             }
         }
     }
@@ -335,7 +334,7 @@ public class LatentDirichletAllocation<T> : TransformerBase<T, Matrix<T>, Matrix
             _lambdaSums[t] = sum;
             for (int w = 0; w < _nVocab; w++)
             {
-                components[t, w] = lambda[t, w] / sum;
+                _components![t, w] = lambda[t, w] / sum;
             }
         }
     }

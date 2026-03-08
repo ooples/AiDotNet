@@ -326,21 +326,18 @@ public class XLearner<T> : CausalModelBase<T>
             // Compute propensity score e(X)
             double z = NumOps.ToDouble(_biasPropensity);
             for (int j = 0; j < features.Columns; j++)
-                var weightsPropensity = _weightsPropensity ?? throw new InvalidOperationException("_weightsPropensity has not been initialized.");
-                z += NumOps.ToDouble(weightsPropensity[j]) * NumOps.ToDouble(features[i, j]);
+                z += NumOps.ToDouble(_weightsPropensity![j]) * NumOps.ToDouble(features[i, j]);
             double propensity = 1.0 / (1.0 + Math.Exp(-z));
 
             // Compute τ₀(X) - effect estimated from control group
             double tau0 = NumOps.ToDouble(_biasTau0);
             for (int j = 0; j < features.Columns; j++)
-                var weightsTau0 = _weightsTau0 ?? throw new InvalidOperationException("_weightsTau0 has not been initialized.");
-                tau0 += NumOps.ToDouble(weightsTau0[j]) * NumOps.ToDouble(features[i, j]);
+                tau0 += NumOps.ToDouble(_weightsTau0![j]) * NumOps.ToDouble(features[i, j]);
 
             // Compute τ₁(X) - effect estimated from treated group
             double tau1 = NumOps.ToDouble(_biasTau1);
             for (int j = 0; j < features.Columns; j++)
-                var weightsTau1 = _weightsTau1 ?? throw new InvalidOperationException("_weightsTau1 has not been initialized.");
-                tau1 += NumOps.ToDouble(weightsTau1[j]) * NumOps.ToDouble(features[i, j]);
+                tau1 += NumOps.ToDouble(_weightsTau1![j]) * NumOps.ToDouble(features[i, j]);
 
             // Combine: τ(X) = e(X)·τ₀(X) + (1-e(X))·τ₁(X)
             double effect = propensity * tau0 + (1 - propensity) * tau1;
@@ -362,8 +359,7 @@ public class XLearner<T> : CausalModelBase<T>
         {
             double pred = NumOps.ToDouble(_biasTreated);
             for (int j = 0; j < features.Columns; j++)
-                var weightsTreated = _weightsTreated ?? throw new InvalidOperationException("_weightsTreated has not been initialized.");
-                pred += NumOps.ToDouble(weightsTreated[j]) * NumOps.ToDouble(features[i, j]);
+                pred += NumOps.ToDouble(_weightsTreated![j]) * NumOps.ToDouble(features[i, j]);
             result[i] = NumOps.FromDouble(pred);
         }
         return result;
@@ -381,8 +377,7 @@ public class XLearner<T> : CausalModelBase<T>
         {
             double pred = NumOps.ToDouble(_biasControl);
             for (int j = 0; j < features.Columns; j++)
-                var weightsControl = _weightsControl ?? throw new InvalidOperationException("_weightsControl has not been initialized.");
-                pred += NumOps.ToDouble(weightsControl[j]) * NumOps.ToDouble(features[i, j]);
+                pred += NumOps.ToDouble(_weightsControl![j]) * NumOps.ToDouble(features[i, j]);
             result[i] = NumOps.FromDouble(pred);
         }
         return result;
@@ -445,7 +440,7 @@ public class XLearner<T> : CausalModelBase<T>
         {
             double z = NumOps.ToDouble(_biasPropensity);
             for (int j = 0; j < x.Columns; j++)
-                z += NumOps.ToDouble(weightsPropensity[j]) * NumOps.ToDouble(x[i, j]);
+                z += NumOps.ToDouble(_weightsPropensity![j]) * NumOps.ToDouble(x[i, j]);
             double prob = 1.0 / (1.0 + Math.Exp(-z));
             result[i] = NumOps.FromDouble(prob);
         }
@@ -470,11 +465,11 @@ public class XLearner<T> : CausalModelBase<T>
         int offset = 5;
         for (int i = 0; i < p; i++)
         {
-            parameters[offset + i] = weightsControl[i];
-            parameters[offset + p + i] = weightsTreated[i];
-            parameters[offset + 2 * p + i] = weightsTau0[i];
-            parameters[offset + 3 * p + i] = weightsTau1[i];
-            parameters[offset + 4 * p + i] = weightsPropensity[i];
+            parameters[offset + i] = _weightsControl![i];
+            parameters[offset + p + i] = _weightsTreated![i];
+            parameters[offset + 2 * p + i] = _weightsTau0![i];
+            parameters[offset + 3 * p + i] = _weightsTau1![i];
+            parameters[offset + 4 * p + i] = _weightsPropensity![i];
         }
 
         return parameters;

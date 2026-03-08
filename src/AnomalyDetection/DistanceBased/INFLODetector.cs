@@ -92,9 +92,8 @@ public class INFLODetector<T> : AnomalyDetectorBase<T>
         _influenceSpaces = new HashSet<int>[n];
         for (int i = 0; i < n; i++)
         {
-            var knnLists = _knnLists ?? throw new InvalidOperationException("_knnLists has not been initialized.");
-            _influenceSpaces[i] = new HashSet<int>(knnLists[i]);
-            foreach (int rknnIdx in (_rknnLists ?? throw new InvalidOperationException("_rknnLists has not been initialized."))[i])
+            _influenceSpaces[i] = new HashSet<int>(_knnLists![i]);
+            foreach (int rknnIdx in _rknnLists![i])
             {
                 _influenceSpaces[i].Add(rknnIdx);
             }
@@ -243,7 +242,7 @@ public class INFLODetector<T> : AnomalyDetectorBase<T>
 
         for (int i = 0; i < X.Rows; i++)
         {
-            densities[i] = ComputeLocalDensityForPoint(X, i, knnLists[i]);
+            densities[i] = ComputeLocalDensityForPoint(X, i, _knnLists![i]);
         }
 
         return densities;

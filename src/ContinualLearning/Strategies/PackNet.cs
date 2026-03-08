@@ -338,8 +338,7 @@ public class PackNet<T, TInput, TOutput> : ContinualLearningStrategyBase<T, TInp
         var availableIndices = new List<int>();
         for (int i = 0; i < parameters.Length; i++)
         {
-            var parameterOwnership = _parameterOwnership ?? throw new InvalidOperationException("_parameterOwnership has not been initialized.");
-            if (parameterOwnership[i] == 0)
+            if (_parameterOwnership![i] == 0)
             {
                 availableIndices.Add(i);
             }
@@ -382,7 +381,7 @@ public class PackNet<T, TInput, TOutput> : ContinualLearningStrategyBase<T, TInp
     {
         for (int i = 0; i < taskMask.Length; i++)
         {
-            if (taskMask[i] && parameterOwnership[i] == 0)
+            if (taskMask[i] && _parameterOwnership![i] == 0)
             {
                 // Assign this parameter to the current task
                 _parameterOwnership[i] = taskId;
