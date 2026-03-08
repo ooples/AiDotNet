@@ -131,6 +131,8 @@ public class MLkNNClassifier<T> : MultiLabelClassifierBase<T>
             throw new InvalidOperationException("Model must be trained before prediction.");
         }
 
+        var trainLabels = _trainLabels ?? throw new InvalidOperationException("_trainLabels has not been initialized.");
+
         int n = features.Rows;
         int k = _options.KNeighbors;
         var probs = new Matrix<T>(n, NumLabels);
@@ -146,7 +148,7 @@ public class MLkNNClassifier<T> : MultiLabelClassifierBase<T>
                 int neighborCount = 0;
                 foreach (int neighborIdx in neighbors)
                 {
-                    if (NumOps.ToDouble((_trainLabels ?? throw new InvalidOperationException("_trainLabels has not been initialized."))[neighborIdx, l]) > 0.5)
+                    if (NumOps.ToDouble(trainLabels[neighborIdx, l]) > 0.5)
                     {
                         neighborCount++;
                     }

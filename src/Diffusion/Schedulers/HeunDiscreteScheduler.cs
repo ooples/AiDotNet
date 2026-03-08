@@ -140,8 +140,9 @@ public sealed class HeunDiscreteScheduler<T> : NoiseSchedulerBase<T>
     private Vector<T> HeunPredictorStep(Vector<T> modelOutput, int timestep, Vector<T> sample)
     {
         int stepIndex = FindTimestepIndex(timestep);
-        T sigma = (_sigmas ?? throw new InvalidOperationException("_sigmas has not been initialized."))[stepIndex];
-        T sigmaNext = _sigmas[stepIndex + 1];
+        var sigmas = _sigmas ?? throw new InvalidOperationException("_sigmas has not been initialized.");
+        T sigma = sigmas[stepIndex];
+        T sigmaNext = sigmas[stepIndex + 1];
 
         // Convert model output to predicted original sample
         Vector<T> predOriginal = ConvertToPredOriginal(modelOutput, sample, sigma, timestep);
