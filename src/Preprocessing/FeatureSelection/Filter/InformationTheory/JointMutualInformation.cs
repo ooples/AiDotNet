@@ -209,7 +209,7 @@ public class JointMutualInformation<T> : TransformerBase<T, Matrix<T>, Matrix<T>
         // Approximated as: I(X_f1; Y) + I(X_f2; Y) - I(X_f1; X_f2)
         var miScores = _miScores ?? throw new InvalidOperationException("MI scores have not been computed.");
         double mi1 = miScores[f1];
-        double mi2 = _miScores[f2];
+        double mi2 = miScores[f2];
         double miJoint = ComputeFeatureFeatureMI(discretized, f1, f2, n);
 
         return mi1 + mi2 - miJoint;

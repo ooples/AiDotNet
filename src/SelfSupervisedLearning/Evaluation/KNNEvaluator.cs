@@ -251,12 +251,13 @@ public class KNNEvaluator<T>
 
     private int VotePrediction((int index, T distance)[] neighbors)
     {
+        var trainLabels = _trainLabels ?? throw new InvalidOperationException("Training labels have not been initialized. Call Fit() first.");
+
         // Weighted voting based on distance
         var votes = new T[_numClasses];
 
         foreach (var (index, distance) in neighbors)
         {
-            var trainLabels = _trainLabels ?? throw new InvalidOperationException("Training labels have not been initialized. Call Fit() first.");
             var label = trainLabels[index];
             T weight;
 

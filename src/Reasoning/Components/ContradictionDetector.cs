@@ -297,11 +297,13 @@ Analyze:";
                 }
                 catch (FormatException)
                 {
-                    // Token exists but is not a boolean - fall through to text analysis
+                    // Token exists but is not a valid boolean — treat as false
+                    return false;
                 }
                 catch (InvalidCastException)
                 {
-                    // Token is an incompatible type - fall through to text analysis
+                    // Token is an incompatible type — treat as false
+                    return false;
                 }
             }
         }
@@ -310,14 +312,13 @@ Analyze:";
             // Fallback to text analysis
         }
 
-        // Fallback: look for positive indicators
+        // Fallback: look for positive indicators only when JSON parsing failed
+        // or when the "contradictory" field was missing entirely
         if (string.IsNullOrWhiteSpace(response))
             return false;
 
         string lower = response.ToLowerInvariant();
         return lower.Contains("yes") ||
-               lower.Contains("contradictory") ||
-               lower.Contains("contradict") ||
                lower.Contains("inconsistent");
     }
 
