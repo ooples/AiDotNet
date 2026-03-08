@@ -221,6 +221,9 @@ public class SCiForest<T> : AnomalyDetectorBase<T>
     {
         private static readonly INumericOperations<T> Ops = MathHelper.GetNumericOperations<T>();
 
+        /// <summary>Minimum range threshold below which a feature dimension is considered constant.</summary>
+        private static readonly T MinRangeTolerance = Ops.FromDouble(1e-10);
+
         private readonly int _nFeatures;
         private readonly double _sparsity;
         private readonly Random _random;
@@ -279,7 +282,7 @@ public class SCiForest<T> : AnomalyDetectorBase<T>
             }
 
             T range = Ops.Subtract(maxProj, minProj);
-            if (Ops.LessThan(range, Ops.FromDouble(1e-10)))
+            if (Ops.LessThan(range, MinRangeTolerance))
             {
                 _isLeaf = true;
                 return;
