@@ -88,7 +88,8 @@ public class BarlowTwins<T> : SSLMethodBase<T>
 
         // Forward pass for view 1
         var h1 = _encoder.ForwardWithMemory(view1);
-        var z1 = _projector!.Project(h1);
+        var projector = _projector ?? throw new InvalidOperationException("Projector has not been initialized.");
+        var z1 = projector.Project(h1);
 
         // Forward pass for view 2
         var h2 = _encoder.ForwardWithMemory(view2);

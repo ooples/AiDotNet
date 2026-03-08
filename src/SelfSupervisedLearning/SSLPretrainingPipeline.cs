@@ -270,13 +270,13 @@ public class SSLPretrainingPipeline<T>
 
         // Linear evaluation
         var linearEval = new LinearEvaluator<T>(
-            result.Encoder!, _encoderOutputDim, numClasses, epochs: 20);
+            result.Encoder ?? throw new InvalidOperationException("Encoder has not been initialized in the result."), _encoderOutputDim, numClasses, epochs: 20);
 
         result.LinearEvaluation = linearEval.Train(
             validationData, validationLabels);
 
         // k-NN evaluation
-        var knn = new KNNEvaluator<T>(result.Encoder!);
+        var knn = new KNNEvaluator<T>(result.Encoder ?? throw new InvalidOperationException("Encoder has not been initialized in the result."));
         knn.Fit(validationData, validationLabels);
         result.KNNAccuracy = knn.Evaluate(validationData, validationLabels);
 
