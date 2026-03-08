@@ -1269,7 +1269,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
 
         var optimizationResult = new OptimizationResult<T, TInput, TOutput>
         {
-            BestSolution = _model!
+            BestSolution = _model ?? throw new InvalidOperationException("Model has not been configured. Call WithModel() before BuildForInference().")
         };
 
         var deploymentConfig = DeploymentConfiguration.Create(

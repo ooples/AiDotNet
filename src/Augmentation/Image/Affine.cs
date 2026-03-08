@@ -111,7 +111,7 @@ public class Affine<T> : SpatialAugmentationBase<T, ImageTensor<T>>
         TranslationRange = translationRange ?? (0.1, 0.1);
         Interpolation = interpolation;
         BorderMode = borderMode;
-        BorderValue = borderValue ?? default!;
+        BorderValue = borderValue ?? NumOps.Zero;
 
         ValidateRanges();
     }

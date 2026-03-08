@@ -131,11 +131,13 @@ public class HoeffdingTreeClassifier<T> : ClassifierBase<T>, IOnlineClassifier<T
     /// </summary>
     public void PartialFit(Vector<T> features, T label)
     {
+        var root = _root ?? throw new InvalidOperationException("Root node has not been initialized.");
+
         // Initialize feature statistics on first sample
         if (NumFeatures == 0)
         {
             NumFeatures = features.Length;
-            InitializeFeatureStats(_root!, NumFeatures);
+            InitializeFeatureStats(root, NumFeatures);
         }
         else if (features.Length != NumFeatures)
         {
@@ -148,7 +150,7 @@ public class HoeffdingTreeClassifier<T> : ClassifierBase<T>, IOnlineClassifier<T
         int classIdx = GetOrCreateClassIndex(label);
 
         // Sort sample to appropriate leaf
-        var leaf = SortToLeaf(_root!, features);
+        var leaf = SortToLeaf(root, features);
 
         // Update leaf statistics
         UpdateLeafStats(leaf, features, classIdx);
@@ -213,7 +215,9 @@ public class HoeffdingTreeClassifier<T> : ClassifierBase<T>, IOnlineClassifier<T
     {
         if (_root is null || !IsWarm)
         {
-            return _knownClasses.Count > 0 ? _knownClasses[0] : default!;
+            if (_knownClasses.Count == 0)
+                throw new InvalidOperationException("No known classes available. The classifier must be trained first.");
+            return _knownClasses[0];
         }
 
         var leaf = SortToLeaf(_root, features);
@@ -230,11 +234,13 @@ public class HoeffdingTreeClassifier<T> : ClassifierBase<T>, IOnlineClassifier<T
         double value = NumOps.ToDouble(features[node.SplitFeature]);
         if (value <= node.SplitThreshold)
         {
-            return SortToLeaf(node.Left!, features);
+            var left = node.Left ?? throw new InvalidOperationException("Left child node has not been initialized.");
+            return SortToLeaf(left, features);
         }
         else
         {
-            return SortToLeaf(node.Right!, features);
+            var right = node.Right ?? throw new InvalidOperationException("Right child node has not been initialized.");
+            return SortToLeaf(right, features);
         }
     }
 
@@ -242,7 +248,9 @@ public class HoeffdingTreeClassifier<T> : ClassifierBase<T>, IOnlineClassifier<T
     {
         if (node.ClassCounts.Count == 0)
         {
-            return _knownClasses.Count > 0 ? _knownClasses[0] : default!;
+            if (_knownClasses.Count == 0)
+                throw new InvalidOperationException("No known classes available. The classifier must be trained first.");
+            return _knownClasses[0];
         }
 
         int majorityIdx = 0;
@@ -255,7 +263,9 @@ public class HoeffdingTreeClassifier<T> : ClassifierBase<T>, IOnlineClassifier<T
                 majorityIdx = kv.Key;
             }
         }
-        return majorityIdx < _knownClasses.Count ? _knownClasses[majorityIdx] : default!;
+        if (majorityIdx >= _knownClasses.Count)
+            throw new InvalidOperationException("Majority class index is out of range. The classifier may not be properly trained.");
+        return _knownClasses[majorityIdx];
     }
 
     private HoeffdingNode CreateLeaf(int depth)
@@ -311,10 +321,11 @@ public class HoeffdingTreeClassifier<T> : ClassifierBase<T>, IOnlineClassifier<T
             InitializeFeatureStats(leaf, features.Length);
         }
 
+        var featureStatistics = leaf.FeatureStatistics ?? throw new InvalidOperationException("FeatureStatistics has not been initialized.");
         for (int f = 0; f < features.Length; f++)
         {
             double value = NumOps.ToDouble(features[f]);
-            var stats = leaf.FeatureStatistics![f];
+            var stats = featureStatistics[f];
 
             // Update min/max for tracking
             stats.Min = Math.Min(stats.Min, value);
@@ -333,8 +344,9 @@ public class HoeffdingTreeClassifier<T> : ClassifierBase<T>, IOnlineClassifier<T
                 stats.BinMax = Math.Max(stats.BinMax, value);
             }
 
+            var binsByClass = stats.BinsByClass ?? throw new InvalidOperationException("BinsByClass has not been initialized.");
             // Initialize bins for this class if needed
-            if (!stats.BinsByClass!.ContainsKey(classIdx))
+            if (!binsByClass.ContainsKey(classIdx))
             {
                 stats.BinsByClass[classIdx] = new BinStats
                 {
@@ -432,7 +444,8 @@ public class HoeffdingTreeClassifier<T> : ClassifierBase<T>, IOnlineClassifier<T
     private double CalculateInformationGain(HoeffdingNode leaf, int feature, double threshold,
         double currentEntropy)
     {
-        var stats = leaf.FeatureStatistics![feature];
+        var leafFeatureStats = leaf.FeatureStatistics ?? throw new InvalidOperationException("FeatureStatistics has not been initialized.");
+        var stats = leafFeatureStats[feature];
         var leftCounts = new Dictionary<int, long>();
         var rightCounts = new Dictionary<int, long>();
         long leftTotal = 0, rightTotal = 0;
@@ -440,7 +453,8 @@ public class HoeffdingTreeClassifier<T> : ClassifierBase<T>, IOnlineClassifier<T
         // Estimate split using bin statistics
         int splitBin = GetBinIndex(threshold, stats.Min, stats.Max);
 
-        foreach (var kvp in stats.BinsByClass!)
+        var statsBinsByClass = stats.BinsByClass ?? throw new InvalidOperationException("BinsByClass has not been initialized.");
+        foreach (var kvp in statsBinsByClass)
         {
             int classIdx = kvp.Key;
             var bins = kvp.Value.Counts;
