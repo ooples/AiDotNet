@@ -1,6 +1,9 @@
+using System.Text;
 using AiDotNet.Classification;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors.Helpers;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace AiDotNet.Classification.SVM;
 
@@ -556,5 +559,118 @@ public class SupportVectorClassifier<T> : SVMBase<T>
         }
 
         return clone;
+    }
+
+    /// <inheritdoc/>
+    public override byte[] Serialize()
+    {
+        var modelData = new Dictionary<string, object>
+        {
+            { "NumClasses", NumClasses },
+            { "NumFeatures", NumFeatures },
+            { "TaskType", (int)TaskType },
+            { "ClassLabels", ClassLabels?.ToArray() ?? Array.Empty<T>() },
+            { "RegularizationOptions", Regularization.GetOptions() }
+        };
+
+        SerializeMatrix(modelData, "XTrain", _xTrain);
+        SerializeVector(modelData, "YTrain", _yTrain);
+        SerializeVector(modelData, "Alphas", _alphas);
+        SerializeVector(modelData, "Intercept", _intercept);
+        SerializeMatrix(modelData, "SupportVectors", _supportVectors);
+        SerializeMatrix(modelData, "DualCoef", _dualCoef);
+
+        var modelMetadata = GetModelMetadata();
+        modelMetadata.ModelData = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelData));
+        return Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelMetadata));
+    }
+
+    /// <inheritdoc/>
+    public override void Deserialize(byte[] modelData)
+    {
+        var jsonString = Encoding.UTF8.GetString(modelData);
+        var modelMetadata = JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString);
+
+        if (modelMetadata == null || modelMetadata.ModelData == null)
+            throw new InvalidOperationException("Deserialization failed: The model data is invalid or corrupted.");
+
+        var modelDataString = Encoding.UTF8.GetString(modelMetadata.ModelData);
+        var modelDataObj = JsonConvert.DeserializeObject<JObject>(modelDataString);
+
+        if (modelDataObj == null)
+            throw new InvalidOperationException("Deserialization failed: The model data is invalid or corrupted.");
+
+        NumClasses = modelDataObj["NumClasses"]?.ToObject<int>() ?? 0;
+        NumFeatures = modelDataObj["NumFeatures"]?.ToObject<int>() ?? 0;
+        TaskType = (ClassificationTaskType)(modelDataObj["TaskType"]?.ToObject<int>() ?? 0);
+
+        var classLabelsToken = modelDataObj["ClassLabels"];
+        if (classLabelsToken is not null)
+        {
+            var classLabelsAsDoubles = classLabelsToken.ToObject<double[]>() ?? Array.Empty<double>();
+            if (classLabelsAsDoubles.Length > 0)
+            {
+                ClassLabels = new Vector<T>(classLabelsAsDoubles.Length);
+                for (int i = 0; i < classLabelsAsDoubles.Length; i++)
+                    ClassLabels[i] = NumOps.FromDouble(classLabelsAsDoubles[i]);
+            }
+        }
+
+        _xTrain = DeserializeMatrix(modelDataObj, "XTrain");
+        _yTrain = DeserializeVector(modelDataObj, "YTrain");
+        _alphas = DeserializeVector(modelDataObj, "Alphas");
+        _intercept = DeserializeVector(modelDataObj, "Intercept");
+        _supportVectors = DeserializeMatrix(modelDataObj, "SupportVectors");
+        _dualCoef = DeserializeMatrix(modelDataObj, "DualCoef");
+    }
+
+    private void SerializeMatrix(Dictionary<string, object> data, string name, Matrix<T>? matrix)
+    {
+        if (matrix is null) return;
+        var arr = new double[matrix.Rows * matrix.Columns];
+        int idx = 0;
+        for (int i = 0; i < matrix.Rows; i++)
+            for (int j = 0; j < matrix.Columns; j++)
+                arr[idx++] = NumOps.ToDouble(matrix[i, j]);
+        data[name] = arr;
+        data[$"{name}Rows"] = matrix.Rows;
+        data[$"{name}Cols"] = matrix.Columns;
+    }
+
+    private Matrix<T>? DeserializeMatrix(JObject obj, string name)
+    {
+        var token = obj[name];
+        if (token is null) return null;
+        var arr = token.ToObject<double[]>() ?? Array.Empty<double>();
+        int rows = obj[$"{name}Rows"]?.ToObject<int>() ?? 0;
+        int cols = obj[$"{name}Cols"]?.ToObject<int>() ?? 0;
+        if (rows <= 0 || cols <= 0) return null;
+        var matrix = new Matrix<T>(rows, cols);
+        int idx = 0;
+        for (int i = 0; i < rows; i++)
+            for (int j = 0; j < cols; j++)
+                matrix[i, j] = NumOps.FromDouble(arr[idx++]);
+        return matrix;
+    }
+
+    private void SerializeVector(Dictionary<string, object> data, string name, Vector<T>? vector)
+    {
+        if (vector is null) return;
+        var arr = new double[vector.Length];
+        for (int i = 0; i < vector.Length; i++)
+            arr[i] = NumOps.ToDouble(vector[i]);
+        data[name] = arr;
+    }
+
+    private Vector<T>? DeserializeVector(JObject obj, string name)
+    {
+        var token = obj[name];
+        if (token is null) return null;
+        var arr = token.ToObject<double[]>() ?? Array.Empty<double>();
+        if (arr.Length == 0) return null;
+        var vector = new Vector<T>(arr.Length);
+        for (int i = 0; i < arr.Length; i++)
+            vector[i] = NumOps.FromDouble(arr[i]);
+        return vector;
     }
 }

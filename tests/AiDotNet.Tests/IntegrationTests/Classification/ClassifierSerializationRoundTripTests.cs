@@ -527,6 +527,97 @@ public class ClassifierSerializationRoundTripTests
 
     #endregion
 
+    #region Full SVM Serialize Round-trips
+
+    [Fact]
+    public void SVC_SerializeRoundTrip_PredictionsMatch()
+    {
+        var (trainX, trainY) = CreateBinaryData(60, 2, separation: 5.0, seed: 42);
+        var classifier = new SupportVectorClassifier<double>(new SVMOptions<double>
+        {
+            C = 1.0,
+            Kernel = KernelType.RBF,
+            MaxIterations = 200,
+            Tolerance = 1e-3,
+            Seed = 42
+        });
+        classifier.Train(trainX, trainY);
+
+        var testX = CreateRandomMatrix(10, 2, seed: 1600);
+        var original = classifier.Predict(testX);
+
+        var bytes = classifier.Serialize();
+        var restored = new SupportVectorClassifier<double>(new SVMOptions<double>
+        {
+            C = 1.0,
+            Kernel = KernelType.RBF,
+            MaxIterations = 200,
+            Tolerance = 1e-3,
+            Seed = 42
+        });
+        restored.Deserialize(bytes);
+        var restoredPreds = restored.Predict(testX);
+
+        AssertPredictionsMatch(original, restoredPreds, "SupportVectorClassifier");
+    }
+
+    [Fact]
+    public void NuSVC_SerializeRoundTrip_PredictionsMatch()
+    {
+        var (trainX, trainY) = CreateBinaryData(60, 2, separation: 5.0, seed: 42);
+        var classifier = new NuSupportVectorClassifier<double>(new SVMOptions<double>
+        {
+            C = 1.0,
+            Kernel = KernelType.RBF,
+            MaxIterations = 200,
+            Tolerance = 1e-3,
+            Seed = 42
+        });
+        classifier.Train(trainX, trainY);
+
+        var testX = CreateRandomMatrix(10, 2, seed: 1700);
+        var original = classifier.Predict(testX);
+
+        var bytes = classifier.Serialize();
+        var restored = new NuSupportVectorClassifier<double>(new SVMOptions<double>
+        {
+            C = 1.0,
+            Kernel = KernelType.RBF,
+            MaxIterations = 200,
+            Tolerance = 1e-3,
+            Seed = 42
+        });
+        restored.Deserialize(bytes);
+        var restoredPreds = restored.Predict(testX);
+
+        AssertPredictionsMatch(original, restoredPreds, "NuSupportVectorClassifier");
+    }
+
+    [Fact]
+    public void SVC_DeepCopy_PreservesTrainedState()
+    {
+        var (trainX, trainY) = CreateBinaryData(60, 2, separation: 5.0, seed: 42);
+        var classifier = new SupportVectorClassifier<double>(new SVMOptions<double>
+        {
+            C = 1.0,
+            Kernel = KernelType.RBF,
+            MaxIterations = 200,
+            Tolerance = 1e-3,
+            Seed = 42
+        });
+        classifier.Train(trainX, trainY);
+
+        var testX = CreateRandomMatrix(10, 2, seed: 1600);
+        var original = classifier.Predict(testX);
+
+        var copy = classifier.DeepCopy();
+        var copyPreds = copy.Predict(testX);
+
+        AssertPredictionsMatch(original, (Vector<double>)copyPreds, "SVC DeepCopy");
+    }
+
+    #endregion
+
     #region SVM Accuracy Validation
 
     [Fact]
