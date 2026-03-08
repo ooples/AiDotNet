@@ -399,9 +399,11 @@ public class RIFE<T> : FrameInterpolationBase<T>
             var blockGradient = _flowBlocks[i].Backward(fusedGradient);
 
             // Split gradient for fused and flow components
+            // The block input was [fused, flow], so fused channels = blockInput channels - flow channels
+            int fusedChannels = _cachedFlowBlockInputs[i].Shape[1] - cachedFlow.Shape[1];
             var (fusedGrad, flowGrad) = SplitConcatenatedGradient(
                 blockGradient,
-                _cachedFlowBlockOutputs[Math.Max(0, i - 1)].Shape[1],
+                fusedChannels,
                 cachedFlow.Shape[1]);
 
             // Accumulate flow gradients

@@ -778,20 +778,25 @@ public class FILM<T> : FrameInterpolationBase<T>
         if (_cachedFeatures1 == null || _cachedFeatures2 == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
+        // Fail fast on all required backward-pass caches
+        var cachedFusionActivations = _cachedFusionActivations
+            ?? throw new InvalidOperationException("Cached fusion activations have not been initialized. Forward pass must populate all caches.");
+        var cachedFlowEstimatorActivations = _cachedFlowEstimatorActivations
+            ?? throw new InvalidOperationException("Cached flow estimator activations have not been initialized. Forward pass must populate all caches.");
+
         // 1. Backpropagate through synthesis head
         gradient = _synthesisHead.Backward(gradient);
 
         // 2. Backpropagate through fusion layers (reverse order)
         // Apply LeakyReLU gradient for each layer
-        if (_cachedFusionActivations != null)
         {
-            int actIdx = _cachedFusionActivations.Count - 1;
+            int actIdx = cachedFusionActivations.Count - 1;
             for (int i = _fusionLayers.Count - 1; i >= 0; i--)
             {
                 // LeakyReLU gradient
                 if (actIdx >= 1)
                 {
-                    var preActivation = _cachedFusionActivations[actIdx - 1];
+                    var preActivation = cachedFusionActivations[actIdx - 1];
                     gradient = ApplyLeakyReLUGradient(gradient, preActivation, 0.2);
                     actIdx--;
                 }
@@ -843,15 +848,14 @@ public class FILM<T> : FrameInterpolationBase<T>
         // 7. Backpropagate through flow estimator
         var gradFlowCombined = CombineFlowGradients(gradFlow1to2, gradFlow2to1);
 
-        if (_cachedFlowEstimatorActivations != null)
         {
-            int actIdx = _cachedFlowEstimatorActivations.Count - 1;
+            int actIdx = cachedFlowEstimatorActivations.Count - 1;
             for (int i = _flowEstimator.Count - 1; i >= 0; i--)
             {
                 // Apply LeakyReLU gradient for non-final layers
                 if (i < _flowEstimator.Count - 1 && actIdx >= 1)
                 {
-                    var preActivation = _cachedFlowEstimatorActivations[actIdx - 1];
+                    var preActivation = cachedFlowEstimatorActivations[actIdx - 1];
                     gradFlowCombined = ApplyLeakyReLUGradient(gradFlowCombined, preActivation, 0.2);
                     actIdx--;
                 }
