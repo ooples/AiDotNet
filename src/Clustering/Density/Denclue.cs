@@ -299,7 +299,14 @@ public class Denclue<T> : ClusteringBase<T>
 
     private T EuclideanDistance(T[] a, T[] b)
     {
-        return VectorHelper.EuclideanDistance(new Vector<T>(a), new Vector<T>(b));
+        T sum = NumOps.Zero;
+        for (int i = 0; i < a.Length; i++)
+        {
+            T diff = NumOps.Subtract(a[i], b[i]);
+            sum = NumOps.Add(sum, NumOps.Multiply(diff, diff));
+        }
+
+        return NumOps.Sqrt(sum);
     }
 
     /// <summary>

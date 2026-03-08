@@ -92,6 +92,17 @@ public class SCiForest<T> : AnomalyDetectorBase<T>
                 "Sparsity must be between 0 (exclusive) and 1 (inclusive). Recommended is 0.2.");
         }
 
+        // SCiForest requires negative and fractional values for random projections,
+        // thresholds, and scoring. Integer types will produce incorrect results.
+        var typeCode = Type.GetTypeCode(typeof(T));
+        if (typeCode is TypeCode.Int32 or TypeCode.Int64 or TypeCode.UInt32 or TypeCode.UInt64
+            or TypeCode.Int16 or TypeCode.UInt16 or TypeCode.Byte or TypeCode.SByte)
+        {
+            throw new NotSupportedException(
+                $"SCiForest does not support integer type '{typeof(T).Name}'. " +
+                "Use a floating-point type such as float or double.");
+        }
+
         _numTrees = numTrees;
         _maxSamples = maxSamples;
         _sparsity = sparsity;
@@ -129,7 +140,7 @@ public class SCiForest<T> : AnomalyDetectorBase<T>
             var sampleData = sampleIndices.Select(i => data[i]).ToArray();
 
             // Build tree
-            var tree = new SCiTree(_nFeatures, _sparsity, random);
+            var tree = new SCiTree(_nFeatures, _sparsity, random, NumOps);
             tree.Build(sampleData, 0, maxDepth);
             _trees.Add(tree);
         }
@@ -219,10 +230,10 @@ public class SCiForest<T> : AnomalyDetectorBase<T>
 
     private class SCiTree
     {
-        private static readonly INumericOperations<T> Ops = MathHelper.GetNumericOperations<T>();
+        private readonly INumericOperations<T> _ops;
 
         /// <summary>Minimum range threshold below which a feature dimension is considered constant.</summary>
-        private static readonly T MinRangeTolerance = Ops.FromDouble(1e-10);
+        private readonly T _minRangeTolerance;
 
         private readonly int _nFeatures;
         private readonly double _sparsity;
@@ -234,13 +245,15 @@ public class SCiForest<T> : AnomalyDetectorBase<T>
         private int _size;
         private bool _isLeaf;
 
-        public SCiTree(int nFeatures, double sparsity, Random random)
+        public SCiTree(int nFeatures, double sparsity, Random random, INumericOperations<T> numOps)
         {
+            _ops = numOps;
+            _minRangeTolerance = _ops.FromDouble(1e-10);
             _nFeatures = nFeatures;
             _sparsity = sparsity;
             _random = random;
             _isLeaf = true;
-            _threshold = Ops.Zero;
+            _threshold = _ops.Zero;
         }
 
         public void Build(T[][] data, int currentDepth, int maxDepth)
@@ -255,7 +268,7 @@ public class SCiForest<T> : AnomalyDetectorBase<T>
 
             // Generate sparse random projection
             _sparseWeights = new T[_nFeatures];
-            for (int j = 0; j < _nFeatures; j++) _sparseWeights[j] = Ops.Zero;
+            for (int j = 0; j < _nFeatures; j++) _sparseWeights[j] = _ops.Zero;
 
             int numActive = Math.Max(1, (int)(_nFeatures * _sparsity));
 
@@ -267,7 +280,7 @@ public class SCiForest<T> : AnomalyDetectorBase<T>
             foreach (int f in activeFeatures)
             {
                 // Random weight: +1 or -1
-                _sparseWeights[f] = _random.NextDouble() < 0.5 ? Ops.One : Ops.Negate(Ops.One);
+                _sparseWeights[f] = _random.NextDouble() < 0.5 ? _ops.One : _ops.Negate(_ops.One);
             }
 
             // Compute projections
@@ -277,18 +290,18 @@ public class SCiForest<T> : AnomalyDetectorBase<T>
             T maxProj = projections[0];
             for (int i = 1; i < projections.Length; i++)
             {
-                if (Ops.LessThan(projections[i], minProj)) minProj = projections[i];
-                if (Ops.GreaterThan(projections[i], maxProj)) maxProj = projections[i];
+                if (_ops.LessThan(projections[i], minProj)) minProj = projections[i];
+                if (_ops.GreaterThan(projections[i], maxProj)) maxProj = projections[i];
             }
 
-            T range = Ops.Subtract(maxProj, minProj);
-            if (Ops.LessThan(range, MinRangeTolerance))
+            T range = _ops.Subtract(maxProj, minProj);
+            if (_ops.LessThan(range, _minRangeTolerance))
             {
                 _isLeaf = true;
                 return;
             }
 
-            _threshold = Ops.Add(minProj, Ops.Multiply(Ops.FromDouble(_random.NextDouble()), range));
+            _threshold = _ops.Add(minProj, _ops.Multiply(_ops.FromDouble(_random.NextDouble()), range));
 
             // Split data
             var leftData = new List<T[]>();
@@ -296,7 +309,7 @@ public class SCiForest<T> : AnomalyDetectorBase<T>
 
             for (int i = 0; i < data.Length; i++)
             {
-                if (Ops.LessThan(projections[i], _threshold))
+                if (_ops.LessThan(projections[i], _threshold))
                     leftData.Add(data[i]);
                 else
                     rightData.Add(data[i]);
@@ -309,8 +322,8 @@ public class SCiForest<T> : AnomalyDetectorBase<T>
             }
 
             _isLeaf = false;
-            _left = new SCiTree(_nFeatures, _sparsity, _random);
-            _right = new SCiTree(_nFeatures, _sparsity, _random);
+            _left = new SCiTree(_nFeatures, _sparsity, _random, _ops);
+            _right = new SCiTree(_nFeatures, _sparsity, _random, _ops);
 
             _left.Build(leftData.ToArray(), currentDepth + 1, maxDepth);
             _right.Build(rightData.ToArray(), currentDepth + 1, maxDepth);
@@ -320,7 +333,7 @@ public class SCiForest<T> : AnomalyDetectorBase<T>
         {
             if (_isLeaf)
             {
-                return Ops.Add(Ops.FromDouble(currentDepth), EstimateC(_size));
+                return _ops.Add(_ops.FromDouble(currentDepth), EstimateC(_size));
             }
 
             var sparseWeights = _sparseWeights;
@@ -329,32 +342,34 @@ public class SCiForest<T> : AnomalyDetectorBase<T>
 
             if (sparseWeights is null || left is null || right is null)
             {
-                return Ops.Add(Ops.FromDouble(currentDepth), EstimateC(_size));
+                throw new InvalidOperationException(
+                    "Non-leaf SCiTree node has uninitialized children or weights. " +
+                    "This indicates a corrupted tree structure.");
             }
 
             T projection = DotProduct(point, sparseWeights);
 
-            if (Ops.LessThan(projection, _threshold))
+            if (_ops.LessThan(projection, _threshold))
                 return left.PathLength(point, currentDepth + 1);
             else
                 return right.PathLength(point, currentDepth + 1);
         }
 
-        private static T DotProduct(T[] a, T[] b)
+        private T DotProduct(T[] a, T[] b)
         {
-            T sum = Ops.Zero;
+            T sum = _ops.Zero;
             for (int i = 0; i < a.Length; i++)
             {
-                sum = Ops.Add(sum, Ops.Multiply(a[i], b[i]));
+                sum = _ops.Add(sum, _ops.Multiply(a[i], b[i]));
             }
             return sum;
         }
 
-        private static T EstimateC(int n)
+        private T EstimateC(int n)
         {
             if (n > 2)
-                return Ops.FromDouble(2 * (Math.Log(n - 1) + 0.5772156649) - (2.0 * (n - 1) / n));
-            return Ops.FromDouble(n == 2 ? 1 : 0);
+                return _ops.FromDouble(2 * (Math.Log(n - 1) + 0.5772156649) - (2.0 * (n - 1) / n));
+            return _ops.FromDouble(n == 2 ? 1 : 0);
         }
     }
 }

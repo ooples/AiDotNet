@@ -364,8 +364,9 @@ public class MiniBatchKMeans<T> : ClusteringBase<T>
                 }
 
                 // Update center
-                (_centerCounts ?? throw new InvalidOperationException("_centerCounts has not been initialized."))[bestCluster]++;
-                double eta = 1.0 / _centerCounts[bestCluster];
+                var centerCounts = _centerCounts ?? throw new InvalidOperationException("_centerCounts has not been initialized.");
+                centerCounts[bestCluster]++;
+                double eta = 1.0 / centerCounts[bestCluster];
 
                 for (int j = 0; j < d; j++)
                 {
