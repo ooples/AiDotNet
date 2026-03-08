@@ -312,7 +312,7 @@ public class COPKMeans<T> : ClusteringBase<T>
     private bool ViolatesConstraints(int pointIdx, int cluster, int[] labels)
     {
         // Check must-link constraints
-        foreach (var (i, j) in _mustLinkClosure!)
+        foreach (var (i, j) in (_mustLinkClosure ?? throw new InvalidOperationException("COPKMeans: Must-link closure not initialized."))
         {
             if (i == pointIdx || j == pointIdx)
             {
@@ -325,7 +325,7 @@ public class COPKMeans<T> : ClusteringBase<T>
         }
 
         // Check cannot-link constraints
-        foreach (var (i, j) in _cannotLinkClosure!)
+        foreach (var (i, j) in (_cannotLinkClosure ?? throw new InvalidOperationException("COPKMeans: Cannot-link closure not initialized."))
         {
             if (i == pointIdx || j == pointIdx)
             {
@@ -344,7 +344,7 @@ public class COPKMeans<T> : ClusteringBase<T>
     {
         int violations = 0;
 
-        foreach (var (i, j) in _mustLinkClosure!)
+        foreach (var (i, j) in (_mustLinkClosure ?? throw new InvalidOperationException("COPKMeans: Must-link closure not initialized."))
         {
             if (labels[i] != labels[j])
             {
@@ -352,7 +352,7 @@ public class COPKMeans<T> : ClusteringBase<T>
             }
         }
 
-        foreach (var (i, j) in _cannotLinkClosure!)
+        foreach (var (i, j) in (_cannotLinkClosure ?? throw new InvalidOperationException("COPKMeans: Cannot-link closure not initialized."))
         {
             if (labels[i] == labels[j])
             {
@@ -462,6 +462,6 @@ public class COPKMeans<T> : ClusteringBase<T>
     public override Vector<T> FitPredict(Matrix<T> x)
     {
         Train(x);
-        return Labels!;
+        return Labels ?? throw new InvalidOperationException("Labels have not been computed.");
     }
 }

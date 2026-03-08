@@ -205,7 +205,7 @@ public class DBSCAN<T> : ClusteringBase<T>
             int current = queue.Dequeue();
 
             // If current is a core point, expand to its neighbors
-            if (_corePointMask![current])
+            if ((_corePointMask ?? throw new InvalidOperationException("DBSCAN: Core point mask not initialized."))[current])
             {
                 foreach (int neighborIdx in neighbors[current])
                 {
@@ -379,7 +379,7 @@ public class DBSCAN<T> : ClusteringBase<T>
     public override Vector<T> FitPredict(Matrix<T> x)
     {
         Train(x);
-        return Labels!;
+        return Labels ?? throw new InvalidOperationException("Labels have not been computed.");
     }
 
     /// <inheritdoc />

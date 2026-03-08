@@ -363,7 +363,7 @@ public class AgglomerativeClustering<T> : ClusteringBase<T>
         }
 
         int nextId = n;
-        foreach (var (c1, c2, dist, size) in _dendrogram!)
+        foreach (var (c1, c2, dist, size) in (_dendrogram ?? throw new InvalidOperationException("AgglomerativeClustering: Dendrogram not computed."))
         {
             parent[c1] = nextId;
             parent[c2] = nextId;
@@ -474,7 +474,7 @@ public class AgglomerativeClustering<T> : ClusteringBase<T>
     public override Vector<T> FitPredict(Matrix<T> x)
     {
         Train(x);
-        return Labels!;
+        return Labels ?? throw new InvalidOperationException("Labels have not been computed.");
     }
 
     /// <summary>

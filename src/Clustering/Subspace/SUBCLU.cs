@@ -508,7 +508,7 @@ public class SUBCLU<T> : ClusteringBase<T>
         }
 
         // Sort clusters by dimensionality (prefer higher dimensional matches)
-        var sortedClusters = _subspaceClusterInfos!
+        var sortedClusters = (_subspaceClusterInfos ?? throw new InvalidOperationException("SUBCLU: Subspace cluster infos not computed."))
             .OrderByDescending(c => c.Dimensions.Length)
             .ToList();
 
@@ -525,7 +525,7 @@ public class SUBCLU<T> : ClusteringBase<T>
                 foreach (int corePointIdx in cluster.CorePoints)
                 {
                     double dist = ComputeSubspaceDistanceToPoint(
-                        _trainingData!, corePointIdx, x, i, cluster.Dimensions);
+                        (_trainingData ?? throw new InvalidOperationException("SUBCLU: Training data not initialized.")), corePointIdx, x, i, cluster.Dimensions);
 
                     if (dist <= _options.Epsilon)
                     {
@@ -560,7 +560,7 @@ public class SUBCLU<T> : ClusteringBase<T>
 
         for (int i = 0; i < n; i++)
         {
-            int label = (int)NumOps.ToDouble(Labels![i]);
+            int label = (int)NumOps.ToDouble((Labels ?? throw new InvalidOperationException("Labels have not been computed."))[i]);
             if (label >= 0 && label < NumClusters)
             {
                 counts[label]++;

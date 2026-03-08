@@ -189,7 +189,7 @@ public class SelfOrganizingMap<T> : ClusteringBase<T>
 
             var (bmuRow, bmuCol) = FindBMU(sample, d);
             int neuronIdx = bmuRow * width + bmuCol;
-            Labels[i] = NumOps.FromDouble(_neuronLabels![neuronIdx]);
+            Labels[i] = NumOps.FromDouble((_neuronLabels ?? throw new InvalidOperationException("SOM: Neuron labels not computed."))[neuronIdx]);
         }
 
         IsTrained = true;
@@ -208,7 +208,7 @@ public class SelfOrganizingMap<T> : ClusteringBase<T>
                 double dist = 0;
                 for (int j = 0; j < d; j++)
                 {
-                    double diff = sample[j] - _weights![r, c][j];
+                    double diff = sample[j] - (_weights ?? throw new InvalidOperationException("SOM: Weights not initialized."))[r, c][j];
                     dist += diff * diff;
                 }
 
@@ -278,7 +278,7 @@ public class SelfOrganizingMap<T> : ClusteringBase<T>
         {
             for (int c = 0; c < width; c++)
             {
-                neuronWeights[r * width + c] = _weights![r, c];
+                neuronWeights[r * width + c] = (_weights ?? throw new InvalidOperationException("SOM: Weights not initialized."))[r, c];
             }
         }
 
@@ -431,7 +431,7 @@ public class SelfOrganizingMap<T> : ClusteringBase<T>
                         double dist = 0;
                         for (int j = 0; j < d; j++)
                         {
-                            double diff = _weights![r, c][j] - _weights[nr, nc][j];
+                            double diff = (_weights ?? throw new InvalidOperationException("SOM: Weights not initialized."))[r, c][j] - _weights[nr, nc][j];
                             dist += diff * diff;
                         }
 
@@ -467,7 +467,7 @@ public class SelfOrganizingMap<T> : ClusteringBase<T>
 
             var (bmuRow, bmuCol) = FindBMU(sample, d);
             int neuronIdx = bmuRow * width + bmuCol;
-            labels[i] = NumOps.FromDouble(_neuronLabels![neuronIdx]);
+            labels[i] = NumOps.FromDouble((_neuronLabels ?? throw new InvalidOperationException("SOM: Neuron labels not computed."))[neuronIdx]);
         }
 
         return labels;
@@ -477,6 +477,6 @@ public class SelfOrganizingMap<T> : ClusteringBase<T>
     public override Vector<T> FitPredict(Matrix<T> x)
     {
         Train(x);
-        return Labels!;
+        return Labels ?? throw new InvalidOperationException("Labels have not been computed.");
     }
 }

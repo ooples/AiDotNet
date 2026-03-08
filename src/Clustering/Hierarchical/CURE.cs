@@ -264,7 +264,7 @@ public class CURE<T> : ClusteringBase<T>
         int bestI = -1, bestJ = -1;
         double minDistance = double.MaxValue;
 
-        for (int i = 0; i < _clusters!.Count; i++)
+        for (int i = 0; i < (_clusters ?? throw new InvalidOperationException("CURE: Clusters not initialized.")).Count; i++)
         {
             for (int j = i + 1; j < _clusters.Count; j++)
             {
@@ -460,7 +460,7 @@ public class CURE<T> : ClusteringBase<T>
         int nearest = 0;
         double minDist = double.MaxValue;
 
-        for (int i = 0; i < _clusters!.Count; i++)
+        for (int i = 0; i < (_clusters ?? throw new InvalidOperationException("CURE: Clusters not initialized.")).Count; i++)
         {
             foreach (var rep in _clusters[i].Representatives)
             {
@@ -491,7 +491,7 @@ public class CURE<T> : ClusteringBase<T>
 
         for (int i = 0; i < n; i++)
         {
-            int label = (int)NumOps.ToDouble(Labels![i]);
+            int label = (int)NumOps.ToDouble((Labels ?? throw new InvalidOperationException("Labels have not been computed."))[i]);
             if (label >= 0 && label < NumClusters)
             {
                 counts[label]++;

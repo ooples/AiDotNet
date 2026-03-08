@@ -146,7 +146,7 @@ public class ConsensusClustering<T> : ClusteringBase<T>
         });
 
         kmeans.Train(x);
-        var labels = kmeans.Labels!;
+        var labels = (kmeans.Labels ?? throw new InvalidOperationException("KMeans: Labels not computed."));
 
         var result = new int[n];
         for (int i = 0; i < n; i++)
@@ -416,6 +416,6 @@ public class ConsensusClustering<T> : ClusteringBase<T>
     public override Vector<T> FitPredict(Matrix<T> x)
     {
         Train(x);
-        return Labels!;
+        return Labels ?? throw new InvalidOperationException("Labels have not been computed.");
     }
 }

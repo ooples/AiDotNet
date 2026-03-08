@@ -189,7 +189,7 @@ public class KDTree<T>
         QuickSelect(indices, start, end - 1, medianIdx, splitDim);
 
         int splitPointIndex = indices[medianIdx];
-        T splitValue = _data![splitPointIndex, splitDim];
+        T splitValue = (_data ?? throw new InvalidOperationException("KDTree: Data not initialized."))[splitPointIndex, splitDim];
 
         var node = new KDNode
         {
@@ -251,7 +251,7 @@ public class KDTree<T>
             Swap(indices, mid, right);
         }
 
-        T pivotValue = _data![indices[right], dimension];
+        T pivotValue = (_data ?? throw new InvalidOperationException("KDTree: Data not initialized."))[indices[right], dimension];
         int storeIndex = left;
 
         for (int i = left; i < right; i++)
@@ -269,7 +269,7 @@ public class KDTree<T>
 
     private int Compare(int idx1, int idx2, int dimension)
     {
-        double v1 = _numOps.ToDouble(_data![idx1, dimension]);
+        double v1 = _numOps.ToDouble((_data ?? throw new InvalidOperationException("KDTree: Data not initialized."))[idx1, dimension]);
         double v2 = _numOps.ToDouble(_data[idx2, dimension]);
         return v1.CompareTo(v2);
     }
@@ -286,7 +286,7 @@ public class KDTree<T>
         if (node.IsLeaf)
         {
             // Check all points in leaf
-            foreach (int idx in node.Indices!)
+            foreach (int idx in (node.Indices ?? throw new InvalidOperationException("KDTree: Leaf node has null indices.")))
             {
                 T dist = ComputeDistance(query, idx);
                 heap.TryAdd(idx, dist);
@@ -331,7 +331,7 @@ public class KDTree<T>
     {
         if (node.IsLeaf)
         {
-            foreach (int idx in node.Indices!)
+            foreach (int idx in (node.Indices ?? throw new InvalidOperationException("KDTree: Leaf node has null indices.")))
             {
                 T dist = ComputeDistance(query, idx);
                 if (_numOps.ToDouble(dist) <= _numOps.ToDouble(radius))
@@ -374,7 +374,7 @@ public class KDTree<T>
     {
         if (node.IsLeaf)
         {
-            foreach (int idx in node.Indices!)
+            foreach (int idx in (node.Indices ?? throw new InvalidOperationException("KDTree: Leaf node has null indices.")))
             {
                 T squaredDist = ComputeSquaredDistance(query, idx);
                 if (_numOps.ToDouble(squaredDist) <= _numOps.ToDouble(squaredRadius))
@@ -415,14 +415,14 @@ public class KDTree<T>
 
     private T ComputeDistance(Vector<T> query, int dataIndex)
     {
-        var point = GetRow(_data!, dataIndex);
+        var point = GetRow((_data ?? throw new InvalidOperationException("KDTree: Data not initialized.")), dataIndex);
         return _distanceMetric.Compute(query, point);
     }
 
     private T ComputeSquaredDistance(Vector<T> query, int dataIndex)
     {
         var engine = AiDotNetEngine.Current;
-        var point = GetRow(_data!, dataIndex);
+        var point = GetRow((_data ?? throw new InvalidOperationException("KDTree: Data not initialized.")), dataIndex);
         var diff = engine.Subtract(query, point);
         return engine.DotProduct(diff, diff);
     }

@@ -361,11 +361,11 @@ public class Denclue<T> : ClusteringBase<T>
             double dist2 = 0;
             for (int j = 0; j < d; j++)
             {
-                double diff = p[j] - _attractors![c][j];
+                double diff = p[j] - (_attractors ?? throw new InvalidOperationException("Denclue: Attractors not initialized."))[c][j];
                 dist2 += diff * diff;
             }
 
-            sum += _attractorDensities![c] * Math.Exp(-dist2 / (2 * h2));
+            sum += (_attractorDensities ?? throw new InvalidOperationException("Denclue: Attractor densities not initialized."))[c] * Math.Exp(-dist2 / (2 * h2));
         }
 
         return sum;
@@ -410,6 +410,6 @@ public class Denclue<T> : ClusteringBase<T>
     public override Vector<T> FitPredict(Matrix<T> x)
     {
         Train(x);
-        return Labels!;
+        return Labels ?? throw new InvalidOperationException("Labels have not been computed.");
     }
 }

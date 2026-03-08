@@ -286,7 +286,7 @@ public class BisectingKMeans<T> : ClusteringBase<T>
             for (int k = 0; k < NumClusters; k++)
             {
                 var point = GetRow(x, i);
-                var center = GetRow(ClusterCenters!, k);
+                var center = GetRow((ClusterCenters ?? throw new InvalidOperationException("BisectingKMeans: Cluster centers not computed.")), k);
                 double dist = NumOps.ToDouble(_distanceMetric.Compute(point, center));
 
                 if (dist < minDist)

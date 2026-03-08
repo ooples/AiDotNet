@@ -451,7 +451,7 @@ public class SpectralClustering<T> : ClusteringBase<T>
                 Seed = Options.Seed
             });
             kmeans.Train(embeddingMatrix);
-            return kmeans.Labels!;
+            return (kmeans.Labels ?? throw new InvalidOperationException("KMeans: Labels not computed."));
         }
         else
         {
@@ -562,7 +562,7 @@ public class SpectralClustering<T> : ClusteringBase<T>
     public override Vector<T> FitPredict(Matrix<T> x)
     {
         Train(x);
-        return Labels!;
+        return Labels ?? throw new InvalidOperationException("Labels have not been computed.");
     }
 
     /// <summary>
@@ -573,7 +573,7 @@ public class SpectralClustering<T> : ClusteringBase<T>
     {
         ValidateIsTrained();
 
-        int n = _embedding!.GetLength(0);
+        int n = (_embedding ?? throw new InvalidOperationException("SpectralClustering: Embedding not computed.")).GetLength(0);
         int k = _embedding.GetLength(1);
         var result = new Matrix<T>(n, k);
 

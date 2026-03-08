@@ -103,7 +103,7 @@ public class GMeans<T> : ClusteringBase<T>
         var currentLabels = new int[n];
         for (int i = 0; i < n; i++)
         {
-            currentLabels[i] = (int)NumOps.ToDouble(kmeans.Labels![i]);
+            currentLabels[i] = (int)NumOps.ToDouble((kmeans.Labels ?? throw new InvalidOperationException("KMeans: Labels not computed."))[i]);
         }
 
         var currentCenters = new List<double[]>();
@@ -112,7 +112,7 @@ public class GMeans<T> : ClusteringBase<T>
             var center = new double[d];
             for (int j = 0; j < d; j++)
             {
-                center[j] = NumOps.ToDouble(kmeans.ClusterCenters![c, j]);
+                center[j] = NumOps.ToDouble((kmeans.ClusterCenters ?? throw new InvalidOperationException("KMeans: Cluster centers not computed."))[c, j]);
             }
             currentCenters.Add(center);
         }
@@ -177,7 +177,7 @@ public class GMeans<T> : ClusteringBase<T>
                         var center = new double[d];
                         for (int j = 0; j < d; j++)
                         {
-                            center[j] = NumOps.ToDouble(subKMeans.ClusterCenters![sc, j]);
+                            center[j] = NumOps.ToDouble((subKMeans.ClusterCenters ?? throw new InvalidOperationException("KMeans: Cluster centers not computed."))[sc, j]);
                         }
                         newCenters.Add(center);
                     }
@@ -185,7 +185,7 @@ public class GMeans<T> : ClusteringBase<T>
                     // Update labels for points in this cluster
                     for (int i = 0; i < clusterPoints.Count; i++)
                     {
-                        int subLabel = (int)NumOps.ToDouble(subKMeans.Labels![i]);
+                        int subLabel = (int)NumOps.ToDouble((subKMeans.Labels ?? throw new InvalidOperationException("KMeans: Labels not computed."))[i]);
                         newLabels[clusterPoints[i]] = newCenters.Count - 2 + subLabel;
                     }
 
@@ -439,6 +439,6 @@ public class GMeans<T> : ClusteringBase<T>
     public override Vector<T> FitPredict(Matrix<T> x)
     {
         Train(x);
-        return Labels!;
+        return Labels ?? throw new InvalidOperationException("Labels have not been computed.");
     }
 }

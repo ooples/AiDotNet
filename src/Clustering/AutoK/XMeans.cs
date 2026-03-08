@@ -107,8 +107,8 @@ public class XMeans<T> : ClusteringBase<T>
         });
 
         kmeans.Train(x);
-        var currentLabels = kmeans.Labels!;
-        var currentCenters = kmeans.ClusterCenters!;
+        var currentLabels = kmeans.Labels ?? throw new InvalidOperationException("KMeans: Labels not computed.");
+        var currentCenters = kmeans.ClusterCenters ?? throw new InvalidOperationException("KMeans: Cluster centers not computed.");
 
         // Iteratively try to split clusters
         bool improved = true;
@@ -168,7 +168,7 @@ public class XMeans<T> : ClusteringBase<T>
                 subKMeans.Train(subMatrix);
 
                 // Compute BIC for children
-                double childBIC = ComputeSplitBIC(subMatrix, subKMeans.Labels!, subKMeans.ClusterCenters!, d);
+                double childBIC = ComputeSplitBIC(subMatrix, (subKMeans.Labels ?? throw new InvalidOperationException("KMeans: Labels not computed.")), (subKMeans.ClusterCenters ?? throw new InvalidOperationException("KMeans: Cluster centers not computed.")), d);
 
                 if (childBIC < parentBIC && newCenters.Count + 1 < _options.MaxClusters)
                 {
@@ -178,13 +178,13 @@ public class XMeans<T> : ClusteringBase<T>
                         var center = new double[d];
                         for (int j = 0; j < d; j++)
                         {
-                            center[j] = NumOps.ToDouble(subKMeans.ClusterCenters![sc, j]);
+                            center[j] = NumOps.ToDouble((subKMeans.ClusterCenters ?? throw new InvalidOperationException("KMeans: Cluster centers not computed."))[sc, j]);
                         }
 
                         var subClusterPoints = new List<int>();
                         for (int i = 0; i < clusterPoints.Count; i++)
                         {
-                            if ((int)NumOps.ToDouble(subKMeans.Labels![i]) == sc)
+                            if ((int)NumOps.ToDouble((subKMeans.Labels ?? throw new InvalidOperationException("KMeans: Labels not computed."))[i]) == sc)
                             {
                                 subClusterPoints.Add(clusterPoints[i]);
                             }
@@ -404,6 +404,6 @@ public class XMeans<T> : ClusteringBase<T>
     public override Vector<T> FitPredict(Matrix<T> x)
     {
         Train(x);
-        return Labels!;
+        return Labels ?? throw new InvalidOperationException("Labels have not been computed.");
     }
 }
