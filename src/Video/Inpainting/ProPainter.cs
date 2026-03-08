@@ -75,7 +75,7 @@ public class ProPainter<T> : VideoInpaintingBase<T>
     #region Properties
 
     private ConvolutionalLayer<T> ProPainterOutputConv => _outputConv ?? throw new InvalidOperationException(
-        $"{GetType().Name}: Output convolution layer not initialized. Call InitializeLayers() first.");
+        $"{GetType().Name}: Native ProPainter layers are not initialized. Ensure construction completed successfully before use.");
 
     /// <summary>
     /// Gets whether training is supported.

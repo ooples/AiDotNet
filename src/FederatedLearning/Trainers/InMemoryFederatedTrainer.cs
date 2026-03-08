@@ -170,14 +170,24 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
             : null;
 
         var heOptions = flOptions?.HomomorphicEncryption;
-        bool useHomomorphicEncryption = heOptions?.Enabled == true;
-        var validHeOptions = useHomomorphicEncryption && heOptions is not null ? heOptions : null;
+        var validHeOptions = heOptions?.Enabled == true ? heOptions : null;
         HomomorphicEncryptionScheme heScheme = validHeOptions is not null ? validHeOptions.Scheme : HomomorphicEncryptionScheme.Ckks;
         HomomorphicEncryptionMode heMode = validHeOptions is not null ? validHeOptions.Mode : HomomorphicEncryptionMode.HeOnly;
-        var heProvider = useHomomorphicEncryption ? (_homomorphicEncryptionProviderOverride ?? new SealHomomorphicEncryptionProvider<T>()) : null;
         var encryptedIndices = validHeOptions is not null
             ? ResolveEncryptedIndices(validHeOptions, GetGlobalModel().ParameterCount, heMode)
             : Array.Empty<int>();
+        bool useHomomorphicEncryption = validHeOptions is not null &&
+            (heMode == HomomorphicEncryptionMode.HeOnly || encryptedIndices.Length > 0);
+        if (validHeOptions is not null &&
+            heMode == HomomorphicEncryptionMode.Hybrid &&
+            encryptedIndices.Length == 0)
+        {
+            throw new InvalidOperationException(
+                "Hybrid homomorphic encryption requires at least one encrypted parameter range.");
+        }
+        var heProvider = useHomomorphicEncryption
+            ? (_homomorphicEncryptionProviderOverride ?? new SealHomomorphicEncryptionProvider<T>())
+            : null;
 
         metadata.HomomorphicEncryptionEnabled = useHomomorphicEncryption;
         metadata.HomomorphicEncryptionSchemeUsed = useHomomorphicEncryption ? GetHomomorphicEncryptionSchemeName(heScheme) : "None";

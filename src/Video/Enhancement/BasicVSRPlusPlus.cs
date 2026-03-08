@@ -179,13 +179,13 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
     #region Properties
 
     private ConvolutionalLayer<T> FeatExtract => _featExtract ?? throw new InvalidOperationException(
-        $"{GetType().Name}: Feature extraction layer not initialized. Call InitializeLayers() first.");
+        $"{GetType().Name}: Native BasicVSR++ layers are not initialized. This member is only available in native mode after successful construction.");
 
     private ConvolutionalLayer<T> OutputConv => _outputConv ?? throw new InvalidOperationException(
-        $"{GetType().Name}: Output convolution layer not initialized. Call InitializeLayers() first.");
+        $"{GetType().Name}: Native BasicVSR++ layers are not initialized. This member is only available in native mode after successful construction.");
 
     private SpyNetLayer<T> FlowEstimator => _flowEstimator ?? throw new InvalidOperationException(
-        $"{GetType().Name}: Flow estimator not initialized. Call InitializeLayers() first.");
+        $"{GetType().Name}: Flow estimator is only available in native mode after successful native-layer initialization.");
 
     /// <summary>
     /// Gets whether this model uses native mode (true) or ONNX mode (false).
@@ -1121,6 +1121,9 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
             {
                 inputGradients.Add(new Tensor<T>(currentGradients[0].Shape));
             }
+
+            var cachedBackwardFeatures = _cachedBackwardPropFeatures ?? throw new InvalidOperationException(
+                "Cached backward propagation features not available. Call Forward() before Backward().");
 
             // Backward propagation went from last to first (i = numFrames-2 to 0)
             // So backward goes from first to last

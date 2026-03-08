@@ -38,7 +38,7 @@ namespace AiDotNet.Video.ActionRecognition;
 /// <b>Technical Details:</b>
 /// - Two-pathway design with lateral connections
 /// - Slow pathway: T frames, C channels
-/// - Fast pathway: αT frames, βC channels (α=8, β=1/8 typically)
+/// - Fast pathway: Î±T frames, Î²C channels (Î±=8, Î²=1/8 typically)
 /// - Lateral connections fuse information between pathways
 /// </para>
 /// <para>

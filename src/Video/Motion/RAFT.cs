@@ -85,19 +85,19 @@ public class RAFT<T> : OpticalFlowBase<T>
     #region Properties
 
     private ConvolutionalLayer<T> CorrelationConv => _correlationConv ?? throw new InvalidOperationException(
-        $"{GetType().Name}: Correlation convolution not initialized. Call InitializeLayers() first.");
+        $"{GetType().Name}: Native RAFT layers are not initialized. Ensure construction completed successfully before use.");
     private ConvolutionalLayer<T> GruConvZ => _gruConvZ ?? throw new InvalidOperationException(
-        $"{GetType().Name}: GRU Z convolution not initialized. Call InitializeLayers() first.");
+        $"{GetType().Name}: Native RAFT layers are not initialized. Ensure construction completed successfully before use.");
     private ConvolutionalLayer<T> GruConvR => _gruConvR ?? throw new InvalidOperationException(
-        $"{GetType().Name}: GRU R convolution not initialized. Call InitializeLayers() first.");
+        $"{GetType().Name}: Native RAFT layers are not initialized. Ensure construction completed successfully before use.");
     private ConvolutionalLayer<T> GruConvH => _gruConvH ?? throw new InvalidOperationException(
-        $"{GetType().Name}: GRU H convolution not initialized. Call InitializeLayers() first.");
+        $"{GetType().Name}: Native RAFT layers are not initialized. Ensure construction completed successfully before use.");
     private ConvolutionalLayer<T> FlowHead => _flowHead ?? throw new InvalidOperationException(
-        $"{GetType().Name}: Flow head not initialized. Call InitializeLayers() first.");
+        $"{GetType().Name}: Native RAFT layers are not initialized. Ensure construction completed successfully before use.");
     private ConvolutionalLayer<T> DeltaFlowHead => _deltaFlowHead ?? throw new InvalidOperationException(
-        $"{GetType().Name}: Delta flow head not initialized. Call InitializeLayers() first.");
+        $"{GetType().Name}: Native RAFT layers are not initialized. Ensure construction completed successfully before use.");
     private ConvolutionalLayer<T> UpsampleConv => _upsampleConv ?? throw new InvalidOperationException(
-        $"{GetType().Name}: Upsample convolution not initialized. Call InitializeLayers() first.");
+        $"{GetType().Name}: Native RAFT layers are not initialized. Ensure construction completed successfully before use.");
 
     /// <summary>
     /// Gets whether training is supported.
