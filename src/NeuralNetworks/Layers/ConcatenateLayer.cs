@@ -177,7 +177,9 @@ public class ConcatenateLayer<T> : LayerBase<T>
         if (needsPermute)
         {
             var invPerm = invPermutation ?? throw new InvalidOperationException("Inverse permutation has not been initialized.");
+            var prePerm = result;
             result = gpuEngine.PermuteGpu(result, invPerm);
+            prePerm.Dispose();
             // Clean up temporary permuted inputs
             foreach (var pInput in processedInputs) pInput.Dispose();
         }
