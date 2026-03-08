@@ -164,18 +164,25 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
         bool useCompression = compressionOptions != null &&
                               compressionOptions.Strategy != FederatedCompressionStrategy.None;
         metadata.CompressionEnabled = useCompression;
-        metadata.CompressionStrategyUsed = useCompression ? compressionOptions!.Strategy.ToString() : "None";
-        Dictionary<int, Vector<T>>? compressionResiduals = useCompression && compressionOptions!.UseErrorFeedback
+        if (useCompression && compressionOptions is not null)
+        {
+            metadata.CompressionStrategyUsed = compressionOptions.Strategy.ToString();
+        }
+        else
+        {
+            metadata.CompressionStrategyUsed = "None";
+        }
+        Dictionary<int, Vector<T>>? compressionResiduals = useCompression && compressionOptions is { UseErrorFeedback: true }
             ? new Dictionary<int, Vector<T>>()
             : null;
 
         var heOptions = flOptions?.HomomorphicEncryption;
         bool useHomomorphicEncryption = heOptions?.Enabled == true;
-        HomomorphicEncryptionScheme heScheme = useHomomorphicEncryption ? heOptions!.Scheme : HomomorphicEncryptionScheme.Ckks;
-        HomomorphicEncryptionMode heMode = useHomomorphicEncryption ? heOptions!.Mode : HomomorphicEncryptionMode.HeOnly;
+        HomomorphicEncryptionScheme heScheme = (useHomomorphicEncryption && heOptions is not null) ? heOptions.Scheme : HomomorphicEncryptionScheme.Ckks;
+        HomomorphicEncryptionMode heMode = (useHomomorphicEncryption && heOptions is not null) ? heOptions.Mode : HomomorphicEncryptionMode.HeOnly;
         var heProvider = useHomomorphicEncryption ? (_homomorphicEncryptionProviderOverride ?? new SealHomomorphicEncryptionProvider<T>()) : null;
-        var encryptedIndices = useHomomorphicEncryption
-            ? ResolveEncryptedIndices(heOptions!, GetGlobalModel().ParameterCount, heMode)
+        var encryptedIndices = (useHomomorphicEncryption && heOptions is not null)
+            ? ResolveEncryptedIndices(heOptions, GetGlobalModel().ParameterCount, heMode)
             : Array.Empty<int>();
 
         metadata.HomomorphicEncryptionEnabled = useHomomorphicEncryption;
@@ -189,9 +196,18 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                                   personalizationOptions.Strategy != FederatedPersonalizationStrategy.None;
 
         metadata.PersonalizationEnabled = usePersonalization;
-        metadata.PersonalizationStrategyUsed = usePersonalization ? personalizationOptions!.Strategy.ToString() : "None";
-        metadata.PersonalizedParameterFraction = usePersonalization ? personalizationOptions!.PersonalizedParameterFraction : 0.0;
-        metadata.PersonalizationLocalAdaptationEpochs = usePersonalization ? Math.Max(0, personalizationOptions!.LocalAdaptationEpochs) : 0;
+        if (usePersonalization && personalizationOptions is not null)
+        {
+            metadata.PersonalizationStrategyUsed = personalizationOptions.Strategy.ToString();
+            metadata.PersonalizedParameterFraction = personalizationOptions.PersonalizedParameterFraction;
+            metadata.PersonalizationLocalAdaptationEpochs = Math.Max(0, personalizationOptions.LocalAdaptationEpochs);
+        }
+        else
+        {
+            metadata.PersonalizationStrategyUsed = "None";
+            metadata.PersonalizedParameterFraction = 0.0;
+            metadata.PersonalizationLocalAdaptationEpochs = 0;
+        }
 
         var metaLearningOptions = flOptions?.MetaLearning;
         bool useMetaLearning = metaLearningOptions != null &&
@@ -199,9 +215,18 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                                metaLearningOptions.Strategy != FederatedMetaLearningStrategy.None;
 
         metadata.MetaLearningEnabled = useMetaLearning;
-        metadata.MetaLearningStrategyUsed = useMetaLearning ? metaLearningOptions!.Strategy.ToString() : "None";
-        metadata.MetaLearningRateUsed = useMetaLearning ? metaLearningOptions!.MetaLearningRate : 0.0;
-        metadata.MetaLearningInnerEpochsUsed = useMetaLearning ? (metaLearningOptions!.InnerEpochs > 0 ? metaLearningOptions.InnerEpochs : localEpochs) : 0;
+        if (useMetaLearning && metaLearningOptions is not null)
+        {
+            metadata.MetaLearningStrategyUsed = metaLearningOptions.Strategy.ToString();
+            metadata.MetaLearningRateUsed = metaLearningOptions.MetaLearningRate;
+            metadata.MetaLearningInnerEpochsUsed = metaLearningOptions.InnerEpochs > 0 ? metaLearningOptions.InnerEpochs : localEpochs;
+        }
+        else
+        {
+            metadata.MetaLearningStrategyUsed = "None";
+            metadata.MetaLearningRateUsed = 0.0;
+            metadata.MetaLearningInnerEpochsUsed = 0;
+        }
 
         if (usePersonalization && useMetaLearning)
         {

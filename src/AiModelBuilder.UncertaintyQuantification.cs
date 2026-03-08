@@ -101,8 +101,13 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 TryComputeSwagPosteriorArtifacts(result, calibrationData.X, labels, _uncertaintyQuantificationOptions, artifacts);
             }
         }
-        else if (calibrationData is { HasTargets: true } && calibrationData.Y is TOutput yCalibration)
+        else if (calibrationData is { HasTargets: true })
         {
+            if (calibrationData.Y is not TOutput yCalibration)
+            {
+                throw new InvalidOperationException("Calibration data reports HasTargets but Y is null or not of the expected type.");
+            }
+
             TryComputeRegressionConformalArtifacts(result, calibrationData.X, yCalibration, artifacts);
 
             if (effectiveMethod == UncertaintyQuantificationMethod.LaplaceApproximation)

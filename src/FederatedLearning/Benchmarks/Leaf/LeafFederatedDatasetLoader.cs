@@ -134,7 +134,7 @@ public sealed class LeafFederatedDatasetLoader<T> : FederatedLearningComponentBa
 
         if (!string.IsNullOrWhiteSpace(testFilePath))
         {
-            test = LoadSplitFromFile(testFilePath!, options);
+            test = LoadSplitFromFile(testFilePath, options);
         }
 
         return new LeafFederatedDataset<Matrix<T>, Vector<T>>(train, test);

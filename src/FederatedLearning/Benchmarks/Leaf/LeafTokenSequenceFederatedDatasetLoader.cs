@@ -126,7 +126,7 @@ public sealed class LeafTokenSequenceFederatedDatasetLoader
 
         if (!string.IsNullOrWhiteSpace(testFilePath))
         {
-            test = LoadSplitFromFile(testFilePath!, options);
+            test = LoadSplitFromFile(testFilePath, options);
         }
 
         return new LeafFederatedDataset<string[][], string[]>(train, test);
