@@ -101,7 +101,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 TryComputeSwagPosteriorArtifacts(result, calibrationData.X, labels, _uncertaintyQuantificationOptions, artifacts);
             }
         }
-        else if (calibrationData is { HasTargets: true })
+        else if (calibrationData is { HasTargets: true } && calibrationData.Y is not null)
         {
             TryComputeRegressionConformalArtifacts(result, calibrationData.X, calibrationData.Y, artifacts);
 

@@ -132,7 +132,7 @@ public sealed class LeafFederatedDatasetLoader<T> : FederatedLearningComponentBa
         var train = LoadSplitFromFile(trainFilePath, options);
         LeafFederatedSplit<Matrix<T>, Vector<T>>? test = null;
 
-        if (!string.IsNullOrWhiteSpace(testFilePath))
+        if (testFilePath is not null && !string.IsNullOrWhiteSpace(testFilePath))
         {
             test = LoadSplitFromFile(testFilePath, options);
         }

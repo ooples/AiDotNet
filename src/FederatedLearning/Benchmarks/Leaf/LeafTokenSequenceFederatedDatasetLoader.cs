@@ -124,7 +124,7 @@ public sealed class LeafTokenSequenceFederatedDatasetLoader
         var train = LoadSplitFromFile(trainFilePath, options);
         LeafFederatedSplit<string[][], string[]>? test = null;
 
-        if (!string.IsNullOrWhiteSpace(testFilePath))
+        if (testFilePath is not null && !string.IsNullOrWhiteSpace(testFilePath))
         {
             test = LoadSplitFromFile(testFilePath, options);
         }
