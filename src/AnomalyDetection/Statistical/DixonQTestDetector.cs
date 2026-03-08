@@ -131,6 +131,10 @@ public class DixonQTestDetector<T> : AnomalyDetectorBase<T>
                 nameof(X));
         }
 
+        var ranges = _ranges ?? throw new InvalidOperationException("_ranges has not been initialized.");
+        var secondMin = _secondMin ?? throw new InvalidOperationException("_secondMin has not been initialized.");
+        var secondMax = _secondMax ?? throw new InvalidOperationException("_secondMax has not been initialized.");
+
         var scores = new Vector<T>(X.Rows);
 
         for (int i = 0; i < X.Rows; i++)
@@ -140,7 +144,6 @@ public class DixonQTestDetector<T> : AnomalyDetectorBase<T>
             for (int j = 0; j < X.Columns; j++)
             {
                 // Skip features with zero range
-                var ranges = _ranges ?? throw new InvalidOperationException("_ranges has not been initialized.");
                 if (NumOps.Equals(ranges[j], NumOps.Zero))
                 {
                     continue;
@@ -156,8 +159,8 @@ public class DixonQTestDetector<T> : AnomalyDetectorBase<T>
                 T value = X[i, j];
                 double rangeD = NumOps.ToDouble(ranges[j]);
                 double valueD = NumOps.ToDouble(value);
-                double secondMinD = NumOps.ToDouble((_secondMin ?? throw new InvalidOperationException("_secondMin has not been initialized."))[j]);
-                double secondMaxD = NumOps.ToDouble((_secondMax ?? throw new InvalidOperationException("_secondMax has not been initialized."))[j]);
+                double secondMinD = NumOps.ToDouble(secondMin[j]);
+                double secondMaxD = NumOps.ToDouble(secondMax[j]);
 
                 T qStatistic;
 
