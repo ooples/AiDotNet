@@ -576,6 +576,14 @@ public class SymmetricProjector<T> : IProjectorHead<T>
     /// <inheritdoc />
     public void SetParameters(Vector<T> parameters)
     {
+        int expected = ParameterCount;
+        if (parameters.Length != expected)
+        {
+            throw new ArgumentException(
+                $"Parameter vector length {parameters.Length} does not match expected {expected}.",
+                nameof(parameters));
+        }
+
         var paramArray = parameters.ToArray();
         int offset = 0;
 

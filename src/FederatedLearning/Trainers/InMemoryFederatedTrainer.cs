@@ -409,13 +409,8 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                 }
 
                 var parametersForAggregation = parameters;
-                if (useHomomorphicEncryption)
+                if (useHomomorphicEncryption && heClientParameters is not null)
                 {
-                    if (heClientParameters is null)
-                    {
-                        throw new InvalidOperationException("Homomorphic encryption is enabled but the HE client parameters dictionary was not initialized.");
-                    }
-
                     heClientParameters[clientId] = parameters;
 
                     parametersForAggregation = heMode == HomomorphicEncryptionMode.HeOnly
