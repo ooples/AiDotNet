@@ -101,17 +101,17 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 TryComputeSwagPosteriorArtifacts(result, calibrationData.X, labels, _uncertaintyQuantificationOptions, artifacts);
             }
         }
-        else if (calibrationData is { HasTargets: true } && calibrationData.Y is TOutput yCalibration)
+        else if (calibrationData is { HasTargets: true })
         {
-            TryComputeRegressionConformalArtifacts(result, calibrationData.X, yCalibration, artifacts);
+            TryComputeRegressionConformalArtifacts(result, calibrationData.X, calibrationData.Y, artifacts);
 
             if (effectiveMethod == UncertaintyQuantificationMethod.LaplaceApproximation)
             {
-                TryComputeLaplacePosteriorArtifacts(result, calibrationData.X, yCalibration, _uncertaintyQuantificationOptions, artifacts);
+                TryComputeLaplacePosteriorArtifacts(result, calibrationData.X, calibrationData.Y, _uncertaintyQuantificationOptions, artifacts);
             }
             else if (effectiveMethod == UncertaintyQuantificationMethod.Swag)
             {
-                TryComputeSwagPosteriorArtifacts(result, calibrationData.X, yCalibration, _uncertaintyQuantificationOptions, artifacts);
+                TryComputeSwagPosteriorArtifacts(result, calibrationData.X, calibrationData.Y, _uncertaintyQuantificationOptions, artifacts);
             }
         }
 
@@ -1060,11 +1060,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             {
                 mean[i] = numOps.Add(mean[i], numOps.Divide(numOps.Subtract(parameters[i], mean[i]), k));
                 var p2 = numOps.Multiply(parameters[i], parameters[i]);
-                if (sqMean is null)
-                {
-                    throw new InvalidOperationException("sqMean has not been initialized.");
-                }
-                sqMean[i] = numOps.Add(sqMean[i], numOps.Divide(numOps.Subtract(p2, sqMean[i]), k));
+                sqMean![i] = numOps.Add(sqMean[i], numOps.Divide(numOps.Subtract(p2, sqMean[i]), k));
             }
         }
 
@@ -1174,7 +1170,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             {
                 mean[i] = numOps.Add(mean[i], numOps.Divide(numOps.Subtract(parameters[i], mean[i]), k));
                 var p2 = numOps.Multiply(parameters[i], parameters[i]);
-                sqMean[i] = numOps.Add(sqMean[i], numOps.Divide(numOps.Subtract(p2, sqMean[i]), k));
+                sqMean![i] = numOps.Add(sqMean[i], numOps.Divide(numOps.Subtract(p2, sqMean[i]), k));
             }
         }
 
