@@ -693,16 +693,16 @@ public class SlowFast<T> : NeuralNetworkBase<T>
 
         // Training component type names for restoration
         writer.Write(_lossFunction.GetType().AssemblyQualifiedName ?? throw new InvalidOperationException(
-            "Cannot resolve AssemblyQualifiedName for loss function type."));
+            $"Cannot resolve AssemblyQualifiedName for loss function type '{_lossFunction.GetType().FullName}'."));
         writer.Write(_probabilityActivation.GetType().AssemblyQualifiedName ?? throw new InvalidOperationException(
-            "Cannot resolve AssemblyQualifiedName for activation function type."));
+            $"Cannot resolve AssemblyQualifiedName for activation function type '{_probabilityActivation.GetType().FullName}'."));
 
         // Optimizer type (can be null for ONNX mode or after certain operations)
         writer.Write(_optimizer is not null);
         if (_optimizer is not null)
         {
             writer.Write(_optimizer.GetType().AssemblyQualifiedName ?? throw new InvalidOperationException(
-                "Cannot resolve AssemblyQualifiedName for optimizer type."));
+                $"Cannot resolve AssemblyQualifiedName for optimizer type '{_optimizer.GetType().FullName}'."));
         }
     }
 

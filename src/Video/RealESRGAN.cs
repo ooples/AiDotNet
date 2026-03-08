@@ -232,11 +232,26 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
     #region Guards
 
     /// <summary>
+    /// Throws if the model is running in ONNX mode where native operations are not supported.
+    /// </summary>
+    private void ThrowIfOnnxMode()
+    {
+        if (!_useNativeMode)
+        {
+            throw new InvalidOperationException(
+                $"{nameof(RealESRGAN<T>)} does not support this operation in ONNX inference mode. " +
+                "Use native mode for training, serialization, and parameter updates.");
+        }
+    }
+
+    /// <summary>
     /// Throws if the native-mode components (Generator, Discriminator, loss) have not been initialized.
     /// </summary>
     private void ThrowIfNotNativeMode()
     {
-        if (!_useNativeMode || Generator is null || Discriminator is null || _realESRGANLoss is null)
+        ThrowIfOnnxMode();
+
+        if (Generator is null || Discriminator is null || _realESRGANLoss is null)
         {
             throw new InvalidOperationException(
                 $"{nameof(RealESRGAN<T>)} native-mode components are not initialized. " +
