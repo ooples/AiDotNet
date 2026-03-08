@@ -73,6 +73,19 @@ public class OptimizationStepData<T, TInput, TOutput>
     public List<Vector<T>> SelectedFeatures { get; set; } = new List<Vector<T>>();
 
     /// <summary>
+    /// Gets or sets the list of selected feature column indices for this optimization step.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This stores the actual column indices that were selected during feature selection,
+    /// allowing the same selection to be applied to new data at prediction time.
+    /// Unlike <see cref="SelectedFeatures"/> which stores column vectors from training data,
+    /// this stores the indices directly for reliable feature selection during inference.
+    /// </para>
+    /// </remarks>
+    public List<int> SelectedFeatureIndices { get; set; } = new List<int>();
+
+    /// <summary>
     /// Gets or sets the subset of the training data used for this optimization step.
     /// </summary>
     /// <value>A TInput object containing the subset of training data.</value>

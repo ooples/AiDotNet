@@ -3,29 +3,26 @@ using AiDotNet.Interfaces;
 namespace AiDotNet.Preprocessing;
 
 /// <summary>
-/// Global registry for the preprocessing pipeline.
+/// Deprecated: Static registry for the preprocessing pipeline. Use instance-based
+/// <c>AiModelBuilder.ConfigurePreprocessing()</c> instead.
 /// </summary>
 /// <remarks>
 /// <para>
-/// <b>WARNING:</b> This registry is a process-global singleton and is NOT safe for concurrent
-/// builds. Multiple <c>AiModelBuilder</c> instances will overwrite each other's pipeline.
-/// The authoritative pipeline for each build is the instance-level <c>_preprocessingPipeline</c>
-/// stored in <c>AiModelBuilder</c> and passed to <c>PreprocessingInfo</c> in the result.
-/// This registry exists only for backward compatibility with components that need static access.
+/// <b>Deprecated:</b> This static registry causes race conditions when multiple
+/// <c>AiModelBuilder</c> instances build models concurrently, because they overwrite
+/// each other's pipeline. <c>AiModelBuilder</c> no longer sets this registry;
+/// it stores the pipeline per-instance and flows it to <c>AiModelResult</c>
+/// via <c>PreprocessingInfo</c>.
 /// </para>
-/// <para><b>For Beginners:</b> You don't need to interact with this directly — just use AiModelBuilder:
-/// <code>
-/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
-///     .ConfigurePreprocessing(pipeline => pipeline
-///         .Add(new SimpleImputer&lt;double&gt;(ImputationStrategy.Mean))
-///         .Add(new StandardScaler&lt;double&gt;()))
-///     .ConfigureModel(new LogisticRegression&lt;double&gt;())
-///     .Build(X, y);
-/// </code>
+/// <para>
+/// This class remains only for backward compatibility with external code that
+/// references it directly. It will be removed in a future version.
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for calculations (e.g., float, double).</typeparam>
 /// <typeparam name="TInput">The input data type.</typeparam>
+[Obsolete("Use instance-based preprocessing via AiModelBuilder.ConfigurePreprocessing() instead. " +
+    "This static registry causes race conditions in concurrent model building and will be removed in a future version.")]
 public static class PreprocessingRegistry<T, TInput>
 {
     private static IDataTransformer<T, TInput, TInput>? _current;
@@ -36,11 +33,10 @@ public static class PreprocessingRegistry<T, TInput>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This is set automatically when you call AiModelBuilder.ConfigurePreprocessing().
-    /// The pipeline is global and thread-safe.
-    /// </para>
-    /// <para><b>For Beginners:</b> You typically don't set this directly.
-    /// Use AiModelBuilder.ConfigurePreprocessing() instead.
+    /// <b>Deprecated:</b> This property is no longer set by <c>AiModelBuilder.ConfigurePreprocessing()</c>.
+    /// The builder now stores the pipeline per-instance and flows it to <c>AiModelResult</c>
+    /// via <c>PreprocessingInfo</c>. This property remains only for backward compatibility
+    /// with external code that sets it directly.
     /// </para>
     /// </remarks>
     public static IDataTransformer<T, TInput, TInput>? Current
