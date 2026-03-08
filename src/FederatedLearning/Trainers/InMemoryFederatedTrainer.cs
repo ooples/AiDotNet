@@ -402,19 +402,20 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                     uploadRatioCount++;
                 }
 
-                if (useDifferentialPrivacy && (dpMode == DifferentialPrivacyMode.Local || dpMode == DifferentialPrivacyMode.LocalAndCentral))
+                if (useDifferentialPrivacy && dpMechanism is not null &&
+                    (dpMode == DifferentialPrivacyMode.Local || dpMode == DifferentialPrivacyMode.LocalAndCentral))
                 {
-                    if (dpMechanism is null)
-                    {
-                        throw new InvalidOperationException("Differential privacy is enabled but the privacy mechanism is null.");
-                    }
-
                     parameters = dpMechanism.ApplyPrivacy(parameters, dpEpsilon, dpDelta);
                 }
 
                 var parametersForAggregation = parameters;
-                if (useHomomorphicEncryption && heClientParameters != null)
+                if (useHomomorphicEncryption)
                 {
+                    if (heClientParameters is null)
+                    {
+                        throw new InvalidOperationException("Homomorphic encryption is enabled but the HE client parameters dictionary was not initialized.");
+                    }
+
                     heClientParameters[clientId] = parameters;
 
                     parametersForAggregation = heMode == HomomorphicEncryptionMode.HeOnly
@@ -430,14 +431,18 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
 
                 if (useSecureAggregation)
                 {
-                    if (thresholdSecureAggregation is null && secureAggregation is null)
+                    if (thresholdSecureAggregation is not null)
+                    {
+                        maskedParameters[clientId] = thresholdSecureAggregation.MaskUpdate(clientId, parametersForAggregation, weight);
+                    }
+                    else if (secureAggregation is not null)
+                    {
+                        maskedParameters[clientId] = secureAggregation.MaskUpdate(clientId, parametersForAggregation, weight);
+                    }
+                    else
                     {
                         throw new InvalidOperationException("Secure aggregation is enabled but no secure aggregation instance was created.");
                     }
-
-                    maskedParameters[clientId] = thresholdSecureAggregation != null
-                        ? thresholdSecureAggregation.MaskUpdate(clientId, parametersForAggregation, weight)
-                        : secureAggregation!.MaskUpdate(clientId, parametersForAggregation, weight);
                 }
                 else
                 {
@@ -445,13 +450,9 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                 }
             }
 
-            if (useDifferentialPrivacy && (dpMode == DifferentialPrivacyMode.Local || dpMode == DifferentialPrivacyMode.LocalAndCentral))
+            if (useDifferentialPrivacy && privacyAccountant is not null &&
+                (dpMode == DifferentialPrivacyMode.Local || dpMode == DifferentialPrivacyMode.LocalAndCentral))
             {
-                if (privacyAccountant is null)
-                {
-                    throw new InvalidOperationException("Differential privacy is enabled but the privacy accountant is null.");
-                }
-
                 privacyAccountant.AddRound(dpEpsilon, dpDelta, samplingRate: (double)selectedClientIds.Count / GetNumberOfClientsOrThrow());
                 privacyEventsThisRound++;
             }
@@ -480,22 +481,20 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
             }
             else if (useSecureAggregation)
             {
-                if (thresholdSecureAggregation is null && secureAggregation is null)
+                Vector<T> averagedParameters;
+                if (thresholdSecureAggregation is not null)
                 {
-                    throw new InvalidOperationException("Secure aggregation is enabled but no secure aggregation instance was created.");
-                }
-
-                var averagedParameters = thresholdSecureAggregation != null
-                    ? thresholdSecureAggregation.AggregateSecurely(maskedParameters, clientWeights)
-                    : secureAggregation!.AggregateSecurely(maskedParameters, clientWeights);
-
-                if (thresholdSecureAggregation != null)
-                {
+                    averagedParameters = thresholdSecureAggregation.AggregateSecurely(maskedParameters, clientWeights);
                     thresholdSecureAggregation.ClearSecrets();
+                }
+                else if (secureAggregation is not null)
+                {
+                    averagedParameters = secureAggregation.AggregateSecurely(maskedParameters, clientWeights);
+                    secureAggregation.ClearSecrets();
                 }
                 else
                 {
-                    secureAggregation!.ClearSecrets();
+                    throw new InvalidOperationException("Secure aggregation is enabled but no secure aggregation instance was created.");
                 }
 
                 newGlobalModel = globalBefore.WithParameters(averagedParameters);
@@ -542,13 +541,9 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                 newGlobalModel = newGlobalModel.WithParameters(updatedParams);
             }
 
-            if (useDifferentialPrivacy && (dpMode == DifferentialPrivacyMode.Central || dpMode == DifferentialPrivacyMode.LocalAndCentral))
+            if (useDifferentialPrivacy && dpMechanism is not null && privacyAccountant is not null &&
+                (dpMode == DifferentialPrivacyMode.Central || dpMode == DifferentialPrivacyMode.LocalAndCentral))
             {
-                if (dpMechanism is null || privacyAccountant is null)
-                {
-                    throw new InvalidOperationException("Differential privacy is enabled but the privacy mechanism or accountant is null.");
-                }
-
                 var globalParams = newGlobalModel.GetParameters();
                 var privateGlobalParams = dpMechanism.ApplyPrivacy(globalParams, dpEpsilon, dpDelta);
                 privacyAccountant.AddRound(dpEpsilon, dpDelta, samplingRate: (double)selectedClientIds.Count / GetNumberOfClientsOrThrow());
@@ -730,13 +725,9 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                     uploadRatioCount++;
                 }
 
-                if (useDifferentialPrivacy && (dpMode == DifferentialPrivacyMode.Local || dpMode == DifferentialPrivacyMode.LocalAndCentral))
+                if (useDifferentialPrivacy && dpMechanism is not null &&
+                    (dpMode == DifferentialPrivacyMode.Local || dpMode == DifferentialPrivacyMode.LocalAndCentral))
                 {
-                    if (dpMechanism is null)
-                    {
-                        throw new InvalidOperationException("Differential privacy is enabled but the privacy mechanism is null.");
-                    }
-
                     parameters = dpMechanism.ApplyPrivacy(parameters, dpEpsilon, dpDelta);
                 }
 
@@ -750,13 +741,9 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                 pending.Add((clientId, parameters, weight, step, step + delay));
             }
 
-            if (useDifferentialPrivacy && (dpMode == DifferentialPrivacyMode.Local || dpMode == DifferentialPrivacyMode.LocalAndCentral))
+            if (useDifferentialPrivacy && privacyAccountant is not null &&
+                (dpMode == DifferentialPrivacyMode.Local || dpMode == DifferentialPrivacyMode.LocalAndCentral))
             {
-                if (privacyAccountant is null)
-                {
-                    throw new InvalidOperationException("Differential privacy is enabled but the privacy accountant is null.");
-                }
-
                 privacyAccountant.AddRound(dpEpsilon, dpDelta, samplingRate: (double)selectedClientIds.Count / GetNumberOfClientsOrThrow());
                 privacyEventsThisStep++;
             }
@@ -819,13 +806,9 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                         targetModel = targetModel.WithParameters(updatedParams);
                     }
 
-                    if (useDifferentialPrivacy && (dpMode == DifferentialPrivacyMode.Central || dpMode == DifferentialPrivacyMode.LocalAndCentral))
+                    if (useDifferentialPrivacy && dpMechanism is not null && privacyAccountant is not null &&
+                        (dpMode == DifferentialPrivacyMode.Central || dpMode == DifferentialPrivacyMode.LocalAndCentral))
                     {
-                        if (dpMechanism is null || privacyAccountant is null)
-                        {
-                            throw new InvalidOperationException("Differential privacy is enabled but the privacy mechanism or accountant is null.");
-                        }
-
                         var globalParams = targetModel.GetParameters();
                         var privateGlobalParams = dpMechanism.ApplyPrivacy(globalParams, dpEpsilon, dpDelta);
                         privacyAccountant.AddRound(dpEpsilon, dpDelta, samplingRate: (double)selectedClientIds.Count / GetNumberOfClientsOrThrow());
@@ -846,8 +829,13 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
 
                     bufferModels[bufferedUpdateKey] = globalAtStepStart.WithParameters(parametersForPlain);
                     bufferWeights[bufferedUpdateKey] = update.Weight;
-                    if (useHomomorphicEncryption && bufferHeParameters != null)
+                    if (useHomomorphicEncryption)
                     {
+                        if (bufferHeParameters is null)
+                        {
+                            throw new InvalidOperationException("Homomorphic encryption is enabled but the buffer HE parameters dictionary was not initialized.");
+                        }
+
                         bufferHeParameters[bufferedUpdateKey] = update.Parameters;
                     }
                     bufferedUpdateKey++;
@@ -888,13 +876,9 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                         newGlobalModel = newGlobalModel.WithParameters(updatedParams);
                     }
 
-                    if (useDifferentialPrivacy && (dpMode == DifferentialPrivacyMode.Central || dpMode == DifferentialPrivacyMode.LocalAndCentral))
+                    if (useDifferentialPrivacy && dpMechanism is not null && privacyAccountant is not null &&
+                        (dpMode == DifferentialPrivacyMode.Central || dpMode == DifferentialPrivacyMode.LocalAndCentral))
                     {
-                        if (dpMechanism is null || privacyAccountant is null)
-                        {
-                            throw new InvalidOperationException("Differential privacy is enabled but the privacy mechanism or accountant is null.");
-                        }
-
                         var globalParams = newGlobalModel.GetParameters();
                         var privateGlobalParams = dpMechanism.ApplyPrivacy(globalParams, dpEpsilon, dpDelta);
                         privacyAccountant.AddRound(dpEpsilon, dpDelta, samplingRate: (double)selectedClientIds.Count / GetNumberOfClientsOrThrow());
