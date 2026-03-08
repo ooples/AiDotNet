@@ -240,7 +240,7 @@ public abstract class TabPFNBase<T>
                 var oneHot = CreateOneHotEncoding(
                     categoricalIndices,
                     catIdx,
-                    Options.CategoricalCardinalities![catIdx]);
+                    (Options.CategoricalCardinalities ?? throw new InvalidOperationException("CategoricalCardinalities has not been initialized."))[catIdx]);
                 var catEmb = _categoricalEncoders[catIdx].Forward(oneHot);
 
                 queryEncoded = Engine.TensorAdd(queryEncoded, catEmb);

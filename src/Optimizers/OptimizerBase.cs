@@ -756,7 +756,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     protected virtual IFullModel<T, TInput, TOutput> CreateSolution(TInput xTrain)
     {
         // Create a deep copy of the model to avoid modifying the original
-        var solution = Model!.DeepCopy();
+        var solution = (Model ?? throw new InvalidOperationException("Model has not been initialized.")).DeepCopy();
 
         // Return the deep copy - subclasses can override to add custom solution creation logic
         return solution;

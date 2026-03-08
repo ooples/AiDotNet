@@ -750,7 +750,7 @@ public class ProbabilityCalibrator<T>
         {
             for (int b = 0; b < _binProbabilities.Length; b++)
             {
-                if (s >= _binEdges![b] && s < _binEdges[b + 1])
+                if (s >= (_binEdges ?? throw new InvalidOperationException("_binEdges has not been initialized."))[b] && s < _binEdges[b + 1])
                 {
                     return _binProbabilities[b];
                 }

@@ -143,7 +143,7 @@ public class ImageFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private void AdjustForSpatialDiversity(int p)
     {
         // Greedy selection ensuring spatial diversity
-        var adjustedScores = (double[])_featureScores!.Clone();
+        var adjustedScores = (double[])(_featureScores ?? throw new InvalidOperationException("_featureScores has not been initialized.")).Clone();
         var selected = new HashSet<int>();
 
         for (int k = 0; k < Math.Min(_nFeaturesToSelect * 2, p); k++)

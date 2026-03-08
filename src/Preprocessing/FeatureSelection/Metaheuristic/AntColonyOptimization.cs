@@ -186,8 +186,10 @@ public class AntColonyOptimization<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             for (int i = 0; i < available.Count; i++)
             {
                 int j = available[i];
-                double tau = Math.Pow(_pheromones![j], _alpha);
-                double eta = Math.Pow(_featureScores![j], _beta);
+                var pheromones = _pheromones ?? throw new InvalidOperationException("_pheromones has not been initialized.");
+                double tau = Math.Pow(pheromones[j], _alpha);
+                var featureScores = _featureScores ?? throw new InvalidOperationException("_featureScores has not been initialized.");
+                double eta = Math.Pow(featureScores[j], _beta);
                 probabilities[i] = tau * eta;
                 total += probabilities[i];
             }
@@ -230,7 +232,7 @@ public class AntColonyOptimization<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         // Use sum of correlations as fitness
         double fitness = 0;
         foreach (int j in subset)
-            fitness += _featureScores![j];
+            fitness += featureScores[j];
 
         return fitness / subset.Length;
     }
@@ -239,19 +241,19 @@ public class AntColonyOptimization<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     {
         // Evaporation
         for (int j = 0; j < p; j++)
-            _pheromones![j] *= (1 - _rho);
+            pheromones[j] *= (1 - _rho);
 
         // Deposit
         for (int ant = 0; ant < antSubsets.Count; ant++)
         {
             double deposit = antFitness[ant];
             foreach (int j in antSubsets[ant])
-                _pheromones![j] += deposit;
+                pheromones[j] += deposit;
         }
 
         // Ensure minimum pheromone level
         for (int j = 0; j < p; j++)
-            if (_pheromones![j] < 0.01) _pheromones[j] = 0.01;
+            if (pheromones[j] < 0.01) _pheromones[j] = 0.01;
     }
 
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)

@@ -580,7 +580,8 @@ public class GPWithMCMC<T> : IGaussianProcess<T>
     /// </summary>
     private Matrix<T> BuildKernelMatrix(double lengthscale, double outputVar, double noiseVar)
     {
-        int n = _X!.Rows;
+        var x = _X ?? throw new InvalidOperationException("_X has not been initialized.");
+        int n = x.Rows;
         var K = new Matrix<T>(n, n);
 
         for (int i = 0; i < n; i++)
@@ -614,7 +615,7 @@ public class GPWithMCMC<T> : IGaussianProcess<T>
     {
         // Note: lengthscale and outputVar parameters are from MCMC samples but the actual
         // kernel function is used. For non-RBF kernels, these parameters are diagnostic only.
-        int n = _X!.Rows;
+        int n = x.Rows;
         var kstar = new Vector<T>(n);
 
         for (int i = 0; i < n; i++)

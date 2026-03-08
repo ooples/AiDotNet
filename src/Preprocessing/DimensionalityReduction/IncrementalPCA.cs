@@ -270,7 +270,7 @@ public class IncrementalPCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 $"Number of features ({p}) does not match fitted model ({_nFeaturesIn}).");
         }
 
-        int k = _components!.GetLength(0);
+        int k = (_components ?? throw new InvalidOperationException("_components has not been initialized.")).GetLength(0);
 
         // Convert batch to double and compute batch statistics
         var batchData = new double[nBatch, p];
@@ -334,7 +334,7 @@ public class IncrementalPCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         double oldScale = Math.Sqrt((double)(nOld - 1) / (nTotal - 1));
         for (int i = 0; i < k; i++)
         {
-            double singularValue = _singularValues != null ? _singularValues[i] : Math.Sqrt(_explainedVariance![i] * (nOld - 1));
+            double singularValue = _singularValues != null ? _singularValues[i] : Math.Sqrt((_explainedVariance ?? throw new InvalidOperationException("_explainedVariance has not been initialized."))[i] * (nOld - 1));
             for (int j = 0; j < p; j++)
             {
                 combinedMatrix[i, j] = oldScale * singularValue * _components[i, j];

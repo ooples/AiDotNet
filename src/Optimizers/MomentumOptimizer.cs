@@ -402,7 +402,7 @@ public class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             writer.Write(hasVelocity);
             if (hasVelocity)
             {
-                writer.Write(_velocity!.Length);
+                writer.Write((_velocity ?? throw new InvalidOperationException("_velocity has not been initialized.")).Length);
                 for (int i = 0; i < _velocity.Length; i++)
                 {
                     writer.Write(NumOps.ToDouble(_velocity[i]));

@@ -131,7 +131,8 @@ public class SequentialFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix
             {
                 selected.Add(bestFeature);
                 remaining.Remove(bestFeature);
-                _featureScores![bestFeature] = bestScore;
+                var featureScores = _featureScores ?? throw new InvalidOperationException("_featureScores has not been initialized.");
+                featureScores[bestFeature] = bestScore;
             }
             else
             {
@@ -167,7 +168,7 @@ public class SequentialFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix
 
             if (worstFeature >= 0)
             {
-                _featureScores![worstFeature] = -bestScore; // Lower score = worse feature
+                featureScores[worstFeature] = -bestScore; // Lower score = worse feature
                 remaining.Remove(worstFeature);
             }
             else
@@ -179,7 +180,7 @@ public class SequentialFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix
         // Set positive scores for remaining features
         double finalScore = DefaultScorer(data, target, remaining.ToArray());
         foreach (int idx in remaining)
-            _featureScores![idx] = finalScore;
+            featureScores[idx] = finalScore;
 
         return remaining.OrderBy(x => x).ToArray();
     }

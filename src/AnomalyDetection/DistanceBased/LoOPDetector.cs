@@ -129,7 +129,7 @@ public class LoOPDetector<T> : AnomalyDetectorBase<T>
             double ePdist = 0;
             foreach (int neighborIdx in neighbors)
             {
-                ePdist += _probabilisticDistances![neighborIdx];
+                ePdist += (_probabilisticDistances ?? throw new InvalidOperationException("_probabilisticDistances has not been initialized."))[neighborIdx];
             }
             ePdist /= neighbors.Count;
 

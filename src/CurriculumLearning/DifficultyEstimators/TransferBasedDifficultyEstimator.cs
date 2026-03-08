@@ -129,7 +129,8 @@ public class TransferBasedDifficultyEstimator<T, TInput, TOutput> : DifficultyEs
         TOutput expectedOutput,
         IFullModel<T, TInput, TOutput> studentModel)
     {
-        var teacherPrediction = _teacherModel!.Predict(input);
+        var teacherModel = _teacherModel ?? throw new InvalidOperationException("_teacherModel has not been initialized.");
+        var teacherPrediction = teacherModel.Predict(input);
         var studentPrediction = studentModel.Predict(input);
 
         // Convert to vectors for loss calculation
@@ -157,7 +158,7 @@ public class TransferBasedDifficultyEstimator<T, TInput, TOutput> : DifficultyEs
     /// </summary>
     private T CalculateTeacherLossDifficulty(TInput input, TOutput expectedOutput)
     {
-        var teacherPrediction = _teacherModel!.Predict(input);
+        var teacherPrediction = teacherModel.Predict(input);
         var expectedVector = ConversionsHelper.ConvertToVector<T, TOutput>(expectedOutput);
         var predictionVector = ConversionsHelper.ConvertToVector<T, TOutput>(teacherPrediction);
         return _teacherModel.DefaultLossFunction.CalculateLoss(predictionVector, expectedVector);

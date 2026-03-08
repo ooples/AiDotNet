@@ -250,7 +250,8 @@ public class M4DatasetLoader<T> : DataLoaderBase<T>
 
         for (int i = _currentSeriesIndex; i < endIndex; i++)
         {
-            batch.Add(_trainingSeries![i]);
+            var trainingSeries = _trainingSeries ?? throw new InvalidOperationException("_trainingSeries has not been initialized.");
+            batch.Add(trainingSeries[i]);
         }
 
         _currentSeriesIndex = endIndex;
@@ -271,7 +272,7 @@ public class M4DatasetLoader<T> : DataLoaderBase<T>
         if (index < 0 || index >= TotalCount)
             throw new ArgumentOutOfRangeException(nameof(index));
 
-        return (_trainingSeries![index], _testSeries![index]);
+        return (trainingSeries[index], (_testSeries ?? throw new InvalidOperationException("_testSeries has not been initialized."))[index]);
     }
 
     /// <summary>

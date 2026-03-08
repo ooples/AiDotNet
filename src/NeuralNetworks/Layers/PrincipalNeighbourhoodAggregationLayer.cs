@@ -790,7 +790,8 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
         var tiled = Engine.TensorTile(expanded, [1, numNodes, 1, 1]);
 
         // Create mask from adjacency: [batch, nodes, nodes, 1]
-        var adjExpanded = _adjacencyMatrix!.Reshape([batchSize, numNodes, numNodes, 1]);
+        var adjacencyMatrix = _adjacencyMatrix ?? throw new InvalidOperationException("_adjacencyMatrix has not been initialized.");
+        var adjExpanded = adjacencyMatrix.Reshape([batchSize, numNodes, numNodes, 1]);
 
         // Mask non-neighbors with -inf
         var negInf = new Tensor<T>(tiled.Shape);
@@ -824,7 +825,7 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
         var tiled = Engine.TensorTile(expanded, [1, numNodes, 1, 1]);
 
         // Create mask from adjacency: [batch, nodes, nodes, 1]
-        var adjExpanded = _adjacencyMatrix!.Reshape([batchSize, numNodes, numNodes, 1]);
+        var adjExpanded = adjacencyMatrix.Reshape([batchSize, numNodes, numNodes, 1]);
 
         // Mask non-neighbors with +inf
         var posInf = new Tensor<T>(tiled.Shape);
@@ -1381,7 +1382,7 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
         var mlpHiddenGradPre = Engine.TensorMatMul(activationGradient, weights2T);
 
         // ReLU derivative
-        var zeroTensor = new Tensor<T>(_lastMlpHiddenPreRelu!.Shape);
+        var zeroTensor = new Tensor<T>((_lastMlpHiddenPreRelu ?? throw new InvalidOperationException("_lastMlpHiddenPreRelu has not been initialized.")).Shape);
         zeroTensor.Fill(NumOps.Zero);
         var reluMask = Engine.TensorGreaterThan(_lastMlpHiddenPreRelu, zeroTensor);
         var oneTensor = new Tensor<T>(_lastMlpHiddenPreRelu.Shape);

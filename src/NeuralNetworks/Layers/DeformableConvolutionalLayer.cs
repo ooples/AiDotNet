@@ -517,8 +517,8 @@ public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputati
 
         if (_useModulation)
         {
-            _maskWeightGradients = new Tensor<T>(_maskWeights!.Shape);
-            _maskBiasGradients = new Tensor<T>(_maskBias!.Shape);
+            _maskWeightGradients = new Tensor<T>((_maskWeights ?? throw new InvalidOperationException("_maskWeights has not been initialized.")).Shape);
+            _maskBiasGradients = new Tensor<T>((_maskBias ?? throw new InvalidOperationException("_maskBias has not been initialized.")).Shape);
         }
 
         // 1. Compute bias gradients (sum over batch and spatial dimensions)
@@ -625,7 +625,7 @@ public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputati
                     }
                 }
             }
-            _biasGradients!.Data.Span[c] = sum;
+            (_biasGradients ?? throw new InvalidOperationException("_biasGradients has not been initialized.")).Data.Span[c] = sum;
         }
     }
 

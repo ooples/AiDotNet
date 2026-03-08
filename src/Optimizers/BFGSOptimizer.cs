@@ -167,7 +167,7 @@ public class BFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
             UpdateInverseHessian(parameters, gradient);
         }
 
-        var direction = _inverseHessian!.Multiply(gradient);
+        var direction = (_inverseHessian ?? throw new InvalidOperationException("_inverseHessian has not been initialized.")).Multiply(gradient);
         // Vectorized negation
         direction = (Vector<T>)Engine.Multiply(direction, NumOps.Negate(NumOps.One));
 

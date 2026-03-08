@@ -101,13 +101,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 TryComputeSwagPosteriorArtifacts(result, calibrationData.X, labels, _uncertaintyQuantificationOptions, artifacts);
             }
         }
-        else if (calibrationData is { HasTargets: true })
+        else if (calibrationData is { HasTargets: true } && calibrationData.Y is TOutput yCalibration)
         {
-            if (calibrationData.Y is not TOutput yCalibration)
-            {
-                throw new InvalidOperationException("Calibration data reports HasTargets but Y is null or not of the expected type.");
-            }
-
             TryComputeRegressionConformalArtifacts(result, calibrationData.X, yCalibration, artifacts);
 
             if (effectiveMethod == UncertaintyQuantificationMethod.LaplaceApproximation)
@@ -1065,7 +1060,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             {
                 mean[i] = numOps.Add(mean[i], numOps.Divide(numOps.Subtract(parameters[i], mean[i]), k));
                 var p2 = numOps.Multiply(parameters[i], parameters[i]);
-                sqMean![i] = numOps.Add(sqMean[i], numOps.Divide(numOps.Subtract(p2, sqMean[i]), k));
+                var sqMean = sqMean ?? throw new InvalidOperationException("sqMean has not been initialized.");
+                sqMean[i] = numOps.Add(sqMean[i], numOps.Divide(numOps.Subtract(p2, sqMean[i]), k));
             }
         }
 
@@ -1175,7 +1171,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             {
                 mean[i] = numOps.Add(mean[i], numOps.Divide(numOps.Subtract(parameters[i], mean[i]), k));
                 var p2 = numOps.Multiply(parameters[i], parameters[i]);
-                sqMean![i] = numOps.Add(sqMean[i], numOps.Divide(numOps.Subtract(p2, sqMean[i]), k));
+                sqMean[i] = numOps.Add(sqMean[i], numOps.Divide(numOps.Subtract(p2, sqMean[i]), k));
             }
         }
 

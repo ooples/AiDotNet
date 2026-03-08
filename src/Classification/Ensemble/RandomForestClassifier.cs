@@ -169,7 +169,7 @@ public class RandomForestClassifier<T> : EnsembleClassifierBase<T>, ITreeBasedCl
             // Sample with replacement
             for (int i = 0; i < nSamples; i++)
             {
-                int idx = _random!.Next(nSamples);
+                int idx = (_random ?? throw new InvalidOperationException("_random has not been initialized.")).Next(nSamples);
                 bootstrapIndices.Add(idx);
                 oobSet.Remove(idx);
             }

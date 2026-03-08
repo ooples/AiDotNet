@@ -369,7 +369,8 @@ public class ActivationLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T> ApplyScalarActivation(Tensor<T> input)
     {
-        return ScalarActivation!.Activate(input);
+        var scalarActivation = ScalarActivation ?? throw new InvalidOperationException("ScalarActivation has not been initialized.");
+        return scalarActivation.Activate(input);
     }
 
     /// <summary>
@@ -384,7 +385,8 @@ public class ActivationLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T> ApplyVectorActivation(Tensor<T> input)
     {
-        return VectorActivation!.Activate(input);
+        var vectorActivation = VectorActivation ?? throw new InvalidOperationException("VectorActivation has not been initialized.");
+        return vectorActivation.Activate(input);
     }
 
     /// <summary>
@@ -399,7 +401,7 @@ public class ActivationLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T> BackwardScalarActivation(Tensor<T> outputGradient)
     {
-        return ScalarActivation!.Backward(_lastInput!, outputGradient);
+        return scalarActivation.Backward(_lastInput!, outputGradient);
     }
 
 
@@ -434,7 +436,7 @@ public class ActivationLayer<T> : LayerBase<T>
     private Tensor<T> BackwardVectorActivation(Tensor<T> outputGradient)
     {
         // Now unified via IVectorActivationFunction.Backward
-        return VectorActivation!.Backward(_lastInput!, outputGradient);
+        return vectorActivation.Backward(_lastInput!, outputGradient);
     }
 
     /// <summary>

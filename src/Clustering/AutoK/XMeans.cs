@@ -178,13 +178,13 @@ public class XMeans<T> : ClusteringBase<T>
                         var center = new double[d];
                         for (int j = 0; j < d; j++)
                         {
-                            center[j] = NumOps.ToDouble(subKMeans.ClusterCenters![sc, j]);
+                            center[j] = NumOps.ToDouble((subKMeans.ClusterCenters ?? throw new InvalidOperationException("ClusterCenters has not been initialized."))[sc, j]);
                         }
 
                         var subClusterPoints = new List<int>();
                         for (int i = 0; i < clusterPoints.Count; i++)
                         {
-                            if ((int)NumOps.ToDouble(subKMeans.Labels![i]) == sc)
+                            if ((int)NumOps.ToDouble((subKMeans.Labels ?? throw new InvalidOperationException("Labels has not been initialized."))[i]) == sc)
                             {
                                 subClusterPoints.Add(clusterPoints[i]);
                             }

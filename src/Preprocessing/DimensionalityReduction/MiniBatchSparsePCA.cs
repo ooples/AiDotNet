@@ -305,7 +305,8 @@ public class MiniBatchSparsePCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 double sum = 0;
                 for (int f = 0; f < p; f++)
                 {
-                    sum += _components![i, f] * _components[j, f];
+                    var components = _components ?? throw new InvalidOperationException("_components has not been initialized.");
+                    sum += components[i, f] * _components[j, f];
                 }
                 gram[i, j] = sum;
                 if (i == j)
@@ -325,7 +326,7 @@ public class MiniBatchSparsePCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 double sum = 0;
                 for (int j = 0; j < p; j++)
                 {
-                    sum += data[i, j] * _components![c, j];
+                    sum += data[i, j] * components[c, j];
                 }
                 dataProj[i, c] = sum;
             }
@@ -361,7 +362,7 @@ public class MiniBatchSparsePCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 {
                     if (other != c)
                     {
-                        rhs -= A[c, other] * _components![other, j];
+                        rhs -= A[c, other] * components[other, j];
                     }
                 }
 
@@ -373,14 +374,14 @@ public class MiniBatchSparsePCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
                 // Soft thresholding
                 double newValue = SoftThreshold(rhs / denominator, _alpha / denominator);
-                _components![c, j] = newValue;
+                components[c, j] = newValue;
             }
 
             // Normalize component
             double norm = 0;
             for (int j = 0; j < p; j++)
             {
-                norm += _components![c, j] * _components[c, j];
+                norm += components[c, j] * _components[c, j];
             }
             norm = Math.Sqrt(norm);
 
@@ -388,7 +389,7 @@ public class MiniBatchSparsePCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             {
                 for (int j = 0; j < p; j++)
                 {
-                    _components![c, j] /= norm;
+                    components[c, j] /= norm;
                 }
             }
         }

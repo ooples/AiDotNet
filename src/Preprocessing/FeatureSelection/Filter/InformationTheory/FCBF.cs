@@ -250,7 +250,7 @@ public class FCBF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         // and _suScores[fi] >= _suScores[fj]
         double su_fi_fj = ComputeSU(bins[fi], bins[fj], n);
 
-        return su_fi_fj >= _suScores![fj];
+        return su_fi_fj >= (_suScores ?? throw new InvalidOperationException("_suScores has not been initialized."))[fj];
     }
 
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)

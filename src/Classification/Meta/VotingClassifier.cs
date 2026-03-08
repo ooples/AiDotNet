@@ -180,7 +180,7 @@ public class VotingClassifier<T> : MetaClassifierBase<T>
             var votes = new double[NumClasses];
 
             // Get vote from each classifier
-            for (int e = 0; e < _estimators!.Count; e++)
+            for (int e = 0; e < (_estimators ?? throw new InvalidOperationException("_estimators has not been initialized.")).Count; e++)
             {
                 // Extract single sample
                 var sample = new Matrix<T>(1, NumFeatures);
@@ -194,9 +194,11 @@ public class VotingClassifier<T> : MetaClassifierBase<T>
                 // Find which class
                 for (int c = 0; c < NumClasses; c++)
                 {
-                    if (NumOps.Compare(pred[0], ClassLabels![c]) == 0)
+                    var classLabels = ClassLabels ?? throw new InvalidOperationException("ClassLabels has not been initialized.");
+                    if (NumOps.Compare(pred[0], classLabels[c]) == 0)
                     {
-                        votes[c] += _weights![e];
+                        var weights = _weights ?? throw new InvalidOperationException("_weights has not been initialized.");
+                        votes[c] += weights[e];
                         break;
                     }
                 }
@@ -214,7 +216,7 @@ public class VotingClassifier<T> : MetaClassifierBase<T>
                 }
             }
 
-            predictions[i] = ClassLabels![bestClass];
+            predictions[i] = classLabels[bestClass];
         }
 
         return predictions;
@@ -249,7 +251,7 @@ public class VotingClassifier<T> : MetaClassifierBase<T>
                 {
                     for (int c = 0; c < NumClasses; c++)
                     {
-                        if (NumOps.Compare(preds[i], ClassLabels![c]) == 0)
+                        if (NumOps.Compare(preds[i], classLabels[c]) == 0)
                         {
                             estProbs[i, c] = NumOps.One;
                         }
@@ -258,7 +260,7 @@ public class VotingClassifier<T> : MetaClassifierBase<T>
             }
 
             // Weighted accumulation
-            T weight = NumOps.FromDouble(_weights![e]);
+            T weight = NumOps.FromDouble(weights[e]);
             for (int i = 0; i < input.Rows; i++)
             {
                 for (int c = 0; c < NumClasses; c++)

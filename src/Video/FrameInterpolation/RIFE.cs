@@ -352,7 +352,8 @@ public class RIFE<T> : FrameInterpolationBase<T>
             ConcatenateChannels(_cachedFrame1Warped, _cachedFrame2Warped),
             ConcatenateChannels(_cachedContext, _cachedFlow));
 
-        _cachedFused = _fusion!.Forward(_cachedFusionInput);
+        var fusion = _fusion ?? throw new InvalidOperationException("_fusion has not been initialized.");
+        _cachedFused = fusion.Forward(_cachedFusionInput);
 
         // Flow blocks with caching
         var fused = _cachedFused;
@@ -364,7 +365,8 @@ public class RIFE<T> : FrameInterpolationBase<T>
             _cachedFlowBlockOutputs.Add(fused);
         }
 
-        return _outputConv!.Forward(fused);
+        var outputConv = _outputConv ?? throw new InvalidOperationException("_outputConv has not been initialized.");
+        return outputConv.Forward(fused);
     }
 
     /// <summary>
@@ -383,10 +385,10 @@ public class RIFE<T> : FrameInterpolationBase<T>
     private void BackwardPass(Tensor<T> gradient)
     {
         // 1. Backward through output convolution
-        gradient = _outputConv!.Backward(gradient);
+        gradient = outputConv.Backward(gradient);
 
         // 2. Backward through flow blocks with gradient accumulation for flow
-        var flowGradAccumulator = new Tensor<T>(_cachedFlow!.Shape);
+        var flowGradAccumulator = new Tensor<T>((_cachedFlow ?? throw new InvalidOperationException("_cachedFlow has not been initialized.")).Shape);
         var fusedGradient = gradient;
 
         for (int i = _flowBlocks.Count - 1; i >= 0; i--)
@@ -408,11 +410,11 @@ public class RIFE<T> : FrameInterpolationBase<T>
         }
 
         // 3. Backward through fusion layer
-        var fusionGradient = _fusion!.Backward(fusedGradient);
+        var fusionGradient = fusion.Backward(fusedGradient);
 
         // Split fusion gradient: [frame1_warped, frame2_warped, context, flow]
         int warpedChannels = _channels;
-        int contextChannels = _cachedContext!.Shape[1];
+        int contextChannels = (_cachedContext ?? throw new InvalidOperationException("_cachedContext has not been initialized.")).Shape[1];
         int flowChannels = _cachedFlow.Shape[1];
 
         var (warpedGradients, contextFlowGrad) = SplitConcatenatedGradient(

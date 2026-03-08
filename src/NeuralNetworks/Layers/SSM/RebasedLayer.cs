@@ -520,14 +520,16 @@ public class RebasedLayer<T> : LayerBase<T>
                     // Update with phi(k) * v^T
                     for (int fi = 0; fi < _headDimension; fi++)
                     {
-                        T phiKVal = _lastPhiK![new[] { bi, t, hi, fi }];
+                        var lastPhiK = _lastPhiK ?? throw new InvalidOperationException("_lastPhiK has not been initialized.");
+                        T phiKVal = lastPhiK[new[] { bi, t, hi, fi }];
                         norms[t + 1, fi] = NumOps.Add(norms[t + 1, fi], phiKVal);
                         for (int di = 0; di < _headDimension; di++)
                         {
                             int flatD = dimStart + di;
                             states[t + 1, fi, di] = NumOps.Add(
                                 states[t + 1, fi, di],
-                                NumOps.Multiply(phiKVal, _lastValue![new[] { bi, t, flatD }]));
+                                var lastValue = _lastValue ?? throw new InvalidOperationException("_lastValue has not been initialized.");
+                                NumOps.Multiply(phiKVal, lastValue[new[] { bi, t, flatD }]));
                         }
                     }
                 }
@@ -538,7 +540,7 @@ public class RebasedLayer<T> : LayerBase<T>
 
                 for (int t = seqLen - 1; t >= 0; t--)
                 {
-                    T denom = _lastDenominators![new[] { bi, t, hi }];
+                    T denom = (_lastDenominators ?? throw new InvalidOperationException("_lastDenominators has not been initialized."))[new[] { bi, t, hi }];
                     T denomSq = NumOps.Multiply(denom, denom);
 
                     // Gradient of phi(q) from output computation
@@ -554,11 +556,12 @@ public class RebasedLayer<T> : LayerBase<T>
                         for (int fi = 0; fi < _headDimension; fi++)
                             numVal = NumOps.Add(numVal,
                                 NumOps.Multiply(states[t + 1, fi, di],
-                                    _lastPhiQ![new[] { bi, t, hi, fi }]));
+                                    var lastPhiQ = _lastPhiQ ?? throw new InvalidOperationException("_lastPhiQ has not been initialized.");
+                                    lastPhiQ[new[] { bi, t, hi, fi }]));
 
                         for (int fi = 0; fi < _headDimension; fi++)
                         {
-                            T phiQVal = _lastPhiQ![new[] { bi, t, hi, fi }];
+                            T phiQVal = lastPhiQ[new[] { bi, t, hi, fi }];
 
                             // dS[fi,di] += dO * phiQ[fi] / denom
                             dS[fi, di] = NumOps.Add(dS[fi, di],
@@ -585,9 +588,9 @@ public class RebasedLayer<T> : LayerBase<T>
                             for (int fj = 0; fj < _headDimension; fj++)
                                 numVal = NumOps.Add(numVal,
                                     NumOps.Multiply(states[t + 1, fj, di],
-                                        _lastPhiQ![new[] { bi, t, hi, fj }]));
+                                        lastPhiQ[new[] { bi, t, hi, fj }]));
 
-                            T phiQVal = _lastPhiQ![new[] { bi, t, hi, fi }];
+                            T phiQVal = lastPhiQ[new[] { bi, t, hi, fi }];
                             dZ[fi] = NumOps.Subtract(dZ[fi],
                                 NumOps.Divide(
                                     NumOps.Multiply(NumOps.Multiply(dO, numVal), phiQVal),
@@ -604,9 +607,9 @@ public class RebasedLayer<T> : LayerBase<T>
                         {
                             int flatD = dimStart + di;
                             dPhiK[fi] = NumOps.Add(dPhiK[fi],
-                                NumOps.Multiply(dS[fi, di], _lastValue![new[] { bi, t, flatD }]));
+                                NumOps.Multiply(dS[fi, di], lastValue[new[] { bi, t, flatD }]));
 
-                            T phiKVal = _lastPhiK![new[] { bi, t, hi, fi }];
+                            T phiKVal = lastPhiK[new[] { bi, t, hi, fi }];
                             dV[new[] { bi, t, flatD }] = NumOps.Add(
                                 dV[new[] { bi, t, flatD }],
                                 NumOps.Multiply(dS[fi, di], phiKVal));
@@ -621,33 +624,33 @@ public class RebasedLayer<T> : LayerBase<T>
                     // Chain: dphi/dx = dphi/du * du/dx
 
                     // Query normalization gradient
-                    T qNorm = _lastPhiQNorm![new[] { bi, t, hi }];
+                    T qNorm = (_lastPhiQNorm ?? throw new InvalidOperationException("_lastPhiQNorm has not been initialized."))[new[] { bi, t, hi }];
                     T qNormInv = NumOps.Divide(NumOps.One, qNorm);
 
                     // Compute dot(dPhiQ, phiQ) for the normalization correction
                     T dotQ = NumOps.Zero;
                     for (int d = 0; d < _headDimension; d++)
-                        dotQ = NumOps.Add(dotQ, NumOps.Multiply(dPhiQ[d], _lastPhiQ![new[] { bi, t, hi, d }]));
+                        dotQ = NumOps.Add(dotQ, NumOps.Multiply(dPhiQ[d], lastPhiQ[new[] { bi, t, hi, d }]));
 
                     // Key normalization gradient
-                    T kNorm = _lastPhiKNorm![new[] { bi, t, hi }];
+                    T kNorm = (_lastPhiKNorm ?? throw new InvalidOperationException("_lastPhiKNorm has not been initialized."))[new[] { bi, t, hi }];
                     T kNormInv = NumOps.Divide(NumOps.One, kNorm);
 
                     T dotK = NumOps.Zero;
                     for (int d = 0; d < _headDimension; d++)
-                        dotK = NumOps.Add(dotK, NumOps.Multiply(dPhiK[d], _lastPhiK![new[] { bi, t, hi, d }]));
+                        dotK = NumOps.Add(dotK, NumOps.Multiply(dPhiK[d], lastPhiK[new[] { bi, t, hi, d }]));
 
                     for (int d = 0; d < _headDimension; d++)
                     {
                         int flatD = dimStart + d;
-                        T qVal = _lastQuery![new[] { bi, t, flatD }];
-                        T kVal = _lastKey![new[] { bi, t, flatD }];
+                        T qVal = (_lastQuery ?? throw new InvalidOperationException("_lastQuery has not been initialized."))[new[] { bi, t, flatD }];
+                        T kVal = (_lastKey ?? throw new InvalidOperationException("_lastKey has not been initialized."))[new[] { bi, t, flatD }];
 
                         // dphi/du = (dPhiQ - phiQ * dot(dPhiQ, phiQ)) / norm
-                        T phiQd = _lastPhiQ![new[] { bi, t, hi, d }];
+                        T phiQd = lastPhiQ[new[] { bi, t, hi, d }];
                         T dU_Q = NumOps.Multiply(NumOps.Subtract(dPhiQ[d], NumOps.Multiply(phiQd, dotQ)), qNormInv);
 
-                        T phiKd = _lastPhiK![new[] { bi, t, hi, d }];
+                        T phiKd = lastPhiK[new[] { bi, t, hi, d }];
                         T dU_K = NumOps.Multiply(NumOps.Subtract(dPhiK[d], NumOps.Multiply(phiKd, dotK)), kNormInv);
 
                         // du/dx = 2*ReLU(x) for x > 0, 0 otherwise

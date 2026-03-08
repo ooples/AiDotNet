@@ -207,7 +207,7 @@ public class JointMutualInformation<T> : TransformerBase<T, Matrix<T>, Matrix<T>
     {
         // I(X_f1, X_f2; Y) = I(X_f1; Y) + I(X_f2; Y | X_f1)
         // Approximated as: I(X_f1; Y) + I(X_f2; Y) - I(X_f1; X_f2)
-        double mi1 = _miScores![f1];
+        double mi1 = (_miScores ?? throw new InvalidOperationException("_miScores has not been initialized."))[f1];
         double mi2 = _miScores[f2];
         double miJoint = ComputeFeatureFeatureMI(discretized, f1, f2, n);
 

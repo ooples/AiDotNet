@@ -654,7 +654,7 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
                 ["encoder_hidden_states"] = encoderOutput,
                 ["input_ids"] = initialTokens
             };
-            var output = OnnxDecoder!.Run(inputs);
+            var output = (OnnxDecoder ?? throw new InvalidOperationException("OnnxDecoder has not been initialized.")).Run(inputs);
             logits = output.Values.First();
         }
 

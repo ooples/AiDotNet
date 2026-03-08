@@ -72,7 +72,7 @@ public abstract class DifficultyEstimatorBase<T, TInput, TOutput> : IDifficultyE
         }
 
         // Return cached scores if available
-        if (CacheScores && HasCachedScores && CachedScores!.Length == dataset.Count)
+        if (CacheScores && HasCachedScores && (CachedScores ?? throw new InvalidOperationException("CachedScores has not been initialized.")).Length == dataset.Count)
         {
             return CachedScores;
         }

@@ -304,7 +304,7 @@ public class LDCOFDetector<T> : AnomalyDetectorBase<T>
             double localDensity = 1.0 / (kDist + 1e-10);
 
             // LDCOF score: ratio of cluster density to local density
-            double score = _clusterDensities![nearestCluster] / (localDensity + 1e-10);
+            double score = (_clusterDensities ?? throw new InvalidOperationException("_clusterDensities has not been initialized."))[nearestCluster] / (localDensity + 1e-10);
 
             scores[i] = NumOps.FromDouble(score);
         }

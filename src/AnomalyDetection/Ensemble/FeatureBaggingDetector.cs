@@ -154,8 +154,8 @@ public class FeatureBaggingDetector<T> : AnomalyDetectorBase<T>
         // Get scores from each base detector
         for (int e = 0; e < _nEstimators; e++)
         {
-            var subsetData = ExtractFeatureSubset(X, _featureSubsets![e]);
-            var detectorScores = _baseDetectors![e].ScoreAnomalies(subsetData);
+            var subsetData = ExtractFeatureSubset(X, (_featureSubsets ?? throw new InvalidOperationException("_featureSubsets has not been initialized."))[e]);
+            var detectorScores = (_baseDetectors ?? throw new InvalidOperationException("_baseDetectors has not been initialized."))[e].ScoreAnomalies(subsetData);
             allScores.Add(detectorScores);
         }
 

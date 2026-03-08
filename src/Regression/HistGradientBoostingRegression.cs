@@ -1037,7 +1037,8 @@ public class HistGradientBoostingRegression<T> : IFullModel<T, Matrix<T>, Vector
         for (int f = 0; f < _numFeatures; f++)
         {
             double val = NumOps.ToDouble(x[row, f]);
-            var thresholds = _binThresholds![f].Select(t => NumOps.ToDouble(t)).ToList();
+            var binThresholds = _binThresholds ?? throw new InvalidOperationException("_binThresholds has not been initialized.");
+            var thresholds = binThresholds[f].Select(t => NumOps.ToDouble(t)).ToList();
             binned[f] = (byte)FindBin(val, thresholds);
         }
 
@@ -1256,7 +1257,7 @@ public class HistGradientBoostingRegression<T> : IFullModel<T, Matrix<T>, Vector
     /// </remarks>
     private HistogramBin[] BuildHistogram(List<int> sampleIndices, int featureIdx, double[] residuals)
     {
-        int numBins = _binThresholds![featureIdx].Length + 1;
+        int numBins = binThresholds[featureIdx].Length + 1;
         var histogram = new HistogramBin[numBins];
 
         for (int i = 0; i < numBins; i++)
@@ -1266,7 +1267,8 @@ public class HistGradientBoostingRegression<T> : IFullModel<T, Matrix<T>, Vector
 
         foreach (int idx in sampleIndices)
         {
-            int bin = _binnedData![idx, featureIdx];
+            var binnedData = _binnedData ?? throw new InvalidOperationException("_binnedData has not been initialized.");
+            int bin = binnedData[idx, featureIdx];
             histogram[bin].GradientSum += residuals[idx];
             histogram[bin].HessianSum += 1.0; // Squared loss has hessian = 1
             histogram[bin].Count++;
@@ -1375,7 +1377,7 @@ public class HistGradientBoostingRegression<T> : IFullModel<T, Matrix<T>, Vector
 
         foreach (int idx in node.SampleIndices)
         {
-            int bin = _binnedData![idx, split.FeatureIndex];
+            int bin = binnedData[idx, split.FeatureIndex];
             if (bin <= split.BinThreshold)
             {
                 leftIndices.Add(idx);
@@ -1391,7 +1393,7 @@ public class HistGradientBoostingRegression<T> : IFullModel<T, Matrix<T>, Vector
         node.BinThreshold = split.BinThreshold;
 
         // Convert bin threshold to actual value for prediction
-        if (split.BinThreshold < _binThresholds![split.FeatureIndex].Length)
+        if (split.BinThreshold < binThresholds[split.FeatureIndex].Length)
         {
             node.Threshold = NumOps.ToDouble(_binThresholds[split.FeatureIndex][split.BinThreshold]);
         }
@@ -1467,7 +1469,7 @@ public class HistGradientBoostingRegression<T> : IFullModel<T, Matrix<T>, Vector
 
         while (!node.IsLeaf)
         {
-            int bin = _binnedData![sampleIndex, node.FeatureIndex];
+            int bin = binnedData[sampleIndex, node.FeatureIndex];
             node = bin <= node.BinThreshold ? node.Left! : node.Right!;
         }
 

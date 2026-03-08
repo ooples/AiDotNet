@@ -696,11 +696,11 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
     {
         if (UsingVectorActivation)
         {
-            return VectorActivation!.Activate(new Vector<T>([value]))[0];
+            return (VectorActivation ?? throw new InvalidOperationException("VectorActivation has not been initialized.")).Activate(new Vector<T>([value]))[0];
         }
         else
         {
-            return ScalarActivation!.Activate(value);
+            return (ScalarActivation ?? throw new InvalidOperationException("ScalarActivation has not been initialized.")).Activate(value);
         }
     }
 

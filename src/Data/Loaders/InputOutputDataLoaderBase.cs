@@ -130,7 +130,8 @@ public abstract class InputOutputDataLoaderBase<T, TInput, TOutput> :
         var batchIndices = new int[actualBatchSize];
         for (int i = 0; i < actualBatchSize; i++)
         {
-            batchIndices[i] = Indices![batchStart + i];
+            var indices = Indices ?? throw new InvalidOperationException("Indices has not been initialized.");
+            batchIndices[i] = indices[batchStart + i];
         }
 
         // Extract features and labels for this batch
@@ -166,7 +167,7 @@ public abstract class InputOutputDataLoaderBase<T, TInput, TOutput> :
             : RandomHelper.CreateSecureRandom();
 
         // Fisher-Yates shuffle
-        for (int i = Indices!.Length - 1; i > 0; i--)
+        for (int i = indices.Length - 1; i > 0; i--)
         {
             int j = random.Next(i + 1);
             (Indices[i], Indices[j]) = (Indices[j], Indices[i]);
@@ -181,7 +182,7 @@ public abstract class InputOutputDataLoaderBase<T, TInput, TOutput> :
         EnsureLoaded();
 
         // Restore original order
-        for (int i = 0; i < Indices!.Length; i++)
+        for (int i = 0; i < indices.Length; i++)
         {
             Indices[i] = i;
         }

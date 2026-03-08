@@ -104,7 +104,7 @@ public sealed class DevelopmentAttestationVerifier : IAttestationVerifier
         {
             var principal = _tokenHandler.ValidateToken(evidence.AttestationToken, _jwtParameters!, out _);
 
-            if (_jwtOptions!.RequireNonceClaim)
+            if ((_jwtOptions ?? throw new InvalidOperationException("_jwtOptions has not been initialized.")).RequireNonceClaim)
             {
                 if (string.IsNullOrWhiteSpace(evidence.Nonce))
                 {

@@ -189,7 +189,8 @@ public class SelfOrganizingMap<T> : ClusteringBase<T>
 
             var (bmuRow, bmuCol) = FindBMU(sample, d);
             int neuronIdx = bmuRow * width + bmuCol;
-            Labels[i] = NumOps.FromDouble(_neuronLabels![neuronIdx]);
+            var neuronLabels = _neuronLabels ?? throw new InvalidOperationException("_neuronLabels has not been initialized.");
+            Labels[i] = NumOps.FromDouble(neuronLabels[neuronIdx]);
         }
 
         IsTrained = true;
@@ -208,7 +209,8 @@ public class SelfOrganizingMap<T> : ClusteringBase<T>
                 double dist = 0;
                 for (int j = 0; j < d; j++)
                 {
-                    double diff = sample[j] - _weights![r, c][j];
+                    var weights = _weights ?? throw new InvalidOperationException("_weights has not been initialized.");
+                    double diff = sample[j] - weights[r, c][j];
                     dist += diff * diff;
                 }
 
@@ -278,7 +280,7 @@ public class SelfOrganizingMap<T> : ClusteringBase<T>
         {
             for (int c = 0; c < width; c++)
             {
-                neuronWeights[r * width + c] = _weights![r, c];
+                neuronWeights[r * width + c] = weights[r, c];
             }
         }
 
@@ -431,7 +433,7 @@ public class SelfOrganizingMap<T> : ClusteringBase<T>
                         double dist = 0;
                         for (int j = 0; j < d; j++)
                         {
-                            double diff = _weights![r, c][j] - _weights[nr, nc][j];
+                            double diff = weights[r, c][j] - _weights[nr, nc][j];
                             dist += diff * diff;
                         }
 
@@ -467,7 +469,7 @@ public class SelfOrganizingMap<T> : ClusteringBase<T>
 
             var (bmuRow, bmuCol) = FindBMU(sample, d);
             int neuronIdx = bmuRow * width + bmuCol;
-            labels[i] = NumOps.FromDouble(_neuronLabels![neuronIdx]);
+            labels[i] = NumOps.FromDouble(neuronLabels[neuronIdx]);
         }
 
         return labels;

@@ -392,7 +392,7 @@ public class AestheticScore<T> where T : struct
 
         // Linear projection: score = weights^T * embedding
         T score = _numOps.Zero;
-        for (int i = 0; i < Math.Min(_aestheticWeights!.Length, imageEmbedding.Length); i++)
+        for (int i = 0; i < Math.Min((_aestheticWeights ?? throw new InvalidOperationException("_aestheticWeights has not been initialized.")).Length, imageEmbedding.Length); i++)
         {
             score = _numOps.Add(score, _numOps.Multiply(_aestheticWeights[i], imageEmbedding[i]));
         }

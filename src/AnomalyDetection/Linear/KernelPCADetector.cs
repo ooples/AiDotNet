@@ -176,7 +176,8 @@ public class KernelPCADetector<T> : AnomalyDetectorBase<T>
         {
             for (int j = 0; j < n; j++)
             {
-                _mean[i] += _kernelMatrix![i, j];
+                var kernelMatrix = _kernelMatrix ?? throw new InvalidOperationException("_kernelMatrix has not been initialized.");
+                _mean[i] += kernelMatrix[i, j];
             }
             _mean[i] /= n;
             grandMean += _mean[i];
@@ -188,7 +189,7 @@ public class KernelPCADetector<T> : AnomalyDetectorBase<T>
         {
             for (int j = 0; j < n; j++)
             {
-                _kernelMatrix![i, j] = _kernelMatrix[i, j] - _mean[i] - _mean[j] + grandMean;
+                kernelMatrix[i, j] = _kernelMatrix[i, j] - _mean[i] - _mean[j] + grandMean;
             }
         }
     }
@@ -202,7 +203,7 @@ public class KernelPCADetector<T> : AnomalyDetectorBase<T>
         var matrix = new double[n, n];
         for (int i = 0; i < n; i++)
             for (int j = 0; j < n; j++)
-                matrix[i, j] = _kernelMatrix![i, j];
+                matrix[i, j] = kernelMatrix[i, j];
 
         for (int c = 0; c < maxComponents; c++)
         {

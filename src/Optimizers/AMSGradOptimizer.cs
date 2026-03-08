@@ -446,7 +446,7 @@ public class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
         writer.Write(hasVector);
         if (hasVector)
         {
-            writer.Write(vector!.Length);
+            writer.Write((vector ?? throw new InvalidOperationException("vector has not been initialized.")).Length);
             for (int i = 0; i < vector.Length; i++)
             {
                 writer.Write(NumOps.ToDouble(vector[i]));

@@ -141,7 +141,7 @@ public class KNeighborsClassifier<T> : ProbabilisticClassifierBase<T>
     {
         // Compute distances to all training samples
         var distances = new List<(T distance, int index)>();
-        for (int i = 0; i < _xTrain!.Rows; i++)
+        for (int i = 0; i < (_xTrain ?? throw new InvalidOperationException("_xTrain has not been initialized.")).Rows; i++)
         {
             var trainSample = new Vector<T>(_xTrain.Columns);
             for (int j = 0; j < _xTrain.Columns; j++)
@@ -168,7 +168,7 @@ public class KNeighborsClassifier<T> : ProbabilisticClassifierBase<T>
 
         foreach (var (distance, index) in sortedDistances)
         {
-            int classIdx = GetClassIndex(_yTrain![index]);
+            int classIdx = GetClassIndex((_yTrain ?? throw new InvalidOperationException("_yTrain has not been initialized."))[index]);
             T weight = GetWeight(distance);
             classVotes[classIdx] = NumOps.Add(classVotes[classIdx], weight);
         }

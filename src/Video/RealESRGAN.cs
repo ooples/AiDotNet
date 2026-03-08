@@ -525,7 +525,7 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
         Tensor<T> fakeOutput = ProcessThroughDiscriminator(generatedImages);
 
         // Calculate discriminator loss
-        T discriminatorLoss = _realESRGANLoss!.CalculateDiscriminatorLoss(
+        T discriminatorLoss = (_realESRGANLoss ?? throw new InvalidOperationException("_realESRGANLoss has not been initialized.")).CalculateDiscriminatorLoss(
             realOutput.ToVector(), fakeOutput.ToVector());
         _lastDiscriminatorLoss = discriminatorLoss;
 
@@ -572,7 +572,8 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
         var fakeLabels = CreateLabelTensor(fakeOutput.Shape[0], NumOps.Zero);
 
         // Calculate gradients for real images
-        var realGradient = Discriminator!.Backward(
+        var discriminator = Discriminator ?? throw new InvalidOperationException("Discriminator has not been initialized.");
+        var realGradient = discriminator.Backward(
             CalculateBCEGradient(realOutput, realLabels));
 
         // Calculate gradients for fake images
@@ -618,7 +619,8 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
         var combinedGradient = CombineGradients(reconstructionGradient, ganGradient);
 
         // Backpropagate through generator
-        Generator!.Backward(combinedGradient);
+        var generator = Generator ?? throw new InvalidOperationException("Generator has not been initialized.");
+        generator.Backward(combinedGradient);
 
         // Update generator parameters using optimizer or fallback to default learning rate
         if (_generatorOptimizer != null)
@@ -752,7 +754,7 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
     /// </remarks>
     private Tensor<T> ProcessThroughGenerator(Tensor<T> input)
     {
-        var expectedShape = Generator!.GetInputShape();
+        var expectedShape = generator.GetInputShape();
 
         // Check if input matches expected shape exactly (no batch dimension)
         if (input.Rank == expectedShape.Length && ShapesMatch(input.Shape, expectedShape))
@@ -851,7 +853,7 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
     /// </summary>
     private Tensor<T> ProcessThroughDiscriminator(Tensor<T> input)
     {
-        var expectedShape = Discriminator!.GetInputShape();
+        var expectedShape = discriminator.GetInputShape();
 
         // Check if input matches expected shape exactly (no batch dimension)
         if (input.Rank == expectedShape.Length && ShapesMatch(input.Shape, expectedShape))
@@ -1000,8 +1002,8 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
             throw new InvalidOperationException("Parameter updates are not supported in ONNX mode.");
 
         // Split parameters between generator and discriminator
-        int generatorParams = Generator!.GetParameters().Length;
-        int discriminatorParams = Discriminator!.GetParameters().Length;
+        int generatorParams = generator.GetParameters().Length;
+        int discriminatorParams = discriminator.GetParameters().Length;
 
         if (parameters.Length != generatorParams + discriminatorParams)
         {
@@ -1066,7 +1068,7 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
         writer.Write(_ganLambda);
 
         // Serialize generator parameters
-        var generatorParams = Generator!.GetParameters();
+        var generatorParams = generator.GetParameters();
         writer.Write(generatorParams.Length);
         for (int i = 0; i < generatorParams.Length; i++)
         {
@@ -1074,7 +1076,7 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
         }
 
         // Serialize discriminator parameters
-        var discriminatorParams = Discriminator!.GetParameters();
+        var discriminatorParams = discriminator.GetParameters();
         writer.Write(discriminatorParams.Length);
         for (int i = 0; i < discriminatorParams.Length; i++)
         {
@@ -1104,7 +1106,7 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
         {
             generatorParams[i] = NumOps.FromDouble(reader.ReadDouble());
         }
-        Generator!.SetParameters(new Vector<T>(generatorParams));
+        generator.SetParameters(new Vector<T>(generatorParams));
 
         // Load discriminator parameters
         int discriminatorParamCount = reader.ReadInt32();
@@ -1113,7 +1115,7 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
         {
             discriminatorParams[i] = NumOps.FromDouble(reader.ReadDouble());
         }
-        Discriminator!.SetParameters(new Vector<T>(discriminatorParams));
+        discriminator.SetParameters(new Vector<T>(discriminatorParams));
     }
 
     /// <inheritdoc/>

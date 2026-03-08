@@ -314,7 +314,7 @@ public class HoeffdingTreeClassifier<T> : ClassifierBase<T>, IOnlineClassifier<T
         for (int f = 0; f < features.Length; f++)
         {
             double value = NumOps.ToDouble(features[f]);
-            var stats = leaf.FeatureStatistics![f];
+            var stats = (leaf.FeatureStatistics ?? throw new InvalidOperationException("FeatureStatistics has not been initialized."))[f];
 
             // Update min/max for tracking
             stats.Min = Math.Min(stats.Min, value);
@@ -334,7 +334,7 @@ public class HoeffdingTreeClassifier<T> : ClassifierBase<T>, IOnlineClassifier<T
             }
 
             // Initialize bins for this class if needed
-            if (!stats.BinsByClass!.ContainsKey(classIdx))
+            if (!(stats.BinsByClass ?? throw new InvalidOperationException("BinsByClass has not been initialized.")).ContainsKey(classIdx))
             {
                 stats.BinsByClass[classIdx] = new BinStats
                 {
@@ -432,7 +432,7 @@ public class HoeffdingTreeClassifier<T> : ClassifierBase<T>, IOnlineClassifier<T
     private double CalculateInformationGain(HoeffdingNode leaf, int feature, double threshold,
         double currentEntropy)
     {
-        var stats = leaf.FeatureStatistics![feature];
+        var stats = (leaf.FeatureStatistics ?? throw new InvalidOperationException("FeatureStatistics has not been initialized."))[feature];
         var leftCounts = new Dictionary<int, long>();
         var rightCounts = new Dictionary<int, long>();
         long leftTotal = 0, rightTotal = 0;

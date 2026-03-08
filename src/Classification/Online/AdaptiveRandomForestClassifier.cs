@@ -296,7 +296,7 @@ public class AdaptiveRandomForestClassifier<T> : ClassifierBase<T>, IOnlineClass
         foreach (var member in _ensemble)
         {
             var selectedFeatures = ExtractSelectedFeatures(features, member.SelectedFeatures!);
-            var treePrediction = member.Tree!.Predict(ConvertToMatrix(selectedFeatures));
+            var treePrediction = (member.Tree ?? throw new InvalidOperationException("Tree has not been initialized.")).Predict(ConvertToMatrix(selectedFeatures));
 
             int classIdx = GetClassIndex(treePrediction[0]);
             if (classIdx >= 0)

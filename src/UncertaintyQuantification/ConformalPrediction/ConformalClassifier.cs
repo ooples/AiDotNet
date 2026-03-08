@@ -172,7 +172,7 @@ public class ConformalClassifier<T>
     /// </summary>
     private T ComputeThreshold(double confidenceLevel)
     {
-        var n = _calibrationScores!.Length;
+        var n = (_calibrationScores ?? throw new InvalidOperationException("_calibrationScores has not been initialized.")).Length;
 
         // Compute quantile index (using floor for conservative estimates)
         var quantileLevel = 1.0 - confidenceLevel;

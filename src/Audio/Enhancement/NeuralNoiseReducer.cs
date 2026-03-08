@@ -475,7 +475,8 @@ public class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
             var frameData = new T[_fftSize];
             for (int i = 0; i < _fftSize && start + i < input.Length; i++)
             {
-                frameData[i] = NumOps.Multiply(input[start + i], _window![i]);
+                var window = _window ?? throw new InvalidOperationException("_window has not been initialized.");
+                frameData[i] = NumOps.Multiply(input[start + i], window[i]);
             }
 
             // Compute STFT
@@ -490,7 +491,7 @@ public class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
             // Window and overlap-add
             for (int i = 0; i < _fftSize && start + i < output.Length; i++)
             {
-                var windowed = NumOps.Multiply(enhanced[i], _window![i]);
+                var windowed = NumOps.Multiply(enhanced[i], window[i]);
                 output[start + i] = NumOps.Add(output[start + i], windowed);
             }
         }
@@ -511,7 +512,7 @@ public class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
 
         for (int i = 0; i < chunk.Length; i++)
         {
-            _inputBuffer![_bufferPosition] = chunk[i];
+            (_inputBuffer ?? throw new InvalidOperationException("_inputBuffer has not been initialized."))[_bufferPosition] = chunk[i];
             _bufferPosition++;
 
             if (_bufferPosition >= _hopSize)
@@ -521,7 +522,7 @@ public class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
                 for (int j = 0; j < _fftSize; j++)
                 {
                     int idx = (j + _bufferPosition - _hopSize) % _fftSize;
-                    frameData[j] = NumOps.Multiply(_inputBuffer[idx], _window![j]);
+                    frameData[j] = NumOps.Multiply(_inputBuffer[idx], window[j]);
                 }
 
                 var (magnitudes, phases) = ComputeSTFT(frameData);
@@ -531,14 +532,15 @@ public class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
                 // Overlap-add to output buffer
                 for (int j = 0; j < _fftSize; j++)
                 {
-                    var windowed = NumOps.Multiply(enhanced[j], _window![j]);
-                    _outputBuffer![j] = NumOps.Add(_outputBuffer[j], windowed);
+                    var windowed = NumOps.Multiply(enhanced[j], window[j]);
+                    var outputBuffer = _outputBuffer ?? throw new InvalidOperationException("_outputBuffer has not been initialized.");
+                    outputBuffer[j] = NumOps.Add(_outputBuffer[j], windowed);
                 }
 
                 // Output hop samples
                 for (int j = 0; j < _hopSize && outputPos < output.Length; j++)
                 {
-                    output[outputPos++] = _outputBuffer![j];
+                    output[outputPos++] = outputBuffer[j];
                 }
 
                 // Shift output buffer
@@ -698,7 +700,7 @@ public class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
 
             for (int i = 0; i < _fftSize && start + i < noiseAudio.Length; i++)
             {
-                frameData[i] = NumOps.Multiply(noiseAudio[start + i], _window![i]);
+                frameData[i] = NumOps.Multiply(noiseAudio[start + i], window[i]);
             }
 
             var (magnitudes, _) = ComputeSTFT(frameData);
@@ -733,7 +735,7 @@ public class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
         var windowed = new T[Math.Min(samples.Length, _fftSize)];
         for (int i = 0; i < windowed.Length; i++)
         {
-            windowed[i] = NumOps.Multiply(samples[i], _window![i]);
+            windowed[i] = NumOps.Multiply(samples[i], window[i]);
         }
 
         // Compute magnitude spectrum

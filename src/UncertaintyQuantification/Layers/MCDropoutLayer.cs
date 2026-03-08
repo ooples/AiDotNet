@@ -106,7 +106,7 @@ public class MCDropoutLayer<T> : LayerBase<T>
 
         for (int i = 0; i < inputVector.Length; i++)
         {
-            if (_rng.Value!.NextDouble() > _dropoutRate)
+            if ((_rng.Value ?? throw new InvalidOperationException("Value has not been initialized.")).NextDouble() > _dropoutRate)
             {
                 mask[i] = _scale;
                 outputVector[i] = NumOps.Multiply(inputVector[i], _scale);

@@ -450,7 +450,8 @@ public abstract class AudioDiffusionModelBase<T> : LatentDiffusionModelBase<T>, 
             var singleWaveform = ExtractBatchWaveform(waveform, b, numSamples);
 
             // Compute mel spectrogram using GPU-accelerated processor
-            var singleMel = _melSpectrogramProcessor!.Forward(singleWaveform);
+            var melSpectrogramProcessor = _melSpectrogramProcessor ?? throw new InvalidOperationException("_melSpectrogramProcessor has not been initialized.");
+            var singleMel = melSpectrogramProcessor.Forward(singleWaveform);
 
             // Copy result to batch output
             CopyMelToBatch(melSpan, singleMel, b, MelChannels, numFrames);
@@ -534,10 +535,10 @@ public abstract class AudioDiffusionModelBase<T> : LatentDiffusionModelBase<T>, 
             var singleMel = ExtractBatchMel(melSpectrogram, b, MelChannels, numFrames);
 
             // Invert mel spectrogram to linear magnitude using the filterbank
-            var magnitude = _melSpectrogramProcessor!.InvertMelToMagnitude(singleMel);
+            var magnitude = melSpectrogramProcessor.InvertMelToMagnitude(singleMel);
 
             // Reconstruct audio using Griffin-Lim
-            var singleAudio = _griffinLimProcessor!.Reconstruct(magnitude, numSamples);
+            var singleAudio = (_griffinLimProcessor ?? throw new InvalidOperationException("_griffinLimProcessor has not been initialized.")).Reconstruct(magnitude, numSamples);
 
             // Copy result to batch output
             CopyAudioToBatch(waveSpan, singleAudio, b, numSamples);
@@ -617,7 +618,7 @@ public abstract class AudioDiffusionModelBase<T> : LatentDiffusionModelBase<T>, 
         }
 
         // Compute mel spectrogram using GPU-accelerated processor
-        var melSpectrogram = _melSpectrogramProcessor!.Forward(waveform);
+        var melSpectrogram = melSpectrogramProcessor.Forward(waveform);
         var melSpan = melSpectrogram.AsSpan();
 
         // Compute statistical embedding from mel spectrogram

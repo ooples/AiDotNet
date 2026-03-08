@@ -573,7 +573,7 @@ public class SpectralClustering<T> : ClusteringBase<T>
     {
         ValidateIsTrained();
 
-        int n = _embedding!.GetLength(0);
+        int n = (_embedding ?? throw new InvalidOperationException("_embedding has not been initialized.")).GetLength(0);
         int k = _embedding.GetLength(1);
         var result = new Matrix<T>(n, k);
 

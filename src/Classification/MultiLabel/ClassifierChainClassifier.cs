@@ -307,7 +307,7 @@ public class ClassifierChainClassifier<T> : MultiLabelClassifierBase<T>
             {
                 for (int p = 0; p < chainPosition; p++)
                 {
-                    int prevLabelIndex = _chainOrder![p];
+                    int prevLabelIndex = (_chainOrder ?? throw new InvalidOperationException("_chainOrder has not been initialized."))[p];
                     augmented[i, x.Columns + p] = y[i, prevLabelIndex];
                 }
             }

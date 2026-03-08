@@ -317,14 +317,14 @@ public class UViTNoisePredictor<T> : NoisePredictorBase<T>
     private Tensor<T> ApplyBlock(UViTBlock block, Tensor<T> x)
     {
         // Self-attention with residual
-        var normed = block.Norm1!.Forward(x);
-        var attn = block.Attention!.Forward(normed);
+        var normed = (block.Norm1 ?? throw new InvalidOperationException("Norm1 has not been initialized.")).Forward(x);
+        var attn = (block.Attention ?? throw new InvalidOperationException("Attention has not been initialized.")).Forward(normed);
         x = AddTensors(x, attn);
 
         // MLP with residual
-        normed = block.Norm2!.Forward(x);
-        var mlp = block.MLP1!.Forward(normed);
-        mlp = block.MLP2!.Forward(mlp);
+        normed = (block.Norm2 ?? throw new InvalidOperationException("Norm2 has not been initialized.")).Forward(x);
+        var mlp = (block.MLP1 ?? throw new InvalidOperationException("MLP1 has not been initialized.")).Forward(normed);
+        mlp = (block.MLP2 ?? throw new InvalidOperationException("MLP2 has not been initialized.")).Forward(mlp);
         x = AddTensors(x, mlp);
 
         return x;

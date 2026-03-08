@@ -802,7 +802,7 @@ public class BASEDLayer<T> : LayerBase<T>
                             ds = NumOps.Add(ds,
                                 NumOps.Multiply(
                                     dOutput[new[] { bi, t, flatD }],
-                                    _lastWindowValue![new[] { bi, srcT, flatD }]));
+                                    (_lastWindowValue ?? throw new InvalidOperationException("_lastWindowValue has not been initialized."))[new[] { bi, srcT, flatD }]));
                         }
                         dScores[wi] = ds;
                     }
@@ -811,14 +811,15 @@ public class BASEDLayer<T> : LayerBase<T>
                     T dotAS = NumOps.Zero;
                     for (int wi = 0; wi < windowLen; wi++)
                     {
-                        T attnW = wi < _windowSize ? _lastWindowScores![new[] { bi, t, hi, wi }] : NumOps.Zero;
+                        var lastWindowScores = _lastWindowScores ?? throw new InvalidOperationException("_lastWindowScores has not been initialized.");
+                        T attnW = wi < _windowSize ? lastWindowScores[new[] { bi, t, hi, wi }] : NumOps.Zero;
                         dotAS = NumOps.Add(dotAS, NumOps.Multiply(attnW, dScores[wi]));
                     }
 
                     for (int wi = 0; wi < windowLen; wi++)
                     {
                         int srcT = windowStart + wi;
-                        T attnW = wi < _windowSize ? _lastWindowScores![new[] { bi, t, hi, wi }] : NumOps.Zero;
+                        T attnW = wi < _windowSize ? lastWindowScores[new[] { bi, t, hi, wi }] : NumOps.Zero;
                         T dRaw = NumOps.Multiply(attnW, NumOps.Subtract(dScores[wi], dotAS));
                         T dRawScaled = NumOps.Multiply(dRaw, scale);
 
@@ -829,10 +830,10 @@ public class BASEDLayer<T> : LayerBase<T>
                             int flatD = dimStart + d;
                             dQ[new[] { bi, t, flatD }] = NumOps.Add(
                                 dQ[new[] { bi, t, flatD }],
-                                NumOps.Multiply(dRawScaled, _lastWindowKey![new[] { bi, srcT, flatD }]));
+                                NumOps.Multiply(dRawScaled, (_lastWindowKey ?? throw new InvalidOperationException("_lastWindowKey has not been initialized."))[new[] { bi, srcT, flatD }]));
                             dK[new[] { bi, srcT, flatD }] = NumOps.Add(
                                 dK[new[] { bi, srcT, flatD }],
-                                NumOps.Multiply(dRawScaled, _lastWindowQuery![new[] { bi, t, flatD }]));
+                                NumOps.Multiply(dRawScaled, (_lastWindowQuery ?? throw new InvalidOperationException("_lastWindowQuery has not been initialized."))[new[] { bi, t, flatD }]));
                         }
 
                         // dV[srcT] += attn[wi] * dOutput[t]
@@ -903,14 +904,16 @@ public class BASEDLayer<T> : LayerBase<T>
                     // Update state with phi(k) * v^T
                     for (int fi = 0; fi < featureDim; fi++)
                     {
-                        T phiKVal = _lastLinearFeatureK![new[] { bi, t, hi, fi }];
+                        var lastLinearFeatureK = _lastLinearFeatureK ?? throw new InvalidOperationException("_lastLinearFeatureK has not been initialized.");
+                        T phiKVal = lastLinearFeatureK[new[] { bi, t, hi, fi }];
                         norms[t + 1, fi] = NumOps.Add(norms[t + 1, fi], phiKVal);
                         for (int di = 0; di < _headDimension; di++)
                         {
                             int flatD = dimStart + di;
                             states[t + 1, fi, di] = NumOps.Add(
                                 states[t + 1, fi, di],
-                                NumOps.Multiply(phiKVal, _lastLinearValue![new[] { bi, t, flatD }]));
+                                var lastLinearValue = _lastLinearValue ?? throw new InvalidOperationException("_lastLinearValue has not been initialized.");
+                                NumOps.Multiply(phiKVal, lastLinearValue[new[] { bi, t, flatD }]));
                         }
                     }
 
@@ -918,7 +921,8 @@ public class BASEDLayer<T> : LayerBase<T>
                     T denom = epsilon;
                     for (int fi = 0; fi < featureDim; fi++)
                     {
-                        T phiQVal = _lastLinearFeatureQ![new[] { bi, t, hi, fi }];
+                        var lastLinearFeatureQ = _lastLinearFeatureQ ?? throw new InvalidOperationException("_lastLinearFeatureQ has not been initialized.");
+                        T phiQVal = lastLinearFeatureQ[new[] { bi, t, hi, fi }];
                         denom = NumOps.Add(denom, NumOps.Multiply(norms[t + 1, fi], phiQVal));
                     }
                     denoms[t] = denom;
@@ -952,11 +956,11 @@ public class BASEDLayer<T> : LayerBase<T>
                         for (int fi = 0; fi < featureDim; fi++)
                             numVal = NumOps.Add(numVal,
                                 NumOps.Multiply(states[t + 1, fi, di],
-                                    _lastLinearFeatureQ![new[] { bi, t, hi, fi }]));
+                                    lastLinearFeatureQ[new[] { bi, t, hi, fi }]));
 
                         for (int fi = 0; fi < featureDim; fi++)
                         {
-                            T phiQVal = _lastLinearFeatureQ![new[] { bi, t, hi, fi }];
+                            T phiQVal = lastLinearFeatureQ[new[] { bi, t, hi, fi }];
 
                             // dS[f,d] += dO * phiQ[f] / denom
                             dS[fi, di] = NumOps.Add(dS[fi, di],
@@ -983,9 +987,9 @@ public class BASEDLayer<T> : LayerBase<T>
                             for (int fj = 0; fj < featureDim; fj++)
                                 numVal = NumOps.Add(numVal,
                                     NumOps.Multiply(states[t + 1, fj, di],
-                                        _lastLinearFeatureQ![new[] { bi, t, hi, fj }]));
+                                        lastLinearFeatureQ[new[] { bi, t, hi, fj }]));
 
-                            T phiQVal = _lastLinearFeatureQ![new[] { bi, t, hi, fi }];
+                            T phiQVal = lastLinearFeatureQ[new[] { bi, t, hi, fi }];
                             dZ[fi] = NumOps.Subtract(dZ[fi],
                                 NumOps.Divide(
                                     NumOps.Multiply(NumOps.Multiply(dO, numVal), phiQVal),
@@ -1004,9 +1008,9 @@ public class BASEDLayer<T> : LayerBase<T>
                         {
                             int flatD = dimStart + di;
                             dPhiK[fi] = NumOps.Add(dPhiK[fi],
-                                NumOps.Multiply(dS[fi, di], _lastLinearValue![new[] { bi, t, flatD }]));
+                                NumOps.Multiply(dS[fi, di], lastLinearValue[new[] { bi, t, flatD }]));
 
-                            T phiKVal = _lastLinearFeatureK![new[] { bi, t, hi, fi }];
+                            T phiKVal = lastLinearFeatureK[new[] { bi, t, hi, fi }];
                             dV[new[] { bi, t, flatD }] = NumOps.Add(
                                 dV[new[] { bi, t, flatD }],
                                 NumOps.Multiply(dS[fi, di], phiKVal));
@@ -1022,8 +1026,8 @@ public class BASEDLayer<T> : LayerBase<T>
                         int flatD = dimStart + d;
                         T scaleVal = _featureMapScale[new[] { hi, d }];
 
-                        T qVal = NumOps.Multiply(_lastLinearQuery![new[] { bi, t, flatD }], keyScale);
-                        T kVal = NumOps.Multiply(_lastLinearKey![new[] { bi, t, flatD }], keyScale);
+                        T qVal = NumOps.Multiply((_lastLinearQuery ?? throw new InvalidOperationException("_lastLinearQuery has not been initialized."))[new[] { bi, t, flatD }], keyScale);
+                        T kVal = NumOps.Multiply((_lastLinearKey ?? throw new InvalidOperationException("_lastLinearKey has not been initialized."))[new[] { bi, t, flatD }], keyScale);
 
                         // First order: dphi/dx = scale
                         T dQ_d = NumOps.Multiply(dPhiQ[d], scaleVal);

@@ -700,7 +700,7 @@ public class SlowFast<T> : NeuralNetworkBase<T>
         writer.Write(hasOptimizer);
         if (hasOptimizer)
         {
-            writer.Write(_optimizer!.GetType().AssemblyQualifiedName ?? typeof(AdamOptimizer<T, Tensor<T>, Tensor<T>>).AssemblyQualifiedName!);
+            writer.Write((_optimizer ?? throw new InvalidOperationException("_optimizer has not been initialized.")).GetType().AssemblyQualifiedName ?? typeof(AdamOptimizer<T, Tensor<T>, Tensor<T>>).AssemblyQualifiedName!);
         }
     }
 

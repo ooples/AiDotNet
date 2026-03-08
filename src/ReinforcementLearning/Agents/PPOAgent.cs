@@ -405,8 +405,8 @@ public class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>
             var state = _trajectory.States[idx];
             var action = _trajectory.Actions[idx];
             var oldLogProb = _trajectory.LogProbs[idx];
-            var advantage = _trajectory.Advantages![idx];
-            var targetReturn = _trajectory.Returns![idx];
+            var advantage = (_trajectory.Advantages ?? throw new InvalidOperationException("Advantages has not been initialized."))[idx];
+            var targetReturn = (_trajectory.Returns ?? throw new InvalidOperationException("Returns has not been initialized."))[idx];
 
             // Policy loss (clipped objective)
             var newLogProb = ComputeLogProb(state, action);
@@ -509,8 +509,8 @@ public class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>
         {
             var state = _trajectory.States[idx];
             var action = _trajectory.Actions[idx];
-            var advantage = _trajectory.Advantages![idx];
-            var oldLogProb = _trajectory.LogProbs![idx];
+            var advantage = (_trajectory.Advantages ?? throw new InvalidOperationException("Advantages has not been initialized."))[idx];
+            var oldLogProb = (_trajectory.LogProbs ?? throw new InvalidOperationException("LogProbs has not been initialized."))[idx];
 
             // Forward pass to get current policy probabilities
             var stateTensor = Tensor<T>.FromVector(state);
@@ -589,7 +589,7 @@ public class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>
         foreach (var idx in batchIndices)
         {
             var state = _trajectory.States[idx];
-            var targetReturn = _trajectory.Returns![idx];
+            var targetReturn = (_trajectory.Returns ?? throw new InvalidOperationException("Returns has not been initialized."))[idx];
 
             var stateTensor = Tensor<T>.FromVector(state);
             var valueOutputTensor = _valueNetwork.Predict(stateTensor);

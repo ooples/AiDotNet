@@ -238,7 +238,8 @@ public class InfluenceFunctionExplainer<T> : IGPUAcceleratedExplainer<T>
         for (int i = 0; i < _trainingData.Rows; i++)
         {
             double dot = 0;
-            for (int j = 0; j < ihvp.Length && j < _cachedTrainingGradients!.Columns; j++)
+            var cachedTrainingGradients = _cachedTrainingGradients ?? throw new InvalidOperationException("_cachedTrainingGradients has not been initialized.");
+            for (int j = 0; j < ihvp.Length && j < cachedTrainingGradients.Columns; j++)
             {
                 dot += NumOps.ToDouble(_cachedTrainingGradients[i, j]) * NumOps.ToDouble(ihvp[j]);
             }
@@ -292,7 +293,7 @@ public class InfluenceFunctionExplainer<T> : IGPUAcceleratedExplainer<T>
         for (int i = 0; i < _trainingData.Rows; i++)
         {
             // Get gradient for this training sample
-            var trainGradient = new Vector<T>(_cachedTrainingGradients!.Columns);
+            var trainGradient = new Vector<T>(cachedTrainingGradients.Columns);
             for (int j = 0; j < trainGradient.Length; j++)
             {
                 trainGradient[j] = _cachedTrainingGradients[i, j];
@@ -708,7 +709,7 @@ public class InfluenceFunctionExplainer<T> : IGPUAcceleratedExplainer<T>
     {
         EnsureTrainingGradientsComputed();
 
-        int n = _cachedTrainingGradients!.Columns;
+        int n = cachedTrainingGradients.Columns;
         var avg = new Vector<T>(n);
 
         for (int i = 0; i < _trainingData.Rows; i++)

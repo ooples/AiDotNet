@@ -29,7 +29,7 @@ public class SteadyStateGeneticAlgorithm<T, TInput, TOutput> :
         // Sort by fitness
         var sortedPopulation = newPopulation
             .OrderByDescending(i => FitnessCalculator.IsHigherScoreBetter ?
-                i!.GetFitness() : InvertFitness(i!.GetFitness()))
+                (i ?? throw new InvalidOperationException("i has not been initialized.")).GetFitness() : InvertFitness(i!.GetFitness()))
             .ToList();
 
         // Determine how many individuals to replace

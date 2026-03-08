@@ -333,11 +333,11 @@ public class BayesianDetector<T> : AnomalyDetectorBase<T>
             double mahalSq = 0;
             for (int j1 = 0; j1 < _nFeatures; j1++)
             {
-                double diff1 = point[j1] - _posteriorMean![j1];
+                double diff1 = point[j1] - (_posteriorMean ?? throw new InvalidOperationException("_posteriorMean has not been initialized."))[j1];
                 for (int j2 = 0; j2 < _nFeatures; j2++)
                 {
                     double diff2 = point[j2] - _posteriorMean[j2];
-                    mahalSq += diff1 * _posteriorPrecision![j1, j2] * diff2;
+                    mahalSq += diff1 * (_posteriorPrecision ?? throw new InvalidOperationException("_posteriorPrecision has not been initialized."))[j1, j2] * diff2;
                 }
             }
 

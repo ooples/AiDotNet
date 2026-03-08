@@ -474,7 +474,7 @@ public class InterpretabilityDashboard : IDisposable
 
                 foreach (var exp in attributions)
                 {
-                    for (int i = 0; i < featureNames.Length && i < exp.Attributions!.Length; i++)
+                    for (int i = 0; i < featureNames.Length && i < (exp.Attributions ?? throw new InvalidOperationException("Attributions has not been initialized.")).Length; i++)
                     {
                         meanAttr[i] += exp.Attributions[i];
                     }

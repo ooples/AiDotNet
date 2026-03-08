@@ -116,7 +116,7 @@ public class EllipticEnvelopeDetector<T> : AnomalyDetectorBase<T>
             var diff = new Vector<T>(d);
             for (int j = 0; j < d; j++)
             {
-                diff[j] = NumOps.Subtract(X[i, j], _location![j]);
+                diff[j] = NumOps.Subtract(X[i, j], (_location ?? throw new InvalidOperationException("_location has not been initialized."))[j]);
             }
 
             // temp = Precision * diff
@@ -126,7 +126,7 @@ public class EllipticEnvelopeDetector<T> : AnomalyDetectorBase<T>
                 T sum = NumOps.Zero;
                 for (int k = 0; k < d; k++)
                 {
-                    sum = NumOps.Add(sum, NumOps.Multiply(_precisionMatrix![j, k], diff[k]));
+                    sum = NumOps.Add(sum, NumOps.Multiply((_precisionMatrix ?? throw new InvalidOperationException("_precisionMatrix has not been initialized."))[j, k], diff[k]));
                 }
                 temp[j] = sum;
             }

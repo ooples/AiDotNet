@@ -799,7 +799,7 @@ public class AudioVisualEventLocalizationNetwork<T> : NeuralNetworkBase<T>, IAud
             if (relevantEvents.Any())
             {
                 var evt = relevantEvents.First();
-                var box = evt.BoundingBox!.Value;
+                var box = (evt.BoundingBox ?? throw new InvalidOperationException("BoundingBox has not been initialized.")).Value;
                 answer = $"The event is located at position ({box.X}, {box.Y}) with size ({box.Width}x{box.Height})";
                 evidence.AddRange(relevantEvents.Select(e => (e.StartTime, e.EndTime)));
             }

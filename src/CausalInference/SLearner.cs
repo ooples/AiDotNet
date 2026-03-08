@@ -160,8 +160,9 @@ public class SLearner<T> : CausalModelBase<T>
             // Predict with treatment = 1
             double predTreated = NumOps.ToDouble(_bias);
             for (int j = 0; j < features.Columns; j++)
-                predTreated += NumOps.ToDouble(_weights![j]) * NumOps.ToDouble(features[i, j]);
-            predTreated += NumOps.ToDouble(_weights![features.Columns]) * 1.0; // T = 1
+                var weights = _weights ?? throw new InvalidOperationException("_weights has not been initialized.");
+                predTreated += NumOps.ToDouble(weights[j]) * NumOps.ToDouble(features[i, j]);
+            predTreated += NumOps.ToDouble(weights[features.Columns]) * 1.0; // T = 1
 
             // Predict with treatment = 0
             double predControl = NumOps.ToDouble(_bias);
@@ -187,8 +188,8 @@ public class SLearner<T> : CausalModelBase<T>
         {
             double pred = NumOps.ToDouble(_bias);
             for (int j = 0; j < features.Columns; j++)
-                pred += NumOps.ToDouble(_weights![j]) * NumOps.ToDouble(features[i, j]);
-            pred += NumOps.ToDouble(_weights![features.Columns]) * 1.0;
+                pred += NumOps.ToDouble(weights[j]) * NumOps.ToDouble(features[i, j]);
+            pred += NumOps.ToDouble(weights[features.Columns]) * 1.0;
             result[i] = NumOps.FromDouble(pred);
         }
         return result;
@@ -206,7 +207,7 @@ public class SLearner<T> : CausalModelBase<T>
         {
             double pred = NumOps.ToDouble(_bias);
             for (int j = 0; j < features.Columns; j++)
-                pred += NumOps.ToDouble(_weights![j]) * NumOps.ToDouble(features[i, j]);
+                pred += NumOps.ToDouble(weights[j]) * NumOps.ToDouble(features[i, j]);
             // Treatment = 0, so treatment weight not added
             result[i] = NumOps.FromDouble(pred);
         }

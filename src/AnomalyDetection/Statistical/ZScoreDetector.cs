@@ -121,14 +121,14 @@ public class ZScoreDetector<T> : AnomalyDetectorBase<T>
             for (int j = 0; j < X.Columns; j++)
             {
                 // Skip features with zero standard deviation (constant features)
-                if (NumOps.Equals(_stds![j], NumOps.Zero))
+                if (NumOps.Equals((_stds ?? throw new InvalidOperationException("_stds has not been initialized."))[j], NumOps.Zero))
                 {
                     continue;
                 }
 
                 // Z = (x - mean) / std
                 T zScore = NumOps.Divide(
-                    NumOps.Subtract(X[i, j], _means![j]),
+                    NumOps.Subtract(X[i, j], (_means ?? throw new InvalidOperationException("_means has not been initialized."))[j]),
                     _stds[j]);
 
                 T absZScore = NumOps.Abs(zScore);

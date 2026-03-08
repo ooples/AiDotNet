@@ -420,8 +420,8 @@ public class CalibrationHelper<T, TInput, TOutput>
         for (int i = 0; i < n; i++)
         {
             double absVal = Math.Abs(Convert.ToDouble(parameters[i]));
-            stats.GlobalMaxAbsActivations![i] = absVal;
-            stats.GlobalActivationMagnitudes![i] = absVal;
+            (stats.GlobalMaxAbsActivations ?? throw new InvalidOperationException("GlobalMaxAbsActivations has not been initialized."))[i] = absVal;
+            (stats.GlobalActivationMagnitudes ?? throw new InvalidOperationException("GlobalActivationMagnitudes has not been initialized."))[i] = absVal;
             maxMag = Math.Max(maxMag, absVal);
         }
 
@@ -430,7 +430,7 @@ public class CalibrationHelper<T, TInput, TOutput>
         {
             for (int i = 0; i < n; i++)
             {
-                stats.GlobalActivationMagnitudes![i] /= maxMag;
+                (stats.GlobalActivationMagnitudes ?? throw new InvalidOperationException("GlobalActivationMagnitudes has not been initialized."))[i] /= maxMag;
             }
         }
     }

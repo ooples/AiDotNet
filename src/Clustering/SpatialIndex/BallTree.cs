@@ -163,7 +163,8 @@ public class BallTree<T>
 
         // Sort indices by split dimension
         Array.Sort(indices, start, count, Comparer<int>.Create((a, b) =>
-            _numOps.ToDouble(_data![a, splitDim]).CompareTo(_numOps.ToDouble(_data[b, splitDim]))));
+            var data = _data ?? throw new InvalidOperationException("_data has not been initialized.");
+            _numOps.ToDouble(data[a, splitDim]).CompareTo(_numOps.ToDouble(_data[b, splitDim]))));
 
         int mid = start + count / 2;
 
@@ -193,7 +194,7 @@ public class BallTree<T>
             T sum = _numOps.Zero;
             for (int i = start; i < end; i++)
             {
-                sum = _numOps.Add(sum, _data![indices[i], j]);
+                sum = _numOps.Add(sum, data[indices[i], j]);
             }
             centroid[j] = _numOps.Divide(sum, _numOps.FromDouble(count));
         }
@@ -230,7 +231,7 @@ public class BallTree<T>
 
             for (int i = start; i < end; i++)
             {
-                double val = _numOps.ToDouble(_data![indices[i], d]);
+                double val = _numOps.ToDouble(data[indices[i], d]);
                 min = Math.Min(min, val);
                 max = Math.Max(max, val);
             }
@@ -281,8 +282,8 @@ public class BallTree<T>
         }
 
         // Visit children (closer one first)
-        T distToLeft = _distanceMetric.Compute(query, node.Left!.Centroid);
-        T distToRight = _distanceMetric.Compute(query, node.Right!.Centroid);
+        T distToLeft = _distanceMetric.Compute(query, (node.Left ?? throw new InvalidOperationException("Left has not been initialized.")).Centroid);
+        T distToRight = _distanceMetric.Compute(query, (node.Right ?? throw new InvalidOperationException("Right has not been initialized.")).Centroid);
 
         if (_numOps.ToDouble(distToLeft) <= _numOps.ToDouble(distToRight))
         {

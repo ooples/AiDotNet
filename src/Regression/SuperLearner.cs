@@ -441,7 +441,7 @@ public class SuperLearner<T> : NonLinearRegressionBase<T>
         {
             for (int i = 0; i < n; i++)
             {
-                features[i, j] = (features[i, j] - _predMeans![j]) / _predStds![j];
+                features[i, j] = (features[i, j] - (_predMeans ?? throw new InvalidOperationException("_predMeans has not been initialized."))[j]) / (_predStds ?? throw new InvalidOperationException("_predStds has not been initialized."))[j];
             }
         }
     }
@@ -512,7 +512,7 @@ public class SuperLearner<T> : NonLinearRegressionBase<T>
         double sum = 0;
         for (int i = 0; i < numModels; i++)
         {
-            invMse[i] = 1.0 / (_cvPerformance![i] + 1e-10);
+            invMse[i] = 1.0 / ((_cvPerformance ?? throw new InvalidOperationException("_cvPerformance has not been initialized."))[i] + 1e-10);
             sum += invMse[i];
         }
 

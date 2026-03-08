@@ -264,7 +264,7 @@ public class LabelPowerset<T> : MultiLabelClassifierBase<T>
         for (int i = 0; i < y.Rows; i++)
         {
             var labelKey = GetLabelKey(y, i);
-            int classIndex = _labelsToClass![labelKey];
+            int classIndex = (_labelsToClass ?? throw new InvalidOperationException("_labelsToClass has not been initialized."))[labelKey];
             classLabels[i] = NumOps.FromDouble(classIndex);
         }
 

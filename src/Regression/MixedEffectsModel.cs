@@ -405,7 +405,7 @@ public class MixedEffectsModel<T> : NonLinearRegressionBase<T>
 
         for (int j = 0; j < x.Columns; j++)
         {
-            double mean = NumOps.ToDouble(_featureMeans![j]);
+            double mean = NumOps.ToDouble((_featureMeans ?? throw new InvalidOperationException("_featureMeans has not been initialized."))[j]);
             for (int i = 0; i < x.Rows; i++)
             {
                 centered[i, j] = NumOps.FromDouble(NumOps.ToDouble(x[i, j]) - mean);

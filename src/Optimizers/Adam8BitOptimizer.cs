@@ -166,7 +166,7 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         for (int b = 0; b < _numBlocks; b++)
         {
             if (_mScales != null) _mScales[b] = 1.0;
-            _vScales![b] = 1.0;
+            (_vScales ?? throw new InvalidOperationException("_vScales has not been initialized."))[b] = 1.0;
         }
     }
 

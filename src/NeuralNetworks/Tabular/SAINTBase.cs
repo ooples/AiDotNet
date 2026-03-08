@@ -161,7 +161,7 @@ public abstract class SAINTBase<T>
             // Row attention layer (if enabled)
             if (Options.UseIntersampleAttention)
             {
-                _rowAttentionLayers!.Add(new MultiHeadAttentionLayer<T>(
+                (_rowAttentionLayers ?? throw new InvalidOperationException("_rowAttentionLayers has not been initialized.")).Add(new MultiHeadAttentionLayer<T>(
                     Options.EmbeddingDimension,
                     Options.NumHeads,
                     Options.EmbeddingDimension / Options.NumHeads));
@@ -176,7 +176,8 @@ public abstract class SAINTBase<T>
             // Layer normalizations
             if (Options.UseLayerNorm)
             {
-                _layerNorms!.Add(new LayerNormalizationLayer<T>(Options.EmbeddingDimension));
+                var layerNorms = _layerNorms ?? throw new InvalidOperationException("_layerNorms has not been initialized.");
+                layerNorms.Add(new LayerNormalizationLayer<T>(Options.EmbeddingDimension));
                 _layerNorms.Add(new LayerNormalizationLayer<T>(Options.EmbeddingDimension));
                 if (Options.UseIntersampleAttention)
                 {
@@ -234,7 +235,8 @@ public abstract class SAINTBase<T>
                     int idx = (b * TotalEmbeddedFeatures + f) * Options.EmbeddingDimension + d;
                     embedded[idx] = NumOps.Add(
                         embeddedFeature[d],
-                        _columnEmbeddings![f * Options.EmbeddingDimension + d]);
+                        var columnEmbeddings = _columnEmbeddings ?? throw new InvalidOperationException("_columnEmbeddings has not been initialized.");
+                        columnEmbeddings[f * Options.EmbeddingDimension + d]);
                 }
             }
         }
@@ -255,7 +257,7 @@ public abstract class SAINTBase<T>
                         int outIdx = (b * TotalEmbeddedFeatures + featureIdx) * Options.EmbeddingDimension + d;
                         embedded[outIdx] = NumOps.Add(
                             _categoricalEmbeddings[f][embIdx],
-                            _columnEmbeddings![featureIdx * Options.EmbeddingDimension + d]);
+                            columnEmbeddings[featureIdx * Options.EmbeddingDimension + d]);
                     }
                 }
             }
@@ -287,7 +289,7 @@ public abstract class SAINTBase<T>
             var colAttnInput = current;
             if (Options.UsePreNorm && Options.UseLayerNorm)
             {
-                colAttnInput = ApplyLayerNorm(_layerNorms![normIdx++], colAttnInput, batchSize);
+                colAttnInput = ApplyLayerNorm(layerNorms[normIdx++], colAttnInput, batchSize);
             }
 
             var colAttnOutput = ApplyColumnAttention(_columnAttentionLayers[layer], colAttnInput, batchSize);
@@ -298,7 +300,7 @@ public abstract class SAINTBase<T>
 
             if (!Options.UsePreNorm && Options.UseLayerNorm)
             {
-                current = ApplyLayerNorm(_layerNorms![normIdx++], current, batchSize);
+                current = ApplyLayerNorm(layerNorms[normIdx++], current, batchSize);
             }
 
             // Row attention (inter-sample attention, if enabled)
@@ -307,7 +309,7 @@ public abstract class SAINTBase<T>
                 var rowAttnInput = current;
                 if (Options.UsePreNorm && Options.UseLayerNorm)
                 {
-                    rowAttnInput = ApplyLayerNorm(_layerNorms![normIdx++], rowAttnInput, batchSize);
+                    rowAttnInput = ApplyLayerNorm(layerNorms[normIdx++], rowAttnInput, batchSize);
                 }
 
                 var rowAttnOutput = ApplyRowAttention(_rowAttentionLayers[layer], rowAttnInput, batchSize);
@@ -318,7 +320,7 @@ public abstract class SAINTBase<T>
 
                 if (!Options.UsePreNorm && Options.UseLayerNorm)
                 {
-                    current = ApplyLayerNorm(_layerNorms![normIdx++], current, batchSize);
+                    current = ApplyLayerNorm(layerNorms[normIdx++], current, batchSize);
                 }
             }
 
@@ -326,7 +328,7 @@ public abstract class SAINTBase<T>
             var ffnInput = current;
             if (Options.UsePreNorm && Options.UseLayerNorm)
             {
-                ffnInput = ApplyLayerNorm(_layerNorms![normIdx++], ffnInput, batchSize);
+                ffnInput = ApplyLayerNorm(layerNorms[normIdx++], ffnInput, batchSize);
             }
 
             var ffnOutput = ApplyFeedForward(_ffnLayers[layer], ffnInput, batchSize);
@@ -336,7 +338,7 @@ public abstract class SAINTBase<T>
 
             if (!Options.UsePreNorm && Options.UseLayerNorm)
             {
-                current = ApplyLayerNorm(_layerNorms![normIdx++], current, batchSize);
+                current = ApplyLayerNorm(layerNorms[normIdx++], current, batchSize);
             }
         }
 

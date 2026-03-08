@@ -103,7 +103,7 @@ public class ECODDetector<T> : AnomalyDetectorBase<T>
                 double value = NumOps.ToDouble(X[i, j]);
 
                 // Compute empirical CDF: F(x) = proportion of values <= x
-                double leftCdf = ComputeECDF(value, _sortedFeatureValues![j]);
+                double leftCdf = ComputeECDF(value, (_sortedFeatureValues ?? throw new InvalidOperationException("_sortedFeatureValues has not been initialized."))[j]);
                 double rightCdf = 1.0 - leftCdf;
 
                 // Use the minimum of left and right tail probabilities

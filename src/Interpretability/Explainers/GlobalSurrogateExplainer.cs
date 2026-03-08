@@ -172,7 +172,7 @@ public class GlobalSurrogateExplainer<T> : IGlobalExplainer<T, SurrogateExplanat
             var pred = _surrogateIntercept;
             for (int j = 0; j < NumFeatures; j++)
             {
-                pred = NumOps.Add(pred, NumOps.Multiply(_surrogateCoefficients![j], X[i, j]));
+                pred = NumOps.Add(pred, NumOps.Multiply((_surrogateCoefficients ?? throw new InvalidOperationException("_surrogateCoefficients has not been initialized."))[j], X[i, j]));
             }
             predictions[i] = pred;
         }

@@ -140,7 +140,8 @@ public class DixonQTestDetector<T> : AnomalyDetectorBase<T>
             for (int j = 0; j < X.Columns; j++)
             {
                 // Skip features with zero range
-                if (NumOps.Equals(_ranges![j], NumOps.Zero))
+                var ranges = _ranges ?? throw new InvalidOperationException("_ranges has not been initialized.");
+                if (NumOps.Equals(ranges[j], NumOps.Zero))
                 {
                     continue;
                 }
@@ -153,10 +154,10 @@ public class DixonQTestDetector<T> : AnomalyDetectorBase<T>
                 // If closer to max: Q = (max - x) / range compared to (max - x(n-1)) / range
 
                 T value = X[i, j];
-                double rangeD = NumOps.ToDouble(_ranges![j]);
+                double rangeD = NumOps.ToDouble(ranges[j]);
                 double valueD = NumOps.ToDouble(value);
-                double secondMinD = NumOps.ToDouble(_secondMin![j]);
-                double secondMaxD = NumOps.ToDouble(_secondMax![j]);
+                double secondMinD = NumOps.ToDouble((_secondMin ?? throw new InvalidOperationException("_secondMin has not been initialized."))[j]);
+                double secondMaxD = NumOps.ToDouble((_secondMax ?? throw new InvalidOperationException("_secondMax has not been initialized."))[j]);
 
                 T qStatistic;
 

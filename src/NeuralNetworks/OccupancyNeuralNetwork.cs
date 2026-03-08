@@ -241,7 +241,6 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
             {
                 history.Dequeue();
             }
-            sensorHistory = history;
 
             var input = new Tensor<T>([1, _historyWindowSize, Architecture.InputSize]);
             int timeStep = 0;

@@ -611,7 +611,8 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
             var combinedContext = CombineVideoTextContext(contextTensor, sequenceEmbedding);
 
             // Project to vocabulary logits through caption head
-            var logits = _captionHead!.Forward(combinedContext);
+            var captionHead = _captionHead ?? throw new InvalidOperationException("_captionHead has not been initialized.");
+            var logits = captionHead.Forward(combinedContext);
 
             // Get logits for the last position
             int vocabSize = logits.Shape.Length > 1 ? logits.Shape[1] : logits.Shape[0];
@@ -866,7 +867,7 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
             var decoderInput = CombineVideoTextContext(combinedContextTensor, sequenceEmbedding);
 
             // Project to vocabulary logits
-            var logits = _captionHead!.Forward(decoderInput);
+            var logits = captionHead.Forward(decoderInput);
 
             // Get logits for the last position
             int vocabSize = logits.Shape.Length > 1 ? logits.Shape[1] : logits.Shape[0];

@@ -118,7 +118,7 @@ public class OneVsOneClassifier<T> : MetaClassifierBase<T>
     /// </summary>
     private (Matrix<T> x, Vector<T> y) ExtractPairData(Matrix<T> x, Vector<T> y, int classA, int classB)
     {
-        T labelA = ClassLabels![classA];
+        T labelA = (ClassLabels ?? throw new InvalidOperationException("ClassLabels has not been initialized."))[classA];
         T labelB = ClassLabels[classB];
 
         // Count samples for these classes

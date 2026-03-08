@@ -154,7 +154,7 @@ public abstract class NaiveBayesBase<T> : ProbabilisticClassifierBase<T>
             for (int c = 0; c < NumClasses; c++)
             {
                 // log P(class) + log P(features|class)
-                unnormalizedLogProbs[c] = NumOps.Add(LogPriors![c], ComputeLogLikelihood(sample, c));
+                unnormalizedLogProbs[c] = NumOps.Add((LogPriors ?? throw new InvalidOperationException("LogPriors has not been initialized."))[c], ComputeLogLikelihood(sample, c));
             }
 
             // Normalize using log-sum-exp trick

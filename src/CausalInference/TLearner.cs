@@ -191,12 +191,14 @@ public class TLearner<T> : CausalModelBase<T>
             // Predict with treatment model
             double predTreated = NumOps.ToDouble(_biasTreated);
             for (int j = 0; j < features.Columns; j++)
-                predTreated += NumOps.ToDouble(_weightsTreated![j]) * NumOps.ToDouble(features[i, j]);
+                var weightsTreated = _weightsTreated ?? throw new InvalidOperationException("_weightsTreated has not been initialized.");
+                predTreated += NumOps.ToDouble(weightsTreated[j]) * NumOps.ToDouble(features[i, j]);
 
             // Predict with control model
             double predControl = NumOps.ToDouble(_biasControl);
             for (int j = 0; j < features.Columns; j++)
-                predControl += NumOps.ToDouble(_weightsControl![j]) * NumOps.ToDouble(features[i, j]);
+                var weightsControl = _weightsControl ?? throw new InvalidOperationException("_weightsControl has not been initialized.");
+                predControl += NumOps.ToDouble(weightsControl[j]) * NumOps.ToDouble(features[i, j]);
 
             effects[i] = NumOps.FromDouble(predTreated - predControl);
         }
@@ -216,7 +218,7 @@ public class TLearner<T> : CausalModelBase<T>
         {
             double pred = NumOps.ToDouble(_biasTreated);
             for (int j = 0; j < features.Columns; j++)
-                pred += NumOps.ToDouble(_weightsTreated![j]) * NumOps.ToDouble(features[i, j]);
+                pred += NumOps.ToDouble(weightsTreated[j]) * NumOps.ToDouble(features[i, j]);
             result[i] = NumOps.FromDouble(pred);
         }
         return result;
@@ -234,7 +236,7 @@ public class TLearner<T> : CausalModelBase<T>
         {
             double pred = NumOps.ToDouble(_biasControl);
             for (int j = 0; j < features.Columns; j++)
-                pred += NumOps.ToDouble(_weightsControl![j]) * NumOps.ToDouble(features[i, j]);
+                pred += NumOps.ToDouble(weightsControl[j]) * NumOps.ToDouble(features[i, j]);
             result[i] = NumOps.FromDouble(pred);
         }
         return result;

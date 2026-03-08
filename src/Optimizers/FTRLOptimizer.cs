@@ -179,7 +179,8 @@ public class FTRLOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
             {
                 // FTRL proximal: w = -sign(z) * (|z| - lambda1) / (lambda2 + (sqrt(n) + beta) / alpha)
                 var absZMinusLambda1 = NumOps.Subtract(absZ, lambda1);
-                var sqrtNi = NumOps.Sqrt(_n![i]);
+                var n = _n ?? throw new InvalidOperationException("_n has not been initialized.");
+                var sqrtNi = NumOps.Sqrt(n[i]);
                 var sqrtNPlusBeta = NumOps.Add(sqrtNi, beta);
                 var sqrtNPlusBetaOverAlpha = NumOps.Divide(sqrtNPlusBeta, alpha);
                 var denominator = NumOps.Add(lambda2, sqrtNPlusBetaOverAlpha);
@@ -327,7 +328,7 @@ public class FTRLOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
                 // FTRL proximal formula (aligned with UpdateParameters):
                 // w = -sign(z) * (|z| - lambda1) / (lambda2 + (sqrt(n) + beta) / alpha)
                 var absZMinusLambda1 = NumOps.Subtract(absZ[i], lambda1);
-                var sqrtNi = NumOps.Sqrt(_n![i]);
+                var sqrtNi = NumOps.Sqrt(n[i]);
                 var sqrtNPlusBeta = NumOps.Add(sqrtNi, beta);
                 var sqrtNPlusBetaOverAlpha = NumOps.Divide(sqrtNPlusBeta, alpha);
                 var denominatorValue = NumOps.Add(lambda2, sqrtNPlusBetaOverAlpha);

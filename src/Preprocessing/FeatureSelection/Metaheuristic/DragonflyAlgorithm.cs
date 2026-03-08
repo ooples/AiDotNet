@@ -301,7 +301,7 @@ public class DragonflyAlgorithm<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         {
             if (positions[idx, j] > 0.5)
             {
-                fitness += _featureScores![j];
+                fitness += (_featureScores ?? throw new InvalidOperationException("_featureScores has not been initialized."))[j];
                 selected++;
             }
         }

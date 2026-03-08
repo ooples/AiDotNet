@@ -80,21 +80,24 @@ public class OnlineFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 double xi = NumOps.ToDouble(data[i, j]);
 
                 // Welford's online algorithm for mean and variance
-                double delta = xi - _runningMeans![j];
+                var runningMeans = _runningMeans ?? throw new InvalidOperationException("_runningMeans has not been initialized.");
+                double delta = xi - runningMeans[j];
                 _runningMeans[j] += delta / _sampleCount;
                 double delta2 = xi - _runningMeans[j];
-                _runningVars![j] += delta * delta2;
+                var runningVars = _runningVars ?? throw new InvalidOperationException("_runningVars has not been initialized.");
+                runningVars[j] += delta * delta2;
 
                 // Update correlation estimate incrementally
                 double correlation = ComputeOnlineCorrelation(xi, yi, j);
-                _runningScores![j] = (1 - _learningRate) * _runningScores[j] + _learningRate * correlation;
+                var runningScores = _runningScores ?? throw new InvalidOperationException("_runningScores has not been initialized.");
+                runningScores[j] = (1 - _learningRate) * _runningScores[j] + _learningRate * correlation;
             }
         }
 
         // Select top features
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
         _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => Math.Abs(_runningScores![j]))
+            .OrderByDescending(j => Math.Abs(runningScores[j]))
             .Take(numToSelect)
             .OrderBy(x => x)
             .ToArray();
@@ -117,10 +120,10 @@ public class OnlineFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         _targetVar += (y - oldTargetMean) * (y - _targetMean);
 
         // Update covariance
-        _covariances[featureIdx] += (x - _runningMeans![featureIdx]) * (y - _targetMean);
+        _covariances[featureIdx] += (x - runningMeans[featureIdx]) * (y - _targetMean);
 
         // Compute correlation
-        double xVar = _runningVars![featureIdx];
+        double xVar = runningVars[featureIdx];
         double yVar = _targetVar;
 
         if (xVar > 1e-10 && yVar > 1e-10)

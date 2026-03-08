@@ -207,7 +207,8 @@ public class TimeSeriesForestClassifier<T> : ClassifierBase<T>, ITimeSeriesClass
                     bestClass = kv.Key;
                 }
             }
-            predictions[i] = ClassLabels![bestClass];
+            var classLabels = ClassLabels ?? throw new InvalidOperationException("ClassLabels has not been initialized.");
+            predictions[i] = classLabels[bestClass];
         }
 
         return predictions;
@@ -465,7 +466,7 @@ public class TimeSeriesForestClassifier<T> : ClassifierBase<T>, ITimeSeriesClass
         return new DecisionTreeNode
         {
             IsLeaf = true,
-            PredictedClass = ClassLabels![majorityClass],
+            PredictedClass = classLabels[majorityClass],
             ClassProbabilities = probs
         };
     }

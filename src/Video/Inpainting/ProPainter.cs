@@ -357,7 +357,8 @@ public class ProPainter<T> : VideoInpaintingBase<T>
             decoded = BilinearUpsample(decoded, 2);
         }
 
-        var output = _outputConv!.Forward(decoded);
+        var outputConv = _outputConv ?? throw new InvalidOperationException("_outputConv has not been initialized.");
+        var output = outputConv.Forward(decoded);
 
         // Step 6: Blend original and inpainted regions using mask
         return BlendWithMask(frame, output, mask);
@@ -823,7 +824,7 @@ public class ProPainter<T> : VideoInpaintingBase<T>
 
     private void BackwardPass(Tensor<T> gradient)
     {
-        gradient = _outputConv!.Backward(gradient);
+        gradient = outputConv.Backward(gradient);
 
         for (int i = _imageDecoder.Count - 1; i >= 0; i--)
         {

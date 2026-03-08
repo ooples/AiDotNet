@@ -248,7 +248,8 @@ public class LogNormalAFT<T> : SurvivalModelBase<T>
         {
             // Compute linear predictor (μ_i)
             double mu = NumOps.ToDouble(Intercept);
-            for (int j = 0; j < Coefficients!.Length; j++)
+            var coefficients = Coefficients ?? throw new InvalidOperationException("Coefficients has not been initialized.");
+            for (int j = 0; j < coefficients.Length; j++)
                 mu += NumOps.ToDouble(Coefficients[j]) * NumOps.ToDouble(x[i, j]);
 
             for (int t = 0; t < times.Length; t++)
@@ -275,7 +276,7 @@ public class LogNormalAFT<T> : SurvivalModelBase<T>
         for (int i = 0; i < x.Rows; i++)
         {
             double eta = 0;
-            for (int j = 0; j < Coefficients!.Length; j++)
+            for (int j = 0; j < coefficients.Length; j++)
                 eta += NumOps.ToDouble(Coefficients[j]) * NumOps.ToDouble(x[i, j]);
 
             // For log-normal, the acceleration factor is exp(-η)
@@ -319,7 +320,7 @@ public class LogNormalAFT<T> : SurvivalModelBase<T>
         for (int i = 0; i < input.Rows; i++)
         {
             double mu = NumOps.ToDouble(Intercept);
-            for (int j = 0; j < Coefficients!.Length; j++)
+            for (int j = 0; j < coefficients.Length; j++)
                 mu += NumOps.ToDouble(Coefficients[j]) * NumOps.ToDouble(input[i, j]);
 
             // Median survival time for log-normal: exp(μ)

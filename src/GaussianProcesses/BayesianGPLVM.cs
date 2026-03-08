@@ -1082,8 +1082,8 @@ public class BayesianGPLVM<T>
 
         // Reconstruction term (negative squared error)
         T reconstructionLoss = _numOps.Zero;
-        int n = _latentMean!.Rows;
-        int d = _observedData!.Columns;
+        int n = (_latentMean ?? throw new InvalidOperationException("_latentMean has not been initialized.")).Rows;
+        int d = (_observedData ?? throw new InvalidOperationException("_observedData has not been initialized.")).Columns;
 
         for (int i = 0; i < n; i++)
         {
@@ -1106,7 +1106,7 @@ public class BayesianGPLVM<T>
             for (int q = 0; q < _latentDimensions; q++)
             {
                 T mu = _latentMean[i, q];
-                T sigma2 = _latentVariance![i, q];
+                T sigma2 = (_latentVariance ?? throw new InvalidOperationException("_latentVariance has not been initialized."))[i, q];
 
                 // KL = 0.5 * (mu^2 + sigma^2 - log(sigma^2) - 1)
                 T muSq = _numOps.Multiply(mu, mu);

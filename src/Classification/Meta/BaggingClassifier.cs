@@ -145,7 +145,8 @@ public class BaggingClassifier<T> : MetaClassifierBase<T>
 
         for (int i = 0; i < sampleSize; i++)
         {
-            int idx = _random!.Next(x.Rows);
+            var random = _random ?? throw new InvalidOperationException("_random has not been initialized.");
+            int idx = random.Next(x.Rows);
 
             for (int j = 0; j < NumFeatures; j++)
             {
@@ -166,7 +167,7 @@ public class BaggingClassifier<T> : MetaClassifierBase<T>
         // Randomly select feature indices without replacement
         // Sort the selected indices to maintain consistent ordering and avoid bias
         var featureIndices = Enumerable.Range(0, x.Columns)
-            .OrderBy(_ => _random!.Next())
+            .OrderBy(_ => random.Next())
             .Take(numFeatures)
             .OrderBy(i => i)
             .ToArray();
@@ -280,7 +281,7 @@ public class BaggingClassifier<T> : MetaClassifierBase<T>
                 {
                     for (int c = 0; c < NumClasses; c++)
                     {
-                        if (NumOps.Compare(preds[i], ClassLabels![c]) == 0)
+                        if (NumOps.Compare(preds[i], (ClassLabels ?? throw new InvalidOperationException("ClassLabels has not been initialized."))[c]) == 0)
                         {
                             estProbs[i, c] = NumOps.One;
                         }

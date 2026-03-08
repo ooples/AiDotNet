@@ -219,7 +219,7 @@ public class KNNEvaluator<T>
 
     private int PredictSingle(Tensor<T> testFeatures, int testIdx)
     {
-        var numTrain = _trainFeatures!.Shape[0];
+        var numTrain = (_trainFeatures ?? throw new InvalidOperationException("_trainFeatures has not been initialized.")).Shape[0];
         var dim = testFeatures.Shape[1];
 
         // Compute distances to all training samples
@@ -255,7 +255,7 @@ public class KNNEvaluator<T>
 
         foreach (var (index, distance) in neighbors)
         {
-            var label = _trainLabels![index];
+            var label = (_trainLabels ?? throw new InvalidOperationException("_trainLabels has not been initialized."))[index];
             T weight;
 
             if (_useCosine)

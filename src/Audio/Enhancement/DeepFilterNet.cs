@@ -587,7 +587,7 @@ public class DeepFilterNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         }
 
         // Gain estimation
-        var gains = _gainLayer!.Forward(x);
+        var gains = (_gainLayer ?? throw new InvalidOperationException("_gainLayer has not been initialized.")).Forward(x);
 
         // Combine DF coefficients and gains
         return CombineOutputs(dfCoeffs, gains);

@@ -217,7 +217,8 @@ public class OPTICS<T> : ClusteringBase<T>
         var centerPoint = GetRow(x, centerIdx);
         var neighbors = FindNeighbors(neighborFinder, x, centerPoint, maxEps);
 
-        double coreDist = _coreDistances![centerIdx];
+        var coreDistances = _coreDistances ?? throw new InvalidOperationException("_coreDistances has not been initialized.");
+        double coreDist = coreDistances[centerIdx];
 
         foreach (int neighborIdx in neighbors)
         {
@@ -227,13 +228,14 @@ public class OPTICS<T> : ClusteringBase<T>
             double dist = NumOps.ToDouble(metric.Compute(centerPoint, neighborPoint));
             double reachDist = Math.Max(coreDist, dist);
 
-            if (reachDist < _reachabilityDistances![neighborIdx])
+            var reachabilityDistances = _reachabilityDistances ?? throw new InvalidOperationException("_reachabilityDistances has not been initialized.");
+            if (reachDist < reachabilityDistances[neighborIdx])
             {
                 // Remove old entry if exists
                 seeds.Remove((_reachabilityDistances[neighborIdx], neighborIdx));
 
                 _reachabilityDistances[neighborIdx] = reachDist;
-                _predecessor![neighborIdx] = centerIdx;
+                (_predecessor ?? throw new InvalidOperationException("_predecessor has not been initialized."))[neighborIdx] = centerIdx;
 
                 seeds.Add((reachDist, neighborIdx));
             }
@@ -265,14 +267,16 @@ public class OPTICS<T> : ClusteringBase<T>
 
         for (int i = 0; i < n; i++)
         {
-            int pointIdx = _ordering![i];
+            var ordering = _ordering ?? throw new InvalidOperationException("_ordering has not been initialized.");
+            int pointIdx = ordering[i];
 
-            if (_reachabilityDistances![pointIdx] > eps)
+            if (reachabilityDistances[pointIdx] > eps)
             {
                 // Start new cluster or noise
-                if (!double.IsPositiveInfinity(_coreDistances![pointIdx]) && _coreDistances[pointIdx] <= eps)
+                if (!double.IsPositiveInfinity(coreDistances[pointIdx]) && _coreDistances[pointIdx] <= eps)
                 {
-                    Labels![pointIdx] = NumOps.FromDouble(currentCluster);
+                    var labels = Labels ?? throw new InvalidOperationException("Labels has not been initialized.");
+                    labels[pointIdx] = NumOps.FromDouble(currentCluster);
                     currentCluster++;
                 }
             }
@@ -281,7 +285,7 @@ public class OPTICS<T> : ClusteringBase<T>
                 // Assign to current cluster
                 if (currentCluster > 0)
                 {
-                    Labels![pointIdx] = NumOps.FromDouble(currentCluster - 1);
+                    labels[pointIdx] = NumOps.FromDouble(currentCluster - 1);
                 }
             }
         }
@@ -299,11 +303,11 @@ public class OPTICS<T> : ClusteringBase<T>
         // Find steep up and down areas
         for (int i = 1; i < n; i++)
         {
-            int prevIdx = _ordering![i - 1];
-            int currIdx = _ordering![i];
+            int prevIdx = ordering[i - 1];
+            int currIdx = ordering[i];
 
-            double prevReach = _reachabilityDistances![prevIdx];
-            double currReach = _reachabilityDistances![currIdx];
+            double prevReach = reachabilityDistances[prevIdx];
+            double currReach = reachabilityDistances[currIdx];
 
             if (double.IsPositiveInfinity(prevReach)) prevReach = _options.MaxEpsilon;
             if (double.IsPositiveInfinity(currReach)) currReach = _options.MaxEpsilon;
@@ -319,11 +323,11 @@ public class OPTICS<T> : ClusteringBase<T>
                 // Extend the steep area
                 while (end < n - 1)
                 {
-                    int nextPrevIdx = _ordering![end];
-                    int nextCurrIdx = _ordering![end + 1];
+                    int nextPrevIdx = ordering[end];
+                    int nextCurrIdx = ordering[end + 1];
 
-                    double nextPrevReach = _reachabilityDistances![nextPrevIdx];
-                    double nextCurrReach = _reachabilityDistances![nextCurrIdx];
+                    double nextPrevReach = reachabilityDistances[nextPrevIdx];
+                    double nextCurrReach = reachabilityDistances[nextCurrIdx];
 
                     if (double.IsPositiveInfinity(nextPrevReach)) nextPrevReach = _options.MaxEpsilon;
                     if (double.IsPositiveInfinity(nextCurrReach)) nextCurrReach = _options.MaxEpsilon;
@@ -374,10 +378,10 @@ public class OPTICS<T> : ClusteringBase<T>
         {
             for (int i = start; i <= end && i < n; i++)
             {
-                int pointIdx = _ordering![i];
-                if (NumOps.ToDouble(Labels![pointIdx]) < 0)
+                int pointIdx = ordering[i];
+                if (NumOps.ToDouble(labels[pointIdx]) < 0)
                 {
-                    Labels![pointIdx] = NumOps.FromDouble(currentCluster);
+                    labels[pointIdx] = NumOps.FromDouble(currentCluster);
                 }
             }
             currentCluster++;
@@ -547,13 +551,13 @@ public class OPTICS<T> : ClusteringBase<T>
     {
         ValidateIsTrained();
 
-        int n = _ordering!.Length;
+        int n = ordering.Length;
         var plot = new (int, double)[n];
 
         for (int i = 0; i < n; i++)
         {
             int pointIdx = _ordering[i];
-            double reach = _reachabilityDistances![pointIdx];
+            double reach = reachabilityDistances[pointIdx];
             if (double.IsPositiveInfinity(reach))
             {
                 reach = _options.MaxEpsilon;
@@ -573,7 +577,7 @@ public class OPTICS<T> : ClusteringBase<T>
     {
         ValidateIsTrained();
 
-        int n = _ordering!.Length;
+        int n = ordering.Length;
         var labels = new Vector<T>(n);
         for (int i = 0; i < n; i++)
         {
@@ -586,9 +590,9 @@ public class OPTICS<T> : ClusteringBase<T>
         {
             int pointIdx = _ordering[i];
 
-            if (_reachabilityDistances![pointIdx] > epsilon)
+            if (reachabilityDistances[pointIdx] > epsilon)
             {
-                if (!double.IsPositiveInfinity(_coreDistances![pointIdx]) && _coreDistances[pointIdx] <= epsilon)
+                if (!double.IsPositiveInfinity(coreDistances[pointIdx]) && _coreDistances[pointIdx] <= epsilon)
                 {
                     labels[pointIdx] = NumOps.FromDouble(currentCluster);
                     currentCluster++;

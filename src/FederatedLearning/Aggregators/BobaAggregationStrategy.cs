@@ -224,7 +224,7 @@ public class BobaAggregationStrategy<T> : ParameterDictionaryAggregationStrategy
     /// </remarks>
     private double[] RunEM(double[][] vectors, List<int> clientIds, int n, int dim)
     {
-        var beliefs = _beliefs ?? throw new InvalidOperationException("Beliefs have not been initialized. Call UpdateBeliefs before RunEM.");
+        var beliefs = _beliefs ?? throw new InvalidOperationException("Beliefs have not been initialized. Call Aggregate before RunEM.");
 
         // Work with squared distances from the mean for efficiency.
         // This is equivalent to a 1D projection (distance to centroid) for mixture modeling.

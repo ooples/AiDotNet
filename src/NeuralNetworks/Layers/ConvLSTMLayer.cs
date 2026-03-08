@@ -1690,7 +1690,7 @@ public class ConvLSTMLayer<T> : LayerBase<T>
             outGrad5D = outputGradient.Reshape([flatBatch, outputGradient.Shape[_originalInputShape.Length - 4], outputGradient.Shape[_originalInputShape.Length - 3], outputGradient.Shape[_originalInputShape.Length - 2], outputGradient.Shape[_originalInputShape.Length - 1]]);
         }
 
-        int batchSize = _lastInput!.Shape[0];
+        int batchSize = (_lastInput ?? throw new InvalidOperationException("_lastInput has not been initialized.")).Shape[0];
         int timeSteps = _lastInput.Shape[1];
 
         var dInput = new Tensor<T>(_lastInput.Shape);
@@ -1707,8 +1707,8 @@ public class ConvLSTMLayer<T> : LayerBase<T>
         var dBiasC = new Tensor<T>(_biasC.Shape);
         var dBiasO = new Tensor<T>(_biasO.Shape);
 
-        var dNextH = new Tensor<T>(_lastHiddenState!.Shape);
-        var dNextC = new Tensor<T>(_lastCellState!.Shape);
+        var dNextH = new Tensor<T>((_lastHiddenState ?? throw new InvalidOperationException("_lastHiddenState has not been initialized.")).Shape);
+        var dNextC = new Tensor<T>((_lastCellState ?? throw new InvalidOperationException("_lastCellState has not been initialized.")).Shape);
 
         for (int t = timeSteps - 1; t >= 0; t--)
         {
@@ -1792,11 +1792,11 @@ public class ConvLSTMLayer<T> : LayerBase<T>
     {
         if (UsingVectorActivation)
         {
-            return VectorActivation!.Derivative(input);
+            return (VectorActivation ?? throw new InvalidOperationException("VectorActivation has not been initialized.")).Derivative(input);
         }
         else
         {
-            return input.Transform((x, _) => ScalarActivation!.Derivative(x));
+            return input.Transform((x, _) => (ScalarActivation ?? throw new InvalidOperationException("ScalarActivation has not been initialized.")).Derivative(x));
         }
     }
 

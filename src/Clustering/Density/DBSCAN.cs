@@ -205,7 +205,7 @@ public class DBSCAN<T> : ClusteringBase<T>
             int current = queue.Dequeue();
 
             // If current is a core point, expand to its neighbors
-            if (_corePointMask![current])
+            if ((_corePointMask ?? throw new InvalidOperationException("_corePointMask has not been initialized."))[current])
             {
                 foreach (int neighborIdx in neighbors[current])
                 {

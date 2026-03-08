@@ -265,7 +265,7 @@ public class OnlineSGDRegressor<T> : OnlineLearningModelBase<T>
         double linearPred = NumOps.ToDouble(_bias);
         for (int i = 0; i < NumFeatures; i++)
         {
-            linearPred += NumOps.ToDouble(_weights![i]) * NumOps.ToDouble(x[i]);
+            linearPred += NumOps.ToDouble((_weights ?? throw new InvalidOperationException("_weights has not been initialized."))[i]) * NumOps.ToDouble(x[i]);
         }
         return linearPred;
     }

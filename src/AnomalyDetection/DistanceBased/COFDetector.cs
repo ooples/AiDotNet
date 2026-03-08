@@ -117,7 +117,7 @@ public class COFDetector<T> : AnomalyDetectorBase<T>
             double avgNeighborAcDist = 0;
             foreach (int neighborIdx in neighbors)
             {
-                avgNeighborAcDist += _chainingDistances![neighborIdx];
+                avgNeighborAcDist += (_chainingDistances ?? throw new InvalidOperationException("_chainingDistances has not been initialized."))[neighborIdx];
             }
             avgNeighborAcDist /= neighbors.Count;
 

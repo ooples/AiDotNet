@@ -164,7 +164,7 @@ public class DistributedTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>,
         }
 
         // Divide by number of workers to get average
-        var divisorTensor = new Tensor<T>((int[])sumNode!.Value.Shape.Clone());
+        var divisorTensor = new Tensor<T>((int[])(sumNode ?? throw new InvalidOperationException("sumNode has not been initialized.")).Value.Shape.Clone());
         divisorTensor.Fill(NumOps.FromDouble(_workers.Length));
         var divisorNode = TensorOperations<T>.Constant(divisorTensor, "worker_count");
         var resultNode = TensorOperations<T>.Divide(sumNode!, divisorNode);

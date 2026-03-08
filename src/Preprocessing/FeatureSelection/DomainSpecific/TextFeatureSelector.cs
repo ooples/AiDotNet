@@ -194,7 +194,8 @@ public class TextFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 }
             }
 
-            _featureScores![j] = chiSq;
+            var featureScores = _featureScores ?? throw new InvalidOperationException("_featureScores has not been initialized.");
+            featureScores[j] = chiSq;
         }
     }
 
@@ -224,7 +225,7 @@ public class TextFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 syy += yDiff * yDiff;
             }
 
-            _featureScores![j] = (sxx > 1e-10 && syy > 1e-10) ? Math.Abs(sxy / Math.Sqrt(sxx * syy)) : 0;
+            featureScores[j] = (sxx > 1e-10 && syy > 1e-10) ? Math.Abs(sxy / Math.Sqrt(sxx * syy)) : 0;
         }
     }
 

@@ -238,7 +238,7 @@ public class SUODDetector<T> : AnomalyDetectorBase<T>
                 T sum = NumOps.Zero;
                 for (int k = 0; k < X.Columns; k++)
                 {
-                    sum = NumOps.Add(sum, NumOps.Multiply(X[i, k], _projectionMatrix![k, j]));
+                    sum = NumOps.Add(sum, NumOps.Multiply(X[i, k], (_projectionMatrix ?? throw new InvalidOperationException("_projectionMatrix has not been initialized."))[k, j]));
                 }
                 projected[i, j] = sum;
             }

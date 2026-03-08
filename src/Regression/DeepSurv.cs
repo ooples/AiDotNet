@@ -630,11 +630,12 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
         {
             if (t <= NumOps.ToDouble(_baselineHazardTimes[i]))
             {
-                return i > 0 ? NumOps.ToDouble(_baselineHazardValues![i - 1]) : 0;
+                var baselineHazardValues = _baselineHazardValues ?? throw new InvalidOperationException("_baselineHazardValues has not been initialized.");
+                return i > 0 ? NumOps.ToDouble(baselineHazardValues[i - 1]) : 0;
             }
         }
 
-        return NumOps.ToDouble(_baselineHazardValues![^1]);
+        return NumOps.ToDouble(baselineHazardValues[^1]);
     }
 
     /// <summary>
@@ -645,7 +646,7 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
         if (_baselineHazardTimes == null || _baselineHazardTimes.Length == 0)
             return double.PositiveInfinity;
 
-        for (int i = 0; i < _baselineHazardValues!.Length; i++)
+        for (int i = 0; i < baselineHazardValues.Length; i++)
         {
             if (NumOps.ToDouble(_baselineHazardValues[i]) >= targetH0)
             {

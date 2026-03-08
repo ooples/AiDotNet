@@ -98,7 +98,7 @@ public class BernoulliNaiveBayes<T> : NaiveBayesBase<T>
         for (int c = 0; c < NumClasses; c++)
         {
             // Count of samples in this class (already computed in base class)
-            int classCount = ClassCounts![c];
+            int classCount = (ClassCounts ?? throw new InvalidOperationException("ClassCounts has not been initialized."))[c];
             T classSampleCount = NumOps.FromDouble(classCount);
 
             // Count features present (value > threshold) for each feature

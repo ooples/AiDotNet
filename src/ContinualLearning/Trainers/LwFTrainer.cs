@@ -254,7 +254,7 @@ public class LwFTrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TO
                     if (hasTeacher && _lwfStrategy != null)
                     {
                         var studentOutput = prediction;
-                        var teacherOutput = teacherModel!.Predict(input);
+                        var teacherOutput = (teacherModel ?? throw new InvalidOperationException("teacherModel has not been initialized.")).Predict(input);
 
                         // Convert outputs to vectors for distillation loss computation
                         var studentVector = ConvertToVector(studentOutput);

@@ -139,7 +139,8 @@ public class OnlineKMeans<T> : ClusteringBase<T>
             UpdateCenter(point, nearest, d);
 
             _totalPointsSeen++;
-            _clusterCounts![nearest]++;
+            var clusterCounts = _clusterCounts ?? throw new InvalidOperationException("_clusterCounts has not been initialized.");
+            clusterCounts[nearest]++;
 
             // Decay learning rate
             if (_options.DecayLearningRate)
@@ -159,7 +160,8 @@ public class OnlineKMeans<T> : ClusteringBase<T>
         {
             for (int j = 0; j < d; j++)
             {
-                ClusterCenters[c, j] = NumOps.FromDouble(_centers![c, j]);
+                var centers = _centers ?? throw new InvalidOperationException("_centers has not been initialized.");
+                ClusterCenters[c, j] = NumOps.FromDouble(centers[c, j]);
             }
         }
 
@@ -198,7 +200,7 @@ public class OnlineKMeans<T> : ClusteringBase<T>
             double dist = 0;
             for (int j = 0; j < d; j++)
             {
-                double diff = point[j] - _centers![c, j];
+                double diff = point[j] - centers[c, j];
                 dist += diff * diff;
             }
 
@@ -216,7 +218,7 @@ public class OnlineKMeans<T> : ClusteringBase<T>
     {
         for (int j = 0; j < d; j++)
         {
-            _centers![clusterIdx, j] += CurrentLearningRate * (point[j] - _centers[clusterIdx, j]);
+            centers[clusterIdx, j] += CurrentLearningRate * (point[j] - _centers[clusterIdx, j]);
         }
     }
 
@@ -245,7 +247,7 @@ public class OnlineKMeans<T> : ClusteringBase<T>
         UpdateCenter(pointArray, nearest, d);
 
         _totalPointsSeen++;
-        _clusterCounts![nearest]++;
+        clusterCounts[nearest]++;
 
         if (_options.DecayLearningRate)
         {

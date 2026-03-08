@@ -88,7 +88,7 @@ public class LossBasedDifficultyEstimator<T, TInput, TOutput> : DifficultyEstima
             // Use provided loss function - convert TOutput to Vector<T>
             var predictionVector = ConversionsHelper.ConvertToVector<T, TOutput>(prediction);
             var expectedVector = ConversionsHelper.ConvertToVector<T, TOutput>(expectedOutput);
-            return _lossFunction!.CalculateLoss(predictionVector, expectedVector);
+            return (_lossFunction ?? throw new InvalidOperationException("_lossFunction has not been initialized.")).CalculateLoss(predictionVector, expectedVector);
         }
     }
 
@@ -103,7 +103,7 @@ public class LossBasedDifficultyEstimator<T, TInput, TOutput> : DifficultyEstima
         if (model is null) throw new ArgumentNullException(nameof(model));
 
         // Return cached scores if available
-        if (CacheScores && HasCachedScores && CachedScores!.Length == dataset.Count)
+        if (CacheScores && HasCachedScores && (CachedScores ?? throw new InvalidOperationException("CachedScores has not been initialized.")).Length == dataset.Count)
         {
             return CachedScores!;
         }

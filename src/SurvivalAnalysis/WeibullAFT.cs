@@ -207,7 +207,8 @@ public class WeibullAFT<T> : SurvivalModelBase<T>
         {
             // Compute linear predictor
             double eta = NumOps.ToDouble(Intercept);
-            for (int j = 0; j < Coefficients!.Length; j++)
+            var coefficients = Coefficients ?? throw new InvalidOperationException("Coefficients has not been initialized.");
+            for (int j = 0; j < coefficients.Length; j++)
                 eta += NumOps.ToDouble(Coefficients[j]) * NumOps.ToDouble(x[i, j]);
 
             double scale = Math.Exp(eta);
@@ -237,7 +238,7 @@ public class WeibullAFT<T> : SurvivalModelBase<T>
         for (int i = 0; i < x.Rows; i++)
         {
             double eta = 0;
-            for (int j = 0; j < Coefficients!.Length; j++)
+            for (int j = 0; j < coefficients.Length; j++)
                 eta += NumOps.ToDouble(Coefficients[j]) * NumOps.ToDouble(x[i, j]);
 
             // AFT acceleration factor: exp(-κ * Σβⱼxⱼ)
@@ -282,7 +283,7 @@ public class WeibullAFT<T> : SurvivalModelBase<T>
         for (int i = 0; i < input.Rows; i++)
         {
             double eta = NumOps.ToDouble(Intercept);
-            for (int j = 0; j < Coefficients!.Length; j++)
+            for (int j = 0; j < coefficients.Length; j++)
                 eta += NumOps.ToDouble(Coefficients[j]) * NumOps.ToDouble(input[i, j]);
 
             double scale = Math.Exp(eta);

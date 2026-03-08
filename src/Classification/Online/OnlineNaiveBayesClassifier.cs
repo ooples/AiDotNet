@@ -136,10 +136,10 @@ public class OnlineNaiveBayesClassifier<T> : ClassifierBase<T>, IOnlineClassifie
         for (int f = 0; f < features.Length; f++)
         {
             double value = NumOps.ToDouble(features[f]);
-            double delta = value - stats.Means![f];
+            double delta = value - (stats.Means ?? throw new InvalidOperationException("Means has not been initialized."))[f];
             stats.Means[f] += delta / stats.Count;
             double delta2 = value - stats.Means[f];
-            stats.M2![f] += delta * delta2;
+            (stats.M2 ?? throw new InvalidOperationException("M2 has not been initialized."))[f] += delta * delta2;
         }
 
         SamplesSeen++;
@@ -227,7 +227,7 @@ public class OnlineNaiveBayesClassifier<T> : ClassifierBase<T>, IOnlineClassifie
         for (int f = 0; f < features.Length; f++)
         {
             double x = NumOps.ToDouble(features[f]);
-            double mean = stats.Means![f];
+            double mean = (stats.Means ?? throw new InvalidOperationException("Means has not been initialized."))[f];
             double variance = variances?[f] ?? 1.0;
 
             // Add small constant to prevent division by zero
@@ -369,14 +369,14 @@ public class OnlineNaiveBayesClassifier<T> : ClassifierBase<T>, IOnlineClassifie
 
             for (int f = 0; f < NumFeatures; f++)
             {
-                stats.Means![f] = NumOps.ToDouble(parameters[idx++]);
+                (stats.Means ?? throw new InvalidOperationException("Means has not been initialized."))[f] = NumOps.ToDouble(parameters[idx++]);
             }
 
             // Set M2 based on variance (reverse Welford)
             for (int f = 0; f < NumFeatures; f++)
             {
                 double variance = NumOps.ToDouble(parameters[idx++]);
-                stats.M2![f] = variance * (stats.Count - 1);
+                (stats.M2 ?? throw new InvalidOperationException("M2 has not been initialized."))[f] = variance * (stats.Count - 1);
             }
         }
 

@@ -791,11 +791,15 @@ namespace AiDotNet.PhysicsInformed.ScientificML
                     }
                     return variables[VariableIndex];
                 case SymbolicExpressionType.UnaryOperation:
-                    return UnaryOperator!.Apply(Left!.Evaluate(variables, numOps));
+                    var unaryOperator = UnaryOperator ?? throw new InvalidOperationException("UnaryOperator has not been initialized.");
+                    var left = Left ?? throw new InvalidOperationException("Left has not been initialized.");
+                    return unaryOperator.Apply(left.Evaluate(variables, numOps));
                 case SymbolicExpressionType.BinaryOperation:
-                    return BinaryOperator!.Apply(
-                        Left!.Evaluate(variables, numOps),
-                        Right!.Evaluate(variables, numOps));
+                    var binaryOperator = BinaryOperator ?? throw new InvalidOperationException("BinaryOperator has not been initialized.");
+                    return binaryOperator.Apply(
+                        left.Evaluate(variables, numOps),
+                        var right = Right ?? throw new InvalidOperationException("Right has not been initialized.");
+                        right.Evaluate(variables, numOps));
                 default:
                     return numOps.Zero;
             }
@@ -832,9 +836,9 @@ namespace AiDotNet.PhysicsInformed.ScientificML
                 case SymbolicExpressionType.Variable:
                     return $"x{VariableIndex + 1}";
                 case SymbolicExpressionType.UnaryOperation:
-                    return UnaryOperator!.Formatter(Left!.Format());
+                    return unaryOperator.Formatter(left.Format());
                 case SymbolicExpressionType.BinaryOperation:
-                    return BinaryOperator!.Formatter(Left!.Format(), Right!.Format());
+                    return binaryOperator.Formatter(left.Format(), right.Format());
                 default:
                     return "0";
             }

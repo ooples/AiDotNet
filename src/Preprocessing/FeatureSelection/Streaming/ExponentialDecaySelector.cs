@@ -92,12 +92,14 @@ public class ExponentialDecaySelector<T> : TransformerBase<T, Matrix<T>, Matrix<
             {
                 double xij = NumOps.ToDouble(data[i, j]);
 
-                double oldMean = _ewmaMeans![j];
+                double oldMean = (_ewmaMeans ?? throw new InvalidOperationException("_ewmaMeans has not been initialized."))[j];
                 _ewmaMeans[j] = _decayFactor * _ewmaMeans[j] + (1 - _decayFactor) * xij;
-                _ewmaVars![j] = _decayFactor * _ewmaVars[j] +
+                var ewmaVars = _ewmaVars ?? throw new InvalidOperationException("_ewmaVars has not been initialized.");
+                ewmaVars[j] = _decayFactor * _ewmaVars[j] +
                     (1 - _decayFactor) * (xij - oldMean) * (xij - _ewmaMeans[j]);
 
-                _ewmaCovariances![j] = _decayFactor * _ewmaCovariances[j] +
+                var ewmaCovariances = _ewmaCovariances ?? throw new InvalidOperationException("_ewmaCovariances has not been initialized.");
+                ewmaCovariances[j] = _decayFactor * _ewmaCovariances[j] +
                     (1 - _decayFactor) * (xij - _ewmaMeans[j]) * (yi - _ewmaTargetMean);
             }
         }
@@ -106,10 +108,10 @@ public class ExponentialDecaySelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         _featureScores = new double[p];
         for (int j = 0; j < p; j++)
         {
-            double xVar = _ewmaVars![j];
+            double xVar = ewmaVars[j];
             double yVar = _ewmaTargetVar;
             if (xVar > 1e-10 && yVar > 1e-10)
-                _featureScores[j] = Math.Abs(_ewmaCovariances![j] / Math.Sqrt(xVar * yVar));
+                _featureScores[j] = Math.Abs(ewmaCovariances[j] / Math.Sqrt(xVar * yVar));
         }
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);

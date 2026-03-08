@@ -560,7 +560,7 @@ public class SUBCLU<T> : ClusteringBase<T>
 
         for (int i = 0; i < n; i++)
         {
-            int label = (int)NumOps.ToDouble(Labels![i]);
+            int label = (int)NumOps.ToDouble((Labels ?? throw new InvalidOperationException("Labels has not been initialized."))[i]);
             if (label >= 0 && label < NumClusters)
             {
                 counts[label]++;

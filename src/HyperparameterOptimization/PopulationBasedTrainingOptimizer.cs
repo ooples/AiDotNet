@@ -117,7 +117,7 @@ public class PopulationBasedTrainingOptimizer<T, TInput, TOutput> : Hyperparamet
                 // Train each member for one step
                 for (int i = 0; i < _populationSize && trialId < totalSteps; i++)
                 {
-                    var member = _population![i];
+                    var member = (_population ?? throw new InvalidOperationException("_population has not been initialized."))[i];
                     member.StepCount++;
 
                     var trial = new HyperparameterTrial<T>(trialId++);

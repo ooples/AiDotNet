@@ -330,12 +330,13 @@ public class UMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
             if (localConnFrac < 1e-5 || localConnIdx >= _nNeighbors - 1)
             {
-                rhos[i] = _knnDistances![i, localConnIdx];
+                var knnDistances = _knnDistances ?? throw new InvalidOperationException("_knnDistances has not been initialized.");
+                rhos[i] = knnDistances[i, localConnIdx];
             }
             else
             {
                 // Interpolate between neighbors
-                rhos[i] = (1 - localConnFrac) * _knnDistances![i, localConnIdx]
+                rhos[i] = (1 - localConnFrac) * knnDistances[i, localConnIdx]
                         + localConnFrac * _knnDistances[i, localConnIdx + 1];
             }
 
@@ -395,8 +396,8 @@ public class UMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         {
             for (int k = 0; k < _nNeighbors; k++)
             {
-                int j = _knnIndices![i, k];
-                double d = _knnDistances![i, k] - rhos[i];
+                int j = (_knnIndices ?? throw new InvalidOperationException("_knnIndices has not been initialized."))[i, k];
+                double d = knnDistances[i, k] - rhos[i];
                 double weight = d > 0 ? Math.Exp(-d / sigmas[i]) : 1.0;
                 graph[i, j] = weight;
             }
@@ -667,7 +668,7 @@ public class UMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 var trainPoint = new double[p];
                 for (int k = 0; k < p; k++)
                 {
-                    trainPoint[k] = _trainingData![j, k];
+                    trainPoint[k] = (_trainingData ?? throw new InvalidOperationException("_trainingData has not been initialized."))[j, k];
                 }
                 // Use the same distance metric as during training
                 double dist = ComputeDistance(newPoint, trainPoint);
@@ -688,7 +689,7 @@ public class UMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
                 for (int d = 0; d < _nComponents; d++)
                 {
-                    embeddingSum[d] += weight * _embedding![idx, d];
+                    embeddingSum[d] += weight * (_embedding ?? throw new InvalidOperationException("_embedding has not been initialized."))[idx, d];
                 }
             }
 

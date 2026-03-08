@@ -279,10 +279,11 @@ public class BayesianDenseLayer<T> : LayerBase<T>, IBayesianLayer<T>
 
             for (int i = 0; i < _outputSize; i++)
             {
-                var sum = _sampledBias![i];
+                var sampledBias = _sampledBias ?? throw new InvalidOperationException("_sampledBias has not been initialized.");
+                var sum = sampledBias[i];
                 for (int j = 0; j < _inputSize; j++)
                 {
-                    sum = NumOps.Add(sum, NumOps.Multiply(_sampledWeights![i, j], inputFlat[inputOffset + j]));
+                    sum = NumOps.Add(sum, NumOps.Multiply((_sampledWeights ?? throw new InvalidOperationException("_sampledWeights has not been initialized."))[i, j], inputFlat[inputOffset + j]));
                 }
                 outputVector[outputOffset + i] = sum;
             }
@@ -365,7 +366,7 @@ public class BayesianDenseLayer<T> : LayerBase<T>, IBayesianLayer<T>
 
             var biasStd = NumOps.Sqrt(NumOps.Exp(_biasLogVar[i]));
             var biasEpsilon = NumOps.Divide(
-                NumOps.Subtract(_sampledBias![i], _biasMean[i]),
+                NumOps.Subtract(sampledBias[i], _biasMean[i]),
                 NumOps.Add(biasStd, NumOps.FromDouble(1e-8))
             );
             var biasGradLogVar = NumOps.Multiply(

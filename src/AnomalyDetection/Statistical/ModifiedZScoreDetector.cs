@@ -178,14 +178,14 @@ public class ModifiedZScoreDetector<T> : AnomalyDetectorBase<T>
             for (int j = 0; j < X.Columns; j++)
             {
                 // Skip features with zero MAD (constant features)
-                if (NumOps.Equals(_mads![j], NumOps.Zero))
+                if (NumOps.Equals((_mads ?? throw new InvalidOperationException("_mads has not been initialized."))[j], NumOps.Zero))
                 {
                     continue;
                 }
 
                 // Modified Z = k * (x - median) / MAD
                 // where k = 0.6745 (scaling factor)
-                T deviation = NumOps.Subtract(X[i, j], _medians![j]);
+                T deviation = NumOps.Subtract(X[i, j], (_medians ?? throw new InvalidOperationException("_medians has not been initialized."))[j]);
                 T modifiedZ = NumOps.Divide(
                     NumOps.Multiply(scaleFactor, deviation),
                     _mads[j]);

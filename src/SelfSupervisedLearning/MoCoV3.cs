@@ -108,7 +108,8 @@ public class MoCoV3<T> : SSLMethodBase<T>
 
         // Forward pass for view 1 through online encoder
         var h1 = _encoder.ForwardWithMemory(view1);
-        var z1 = _projector!.Project(h1);
+        var projector = _projector ?? throw new InvalidOperationException("_projector has not been initialized.");
+        var z1 = projector.Project(h1);
         var q1 = _predictor?.Project(z1) ?? z1;
 
         // Forward pass for view 2 through online encoder
@@ -118,7 +119,7 @@ public class MoCoV3<T> : SSLMethodBase<T>
 
         // Forward pass through momentum encoder (no gradients)
         var hk1 = _momentumEncoder.Encode(view1);
-        var k1 = _momentumProjector!.Project(hk1);
+        var k1 = (_momentumProjector ?? throw new InvalidOperationException("_momentumProjector has not been initialized.")).Project(hk1);
 
         var hk2 = _momentumEncoder.Encode(view2);
         var k2 = _momentumProjector.Project(hk2);
@@ -139,7 +140,7 @@ public class MoCoV3<T> : SSLMethodBase<T>
 
         // Backward pass through predictor (if present) and projector for view 1
         var gradZ1 = _predictor?.Backward(gradQ1) ?? gradQ1;
-        var gradH1 = _projector!.Backward(gradZ1);
+        var gradH1 = projector.Backward(gradZ1);
         _encoder.Backpropagate(gradH1);
 
         // Backward pass through predictor (if present) and projector for view 2

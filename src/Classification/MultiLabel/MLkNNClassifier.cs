@@ -146,7 +146,7 @@ public class MLkNNClassifier<T> : MultiLabelClassifierBase<T>
                 int neighborCount = 0;
                 foreach (int neighborIdx in neighbors)
                 {
-                    if (NumOps.ToDouble(_trainLabels![neighborIdx, l]) > 0.5)
+                    if (NumOps.ToDouble((_trainLabels ?? throw new InvalidOperationException("_trainLabels has not been initialized."))[neighborIdx, l]) > 0.5)
                     {
                         neighborCount++;
                     }
@@ -186,7 +186,7 @@ public class MLkNNClassifier<T> : MultiLabelClassifierBase<T>
 
     private int[] FindKNearestNeighborsInTraining(Matrix<T> query, int queryIdx, int k)
     {
-        int n = _trainFeatures!.Rows;
+        int n = (_trainFeatures ?? throw new InvalidOperationException("_trainFeatures has not been initialized.")).Rows;
         var distances = new List<(int Index, double Distance)>();
 
         for (int i = 0; i < n; i++)
@@ -240,7 +240,7 @@ public class MLkNNClassifier<T> : MultiLabelClassifierBase<T>
         {
             for (int j = 0; j <= k; j++)
             {
-                parameters[idx++] = NumOps.FromDouble(_condProbsPos![l, j]);
+                parameters[idx++] = NumOps.FromDouble((_condProbsPos ?? throw new InvalidOperationException("_condProbsPos has not been initialized."))[l, j]);
             }
         }
 
@@ -248,7 +248,7 @@ public class MLkNNClassifier<T> : MultiLabelClassifierBase<T>
         {
             for (int j = 0; j <= k; j++)
             {
-                parameters[idx++] = NumOps.FromDouble(_condProbsNeg![l, j]);
+                parameters[idx++] = NumOps.FromDouble((_condProbsNeg ?? throw new InvalidOperationException("_condProbsNeg has not been initialized."))[l, j]);
             }
         }
 

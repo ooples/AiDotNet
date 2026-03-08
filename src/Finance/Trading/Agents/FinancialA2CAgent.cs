@@ -163,7 +163,7 @@ public class FinancialA2CAgent<T> : TradingAgentBase<T>
             _critic.Train(Tensor<T>.FromVector(exp.State), Tensor<T>.FromVector(targetVVec));
 
             // Update Actor
-            T actorLoss = TradingOptions.LossFunction!.CalculateLoss(
+            T actorLoss = (TradingOptions.LossFunction ?? throw new InvalidOperationException("LossFunction has not been initialized.")).CalculateLoss(
                 _actor.Predict(Tensor<T>.FromVector(exp.State)).ToVector(), 
                 exp.Action);
             

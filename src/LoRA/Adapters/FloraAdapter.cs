@@ -102,7 +102,7 @@ public class FloraAdapter<T> : LoRAAdapterBase<T>
         {
             for (int j = 0; j < outputSize; j++)
             {
-                T oldMomentum = _compressedMomentum![i, j];
+                T oldMomentum = (_compressedMomentum ?? throw new InvalidOperationException("_compressedMomentum has not been initialized."))[i, j];
                 T newMomentum = NumOps.Add(
                     NumOps.Multiply(beta1, oldMomentum),
                     NumOps.Multiply(oneMinusBeta1, gradB[i, j])
@@ -122,7 +122,7 @@ public class FloraAdapter<T> : LoRAAdapterBase<T>
                 {
                     T grad = gradB[i, j];
                     T gradSquared = NumOps.Multiply(grad, grad);
-                    T oldSecondMoment = _compressedSecondMoment![i, j];
+                    T oldSecondMoment = (_compressedSecondMoment ?? throw new InvalidOperationException("_compressedSecondMoment has not been initialized."))[i, j];
                     T newSecondMoment = NumOps.Add(
                         NumOps.Multiply(beta2, oldSecondMoment),
                         NumOps.Multiply(oneMinusBeta2, gradSquared)

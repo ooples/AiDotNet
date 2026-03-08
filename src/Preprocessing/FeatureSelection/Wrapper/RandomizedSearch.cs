@@ -135,7 +135,7 @@ public class RandomizedSearch<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     {
         double score = 0;
         foreach (int j in subset)
-            score += _featureScores![j];
+            score += (_featureScores ?? throw new InvalidOperationException("_featureScores has not been initialized."))[j];
 
         return score / subset.Length;
     }

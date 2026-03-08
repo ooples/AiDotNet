@@ -88,7 +88,7 @@ public class NHiTSModel<T> : TimeSeriesModelBase<T>
 
         for (int i = 0; i < _options.NumStacks; i++)
         {
-            int poolingSize = _options.PoolingKernelSizes![i];
+            int poolingSize = (_options.PoolingKernelSizes ?? throw new InvalidOperationException("PoolingKernelSizes has not been initialized."))[i];
             int downsampledLength = _options.LookbackWindow / poolingSize;
 
             var stack = new NHiTSStackTensor<T>(
@@ -245,7 +245,7 @@ public class NHiTSModel<T> : TimeSeriesModelBase<T>
                 foreach (var grad in batchGradients.Where(g => g.ContainsKey(key)))
                 {
                     grad.TryGetValue(key, out var g);
-                    sumGradient = sumGradient is null ? g!.Clone() : Engine.TensorAdd(sumGradient, g!);
+                    sumGradient = sumGradient is null ? (g ?? throw new InvalidOperationException("g has not been initialized.")).Clone() : Engine.TensorAdd(sumGradient, g!);
                 }
 
                 if (sumGradient is not null)
