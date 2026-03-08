@@ -153,9 +153,7 @@ public sealed class DevelopmentAttestationVerifier : IAttestationVerifier
 
             return new AttestationVerificationResult(true);
         }
-        catch (Exception ex) when (
-            ex is SecurityTokenException ||
-            ex is ArgumentException)
+        catch (SecurityTokenException)
         {
             return new AttestationVerificationResult(false, "Attestation token validation failed.");
         }
