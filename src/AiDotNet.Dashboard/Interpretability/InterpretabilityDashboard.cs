@@ -474,9 +474,15 @@ public class InterpretabilityDashboard : IDisposable
 
                 foreach (var exp in attributions)
                 {
-                    for (int i = 0; i < featureNames.Length && i < exp.Attributions!.Length; i++)
+                    if (exp.Attributions is not { Length: > 0 } expAttributions)
                     {
-                        meanAttr[i] += exp.Attributions[i];
+                        SysConsole.WriteLine($"[WARNING] Skipping explanation '{exp.InstanceId}' in session '{session.Name}': attribution values are empty or missing.");
+                        continue;
+                    }
+
+                    for (int i = 0; i < featureNames.Length && i < expAttributions.Length; i++)
+                    {
+                        meanAttr[i] += expAttributions[i];
                     }
                 }
 
