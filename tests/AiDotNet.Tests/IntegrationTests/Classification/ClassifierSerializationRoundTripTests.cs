@@ -1,6 +1,7 @@
 using AiDotNet.Classification.Boosting;
 using AiDotNet.Classification.DiscriminantAnalysis;
 using AiDotNet.Classification.Ensemble;
+using AiDotNet.Classification.ImbalancedEnsemble;
 using AiDotNet.Classification.Ordinal;
 using AiDotNet.Classification.Linear;
 using AiDotNet.Classification.NaiveBayes;
@@ -1117,6 +1118,158 @@ public class ClassifierSerializationRoundTripTests
 
     #endregion
 
+    #region ImbalancedEnsemble Classifiers — Internal tree/AdaBoost state
+
+    [Fact]
+    public void BalancedRandomForest_SerializeRoundTrip_PredictionsMatch()
+    {
+        // Create imbalanced binary data (majority:minority = 4:1)
+        var (trainX, trainY) = CreateImbalancedBinaryData(100, 3, majorityRatio: 4.0, separation: 4.0, seed: 42);
+        var classifier = new BalancedRandomForestClassifier<double>(nEstimators: 10, maxDepth: 5, seed: 42);
+        classifier.Train(trainX, trainY);
+
+        var testX = CreateRandomMatrix(10, 3, seed: 100);
+        var original = classifier.Predict(testX);
+
+        var bytes = classifier.Serialize();
+        var restored = new BalancedRandomForestClassifier<double>(nEstimators: 10, maxDepth: 5, seed: 99);
+        restored.Deserialize(bytes);
+        var restoredPreds = restored.Predict(testX);
+
+        AssertPredictionsMatch(original, restoredPreds, "BalancedRandomForestClassifier");
+    }
+
+    [Fact]
+    public void BalancedRandomForest_DeepCopy_PreservesTrainedState()
+    {
+        var (trainX, trainY) = CreateImbalancedBinaryData(100, 3, majorityRatio: 4.0, separation: 4.0, seed: 42);
+        var classifier = new BalancedRandomForestClassifier<double>(nEstimators: 10, maxDepth: 5, seed: 42);
+        classifier.Train(trainX, trainY);
+
+        var testX = CreateRandomMatrix(10, 3, seed: 100);
+        var original = classifier.Predict(testX);
+
+        var copy = classifier.DeepCopy();
+        var copyPreds = copy.Predict(testX);
+
+        AssertPredictionsMatch(original, (Vector<double>)copyPreds, "BalancedRandomForestClassifier DeepCopy");
+    }
+
+    [Fact]
+    public void BalancedRandomForest_TrainAndPredict_AchievesReasonableAccuracy()
+    {
+        var (trainX, trainY) = CreateImbalancedBinaryData(120, 3, majorityRatio: 3.0, separation: 5.0, seed: 42);
+        var classifier = new BalancedRandomForestClassifier<double>(nEstimators: 20, maxDepth: 5, seed: 42);
+        classifier.Train(trainX, trainY);
+
+        var (testX, testY) = CreateImbalancedBinaryData(40, 3, majorityRatio: 3.0, separation: 5.0, seed: 99);
+        var predictions = classifier.Predict(testX);
+
+        double accuracy = ComputeAccuracy(predictions, testY);
+        Assert.True(accuracy >= 0.60,
+            $"BalancedRandomForestClassifier accuracy {accuracy:P1} is below 60% threshold.");
+    }
+
+    [Fact]
+    public void BalancedBagging_SerializeRoundTrip_PredictionsMatch()
+    {
+        var (trainX, trainY) = CreateImbalancedBinaryData(100, 3, majorityRatio: 4.0, separation: 4.0, seed: 42);
+        var classifier = new BalancedBaggingClassifier<double>(nEstimators: 10, maxDepth: 5, seed: 42);
+        classifier.Train(trainX, trainY);
+
+        var testX = CreateRandomMatrix(10, 3, seed: 100);
+        var original = classifier.Predict(testX);
+
+        var bytes = classifier.Serialize();
+        var restored = new BalancedBaggingClassifier<double>(nEstimators: 10, maxDepth: 5, seed: 99);
+        restored.Deserialize(bytes);
+        var restoredPreds = restored.Predict(testX);
+
+        AssertPredictionsMatch(original, restoredPreds, "BalancedBaggingClassifier");
+    }
+
+    [Fact]
+    public void BalancedBagging_DeepCopy_PreservesTrainedState()
+    {
+        var (trainX, trainY) = CreateImbalancedBinaryData(100, 3, majorityRatio: 4.0, separation: 4.0, seed: 42);
+        var classifier = new BalancedBaggingClassifier<double>(nEstimators: 10, maxDepth: 5, seed: 42);
+        classifier.Train(trainX, trainY);
+
+        var testX = CreateRandomMatrix(10, 3, seed: 100);
+        var original = classifier.Predict(testX);
+
+        var copy = classifier.DeepCopy();
+        var copyPreds = copy.Predict(testX);
+
+        AssertPredictionsMatch(original, (Vector<double>)copyPreds, "BalancedBaggingClassifier DeepCopy");
+    }
+
+    [Fact]
+    public void BalancedBagging_TrainAndPredict_AchievesReasonableAccuracy()
+    {
+        var (trainX, trainY) = CreateImbalancedBinaryData(120, 3, majorityRatio: 3.0, separation: 5.0, seed: 42);
+        var classifier = new BalancedBaggingClassifier<double>(nEstimators: 20, maxDepth: 5, seed: 42);
+        classifier.Train(trainX, trainY);
+
+        var (testX, testY) = CreateImbalancedBinaryData(40, 3, majorityRatio: 3.0, separation: 5.0, seed: 99);
+        var predictions = classifier.Predict(testX);
+
+        double accuracy = ComputeAccuracy(predictions, testY);
+        Assert.True(accuracy >= 0.60,
+            $"BalancedBaggingClassifier accuracy {accuracy:P1} is below 60% threshold.");
+    }
+
+    [Fact]
+    public void EasyEnsemble_SerializeRoundTrip_PredictionsMatch()
+    {
+        var (trainX, trainY) = CreateImbalancedBinaryData(100, 3, majorityRatio: 4.0, separation: 4.0, seed: 42);
+        var classifier = new EasyEnsembleClassifier<double>(nSubsets: 5, nEstimatorsPerSubset: 10, seed: 42);
+        classifier.Train(trainX, trainY);
+
+        var testX = CreateRandomMatrix(10, 3, seed: 100);
+        var original = classifier.Predict(testX);
+
+        var bytes = classifier.Serialize();
+        var restored = new EasyEnsembleClassifier<double>(nSubsets: 5, nEstimatorsPerSubset: 10, seed: 99);
+        restored.Deserialize(bytes);
+        var restoredPreds = restored.Predict(testX);
+
+        AssertPredictionsMatch(original, restoredPreds, "EasyEnsembleClassifier");
+    }
+
+    [Fact]
+    public void EasyEnsemble_DeepCopy_PreservesTrainedState()
+    {
+        var (trainX, trainY) = CreateImbalancedBinaryData(100, 3, majorityRatio: 4.0, separation: 4.0, seed: 42);
+        var classifier = new EasyEnsembleClassifier<double>(nSubsets: 5, nEstimatorsPerSubset: 10, seed: 42);
+        classifier.Train(trainX, trainY);
+
+        var testX = CreateRandomMatrix(10, 3, seed: 100);
+        var original = classifier.Predict(testX);
+
+        var copy = classifier.DeepCopy();
+        var copyPreds = copy.Predict(testX);
+
+        AssertPredictionsMatch(original, (Vector<double>)copyPreds, "EasyEnsembleClassifier DeepCopy");
+    }
+
+    [Fact]
+    public void EasyEnsemble_TrainAndPredict_AchievesReasonableAccuracy()
+    {
+        var (trainX, trainY) = CreateImbalancedBinaryData(120, 3, majorityRatio: 3.0, separation: 5.0, seed: 42);
+        var classifier = new EasyEnsembleClassifier<double>(nSubsets: 5, nEstimatorsPerSubset: 20, seed: 42);
+        classifier.Train(trainX, trainY);
+
+        var (testX, testY) = CreateImbalancedBinaryData(40, 3, majorityRatio: 3.0, separation: 5.0, seed: 99);
+        var predictions = classifier.Predict(testX);
+
+        double accuracy = ComputeAccuracy(predictions, testY);
+        Assert.True(accuracy >= 0.60,
+            $"EasyEnsembleClassifier accuracy {accuracy:P1} is below 60% threshold.");
+    }
+
+    #endregion
+
     #region Helper Methods
 
     private static (Matrix<double> x, Vector<double> y) CreateBinaryData(
@@ -1137,6 +1290,37 @@ public class ClassifierSerializationRoundTripTests
                 x[i, j] = classLabel * separation + noise;
             }
         }
+        return (x, y);
+    }
+
+    private static (Matrix<double> x, Vector<double> y) CreateImbalancedBinaryData(
+        int totalSamples, int features, double majorityRatio, double separation, int seed)
+    {
+        var random = new Random(seed);
+        int minoritySamples = (int)(totalSamples / (1 + majorityRatio));
+        if (minoritySamples < 2) minoritySamples = 2;
+        int majoritySamples = totalSamples - minoritySamples;
+        int n = minoritySamples + majoritySamples;
+
+        var x = new Matrix<double>(n, features);
+        var y = new Vector<double>(n);
+
+        // Minority class (label 1)
+        for (int i = 0; i < minoritySamples; i++)
+        {
+            y[i] = 1;
+            for (int j = 0; j < features; j++)
+                x[i, j] = separation + NextGaussian(random);
+        }
+
+        // Majority class (label 0)
+        for (int i = minoritySamples; i < n; i++)
+        {
+            y[i] = 0;
+            for (int j = 0; j < features; j++)
+                x[i, j] = NextGaussian(random);
+        }
+
         return (x, y);
     }
 
