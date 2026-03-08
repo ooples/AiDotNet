@@ -683,11 +683,9 @@ public abstract class KnowledgeDistillationTrainerBase<T, TInput, TOutput> : IKn
 
             if (bestCheckpoint != null)
             {
-                System.Diagnostics.Debug.WriteLine($"[Checkpointing] Loaded best checkpoint from epoch {bestCheckpoint.Epoch}");
-                if (bestCheckpoint.Metrics.ContainsKey(_checkpointConfig!.BestMetric))
-                {
-                    System.Diagnostics.Debug.WriteLine($"[Checkpointing] Best {_checkpointConfig.BestMetric}: {bestCheckpoint.Metrics[_checkpointConfig.BestMetric]:F4}");
-                }
+                var checkpointConfig = _checkpointConfig ?? throw new InvalidOperationException("Checkpoint configuration has not been initialized.");
+                // Best checkpoint loaded from epoch bestCheckpoint.Epoch
+                // Metric values available via bestCheckpoint.Metrics dictionary
             }
         }
     }

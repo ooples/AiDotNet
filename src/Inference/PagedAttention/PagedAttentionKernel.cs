@@ -499,15 +499,21 @@ internal class PagedAttentionKernel<T>
 
     private static float ToFloat(T value)
     {
+        object boxed = value ?? throw new InvalidOperationException("Cannot convert null value to float.");
         if (typeof(T) == typeof(float))
-            object boxed = value ?? throw new InvalidOperationException("Cannot convert null value to float.");
+        {
             return (float)boxed;
+        }
+
         if (typeof(T) == typeof(double))
-            object boxed2 = value ?? throw new InvalidOperationException("Cannot convert null value to float.");
-            return (float)(double)boxed2;
+        {
+            return (float)(double)boxed;
+        }
+
         if (typeof(T) == typeof(Half))
-            object boxed3 = value ?? throw new InvalidOperationException("Cannot convert null value to float.");
-            return (float)(Half)boxed3;
+        {
+            return (float)(Half)boxed;
+        }
 
         return Convert.ToSingle(value);
     }
@@ -515,13 +521,23 @@ internal class PagedAttentionKernel<T>
     private static T FromFloat(float value)
     {
         if (typeof(T) == typeof(float))
+        {
             return (T)(object)value;
-        if (typeof(T) == typeof(double))
-            return (T)(object)(double)value;
-        if (typeof(T) == typeof(Half))
-            return (T)(object)(Half)value;
+        }
 
-        return (T)(Convert.ChangeType(value, typeof(T)) ?? throw new InvalidOperationException("Type conversion returned null."));
+        if (typeof(T) == typeof(double))
+        {
+            return (T)(object)(double)value;
+        }
+
+        if (typeof(T) == typeof(Half))
+        {
+            return (T)(object)(Half)value;
+        }
+
+        object converted = Convert.ChangeType(value, typeof(T))
+            ?? throw new InvalidOperationException($"Cannot convert float to {typeof(T).Name}.");
+        return (T)converted;
     }
 
     private static T[] ConvertArray(ReadOnlySpan<float> source)

@@ -294,8 +294,8 @@ internal class CachedMultiHeadAttention<T> : LayerBase<T>
         }
 
         // Append to cache and get full K, V
-        var cacheForAppend = _cache ?? throw new InvalidOperationException("KV cache has not been initialized.");
-        var (keys, values) = cacheForAppend.Append(_layerIndex, newKeys, newValues);
+        var cache = _cache ?? throw new InvalidOperationException("KV cache has not been initialized.");
+        var (keys, values) = cache.Append(_layerIndex, newKeys, newValues);
 
         // Compute attention using cached K, V
         Tensor<T> attentionOutput;

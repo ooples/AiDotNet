@@ -122,7 +122,7 @@ internal class KVCache<T>
             else if (typeof(T) == typeof(Half))
             {
                 _useInt8Storage = true;
-                _toFloat = value => (float)(Half)(object)(value ?? throw new InvalidOperationException("Unexpected null value in KV cache conversion."));
+                _toFloat = value => { object boxed = value ?? throw new InvalidOperationException("Cannot convert null to float."); return (float)(Half)boxed; };
                 _fromFloat = value => (T)(object)(Half)value;
             }
         }

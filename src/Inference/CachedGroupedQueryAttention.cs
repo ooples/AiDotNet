@@ -235,8 +235,8 @@ internal class CachedGroupedQueryAttention<T> : LayerBase<T>
         }
 
         // Append to cache (cache stores numKVHeads, not numHeads!)
-        var cache2 = _cache ?? throw new InvalidOperationException("KV cache has not been initialized.");
-        var (keys, values) = cache2.Append(_layerIndex, newKeys, newValues);
+        var cache = _cache ?? throw new InvalidOperationException("KV cache has not been initialized.");
+        var (keys, values) = cache.Append(_layerIndex, newKeys, newValues);
 
         // Expand KV heads to match Q heads
         int cachedSeqLen = keys.Shape[2];
