@@ -7,6 +7,7 @@ using AiDotNet.Classification.Ordinal;
 using AiDotNet.Classification.Linear;
 using AiDotNet.Classification.NaiveBayes;
 using AiDotNet.Classification.SVM;
+using AiDotNet.Classification.TimeSeries;
 using AiDotNet.Classification.Trees;
 using AiDotNet.Enums;
 using AiDotNet.Models.Options;
@@ -1446,6 +1447,137 @@ public class ClassifierSerializationRoundTripTests
         double accuracy = ComputeAccuracy(predictions, testY);
         Assert.True(accuracy >= 0.55,
             $"AdaptiveRandomForestClassifier accuracy {accuracy:P1} is below 55% threshold.");
+    }
+
+    #endregion
+
+    #region TimeSeries Classifiers — Interval trees, convolutional kernels, biases
+
+    [Fact]
+    public void TimeSeriesForest_SerializeRoundTrip_PredictionsMatch()
+    {
+        // TimeSeriesForest wraps Matrix into Tensor internally via Train(Matrix, Vector)
+        var (trainX, trainY) = CreateBinaryData(100, 20, separation: 5.0, seed: 42);
+        var options = new TimeSeriesForestOptions<double> { NumTrees = 5, MaxDepth = 5, RandomSeed = 42 };
+        var classifier = new TimeSeriesForestClassifier<double>(options);
+        classifier.Train(trainX, trainY);
+
+        var testX = CreateRandomMatrix(10, 20, seed: 100);
+        var original = classifier.Predict(testX);
+
+        var bytes = classifier.Serialize();
+        var restored = new TimeSeriesForestClassifier<double>(options);
+        restored.Deserialize(bytes);
+        var restoredPreds = restored.Predict(testX);
+
+        AssertPredictionsMatch(original, restoredPreds, "TimeSeriesForestClassifier");
+    }
+
+    [Fact]
+    public void TimeSeriesForest_DeepCopy_PreservesTrainedState()
+    {
+        var (trainX, trainY) = CreateBinaryData(100, 20, separation: 5.0, seed: 42);
+        var options = new TimeSeriesForestOptions<double> { NumTrees = 5, MaxDepth = 5, RandomSeed = 42 };
+        var classifier = new TimeSeriesForestClassifier<double>(options);
+        classifier.Train(trainX, trainY);
+
+        var testX = CreateRandomMatrix(10, 20, seed: 100);
+        var original = classifier.Predict(testX);
+
+        var copy = classifier.DeepCopy();
+        var copyPreds = copy.Predict(testX);
+
+        AssertPredictionsMatch(original, (Vector<double>)copyPreds, "TimeSeriesForestClassifier DeepCopy");
+    }
+
+    [Fact]
+    public void TimeSeriesForest_TrainAndPredict_AchievesReasonableAccuracy()
+    {
+        var (trainX, trainY) = CreateBinaryData(200, 20, separation: 5.0, seed: 42);
+        var options = new TimeSeriesForestOptions<double> { NumTrees = 10, MaxDepth = 5, RandomSeed = 42 };
+        var classifier = new TimeSeriesForestClassifier<double>(options);
+        classifier.Train(trainX, trainY);
+
+        var (testX, testY) = CreateBinaryData(100, 20, separation: 5.0, seed: 99);
+        var predictions = classifier.Predict(testX);
+
+        double accuracy = ComputeAccuracy(predictions, testY);
+        Assert.True(accuracy >= 0.55,
+            $"TimeSeriesForestClassifier accuracy {accuracy:P1} is below 55% threshold.");
+    }
+
+    [Fact]
+    public void Rocket_SerializeRoundTrip_PredictionsMatch()
+    {
+        // Use few kernels (100) to keep test fast — default 10000 is too slow for tests
+        var (trainX, trainY) = CreateBinaryData(60, 20, separation: 5.0, seed: 42);
+        var options = new RocketOptions<double> { NumKernels = 100, RandomSeed = 42 };
+        var classifier = new RocketClassifier<double>(options);
+        classifier.Train(trainX, trainY);
+
+        var testX = CreateRandomMatrix(10, 20, seed: 100);
+        var original = classifier.Predict(testX);
+
+        var bytes = classifier.Serialize();
+        var restored = new RocketClassifier<double>(options);
+        restored.Deserialize(bytes);
+        var restoredPreds = restored.Predict(testX);
+
+        AssertPredictionsMatch(original, restoredPreds, "RocketClassifier");
+    }
+
+    [Fact]
+    public void Rocket_DeepCopy_PreservesTrainedState()
+    {
+        var (trainX, trainY) = CreateBinaryData(60, 20, separation: 5.0, seed: 42);
+        var options = new RocketOptions<double> { NumKernels = 100, RandomSeed = 42 };
+        var classifier = new RocketClassifier<double>(options);
+        classifier.Train(trainX, trainY);
+
+        var testX = CreateRandomMatrix(10, 20, seed: 100);
+        var original = classifier.Predict(testX);
+
+        var copy = classifier.DeepCopy();
+        var copyPreds = copy.Predict(testX);
+
+        AssertPredictionsMatch(original, (Vector<double>)copyPreds, "RocketClassifier DeepCopy");
+    }
+
+    [Fact]
+    public void MiniRocket_SerializeRoundTrip_PredictionsMatch()
+    {
+        // MiniRocket uses 84 fixed kernels × dilations × biases — needs enough sequence length
+        var (trainX, trainY) = CreateBinaryData(60, 20, separation: 5.0, seed: 42);
+        var options = new MiniRocketOptions<double> { RandomSeed = 42, NumBiasesPerDilation = 3 };
+        var classifier = new MiniRocketClassifier<double>(options);
+        classifier.Train(trainX, trainY);
+
+        var testX = CreateRandomMatrix(10, 20, seed: 100);
+        var original = classifier.Predict(testX);
+
+        var bytes = classifier.Serialize();
+        var restored = new MiniRocketClassifier<double>(options);
+        restored.Deserialize(bytes);
+        var restoredPreds = restored.Predict(testX);
+
+        AssertPredictionsMatch(original, restoredPreds, "MiniRocketClassifier");
+    }
+
+    [Fact]
+    public void MiniRocket_DeepCopy_PreservesTrainedState()
+    {
+        var (trainX, trainY) = CreateBinaryData(60, 20, separation: 5.0, seed: 42);
+        var options = new MiniRocketOptions<double> { RandomSeed = 42, NumBiasesPerDilation = 3 };
+        var classifier = new MiniRocketClassifier<double>(options);
+        classifier.Train(trainX, trainY);
+
+        var testX = CreateRandomMatrix(10, 20, seed: 100);
+        var original = classifier.Predict(testX);
+
+        var copy = classifier.DeepCopy();
+        var copyPreds = copy.Predict(testX);
+
+        AssertPredictionsMatch(original, (Vector<double>)copyPreds, "MiniRocketClassifier DeepCopy");
     }
 
     #endregion
