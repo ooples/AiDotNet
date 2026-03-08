@@ -731,52 +731,42 @@ public class SlowFast<T> : NeuralNetworkBase<T>
         string probabilityActivationTypeName = reader.ReadString();
 
         // Recreate loss function from type name
-        var lossFunctionType = Type.GetType(lossFunctionTypeName);
-        if (lossFunctionType != null)
-        {
-            _lossFunction = (ILossFunction<T>?)Activator.CreateInstance(lossFunctionType) ?? new CrossEntropyLoss<T>();
-        }
-        else
-        {
-            _lossFunction = new CrossEntropyLoss<T>();
-        }
+        var lossFunctionType = Type.GetType(lossFunctionTypeName)
+            ?? throw new InvalidOperationException(
+                $"Cannot resolve serialized loss function type '{lossFunctionTypeName}'.");
+        _lossFunction = (ILossFunction<T>?)Activator.CreateInstance(lossFunctionType)
+            ?? throw new InvalidOperationException(
+                $"Cannot create instance of serialized loss function type '{lossFunctionTypeName}'.");
 
         // Recreate probability activation from type name
-        var activationType = Type.GetType(probabilityActivationTypeName);
-        if (activationType != null)
-        {
-            _probabilityActivation = (IActivationFunction<T>?)Activator.CreateInstance(activationType) ?? new SoftmaxActivation<T>();
-        }
-        else
-        {
-            _probabilityActivation = new SoftmaxActivation<T>();
-        }
+        var activationType = Type.GetType(probabilityActivationTypeName)
+            ?? throw new InvalidOperationException(
+                $"Cannot resolve serialized activation function type '{probabilityActivationTypeName}'.");
+        _probabilityActivation = (IActivationFunction<T>?)Activator.CreateInstance(activationType)
+            ?? throw new InvalidOperationException(
+                $"Cannot create instance of serialized activation function type '{probabilityActivationTypeName}'.");
 
         // Restore optimizer if it was serialized
         bool hasOptimizer = reader.ReadBoolean();
         if (hasOptimizer)
         {
             string optimizerTypeName = reader.ReadString();
-            var optimizerType = Type.GetType(optimizerTypeName);
+            var optimizerType = Type.GetType(optimizerTypeName)
+                ?? throw new InvalidOperationException(
+                    $"Cannot resolve serialized optimizer type '{optimizerTypeName}'.");
 
-            // Optimizer requires 'this' network instance, so we need to handle construction specially
-            if (optimizerType != null)
+            // Try to find constructor that takes IFullModel parameter (used by optimizers)
+            var constructor = optimizerType.GetConstructor([typeof(IFullModel<T, Tensor<T>, Tensor<T>>)]);
+            if (constructor is not null)
             {
-                // Try to find constructor that takes IFullModel parameter (used by optimizers)
-                var constructor = optimizerType.GetConstructor([typeof(IFullModel<T, Tensor<T>, Tensor<T>>)]);
-                if (constructor != null)
-                {
-                    _optimizer = (IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>?)constructor.Invoke([this]);
-                }
-                else
-                {
-                    // Fall back to default Adam optimizer
-                    _optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-                }
+                _optimizer = (IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>?)constructor.Invoke([this])
+                    ?? throw new InvalidOperationException(
+                        $"Cannot create instance of serialized optimizer type '{optimizerTypeName}'.");
             }
             else
             {
-                _optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+                throw new InvalidOperationException(
+                    $"Serialized optimizer type '{optimizerTypeName}' does not have a constructor that accepts IFullModel<T, Tensor<T>, Tensor<T>>.");
             }
         }
         else

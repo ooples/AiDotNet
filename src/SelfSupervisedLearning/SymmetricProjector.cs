@@ -325,7 +325,21 @@ public class SymmetricProjector<T> : IProjectorHead<T>
             out ctx.ProjBn1GammaGrad, out ctx.ProjBn1BetaGrad);
         grad = LinearBackward(grad, _projWeight1, _inputDim, _hiddenDim);
 
-        _gradients = ComputeParameterGradients(gradAtProjectorOutput, gradOutput, ctx);
+        var branchGradients = ComputeParameterGradients(gradAtProjectorOutput, gradOutput, ctx);
+        if (_gradients is null)
+        {
+            _gradients = branchGradients;
+        }
+        else
+        {
+            var accumulated = _gradients.ToArray();
+            var branchArray = branchGradients.ToArray();
+            for (int i = 0; i < accumulated.Length; i++)
+            {
+                accumulated[i] = NumOps.Add(accumulated[i], branchArray[i]);
+            }
+            _gradients = new Vector<T>(accumulated);
+        }
 
         return grad;
     }
