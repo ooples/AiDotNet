@@ -60,6 +60,17 @@ public class Denclue<T> : ClusteringBase<T>
     public Denclue(DenclueOptions<T>? options = null)
         : base(options ?? new DenclueOptions<T>())
     {
+        // DENCLUE requires fractional math (Divide, Exp, Sqrt, non-integer bandwidth).
+        // Integer types will produce incorrect results.
+        var typeCode = Type.GetTypeCode(typeof(T));
+        if (typeCode is TypeCode.Int32 or TypeCode.Int64 or TypeCode.UInt32 or TypeCode.UInt64
+            or TypeCode.Int16 or TypeCode.UInt16 or TypeCode.Byte or TypeCode.SByte)
+        {
+            throw new NotSupportedException(
+                $"DENCLUE does not support integer type '{typeof(T).Name}'. " +
+                "Use a floating-point type such as float or double.");
+        }
+
         _options = options ?? new DenclueOptions<T>();
     }
 
@@ -321,6 +332,13 @@ public class Denclue<T> : ClusteringBase<T>
         if (ClusterCenters is null) return NumOps.Zero;
 
         int d = NumFeatures;
+        if (point.Length != d)
+        {
+            throw new ArgumentException(
+                $"Point has {point.Length} dimensions, but the model was fitted with {d} features.",
+                nameof(point));
+        }
+
         var p = new T[d];
         for (int j = 0; j < d; j++)
         {

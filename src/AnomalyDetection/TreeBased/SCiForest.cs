@@ -46,6 +46,7 @@ public class SCiForest<T> : AnomalyDetectorBase<T>
     private readonly double _sparsity;
     private List<SCiTree>? _trees;
     private int _nFeatures;
+    private int _trainingSampleSize;
 
     /// <summary>
     /// Gets the number of trees in the forest.
@@ -115,6 +116,7 @@ public class SCiForest<T> : AnomalyDetectorBase<T>
 
         _nFeatures = X.Columns;
         int nSamples = Math.Min(_maxSamples, X.Rows);
+        _trainingSampleSize = nSamples;
         int maxDepth = (int)Math.Ceiling(Math.Log(nSamples, 2));
 
         // Extract data into T arrays
@@ -171,12 +173,11 @@ public class SCiForest<T> : AnomalyDetectorBase<T>
         }
 
         var scores = new Vector<T>(X.Rows);
-        int nSamples = Math.Min(_maxSamples, X.Rows);
 
-        // Expected path length for BST
-        T c = nSamples > 2
-            ? NumOps.FromDouble(2 * (Math.Log(nSamples - 1) + 0.5772156649) - (2.0 * (nSamples - 1) / nSamples))
-            : NumOps.FromDouble(nSamples == 2 ? 1 : 0);
+        // Expected path length for BST — must use the training subsample size, not the scoring batch size
+        T c = _trainingSampleSize > 2
+            ? NumOps.FromDouble(2 * (Math.Log(_trainingSampleSize - 1) + 0.5772156649) - (2.0 * (_trainingSampleSize - 1) / _trainingSampleSize))
+            : NumOps.FromDouble(_trainingSampleSize == 2 ? 1 : 0);
 
         var trees = _trees;
         if (trees is null)
