@@ -28,7 +28,7 @@ $$;
 
 -- Replace the permissive update policy with one that prevents role escalation.
 -- Users can only update full_name and updated_at on their own profile.
--- Role, subscription_tier, and subscription_status changes require admin.
+-- Role, subscription_tier, subscription_status, and stripe_customer_id changes require admin.
 drop policy if exists "Users can update own profile" on public.profiles;
 create policy "Users can update own profile"
   on public.profiles for update
@@ -38,6 +38,7 @@ create policy "Users can update own profile"
     and role = (select p.role from public.profiles p where p.id = auth.uid())
     and subscription_tier = (select p.subscription_tier from public.profiles p where p.id = auth.uid())
     and subscription_status = (select p.subscription_status from public.profiles p where p.id = auth.uid())
+    and stripe_customer_id is not distinct from (select p.stripe_customer_id from public.profiles p where p.id = auth.uid())
   );
 
 -- ============================================================================
@@ -50,4 +51,10 @@ drop policy if exists "Users can update own keys" on public.user_api_keys;
 create policy "Users can update own keys"
   on public.user_api_keys for update
   using (auth.uid() = user_id)
-  with check (auth.uid() = user_id);
+  with check (
+    auth.uid() = user_id
+    and key_hash = (select k.key_hash from public.user_api_keys k where k.id = id)
+    and key_prefix = (select k.key_prefix from public.user_api_keys k where k.id = id)
+    and scopes = (select k.scopes from public.user_api_keys k where k.id = id)
+    and user_id = (select k.user_id from public.user_api_keys k where k.id = id)
+  );

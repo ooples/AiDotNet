@@ -90,7 +90,7 @@ create or replace function public.handle_new_user()
 returns trigger
 language plpgsql
 security definer
-set search_path = 'public'
+set search_path = 'pg_catalog, public'
 as $$
 begin
   insert into public.profiles (id, full_name)
@@ -134,6 +134,7 @@ create policy "Users can update own profile"
     and role = (select p.role from public.profiles p where p.id = auth.uid())
     and subscription_tier = (select p.subscription_tier from public.profiles p where p.id = auth.uid())
     and subscription_status = (select p.subscription_status from public.profiles p where p.id = auth.uid())
+    and stripe_customer_id is not distinct from (select p.stripe_customer_id from public.profiles p where p.id = auth.uid())
   );
 
 drop policy if exists "Admins can read all profiles" on public.profiles;
@@ -162,7 +163,13 @@ drop policy if exists "Users can update own keys" on public.user_api_keys;
 create policy "Users can update own keys"
   on public.user_api_keys for update
   using (auth.uid() = user_id)
-  with check (auth.uid() = user_id);
+  with check (
+    auth.uid() = user_id
+    and key_hash = (select k.key_hash from public.user_api_keys k where k.id = id)
+    and key_prefix = (select k.key_prefix from public.user_api_keys k where k.id = id)
+    and scopes = (select k.scopes from public.user_api_keys k where k.id = id)
+    and user_id = (select k.user_id from public.user_api_keys k where k.id = id)
+  );
 
 drop policy if exists "Admins can read all keys" on public.user_api_keys;
 create policy "Admins can read all keys"

@@ -151,7 +151,7 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
       // Summary stats — use exact count from server, not sample length
       setEl('stat-total', exactTotal.toLocaleString());
 
-      if (total > 0) {
+      if (exactTotal > 0) {
         const latencies = data.filter(d => d.latency_ms != null).map(d => d.latency_ms as number);
         if (latencies.length > 0) {
           const avg = Math.round(latencies.reduce((a, b) => a + b, 0) / latencies.length);
@@ -162,7 +162,7 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
           setEl('stat-p95', `${p95}ms`);
         }
         const successCount = data.filter(d => d.status_code >= 200 && d.status_code < 400).length;
-        const successRate = Math.round((successCount / total) * 100);
+        const successRate = Math.round((successCount / exactTotal) * 100);
         const successEl = document.getElementById('stat-success');
         if (successEl) {
           const color = successRate >= 95 ? 'text-green-500' : successRate >= 80 ? 'text-yellow-500' : 'text-red-500';

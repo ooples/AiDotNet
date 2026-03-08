@@ -80,10 +80,11 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
     let filteredKeys: ApiKey[] = [];
 
     async function loadKeys() {
-      // Load all profiles for name lookup
+      // Load all profiles for name lookup (paginate to avoid max_rows limit)
       const { data: profiles } = await supabase
         .from('profiles')
-        .select('id, full_name');
+        .select('id, full_name')
+        .range(0, 999);
 
       const nameMap = new Map<string, string>();
       if (profiles) {
@@ -92,11 +93,12 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
         }
       }
 
-      // Load all API keys
+      // Load all API keys (paginate to avoid max_rows limit)
       const { data: keys, error: keysError } = await supabase
         .from('user_api_keys')
         .select('id, user_id, key_name, key_prefix, scopes, is_active, last_used_at, created_at')
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .range(0, 999);
 
       if (keysError || !keys) {
         const loading = document.getElementById('keys-loading');
