@@ -1,5 +1,7 @@
+using AiDotNet.Classification.Boosting;
 using AiDotNet.Classification.DiscriminantAnalysis;
 using AiDotNet.Classification.Ensemble;
+using AiDotNet.Classification.Ordinal;
 using AiDotNet.Classification.Linear;
 using AiDotNet.Classification.NaiveBayes;
 using AiDotNet.Classification.SVM;
@@ -926,6 +928,67 @@ public class ClassifierSerializationRoundTripTests
 
     #endregion
 
+    #region Boosting Classifiers — HistTree + BinBoundaries + InitPrediction
+
+    [Fact]
+    public void HistGradientBoosting_SerializeRoundTrip_PredictionsMatch()
+    {
+        var (trainX, trainY) = CreateBinaryData(100, 3, separation: 5.0, seed: 42);
+        var classifier = new HistGradientBoostingClassifier<double>(
+            maxBins: 32, maxDepth: 3, nEstimators: 5, learningRate: 0.1,
+            minSamplesLeaf: 5, seed: 42);
+        classifier.Train(trainX, trainY);
+
+        var testX = CreateRandomMatrix(10, 3, seed: 2400);
+        var original = classifier.Predict(testX);
+
+        var bytes = classifier.Serialize();
+        var restored = new HistGradientBoostingClassifier<double>(
+            maxBins: 32, maxDepth: 3, nEstimators: 5, learningRate: 0.1,
+            minSamplesLeaf: 5, seed: 42);
+        restored.Deserialize(bytes);
+        var restoredPreds = restored.Predict(testX);
+
+        AssertPredictionsMatch(original, restoredPreds, "HistGradientBoostingClassifier");
+    }
+
+    [Fact]
+    public void HistGradientBoosting_DeepCopy_PreservesTrainedState()
+    {
+        var (trainX, trainY) = CreateBinaryData(100, 3, separation: 5.0, seed: 42);
+        var classifier = new HistGradientBoostingClassifier<double>(
+            maxBins: 32, maxDepth: 3, nEstimators: 5, learningRate: 0.1,
+            minSamplesLeaf: 5, seed: 42);
+        classifier.Train(trainX, trainY);
+
+        var testX = CreateRandomMatrix(10, 3, seed: 2400);
+        var original = classifier.Predict(testX);
+
+        var copy = classifier.DeepCopy();
+        var copyPreds = copy.Predict(testX);
+
+        AssertPredictionsMatch(original, (Vector<double>)copyPreds, "HistGradientBoosting DeepCopy");
+    }
+
+    [Fact]
+    public void HistGradientBoosting_TrainAndPredict_AchievesReasonableAccuracy()
+    {
+        var (trainX, trainY) = CreateBinaryData(120, 3, separation: 5.0, seed: 42);
+        var classifier = new HistGradientBoostingClassifier<double>(
+            maxBins: 64, maxDepth: 4, nEstimators: 20, learningRate: 0.1,
+            minSamplesLeaf: 5, seed: 42);
+        classifier.Train(trainX, trainY);
+
+        var (testX, testY) = CreateBinaryData(40, 3, separation: 5.0, seed: 999);
+        var predictions = classifier.Predict(testX);
+
+        double accuracy = ComputeAccuracy(predictions, testY);
+        Assert.True(accuracy > 0.70,
+            $"HistGradientBoosting accuracy {accuracy:P1} too low for separable data (expected > 70%)");
+    }
+
+    #endregion
+
     #region Multi-class Serialize Round-trips
 
     [Fact]
@@ -974,6 +1037,82 @@ public class ClassifierSerializationRoundTripTests
         var restoredPreds = restored.Predict(testX);
 
         AssertPredictionsMatch(original, restoredPreds, "QDA MultiClass");
+    }
+
+    #endregion
+
+    #region Ordinal Classifiers — Coefficients + Thresholds + Bias
+
+    [Fact]
+    public void OrdinalLogisticRegression_SerializeRoundTrip_PredictionsMatch()
+    {
+        // Create ordinal data (3 ordered classes: 0, 1, 2)
+        var (trainX, trainY) = CreateMultiClassData(40, 3, numClasses: 3, separation: 5.0, seed: 42);
+        var classifier = new OrdinalLogisticRegression<double>(
+            learningRate: 0.05, maxIterations: 500, seed: 42);
+        classifier.Train(trainX, trainY);
+
+        var testX = CreateRandomMatrix(10, 3, seed: 2500);
+        var original = classifier.Predict(testX);
+
+        var bytes = classifier.Serialize();
+        var restored = new OrdinalLogisticRegression<double>(
+            learningRate: 0.05, maxIterations: 500, seed: 42);
+        restored.Deserialize(bytes);
+        var restoredPreds = restored.Predict(testX);
+
+        AssertPredictionsMatch(original, restoredPreds, "OrdinalLogisticRegression");
+    }
+
+    [Fact]
+    public void OrdinalLogisticRegression_DeepCopy_PreservesTrainedState()
+    {
+        var (trainX, trainY) = CreateMultiClassData(40, 3, numClasses: 3, separation: 5.0, seed: 42);
+        var classifier = new OrdinalLogisticRegression<double>(
+            learningRate: 0.05, maxIterations: 500, seed: 42);
+        classifier.Train(trainX, trainY);
+
+        var testX = CreateRandomMatrix(10, 3, seed: 2500);
+        var original = classifier.Predict(testX);
+
+        var copy = classifier.DeepCopy();
+        var copyPreds = copy.Predict(testX);
+
+        AssertPredictionsMatch(original, (Vector<double>)copyPreds, "OrdinalLogisticRegression DeepCopy");
+    }
+
+    [Fact]
+    public void OrdinalRidgeRegression_SerializeRoundTrip_PredictionsMatch()
+    {
+        var (trainX, trainY) = CreateMultiClassData(40, 3, numClasses: 3, separation: 5.0, seed: 42);
+        var classifier = new OrdinalRidgeRegression<double>(alpha: 1.0);
+        classifier.Train(trainX, trainY);
+
+        var testX = CreateRandomMatrix(10, 3, seed: 2600);
+        var original = classifier.Predict(testX);
+
+        var bytes = classifier.Serialize();
+        var restored = new OrdinalRidgeRegression<double>(alpha: 1.0);
+        restored.Deserialize(bytes);
+        var restoredPreds = restored.Predict(testX);
+
+        AssertPredictionsMatch(original, restoredPreds, "OrdinalRidgeRegression");
+    }
+
+    [Fact]
+    public void OrdinalRidgeRegression_DeepCopy_PreservesTrainedState()
+    {
+        var (trainX, trainY) = CreateMultiClassData(40, 3, numClasses: 3, separation: 5.0, seed: 42);
+        var classifier = new OrdinalRidgeRegression<double>(alpha: 1.0);
+        classifier.Train(trainX, trainY);
+
+        var testX = CreateRandomMatrix(10, 3, seed: 2600);
+        var original = classifier.Predict(testX);
+
+        var copy = classifier.DeepCopy();
+        var copyPreds = copy.Predict(testX);
+
+        AssertPredictionsMatch(original, (Vector<double>)copyPreds, "OrdinalRidgeRegression DeepCopy");
     }
 
     #endregion
