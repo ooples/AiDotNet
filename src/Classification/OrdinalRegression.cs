@@ -497,7 +497,7 @@ public class OrdinalRegression<T> : ClassifierBase<T>
     {
         if (_coefficients == null || _thresholds == null)
         {
-            throw new InvalidOperationException("Model must be trained before making predictions.");
+            throw new InvalidOperationException("Model must be trained first. Call Train().");
         }
 
         var predictions = new Vector<T>(input.Rows);
@@ -596,7 +596,7 @@ public class OrdinalRegression<T> : ClassifierBase<T>
     {
         if (_coefficients == null || _thresholds == null)
         {
-            throw new InvalidOperationException("Model must be trained before making predictions.");
+            throw new InvalidOperationException("Model must be trained first. Call Train().");
         }
 
         var probs = new Matrix<T>(input.Rows, NumClasses);
@@ -782,7 +782,7 @@ public class OrdinalRegression<T> : ClassifierBase<T>
     {
         if (_coefficients == null || _thresholds == null)
         {
-            throw new InvalidOperationException("Model must be trained before applying gradients.");
+            throw new InvalidOperationException("Model must be trained first. Call Train().");
         }
 
         double lr = NumOps.ToDouble(learningRate);
@@ -861,7 +861,7 @@ public class OrdinalRegression<T> : ClassifierBase<T>
     {
         if (_coefficients == null || _thresholds == null)
         {
-            throw new InvalidOperationException("Model must be trained before exporting computation graph.");
+            throw new InvalidOperationException("Model must be trained first. Call Train().");
         }
 
         // Create input placeholder for features: [batchSize, numFeatures]
