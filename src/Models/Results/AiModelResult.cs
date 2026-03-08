@@ -2433,15 +2433,16 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         }
 
         // Normalize input and target to maintain API consistency with Predict
-        var normalizedInput = PreprocessingInfo?.IsFitted == true
-            ? PreprocessingInfo.TransformFeatures(input)
+        var preprocessing = PreprocessingInfo;
+        var normalizedInput = preprocessing?.IsFitted == true
+            ? preprocessing.TransformFeatures(input)
             : input;
         TOutput normalizedTarget;
-        if (PreprocessingInfo?.IsTargetFitted == true)
+        if (preprocessing?.IsTargetFitted == true)
         {
-            if (PreprocessingInfo.TargetPipeline is null)
+            if (preprocessing.TargetPipeline is null)
                 throw new InvalidOperationException("IsTargetFitted is true but TargetPipeline is null. The preprocessing pipeline is in an inconsistent state.");
-            normalizedTarget = PreprocessingInfo.TargetPipeline.Transform(target);
+            normalizedTarget = preprocessing.TargetPipeline.Transform(target);
         }
         else
         {
