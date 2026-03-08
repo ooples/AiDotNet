@@ -125,7 +125,7 @@ public sealed class LeafSent140FederatedDatasetLoader
 
         if (!string.IsNullOrWhiteSpace(testFilePath))
         {
-            test = LoadSplitFromFile(testFilePath ?? throw new InvalidOperationException("Test file path is null."), options);
+            test = LoadSplitFromFile(testFilePath, options);
         }
 
         return new LeafFederatedDataset<string[], int[]>(train, test);
