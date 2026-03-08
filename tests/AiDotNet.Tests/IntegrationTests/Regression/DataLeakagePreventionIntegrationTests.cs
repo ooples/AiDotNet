@@ -27,20 +27,22 @@ public class DataLeakagePreventionIntegrationTests
     [Fact]
     public async Task BuildAsync_WithPreprocessing_ScalerStatisticsReflectTrainingDataOnly()
     {
-        // Arrange: Create a dataset where the first 70% and last 30% have very different
-        // distributions. The DataSplitter shuffles, but with 100 samples the training split
-        // will be a mix — critically different from fitting on ALL data.
+        // Arrange: Create a dataset where each sample has a distinct value to guarantee
+        // that any 70/30 split produces different scaler statistics than all data.
+        // Using widely spaced unique values ensures mean/std differ significantly.
         int samples = 100;
         int features = 2;
         var x = new Matrix<double>(samples, features);
         var y = new Vector<double>(samples);
 
+        // Assign each row a unique value spread across [0, 1000] with large gaps.
+        // The 30% holdout always removes enough mass to shift the training mean/std.
         for (int i = 0; i < samples; i++)
         {
-            double baseVal = i < 70 ? 5.0 : 100.0;
+            double val = i * 10.0; // values: 0, 10, 20, ..., 990
             for (int j = 0; j < features; j++)
             {
-                x[i, j] = baseVal + (i * 0.01) + (j * 0.1);
+                x[i, j] = val + (j * 0.1);
             }
             y[i] = x[i, 0] + x[i, 1];
         }
