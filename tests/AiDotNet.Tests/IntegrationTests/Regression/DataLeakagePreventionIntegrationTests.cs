@@ -89,6 +89,22 @@ public class DataLeakagePreventionIntegrationTests
         Assert.True(areDifferent,
             "Scaler fitted on training split should produce different results than scaler fitted on all data, " +
             "confirming preprocessing is NOT fitted on the full dataset (data leakage prevention).");
+
+        // Positive assertion: verify the pipeline transformation is NOT identity
+        // (i.e., the scaler was fitted on *some* data, not left unfitted)
+        bool isTransformed = false;
+        for (int j = 0; j < features; j++)
+        {
+            if (Math.Abs(transformedByTrainPipeline[0, j] - testPoint[0, j]) > Tolerance)
+            {
+                isTransformed = true;
+                break;
+            }
+        }
+
+        Assert.True(isTransformed,
+            "Scaler must actually transform data (not be identity), " +
+            "confirming the pipeline was fitted on the training split.");
     }
 
     [Fact]
@@ -205,8 +221,26 @@ public class DataLeakagePreventionIntegrationTests
         // PreprocessingInfo should be null (no preprocessing configured)
         Assert.Null(result.PreprocessingInfo);
 
-        // Model should have been trained successfully
+        // Model should have been trained successfully and produce reasonable predictions
         Assert.NotNull(result.Model);
+
+        // Exercise the built model on a small holdout input to verify it actually works
+        var holdout = new Matrix<double>(2, 3);
+        holdout[0, 0] = 1.0; holdout[0, 1] = 2.0; holdout[0, 2] = 3.0;
+        holdout[1, 0] = 4.0; holdout[1, 1] = 5.0; holdout[1, 2] = 6.0;
+
+        var predictions = result.Model.Predict(holdout);
+        Assert.NotNull(predictions);
+        Assert.Equal(2, predictions.Length);
+
+        // Predictions should be finite numbers (not NaN/Infinity)
+        for (int i = 0; i < predictions.Length; i++)
+        {
+            Assert.False(double.IsNaN(predictions[i]),
+                $"Prediction {i} should not be NaN — model must produce valid outputs");
+            Assert.False(double.IsInfinity(predictions[i]),
+                $"Prediction {i} should not be Infinity — model must produce valid outputs");
+        }
     }
 
     [Fact]
