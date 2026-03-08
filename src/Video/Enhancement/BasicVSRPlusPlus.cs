@@ -1091,7 +1091,7 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
                 // Backward through warping: gradients go to previous frame features and flow
                 var (unwarpedGrad, flowGrad) = WarpBackward(
                     warpedGrad, _cachedFlows[i - 1].forward,
-                    _cachedForwardPropFeatures![iter][i - 1]);
+                    cachedForwardFeatures[iter][i - 1]);
 
                 // Accumulate gradients
                 AccumulateGradient(backwardPhaseGradients[i], currentPartGrad);
@@ -1111,6 +1111,9 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
             {
                 inputGradients.Add(new Tensor<T>(currentGradients[0].Shape));
             }
+
+            var cachedBackwardFeatures = _cachedBackwardPropFeatures ?? throw new InvalidOperationException(
+                "Cached backward propagation features not available. Call Forward() before Backward().");
 
             // Backward propagation went from last to first (i = numFrames-2 to 0)
             // So backward goes from first to last
@@ -1135,7 +1138,7 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
                 // Backward through warping: gradients go to next frame features and flow
                 var (unwarpedGrad, flowGrad) = WarpBackward(
                     warpedGrad, _cachedFlows[i].backward,
-                    _cachedBackwardPropFeatures![iter][i + 1]);
+                    cachedBackwardFeatures[iter][i + 1]);
 
                 // Accumulate gradients
                 AccumulateGradient(inputGradients[i], origPartGrad);
