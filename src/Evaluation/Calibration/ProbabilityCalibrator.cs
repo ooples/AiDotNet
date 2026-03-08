@@ -747,10 +747,14 @@ public class ProbabilityCalibrator<T>
         var scoresDouble = scores.Select(s => NumOps.ToDouble(s)).ToArray();
         var labelsDouble = labels.Select(l => NumOps.ToDouble(l)).ToArray();
 
+        // Sort once and co-sort labels to avoid re-sorting per candidate numBins
+        var sortedIndices = Enumerable.Range(0, n).OrderBy(i => scoresDouble[i]).ToArray();
+        var sortedScores = sortedIndices.Select(i => scoresDouble[i]).ToArray();
+        var sortedLabels = sortedIndices.Select(i => labelsDouble[i]).ToArray();
+
         for (int numBins = 2; numBins <= maxBins; numBins++)
         {
-            // Create equal-frequency (quantile) bin edges
-            var sorted = scoresDouble.OrderBy(s => s).ToArray();
+            // Create equal-frequency (quantile) bin edges from pre-sorted data
             int binSize = n / numBins;
 
             var edges = new double[numBins + 1];
@@ -759,27 +763,30 @@ public class ProbabilityCalibrator<T>
             for (int b = 1; b < numBins; b++)
             {
                 int idx = Math.Min(b * binSize, n - 1);
-                edges[b] = sorted[idx];
+                edges[b] = sortedScores[idx];
             }
 
-            // Compute bin statistics and log-likelihood
+            // Compute bin statistics using sorted data with binary search for bin boundaries
             double logLikelihood = 0;
             var probs = new double[numBins];
 
+            // Use sorted order to partition samples into bins in O(n) total
+            int sampleIdx = 0;
             for (int b = 0; b < numBins; b++)
             {
                 int count = 0;
                 double positiveCount = 0;
+                double upperEdge = edges[b + 1];
+                bool isLastBin = b == numBins - 1;
 
-                for (int i = 0; i < n; i++)
+                while (sampleIdx < n)
                 {
-                    bool inBin = scoresDouble[i] >= edges[b] &&
-                        (b == numBins - 1 ? scoresDouble[i] <= edges[b + 1] : scoresDouble[i] < edges[b + 1]);
-                    if (inBin)
-                    {
-                        count++;
-                        positiveCount += labelsDouble[i];
-                    }
+                    double score = sortedScores[sampleIdx];
+                    bool inBin = isLastBin ? score <= upperEdge : score < upperEdge;
+                    if (!inBin) break;
+                    count++;
+                    positiveCount += sortedLabels[sampleIdx];
+                    sampleIdx++;
                 }
 
                 if (count == 0)
