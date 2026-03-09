@@ -43,7 +43,12 @@ public class SimSiam<T> : SSLMethodBase<T>
     /// <summary>
     /// Gets the typed symmetric projector.
     /// </summary>
-    private SymmetricProjector<T> SymmetricProjector => (SymmetricProjector<T>)Projector;
+    private SymmetricProjector<T> SymmetricProjector =>
+        Projector is SymmetricProjector<T> sp
+            ? sp
+            : throw new InvalidOperationException(
+                $"SimSiam requires a SymmetricProjector<{typeof(T).Name}>, " +
+                $"but received {Projector?.GetType().Name ?? "null"}.");
 
     /// <inheritdoc />
     public override string Name => "SimSiam";

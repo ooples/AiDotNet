@@ -84,20 +84,18 @@ public class RAFT<T> : OpticalFlowBase<T>
 
     #region Properties
 
-    private ConvolutionalLayer<T> CorrelationConv => _correlationConv ?? throw new InvalidOperationException(
-        $"{GetType().Name}: Native RAFT layers are not initialized. Ensure construction completed successfully before use.");
-    private ConvolutionalLayer<T> GruConvZ => _gruConvZ ?? throw new InvalidOperationException(
-        $"{GetType().Name}: Native RAFT layers are not initialized. Ensure construction completed successfully before use.");
-    private ConvolutionalLayer<T> GruConvR => _gruConvR ?? throw new InvalidOperationException(
-        $"{GetType().Name}: Native RAFT layers are not initialized. Ensure construction completed successfully before use.");
-    private ConvolutionalLayer<T> GruConvH => _gruConvH ?? throw new InvalidOperationException(
-        $"{GetType().Name}: Native RAFT layers are not initialized. Ensure construction completed successfully before use.");
-    private ConvolutionalLayer<T> FlowHead => _flowHead ?? throw new InvalidOperationException(
-        $"{GetType().Name}: Native RAFT layers are not initialized. Ensure construction completed successfully before use.");
-    private ConvolutionalLayer<T> DeltaFlowHead => _deltaFlowHead ?? throw new InvalidOperationException(
-        $"{GetType().Name}: Native RAFT layers are not initialized. Ensure construction completed successfully before use.");
-    private ConvolutionalLayer<T> UpsampleConv => _upsampleConv ?? throw new InvalidOperationException(
-        $"{GetType().Name}: Native RAFT layers are not initialized. Ensure construction completed successfully before use.");
+    private ConvolutionalLayer<T> CorrelationConv => _correlationConv ?? ThrowNotInitialized<ConvolutionalLayer<T>>(nameof(CorrelationConv));
+    private ConvolutionalLayer<T> GruConvZ => _gruConvZ ?? ThrowNotInitialized<ConvolutionalLayer<T>>(nameof(GruConvZ));
+    private ConvolutionalLayer<T> GruConvR => _gruConvR ?? ThrowNotInitialized<ConvolutionalLayer<T>>(nameof(GruConvR));
+    private ConvolutionalLayer<T> GruConvH => _gruConvH ?? ThrowNotInitialized<ConvolutionalLayer<T>>(nameof(GruConvH));
+    private ConvolutionalLayer<T> FlowHead => _flowHead ?? ThrowNotInitialized<ConvolutionalLayer<T>>(nameof(FlowHead));
+    private ConvolutionalLayer<T> DeltaFlowHead => _deltaFlowHead ?? ThrowNotInitialized<ConvolutionalLayer<T>>(nameof(DeltaFlowHead));
+    private ConvolutionalLayer<T> UpsampleConv => _upsampleConv ?? ThrowNotInitialized<ConvolutionalLayer<T>>(nameof(UpsampleConv));
+
+    private TLayer ThrowNotInitialized<TLayer>(string layerName) =>
+        throw new InvalidOperationException(
+            $"{GetType().Name}: Layer '{layerName}' is not initialized. " +
+            "Ensure construction completed successfully before use.");
 
     /// <summary>
     /// Gets whether training is supported.
