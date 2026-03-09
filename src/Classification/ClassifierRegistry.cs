@@ -73,6 +73,19 @@ public static class ClassifierRegistry<T>
     /// <param name="classifierType">The concrete classifier type. Must implement IClassifier&lt;T&gt; and have a parameterless constructor.</param>
     public static void Register(string typeName, Type classifierType)
     {
+        if (string.IsNullOrWhiteSpace(typeName))
+            throw new ArgumentException("Type name cannot be null or empty.", nameof(typeName));
+        if (classifierType is null)
+            throw new ArgumentNullException(nameof(classifierType));
+        if (!typeof(IClassifier<T>).IsAssignableFrom(classifierType))
+            throw new ArgumentException(
+                $"Type '{classifierType.FullName}' does not implement IClassifier<{typeof(T).Name}>.",
+                nameof(classifierType));
+        if (classifierType.GetConstructor(Type.EmptyTypes) is null)
+            throw new ArgumentException(
+                $"Type '{classifierType.FullName}' must have a public parameterless constructor for deserialization.",
+                nameof(classifierType));
+
         EnsureInitialized();
         lock (_lock)
         {
@@ -97,7 +110,10 @@ public static class ClassifierRegistry<T>
 
         if (type is not null)
         {
-            return (IClassifier<T>)Activator.CreateInstance(type)!;
+            var instance = Activator.CreateInstance(type)
+                ?? throw new InvalidOperationException(
+                    $"Failed to create instance of classifier type '{typeName}'. Activator.CreateInstance returned null.");
+            return (IClassifier<T>)instance;
         }
 
         throw new InvalidOperationException(
