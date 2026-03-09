@@ -122,6 +122,12 @@ public class DataLeakagePreventionIntegrationTests
         newData[0, 0] = 5.0; newData[0, 1] = 6.0; newData[0, 2] = 7.0;
         newData[1, 0] = 8.0; newData[1, 1] = 9.0; newData[1, 2] = 10.0;
 
+        // Snapshot original values before Transform — some implementations may mutate in-place
+        var originalValues = new double[2, 3];
+        for (int i = 0; i < 2; i++)
+            for (int j = 0; j < 3; j++)
+                originalValues[i, j] = newData[i, j];
+
         var transformed = preprocessingInfo.Pipeline.Transform(newData);
         Assert.NotNull(transformed);
 
@@ -136,7 +142,7 @@ public class DataLeakagePreventionIntegrationTests
         {
             for (int j = 0; j < 3; j++)
             {
-                if (Math.Abs(transformed[i, j] - newData[i, j]) > Tolerance)
+                if (Math.Abs(transformed[i, j] - originalValues[i, j]) > Tolerance)
                 {
                     anyDifferent = true;
                     break;

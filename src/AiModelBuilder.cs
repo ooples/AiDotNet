@@ -2031,11 +2031,12 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         // These variables are assigned in all code paths before use (train/val/test split or
         // federated path). The pragma suppresses nullable warnings for the initial default
         // declarations since TInput/TOutput are reference types (Matrix<T>/Vector<T>).
-#pragma warning disable CS8600, CS8604 // Assigned in all code paths before use
+#pragma warning disable CS8600 // Converting null literal or possible null value to non-nullable type
         TInput XVal = default;
         TOutput yVal = default;
         TInput XTest = default;
         TOutput yTest = default;
+#pragma warning restore CS8600
 
         if (usePartitionedFederatedData)
         {
@@ -2131,8 +2132,10 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                 XTrain = _preprocessingPipeline.FitTransform(XTrain);
 
                 // Transform (NOT FitTransform) validation and test data using training-fitted pipeline
+#pragma warning disable CS8604 // XVal and XTest are assigned by DataSplitter.Split above
                 XVal = _preprocessingPipeline.Transform(XVal);
                 XTest = _preprocessingPipeline.Transform(XTest);
+#pragma warning restore CS8604
 
                 preprocessingInfo = new PreprocessingInfo<T, TInput, TOutput>(
                     _preprocessingPipeline,
@@ -2335,9 +2338,11 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                     }
 
                     // Train with current hyperparameters
+#pragma warning disable CS8604 // XVal/yVal/XTest/yTest assigned by DataSplitter.Split
                     var trialResult = finalOptimizer.Optimize(
                         OptimizerHelper<T, TInput, TOutput>.CreateOptimizationInputData(
                             XTrain, yTrain, XVal, yVal, XTest, yTest));
+#pragma warning restore CS8604
 
                     // Return validation MSE as objective (minimizing)
                     if (trialResult.ValidationResult.ErrorStats is not null)
@@ -2407,7 +2412,9 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
 
         OptimizationResult<T, TInput, TOutput> optimizationResult;
         FederatedLearningMetadata? federatedLearningMetadata = null;
+#pragma warning disable CS8604 // XVal/yVal/XTest/yTest assigned by DataSplitter.Split
         var optimizationInputData = OptimizerHelper<T, TInput, TOutput>.CreateOptimizationInputData(XTrain, yTrain, XVal, yVal, XTest, yTest);
+#pragma warning restore CS8604
 
         // FEDERATED LEARNING PATH (facade-first: orchestration stays internal)
         if (_federatedLearningOptions != null)
@@ -2829,7 +2836,6 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         // Build and attach the composable safety pipeline if configured
         AttachSafetyPipeline(finalResult);
 
-#pragma warning restore CS8600, CS8604
         return finalResult;
     }
 
