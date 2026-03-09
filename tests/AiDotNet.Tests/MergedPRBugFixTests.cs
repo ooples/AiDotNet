@@ -2732,7 +2732,8 @@ public class MergedPRBugFixTests
     [Fact]
     public void TensorJsonConverter_EmptyShape_ThrowsJsonSerializationException()
     {
-        // ARRANGE: JSON with empty shape array that should be rejected
+        // ARRANGE: JSON with empty shape array — the converter normalizes [] to [1] (scalar),
+        // which then fails because the data array has 0 elements instead of the expected 1.
         var converter = new TensorJsonConverter();
         var settings = new JsonSerializerSettings();
         settings.Converters.Add(converter);
@@ -2745,7 +2746,7 @@ public class MergedPRBugFixTests
             JsonConvert.DeserializeObject<Tensor<double>>(malformedJson, settings);
         });
 
-        Assert.Contains("at least one dimension", ex.Message);
+        Assert.Contains("Tensor data length mismatch", ex.Message);
     }
 
     [Fact]
