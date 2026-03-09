@@ -1,7 +1,10 @@
+using System.Text;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors.Helpers;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace AiDotNet.Classification.ImbalancedEnsemble;
 
@@ -649,6 +652,108 @@ public class BalancedBaggingClassifier<T> : ClassifierBase<T>
         importance[node.FeatureIndex] += 1;
         CountFeatureUsage(node.LeftChild, importance);
         CountFeatureUsage(node.RightChild, importance);
+    }
+
+    /// <summary>
+    /// Serializes the trained model state including all base classifier trees.
+    /// </summary>
+    public override byte[] Serialize()
+    {
+        var modelData = new Dictionary<string, object>
+        {
+            { "NumClasses", NumClasses },
+            { "NumFeatures", NumFeatures },
+            { "TaskType", (int)TaskType },
+            { "ClassLabels", ClassLabels?.ToArray() ?? Array.Empty<T>() },
+            { "ClassifierCount", _baseClassifiers.Count }
+        };
+
+        for (int i = 0; i < _baseClassifiers.Count; i++)
+        {
+            modelData[$"Classifier_{i}"] = SerializeTreeNode(_baseClassifiers[i]);
+        }
+
+        var modelMetadata = GetModelMetadata();
+        modelMetadata.ModelData = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelData));
+        return Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelMetadata));
+    }
+
+    /// <summary>
+    /// Deserializes the trained model state including all base classifier trees.
+    /// </summary>
+    public override void Deserialize(byte[] modelData)
+    {
+        var jsonString = Encoding.UTF8.GetString(modelData);
+        var modelMetadata = JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString);
+        if (modelMetadata?.ModelData is null)
+            throw new InvalidOperationException("Deserialization failed: invalid model data.");
+
+        var dataString = Encoding.UTF8.GetString(modelMetadata.ModelData);
+        var dataObj = JsonConvert.DeserializeObject<JObject>(dataString);
+        if (dataObj is null)
+            throw new InvalidOperationException("Deserialization failed: invalid model data.");
+
+        NumClasses = dataObj["NumClasses"]?.ToObject<int>() ?? 0;
+        NumFeatures = dataObj["NumFeatures"]?.ToObject<int>() ?? 0;
+        TaskType = (ClassificationTaskType)(dataObj["TaskType"]?.ToObject<int>() ?? 0);
+
+        var classLabelsToken = dataObj["ClassLabels"];
+        if (classLabelsToken is not null)
+        {
+            var arr = classLabelsToken.ToObject<double[]>() ?? Array.Empty<double>();
+            if (arr.Length > 0)
+            {
+                ClassLabels = new Vector<T>(arr.Length);
+                for (int i = 0; i < arr.Length; i++)
+                    ClassLabels[i] = NumOps.FromDouble(arr[i]);
+            }
+        }
+
+        _baseClassifiers.Clear();
+        int count = dataObj["ClassifierCount"]?.ToObject<int>() ?? 0;
+        for (int i = 0; i < count; i++)
+        {
+            if (dataObj[$"Classifier_{i}"] is JObject jObj)
+            {
+                _baseClassifiers.Add(DeserializeTreeNode(jObj));
+            }
+        }
+    }
+
+    private static Dictionary<string, object?> SerializeTreeNode(DecisionTreeNode node)
+    {
+        var dict = new Dictionary<string, object?>
+        {
+            ["FeatureIndex"] = node.FeatureIndex,
+            ["Threshold"] = node.Threshold,
+            ["PredictedClass"] = node.PredictedClass,
+            ["ClassProbabilities"] = node.ClassProbabilities
+        };
+
+        if (node.LeftChild is not null)
+            dict["LeftChild"] = SerializeTreeNode(node.LeftChild);
+        if (node.RightChild is not null)
+            dict["RightChild"] = SerializeTreeNode(node.RightChild);
+
+        return dict;
+    }
+
+    private static DecisionTreeNode DeserializeTreeNode(JObject jObj)
+    {
+        var node = new DecisionTreeNode
+        {
+            FeatureIndex = jObj["FeatureIndex"]?.ToObject<int>() ?? 0,
+            Threshold = jObj["Threshold"]?.ToObject<double>() ?? 0,
+            PredictedClass = jObj["PredictedClass"]?.ToObject<int>() ?? 0,
+            ClassProbabilities = jObj["ClassProbabilities"]?.ToObject<double[]>()
+        };
+
+        if (jObj["LeftChild"] is JObject leftObj)
+            node.LeftChild = DeserializeTreeNode(leftObj);
+        if (jObj["RightChild"] is JObject rightObj)
+            node.RightChild = DeserializeTreeNode(rightObj);
+
+        return node;
     }
 
     /// <summary>

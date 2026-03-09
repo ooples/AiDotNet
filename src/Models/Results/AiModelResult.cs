@@ -6728,14 +6728,13 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// - No JIT acceleration, but still optimized for the model type
     /// </para>
     /// </remarks>
-    /// <exception cref="InvalidOperationException">Thrown when Model is null.</exception>
     public bool SupportsJitCompilation
     {
         get
         {
             if (Model == null)
             {
-                throw new InvalidOperationException("Model is not initialized.");
+                return false;
             }
 
             // Check if the model implements IJitCompilable and supports JIT

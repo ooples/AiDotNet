@@ -1,7 +1,10 @@
+using System.Text;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors.Helpers;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace AiDotNet.Classification.Online;
 
@@ -531,5 +534,194 @@ public class HoeffdingTreeClassifier<T> : ClassifierBase<T>, IOnlineClassifier<T
     public override void ApplyGradients(Vector<T> gradients, T learningRate)
     {
         // Tree-based model - no gradient application
+    }
+
+    /// <summary>
+    /// Serializes the trained Hoeffding tree including all nodes and statistics.
+    /// </summary>
+    public override byte[] Serialize()
+    {
+        var modelData = new Dictionary<string, object>
+        {
+            { "NumClasses", NumClasses },
+            { "NumFeatures", NumFeatures },
+            { "TaskType", (int)TaskType },
+            { "ClassLabels", ClassLabels?.ToArray() ?? Array.Empty<T>() },
+            { "SamplesSeen", SamplesSeen }
+        };
+
+        var knownClassValues = new double[_knownClasses.Count];
+        for (int i = 0; i < _knownClasses.Count; i++)
+            knownClassValues[i] = NumOps.ToDouble(_knownClasses[i]);
+        modelData["KnownClasses"] = knownClassValues;
+
+        if (_root is not null)
+        {
+            modelData["Root"] = SerializeNode(_root);
+        }
+
+        var modelMetadata = GetModelMetadata();
+        modelMetadata.ModelData = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelData));
+        return Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelMetadata));
+    }
+
+    /// <summary>
+    /// Deserializes the trained Hoeffding tree including all nodes and statistics.
+    /// </summary>
+    public override void Deserialize(byte[] modelData)
+    {
+        var jsonString = Encoding.UTF8.GetString(modelData);
+        var modelMetadata = JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString);
+        if (modelMetadata?.ModelData is null)
+            throw new InvalidOperationException("Deserialization failed: invalid model data.");
+
+        var dataString = Encoding.UTF8.GetString(modelMetadata.ModelData);
+        var dataObj = JsonConvert.DeserializeObject<JObject>(dataString);
+        if (dataObj is null)
+            throw new InvalidOperationException("Deserialization failed: invalid model data.");
+
+        NumClasses = dataObj["NumClasses"]?.ToObject<int>() ?? 0;
+        NumFeatures = dataObj["NumFeatures"]?.ToObject<int>() ?? 0;
+        TaskType = (ClassificationTaskType)(dataObj["TaskType"]?.ToObject<int>() ?? 0);
+        SamplesSeen = dataObj["SamplesSeen"]?.ToObject<long>() ?? 0;
+
+        var classLabelsToken = dataObj["ClassLabels"];
+        if (classLabelsToken is not null)
+        {
+            var arr = classLabelsToken.ToObject<double[]>() ?? Array.Empty<double>();
+            if (arr.Length > 0)
+            {
+                ClassLabels = new Vector<T>(arr.Length);
+                for (int i = 0; i < arr.Length; i++)
+                    ClassLabels[i] = NumOps.FromDouble(arr[i]);
+            }
+        }
+
+        _knownClasses.Clear();
+        var knownArr = dataObj["KnownClasses"]?.ToObject<double[]>();
+        if (knownArr is not null)
+        {
+            foreach (var val in knownArr)
+                _knownClasses.Add(NumOps.FromDouble(val));
+        }
+
+        if (dataObj["Root"] is JObject rootObj)
+        {
+            _root = DeserializeNode(rootObj);
+        }
+    }
+
+    private static Dictionary<string, object?> SerializeNode(HoeffdingNode node)
+    {
+        var dict = new Dictionary<string, object?>
+        {
+            ["IsLeaf"] = node.IsLeaf,
+            ["Depth"] = node.Depth,
+            ["TotalCount"] = node.TotalCount,
+            ["SplitFeature"] = node.SplitFeature,
+            ["SplitThreshold"] = node.SplitThreshold,
+            ["ClassCounts"] = node.ClassCounts.ToDictionary(kv => kv.Key.ToString(), kv => (object)kv.Value)
+        };
+
+        if (node.FeatureStatistics is not null)
+        {
+            var fsDict = new Dictionary<string, object?>();
+            foreach (var kvp in node.FeatureStatistics)
+            {
+                var featureDict = new Dictionary<string, object?>
+                {
+                    ["Min"] = kvp.Value.Min,
+                    ["Max"] = kvp.Value.Max,
+                    ["BinMin"] = kvp.Value.BinMin,
+                    ["BinMax"] = kvp.Value.BinMax
+                };
+
+                if (kvp.Value.BinsByClass is not null)
+                {
+                    var binsDict = new Dictionary<string, object?>();
+                    foreach (var bc in kvp.Value.BinsByClass)
+                    {
+                        binsDict[bc.Key.ToString()] = bc.Value.Counts;
+                    }
+                    featureDict["BinsByClass"] = binsDict;
+                }
+
+                fsDict[kvp.Key.ToString()] = featureDict;
+            }
+            dict["FeatureStatistics"] = fsDict;
+        }
+
+        if (node.Left is not null)
+            dict["Left"] = SerializeNode(node.Left);
+        if (node.Right is not null)
+            dict["Right"] = SerializeNode(node.Right);
+
+        return dict;
+    }
+
+    private static HoeffdingNode DeserializeNode(JObject jObj)
+    {
+        var node = new HoeffdingNode
+        {
+            IsLeaf = jObj["IsLeaf"]?.ToObject<bool>() ?? true,
+            Depth = jObj["Depth"]?.ToObject<int>() ?? 0,
+            TotalCount = jObj["TotalCount"]?.ToObject<long>() ?? 0,
+            SplitFeature = jObj["SplitFeature"]?.ToObject<int>() ?? -1,
+            SplitThreshold = jObj["SplitThreshold"]?.ToObject<double>() ?? 0
+        };
+
+        var ccObj = jObj["ClassCounts"] as JObject;
+        if (ccObj is not null)
+        {
+            foreach (var prop in ccObj.Properties())
+            {
+                if (int.TryParse(prop.Name, out int classIdx))
+                {
+                    node.ClassCounts[classIdx] = prop.Value.ToObject<long>();
+                }
+            }
+        }
+
+        if (jObj["FeatureStatistics"] is JObject fsObj)
+        {
+            node.FeatureStatistics = new Dictionary<int, FeatureStats>();
+            foreach (var prop in fsObj.Properties())
+            {
+                if (int.TryParse(prop.Name, out int featureIdx) && prop.Value is JObject featureObj)
+                {
+                    var stats = new FeatureStats
+                    {
+                        Min = featureObj["Min"]?.ToObject<double>() ?? double.MaxValue,
+                        Max = featureObj["Max"]?.ToObject<double>() ?? double.MinValue,
+                        BinMin = featureObj["BinMin"]?.ToObject<double>() ?? double.NaN,
+                        BinMax = featureObj["BinMax"]?.ToObject<double>() ?? double.NaN
+                    };
+
+                    if (featureObj["BinsByClass"] is JObject binsObj)
+                    {
+                        stats.BinsByClass = new Dictionary<int, BinStats>();
+                        foreach (var binProp in binsObj.Properties())
+                        {
+                            if (int.TryParse(binProp.Name, out int binClassIdx))
+                            {
+                                stats.BinsByClass[binClassIdx] = new BinStats
+                                {
+                                    Counts = binProp.Value.ToObject<long[]>() ?? Array.Empty<long>()
+                                };
+                            }
+                        }
+                    }
+
+                    node.FeatureStatistics[featureIdx] = stats;
+                }
+            }
+        }
+
+        if (jObj["Left"] is JObject leftObj)
+            node.Left = DeserializeNode(leftObj);
+        if (jObj["Right"] is JObject rightObj)
+            node.Right = DeserializeNode(rightObj);
+
+        return node;
     }
 }
