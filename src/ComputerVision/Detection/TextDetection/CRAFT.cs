@@ -101,7 +101,7 @@ public class CRAFT<T> : TextDetectorBase<T>
     protected override List<Tensor<T>> Forward(Tensor<T> input)
     {
         // Extract multi-scale backbone features
-        var features = Backbone!.ExtractFeatures(input);
+        var features = EnsureBackbone.ExtractFeatures(input);
 
         // U-Net style upsampling with skip connections
         // Start from deepest features
@@ -276,7 +276,7 @@ public class CRAFT<T> : TextDetectorBase<T>
         }
 
         // Read component weights
-        Backbone!.ReadParameters(reader);
+        EnsureBackbone.ReadParameters(reader);
         _upConv1.ReadParameters(reader);
         _upConv2.ReadParameters(reader);
         _upConv3.ReadParameters(reader);
@@ -298,7 +298,7 @@ public class CRAFT<T> : TextDetectorBase<T>
         writer.Write(_hiddenDim);
 
         // Write component weights
-        Backbone!.WriteParameters(writer);
+        EnsureBackbone.WriteParameters(writer);
         _upConv1.WriteParameters(writer);
         _upConv2.WriteParameters(writer);
         _upConv3.WriteParameters(writer);

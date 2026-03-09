@@ -1,5 +1,6 @@
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
+using Newtonsoft.Json;
 
 namespace AiDotNet.Preprocessing.Scalers;
 
@@ -44,11 +45,13 @@ public enum NormType
 /// <typeparam name="T">The numeric type for calculations (e.g., float, double).</typeparam>
 public class Normalizer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 {
+    [JsonProperty]
     private readonly NormType _normType;
 
     /// <summary>
     /// Gets the norm type used for normalization.
     /// </summary>
+    [JsonIgnore]
     public NormType NormType => _normType;
 
     /// <summary>

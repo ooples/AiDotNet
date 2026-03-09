@@ -699,10 +699,10 @@ public class SlowFast<T> : NeuralNetworkBase<T>
 
         // Optimizer type (can be null for ONNX mode or after certain operations)
         writer.Write(_optimizer is not null);
-        if (_optimizer is not null)
+        if (_optimizer is { } optimizer)
         {
-            writer.Write(_optimizer.GetType().AssemblyQualifiedName ?? throw new InvalidOperationException(
-                $"Cannot resolve AssemblyQualifiedName for optimizer type '{_optimizer.GetType().FullName}'."));
+            writer.Write(optimizer.GetType().AssemblyQualifiedName ?? throw new InvalidOperationException(
+                $"Cannot resolve AssemblyQualifiedName for optimizer type '{optimizer.GetType().FullName}'."));
         }
     }
 
@@ -731,44 +731,56 @@ public class SlowFast<T> : NeuralNetworkBase<T>
         string probabilityActivationTypeName = reader.ReadString();
 
         // Recreate loss function from type name
-        var lossFunctionType = Type.GetType(lossFunctionTypeName)
-            ?? throw new InvalidOperationException(
-                $"Cannot resolve serialized loss function type '{lossFunctionTypeName}'.");
-        _lossFunction = (ILossFunction<T>?)Activator.CreateInstance(lossFunctionType)
-            ?? throw new InvalidOperationException(
-                $"Cannot create instance of serialized loss function type '{lossFunctionTypeName}'.");
+        var lossFunctionType = Type.GetType(lossFunctionTypeName);
+        if (lossFunctionType != null)
+        {
+            _lossFunction = (ILossFunction<T>?)Activator.CreateInstance(lossFunctionType) ?? new CrossEntropyLoss<T>();
+        }
+        else
+        {
+            System.Diagnostics.Debug.WriteLine(
+                $"Warning: Serialized loss function type '{lossFunctionTypeName}' could not be resolved. Falling back to CrossEntropyLoss.");
+            _lossFunction = new CrossEntropyLoss<T>();
+        }
 
         // Recreate probability activation from type name
-        var activationType = Type.GetType(probabilityActivationTypeName)
-            ?? throw new InvalidOperationException(
-                $"Cannot resolve serialized activation function type '{probabilityActivationTypeName}'.");
-        _probabilityActivation = (IActivationFunction<T>?)Activator.CreateInstance(activationType)
-            ?? throw new InvalidOperationException(
-                $"Cannot create instance of serialized activation function type '{probabilityActivationTypeName}'.");
+        var activationType = Type.GetType(probabilityActivationTypeName);
+        if (activationType != null)
+        {
+            _probabilityActivation = (IActivationFunction<T>?)Activator.CreateInstance(activationType) ?? new SoftmaxActivation<T>();
+        }
+        else
+        {
+            System.Diagnostics.Debug.WriteLine(
+                $"Warning: Serialized activation type '{probabilityActivationTypeName}' could not be resolved. Falling back to SoftmaxActivation.");
+            _probabilityActivation = new SoftmaxActivation<T>();
+        }
 
         // Restore optimizer if it was serialized
         bool hasOptimizer = reader.ReadBoolean();
         if (hasOptimizer)
         {
             string optimizerTypeName = reader.ReadString();
-            var optimizerType = Type.GetType(optimizerTypeName)
-                ?? throw new InvalidOperationException(
-                    $"Cannot resolve serialized optimizer type '{optimizerTypeName}'.");
+            var optimizerType = Type.GetType(optimizerTypeName);
 
-            // Try to find constructor that takes IFullModel parameter (used by optimizers)
-            var constructor = optimizerType.GetConstructor([typeof(IFullModel<T, Tensor<T>, Tensor<T>>)]);
-            if (constructor is not null)
+            if (optimizerType != null)
             {
-                _optimizer = (IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>?)constructor.Invoke([this])
-                    ?? throw new InvalidOperationException(
-                        $"Cannot create instance of serialized optimizer type '{optimizerTypeName}'.");
+                var constructor = optimizerType.GetConstructor([typeof(IFullModel<T, Tensor<T>, Tensor<T>>)]);
+                if (constructor != null)
+                {
+                    _optimizer = (IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>?)constructor.Invoke([this]);
+                }
+                else
+                {
+                    System.Diagnostics.Debug.WriteLine(
+                        $"Warning: Serialized optimizer type '{optimizerTypeName}' does not have expected constructor. Falling back to Adam.");
+                    _optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+                }
             }
             else
             {
-                // Fall back to Adam if the serialized optimizer type lacks the expected constructor.
-                // This preserves backward compatibility with older serialized models.
                 System.Diagnostics.Debug.WriteLine(
-                    $"Warning: Serialized optimizer type '{optimizerTypeName}' does not have expected constructor. Falling back to Adam.");
+                    $"Warning: Serialized optimizer type '{optimizerTypeName}' could not be resolved. Falling back to Adam.");
                 _optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
             }
         }

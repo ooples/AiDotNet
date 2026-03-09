@@ -96,7 +96,7 @@ public class Scale<T> : SpatialAugmentationBase<T, ImageTensor<T>>
         MaxScale = maxScale;
         Interpolation = interpolation;
         BorderMode = borderMode;
-        BorderValue = borderValue ?? default!;
+        BorderValue = borderValue ?? NumOps.Zero;
     }
 
     /// <summary>

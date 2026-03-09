@@ -401,3 +401,5 @@ api/node_modules/
 _playground_new/
 _playground_test/
 .azure-publish-profile.xml
+.vercel
+.env*.local

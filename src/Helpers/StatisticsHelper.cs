@@ -30,9 +30,14 @@ public static class StatisticsHelper<T>
         }
 
         // With unconstrained generics, optional parameters of type `T?` that are omitted at the callsite
-        // are passed as `default(T)` (e.g. 0 for numeric structs), not `null`. Treat `default(T)` as
-        // "not provided" so documented defaults are applied consistently.
-        return treatDefaultAsMissing && EqualityComparer<T>.Default.Equals(value, default!) ? defaultValue : value;
+        // are passed as `default(T)` (e.g. 0.0 for double, 0 for int), not `null`. For all supported
+        // numeric types, default(T) equals zero, so checking against NumOps.Zero is correct.
+        if (treatDefaultAsMissing && _numOps.Equals(value, _numOps.Zero))
+        {
+            return defaultValue;
+        }
+
+        return value;
     }
 
     /// <summary>

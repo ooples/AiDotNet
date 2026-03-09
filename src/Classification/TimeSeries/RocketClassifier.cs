@@ -1,9 +1,11 @@
+using System.Text;
 using AiDotNet.Classification.Linear;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors.Helpers;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace AiDotNet.Classification.TimeSeries;
 
@@ -487,6 +489,106 @@ public class RocketClassifier<T> : ClassifierBase<T>, ITimeSeriesClassifier<T>
         {
             _internalWeights[i] = NumOps.Subtract(_internalWeights[i],
                 NumOps.Multiply(learningRate, gradients[i]));
+        }
+    }
+
+    /// <inheritdoc />
+    public override byte[] Serialize()
+    {
+        var metadata = GetModelMetadata();
+        var modelDict = new Dictionary<string, object?>
+        {
+            ["SequenceLength"] = SequenceLength,
+            ["NumChannels"] = NumChannels,
+            ["NumClasses"] = NumClasses,
+            ["NumFeatures"] = NumFeatures,
+            ["TaskType"] = (int)TaskType
+        };
+
+        if (ClassLabels is not null)
+        {
+            var labels = new double[ClassLabels.Length];
+            for (int i = 0; i < ClassLabels.Length; i++)
+            {
+                labels[i] = NumOps.ToDouble(ClassLabels[i]);
+            }
+            modelDict["ClassLabels"] = labels;
+        }
+
+        if (_internalWeights is not null)
+        {
+            var weights = new double[_internalWeights.Length];
+            for (int i = 0; i < _internalWeights.Length; i++)
+            {
+                weights[i] = NumOps.ToDouble(_internalWeights[i]);
+            }
+            modelDict["InternalWeights"] = weights;
+        }
+
+        if (_kernels.Count > 0)
+        {
+            modelDict["KernelCount"] = _kernels.Count;
+            for (int i = 0; i < _kernels.Count; i++)
+            {
+                var kernel = _kernels[i];
+                modelDict[$"Kernel_{i}_Weights"] = kernel.Weights;
+                modelDict[$"Kernel_{i}_Dilation"] = kernel.Dilation;
+                modelDict[$"Kernel_{i}_Bias"] = kernel.Bias;
+                modelDict[$"Kernel_{i}_Padding"] = kernel.Padding;
+            }
+        }
+
+        metadata.ModelData = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelDict));
+        return Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(metadata));
+    }
+
+    /// <inheritdoc />
+    public override void Deserialize(byte[] modelData)
+    {
+        var jsonString = Encoding.UTF8.GetString(modelData);
+        var metadata = JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString);
+        if (metadata?.ModelData is null) return;
+
+        var dataString = Encoding.UTF8.GetString(metadata.ModelData);
+        var jObj = JsonConvert.DeserializeObject<JObject>(dataString);
+        if (jObj is null) return;
+
+        SequenceLength = jObj["SequenceLength"]?.ToObject<int>() ?? 0;
+        NumChannels = jObj["NumChannels"]?.ToObject<int>() ?? 1;
+        NumClasses = jObj["NumClasses"]?.ToObject<int>() ?? 0;
+        NumFeatures = jObj["NumFeatures"]?.ToObject<int>() ?? 0;
+        TaskType = (ClassificationTaskType)(jObj["TaskType"]?.ToObject<int>() ?? 0);
+
+        var labelsToken = jObj["ClassLabels"];
+        if (labelsToken is JArray labelsArr)
+        {
+            ClassLabels = new Vector<T>(labelsArr.Count);
+            for (int i = 0; i < labelsArr.Count; i++)
+            {
+                ClassLabels[i] = NumOps.FromDouble(labelsArr[i].Value<double>());
+            }
+        }
+
+        var weightsToken = jObj["InternalWeights"];
+        if (weightsToken is JArray weightsArr)
+        {
+            _internalWeights = new Vector<T>(weightsArr.Count);
+            for (int i = 0; i < weightsArr.Count; i++)
+            {
+                _internalWeights[i] = NumOps.FromDouble(weightsArr[i].Value<double>());
+            }
+        }
+
+        int kernelCount = jObj["KernelCount"]?.ToObject<int>() ?? 0;
+        _kernels.Clear();
+        for (int i = 0; i < kernelCount; i++)
+        {
+            var weightsArr2 = jObj[$"Kernel_{i}_Weights"] as JArray;
+            double[] kWeights = weightsArr2?.Select(w => w.Value<double>()).ToArray() ?? [];
+            int dilation = jObj[$"Kernel_{i}_Dilation"]?.ToObject<int>() ?? 1;
+            double bias = jObj[$"Kernel_{i}_Bias"]?.ToObject<double>() ?? 0;
+            int padding = jObj[$"Kernel_{i}_Padding"]?.ToObject<int>() ?? 0;
+            _kernels.Add(new RocketKernel(kWeights, dilation, bias, padding));
         }
     }
 
