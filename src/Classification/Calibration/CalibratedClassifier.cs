@@ -905,6 +905,8 @@ public class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>
         NumClasses = jObj["NumClasses"]?.ToObject<int>() ?? 0;
         NumFeatures = jObj["NumFeatures"]?.ToObject<int>() ?? 0;
         TaskType = (ClassificationTaskType)(jObj["TaskType"]?.ToObject<int>() ?? 0);
+        _options.CalibrationMethod = (ProbabilityCalibrationMethod)(jObj["CalibrationMethod"]?.ToObject<int>()
+            ?? (int)ProbabilityCalibrationMethod.PlattScaling);
         _plattA = jObj["PlattA"]?.ToObject<double>() ?? 1.0;
         _plattB = jObj["PlattB"]?.ToObject<double>() ?? 0.0;
         _betaA = jObj["BetaA"]?.ToObject<double>() ?? 1.0;
@@ -916,7 +918,10 @@ public class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>
         var isoArr = jObj["IsotonicMapping"]?.ToObject<double[][]>();
         if (isoArr is not null)
         {
-            _isotonicMapping = isoArr.Select(m => (m[0], m[1])).ToArray();
+            _isotonicMapping = isoArr
+                .Where(m => m is not null && m.Length >= 2)
+                .Select(m => (m[0], m[1]))
+                .ToArray();
         }
 
         // Restore wrapped base classifier

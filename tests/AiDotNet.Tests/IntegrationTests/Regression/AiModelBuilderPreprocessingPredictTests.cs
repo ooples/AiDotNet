@@ -112,8 +112,8 @@ public class AiModelBuilderPreprocessingPredictTests
         Assert.True(Math.Abs(predictions[0]) > 5.0,
             $"Prediction {predictions[0]:F2} is too close to 0 — inverse transform may not have been applied. " +
             "Expected ~23 (original scale), got standardized-scale value.");
-        // Also verify it's in a reasonable range for y = 2*x + 3 with x = 10
-        Assert.InRange(predictions[0], 5.0, 50.0);
+        // Also verify it's in a reasonable range for y = 2*x + 3 with x = 10 → expected ~23
+        Assert.InRange(predictions[0], 15.0, 35.0);
     }
 
     [Fact]

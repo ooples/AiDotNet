@@ -233,7 +233,7 @@ public class ScalerMathTests
     #region Cross-Scaler Consistency
 
     [Fact]
-    public void StandardScaler_TransformDoesNotMutateUnrelatedData()
+    public void StandardScaler_TransformDoesNotMutateOriginalData()
     {
         var data = CreateKnownData();
         var backup = CloneMatrix(data);
@@ -241,6 +241,15 @@ public class ScalerMathTests
         var scaler = new StandardScaler<double>();
         scaler.Fit(data);
         var transformed = scaler.Transform(data);
+
+        // Verify the original data was NOT mutated by Transform
+        for (int i = 0; i < data.Rows; i++)
+        {
+            for (int j = 0; j < data.Columns; j++)
+            {
+                Assert.Equal(backup[i, j], data[i, j], precision: 14);
+            }
+        }
 
         // Verify the transformed result differs from original (scaler did something)
         bool anyDifferent = false;

@@ -762,7 +762,7 @@ public class EasyEnsembleClassifier<T> : ClassifierBase<T>
         NumClasses = dataObj["NumClasses"]?.ToObject<int>() ?? 0;
         NumFeatures = dataObj["NumFeatures"]?.ToObject<int>() ?? 0;
         TaskType = (ClassificationTaskType)(dataObj["TaskType"]?.ToObject<int>() ?? 0);
-        _softVoting = dataObj["SoftVoting"]?.ToObject<bool>() ?? true;
+        _softVoting = dataObj["SoftVoting"]?.ToObject<bool>() ?? _softVoting;
 
         var classLabelsToken = dataObj["ClassLabels"];
         if (classLabelsToken is not null)

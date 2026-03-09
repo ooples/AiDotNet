@@ -416,6 +416,9 @@ public class OneVsRestClassifier<T> : MetaClassifierBase<T>
         if (types is null || data is null || types.Length != data.Length)
             throw new InvalidOperationException(
                 "Failed to deserialize OneVsRestClassifier: estimator types/data arrays are missing or mismatched.");
+        if (NumClasses > 0 && types.Length != NumClasses)
+            throw new InvalidOperationException(
+                $"Failed to deserialize OneVsRestClassifier: expected {NumClasses} estimators but found {types.Length}.");
 
         _estimators = new IClassifier<T>[types.Length];
         for (int i = 0; i < types.Length; i++)

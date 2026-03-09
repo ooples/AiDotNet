@@ -74,7 +74,7 @@ public static class ClassifierRegistry<T>
     public static void Register(string typeName, Type classifierType)
     {
         if (string.IsNullOrWhiteSpace(typeName))
-            throw new ArgumentException("Type name cannot be null or empty.", nameof(typeName));
+            throw new ArgumentException("Type name cannot be null, empty, or whitespace.", nameof(typeName));
         if (classifierType is null)
             throw new ArgumentNullException(nameof(classifierType));
         if (!typeof(IClassifier<T>).IsAssignableFrom(classifierType))
@@ -181,7 +181,7 @@ public static class ClassifierRegistry<T>
             EnsureInitialized();
             lock (_lock)
             {
-                return new List<string>(_registry.Keys);
+                return new List<string>(_registry.Keys).AsReadOnly();
             }
         }
     }

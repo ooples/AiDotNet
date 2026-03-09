@@ -315,10 +315,10 @@ public class RegressionModelMathTests
         Assert.NotNull(predictions);
         Assert.Equal(20, predictions.Length);
 
-        // Verify R² > 0 (better than mean baseline) on known linear data
+        // Verify R² > 0.5 (Lasso should fit well on clean linear data with low noise)
         double r2 = ComputeR2(testY, predictions);
-        Assert.True(r2 > 0.0,
-            $"Lasso through builder: R²={r2:F4} should be > 0 on linear data");
+        Assert.True(r2 > 0.5,
+            $"Lasso through builder: R²={r2:F4} should be > 0.5 on linear data");
 
         for (int i = 0; i < predictions.Length; i++)
         {
@@ -348,10 +348,10 @@ public class RegressionModelMathTests
         Assert.NotNull(predictions);
         Assert.Equal(20, predictions.Length);
 
-        // Verify R² > 0 (better than mean baseline) on known linear data
+        // Verify R² > 0.5 (ElasticNet should fit well on clean linear data with low noise)
         double r2 = ComputeR2(testY, predictions);
-        Assert.True(r2 > 0.0,
-            $"ElasticNet through builder: R²={r2:F4} should be > 0 on linear data");
+        Assert.True(r2 > 0.5,
+            $"ElasticNet through builder: R²={r2:F4} should be > 0.5 on linear data");
 
         for (int i = 0; i < predictions.Length; i++)
         {
@@ -402,10 +402,10 @@ public class RegressionModelMathTests
         Assert.NotNull(predictions);
         Assert.Equal(testSamples, predictions.Length);
 
-        // Verify R² > 0 (polynomial model should fit quadratic data)
+        // Verify R² > 0.7 (degree-2 polynomial should fit quadratic data well)
         double r2 = ComputeR2(testY, predictions);
-        Assert.True(r2 > 0.0,
-            $"Polynomial through builder: R²={r2:F4} should be > 0 on quadratic data");
+        Assert.True(r2 > 0.7,
+            $"Polynomial through builder: R²={r2:F4} should be > 0.7 on quadratic data");
 
         for (int i = 0; i < predictions.Length; i++)
         {

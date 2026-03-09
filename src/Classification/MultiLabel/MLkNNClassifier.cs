@@ -367,6 +367,9 @@ public class MLkNNClassifier<T> : MultiLabelClassifierBase<T>
         var condProbsNegArr = jObj["CondProbsNeg"]?.ToObject<double[][]>();
         if (condProbsPosArr is not null && condProbsNegArr is not null)
         {
+            if (condProbsPosArr.Length < NumLabels)
+                throw new InvalidOperationException(
+                    $"Failed to deserialize MLkNNClassifier: CondProbsPos has {condProbsPosArr.Length} rows but expected at least {NumLabels}.");
             if (condProbsNegArr.Length < NumLabels)
                 throw new InvalidOperationException(
                     $"Failed to deserialize MLkNNClassifier: CondProbsNeg has {condProbsNegArr.Length} rows but expected at least {NumLabels}.");

@@ -46,7 +46,7 @@ public class LabelPropagation<T> : SemiSupervisedClassifierBase<T>
     /// to nearby points and low similarity to distant points.
     /// </para>
     /// </remarks>
-    private readonly IKernelFunction<T> _kernel;
+    private IKernelFunction<T> _kernel;
 
     /// <summary>
     /// Maximum number of iterations for label propagation.
@@ -776,6 +776,18 @@ public class LabelPropagation<T> : SemiSupervisedClassifierBase<T>
         return new Kernels.GaussianKernel<T>(1.0);
     }
 
+    private static IKernelFunction<T>? CreateKernelByName(string kernelTypeName)
+    {
+        return kernelTypeName switch
+        {
+            "GaussianKernel`1" or "GaussianKernel" => new Kernels.GaussianKernel<T>(1.0),
+            "LaplacianKernel`1" or "LaplacianKernel" => new Kernels.LaplacianKernel<T>(),
+            "LinearKernel`1" or "LinearKernel" => new Kernels.LinearKernel<T>(),
+            "PolynomialKernel`1" or "PolynomialKernel" => new Kernels.PolynomialKernel<T>(),
+            _ => null
+        };
+    }
+
     #endregion
 
     #region Serialization
@@ -847,6 +859,13 @@ public class LabelPropagation<T> : SemiSupervisedClassifierBase<T>
         TaskType = (ClassificationTaskType)(jObj["TaskType"]?.ToObject<int>() ?? 0);
         _numLabeled = jObj["NumLabeled"]?.ToObject<int>() ?? 0;
         _maxIterations = jObj["MaxIterations"]?.ToObject<int>() ?? _maxIterations;
+
+        var kernelType = jObj["KernelType"]?.ToObject<string>();
+        if (kernelType is not null && kernelType != _kernel.GetType().Name)
+        {
+            _kernel = CreateKernelByName(kernelType) ?? CreateDefaultKernel();
+        }
+
         var toleranceVal = jObj["Tolerance"]?.ToObject<double>();
         if (toleranceVal.HasValue)
             _tolerance = NumOps.FromDouble(toleranceVal.Value);

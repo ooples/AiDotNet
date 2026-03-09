@@ -365,6 +365,10 @@ public class VotingClassifier<T> : MetaClassifierBase<T>
         _estimators = new List<IClassifier<T>>();
         for (int i = 0; i < types.Length; i++)
             _estimators.Add(ClassifierRegistry<T>.DeserializeClassifier(types[i], data[i]));
+
+        if (_weights is not null && _estimators.Count > 0 && _weights.Length != _estimators.Count)
+            throw new InvalidOperationException(
+                $"Failed to deserialize VotingClassifier: weight vector length ({_weights.Length}) does not match estimator count ({_estimators.Count}).");
     }
 
     /// <inheritdoc/>

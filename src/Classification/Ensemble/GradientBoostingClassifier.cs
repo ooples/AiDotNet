@@ -506,7 +506,6 @@ public class GradientBoostingClassifier<T> : EnsembleClassifierBase<T>, ITreeBas
     /// <inheritdoc/>
     public override byte[] Serialize()
     {
-        var regOptions = Regularization?.GetOptions();
         var modelData = new Dictionary<string, object>
         {
             { "NumClasses", NumClasses },
@@ -515,8 +514,6 @@ public class GradientBoostingClassifier<T> : EnsembleClassifierBase<T>, ITreeBas
             { "ClassLabels", ClassLabels?.ToArray() ?? Array.Empty<T>() },
             { "InitPrediction", NumOps.ToDouble(_initPrediction) }
         };
-        if (regOptions is not null)
-            modelData["RegularizationOptions"] = regOptions;
 
         // Serialize FeatureImportances
         if (FeatureImportances is not null)
