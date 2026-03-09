@@ -49,17 +49,17 @@ public class LabelSpreading<T> : SemiSupervisedClassifierBase<T>
     /// to nearby points and low similarity to distant points.
     /// </para>
     /// </remarks>
-    private readonly IKernelFunction<T> _kernel;
+    private IKernelFunction<T> _kernel;
 
     /// <summary>
     /// Maximum number of iterations for label spreading.
     /// </summary>
-    private readonly int _maxIterations;
+    private int _maxIterations;
 
     /// <summary>
     /// Convergence tolerance for stopping the spreading early.
     /// </summary>
-    private readonly T _tolerance;
+    private T _tolerance;
 
     /// <summary>
     /// The clamping factor (alpha) that balances original labels vs. propagated information.
@@ -75,7 +75,7 @@ public class LabelSpreading<T> : SemiSupervisedClassifierBase<T>
     /// Higher values allow more influence from the graph structure.
     /// </para>
     /// </remarks>
-    private readonly T _alpha;
+    private T _alpha;
 
     /// <summary>
     /// The symmetrically normalized affinity matrix (Laplacian-style normalization).
@@ -856,7 +856,11 @@ public class LabelSpreading<T> : SemiSupervisedClassifierBase<T>
             ["NumClasses"] = NumClasses,
             ["NumFeatures"] = NumFeatures,
             ["TaskType"] = (int)TaskType,
-            ["NumLabeled"] = _numLabeled
+            ["NumLabeled"] = _numLabeled,
+            ["KernelType"] = _kernel.GetType().Name,
+            ["MaxIterations"] = _maxIterations,
+            ["Tolerance"] = NumOps.ToDouble(_tolerance),
+            ["Alpha"] = NumOps.ToDouble(_alpha)
         };
 
         if (ClassLabels is not null)
@@ -897,17 +901,26 @@ public class LabelSpreading<T> : SemiSupervisedClassifierBase<T>
     public override void Deserialize(byte[] modelData)
     {
         var jsonString = Encoding.UTF8.GetString(modelData);
-        var modelMetadata = JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString);
-        if (modelMetadata?.ModelData is null) return;
+        var modelMetadata = JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString)
+            ?? throw new InvalidOperationException("Failed to deserialize LabelSpreading: invalid metadata.");
+        if (modelMetadata.ModelData is null)
+            throw new InvalidOperationException("Failed to deserialize LabelSpreading: missing model data.");
 
         var dataString = Encoding.UTF8.GetString(modelMetadata.ModelData);
-        var jObj = JsonConvert.DeserializeObject<JObject>(dataString);
-        if (jObj is null) return;
+        var jObj = JsonConvert.DeserializeObject<JObject>(dataString)
+            ?? throw new InvalidOperationException("Failed to deserialize LabelSpreading: invalid model payload.");
 
         NumClasses = jObj["NumClasses"]?.ToObject<int>() ?? 0;
         NumFeatures = jObj["NumFeatures"]?.ToObject<int>() ?? 0;
         TaskType = (ClassificationTaskType)(jObj["TaskType"]?.ToObject<int>() ?? 0);
         _numLabeled = jObj["NumLabeled"]?.ToObject<int>() ?? 0;
+        _maxIterations = jObj["MaxIterations"]?.ToObject<int>() ?? _maxIterations;
+        var toleranceVal = jObj["Tolerance"]?.ToObject<double>();
+        if (toleranceVal.HasValue)
+            _tolerance = NumOps.FromDouble(toleranceVal.Value);
+        var alphaVal = jObj["Alpha"]?.ToObject<double>();
+        if (alphaVal.HasValue)
+            _alpha = NumOps.FromDouble(alphaVal.Value);
 
         var labelsToken = jObj["ClassLabels"];
         if (labelsToken is JArray labelsArr)

@@ -51,12 +51,12 @@ public class LabelPropagation<T> : SemiSupervisedClassifierBase<T>
     /// <summary>
     /// Maximum number of iterations for label propagation.
     /// </summary>
-    private readonly int _maxIterations;
+    private int _maxIterations;
 
     /// <summary>
     /// Convergence tolerance for stopping the propagation early.
     /// </summary>
-    private readonly T _tolerance;
+    private T _tolerance;
 
     /// <summary>
     /// The affinity matrix representing pairwise similarities between all samples.
@@ -789,7 +789,10 @@ public class LabelPropagation<T> : SemiSupervisedClassifierBase<T>
             ["NumClasses"] = NumClasses,
             ["NumFeatures"] = NumFeatures,
             ["TaskType"] = (int)TaskType,
-            ["NumLabeled"] = _numLabeled
+            ["NumLabeled"] = _numLabeled,
+            ["KernelType"] = _kernel.GetType().Name,
+            ["MaxIterations"] = _maxIterations,
+            ["Tolerance"] = NumOps.ToDouble(_tolerance)
         };
 
         if (ClassLabels is not null)
@@ -830,17 +833,23 @@ public class LabelPropagation<T> : SemiSupervisedClassifierBase<T>
     public override void Deserialize(byte[] modelData)
     {
         var jsonString = Encoding.UTF8.GetString(modelData);
-        var modelMetadata = JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString);
-        if (modelMetadata?.ModelData is null) return;
+        var modelMetadata = JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString)
+            ?? throw new InvalidOperationException("Failed to deserialize LabelPropagation: invalid metadata.");
+        if (modelMetadata.ModelData is null)
+            throw new InvalidOperationException("Failed to deserialize LabelPropagation: missing model data.");
 
         var dataString = Encoding.UTF8.GetString(modelMetadata.ModelData);
-        var jObj = JsonConvert.DeserializeObject<JObject>(dataString);
-        if (jObj is null) return;
+        var jObj = JsonConvert.DeserializeObject<JObject>(dataString)
+            ?? throw new InvalidOperationException("Failed to deserialize LabelPropagation: invalid model payload.");
 
         NumClasses = jObj["NumClasses"]?.ToObject<int>() ?? 0;
         NumFeatures = jObj["NumFeatures"]?.ToObject<int>() ?? 0;
         TaskType = (ClassificationTaskType)(jObj["TaskType"]?.ToObject<int>() ?? 0);
         _numLabeled = jObj["NumLabeled"]?.ToObject<int>() ?? 0;
+        _maxIterations = jObj["MaxIterations"]?.ToObject<int>() ?? _maxIterations;
+        var toleranceVal = jObj["Tolerance"]?.ToObject<double>();
+        if (toleranceVal.HasValue)
+            _tolerance = NumOps.FromDouble(toleranceVal.Value);
 
         var labelsToken = jObj["ClassLabels"];
         if (labelsToken is JArray labelsArr)

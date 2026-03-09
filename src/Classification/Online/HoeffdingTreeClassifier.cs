@@ -736,6 +736,10 @@ public class HoeffdingTreeClassifier<T> : ClassifierBase<T>, IOnlineClassifier<T
         if (jObj["Right"] is JObject rightObj)
             node.Right = DeserializeNode(rightObj);
 
+        if (!node.IsLeaf && node.Left is null && node.Right is null)
+            throw new InvalidOperationException(
+                $"Deserialization failed: non-leaf node at depth {node.Depth} has no children.");
+
         return node;
     }
 }
