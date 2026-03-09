@@ -471,12 +471,14 @@ public class ClassifierChainClassifier<T> : MultiLabelClassifierBase<T>
     public override void Deserialize(byte[] modelData)
     {
         var jsonString = Encoding.UTF8.GetString(modelData);
-        var metadata = JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString);
-        if (metadata?.ModelData is null) return;
+        var metadata = JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString)
+            ?? throw new InvalidOperationException("Failed to deserialize ClassifierChainClassifier: invalid metadata.");
+        if (metadata.ModelData is null)
+            throw new InvalidOperationException("Failed to deserialize ClassifierChainClassifier: missing model data.");
 
         var dataString = Encoding.UTF8.GetString(metadata.ModelData);
-        var jObj = JsonConvert.DeserializeObject<JObject>(dataString);
-        if (jObj is null) return;
+        var jObj = JsonConvert.DeserializeObject<JObject>(dataString)
+            ?? throw new InvalidOperationException("Failed to deserialize ClassifierChainClassifier: invalid model payload.");
 
         NumLabels = jObj["NumLabels"]?.ToObject<int>() ?? 0;
         NumFeatures = jObj["NumFeatures"]?.ToObject<int>() ?? 0;
@@ -487,13 +489,18 @@ public class ClassifierChainClassifier<T> : MultiLabelClassifierBase<T>
 
         var types = jObj["ClassifierTypes"]?.ToObject<string[]>();
         var data = jObj["ClassifierData"]?.ToObject<string[]>();
-        if (types is not null && data is not null && types.Length == data.Length)
+        if (types is null || data is null || types.Length != data.Length)
+            throw new InvalidOperationException(
+                "Failed to deserialize ClassifierChainClassifier: classifier types/data arrays are missing or mismatched.");
+
+        if (_chainOrder is not null && _chainOrder.Length != types.Length)
+            throw new InvalidOperationException(
+                $"Failed to deserialize ClassifierChainClassifier: ChainOrder length ({_chainOrder.Length}) does not match classifier count ({types.Length}).");
+
+        _chainClassifiers = new IClassifier<T>[types.Length];
+        for (int i = 0; i < types.Length; i++)
         {
-            _chainClassifiers = new IClassifier<T>[types.Length];
-            for (int i = 0; i < types.Length; i++)
-            {
-                _chainClassifiers[i] = ClassifierRegistry<T>.DeserializeClassifier(types[i], data[i]);
-            }
+            _chainClassifiers[i] = ClassifierRegistry<T>.DeserializeClassifier(types[i], data[i]);
         }
     }
 

@@ -343,18 +343,21 @@ public class MLkNNClassifier<T> : MultiLabelClassifierBase<T>
     public override void Deserialize(byte[] modelData)
     {
         var jsonString = Encoding.UTF8.GetString(modelData);
-        var metadata = JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString);
-        if (metadata?.ModelData is null) return;
+        var metadata = JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString)
+            ?? throw new InvalidOperationException("Failed to deserialize MLkNNClassifier: invalid metadata.");
+        if (metadata.ModelData is null)
+            throw new InvalidOperationException("Failed to deserialize MLkNNClassifier: missing model data.");
 
         var dataString = Encoding.UTF8.GetString(metadata.ModelData);
-        var jObj = JsonConvert.DeserializeObject<JObject>(dataString);
-        if (jObj is null) return;
+        var jObj = JsonConvert.DeserializeObject<JObject>(dataString)
+            ?? throw new InvalidOperationException("Failed to deserialize MLkNNClassifier: invalid model payload.");
 
         NumLabels = jObj["NumLabels"]?.ToObject<int>() ?? 0;
         NumFeatures = jObj["NumFeatures"]?.ToObject<int>() ?? 0;
         NumClasses = jObj["NumClasses"]?.ToObject<int>() ?? 2;
         TaskType = (ClassificationTaskType)(jObj["TaskType"]?.ToObject<int>() ?? 0);
         LabelNames = jObj["LabelNames"]?.ToObject<string[]>();
+        _options.Smoothing = jObj["Smoothing"]?.ToObject<double>() ?? _options.Smoothing;
 
         _priorProbs = jObj["PriorProbs"]?.ToObject<double[]>();
 
@@ -364,6 +367,10 @@ public class MLkNNClassifier<T> : MultiLabelClassifierBase<T>
         var condProbsNegArr = jObj["CondProbsNeg"]?.ToObject<double[][]>();
         if (condProbsPosArr is not null && condProbsNegArr is not null)
         {
+            if (condProbsNegArr.Length < NumLabels)
+                throw new InvalidOperationException(
+                    $"Failed to deserialize MLkNNClassifier: CondProbsNeg has {condProbsNegArr.Length} rows but expected at least {NumLabels}.");
+
             _condProbsPos = new double[NumLabels, k + 1];
             _condProbsNeg = new double[NumLabels, k + 1];
             for (int l = 0; l < NumLabels && l < condProbsPosArr.Length; l++)

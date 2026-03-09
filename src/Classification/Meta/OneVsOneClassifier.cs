@@ -376,12 +376,14 @@ public class OneVsOneClassifier<T> : MetaClassifierBase<T>
     public override void Deserialize(byte[] modelData)
     {
         var jsonString = Encoding.UTF8.GetString(modelData);
-        var metadata = JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString);
-        if (metadata?.ModelData is null) return;
+        var metadata = JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString)
+            ?? throw new InvalidOperationException("Failed to deserialize OneVsOneClassifier: invalid metadata.");
+        if (metadata.ModelData is null)
+            throw new InvalidOperationException("Failed to deserialize OneVsOneClassifier: missing model data.");
 
         var dataString = Encoding.UTF8.GetString(metadata.ModelData);
-        var jObj = JsonConvert.DeserializeObject<JObject>(dataString);
-        if (jObj is null) return;
+        var jObj = JsonConvert.DeserializeObject<JObject>(dataString)
+            ?? throw new InvalidOperationException("Failed to deserialize OneVsOneClassifier: invalid model payload.");
 
         var classLabelsArr = jObj["ClassLabels"]?.ToObject<double[]>();
         if (classLabelsArr is not null)
@@ -396,21 +398,23 @@ public class OneVsOneClassifier<T> : MetaClassifierBase<T>
 
         var pairsFirst = jObj["ClassPairsFirst"]?.ToObject<int[]>();
         var pairsSecond = jObj["ClassPairsSecond"]?.ToObject<int[]>();
-        if (pairsFirst is not null && pairsSecond is not null && pairsFirst.Length == pairsSecond.Length)
-        {
-            _classPairs = new (int, int)[pairsFirst.Length];
-            for (int i = 0; i < pairsFirst.Length; i++)
-                _classPairs[i] = (pairsFirst[i], pairsSecond[i]);
-        }
+        if (pairsFirst is null || pairsSecond is null || pairsFirst.Length != pairsSecond.Length)
+            throw new InvalidOperationException(
+                "Failed to deserialize OneVsOneClassifier: class pairs data is missing or mismatched.");
+
+        _classPairs = new (int, int)[pairsFirst.Length];
+        for (int i = 0; i < pairsFirst.Length; i++)
+            _classPairs[i] = (pairsFirst[i], pairsSecond[i]);
 
         var types = jObj["EstimatorTypes"]?.ToObject<string[]>();
         var data = jObj["EstimatorData"]?.ToObject<string[]>();
-        if (types is not null && data is not null && types.Length == data.Length)
-        {
-            _estimators = new IClassifier<T>[types.Length];
-            for (int i = 0; i < types.Length; i++)
-                _estimators[i] = ClassifierRegistry<T>.DeserializeClassifier(types[i], data[i]);
-        }
+        if (types is null || data is null || types.Length != data.Length)
+            throw new InvalidOperationException(
+                "Failed to deserialize OneVsOneClassifier: estimator types/data arrays are missing or mismatched.");
+
+        _estimators = new IClassifier<T>[types.Length];
+        for (int i = 0; i < types.Length; i++)
+            _estimators[i] = ClassifierRegistry<T>.DeserializeClassifier(types[i], data[i]);
     }
 
     /// <inheritdoc/>

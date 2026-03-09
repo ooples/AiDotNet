@@ -390,12 +390,14 @@ public class OneVsRestClassifier<T> : MetaClassifierBase<T>
     public override void Deserialize(byte[] modelData)
     {
         var jsonString = Encoding.UTF8.GetString(modelData);
-        var metadata = JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString);
-        if (metadata?.ModelData is null) return;
+        var metadata = JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString)
+            ?? throw new InvalidOperationException("Failed to deserialize OneVsRestClassifier: invalid metadata.");
+        if (metadata.ModelData is null)
+            throw new InvalidOperationException("Failed to deserialize OneVsRestClassifier: missing model data.");
 
         var dataString = Encoding.UTF8.GetString(metadata.ModelData);
-        var jObj = JsonConvert.DeserializeObject<JObject>(dataString);
-        if (jObj is null) return;
+        var jObj = JsonConvert.DeserializeObject<JObject>(dataString)
+            ?? throw new InvalidOperationException("Failed to deserialize OneVsRestClassifier: invalid model payload.");
 
         var classLabelsArr = jObj["ClassLabels"]?.ToObject<double[]>();
         if (classLabelsArr is not null)
@@ -411,12 +413,13 @@ public class OneVsRestClassifier<T> : MetaClassifierBase<T>
 
         var types = jObj["EstimatorTypes"]?.ToObject<string[]>();
         var data = jObj["EstimatorData"]?.ToObject<string[]>();
-        if (types is not null && data is not null && types.Length == data.Length)
-        {
-            _estimators = new IClassifier<T>[types.Length];
-            for (int i = 0; i < types.Length; i++)
-                _estimators[i] = ClassifierRegistry<T>.DeserializeClassifier(types[i], data[i]);
-        }
+        if (types is null || data is null || types.Length != data.Length)
+            throw new InvalidOperationException(
+                "Failed to deserialize OneVsRestClassifier: estimator types/data arrays are missing or mismatched.");
+
+        _estimators = new IClassifier<T>[types.Length];
+        for (int i = 0; i < types.Length; i++)
+            _estimators[i] = ClassifierRegistry<T>.DeserializeClassifier(types[i], data[i]);
     }
 
     /// <inheritdoc/>

@@ -38,7 +38,7 @@ public class RAkELClassifier<T> : MultiLabelClassifierBase<T>
     /// <summary>
     /// Gets the size of each labelset (k parameter).
     /// </summary>
-    public int LabelsetSize { get; }
+    public int LabelsetSize { get; private set; }
 
     /// <summary>
     /// Gets the number of labelsets to create.
@@ -405,18 +405,21 @@ public class RAkELClassifier<T> : MultiLabelClassifierBase<T>
     public override void Deserialize(byte[] modelData)
     {
         var jsonString = Encoding.UTF8.GetString(modelData);
-        var metadata = JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString);
-        if (metadata?.ModelData is null) return;
+        var metadata = JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString)
+            ?? throw new InvalidOperationException("Failed to deserialize RAkELClassifier: invalid metadata.");
+        if (metadata.ModelData is null)
+            throw new InvalidOperationException("Failed to deserialize RAkELClassifier: missing model data.");
 
         var dataString = Encoding.UTF8.GetString(metadata.ModelData);
-        var jObj = JsonConvert.DeserializeObject<JObject>(dataString);
-        if (jObj is null) return;
+        var jObj = JsonConvert.DeserializeObject<JObject>(dataString)
+            ?? throw new InvalidOperationException("Failed to deserialize RAkELClassifier: invalid model payload.");
 
         NumLabels = jObj["NumLabels"]?.ToObject<int>() ?? 0;
         NumFeatures = jObj["NumFeatures"]?.ToObject<int>() ?? 0;
         NumClasses = jObj["NumClasses"]?.ToObject<int>() ?? 2;
         TaskType = (ClassificationTaskType)(jObj["TaskType"]?.ToObject<int>() ?? 0);
         LabelNames = jObj["LabelNames"]?.ToObject<string[]>();
+        LabelsetSize = jObj["LabelsetSize"]?.ToObject<int>() ?? 3;
         NumLabelsets = jObj["NumLabelsets"]?.ToObject<int>() ?? 0;
 
         // Deserialize labelsets

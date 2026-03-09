@@ -334,12 +334,14 @@ public class VotingClassifier<T> : MetaClassifierBase<T>
     public override void Deserialize(byte[] modelData)
     {
         var jsonString = Encoding.UTF8.GetString(modelData);
-        var metadata = JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString);
-        if (metadata?.ModelData is null) return;
+        var metadata = JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString)
+            ?? throw new InvalidOperationException("Failed to deserialize VotingClassifier: invalid metadata.");
+        if (metadata.ModelData is null)
+            throw new InvalidOperationException("Failed to deserialize VotingClassifier: missing model data.");
 
         var dataString = Encoding.UTF8.GetString(metadata.ModelData);
-        var jObj = JsonConvert.DeserializeObject<JObject>(dataString);
-        if (jObj is null) return;
+        var jObj = JsonConvert.DeserializeObject<JObject>(dataString)
+            ?? throw new InvalidOperationException("Failed to deserialize VotingClassifier: invalid model payload.");
 
         var classLabelsArr = jObj["ClassLabels"]?.ToObject<double[]>();
         if (classLabelsArr is not null)
@@ -352,15 +354,17 @@ public class VotingClassifier<T> : MetaClassifierBase<T>
         NumFeatures = jObj["NumFeatures"]?.ToObject<int>() ?? 0;
         TaskType = (ClassificationTaskType)(jObj["TaskType"]?.ToObject<int>() ?? 0);
         _weights = jObj["Weights"]?.ToObject<double[]>();
+        Options.Voting = (VotingType)(jObj["VotingType"]?.ToObject<int>() ?? (int)VotingType.Hard);
 
         var types = jObj["EstimatorTypes"]?.ToObject<string[]>();
         var data = jObj["EstimatorData"]?.ToObject<string[]>();
-        if (types is not null && data is not null && types.Length == data.Length)
-        {
-            _estimators = new List<IClassifier<T>>();
-            for (int i = 0; i < types.Length; i++)
-                _estimators.Add(ClassifierRegistry<T>.DeserializeClassifier(types[i], data[i]));
-        }
+        if (types is null || data is null || types.Length != data.Length)
+            throw new InvalidOperationException(
+                "Failed to deserialize VotingClassifier: estimator types/data arrays are missing or mismatched.");
+
+        _estimators = new List<IClassifier<T>>();
+        for (int i = 0; i < types.Length; i++)
+            _estimators.Add(ClassifierRegistry<T>.DeserializeClassifier(types[i], data[i]));
     }
 
     /// <inheritdoc/>
