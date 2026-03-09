@@ -781,7 +781,7 @@ public class TableGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
     {
         var result = new Tensor<T>(input.Shape);
         for (int i = 0; i < input.Length; i++)
-            result[i] = NumOps.ToDouble(input[i]) > 0 ? input[i] : NumOps.Zero;
+            result[i] = NumOps.GreaterThan(input[i], NumOps.Zero) ? input[i] : NumOps.Zero;
         return result;
     }
 
@@ -790,7 +790,7 @@ public class TableGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
         int len = Math.Min(gradOutput.Length, preActivation.Length);
         var result = new Tensor<T>(gradOutput.Shape);
         for (int i = 0; i < len; i++)
-            result[i] = NumOps.ToDouble(preActivation[i]) > 0 ? gradOutput[i] : NumOps.Zero;
+            result[i] = NumOps.GreaterThan(preActivation[i], NumOps.Zero) ? gradOutput[i] : NumOps.Zero;
         return result;
     }
 
@@ -813,7 +813,7 @@ public class TableGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
         T slope = NumOps.FromDouble(0.2);
         for (int i = 0; i < len; i++)
         {
-            result[i] = NumOps.ToDouble(preActivation[i]) > 0
+            result[i] = NumOps.GreaterThan(preActivation[i], NumOps.Zero)
                 ? gradOutput[i]
                 : NumOps.Multiply(slope, gradOutput[i]);
         }

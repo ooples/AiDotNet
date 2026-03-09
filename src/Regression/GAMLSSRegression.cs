@@ -245,23 +245,29 @@ public class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
     private void InitializeParameters(Vector<T> y)
     {
         // Compute initial estimates
-        double mean = 0, variance = 0;
+        T mean = NumOps.Zero;
         for (int i = 0; i < y.Length; i++)
         {
-            mean += NumOps.ToDouble(y[i]);
+            mean = NumOps.Add(mean, y[i]);
         }
-        mean /= y.Length;
+        mean = NumOps.Divide(mean, NumOps.FromDouble(y.Length));
 
+        T variance = NumOps.Zero;
         for (int i = 0; i < y.Length; i++)
         {
-            double diff = NumOps.ToDouble(y[i]) - mean;
-            variance += diff * diff;
+            T diff = NumOps.Subtract(y[i], mean);
+            variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
         }
-        variance /= y.Length;
-        variance = Math.Max(variance, 1e-6);
+        variance = NumOps.Divide(variance, NumOps.FromDouble(y.Length));
+        T minVariance = NumOps.FromDouble(1e-6);
+        if (NumOps.LessThan(variance, minVariance))
+        {
+            variance = minVariance;
+        }
 
-        _locationIntercept = NumOps.FromDouble(mean);
-        _scaleIntercept = NumOps.FromDouble(Math.Log(Math.Sqrt(variance)));  // Log link for scale
+        _locationIntercept = mean;
+        // Log link for scale: log(sqrt(variance))
+        _scaleIntercept = NumOps.FromDouble(Math.Log(Math.Sqrt(NumOps.ToDouble(variance))));
 
         // Initialize coefficients to zero
         if (_options.LocationModelType != GAMLSSModelType.Constant)
@@ -306,7 +312,11 @@ public class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
             }
 
             // Update coefficients using weighted least squares
-            UpdateCoefficients(x, z, weights, ref _locationCoefficients!, ref _locationIntercept);
+            if (_locationCoefficients is null)
+            {
+                throw new InvalidOperationException("Location coefficients have not been initialized.");
+            }
+            UpdateCoefficients(x, z, weights, ref _locationCoefficients, ref _locationIntercept);
             UpdateLinearPredictor(x, etaLocation, _locationCoefficients, _locationIntercept);
         }
     }
@@ -341,7 +351,11 @@ public class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
                 z[i] = NumOps.FromDouble(zi);
             }
 
-            UpdateCoefficients(x, z, weights, ref _scaleCoefficients!, ref _scaleIntercept);
+            if (_scaleCoefficients is null)
+            {
+                throw new InvalidOperationException("Scale coefficients have not been initialized.");
+            }
+            UpdateCoefficients(x, z, weights, ref _scaleCoefficients, ref _scaleIntercept);
             UpdateLinearPredictor(x, etaScale, _scaleCoefficients, _scaleIntercept);
         }
     }
@@ -387,29 +401,31 @@ public class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
         int p = _numFeatures;
 
         // Compute X'WX and X'Wz with intercept
-        var xtwx = new Matrix<double>(p + 1, p + 1);
-        var xtwz = new Vector<double>(p + 1);
+        var xtwx = new Matrix<T>(p + 1, p + 1);
+        var xtwz = new Vector<T>(p + 1);
 
         for (int i = 0; i < n; i++)
         {
-            double w = NumOps.ToDouble(weights[i]);
-            double zi = NumOps.ToDouble(z[i]);
+            T w = weights[i];
+            T zi = z[i];
 
             // Intercept term
-            xtwx[0, 0] += w;
-            xtwz[0] += w * zi;
+            xtwx[0, 0] = NumOps.Add(xtwx[0, 0], w);
+            xtwz[0] = NumOps.Add(xtwz[0], NumOps.Multiply(w, zi));
 
             for (int j = 0; j < p; j++)
             {
-                double xij = NumOps.ToDouble(x[i, j]);
-                xtwx[0, j + 1] += w * xij;
-                xtwx[j + 1, 0] += w * xij;
-                xtwz[j + 1] += w * xij * zi;
+                T xij = x[i, j];
+                T wxij = NumOps.Multiply(w, xij);
+                xtwx[0, j + 1] = NumOps.Add(xtwx[0, j + 1], wxij);
+                xtwx[j + 1, 0] = NumOps.Add(xtwx[j + 1, 0], wxij);
+                xtwz[j + 1] = NumOps.Add(xtwz[j + 1], NumOps.Multiply(wxij, zi));
 
                 for (int k = 0; k <= j; k++)
                 {
-                    double xik = NumOps.ToDouble(x[i, k]);
-                    xtwx[j + 1, k + 1] += w * xij * xik;
+                    T xik = x[i, k];
+                    T val = NumOps.Multiply(wxij, xik);
+                    xtwx[j + 1, k + 1] = NumOps.Add(xtwx[j + 1, k + 1], val);
                     if (k < j)
                         xtwx[k + 1, j + 1] = xtwx[j + 1, k + 1];
                 }
@@ -417,25 +433,28 @@ public class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
         }
 
         // Add regularization
-        double lambda = _options.UseRegularization ? _options.RegularizationStrength : 0;
+        T lambda = _options.UseRegularization ? NumOps.FromDouble(_options.RegularizationStrength) : NumOps.Zero;
         for (int j = 1; j <= p; j++)
         {
-            xtwx[j, j] += lambda;
+            xtwx[j, j] = NumOps.Add(xtwx[j, j], lambda);
         }
 
         // Solve the system
         var solution = SolveLinearSystem(xtwx, xtwz, p + 1);
 
         // Update parameters with learning rate
+        T lr = NumOps.FromDouble(_options.LearningRate);
+        T oneMinusLr = NumOps.Subtract(NumOps.One, lr);
+
         intercept = NumOps.Add(
-            NumOps.Multiply(NumOps.FromDouble(1 - _options.LearningRate), intercept),
-            NumOps.FromDouble(_options.LearningRate * solution[0]));
+            NumOps.Multiply(oneMinusLr, intercept),
+            NumOps.Multiply(lr, solution[0]));
 
         for (int j = 0; j < p; j++)
         {
             coefficients[j] = NumOps.Add(
-                NumOps.Multiply(NumOps.FromDouble(1 - _options.LearningRate), coefficients[j]),
-                NumOps.FromDouble(_options.LearningRate * solution[j + 1]));
+                NumOps.Multiply(oneMinusLr, coefficients[j]),
+                NumOps.Multiply(lr, solution[j + 1]));
         }
     }
 
@@ -446,17 +465,17 @@ public class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
     {
         for (int i = 0; i < x.Rows; i++)
         {
-            double val = NumOps.ToDouble(intercept);
+            T val = intercept;
 
             if (coefficients != null)
             {
                 for (int j = 0; j < _numFeatures; j++)
                 {
-                    val += NumOps.ToDouble(coefficients[j]) * NumOps.ToDouble(x[i, j]);
+                    val = NumOps.Add(val, NumOps.Multiply(coefficients[j], x[i, j]));
                 }
             }
 
-            eta[i] = NumOps.FromDouble(val);
+            eta[i] = val;
         }
     }
 
@@ -465,22 +484,22 @@ public class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// </summary>
     private T PredictParameter(Vector<T> sample, Vector<T>? coefficients, T intercept, bool useExpLink)
     {
-        double val = NumOps.ToDouble(intercept);
+        T val = intercept;
 
         if (coefficients != null)
         {
             for (int j = 0; j < _numFeatures; j++)
             {
-                val += NumOps.ToDouble(coefficients[j]) * NumOps.ToDouble(sample[j]);
+                val = NumOps.Add(val, NumOps.Multiply(coefficients[j], sample[j]));
             }
         }
 
         if (useExpLink)
         {
-            val = Math.Exp(val);
+            val = NumOps.Exp(val);
         }
 
-        return NumOps.FromDouble(val);
+        return val;
     }
 
     /// <summary>
@@ -525,9 +544,9 @@ public class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Solves a linear system using Gaussian elimination.
     /// </summary>
-    private Vector<double> SolveLinearSystem(Matrix<double> a, Vector<double> b, int n)
+    private Vector<T> SolveLinearSystem(Matrix<T> a, Vector<T> b, int n)
     {
-        var augmented = new Matrix<double>(n, n + 1);
+        var augmented = new Matrix<T>(n, n + 1);
         for (int i = 0; i < n; i++)
         {
             for (int j = 0; j < n; j++)
@@ -537,13 +556,15 @@ public class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
             augmented[i, n] = b[i];
         }
 
+        T pivotThreshold = NumOps.FromDouble(1e-10);
+
         // Forward elimination with partial pivoting
         for (int col = 0; col < n; col++)
         {
             int maxRow = col;
             for (int row = col + 1; row < n; row++)
             {
-                if (Math.Abs(augmented[row, col]) > Math.Abs(augmented[maxRow, col]))
+                if (NumOps.GreaterThan(NumOps.Abs(augmented[row, col]), NumOps.Abs(augmented[maxRow, col])))
                 {
                     maxRow = row;
                 }
@@ -554,28 +575,31 @@ public class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
                 (augmented[col, j], augmented[maxRow, j]) = (augmented[maxRow, j], augmented[col, j]);
             }
 
-            double pivot = augmented[col, col];
-            if (Math.Abs(pivot) < 1e-10) pivot = 1e-10;
+            T pivot = augmented[col, col];
+            if (NumOps.LessThan(NumOps.Abs(pivot), pivotThreshold))
+            {
+                pivot = pivotThreshold;
+            }
 
             for (int j = 0; j <= n; j++)
             {
-                augmented[col, j] /= pivot;
+                augmented[col, j] = NumOps.Divide(augmented[col, j], pivot);
             }
 
             for (int row = 0; row < n; row++)
             {
                 if (row != col)
                 {
-                    double factor = augmented[row, col];
+                    T factor = augmented[row, col];
                     for (int j = 0; j <= n; j++)
                     {
-                        augmented[row, j] -= factor * augmented[col, j];
+                        augmented[row, j] = NumOps.Subtract(augmented[row, j], NumOps.Multiply(factor, augmented[col, j]));
                     }
                 }
             }
         }
 
-        var solution = new Vector<double>(n);
+        var solution = new Vector<T>(n);
         for (int i = 0; i < n; i++)
         {
             solution[i] = augmented[i, n];
@@ -592,35 +616,35 @@ public class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
         // Combine importances from all parameter models
         for (int f = 0; f < _numFeatures; f++)
         {
-            double importance = 0;
+            T importance = NumOps.Zero;
 
             if (_locationCoefficients != null)
             {
-                importance += Math.Abs(NumOps.ToDouble(_locationCoefficients[f]));
+                importance = NumOps.Add(importance, NumOps.Abs(_locationCoefficients[f]));
             }
             if (_scaleCoefficients != null)
             {
-                importance += Math.Abs(NumOps.ToDouble(_scaleCoefficients[f]));
+                importance = NumOps.Add(importance, NumOps.Abs(_scaleCoefficients[f]));
             }
             if (_shapeCoefficients != null)
             {
-                importance += Math.Abs(NumOps.ToDouble(_shapeCoefficients[f]));
+                importance = NumOps.Add(importance, NumOps.Abs(_shapeCoefficients[f]));
             }
 
-            importances[f] = NumOps.FromDouble(importance);
+            importances[f] = importance;
         }
 
         // Normalize
-        double sum = 0;
+        T sum = NumOps.Zero;
         for (int f = 0; f < _numFeatures; f++)
         {
-            sum += NumOps.ToDouble(importances[f]);
+            sum = NumOps.Add(sum, importances[f]);
         }
-        if (sum > 0)
+        if (NumOps.GreaterThan(sum, NumOps.Zero))
         {
             for (int f = 0; f < _numFeatures; f++)
             {
-                importances[f] = NumOps.Divide(importances[f], NumOps.FromDouble(sum));
+                importances[f] = NumOps.Divide(importances[f], sum);
             }
         }
 

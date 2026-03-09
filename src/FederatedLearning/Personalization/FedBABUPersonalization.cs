@@ -129,7 +129,7 @@ public class FedBABUPersonalization<T> : Infrastructure.FederatedLearningCompone
     public Dictionary<string, T[]> InitializeRandomHead(Dictionary<string, T[]> headParams, int seed = 42)
     {
         Guard.NotNull(headParams);
-        var rng = new Random(seed);
+        var rng = RandomHelper.CreateSeededRandom(seed);
         var initialized = new Dictionary<string, T[]>(headParams.Count);
 
         foreach (var (layerName, values) in headParams)

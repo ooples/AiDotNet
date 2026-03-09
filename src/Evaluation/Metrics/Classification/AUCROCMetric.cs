@@ -122,14 +122,14 @@ public class AUCROCMetric<T> : IProbabilisticClassificationMetric<T>
             for (int i = 0; i < n; i++)
             {
                 classProbs[i] = probs[i * numClasses + c];
-                classLabels[i] = Math.Abs(NumOps.ToDouble(actuals[i]) - c) < 0.5 ? NumOps.One : NumOps.Zero;
+                classLabels[i] = NumOps.Compare(actuals[i], NumOps.FromDouble(c)) == 0 ? NumOps.One : NumOps.Zero;
             }
 
             // Check if we have both classes
             bool hasPos = false, hasNeg = false;
             for (int i = 0; i < n; i++)
             {
-                if (NumOps.ToDouble(classLabels[i]) > 0.5) hasPos = true;
+                if (NumOps.GreaterThan(classLabels[i], NumOps.FromDouble(0.5))) hasPos = true;
                 else hasNeg = true;
             }
 

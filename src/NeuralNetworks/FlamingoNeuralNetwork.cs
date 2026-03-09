@@ -461,7 +461,7 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
         }
 
         T normProduct = NumOps.Multiply(NumOps.Sqrt(norm1), NumOps.Sqrt(norm2));
-        if (NumOps.ToDouble(normProduct) < 1e-10)
+        if (NumOps.LessThan(normProduct, NumOps.FromDouble(1e-10)))
             return NumOps.Zero;
 
         return NumOps.Divide(dotProduct, normProduct);

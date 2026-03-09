@@ -101,7 +101,7 @@ internal class WavLMSER<T> : AudioClassifierBase<T>, IEmotionRecognizer<T>
         var sorted = probs.OrderByDescending(p => NumOps.ToDouble(p.Value)).ToList();
         string primary = sorted[0].Key;
         T confidence = sorted[0].Value;
-        string? secondary = sorted.Count > 1 && NumOps.ToDouble(sorted[1].Value) > 0.1 ? sorted[1].Key : null;
+        string? secondary = sorted.Count > 1 && NumOps.GreaterThan(sorted[1].Value, NumOps.FromDouble(0.1)) ? sorted[1].Key : null;
 
         return new EmotionResult<T>
         {

@@ -152,7 +152,7 @@ public class MRMR<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     {
         var result = new int[n];
         for (int i = 0; i < n; i++)
-            result[i] = NumOps.ToDouble(target[i]) >= 0.5 ? 1 : 0;
+            result[i] = NumOps.Compare(target[i], NumOps.One) == 0 ? 1 : 0;
         return result;
     }
 

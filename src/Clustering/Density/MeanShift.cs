@@ -2,8 +2,8 @@ using AiDotNet.Clustering.Base;
 using AiDotNet.Clustering.DistanceMetrics;
 using AiDotNet.Clustering.Interfaces;
 using AiDotNet.Clustering.Options;
-using AiDotNet.Clustering.SpatialIndex;
 using AiDotNet.Enums;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.Clustering.Density;
@@ -49,7 +49,7 @@ public class MeanShift<T> : ClusteringBase<T>
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
-    private double _bandwidth;
+    private T _bandwidth = MathHelper.GetNumericOperations<T>().Zero;
 
     /// <summary>
     /// Initializes a new MeanShift instance.
@@ -64,7 +64,7 @@ public class MeanShift<T> : ClusteringBase<T>
     /// <summary>
     /// Gets the bandwidth used for clustering.
     /// </summary>
-    public double Bandwidth => _bandwidth;
+    public T Bandwidth => _bandwidth;
 
     /// <inheritdoc />
     protected override ModelType GetModelType() => ModelType.Clustering;
@@ -102,37 +102,32 @@ public class MeanShift<T> : ClusteringBase<T>
         NumFeatures = d;
 
         // Estimate bandwidth if not provided
-        _bandwidth = _options.Bandwidth ?? EstimateBandwidth(x);
-
-        // Convert data to double
-        var data = new double[n, d];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < d; j++)
-            {
-                data[i, j] = NumOps.ToDouble(x[i, j]);
-            }
-        }
+        _bandwidth = NumOps.FromDouble(_options.Bandwidth ?? EstimateBandwidth(x));
+        T tolerance = NumOps.FromDouble(Options.Tolerance);
 
         // Get seeds (either binned or all points)
-        double[,] seeds;
+        T[,] seeds;
         if (_options.BinSeeding)
         {
-            seeds = GetBinnedSeeds(data, n, d);
+            seeds = GetBinnedSeeds(x, n, d);
         }
         else
         {
-            seeds = (double[,])data.Clone();
+            var seedsCopy = new T[n, d];
+            for (int i = 0; i < n; i++)
+                for (int j = 0; j < d; j++)
+                    seedsCopy[i, j] = x[i, j];
+            seeds = seedsCopy;
         }
 
         int numSeeds = seeds.GetLength(0);
 
         // Mean shift iterations for each seed
-        var convergedCenters = new List<double[]>();
+        var convergedCenters = new List<T[]>();
 
         for (int s = 0; s < numSeeds; s++)
         {
-            var center = new double[d];
+            var center = new T[d];
             for (int j = 0; j < d; j++)
             {
                 center[j] = seeds[s, j];
@@ -141,20 +136,20 @@ public class MeanShift<T> : ClusteringBase<T>
             // Iterate until convergence
             for (int iter = 0; iter < Options.MaxIterations; iter++)
             {
-                var newCenter = ComputeMeanShift(data, center, n, d);
+                var newCenter = ComputeMeanShift(x, center, n, d);
 
                 // Check convergence
-                double shift = 0;
+                T shift = NumOps.Zero;
                 for (int j = 0; j < d; j++)
                 {
-                    double diff = newCenter[j] - center[j];
-                    shift += diff * diff;
+                    T diff = NumOps.Subtract(newCenter[j], center[j]);
+                    shift = NumOps.Add(shift, NumOps.Multiply(diff, diff));
                 }
-                shift = Math.Sqrt(shift);
+                shift = NumOps.Sqrt(shift);
 
                 center = newCenter;
 
-                if (shift < Options.Tolerance)
+                if (NumOps.LessThan(shift, tolerance))
                 {
                     break;
                 }
@@ -164,7 +159,9 @@ public class MeanShift<T> : ClusteringBase<T>
         }
 
         // Merge nearby centers
-        double mergeThreshold = _options.ClusterMergeThreshold ?? _bandwidth;
+        T mergeThreshold = _options.ClusterMergeThreshold.HasValue
+            ? NumOps.FromDouble(_options.ClusterMergeThreshold.Value)
+            : _bandwidth;
         var finalCenters = MergeCenters(convergedCenters, mergeThreshold, d);
 
         NumClusters = finalCenters.Count;
@@ -175,7 +172,7 @@ public class MeanShift<T> : ClusteringBase<T>
         {
             for (int j = 0; j < d; j++)
             {
-                ClusterCenters[k, j] = NumOps.FromDouble(finalCenters[k][j]);
+                ClusterCenters[k, j] = finalCenters[k][j];
             }
         }
 
@@ -186,15 +183,15 @@ public class MeanShift<T> : ClusteringBase<T>
         for (int i = 0; i < n; i++)
         {
             var point = GetRow(x, i);
-            double minDist = double.MaxValue;
+            T minDist = NumOps.MaxValue;
             int nearestCluster = 0;
 
             for (int k = 0; k < NumClusters; k++)
             {
                 var center = GetRow(ClusterCenters, k);
-                double dist = NumOps.ToDouble(metric.Compute(point, center));
+                T dist = metric.Compute(point, center);
 
-                if (dist < minDist)
+                if (NumOps.LessThan(dist, minDist))
                 {
                     minDist = dist;
                     nearestCluster = k;
@@ -210,7 +207,6 @@ public class MeanShift<T> : ClusteringBase<T>
     private double EstimateBandwidth(Matrix<T> x)
     {
         int n = x.Rows;
-        int d = x.Columns;
         var metric = _options.DistanceMetric ?? new EuclideanDistance<T>();
 
         // Sample a subset of points for efficiency
@@ -218,7 +214,7 @@ public class MeanShift<T> : ClusteringBase<T>
         var rand = Random ?? RandomHelper.CreateSecureRandom();
         var indices = Enumerable.Range(0, n).OrderBy(_ => rand.Next()).Take(sampleSize).ToList();
 
-        // Compute pairwise distances
+        // Compute pairwise distances (convert to double for sorting/quantile selection)
         var distances = new List<double>();
         for (int i = 0; i < indices.Count; i++)
         {
@@ -238,54 +234,57 @@ public class MeanShift<T> : ClusteringBase<T>
         return distances[Math.Max(0, Math.Min(idx, distances.Count - 1))];
     }
 
-    private double[,] GetBinnedSeeds(double[,] data, int n, int d)
+    private T[,] GetBinnedSeeds(Matrix<T> data, int n, int d)
     {
         // Create bins with width = bandwidth
-        double binWidth = _bandwidth;
+        double binWidth = NumOps.ToDouble(_bandwidth);
 
         // Compute bin indices for each point
-        var binCounts = new Dictionary<string, (double[] Sum, int Count)>();
+        var binCounts = new Dictionary<string, (T[] Sum, int Count)>();
 
         for (int i = 0; i < n; i++)
         {
             var binKey = new int[d];
             for (int j = 0; j < d; j++)
             {
-                binKey[j] = (int)Math.Floor(data[i, j] / binWidth);
+                binKey[j] = (int)Math.Floor(NumOps.ToDouble(data[i, j]) / binWidth);
             }
 
             string key = string.Join(",", binKey);
 
             if (!binCounts.ContainsKey(key))
             {
-                binCounts[key] = (new double[d], 0);
+                var sumArr = new T[d];
+                for (int j = 0; j < d; j++) sumArr[j] = NumOps.Zero;
+                binCounts[key] = (sumArr, 0);
             }
 
             var (sum, count) = binCounts[key];
             for (int j = 0; j < d; j++)
             {
-                sum[j] += data[i, j];
+                sum[j] = NumOps.Add(sum[j], data[i, j]);
             }
             binCounts[key] = (sum, count + 1);
         }
 
         // Filter bins with minimum frequency and compute centroids
-        var seeds = new List<double[]>();
+        var seeds = new List<T[]>();
         foreach (var kvp in binCounts)
         {
             if (kvp.Value.Count >= _options.MinBinFrequency)
             {
-                var centroid = new double[d];
+                T countT = NumOps.FromDouble(kvp.Value.Count);
+                var centroid = new T[d];
                 for (int j = 0; j < d; j++)
                 {
-                    centroid[j] = kvp.Value.Sum[j] / kvp.Value.Count;
+                    centroid[j] = NumOps.Divide(kvp.Value.Sum[j], countT);
                 }
                 seeds.Add(centroid);
             }
         }
 
         // Convert to 2D array
-        var result = new double[seeds.Count, d];
+        var result = new T[seeds.Count, d];
         for (int i = 0; i < seeds.Count; i++)
         {
             for (int j = 0; j < d; j++)
@@ -297,54 +296,56 @@ public class MeanShift<T> : ClusteringBase<T>
         return result;
     }
 
-    private double[] ComputeMeanShift(double[,] data, double[] center, int n, int d)
+    private T[] ComputeMeanShift(Matrix<T> data, T[] center, int n, int d)
     {
-        double bandwidthSq = _bandwidth * _bandwidth;
-        var newCenter = new double[d];
-        double totalWeight = 0;
+        T bandwidthSq = NumOps.Multiply(_bandwidth, _bandwidth);
+        T halfT = NumOps.FromDouble(0.5);
+        var newCenter = new T[d];
+        T totalWeight = NumOps.Zero;
+        for (int j = 0; j < d; j++) newCenter[j] = NumOps.Zero;
 
         for (int i = 0; i < n; i++)
         {
             // Compute squared distance
-            double distSq = 0;
+            T distSq = NumOps.Zero;
             for (int j = 0; j < d; j++)
             {
-                double diff = data[i, j] - center[j];
-                distSq += diff * diff;
+                T diff = NumOps.Subtract(data[i, j], center[j]);
+                distSq = NumOps.Add(distSq, NumOps.Multiply(diff, diff));
             }
 
-            // Gaussian kernel weight
-            if (distSq <= bandwidthSq)
+            // Gaussian kernel weight (only within bandwidth)
+            if (!NumOps.GreaterThan(distSq, bandwidthSq))
             {
-                double weight = Math.Exp(-0.5 * distSq / bandwidthSq);
-                totalWeight += weight;
+                T weight = NumOps.Exp(NumOps.Negate(NumOps.Multiply(halfT, NumOps.Divide(distSq, bandwidthSq))));
+                totalWeight = NumOps.Add(totalWeight, weight);
 
                 for (int j = 0; j < d; j++)
                 {
-                    newCenter[j] += weight * data[i, j];
+                    newCenter[j] = NumOps.Add(newCenter[j], NumOps.Multiply(weight, data[i, j]));
                 }
             }
         }
 
-        if (totalWeight > 0)
+        if (NumOps.GreaterThan(totalWeight, NumOps.Zero))
         {
             for (int j = 0; j < d; j++)
             {
-                newCenter[j] /= totalWeight;
+                newCenter[j] = NumOps.Divide(newCenter[j], totalWeight);
             }
         }
         else
         {
             // No neighbors, keep current center
-            newCenter = (double[])center.Clone();
+            newCenter = (T[])center.Clone();
         }
 
         return newCenter;
     }
 
-    private List<double[]> MergeCenters(List<double[]> centers, double threshold, int d)
+    private List<T[]> MergeCenters(List<T[]> centers, T threshold, int d)
     {
-        var merged = new List<double[]>();
+        var merged = new List<T[]>();
         var used = new bool[centers.Count];
 
         for (int i = 0; i < centers.Count; i++)
@@ -352,21 +353,21 @@ public class MeanShift<T> : ClusteringBase<T>
             if (used[i]) continue;
 
             // Find all centers close to this one
-            var cluster = new List<double[]> { centers[i] };
+            var cluster = new List<T[]> { centers[i] };
             used[i] = true;
 
             for (int j = i + 1; j < centers.Count; j++)
             {
                 if (used[j]) continue;
 
-                double distSq = 0;
+                T distSq = NumOps.Zero;
                 for (int k = 0; k < d; k++)
                 {
-                    double diff = centers[i][k] - centers[j][k];
-                    distSq += diff * diff;
+                    T diff = NumOps.Subtract(centers[i][k], centers[j][k]);
+                    distSq = NumOps.Add(distSq, NumOps.Multiply(diff, diff));
                 }
 
-                if (Math.Sqrt(distSq) < threshold)
+                if (NumOps.LessThan(NumOps.Sqrt(distSq), threshold))
                 {
                     cluster.Add(centers[j]);
                     used[j] = true;
@@ -374,17 +375,20 @@ public class MeanShift<T> : ClusteringBase<T>
             }
 
             // Compute mean of cluster
-            var mean = new double[d];
+            var mean = new T[d];
+            for (int k = 0; k < d; k++) mean[k] = NumOps.Zero;
+
             foreach (var c in cluster)
             {
                 for (int k = 0; k < d; k++)
                 {
-                    mean[k] += c[k];
+                    mean[k] = NumOps.Add(mean[k], c[k]);
                 }
             }
+            T clusterCount = NumOps.FromDouble(cluster.Count);
             for (int k = 0; k < d; k++)
             {
-                mean[k] /= cluster.Count;
+                mean[k] = NumOps.Divide(mean[k], clusterCount);
             }
 
             merged.Add(mean);
@@ -404,7 +408,7 @@ public class MeanShift<T> : ClusteringBase<T>
         for (int i = 0; i < x.Rows; i++)
         {
             var point = GetRow(x, i);
-            double minDist = double.MaxValue;
+            T minDist = NumOps.MaxValue;
             int nearestCluster = 0;
 
             if (ClusterCenters is not null)
@@ -412,9 +416,9 @@ public class MeanShift<T> : ClusteringBase<T>
                 for (int k = 0; k < NumClusters; k++)
                 {
                     var center = GetRow(ClusterCenters, k);
-                    double dist = NumOps.ToDouble(metric.Compute(point, center));
+                    T dist = metric.Compute(point, center);
 
-                    if (dist < minDist)
+                    if (NumOps.LessThan(dist, minDist))
                     {
                         minDist = dist;
                         nearestCluster = k;
@@ -432,6 +436,6 @@ public class MeanShift<T> : ClusteringBase<T>
     public override Vector<T> FitPredict(Matrix<T> x)
     {
         Train(x);
-        return Labels!;
+        return Labels ?? new Vector<T>(0);
     }
 }

@@ -120,13 +120,13 @@ internal class BetaDistribution<T> : DistributionBase<T>
         // Handle edge cases at x=0 and x=1
         if (xVal == 0)
         {
-            if (a < 1) return NumOps.FromDouble(double.PositiveInfinity);
+            if (a < 1) return NumOps.MaxValue;
             if (a == 1) return NumOps.FromDouble(b); // pdf(0) = b/Beta(1,b) = b
             return Zero; // a > 1
         }
         if (xVal == 1)
         {
-            if (b < 1) return NumOps.FromDouble(double.PositiveInfinity);
+            if (b < 1) return NumOps.MaxValue;
             if (b == 1) return NumOps.FromDouble(a); // pdf(1) = a/Beta(a,1) = a
             return Zero; // b > 1
         }
@@ -140,7 +140,7 @@ internal class BetaDistribution<T> : DistributionBase<T>
     {
         double xVal = NumOps.ToDouble(x);
         if (xVal < 0 || xVal > 1)
-            return NumOps.FromDouble(double.NegativeInfinity);
+            return NumOps.MinValue;
 
         double a = NumOps.ToDouble(_alpha);
         double b = NumOps.ToDouble(_beta);
@@ -148,15 +148,15 @@ internal class BetaDistribution<T> : DistributionBase<T>
         // Handle boundary cases
         if (xVal == 0)
         {
-            if (a < 1) return NumOps.FromDouble(double.PositiveInfinity);
+            if (a < 1) return NumOps.MaxValue;
             if (a == 1) return NumOps.FromDouble(Math.Log(b));
-            return NumOps.FromDouble(double.NegativeInfinity); // a > 1
+            return NumOps.MinValue; // a > 1
         }
         if (xVal == 1)
         {
-            if (b < 1) return NumOps.FromDouble(double.PositiveInfinity);
+            if (b < 1) return NumOps.MaxValue;
             if (b == 1) return NumOps.FromDouble(Math.Log(a));
-            return NumOps.FromDouble(double.NegativeInfinity); // b > 1
+            return NumOps.MinValue; // b > 1
         }
 
         return NumOps.FromDouble((a - 1) * Math.Log(xVal) + (b - 1) * Math.Log(1 - xVal) - LogBeta(a, b));

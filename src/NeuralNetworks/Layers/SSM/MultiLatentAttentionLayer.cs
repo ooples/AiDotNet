@@ -319,7 +319,7 @@ public class MultiLatentAttentionLayer<T> : LayerBase<T>
                 {
                     // Compute attention scores for this query position (causal: s <= tq)
                     var scores = new T[tq + 1];
-                    T maxScore = NumOps.FromDouble(double.NegativeInfinity);
+                    T maxScore = NumOps.MinValue;
 
                     for (int tk = 0; tk <= tq; tk++)
                     {
@@ -332,7 +332,7 @@ public class MultiLatentAttentionLayer<T> : LayerBase<T>
                                     k[new[] { bi, tk, flatD }]));
                         }
                         scores[tk] = NumOps.Multiply(dot, scale);
-                        if (NumOps.ToDouble(scores[tk]) > NumOps.ToDouble(maxScore))
+                        if (NumOps.GreaterThan(scores[tk], maxScore))
                             maxScore = scores[tk];
                     }
 

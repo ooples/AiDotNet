@@ -1175,7 +1175,7 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
             T maxScore = scores[0];
             for (int k = 1; k < kvLen; k++)
             {
-                if (NumOps.ToDouble(scores[k]) > NumOps.ToDouble(maxScore))
+                if (NumOps.GreaterThan(scores[k], maxScore))
                     maxScore = scores[k];
             }
 
@@ -1576,7 +1576,7 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
             T maxLogit = scaledLogits[0];
             for (int i = 1; i < _vocabularySize; i++)
             {
-                if (NumOps.ToDouble(scaledLogits[i]) > NumOps.ToDouble(maxLogit))
+                if (NumOps.GreaterThan(scaledLogits[i], maxLogit))
                 {
                     maxLogit = scaledLogits[i];
                 }
@@ -1755,7 +1755,7 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
         T maxVal = avgAttention[0];
         for (int p = 1; p < avgAttention.Length; p++)
         {
-            if (NumOps.ToDouble(avgAttention[p]) > NumOps.ToDouble(maxVal))
+            if (NumOps.GreaterThan(avgAttention[p], maxVal))
             {
                 maxVal = avgAttention[p];
                 maxIdx = p;
@@ -1808,7 +1808,7 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
         T maxScore = scores.Values.First();
         foreach (var score in scores.Values)
         {
-            if (NumOps.ToDouble(score) > NumOps.ToDouble(maxScore))
+            if (NumOps.GreaterThan(score, maxScore))
                 maxScore = score;
         }
 

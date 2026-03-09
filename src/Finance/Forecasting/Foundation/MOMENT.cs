@@ -734,7 +734,7 @@ public class MOMENT<T> : TimeSeriesFoundationModelBase<T>
         var result = new Tensor<T>(series.Shape);
         for (int i = 0; i < series.Length; i++)
         {
-            if (i < mask.Length && NumOps.ToDouble(mask[i]) > 0.5)
+            if (i < mask.Length && NumOps.GreaterThan(mask[i], NumOps.FromDouble(0.5)))
             {
                 result.Data.Span[i] = series[i];
             }

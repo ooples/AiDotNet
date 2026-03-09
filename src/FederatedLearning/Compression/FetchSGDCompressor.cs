@@ -67,7 +67,7 @@ public class FetchSGDCompressor<T> : Infrastructure.FederatedLearningComponentBa
         // Initialize 2-universal hash families: h(x) = ((a*x + b) mod p) mod m
         // where a, b are random, p is a large prime, m is the table size.
         // This guarantees pairwise independence for collision bounds.
-        var rng = new Random(seed);
+        var rng = RandomHelper.CreateSeededRandom(seed);
         _hashA = new long[sketchRows];
         _hashB = new long[sketchRows];
         _signA = new long[sketchRows];

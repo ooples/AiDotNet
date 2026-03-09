@@ -349,7 +349,7 @@ public abstract class TradingAgentBase<T> : ReinforcementLearningAgentBase<T>, I
         {
             TradeHistory.Add(pnl);
             _totalTrades++;
-            if (NumOps.ToDouble(pnl) > 0)
+            if (NumOps.GreaterThan(pnl, NumOps.Zero))
             {
                 _winningTrades++;
             }
@@ -360,7 +360,7 @@ public abstract class TradingAgentBase<T> : ReinforcementLearningAgentBase<T>, I
         PortfolioHistory.Add(_portfolioValue);
 
         // Update peak for drawdown calculation
-        if (NumOps.ToDouble(_portfolioValue) > NumOps.ToDouble(_peakValue))
+        if (NumOps.GreaterThan(_portfolioValue, _peakValue))
         {
             _peakValue = _portfolioValue;
         }
@@ -403,7 +403,7 @@ public abstract class TradingAgentBase<T> : ReinforcementLearningAgentBase<T>, I
         {
             T prevValue = PortfolioHistory[i - 1];
             T currValue = PortfolioHistory[i];
-            if (NumOps.ToDouble(prevValue) > 0)
+            if (NumOps.GreaterThan(prevValue, NumOps.Zero))
             {
                 T ret = NumOps.Divide(NumOps.Subtract(currValue, prevValue), prevValue);
                 returns.Add(ret);
@@ -430,7 +430,7 @@ public abstract class TradingAgentBase<T> : ReinforcementLearningAgentBase<T>, I
         T variance = NumOps.Divide(sumSquaredDiff, NumOps.FromDouble(returns.Count - 1));
         T stdDev = NumOps.FromDouble(Math.Sqrt(NumOps.ToDouble(variance)));
 
-        if (NumOps.ToDouble(stdDev) < 1e-10) return NumOps.Zero;
+        if (NumOps.LessThan(stdDev, NumOps.FromDouble(1e-10))) return NumOps.Zero;
 
         // Calculate Sharpe ratio (annualized, assuming risk-free rate = 0)
         T riskFreeRate = NumOps.FromDouble(TradingOptions.RiskFreeRate / 252.0); // Daily rate
@@ -460,15 +460,15 @@ public abstract class TradingAgentBase<T> : ReinforcementLearningAgentBase<T>, I
 
         foreach (var value in PortfolioHistory)
         {
-            if (NumOps.ToDouble(value) > NumOps.ToDouble(peak))
+            if (NumOps.GreaterThan(value, peak))
             {
                 peak = value;
             }
 
-            if (NumOps.ToDouble(peak) > 0)
+            if (NumOps.GreaterThan(peak, NumOps.Zero))
             {
                 T drawdown = NumOps.Divide(NumOps.Subtract(peak, value), peak);
-                if (NumOps.ToDouble(drawdown) > NumOps.ToDouble(maxDrawdown))
+                if (NumOps.GreaterThan(drawdown, maxDrawdown))
                 {
                     maxDrawdown = drawdown;
                 }
@@ -491,7 +491,7 @@ public abstract class TradingAgentBase<T> : ReinforcementLearningAgentBase<T>, I
     /// </remarks>
     protected virtual T CalculateCumulativeReturn()
     {
-        if (NumOps.ToDouble(_initialCapital) <= 0) return NumOps.Zero;
+        if (!NumOps.GreaterThan(_initialCapital, NumOps.Zero)) return NumOps.Zero;
 
         return NumOps.Divide(
             NumOps.Subtract(_portfolioValue, _initialCapital),
@@ -544,10 +544,10 @@ public abstract class TradingAgentBase<T> : ReinforcementLearningAgentBase<T>, I
             T value = action[i];
             T absValue = NumOps.FromDouble(Math.Abs(NumOps.ToDouble(value)));
 
-            if (NumOps.ToDouble(absValue) > NumOps.ToDouble(maxPositionSize))
+            if (NumOps.GreaterThan(absValue, maxPositionSize))
             {
                 // Scale down to max position size
-                T sign = NumOps.ToDouble(value) >= 0 ? NumOps.One : NumOps.FromDouble(-1);
+                T sign = !NumOps.LessThan(value, NumOps.Zero) ? NumOps.One : NumOps.FromDouble(-1);
                 constrainedAction[i] = NumOps.Multiply(sign, maxPositionSize);
             }
             else
@@ -557,7 +557,7 @@ public abstract class TradingAgentBase<T> : ReinforcementLearningAgentBase<T>, I
         }
 
         // Further scale based on risk budget if needed
-        T riskMultiplier = NumOps.ToDouble(riskBudget) < 1.0 ? riskBudget : NumOps.One;
+        T riskMultiplier = NumOps.LessThan(riskBudget, NumOps.One) ? riskBudget : NumOps.One;
         for (int i = 0; i < constrainedAction.Length; i++)
         {
             constrainedAction[i] = NumOps.Multiply(constrainedAction[i], riskMultiplier);

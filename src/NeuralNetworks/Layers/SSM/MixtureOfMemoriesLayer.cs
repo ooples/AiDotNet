@@ -384,7 +384,7 @@ public class MixtureOfMemoriesLayer<T> : LayerBase<T>
                 for (int d = 1; d < dim; d++)
                 {
                     T val = logits[new[] { bi, t, d }];
-                    if (NumOps.ToDouble(val) > NumOps.ToDouble(maxVal))
+                    if (NumOps.GreaterThan(val, maxVal))
                         maxVal = val;
                 }
 

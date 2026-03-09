@@ -138,7 +138,7 @@ public class InfoNCELoss<T>
         {
             // Compute all logits: q_i · k_j / τ
             var logits = new T[batchSize];
-            T maxLogit = NumOps.FromDouble(double.MinValue);
+            T maxLogit = NumOps.MinValue;
 
             for (int j = 0; j < batchSize; j++)
             {
@@ -196,7 +196,7 @@ public class InfoNCELoss<T>
         {
             // Compute all logits: q_i · k_j / τ
             var logits = new T[batchSize];
-            T maxLogit = NumOps.FromDouble(double.MinValue);
+            T maxLogit = NumOps.MinValue;
 
             for (int j = 0; j < batchSize; j++)
             {

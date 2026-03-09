@@ -370,7 +370,7 @@ public class ABCLayer<T> : LayerBase<T>
 
                     // Step 1: Compute write scores using key against slot keys
                     var wScores = new T[_numSlots];
-                    T maxWScore = NumOps.FromDouble(double.NegativeInfinity);
+                    T maxWScore = NumOps.MinValue;
                     for (int si = 0; si < _numSlots; si++)
                     {
                         T dot = NumOps.Zero;
@@ -382,7 +382,7 @@ public class ABCLayer<T> : LayerBase<T>
                                     _slotKeys[new[] { hi, si, d }]));
                         }
                         wScores[si] = NumOps.Multiply(dot, scale);
-                        if (NumOps.ToDouble(wScores[si]) > NumOps.ToDouble(maxWScore))
+                        if (NumOps.GreaterThan(wScores[si], maxWScore))
                             maxWScore = wScores[si];
                     }
 
@@ -418,7 +418,7 @@ public class ABCLayer<T> : LayerBase<T>
 
                     // Step 4: Compute read scores using query against current slot content
                     var rScores = new T[_numSlots];
-                    T maxRScore = NumOps.FromDouble(double.NegativeInfinity);
+                    T maxRScore = NumOps.MinValue;
                     for (int si = 0; si < _numSlots; si++)
                     {
                         T dot = NumOps.Zero;
@@ -430,7 +430,7 @@ public class ABCLayer<T> : LayerBase<T>
                                     slotValues[new[] { bi, hi, si, d }]));
                         }
                         rScores[si] = NumOps.Multiply(dot, scale);
-                        if (NumOps.ToDouble(rScores[si]) > NumOps.ToDouble(maxRScore))
+                        if (NumOps.GreaterThan(rScores[si], maxRScore))
                             maxRScore = rScores[si];
                     }
 

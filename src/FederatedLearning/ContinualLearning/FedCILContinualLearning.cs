@@ -105,7 +105,7 @@ public class FedCILContinualLearning<T> : Infrastructure.FederatedLearningCompon
             throw new ArgumentException($"No prototype for class {classLabel}.", nameof(classLabel));
         }
 
-        var rng = new Random(_seed + classLabel);
+        var rng = RandomHelper.CreateSeededRandom(_seed + classLabel);
         var samples = new T[numSamples][];
 
         for (int s = 0; s < numSamples; s++)

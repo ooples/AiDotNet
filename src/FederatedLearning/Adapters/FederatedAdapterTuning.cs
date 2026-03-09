@@ -220,7 +220,7 @@ public class FederatedAdapterTuning<T> : Infrastructure.FederatedLearningCompone
         // ReLU activation.
         for (int b = 0; b < _bottleneckDim; b++)
         {
-            if (NumOps.ToDouble(hidden[b]) < 0)
+            if (NumOps.LessThan(hidden[b], NumOps.Zero))
             {
                 hidden[b] = NumOps.Zero;
             }

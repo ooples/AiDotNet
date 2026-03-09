@@ -121,13 +121,12 @@ public class ExplainableBoostingMachineRegression<T> : AsyncDecisionTreeRegressi
         int n = x.Rows;
 
         // Initialize intercept as mean of y
-        double mean = 0;
+        T mean = NumOps.Zero;
         for (int i = 0; i < n; i++)
         {
-            mean += NumOps.ToDouble(y[i]);
+            mean = NumOps.Add(mean, y[i]);
         }
-        mean /= n;
-        _intercept = NumOps.FromDouble(mean);
+        _intercept = NumOps.Divide(mean, NumOps.FromDouble(n));
 
         // Create bins for each feature
         CreateBins(x);
@@ -275,9 +274,9 @@ public class ExplainableBoostingMachineRegression<T> : AsyncDecisionTreeRegressi
             else if (b < edges.Length)
             {
                 // Middle bins: average of edges
-                double low = b > 0 ? NumOps.ToDouble(edges[b - 1]) : NumOps.ToDouble(edges[0]);
-                double high = NumOps.ToDouble(edges[b]);
-                centers[b] = NumOps.FromDouble((low + high) / 2);
+                T low = b > 0 ? edges[b - 1] : edges[0];
+                T high = edges[b];
+                centers[b] = NumOps.Divide(NumOps.Add(low, high), NumOps.FromDouble(2.0));
             }
             else
             {
@@ -374,10 +373,9 @@ public class ExplainableBoostingMachineRegression<T> : AsyncDecisionTreeRegressi
         var edges = _binEdges[featureIndex];
         if (edges.Length == 0) return 0;
 
-        double v = NumOps.ToDouble(value);
         for (int b = 0; b < edges.Length; b++)
         {
-            if (v < NumOps.ToDouble(edges[b]))
+            if (NumOps.LessThan(value, edges[b]))
             {
                 return b;
             }
@@ -392,27 +390,35 @@ public class ExplainableBoostingMachineRegression<T> : AsyncDecisionTreeRegressi
     private void UpdateShapeFunction(Matrix<T> x, Vector<T> residuals, int featureIndex, int[] sampleIndices)
     {
         int numBins = _shapeFunctions[featureIndex].Length;
+        T lr = NumOps.FromDouble(_options.LearningRate);
 
         // Accumulate gradients per bin
-        var binSums = new double[numBins];
+        var binSums = new T[numBins];
         var binCounts = new int[numBins];
+        for (int b = 0; b < numBins; b++)
+        {
+            binSums[b] = NumOps.Zero;
+        }
 
         foreach (int i in sampleIndices)
         {
             int bin = GetBinIndex(x[i, featureIndex], featureIndex);
-            binSums[bin] += NumOps.ToDouble(residuals[i]);
+            binSums[bin] = NumOps.Add(binSums[bin], residuals[i]);
             binCounts[bin]++;
         }
 
-        // Update shape function and residuals
+        // Precompute updates per bin
+        var binUpdates = new T[numBins];
         for (int b = 0; b < numBins; b++)
         {
             if (binCounts[b] >= _options.MinSamplesPerBin)
             {
-                double update = _options.LearningRate * binSums[b] / binCounts[b];
-                _shapeFunctions[featureIndex][b] = NumOps.Add(
-                    _shapeFunctions[featureIndex][b],
-                    NumOps.FromDouble(update));
+                binUpdates[b] = NumOps.Multiply(lr, NumOps.Divide(binSums[b], NumOps.FromDouble(binCounts[b])));
+                _shapeFunctions[featureIndex][b] = NumOps.Add(_shapeFunctions[featureIndex][b], binUpdates[b]);
+            }
+            else
+            {
+                binUpdates[b] = NumOps.Zero;
             }
         }
 
@@ -422,8 +428,7 @@ public class ExplainableBoostingMachineRegression<T> : AsyncDecisionTreeRegressi
             int bin = GetBinIndex(x[i, featureIndex], featureIndex);
             if (binCounts[bin] >= _options.MinSamplesPerBin)
             {
-                double update = _options.LearningRate * binSums[bin] / binCounts[bin];
-                residuals[i] = NumOps.Subtract(residuals[i], NumOps.FromDouble(update));
+                residuals[i] = NumOps.Subtract(residuals[i], binUpdates[bin]);
             }
         }
     }
@@ -509,15 +514,22 @@ public class ExplainableBoostingMachineRegression<T> : AsyncDecisionTreeRegressi
         numBins2 = Math.Min(numBins2, 32);
 
         var interactionMatrix = new Matrix<T>(numBins1, numBins2);
-        var binSums = new double[numBins1, numBins2];
+        var binSums = new T[numBins1, numBins2];
         var binCounts = new int[numBins1, numBins2];
+        for (int i1 = 0; i1 < numBins1; i1++)
+        {
+            for (int i2 = 0; i2 < numBins2; i2++)
+            {
+                binSums[i1, i2] = NumOps.Zero;
+            }
+        }
 
         // Accumulate residuals
         for (int i = 0; i < residuals.Length; i++)
         {
             int b1 = GetBinIndex(x[i, f1], f1) % numBins1;
             int b2 = GetBinIndex(x[i, f2], f2) % numBins2;
-            binSums[b1, b2] += NumOps.ToDouble(residuals[i]);
+            binSums[b1, b2] = NumOps.Add(binSums[b1, b2], residuals[i]);
             binCounts[b1, b2]++;
         }
 
@@ -528,7 +540,7 @@ public class ExplainableBoostingMachineRegression<T> : AsyncDecisionTreeRegressi
             {
                 if (binCounts[b1, b2] >= _options.MinSamplesPerBin)
                 {
-                    interactionMatrix[b1, b2] = NumOps.FromDouble(binSums[b1, b2] / binCounts[b1, b2]);
+                    interactionMatrix[b1, b2] = NumOps.Divide(binSums[b1, b2], NumOps.FromDouble(binCounts[b1, b2]));
                 }
                 else
                 {
@@ -553,7 +565,8 @@ public class ExplainableBoostingMachineRegression<T> : AsyncDecisionTreeRegressi
     /// </summary>
     private void SmoothShapeFunctions()
     {
-        double lambda = _options.RegularizationStrength;
+        T lambda = NumOps.FromDouble(_options.RegularizationStrength);
+        T divisor = NumOps.Add(NumOps.One, NumOps.Multiply(NumOps.FromDouble(2.0), lambda));
 
         for (int f = 0; f < _numFeatures; f++)
         {
@@ -563,21 +576,18 @@ public class ExplainableBoostingMachineRegression<T> : AsyncDecisionTreeRegressi
             var smoothed = new Vector<T>(_shapeFunctions[f].Length);
             for (int b = 0; b < _shapeFunctions[f].Length; b++)
             {
-                double sum = NumOps.ToDouble(_shapeFunctions[f][b]);
-                int count = 1;
+                T sum = _shapeFunctions[f][b];
 
                 if (b > 0)
                 {
-                    sum += lambda * NumOps.ToDouble(_shapeFunctions[f][b - 1]);
-                    count++;
+                    sum = NumOps.Add(sum, NumOps.Multiply(lambda, _shapeFunctions[f][b - 1]));
                 }
                 if (b < _shapeFunctions[f].Length - 1)
                 {
-                    sum += lambda * NumOps.ToDouble(_shapeFunctions[f][b + 1]);
-                    count++;
+                    sum = NumOps.Add(sum, NumOps.Multiply(lambda, _shapeFunctions[f][b + 1]));
                 }
 
-                smoothed[b] = NumOps.FromDouble(sum / (1 + 2 * lambda));
+                smoothed[b] = NumOps.Divide(sum, divisor);
             }
 
             _shapeFunctions[f] = smoothed;
@@ -592,30 +602,30 @@ public class ExplainableBoostingMachineRegression<T> : AsyncDecisionTreeRegressi
         for (int f = 0; f < _numFeatures; f++)
         {
             // Importance = range of shape function values
-            double min = double.MaxValue;
-            double max = double.MinValue;
+            T min = NumOps.MaxValue;
+            T max = NumOps.MinValue;
 
             for (int b = 0; b < _shapeFunctions[f].Length; b++)
             {
-                double v = NumOps.ToDouble(_shapeFunctions[f][b]);
-                min = Math.Min(min, v);
-                max = Math.Max(max, v);
+                T v = _shapeFunctions[f][b];
+                if (NumOps.LessThan(v, min)) min = v;
+                if (NumOps.GreaterThan(v, max)) max = v;
             }
 
-            importances[f] = NumOps.FromDouble(max - min);
+            importances[f] = NumOps.Subtract(max, min);
         }
 
         // Normalize
-        double sum = 0;
+        T sum = NumOps.Zero;
         for (int f = 0; f < _numFeatures; f++)
         {
-            sum += NumOps.ToDouble(importances[f]);
+            sum = NumOps.Add(sum, importances[f]);
         }
-        if (sum > 0)
+        if (NumOps.GreaterThan(sum, NumOps.Zero))
         {
             for (int f = 0; f < _numFeatures; f++)
             {
-                importances[f] = NumOps.Divide(importances[f], NumOps.FromDouble(sum));
+                importances[f] = NumOps.Divide(importances[f], sum);
             }
         }
 

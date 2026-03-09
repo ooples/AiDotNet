@@ -111,14 +111,15 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
         // Sort by time (required for Cox partial likelihood)
         var sortedIndices = GetSortedIndices(times);
 
-        double bestLoss = double.MaxValue;
+        T bestLoss = NumOps.MaxValue;
         int patienceCounter = 0;
+        T earlyStopThreshold = NumOps.FromDouble(1e-6);
 
         for (int epoch = 0; epoch < _options.Epochs; epoch++)
         {
             // Mini-batch training
             var shuffledIndices = ShuffleArray(Enumerable.Range(0, n).ToArray());
-            double epochLoss = 0;
+            T epochLoss = NumOps.Zero;
             int numBatches = 0;
 
             for (int b = 0; b < n; b += _options.BatchSize)
@@ -133,19 +134,19 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
                 var (loss, gradients) = ComputeCoxLossAndGradients(
                     riskScores, times, events, batchIndices, sortedIndices);
 
-                epochLoss += loss;
+                epochLoss = NumOps.Add(epochLoss, loss);
                 numBatches++;
 
                 // Backward pass and update
                 BackwardPass(x, batchIndices, hiddenOutputs, gradients);
             }
 
-            epochLoss /= numBatches;
+            epochLoss = NumOps.Divide(epochLoss, NumOps.FromDouble(numBatches));
 
             // Early stopping
             if (_options.EarlyStoppingPatience.HasValue)
             {
-                if (epochLoss < bestLoss - 1e-6)
+                if (NumOps.LessThan(epochLoss, NumOps.Subtract(bestLoss, earlyStopThreshold)))
                 {
                     bestLoss = epochLoss;
                     patienceCounter = 0;
@@ -219,28 +220,26 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
 
         if (_baselineHazardTimes == null || _baselineHazardValues == null)
         {
-            // If baseline hazard not computed, use exponential model
+            // If baseline hazard not computed, use exponential model: S(t) = exp(-exp(risk) * t)
             for (int i = 0; i < input.Rows; i++)
             {
-                double risk = NumOps.ToDouble(riskScores[i]);
+                T expRisk = NumOps.Exp(riskScores[i]);
                 for (int j = 0; j < times.Length; j++)
                 {
-                    double t = NumOps.ToDouble(times[j]);
-                    survivalProbs[i, j] = NumOps.FromDouble(Math.Exp(-Math.Exp(risk) * t));
+                    survivalProbs[i, j] = NumOps.Exp(NumOps.Negate(NumOps.Multiply(expRisk, times[j])));
                 }
             }
         }
         else
         {
-            // Use baseline cumulative hazard
+            // Use baseline cumulative hazard: S(t) = exp(-H0(t) * exp(risk))
             for (int i = 0; i < input.Rows; i++)
             {
-                double risk = Math.Exp(NumOps.ToDouble(riskScores[i]));
+                T expRisk = NumOps.Exp(riskScores[i]);
                 for (int j = 0; j < times.Length; j++)
                 {
-                    double t = NumOps.ToDouble(times[j]);
-                    double H0 = InterpolateBaselineHazard(t);
-                    survivalProbs[i, j] = NumOps.FromDouble(Math.Exp(-H0 * risk));
+                    T h0 = InterpolateBaselineHazard(times[j]);
+                    survivalProbs[i, j] = NumOps.Exp(NumOps.Negate(NumOps.Multiply(h0, expRisk)));
                 }
             }
         }
@@ -258,23 +257,25 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
         var riskScores = PredictRiskScores(input);
         var medianTimes = new Vector<T>(input.Rows);
 
+        T ln2 = NumOps.Log(NumOps.FromDouble(2.0));
+
         for (int i = 0; i < input.Rows; i++)
         {
-            double risk = Math.Exp(NumOps.ToDouble(riskScores[i]));
+            T expRisk = NumOps.Exp(riskScores[i]);
 
             // Find time where S(t) = 0.5
             if (_baselineHazardTimes != null && _baselineHazardValues != null && _baselineHazardTimes.Length > 0)
             {
-                double targetH0 = -Math.Log(0.5) / risk;  // H0 such that S = exp(-H0 * risk) = 0.5
+                // H0 such that S = exp(-H0 * risk) = 0.5 => H0 = ln(2) / exp(risk)
+                T targetH0 = NumOps.Divide(ln2, expRisk);
 
-                // Binary search for time
-                double medianTime = FindTimeForHazard(targetH0);
-                medianTimes[i] = NumOps.FromDouble(medianTime);
+                // Search for time
+                medianTimes[i] = FindTimeForHazard(targetH0);
             }
             else
             {
-                // Exponential model: median = ln(2) / (exp(risk))
-                medianTimes[i] = NumOps.FromDouble(Math.Log(2) / risk);
+                // Exponential model: median = ln(2) / exp(risk)
+                medianTimes[i] = NumOps.Divide(ln2, expRisk);
             }
         }
 
@@ -400,14 +401,14 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
                 next[i] = new Vector<T>(outputSize);
                 for (int j = 0; j < outputSize; j++)
                 {
-                    double sum = NumOps.ToDouble(b[j]);
+                    T sum = b[j];
                     for (int k = 0; k < current[i].Length; k++)
                     {
-                        sum += NumOps.ToDouble(current[i][k]) * NumOps.ToDouble(w[k, j]);
+                        sum = NumOps.Add(sum, NumOps.Multiply(current[i][k], w[k, j]));
                     }
 
-                    // Apply activation
-                    next[i][j] = NumOps.FromDouble(ApplyActivation(sum));
+                    // Apply activation (stays double - special math functions)
+                    next[i][j] = NumOps.FromDouble(ApplyActivation(NumOps.ToDouble(sum)));
                 }
             }
 
@@ -422,12 +423,12 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
 
         for (int i = 0; i < n; i++)
         {
-            double sum = NumOps.ToDouble(bOut[0]);
+            T sum = bOut[0];
             for (int k = 0; k < current[i].Length; k++)
             {
-                sum += NumOps.ToDouble(current[i][k]) * NumOps.ToDouble(wOut[k, 0]);
+                sum = NumOps.Add(sum, NumOps.Multiply(current[i][k], wOut[k, 0]));
             }
-            riskScores[i] = NumOps.FromDouble(sum);
+            riskScores[i] = sum;
         }
 
         hiddenOutputs.Add(current);
@@ -437,7 +438,7 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Computes Cox partial log-likelihood loss and gradients.
     /// </summary>
-    private (double loss, Vector<T> gradients) ComputeCoxLossAndGradients(
+    private (T loss, Vector<T> gradients) ComputeCoxLossAndGradients(
         Vector<T> riskScores, Vector<T> times, Vector<T> events,
         int[] batchIndices, int[] sortedIndices)
     {
@@ -452,39 +453,43 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
             batchIndexMap[batchIndices[i]] = i;
         }
 
-        double loss = 0;
+        T loss = NumOps.Zero;
+        T epsilon = NumOps.FromDouble(1e-10);
 
         // Process events in time order
-        double riskSum = 0;
+        T riskSum = NumOps.Zero;
         for (int i = sortedIndices.Length - 1; i >= 0; i--)
         {
             int idx = sortedIndices[i];
             if (!batchSet.Contains(idx)) continue;
 
             int batchIdx = batchIndexMap[idx];
-            double ri = NumOps.ToDouble(riskScores[batchIdx]);
-            double expRi = Math.Exp(ri);
+            T ri = riskScores[batchIdx];
+            T expRi = NumOps.Exp(ri);
 
-            riskSum += expRi;
+            riskSum = NumOps.Add(riskSum, expRi);
 
-            if (NumOps.ToDouble(events[idx]) == 1)
+            T riskSumSafe = NumOps.Add(riskSum, epsilon);
+            T expRiOverRiskSum = NumOps.Divide(expRi, riskSumSafe);
+
+            if (NumOps.Compare(events[idx], NumOps.One) == 0)
             {
-                // Event occurred
-                loss -= ri - Math.Log(riskSum + 1e-10);
+                // Event occurred: loss -= ri - log(riskSum + eps)
+                loss = NumOps.Subtract(loss, NumOps.Subtract(ri, NumOps.Log(riskSumSafe)));
 
-                // Gradient: event contribution
-                gradients[batchIdx] = NumOps.FromDouble(
-                    NumOps.ToDouble(gradients[batchIdx]) - 1 + expRi / (riskSum + 1e-10));
+                // Gradient: event contribution: grad - 1 + expRi / (riskSum + eps)
+                gradients[batchIdx] = NumOps.Add(
+                    NumOps.Subtract(gradients[batchIdx], NumOps.One),
+                    expRiOverRiskSum);
             }
             else
             {
                 // Censored - only contributes to risk set
-                gradients[batchIdx] = NumOps.FromDouble(
-                    NumOps.ToDouble(gradients[batchIdx]) + expRi / (riskSum + 1e-10));
+                gradients[batchIdx] = NumOps.Add(gradients[batchIdx], expRiOverRiskSum);
             }
         }
 
-        return (loss / n, gradients);
+        return (NumOps.Divide(loss, NumOps.FromDouble(n)), gradients);
     }
 
     /// <summary>
@@ -493,8 +498,8 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
     private void BackwardPass(Matrix<T> x, int[] batchIndices, List<Vector<T>[]> hiddenOutputs, Vector<T> gradients)
     {
         int n = batchIndices.Length;
-        double lr = _options.LearningRate / n;
-        double l2 = _options.L2Regularization;
+        T lr = NumOps.Divide(NumOps.FromDouble(_options.LearningRate), NumOps.FromDouble(n));
+        T l2 = NumOps.FromDouble(_options.L2Regularization);
 
         // Start from output layer
         var currentGrad = new Vector<T>[n];
@@ -508,7 +513,6 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
         {
             var w = _weights[layer];
             var b = _biases[layer];
-            var input = layer > 0 ? hiddenOutputs[layer - 1] : null;
 
             int inputSize = w.Rows;
             int outputSize = w.Columns;
@@ -516,34 +520,34 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
             // Gradient w.r.t. weights and biases
             for (int j = 0; j < outputSize; j++)
             {
-                double biasGrad = 0;
+                T biasGrad = NumOps.Zero;
                 for (int i = 0; i < n; i++)
                 {
-                    biasGrad += NumOps.ToDouble(currentGrad[i][j]);
+                    biasGrad = NumOps.Add(biasGrad, currentGrad[i][j]);
                 }
-                b[j] = NumOps.FromDouble(NumOps.ToDouble(b[j]) - lr * biasGrad);
+                b[j] = NumOps.Subtract(b[j], NumOps.Multiply(lr, biasGrad));
 
                 for (int k = 0; k < inputSize; k++)
                 {
-                    double wGrad = 0;
+                    T wGrad = NumOps.Zero;
                     for (int i = 0; i < n; i++)
                     {
-                        double inp;
+                        T inp;
                         if (layer == 0)
                         {
-                            inp = NumOps.ToDouble(x[batchIndices[i], k]);
+                            inp = x[batchIndices[i], k];
                         }
                         else
                         {
-                            inp = NumOps.ToDouble(hiddenOutputs[layer - 1][i][k]);
+                            inp = hiddenOutputs[layer - 1][i][k];
                         }
-                        wGrad += NumOps.ToDouble(currentGrad[i][j]) * inp;
+                        wGrad = NumOps.Add(wGrad, NumOps.Multiply(currentGrad[i][j], inp));
                     }
 
                     // L2 regularization
-                    wGrad += l2 * NumOps.ToDouble(w[k, j]);
+                    wGrad = NumOps.Add(wGrad, NumOps.Multiply(l2, w[k, j]));
 
-                    w[k, j] = NumOps.FromDouble(NumOps.ToDouble(w[k, j]) - lr * wGrad);
+                    w[k, j] = NumOps.Subtract(w[k, j], NumOps.Multiply(lr, wGrad));
                 }
             }
 
@@ -556,15 +560,15 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
                     nextGrad[i] = new Vector<T>(inputSize);
                     for (int k = 0; k < inputSize; k++)
                     {
-                        double sum = 0;
+                        T sum = NumOps.Zero;
                         for (int j = 0; j < outputSize; j++)
                         {
-                            sum += NumOps.ToDouble(currentGrad[i][j]) * NumOps.ToDouble(w[k, j]);
+                            sum = NumOps.Add(sum, NumOps.Multiply(currentGrad[i][j], w[k, j]));
                         }
 
-                        // Activation derivative
+                        // Activation derivative (stays double - special math functions)
                         double actDeriv = ApplyActivationDerivative(NumOps.ToDouble(hiddenOutputs[layer - 1][i][k]));
-                        nextGrad[i][k] = NumOps.FromDouble(sum * actDeriv);
+                        nextGrad[i][k] = NumOps.Multiply(sum, NumOps.FromDouble(actDeriv));
                     }
                 }
                 currentGrad = nextGrad;
@@ -579,81 +583,93 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
     {
         var riskScores = PredictRiskScores(x);
 
-        var uniqueTimes = new List<double>();
-        var hazardValues = new List<double>();
+        var uniqueTimes = new List<T>();
+        var hazardValues = new List<T>();
 
-        double cumulativeHazard = 0;
-        double riskSum = 0;
+        T cumulativeHazard = NumOps.Zero;
+        T riskSum = NumOps.Zero;
+        T epsilon = NumOps.FromDouble(1e-10);
 
         // Compute sum of exp(risk) for all at risk at end
         for (int i = 0; i < x.Rows; i++)
         {
-            riskSum += Math.Exp(NumOps.ToDouble(riskScores[i]));
+            riskSum = NumOps.Add(riskSum, NumOps.Exp(riskScores[i]));
         }
 
-        double lastTime = double.MinValue;
+        T lastTime = NumOps.MinValue;
 
         for (int i = 0; i < sortedIndices.Length; i++)
         {
             int idx = sortedIndices[i];
-            double t = NumOps.ToDouble(times[idx]);
-            double e = NumOps.ToDouble(events[idx]);
+            T t = times[idx];
 
-            if (e == 1 && t > lastTime)
+            if (NumOps.Compare(events[idx], NumOps.One) == 0 && NumOps.GreaterThan(t, lastTime))
             {
                 // Add to baseline hazard
-                cumulativeHazard += 1.0 / (riskSum + 1e-10);
+                cumulativeHazard = NumOps.Add(cumulativeHazard,
+                    NumOps.Divide(NumOps.One, NumOps.Add(riskSum, epsilon)));
                 uniqueTimes.Add(t);
                 hazardValues.Add(cumulativeHazard);
                 lastTime = t;
             }
 
             // Remove from risk set
-            riskSum -= Math.Exp(NumOps.ToDouble(riskScores[idx]));
+            riskSum = NumOps.Subtract(riskSum, NumOps.Exp(riskScores[idx]));
         }
 
-        var timesArr = uniqueTimes.Select(t => NumOps.FromDouble(t)).ToArray();
-        _baselineHazardTimes = new Vector<T>(timesArr);
-        var hazardArr = hazardValues.Select(h => NumOps.FromDouble(h)).ToArray();
-        _baselineHazardValues = new Vector<T>(hazardArr);
+        _baselineHazardTimes = new Vector<T>(uniqueTimes.ToArray());
+        _baselineHazardValues = new Vector<T>(hazardValues.ToArray());
     }
 
     /// <summary>
     /// Interpolates baseline hazard at a given time.
     /// </summary>
-    private double InterpolateBaselineHazard(double t)
+    private T InterpolateBaselineHazard(T t)
     {
         if (_baselineHazardTimes == null || _baselineHazardTimes.Length == 0)
-            return 0;
+            return NumOps.Zero;
 
         for (int i = 0; i < _baselineHazardTimes.Length; i++)
         {
-            if (t <= NumOps.ToDouble(_baselineHazardTimes[i]))
+            if (!NumOps.GreaterThan(t, _baselineHazardTimes[i]))
             {
-                return i > 0 ? NumOps.ToDouble(_baselineHazardValues![i - 1]) : 0;
+                if (_baselineHazardValues is null)
+                {
+                    throw new InvalidOperationException("Baseline hazard values have not been computed.");
+                }
+                return i > 0 ? _baselineHazardValues[i - 1] : NumOps.Zero;
             }
         }
 
-        return NumOps.ToDouble(_baselineHazardValues![^1]);
+        if (_baselineHazardValues is null)
+        {
+            throw new InvalidOperationException("Baseline hazard values have not been computed.");
+        }
+        return _baselineHazardValues[^1];
     }
 
     /// <summary>
     /// Finds time for a given cumulative hazard value.
     /// </summary>
-    private double FindTimeForHazard(double targetH0)
+    private T FindTimeForHazard(T targetH0)
     {
         if (_baselineHazardTimes == null || _baselineHazardTimes.Length == 0)
-            return double.PositiveInfinity;
+            return NumOps.MaxValue;
 
-        for (int i = 0; i < _baselineHazardValues!.Length; i++)
+        if (_baselineHazardValues is null)
         {
-            if (NumOps.ToDouble(_baselineHazardValues[i]) >= targetH0)
+            throw new InvalidOperationException("Baseline hazard values have not been computed.");
+        }
+
+        for (int i = 0; i < _baselineHazardValues.Length; i++)
+        {
+            if (!NumOps.LessThan(_baselineHazardValues[i], targetH0))
             {
-                return NumOps.ToDouble(_baselineHazardTimes[i]);
+                return _baselineHazardTimes[i];
             }
         }
 
-        return double.PositiveInfinity;
+        return NumOps.MaxValue;
     }
 
     /// <summary>
@@ -716,25 +732,25 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
             var firstLayerWeights = _weights[0];
             for (int f = 0; f < _numFeatures; f++)
             {
-                double sumAbsWeight = 0;
+                T sumAbsWeight = NumOps.Zero;
                 for (int j = 0; j < firstLayerWeights.Columns; j++)
                 {
-                    sumAbsWeight += Math.Abs(NumOps.ToDouble(firstLayerWeights[f, j]));
+                    sumAbsWeight = NumOps.Add(sumAbsWeight, NumOps.Abs(firstLayerWeights[f, j]));
                 }
-                importances[f] = NumOps.FromDouble(sumAbsWeight);
+                importances[f] = sumAbsWeight;
             }
         }
 
-        double sum = 0;
+        T sum = NumOps.Zero;
         for (int f = 0; f < _numFeatures; f++)
         {
-            sum += NumOps.ToDouble(importances[f]);
+            sum = NumOps.Add(sum, importances[f]);
         }
-        if (sum > 0)
+        if (NumOps.GreaterThan(sum, NumOps.Zero))
         {
             for (int f = 0; f < _numFeatures; f++)
             {
-                importances[f] = NumOps.Divide(importances[f], NumOps.FromDouble(sum));
+                importances[f] = NumOps.Divide(importances[f], sum);
             }
         }
 
@@ -799,15 +815,15 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
         }
 
         // Baseline hazard
-        writer.Write(_baselineHazardTimes != null);
-        if (_baselineHazardTimes != null)
+        writer.Write(_baselineHazardTimes is not null);
+        if (_baselineHazardTimes is not null && _baselineHazardValues is not null)
         {
             writer.Write(_baselineHazardTimes.Length);
             foreach (var t in _baselineHazardTimes)
             {
                 writer.Write(NumOps.ToDouble(t));
             }
-            foreach (var h in _baselineHazardValues!)
+            foreach (var h in _baselineHazardValues)
             {
                 writer.Write(NumOps.ToDouble(h));
             }

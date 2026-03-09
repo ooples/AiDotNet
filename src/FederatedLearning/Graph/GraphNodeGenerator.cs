@@ -258,7 +258,7 @@ public class GraphNodeGenerator<T> : FederatedLearningComponentBase<T>
             if (j == nodeIdx) continue;
 
             int adjIdx = nodeIdx * numNodes + j;
-            if (adjIdx < adjacency.Shape[0] && NumOps.ToDouble(adjacency[adjIdx]) > 0)
+            if (adjIdx < adjacency.Shape[0] && NumOps.GreaterThan(adjacency[adjIdx], NumOps.Zero))
             {
                 neighborCount++;
                 for (int d = 0; d < featureDim; d++)

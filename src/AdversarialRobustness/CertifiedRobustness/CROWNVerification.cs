@@ -1043,7 +1043,7 @@ public class CROWNVerification<T, TInput, TOutput> : ICertifiedDefense<T, TInput
     private double ComputeConfidence(Vector<T> lowerBounds, Vector<T> upperBounds, int predictedClass)
     {
         T predictedLower = lowerBounds[predictedClass];
-        T maxOtherUpper = NumOps.FromDouble(double.NegativeInfinity);
+        T maxOtherUpper = NumOps.MinValue;
 
         for (int i = 0; i < upperBounds.Length; i++)
         {

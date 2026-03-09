@@ -122,7 +122,7 @@ public class DivideAndConquerAggregationStrategy<T> : ParameterDictionaryAggrega
         }
 
         // Use round-varying seed for fresh randomness each aggregation.
-        var rng = new Random(_seed + _roundCounter++);
+        var rng = RandomHelper.CreateSeededRandom(_seed + _roundCounter++);
 
         // Generate random orthogonal projection matrix via QR decomposition of Gaussian matrix.
         int dim = Math.Min(_subspaceDimension, totalParams);

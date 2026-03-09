@@ -683,7 +683,7 @@ public class AnimateDiffModel<T> : VideoDiffusionModelBase<T>
         for (int i = 0; i < resultSpan.Length; i++)
         {
             var weight = weightSpan[i];
-            resultSpan[i] = NumOps.ToDouble(weight) > 1e-8
+            resultSpan[i] = NumOps.GreaterThan(weight, NumOps.FromDouble(1e-8))
                 ? NumOps.Divide(accSpan[i], weight)
                 : accSpan[i];
         }

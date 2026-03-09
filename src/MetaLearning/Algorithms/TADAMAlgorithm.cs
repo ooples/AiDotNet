@@ -289,7 +289,7 @@ public class TADAMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
                 NumOps.Multiply(gradients[i], NumOps.FromDouble(learningRate)));
 
             // Ensure metric scale stays positive
-            if (NumOps.ToDouble(_metricScale[i]) < 1e-6)
+            if (NumOps.LessThan(_metricScale[i], NumOps.FromDouble(1e-6)))
             {
                 _metricScale[i] = NumOps.FromDouble(1e-6);
             }
@@ -809,7 +809,7 @@ public class TADAMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
             for (int c = 1; c < numClasses; c++)
             {
                 T negDist = NumOps.Negate(distances[q, c]);
-                if (NumOps.ToDouble(negDist) > NumOps.ToDouble(maxNegDist))
+                if (NumOps.GreaterThan(negDist, maxNegDist))
                 {
                     maxNegDist = negDist;
                 }
@@ -954,7 +954,7 @@ public class TADAMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
                 for (int i = 1; i < numClasses; i++)
                 {
                     var prob = tensor.GetFlat(index * numClasses + i);
-                    if (NumOps.ToDouble(prob) > NumOps.ToDouble(maxProb))
+                    if (NumOps.GreaterThan(prob, maxProb))
                     {
                         maxProb = prob;
                         maxClass = i;

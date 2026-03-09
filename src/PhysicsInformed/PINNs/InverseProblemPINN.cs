@@ -215,7 +215,7 @@ namespace AiDotNet.PhysicsInformed.PINNs
 
             try
             {
-                T previousLoss = NumOps.FromDouble(double.MaxValue);
+                T previousLoss = NumOps.MaxValue;
                 int noImprovementCount = 0;
                 const int patience = 50;
                 const double tolerance = 1e-8;
@@ -654,7 +654,7 @@ namespace AiDotNet.PhysicsInformed.PINNs
                 }
                 else
                 {
-                    uncertainties[i] = NumOps.FromDouble(double.PositiveInfinity);
+                    uncertainties[i] = NumOps.MaxValue;
                 }
             }
 

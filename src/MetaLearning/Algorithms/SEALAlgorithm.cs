@@ -634,7 +634,7 @@ public class SEALAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
         T maxLogit = logits[0];
         for (int i = 1; i < logits.Length; i++)
         {
-            if (NumOps.ToDouble(logits[i]) > NumOps.ToDouble(maxLogit))
+            if (NumOps.GreaterThan(logits[i], maxLogit))
             {
                 maxLogit = logits[i];
             }

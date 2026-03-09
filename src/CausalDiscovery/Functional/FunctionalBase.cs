@@ -118,7 +118,7 @@ public abstract class FunctionalBase<T> : CausalDiscoveryBase<T>
             sxx = NumOps.Add(sxx, NumOps.Multiply(dx, dx));
         }
 
-        T beta = NumOps.ToDouble(sxx) > 1e-10
+        T beta = NumOps.GreaterThan(sxx, NumOps.FromDouble(1e-10))
             ? NumOps.Divide(sxy, sxx)
             : NumOps.Zero;
 
@@ -258,7 +258,7 @@ public abstract class FunctionalBase<T> : CausalDiscoveryBase<T>
                 denominator = NumOps.Add(denominator, kernel);
             }
 
-            smoothed[i] = NumOps.ToDouble(denominator) > 1e-15
+            smoothed[i] = NumOps.GreaterThan(denominator, NumOps.FromDouble(1e-15))
                 ? NumOps.Divide(numerator, denominator)
                 : NumOps.Zero;
         }
@@ -302,7 +302,7 @@ public abstract class FunctionalBase<T> : CausalDiscoveryBase<T>
                 denominator = NumOps.Add(denominator, kernel);
             }
 
-            T predicted = NumOps.ToDouble(denominator) > 1e-15
+            T predicted = NumOps.GreaterThan(denominator, NumOps.FromDouble(1e-15))
                 ? NumOps.Divide(numerator, denominator)
                 : NumOps.Zero;
             residuals[i] = NumOps.Subtract(response[i], predicted);
