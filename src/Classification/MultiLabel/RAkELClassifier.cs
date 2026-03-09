@@ -141,7 +141,7 @@ public class RAkELClassifier<T> : MultiLabelClassifierBase<T>
                 var combination = new int[labelset.Length];
                 for (int j = 0; j < labelset.Length; j++)
                 {
-                    combination[j] = NumOps.ToDouble(labels[i, labelset[j]]) > 0.5 ? 1 : 0;
+                    combination[j] = NumOps.GreaterThan(labels[i, labelset[j]], NumOps.FromDouble(0.5)) ? 1 : 0;
                 }
 
                 string key = string.Join(",", combination);
@@ -170,7 +170,7 @@ public class RAkELClassifier<T> : MultiLabelClassifierBase<T>
                     var combination = new int[labelset.Length];
                     for (int j = 0; j < labelset.Length; j++)
                     {
-                        combination[j] = NumOps.ToDouble(labels[i, labelset[j]]) > 0.5 ? 1 : 0;
+                        combination[j] = NumOps.GreaterThan(labels[i, labelset[j]], NumOps.FromDouble(0.5)) ? 1 : 0;
                     }
                     string key = string.Join(",", combination);
                     int trueClass = combinationMap[key];

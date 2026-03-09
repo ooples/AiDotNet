@@ -470,7 +470,7 @@ public class MatchingNetworksAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
         T maxVal = values[0];
         for (int i = 1; i < values.Length; i++)
         {
-            if (NumOps.ToDouble(values[i]) > NumOps.ToDouble(maxVal))
+            if (NumOps.GreaterThan(values[i], maxVal))
             {
                 maxVal = values[i];
             }
@@ -573,7 +573,7 @@ public class MatchingNetworksAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
             T maxVal = matrix[index % matrix.Rows, 0];
             for (int c = 1; c < matrix.Columns; c++)
             {
-                if (NumOps.ToDouble(matrix[index % matrix.Rows, c]) > NumOps.ToDouble(maxVal))
+                if (NumOps.GreaterThan(matrix[index % matrix.Rows, c], maxVal))
                 {
                     maxVal = matrix[index % matrix.Rows, c];
                     maxIdx = c;

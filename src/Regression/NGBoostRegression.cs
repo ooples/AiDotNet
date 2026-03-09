@@ -36,6 +36,12 @@ namespace AiDotNet.Regression;
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
 {
+    private const double MinVariance = 1e-6;
+    private const double MaxStdDevMultiplier = 4.0;
+    private const double MatrixRegularization = 1e-4;
+    private const double DeterminantThreshold = 1e-10;
+    private const double PivotThreshold = 1e-10;
+
     /// <summary>
     /// Base learners for each distribution parameter.
     /// </summary>
@@ -117,7 +123,7 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
         _trees = [];
         FeatureImportances = new Vector<T>(x.Columns);
 
-        double bestScore = double.MaxValue;
+        T bestScore = NumOps.MaxValue;
         int roundsWithoutImprovement = 0;
 
         for (int iter = 0; iter < _options.NumberOfIterations; iter++)
@@ -216,8 +222,8 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
             // Early stopping check
             if (_options.EarlyStoppingRounds.HasValue)
             {
-                double currentScore = ComputeMeanScore(currentParams, y);
-                if (currentScore < bestScore)
+                T currentScore = ComputeMeanScore(currentParams, y);
+                if (NumOps.LessThan(currentScore, bestScore))
                 {
                     bestScore = currentScore;
                     roundsWithoutImprovement = 0;
@@ -232,12 +238,6 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
                 }
             }
 
-            // Verbose output
-            if (_options.Verbose && (iter + 1) % _options.VerboseEval == 0)
-            {
-                double score = ComputeMeanScore(currentParams, y);
-                Console.WriteLine($"[{iter + 1}] {_scoringRule.Name}: {score:F6}");
-            }
         }
 
         await CalculateFeatureImportancesAsync(x.Columns);
@@ -382,44 +382,48 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// </summary>
     private IParametricDistribution<T> CreateDistribution(Vector<T> y)
     {
-        double mean = 0, variance = 0;
+        T mean = NumOps.Zero;
         for (int i = 0; i < y.Length; i++)
         {
-            mean += NumOps.ToDouble(y[i]);
+            mean = NumOps.Add(mean, y[i]);
         }
-        mean /= y.Length;
+        mean = NumOps.Divide(mean, NumOps.FromDouble(y.Length));
 
+        T variance = NumOps.Zero;
         for (int i = 0; i < y.Length; i++)
         {
-            double diff = NumOps.ToDouble(y[i]) - mean;
-            variance += diff * diff;
+            T diff = NumOps.Subtract(y[i], mean);
+            variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
         }
-        variance /= y.Length;
-        variance = Math.Max(variance, 1e-6); // Prevent zero variance
+        variance = NumOps.Divide(variance, NumOps.FromDouble(y.Length));
+        T minVariance = NumOps.FromDouble(MinVariance);
+        if (NumOps.LessThan(variance, minVariance))
+        {
+            variance = minVariance;
+        }
+
+        // Distribution construction — some use special math functions (Math.Sqrt, Math.Log)
+        // at the boundary for parameter transformations
+        double meanD = NumOps.ToDouble(mean);
+        double varianceD = NumOps.ToDouble(variance);
 
         return _options.DistributionType switch
         {
-            NGBoostDistributionType.Normal => new NormalDistribution<T>(
-                NumOps.FromDouble(mean),
-                NumOps.FromDouble(variance)),
+            NGBoostDistributionType.Normal => new NormalDistribution<T>(mean, variance),
             NGBoostDistributionType.Laplace => new LaplaceDistribution<T>(
-                NumOps.FromDouble(mean),
-                NumOps.FromDouble(Math.Sqrt(variance / 2))),
+                mean, NumOps.FromDouble(Math.Sqrt(varianceD / 2))),
             NGBoostDistributionType.StudentT => new StudentTDistribution<T>(
-                NumOps.FromDouble(mean),
-                NumOps.FromDouble(Math.Sqrt(variance)),
-                NumOps.FromDouble(4.0)),  // 4 degrees of freedom
+                mean, NumOps.Sqrt(variance), NumOps.FromDouble(MaxStdDevMultiplier)),
             NGBoostDistributionType.LogNormal => new LogNormalDistribution<T>(
-                NumOps.FromDouble(Math.Log(Math.Max(mean, 1e-6))),
-                NumOps.FromDouble(Math.Sqrt(Math.Log(1 + variance / (mean * mean + 1e-6))))),
+                NumOps.FromDouble(Math.Log(Math.Max(meanD, MinVariance))),
+                NumOps.FromDouble(Math.Sqrt(Math.Log(1 + varianceD / (meanD * meanD + MinVariance))))),
             NGBoostDistributionType.Exponential => new ExponentialDistribution<T>(
-                NumOps.FromDouble(1.0 / Math.Max(mean, 1e-6))),
+                NumOps.Divide(NumOps.One, EnsurePositive(mean))),
             NGBoostDistributionType.Gamma => new GammaDistribution<T>(
-                NumOps.FromDouble(mean * mean / variance),
-                NumOps.FromDouble(mean / variance)),
-            NGBoostDistributionType.Poisson => new PoissonDistribution<T>(
-                NumOps.FromDouble(Math.Max(mean, 1e-6))),
-            _ => new NormalDistribution<T>(NumOps.FromDouble(mean), NumOps.FromDouble(variance))
+                NumOps.Divide(NumOps.Multiply(mean, mean), variance),
+                NumOps.Divide(mean, variance)),
+            NGBoostDistributionType.Poisson => new PoissonDistribution<T>(EnsurePositive(mean)),
+            _ => new NormalDistribution<T>(mean, variance)
         };
     }
 
@@ -460,8 +464,8 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// </summary>
     private T EnsurePositive(T value)
     {
-        double v = NumOps.ToDouble(value);
-        return NumOps.FromDouble(Math.Max(v, 1e-6));
+        T minVal = NumOps.FromDouble(MinVariance);
+        return NumOps.LessThan(value, minVal) ? minVal : value;
     }
 
     /// <summary>
@@ -472,12 +476,13 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
         var naturalGrads = new Vector<T>[_numParams];
 
         // Average Fisher Information Matrix
-        var fisherAvg = new Matrix<double>(_numParams, _numParams);
+        T sampleSizeT = NumOps.FromDouble(sampleSize);
+        var fisherAvg = new Matrix<T>(_numParams, _numParams);
         for (int i = 0; i < _numParams; i++)
         {
             for (int j = 0; j < _numParams; j++)
             {
-                fisherAvg[i, j] = NumOps.ToDouble(fisherSum[i, j]) / sampleSize;
+                fisherAvg[i, j] = NumOps.Divide(fisherSum[i, j], sampleSizeT);
             }
         }
 
@@ -494,12 +499,12 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
         {
             for (int p = 0; p < _numParams; p++)
             {
-                double sum = 0;
+                T sum = NumOps.Zero;
                 for (int q = 0; q < _numParams; q++)
                 {
-                    sum += fisherInv[p, q] * NumOps.ToDouble(gradients[q][i]);
+                    sum = NumOps.Add(sum, NumOps.Multiply(fisherInv[p, q], gradients[q][i]));
                 }
-                naturalGrads[p][i] = NumOps.FromDouble(sum);
+                naturalGrads[p][i] = sum;
             }
         }
 
@@ -509,32 +514,39 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Inverts a small matrix with regularization.
     /// </summary>
-    private Matrix<double> InvertMatrix(Matrix<double> matrix)
+    private Matrix<T> InvertMatrix(Matrix<T> matrix)
     {
         int n = matrix.Rows;
+        T reg = NumOps.FromDouble(MatrixRegularization);
+        T detThreshold = NumOps.FromDouble(DeterminantThreshold);
 
         // Add small regularization for numerical stability
         for (int i = 0; i < n; i++)
         {
-            matrix[i, i] += 1e-4;
+            matrix[i, i] = NumOps.Add(matrix[i, i], reg);
         }
 
         // For small matrices (2x2 or 3x3), use analytical formulas
         if (n == 1)
         {
-            var result1 = new Matrix<double>(1, 1);
-            result1[0, 0] = 1.0 / matrix[0, 0];
+            var result1 = new Matrix<T>(1, 1);
+            result1[0, 0] = NumOps.Divide(NumOps.One, matrix[0, 0]);
             return result1;
         }
         else if (n == 2)
         {
-            double det = matrix[0, 0] * matrix[1, 1] - matrix[0, 1] * matrix[1, 0];
-            if (Math.Abs(det) < 1e-10) det = 1e-10;
-            var result2 = new Matrix<double>(2, 2);
-            result2[0, 0] = matrix[1, 1] / det;
-            result2[0, 1] = -matrix[0, 1] / det;
-            result2[1, 0] = -matrix[1, 0] / det;
-            result2[1, 1] = matrix[0, 0] / det;
+            T det = NumOps.Subtract(
+                NumOps.Multiply(matrix[0, 0], matrix[1, 1]),
+                NumOps.Multiply(matrix[0, 1], matrix[1, 0]));
+            if (NumOps.LessThan(NumOps.Abs(det), detThreshold))
+            {
+                det = detThreshold;
+            }
+            var result2 = new Matrix<T>(2, 2);
+            result2[0, 0] = NumOps.Divide(matrix[1, 1], det);
+            result2[0, 1] = NumOps.Divide(NumOps.Negate(matrix[0, 1]), det);
+            result2[1, 0] = NumOps.Divide(NumOps.Negate(matrix[1, 0]), det);
+            result2[1, 1] = NumOps.Divide(matrix[0, 0], det);
             return result2;
         }
 
@@ -545,17 +557,19 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Matrix inversion using Gaussian elimination.
     /// </summary>
-    private Matrix<double> GaussianElimination(Matrix<double> matrix, int n)
+    private Matrix<T> GaussianElimination(Matrix<T> matrix, int n)
     {
+        T pivotThreshold = NumOps.FromDouble(PivotThreshold);
+
         // Create augmented matrix [A | I]
-        var augmented = new Matrix<double>(n, 2 * n);
+        var augmented = new Matrix<T>(n, 2 * n);
         for (int i = 0; i < n; i++)
         {
             for (int j = 0; j < n; j++)
             {
                 augmented[i, j] = matrix[i, j];
             }
-            augmented[i, n + i] = 1.0;
+            augmented[i, n + i] = NumOps.One;
         }
 
         // Forward elimination
@@ -565,7 +579,7 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
             int maxRow = col;
             for (int row = col + 1; row < n; row++)
             {
-                if (Math.Abs(augmented[row, col]) > Math.Abs(augmented[maxRow, col]))
+                if (NumOps.GreaterThan(NumOps.Abs(augmented[row, col]), NumOps.Abs(augmented[maxRow, col])))
                 {
                     maxRow = row;
                 }
@@ -578,11 +592,14 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
             }
 
             // Scale pivot row
-            double pivot = augmented[col, col];
-            if (Math.Abs(pivot) < 1e-10) pivot = 1e-10;
+            T pivot = augmented[col, col];
+            if (NumOps.LessThan(NumOps.Abs(pivot), pivotThreshold))
+            {
+                pivot = pivotThreshold;
+            }
             for (int j = 0; j < 2 * n; j++)
             {
-                augmented[col, j] /= pivot;
+                augmented[col, j] = NumOps.Divide(augmented[col, j], pivot);
             }
 
             // Eliminate column
@@ -590,17 +607,17 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
             {
                 if (row != col)
                 {
-                    double factor = augmented[row, col];
+                    T factor = augmented[row, col];
                     for (int j = 0; j < 2 * n; j++)
                     {
-                        augmented[row, j] -= factor * augmented[col, j];
+                        augmented[row, j] = NumOps.Subtract(augmented[row, j], NumOps.Multiply(factor, augmented[col, j]));
                     }
                 }
             }
         }
 
         // Extract inverse
-        var inverse = new Matrix<double>(n, n);
+        var inverse = new Matrix<T>(n, n);
         for (int i = 0; i < n; i++)
         {
             for (int j = 0; j < n; j++)
@@ -622,22 +639,22 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
             return Enumerable.Range(0, n).ToArray();
         }
 
-        int sampleSize = (int)(n * _options.SubsampleRatio);
+        int sampleSize = Math.Max(1, (int)(n * _options.SubsampleRatio));
         return SamplingHelper.SampleWithoutReplacement(n, sampleSize);
     }
 
     /// <summary>
     /// Computes the mean score for the current parameter values.
     /// </summary>
-    private double ComputeMeanScore(Vector<T>[] currentParams, Vector<T> y)
+    private T ComputeMeanScore(Vector<T>[] currentParams, Vector<T> y)
     {
-        double sum = 0;
+        T sum = NumOps.Zero;
         for (int i = 0; i < y.Length; i++)
         {
             var dist = CreateDistributionFromParams(currentParams, i);
-            sum += NumOps.ToDouble(_scoringRule.Score(dist, y[i]));
+            sum = NumOps.Add(sum, _scoringRule.Score(dist, y[i]));
         }
-        return sum / y.Length;
+        return NumOps.Divide(sum, NumOps.FromDouble(y.Length));
     }
 
     /// <inheritdoc/>
@@ -675,7 +692,7 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
         {
             sum = NumOps.Add(sum, importances[i]);
         }
-        if (NumOps.ToDouble(sum) > 0)
+        if (NumOps.GreaterThan(sum, NumOps.Zero))
         {
             for (int i = 0; i < featureCount; i++)
             {

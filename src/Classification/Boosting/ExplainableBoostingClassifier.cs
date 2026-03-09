@@ -152,13 +152,13 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
             : RandomHelper.CreateSecureRandom();
 
         // Convert to binary labels
-        var yBinary = new Vector<double>(n);
+        var yBinary = new Vector<T>(n);
         T positiveClass = ClassLabels[ClassLabels.Length - 1];
         int posCount = 0;
         for (int i = 0; i < n; i++)
         {
-            yBinary[i] = NumOps.Compare(y[i], positiveClass) == 0 ? 1.0 : 0.0;
-            if (yBinary[i] == 1.0) posCount++;
+            yBinary[i] = NumOps.Compare(y[i], positiveClass) == 0 ? NumOps.One : NumOps.Zero;
+            if (NumOps.Compare(yBinary[i], NumOps.One) == 0) posCount++;
         }
 
         // Initialize intercept as log-odds of prior
@@ -190,24 +190,28 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
             sampleBins[f] = new int[n];
             for (int i = 0; i < n; i++)
             {
-                sampleBins[f][i] = GetBinIndex(NumOps.ToDouble(x[i, f]), f);
+                sampleBins[f][i] = GetBinIndex(x[i, f], f);
             }
         }
 
         // Cyclic boosting over features
-        double bestLoss = double.MaxValue;
+        T bestLoss = NumOps.MaxValue;
         int roundsWithoutImprovement = 0;
 
         // Maintain running log-odds to avoid recomputing from scratch each iteration
-        var runningLogOdds = new Vector<double>(n);
+        var runningLogOdds = new Vector<T>(n);
         for (int i = 0; i < n; i++)
         {
-            runningLogOdds[i] = NumOps.ToDouble(_intercept);
+            runningLogOdds[i] = _intercept;
             for (int f = 0; f < _numFeatures; f++)
             {
-                runningLogOdds[i] += NumOps.ToDouble(_shapeFunctions[f][sampleBins[f][i]]);
+                runningLogOdds[i] = NumOps.Add(runningLogOdds[i], _shapeFunctions[f][sampleBins[f][i]]);
             }
         }
+
+        T learningRate = NumOps.FromDouble(_options.LearningRate);
+        T l2Reg = NumOps.FromDouble(_options.L2Regularization);
+        T eps = NumOps.FromDouble(1e-10);
 
         for (int outer = 0; outer < _options.OuterBags; outer++)
         {
@@ -216,30 +220,40 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
                 // Cycle through features in round-robin fashion
                 for (int f = 0; f < _numFeatures; f++)
                 {
+                    int numBins = _binEdges[f].Length + 1;
                     // Compute gradient and hessian for each bin using running log-odds
-                    var binGradients = new double[_binEdges[f].Length + 1];
-                    var binHessians = new double[_binEdges[f].Length + 1];
+                    var binGradients = new T[numBins];
+                    var binHessians = new T[numBins];
+                    for (int b = 0; b < numBins; b++)
+                    {
+                        binGradients[b] = NumOps.Zero;
+                        binHessians[b] = NumOps.Zero;
+                    }
 
                     for (int i = 0; i < n; i++)
                     {
-                        double prob = Sigmoid(runningLogOdds[i]);
-                        double grad = yBinary[i] - prob;  // Negative gradient of log-loss
-                        double hess = prob * (1 - prob);   // Hessian
+                        T prob = Sigmoid(runningLogOdds[i]);
+                        T grad = NumOps.Subtract(yBinary[i], prob);
+                        T hess = NumOps.Multiply(prob, NumOps.Subtract(NumOps.One, prob));
 
                         int bin = sampleBins[f][i];
-                        binGradients[bin] += grad;
-                        binHessians[bin] += hess;
+                        binGradients[bin] = NumOps.Add(binGradients[bin], grad);
+                        binHessians[bin] = NumOps.Add(binHessians[bin], hess);
                     }
 
                     // Update shape function for this feature and adjust running log-odds
-                    for (int b = 0; b <= _binEdges[f].Length; b++)
+                    var binUpdates = new T[numBins];
+                    for (int b = 0; b < numBins; b++)
                     {
-                        if (binHessians[b] > 1e-10)
+                        binUpdates[b] = NumOps.Zero;
+                        if (NumOps.GreaterThan(binHessians[b], eps))
                         {
                             // Newton step with L2 regularization
-                            double update = (binGradients[b] / (binHessians[b] + _options.L2Regularization))
-                                           * _options.LearningRate;
-                            _shapeFunctions[f][b] = NumOps.Add(_shapeFunctions[f][b], NumOps.FromDouble(update));
+                            T update = NumOps.Multiply(
+                                NumOps.Divide(binGradients[b], NumOps.Add(binHessians[b], l2Reg)),
+                                learningRate);
+                            _shapeFunctions[f][b] = NumOps.Add(_shapeFunctions[f][b], update);
+                            binUpdates[b] = update;
                         }
                     }
 
@@ -247,12 +261,7 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
                     for (int i = 0; i < n; i++)
                     {
                         int bin = sampleBins[f][i];
-                        if (binHessians[bin] > 1e-10)
-                        {
-                            double update = (binGradients[bin] / (binHessians[bin] + _options.L2Regularization))
-                                           * _options.LearningRate;
-                            runningLogOdds[i] += update;
-                        }
+                        runningLogOdds[i] = NumOps.Add(runningLogOdds[i], binUpdates[bin]);
                     }
                 }
             }
@@ -260,9 +269,9 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
             // Early stopping check
             if (_options.EarlyStoppingRounds.HasValue)
             {
-                double loss = ComputeLogLoss(runningLogOdds, yBinary);
+                T loss = ComputeLogLoss(runningLogOdds, yBinary);
 
-                if (loss < bestLoss)
+                if (NumOps.LessThan(loss, bestLoss))
                 {
                     bestLoss = loss;
                     roundsWithoutImprovement = 0;
@@ -277,11 +286,6 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
                 }
             }
 
-            if (_options.Verbose && _options.VerboseEval > 0 && (outer + 1) % _options.VerboseEval == 0)
-            {
-                double loss = ComputeLogLoss(runningLogOdds, yBinary);
-                Console.WriteLine($"[{outer + 1}] Log Loss: {loss:F6}");
-            }
         }
 
         // Detect and add interaction terms if enabled
@@ -339,13 +343,13 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
 
         for (int i = 0; i < n; i++)
         {
-            double logOdds = NumOps.ToDouble(_intercept);
+            T logOdds = _intercept;
 
             // Add main effects
             for (int f = 0; f < _numFeatures; f++)
             {
-                int bin = GetBinIndex(NumOps.ToDouble(input[i, f]), f);
-                logOdds += NumOps.ToDouble(_shapeFunctions[f][bin]);
+                int bin = GetBinIndex(input[i, f], f);
+                logOdds = NumOps.Add(logOdds, _shapeFunctions[f][bin]);
             }
 
             // Add interaction effects
@@ -353,8 +357,8 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
             {
                 int f1 = kvp.Key.Item1;
                 int f2 = kvp.Key.Item2;
-                int bin1 = GetBinIndex(NumOps.ToDouble(input[i, f1]), f1);
-                int bin2 = GetBinIndex(NumOps.ToDouble(input[i, f2]), f2);
+                int bin1 = GetBinIndex(input[i, f1], f1);
+                int bin2 = GetBinIndex(input[i, f2], f2);
 
                 // Ensure we don't go out of bounds
                 int maxBin1 = kvp.Value.Rows - 1;
@@ -362,12 +366,12 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
                 bin1 = Math.Min(bin1, maxBin1);
                 bin2 = Math.Min(bin2, maxBin2);
 
-                logOdds += NumOps.ToDouble(kvp.Value[bin1, bin2]);
+                logOdds = NumOps.Add(logOdds, kvp.Value[bin1, bin2]);
             }
 
-            double prob1 = Sigmoid(logOdds);
-            probs[i, 0] = NumOps.FromDouble(1 - prob1);
-            probs[i, 1] = NumOps.FromDouble(prob1);
+            T prob1 = Sigmoid(logOdds);
+            probs[i, 0] = NumOps.Subtract(NumOps.One, prob1);
+            probs[i, 1] = prob1;
         }
 
         return probs;
@@ -389,7 +393,7 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
         // Main effects
         for (int f = 0; f < _numFeatures; f++)
         {
-            int bin = GetBinIndex(NumOps.ToDouble(sample[f]), f);
+            int bin = GetBinIndex(sample[f], f);
             contributions[$"feature_{f}"] = _shapeFunctions[f][bin];
         }
 
@@ -398,8 +402,8 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
         {
             int f1 = kvp.Key.Item1;
             int f2 = kvp.Key.Item2;
-            int bin1 = GetBinIndex(NumOps.ToDouble(sample[f1]), f1);
-            int bin2 = GetBinIndex(NumOps.ToDouble(sample[f2]), f2);
+            int bin1 = GetBinIndex(sample[f1], f1);
+            int bin2 = GetBinIndex(sample[f2], f2);
 
             int maxBin1 = kvp.Value.Rows - 1;
             int maxBin2 = kvp.Value.Columns - 1;
@@ -422,16 +426,23 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
         for (int f = 0; f < _numFeatures; f++)
         {
             // Collect unique values
-            var values = new List<double>();
+            var values = new List<T>();
             for (int i = 0; i < x.Rows; i++)
             {
-                values.Add(NumOps.ToDouble(x[i, f]));
+                values.Add(x[i, f]);
             }
-            values.Sort();
-            values = values.Distinct().ToList();
+            values.Sort((a, b) => NumOps.Compare(a, b));
+            var distinctValues = new List<T>();
+            for (int i = 0; i < values.Count; i++)
+            {
+                if (i == 0 || NumOps.Compare(values[i], values[i - 1]) != 0)
+                {
+                    distinctValues.Add(values[i]);
+                }
+            }
 
             // Create quantile-based bins
-            int numBins = Math.Min(_options.MaxBins, values.Count);
+            int numBins = Math.Min(_options.MaxBins, distinctValues.Count);
             if (numBins <= 1)
             {
                 _binEdges.Add(new Vector<T>(0));
@@ -441,23 +452,32 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
             var edges = new List<T>();
             for (int b = 1; b < numBins; b++)
             {
-                int idx = (int)((double)b / numBins * values.Count);
-                idx = Math.Max(0, Math.Min(idx, values.Count - 1));
-                edges.Add(NumOps.FromDouble(values[idx]));
+                int idx = (int)((double)b / numBins * distinctValues.Count);
+                idx = Math.Max(0, Math.Min(idx, distinctValues.Count - 1));
+                edges.Add(distinctValues[idx]);
             }
-            _binEdges.Add(new Vector<T>(edges.Distinct()));
+            // Deduplicate edges
+            var uniqueEdges = new List<T>();
+            for (int i = 0; i < edges.Count; i++)
+            {
+                if (i == 0 || NumOps.Compare(edges[i], edges[i - 1]) != 0)
+                {
+                    uniqueEdges.Add(edges[i]);
+                }
+            }
+            _binEdges.Add(new Vector<T>(uniqueEdges));
         }
     }
 
     /// <summary>
     /// Gets the bin index for a value.
     /// </summary>
-    private int GetBinIndex(double value, int featureIndex)
+    private int GetBinIndex(T value, int featureIndex)
     {
         var edges = _binEdges[featureIndex];
         for (int i = 0; i < edges.Length; i++)
         {
-            if (value < NumOps.ToDouble(edges[i]))
+            if (NumOps.LessThan(value, edges[i]))
             {
                 return i;
             }
@@ -468,17 +488,17 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
     /// <summary>
     /// Computes log-odds for all samples.
     /// </summary>
-    private Vector<double> ComputeLogOdds(Matrix<T> x, int[][] sampleBins)
+    private Vector<T> ComputeLogOdds(Matrix<T> x, int[][] sampleBins)
     {
         int n = x.Rows;
-        var logOdds = new Vector<double>(n);
+        var logOdds = new Vector<T>(n);
 
         for (int i = 0; i < n; i++)
         {
-            logOdds[i] = NumOps.ToDouble(_intercept);
+            logOdds[i] = _intercept;
             for (int f = 0; f < _numFeatures; f++)
             {
-                logOdds[i] += NumOps.ToDouble(_shapeFunctions[f][sampleBins[f][i]]);
+                logOdds[i] = NumOps.Add(logOdds[i], _shapeFunctions[f][sampleBins[f][i]]);
             }
         }
 
@@ -488,50 +508,58 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
     /// <summary>
     /// Sigmoid function.
     /// </summary>
-    private static double Sigmoid(double x)
+    private T Sigmoid(T x)
     {
-        if (x >= 0)
+        if (NumOps.GreaterThanOrEquals(x, NumOps.Zero))
         {
-            double ez = Math.Exp(-x);
-            return 1.0 / (1.0 + ez);
+            T ez = NumOps.Exp(NumOps.Negate(x));
+            return NumOps.Divide(NumOps.One, NumOps.Add(NumOps.One, ez));
         }
         else
         {
-            double ez = Math.Exp(x);
-            return ez / (1.0 + ez);
+            T ez = NumOps.Exp(x);
+            return NumOps.Divide(ez, NumOps.Add(NumOps.One, ez));
         }
     }
 
     /// <summary>
     /// Computes log loss.
     /// </summary>
-    private static double ComputeLogLoss(Vector<double> logOdds, Vector<double> yBinary)
+    private T ComputeLogLoss(Vector<T> logOdds, Vector<T> yBinary)
     {
-        double loss = 0;
+        T eps = NumOps.FromDouble(1e-10);
+        T oneMinusEps = NumOps.Subtract(NumOps.One, eps);
+        T loss = NumOps.Zero;
         for (int i = 0; i < logOdds.Length; i++)
         {
-            double p = Sigmoid(logOdds[i]);
-            p = Math.Max(1e-10, Math.Min(1 - 1e-10, p));
-            loss -= yBinary[i] * Math.Log(p) + (1 - yBinary[i]) * Math.Log(1 - p);
+            T p = Sigmoid(logOdds[i]);
+            if (NumOps.LessThan(p, eps)) p = eps;
+            if (NumOps.GreaterThan(p, oneMinusEps)) p = oneMinusEps;
+            // loss -= y * log(p) + (1 - y) * log(1 - p)
+            loss = NumOps.Subtract(loss,
+                NumOps.Add(
+                    NumOps.Multiply(yBinary[i], NumOps.Log(p)),
+                    NumOps.Multiply(NumOps.Subtract(NumOps.One, yBinary[i]),
+                        NumOps.Log(NumOps.Subtract(NumOps.One, p)))));
         }
-        return loss / logOdds.Length;
+        return NumOps.Divide(loss, NumOps.FromDouble(logOdds.Length));
     }
 
     /// <summary>
     /// Detects important pairwise interactions and trains them with cyclic boosting.
     /// </summary>
-    private void DetectInteractions(Matrix<T> x, int[][] sampleBins, Vector<double> yBinary)
+    private void DetectInteractions(Matrix<T> x, int[][] sampleBins, Vector<T> yBinary)
     {
         int n = x.Rows;
         var logOdds = ComputeLogOdds(x, sampleBins);
-        var residuals = new Vector<double>(n);
+        var residuals = new Vector<T>(n);
         for (int i = 0; i < n; i++)
         {
-            residuals[i] = yBinary[i] - Sigmoid(logOdds[i]);
+            residuals[i] = NumOps.Subtract(yBinary[i], Sigmoid(logOdds[i]));
         }
 
         // Check top feature pairs
-        var candidates = new List<(int, int, double)>();
+        var candidates = new List<(int, int, T)>();
 
         int maxFeaturesToConsider = Math.Min(_numFeatures, Math.Max(0, _options.MaxInteractionFeatures));
         if (maxFeaturesToConsider < 2)
@@ -543,13 +571,15 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
         {
             for (int f2 = f1 + 1; f2 < maxFeaturesToConsider; f2++)
             {
-                double score = ComputeInteractionScore(sampleBins[f1], sampleBins[f2], residuals);
+                T score = ComputeInteractionScore(sampleBins[f1], sampleBins[f2], residuals);
                 candidates.Add((f1, f2, score));
             }
         }
 
         // Select top interactions and initialize their terms
-        var topInteractions = candidates.OrderByDescending(c => c.Item3).Take(_options.MaxInteractions).ToList();
+        var topInteractions = candidates
+            .OrderByDescending(c => NumOps.ToDouble(c.Item3))
+            .Take(_options.MaxInteractions).ToList();
 
         foreach (var (f1, f2, _) in topInteractions)
         {
@@ -561,11 +591,15 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
         if (_interactionTerms.Count == 0) return;
 
         // Recompute running log-odds including main effects
-        var runningLogOdds = new Vector<double>(n);
+        var runningLogOdds = new Vector<T>(n);
         for (int i = 0; i < n; i++)
         {
             runningLogOdds[i] = logOdds[i];
         }
+
+        T learningRate = NumOps.FromDouble(_options.LearningRate);
+        T l2Reg = NumOps.FromDouble(_options.L2Regularization);
+        T eps = NumOps.FromDouble(1e-10);
 
         // Cyclic boosting over interaction terms (same structure as main effect training)
         for (int outer = 0; outer < _options.InnerBags; outer++)
@@ -578,30 +612,43 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
                 int numBins1 = term.Rows;
                 int numBins2 = term.Columns;
 
-                var binGradients = new double[numBins1, numBins2];
-                var binHessians = new double[numBins1, numBins2];
-
-                for (int i = 0; i < n; i++)
-                {
-                    double prob = Sigmoid(runningLogOdds[i]);
-                    double grad = yBinary[i] - prob;
-                    double hess = prob * (1 - prob);
-
-                    int b1 = Math.Min(sampleBins[f1][i], numBins1 - 1);
-                    int b2 = Math.Min(sampleBins[f2][i], numBins2 - 1);
-                    binGradients[b1, b2] += grad;
-                    binHessians[b1, b2] += hess;
-                }
-
+                var binGradients = new T[numBins1, numBins2];
+                var binHessians = new T[numBins1, numBins2];
                 for (int b1 = 0; b1 < numBins1; b1++)
                 {
                     for (int b2 = 0; b2 < numBins2; b2++)
                     {
-                        if (binHessians[b1, b2] > 1e-10)
+                        binGradients[b1, b2] = NumOps.Zero;
+                        binHessians[b1, b2] = NumOps.Zero;
+                    }
+                }
+
+                for (int i = 0; i < n; i++)
+                {
+                    T prob = Sigmoid(runningLogOdds[i]);
+                    T grad = NumOps.Subtract(yBinary[i], prob);
+                    T hess = NumOps.Multiply(prob, NumOps.Subtract(NumOps.One, prob));
+
+                    int b1 = Math.Min(sampleBins[f1][i], numBins1 - 1);
+                    int b2 = Math.Min(sampleBins[f2][i], numBins2 - 1);
+                    binGradients[b1, b2] = NumOps.Add(binGradients[b1, b2], grad);
+                    binHessians[b1, b2] = NumOps.Add(binHessians[b1, b2], hess);
+                }
+
+                var binUpdates = new T[numBins1, numBins2];
+                for (int b1 = 0; b1 < numBins1; b1++)
+                {
+                    for (int b2 = 0; b2 < numBins2; b2++)
+                    {
+                        binUpdates[b1, b2] = NumOps.Zero;
+                        if (NumOps.GreaterThan(binHessians[b1, b2], eps))
                         {
-                            double update = (binGradients[b1, b2] / (binHessians[b1, b2] + _options.L2Regularization))
-                                           * _options.LearningRate;
-                            term[b1, b2] = NumOps.Add(term[b1, b2], NumOps.FromDouble(update));
+                            T update = NumOps.Multiply(
+                                NumOps.Divide(binGradients[b1, b2],
+                                    NumOps.Add(binHessians[b1, b2], l2Reg)),
+                                learningRate);
+                            term[b1, b2] = NumOps.Add(term[b1, b2], update);
+                            binUpdates[b1, b2] = update;
                         }
                     }
                 }
@@ -611,12 +658,7 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
                 {
                     int b1 = Math.Min(sampleBins[f1][i], numBins1 - 1);
                     int b2 = Math.Min(sampleBins[f2][i], numBins2 - 1);
-                    if (binHessians[b1, b2] > 1e-10)
-                    {
-                        double update = (binGradients[b1, b2] / (binHessians[b1, b2] + _options.L2Regularization))
-                                       * _options.LearningRate;
-                        runningLogOdds[i] += update;
-                    }
+                    runningLogOdds[i] = NumOps.Add(runningLogOdds[i], binUpdates[b1, b2]);
                 }
             }
         }
@@ -625,10 +667,10 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
     /// <summary>
     /// Computes interaction score (variance reduction).
     /// </summary>
-    private static double ComputeInteractionScore(int[] bins1, int[] bins2, Vector<double> residuals)
+    private T ComputeInteractionScore(int[] bins1, int[] bins2, Vector<T> residuals)
     {
         // Group residuals by bin pair and compute variance reduction
-        var groups = new Dictionary<(int, int), List<double>>();
+        var groups = new Dictionary<(int, int), List<T>>();
         for (int i = 0; i < residuals.Length; i++)
         {
             var key = (bins1[i], bins2[i]);
@@ -639,26 +681,38 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
             groups[key].Add(residuals[i]);
         }
 
-        double totalVar = ComputeVariance(residuals);
-        double withinVar = groups.Values
-            .Where(g => g.Count > 1)
-            .Sum(g => ComputeVariance(new Vector<double>(g)) * g.Count / residuals.Length);
+        T totalVar = ComputeVariance(residuals);
+        T withinVar = NumOps.Zero;
+        foreach (var g in groups.Values)
+        {
+            if (g.Count > 1)
+            {
+                var gVec = new Vector<T>(g);
+                T gVar = ComputeVariance(gVec);
+                withinVar = NumOps.Add(withinVar,
+                    NumOps.Multiply(gVar, NumOps.FromDouble((double)g.Count / residuals.Length)));
+            }
+        }
 
-        return totalVar - withinVar;
+        return NumOps.Subtract(totalVar, withinVar);
     }
 
     /// <summary>
     /// Computes variance.
     /// </summary>
-    private static double ComputeVariance(Vector<double> values)
+    private T ComputeVariance(Vector<T> values)
     {
-        if (values.Length < 2) return 0;
-        double sum = 0;
-        for (int i = 0; i < values.Length; i++) sum += values[i];
-        double mean = sum / values.Length;
-        double sqSum = 0;
-        for (int i = 0; i < values.Length; i++) sqSum += (values[i] - mean) * (values[i] - mean);
-        return sqSum / values.Length;
+        if (values.Length < 2) return NumOps.Zero;
+        T sum = NumOps.Zero;
+        for (int i = 0; i < values.Length; i++) sum = NumOps.Add(sum, values[i]);
+        T mean = NumOps.Divide(sum, NumOps.FromDouble(values.Length));
+        T sqSum = NumOps.Zero;
+        for (int i = 0; i < values.Length; i++)
+        {
+            T diff = NumOps.Subtract(values[i], mean);
+            sqSum = NumOps.Add(sqSum, NumOps.Multiply(diff, diff));
+        }
+        return NumOps.Divide(sqSum, NumOps.FromDouble(values.Length));
     }
 
     /// <summary>
@@ -669,19 +723,19 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
         for (int f = 0; f < _numFeatures; f++)
         {
             // Compute weighted mean of shape function
-            double weightedSum = 0;
+            T weightedSum = NumOps.Zero;
             for (int i = 0; i < n; i++)
             {
-                weightedSum += NumOps.ToDouble(_shapeFunctions[f][sampleBins[f][i]]);
+                weightedSum = NumOps.Add(weightedSum, _shapeFunctions[f][sampleBins[f][i]]);
             }
-            double mean = weightedSum / n;
+            T mean = NumOps.Divide(weightedSum, NumOps.FromDouble(n));
 
             // Subtract mean and add to intercept
             for (int b = 0; b < _shapeFunctions[f].Length; b++)
             {
-                _shapeFunctions[f][b] = NumOps.Subtract(_shapeFunctions[f][b], NumOps.FromDouble(mean));
+                _shapeFunctions[f][b] = NumOps.Subtract(_shapeFunctions[f][b], mean);
             }
-            _intercept = NumOps.Add(_intercept, NumOps.FromDouble(mean));
+            _intercept = NumOps.Add(_intercept, mean);
         }
     }
 
@@ -695,15 +749,15 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
         for (int f = 0; f < _numFeatures; f++)
         {
             // Importance = range of shape function values
-            double min = double.MaxValue;
-            double max = double.MinValue;
+            T min = NumOps.MaxValue;
+            T max = NumOps.MinValue;
             for (int b = 0; b < _shapeFunctions[f].Length; b++)
             {
-                double v = NumOps.ToDouble(_shapeFunctions[f][b]);
-                min = Math.Min(min, v);
-                max = Math.Max(max, v);
+                T v = _shapeFunctions[f][b];
+                if (NumOps.LessThan(v, min)) min = v;
+                if (NumOps.GreaterThan(v, max)) max = v;
             }
-            importances[f] = NumOps.FromDouble(max - min);
+            importances[f] = NumOps.Subtract(max, min);
         }
 
         // Normalize
@@ -712,7 +766,7 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
         {
             sum = NumOps.Add(sum, importances[f]);
         }
-        if (NumOps.ToDouble(sum) > 0)
+        if (NumOps.GreaterThan(sum, NumOps.Zero))
         {
             for (int f = 0; f < _numFeatures; f++)
             {

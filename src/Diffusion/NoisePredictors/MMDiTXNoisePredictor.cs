@@ -6,6 +6,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Diffusion.NoisePredictors;
 
@@ -106,7 +107,7 @@ public class MMDiTXNoisePredictor<T> : NoisePredictorBase<T>
 
         _finalLayer = new DenseLayer<T>(_hiddenSize, patchDim, (IActivationFunction<T>?)null);
         _posEmbed = new Vector<T>(1024 * _hiddenSize);
-        var rng = seed.HasValue ? new Random(seed.Value) : new Random();
+        var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
         for (int i = 0; i < _posEmbed.Length; i++)
             _posEmbed[i] = NumOps.FromDouble(rng.NextDouble() * 0.02 - 0.01);
     }

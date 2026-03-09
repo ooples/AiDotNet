@@ -317,10 +317,9 @@ public abstract class ClassifierBase<T> : IClassifier<T>, IConfigurableModel<T>,
             return -1;
         }
 
-        double labelValue = NumOps.ToDouble(label);
         for (int i = 0; i < ClassLabels.Length; i++)
         {
-            if (Math.Abs(NumOps.ToDouble(ClassLabels[i]) - labelValue) < 1e-10)
+            if (NumOps.Compare(ClassLabels[i], label) == 0)
             {
                 return i;
             }

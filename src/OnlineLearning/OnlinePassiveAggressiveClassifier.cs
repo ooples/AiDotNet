@@ -466,7 +466,7 @@ public class OnlinePassiveAggressiveClassifier<T> : OnlineLearningModelBase<T>
             }
 
             double score = ComputeScore(xi);
-            double yLabel = NumOps.ToDouble(y[i]) > 0 ? 1.0 : -1.0;
+            double yLabel = NumOps.GreaterThan(y[i], NumOps.Zero) ? 1.0 : -1.0;
             double margin = yLabel * score;
             totalLoss += Math.Max(0, 1.0 - margin);
         }

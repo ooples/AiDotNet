@@ -226,7 +226,7 @@ public class MahalanobisDistance<T> : DistanceMetricBase<T>
             }
 
             // Check for singular matrix
-            if (Math.Abs(NumOps.ToDouble(augmented[col, col])) < 1e-10)
+            if (NumOps.LessThan(NumOps.Abs(augmented[col, col]), NumOps.FromDouble(1e-10)))
             {
                 throw new InvalidOperationException("Matrix is singular and cannot be inverted.");
             }

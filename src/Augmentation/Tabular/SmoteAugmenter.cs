@@ -185,7 +185,7 @@ public class SmoteAugmenter<T> : TabularAugmenterBase<T>
         // Validate that all minority labels have the same value
         for (int i = 1; i < minorityLabels.Length; i++)
         {
-            if (!NumOps.ToDouble(minorityLabels[i]).Equals(NumOps.ToDouble(minorityLabel)))
+            if (NumOps.Compare(minorityLabels[i], minorityLabel) != 0)
             {
                 throw new ArgumentException("All minority labels must have the same value.", nameof(minorityLabels));
             }

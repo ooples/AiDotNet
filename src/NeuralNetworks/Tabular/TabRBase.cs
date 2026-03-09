@@ -314,7 +314,7 @@ public abstract class TabRBase<T>
                 // Skip excluded indices (for leave-one-out)
                 if (excludeIndices != null && b < excludeIndices.Length && excludeIndices[b] == i)
                 {
-                    dists[i] = (i, NumOps.FromDouble(double.MaxValue));
+                    dists[i] = (i, NumOps.MaxValue);
                     continue;
                 }
 
@@ -379,7 +379,7 @@ public abstract class TabRBase<T>
         for (int b = 0; b < batchSize; b++)
         {
             // Find max for numerical stability
-            var maxScore = NumOps.FromDouble(double.MinValue);
+            var maxScore = NumOps.MinValue;
             var scores = new T[k];
 
             for (int j = 0; j < k; j++)

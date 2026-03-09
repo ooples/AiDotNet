@@ -148,7 +148,7 @@ public class CorrelationMIHybrid<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 int fBin = range > 1e-10
                     ? Math.Min(_nBins - 1, (int)((NumOps.ToDouble(data[i, j]) - minVal) / range * (_nBins - 1)))
                     : 0;
-                int tBin = NumOps.ToDouble(target[i]) >= 0.5 ? 1 : 0;
+                int tBin = NumOps.Compare(target[i], NumOps.One) == 0 ? 1 : 0;
 
                 jointCounts[fBin, tBin]++;
                 featureCounts[fBin]++;

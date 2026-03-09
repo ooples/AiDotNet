@@ -136,17 +136,17 @@ public class CURE<T> : ClusteringBase<T>
         _clusters = new List<CureCluster>();
         for (int i = 0; i < sampleN; i++)
         {
-            var point = new double[d];
+            var point = new T[d];
             for (int j = 0; j < d; j++)
             {
-                point[j] = NumOps.ToDouble(data[i, j]);
+                point[j] = data[i, j];
             }
 
             var cluster = new CureCluster
             {
                 Points = new List<int> { i },
                 Center = point,
-                Representatives = new List<double[]> { (double[])point.Clone() }
+                Representatives = new List<T[]> { (T[])point.Clone() }
             };
             _clusters.Add(cluster);
         }
@@ -207,10 +207,10 @@ public class CURE<T> : ClusteringBase<T>
             {
                 if (!sampledSet.Contains(i))
                 {
-                    var point = new double[d];
+                    var point = new T[d];
                     for (int j = 0; j < d; j++)
                     {
-                        point[j] = NumOps.ToDouble(x[i, j]);
+                        point[j] = x[i, j];
                     }
 
                     int nearestCluster = FindNearestCluster(point);
@@ -246,10 +246,10 @@ public class CURE<T> : ClusteringBase<T>
 
         for (int i = 0; i < n; i++)
         {
-            var point = new double[d];
+            var point = new T[d];
             for (int j = 0; j < d; j++)
             {
-                point[j] = NumOps.ToDouble(x[i, j]);
+                point[j] = x[i, j];
             }
 
             int nearestCluster = FindNearestCluster(point);
@@ -262,14 +262,14 @@ public class CURE<T> : ClusteringBase<T>
     private (int, int) FindClosestClusters()
     {
         int bestI = -1, bestJ = -1;
-        double minDistance = double.MaxValue;
+        T minDistance = NumOps.MaxValue;
 
         for (int i = 0; i < _clusters!.Count; i++)
         {
             for (int j = i + 1; j < _clusters.Count; j++)
             {
-                double dist = ComputeClusterDistance(_clusters[i], _clusters[j]);
-                if (dist < minDistance)
+                T dist = ComputeClusterDistance(_clusters[i], _clusters[j]);
+                if (NumOps.LessThan(dist, minDistance))
                 {
                     minDistance = dist;
                     bestI = i;
@@ -281,34 +281,34 @@ public class CURE<T> : ClusteringBase<T>
         return (bestI, bestJ);
     }
 
-    private double ComputeClusterDistance(CureCluster c1, CureCluster c2)
+    private T ComputeClusterDistance(CureCluster c1, CureCluster c2)
     {
         // Minimum distance between any pair of representatives
-        double minDist = double.MaxValue;
+        T minDist = NumOps.MaxValue;
 
         foreach (var rep1 in c1.Representatives)
         {
             foreach (var rep2 in c2.Representatives)
             {
-                double dist = ComputeDistance(rep1, rep2);
-                minDist = Math.Min(minDist, dist);
+                T dist = ComputeDistance(rep1, rep2);
+                if (NumOps.LessThan(dist, minDist))
+                    minDist = dist;
             }
         }
 
         return minDist;
     }
 
-    private double ComputeDistance(double[] a, double[] b)
+    private T ComputeDistance(T[] a, T[] b)
     {
-        // Convert to Vector<T> and use the configured distance metric
         var vecA = new Vector<T>(a.Length);
         var vecB = new Vector<T>(b.Length);
         for (int i = 0; i < a.Length; i++)
         {
-            vecA[i] = NumOps.FromDouble(a[i]);
-            vecB[i] = NumOps.FromDouble(b[i]);
+            vecA[i] = a[i];
+            vecB[i] = b[i];
         }
-        return NumOps.ToDouble(_distanceMetric.Compute(vecA, vecB));
+        return _distanceMetric.Compute(vecA, vecB);
     }
 
     private CureCluster MergeClusters(CureCluster c1, CureCluster c2, Matrix<T> data)
@@ -320,29 +320,32 @@ public class CURE<T> : ClusteringBase<T>
         mergedPoints.AddRange(c2.Points);
 
         // Compute new center
-        var center = new double[d];
+        var center = new T[d];
+        for (int j = 0; j < d; j++) center[j] = NumOps.Zero;
         foreach (int idx in mergedPoints)
         {
             for (int j = 0; j < d; j++)
             {
-                center[j] += NumOps.ToDouble(data[idx, j]);
+                center[j] = NumOps.Add(center[j], data[idx, j]);
             }
         }
+        T countT = NumOps.FromDouble(mergedPoints.Count);
         for (int j = 0; j < d; j++)
         {
-            center[j] /= mergedPoints.Count;
+            center[j] = NumOps.Divide(center[j], countT);
         }
 
         // Select representatives using farthest-point heuristic
         var representatives = SelectRepresentatives(mergedPoints, data, center);
 
         // Shrink representatives toward center
+        T shrinkFactor = NumOps.FromDouble(_options.ShrinkFactor);
         for (int i = 0; i < representatives.Count; i++)
         {
             for (int j = 0; j < d; j++)
             {
-                representatives[i][j] = representatives[i][j] +
-                    _options.ShrinkFactor * (center[j] - representatives[i][j]);
+                representatives[i][j] = NumOps.Add(representatives[i][j],
+                    NumOps.Multiply(shrinkFactor, NumOps.Subtract(center[j], representatives[i][j])));
             }
         }
 
@@ -354,11 +357,12 @@ public class CURE<T> : ClusteringBase<T>
         };
     }
 
-    private List<double[]> SelectRepresentatives(List<int> points, Matrix<T> data, double[] center)
+    private List<T[]> SelectRepresentatives(List<int> points, Matrix<T> data, T[] center)
     {
         int d = data.Columns;
         int numReps = Math.Min(_options.NumRepresentatives, points.Count);
-        var representatives = new List<double[]>();
+        var representatives = new List<T[]>();
+        T epsilon = NumOps.FromDouble(1e-10);
 
         if (numReps == 0)
         {
@@ -367,18 +371,18 @@ public class CURE<T> : ClusteringBase<T>
 
         // Start with point farthest from center
         int farthestIdx = -1;
-        double maxDist = -1;
+        T maxDist = NumOps.Negate(NumOps.One);
 
         foreach (int idx in points)
         {
-            var point = new double[d];
+            var point = new T[d];
             for (int j = 0; j < d; j++)
             {
-                point[j] = NumOps.ToDouble(data[idx, j]);
+                point[j] = data[idx, j];
             }
 
-            double dist = ComputeDistance(point, center);
-            if (dist > maxDist)
+            T dist = ComputeDistance(point, center);
+            if (NumOps.GreaterThan(dist, maxDist))
             {
                 maxDist = dist;
                 farthestIdx = idx;
@@ -387,10 +391,10 @@ public class CURE<T> : ClusteringBase<T>
 
         if (farthestIdx >= 0)
         {
-            var point = new double[d];
+            var point = new T[d];
             for (int j = 0; j < d; j++)
             {
-                point[j] = NumOps.ToDouble(data[farthestIdx, j]);
+                point[j] = data[farthestIdx, j];
             }
             representatives.Add(point);
         }
@@ -399,21 +403,21 @@ public class CURE<T> : ClusteringBase<T>
         while (representatives.Count < numReps)
         {
             int nextIdx = -1;
-            double maxMinDist = -1;
+            T maxMinDist = NumOps.Negate(NumOps.One);
 
             foreach (int idx in points)
             {
                 // Skip if already a representative
                 bool isRep = false;
-                var point = new double[d];
+                var point = new T[d];
                 for (int j = 0; j < d; j++)
                 {
-                    point[j] = NumOps.ToDouble(data[idx, j]);
+                    point[j] = data[idx, j];
                 }
 
                 foreach (var rep in representatives)
                 {
-                    if (ComputeDistance(point, rep) < 1e-10)
+                    if (NumOps.LessThan(ComputeDistance(point, rep), epsilon))
                     {
                         isRep = true;
                         break;
@@ -423,14 +427,15 @@ public class CURE<T> : ClusteringBase<T>
                 if (isRep) continue;
 
                 // Find minimum distance to any existing representative
-                double minDist = double.MaxValue;
+                T minDist = NumOps.MaxValue;
                 foreach (var rep in representatives)
                 {
-                    double dist = ComputeDistance(point, rep);
-                    minDist = Math.Min(minDist, dist);
+                    T dist = ComputeDistance(point, rep);
+                    if (NumOps.LessThan(dist, minDist))
+                        minDist = dist;
                 }
 
-                if (minDist > maxMinDist)
+                if (NumOps.GreaterThan(minDist, maxMinDist))
                 {
                     maxMinDist = minDist;
                     nextIdx = idx;
@@ -439,10 +444,10 @@ public class CURE<T> : ClusteringBase<T>
 
             if (nextIdx >= 0)
             {
-                var point = new double[d];
+                var point = new T[d];
                 for (int j = 0; j < d; j++)
                 {
-                    point[j] = NumOps.ToDouble(data[nextIdx, j]);
+                    point[j] = data[nextIdx, j];
                 }
                 representatives.Add(point);
             }
@@ -455,17 +460,17 @@ public class CURE<T> : ClusteringBase<T>
         return representatives;
     }
 
-    private int FindNearestCluster(double[] point)
+    private int FindNearestCluster(T[] point)
     {
         int nearest = 0;
-        double minDist = double.MaxValue;
+        T minDist = NumOps.MaxValue;
 
         for (int i = 0; i < _clusters!.Count; i++)
         {
             foreach (var rep in _clusters[i].Representatives)
             {
-                double dist = ComputeDistance(point, rep);
-                if (dist < minDist)
+                T dist = ComputeDistance(point, rep);
+                if (NumOps.LessThan(dist, minDist))
                 {
                     minDist = dist;
                     nearest = i;
@@ -546,7 +551,7 @@ public class CURE<T> : ClusteringBase<T>
     private class CureCluster
     {
         public List<int> Points { get; set; } = new List<int>();
-        public double[] Center { get; set; } = Array.Empty<double>();
-        public List<double[]> Representatives { get; set; } = new List<double[]>();
+        public T[] Center { get; set; } = Array.Empty<T>();
+        public List<T[]> Representatives { get; set; } = new List<T[]>();
     }
 }

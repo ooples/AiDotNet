@@ -125,7 +125,7 @@ public abstract class MultiLabelClassifierBase<T> : IMultiLabelClassifier<T>, IC
         {
             for (int l = 0; l < NumLabels; l++)
             {
-                predictions[i, l] = NumOps.ToDouble(probabilities[i, l]) > 0.5 ? NumOps.One : NumOps.Zero;
+                predictions[i, l] = NumOps.GreaterThan(probabilities[i, l], NumOps.FromDouble(0.5)) ? NumOps.One : NumOps.Zero;
             }
         }
 

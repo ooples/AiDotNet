@@ -538,7 +538,7 @@ public class LabelPowerset<T> : MultiLabelClassifierBase<T>
             for (int j = 0; j < target.Columns; j++)
             {
                 // Use >= 0.5 for consistency with GetLabelKey
-                labels[j] = NumOps.ToDouble(target[i, j]) >= 0.5;
+                labels[j] = NumOps.Compare(target[i, j], NumOps.One) == 0;
             }
 
             var key = string.Join(",", labels.Select(l => l ? "1" : "0"));

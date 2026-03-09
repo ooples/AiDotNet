@@ -75,7 +75,7 @@ public class MLMI<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         var binaryLabels = new int[n, numLabels];
         for (int i = 0; i < n; i++)
             for (int l = 0; l < numLabels; l++)
-                binaryLabels[i, l] = NumOps.ToDouble(labels[i, l]) > 0.5 ? 1 : 0;
+                binaryLabels[i, l] = NumOps.GreaterThan(labels[i, l], NumOps.FromDouble(0.5)) ? 1 : 0;
 
         // Compute mutual information for each feature
         for (int j = 0; j < p; j++)

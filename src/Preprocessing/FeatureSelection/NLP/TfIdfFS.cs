@@ -71,7 +71,7 @@ public class TfIdfFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         {
             for (int i = 0; i < n; i++)
             {
-                if (NumOps.ToDouble(data[i, j]) > 0)
+                if (NumOps.GreaterThan(data[i, j], NumOps.Zero))
                     docFreq[j]++;
             }
         }

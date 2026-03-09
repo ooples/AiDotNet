@@ -251,7 +251,7 @@ public class FedKDCompressor<T> : Infrastructure.FederatedLearningComponentBase<
                 // In a real system, this would use backpropagation.
                 double epsilon = 1e-5;
                 int gradSamples = Math.Min(currentParams.Length, 50); // Subsample for efficiency.
-                var rng = new Random(step * aggregatedSoftLabels.Length + s);
+                var rng = RandomHelper.CreateSeededRandom(step * aggregatedSoftLabels.Length + s);
 
                 for (int g = 0; g < gradSamples; g++)
                 {

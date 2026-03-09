@@ -530,7 +530,7 @@ public class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         var max = logits[0];
         for (int i = 1; i < logits.Length; i++)
-            if (NumOps.ToDouble(logits[i]) > NumOps.ToDouble(max))
+            if (NumOps.GreaterThan(logits[i], max))
                 max = logits[i];
 
         var expSum = NumOps.Zero;
@@ -554,7 +554,7 @@ public class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>
         T maxVal = actionVector[0];
         for (int i = 1; i < actionVector.Length; i++)
         {
-            if (NumOps.ToDouble(actionVector[i]) > NumOps.ToDouble(maxVal))
+            if (NumOps.GreaterThan(actionVector[i], maxVal))
             {
                 maxVal = actionVector[i];
                 maxIdx = i;

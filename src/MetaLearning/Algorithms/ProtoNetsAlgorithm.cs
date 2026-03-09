@@ -536,7 +536,7 @@ public class ProtoNetsAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
             T maxDistance = scaledDistances[q, 0];
             for (int c = 1; c < numClasses; c++)
             {
-                if (NumOps.ToDouble(scaledDistances[q, c]) > NumOps.ToDouble(maxDistance))
+                if (NumOps.GreaterThan(scaledDistances[q, c], maxDistance))
                 {
                     maxDistance = scaledDistances[q, c];
                 }
@@ -667,7 +667,7 @@ public class ProtoNetsAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
             T norm = NumOps.FromDouble(Math.Sqrt(NumOps.ToDouble(sumSquares)));
 
             // Normalize if norm is not zero
-            if (NumOps.ToDouble(norm) > 1e-8)
+            if (NumOps.GreaterThan(norm, NumOps.FromDouble(1e-8)))
             {
                 for (int j = 0; j < features.Columns; j++)
                 {
@@ -767,7 +767,7 @@ public class ProtoNetsAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
                     for (int c = 1; c < tensor.Shape[1]; c++)
                     {
                         T val = tensor[new int[] { index, c }];
-                        if (NumOps.ToDouble(val) > NumOps.ToDouble(maxVal))
+                        if (NumOps.GreaterThan(val, maxVal))
                         {
                             maxVal = val;
                             maxIdx = c;
@@ -791,7 +791,7 @@ public class ProtoNetsAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
                 T maxVal = matrix[index, 0];
                 for (int c = 1; c < matrix.Columns; c++)
                 {
-                    if (NumOps.ToDouble(matrix[index, c]) > NumOps.ToDouble(maxVal))
+                    if (NumOps.GreaterThan(matrix[index, c], maxVal))
                     {
                         maxVal = matrix[index, c];
                         maxIdx = c;

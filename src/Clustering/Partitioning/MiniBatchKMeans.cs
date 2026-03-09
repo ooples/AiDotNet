@@ -113,7 +113,7 @@ public class MiniBatchKMeans<T> : ClusteringBase<T>
 
         Matrix<T>? bestCenters = null;
         Vector<T>? bestLabels = null;
-        T bestInertia = NumOps.FromDouble(double.MaxValue);
+        T bestInertia = NumOps.MaxValue;
 
         int numInits = _options.InitMethod == KMeansInitMethod.Custom ? 1 : _options.NumInitializations;
 
@@ -121,7 +121,7 @@ public class MiniBatchKMeans<T> : ClusteringBase<T>
         {
             var (centers, labels, inertia, iterations) = FitSingle(x);
 
-            if (NumOps.ToDouble(inertia) < NumOps.ToDouble(bestInertia))
+            if (NumOps.LessThan(inertia, bestInertia))
             {
                 bestCenters = centers;
                 bestLabels = labels;
@@ -188,7 +188,7 @@ public class MiniBatchKMeans<T> : ClusteringBase<T>
         var centers = InitializeCenters(initData);
         _centerCounts = new int[_options.NumClusters];
 
-        T prevInertia = NumOps.FromDouble(double.MaxValue);
+        T prevInertia = NumOps.MaxValue;
         int noImprovementCount = 0;
         int iterations = 0;
 

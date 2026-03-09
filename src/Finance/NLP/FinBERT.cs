@@ -15,7 +15,8 @@ using AiDotNet.Tensors;
 using AiDotNet.Tensors.Helpers;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
-
+
+
 using AiDotNet.Finance.Base;
 namespace AiDotNet.Finance.NLP;
 
@@ -610,7 +611,7 @@ public class FinBERT<T> : FinancialNLPModelBase<T>
                 string className = j < _sentimentClasses.Length ? _sentimentClasses[j] : $"class_{j}";
                 classProbabilities[className] = probVector[j];
 
-                if (NumOps.ToDouble(probVector[j]) > NumOps.ToDouble(maxProb))
+                if (NumOps.GreaterThan(probVector[j], maxProb))
                 {
                     maxProb = probVector[j];
                     maxIdx = j;

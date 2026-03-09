@@ -1,5 +1,6 @@
 using AiDotNet.Diffusion.Control;
 using AiDotNet.Models;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Diffusion.Preprocessing;
 
@@ -57,7 +58,7 @@ public class ShufflePreprocessor<T> : DiffusionPreprocessorBase<T>
             int totalPatches = patchRows * patchCols;
 
             // Create shuffled indices
-            var rng = new Random(_seed + b);
+            var rng = RandomHelper.CreateSeededRandom(_seed + b);
             var indices = new int[totalPatches];
             for (int i = 0; i < totalPatches; i++) indices[i] = i;
             for (int i = totalPatches - 1; i > 0; i--)

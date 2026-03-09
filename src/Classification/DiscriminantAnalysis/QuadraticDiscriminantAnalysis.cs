@@ -456,7 +456,7 @@ public class QuadraticDiscriminantAnalysis<T> : ProbabilisticClassifierBase<T>
 
         for (int i = 0; i < input.Rows; i++)
         {
-            T maxLogProb = NumOps.FromDouble(double.NegativeInfinity);
+            T maxLogProb = NumOps.MinValue;
 
             for (int c = 0; c < NumClasses; c++)
             {

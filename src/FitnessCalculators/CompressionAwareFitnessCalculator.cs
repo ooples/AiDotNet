@@ -171,7 +171,7 @@ public class CompressionAwareFitnessCalculator<T, TInput, TOutput> : IFitnessCal
     /// <returns>True if current fitness is better than best fitness.</returns>
     public bool IsBetterFitness(T currentFitness, T bestFitness)
     {
-        return NumOps.ToDouble(currentFitness) > NumOps.ToDouble(bestFitness);
+        return NumOps.GreaterThan(currentFitness, bestFitness);
     }
 
     /// <summary>

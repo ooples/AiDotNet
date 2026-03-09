@@ -318,7 +318,7 @@ public class SubgraphFederatedTrainer<T> : FederatedLearningComponentBase<T>, IF
 
         for (int i = 0; i < totalElements; i++)
         {
-            if (NumOps.ToDouble(adjacency[i]) > 0)
+            if (NumOps.GreaterThan(adjacency[i], NumOps.Zero))
             {
                 edgeCount++;
             }
