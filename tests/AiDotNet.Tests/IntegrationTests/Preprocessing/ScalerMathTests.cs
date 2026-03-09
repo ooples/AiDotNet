@@ -233,40 +233,39 @@ public class ScalerMathTests
     #region Cross-Scaler Consistency
 
     [Fact]
-    public void StandardScaler_TransformDoesNotModifyOriginalCopy()
+    public void StandardScaler_TransformDoesNotMutateUnrelatedData()
     {
-        var original = CreateKnownData();
-        var backup = CloneMatrix(original);
-        var copy = CloneMatrix(original);
+        var data = CreateKnownData();
+        var backup = CloneMatrix(data);
 
         var scaler = new StandardScaler<double>();
-        scaler.Fit(copy);
-        scaler.Transform(copy);
+        scaler.Fit(data);
+        var transformed = scaler.Transform(data);
 
-        // Verify the original matrix wasn't mutated by transforming the copy
-        for (int i = 0; i < original.Rows; i++)
-        {
-            for (int j = 0; j < original.Columns; j++)
-            {
-                Assert.Equal(backup[i, j], original[i, j], precision: 15);
-            }
-        }
-
-        // Also verify the copy was actually transformed (differs from original)
+        // Verify the transformed result differs from original (scaler did something)
         bool anyDifferent = false;
-        for (int i = 0; i < copy.Rows; i++)
+        for (int i = 0; i < transformed.Rows && !anyDifferent; i++)
         {
-            for (int j = 0; j < copy.Columns; j++)
+            for (int j = 0; j < transformed.Columns; j++)
             {
-                if (Math.Abs(copy[i, j] - original[i, j]) > 1e-10)
+                if (Math.Abs(transformed[i, j] - backup[i, j]) > 1e-10)
                 {
                     anyDifferent = true;
                     break;
                 }
             }
-            if (anyDifferent) break;
         }
-        Assert.True(anyDifferent, "Transform should have modified the copy");
+        Assert.True(anyDifferent, "StandardScaler.Transform should produce different output from the raw input");
+
+        // Verify inverse transform recovers the original data
+        var recovered = scaler.InverseTransform(transformed);
+        for (int i = 0; i < recovered.Rows; i++)
+        {
+            for (int j = 0; j < recovered.Columns; j++)
+            {
+                Assert.Equal(backup[i, j], recovered[i, j], precision: 10);
+            }
+        }
     }
 
     #endregion

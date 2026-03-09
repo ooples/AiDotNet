@@ -56,21 +56,30 @@ public class ClusteringMathTests
     }
 
     [Fact]
-    public void KMeans_PredictionDeterminism_SameInputSameOutput()
+    public void KMeans_DeterministicTraining_SameDataSameResult()
     {
-        var data = CreateClusteredData(
+        var data1 = CreateClusteredData(
             clusterCenters: new double[,] { { 0, 0 }, { 10, 0 } },
             pointsPerCluster: 30,
             spread: 1.0,
             seed: 42);
 
-        var kmeans = new KMeans<double>(new KMeansOptions<double> { NumClusters = 2 });
-        kmeans.Train(data, new Vector<double>(data.Rows));
+        var data2 = CreateClusteredData(
+            clusterCenters: new double[,] { { 0, 0 }, { 10, 0 } },
+            pointsPerCluster: 30,
+            spread: 1.0,
+            seed: 42);
 
-        var pred1 = kmeans.Predict(data);
-        var pred2 = kmeans.Predict(data);
+        var kmeans1 = new KMeans<double>(new KMeansOptions<double> { NumClusters = 2 });
+        kmeans1.Train(data1, new Vector<double>(data1.Rows));
 
-        // Same model, same data → same predictions
+        var kmeans2 = new KMeans<double>(new KMeansOptions<double> { NumClusters = 2 });
+        kmeans2.Train(data2, new Vector<double>(data2.Rows));
+
+        var pred1 = kmeans1.Predict(data1);
+        var pred2 = kmeans2.Predict(data2);
+
+        // Two independently trained models on the same data should produce the same assignments
         for (int i = 0; i < pred1.Length; i++)
         {
             Assert.Equal(pred1[i], pred2[i]);

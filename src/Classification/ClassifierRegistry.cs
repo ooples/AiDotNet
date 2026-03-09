@@ -181,7 +181,7 @@ public static class ClassifierRegistry<T>
             EnsureInitialized();
             lock (_lock)
             {
-                return _registry.Keys.ToList().AsReadOnly();
+                return new List<string>(_registry.Keys);
             }
         }
     }
