@@ -777,36 +777,10 @@ public class LabelPropagation<T> : SemiSupervisedClassifierBase<T>
     }
 
     private static Dictionary<string, double> ExtractKernelParams(IKernelFunction<T> kernel)
-    {
-        var parameters = new Dictionary<string, double>();
-        var type = kernel.GetType();
-
-        foreach (var field in type.GetFields(System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance))
-        {
-            if (field.FieldType == typeof(double))
-            {
-                var val = field.GetValue(kernel);
-                if (val is double d)
-                    parameters[field.Name] = d;
-            }
-        }
-
-        return parameters;
-    }
+        => Kernels.KernelSerializationHelper<T>.ExtractKernelParams(kernel);
 
     private static IKernelFunction<T>? CreateKernelByName(string kernelTypeName, Dictionary<string, double>? kernelParams = null)
-    {
-        double sigma = kernelParams is not null && kernelParams.TryGetValue("_sigma", out var s) ? s : 1.0;
-
-        return kernelTypeName switch
-        {
-            "GaussianKernel`1" or "GaussianKernel" => new Kernels.GaussianKernel<T>(sigma),
-            "LaplacianKernel`1" or "LaplacianKernel" => new Kernels.LaplacianKernel<T>(),
-            "LinearKernel`1" or "LinearKernel" => new Kernels.LinearKernel<T>(),
-            "PolynomialKernel`1" or "PolynomialKernel" => new Kernels.PolynomialKernel<T>(),
-            _ => null
-        };
-    }
+        => Kernels.KernelSerializationHelper<T>.CreateKernelByName(kernelTypeName, kernelParams);
 
     #endregion
 

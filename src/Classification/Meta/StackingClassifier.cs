@@ -493,6 +493,7 @@ public class StackingClassifier<T> : MetaClassifierBase<T>
             { "TaskType", (int)TaskType },
             { "CrossValidationFolds", Options.CrossValidationFolds },
             { "UseProbabilities", Options.UseProbabilities },
+            { "Passthrough", Options.Passthrough },
             { "EstimatorTypes", estimatorTypes },
             { "EstimatorData", estimatorData },
             { "FinalEstimatorType", finalType },
@@ -529,6 +530,7 @@ public class StackingClassifier<T> : MetaClassifierBase<T>
         TaskType = (ClassificationTaskType)(jObj["TaskType"]?.ToObject<int>() ?? 0);
         Options.CrossValidationFolds = jObj["CrossValidationFolds"]?.ToObject<int>() ?? Options.CrossValidationFolds;
         Options.UseProbabilities = jObj["UseProbabilities"]?.ToObject<bool>() ?? Options.UseProbabilities;
+        Options.Passthrough = jObj["Passthrough"]?.ToObject<bool>() ?? Options.Passthrough;
 
         var types = jObj["EstimatorTypes"]?.ToObject<string[]>();
         var data = jObj["EstimatorData"]?.ToObject<string[]>();

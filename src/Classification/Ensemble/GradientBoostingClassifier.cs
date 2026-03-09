@@ -656,6 +656,8 @@ public class GradientBoostingClassifier<T> : EnsembleClassifierBase<T>, ITreeBas
             {
                 RegularizationType.L1 => new L1Regularization<T, Matrix<T>, Vector<T>>(regOptions),
                 RegularizationType.L2 => new L2Regularization<T, Matrix<T>, Vector<T>>(regOptions),
+                RegularizationType.ElasticNet => new ElasticNetRegularization<T, Matrix<T>, Vector<T>>(regOptions),
+                RegularizationType.None => null,
                 _ => null
             };
         }

@@ -419,7 +419,11 @@ public class RAkELClassifier<T> : MultiLabelClassifierBase<T>
         NumClasses = jObj["NumClasses"]?.ToObject<int>() ?? 2;
         TaskType = (ClassificationTaskType)(jObj["TaskType"]?.ToObject<int>() ?? 0);
         LabelNames = jObj["LabelNames"]?.ToObject<string[]>();
-        LabelsetSize = jObj["LabelsetSize"]?.ToObject<int>() ?? LabelsetSize;
+        var deserializedLabelsetSize = jObj["LabelsetSize"]?.ToObject<int>() ?? LabelsetSize;
+        if (deserializedLabelsetSize < 2)
+            throw new InvalidOperationException(
+                $"Failed to deserialize RAkELClassifier: LabelsetSize ({deserializedLabelsetSize}) must be >= 2.");
+        LabelsetSize = deserializedLabelsetSize;
         NumLabelsets = jObj["NumLabelsets"]?.ToObject<int>() ?? NumLabelsets;
 
         // Deserialize labelsets
