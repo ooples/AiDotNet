@@ -74,7 +74,7 @@ public class TimeVaryingTopology<T> : Infrastructure.FederatedLearningComponentB
         {
             case TopologyStrategy.RandomPairing:
             {
-                var rng = new Random(_seed + _roundCounter);
+                var rng = RandomHelper.CreateSeededRandom(_seed + _roundCounter);
                 var shuffled = clientIds.OrderBy(_ => rng.Next()).ToList();
                 for (int i = 0; i < shuffled.Count - 1; i += 2)
                 {

@@ -57,7 +57,7 @@ public class TheilUMetric<T> : ITimeSeriesMetric<T>
         }
 
         if (sumSquaredChange < 1e-10)
-            return sumSquaredError < 1e-10 ? NumOps.Zero : NumOps.FromDouble(double.MaxValue);
+            return sumSquaredError < 1e-10 ? NumOps.Zero : NumOps.MaxValue;
 
         return NumOps.FromDouble(Math.Sqrt(sumSquaredError / sumSquaredChange));
     }

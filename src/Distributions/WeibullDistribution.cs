@@ -110,7 +110,7 @@ internal class WeibullDistribution<T> : DistributionBase<T>
         {
             double k = NumOps.ToDouble(_shape);
             // For k < 1, the theoretical PDF at x = 0 is +∞.
-            if (k < 1) return NumOps.FromDouble(double.PositiveInfinity);
+            if (k < 1) return NumOps.MaxValue;
             if (k == 1) return NumOps.Divide(_shape, _scale);
             return Zero;
         }
@@ -129,15 +129,15 @@ internal class WeibullDistribution<T> : DistributionBase<T>
     public override T LogPdf(T x)
     {
         if (NumOps.Compare(x, Zero) < 0)
-            return NumOps.FromDouble(double.NegativeInfinity);
+            return NumOps.MinValue;
 
         if (NumOps.Compare(x, Zero) == 0)
         {
             double k = NumOps.ToDouble(_shape);
             // For k < 1, log(PDF) at x = 0 is +∞ (since PDF is +∞).
-            if (k < 1) return NumOps.FromDouble(double.PositiveInfinity);
+            if (k < 1) return NumOps.MaxValue;
             if (k == 1) return NumOps.FromDouble(Math.Log(NumOps.ToDouble(_shape)) - Math.Log(NumOps.ToDouble(_scale)));
-            return NumOps.FromDouble(double.NegativeInfinity);
+            return NumOps.MinValue;
         }
 
         double xVal = NumOps.ToDouble(x);
@@ -172,7 +172,7 @@ internal class WeibullDistribution<T> : DistributionBase<T>
             throw new ArgumentOutOfRangeException(nameof(p), "Probability must be in [0, 1].");
 
         if (pVal == 0) return Zero;
-        if (pVal == 1) return NumOps.FromDouble(double.PositiveInfinity);
+        if (pVal == 1) return NumOps.MaxValue;
 
         double kVal = NumOps.ToDouble(_shape);
         double lambdaVal = NumOps.ToDouble(_scale);

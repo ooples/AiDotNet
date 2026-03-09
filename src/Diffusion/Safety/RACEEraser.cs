@@ -113,7 +113,7 @@ public class RACEEraser<T>
         for (int i = 0; i < result.Length; i++)
         {
             var grad = i < gradient.Length ? gradient[i] : NumOps.Zero;
-            var sign = NumOps.FromDouble(NumOps.ToDouble(grad) >= 0 ? 1.0 : -1.0);
+            var sign = NumOps.FromDouble(!NumOps.LessThan(grad, NumOps.Zero) ? 1.0 : -1.0);
             var step = NumOps.Multiply(lr, sign);
             result[i] = NumOps.Add(promptEmbedding[i], step);
         }

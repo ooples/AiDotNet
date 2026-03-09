@@ -89,7 +89,7 @@ public class FedMeZO<T> : Infrastructure.FederatedLearningComponentBase<T>, IFed
     /// <returns>Random perturbation vector of dimension <see cref="_modelDim"/>.</returns>
     public Vector<T> GeneratePerturbation(int seed)
     {
-        var rng = new Random(seed);
+        var rng = RandomHelper.CreateSeededRandom(seed);
         var z = new T[_modelDim];
 
         for (int i = 0; i < _modelDim; i++)

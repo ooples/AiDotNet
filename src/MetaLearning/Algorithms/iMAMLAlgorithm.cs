@@ -368,7 +368,7 @@ public class iMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
             T pAp = VectorHelper.DotProduct(p, Ap);
 
             // Avoid division by zero
-            if (NumOps.ToDouble(pAp) < 1e-12)
+            if (NumOps.LessThan(pAp, NumOps.FromDouble(1e-12)))
             {
                 break;
             }
@@ -390,7 +390,7 @@ public class iMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
             T rsNew = VectorHelper.DotProduct(r, r);
 
             // Avoid division by zero
-            if (NumOps.ToDouble(rsOld) < 1e-12)
+            if (NumOps.LessThan(rsOld, NumOps.FromDouble(1e-12)))
             {
                 break;
             }

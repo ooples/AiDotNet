@@ -62,7 +62,7 @@ public class DeepSORT<T> : ObjectTrackerBase<T>
 
         // Filter detections by confidence
         var filteredDetections = detections
-            .Where(d => NumOps.ToDouble(d.Confidence) >= NumOps.ToDouble(Options.ConfidenceThreshold))
+            .Where(d => NumOps.GreaterThanOrEquals(d.Confidence, Options.ConfidenceThreshold))
             .ToList();
 
         // Extract appearance features if network available and image provided

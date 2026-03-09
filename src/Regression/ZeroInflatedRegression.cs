@@ -110,10 +110,11 @@ public class ZeroInflatedRegression<T> : AsyncDecisionTreeRegressionBase<T>
         int n = x.Rows;
 
         // Validate response values are non-negative integers
+        T zero = NumOps.Zero;
         for (int i = 0; i < n; i++)
         {
             double yi = NumOps.ToDouble(y[i]);
-            if (yi < 0 || yi != Math.Floor(yi))
+            if (NumOps.LessThan(y[i], zero) || yi != Math.Floor(yi))
             {
                 throw new ArgumentException($"Response must be non-negative integers. Found: {yi} at index {i}");
             }
@@ -122,7 +123,8 @@ public class ZeroInflatedRegression<T> : AsyncDecisionTreeRegressionBase<T>
         // Initialize parameters
         InitializeParameters(y);
 
-        double prevLogLik = double.MinValue;
+        T prevLogLik = NumOps.MinValue;
+        T tolerance = NumOps.FromDouble(_options.Tolerance);
 
         // EM algorithm for optimization
         for (int iter = 0; iter < _options.MaxIterations; iter++)
@@ -149,9 +151,9 @@ public class ZeroInflatedRegression<T> : AsyncDecisionTreeRegressionBase<T>
 
             // Check convergence
             (lambdas, pis) = ComputePredictions(x);
-            double logLik = ComputeLogLikelihood(y, lambdas, pis);
+            T logLik = ComputeLogLikelihood(y, lambdas, pis);
 
-            if (Math.Abs(logLik - prevLogLik) < _options.Tolerance)
+            if (NumOps.LessThan(NumOps.Abs(NumOps.Subtract(logLik, prevLogLik)), tolerance))
             {
                 break;
             }
@@ -170,9 +172,7 @@ public class ZeroInflatedRegression<T> : AsyncDecisionTreeRegressionBase<T>
         // Expected value = (1 - π) * λ
         for (int i = 0; i < input.Rows; i++)
         {
-            double pi = NumOps.ToDouble(pis[i]);
-            double lambda = NumOps.ToDouble(lambdas[i]);
-            predictions[i] = NumOps.FromDouble((1 - pi) * lambda);
+            predictions[i] = NumOps.Multiply(NumOps.Subtract(NumOps.One, pis[i]), lambdas[i]);
         }
 
         return predictions;
@@ -213,25 +213,26 @@ public class ZeroInflatedRegression<T> : AsyncDecisionTreeRegressionBase<T>
 
         for (int i = 0; i < input.Rows; i++)
         {
-            double pi = NumOps.ToDouble(pis[i]);
-            double lambda = NumOps.ToDouble(lambdas[i]);
+            T pi = pis[i];
+            T oneMinusPi = NumOps.Subtract(NumOps.One, pi);
+            double lambdaD = NumOps.ToDouble(lambdas[i]);
 
             for (int k = 0; k <= maxCount; k++)
             {
-                double prob;
+                // ComputeCountProbability is a numerical recipe — boundary conversion
+                double pk = ComputeCountProbability(k, lambdaD);
+                T pkT = NumOps.FromDouble(pk);
+
                 if (k == 0)
                 {
                     // P(Y=0) = π + (1-π) * P_count(0)
-                    double p0 = ComputeCountProbability(0, lambda);
-                    prob = pi + (1 - pi) * p0;
+                    pmf[i, k] = NumOps.Add(pi, NumOps.Multiply(oneMinusPi, pkT));
                 }
                 else
                 {
                     // P(Y=k) = (1-π) * P_count(k)
-                    double pk = ComputeCountProbability(k, lambda);
-                    prob = (1 - pi) * pk;
+                    pmf[i, k] = NumOps.Multiply(oneMinusPi, pkT);
                 }
-                pmf[i, k] = NumOps.FromDouble(prob);
             }
         }
 
@@ -245,32 +246,39 @@ public class ZeroInflatedRegression<T> : AsyncDecisionTreeRegressionBase<T>
     {
         // Proportion of zeros
         int numZeros = 0;
-        double sumNonZero = 0;
+        T sumNonZero = NumOps.Zero;
         int countNonZero = 0;
 
         for (int i = 0; i < y.Length; i++)
         {
-            double yi = NumOps.ToDouble(y[i]);
-            if (yi == 0)
+            if (NumOps.Compare(y[i], NumOps.Zero) == 0)
             {
                 numZeros++;
             }
             else
             {
-                sumNonZero += yi;
+                sumNonZero = NumOps.Add(sumNonZero, y[i]);
                 countNonZero++;
             }
         }
 
-        double pZero = (double)numZeros / y.Length;
-        double meanNonZero = countNonZero > 0 ? sumNonZero / countNonZero : 1.0;
+        T pZero = NumOps.Divide(NumOps.FromDouble(numZeros), NumOps.FromDouble(y.Length));
+        T meanNonZero = countNonZero > 0
+            ? NumOps.Divide(sumNonZero, NumOps.FromDouble(countNonZero))
+            : NumOps.One;
 
         // Initialize zero model intercept (logit scale)
-        pZero = Math.Max(0.01, Math.Min(0.99, pZero));
-        _zeroIntercept = NumOps.FromDouble(Math.Log(pZero / (1 - pZero)));
+        // Clamp pZero to [0.01, 0.99]
+        T minP = NumOps.FromDouble(0.01);
+        T maxP = NumOps.FromDouble(0.99);
+        if (NumOps.LessThan(pZero, minP)) pZero = minP;
+        if (NumOps.GreaterThan(pZero, maxP)) pZero = maxP;
+        _zeroIntercept = NumOps.Log(NumOps.Divide(pZero, NumOps.Subtract(NumOps.One, pZero)));
 
         // Initialize count model intercept (log scale)
-        _countIntercept = NumOps.FromDouble(Math.Log(Math.Max(meanNonZero, 0.1)));
+        T minMean = NumOps.FromDouble(0.1);
+        if (NumOps.LessThan(meanNonZero, minMean)) meanNonZero = minMean;
+        _countIntercept = NumOps.Log(meanNonZero);
 
         // Initialize coefficients
         _countCoefficients = new Vector<T>(_numFeatures);
@@ -291,46 +299,58 @@ public class ZeroInflatedRegression<T> : AsyncDecisionTreeRegressionBase<T>
         int n = x.Rows;
         var lambdas = new Vector<T>(n);
         var pis = new Vector<T>(n);
+        T minLambda = NumOps.FromDouble(0.001);
 
         for (int i = 0; i < n; i++)
         {
             // Count model linear predictor
-            double etaCount = NumOps.ToDouble(_countIntercept);
+            T etaCount = _countIntercept;
             if (_countCoefficients != null)
             {
                 for (int j = 0; j < _numFeatures; j++)
                 {
-                    etaCount += NumOps.ToDouble(_countCoefficients[j]) * NumOps.ToDouble(x[i, j]);
+                    etaCount = NumOps.Add(etaCount, NumOps.Multiply(_countCoefficients[j], x[i, j]));
                 }
             }
 
-            // Apply count link inverse (log link -> exp)
-            double lambda = _options.CountLink switch
+            // Apply count link inverse (boundary: special math functions)
+            T lambda;
+            if (_options.CountLink == ZeroInflatedCountLink.Log)
             {
-                ZeroInflatedCountLink.Log => Math.Exp(etaCount),
-                ZeroInflatedCountLink.SquareRoot => etaCount * etaCount,
-                ZeroInflatedCountLink.Identity => Math.Max(0.001, etaCount),
-                _ => Math.Exp(etaCount)
-            };
-            lambdas[i] = NumOps.FromDouble(lambda);
+                lambda = NumOps.Exp(etaCount);
+            }
+            else if (_options.CountLink == ZeroInflatedCountLink.SquareRoot)
+            {
+                lambda = NumOps.Multiply(etaCount, etaCount);
+            }
+            else if (_options.CountLink == ZeroInflatedCountLink.Identity)
+            {
+                lambda = NumOps.LessThan(etaCount, minLambda) ? minLambda : etaCount;
+            }
+            else
+            {
+                lambda = NumOps.Exp(etaCount);
+            }
+            lambdas[i] = lambda;
 
             // Zero-inflation model linear predictor
-            double etaZero = NumOps.ToDouble(_zeroIntercept);
+            T etaZero = _zeroIntercept;
             if (_options.ModelZeroInflation && _zeroCoefficients != null)
             {
                 for (int j = 0; j < _numFeatures; j++)
                 {
-                    etaZero += NumOps.ToDouble(_zeroCoefficients[j]) * NumOps.ToDouble(x[i, j]);
+                    etaZero = NumOps.Add(etaZero, NumOps.Multiply(_zeroCoefficients[j], x[i, j]));
                 }
             }
 
-            // Apply zero link inverse
+            // Apply zero link inverse (boundary: special math functions for Probit/CLogLog)
+            double etaZeroD = NumOps.ToDouble(etaZero);
             double pi = _options.ZeroLink switch
             {
-                ZeroInflatedZeroLink.Logit => 1 / (1 + Math.Exp(-etaZero)),
-                ZeroInflatedZeroLink.Probit => StandardNormalCdf(etaZero),
-                ZeroInflatedZeroLink.CLogLog => 1 - Math.Exp(-Math.Exp(etaZero)),
-                _ => 1 / (1 + Math.Exp(-etaZero))
+                ZeroInflatedZeroLink.Logit => 1 / (1 + Math.Exp(-etaZeroD)),
+                ZeroInflatedZeroLink.Probit => StandardNormalCdf(etaZeroD),
+                ZeroInflatedZeroLink.CLogLog => 1 - Math.Exp(-Math.Exp(etaZeroD)),
+                _ => 1 / (1 + Math.Exp(-etaZeroD))
             };
             pis[i] = NumOps.FromDouble(pi);
         }
@@ -341,28 +361,29 @@ public class ZeroInflatedRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Computes posterior probability of being a structural zero.
     /// </summary>
-    private Vector<double> ComputePosteriorZero(Vector<T> y, Vector<T> lambdas, Vector<T> pis)
+    private Vector<T> ComputePosteriorZero(Vector<T> y, Vector<T> lambdas, Vector<T> pis)
     {
-        var posterior = new Vector<double>(y.Length);
+        var posterior = new Vector<T>(y.Length);
+        T half = NumOps.FromDouble(0.5);
 
         for (int i = 0; i < y.Length; i++)
         {
-            double yi = NumOps.ToDouble(y[i]);
-            double pi = NumOps.ToDouble(pis[i]);
-            double lambda = NumOps.ToDouble(lambdas[i]);
-
-            if (yi == 0)
+            if (NumOps.Compare(y[i], NumOps.Zero) == 0)
             {
                 // P(Z=1 | Y=0) = π / (π + (1-π) * P(Y=0|Z=0))
-                double p0 = ComputeCountProbability(0, lambda);
-                double numer = pi;
-                double denom = pi + (1 - pi) * p0;
-                posterior[i] = denom > 0 ? numer / denom : 0.5;
+                // ComputeCountProbability is a numerical recipe — boundary conversion
+                double p0 = ComputeCountProbability(0, NumOps.ToDouble(lambdas[i]));
+                T p0T = NumOps.FromDouble(p0);
+                T pi = pis[i];
+                T denom = NumOps.Add(pi, NumOps.Multiply(NumOps.Subtract(NumOps.One, pi), p0T));
+                posterior[i] = NumOps.GreaterThan(denom, NumOps.Zero)
+                    ? NumOps.Divide(pi, denom)
+                    : half;
             }
             else
             {
                 // If Y > 0, definitely not a structural zero
-                posterior[i] = 0;
+                posterior[i] = NumOps.Zero;
             }
         }
 
@@ -393,73 +414,81 @@ public class ZeroInflatedRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Updates the count model parameters.
     /// </summary>
-    private void UpdateCountModel(Matrix<T> x, Vector<T> y, Vector<double> posteriorZero)
+    private void UpdateCountModel(Matrix<T> x, Vector<T> y, Vector<T> posteriorZero)
     {
         int n = x.Rows;
         int p = _numFeatures;
+        T minWeight = NumOps.FromDouble(1e-10);
 
         // Weighted IRLS for Poisson/NB regression
-        var weights = new Vector<double>(n);
-        var z = new Vector<double>(n);
+        var weights = new Vector<T>(n);
+        var z = new Vector<T>(n);
 
         for (int i = 0; i < n; i++)
         {
-            double yi = NumOps.ToDouble(y[i]);
-            double wi = 1 - posteriorZero[i];  // Weight by probability of not being structural zero
+            T wi = NumOps.Subtract(NumOps.One, posteriorZero[i]);
+            if (NumOps.LessThan(wi, minWeight)) wi = minWeight;
 
-            if (wi < 1e-10) wi = 1e-10;
-
-            double eta = NumOps.ToDouble(_countIntercept);
+            T eta = _countIntercept;
             if (_countCoefficients != null)
             {
                 for (int j = 0; j < p; j++)
                 {
-                    eta += NumOps.ToDouble(_countCoefficients[j]) * NumOps.ToDouble(x[i, j]);
+                    eta = NumOps.Add(eta, NumOps.Multiply(_countCoefficients[j], x[i, j]));
                 }
             }
 
-            double lambda = Math.Exp(eta);
-            lambda = Math.Max(lambda, 1e-10);
+            T lambda = NumOps.Exp(eta);
+            if (NumOps.LessThan(lambda, minWeight)) lambda = minWeight;
 
             // Working weight and response for log link
-            weights[i] = wi * lambda;
-            z[i] = eta + (yi - lambda) / lambda;
+            weights[i] = NumOps.Multiply(wi, lambda);
+            z[i] = NumOps.Add(eta, NumOps.Divide(NumOps.Subtract(y[i], lambda), lambda));
         }
 
-        UpdateCoefficientsWLS(x, z, weights, ref _countCoefficients!, ref _countIntercept);
+        if (_countCoefficients is null)
+        {
+            throw new InvalidOperationException("Count coefficients not initialized.");
+        }
+        UpdateCoefficientsWLS(x, z, weights, ref _countCoefficients, ref _countIntercept);
     }
 
     /// <summary>
     /// Updates the zero-inflation model parameters.
     /// </summary>
-    private void UpdateZeroModel(Matrix<T> x, Vector<double> posteriorZero)
+    private void UpdateZeroModel(Matrix<T> x, Vector<T> posteriorZero)
     {
         int n = x.Rows;
         int p = _numFeatures;
+        T minPi = NumOps.FromDouble(1e-10);
+        T maxPi = NumOps.FromDouble(1 - 1e-10);
 
         // Weighted logistic regression for zero model
-        var weights = new Vector<double>(n);
-        var z = new Vector<double>(n);
+        var weights = new Vector<T>(n);
+        var z = new Vector<T>(n);
 
         for (int i = 0; i < n; i++)
         {
-            double pZero = posteriorZero[i];
+            T pZero = posteriorZero[i];
 
-            double eta = NumOps.ToDouble(_zeroIntercept);
+            T eta = _zeroIntercept;
             if (_zeroCoefficients != null)
             {
                 for (int j = 0; j < p; j++)
                 {
-                    eta += NumOps.ToDouble(_zeroCoefficients[j]) * NumOps.ToDouble(x[i, j]);
+                    eta = NumOps.Add(eta, NumOps.Multiply(_zeroCoefficients[j], x[i, j]));
                 }
             }
 
-            double pi = 1 / (1 + Math.Exp(-eta));
-            pi = Math.Max(1e-10, Math.Min(1 - 1e-10, pi));
+            // Logistic function: 1 / (1 + exp(-eta))
+            T pi = NumOps.Divide(NumOps.One, NumOps.Add(NumOps.One, NumOps.Exp(NumOps.Negate(eta))));
+            if (NumOps.LessThan(pi, minPi)) pi = minPi;
+            if (NumOps.GreaterThan(pi, maxPi)) pi = maxPi;
 
             // Working weight and response for logit link
-            weights[i] = pi * (1 - pi);
-            z[i] = eta + (pZero - pi) / (pi * (1 - pi));
+            T piOneMinusPi = NumOps.Multiply(pi, NumOps.Subtract(NumOps.One, pi));
+            weights[i] = piOneMinusPi;
+            z[i] = NumOps.Add(eta, NumOps.Divide(NumOps.Subtract(pZero, pi), piOneMinusPi));
         }
 
         if (_zeroCoefficients != null)
@@ -471,38 +500,41 @@ public class ZeroInflatedRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Updates dispersion parameter for Negative Binomial.
     /// </summary>
-    private void UpdateDispersion(Vector<T> y, Vector<T> lambdas, Vector<double> posteriorZero)
+    private void UpdateDispersion(Vector<T> y, Vector<T> lambdas, Vector<T> posteriorZero)
     {
         // Method of moments estimate
-        double sumSqDev = 0;
-        double sumLambda = 0;
-        double totalWeight = 0;
+        T sumSqDev = NumOps.Zero;
+        T sumLambda = NumOps.Zero;
+        T totalWeight = NumOps.Zero;
+        T minWeight = NumOps.FromDouble(1e-10);
 
         for (int i = 0; i < y.Length; i++)
         {
-            double wi = 1 - posteriorZero[i];
-            if (wi < 1e-10) continue;
+            T wi = NumOps.Subtract(NumOps.One, posteriorZero[i]);
+            if (NumOps.LessThan(wi, minWeight)) continue;
 
-            double yi = NumOps.ToDouble(y[i]);
-            double lambda = NumOps.ToDouble(lambdas[i]);
-
-            sumSqDev += wi * (yi - lambda) * (yi - lambda);
-            sumLambda += wi * lambda;
-            totalWeight += wi;
+            T diff = NumOps.Subtract(y[i], lambdas[i]);
+            sumSqDev = NumOps.Add(sumSqDev, NumOps.Multiply(wi, NumOps.Multiply(diff, diff)));
+            sumLambda = NumOps.Add(sumLambda, NumOps.Multiply(wi, lambdas[i]));
+            totalWeight = NumOps.Add(totalWeight, wi);
         }
 
-        if (totalWeight > 0 && sumLambda > 0)
+        if (NumOps.GreaterThan(totalWeight, NumOps.Zero) && NumOps.GreaterThan(sumLambda, NumOps.Zero))
         {
-            double varianceEstimate = sumSqDev / totalWeight;
-            double meanEstimate = sumLambda / totalWeight;
+            T varianceEstimate = NumOps.Divide(sumSqDev, totalWeight);
+            T meanEstimate = NumOps.Divide(sumLambda, totalWeight);
 
             // For NB: Var = μ + μ²/r, so r = μ² / (Var - μ)
-            double excess = varianceEstimate - meanEstimate;
-            if (excess > 0.1)
+            T excess = NumOps.Subtract(varianceEstimate, meanEstimate);
+            T minExcess = NumOps.FromDouble(0.1);
+            if (NumOps.GreaterThan(excess, minExcess))
             {
-                double r = meanEstimate * meanEstimate / excess;
-                r = Math.Max(0.1, Math.Min(1000, r));
-                _dispersion = NumOps.FromDouble(r);
+                T r = NumOps.Divide(NumOps.Multiply(meanEstimate, meanEstimate), excess);
+                T minR = NumOps.FromDouble(0.1);
+                T maxR = NumOps.FromDouble(1000);
+                if (NumOps.LessThan(r, minR)) r = minR;
+                if (NumOps.GreaterThan(r, maxR)) r = maxR;
+                _dispersion = r;
             }
         }
     }
@@ -510,76 +542,86 @@ public class ZeroInflatedRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Updates coefficients using weighted least squares.
     /// </summary>
-    private void UpdateCoefficientsWLS(Matrix<T> x, Vector<double> z, Vector<double> weights,
+    private void UpdateCoefficientsWLS(Matrix<T> x, Vector<T> z, Vector<T> weights,
         ref Vector<T> coefficients, ref T intercept)
     {
         int n = x.Rows;
         int p = _numFeatures;
+        T minWeight = NumOps.FromDouble(1e-10);
 
-        var xtwx = new Matrix<double>(p + 1, p + 1);
-        var xtwz = new Vector<double>(p + 1);
+        var xtwx = new Matrix<T>(p + 1, p + 1);
+        var xtwz = new Vector<T>(p + 1);
 
         for (int i = 0; i < n; i++)
         {
-            double w = weights[i];
-            if (w < 1e-10) continue;
+            T w = weights[i];
+            if (NumOps.LessThan(w, minWeight)) continue;
 
-            xtwx[0, 0] += w;
-            xtwz[0] += w * z[i];
+            xtwx[0, 0] = NumOps.Add(xtwx[0, 0], w);
+            xtwz[0] = NumOps.Add(xtwz[0], NumOps.Multiply(w, z[i]));
 
             for (int j = 0; j < p; j++)
             {
-                double xij = NumOps.ToDouble(x[i, j]);
-                xtwx[0, j + 1] += w * xij;
-                xtwx[j + 1, 0] += w * xij;
-                xtwz[j + 1] += w * xij * z[i];
+                T wxij = NumOps.Multiply(w, x[i, j]);
+                xtwx[0, j + 1] = NumOps.Add(xtwx[0, j + 1], wxij);
+                xtwx[j + 1, 0] = NumOps.Add(xtwx[j + 1, 0], wxij);
+                xtwz[j + 1] = NumOps.Add(xtwz[j + 1], NumOps.Multiply(wxij, z[i]));
 
                 for (int k = 0; k <= j; k++)
                 {
-                    double xik = NumOps.ToDouble(x[i, k]);
-                    xtwx[j + 1, k + 1] += w * xij * xik;
-                    if (k < j) xtwx[k + 1, j + 1] = xtwx[j + 1, k + 1];
+                    T val = NumOps.Add(xtwx[j + 1, k + 1], NumOps.Multiply(wxij, x[i, k]));
+                    xtwx[j + 1, k + 1] = val;
+                    if (k < j) xtwx[k + 1, j + 1] = val;
                 }
             }
         }
 
         // Regularization
-        double lambda = _options.UseRegularization ? _options.RegularizationStrength : 0;
-        for (int j = 1; j <= p; j++)
+        if (_options.UseRegularization)
         {
-            xtwx[j, j] += lambda;
+            T lambda = NumOps.FromDouble(_options.RegularizationStrength);
+            for (int j = 1; j <= p; j++)
+            {
+                xtwx[j, j] = NumOps.Add(xtwx[j, j], lambda);
+            }
         }
 
         var solution = SolveSystem(xtwx, xtwz, p + 1);
 
-        intercept = NumOps.FromDouble(solution[0]);
+        intercept = solution[0];
         for (int j = 0; j < p; j++)
         {
-            coefficients[j] = NumOps.FromDouble(solution[j + 1]);
+            coefficients[j] = solution[j + 1];
         }
     }
 
     /// <summary>
     /// Computes the log-likelihood.
     /// </summary>
-    private double ComputeLogLikelihood(Vector<T> y, Vector<T> lambdas, Vector<T> pis)
+    private T ComputeLogLikelihood(Vector<T> y, Vector<T> lambdas, Vector<T> pis)
     {
-        double ll = 0;
+        T ll = NumOps.Zero;
+        T tiny = NumOps.FromDouble(1e-300);
+
         for (int i = 0; i < y.Length; i++)
         {
-            double yi = NumOps.ToDouble(y[i]);
-            double pi = NumOps.ToDouble(pis[i]);
-            double lambda = NumOps.ToDouble(lambdas[i]);
+            T pi = pis[i];
+            T oneMinusPi = NumOps.Subtract(NumOps.One, pi);
+            // ComputeCountProbability is a numerical recipe — boundary conversion
+            double lambdaD = NumOps.ToDouble(lambdas[i]);
 
-            if (yi == 0)
+            if (NumOps.Compare(y[i], NumOps.Zero) == 0)
             {
-                double p0 = ComputeCountProbability(0, lambda);
-                ll += Math.Log(pi + (1 - pi) * p0 + 1e-300);
+                double p0 = ComputeCountProbability(0, lambdaD);
+                T likelihood = NumOps.Add(pi, NumOps.Add(NumOps.Multiply(oneMinusPi, NumOps.FromDouble(p0)), tiny));
+                ll = NumOps.Add(ll, NumOps.Log(likelihood));
             }
             else
             {
-                double pk = ComputeCountProbability((int)yi, lambda);
-                ll += Math.Log((1 - pi) * pk + 1e-300);
+                int yi = (int)NumOps.ToDouble(y[i]);
+                double pk = ComputeCountProbability(yi, lambdaD);
+                T likelihood = NumOps.Add(NumOps.Multiply(oneMinusPi, NumOps.FromDouble(pk)), tiny);
+                ll = NumOps.Add(ll, NumOps.Log(likelihood));
             }
         }
         return ll;
@@ -617,39 +659,46 @@ public class ZeroInflatedRegression<T> : AsyncDecisionTreeRegressionBase<T>
         return -tmp + Math.Log(2.5066282746310005 * ser / x);
     }
 
-    private Vector<double> SolveSystem(Matrix<double> a, Vector<double> b, int n)
+    private Vector<T> SolveSystem(Matrix<T> a, Vector<T> b, int n)
     {
-        var aug = new Matrix<double>(n, n + 1);
+        var aug = new Matrix<T>(n, n + 1);
         for (int i = 0; i < n; i++)
         {
             for (int j = 0; j < n; j++) aug[i, j] = a[i, j];
             aug[i, n] = b[i];
         }
 
+        T pivotThreshold = NumOps.FromDouble(1e-10);
+
         for (int col = 0; col < n; col++)
         {
             int maxRow = col;
             for (int row = col + 1; row < n; row++)
-                if (Math.Abs(aug[row, col]) > Math.Abs(aug[maxRow, col])) maxRow = row;
+            {
+                if (NumOps.GreaterThan(NumOps.Abs(aug[row, col]), NumOps.Abs(aug[maxRow, col])))
+                    maxRow = row;
+            }
 
             for (int j = 0; j <= n; j++)
                 (aug[col, j], aug[maxRow, j]) = (aug[maxRow, j], aug[col, j]);
 
-            double pivot = aug[col, col];
-            if (Math.Abs(pivot) < 1e-10) pivot = 1e-10;
-            for (int j = 0; j <= n; j++) aug[col, j] /= pivot;
+            T pivot = aug[col, col];
+            if (NumOps.LessThan(NumOps.Abs(pivot), pivotThreshold))
+                pivot = pivotThreshold;
+            for (int j = 0; j <= n; j++) aug[col, j] = NumOps.Divide(aug[col, j], pivot);
 
             for (int row = 0; row < n; row++)
             {
                 if (row != col)
                 {
-                    double factor = aug[row, col];
-                    for (int j = 0; j <= n; j++) aug[row, j] -= factor * aug[col, j];
+                    T factor = aug[row, col];
+                    for (int j = 0; j <= n; j++)
+                        aug[row, j] = NumOps.Subtract(aug[row, j], NumOps.Multiply(factor, aug[col, j]));
                 }
             }
         }
 
-        var sol = new Vector<double>(n);
+        var sol = new Vector<T>(n);
         for (int i = 0; i < n; i++) sol[i] = aug[i, n];
         return sol;
     }
@@ -661,23 +710,23 @@ public class ZeroInflatedRegression<T> : AsyncDecisionTreeRegressionBase<T>
 
         for (int f = 0; f < _numFeatures; f++)
         {
-            double imp = 0;
+            T imp = NumOps.Zero;
             if (_countCoefficients != null)
-                imp += Math.Abs(NumOps.ToDouble(_countCoefficients[f]));
+                imp = NumOps.Add(imp, NumOps.Abs(_countCoefficients[f]));
             if (_zeroCoefficients != null)
-                imp += Math.Abs(NumOps.ToDouble(_zeroCoefficients[f]));
-            importances[f] = NumOps.FromDouble(imp);
+                imp = NumOps.Add(imp, NumOps.Abs(_zeroCoefficients[f]));
+            importances[f] = imp;
         }
 
-        double sum = 0;
+        T sum = NumOps.Zero;
         for (int f = 0; f < _numFeatures; f++)
         {
-            sum += NumOps.ToDouble(importances[f]);
+            sum = NumOps.Add(sum, importances[f]);
         }
-        if (sum > 0)
+        if (NumOps.GreaterThan(sum, NumOps.Zero))
         {
             for (int f = 0; f < _numFeatures; f++)
-                importances[f] = NumOps.Divide(importances[f], NumOps.FromDouble(sum));
+                importances[f] = NumOps.Divide(importances[f], sum);
         }
 
         FeatureImportances = importances;

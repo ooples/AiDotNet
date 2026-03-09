@@ -1,5 +1,6 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.AnomalyDetection.Ensemble;
@@ -192,7 +193,7 @@ public class FeatureBaggingDetector<T> : AnomalyDetectorBase<T>
 
     private int[] GenerateFeatureSubset(int totalFeatures, int subsetSize, int seed)
     {
-        var random = new Random(_randomSeed + seed);
+        var random = RandomHelper.CreateSeededRandom(_randomSeed + seed);
         var allFeatures = Enumerable.Range(0, totalFeatures).ToList();
 
         // Shuffle

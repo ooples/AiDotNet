@@ -120,7 +120,7 @@ public class SpeakerLM<T> : SpeakerRecognitionBase<T>, ISpeakerVerifier<T>, ISpe
         ThrowIfDisposed();
         var testEmb = ExtractEmbedding(audio);
         var score = ComputeCosineSimilarity(testEmb, referenceEmbedding);
-        bool isAccepted = NumOps.ToDouble(score) >= NumOps.ToDouble(threshold);
+        bool isAccepted = NumOps.GreaterThanOrEquals(score, threshold);
         var confidence = NumOps.Abs(NumOps.Subtract(score, threshold));
         return new SpeakerVerificationResult<T> { IsAccepted = isAccepted, Score = score, Threshold = threshold, Confidence = confidence };
     }

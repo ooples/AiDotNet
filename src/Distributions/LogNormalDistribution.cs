@@ -122,7 +122,7 @@ internal class LogNormalDistribution<T> : DistributionBase<T>
     public override T LogPdf(T x)
     {
         if (NumOps.Compare(x, Zero) <= 0)
-            return NumOps.FromDouble(double.NegativeInfinity);
+            return NumOps.MinValue;
 
         double xVal = NumOps.ToDouble(x);
         double mu = NumOps.ToDouble(_mu);
@@ -157,7 +157,7 @@ internal class LogNormalDistribution<T> : DistributionBase<T>
             throw new ArgumentOutOfRangeException(nameof(p), "Probability must be in [0, 1].");
 
         if (pVal == 0) return Zero;
-        if (pVal == 1) return NumOps.FromDouble(double.PositiveInfinity);
+        if (pVal == 1) return NumOps.MaxValue;
 
         double mu = NumOps.ToDouble(_mu);
         double sigma = NumOps.ToDouble(_sigma);

@@ -346,7 +346,7 @@ public class KMaXDeepLab<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
             int area = 0; double sumConf = 0;
             for (int row = 0; row < h; row++)
                 for (int col = 0; col < w; col++)
-                    if (Math.Abs(NumOps.ToDouble(semanticMap[row, col]) - cls) < 0.5)
+                    if (NumOps.Compare(semanticMap[row, col], NumOps.FromDouble(cls)) == 0)
                     { panopticMap[row, col] = NumOps.FromDouble(cls * 1000); area++; sumConf += NumOps.ToDouble(probMap[cls, row, col]); }
             if (area > 0) segments.Add(new PanopticSegment<T> { SegmentId = cls, ClassId = cls, IsThing = false, Confidence = sumConf / area, Area = area });
         }
@@ -359,7 +359,7 @@ public class KMaXDeepLab<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
                 int area = 0; double sumConf = 0; var compMask = new Tensor<T>([h, w]);
                 for (int row = 0; row < h; row++)
                     for (int col = 0; col < w; col++)
-                        if (Math.Abs(NumOps.ToDouble(labelMap[row, col]) - comp) < 0.5)
+                        if (NumOps.Compare(labelMap[row, col], NumOps.FromDouble(comp)) == 0)
                         { instanceMap[row, col] = NumOps.FromDouble(instId); panopticMap[row, col] = NumOps.FromDouble(cls * 1000 + instId); compMask[row, col] = NumOps.FromDouble(1.0); area++; sumConf += NumOps.ToDouble(probMap[cls, row, col]); }
                 if (area > 0) segments.Add(new PanopticSegment<T> { SegmentId = instId, ClassId = cls, IsThing = true, Confidence = sumConf / area, Area = area, Mask = compMask });
             }

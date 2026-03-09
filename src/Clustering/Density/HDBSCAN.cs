@@ -49,8 +49,8 @@ public class HDBSCAN<T> : ClusteringBase<T>
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
-    private double[]? _outlierScores;
-    private double[]? _probabilities;
+    private T[]? _outlierScores;
+    private T[]? _probabilities;
     private List<CondensedTreeNode>? _condensedTree;
 
     /// <summary>
@@ -66,12 +66,12 @@ public class HDBSCAN<T> : ClusteringBase<T>
     /// <summary>
     /// Gets the outlier scores for each point.
     /// </summary>
-    public double[]? OutlierScores => _outlierScores;
+    public T[]? OutlierScores => _outlierScores;
 
     /// <summary>
     /// Gets the cluster membership probabilities.
     /// </summary>
-    public double[]? Probabilities => _probabilities;
+    public T[]? Probabilities => _probabilities;
 
     /// <inheritdoc />
     protected override ModelType GetModelType() => ModelType.Clustering;
@@ -146,7 +146,10 @@ public class HDBSCAN<T> : ClusteringBase<T>
         {
             ClusterCenters = new Matrix<T>(NumClusters, d);
             var clusterCounts = new int[NumClusters];
-            var clusterSums = new double[NumClusters, d];
+            var clusterSums = new T[NumClusters, d];
+            for (int k = 0; k < NumClusters; k++)
+                for (int j = 0; j < d; j++)
+                    clusterSums[k, j] = NumOps.Zero;
 
             for (int i = 0; i < n; i++)
             {
@@ -156,7 +159,7 @@ public class HDBSCAN<T> : ClusteringBase<T>
                     clusterCounts[label]++;
                     for (int j = 0; j < d; j++)
                     {
-                        clusterSums[label, j] += NumOps.ToDouble(x[i, j]);
+                        clusterSums[label, j] = NumOps.Add(clusterSums[label, j], x[i, j]);
                     }
                 }
             }
@@ -165,9 +168,10 @@ public class HDBSCAN<T> : ClusteringBase<T>
             {
                 if (clusterCounts[k] > 0)
                 {
+                    T countT = NumOps.FromDouble(clusterCounts[k]);
                     for (int j = 0; j < d; j++)
                     {
-                        ClusterCenters[k, j] = NumOps.FromDouble(clusterSums[k, j] / clusterCounts[k]);
+                        ClusterCenters[k, j] = NumOps.Divide(clusterSums[k, j], countT);
                     }
                 }
             }
@@ -180,9 +184,9 @@ public class HDBSCAN<T> : ClusteringBase<T>
         IsTrained = true;
     }
 
-    private double[,] ComputeDistanceMatrix(Matrix<T> x, int n, IDistanceMetric<T> metric)
+    private T[,] ComputeDistanceMatrix(Matrix<T> x, int n, IDistanceMetric<T> metric)
     {
-        var distMatrix = new double[n, n];
+        var distMatrix = new T[n, n];
 
         for (int i = 0; i < n; i++)
         {
@@ -190,7 +194,7 @@ public class HDBSCAN<T> : ClusteringBase<T>
             for (int j = i + 1; j < n; j++)
             {
                 var pointJ = GetRow(x, j);
-                double dist = NumOps.ToDouble(metric.Compute(pointI, pointJ));
+                T dist = metric.Compute(pointI, pointJ);
                 distMatrix[i, j] = dist;
                 distMatrix[j, i] = dist;
             }
@@ -199,15 +203,15 @@ public class HDBSCAN<T> : ClusteringBase<T>
         return distMatrix;
     }
 
-    private double[] ComputeCoreDistances(double[,] distMatrix, int n, int minSamples)
+    private T[] ComputeCoreDistances(T[,] distMatrix, int n, int minSamples)
     {
-        var coreDistances = new double[n];
+        var coreDistances = new T[n];
         int k = Math.Min(minSamples, n - 1);
 
         for (int i = 0; i < n; i++)
         {
             // Get distances to all other points
-            var distances = new List<double>(n);
+            var distances = new List<T>(n);
             for (int j = 0; j < n; j++)
             {
                 if (i != j)
@@ -216,25 +220,27 @@ public class HDBSCAN<T> : ClusteringBase<T>
                 }
             }
 
-            distances.Sort();
+            distances.Sort((a, b) => NumOps.Compare(a, b));
 
             // Core distance is distance to k-th nearest neighbor
-            coreDistances[i] = k > 0 && k <= distances.Count ? distances[k - 1] : 0;
+            coreDistances[i] = k > 0 && k <= distances.Count ? distances[k - 1] : NumOps.Zero;
         }
 
         return coreDistances;
     }
 
-    private double[,] ComputeMutualReachabilityDistances(double[,] distMatrix, double[] coreDistances, int n)
+    private T[,] ComputeMutualReachabilityDistances(T[,] distMatrix, T[] coreDistances, int n)
     {
-        var mrdMatrix = new double[n, n];
+        var mrdMatrix = new T[n, n];
 
         for (int i = 0; i < n; i++)
         {
             for (int j = i + 1; j < n; j++)
             {
                 // Mutual reachability distance = max(core_dist[i], core_dist[j], dist[i,j])
-                double mrd = Math.Max(coreDistances[i], Math.Max(coreDistances[j], distMatrix[i, j]));
+                T mrd = coreDistances[i];
+                if (NumOps.GreaterThan(coreDistances[j], mrd)) mrd = coreDistances[j];
+                if (NumOps.GreaterThan(distMatrix[i, j], mrd)) mrd = distMatrix[i, j];
                 mrdMatrix[i, j] = mrd;
                 mrdMatrix[j, i] = mrd;
             }
@@ -243,31 +249,31 @@ public class HDBSCAN<T> : ClusteringBase<T>
         return mrdMatrix;
     }
 
-    private List<MSTEdge> BuildMinimumSpanningTree(double[,] mrdMatrix, int n)
+    private List<MSTEdge> BuildMinimumSpanningTree(T[,] mrdMatrix, int n)
     {
         // Prim's algorithm for MST
         var mst = new List<MSTEdge>();
         var inTree = new bool[n];
-        var minDist = new double[n];
+        var minDist = new T[n];
         var minFrom = new int[n];
 
         for (int i = 0; i < n; i++)
         {
-            minDist[i] = double.MaxValue;
+            minDist[i] = NumOps.MaxValue;
             minFrom[i] = -1;
         }
 
         // Start from node 0
-        minDist[0] = 0;
+        minDist[0] = NumOps.Zero;
 
         for (int count = 0; count < n; count++)
         {
             // Find minimum distance node not in tree
             int u = -1;
-            double minVal = double.MaxValue;
+            T minVal = NumOps.MaxValue;
             for (int i = 0; i < n; i++)
             {
-                if (!inTree[i] && minDist[i] < minVal)
+                if (!inTree[i] && NumOps.LessThan(minDist[i], minVal))
                 {
                     minVal = minDist[i];
                     u = i;
@@ -286,7 +292,7 @@ public class HDBSCAN<T> : ClusteringBase<T>
             // Update distances
             for (int v = 0; v < n; v++)
             {
-                if (!inTree[v] && mrdMatrix[u, v] < minDist[v])
+                if (!inTree[v] && NumOps.LessThan(mrdMatrix[u, v], minDist[v]))
                 {
                     minDist[v] = mrdMatrix[u, v];
                     minFrom[v] = u;
@@ -295,7 +301,7 @@ public class HDBSCAN<T> : ClusteringBase<T>
         }
 
         // Sort edges by weight
-        mst.Sort((a, b) => a.Weight.CompareTo(b.Weight));
+        mst.Sort((a, b) => NumOps.Compare(a.Weight, b.Weight));
 
         return mst;
     }
@@ -307,13 +313,11 @@ public class HDBSCAN<T> : ClusteringBase<T>
         // Use Union-Find to track cluster membership
         var parent = new int[n];
         var size = new int[n];
-        var lambda = new double[n]; // Birth lambda for each point
 
         for (int i = 0; i < n; i++)
         {
             parent[i] = i;
             size[i] = 1;
-            lambda[i] = 0;
         }
 
         int nextCluster = n;
@@ -326,7 +330,9 @@ public class HDBSCAN<T> : ClusteringBase<T>
 
             if (root1 == root2) continue;
 
-            double edgeLambda = edge.Weight > 0 ? 1.0 / edge.Weight : double.MaxValue;
+            T edgeLambda = NumOps.GreaterThan(edge.Weight, NumOps.Zero)
+                ? NumOps.Divide(NumOps.One, edge.Weight)
+                : NumOps.MaxValue;
 
             int size1 = size[root1];
             int size2 = size[root2];
@@ -447,14 +453,14 @@ public class HDBSCAN<T> : ClusteringBase<T>
         if (method == HDBSCANClusterSelection.EOM)
         {
             // Compute stability for each cluster
-            var stability = new Dictionary<int, double>();
-            var birthLambda = new Dictionary<int, double>();
+            var stability = new Dictionary<int, T>();
+            var birthLambda = new Dictionary<int, T>();
             var children = new Dictionary<int, List<int>>();
 
             foreach (int cluster in clusterNodes)
             {
-                stability[cluster] = 0;
-                birthLambda[cluster] = double.MaxValue;
+                stability[cluster] = NumOps.Zero;
+                birthLambda[cluster] = NumOps.MaxValue;
                 children[cluster] = new List<int>();
             }
 
@@ -462,7 +468,9 @@ public class HDBSCAN<T> : ClusteringBase<T>
             {
                 if (birthLambda.ContainsKey(node.Child))
                 {
-                    birthLambda[node.Child] = Math.Min(birthLambda[node.Child], node.Lambda);
+                    T current = birthLambda[node.Child];
+                    if (NumOps.LessThan(node.Lambda, current))
+                        birthLambda[node.Child] = node.Lambda;
                 }
                 if (children.ContainsKey(node.Parent))
                 {
@@ -472,9 +480,11 @@ public class HDBSCAN<T> : ClusteringBase<T>
                 // Add stability contribution
                 if (stability.ContainsKey(node.Parent))
                 {
-                    double deathLambda = node.Lambda;
-                    double birth = birthLambda.ContainsKey(node.Parent) ? birthLambda[node.Parent] : 0;
-                    stability[node.Parent] += (deathLambda - birth) * node.Size;
+                    T deathLambda = node.Lambda;
+                    T birth = birthLambda.ContainsKey(node.Parent) ? birthLambda[node.Parent] : NumOps.Zero;
+                    T sizeT = NumOps.FromDouble(node.Size);
+                    stability[node.Parent] = NumOps.Add(stability[node.Parent],
+                        NumOps.Multiply(NumOps.Subtract(deathLambda, birth), sizeT));
                 }
             }
 
@@ -484,11 +494,17 @@ public class HDBSCAN<T> : ClusteringBase<T>
 
             foreach (int cluster in clusterList)
             {
-                double childStability = children.ContainsKey(cluster)
-                    ? children[cluster].Where(c => c >= n).Sum(c => stability.ContainsKey(c) ? stability[c] : 0)
-                    : 0;
+                T childStability = NumOps.Zero;
+                if (children.ContainsKey(cluster))
+                {
+                    foreach (int c in children[cluster].Where(c => c >= n))
+                    {
+                        if (stability.ContainsKey(c))
+                            childStability = NumOps.Add(childStability, stability[c]);
+                    }
+                }
 
-                if (stability.ContainsKey(cluster) && stability[cluster] > childStability)
+                if (stability.ContainsKey(cluster) && NumOps.GreaterThan(stability[cluster], childStability))
                 {
                     selectedClusters.Add(cluster);
                     // Remove descendants
@@ -500,7 +516,7 @@ public class HDBSCAN<T> : ClusteringBase<T>
                         }
                     }
                 }
-                else if (childStability > 0)
+                else if (NumOps.GreaterThan(childStability, NumOps.Zero))
                 {
                     // Propagate child stability
                     stability[cluster] = childStability;
@@ -574,16 +590,16 @@ public class HDBSCAN<T> : ClusteringBase<T>
 
     private void ComputeProbabilitiesAndOutlierScores(int[] labels, List<CondensedTreeNode> condensedTree, int n)
     {
-        _probabilities = new double[n];
-        _outlierScores = new double[n];
+        _probabilities = new T[n];
+        _outlierScores = new T[n];
 
         // For each point, probability is based on lambda at which it joined its cluster
         foreach (var node in condensedTree)
         {
             if (node.Child < n)
             {
-                _probabilities[node.Child] = labels[node.Child] >= 0 ? 1.0 : 0.0;
-                _outlierScores[node.Child] = labels[node.Child] >= 0 ? 0.0 : 1.0;
+                _probabilities[node.Child] = labels[node.Child] >= 0 ? NumOps.One : NumOps.Zero;
+                _outlierScores[node.Child] = labels[node.Child] >= 0 ? NumOps.Zero : NumOps.One;
             }
         }
     }
@@ -599,7 +615,7 @@ public class HDBSCAN<T> : ClusteringBase<T>
         for (int i = 0; i < x.Rows; i++)
         {
             var point = GetRow(x, i);
-            double minDist = double.MaxValue;
+            T minDist = NumOps.MaxValue;
             int nearestCluster = -1;
 
             if (ClusterCenters is not null && NumClusters > 0)
@@ -607,9 +623,9 @@ public class HDBSCAN<T> : ClusteringBase<T>
                 for (int k = 0; k < NumClusters; k++)
                 {
                     var center = GetRow(ClusterCenters, k);
-                    double dist = NumOps.ToDouble(metric.Compute(point, center));
+                    T dist = metric.Compute(point, center);
 
-                    if (dist < minDist)
+                    if (NumOps.LessThan(dist, minDist))
                     {
                         minDist = dist;
                         nearestCluster = k;
@@ -627,7 +643,7 @@ public class HDBSCAN<T> : ClusteringBase<T>
     public override Vector<T> FitPredict(Matrix<T> x)
     {
         Train(x);
-        return Labels!;
+        return Labels ?? new Vector<T>(0);
     }
 
     /// <summary>
@@ -637,9 +653,9 @@ public class HDBSCAN<T> : ClusteringBase<T>
     {
         public int U { get; }
         public int V { get; }
-        public double Weight { get; }
+        public T Weight { get; }
 
-        public MSTEdge(int u, int v, double weight)
+        public MSTEdge(int u, int v, T weight)
         {
             U = u;
             V = v;
@@ -659,7 +675,7 @@ public class HDBSCAN<T> : ClusteringBase<T>
         public int Child { get; }
 
         /// <summary>Lambda value (1/distance) at which this split occurred.</summary>
-        public double Lambda { get; }
+        public T Lambda { get; }
 
         /// <summary>Size of the child.</summary>
         public int Size { get; }
@@ -667,7 +683,7 @@ public class HDBSCAN<T> : ClusteringBase<T>
         /// <summary>
         /// Initializes a new CondensedTreeNode.
         /// </summary>
-        public CondensedTreeNode(int parent, int child, double lambda, int size)
+        public CondensedTreeNode(int parent, int child, T lambda, int size)
         {
             Parent = parent;
             Child = child;

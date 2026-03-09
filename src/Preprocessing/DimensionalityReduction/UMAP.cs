@@ -35,6 +35,7 @@ namespace AiDotNet.Preprocessing.DimensionalityReduction;
 /// <typeparam name="T">The numeric type for calculations (e.g., float, double).</typeparam>
 public class UMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 {
+    private const double DistanceEpsilon = 1e-10;
     private readonly int _nComponents;
     private readonly int _nNeighbors;
     private readonly double _minDist;
@@ -271,18 +272,42 @@ public class UMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// </summary>
     private double ComputeDistance(double[] pointA, double[] pointB)
     {
-        var va = new Vector<double>(pointA);
-        var vb = new Vector<double>(pointB);
+        int len = pointA.Length;
         switch (_metric)
         {
             case UMAPMetric.Euclidean:
-                return VectorHelper.EuclideanDistance(va, vb);
+            {
+                double sum = 0;
+                for (int k = 0; k < len; k++)
+                {
+                    double d = pointA[k] - pointB[k];
+                    sum += d * d;
+                }
+                return Math.Sqrt(sum);
+            }
 
             case UMAPMetric.Manhattan:
-                return VectorHelper.ManhattanDistance(va, vb);
+            {
+                double sum = 0;
+                for (int k = 0; k < len; k++)
+                {
+                    sum += Math.Abs(pointA[k] - pointB[k]);
+                }
+                return sum;
+            }
 
             case UMAPMetric.Cosine:
-                return 1.0 - VectorHelper.CosineSimilarity(va, vb);
+            {
+                double dot = 0, nA = 0, nB = 0;
+                for (int k = 0; k < len; k++)
+                {
+                    dot += pointA[k] * pointB[k];
+                    nA += pointA[k] * pointA[k];
+                    nB += pointB[k] * pointB[k];
+                }
+                double denom = Math.Sqrt(nA) * Math.Sqrt(nB);
+                return denom > DistanceEpsilon ? 1.0 - dot / denom : 1.0;
+            }
 
             case UMAPMetric.Correlation:
                 int dim = pointA.Length;
@@ -305,7 +330,7 @@ public class UMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                     varB += diffB * diffB;
                 }
                 double denomCorr = Math.Sqrt(varA * varB);
-                return denomCorr > 1e-10 ? 1 - cov / denomCorr : 1;
+                return denomCorr > DistanceEpsilon ? 1 - cov / denomCorr : 1;
 
             default:
                 throw new NotSupportedException($"Metric {_metric} is not supported.");
@@ -682,7 +707,7 @@ public class UMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
             for (int k = 0; k < _nNeighbors; k++)
             {
-                double weight = 1.0 / (distances[k].dist + 1e-10);
+                double weight = 1.0 / (distances[k].dist + DistanceEpsilon);
                 totalWeight += weight;
                 int idx = distances[k].idx;
 

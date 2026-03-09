@@ -101,7 +101,7 @@ public class VarianceComponent<T>
     /// <returns>Proportion between 0 and 1.</returns>
     public T GetVarianceProportion(T totalVariance)
     {
-        if (NumOps.ToDouble(totalVariance) <= 0)
+        if (!NumOps.GreaterThan(totalVariance, NumOps.Zero))
         {
             return NumOps.Zero;
         }

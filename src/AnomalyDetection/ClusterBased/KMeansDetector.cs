@@ -1,5 +1,6 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.AnomalyDetection.ClusterBased;
@@ -116,7 +117,7 @@ public class KMeansDetector<T> : AnomalyDetectorBase<T>
         for (int i = 0; i < X.Rows; i++)
         {
             // Find distance to nearest centroid and which cluster it belongs to
-            double minDist = double.MaxValue;
+            T minDist = NumOps.MaxValue;
             int nearestCluster = 0;
 
             var point = new Vector<T>(X.Columns);
@@ -139,8 +140,8 @@ public class KMeansDetector<T> : AnomalyDetectorBase<T>
                     centroid[j] = centroids[c, j];
                 }
 
-                double dist = NumOps.ToDouble(StatisticsHelper<T>.EuclideanDistance(point, centroid));
-                if (dist < minDist)
+                T dist = StatisticsHelper<T>.EuclideanDistance(point, centroid);
+                if (NumOps.LessThan(dist, minDist))
                 {
                     minDist = dist;
                     nearestCluster = c;
@@ -157,10 +158,10 @@ public class KMeansDetector<T> : AnomalyDetectorBase<T>
 
             // Score = distance + penalty for small clusters
             // The penalty term ensures singleton cluster members get high scores even with distance 0
-            double smallClusterPenalty = 1.0 - clusterFraction;
-            double score = minDist + smallClusterPenalty;
+            T smallClusterPenalty = NumOps.FromDouble(1.0 - clusterFraction);
+            T score = NumOps.Add(minDist, smallClusterPenalty);
 
-            scores[i] = NumOps.FromDouble(score);
+            scores[i] = score;
         }
 
         return scores;
@@ -168,7 +169,7 @@ public class KMeansDetector<T> : AnomalyDetectorBase<T>
 
     private Matrix<T> RunKMeans(Matrix<T> X, out int[] clusterSizes)
     {
-        var random = new Random(_randomSeed);
+        var random = RandomHelper.CreateSeededRandom(_randomSeed);
         int n = X.Rows;
         int d = X.Columns;
 
@@ -185,7 +186,7 @@ public class KMeansDetector<T> : AnomalyDetectorBase<T>
             for (int i = 0; i < n; i++)
             {
                 int nearestCentroid = 0;
-                double minDist = double.MaxValue;
+                T minDist = NumOps.MaxValue;
 
                 var point = new Vector<T>(d);
                 for (int j = 0; j < d; j++)
@@ -201,8 +202,8 @@ public class KMeansDetector<T> : AnomalyDetectorBase<T>
                         centroid[j] = centroids[c, j];
                     }
 
-                    double dist = NumOps.ToDouble(StatisticsHelper<T>.EuclideanDistance(point, centroid));
-                    if (dist < minDist)
+                    T dist = StatisticsHelper<T>.EuclideanDistance(point, centroid);
+                    if (NumOps.LessThan(dist, minDist))
                     {
                         minDist = dist;
                         nearestCentroid = c;
@@ -288,7 +289,7 @@ public class KMeansDetector<T> : AnomalyDetectorBase<T>
 
             for (int i = 0; i < n; i++)
             {
-                double minDist = double.MaxValue;
+                T minDist = NumOps.MaxValue;
                 var point = new Vector<T>(d);
                 for (int j = 0; j < d; j++)
                 {
@@ -303,14 +304,15 @@ public class KMeansDetector<T> : AnomalyDetectorBase<T>
                         centroid[j] = centroids[prevC, j];
                     }
 
-                    double dist = NumOps.ToDouble(StatisticsHelper<T>.EuclideanDistance(point, centroid));
-                    if (dist < minDist)
+                    T dist = StatisticsHelper<T>.EuclideanDistance(point, centroid);
+                    if (NumOps.LessThan(dist, minDist))
                     {
                         minDist = dist;
                     }
                 }
 
-                distances[i] = minDist * minDist;
+                double minDistDouble = NumOps.ToDouble(minDist);
+                distances[i] = minDistDouble * minDistDouble;
                 totalDist += distances[i];
             }
 

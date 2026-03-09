@@ -183,8 +183,8 @@ internal class StudentTDistribution<T> : DistributionBase<T>
         if (pVal < 0 || pVal > 1)
             throw new ArgumentOutOfRangeException(nameof(p), "Probability must be in [0, 1].");
 
-        if (pVal == 0) return NumOps.FromDouble(double.NegativeInfinity);
-        if (pVal == 1) return NumOps.FromDouble(double.PositiveInfinity);
+        if (pVal == 0) return NumOps.MinValue;
+        if (pVal == 1) return NumOps.MaxValue;
 
         double locVal = NumOps.ToDouble(_location);
         double scaleVal = NumOps.ToDouble(_scale);

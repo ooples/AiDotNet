@@ -307,7 +307,7 @@ public class RocketClassifier<T> : ClassifierBase<T>, ITimeSeriesClassifier<T>
 
             // Eliminate
             T pivot = augmented[k, k];
-            if (Math.Abs(NumOps.ToDouble(pivot)) < 1e-10)
+            if (NumOps.LessThan(NumOps.Abs(pivot), NumOps.FromDouble(1e-10)))
             {
                 continue; // Skip near-zero pivot
             }
@@ -333,7 +333,7 @@ public class RocketClassifier<T> : ClassifierBase<T>, ITimeSeriesClassifier<T>
             }
 
             T diag = augmented[i, i];
-            x[i] = Math.Abs(NumOps.ToDouble(diag)) > 1e-10
+            x[i] = NumOps.GreaterThan(NumOps.Abs(diag), NumOps.FromDouble(1e-10))
                 ? NumOps.Divide(sum, diag)
                 : NumOps.Zero;
         }

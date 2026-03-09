@@ -163,7 +163,7 @@ namespace AiDotNet.ReinforcementLearning.Policies
             int discreteActionIndex = 0;
             for (int i = 0; i < _discreteActionSize; i++)
             {
-                if (NumOps.ToDouble(discreteAction[i]) > 0.5)
+                if (NumOps.GreaterThan(discreteAction[i], NumOps.FromDouble(0.5)))
                 {
                     discreteActionIndex = i;
                     break;
@@ -219,7 +219,7 @@ namespace AiDotNet.ReinforcementLearning.Policies
 
             for (int i = 1; i < logits.Length; i++)
             {
-                if (NumOps.ToDouble(logits[i]) > NumOps.ToDouble(maxLogit))
+                if (NumOps.GreaterThan(logits[i], maxLogit))
                 {
                     maxLogit = logits[i];
                 }

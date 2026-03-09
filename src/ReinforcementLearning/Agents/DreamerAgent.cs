@@ -392,7 +392,7 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
 
             // Check if episode continues
             var continueProb = _continueNetwork.Predict(Tensor<T>.FromVector(latentState)).ToVector()[0];
-            if (NumOps.ToDouble(continueProb) < 0.5)
+            if (NumOps.LessThan(continueProb, NumOps.FromDouble(0.5)))
             {
                 break;
             }

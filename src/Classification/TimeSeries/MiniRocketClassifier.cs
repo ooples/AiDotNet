@@ -185,7 +185,7 @@ public class MiniRocketClassifier<T> : ClassifierBase<T>, ITimeSeriesClassifier<
             {
                 // Binary classification
                 T score = ComputeScore(input, i, _weights);
-                predictions[i] = NumOps.ToDouble(score) >= 0
+                predictions[i] = !NumOps.LessThan(score, NumOps.Zero)
                     ? ClassLabels![1]
                     : ClassLabels![0];
             }
@@ -712,7 +712,7 @@ public class MiniRocketClassifier<T> : ClassifierBase<T>, ITimeSeriesClassifier<
             }
 
             T pivot = augmented[k, k];
-            if (Math.Abs(NumOps.ToDouble(pivot)) < 1e-10) continue;
+            if (NumOps.LessThan(NumOps.Abs(pivot), NumOps.FromDouble(1e-10))) continue;
 
             for (int i = k + 1; i < n; i++)
             {
@@ -735,7 +735,7 @@ public class MiniRocketClassifier<T> : ClassifierBase<T>, ITimeSeriesClassifier<
             }
 
             T diag = augmented[i, i];
-            x[i] = Math.Abs(NumOps.ToDouble(diag)) > 1e-10
+            x[i] = NumOps.GreaterThan(NumOps.Abs(diag), NumOps.FromDouble(1e-10))
                 ? NumOps.Divide(sum, diag)
                 : NumOps.Zero;
         }

@@ -61,8 +61,8 @@ internal class DFedBCAProtocol<T> : Infrastructure.FederatedLearningComponentBas
         {
             BlockSelectionStrategy.Cyclic => round % _numBlocks,
             BlockSelectionStrategy.Random => seed.HasValue
-                ? new Random(seed.Value + round).Next(_numBlocks)
-                : new Random(round).Next(_numBlocks),
+                ? RandomHelper.CreateSeededRandom(seed.Value + round).Next(_numBlocks)
+                : RandomHelper.CreateSeededRandom(round).Next(_numBlocks),
             BlockSelectionStrategy.ImportanceBased => SelectByImportance(round),
             _ => round % _numBlocks
         };

@@ -124,7 +124,7 @@ public class CurriculumLearner<T, TInput, TOutput> : ICurriculumLearner<T, TInpu
             : RandomHelper.CreateSecureRandom();
 
         _isTraining = false;
-        _bestValidationLoss = NumOps.FromDouble(double.MaxValue);
+        _bestValidationLoss = NumOps.MaxValue;
         _epochsWithoutImprovement = 0;
     }
 
@@ -198,7 +198,7 @@ public class CurriculumLearner<T, TInput, TOutput> : ICurriculumLearner<T, TInpu
             // Reset scheduler for fresh training
             _scheduler.Reset();
             _phaseHistory.Clear();
-            _bestValidationLoss = NumOps.FromDouble(double.MaxValue);
+            _bestValidationLoss = NumOps.MaxValue;
             _epochsWithoutImprovement = 0;
 
             var currentPhaseNumber = -1;
@@ -367,7 +367,7 @@ public class CurriculumLearner<T, TInput, TOutput> : ICurriculumLearner<T, TInpu
         _phaseHistory.Clear();
         _currentDifficulties = null;
         _sortedIndices = null;
-        _bestValidationLoss = NumOps.FromDouble(double.MaxValue);
+        _bestValidationLoss = NumOps.MaxValue;
         _epochsWithoutImprovement = 0;
     }
 

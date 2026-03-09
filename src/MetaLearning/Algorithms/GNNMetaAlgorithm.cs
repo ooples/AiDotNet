@@ -635,7 +635,7 @@ public class GNNMetaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
         {
             // Check if there's an edge from nodeIndex to j (non-zero adjacency)
             T edgeWeight = adjacencyMatrix[nodeIndex, j];
-            if (NumOps.ToDouble(edgeWeight) > 0)
+            if (NumOps.GreaterThan(edgeWeight, NumOps.Zero))
             {
                 for (int i = 0; i < embDim; i++)
                 {

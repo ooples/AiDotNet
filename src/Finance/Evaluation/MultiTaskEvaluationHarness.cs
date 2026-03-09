@@ -129,7 +129,7 @@ public class MultiTaskEvaluationHarness<T>
             for (int i = 0; i < evalLen; i++)
             {
                 bool predicted = NumOps.ToDouble(scores[i]) > binarizationThreshold;
-                bool actual = NumOps.ToDouble(labels[i]) > 0.5;
+                bool actual = NumOps.GreaterThan(labels[i], NumOps.FromDouble(0.5));
 
                 if (predicted && actual) tp++;
                 else if (predicted && !actual) fp++;
@@ -273,7 +273,7 @@ public class MultiTaskEvaluationHarness<T>
             int evalLen = Math.Min(imputed.Length, original.Length);
             for (int i = 0; i < evalLen; i++)
             {
-                if (NumOps.ToDouble(mask[i]) < 0.5) // This was masked
+                if (NumOps.LessThan(mask[i], NumOps.FromDouble(0.5))) // This was masked
                 {
                     double diff = NumOps.ToDouble(imputed[i]) - NumOps.ToDouble(original[i]);
                     totalMse += diff * diff;

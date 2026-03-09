@@ -1,4 +1,5 @@
 using AiDotNet.Tensors;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.FederatedLearning.ContinualLearning;
 
@@ -331,7 +332,7 @@ public class DataFreeFCL<T> : Infrastructure.FederatedLearningComponentBase<T>, 
             throw new ArgumentOutOfRangeException(nameof(inputDim), "Input dimension must be positive.");
         }
 
-        var rng = new Random(seed);
+        var rng = RandomHelper.CreateSeededRandom(seed);
         var syntheticData = new Dictionary<int, List<double[]>>();
         double optimLr = 0.01; // learning rate for input optimization
         double regularization = 0.001; // L2 regularization on input norm

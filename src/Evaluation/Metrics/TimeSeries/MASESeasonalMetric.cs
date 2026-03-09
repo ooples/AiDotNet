@@ -68,7 +68,7 @@ public class MASESeasonalMetric<T> : ITimeSeriesMetric<T>
         }
 
         if (naiveCount == 0 || maeSeasonalNaive < 1e-10)
-            return mae < 1e-10 ? NumOps.Zero : NumOps.FromDouble(double.MaxValue);
+            return mae < 1e-10 ? NumOps.Zero : NumOps.MaxValue;
 
         maeSeasonalNaive /= naiveCount;
         return NumOps.FromDouble(mae / maeSeasonalNaive);

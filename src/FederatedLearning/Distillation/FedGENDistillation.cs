@@ -51,7 +51,7 @@ public class FedGENDistillation<T> : Infrastructure.FederatedLearningComponentBa
         _generatorEpochs = generatorEpochs;
         _generatorLearningRate = generatorLearningRate;
         _seed = seed;
-        _rng = new Random(seed);
+        _rng = RandomHelper.CreateSeededRandom(seed);
     }
 
     /// <inheritdoc/>
@@ -147,7 +147,7 @@ public class FedGENDistillation<T> : Infrastructure.FederatedLearningComponentBa
         var syntheticData = new Matrix<T>(totalSamples, statDim);
         var syntheticLabels = new int[totalSamples];
 
-        _rng = new Random(_seed + _roundCounter);
+        _rng = RandomHelper.CreateSeededRandom(_seed + _roundCounter);
         _roundCounter++;
         for (int c = 0; c < _numClasses; c++)
         {

@@ -245,7 +245,7 @@ public class LocalOutlierFactor<T> : AnomalyDetectorBase<T>
             // If all neighbors are at distance 0, assign high LRD
             lrd[i] = NumOps.GreaterThan(reachabilitySum, NumOps.Zero)
                 ? NumOps.Divide(NumOps.FromDouble(_numNeighbors), reachabilitySum)
-                : NumOps.FromDouble(double.MaxValue);
+                : NumOps.MaxValue;
         }
 
         return lrd;
@@ -306,7 +306,7 @@ public class LocalOutlierFactor<T> : AnomalyDetectorBase<T>
 
         T pointLrd = NumOps.GreaterThan(reachabilitySum, NumOps.Zero)
             ? NumOps.Divide(NumOps.FromDouble(_numNeighbors), reachabilitySum)
-            : NumOps.FromDouble(double.MaxValue);
+            : NumOps.MaxValue;
 
         // Compute LOF
         T lofSum = NumOps.Zero;

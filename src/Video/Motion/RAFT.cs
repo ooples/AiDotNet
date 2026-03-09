@@ -84,19 +84,6 @@ public class RAFT<T> : OpticalFlowBase<T>
 
     #region Properties
 
-    private ConvolutionalLayer<T> CorrelationConv => _correlationConv ?? ThrowNotInitialized<ConvolutionalLayer<T>>(nameof(CorrelationConv));
-    private ConvolutionalLayer<T> GruConvZ => _gruConvZ ?? ThrowNotInitialized<ConvolutionalLayer<T>>(nameof(GruConvZ));
-    private ConvolutionalLayer<T> GruConvR => _gruConvR ?? ThrowNotInitialized<ConvolutionalLayer<T>>(nameof(GruConvR));
-    private ConvolutionalLayer<T> GruConvH => _gruConvH ?? ThrowNotInitialized<ConvolutionalLayer<T>>(nameof(GruConvH));
-    private ConvolutionalLayer<T> FlowHead => _flowHead ?? ThrowNotInitialized<ConvolutionalLayer<T>>(nameof(FlowHead));
-    private ConvolutionalLayer<T> DeltaFlowHead => _deltaFlowHead ?? ThrowNotInitialized<ConvolutionalLayer<T>>(nameof(DeltaFlowHead));
-    private ConvolutionalLayer<T> UpsampleConv => _upsampleConv ?? ThrowNotInitialized<ConvolutionalLayer<T>>(nameof(UpsampleConv));
-
-    private TLayer ThrowNotInitialized<TLayer>(string layerName) =>
-        throw new InvalidOperationException(
-            $"{GetType().Name}: Layer '{layerName}' is not initialized. " +
-            "Ensure construction completed successfully before use.");
-
     /// <summary>
     /// Gets whether training is supported.
     /// </summary>
@@ -257,6 +244,20 @@ public class RAFT<T> : OpticalFlowBase<T>
 
     #region Private Methods
 
+    /// <summary>
+    /// Throws if the layer fields have not been initialized via <see cref="InitializeNativeLayers"/>.
+    /// </summary>
+    private void ThrowIfNotInitialized()
+    {
+        if (_correlationConv is null || _gruConvZ is null || _gruConvR is null ||
+            _gruConvH is null || _flowHead is null || _deltaFlowHead is null ||
+            _upsampleConv is null)
+        {
+            throw new InvalidOperationException(
+                $"{nameof(RAFT<T>)} has not been initialized. Ensure the constructor completed successfully.");
+        }
+    }
+
     private void InitializeNativeLayers()
     {
         // Check for user-provided custom layers
@@ -296,6 +297,8 @@ public class RAFT<T> : OpticalFlowBase<T>
 
     private List<Tensor<T>> ForwardIterative(Tensor<T> frame1, Tensor<T> frame2)
     {
+        ThrowIfNotInitialized();
+
         int batchSize = frame1.Shape[0];
         int featHeight = _height / 8;
         int featWidth = _width / 8;
@@ -312,7 +315,7 @@ public class RAFT<T> : OpticalFlowBase<T>
         for (int iter = 0; iter < NumIterations; iter++)
         {
             var correlation = ComputeCorrelation(fmap1, fmap2, flow);
-            var corrFeatures = CorrelationConv.Forward(correlation);
+            var corrFeatures = _correlationConv!.Forward(correlation);
 
             var gruInput = ConcatenateChannels(
                 ConcatenateChannels(context, corrFeatures),
@@ -320,8 +323,8 @@ public class RAFT<T> : OpticalFlowBase<T>
 
             hiddenState = GRUUpdate(hiddenState, gruInput);
 
-            var flowFeatures = FlowHead.Forward(hiddenState);
-            var deltaFlow = DeltaFlowHead.Forward(flowFeatures);
+            var flowFeatures = _flowHead!.Forward(hiddenState);
+            var deltaFlow = _deltaFlowHead!.Forward(flowFeatures);
 
             flow = AddTensors(flow, deltaFlow);
 
@@ -407,9 +410,11 @@ public class RAFT<T> : OpticalFlowBase<T>
 
     private Tensor<T> GRUUpdate(Tensor<T> hiddenState, Tensor<T> gruInput)
     {
-        var z = Engine.Sigmoid(GruConvZ.Forward(gruInput));
-        var r = Engine.Sigmoid(GruConvR.Forward(gruInput));
-        var hNew = ApplyTanh(GruConvH.Forward(gruInput));
+        ThrowIfNotInitialized();
+
+        var z = Engine.Sigmoid(_gruConvZ!.Forward(gruInput));
+        var r = Engine.Sigmoid(_gruConvR!.Forward(gruInput));
+        var hNew = ApplyTanh(_gruConvH!.Forward(gruInput));
 
         var ones = Tensor<T>.CreateDefault(z.Shape, NumOps.One);
         var oneMinusZ = Engine.TensorSubtract(ones, z);
@@ -554,13 +559,15 @@ public class RAFT<T> : OpticalFlowBase<T>
 
     private void BackwardPass(Tensor<T> gradient)
     {
-        gradient = UpsampleConv.Backward(gradient);
-        gradient = DeltaFlowHead.Backward(gradient);
-        gradient = FlowHead.Backward(gradient);
-        gradient = GruConvH.Backward(gradient);
-        gradient = GruConvR.Backward(gradient);
-        gradient = GruConvZ.Backward(gradient);
-        gradient = CorrelationConv.Backward(gradient);
+        ThrowIfNotInitialized();
+
+        gradient = _upsampleConv!.Backward(gradient);
+        gradient = _deltaFlowHead!.Backward(gradient);
+        gradient = _flowHead!.Backward(gradient);
+        gradient = _gruConvH!.Backward(gradient);
+        gradient = _gruConvR!.Backward(gradient);
+        gradient = _gruConvZ!.Backward(gradient);
+        gradient = _correlationConv!.Backward(gradient);
 
         for (int i = _contextEncoder.Count - 1; i >= 0; i--)
         {

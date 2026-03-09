@@ -424,7 +424,7 @@ public class MEGALayer<T> : LayerBase<T>
                 {
                     // Compute Q_i * K_j^T for j <= i
                     var rawScores = new T[i + 1];
-                    T maxScore = NumOps.FromDouble(double.NegativeInfinity);
+                    T maxScore = NumOps.MinValue;
 
                     for (int j = 0; j <= i; j++)
                     {
@@ -436,7 +436,7 @@ public class MEGALayer<T> : LayerBase<T>
                                 NumOps.Multiply(q[new[] { bi, i, flatD }], k[new[] { bi, j, flatD }]));
                         }
                         rawScores[j] = NumOps.Multiply(dot, headScale);
-                        if (NumOps.ToDouble(rawScores[j]) > NumOps.ToDouble(maxScore))
+                        if (NumOps.GreaterThan(rawScores[j], maxScore))
                             maxScore = rawScores[j];
                     }
 
