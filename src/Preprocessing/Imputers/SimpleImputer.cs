@@ -1,5 +1,6 @@
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
+using Newtonsoft.Json;
 
 namespace AiDotNet.Preprocessing.Imputers;
 
@@ -53,31 +54,39 @@ public enum ImputationStrategy
 /// <typeparam name="T">The numeric type for calculations (e.g., float, double).</typeparam>
 public class SimpleImputer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 {
+    [JsonProperty]
     private readonly ImputationStrategy _strategy;
+    [JsonProperty]
     private readonly T? _fillValue;
+    [JsonProperty]
     private readonly T _missingValue;
 
     // Fitted parameters: statistics for each column
+    [JsonProperty]
     private Vector<T>? _statistics;
 
     /// <summary>
     /// Gets the imputation strategy used.
     /// </summary>
+    [JsonIgnore]
     public ImputationStrategy Strategy => _strategy;
 
     /// <summary>
     /// Gets the fill value used for Constant strategy.
     /// </summary>
+    [JsonIgnore]
     public T? FillValue => _fillValue;
 
     /// <summary>
     /// Gets the value considered as missing.
     /// </summary>
+    [JsonIgnore]
     public T MissingValue => _missingValue;
 
     /// <summary>
     /// Gets the computed statistics for each feature.
     /// </summary>
+    [JsonIgnore]
     public Vector<T>? Statistics => _statistics;
 
     /// <summary>

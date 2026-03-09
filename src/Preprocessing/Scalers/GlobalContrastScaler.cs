@@ -1,5 +1,6 @@
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
+using Newtonsoft.Json;
 
 namespace AiDotNet.Preprocessing.Scalers;
 
@@ -23,17 +24,21 @@ namespace AiDotNet.Preprocessing.Scalers;
 /// <typeparam name="T">The numeric type for calculations (e.g., float, double).</typeparam>
 public class GlobalContrastScaler<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 {
+    [JsonProperty]
     private Vector<T>? _mean;
+    [JsonProperty]
     private Vector<T>? _stdDev;
 
     /// <summary>
     /// Gets the mean for each feature computed during fitting.
     /// </summary>
+    [JsonIgnore]
     public Vector<T>? Mean => _mean;
 
     /// <summary>
     /// Gets the standard deviation for each feature computed during fitting.
     /// </summary>
+    [JsonIgnore]
     public Vector<T>? StdDev => _stdDev;
 
     /// <summary>

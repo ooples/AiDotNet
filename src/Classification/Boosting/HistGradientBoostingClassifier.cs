@@ -1,7 +1,10 @@
+using System.Text;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors.Helpers;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace AiDotNet.Classification.Boosting;
 
@@ -842,6 +845,187 @@ public class HistGradientBoostingClassifier<T> : ClassifierBase<T>
         importance[node.FeatureIndex] += 1;
         CountFeatureUsage(node.LeftChild, importance);
         CountFeatureUsage(node.RightChild, importance);
+    }
+
+    /// <inheritdoc/>
+    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
+    {
+        var clone = new HistGradientBoostingClassifier<T>(_maxBins, _maxDepth, _nEstimators,
+            _learningRate, _minSamplesLeaf, _l2Regularization);
+
+        clone.NumFeatures = NumFeatures;
+        clone.NumClasses = NumClasses;
+        clone.TaskType = TaskType;
+
+        if (ClassLabels is not null)
+        {
+            clone.ClassLabels = new Vector<T>(ClassLabels.Length);
+            for (int i = 0; i < ClassLabels.Length; i++)
+                clone.ClassLabels[i] = ClassLabels[i];
+        }
+
+        if (_binBoundaries is not null)
+        {
+            clone._binBoundaries = new double[_binBoundaries.Length][];
+            for (int i = 0; i < _binBoundaries.Length; i++)
+            {
+                clone._binBoundaries[i] = new double[_binBoundaries[i].Length];
+                Array.Copy(_binBoundaries[i], clone._binBoundaries[i], _binBoundaries[i].Length);
+            }
+        }
+
+        if (_initialPrediction is not null)
+        {
+            clone._initialPrediction = new double[_initialPrediction.Length];
+            Array.Copy(_initialPrediction, clone._initialPrediction, _initialPrediction.Length);
+        }
+
+        foreach (var tree in _trees)
+        {
+            clone._trees.Add(CloneHistTree(tree));
+        }
+
+        return clone;
+    }
+
+    private static HistTree CloneHistTree(HistTree node)
+    {
+        var cloned = new HistTree
+        {
+            FeatureIndex = node.FeatureIndex,
+            BinThreshold = node.BinThreshold,
+            LeafValue = node.LeafValue
+        };
+        if (node.LeftChild is not null)
+            cloned.LeftChild = CloneHistTree(node.LeftChild);
+        if (node.RightChild is not null)
+            cloned.RightChild = CloneHistTree(node.RightChild);
+        return cloned;
+    }
+
+    /// <inheritdoc/>
+    public override byte[] Serialize()
+    {
+        var modelData = new Dictionary<string, object>
+        {
+            { "NumClasses", NumClasses },
+            { "NumFeatures", NumFeatures },
+            { "TaskType", (int)TaskType },
+            { "ClassLabels", ClassLabels?.ToArray() ?? Array.Empty<T>() },
+            { "MaxBins", _maxBins },
+            { "MaxDepth", _maxDepth },
+            { "NEstimators", _nEstimators },
+            { "LearningRate", _learningRate },
+            { "MinSamplesLeaf", _minSamplesLeaf },
+            { "L2Regularization", _l2Regularization }
+        };
+
+        if (_initialPrediction is not null)
+            modelData["InitialPrediction"] = _initialPrediction;
+
+        if (_binBoundaries is not null)
+        {
+            modelData["BinBoundariesCount"] = _binBoundaries.Length;
+            for (int i = 0; i < _binBoundaries.Length; i++)
+                modelData[$"BinBoundaries_{i}"] = _binBoundaries[i];
+        }
+
+        modelData["TreeCount"] = _trees.Count;
+        for (int i = 0; i < _trees.Count; i++)
+            modelData[$"Tree_{i}"] = SerializeHistTree(_trees[i]);
+
+        var modelMetadata = GetModelMetadata();
+        modelMetadata.ModelData = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelData));
+        return Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelMetadata));
+    }
+
+    /// <inheritdoc/>
+    public override void Deserialize(byte[] modelData)
+    {
+        var jsonString = Encoding.UTF8.GetString(modelData);
+        var modelMetadata = JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString);
+
+        if (modelMetadata == null || modelMetadata.ModelData == null)
+            throw new InvalidOperationException("Deserialization failed: The model data is invalid or corrupted.");
+
+        var modelDataString = Encoding.UTF8.GetString(modelMetadata.ModelData);
+        var modelDataObj = JsonConvert.DeserializeObject<JObject>(modelDataString);
+
+        if (modelDataObj == null)
+            throw new InvalidOperationException("Deserialization failed: The model data is invalid or corrupted.");
+
+        NumClasses = modelDataObj["NumClasses"]?.ToObject<int>() ?? 0;
+        NumFeatures = modelDataObj["NumFeatures"]?.ToObject<int>() ?? 0;
+        TaskType = (ClassificationTaskType)(modelDataObj["TaskType"]?.ToObject<int>() ?? 0);
+
+        var classLabelsToken = modelDataObj["ClassLabels"];
+        if (classLabelsToken is not null)
+        {
+            var classLabelsAsDoubles = classLabelsToken.ToObject<double[]>() ?? Array.Empty<double>();
+            if (classLabelsAsDoubles.Length > 0)
+            {
+                ClassLabels = new Vector<T>(classLabelsAsDoubles.Length);
+                for (int i = 0; i < classLabelsAsDoubles.Length; i++)
+                    ClassLabels[i] = NumOps.FromDouble(classLabelsAsDoubles[i]);
+            }
+        }
+
+        _initialPrediction = modelDataObj["InitialPrediction"]?.ToObject<double[]>();
+
+        int bbCount = modelDataObj["BinBoundariesCount"]?.ToObject<int>() ?? 0;
+        if (bbCount > 0)
+        {
+            _binBoundaries = new double[bbCount][];
+            for (int i = 0; i < bbCount; i++)
+                _binBoundaries[i] = modelDataObj[$"BinBoundaries_{i}"]?.ToObject<double[]>() ?? Array.Empty<double>();
+        }
+
+        _trees.Clear();
+        int treeCount = modelDataObj["TreeCount"]?.ToObject<int>() ?? 0;
+        for (int i = 0; i < treeCount; i++)
+        {
+            var treeToken = modelDataObj[$"Tree_{i}"] as JObject;
+            if (treeToken is not null)
+                _trees.Add(DeserializeHistTree(treeToken));
+        }
+    }
+
+    private Dictionary<string, object> SerializeHistTree(HistTree node)
+    {
+        var data = new Dictionary<string, object>
+        {
+            { "FeatureIndex", node.FeatureIndex },
+            { "BinThreshold", node.BinThreshold },
+            { "LeafValue", node.LeafValue },
+            { "IsLeaf", node.LeftChild is null && node.RightChild is null }
+        };
+
+        if (node.LeftChild is not null)
+            data["Left"] = SerializeHistTree(node.LeftChild);
+        if (node.RightChild is not null)
+            data["Right"] = SerializeHistTree(node.RightChild);
+
+        return data;
+    }
+
+    private HistTree DeserializeHistTree(JObject data)
+    {
+        var node = new HistTree
+        {
+            FeatureIndex = data["FeatureIndex"]?.ToObject<int>() ?? 0,
+            BinThreshold = data["BinThreshold"]?.ToObject<int>() ?? 0,
+            LeafValue = data["LeafValue"]?.ToObject<double>() ?? 0.0
+        };
+
+        var leftToken = data["Left"];
+        if (leftToken is not null && leftToken.Type == JTokenType.Object)
+            node.LeftChild = DeserializeHistTree((JObject)leftToken);
+
+        var rightToken = data["Right"];
+        if (rightToken is not null && rightToken.Type == JTokenType.Object)
+            node.RightChild = DeserializeHistTree((JObject)rightToken);
+
+        return node;
     }
 
     /// <summary>

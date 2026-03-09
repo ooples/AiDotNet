@@ -162,8 +162,10 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
     // Comprehensive activation cache for proper backward pass
     private List<Tensor<T>>? _cachedInitialFeatures;
     private List<(Tensor<T> forward, Tensor<T> backward)>? _cachedFlows;
-    private List<List<Tensor<T>>>? _cachedBackwardPropFeatures;  // [iteration][frame]
-    private List<List<Tensor<T>>>? _cachedForwardPropFeatures;   // [iteration][frame]
+    private List<List<Tensor<T>>>? _cachedBackwardPropFeatures;  // [iteration][frame] - concat tensors for conv input
+    private List<List<Tensor<T>>>? _cachedForwardPropFeatures;   // [iteration][frame] - concat tensors for conv input
+    private List<List<Tensor<T>>>? _cachedBackwardOutputFeatures; // [iteration][frame] - actual propagated features (conv output)
+    private List<List<Tensor<T>>>? _cachedForwardOutputFeatures;  // [iteration][frame] - actual propagated features (conv output)
     private List<List<Tensor<T>>>? _cachedBackwardAlignInputs;   // [iteration][frame]
     private List<List<Tensor<T>>>? _cachedForwardAlignInputs;    // [iteration][frame]
     private List<List<Tensor<T>>>? _cachedBackwardAlignOutputs;  // [iteration][frame]
@@ -452,7 +454,13 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
     /// <inheritdoc/>
     public override Tensor<T> Predict(Tensor<T> input)
     {
-        return EnhanceVideo(input);
+        var result = EnhanceVideo(input);
+
+        // Clear activation caches after inference to avoid retaining large tensors
+        // that are only needed for backward pass during training.
+        ClearActivationCache();
+
+        return result;
     }
 
     /// <inheritdoc/>
@@ -565,6 +573,8 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
         _cachedFlows = null;
         _cachedBackwardPropFeatures = null;
         _cachedForwardPropFeatures = null;
+        _cachedBackwardOutputFeatures = null;
+        _cachedForwardOutputFeatures = null;
         _cachedBackwardAlignInputs = null;
         _cachedForwardAlignInputs = null;
         _cachedBackwardAlignOutputs = null;
@@ -666,6 +676,8 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
         // Initialize caches for propagation
         _cachedBackwardPropFeatures = [];
         _cachedForwardPropFeatures = [];
+        _cachedBackwardOutputFeatures = [];
+        _cachedForwardOutputFeatures = [];
         _cachedBackwardAlignInputs = [];
         _cachedForwardAlignInputs = [];
         _cachedBackwardAlignOutputs = [];
@@ -757,6 +769,8 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
             // Cache this iteration's activations
             _cachedBackwardPropFeatures.Add(iterBackwardPropFeatures);
             _cachedForwardPropFeatures.Add(iterForwardPropFeatures);
+            _cachedBackwardOutputFeatures.Add(backwardFeats.ToList());
+            _cachedForwardOutputFeatures.Add(forwardFeats.ToList());
             _cachedBackwardAlignInputs.Add(iterBackwardAlignInputs);
             _cachedForwardAlignInputs.Add(iterForwardAlignInputs);
             _cachedBackwardAlignOutputs.Add(iterBackwardAlignOutputs);
@@ -1058,6 +1072,7 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
     private List<Tensor<T>> BackwardThroughPropagation(List<Tensor<T>> outputGradients, int numFrames)
     {
         if (_cachedBackwardPropFeatures == null || _cachedForwardPropFeatures == null ||
+            _cachedBackwardOutputFeatures == null || _cachedForwardOutputFeatures == null ||
             _cachedBackwardAlignInputs == null || _cachedForwardAlignInputs == null ||
             _cachedFlows == null)
         {
@@ -1098,10 +1113,10 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
                     alignGrad, _numFeatures, _numFeatures);
 
                 // Backward through warping: gradients go to previous frame features and flow
+                // Use the actual propagated features (conv output), not the concat tensor
                 var (unwarpedGrad, flowGrad) = WarpBackward(
                     warpedGrad, _cachedFlows[i - 1].forward,
-                    (_cachedForwardPropFeatures ?? throw new InvalidOperationException(
-                        $"{GetType().Name}: Forward propagation features not cached. Call Forward() before Backward()."))[iter][i - 1]);
+                    _cachedForwardOutputFeatures[iter][i - 1]);
 
                 // Accumulate gradients
                 AccumulateGradient(backwardPhaseGradients[i], currentPartGrad);
@@ -1121,8 +1136,6 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
             {
                 inputGradients.Add(new Tensor<T>(currentGradients[0].Shape));
             }
-
-            var cachedBackwardFeatures = _cachedBackwardPropFeatures ?? throw new InvalidOperationException("_cachedBackwardPropFeatures has not been initialized.");
 
             // Backward propagation went from last to first (i = numFrames-2 to 0)
             // So backward goes from first to last
@@ -1145,9 +1158,10 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
                     alignGrad, _numFeatures, _numFeatures);
 
                 // Backward through warping: gradients go to next frame features and flow
+                // Use the actual propagated features (conv output), not the concat tensor
                 var (unwarpedGrad, flowGrad) = WarpBackward(
                     warpedGrad, _cachedFlows[i].backward,
-                    cachedBackwardFeatures[iter][i + 1]);
+                    _cachedBackwardOutputFeatures[iter][i + 1]);
 
                 // Accumulate gradients
                 AccumulateGradient(inputGradients[i], origPartGrad);

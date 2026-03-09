@@ -1,5 +1,6 @@
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
+using Newtonsoft.Json;
 
 namespace AiDotNet.Preprocessing.Scalers;
 
@@ -23,29 +24,37 @@ namespace AiDotNet.Preprocessing.Scalers;
 /// <typeparam name="T">The numeric type for calculations (e.g., float, double).</typeparam>
 public class StandardScaler<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 {
+    [JsonProperty]
     private Vector<T>? _mean;
+    [JsonProperty]
     private Vector<T>? _stdDev;
+    [JsonProperty]
     private readonly bool _withMean;
+    [JsonProperty]
     private readonly bool _withStd;
 
     /// <summary>
     /// Gets the mean of each feature computed during fitting.
     /// </summary>
+    [JsonIgnore]
     public Vector<T>? Mean => _mean;
 
     /// <summary>
     /// Gets the standard deviation of each feature computed during fitting.
     /// </summary>
+    [JsonIgnore]
     public Vector<T>? StandardDeviation => _stdDev;
 
     /// <summary>
     /// Gets whether this scaler centers the data (subtracts mean).
     /// </summary>
+    [JsonIgnore]
     public bool WithMean => _withMean;
 
     /// <summary>
     /// Gets whether this scaler scales the data (divides by std).
     /// </summary>
+    [JsonIgnore]
     public bool WithStd => _withStd;
 
     /// <summary>

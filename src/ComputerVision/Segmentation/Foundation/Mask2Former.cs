@@ -462,7 +462,7 @@ public class Mask2Former<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
     {
         return _useNativeMode
             ? new Mask2Former<T>(Architecture, _optimizer, LossFunction, _numClasses, _numQueries, _modelSize, _dropRate, _options)
-            : new Mask2Former<T>(Architecture, _onnxModelPath!, _numClasses, _numQueries, _modelSize, _options);
+            : new Mask2Former<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _numQueries, _modelSize, _options);
     }
 
     /// <summary>

@@ -63,11 +63,11 @@ public class SymmetricProjector<T> : IProjectorHead<T>
         public Tensor<T>? CachedH1Bn;
         public Tensor<T>? CachedH1Relu;
         public Tensor<T>? CachedProjection;
-        public Tensor<T>? CachedPredictorInput;
         public Tensor<T>? CachedPredH1;
         public Tensor<T>? CachedPredH1Bn;
         public Tensor<T>? CachedPredH1Relu;
 
+        // BatchNorm cached statistics
         public T[]? ProjBn1Mean;
         public T[]? ProjBn1Var;
         public Tensor<T>? ProjBn1Normalized;
@@ -78,6 +78,11 @@ public class SymmetricProjector<T> : IProjectorHead<T>
         public T[]? PredBn1Var;
         public Tensor<T>? PredBn1Normalized;
 
+        // Cached intermediate backward results (to avoid recomputation in ComputeParameterGradients)
+        public Tensor<T>? GradBeforeBn2;
+        public Tensor<T>? GradAtH1;
+
+        // BatchNorm gradients
         public T[]? ProjBn1GammaGrad;
         public T[]? ProjBn1BetaGrad;
         public T[]? ProjBn2GammaGrad;
@@ -87,33 +92,46 @@ public class SymmetricProjector<T> : IProjectorHead<T>
 
         public void Clear()
         {
-            CachedInput = null; CachedH1 = null; CachedH1Bn = null;
-            CachedH1Relu = null; CachedProjection = null;
-            CachedPredictorInput = null; CachedPredH1 = null; CachedPredH1Bn = null; CachedPredH1Relu = null;
-            ProjBn1Mean = null; ProjBn1Var = null; ProjBn1Normalized = null;
-            ProjBn2Mean = null; ProjBn2Var = null; ProjBn2Normalized = null;
-            PredBn1Mean = null; PredBn1Var = null; PredBn1Normalized = null;
-            ProjBn1GammaGrad = null; ProjBn1BetaGrad = null;
-            ProjBn2GammaGrad = null; ProjBn2BetaGrad = null;
-            PredBn1GammaGrad = null; PredBn1BetaGrad = null;
+            CachedInput = null;
+            CachedH1 = null;
+            CachedH1Bn = null;
+            CachedH1Relu = null;
+            CachedProjection = null;
+            CachedPredH1 = null;
+            CachedPredH1Bn = null;
+            CachedPredH1Relu = null;
+
+            ProjBn1Mean = null;
+            ProjBn1Var = null;
+            ProjBn1Normalized = null;
+            ProjBn2Mean = null;
+            ProjBn2Var = null;
+            ProjBn2Normalized = null;
+            PredBn1Mean = null;
+            PredBn1Var = null;
+            PredBn1Normalized = null;
+
+            GradBeforeBn2 = null;
+            GradAtH1 = null;
+
+            ProjBn1GammaGrad = null;
+            ProjBn1BetaGrad = null;
+            ProjBn2GammaGrad = null;
+            ProjBn2BetaGrad = null;
+            PredBn1GammaGrad = null;
+            PredBn1BetaGrad = null;
         }
     }
 
+    // Dual-branch forward contexts for symmetric multi-view training
     private readonly ForwardContext _branch1 = new();
     private readonly ForwardContext _branch2 = new();
-    private int _nextBranch;
-    private int _nextBackwardBranch;
+    private int _nextBranch;           // 0 = branch1, 1 = branch2
+    private int _nextBackwardBranch;   // 0 = branch1, 1 = branch2
+
     private Vector<T>? _gradients;
 
-    // Running statistics for eval-mode batch normalization
-    private T[]? _runningProjBn1Mean;
-    private T[]? _runningProjBn1Var;
-    private T[]? _runningProjBn2Mean;
-    private T[]? _runningProjBn2Var;
-    private T[]? _runningPredBn1Mean;
-    private T[]? _runningPredBn1Var;
-    private const double BnMomentum = 0.1;
-
+    // Guard properties for predictor parameters
     private T[] PredWeight1 => _predWeight1 ?? throw new InvalidOperationException("Predictor weight1 not initialized. Ensure _hasPredictor is true.");
     private T[] PredBias1 => _predBias1 ?? throw new InvalidOperationException("Predictor bias1 not initialized.");
     private T[] PredBn1Gamma => _predBn1Gamma ?? throw new InvalidOperationException("Predictor BN1 gamma not initialized.");
@@ -123,282 +141,521 @@ public class SymmetricProjector<T> : IProjectorHead<T>
 
     /// <inheritdoc />
     public int InputDimension => _inputDim;
+
     /// <inheritdoc />
     public int OutputDimension => _projectionDim;
+
     /// <inheritdoc />
     public int? HiddenDimension => _hiddenDim;
+
     /// <inheritdoc />
     public int ParameterCount => ComputeParameterCount();
 
     private bool _isTraining = true;
 
-    /// <summary>Gets whether this projector has a predictor head.</summary>
+    /// <summary>
+    /// Gets whether this projector has a predictor head.
+    /// </summary>
     public bool HasPredictor => _hasPredictor;
 
-    public SymmetricProjector(int inputDim, int hiddenDim = 4096, int projectionDim = 256, int predictorHiddenDim = 4096, int? seed = null)
+    /// <summary>
+    /// Initializes a new instance of the SymmetricProjector class.
+    /// </summary>
+    /// <param name="inputDim">Input dimension from encoder.</param>
+    /// <param name="hiddenDim">Hidden dimension of the projector (default: 4096).</param>
+    /// <param name="projectionDim">Output dimension (default: 256).</param>
+    /// <param name="predictorHiddenDim">Hidden dimension of predictor (default: 4096). Set to 0 to disable predictor.</param>
+    /// <param name="seed">Random seed for initialization.</param>
+    public SymmetricProjector(
+        int inputDim,
+        int hiddenDim = 4096,
+        int projectionDim = 256,
+        int predictorHiddenDim = 4096,
+        int? seed = null)
     {
-        _inputDim = inputDim; _hiddenDim = hiddenDim; _projectionDim = projectionDim;
-        _predictorHiddenDim = predictorHiddenDim; _hasPredictor = predictorHiddenDim > 0;
+        _inputDim = inputDim;
+        _hiddenDim = hiddenDim;
+        _projectionDim = projectionDim;
+        _predictorHiddenDim = predictorHiddenDim;
+        _hasPredictor = predictorHiddenDim > 0;
+
         var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.Shared;
+
+        // Initialize projector
         _projWeight1 = InitializeWeight(inputDim, hiddenDim, rng);
-        _projBias1 = new T[hiddenDim]; _projBn1Gamma = InitializeOnes(hiddenDim); _projBn1Beta = new T[hiddenDim];
+        _projBias1 = new T[hiddenDim];
+        _projBn1Gamma = InitializeOnes(hiddenDim);
+        _projBn1Beta = new T[hiddenDim];
         _projWeight2 = InitializeWeight(hiddenDim, projectionDim, rng);
-        _projBias2 = new T[projectionDim]; _projBn2Gamma = InitializeOnes(projectionDim); _projBn2Beta = new T[projectionDim];
+        _projBias2 = new T[projectionDim];
+        _projBn2Gamma = InitializeOnes(projectionDim);
+        _projBn2Beta = new T[projectionDim];
+
+        // Initialize predictor if needed
         if (_hasPredictor)
         {
             _predWeight1 = InitializeWeight(projectionDim, predictorHiddenDim, rng);
-            _predBias1 = new T[predictorHiddenDim]; _predBn1Gamma = InitializeOnes(predictorHiddenDim); _predBn1Beta = new T[predictorHiddenDim];
+            _predBias1 = new T[predictorHiddenDim];
+            _predBn1Gamma = InitializeOnes(predictorHiddenDim);
+            _predBn1Beta = new T[predictorHiddenDim];
             _predWeight2 = InitializeWeight(predictorHiddenDim, projectionDim, rng);
             _predBias2 = new T[projectionDim];
         }
     }
 
-    private ForwardContext GetNextForwardContext() { var ctx = _nextBranch == 0 ? _branch1 : _branch2; ctx.Clear(); _nextBranch = (_nextBranch + 1) % 2; return ctx; }
-    private ForwardContext GetNextBackwardContext() { var ctx = _nextBackwardBranch == 0 ? _branch1 : _branch2; _nextBackwardBranch = (_nextBackwardBranch + 1) % 2; return ctx; }
+    private ForwardContext GetNextForwardContext()
+    {
+        var ctx = _nextBranch == 0 ? _branch1 : _branch2;
+        _nextBranch = (_nextBranch + 1) % 2;
+        return ctx;
+    }
+
+    private ForwardContext GetNextBackwardContext()
+    {
+        var ctx = _nextBackwardBranch == 0 ? _branch1 : _branch2;
+        _nextBackwardBranch = (_nextBackwardBranch + 1) % 2;
+        return ctx;
+    }
 
     /// <inheritdoc />
     public Tensor<T> Project(Tensor<T> input)
     {
         var ctx = GetNextForwardContext();
+        ctx.Clear();
         ctx.CachedInput = input;
+
+        // Projector: Linear -> BN -> ReLU -> Linear -> BN
         ctx.CachedH1 = Linear(input, _projWeight1, _projBias1, _inputDim, _hiddenDim);
-        ctx.CachedH1Bn = BatchNorm(ctx.CachedH1, _projBn1Gamma, _projBn1Beta, out ctx.ProjBn1Mean, out ctx.ProjBn1Var, out ctx.ProjBn1Normalized, ref _runningProjBn1Mean, ref _runningProjBn1Var);
+        ctx.CachedH1Bn = BatchNorm(ctx.CachedH1, _projBn1Gamma, _projBn1Beta,
+            out ctx.ProjBn1Mean, out ctx.ProjBn1Var, out ctx.ProjBn1Normalized);
         ctx.CachedH1Relu = ReLU(ctx.CachedH1Bn);
         ctx.CachedProjection = Linear(ctx.CachedH1Relu, _projWeight2, _projBias2, _hiddenDim, _projectionDim);
-        var projNorm = BatchNorm(ctx.CachedProjection, _projBn2Gamma, _projBn2Beta, out ctx.ProjBn2Mean, out ctx.ProjBn2Var, out ctx.ProjBn2Normalized, ref _runningProjBn2Mean, ref _runningProjBn2Var);
+        var projNorm = BatchNorm(ctx.CachedProjection, _projBn2Gamma, _projBn2Beta,
+            out ctx.ProjBn2Mean, out ctx.ProjBn2Var, out ctx.ProjBn2Normalized);
+
         return projNorm;
     }
 
-    /// <summary>Applies the predictor head (for online branch only).</summary>
-    /// <remarks>
-    /// Prediction is stored in the context of the most recently completed <see cref="Project"/> call.
-    /// When using symmetric dual-branch training, call Project and Predict in alternating pairs:
-    /// <c>Project(view1); Predict(proj1); Project(view2); Predict(proj2);</c>
-    /// </remarks>
-    public Tensor<T> Predict(Tensor<T> projection)
-    {
-        if (!_hasPredictor) return projection;
-        // Pick the context from the most recently completed Project() call.
-        // After Project(), _nextBranch was already incremented, so the "last used" branch
-        // is the opposite of _nextBranch.
-        var ctx = _nextBranch == 0 ? _branch2 : _branch1;
-        ctx.CachedPredictorInput = projection;
-        ctx.CachedPredH1 = Linear(projection, PredWeight1, PredBias1, _projectionDim, _predictorHiddenDim);
-        ctx.CachedPredH1Bn = BatchNorm(ctx.CachedPredH1, PredBn1Gamma, PredBn1Beta, out ctx.PredBn1Mean, out ctx.PredBn1Var, out ctx.PredBn1Normalized, ref _runningPredBn1Mean, ref _runningPredBn1Var);
-        ctx.CachedPredH1Relu = ReLU(ctx.CachedPredH1Bn);
-        return Linear(ctx.CachedPredH1Relu, PredWeight2, PredBias2, _predictorHiddenDim, _projectionDim);
-    }
+    /// <summary>
+    /// Applies the predictor head using the most recently used branch from <see cref="Project"/>.
+    /// </summary>
+    public Tensor<T> Predict(Tensor<T> projection) => Predict(projection, -1);
 
-    /// <summary>Projects and predicts in one call.</summary>
-    public Tensor<T> ProjectAndPredict(Tensor<T> input) { var projection = Project(input); return Predict(projection); }
-
-    /// <inheritdoc />
-    public Tensor<T> Backward(Tensor<T> gradOutput)
+    /// <summary>
+    /// Applies the predictor head (for online branch only).
+    /// </summary>
+    /// <param name="projection">Output from the projector.</param>
+    /// <param name="branchIndex">0 for branch1, 1 for branch2, or -1 for most recent (legacy).</param>
+    public Tensor<T> Predict(Tensor<T> projection, int branchIndex)
     {
-        var ctx = GetNextBackwardContext();
-        var grad = gradOutput;
-        if (_hasPredictor && ctx.CachedPredH1Relu is not null)
+        if (!_hasPredictor)
+            return projection;
+
+        ForwardContext ctx;
+        if (branchIndex >= 0)
         {
-            grad = LinearBackward(grad, PredWeight2, _predictorHiddenDim, _projectionDim);
-            var predH1Bn = ctx.CachedPredH1Bn ?? throw new InvalidOperationException("Cached predictor H1 BN not available. Call Project() before Backward().");
-            grad = ReLUBackward(grad, predH1Bn);
-            grad = BatchNormBackward(grad, PredBn1Gamma, ctx.PredBn1Var, ctx.PredBn1Normalized, out ctx.PredBn1GammaGrad, out ctx.PredBn1BetaGrad);
-            grad = LinearBackward(grad, PredWeight1, _projectionDim, _predictorHiddenDim);
-        }
-        if (ctx.ProjBn2Var is null || ctx.ProjBn2Normalized is null)
-        {
-            throw new InvalidOperationException("Projector BN2 caches not available. Call Project() before Backward().");
-        }
-        grad = BatchNormBackward(grad, _projBn2Gamma, ctx.ProjBn2Var, ctx.ProjBn2Normalized, out ctx.ProjBn2GammaGrad, out ctx.ProjBn2BetaGrad);
-        grad = LinearBackward(grad, _projWeight2, _hiddenDim, _projectionDim);
-        var h1Bn = ctx.CachedH1Bn ?? throw new InvalidOperationException("Cached H1 BN not available. Call Project() before Backward().");
-        grad = ReLUBackward(grad, h1Bn);
-        grad = BatchNormBackward(grad, _projBn1Gamma, ctx.ProjBn1Var, ctx.ProjBn1Normalized, out ctx.ProjBn1GammaGrad, out ctx.ProjBn1BetaGrad);
-        grad = LinearBackward(grad, _projWeight1, _inputDim, _hiddenDim);
-        var branchGrad = ComputeParameterGradients(gradOutput, ctx, _hasPredictor && ctx.CachedPredH1Relu is not null);
-        if (_gradients is null)
-        {
-            _gradients = branchGrad;
+            if (branchIndex > 1)
+                throw new ArgumentOutOfRangeException(nameof(branchIndex), "Branch index must be 0 or 1.");
+            ctx = branchIndex == 0 ? _branch1 : _branch2;
         }
         else
         {
-            // Accumulate gradients from both branches
-            for (int i = 0; i < _gradients.Length; i++)
-            {
-                _gradients[i] = NumOps.Add(_gradients[i], branchGrad[i]);
-            }
+            ctx = _nextBranch == 0 ? _branch2 : _branch1;
         }
+
+        // Predictor: Linear -> BN -> ReLU -> Linear
+        ctx.CachedPredH1 = Linear(projection, PredWeight1, PredBias1, _projectionDim, _predictorHiddenDim);
+        ctx.CachedPredH1Bn = BatchNorm(ctx.CachedPredH1, PredBn1Gamma, PredBn1Beta,
+            out ctx.PredBn1Mean, out ctx.PredBn1Var, out ctx.PredBn1Normalized);
+        ctx.CachedPredH1Relu = ReLU(ctx.CachedPredH1Bn);
+        var output = Linear(ctx.CachedPredH1Relu, PredWeight2, PredBias2, _predictorHiddenDim, _projectionDim);
+
+        return output;
+    }
+
+    /// <summary>
+    /// Projects and predicts in one call (convenience method).
+    /// </summary>
+    public Tensor<T> ProjectAndPredict(Tensor<T> input)
+    {
+        var projection = Project(input);
+        return Predict(projection);
+    }
+
+    /// <inheritdoc />
+    public Tensor<T> Backward(Tensor<T> gradOutput) => Backward(gradOutput, -1);
+
+    /// <summary>
+    /// Backward pass with explicit branch selection.
+    /// </summary>
+    /// <param name="gradOutput">The gradient from downstream.</param>
+    /// <param name="branchIndex">0 for branch1, 1 for branch2, or -1 for round-robin (legacy).</param>
+    public Tensor<T> Backward(Tensor<T> gradOutput, int branchIndex)
+    {
+        ForwardContext ctx;
+        if (branchIndex >= 0)
+        {
+            if (branchIndex > 1)
+                throw new ArgumentOutOfRangeException(nameof(branchIndex), "Branch index must be 0 or 1.");
+            ctx = branchIndex == 0 ? _branch1 : _branch2;
+        }
+        else
+        {
+            ctx = GetNextBackwardContext();
+        }
+
+        var grad = gradOutput;
+
+        // Backward through predictor if present
+        if (_hasPredictor && ctx.CachedPredH1Relu is not null)
+        {
+            grad = LinearBackward(grad, PredWeight2, _predictorHiddenDim, _projectionDim);
+            var cachedPredH1Bn = ctx.CachedPredH1Bn ?? throw new InvalidOperationException(
+                "Cached predictor H1 BN not available. Call Project() before Backward().");
+            grad = ReLUBackward(grad, cachedPredH1Bn);
+            grad = BatchNormBackward(grad, PredBn1Gamma, ctx.PredBn1Var, ctx.PredBn1Normalized,
+                out ctx.PredBn1GammaGrad, out ctx.PredBn1BetaGrad);
+            grad = LinearBackward(grad, PredWeight1, _projectionDim, _predictorHiddenDim);
+        }
+
+        var gradAtProjectorOutput = grad;
+
+        var bn2Var = ctx.ProjBn2Var ?? throw new InvalidOperationException(
+            "ProjBn2Var not available. Call Project() before Backward().");
+        var bn2Norm = ctx.ProjBn2Normalized ?? throw new InvalidOperationException(
+            "ProjBn2Normalized not available. Call Project() before Backward().");
+        grad = BatchNormBackward(grad, _projBn2Gamma, bn2Var, bn2Norm,
+            out ctx.ProjBn2GammaGrad, out ctx.ProjBn2BetaGrad);
+        ctx.GradBeforeBn2 = grad; // Cache for reuse in ComputeParameterGradients
+        grad = LinearBackward(grad, _projWeight2, _hiddenDim, _projectionDim);
+        var cachedH1Bn = ctx.CachedH1Bn ?? throw new InvalidOperationException(
+            "Cached H1 BN not available. Call Project() before Backward().");
+        grad = ReLUBackward(grad, cachedH1Bn);
+        var bn1Var = ctx.ProjBn1Var ?? throw new InvalidOperationException(
+            "ProjBn1Var not available. Call Project() before Backward().");
+        var bn1Norm = ctx.ProjBn1Normalized ?? throw new InvalidOperationException(
+            "ProjBn1Normalized not available. Call Project() before Backward().");
+        grad = BatchNormBackward(grad, _projBn1Gamma, bn1Var, bn1Norm,
+            out ctx.ProjBn1GammaGrad, out ctx.ProjBn1BetaGrad);
+        ctx.GradAtH1 = grad; // Cache for reuse in ComputeParameterGradients
+        grad = LinearBackward(grad, _projWeight1, _inputDim, _hiddenDim);
+
+        // Compute parameter gradients and accumulate across backward passes
+        var branchGradients = ComputeParameterGradients(gradAtProjectorOutput, gradOutput, ctx);
+        if (_gradients is null)
+        {
+            _gradients = branchGradients;
+        }
+        else
+        {
+            var accumulated = new T[_gradients.Length];
+            for (int i = 0; i < accumulated.Length; i++)
+            {
+                accumulated[i] = NumOps.Add(_gradients[i], branchGradients[i]);
+            }
+            _gradients = new Vector<T>(accumulated);
+        }
+
         return grad;
     }
 
     private Tensor<T> LinearBackward(Tensor<T> gradOutput, T[] weight, int inDim, int outDim)
     {
-        var batchSize = gradOutput.Shape[0]; var gradInput = new T[batchSize * inDim];
+        var batchSize = gradOutput.Shape[0];
+        var gradInput = new T[batchSize * inDim];
+
+        // gradInput = gradOutput @ weight.T
         for (int b = 0; b < batchSize; b++)
+        {
             for (int i = 0; i < inDim; i++)
             {
                 T sum = NumOps.Zero;
-                for (int j = 0; j < outDim; j++) sum = NumOps.Add(sum, NumOps.Multiply(gradOutput[b, j], weight[i * outDim + j]));
+                for (int j = 0; j < outDim; j++)
+                {
+                    sum = NumOps.Add(sum, NumOps.Multiply(gradOutput[b, j], weight[i * outDim + j]));
+                }
                 gradInput[b * inDim + i] = sum;
             }
+        }
+
         return new Tensor<T>(gradInput, [batchSize, inDim]);
     }
 
     private Tensor<T> ReLUBackward(Tensor<T> gradOutput, Tensor<T> preActivation)
     {
-        var batchSize = gradOutput.Shape[0]; var dim = gradOutput.Shape[1]; var gradInput = new T[batchSize * dim];
+        var batchSize = gradOutput.Shape[0];
+        var dim = gradOutput.Shape[1];
+        var gradInput = new T[batchSize * dim];
+
         for (int b = 0; b < batchSize; b++)
+        {
             for (int i = 0; i < dim; i++)
             {
+                // Gradient is passed through only where input was positive
                 var wasPositive = NumOps.GreaterThan(preActivation[b, i], NumOps.Zero);
                 gradInput[b * dim + i] = wasPositive ? gradOutput[b, i] : NumOps.Zero;
             }
+        }
+
         return new Tensor<T>(gradInput, [batchSize, dim]);
     }
 
-    private Tensor<T> BatchNormBackward(Tensor<T> gradOutput, T[] gamma, T[]? variance, Tensor<T>? normalizedInput, out T[] gammaGrad, out T[] betaGrad)
+    /// <summary>
+    /// Full BatchNorm backward pass computing gradients for input, gamma, and beta.
+    /// </summary>
+    /// <remarks>
+    /// The full BatchNorm backward follows these equations:
+    /// dx = (gamma / std) * (dout - mean(dout) - xhat * mean(dout * xhat))
+    /// dgamma = sum(dout * xhat, axis=batch)
+    /// dbeta = sum(dout, axis=batch)
+    /// where xhat is the normalized input and std = sqrt(var + eps)
+    /// </remarks>
+    private Tensor<T> BatchNormBackward(
+        Tensor<T> gradOutput,
+        T[] gamma,
+        T[]? variance,
+        Tensor<T>? normalizedInput,
+        out T[] gammaGrad,
+        out T[] betaGrad)
     {
-        var batchSize = gradOutput.Shape[0]; var dim = gradOutput.Shape[1];
-        var gradInput = new T[batchSize * dim]; gammaGrad = new T[dim]; betaGrad = new T[dim];
-        var eps = NumOps.FromDouble(1e-5); var invN = NumOps.FromDouble(1.0 / batchSize);
+        var batchSize = gradOutput.Shape[0];
+        var dim = gradOutput.Shape[1];
+        var gradInput = new T[batchSize * dim];
+        gammaGrad = new T[dim];
+        betaGrad = new T[dim];
+
+        var eps = NumOps.FromDouble(1e-5);
+        var invN = NumOps.FromDouble(1.0 / batchSize);
+
         for (int j = 0; j < dim; j++)
         {
-            var std = variance != null ? NumOps.Sqrt(NumOps.Add(variance[j], eps)) : NumOps.One;
+            // Compute std = sqrt(variance + eps)
+            var std = variance != null
+                ? NumOps.Sqrt(NumOps.Add(variance[j], eps))
+                : NumOps.One;
             var invStd = NumOps.Divide(NumOps.One, std);
-            T dgamma = NumOps.Zero; T dbeta = NumOps.Zero;
+
+            // Compute dgamma = sum(dout * xhat, axis=batch)
+            // Compute dbeta = sum(dout, axis=batch)
+            T dgamma = NumOps.Zero;
+            T dbeta = NumOps.Zero;
             for (int b = 0; b < batchSize; b++)
             {
-                var dout = gradOutput[b, j]; var xhat = normalizedInput != null ? normalizedInput[b, j] : NumOps.Zero;
-                dgamma = NumOps.Add(dgamma, NumOps.Multiply(dout, xhat)); dbeta = NumOps.Add(dbeta, dout);
+                var dout = gradOutput[b, j];
+                var xhat = normalizedInput != null ? normalizedInput[b, j] : NumOps.Zero;
+                dgamma = NumOps.Add(dgamma, NumOps.Multiply(dout, xhat));
+                dbeta = NumOps.Add(dbeta, dout);
             }
-            gammaGrad[j] = dgamma; betaGrad[j] = dbeta;
-            T meanDout = NumOps.Multiply(dbeta, invN); T meanDoutXhat = NumOps.Multiply(dgamma, invN);
+            gammaGrad[j] = dgamma;
+            betaGrad[j] = dbeta;
+
+            // Compute mean(dout) and mean(dout * xhat)
+            T meanDout = NumOps.Multiply(dbeta, invN);
+            T meanDoutXhat = NumOps.Multiply(dgamma, invN);
+
+            // Compute gradInput for each sample:
+            // dx = (gamma / std) * (dout - mean(dout) - xhat * mean(dout * xhat))
             var gammaOverStd = NumOps.Multiply(gamma[j], invStd);
             for (int b = 0; b < batchSize; b++)
             {
-                var dout = gradOutput[b, j]; var xhat = normalizedInput != null ? normalizedInput[b, j] : NumOps.Zero;
+                var dout = gradOutput[b, j];
+                var xhat = normalizedInput != null ? normalizedInput[b, j] : NumOps.Zero;
+
+                // dout - mean(dout) - xhat * mean(dout * xhat)
                 var term = NumOps.Subtract(dout, meanDout);
                 term = NumOps.Subtract(term, NumOps.Multiply(xhat, meanDoutXhat));
+
                 gradInput[b * dim + j] = NumOps.Multiply(gammaOverStd, term);
             }
         }
+
         return new Tensor<T>(gradInput, [batchSize, dim]);
     }
 
-    private Vector<T> ComputeParameterGradients(Tensor<T> gradOutput, ForwardContext ctx, bool hadPredictor)
+    private Vector<T> ComputeParameterGradients(Tensor<T> gradAtProjectorOutput, Tensor<T> originalGradOutput, ForwardContext ctx)
     {
-        var grads = new T[ParameterCount]; var batchSize = gradOutput.Shape[0];
-        var invBatchSize = NumOps.FromDouble(1.0 / batchSize); int offset = 0;
+        var grads = new T[ParameterCount];
+        var batchSize = gradAtProjectorOutput.Shape[0];
+        var invBatchSize = NumOps.FromDouble(1.0 / batchSize);
+        int offset = 0;
+
+        // If we don't have cached activations, we can't compute proper gradients
         if (ctx.CachedInput is null || ctx.CachedH1Relu is null || ctx.CachedProjection is null)
-            throw new InvalidOperationException("Forward pass caches (CachedInput, CachedH1Relu, CachedProjection) must be populated before computing parameter gradients. Call Project() before Backward().");
-        var cachedInput = ctx.CachedInput; var cachedH1Relu = ctx.CachedH1Relu;
-
-        // When predictor was used, compute predictor parameter gradients first using the original gradOutput.
-        // The gradOutput enters the predictor, and we need gradients w.r.t. predictor weights before
-        // propagating through the projector.
-        Tensor<T> projectorGrad = gradOutput;
-        int bn2BetaEnd = offset + _projWeight1.Length + _projBias1.Length + _projBn1Gamma.Length + _projBn1Beta.Length
-                       + _projWeight2.Length + _projBias2.Length + _projBn2Gamma.Length + _projBn2Beta.Length;
-
-        if (hadPredictor && ctx.CachedPredH1Relu is not null && ctx.CachedProjection is not null)
         {
-            int predOffset = bn2BetaEnd;
-
-            // PredWeight2 gradients: dL/dPredWeight2 = CachedPredH1Relu^T * gradOutput
-            int pw2Offset = predOffset + PredWeight1.Length + PredBias1.Length + PredBn1Gamma.Length + PredBn1Beta.Length;
-            for (int i = 0; i < _predictorHiddenDim; i++)
-                for (int j = 0; j < _projectionDim; j++)
-                {
-                    T sum = NumOps.Zero;
-                    for (int b = 0; b < batchSize; b++) sum = NumOps.Add(sum, NumOps.Multiply(ctx.CachedPredH1Relu[b, i], gradOutput[b, j]));
-                    grads[pw2Offset + i * _projectionDim + j] = NumOps.Multiply(sum, invBatchSize);
-                }
-
-            // PredBias2 gradients
-            int pb2Offset = predOffset + PredWeight1.Length + PredBias1.Length + PredBn1Gamma.Length + PredBn1Beta.Length + PredWeight2.Length;
-            for (int j = 0; j < _projectionDim; j++)
-            {
-                T sum = NumOps.Zero;
-                for (int b = 0; b < batchSize; b++) sum = NumOps.Add(sum, gradOutput[b, j]);
-                grads[pb2Offset + j] = NumOps.Multiply(sum, invBatchSize);
-            }
-
-            // Backprop through PredWeight2 to get grad at PredH1Relu
-            var gradAtPredH1Relu = LinearBackward(gradOutput, PredWeight2, _predictorHiddenDim, _projectionDim);
-
-            // Backprop through PredBN1 ReLU
-            var predH1Bn = ctx.CachedPredH1Bn ?? throw new InvalidOperationException("Cached predictor H1 BN not available.");
-            var gradAtPredH1Bn = ReLUBackward(gradAtPredH1Relu, predH1Bn);
-
-            // PredBN1 gamma/beta gradients
-            var gradAtPredH1 = BatchNormBackward(gradAtPredH1Bn, PredBn1Gamma, ctx.PredBn1Var, ctx.PredBn1Normalized, out var predBn1GammaGrad, out var predBn1BetaGrad);
-            int predBn1GammaOffset = predOffset + PredWeight1.Length + PredBias1.Length;
-            int predBn1BetaOffset = predBn1GammaOffset + PredBn1Gamma.Length;
-            for (int j = 0; j < _predictorHiddenDim; j++) { grads[predBn1GammaOffset + j] = predBn1GammaGrad[j]; grads[predBn1BetaOffset + j] = predBn1BetaGrad[j]; }
-
-            // PredWeight1 gradients: dL/dPredWeight1 = PredictorInput^T * gradAtPredH1
-            var predictorInput = ctx.CachedPredictorInput ?? throw new InvalidOperationException("Cached predictor input not available.");
-            for (int i = 0; i < _projectionDim; i++)
-                for (int j = 0; j < _predictorHiddenDim; j++)
-                {
-                    T sum = NumOps.Zero;
-                    for (int b = 0; b < batchSize; b++) sum = NumOps.Add(sum, NumOps.Multiply(predictorInput[b, i], gradAtPredH1[b, j]));
-                    grads[predOffset + i * _predictorHiddenDim + j] = NumOps.Multiply(sum, invBatchSize);
-                }
-
-            // PredBias1 gradients
-            int predBias1Offset = predOffset + PredWeight1.Length;
-            for (int j = 0; j < _predictorHiddenDim; j++)
-            {
-                T sum = NumOps.Zero;
-                for (int b = 0; b < batchSize; b++) sum = NumOps.Add(sum, gradAtPredH1[b, j]);
-                grads[predBias1Offset + j] = NumOps.Multiply(sum, invBatchSize);
-            }
-
-            // The gradient flowing into the projector is the gradient through PredWeight1
-            projectorGrad = LinearBackward(gradAtPredH1, PredWeight1, _projectionDim, _predictorHiddenDim);
+            return new Vector<T>(grads);
         }
 
-        // Projector parameter gradients using projectorGrad (post-predictor gradient)
-        var gradBeforeBn2 = BatchNormBackward(projectorGrad, _projBn2Gamma, ctx.ProjBn2Var, ctx.ProjBn2Normalized, out _, out _);
+        var cachedInput = ctx.CachedInput;
+        var cachedH1Relu = ctx.CachedH1Relu;
+
+        // Reuse BN2 backward result cached during Backward() to avoid redundant recomputation
+        var gradBeforeBn2 = ctx.GradBeforeBn2 ?? throw new InvalidOperationException(
+            "GradBeforeBn2 not cached. Call Backward() before ComputeParameterGradients().");
+
+        // Compute gradients for projWeight2: cachedH1Relu.T @ gradBeforeBn2
         for (int i = 0; i < _hiddenDim; i++)
+        {
             for (int j = 0; j < _projectionDim; j++)
             {
                 T sum = NumOps.Zero;
-                for (int b = 0; b < batchSize; b++) sum = NumOps.Add(sum, NumOps.Multiply(cachedH1Relu[b, i], gradBeforeBn2[b, j]));
-                grads[offset + _projWeight1.Length + _projBias1.Length + _projBn1Gamma.Length + _projBn1Beta.Length + i * _projectionDim + j] = NumOps.Multiply(sum, invBatchSize);
+                for (int b = 0; b < batchSize; b++)
+                {
+                    sum = NumOps.Add(sum, NumOps.Multiply(cachedH1Relu[b, i], gradBeforeBn2[b, j]));
+                }
+                grads[offset + _projWeight1.Length + _projBias1.Length + _projBn1Gamma.Length + _projBn1Beta.Length + i * _projectionDim + j] =
+                    NumOps.Multiply(sum, invBatchSize);
             }
+        }
+
+        // Compute gradients for projBias2: sum of gradBeforeBn2 across batch
         int bias2Offset = offset + _projWeight1.Length + _projBias1.Length + _projBn1Gamma.Length + _projBn1Beta.Length + _projWeight2.Length;
         for (int j = 0; j < _projectionDim; j++)
         {
             T sum = NumOps.Zero;
-            for (int b = 0; b < batchSize; b++) sum = NumOps.Add(sum, gradBeforeBn2[b, j]);
+            for (int b = 0; b < batchSize; b++)
+            {
+                sum = NumOps.Add(sum, gradBeforeBn2[b, j]);
+            }
             grads[bias2Offset + j] = NumOps.Multiply(sum, invBatchSize);
         }
-        var gradAtH1Relu = LinearBackward(gradBeforeBn2, _projWeight2, _hiddenDim, _projectionDim);
-        var h1Bn = ctx.CachedH1Bn ?? throw new InvalidOperationException("Cached H1 BN not available.");
-        var gradAtH1Bn = ReLUBackward(gradAtH1Relu, h1Bn);
-        var gradAtH1 = BatchNormBackward(gradAtH1Bn, _projBn1Gamma, ctx.ProjBn1Var, ctx.ProjBn1Normalized, out _, out _);
+
+        // Reuse BN1 backward result cached during Backward() to avoid redundant recomputation
+        var gradAtH1 = ctx.GradAtH1 ?? throw new InvalidOperationException(
+            "GradAtH1 not cached. Call Backward() before ComputeParameterGradients().");
+
+        // Compute gradients for projWeight1: cachedInput.T @ gradAtH1
         for (int i = 0; i < _inputDim; i++)
+        {
             for (int j = 0; j < _hiddenDim; j++)
             {
                 T sum = NumOps.Zero;
-                for (int b = 0; b < batchSize; b++) sum = NumOps.Add(sum, NumOps.Multiply(cachedInput[b, i], gradAtH1[b, j]));
+                for (int b = 0; b < batchSize; b++)
+                {
+                    sum = NumOps.Add(sum, NumOps.Multiply(cachedInput[b, i], gradAtH1[b, j]));
+                }
                 grads[offset + i * _hiddenDim + j] = NumOps.Multiply(sum, invBatchSize);
             }
+        }
+
+        // Compute gradients for projBias1
         int bias1Offset = offset + _projWeight1.Length;
         for (int j = 0; j < _hiddenDim; j++)
         {
             T sum = NumOps.Zero;
-            for (int b = 0; b < batchSize; b++) sum = NumOps.Add(sum, gradAtH1[b, j]);
+            for (int b = 0; b < batchSize; b++)
+            {
+                sum = NumOps.Add(sum, gradAtH1[b, j]);
+            }
             grads[bias1Offset + j] = NumOps.Multiply(sum, invBatchSize);
         }
-        int bn1GammaOffset = bias1Offset + _projBias1.Length; int bn1BetaOffset = bn1GammaOffset + _projBn1Gamma.Length;
+
+        // Use the properly computed BN gradients from BatchNormBackward
+        int bn1GammaOffset = bias1Offset + _projBias1.Length;
+        int bn1BetaOffset = bn1GammaOffset + _projBn1Gamma.Length;
         if (ctx.ProjBn1GammaGrad != null && ctx.ProjBn1BetaGrad != null)
-            for (int j = 0; j < _hiddenDim; j++) { grads[bn1GammaOffset + j] = ctx.ProjBn1GammaGrad[j]; grads[bn1BetaOffset + j] = ctx.ProjBn1BetaGrad[j]; }
-        int bn2GammaOffset = bias2Offset + _projBias2.Length; int bn2BetaOffset = bn2GammaOffset + _projBn2Gamma.Length;
+        {
+            for (int j = 0; j < _hiddenDim; j++)
+            {
+                grads[bn1GammaOffset + j] = ctx.ProjBn1GammaGrad[j];
+                grads[bn1BetaOffset + j] = ctx.ProjBn1BetaGrad[j];
+            }
+        }
+
+        int bn2GammaOffset = bias2Offset + _projBias2.Length;
+        int bn2BetaOffset = bn2GammaOffset + _projBn2Gamma.Length;
         if (ctx.ProjBn2GammaGrad != null && ctx.ProjBn2BetaGrad != null)
-            for (int j = 0; j < _projectionDim; j++) { grads[bn2GammaOffset + j] = ctx.ProjBn2GammaGrad[j]; grads[bn2BetaOffset + j] = ctx.ProjBn2BetaGrad[j]; }
+        {
+            for (int j = 0; j < _projectionDim; j++)
+            {
+                grads[bn2GammaOffset + j] = ctx.ProjBn2GammaGrad[j];
+                grads[bn2BetaOffset + j] = ctx.ProjBn2BetaGrad[j];
+            }
+        }
+
+        // Predictor gradients (weight, bias, and BN)
+        if (_hasPredictor)
+        {
+            int predOffset = bn2BetaOffset + _projBn2Beta.Length;
+            int predWeight1Offset = predOffset;
+            int predBias1Offset = predWeight1Offset + PredWeight1.Length;
+            int predBn1GammaOffset = predBias1Offset + PredBias1.Length;
+            int predBn1BetaOffset = predBn1GammaOffset + PredBn1Gamma.Length;
+            int predWeight2Offset = predBn1BetaOffset + PredBn1Beta.Length;
+            int predBias2Offset = predWeight2Offset + PredWeight2.Length;
+
+            // PredWeight2/PredBias2 gradients
+            if (ctx.CachedPredH1Relu is not null)
+            {
+                for (int i = 0; i < _predictorHiddenDim; i++)
+                {
+                    for (int j = 0; j < _projectionDim; j++)
+                    {
+                        T sum = NumOps.Zero;
+                        for (int b = 0; b < batchSize; b++)
+                        {
+                            sum = NumOps.Add(sum, NumOps.Multiply(ctx.CachedPredH1Relu[b, i], originalGradOutput[b, j]));
+                        }
+                        grads[predWeight2Offset + i * _projectionDim + j] = NumOps.Multiply(sum, invBatchSize);
+                    }
+                }
+
+                for (int j = 0; j < _projectionDim; j++)
+                {
+                    T sum = NumOps.Zero;
+                    for (int b = 0; b < batchSize; b++)
+                    {
+                        sum = NumOps.Add(sum, originalGradOutput[b, j]);
+                    }
+                    grads[predBias2Offset + j] = NumOps.Multiply(sum, invBatchSize);
+                }
+            }
+
+            // PredWeight1/PredBias1 gradients
+            if (ctx.CachedProjection is not null)
+            {
+                var gradBeforePredBn1 = LinearBackward(originalGradOutput, PredWeight2, _predictorHiddenDim, _projectionDim);
+                if (ctx.CachedPredH1Bn is not null)
+                {
+                    gradBeforePredBn1 = ReLUBackward(gradBeforePredBn1, ctx.CachedPredH1Bn);
+                }
+                var gradAtPredH1 = BatchNormBackward(gradBeforePredBn1, PredBn1Gamma, ctx.PredBn1Var, ctx.PredBn1Normalized,
+                    out _, out _);
+
+                for (int i = 0; i < _projectionDim; i++)
+                {
+                    for (int j = 0; j < _predictorHiddenDim; j++)
+                    {
+                        T sum = NumOps.Zero;
+                        for (int b = 0; b < batchSize; b++)
+                        {
+                            sum = NumOps.Add(sum, NumOps.Multiply(ctx.CachedProjection[b, i], gradAtPredH1[b, j]));
+                        }
+                        grads[predWeight1Offset + i * _predictorHiddenDim + j] = NumOps.Multiply(sum, invBatchSize);
+                    }
+                }
+
+                for (int j = 0; j < _predictorHiddenDim; j++)
+                {
+                    T sum = NumOps.Zero;
+                    for (int b = 0; b < batchSize; b++)
+                    {
+                        sum = NumOps.Add(sum, gradAtPredH1[b, j]);
+                    }
+                    grads[predBias1Offset + j] = NumOps.Multiply(sum, invBatchSize);
+                }
+            }
+
+            // Predictor BN1 gamma/beta gradients
+            if (ctx.PredBn1GammaGrad != null && ctx.PredBn1BetaGrad != null)
+            {
+                for (int j = 0; j < _predictorHiddenDim; j++)
+                {
+                    grads[predBn1GammaOffset + j] = ctx.PredBn1GammaGrad[j];
+                    grads[predBn1BetaOffset + j] = ctx.PredBn1BetaGrad[j];
+                }
+            }
+        }
+
         return new Vector<T>(grads);
     }
 
@@ -406,9 +663,28 @@ public class SymmetricProjector<T> : IProjectorHead<T>
     public Vector<T> GetParameters()
     {
         var allParams = new List<T>();
-        allParams.AddRange(_projWeight1); allParams.AddRange(_projBias1); allParams.AddRange(_projBn1Gamma); allParams.AddRange(_projBn1Beta);
-        allParams.AddRange(_projWeight2); allParams.AddRange(_projBias2); allParams.AddRange(_projBn2Gamma); allParams.AddRange(_projBn2Beta);
-        if (_hasPredictor) { allParams.AddRange(PredWeight1); allParams.AddRange(PredBias1); allParams.AddRange(PredBn1Gamma); allParams.AddRange(PredBn1Beta); allParams.AddRange(PredWeight2); allParams.AddRange(PredBias2); }
+
+        // Projector parameters
+        allParams.AddRange(_projWeight1);
+        allParams.AddRange(_projBias1);
+        allParams.AddRange(_projBn1Gamma);
+        allParams.AddRange(_projBn1Beta);
+        allParams.AddRange(_projWeight2);
+        allParams.AddRange(_projBias2);
+        allParams.AddRange(_projBn2Gamma);
+        allParams.AddRange(_projBn2Beta);
+
+        // Predictor parameters
+        if (_hasPredictor)
+        {
+            allParams.AddRange(PredWeight1);
+            allParams.AddRange(PredBias1);
+            allParams.AddRange(PredBn1Gamma);
+            allParams.AddRange(PredBn1Beta);
+            allParams.AddRange(PredWeight2);
+            allParams.AddRange(PredBias2);
+        }
+
         return new Vector<T>([.. allParams]);
     }
 
@@ -425,144 +701,197 @@ public class SymmetricProjector<T> : IProjectorHead<T>
 
         var paramArray = parameters.ToArray();
         int offset = 0;
-        Array.Copy(paramArray, offset, _projWeight1, 0, _projWeight1.Length); offset += _projWeight1.Length;
-        Array.Copy(paramArray, offset, _projBias1, 0, _projBias1.Length); offset += _projBias1.Length;
-        Array.Copy(paramArray, offset, _projBn1Gamma, 0, _projBn1Gamma.Length); offset += _projBn1Gamma.Length;
-        Array.Copy(paramArray, offset, _projBn1Beta, 0, _projBn1Beta.Length); offset += _projBn1Beta.Length;
-        Array.Copy(paramArray, offset, _projWeight2, 0, _projWeight2.Length); offset += _projWeight2.Length;
-        Array.Copy(paramArray, offset, _projBias2, 0, _projBias2.Length); offset += _projBias2.Length;
-        Array.Copy(paramArray, offset, _projBn2Gamma, 0, _projBn2Gamma.Length); offset += _projBn2Gamma.Length;
-        Array.Copy(paramArray, offset, _projBn2Beta, 0, _projBn2Beta.Length); offset += _projBn2Beta.Length;
+
+        // Projector parameters
+        Array.Copy(paramArray, offset, _projWeight1, 0, _projWeight1.Length);
+        offset += _projWeight1.Length;
+        Array.Copy(paramArray, offset, _projBias1, 0, _projBias1.Length);
+        offset += _projBias1.Length;
+        Array.Copy(paramArray, offset, _projBn1Gamma, 0, _projBn1Gamma.Length);
+        offset += _projBn1Gamma.Length;
+        Array.Copy(paramArray, offset, _projBn1Beta, 0, _projBn1Beta.Length);
+        offset += _projBn1Beta.Length;
+        Array.Copy(paramArray, offset, _projWeight2, 0, _projWeight2.Length);
+        offset += _projWeight2.Length;
+        Array.Copy(paramArray, offset, _projBias2, 0, _projBias2.Length);
+        offset += _projBias2.Length;
+        Array.Copy(paramArray, offset, _projBn2Gamma, 0, _projBn2Gamma.Length);
+        offset += _projBn2Gamma.Length;
+        Array.Copy(paramArray, offset, _projBn2Beta, 0, _projBn2Beta.Length);
+        offset += _projBn2Beta.Length;
+
+        // Predictor parameters
         if (_hasPredictor)
         {
-            var pw1 = PredWeight1; var pb1 = PredBias1; var pg1 = PredBn1Gamma; var pbe1 = PredBn1Beta; var pw2 = PredWeight2; var pb2 = PredBias2;
-            Array.Copy(paramArray, offset, pw1, 0, pw1.Length); offset += pw1.Length;
-            Array.Copy(paramArray, offset, pb1, 0, pb1.Length); offset += pb1.Length;
-            Array.Copy(paramArray, offset, pg1, 0, pg1.Length); offset += pg1.Length;
-            Array.Copy(paramArray, offset, pbe1, 0, pbe1.Length); offset += pbe1.Length;
-            Array.Copy(paramArray, offset, pw2, 0, pw2.Length); offset += pw2.Length;
+            var pw1 = PredWeight1;
+            var pb1 = PredBias1;
+            var pg1 = PredBn1Gamma;
+            var pbe1 = PredBn1Beta;
+            var pw2 = PredWeight2;
+            var pb2 = PredBias2;
+            Array.Copy(paramArray, offset, pw1, 0, pw1.Length);
+            offset += pw1.Length;
+            Array.Copy(paramArray, offset, pb1, 0, pb1.Length);
+            offset += pb1.Length;
+            Array.Copy(paramArray, offset, pg1, 0, pg1.Length);
+            offset += pg1.Length;
+            Array.Copy(paramArray, offset, pbe1, 0, pbe1.Length);
+            offset += pbe1.Length;
+            Array.Copy(paramArray, offset, pw2, 0, pw2.Length);
+            offset += pw2.Length;
             Array.Copy(paramArray, offset, pb2, 0, pb2.Length);
         }
     }
 
     /// <inheritdoc />
-    public Vector<T> GetParameterGradients() => _gradients ?? new Vector<T>(new T[ParameterCount]);
+    public Vector<T> GetParameterGradients()
+    {
+        return _gradients ?? new Vector<T>(new T[ParameterCount]);
+    }
+
     /// <inheritdoc />
-    public void ClearGradients() { _gradients = null; }
+    public void ClearGradients()
+    {
+        _gradients = null;
+    }
+
     /// <inheritdoc />
-    public void SetTrainingMode(bool isTraining) { _isTraining = isTraining; }
+    public void SetTrainingMode(bool isTraining)
+    {
+        _isTraining = isTraining;
+    }
+
     /// <inheritdoc />
     public void Reset()
     {
-        _branch1.Clear(); _branch2.Clear();
-        _nextBranch = 0; _nextBackwardBranch = 0;
+        _branch1.Clear();
+        _branch2.Clear();
+        _nextBranch = 0;
+        _nextBackwardBranch = 0;
         _gradients = null;
-        _runningProjBn1Mean = null; _runningProjBn1Var = null;
-        _runningProjBn2Mean = null; _runningProjBn2Var = null;
-        _runningPredBn1Mean = null; _runningPredBn1Var = null;
     }
 
     private int ComputeParameterCount()
     {
-        int projCount = (_inputDim * _hiddenDim + _hiddenDim) + (_hiddenDim * 2) + (_hiddenDim * _projectionDim + _projectionDim) + (_projectionDim * 2);
-        if (!_hasPredictor) return projCount;
-        int predCount = (_projectionDim * _predictorHiddenDim + _predictorHiddenDim) + (_predictorHiddenDim * 2) + (_predictorHiddenDim * _projectionDim + _projectionDim);
+        // Projector: 2 linear layers with bias + 2 BN layers
+        int projCount = (_inputDim * _hiddenDim + _hiddenDim) +     // Linear1 + bias
+                       (_hiddenDim * 2) +                            // BN1 gamma + beta
+                       (_hiddenDim * _projectionDim + _projectionDim) + // Linear2 + bias
+                       (_projectionDim * 2);                         // BN2 gamma + beta
+
+        if (!_hasPredictor)
+            return projCount;
+
+        // Predictor: 2 linear layers with bias + 1 BN layer
+        int predCount = (_projectionDim * _predictorHiddenDim + _predictorHiddenDim) + // Linear1 + bias
+                       (_predictorHiddenDim * 2) +                   // BN1 gamma + beta
+                       (_predictorHiddenDim * _projectionDim + _projectionDim); // Linear2 + bias
+
         return projCount + predCount;
     }
 
     private T[] InitializeWeight(int fanIn, int fanOut, Random rng)
     {
-        var weights = new T[fanIn * fanOut]; var scale = Math.Sqrt(2.0 / fanIn);
-        for (int i = 0; i < weights.Length; i++) weights[i] = NumOps.FromDouble((rng.NextDouble() * 2 - 1) * scale);
+        var weights = new T[fanIn * fanOut];
+        var scale = Math.Sqrt(2.0 / fanIn); // He initialization
+
+        for (int i = 0; i < weights.Length; i++)
+        {
+            weights[i] = NumOps.FromDouble((rng.NextDouble() * 2 - 1) * scale);
+        }
+
         return weights;
     }
 
-    private T[] InitializeOnes(int size) { var ones = new T[size]; for (int i = 0; i < size; i++) ones[i] = NumOps.One; return ones; }
+    private T[] InitializeOnes(int size)
+    {
+        var ones = new T[size];
+        for (int i = 0; i < size; i++)
+        {
+            ones[i] = NumOps.One;
+        }
+        return ones;
+    }
 
     private Tensor<T> Linear(Tensor<T> input, T[] weight, T[] bias, int inDim, int outDim)
     {
-        var batchSize = input.Shape[0]; var output = new T[batchSize * outDim];
+        var batchSize = input.Shape[0];
+        var output = new T[batchSize * outDim];
+
         for (int b = 0; b < batchSize; b++)
+        {
             for (int j = 0; j < outDim; j++)
             {
                 T sum = bias[j];
-                for (int i = 0; i < inDim; i++) sum = NumOps.Add(sum, NumOps.Multiply(input[b, i], weight[i * outDim + j]));
+                for (int i = 0; i < inDim; i++)
+                {
+                    sum = NumOps.Add(sum, NumOps.Multiply(input[b, i], weight[i * outDim + j]));
+                }
                 output[b * outDim + j] = sum;
             }
+        }
+
         return new Tensor<T>(output, [batchSize, outDim]);
     }
 
-    private Tensor<T> BatchNorm(Tensor<T> input, T[] gamma, T[] beta, out T[] mean, out T[] variance, out Tensor<T> normalized,
-        ref T[]? runningMean, ref T[]? runningVar)
+    private Tensor<T> BatchNorm(Tensor<T> input, T[] gamma, T[] beta,
+        out T[] mean, out T[] variance, out Tensor<T> normalized)
     {
-        var batchSize = input.Shape[0]; var dim = input.Shape[1];
-        var output = new T[batchSize * dim]; var normData = new T[batchSize * dim];
+        var batchSize = input.Shape[0];
+        var dim = input.Shape[1];
+        var output = new T[batchSize * dim];
+        var normData = new T[batchSize * dim];
+        mean = new T[dim];
+        variance = new T[dim];
 
-        T[] useMean;
-        T[] useVar;
-
-        if (!_isTraining && runningMean is not null && runningVar is not null)
-        {
-            // Eval mode: use running statistics directly, skip batch computation
-            useMean = runningMean;
-            useVar = runningVar;
-            mean = runningMean;
-            variance = runningVar;
-        }
-        else
-        {
-            // Training mode or no running stats: compute batch statistics
-            mean = new T[dim]; variance = new T[dim];
-            for (int j = 0; j < dim; j++)
-            {
-                T m = NumOps.Zero;
-                for (int b = 0; b < batchSize; b++) m = NumOps.Add(m, input[b, j]);
-                m = NumOps.Divide(m, NumOps.FromDouble(batchSize)); mean[j] = m;
-                T v = NumOps.Zero;
-                for (int b = 0; b < batchSize; b++) { var diff = NumOps.Subtract(input[b, j], m); v = NumOps.Add(v, NumOps.Multiply(diff, diff)); }
-                v = NumOps.Divide(v, NumOps.FromDouble(batchSize)); variance[j] = v;
-            }
-            useMean = mean;
-            useVar = variance;
-
-            if (_isTraining)
-            {
-                // Update running statistics with exponential moving average
-                runningMean ??= new T[dim];
-                runningVar ??= new T[dim];
-                var momentum = NumOps.FromDouble(BnMomentum);
-                var oneMinusMomentum = NumOps.FromDouble(1.0 - BnMomentum);
-                for (int j = 0; j < dim; j++)
-                {
-                    runningMean[j] = NumOps.Add(NumOps.Multiply(oneMinusMomentum, runningMean[j]), NumOps.Multiply(momentum, mean[j]));
-                    runningVar[j] = NumOps.Add(NumOps.Multiply(oneMinusMomentum, runningVar[j]), NumOps.Multiply(momentum, variance[j]));
-                }
-            }
-        }
-
-        // Normalize
         for (int j = 0; j < dim; j++)
         {
-            var std = NumOps.Sqrt(NumOps.Add(useVar[j], NumOps.FromDouble(1e-5)));
+            // Compute mean
+            T m = NumOps.Zero;
             for (int b = 0; b < batchSize; b++)
             {
-                var norm = NumOps.Divide(NumOps.Subtract(input[b, j], useMean[j]), std);
+                m = NumOps.Add(m, input[b, j]);
+            }
+            m = NumOps.Divide(m, NumOps.FromDouble(batchSize));
+            mean[j] = m;
+
+            // Compute variance
+            T v = NumOps.Zero;
+            for (int b = 0; b < batchSize; b++)
+            {
+                var diff = NumOps.Subtract(input[b, j], m);
+                v = NumOps.Add(v, NumOps.Multiply(diff, diff));
+            }
+            v = NumOps.Divide(v, NumOps.FromDouble(batchSize));
+            variance[j] = v;
+            var std = NumOps.Sqrt(NumOps.Add(v, NumOps.FromDouble(1e-5)));
+
+            // Normalize and scale
+            for (int b = 0; b < batchSize; b++)
+            {
+                var norm = NumOps.Divide(NumOps.Subtract(input[b, j], m), std);
                 normData[b * dim + j] = norm;
                 output[b * dim + j] = NumOps.Add(NumOps.Multiply(gamma[j], norm), beta[j]);
             }
         }
+
         normalized = new Tensor<T>(normData, [batchSize, dim]);
         return new Tensor<T>(output, [batchSize, dim]);
     }
 
     private Tensor<T> ReLU(Tensor<T> input)
     {
-        var size = input.Shape[0] * input.Shape[1]; var output = new T[size];
+        var size = input.Shape[0] * input.Shape[1];
+        var output = new T[size];
+
         for (int i = 0; i < size; i++)
         {
-            var idx0 = i / input.Shape[1]; var idx1 = i % input.Shape[1]; var val = input[idx0, idx1];
+            var idx0 = i / input.Shape[1];
+            var idx1 = i % input.Shape[1];
+            var val = input[idx0, idx1];
             output[i] = NumOps.GreaterThan(val, NumOps.Zero) ? val : NumOps.Zero;
         }
+
         return new Tensor<T>(output, input.Shape);
     }
 }
