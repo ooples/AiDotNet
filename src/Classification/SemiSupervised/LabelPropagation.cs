@@ -854,10 +854,14 @@ public class LabelPropagation<T> : SemiSupervisedClassifierBase<T>
         var jObj = JsonConvert.DeserializeObject<JObject>(dataString)
             ?? throw new InvalidOperationException("Failed to deserialize LabelPropagation: invalid model payload.");
 
-        NumClasses = jObj["NumClasses"]?.ToObject<int>() ?? 0;
-        NumFeatures = jObj["NumFeatures"]?.ToObject<int>() ?? 0;
-        TaskType = (ClassificationTaskType)(jObj["TaskType"]?.ToObject<int>() ?? 0);
-        _numLabeled = jObj["NumLabeled"]?.ToObject<int>() ?? 0;
+        NumClasses = jObj["NumClasses"]?.ToObject<int>()
+            ?? throw new InvalidOperationException("Failed to deserialize LabelPropagation: missing NumClasses.");
+        NumFeatures = jObj["NumFeatures"]?.ToObject<int>()
+            ?? throw new InvalidOperationException("Failed to deserialize LabelPropagation: missing NumFeatures.");
+        TaskType = (ClassificationTaskType)(jObj["TaskType"]?.ToObject<int>()
+            ?? throw new InvalidOperationException("Failed to deserialize LabelPropagation: missing TaskType."));
+        _numLabeled = jObj["NumLabeled"]?.ToObject<int>()
+            ?? throw new InvalidOperationException("Failed to deserialize LabelPropagation: missing NumLabeled.");
         _maxIterations = jObj["MaxIterations"]?.ToObject<int>() ?? _maxIterations;
 
         var kernelType = jObj["KernelType"]?.ToObject<string>();
@@ -883,6 +887,10 @@ public class LabelPropagation<T> : SemiSupervisedClassifierBase<T>
         var afToken = jObj["AllFeatures"];
         if (afToken is JArray afArr && afRows > 0 && afCols > 0)
         {
+            if (afArr.Count != afRows * afCols)
+                throw new InvalidOperationException(
+                    $"Failed to deserialize LabelPropagation: AllFeatures array length ({afArr.Count}) does not match {afRows}x{afCols}.");
+
             _allFeatures = new Matrix<T>(afRows, afCols);
             for (int i = 0; i < afRows; i++)
                 for (int j = 0; j < afCols; j++)
@@ -897,6 +905,10 @@ public class LabelPropagation<T> : SemiSupervisedClassifierBase<T>
         var ldToken = jObj["LabelDistributions"];
         if (ldToken is JArray ldArr && ldRows > 0 && ldCols > 0)
         {
+            if (ldArr.Count != ldRows * ldCols)
+                throw new InvalidOperationException(
+                    $"Failed to deserialize LabelPropagation: LabelDistributions array length ({ldArr.Count}) does not match {ldRows}x{ldCols}.");
+
             _labelDistributions = new Matrix<T>(ldRows, ldCols);
             for (int i = 0; i < ldRows; i++)
                 for (int j = 0; j < ldCols; j++)
