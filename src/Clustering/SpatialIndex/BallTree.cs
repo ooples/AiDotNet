@@ -162,8 +162,9 @@ public class BallTree<T>
         int splitDim = FindMaxSpreadDimension(indices, start, end);
 
         // Sort indices by split dimension
+        var data = _data ?? throw new InvalidOperationException("BallTree: Data not initialized.");
         Array.Sort(indices, start, count, Comparer<int>.Create((a, b) =>
-            _numOps.ToDouble((_data ?? throw new InvalidOperationException("BallTree: Data not initialized."))[a, splitDim]).CompareTo(_numOps.ToDouble(_data[b, splitDim]))));
+            _numOps.ToDouble(data[a, splitDim]).CompareTo(_numOps.ToDouble(data[b, splitDim]))));
 
         int mid = start + count / 2;
 

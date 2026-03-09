@@ -234,14 +234,13 @@ public class InfluenceFunctionExplainer<T> : IGPUAcceleratedExplainer<T>
         EnsureTrainingGradientsComputed();
 
         // Step 4: Compute influence scores: influence[i] = -train_gradient[i] dot ihvp
+        var cachedGradients = _cachedTrainingGradients
+            ?? throw new InvalidOperationException("Training gradients have not been cached. Call EnsureTrainingGradientsComputed() first.");
         var influences = new T[_trainingData.Rows];
         for (int i = 0; i < _trainingData.Rows; i++)
         {
             double dot = 0;
-        var cachedGradients = _cachedTrainingGradients
-            ?? throw new InvalidOperationException("Training gradients have not been cached. Call CacheTrainingGradients() first.");
-
-            for (int j = 0; j < ihvp.Length && j < _cachedTrainingGradients!.Columns; j++)
+            for (int j = 0; j < ihvp.Length && j < cachedGradients.Columns; j++)
             {
                 dot += NumOps.ToDouble(cachedGradients[i, j]) * NumOps.ToDouble(ihvp[j]);
             }

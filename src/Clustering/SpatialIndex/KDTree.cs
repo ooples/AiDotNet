@@ -269,8 +269,9 @@ public class KDTree<T>
 
     private int Compare(int idx1, int idx2, int dimension)
     {
-        double v1 = _numOps.ToDouble((_data ?? throw new InvalidOperationException("KDTree: Data not initialized."))[idx1, dimension]);
-        double v2 = _numOps.ToDouble(_data[idx2, dimension]);
+        var data = _data ?? throw new InvalidOperationException("KDTree: Data not initialized.");
+        double v1 = _numOps.ToDouble(data[idx1, dimension]);
+        double v2 = _numOps.ToDouble(data[idx2, dimension]);
         return v1.CompareTo(v2);
     }
 
