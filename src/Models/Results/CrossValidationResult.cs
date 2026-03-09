@@ -148,16 +148,8 @@ public class CrossValidationResult<T, TInput, TOutput>
         if (foldsWithClustering.Any())
         {
             // Silhouette Score
-            var silhouetteValues = new List<T>();
-            foreach (var r in foldsWithClustering)
-            {
-                if (r.ClusteringMetrics is { } cm && cm.SilhouetteScore is { } score)
-                {
-                    silhouetteValues.Add(score);
-                }
-            }
-            var silhouetteScores = silhouetteValues.ToArray();
-            if (silhouetteScores.Any())
+            var silhouetteScores = ExtractClusteringMetricValues(foldsWithClustering, m => m.SilhouetteScore);
+            if (silhouetteScores.Length > 0)
             {
                 SilhouetteScoreStats = new BasicStats<T>(new BasicStatsInputs<T>
                 {
@@ -166,47 +158,32 @@ public class CrossValidationResult<T, TInput, TOutput>
             }
 
             // Calinski-Harabasz Index
-            var calinskiValues = new List<T>();
-            foreach (var r in foldsWithClustering)
-            {
-                if (r.ClusteringMetrics is { } cm2 && cm2.CalinskiHarabaszIndex is { } chi)
-                    calinskiValues.Add(chi);
-            }
-            if (calinskiValues.Count > 0)
+            var calinskiHarabaszScores = ExtractClusteringMetricValues(foldsWithClustering, m => m.CalinskiHarabaszIndex);
+            if (calinskiHarabaszScores.Length > 0)
             {
                 CalinskiHarabaszIndexStats = new BasicStats<T>(new BasicStatsInputs<T>
                 {
-                    Values = new Vector<T>(calinskiValues.ToArray())
+                    Values = new Vector<T>(calinskiHarabaszScores)
                 });
             }
 
             // Davies-Bouldin Index
-            var daviesValues = new List<T>();
-            foreach (var r in foldsWithClustering)
-            {
-                if (r.ClusteringMetrics is { } cm3 && cm3.DaviesBouldinIndex is { } dbi)
-                    daviesValues.Add(dbi);
-            }
-            if (daviesValues.Count > 0)
+            var daviesBouldinScores = ExtractClusteringMetricValues(foldsWithClustering, m => m.DaviesBouldinIndex);
+            if (daviesBouldinScores.Length > 0)
             {
                 DaviesBouldinIndexStats = new BasicStats<T>(new BasicStatsInputs<T>
                 {
-                    Values = new Vector<T>(daviesValues.ToArray())
+                    Values = new Vector<T>(daviesBouldinScores)
                 });
             }
 
             // Adjusted Rand Index
-            var ariValues = new List<T>();
-            foreach (var r in foldsWithClustering)
-            {
-                if (r.ClusteringMetrics is { } cm4 && cm4.AdjustedRandIndex is { } ari)
-                    ariValues.Add(ari);
-            }
-            if (ariValues.Count > 0)
+            var adjustedRandIndexScores = ExtractClusteringMetricValues(foldsWithClustering, m => m.AdjustedRandIndex);
+            if (adjustedRandIndexScores.Length > 0)
             {
                 AdjustedRandIndexStats = new BasicStats<T>(new BasicStatsInputs<T>
                 {
-                    Values = new Vector<T>(ariValues.ToArray())
+                    Values = new Vector<T>(adjustedRandIndexScores)
                 });
             }
         }
@@ -352,5 +329,28 @@ public class CrossValidationResult<T, TInput, TOutput>
         }
 
         return report.ToString();
+    }
+
+    /// <summary>
+    /// Extracts non-null clustering metric values from fold results using a selector function.
+    /// </summary>
+    private static T[] ExtractClusteringMetricValues(
+        List<FoldResult<T, TInput, TOutput>> folds,
+        Func<ClusteringMetrics<T>, T?> selector)
+    {
+        var values = new List<T>();
+        foreach (var fold in folds)
+        {
+            if (fold.ClusteringMetrics is not null)
+            {
+                var metricValue = selector(fold.ClusteringMetrics);
+                if (metricValue is T value)
+                {
+                    values.Add(value);
+                }
+            }
+        }
+
+        return values.ToArray();
     }
 }

@@ -202,7 +202,8 @@ public class CLIQUE<T> : ClusteringBase<T>
         }
 
         // Sort clusters by dimensionality (prefer higher dimensional matches)
-        var sortedClusters = (_subspaceClustersInternal ?? throw new InvalidOperationException("CLIQUE: Subspace clusters not computed."))
+        var subspaceClusters = _subspaceClustersInternal ?? throw new InvalidOperationException("_subspaceClustersInternal has not been initialized.");
+        var sortedClusters = subspaceClusters
             .OrderByDescending(c => c.Dimensions.Length)
             .ToList();
 
@@ -559,11 +560,10 @@ public class CLIQUE<T> : ClusteringBase<T>
         ClusterCenters = new Matrix<T>(NumClusters, d);
         var counts = new int[NumClusters];
 
-        var labels = Labels ?? throw new InvalidOperationException("Labels not computed. Call Train() first.");
         int n = x.Rows;
         for (int i = 0; i < n; i++)
         {
-            int label = (int)NumOps.ToDouble(labels[i]);
+            int label = (int)NumOps.ToDouble(Labels![i]);
             if (label >= 0 && label < NumClusters)
             {
                 counts[label]++;

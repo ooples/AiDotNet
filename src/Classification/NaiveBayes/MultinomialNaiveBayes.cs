@@ -1,4 +1,7 @@
+using System.Text;
 using AiDotNet.Models.Options;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace AiDotNet.Classification.NaiveBayes;
 
@@ -221,5 +224,112 @@ public class MultinomialNaiveBayes<T> : NaiveBayesBase<T>
         var metadata = base.GetModelMetadata();
         metadata.AdditionalInfo["DistributionType"] = "Multinomial";
         return metadata;
+    }
+
+    /// <inheritdoc/>
+    public override byte[] Serialize()
+    {
+        var modelData = new Dictionary<string, object>
+        {
+            { "NumClasses", NumClasses },
+            { "NumFeatures", NumFeatures },
+            { "TaskType", (int)TaskType },
+            { "ClassLabels", ClassLabels?.ToArray() ?? Array.Empty<T>() },
+            { "RegularizationOptions", Regularization.GetOptions() },
+            { "ClassCounts", ClassCounts ?? Array.Empty<int>() }
+        };
+
+        if (LogPriors is not null)
+        {
+            var logPriorsArray = new double[LogPriors.Length];
+            for (int i = 0; i < LogPriors.Length; i++)
+                logPriorsArray[i] = NumOps.ToDouble(LogPriors[i]);
+            modelData["LogPriors"] = logPriorsArray;
+        }
+
+        if (_logFeatureProbs is not null)
+        {
+            var featureProbsArray = new double[_logFeatureProbs.Rows * _logFeatureProbs.Columns];
+            int idx = 0;
+            for (int i = 0; i < _logFeatureProbs.Rows; i++)
+                for (int j = 0; j < _logFeatureProbs.Columns; j++)
+                    featureProbsArray[idx++] = NumOps.ToDouble(_logFeatureProbs[i, j]);
+            modelData["LogFeatureProbs"] = featureProbsArray;
+            modelData["LogFeatureProbsRows"] = _logFeatureProbs.Rows;
+            modelData["LogFeatureProbsCols"] = _logFeatureProbs.Columns;
+        }
+
+        var modelMetadata = GetModelMetadata();
+        modelMetadata.ModelData = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelData));
+        return Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelMetadata));
+    }
+
+    /// <inheritdoc/>
+    public override void Deserialize(byte[] modelData)
+    {
+        var jsonString = Encoding.UTF8.GetString(modelData);
+        var modelMetadata = JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString);
+
+        if (modelMetadata == null || modelMetadata.ModelData == null)
+            throw new InvalidOperationException("Deserialization failed: The model data is invalid or corrupted.");
+
+        var modelDataString = Encoding.UTF8.GetString(modelMetadata.ModelData);
+        var modelDataObj = JsonConvert.DeserializeObject<JObject>(modelDataString);
+
+        if (modelDataObj == null)
+            throw new InvalidOperationException("Deserialization failed: The model data is invalid or corrupted.");
+
+        NumClasses = modelDataObj["NumClasses"]?.ToObject<int>() ?? 0;
+        NumFeatures = modelDataObj["NumFeatures"]?.ToObject<int>() ?? 0;
+        TaskType = (ClassificationTaskType)(modelDataObj["TaskType"]?.ToObject<int>() ?? 0);
+
+        var classLabelsToken = modelDataObj["ClassLabels"];
+        if (classLabelsToken is not null)
+        {
+            var classLabelsAsDoubles = classLabelsToken.ToObject<double[]>() ?? Array.Empty<double>();
+            if (classLabelsAsDoubles.Length > 0)
+            {
+                ClassLabels = new Vector<T>(classLabelsAsDoubles.Length);
+                for (int i = 0; i < classLabelsAsDoubles.Length; i++)
+                    ClassLabels[i] = NumOps.FromDouble(classLabelsAsDoubles[i]);
+            }
+        }
+
+        var classCountsToken = modelDataObj["ClassCounts"];
+        if (classCountsToken is not null)
+            ClassCounts = classCountsToken.ToObject<int[]>();
+
+        var logPriorsToken = modelDataObj["LogPriors"];
+        if (logPriorsToken is not null)
+        {
+            var logPriorsArray = logPriorsToken.ToObject<double[]>() ?? Array.Empty<double>();
+            if (logPriorsArray.Length > 0)
+            {
+                LogPriors = new Vector<T>(logPriorsArray.Length);
+                for (int i = 0; i < logPriorsArray.Length; i++)
+                    LogPriors[i] = NumOps.FromDouble(logPriorsArray[i]);
+            }
+        }
+
+        var featureProbsToken = modelDataObj["LogFeatureProbs"];
+        if (featureProbsToken is not null)
+        {
+            var featureProbsArray = featureProbsToken.ToObject<double[]>() ?? Array.Empty<double>();
+            int rows = modelDataObj["LogFeatureProbsRows"]?.ToObject<int>() ?? 0;
+            int cols = modelDataObj["LogFeatureProbsCols"]?.ToObject<int>() ?? 0;
+            if (rows > 0 && cols > 0)
+            {
+                if (featureProbsArray.Length < rows * cols)
+                {
+                    throw new InvalidOperationException(
+                        $"Deserialization failed: LogFeatureProbs array length {featureProbsArray.Length} is less than expected {rows}x{cols}={rows * cols}.");
+                }
+                _logFeatureProbs = new Matrix<T>(rows, cols);
+                int idx = 0;
+                for (int i = 0; i < rows; i++)
+                    for (int j = 0; j < cols; j++)
+                        _logFeatureProbs[i, j] = NumOps.FromDouble(featureProbsArray[idx++]);
+            }
+        }
     }
 }

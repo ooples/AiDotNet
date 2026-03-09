@@ -1,7 +1,10 @@
+using System.Text;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Validation;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace AiDotNet.Classification.SemiSupervised;
 
@@ -42,7 +45,7 @@ namespace AiDotNet.Classification.SemiSupervised;
 /// </remarks>
 public class SelfTrainingClassifier<T> : SemiSupervisedClassifierBase<T>
 {
-    private readonly IClassifier<T> _baseClassifier;
+    private IClassifier<T> _baseClassifier;
     private readonly double _confidenceThreshold;
     private readonly int _maxIterations;
     private readonly int _maxSamplesPerIteration;
@@ -499,6 +502,72 @@ public class SelfTrainingClassifier<T> : SemiSupervisedClassifierBase<T>
     protected override ModelType GetModelType()
     {
         return ModelType.SelfTrainingClassifier;
+    }
+
+    /// <summary>
+    /// Serializes the self-training classifier including its wrapped base classifier.
+    /// </summary>
+    public override byte[] Serialize()
+    {
+        var (baseTypeName, baseData) = ClassifierRegistry<T>.SerializeClassifier(_baseClassifier);
+
+        var modelDict = new Dictionary<string, object?>
+        {
+            { "ClassLabels", ClassLabels?.ToArray().Select(NumOps.ToDouble).ToArray() },
+            { "NumClasses", NumClasses },
+            { "NumFeatures", NumFeatures },
+            { "TaskType", (int)TaskType },
+            { "ConfidenceThreshold", _confidenceThreshold },
+            { "MaxIterations", _maxIterations },
+            { "MaxSamplesPerIteration", _maxSamplesPerIteration },
+            { "SelectionCriterion", (int)_selectionCriterion },
+            { "IterationsPerformed", IterationsPerformed },
+            { "SamplesAdded", SamplesAdded },
+            { "BaseClassifierType", baseTypeName },
+            { "BaseClassifierData", baseData }
+        };
+
+        var metadata = GetModelMetadata();
+        metadata.ModelData = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelDict));
+        return Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(metadata));
+    }
+
+    /// <summary>
+    /// Deserializes the self-training classifier including its wrapped base classifier.
+    /// </summary>
+    public override void Deserialize(byte[] modelData)
+    {
+        var jsonString = Encoding.UTF8.GetString(modelData);
+        var metadata = JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString);
+        if (metadata?.ModelData is null) return;
+
+        var dataString = Encoding.UTF8.GetString(metadata.ModelData);
+        var jObj = JsonConvert.DeserializeObject<JObject>(dataString);
+        if (jObj is null) return;
+
+        // Restore base class state
+        var classLabelsArr = jObj["ClassLabels"]?.ToObject<double[]>();
+        if (classLabelsArr is not null)
+        {
+            ClassLabels = new Vector<T>(classLabelsArr.Length);
+            for (int i = 0; i < classLabelsArr.Length; i++)
+            {
+                ClassLabels[i] = NumOps.FromDouble(classLabelsArr[i]);
+            }
+        }
+        NumClasses = jObj["NumClasses"]?.ToObject<int>() ?? 0;
+        NumFeatures = jObj["NumFeatures"]?.ToObject<int>() ?? 0;
+        TaskType = (ClassificationTaskType)(jObj["TaskType"]?.ToObject<int>() ?? 0);
+        IterationsPerformed = jObj["IterationsPerformed"]?.ToObject<int>() ?? 0;
+        SamplesAdded = jObj["SamplesAdded"]?.ToObject<int>() ?? 0;
+
+        // Restore wrapped base classifier via registry
+        var baseTypeName = jObj["BaseClassifierType"]?.ToObject<string>();
+        var baseData = jObj["BaseClassifierData"]?.ToObject<string>();
+        if (baseTypeName is not null && baseData is not null)
+        {
+            _baseClassifier = ClassifierRegistry<T>.DeserializeClassifier(baseTypeName, baseData);
+        }
     }
 
     /// <summary>

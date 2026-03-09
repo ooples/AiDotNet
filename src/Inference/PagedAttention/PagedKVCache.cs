@@ -240,31 +240,29 @@ internal class PagedKVCache<T> : IDisposable
     /// </summary>
     public void WriteKey(long sequenceId, int tokenPosition, int layer, ReadOnlySpan<T> keyData)
     {
-        lock (_lock)
+        var table = _blockTableManager.GetBlockTable(sequenceId);
+        if (table == null)
+            throw new InvalidOperationException($"No block table for sequence {sequenceId}");
+
+        var (blockId, offset) = table.GetBlockAndOffset(tokenPosition);
+
+        // Check for copy-on-write
+        if (_blockManager.GetReferenceCount(blockId) > 1)
         {
-            var table = _blockTableManager.GetBlockTable(sequenceId)
-                ?? throw new InvalidOperationException($"No block table for sequence {sequenceId}");
+            _blockTableManager.CopyOnWrite(sequenceId, tokenPosition / _config.BlockSize, CopyBlockData);
+            table = _blockTableManager.GetBlockTable(sequenceId)
+                ?? throw new InvalidOperationException($"Block table missing after copy-on-write for sequence {sequenceId}");
+            (blockId, offset) = table.GetBlockAndOffset(tokenPosition);
+        }
 
-            var (blockId, offset) = table.GetBlockAndOffset(tokenPosition);
-
-            // Check for copy-on-write
-            if (_blockManager.GetReferenceCount(blockId) > 1)
-            {
-                _blockTableManager.CopyOnWrite(sequenceId, tokenPosition / _config.BlockSize, CopyBlockData);
-                table = _blockTableManager.GetBlockTable(sequenceId)
-                    ?? throw new InvalidOperationException($"Block table lost after CoW for sequence {sequenceId}");
-                (blockId, offset) = table.GetBlockAndOffset(tokenPosition);
-            }
-
-            // Write key data for all heads
-            var blockStorage = _kvBlocks[blockId];
-            for (int head = 0; head < _config.NumHeads; head++)
-            {
-                int storageOffset = GetBlockStorageOffset(layer, isValue: false, offset, head);
-                int dataOffset = head * _config.HeadDimension;
-                keyData.Slice(dataOffset, _config.HeadDimension).CopyTo(
-                    blockStorage.AsSpan(storageOffset, _config.HeadDimension));
-            }
+        // Write key data for all heads
+        var blockStorage = _kvBlocks[blockId];
+        for (int head = 0; head < _config.NumHeads; head++)
+        {
+            int storageOffset = GetBlockStorageOffset(layer, isValue: false, offset, head);
+            int dataOffset = head * _config.HeadDimension;
+            keyData.Slice(dataOffset, _config.HeadDimension).CopyTo(
+                blockStorage.AsSpan(storageOffset, _config.HeadDimension));
         }
     }
 
@@ -273,31 +271,29 @@ internal class PagedKVCache<T> : IDisposable
     /// </summary>
     public void WriteValue(long sequenceId, int tokenPosition, int layer, ReadOnlySpan<T> valueData)
     {
-        lock (_lock)
+        var table = _blockTableManager.GetBlockTable(sequenceId);
+        if (table == null)
+            throw new InvalidOperationException($"No block table for sequence {sequenceId}");
+
+        var (blockId, offset) = table.GetBlockAndOffset(tokenPosition);
+
+        // Check for copy-on-write
+        if (_blockManager.GetReferenceCount(blockId) > 1)
         {
-            var table = _blockTableManager.GetBlockTable(sequenceId)
-                ?? throw new InvalidOperationException($"No block table for sequence {sequenceId}");
+            _blockTableManager.CopyOnWrite(sequenceId, tokenPosition / _config.BlockSize, CopyBlockData);
+            table = _blockTableManager.GetBlockTable(sequenceId)
+                ?? throw new InvalidOperationException($"Block table missing after copy-on-write for sequence {sequenceId}");
+            (blockId, offset) = table.GetBlockAndOffset(tokenPosition);
+        }
 
-            var (blockId, offset) = table.GetBlockAndOffset(tokenPosition);
-
-            // Check for copy-on-write
-            if (_blockManager.GetReferenceCount(blockId) > 1)
-            {
-                _blockTableManager.CopyOnWrite(sequenceId, tokenPosition / _config.BlockSize, CopyBlockData);
-                table = _blockTableManager.GetBlockTable(sequenceId)
-                    ?? throw new InvalidOperationException($"Block table lost after CoW for sequence {sequenceId}");
-                (blockId, offset) = table.GetBlockAndOffset(tokenPosition);
-            }
-
-            // Write value data for all heads
-            var blockStorage = _kvBlocks[blockId];
-            for (int head = 0; head < _config.NumHeads; head++)
-            {
-                int storageOffset = GetBlockStorageOffset(layer, isValue: true, offset, head);
-                int dataOffset = head * _config.HeadDimension;
-                valueData.Slice(dataOffset, _config.HeadDimension).CopyTo(
-                    blockStorage.AsSpan(storageOffset, _config.HeadDimension));
-            }
+        // Write value data for all heads
+        var blockStorage = _kvBlocks[blockId];
+        for (int head = 0; head < _config.NumHeads; head++)
+        {
+            int storageOffset = GetBlockStorageOffset(layer, isValue: true, offset, head);
+            int dataOffset = head * _config.HeadDimension;
+            valueData.Slice(dataOffset, _config.HeadDimension).CopyTo(
+                blockStorage.AsSpan(storageOffset, _config.HeadDimension));
         }
     }
 

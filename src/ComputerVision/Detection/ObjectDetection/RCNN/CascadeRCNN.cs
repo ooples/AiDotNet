@@ -113,10 +113,10 @@ public class CascadeRCNN<T> : ObjectDetectorBase<T>
         int imageWidth = input.Shape[3];
 
         // Extract backbone features
-        var backboneFeatures = Backbone!.ExtractFeatures(input);
+        var backboneFeatures = EnsureBackbone.ExtractFeatures(input);
 
         // Apply FPN neck
-        var fpnFeatures = Neck!.Forward(backboneFeatures);
+        var fpnFeatures = EnsureNeck.Forward(backboneFeatures);
 
         // Use P4 level for RPN
         var rpnFeatures = fpnFeatures.Count > 1 ? fpnFeatures[1] : fpnFeatures[0];
@@ -164,14 +164,24 @@ public class CascadeRCNN<T> : ObjectDetectorBase<T>
             var stage = _stages[stageIdx];
             (classLogits, boxDeltas) = stage.Forward(flattenedFeatures);
 
+            if (boxDeltas is null)
+            {
+                throw new InvalidOperationException("Cascade stage did not produce box deltas.");
+            }
+
             // Refine boxes for next stage (except for last stage)
             if (stageIdx < _numStages - 1)
             {
-                currentBoxes = RefineBoxes(currentBoxes, boxDeltas!, imageWidth, imageHeight);
+                currentBoxes = RefineBoxes(currentBoxes, boxDeltas, imageWidth, imageHeight);
             }
         }
 
-        return new List<Tensor<T>> { classLogits!, boxDeltas!, currentBoxes };
+        if (classLogits is null || boxDeltas is null)
+        {
+            throw new InvalidOperationException("Cascade RCNN requires at least one stage to produce outputs.");
+        }
+
+        return new List<Tensor<T>> { classLogits, boxDeltas, currentBoxes };
     }
 
     /// <inheritdoc/>
@@ -328,10 +338,10 @@ public class CascadeRCNN<T> : ObjectDetectorBase<T>
         }
 
         // Read backbone parameters
-        Backbone!.ReadParameters(reader);
+        EnsureBackbone.ReadParameters(reader);
 
         // Read neck parameters
-        Neck!.ReadParameters(reader);
+        EnsureNeck.ReadParameters(reader);
 
         // Read RPN parameters
         _rpn.ReadParameters(reader);
@@ -364,10 +374,10 @@ public class CascadeRCNN<T> : ObjectDetectorBase<T>
         writer.Write(Name);
 
         // Write backbone parameters
-        Backbone!.WriteParameters(writer);
+        EnsureBackbone.WriteParameters(writer);
 
         // Write neck parameters
-        Neck!.WriteParameters(writer);
+        EnsureNeck.WriteParameters(writer);
 
         // Write RPN parameters
         _rpn.WriteParameters(writer);

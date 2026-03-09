@@ -387,7 +387,6 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                 new StandardScaler<T>());
         }
 
-
         return this;
     }
 
@@ -428,7 +427,6 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             _preprocessingPipeline.Add((IDataTransformer<T, TInput, TInput>)(object)
                 new StandardScaler<T>());
         }
-
 
         return this;
     }
@@ -471,7 +469,6 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             _preprocessingPipeline.Add((IDataTransformer<T, TInput, TInput>)(object)
                 new StandardScaler<T>());
         }
-
 
         return this;
     }
@@ -1258,7 +1255,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
 
         var optimizationResult = new OptimizationResult<T, TInput, TOutput>
         {
-            BestSolution = _model!
+            BestSolution = _model ?? throw new InvalidOperationException("Model has not been configured. Call ConfigureModel() before BuildForInference().")
         };
 
         var deploymentConfig = DeploymentConfiguration.Create(
@@ -1802,7 +1799,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             TInput autoMLPreparedX = x;
             TOutput autoMLPreparedY = y;
 
-            bool shuffleBeforeSplit = !IsTimeSeriesTask();
+            bool shuffleBeforeSplit = !(_autoMLOptions?.TaskFamilyOverride == AutoMLTaskFamily.TimeSeriesForecasting
+                || _autoMLOptions?.TaskFamilyOverride == AutoMLTaskFamily.TimeSeriesAnomalyDetection);
 
             var splitResult = DataSplitter.Split<T, TInput, TOutput>(
                 autoMLPreparedX, autoMLPreparedY, trainRatio: 0.7, validationRatio: 0.15, shuffle: shuffleBeforeSplit);
@@ -2030,26 +2028,33 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
 
         TInput XTrain;
         TOutput yTrain;
-        // These generic types are always value types (Matrix<T>, Vector<T>) at runtime,
-        // so default produces valid zero-initialized values, not null. The suppression covers
-        // both the declarations and all downstream usage sites in this method.
-#pragma warning disable CS8600, CS8604 // Generic type defaults - T is always a value type at runtime
+        // These variables are assigned in all code paths before use (train/val/test split or
+        // federated path). The pragma suppresses nullable warnings for the initial default
+        // declarations since TInput/TOutput are reference types (Matrix<T>/Vector<T>).
+#pragma warning disable CS8600 // Converting null literal or possible null value to non-nullable type
         TInput XVal = default;
         TOutput yVal = default;
         TInput XTest = default;
         TOutput yTest = default;
+#pragma warning restore CS8600
 
         if (usePartitionedFederatedData)
         {
-            // Reject row-changing data preparation in natural-client federated mode.
-            // FitResample (SMOTE, outlier removal) can change row counts, which breaks
-            // CreateFederatedClientPartitionsFromClientRanges since it uses original row ranges.
+            // Federated path: all data is training data — FitResample on everything is correct.
             if (_dataPreparationPipeline != null && _dataPreparationPipeline.Count > 0)
             {
-                throw new InvalidOperationException(
-                    "Data preparation (SMOTE, outlier removal) is not supported with natural-client federated " +
-                    "partitioning because row-changing operations break per-client row ranges. Either preprocess " +
-                    "each client's data independently before merging, or use synthetic federated partitioning instead.");
+                if (preparedX is Matrix<T> fedMatrix && preparedY is Vector<T> fedVector)
+                {
+                    var (prepX, prepY) = _dataPreparationPipeline.FitResample(fedMatrix, fedVector);
+                    preparedX = (TInput)(object)prepX;
+                    preparedY = (TOutput)(object)prepY;
+                }
+                else if (preparedX is Tensor<T> fedTensor && preparedY is Tensor<T> fedYTensor)
+                {
+                    var (prepX, prepY) = _dataPreparationPipeline.FitResampleTensor(fedTensor, fedYTensor);
+                    preparedX = (TInput)(object)prepX;
+                    preparedY = (TOutput)(object)prepY;
+                }
             }
 
             // Federated path: all data is training data — FitTransform on everything is correct.
@@ -2098,7 +2103,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             // Standard supervised learning path: split FIRST, then fit preprocessing on training only.
             // This prevents data leakage from test/validation sets into the preprocessing pipeline.
             // Disable shuffling for time-series tasks to preserve chronological ordering.
-            bool shuffleBeforeSplit = !IsTimeSeriesTask();
+            bool shuffleBeforeSplit = !(_autoMLOptions?.TaskFamilyOverride == AutoMLTaskFamily.TimeSeriesForecasting
+                || _autoMLOptions?.TaskFamilyOverride == AutoMLTaskFamily.TimeSeriesAnomalyDetection);
             (XTrain, yTrain, XVal, yVal, XTest, yTest) = DataSplitter.Split<T, TInput, TOutput>(
                 preparedX, preparedY, trainRatio: 0.7, validationRatio: 0.15, shuffle: shuffleBeforeSplit);
 
@@ -2126,8 +2132,10 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                 XTrain = _preprocessingPipeline.FitTransform(XTrain);
 
                 // Transform (NOT FitTransform) validation and test data using training-fitted pipeline
+#pragma warning disable CS8604 // XVal and XTest are assigned by DataSplitter.Split above
                 XVal = _preprocessingPipeline.Transform(XVal);
                 XTest = _preprocessingPipeline.Transform(XTest);
+#pragma warning restore CS8604
 
                 preprocessingInfo = new PreprocessingInfo<T, TInput, TOutput>(
                     _preprocessingPipeline,
@@ -2330,9 +2338,11 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                     }
 
                     // Train with current hyperparameters
+#pragma warning disable CS8604 // XVal/yVal/XTest/yTest assigned by DataSplitter.Split
                     var trialResult = finalOptimizer.Optimize(
                         OptimizerHelper<T, TInput, TOutput>.CreateOptimizationInputData(
                             XTrain, yTrain, XVal, yVal, XTest, yTest));
+#pragma warning restore CS8604
 
                     // Return validation MSE as objective (minimizing)
                     if (trialResult.ValidationResult.ErrorStats is not null)
@@ -2402,7 +2412,9 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
 
         OptimizationResult<T, TInput, TOutput> optimizationResult;
         FederatedLearningMetadata? federatedLearningMetadata = null;
+#pragma warning disable CS8604 // XVal/yVal/XTest/yTest assigned by DataSplitter.Split
         var optimizationInputData = OptimizerHelper<T, TInput, TOutput>.CreateOptimizationInputData(XTrain, yTrain, XVal, yVal, XTest, yTest);
+#pragma warning restore CS8604
 
         // FEDERATED LEARNING PATH (facade-first: orchestration stays internal)
         if (_federatedLearningOptions != null)
@@ -2824,7 +2836,6 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         // Build and attach the composable safety pipeline if configured
         AttachSafetyPipeline(finalResult);
 
-#pragma warning restore CS8600, CS8604
         return finalResult;
     }
 
@@ -4092,34 +4103,6 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             AutoMLBudgetPreset.Thorough => new AutoMLEnsembleOptions { Enabled = true, MaxModelCount = 5 },
             _ => new AutoMLEnsembleOptions { Enabled = false, MaxModelCount = 3 }
         };
-    }
-
-    /// <summary>
-    /// Determines whether the current task is a time-series task that requires chronological splitting.
-    /// Checks AutoML options, and the configured model to avoid silently shuffling time-series data.
-    /// </summary>
-    private bool IsTimeSeriesTask()
-    {
-        // Check AutoML facade options
-        if (_autoMLOptions?.TaskFamilyOverride == AutoMLTaskFamily.TimeSeriesForecasting
-            || _autoMLOptions?.TaskFamilyOverride == AutoMLTaskFamily.TimeSeriesAnomalyDetection)
-        {
-            return true;
-        }
-
-        // Check if the configured model is a time-series model (when using ConfigureAutoML(IAutoMLModel)
-        // without facade options, _autoMLOptions is null but the model may still be time-series)
-        if (_model is not null)
-        {
-            var modelTypeName = _model.GetType().Name;
-            if (modelTypeName.Contains("TimeSeries", StringComparison.OrdinalIgnoreCase)
-                || modelTypeName.Contains("Forecasting", StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     private static bool IsHigherBetter(MetricType metric)

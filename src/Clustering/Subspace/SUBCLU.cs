@@ -498,7 +498,6 @@ public class SUBCLU<T> : ClusteringBase<T>
 
     private Vector<T> AssignLabelsForNewData(Matrix<T> x)
     {
-        var trainingData = _trainingData ?? throw new InvalidOperationException("Training data not available. Call Train() first.");
         int n = x.Rows;
         var labels = new Vector<T>(n);
 
@@ -509,7 +508,8 @@ public class SUBCLU<T> : ClusteringBase<T>
         }
 
         // Sort clusters by dimensionality (prefer higher dimensional matches)
-        var sortedClusters = (_subspaceClusterInfos ?? throw new InvalidOperationException("Cluster info not available. Call Train() first."))
+        var clusterInfos = _subspaceClusterInfos ?? throw new InvalidOperationException("_subspaceClusterInfos has not been initialized.");
+        var sortedClusters = clusterInfos
             .OrderByDescending(c => c.Dimensions.Length)
             .ToList();
 
@@ -526,7 +526,7 @@ public class SUBCLU<T> : ClusteringBase<T>
                 foreach (int corePointIdx in cluster.CorePoints)
                 {
                     double dist = ComputeSubspaceDistanceToPoint(
-                        trainingData, corePointIdx, x, i, cluster.Dimensions);
+                        _trainingData!, corePointIdx, x, i, cluster.Dimensions);
 
                     if (dist <= _options.Epsilon)
                     {
@@ -554,7 +554,6 @@ public class SUBCLU<T> : ClusteringBase<T>
             return;
         }
 
-        var currentLabels = Labels ?? throw new InvalidOperationException("Labels not computed. Call Train() first.");
         int d = x.Columns;
         int n = x.Rows;
         ClusterCenters = new Matrix<T>(NumClusters, d);
@@ -562,7 +561,7 @@ public class SUBCLU<T> : ClusteringBase<T>
 
         for (int i = 0; i < n; i++)
         {
-            int label = (int)NumOps.ToDouble(currentLabels[i]);
+            int label = (int)NumOps.ToDouble(Labels![i]);
             if (label >= 0 && label < NumClusters)
             {
                 counts[label]++;

@@ -1,8 +1,11 @@
+using System.Text;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Validation;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace AiDotNet.Classification.MultiLabel;
 
@@ -426,6 +429,72 @@ public class ClassifierChainClassifier<T> : MultiLabelClassifierBase<T>
         }
 
         return probabilities;
+    }
+
+    #endregion
+
+    #region Serialization
+
+    /// <inheritdoc/>
+    public override byte[] Serialize()
+    {
+        var classifierTypes = new List<string>();
+        var classifierData = new List<string>();
+        if (_chainClassifiers is not null)
+        {
+            foreach (var clf in _chainClassifiers)
+            {
+                var (typeName, data) = ClassifierRegistry<T>.SerializeClassifier(clf);
+                classifierTypes.Add(typeName);
+                classifierData.Add(data);
+            }
+        }
+
+        var modelDict = new Dictionary<string, object?>
+        {
+            { "NumLabels", NumLabels },
+            { "NumFeatures", NumFeatures },
+            { "NumClasses", NumClasses },
+            { "TaskType", (int)TaskType },
+            { "LabelNames", LabelNames },
+            { "ChainOrder", _chainOrder },
+            { "ClassifierTypes", classifierTypes },
+            { "ClassifierData", classifierData }
+        };
+
+        var metadata = GetModelMetadata();
+        metadata.ModelData = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelDict));
+        return Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(metadata));
+    }
+
+    /// <inheritdoc/>
+    public override void Deserialize(byte[] modelData)
+    {
+        var jsonString = Encoding.UTF8.GetString(modelData);
+        var metadata = JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString);
+        if (metadata?.ModelData is null) return;
+
+        var dataString = Encoding.UTF8.GetString(metadata.ModelData);
+        var jObj = JsonConvert.DeserializeObject<JObject>(dataString);
+        if (jObj is null) return;
+
+        NumLabels = jObj["NumLabels"]?.ToObject<int>() ?? 0;
+        NumFeatures = jObj["NumFeatures"]?.ToObject<int>() ?? 0;
+        NumClasses = jObj["NumClasses"]?.ToObject<int>() ?? 2;
+        TaskType = (ClassificationTaskType)(jObj["TaskType"]?.ToObject<int>() ?? 0);
+        LabelNames = jObj["LabelNames"]?.ToObject<string[]>();
+        _chainOrder = jObj["ChainOrder"]?.ToObject<int[]>();
+
+        var types = jObj["ClassifierTypes"]?.ToObject<string[]>();
+        var data = jObj["ClassifierData"]?.ToObject<string[]>();
+        if (types is not null && data is not null && types.Length == data.Length)
+        {
+            _chainClassifiers = new IClassifier<T>[types.Length];
+            for (int i = 0; i < types.Length; i++)
+            {
+                _chainClassifiers[i] = ClassifierRegistry<T>.DeserializeClassifier(types[i], data[i]);
+            }
+        }
     }
 
     #endregion

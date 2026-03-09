@@ -87,11 +87,17 @@ public class HyperparameterOptimizationResult<T>
     /// </summary>
     public List<(int TrialNumber, T ObjectiveValue)> GetOptimizationHistory()
     {
-        return AllTrials
-            .Where(t => t.Status == TrialStatus.Complete && t.ObjectiveValue != null)
-            .Select(t => (t.TrialNumber, t.ObjectiveValue ?? throw new InvalidOperationException("ObjectiveValue was null after filtering.")))
-            .OrderBy(t => t.TrialNumber)
-            .ToList();
+        var result = new List<(int TrialNumber, T ObjectiveValue)>();
+        foreach (var t in AllTrials)
+        {
+            if (t.Status == TrialStatus.Complete && t.ObjectiveValue is T objValue)
+            {
+                result.Add((t.TrialNumber, objValue));
+            }
+        }
+
+        result.Sort((a, b) => a.TrialNumber.CompareTo(b.TrialNumber));
+        return result;
     }
 
     /// <summary>

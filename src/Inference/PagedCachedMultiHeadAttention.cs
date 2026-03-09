@@ -202,15 +202,25 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>
 
         var output = new Tensor<T>([batchSize, seqLen, embDim]);
 
+        var activation = ScalarActivation
+            ?? throw new InvalidOperationException(
+                $"{nameof(PagedCachedMultiHeadAttention<T>)}: ScalarActivation not initialized.");
+
         // Materialize weights to float spans for the paged kernel.
         // Note: This is intentionally conservative and prioritizes correctness.
         // PagedAttentionKernel's MatVecMul expects matrices stored as [outDim, inDim] row-major.
         // Our weights are stored as [inDim, outDim], so we pass a transposed layout.
         EnsureKernelWeightCache();
-        var wQ = _cachedWQ ?? throw new InvalidOperationException("Cached query weights have not been initialized.");
-        var wK = _cachedWK ?? throw new InvalidOperationException("Cached key weights have not been initialized.");
-        var wV = _cachedWV ?? throw new InvalidOperationException("Cached value weights have not been initialized.");
-        var wO = _cachedWO ?? throw new InvalidOperationException("Cached output weights have not been initialized.");
+        if (_cachedWQ is null || _cachedWK is null || _cachedWV is null || _cachedWO is null)
+        {
+            throw new InvalidOperationException(
+                $"{nameof(PagedCachedMultiHeadAttention<T>)}: Kernel weight cache initialization failed.");
+        }
+
+        var wQ = _cachedWQ;
+        var wK = _cachedWK;
+        var wV = _cachedWV;
+        var wO = _cachedWO;
 
         // Process each token sequentially to ensure causal behavior during prefill.
         var pool = ArrayPool<float>.Shared;
@@ -233,6 +243,12 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>
                                 wKInt8.HasValue &&
                                 wVInt8.HasValue &&
                                 wOInt8.HasValue;
+
+            // Extract quantized weights once (guaranteed non-null when useQuantized is true)
+            var qWeightsQ = useQuantized ? wQInt8.GetValueOrDefault() : default;
+            var qWeightsK = useQuantized ? wKInt8.GetValueOrDefault() : default;
+            var qWeightsV = useQuantized ? wVInt8.GetValueOrDefault() : default;
+            var qWeightsO = useQuantized ? wOInt8.GetValueOrDefault() : default;
 
             // Pre-compute ALiBi slopes per head for the paged attention path.
             float[]? alibiSlopes = null;
@@ -273,9 +289,9 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>
                         // Step 1: Project Q, K, V
                         if (useQuantized)
                         {
-                            MatVecMulInt8(hidden, wQInt8.GetValueOrDefault(), querySpan);
-                            MatVecMulInt8(hidden, wKInt8.GetValueOrDefault(), keySpan);
-                            MatVecMulInt8(hidden, wVInt8.GetValueOrDefault(), valueSpan);
+                            MatVecMulInt8(hidden, qWeightsQ, querySpan);
+                            MatVecMulInt8(hidden, qWeightsK, keySpan);
+                            MatVecMulInt8(hidden, qWeightsV, valueSpan);
                         }
                         else
                         {
@@ -301,7 +317,7 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>
                         // Step 4: Output projection
                         if (useQuantized)
                         {
-                            MatVecMulInt8(attnOutput, wOInt8.GetValueOrDefault(), tokenOut);
+                            MatVecMulInt8(attnOutput, qWeightsO, tokenOut);
                         }
                         else
                         {
@@ -312,10 +328,10 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>
                     {
                         Kernel.ForwardQuantized(
                             hiddenStates: hidden,
-                            wQ: wQInt8.GetValueOrDefault(),
-                            wK: wKInt8.GetValueOrDefault(),
-                            wV: wVInt8.GetValueOrDefault(),
-                            wO: wOInt8.GetValueOrDefault(),
+                            wQ: qWeightsQ,
+                            wK: qWeightsK,
+                            wV: qWeightsV,
+                            wO: qWeightsO,
                             sequenceId: SequenceId,
                             position: _currentPosition,
                             layer: LayerIndex,
@@ -340,8 +356,7 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>
                     {
                         T value = NumOps.FromDouble(tokenOut[d]);
                         value = NumOps.Add(value, _outputBias[d]);
-                        var activation = ScalarActivation ?? throw new InvalidOperationException("ScalarActivation has not been initialized.");
-                    output[0, t, d] = activation.Activate(value);
+                        output[0, t, d] = activation.Activate(value);
                     }
 
                     _currentPosition++;
@@ -367,6 +382,10 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>
 
     private Tensor<T> ForwardStateless(Tensor<T> input)
     {
+        var activation = ScalarActivation
+            ?? throw new InvalidOperationException(
+                $"{nameof(PagedCachedMultiHeadAttention<T>)}: ScalarActivation not initialized.");
+
         // Stateless fallback using FlashAttention.
         // Compute Q,K,V projections.
         var (q, k, v) = ComputeQkv(input);
@@ -405,8 +424,7 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>
                 for (int o = 0; o < _embeddingDimension; o++)
                 {
                     T value = NumOps.Add(projected[b, s, o], _outputBias[o]);
-                    var activation2 = ScalarActivation ?? throw new InvalidOperationException("ScalarActivation has not been initialized.");
-                    output[b, s, o] = activation2.Activate(value);
+                    output[b, s, o] = activation.Activate(value);
                 }
             }
         }

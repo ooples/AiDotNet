@@ -211,6 +211,12 @@ internal class CachedGroupedQueryAttention<T> : LayerBase<T>
 
     private Tensor<T> ForwardWithCache(Tensor<T> input)
     {
+        if (_cache is null)
+        {
+            throw new InvalidOperationException(
+                $"{nameof(CachedGroupedQueryAttention<T>)}: KV cache not attached. Call AttachCache() before using cached inference.");
+        }
+
         int batchSize = input.Shape[0];
         int seqLen = input.Shape[1];
 
@@ -231,12 +237,12 @@ internal class CachedGroupedQueryAttention<T> : LayerBase<T>
         // Apply RoPE with position offset
         if (_ropeLayer != null)
         {
-            int startPosition = cache.CurrentLength;
+            int startPosition = _cache.CurrentLength;
             (queries, newKeys) = _ropeLayer.ApplyRoPE(queries, newKeys, startPosition);
         }
 
-        // Append to cache (cache stores numKVHeads, not numHeads!)
-        var (keys, values) = cache.Append(_layerIndex, newKeys, newValues);
+        // Append to cache (cache stores numKVHeads, not numHeads)
+        var (keys, values) = _cache.Append(_layerIndex, newKeys, newValues);
 
         // Expand KV heads to match Q heads
         int cachedSeqLen = keys.Shape[2];

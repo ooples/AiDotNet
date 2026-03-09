@@ -66,7 +66,7 @@ namespace AiDotNetBenchmarkTests.InferenceOptimization
         public Tensor<float> NaiveAttention()
         {
             // Naive implementation: QK^T, softmax, multiply by V
-            float scale = 1.0f / MathF.Sqrt(FeatureDim);
+            float scale = 1.0f / (float)Math.Sqrt(FeatureDim);
 
             // Get arrays for direct access in naive benchmark
             var qData = _q.ToArray();
@@ -102,7 +102,7 @@ namespace AiDotNetBenchmarkTests.InferenceOptimization
                 float sum = 0.0f;
                 for (int j = 0; j < SequenceLength; j++)
                 {
-                    scores[i * SequenceLength + j] = MathF.Exp(scores[i * SequenceLength + j] - maxVal);
+                    scores[i * SequenceLength + j] = (float)Math.Exp(scores[i * SequenceLength + j] - maxVal);
                     sum += scores[i * SequenceLength + j];
                 }
 

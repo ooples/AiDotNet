@@ -1,6 +1,9 @@
+using System.Text;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Helpers;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace AiDotNet.Classification.MultiLabel;
 
@@ -343,6 +346,121 @@ public class RAkELClassifier<T> : MultiLabelClassifierBase<T>
                     if (idx < parameters.Length)
                         weights[i, j] = parameters[idx++];
                 }
+            }
+        }
+    }
+
+    /// <inheritdoc/>
+    public override byte[] Serialize()
+    {
+        // Serialize weight matrices as double[][][]
+        var weightsArr = new List<double[][]>();
+        foreach (var weights in _labelsetWeights)
+        {
+            var matrix = new double[weights.Rows][];
+            for (int i = 0; i < weights.Rows; i++)
+            {
+                matrix[i] = new double[weights.Columns];
+                for (int j = 0; j < weights.Columns; j++)
+                {
+                    matrix[i][j] = NumOps.ToDouble(weights[i, j]);
+                }
+            }
+            weightsArr.Add(matrix);
+        }
+
+        // Serialize inverse label maps as Dictionary<string, int[]>[] (JSON needs string keys)
+        var inverseMapsArr = new List<Dictionary<string, int[]>>();
+        foreach (var map in _inverseLabelMaps)
+        {
+            var strMap = new Dictionary<string, int[]>();
+            foreach (var kvp in map)
+            {
+                strMap[kvp.Key.ToString()] = kvp.Value;
+            }
+            inverseMapsArr.Add(strMap);
+        }
+
+        var modelDict = new Dictionary<string, object?>
+        {
+            { "NumLabels", NumLabels },
+            { "NumFeatures", NumFeatures },
+            { "NumClasses", NumClasses },
+            { "TaskType", (int)TaskType },
+            { "LabelNames", LabelNames },
+            { "LabelsetSize", LabelsetSize },
+            { "NumLabelsets", NumLabelsets },
+            { "Labelsets", _labelsets },
+            { "LabelsetWeights", weightsArr },
+            { "LabelCombinationMaps", _labelCombinationMaps },
+            { "InverseLabelMaps", inverseMapsArr }
+        };
+
+        var metadata = GetModelMetadata();
+        metadata.ModelData = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelDict));
+        return Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(metadata));
+    }
+
+    /// <inheritdoc/>
+    public override void Deserialize(byte[] modelData)
+    {
+        var jsonString = Encoding.UTF8.GetString(modelData);
+        var metadata = JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString);
+        if (metadata?.ModelData is null) return;
+
+        var dataString = Encoding.UTF8.GetString(metadata.ModelData);
+        var jObj = JsonConvert.DeserializeObject<JObject>(dataString);
+        if (jObj is null) return;
+
+        NumLabels = jObj["NumLabels"]?.ToObject<int>() ?? 0;
+        NumFeatures = jObj["NumFeatures"]?.ToObject<int>() ?? 0;
+        NumClasses = jObj["NumClasses"]?.ToObject<int>() ?? 2;
+        TaskType = (ClassificationTaskType)(jObj["TaskType"]?.ToObject<int>() ?? 0);
+        LabelNames = jObj["LabelNames"]?.ToObject<string[]>();
+        NumLabelsets = jObj["NumLabelsets"]?.ToObject<int>() ?? 0;
+
+        // Deserialize labelsets
+        var labelsetsArr = jObj["Labelsets"]?.ToObject<List<int[]>>();
+        _labelsets = labelsetsArr ?? new List<int[]>();
+
+        // Deserialize weight matrices
+        _labelsetWeights = new List<Matrix<T>>();
+        var weightsArr = jObj["LabelsetWeights"]?.ToObject<List<double[][]>>();
+        if (weightsArr is not null)
+        {
+            foreach (var matrixArr in weightsArr)
+            {
+                int rows = matrixArr.Length;
+                int cols = rows > 0 ? matrixArr[0].Length : 0;
+                var matrix = new Matrix<T>(rows, cols);
+                for (int i = 0; i < rows; i++)
+                {
+                    for (int j = 0; j < cols; j++)
+                    {
+                        matrix[i, j] = NumOps.FromDouble(matrixArr[i][j]);
+                    }
+                }
+                _labelsetWeights.Add(matrix);
+            }
+        }
+
+        // Deserialize label combination maps
+        _labelCombinationMaps = jObj["LabelCombinationMaps"]?.ToObject<List<Dictionary<string, int>>>()
+            ?? new List<Dictionary<string, int>>();
+
+        // Deserialize inverse label maps (string keys back to int)
+        _inverseLabelMaps = new List<Dictionary<int, int[]>>();
+        var inverseMapsArr = jObj["InverseLabelMaps"]?.ToObject<List<Dictionary<string, int[]>>>();
+        if (inverseMapsArr is not null)
+        {
+            foreach (var strMap in inverseMapsArr)
+            {
+                var intMap = new Dictionary<int, int[]>();
+                foreach (var kvp in strMap)
+                {
+                    intMap[int.Parse(kvp.Key)] = kvp.Value;
+                }
+                _inverseLabelMaps.Add(intMap);
             }
         }
     }
