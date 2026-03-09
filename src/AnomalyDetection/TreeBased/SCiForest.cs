@@ -1,5 +1,6 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.AnomalyDetection.TreeBased;
@@ -45,6 +46,7 @@ public class SCiForest<T> : AnomalyDetectorBase<T>
     private readonly double _sparsity;
     private List<SCiTree>? _trees;
     private int _nFeatures;
+    private int _trainingSampleSize;
 
     /// <summary>
     /// Gets the number of trees in the forest.
@@ -91,6 +93,8 @@ public class SCiForest<T> : AnomalyDetectorBase<T>
                 "Sparsity must be between 0 (exclusive) and 1 (inclusive). Recommended is 0.2.");
         }
 
+        NumericGuard.RejectIntegerTypes<T>("SCiForest");
+
         _numTrees = numTrees;
         _maxSamples = maxSamples;
         _sparsity = sparsity;
@@ -103,16 +107,17 @@ public class SCiForest<T> : AnomalyDetectorBase<T>
 
         _nFeatures = X.Columns;
         int nSamples = Math.Min(_maxSamples, X.Rows);
+        _trainingSampleSize = nSamples;
         int maxDepth = (int)Math.Ceiling(Math.Log(nSamples, 2));
 
-        // Convert data to double array
-        var data = new double[X.Rows][];
+        // Extract data into T arrays
+        var data = new T[X.Rows][];
         for (int i = 0; i < X.Rows; i++)
         {
-            data[i] = new double[X.Columns];
+            data[i] = new T[X.Columns];
             for (int j = 0; j < X.Columns; j++)
             {
-                data[i][j] = NumOps.ToDouble(X[i, j]);
+                data[i][j] = X[i, j];
             }
         }
 
@@ -128,7 +133,7 @@ public class SCiForest<T> : AnomalyDetectorBase<T>
             var sampleData = sampleIndices.Select(i => data[i]).ToArray();
 
             // Build tree
-            var tree = new SCiTree(_nFeatures, _sparsity, random);
+            var tree = new SCiTree(_nFeatures, _sparsity, random, NumOps);
             tree.Build(sampleData, 0, maxDepth);
             _trees.Add(tree);
         }
@@ -159,39 +164,51 @@ public class SCiForest<T> : AnomalyDetectorBase<T>
         }
 
         var scores = new Vector<T>(X.Rows);
-        int nSamples = Math.Min(_maxSamples, X.Rows);
 
-        // Expected path length for BST
-        double c = nSamples > 2
-            ? 2 * (Math.Log(nSamples - 1) + 0.5772156649) - (2.0 * (nSamples - 1) / nSamples)
-            : nSamples == 2 ? 1 : 0;
+        // Expected path length for BST — must use the training subsample size, not the scoring batch size
+        T c = _trainingSampleSize > 2
+            ? NumOps.FromDouble(2 * (Math.Log(_trainingSampleSize - 1) + 0.5772156649) - (2.0 * (_trainingSampleSize - 1) / _trainingSampleSize))
+            : NumOps.FromDouble(_trainingSampleSize == 2 ? 1 : 0);
 
         var trees = _trees;
-        if (trees == null)
+        if (trees is null)
         {
             throw new InvalidOperationException("Model not properly fitted.");
         }
 
         for (int i = 0; i < X.Rows; i++)
         {
-            var point = new double[X.Columns];
+            var point = new T[X.Columns];
             for (int j = 0; j < X.Columns; j++)
             {
-                point[j] = NumOps.ToDouble(X[i, j]);
+                point[j] = X[i, j];
             }
 
             // Average path length across all trees
-            double avgPathLength = trees.Average(tree => tree.PathLength(point, 0));
+            T totalPathLength = NumOps.Zero;
+            for (int t = 0; t < trees.Count; t++)
+            {
+                totalPathLength = NumOps.Add(totalPathLength, trees[t].PathLength(point, 0));
+            }
+            T avgPathLength = NumOps.Divide(totalPathLength, NumOps.FromDouble(trees.Count));
 
             // Anomaly score: s = 2^(-avgPathLength/c)
-            double score = c > 0 ? Math.Pow(2, -avgPathLength / c) : 0.5;
-            scores[i] = NumOps.FromDouble(score);
+            if (NumOps.GreaterThan(c, NumOps.Zero))
+            {
+                T exponent = NumOps.Negate(NumOps.Divide(avgPathLength, c));
+                T ln2 = NumOps.FromDouble(Math.Log(2));
+                scores[i] = NumOps.Exp(NumOps.Multiply(exponent, ln2));
+            }
+            else
+            {
+                scores[i] = NumOps.FromDouble(0.5);
+            }
         }
 
         return scores;
     }
 
-    private int[] SampleIndices(int total, int sampleSize, Random random)
+    private static int[] SampleIndices(int total, int sampleSize, Random random)
     {
         var indices = Enumerable.Range(0, total).ToList();
         for (int i = indices.Count - 1; i > 0; i--)
@@ -206,25 +223,33 @@ public class SCiForest<T> : AnomalyDetectorBase<T>
 
     private class SCiTree
     {
+        private readonly INumericOperations<T> _ops;
+
+        /// <summary>Minimum range threshold below which a feature dimension is considered constant.</summary>
+        private readonly T _minRangeTolerance;
+
         private readonly int _nFeatures;
         private readonly double _sparsity;
         private readonly Random _random;
-        private double[]? _sparseWeights;
-        private double _threshold;
+        private T[]? _sparseWeights;
+        private T _threshold;
         private SCiTree? _left;
         private SCiTree? _right;
         private int _size;
         private bool _isLeaf;
 
-        public SCiTree(int nFeatures, double sparsity, Random random)
+        public SCiTree(int nFeatures, double sparsity, Random random, INumericOperations<T> numOps)
         {
+            _ops = numOps;
+            _minRangeTolerance = _ops.FromDouble(1e-10);
             _nFeatures = nFeatures;
             _sparsity = sparsity;
             _random = random;
             _isLeaf = true;
+            _threshold = _ops.Zero;
         }
 
-        public void Build(double[][] data, int currentDepth, int maxDepth)
+        public void Build(T[][] data, int currentDepth, int maxDepth)
         {
             _size = data.Length;
 
@@ -235,7 +260,9 @@ public class SCiForest<T> : AnomalyDetectorBase<T>
             }
 
             // Generate sparse random projection
-            _sparseWeights = new double[_nFeatures];
+            _sparseWeights = new T[_nFeatures];
+            for (int j = 0; j < _nFeatures; j++) _sparseWeights[j] = _ops.Zero;
+
             int numActive = Math.Max(1, (int)(_nFeatures * _sparsity));
 
             var activeFeatures = Enumerable.Range(0, _nFeatures)
@@ -246,30 +273,36 @@ public class SCiForest<T> : AnomalyDetectorBase<T>
             foreach (int f in activeFeatures)
             {
                 // Random weight: +1 or -1
-                _sparseWeights[f] = _random.NextDouble() < 0.5 ? 1 : -1;
+                _sparseWeights[f] = _random.NextDouble() < 0.5 ? _ops.One : _ops.Negate(_ops.One);
             }
 
             // Compute projections
             var projections = data.Select(p => DotProduct(p, _sparseWeights)).ToArray();
 
-            double minProj = projections.Min();
-            double maxProj = projections.Max();
+            T minProj = projections[0];
+            T maxProj = projections[0];
+            for (int i = 1; i < projections.Length; i++)
+            {
+                if (_ops.LessThan(projections[i], minProj)) minProj = projections[i];
+                if (_ops.GreaterThan(projections[i], maxProj)) maxProj = projections[i];
+            }
 
-            if (Math.Abs(maxProj - minProj) < 1e-10)
+            T range = _ops.Subtract(maxProj, minProj);
+            if (_ops.LessThan(range, _minRangeTolerance))
             {
                 _isLeaf = true;
                 return;
             }
 
-            _threshold = minProj + _random.NextDouble() * (maxProj - minProj);
+            _threshold = _ops.Add(minProj, _ops.Multiply(_ops.FromDouble(_random.NextDouble()), range));
 
             // Split data
-            var leftData = new List<double[]>();
-            var rightData = new List<double[]>();
+            var leftData = new List<T[]>();
+            var rightData = new List<T[]>();
 
             for (int i = 0; i < data.Length; i++)
             {
-                if (projections[i] < _threshold)
+                if (_ops.LessThan(projections[i], _threshold))
                     leftData.Add(data[i]);
                 else
                     rightData.Add(data[i]);
@@ -282,52 +315,54 @@ public class SCiForest<T> : AnomalyDetectorBase<T>
             }
 
             _isLeaf = false;
-            _left = new SCiTree(_nFeatures, _sparsity, _random);
-            _right = new SCiTree(_nFeatures, _sparsity, _random);
+            _left = new SCiTree(_nFeatures, _sparsity, _random, _ops);
+            _right = new SCiTree(_nFeatures, _sparsity, _random, _ops);
 
             _left.Build(leftData.ToArray(), currentDepth + 1, maxDepth);
             _right.Build(rightData.ToArray(), currentDepth + 1, maxDepth);
         }
 
-        public double PathLength(double[] point, int currentDepth)
+        public T PathLength(T[] point, int currentDepth)
         {
             if (_isLeaf)
             {
-                return currentDepth + EstimateC(_size);
+                return _ops.Add(_ops.FromDouble(currentDepth), EstimateC(_size));
             }
 
             var sparseWeights = _sparseWeights;
             var left = _left;
             var right = _right;
 
-            if (sparseWeights == null || left == null || right == null)
+            if (sparseWeights is null || left is null || right is null)
             {
-                return currentDepth + EstimateC(_size);
+                throw new InvalidOperationException(
+                    "Non-leaf SCiTree node has uninitialized children or weights. " +
+                    "This indicates a corrupted tree structure.");
             }
 
-            double projection = DotProduct(point, sparseWeights);
+            T projection = DotProduct(point, sparseWeights);
 
-            if (projection < _threshold)
+            if (_ops.LessThan(projection, _threshold))
                 return left.PathLength(point, currentDepth + 1);
             else
                 return right.PathLength(point, currentDepth + 1);
         }
 
-        private static double DotProduct(double[] a, double[] b)
+        private T DotProduct(T[] a, T[] b)
         {
-            double sum = 0;
+            T sum = _ops.Zero;
             for (int i = 0; i < a.Length; i++)
             {
-                sum += a[i] * b[i];
+                sum = _ops.Add(sum, _ops.Multiply(a[i], b[i]));
             }
             return sum;
         }
 
-        private static double EstimateC(int n)
+        private T EstimateC(int n)
         {
             if (n > 2)
-                return 2 * (Math.Log(n - 1) + 0.5772156649) - (2.0 * (n - 1) / n);
-            return n == 2 ? 1 : 0;
+                return _ops.FromDouble(2 * (Math.Log(n - 1) + 0.5772156649) - (2.0 * (n - 1) / n));
+            return _ops.FromDouble(n == 2 ? 1 : 0);
         }
     }
 }

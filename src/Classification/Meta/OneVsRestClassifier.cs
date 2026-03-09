@@ -1,4 +1,7 @@
+using System.Text;
 using AiDotNet.Models.Options;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace AiDotNet.Classification.Meta;
 
@@ -350,6 +353,70 @@ public class OneVsRestClassifier<T> : MetaClassifierBase<T>
             result[i] = predictions[i];
         }
         return result;
+    }
+
+    /// <inheritdoc/>
+    public override byte[] Serialize()
+    {
+        var estimatorTypes = new List<string>();
+        var estimatorData = new List<string>();
+        if (_estimators is not null)
+        {
+            foreach (var est in _estimators)
+            {
+                var (typeName, data) = ClassifierRegistry<T>.SerializeClassifier(est);
+                estimatorTypes.Add(typeName);
+                estimatorData.Add(data);
+            }
+        }
+
+        var modelDict = new Dictionary<string, object?>
+        {
+            { "ClassLabels", ClassLabels?.ToArray().Select(NumOps.ToDouble).ToArray() },
+            { "NumClasses", NumClasses },
+            { "NumFeatures", NumFeatures },
+            { "TaskType", (int)TaskType },
+            { "LabelNames", LabelNames },
+            { "EstimatorTypes", estimatorTypes },
+            { "EstimatorData", estimatorData }
+        };
+
+        var metadata = GetModelMetadata();
+        metadata.ModelData = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelDict));
+        return Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(metadata));
+    }
+
+    /// <inheritdoc/>
+    public override void Deserialize(byte[] modelData)
+    {
+        var jsonString = Encoding.UTF8.GetString(modelData);
+        var metadata = JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString);
+        if (metadata?.ModelData is null) return;
+
+        var dataString = Encoding.UTF8.GetString(metadata.ModelData);
+        var jObj = JsonConvert.DeserializeObject<JObject>(dataString);
+        if (jObj is null) return;
+
+        var classLabelsArr = jObj["ClassLabels"]?.ToObject<double[]>();
+        if (classLabelsArr is not null)
+        {
+            ClassLabels = new Vector<T>(classLabelsArr.Length);
+            for (int i = 0; i < classLabelsArr.Length; i++)
+                ClassLabels[i] = NumOps.FromDouble(classLabelsArr[i]);
+        }
+        NumClasses = jObj["NumClasses"]?.ToObject<int>() ?? 0;
+        NumFeatures = jObj["NumFeatures"]?.ToObject<int>() ?? 0;
+        TaskType = (ClassificationTaskType)(jObj["TaskType"]?.ToObject<int>() ?? 0);
+        LabelNames = jObj["LabelNames"]?.ToObject<string[]>();
+
+        var types = jObj["EstimatorTypes"]?.ToObject<string[]>();
+        var data = jObj["EstimatorData"]?.ToObject<string[]>();
+        if (types is not null && data is not null && types.Length == data.Length)
+        {
+            _estimators = new IClassifier<T>[types.Length];
+            for (int i = 0; i < types.Length; i++)
+                _estimators[i] = ClassifierRegistry<T>.DeserializeClassifier(types[i], data[i]);
+        }
     }
 
     /// <inheritdoc/>

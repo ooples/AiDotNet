@@ -107,7 +107,7 @@ public class Rotation<T> : SpatialAugmentationBase<T, ImageTensor<T>>
         MinAngle = minAngle;
         MaxAngle = maxAngle;
         BorderMode = borderMode;
-        BorderValue = borderValue ?? default!;
+        BorderValue = borderValue ?? NumOps.Zero;
         Interpolation = interpolation;
     }
 

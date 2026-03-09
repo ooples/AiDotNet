@@ -160,12 +160,18 @@ public class DeepSORT<T> : ObjectTrackerBase<T>
 
     private List<Tensor<T>> ExtractAppearanceFeatures(Tensor<T> image, List<Detection<T>> detections)
     {
+        if (_reidNetwork is null)
+        {
+            throw new InvalidOperationException(
+                $"{nameof(DeepSORT<T>)}: ReID network not initialized.");
+        }
+
         var features = new List<Tensor<T>>();
 
         foreach (var det in detections)
         {
             var crop = CropImage(image, det.Box);
-            var feat = _reidNetwork!.Extract(crop);
+            var feat = _reidNetwork.Extract(crop);
             features.Add(feat);
         }
 

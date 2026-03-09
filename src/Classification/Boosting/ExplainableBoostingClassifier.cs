@@ -38,7 +38,7 @@ namespace AiDotNet.Classification.Boosting;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-internal class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
+public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
 {
     /// <summary>
     /// Shape functions for each feature (additive terms).

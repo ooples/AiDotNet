@@ -1,7 +1,68 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Validation;
+using Newtonsoft.Json;
 
 namespace AiDotNet.Preprocessing;
+
+/// <summary>
+/// Represents a named step in a preprocessing pipeline.
+/// </summary>
+/// <remarks>
+/// <para>
+/// This class replaces ValueTuple to ensure reliable JSON serialization
+/// of pipeline steps, since ValueTuples do not serialize properly with Newtonsoft.Json.
+/// </para>
+/// </remarks>
+/// <typeparam name="T">The numeric type for calculations.</typeparam>
+/// <typeparam name="TInput">The input data type.</typeparam>
+public class PipelineStep<T, TInput>
+{
+    /// <summary>
+    /// Gets the name of this pipeline step.
+    /// </summary>
+    [JsonProperty]
+    public string Name { get; private set; }
+
+    /// <summary>
+    /// Gets the transformer for this pipeline step.
+    /// </summary>
+    /// <remarks>
+    /// Set via the constructor or JSON deserialization. Guaranteed non-null after
+    /// construction through the parameterized constructor or successful deserialization.
+    /// </remarks>
+    [JsonProperty]
+    public IDataTransformer<T, TInput, TInput> Transformer { get; private set; }
+
+    /// <summary>
+    /// Creates a new pipeline step with the specified name and transformer.
+    /// </summary>
+    /// <param name="name">The step name. Must not be null or whitespace.</param>
+    /// <param name="transformer">The transformer. Must not be null.</param>
+    /// <exception cref="ArgumentException">Thrown if name is null or whitespace.</exception>
+    /// <exception cref="ArgumentNullException">Thrown if transformer is null.</exception>
+    [JsonConstructor]
+    public PipelineStep(string name, IDataTransformer<T, TInput, TInput> transformer)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            throw new ArgumentException("Pipeline step name cannot be null or whitespace.", nameof(name));
+        }
+
+        Name = name;
+        Transformer = transformer ?? throw new ArgumentNullException(nameof(transformer),
+            "Pipeline step transformer cannot be null.");
+    }
+
+    /// <summary>
+    /// Deconstructs this step into its name and transformer components,
+    /// allowing tuple-style destructuring for backward compatibility.
+    /// </summary>
+    public void Deconstruct(out string name, out IDataTransformer<T, TInput, TInput> transformer)
+    {
+        name = Name;
+        transformer = Transformer;
+    }
+}
 
 /// <summary>
 /// Chains multiple data transformers into a sequential pipeline.
@@ -26,8 +87,13 @@ namespace AiDotNet.Preprocessing;
 /// <typeparam name="TOutput">The output data type.</typeparam>
 public class PreprocessingPipeline<T, TInput, TOutput> : IDataTransformer<T, TInput, TOutput>
 {
-    private readonly List<(string Name, IDataTransformer<T, TInput, TInput> Transformer)> _steps;
+    [JsonProperty]
+    private readonly List<PipelineStep<T, TInput>> _steps;
+
+    [JsonProperty]
     private IDataTransformer<T, TInput, TOutput>? _finalTransformer;
+
+    [JsonProperty]
     private bool _isFitted;
 
     /// <summary>
@@ -71,16 +137,16 @@ public class PreprocessingPipeline<T, TInput, TOutput> : IDataTransformer<T, TIn
     public int Count => _steps.Count + (_finalTransformer is not null ? 1 : 0);
 
     /// <summary>
-    /// Gets the named steps in the pipeline.
+    /// Gets the pipeline steps as a read-only list.
     /// </summary>
-    public IReadOnlyList<(string Name, IDataTransformer<T, TInput, TInput> Transformer)> Steps => _steps.AsReadOnly();
+    public IReadOnlyList<PipelineStep<T, TInput>> Steps => _steps.AsReadOnly();
 
     /// <summary>
     /// Creates a new empty preprocessing pipeline.
     /// </summary>
     public PreprocessingPipeline()
     {
-        _steps = new List<(string, IDataTransformer<T, TInput, TInput>)>();
+        _steps = new List<PipelineStep<T, TInput>>();
         _isFitted = false;
     }
 
@@ -121,7 +187,7 @@ public class PreprocessingPipeline<T, TInput, TOutput> : IDataTransformer<T, TIn
             }
         }
 
-        _steps.Add((name, transformer));
+        _steps.Add(new PipelineStep<T, TInput>(name, transformer));
         _isFitted = false;
 
         return this;

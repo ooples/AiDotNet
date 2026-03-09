@@ -62,7 +62,7 @@ public class TOTEM<T> : TimeSeriesFoundationModelBase<T>
 
     // VQ codebook: [numCodebooks x codebookSize x codebookDimension]
     private Tensor<T>? _codebooks;
-    private T _lastCommitmentLoss = default!;
+    private T _lastCommitmentLoss;
 
     #endregion
 
@@ -119,6 +119,7 @@ public class TOTEM<T> : TimeSeriesFoundationModelBase<T>
 
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
+        _lastCommitmentLoss = NumOps.Zero;
 
         CopyOptionsToFields(options);
     }
@@ -143,6 +144,7 @@ public class TOTEM<T> : TimeSeriesFoundationModelBase<T>
 
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
+        _lastCommitmentLoss = NumOps.Zero;
 
         CopyOptionsToFields(options);
         InitializeLayers();

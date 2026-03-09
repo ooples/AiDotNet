@@ -58,7 +58,8 @@ public class Denclue<T> : ClusteringBase<T>
     public Denclue(DenclueOptions<T>? options = null)
         : base(options ?? new DenclueOptions<T>())
     {
-        _options = options ?? new DenclueOptions<T>();
+        NumericGuard.RejectIntegerTypes<T>("DENCLUE");
+        _options = (DenclueOptions<T>)Options;
     }
 
     /// <summary>
@@ -210,7 +211,7 @@ public class Denclue<T> : ClusteringBase<T>
             T movement = EuclideanDistanceT(current, next, d);
             if (NumOps.LessThan(movement, convergenceThreshold))
             {
-                return (current, currentDensity);
+                return (next, nextDensity);
             }
 
             current = next;
@@ -250,6 +251,7 @@ public class Denclue<T> : ClusteringBase<T>
             }
             denominator = NumOps.Add(denominator, weight);
         }
+
 
         var result = new T[d];
         if (NumOps.GreaterThan(denominator, NumOps.Zero))
@@ -300,6 +302,7 @@ public class Denclue<T> : ClusteringBase<T>
             T diff = NumOps.Subtract(a[j], b[j]);
             sum = NumOps.Add(sum, NumOps.Multiply(diff, diff));
         }
+
         return NumOps.Sqrt(sum);
     }
 
@@ -312,12 +315,34 @@ public class Denclue<T> : ClusteringBase<T>
     {
         ValidateIsTrained();
 
-        if (ClusterCenters is null) return NumOps.Zero;
+        if (ClusterCenters is null || _attractors is null || _attractorDensities is null)
+        {
+            throw new InvalidOperationException(
+                "Model is in an inconsistent state: trained but missing cluster data.");
+        }
 
         int d = NumFeatures;
+        if (point.Length != d)
+        {
+            throw new ArgumentException(
+                $"Point has {point.Length} dimensions, but the model was fitted with {d} features.",
+                nameof(point));
+        }
+
+        var p = new T[d];
+        for (int j = 0; j < d; j++)
+        {
+            p[j] = point[j];
+        }
+
+        // Use attractors as representative points for density
         T h = NumOps.FromDouble(_options.Bandwidth);
         T h2 = NumOps.Multiply(h, h);
         T twoH2 = NumOps.Multiply(NumOps.FromDouble(2.0), h2);
+        // Normalization: (2*PI*h^2)^(-d/2)
+        double normDouble = Math.Pow(2 * Math.PI * _options.Bandwidth * _options.Bandwidth, -d / 2.0);
+        T normalization = NumOps.FromDouble(normDouble);
+
 
         T sum = NumOps.Zero;
         for (int c = 0; c < NumClusters; c++)
@@ -325,16 +350,15 @@ public class Denclue<T> : ClusteringBase<T>
             T dist2 = NumOps.Zero;
             for (int j = 0; j < d; j++)
             {
-                T diff = NumOps.Subtract(point[j], _attractors![c][j]);
+                T diff = NumOps.Subtract(p[j], _attractors[c][j]);
                 dist2 = NumOps.Add(dist2, NumOps.Multiply(diff, diff));
             }
 
-            sum = NumOps.Add(sum,
-                NumOps.Multiply(_attractorDensities![c],
-                    NumOps.Exp(NumOps.Negate(NumOps.Divide(dist2, twoH2)))));
+            sum = NumOps.Add(sum, NumOps.Multiply(_attractorDensities[c],
+                NumOps.Exp(NumOps.Negate(NumOps.Divide(dist2, twoH2)))));
         }
 
-        return sum;
+        return NumOps.Multiply(normalization, sum);
     }
 
     /// <inheritdoc />
@@ -376,6 +400,6 @@ public class Denclue<T> : ClusteringBase<T>
     public override Vector<T> FitPredict(Matrix<T> x)
     {
         Train(x);
-        return Labels ?? new Vector<T>(0);
+        return Labels ?? throw new InvalidOperationException("Training failed to produce cluster labels.");
     }
 }

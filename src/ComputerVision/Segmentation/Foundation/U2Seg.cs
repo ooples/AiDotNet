@@ -423,7 +423,7 @@ public class U2Seg<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
     {
         return _useNativeMode
             ? new U2Seg<T>(Architecture, _optimizer, LossFunction, _numClasses, _dropRate, _options)
-            : new U2Seg<T>(Architecture, _onnxModelPath!, _numClasses, _options);
+            : new U2Seg<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _options);
     }
 
     /// <summary>

@@ -425,7 +425,7 @@ public class SAM21<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
     /// </summary>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => _useNativeMode
         ? new SAM21<T>(Architecture, _optimizer, LossFunction, _numClasses, _modelSize, _dropRate, _options)
-        : new SAM21<T>(Architecture, _onnxModelPath!, _numClasses, _modelSize, _options);
+        : new SAM21<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _modelSize, _options);
 
     /// <summary>
     /// Releases managed resources.

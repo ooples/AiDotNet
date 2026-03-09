@@ -109,7 +109,7 @@ public class DBNet<T> : TextDetectorBase<T>
     protected override List<Tensor<T>> Forward(Tensor<T> input)
     {
         // Extract multi-scale backbone features
-        var features = Backbone!.ExtractFeatures(input);
+        var features = EnsureBackbone.ExtractFeatures(input);
 
         // Feature pyramid fusion
         var x = _inConv.Forward(features[^1]);
@@ -320,7 +320,7 @@ public class DBNet<T> : TextDetectorBase<T>
         }
 
         // Read component weights
-        Backbone!.ReadParameters(reader);
+        EnsureBackbone.ReadParameters(reader);
         _inConv.ReadParameters(reader);
         _upConv1.ReadParameters(reader);
         _upConv2.ReadParameters(reader);
@@ -343,7 +343,7 @@ public class DBNet<T> : TextDetectorBase<T>
         writer.Write(_k);
 
         // Write component weights
-        Backbone!.WriteParameters(writer);
+        EnsureBackbone.WriteParameters(writer);
         _inConv.WriteParameters(writer);
         _upConv1.WriteParameters(writer);
         _upConv2.WriteParameters(writer);

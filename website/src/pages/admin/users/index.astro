@@ -1,0 +1,361 @@
+---
+import AdminLayout from '../../../layouts/AdminLayout.astro';
+---
+
+<AdminLayout title="User Management - AiDotNet Admin" description="Manage all platform users, roles, and subscription tiers." activeTab="users">
+  <div class="space-y-6">
+    <div class="flex items-center justify-between">
+      <div>
+        <h1 class="text-2xl font-bold text-slate-900 dark:text-white">Users</h1>
+        <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">Manage platform users, roles, and subscriptions</p>
+      </div>
+      <div class="text-sm text-slate-500 dark:text-slate-400">
+        <span id="user-count">--</span> total users
+      </div>
+    </div>
+
+    <!-- Search and filters -->
+    <div class="flex flex-col sm:flex-row gap-3">
+      <div class="flex-1">
+        <input
+          id="search-input"
+          type="text"
+          placeholder="Search by name or user ID..."
+          class="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/50 text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
+        />
+      </div>
+      <select
+        id="filter-tier"
+        class="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/50 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
+      >
+        <option value="">All Tiers</option>
+        <option value="free">Free</option>
+        <option value="pro">Pro</option>
+        <option value="enterprise">Enterprise</option>
+      </select>
+      <select
+        id="filter-role"
+        class="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/50 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
+      >
+        <option value="">All Roles</option>
+        <option value="user">User</option>
+        <option value="admin">Admin</option>
+      </select>
+    </div>
+
+    <!-- Users table -->
+    <div class="bg-white dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+      <div id="users-loading" class="p-12 text-center">
+        <p class="text-sm text-slate-500 dark:text-slate-400">Loading users...</p>
+      </div>
+      <div class="overflow-x-auto">
+        <table id="users-table" class="hidden w-full text-sm">
+          <thead>
+            <tr class="border-b border-slate-200 dark:border-slate-700">
+              <th class="text-left py-3 px-4 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">User</th>
+              <th class="text-left py-3 px-4 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Role</th>
+              <th class="text-left py-3 px-4 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Tier</th>
+              <th class="text-left py-3 px-4 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Status</th>
+              <th class="text-left py-3 px-4 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">API Keys</th>
+              <th class="text-left py-3 px-4 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Joined</th>
+              <th class="text-left py-3 px-4 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="users-body" class="divide-y divide-slate-100 dark:divide-slate-800">
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Pagination -->
+    <div id="pagination" class="hidden flex items-center justify-between">
+      <p id="page-info" class="text-sm text-slate-500 dark:text-slate-400"></p>
+      <div class="flex gap-2">
+        <button id="prev-btn" class="px-3 py-1.5 text-sm font-medium text-slate-600 dark:text-slate-400 bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed">Previous</button>
+        <button id="next-btn" class="px-3 py-1.5 text-sm font-medium text-slate-600 dark:text-slate-400 bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed">Next</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Edit modal -->
+  <div id="edit-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+    <div class="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-6 w-full max-w-md mx-4 shadow-2xl">
+      <h3 class="text-lg font-semibold text-slate-900 dark:text-white mb-4">Edit User</h3>
+      <input type="hidden" id="edit-user-id" />
+      <div class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Name</label>
+          <p id="edit-user-name" class="text-sm text-slate-500 dark:text-slate-400"></p>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1" for="edit-role">Role</label>
+          <select id="edit-role" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white">
+            <option value="user">User</option>
+            <option value="admin">Admin</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1" for="edit-tier">Subscription Tier</label>
+          <select id="edit-tier" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white">
+            <option value="free">Free</option>
+            <option value="pro">Pro</option>
+            <option value="enterprise">Enterprise</option>
+          </select>
+        </div>
+      </div>
+      <div class="mt-6 flex justify-end gap-3">
+        <button id="modal-cancel" class="px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white">Cancel</button>
+        <button id="modal-save" class="px-4 py-2 text-sm font-semibold text-white rounded-xl bg-gradient-brand hover:opacity-90 transition-opacity">Save Changes</button>
+      </div>
+      <p id="modal-error" class="hidden mt-3 text-sm text-red-500"></p>
+    </div>
+  </div>
+
+  <script>
+    import { supabase } from '../../../lib/supabase';
+
+    interface UserProfile {
+      id: string;
+      full_name: string | null;
+      role: string;
+      subscription_tier: string;
+      subscription_status: string;
+      created_at: string;
+      keyCount?: number;
+    }
+
+    let allUsers: UserProfile[] = [];
+    let filteredUsers: UserProfile[] = [];
+    let currentPage = 0;
+    const pageSize = 20;
+
+    const MAX_USERS = 1000;
+
+    async function loadUsers() {
+      const { data: profiles, error: profilesError } = await supabase
+        .from('profiles')
+        .select('id, full_name, role, subscription_tier, subscription_status, created_at')
+        .order('created_at', { ascending: false })
+        .range(0, MAX_USERS - 1);
+
+      if (profilesError || !profiles) {
+        const loading = document.getElementById('users-loading');
+        if (loading) loading.innerHTML = '<p class="text-sm text-red-500">Failed to load users.</p>';
+        console.error('Profiles load error:', profilesError);
+        return;
+      }
+
+      allUsers = profiles.map(p => ({
+        ...p,
+        keyCount: 0,
+      }));
+
+      applyFilters();
+    }
+
+    async function loadKeyCountsForPage() {
+      const startIndex = currentPage * pageSize;
+      const pageUsers = filteredUsers.slice(startIndex, startIndex + pageSize);
+      const userIds = pageUsers.map(p => p.id);
+      if (userIds.length === 0) return;
+
+      const { data: keys } = await supabase
+        .from('user_api_keys')
+        .select('user_id')
+        .eq('is_active', true)
+        .in('user_id', userIds);
+
+      const keyCounts = new Map<string, number>();
+      if (keys) {
+        for (const k of keys) {
+          keyCounts.set(k.user_id, (keyCounts.get(k.user_id) || 0) + 1);
+        }
+      }
+
+      for (const u of allUsers) {
+        if (keyCounts.has(u.id)) {
+          u.keyCount = keyCounts.get(u.id) || 0;
+        }
+      }
+    }
+
+    function applyFilters() {
+      const search = (document.getElementById('search-input') as HTMLInputElement).value.toLowerCase().trim();
+      const tierFilter = (document.getElementById('filter-tier') as HTMLSelectElement).value;
+      const roleFilter = (document.getElementById('filter-role') as HTMLSelectElement).value;
+
+      filteredUsers = allUsers.filter(u => {
+        if (search && !(u.full_name || '').toLowerCase().includes(search) && !u.id.toLowerCase().includes(search)) {
+          return false;
+        }
+        if (tierFilter && (u.subscription_tier || 'free') !== tierFilter) return false;
+        if (roleFilter && (u.role || 'user') !== roleFilter) return false;
+        return true;
+      });
+
+      currentPage = 0;
+      renderTable();
+    }
+
+    async function renderTable() {
+      await loadKeyCountsForPage();
+
+      const loading = document.getElementById('users-loading');
+      const table = document.getElementById('users-table');
+      const tbody = document.getElementById('users-body');
+      const pagination = document.getElementById('pagination');
+      const countEl = document.getElementById('user-count');
+
+      if (loading) loading.classList.add('hidden');
+      if (table) table.classList.remove('hidden');
+      if (countEl) countEl.textContent = filteredUsers.length.toLocaleString();
+
+      const start = currentPage * pageSize;
+      const end = Math.min(start + pageSize, filteredUsers.length);
+      const pageUsers = filteredUsers.slice(start, end);
+
+      if (tbody) {
+        tbody.innerHTML = pageUsers.map(u => {
+          const tier = u.subscription_tier || 'free';
+          const role = u.role || 'user';
+          const status = u.subscription_status || 'active';
+          const tierColors: Record<string, string> = {
+            free: 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300',
+            pro: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400',
+            enterprise: 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400',
+          };
+          const roleColors: Record<string, string> = {
+            admin: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400',
+            user: 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300',
+          };
+          const statusColors: Record<string, string> = {
+            active: 'text-green-500',
+            cancelled: 'text-yellow-500',
+            past_due: 'text-red-500',
+          };
+          return `<tr>
+            <td class="py-3 px-4">
+              <p class="font-medium text-slate-900 dark:text-white">${escapeHtml(u.full_name || 'Unnamed')}</p>
+              <p class="text-xs text-slate-400 dark:text-slate-500 font-mono">${u.id.slice(0, 8)}...</p>
+            </td>
+            <td class="py-3 px-4">
+              <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${roleColors[role] || roleColors['user']}">${escapeHtml(role)}</span>
+            </td>
+            <td class="py-3 px-4">
+              <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${tierColors[tier] || tierColors['free']}">${escapeHtml(tier)}</span>
+            </td>
+            <td class="py-3 px-4 text-sm ${statusColors[status] || 'text-slate-500'} font-medium">${escapeHtml(status)}</td>
+            <td class="py-3 px-4 text-sm text-slate-600 dark:text-slate-400">${u.keyCount || 0}</td>
+            <td class="py-3 px-4 text-sm text-slate-400 dark:text-slate-500">${new Date(u.created_at).toLocaleDateString()}</td>
+            <td class="py-3 px-4">
+              <button class="edit-user-btn text-sm font-medium text-brand-blue hover:underline" data-id="${escapeAttr(u.id)}" data-name="${escapeAttr(u.full_name || 'Unnamed')}" data-role="${escapeAttr(role)}" data-tier="${escapeAttr(tier)}">Edit</button>
+            </td>
+          </tr>`;
+        }).join('');
+
+        // Attach edit handlers
+        tbody.querySelectorAll('.edit-user-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const el = btn as HTMLElement;
+            openEditModal(el.dataset.id || '', el.dataset.name || '', el.dataset.role || 'user', el.dataset.tier || 'free');
+          });
+        });
+      }
+
+      // Pagination
+      if (pagination) {
+        const totalPages = Math.ceil(filteredUsers.length / pageSize);
+        if (totalPages > 1) {
+          pagination.classList.remove('hidden');
+          const pageInfo = document.getElementById('page-info');
+          if (pageInfo) pageInfo.textContent = `Page ${currentPage + 1} of ${totalPages}`;
+          const prevBtn = document.getElementById('prev-btn') as HTMLButtonElement;
+          const nextBtn = document.getElementById('next-btn') as HTMLButtonElement;
+          if (prevBtn) prevBtn.disabled = currentPage === 0;
+          if (nextBtn) nextBtn.disabled = currentPage >= totalPages - 1;
+        } else {
+          pagination.classList.add('hidden');
+        }
+      }
+    }
+
+    function openEditModal(userId: string, name: string, role: string, tier: string) {
+      const modal = document.getElementById('edit-modal');
+      if (!modal) return;
+      modal.classList.remove('hidden');
+      (document.getElementById('edit-user-id') as HTMLInputElement).value = userId;
+      const nameEl = document.getElementById('edit-user-name');
+      if (nameEl) nameEl.textContent = name;
+      (document.getElementById('edit-role') as HTMLSelectElement).value = role;
+      (document.getElementById('edit-tier') as HTMLSelectElement).value = tier;
+      const errEl = document.getElementById('modal-error');
+      if (errEl) errEl.classList.add('hidden');
+    }
+
+    function closeEditModal() {
+      const modal = document.getElementById('edit-modal');
+      if (modal) modal.classList.add('hidden');
+    }
+
+    async function saveUser() {
+      const userId = (document.getElementById('edit-user-id') as HTMLInputElement).value;
+      const newRole = (document.getElementById('edit-role') as HTMLSelectElement).value;
+      const newTier = (document.getElementById('edit-tier') as HTMLSelectElement).value;
+      const errEl = document.getElementById('modal-error');
+
+      const { error } = await supabase
+        .from('profiles')
+        .update({ role: newRole, subscription_tier: newTier })
+        .eq('id', userId);
+
+      if (error) {
+        if (errEl) {
+          errEl.textContent = 'Failed to update user. Please try again.';
+          errEl.classList.remove('hidden');
+        }
+        console.error('Update error:', error);
+        return;
+      }
+
+      closeEditModal();
+
+      // Update local data
+      const user = allUsers.find(u => u.id === userId);
+      if (user) {
+        user.role = newRole;
+        user.subscription_tier = newTier;
+      }
+      applyFilters();
+    }
+
+    function escapeHtml(str: string): string {
+      const div = document.createElement('div');
+      div.appendChild(document.createTextNode(str));
+      return div.innerHTML;
+    }
+
+    function escapeAttr(str: string): string {
+      return str.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    // Event listeners
+    document.getElementById('search-input')?.addEventListener('input', applyFilters);
+    document.getElementById('filter-tier')?.addEventListener('change', applyFilters);
+    document.getElementById('filter-role')?.addEventListener('change', applyFilters);
+    document.getElementById('modal-cancel')?.addEventListener('click', closeEditModal);
+    document.getElementById('modal-save')?.addEventListener('click', saveUser);
+    document.getElementById('edit-modal')?.addEventListener('click', (e) => {
+      if (e.target === e.currentTarget) closeEditModal();
+    });
+    document.getElementById('prev-btn')?.addEventListener('click', () => {
+      if (currentPage > 0) { currentPage--; renderTable(); }
+    });
+    document.getElementById('next-btn')?.addEventListener('click', () => {
+      const totalPages = Math.ceil(filteredUsers.length / pageSize);
+      if (currentPage < totalPages - 1) { currentPage++; renderTable(); }
+    });
+
+    await (window as any).__adminReady;
+    loadUsers();
+  </script>
+</AdminLayout>

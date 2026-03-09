@@ -471,7 +471,7 @@ public class SAMHQ<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
     {
         return _useNativeMode
             ? new SAMHQ<T>(Architecture, _optimizer, LossFunction, _numClasses, _modelSize, _dropRate, _options)
-            : new SAMHQ<T>(Architecture, _onnxModelPath!, _numClasses, _modelSize, _options);
+            : new SAMHQ<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _modelSize, _options);
     }
 
     /// <summary>

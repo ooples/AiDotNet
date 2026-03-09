@@ -127,7 +127,7 @@ public class Cutout<T> : AugmentationBase<T, ImageTensor<T>>
         MaxHoleHeight = maxHoleHeight;
         MinHoleWidth = minHoleWidth;
         MaxHoleWidth = maxHoleWidth;
-        FillValue = fillValue ?? default!;
+        FillValue = fillValue ?? NumOps.Zero;
     }
 
     /// <summary>

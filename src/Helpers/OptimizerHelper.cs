@@ -35,7 +35,8 @@ public static class OptimizerHelper<T, TInput, TOutput>
         OptimizationResult<T, TInput, TOutput>.DatasetResult validationResult,
         OptimizationResult<T, TInput, TOutput>.DatasetResult testResult,
         FitDetectorResult<T> bestFitDetectionResult,
-        int iterationCount)
+        int iterationCount,
+        List<int>? bestSelectedFeatureIndices = null)
     {
         return new OptimizationResult<T, TInput, TOutput>
         {
@@ -44,6 +45,7 @@ public static class OptimizerHelper<T, TInput, TOutput>
             Iterations = iterationCount,
             FitnessHistory = new Vector<T>([.. fitnessHistory]),
             SelectedFeatures = bestSelectedFeatures,
+            SelectedFeatureIndices = bestSelectedFeatureIndices ?? new List<int>(),
             TrainingResult = trainingResult,
             ValidationResult = validationResult,
             TestResult = testResult,
@@ -216,9 +218,15 @@ public static class OptimizerHelper<T, TInput, TOutput>
     /// </remarks>
     private static Tensor<T> SelectFeaturesTensor(Tensor<T> X, List<int> selectedFeatures)
     {
-        if (X.Shape.Length < 2)
+        // Handle 1D tensors: select elements at the specified indices
+        if (X.Shape.Length == 1)
         {
-            throw new ArgumentException("Input tensor must have at least 2 dimensions", nameof(X));
+            var selected = new Tensor<T>(new[] { selectedFeatures.Count });
+            for (int j = 0; j < selectedFeatures.Count; j++)
+            {
+                selected[j] = X[selectedFeatures[j]];
+            }
+            return selected;
         }
 
         // Create a new shape with the updated feature dimension

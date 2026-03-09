@@ -499,12 +499,13 @@ internal class PagedAttentionKernel<T>
 
     private static float ToFloat(T value)
     {
+        object boxed = value ?? throw new InvalidOperationException("Unexpected null value in PagedAttention type conversion.");
         if (typeof(T) == typeof(float))
-            return (float)(object)value!;
+            return (float)boxed;
         if (typeof(T) == typeof(double))
-            return (float)(double)(object)value!;
+            return (float)(double)boxed;
         if (typeof(T) == typeof(Half))
-            return (float)(Half)(object)value!;
+            return (float)(Half)boxed;
 
         return Convert.ToSingle(value);
     }
@@ -518,7 +519,9 @@ internal class PagedAttentionKernel<T>
         if (typeof(T) == typeof(Half))
             return (T)(object)(Half)value;
 
-        return (T)Convert.ChangeType(value, typeof(T))!;
+        object converted = Convert.ChangeType(value, typeof(T))
+            ?? throw new InvalidOperationException($"Failed to convert float value to {typeof(T).Name}.");
+        return (T)converted;
     }
 
     private static T[] ConvertArray(ReadOnlySpan<float> source)

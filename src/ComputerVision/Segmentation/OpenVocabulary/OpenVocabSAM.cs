@@ -300,7 +300,7 @@ public class OpenVocabSAM<T> : NeuralNetworkBase<T>, IOpenVocabSegmentation<T>
     /// </remarks>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => _useNativeMode
         ? new OpenVocabSAM<T>(Architecture, _optimizer, LossFunction, _numClasses, _dropRate, _options)
-        : new OpenVocabSAM<T>(Architecture, _onnxModelPath!, _numClasses, _options);
+        : new OpenVocabSAM<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _options);
 
     /// <summary>
     /// Releases managed resources including the ONNX inference session.

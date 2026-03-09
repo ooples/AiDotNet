@@ -57,32 +57,31 @@
 	</ItemGroup>
 
 	<ItemGroup>
-	  <PackageReference Include="Azure.Search.Documents" Version="11.7.0" />
-	  <PackageReference Include="Elastic.Clients.Elasticsearch" Version="9.3.1" />
-	  <PackageReference Include="Google.Protobuf" Version="3.34.0" />
-	  <PackageReference Include="Microsoft.CSharp" Version="4.7.0" />
-	  <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.24" />
-	  <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.24.2" />
-	  <PackageReference Include="Microsoft.Research.SEALNet" Version="4.1.1" />
-	  <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
-	  <PackageReference Include="Pinecone.Client" Version="4.0.2" />
-	  <PackageReference Include="StackExchange.Redis" Version="2.11.8" />
-	  <PackageReference Include="System.Numerics.Tensors" Version="10.0.3" />
-	  <PackageReference Include="System.ValueTuple" Version="4.6.2" />
-	  <PackageReference Include="TreeSitter.DotNet" Version="1.3.0" />
-	  <PackageReference Include="FftSharp" Version="2.2.0" />
-	  <PackageReference Include="Parquet.Net" Version="4.25.0" />
-	  <PackageReference Include="YamlDotNet" Version="16.3.0" />
+	  <PackageReference Include="Azure.Search.Documents" />
+	  <PackageReference Include="Elastic.Clients.Elasticsearch" />
+	  <PackageReference Include="Google.Protobuf" />
+	  <PackageReference Include="Microsoft.CSharp" />
+	  <PackageReference Include="Microsoft.Data.Sqlite" />
+	  <PackageReference Include="Microsoft.ML.OnnxRuntime" />
+	  <PackageReference Include="Microsoft.Research.SEALNet" />
+	  <PackageReference Include="Newtonsoft.Json" />
+	  <PackageReference Include="Pinecone.Client" />
+	  <PackageReference Include="StackExchange.Redis" />
+	  <PackageReference Include="System.ValueTuple" />
+	  <PackageReference Include="TreeSitter.DotNet" />
+	  <PackageReference Include="FftSharp" />
+	  <PackageReference Include="Parquet.Net" />
+	  <PackageReference Include="YamlDotNet" />
 	</ItemGroup>
 
 	<!-- ImageSharp for PNG/JPEG/GIF/TIFF support (requires .NET 6+) -->
 	<ItemGroup Condition="'$(TargetFramework)' != 'net471'">
-	  <PackageReference Include="SixLabors.ImageSharp" Version="3.1.12" />
+	  <PackageReference Include="SixLabors.ImageSharp" />
 	</ItemGroup>
 
 	<!-- Npgsql EF Core requires .NET 10+ -->
 	<ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
-	  <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.0" />
+	  <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
 	</ItemGroup>
 
 	<!-- System.Net.Http only for .NET Framework (built-in for .NET Core/.NET 5+) -->
@@ -153,7 +152,7 @@
 
 	<!-- AiDotNet.Tensors NuGet package (spun out to separate repo) -->
 	<ItemGroup>
-	  <PackageReference Include="AiDotNet.Tensors" Version="0.8.0" />
+	  <PackageReference Include="AiDotNet.Tensors" />
 	</ItemGroup>
 
 	<!--
@@ -163,11 +162,11 @@
 	-->
 	<ItemGroup>
 	  <!-- CPU acceleration via OpenBLAS -->
-	  <PackageReference Include="AiDotNet.Native.OpenBLAS" Version="0.8.0" />
+	  <PackageReference Include="AiDotNet.Native.OpenBLAS" />
 	  <!-- GPU acceleration via CLBlast (OpenCL-based) -->
-	  <PackageReference Include="AiDotNet.Native.CLBlast" Version="0.8.0" />
+	  <PackageReference Include="AiDotNet.Native.CLBlast" />
 	  <!-- CPU acceleration via Intel OneDNN -->
-	  <PackageReference Include="AiDotNet.Native.OneDNN" Version="0.8.0" />
+	  <PackageReference Include="AiDotNet.Native.OneDNN" />
 	</ItemGroup>
 
 	<!-- Build-time key derivation resource (injected by CI/CD, not present in dev builds).
@@ -204,6 +203,7 @@
 	<ItemGroup>
 	  <Using Include="System.Text" />
 	</ItemGroup>
+
 
 	<!-- Global usings for internal helpers -->
 	<ItemGroup>

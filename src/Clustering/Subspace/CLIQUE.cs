@@ -202,7 +202,8 @@ public class CLIQUE<T> : ClusteringBase<T>
         }
 
         // Sort clusters by dimensionality (prefer higher dimensional matches)
-        var sortedClusters = _subspaceClustersInternal!
+        var subspaceClusters = _subspaceClustersInternal ?? throw new InvalidOperationException("_subspaceClustersInternal has not been initialized.");
+        var sortedClusters = subspaceClusters
             .OrderByDescending(c => c.Dimensions.Length)
             .ToList();
 

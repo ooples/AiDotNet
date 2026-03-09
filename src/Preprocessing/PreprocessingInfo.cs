@@ -1,3 +1,5 @@
+using Newtonsoft.Json;
+
 namespace AiDotNet.Preprocessing;
 
 /// <summary>
@@ -32,6 +34,7 @@ public class PreprocessingInfo<T, TInput, TOutput>
     /// (like scaling, encoding, and imputation) before making predictions.
     /// </para>
     /// </remarks>
+    [JsonProperty(TypeNameHandling = TypeNameHandling.Auto)]
     public PreprocessingPipeline<T, TInput, TInput>? Pipeline { get; set; }
 
     /// <summary>
@@ -47,6 +50,7 @@ public class PreprocessingInfo<T, TInput, TOutput>
     /// predictions back to the original range.
     /// </para>
     /// </remarks>
+    [JsonProperty(TypeNameHandling = TypeNameHandling.Auto)]
     public PreprocessingPipeline<T, TOutput, TOutput>? TargetPipeline { get; set; }
 
     /// <summary>

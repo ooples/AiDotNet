@@ -508,7 +508,8 @@ public class SUBCLU<T> : ClusteringBase<T>
         }
 
         // Sort clusters by dimensionality (prefer higher dimensional matches)
-        var sortedClusters = _subspaceClusterInfos!
+        var clusterInfos = _subspaceClusterInfos ?? throw new InvalidOperationException("_subspaceClusterInfos has not been initialized.");
+        var sortedClusters = clusterInfos
             .OrderByDescending(c => c.Dimensions.Length)
             .ToList();
 
