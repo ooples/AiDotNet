@@ -930,15 +930,15 @@ public class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>
         TaskType = (ClassificationTaskType)(jObj["TaskType"]?.ToObject<int>() ?? 0);
         _options.CalibrationMethod = (ProbabilityCalibrationMethod)(jObj["CalibrationMethod"]?.ToObject<int>()
             ?? (int)ProbabilityCalibrationMethod.PlattScaling);
-        _plattA = jObj["PlattA"]?.ToObject<double>() ?? 1.0;
-        _plattB = jObj["PlattB"]?.ToObject<double>() ?? 0.0;
-        _betaA = jObj["BetaA"]?.ToObject<double>() ?? 1.0;
-        _betaB = jObj["BetaB"]?.ToObject<double>() ?? 1.0;
-        _betaC = jObj["BetaC"]?.ToObject<double>() ?? 0.0;
-        _temperature = jObj["Temperature"]?.ToObject<double>() ?? 1.0;
+        _plattA = DeserializeValue(jObj["PlattA"], NumOps.One);
+        _plattB = DeserializeValue(jObj["PlattB"], NumOps.Zero);
+        _betaA = DeserializeValue(jObj["BetaA"], NumOps.One);
+        _betaB = DeserializeValue(jObj["BetaB"], NumOps.One);
+        _betaC = DeserializeValue(jObj["BetaC"], NumOps.Zero);
+        _temperature = DeserializeValue(jObj["Temperature"], NumOps.One);
         _isTrained = jObj["IsTrained"]?.ToObject<bool>() ?? false;
 
-        var isoArr = jObj["IsotonicMapping"]?.ToObject<double[][]>();
+        var isoArr = jObj["IsotonicMapping"] is JToken isoToken ? isoToken.ToObject<T[][]>() : null;
         if (isoArr is not null)
         {
             _isotonicMapping = isoArr
@@ -965,6 +965,15 @@ public class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>
                 $"Deserialized base classifier of type '{baseType}' does not implement IProbabilisticClassifier<T>.");
 
         _baseClassifier = probClassifier;
+    }
+
+    private static T DeserializeValue(JToken? token, T defaultValue)
+    {
+        if (token is null || token.Type == JTokenType.Null)
+            return defaultValue;
+
+        var result = token.ToObject<T>();
+        return result is not null ? result : defaultValue;
     }
 
     /// <inheritdoc/>
