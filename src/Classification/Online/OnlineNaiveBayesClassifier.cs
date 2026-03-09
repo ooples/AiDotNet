@@ -192,7 +192,7 @@ public class OnlineNaiveBayesClassifier<T> : ClassifierBase<T>, IOnlineClassifie
     {
         if (_knownClasses.Count == 0)
         {
-            return default!;
+            throw new InvalidOperationException("No known classes available for prediction. The classifier must be trained first.");
         }
 
         double bestLogProb = double.NegativeInfinity;
