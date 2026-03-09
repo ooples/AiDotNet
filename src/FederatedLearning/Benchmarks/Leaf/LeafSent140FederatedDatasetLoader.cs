@@ -123,7 +123,7 @@ public sealed class LeafSent140FederatedDatasetLoader
         var train = LoadSplitFromFile(trainFilePath, options);
         LeafFederatedSplit<string[], int[]>? test = null;
 
-        if (!string.IsNullOrWhiteSpace(testFilePath))
+        if (testFilePath is not null && !string.IsNullOrWhiteSpace(testFilePath))
         {
             test = LoadSplitFromFile(testFilePath, options);
         }

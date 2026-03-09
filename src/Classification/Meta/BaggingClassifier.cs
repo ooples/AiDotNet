@@ -176,7 +176,8 @@ public class BaggingClassifier<T> : MetaClassifierBase<T>
                 int swapIdx = k + random.Next(pool.Length - k);
                 (pool[k], pool[swapIdx]) = (pool[swapIdx], pool[k]);
             }
-            var indices = pool[..sampleSize];
+            var indices = new int[sampleSize];
+            Array.Copy(pool, 0, indices, 0, sampleSize);
 
             for (int i = 0; i < sampleSize; i++)
             {
