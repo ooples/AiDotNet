@@ -100,20 +100,19 @@ public class BarlowTwins<T> : SSLMethodBase<T>
 
         // Replay forward for view 1 to restore projector caches before backward
         // (view 2 forward overwrites shared projector caches)
-        var proj = _projector ?? throw new InvalidOperationException("Projector not initialized.");
-        proj.Reset();
-        proj.Project(h1);
-        var gradH1 = proj.Backward(gradZ1);
+        projector.Reset();
+        projector.Project(h1);
+        var gradH1 = projector.Backward(gradZ1);
         // Capture view1 projector gradients before they are cleared by the next Backward()
-        var view1ProjGrads = proj.GetParameterGradients();
+        var view1ProjGrads = projector.GetParameterGradients();
         _encoder.Backpropagate(gradH1);
 
         // Replay forward for view 2 to restore projector caches before backward
-        proj.Reset();
-        proj.Project(h2);
-        var gradH2 = proj.Backward(gradZ2);
+        projector.Reset();
+        projector.Project(h2);
+        var gradH2 = projector.Backward(gradZ2);
         // Capture view2 projector gradients
-        var view2ProjGrads = proj.GetParameterGradients();
+        var view2ProjGrads = projector.GetParameterGradients();
         _encoder.Backpropagate(gradH2);
 
         // Accumulate projector gradients from both views before updating

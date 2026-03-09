@@ -775,8 +775,10 @@ public class FILM<T> : FrameInterpolationBase<T>
 
     private void BackwardPass(Tensor<T> gradient)
     {
-        if (_cachedFeatures1 == null || _cachedFeatures2 == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+        var cachedFeatures1 = _cachedFeatures1
+            ?? throw new InvalidOperationException("Cached features 1 have not been initialized. Forward pass must be called before backward pass.");
+        var cachedFeatures2 = _cachedFeatures2
+            ?? throw new InvalidOperationException("Cached features 2 have not been initialized. Forward pass must be called before backward pass.");
 
         // Fail fast on all required backward-pass caches
         var cachedFusionActivations = _cachedFusionActivations
@@ -821,9 +823,9 @@ public class FILM<T> : FrameInterpolationBase<T>
         // 4. Backpropagate warping gradients
         // Warp backward: gradient w.r.t. features and flow
         var (gradFeatures1FromWarp, gradFlowToT1) = WarpFeaturesBackward(
-            gradWarped1, _cachedFeatures1, cachedFlowToT1);
+            gradWarped1, cachedFeatures1, cachedFlowToT1);
         var (gradFeatures2FromWarp, gradFlowToT2) = WarpFeaturesBackward(
-            gradWarped2, _cachedFeatures2, cachedFlowToT2);
+            gradWarped2, cachedFeatures2, cachedFlowToT2);
 
         // 5. Scale flow gradients back (reverse of ScaleFlow)
         var gradFlow2to1 = ScaleFlow(gradFlowToT1, _cachedTimestep);
@@ -836,8 +838,8 @@ public class FILM<T> : FrameInterpolationBase<T>
         var gradOccInput = _occlusionEstimator.Backward(gradOccCombined);
 
         // Split occlusion input gradient to features and flows
-        int feat1Channels = _cachedFeatures1.Shape[1];
-        int feat2Channels = _cachedFeatures2.Shape[1];
+        int feat1Channels = cachedFeatures1.Shape[1];
+        int feat2Channels = cachedFeatures2.Shape[1];
         var (gradFeaturesFromOcc1, gradFeaturesFromOcc2, gradFlowFromOcc1, gradFlowFromOcc2) =
             SplitOcclusionGradient(gradOccInput, feat1Channels, feat2Channels);
 
@@ -866,7 +868,7 @@ public class FILM<T> : FrameInterpolationBase<T>
 
         // Split flow input gradient to features1 and features2
         var (gradFeaturesFromFlow1, gradFeaturesFromFlow2) = SplitConcatenatedGradient(
-            gradFlowCombined, _cachedFeatures1.Shape[1], _cachedFeatures2.Shape[1]);
+            gradFlowCombined, cachedFeatures1.Shape[1], cachedFeatures2.Shape[1]);
 
         // 8. Accumulate all gradients going to features1 and features2
         var gradFeatures1 = AddTensors(gradFeatures1FromWarp, gradFeaturesFromOcc1);

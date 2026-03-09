@@ -1692,7 +1692,7 @@ public class ConvLSTMLayer<T> : LayerBase<T>
 
         var lastInput = _lastInput ?? throw new InvalidOperationException("_lastInput has not been initialized.");
         int batchSize = lastInput.Shape[0];
-        int timeSteps = _lastInput.Shape[1];
+        int timeSteps = lastInput.Shape[1];
 
         var dInput = new Tensor<T>(lastInput.Shape);
         var dWeightsFi = new Tensor<T>(_weightsFi.Shape);

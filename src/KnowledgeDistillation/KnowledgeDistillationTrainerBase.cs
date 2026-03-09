@@ -676,17 +676,10 @@ public abstract class KnowledgeDistillationTrainerBase<T, TInput, TOutput> : IKn
         // Load best checkpoint if checkpointing was enabled
         if (_checkpointManager != null && _student != null)
         {
-            var bestCheckpoint = _checkpointManager.LoadBestCheckpoint(
+            _checkpointManager.LoadBestCheckpoint(
                 student: _student,
                 teacher: Teacher as ICheckpointableModel
             );
-
-            if (bestCheckpoint != null)
-            {
-                var checkpointConfig = _checkpointConfig ?? throw new InvalidOperationException("Checkpoint configuration has not been initialized.");
-                // Best checkpoint loaded from epoch bestCheckpoint.Epoch
-                // Metric values available via bestCheckpoint.Metrics dictionary
-            }
         }
     }
 

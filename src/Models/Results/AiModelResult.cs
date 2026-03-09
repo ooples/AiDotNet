@@ -3657,6 +3657,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// </summary>
     private Func<Matrix<T>, Vector<T>> CreatePredictionFunction()
     {
+        var model = Model ?? throw new InvalidOperationException("Model has not been initialized.");
         return (Matrix<T> inputMatrix) =>
         {
             var predictions = new T[inputMatrix.Rows];
@@ -3664,7 +3665,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             {
                 var row = inputMatrix.GetRow(i);
                 var input = ConvertVectorToInput(row);
-                var output = (Model ?? throw new InvalidOperationException("Model has not been initialized.")).Predict(input);
+                var output = model.Predict(input);
                 predictions[i] = ConvertOutputToScalar(output);
             }
             return new Vector<T>(predictions);

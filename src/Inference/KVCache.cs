@@ -358,35 +358,61 @@ internal class KVCache<T>
         var keys = new Tensor<T>(keyShape);
         var values = new Tensor<T>(keyShape);
 
-        // Copy cached values
-        for (int b = 0; b < batchSize; b++)
+        // Hoist layer-level lookups outside the inner loops
+        if (_useInt8Storage)
         {
-            int seqLen = _sequenceLengths[layerIndex][b];
-            for (int h = 0; h < _config.NumHeads; h++)
+            float keyScale = Int8KeyScale[layerIndex];
+            float valueScale = Int8ValueScale[layerIndex];
+            var int8Keys = Int8KeyCache[layerIndex];
+            var int8Values = Int8ValueCache[layerIndex];
+
+            for (int b = 0; b < batchSize; b++)
             {
-                for (int s = 0; s < seqLen; s++)
-                {
-                    for (int d = 0; d < _config.HeadDimension; d++)
-                    {
-                        if (_useInt8Storage)
+                int seqLen = _sequenceLengths[layerIndex][b];
+                for (int h = 0; h < _config.NumHeads; h++)
+                    for (int s = 0; s < seqLen; s++)
+                        for (int d = 0; d < _config.HeadDimension; d++)
                         {
-                            float keyScale = Int8KeyScale[layerIndex];
-                            float valueScale = Int8ValueScale[layerIndex];
-                            keys[new[] { b, h, s, d }] = FromFloatConverter(DequantizeInt8(Int8KeyCache[layerIndex][new[] { b, h, s, d }], keyScale));
-                            values[new[] { b, h, s, d }] = FromFloatConverter(DequantizeInt8(Int8ValueCache[layerIndex][new[] { b, h, s, d }], valueScale));
+                            var idx = new[] { b, h, s, d };
+                            keys[idx] = FromFloatConverter(DequantizeInt8(int8Keys[idx], keyScale));
+                            values[idx] = FromFloatConverter(DequantizeInt8(int8Values[idx], valueScale));
                         }
-                        else if (_useFp16Storage)
+            }
+        }
+        else if (_useFp16Storage)
+        {
+            var fp16Keys = Fp16KeyCache[layerIndex];
+            var fp16Values = Fp16ValueCache[layerIndex];
+
+            for (int b = 0; b < batchSize; b++)
+            {
+                int seqLen = _sequenceLengths[layerIndex][b];
+                for (int h = 0; h < _config.NumHeads; h++)
+                    for (int s = 0; s < seqLen; s++)
+                        for (int d = 0; d < _config.HeadDimension; d++)
                         {
-                            keys[new[] { b, h, s, d }] = FromHalfConverter(Fp16KeyCache[layerIndex][new[] { b, h, s, d }]);
-                            values[new[] { b, h, s, d }] = FromHalfConverter(Fp16ValueCache[layerIndex][new[] { b, h, s, d }]);
+                            var idx = new[] { b, h, s, d };
+                            keys[idx] = FromHalfConverter(fp16Keys[idx]);
+                            values[idx] = FromHalfConverter(fp16Values[idx]);
                         }
-                        else
+            }
+        }
+        else
+        {
+            var cachedKeys = _keyCache[layerIndex];
+            var cachedValues = _valueCache[layerIndex];
+
+            for (int b = 0; b < batchSize; b++)
+            {
+                int seqLen = _sequenceLengths[layerIndex][b];
+                for (int h = 0; h < _config.NumHeads; h++)
+                    for (int s = 0; s < seqLen; s++)
+                        for (int d = 0; d < _config.HeadDimension; d++)
                         {
-                            keys[new[] { b, h, s, d }] = _keyCache[layerIndex][new[] { b, h, s, d }];
-                            values[new[] { b, h, s, d }] = _valueCache[layerIndex][new[] { b, h, s, d }];
+                            var idx = new[] { b, h, s, d };
+                            keys[idx] = cachedKeys[idx];
+                            values[idx] = cachedValues[idx];
                         }
-                    }
-                }
             }
         }
 

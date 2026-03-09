@@ -82,7 +82,7 @@ public class FloraAdapter<T> : LoRAAdapterBase<T>
         int inputSize = GetInputShape()[0];
         int outputSize = GetOutputShape()[0];
 
-        _compressedMomentum = new Matrix<T>(_rank, outputSize);
+        _compressedMomentum ??= new Matrix<T>(_rank, outputSize);
 
         Matrix<T> gradB = new Matrix<T>(_rank, outputSize);
         int bOffset = inputSize * _rank;

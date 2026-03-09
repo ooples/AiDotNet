@@ -611,7 +611,7 @@ public class DeepFilterNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         // Backward through gain layer
         if (_gainLayer is not null)
         {
-            _gainLayer.Backward(grad);
+            grad = _gainLayer.Backward(grad);
         }
 
         // Backward through decoder
