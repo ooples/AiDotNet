@@ -45,7 +45,7 @@ public class ProbabilityCalibrator<T>
     /// <summary>
     /// Isotonic regression points.
     /// </summary>
-    private List<(double x, double y)>? _isotonicPoints;
+    private List<(T x, T y)>? _isotonicPoints;
 
     /// <summary>
     /// Temperature parameter for temperature scaling.
@@ -62,14 +62,14 @@ public class ProbabilityCalibrator<T>
     /// <summary>
     /// Histogram bin edges and probabilities.
     /// </summary>
-    private double[]? _binEdges;
-    private double[]? _binProbabilities;
+    private T[]? _binEdges;
+    private T[]? _binProbabilities;
 
     /// <summary>
     /// Stored calibration data for Venn-ABERS per-point dual isotonic fits.
     /// </summary>
-    private double[]? _vennCalibrationScores;
-    private double[]? _vennCalibrationLabels;
+    private T[]? _vennCalibrationScores;
+    private T[]? _vennCalibrationLabels;
 
     /// <summary>
     /// Configuration options.
@@ -109,37 +109,37 @@ public class ProbabilityCalibrator<T>
             throw new ArgumentException("Scores and labels must have the same length.");
         }
 
-        var scoresDouble = scores.Select(s => NumOps.ToDouble(s)).ToArray();
-        var labelsDouble = labels.Select(l => NumOps.ToDouble(l)).ToArray();
+        var scoresArray = scores.ToArray();
+        var labelsArray = labels.ToArray();
 
         switch (_options.CalibratorMethod)
         {
             case ProbabilityCalibrationMethod.PlattScaling:
-                FitPlattScaling(scoresDouble, labelsDouble);
+                FitPlattScaling(scoresArray, labelsArray);
                 break;
 
             case ProbabilityCalibrationMethod.IsotonicRegression:
-                FitIsotonicRegression(scoresDouble, labelsDouble);
+                FitIsotonicRegression(scoresArray, labelsArray);
                 break;
 
             case ProbabilityCalibrationMethod.TemperatureScaling:
-                FitTemperatureScaling(scoresDouble, labelsDouble);
+                FitTemperatureScaling(scoresArray, labelsArray);
                 break;
 
             case ProbabilityCalibrationMethod.BetaCalibration:
-                FitBetaCalibration(scoresDouble, labelsDouble);
+                FitBetaCalibration(scoresArray, labelsArray);
                 break;
 
             case ProbabilityCalibrationMethod.HistogramBinning:
-                FitHistogramBinning(scoresDouble, labelsDouble);
+                FitHistogramBinning(scoresArray, labelsArray);
                 break;
 
             case ProbabilityCalibrationMethod.BayesianBinning:
-                FitBayesianBinning(scoresDouble, labelsDouble);
+                FitBayesianBinning(scoresArray, labelsArray);
                 break;
 
             case ProbabilityCalibrationMethod.VennABERS:
-                FitVennABERS(scoresDouble, labelsDouble);
+                FitVennABERS(scoresArray, labelsArray);
                 break;
 
             case ProbabilityCalibrationMethod.None:
@@ -168,39 +168,39 @@ public class ProbabilityCalibrator<T>
             throw new InvalidOperationException("Calibrator must be fitted before transform.");
         }
 
-        var scoresDouble = scores.Select(s => NumOps.ToDouble(s)).ToArray();
-        double[] calibrated;
+        var scoresArray = scores.ToArray();
+        T[] calibrated;
 
         switch (_options.CalibratorMethod)
         {
             case ProbabilityCalibrationMethod.PlattScaling:
-                calibrated = TransformPlattScaling(scoresDouble);
+                calibrated = TransformPlattScaling(scoresArray);
                 break;
 
             case ProbabilityCalibrationMethod.IsotonicRegression:
-                calibrated = TransformIsotonicRegression(scoresDouble);
+                calibrated = TransformIsotonicRegression(scoresArray);
                 break;
 
             case ProbabilityCalibrationMethod.TemperatureScaling:
-                calibrated = TransformTemperatureScaling(scoresDouble);
+                calibrated = TransformTemperatureScaling(scoresArray);
                 break;
 
             case ProbabilityCalibrationMethod.BetaCalibration:
-                calibrated = TransformBetaCalibration(scoresDouble);
+                calibrated = TransformBetaCalibration(scoresArray);
                 break;
 
             case ProbabilityCalibrationMethod.HistogramBinning:
             case ProbabilityCalibrationMethod.BayesianBinning:
-                calibrated = TransformHistogramBinning(scoresDouble);
+                calibrated = TransformHistogramBinning(scoresArray);
                 break;
 
             case ProbabilityCalibrationMethod.VennABERS:
-                calibrated = TransformVennABERS(scoresDouble);
+                calibrated = TransformVennABERS(scoresArray);
                 break;
 
             case ProbabilityCalibrationMethod.None:
                 // Identity transform - return scores unchanged
-                calibrated = scoresDouble;
+                calibrated = scoresArray;
                 break;
 
             default:
@@ -210,7 +210,7 @@ public class ProbabilityCalibrator<T>
                     "Unknown calibration method.");
         }
 
-        return new Vector<T>(calibrated.Select(c => NumOps.FromDouble(c)).ToArray());
+        return new Vector<T>(calibrated);
     }
 
     /// <summary>
@@ -231,33 +231,38 @@ public class ProbabilityCalibrator<T>
     /// <returns>ECE value (lower is better, 0 is perfect calibration).</returns>
     public double ComputeECE(Vector<T> scores, Vector<T> labels, int numBins = 10)
     {
-        var scoresDouble = scores.Select(s => NumOps.ToDouble(s)).ToArray();
-        var labelsDouble = labels.Select(l => NumOps.ToDouble(l)).ToArray();
-
-        int n = scoresDouble.Length;
-        double ece = 0;
+        int n = scores.Length;
+        T ece = NumOps.Zero;
 
         for (int b = 0; b < numBins; b++)
         {
-            double lower = (double)b / numBins;
-            double upper = (double)(b + 1) / numBins;
+            T lower = NumOps.FromDouble((double)b / numBins);
+            T upper = NumOps.FromDouble((double)(b + 1) / numBins);
 
             // Include scores == 1.0 in the last bin
             var binIndices = Enumerable.Range(0, n)
-                .Where(i => scoresDouble[i] >= lower && (b == numBins - 1 ? scoresDouble[i] <= upper : scoresDouble[i] < upper))
+                .Where(i => NumOps.GreaterThanOrEquals(scores[i], lower) && (b == numBins - 1 ? NumOps.LessThanOrEquals(scores[i], upper) : NumOps.LessThan(scores[i], upper)))
                 .ToList();
 
             if (binIndices.Count > 0)
             {
-                double avgProb = binIndices.Average(i => scoresDouble[i]);
-                double avgAcc = binIndices.Average(i => labelsDouble[i]);
-                double binWeight = (double)binIndices.Count / n;
+                T sumProb = NumOps.Zero;
+                T sumAcc = NumOps.Zero;
+                foreach (var i in binIndices)
+                {
+                    sumProb = NumOps.Add(sumProb, scores[i]);
+                    sumAcc = NumOps.Add(sumAcc, labels[i]);
+                }
+                T count = NumOps.FromDouble(binIndices.Count);
+                T avgProb = NumOps.Divide(sumProb, count);
+                T avgAcc = NumOps.Divide(sumAcc, count);
+                T binWeight = NumOps.Divide(count, NumOps.FromDouble(n));
 
-                ece += binWeight * Math.Abs(avgProb - avgAcc);
+                ece = NumOps.Add(ece, NumOps.Multiply(binWeight, NumOps.Abs(NumOps.Subtract(avgProb, avgAcc))));
             }
         }
 
-        return ece;
+        return NumOps.ToDouble(ece);
     }
 
     /// <summary>
@@ -265,32 +270,41 @@ public class ProbabilityCalibrator<T>
     /// </summary>
     public double ComputeMCE(Vector<T> scores, Vector<T> labels, int numBins = 10)
     {
-        var scoresDouble = scores.Select(s => NumOps.ToDouble(s)).ToArray();
-        var labelsDouble = labels.Select(l => NumOps.ToDouble(l)).ToArray();
-
-        int n = scoresDouble.Length;
-        double mce = 0;
+        int n = scores.Length;
+        T mce = NumOps.Zero;
 
         for (int b = 0; b < numBins; b++)
         {
-            double lower = (double)b / numBins;
-            double upper = (double)(b + 1) / numBins;
+            T lower = NumOps.FromDouble((double)b / numBins);
+            T upper = NumOps.FromDouble((double)(b + 1) / numBins);
 
             // Include scores == 1.0 in the last bin
             var binIndices = Enumerable.Range(0, n)
-                .Where(i => scoresDouble[i] >= lower && (b == numBins - 1 ? scoresDouble[i] <= upper : scoresDouble[i] < upper))
+                .Where(i => NumOps.GreaterThanOrEquals(scores[i], lower) && (b == numBins - 1 ? NumOps.LessThanOrEquals(scores[i], upper) : NumOps.LessThan(scores[i], upper)))
                 .ToList();
 
             if (binIndices.Count > 0)
             {
-                double avgProb = binIndices.Average(i => scoresDouble[i]);
-                double avgAcc = binIndices.Average(i => labelsDouble[i]);
+                T sumProb = NumOps.Zero;
+                T sumAcc = NumOps.Zero;
+                foreach (var i in binIndices)
+                {
+                    sumProb = NumOps.Add(sumProb, scores[i]);
+                    sumAcc = NumOps.Add(sumAcc, labels[i]);
+                }
+                T count = NumOps.FromDouble(binIndices.Count);
+                T avgProb = NumOps.Divide(sumProb, count);
+                T avgAcc = NumOps.Divide(sumAcc, count);
+                T absError = NumOps.Abs(NumOps.Subtract(avgProb, avgAcc));
 
-                mce = Math.Max(mce, Math.Abs(avgProb - avgAcc));
+                if (NumOps.GreaterThan(absError, mce))
+                {
+                    mce = absError;
+                }
             }
         }
 
-        return mce;
+        return NumOps.ToDouble(mce);
     }
 
     /// <summary>
@@ -301,17 +315,14 @@ public class ProbabilityCalibrator<T>
     /// <returns>Brier score (lower is better, 0 is perfect).</returns>
     public double ComputeBrierScore(Vector<T> scores, Vector<T> labels)
     {
-        var scoresDouble = scores.Select(s => NumOps.ToDouble(s)).ToArray();
-        var labelsDouble = labels.Select(l => NumOps.ToDouble(l)).ToArray();
-
-        double brier = 0;
-        for (int i = 0; i < scoresDouble.Length; i++)
+        T brier = NumOps.Zero;
+        for (int i = 0; i < scores.Length; i++)
         {
-            double diff = scoresDouble[i] - labelsDouble[i];
-            brier += diff * diff;
+            T diff = NumOps.Subtract(scores[i], labels[i]);
+            brier = NumOps.Add(brier, NumOps.Multiply(diff, diff));
         }
 
-        return brier / scoresDouble.Length;
+        return NumOps.ToDouble(NumOps.Divide(brier, NumOps.FromDouble(scores.Length)));
     }
 
     /// <summary>
@@ -321,38 +332,43 @@ public class ProbabilityCalibrator<T>
     /// <param name="labels">True binary labels.</param>
     /// <param name="numBins">Number of bins.</param>
     /// <returns>Tuple of (meanPredicted, fractionPositives, binCounts).</returns>
-    public (double[] meanPredicted, double[] fractionPositives, int[] binCounts) GetReliabilityDiagram(
+    public (T[] meanPredicted, T[] fractionPositives, int[] binCounts) GetReliabilityDiagram(
         Vector<T> scores, Vector<T> labels, int numBins = 10)
     {
-        var scoresDouble = scores.Select(s => NumOps.ToDouble(s)).ToArray();
-        var labelsDouble = labels.Select(l => NumOps.ToDouble(l)).ToArray();
-
-        int n = scoresDouble.Length;
-        var meanPredicted = new double[numBins];
-        var fractionPositives = new double[numBins];
+        int n = scores.Length;
+        var meanPredicted = new T[numBins];
+        var fractionPositives = new T[numBins];
         var binCounts = new int[numBins];
 
         for (int b = 0; b < numBins; b++)
         {
-            double lower = (double)b / numBins;
-            double upper = (double)(b + 1) / numBins;
+            T lower = NumOps.FromDouble((double)b / numBins);
+            T upper = NumOps.FromDouble((double)(b + 1) / numBins);
 
             // Include scores == 1.0 in the last bin
             var binIndices = Enumerable.Range(0, n)
-                .Where(i => scoresDouble[i] >= lower && (b == numBins - 1 ? scoresDouble[i] <= upper : scoresDouble[i] < upper))
+                .Where(i => NumOps.GreaterThanOrEquals(scores[i], lower) && (b == numBins - 1 ? NumOps.LessThanOrEquals(scores[i], upper) : NumOps.LessThan(scores[i], upper)))
                 .ToList();
 
             binCounts[b] = binIndices.Count;
 
             if (binIndices.Count > 0)
             {
-                meanPredicted[b] = binIndices.Average(i => scoresDouble[i]);
-                fractionPositives[b] = binIndices.Average(i => labelsDouble[i]);
+                T sumPred = NumOps.Zero;
+                T sumLabel = NumOps.Zero;
+                foreach (var i in binIndices)
+                {
+                    sumPred = NumOps.Add(sumPred, scores[i]);
+                    sumLabel = NumOps.Add(sumLabel, labels[i]);
+                }
+                T count = NumOps.FromDouble(binIndices.Count);
+                meanPredicted[b] = NumOps.Divide(sumPred, count);
+                fractionPositives[b] = NumOps.Divide(sumLabel, count);
             }
             else
             {
-                meanPredicted[b] = (lower + upper) / 2;
-                fractionPositives[b] = double.NaN;
+                meanPredicted[b] = NumOps.Divide(NumOps.Add(lower, upper), NumOps.FromDouble(2));
+                fractionPositives[b] = NumOps.Zero;
             }
         }
 
@@ -361,30 +377,31 @@ public class ProbabilityCalibrator<T>
 
     #region Platt Scaling
 
-    private void FitPlattScaling(double[] scores, double[] labels)
+    private void FitPlattScaling(T[] scores, T[] labels)
     {
         int n = scores.Length;
-        int numPositive = labels.Count(l => l > 0.5);
+        int numPositive = labels.Count(l => NumOps.ToDouble(l) > 0.5);
         int numNegative = n - numPositive;
 
         // Target values with smoothing
         double hiTarget = (numPositive + 1.0) / (numPositive + 2.0);
         double loTarget = 1.0 / (numNegative + 2.0);
 
-        var targets = labels.Select(l => l > 0.5 ? hiTarget : loTarget).ToArray();
+        var targets = labels.Select(l => NumOps.ToDouble(l) > 0.5 ? hiTarget : loTarget).ToArray();
 
         // Initialize A and B
         double A = 0;
         double B = Math.Log((numNegative + 1.0) / (numPositive + 1.0));
 
-        // Newton-Raphson optimization
+        // Newton-Raphson optimization (internal computation in double for numerical stability)
         for (int iter = 0; iter < _options.MaxIterations; iter++)
         {
             double g1 = 0, g2 = 0, h11 = 0, h22 = 0, h21 = 0;
 
             for (int i = 0; i < n; i++)
             {
-                double fApB = scores[i] * A + B;
+                double si = NumOps.ToDouble(scores[i]);
+                double fApB = si * A + B;
                 double p, q;
 
                 if (fApB >= 0)
@@ -401,11 +418,11 @@ public class ProbabilityCalibrator<T>
                 double d2 = p * q;
                 double d1 = targets[i] - p;
 
-                g1 += scores[i] * d1;
+                g1 += si * d1;
                 g2 += d1;
-                h11 += scores[i] * scores[i] * d2;
+                h11 += si * si * d2;
                 h22 += d2;
-                h21 += scores[i] * d2;
+                h21 += si * d2;
             }
 
             // Regularization
@@ -433,22 +450,22 @@ public class ProbabilityCalibrator<T>
         _plattB = NumOps.FromDouble(B);
     }
 
-    private double[] TransformPlattScaling(double[] scores)
+    private T[] TransformPlattScaling(T[] scores)
     {
         double A = NumOps.ToDouble(_plattA);
         double B = NumOps.ToDouble(_plattB);
 
         return scores.Select(s =>
         {
-            double fApB = s * A + B;
+            double fApB = NumOps.ToDouble(s) * A + B;
             if (fApB >= 0)
             {
-                return 1 / (1 + Math.Exp(-fApB));
+                return NumOps.FromDouble(1 / (1 + Math.Exp(-fApB)));
             }
             else
             {
                 double exp = Math.Exp(fApB);
-                return exp / (1 + exp);
+                return NumOps.FromDouble(exp / (1 + exp));
             }
         }).ToArray();
     }
@@ -457,11 +474,11 @@ public class ProbabilityCalibrator<T>
 
     #region Isotonic Regression
 
-    private void FitIsotonicRegression(double[] scores, double[] labels)
+    private void FitIsotonicRegression(T[] scores, T[] labels)
     {
-        // Pool Adjacent Violators Algorithm (PAVA)
-        var sorted = scores.Zip(labels, (s, l) => (score: s, label: l))
-            .OrderBy(x => x.score)
+        // Pool Adjacent Violators Algorithm (PAVA) - uses double internally for numerical stability
+        var sorted = scores.Zip(labels, (s, l) => (score: s, label: NumOps.ToDouble(l)))
+            .OrderBy(x => NumOps.ToDouble(x.score))
             .ToList();
 
         int n = sorted.Count;
@@ -490,7 +507,7 @@ public class ProbabilityCalibrator<T>
             }
         }
 
-        // Create calibration points
+        // Create calibration points (stored as T)
         _isotonicPoints = [];
         int idx = 0;
         for (int i = 0; i < y.Length; i++)
@@ -498,14 +515,14 @@ public class ProbabilityCalibrator<T>
             double sumWeight = weights[i];
             while (sumWeight > 0)
             {
-                _isotonicPoints.Add((sorted[idx].score, y[i]));
+                _isotonicPoints.Add((sorted[idx].score, NumOps.FromDouble(y[i])));
                 idx++;
                 sumWeight--;
             }
         }
     }
 
-    private double[] TransformIsotonicRegression(double[] scores)
+    private T[] TransformIsotonicRegression(T[] scores)
     {
         if (_isotonicPoints == null || _isotonicPoints.Count == 0)
         {
@@ -517,27 +534,28 @@ public class ProbabilityCalibrator<T>
             // Binary search for nearest point
             int lo = 0, hi = _isotonicPoints.Count - 1;
 
-            if (s <= _isotonicPoints[lo].x) return _isotonicPoints[lo].y;
-            if (s >= _isotonicPoints[hi].x) return _isotonicPoints[hi].y;
+            if (NumOps.LessThanOrEquals(s, _isotonicPoints[lo].x)) return _isotonicPoints[lo].y;
+            if (NumOps.GreaterThanOrEquals(s, _isotonicPoints[hi].x)) return _isotonicPoints[hi].y;
 
             while (lo < hi - 1)
             {
                 int mid = (lo + hi) / 2;
-                if (_isotonicPoints[mid].x <= s)
+                if (NumOps.LessThanOrEquals(_isotonicPoints[mid].x, s))
                     lo = mid;
                 else
                     hi = mid;
             }
 
             // Linear interpolation
-            double x1 = _isotonicPoints[lo].x;
-            double x2 = _isotonicPoints[hi].x;
-            double y1 = _isotonicPoints[lo].y;
-            double y2 = _isotonicPoints[hi].y;
+            T x1 = _isotonicPoints[lo].x;
+            T x2 = _isotonicPoints[hi].x;
+            T y1 = _isotonicPoints[lo].y;
+            T y2 = _isotonicPoints[hi].y;
 
-            if (Math.Abs(x2 - x1) < 1e-10) return y1;
+            T diff = NumOps.Subtract(x2, x1);
+            if (NumOps.LessThan(NumOps.Abs(diff), NumOps.FromDouble(1e-10))) return y1;
 
-            return y1 + (s - x1) * (y2 - y1) / (x2 - x1);
+            return NumOps.Add(y1, NumOps.Divide(NumOps.Multiply(NumOps.Subtract(s, x1), NumOps.Subtract(y2, y1)), diff));
         }).ToArray();
     }
 
@@ -545,19 +563,22 @@ public class ProbabilityCalibrator<T>
 
     #region Temperature Scaling
 
-    private void FitTemperatureScaling(double[] scores, double[] labels)
+    private void FitTemperatureScaling(T[] scores, T[] labels)
     {
         // Temperature scaling for logits: p = sigmoid(logit / T)
         // If scores are already probabilities, convert to logits first
+        // Internal computation in double for numerical stability (exp, log)
 
         var logits = scores.Select(s =>
         {
-            double p = Math.Max(1e-10, Math.Min(1 - 1e-10, s));
+            double p = Math.Max(1e-10, Math.Min(1 - 1e-10, NumOps.ToDouble(s)));
             return Math.Log(p / (1 - p));
         }).ToArray();
 
+        var labelsDouble = labels.Select(l => NumOps.ToDouble(l)).ToArray();
+
         // Optimize temperature to minimize cross-entropy
-        double T = 1.0;
+        double temp = 1.0;
         double lr = _options.LearningRate;
 
         for (int iter = 0; iter < _options.MaxIterations; iter++)
@@ -566,12 +587,12 @@ public class ProbabilityCalibrator<T>
 
             for (int i = 0; i < logits.Length; i++)
             {
-                double scaledLogit = logits[i] / T;
+                double scaledLogit = logits[i] / temp;
                 double p = 1 / (1 + Math.Exp(-scaledLogit));
 
                 // Gradient of cross-entropy w.r.t. T:
                 // dL/dT = -(p - y) * logit / T²
-                gradient += -(p - labels[i]) * logits[i] / (T * T);
+                gradient += -(p - labelsDouble[i]) * logits[i] / (temp * temp);
             }
 
             gradient /= logits.Length;
@@ -581,23 +602,23 @@ public class ProbabilityCalibrator<T>
                 break;
             }
 
-            T -= lr * gradient;
-            T = Math.Max(0.01, T);  // Keep T positive
+            temp -= lr * gradient;
+            temp = Math.Max(0.01, temp);  // Keep T positive
         }
 
-        _temperature = NumOps.FromDouble(T);
+        _temperature = NumOps.FromDouble(temp);
     }
 
-    private double[] TransformTemperatureScaling(double[] scores)
+    private T[] TransformTemperatureScaling(T[] scores)
     {
-        double T = NumOps.ToDouble(_temperature);
+        double temp = NumOps.ToDouble(_temperature);
 
         return scores.Select(s =>
         {
-            double p = Math.Max(1e-10, Math.Min(1 - 1e-10, s));
+            double p = Math.Max(1e-10, Math.Min(1 - 1e-10, NumOps.ToDouble(s)));
             double logit = Math.Log(p / (1 - p));
-            double scaledLogit = logit / T;
-            return 1 / (1 + Math.Exp(-scaledLogit));
+            double scaledLogit = logit / temp;
+            return NumOps.FromDouble(1 / (1 + Math.Exp(-scaledLogit)));
         }).ToArray();
     }
 
@@ -605,21 +626,24 @@ public class ProbabilityCalibrator<T>
 
     #region Beta Calibration
 
-    private void FitBetaCalibration(double[] scores, double[] labels)
+    private void FitBetaCalibration(T[] scores, T[] labels)
     {
         // Beta calibration: p = 1 / (1 + 1/exp(a*log(s/(1-s)) + b*log(s) + c))
         // Simplified: use logistic regression on transformed features
+        // Internal computation in double for numerical stability (exp, log)
 
         int n = scores.Length;
         var features = new double[n, 3];
 
         for (int i = 0; i < n; i++)
         {
-            double s = Math.Max(1e-6, Math.Min(1 - 1e-6, scores[i]));
+            double s = Math.Max(1e-6, Math.Min(1 - 1e-6, NumOps.ToDouble(scores[i])));
             features[i, 0] = Math.Log(s / (1 - s));  // logit
             features[i, 1] = Math.Log(s);             // log(s)
             features[i, 2] = 1;                       // intercept
         }
+
+        var labelsDouble = labels.Select(l => NumOps.ToDouble(l)).ToArray();
 
         // Logistic regression
         double[] w = [0, 0, 0];
@@ -636,7 +660,7 @@ public class ProbabilityCalibrator<T>
 
                 for (int j = 0; j < 3; j++)
                 {
-                    grad[j] += (p - labels[i]) * features[i, j];
+                    grad[j] += (p - labelsDouble[i]) * features[i, j];
                 }
             }
 
@@ -654,7 +678,7 @@ public class ProbabilityCalibrator<T>
         _betaC = NumOps.FromDouble(w[2]);
     }
 
-    private double[] TransformBetaCalibration(double[] scores)
+    private T[] TransformBetaCalibration(T[] scores)
     {
         double a = NumOps.ToDouble(_betaA);
         double b = NumOps.ToDouble(_betaB);
@@ -662,9 +686,9 @@ public class ProbabilityCalibrator<T>
 
         return scores.Select(s =>
         {
-            double sClamped = Math.Max(1e-6, Math.Min(1 - 1e-6, s));
+            double sClamped = Math.Max(1e-6, Math.Min(1 - 1e-6, NumOps.ToDouble(s)));
             double z = a * Math.Log(sClamped / (1 - sClamped)) + b * Math.Log(sClamped) + c;
-            return 1 / (1 + Math.Exp(-z));
+            return NumOps.FromDouble(1 / (1 + Math.Exp(-z)));
         }).ToArray();
     }
 
@@ -672,74 +696,137 @@ public class ProbabilityCalibrator<T>
 
     #region Histogram Binning
 
-    private void FitHistogramBinning(double[] scores, double[] labels)
+    private void FitHistogramBinning(T[] scores, T[] labels)
     {
         int numBins = _options.NumBins;
-        _binEdges = new double[numBins + 1];
-        _binProbabilities = new double[numBins];
+        _binEdges = new T[numBins + 1];
+        _binProbabilities = new T[numBins];
 
         for (int i = 0; i <= numBins; i++)
         {
-            _binEdges[i] = (double)i / numBins;
+            _binEdges[i] = NumOps.FromDouble((double)i / numBins);
         }
 
         for (int b = 0; b < numBins; b++)
         {
             // Include scores == 1.0 in the last bin
             var binIndices = Enumerable.Range(0, scores.Length)
-                .Where(i => scores[i] >= _binEdges[b] && (b == numBins - 1 ? scores[i] <= _binEdges[b + 1] : scores[i] < _binEdges[b + 1]))
+                .Where(i => NumOps.GreaterThanOrEquals(scores[i], _binEdges[b]) && (b == numBins - 1 ? NumOps.LessThanOrEquals(scores[i], _binEdges[b + 1]) : NumOps.LessThan(scores[i], _binEdges[b + 1])))
                 .ToList();
 
             if (binIndices.Count > 0)
             {
-                _binProbabilities[b] = binIndices.Average(i => labels[i]);
+                T sum = NumOps.Zero;
+                foreach (var i in binIndices)
+                {
+                    sum = NumOps.Add(sum, labels[i]);
+                }
+                _binProbabilities[b] = NumOps.Divide(sum, NumOps.FromDouble(binIndices.Count));
             }
             else
             {
-                _binProbabilities[b] = (_binEdges[b] + _binEdges[b + 1]) / 2;
+                _binProbabilities[b] = NumOps.Divide(NumOps.Add(_binEdges[b], _binEdges[b + 1]), NumOps.FromDouble(2));
             }
         }
     }
 
-    private void FitBayesianBinning(double[] scores, double[] labels)
+    private void FitBayesianBinning(T[] scores, T[] labels)
     {
-        // Simplified: use adaptive bin widths based on data density
-        // Sort scores and create bins with roughly equal counts
-        var sorted = scores.OrderBy(s => s).ToArray();
-        int n = sorted.Length;
-        int numBins = _options.NumBins;
-        int binSize = n / numBins;
+        // Bayesian Binning into Quantiles (BBQ):
+        // Evaluate candidate binning schemes with varying number of bins,
+        // score each by BIC (Bayesian Information Criterion),
+        // and select the scheme with the highest score.
+        int n = scores.Length;
+        int maxBins = Math.Min(_options.NumBins, n);
 
-        _binEdges = new double[numBins + 1];
-        _binEdges[0] = 0;
-        _binEdges[numBins] = 1;
+        double bestBic = double.NegativeInfinity;
+        T[]? bestEdges = null;
+        T[]? bestProbs = null;
 
-        for (int b = 1; b < numBins; b++)
+        // Convert scores/labels to double for BIC computation
+        var scoresDouble = scores.Select(s => NumOps.ToDouble(s)).ToArray();
+        var labelsDouble = labels.Select(l => NumOps.ToDouble(l)).ToArray();
+
+        // Sort once and co-sort labels to avoid re-sorting per candidate numBins
+        var sortedIndices = Enumerable.Range(0, n).OrderBy(i => scoresDouble[i]).ToArray();
+        var sortedScores = sortedIndices.Select(i => scoresDouble[i]).ToArray();
+        var sortedLabels = sortedIndices.Select(i => labelsDouble[i]).ToArray();
+
+        for (int numBins = 2; numBins <= maxBins; numBins++)
         {
-            int idx = Math.Min(b * binSize, n - 1);
-            _binEdges[b] = sorted[idx];
+            // Create equal-frequency (quantile) bin edges from pre-sorted data
+            int binSize = n / numBins;
+
+            var edges = new double[numBins + 1];
+            edges[0] = 0.0;
+            edges[numBins] = 1.0;
+            for (int b = 1; b < numBins; b++)
+            {
+                int idx = Math.Min(b * binSize, n - 1);
+                edges[b] = sortedScores[idx];
+            }
+
+            // Compute bin statistics using sorted data with binary search for bin boundaries
+            double logLikelihood = 0;
+            var probs = new double[numBins];
+
+            // Use sorted order to partition samples into bins in O(n) total
+            int sampleIdx = 0;
+            for (int b = 0; b < numBins; b++)
+            {
+                int count = 0;
+                double positiveCount = 0;
+                double upperEdge = edges[b + 1];
+                bool isLastBin = b == numBins - 1;
+
+                while (sampleIdx < n)
+                {
+                    double score = sortedScores[sampleIdx];
+                    bool inBin = isLastBin ? score <= upperEdge : score < upperEdge;
+                    if (!inBin) break;
+                    count++;
+                    positiveCount += sortedLabels[sampleIdx];
+                    sampleIdx++;
+                }
+
+                if (count == 0)
+                {
+                    probs[b] = (edges[b] + edges[b + 1]) / 2.0;
+                    continue;
+                }
+
+                double p = positiveCount / count;
+                p = Math.Max(1e-10, Math.Min(1 - 1e-10, p));
+                probs[b] = p;
+
+                // Binomial log-likelihood for this bin
+                logLikelihood += positiveCount * Math.Log(p) + (count - positiveCount) * Math.Log(1 - p);
+            }
+
+            // BIC = log-likelihood - (k/2) * log(n), where k = numBins (one parameter per bin)
+            double bic = logLikelihood - (numBins / 2.0) * Math.Log(n);
+
+            if (bic > bestBic)
+            {
+                bestBic = bic;
+                bestEdges = edges.Select(e => NumOps.FromDouble(e)).ToArray();
+                bestProbs = probs.Select(p => NumOps.FromDouble(p)).ToArray();
+            }
         }
 
-        _binProbabilities = new double[numBins];
-        for (int b = 0; b < numBins; b++)
+        if (bestEdges is not null && bestProbs is not null)
         {
-            // Include scores == 1.0 in the last bin
-            var binIndices = Enumerable.Range(0, scores.Length)
-                .Where(i => scores[i] >= _binEdges[b] && (b == numBins - 1 ? scores[i] <= _binEdges[b + 1] : scores[i] < _binEdges[b + 1]))
-                .ToList();
-
-            if (binIndices.Count > 0)
-            {
-                _binProbabilities[b] = binIndices.Average(i => labels[i]);
-            }
-            else
-            {
-                _binProbabilities[b] = (_binEdges[b] + _binEdges[b + 1]) / 2;
-            }
+            _binEdges = bestEdges;
+            _binProbabilities = bestProbs;
+        }
+        else
+        {
+            // Fallback to simple histogram binning
+            FitHistogramBinning(scores, labels);
         }
     }
 
-    private double[] TransformHistogramBinning(double[] scores)
+    private T[] TransformHistogramBinning(T[] scores)
     {
         if (_binEdges == null || _binProbabilities == null)
         {
@@ -750,7 +837,7 @@ public class ProbabilityCalibrator<T>
         {
             for (int b = 0; b < _binProbabilities.Length; b++)
             {
-                if (s >= _binEdges![b] && s < _binEdges[b + 1])
+                if (NumOps.GreaterThanOrEquals(s, _binEdges[b]) && NumOps.LessThan(s, _binEdges[b + 1]))
                 {
                     return _binProbabilities[b];
                 }
@@ -763,7 +850,7 @@ public class ProbabilityCalibrator<T>
 
     #region Venn-ABERS
 
-    private void FitVennABERS(double[] scores, double[] labels)
+    private void FitVennABERS(T[] scores, T[] labels)
     {
         // Venn-ABERS produces calibrated probability intervals by fitting
         // isotonic regression twice for each test point (once assuming y=0, once y=1).
@@ -775,7 +862,7 @@ public class ProbabilityCalibrator<T>
         _vennCalibrationLabels = labels;
     }
 
-    private double[] TransformVennABERS(double[] scores)
+    private T[] TransformVennABERS(T[] scores)
     {
         if (_vennCalibrationScores == null || _vennCalibrationLabels == null)
         {
@@ -787,7 +874,9 @@ public class ProbabilityCalibrator<T>
         // p0: assuming test point label = 0, p1: assuming test point label = 1
         // Final calibrated probability = p1 / (1 - p0 + p1)
         var savedIsotonicPoints = _isotonicPoints;
-        var calibrated = new double[scores.Length];
+        var calibrated = new T[scores.Length];
+        T zero = NumOps.Zero;
+        T one = NumOps.One;
 
         try
         {
@@ -795,19 +884,20 @@ public class ProbabilityCalibrator<T>
             {
                 // Augment calibration set with test point labeled 0
                 var scores0 = _vennCalibrationScores.Append(scores[i]).ToArray();
-                var labels0 = _vennCalibrationLabels.Append(0.0).ToArray();
+                var labels0 = _vennCalibrationLabels.Append(zero).ToArray();
                 FitIsotonicRegression(scores0, labels0);
-                double p0 = TransformIsotonicRegression([scores[i]])[0];
+                T p0 = TransformIsotonicRegression([scores[i]])[0];
 
                 // Augment calibration set with test point labeled 1
                 var scores1 = _vennCalibrationScores.Append(scores[i]).ToArray();
-                var labels1 = _vennCalibrationLabels.Append(1.0).ToArray();
+                var labels1 = _vennCalibrationLabels.Append(one).ToArray();
                 FitIsotonicRegression(scores1, labels1);
-                double p1 = TransformIsotonicRegression([scores[i]])[0];
+                T p1 = TransformIsotonicRegression([scores[i]])[0];
 
                 // Combine to get point estimate
-                double denom = 1 - p0 + p1;
-                calibrated[i] = denom > 1e-10 ? p1 / denom : 0.5;
+                T denom = NumOps.Add(NumOps.Subtract(one, p0), p1);
+                double denomDouble = NumOps.ToDouble(denom);
+                calibrated[i] = denomDouble > 1e-10 ? NumOps.Divide(p1, denom) : NumOps.FromDouble(0.5);
             }
         }
         finally
