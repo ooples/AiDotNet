@@ -229,6 +229,38 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
 
     #endregion
 
+    #region Guards
+
+    /// <summary>
+    /// Throws if the model is running in ONNX mode where native operations are not supported.
+    /// </summary>
+    private void ThrowIfOnnxMode()
+    {
+        if (!_useNativeMode)
+        {
+            throw new InvalidOperationException(
+                $"{nameof(RealESRGAN<T>)} does not support this operation in ONNX inference mode. " +
+                "Use native mode for training, serialization, and parameter updates.");
+        }
+    }
+
+    /// <summary>
+    /// Throws if the native-mode components (Generator, Discriminator, loss) have not been initialized.
+    /// </summary>
+    private void ThrowIfNativeModeUnavailable()
+    {
+        ThrowIfOnnxMode();
+
+        if (Generator is null || Discriminator is null || _realESRGANLoss is null)
+        {
+            throw new InvalidOperationException(
+                $"{nameof(RealESRGAN<T>)} native-mode components are not initialized. " +
+                "Ensure the model was constructed in native mode with valid generator and discriminator architectures.");
+        }
+    }
+
+    #endregion
+
     #region Constructors
 
     /// <summary>
@@ -506,8 +538,7 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
     /// </remarks>
     public (T discriminatorLoss, T generatorLoss) TrainStep(Tensor<T> lowResImages, Tensor<T> highResTargets)
     {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Training is not supported in ONNX mode. Use native mode for training.");
+        ThrowIfNativeModeUnavailable();
         if (lowResImages is null)
             throw new ArgumentNullException(nameof(lowResImages));
         if (highResTargets is null)
@@ -525,8 +556,7 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
         Tensor<T> fakeOutput = ProcessThroughDiscriminator(generatedImages);
 
         // Calculate discriminator loss
-        var esrganLoss = _realESRGANLoss ?? throw new InvalidOperationException("RealESRGAN loss has not been initialized.");
-        T discriminatorLoss = esrganLoss.CalculateDiscriminatorLoss(
+        T discriminatorLoss = _realESRGANLoss!.CalculateDiscriminatorLoss(
             realOutput.ToVector(), fakeOutput.ToVector());
         _lastDiscriminatorLoss = discriminatorLoss;
 
@@ -568,33 +598,34 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
         Tensor<T> realOutput,
         Tensor<T> fakeOutput)
     {
+        ThrowIfNativeModeUnavailable();
+
         // Create target labels
         var realLabels = CreateLabelTensor(realOutput.Shape[0], NumOps.One);
         var fakeLabels = CreateLabelTensor(fakeOutput.Shape[0], NumOps.Zero);
 
         // Calculate gradients for real images
-        var discNet = Discriminator ?? throw new InvalidOperationException("Discriminator has not been initialized.");
-        var realGradient = discNet.Backward(
+        var realGradient = Discriminator!.Backward(
             CalculateBCEGradient(realOutput, realLabels));
 
         // Calculate gradients for fake images
-        var fakeGradient = discNet.Backward(
+        var fakeGradient = Discriminator.Backward(
             CalculateBCEGradient(fakeOutput, fakeLabels));
 
         // Update discriminator parameters using optimizer or fallback to default learning rate
         if (_discriminatorOptimizer != null)
         {
             // Use configured optimizer
-            var currentParams = discNet.GetParameters();
-            var gradients = discNet.GetParameterGradients();
+            var currentParams = Discriminator.GetParameters();
+            var gradients = Discriminator.GetParameterGradients();
             var updatedParams = _discriminatorOptimizer.UpdateParameters(currentParams, gradients);
-            discNet.SetParameters(updatedParams);
+            Discriminator.SetParameters(updatedParams);
         }
         else
         {
             // Fallback to simple SGD with default learning rate
             T learningRate = NumOps.FromDouble(0.0001);
-            discNet.UpdateParameters(learningRate);
+            Discriminator.UpdateParameters(learningRate);
         }
     }
 
@@ -620,23 +651,23 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
         var combinedGradient = CombineGradients(reconstructionGradient, ganGradient);
 
         // Backpropagate through generator
-        var genNet = Generator ?? throw new InvalidOperationException("Generator has not been initialized.");
-        genNet.Backward(combinedGradient);
+        ThrowIfNativeModeUnavailable();
+        Generator!.Backward(combinedGradient);
 
         // Update generator parameters using optimizer or fallback to default learning rate
         if (_generatorOptimizer != null)
         {
             // Use configured optimizer
-            var currentParams = genNet.GetParameters();
-            var gradients = genNet.GetParameterGradients();
+            var currentParams = Generator.GetParameters();
+            var gradients = Generator.GetParameterGradients();
             var updatedParams = _generatorOptimizer.UpdateParameters(currentParams, gradients);
-            genNet.SetParameters(updatedParams);
+            Generator.SetParameters(updatedParams);
         }
         else
         {
             // Fallback to simple SGD with default learning rate
             T learningRate = NumOps.FromDouble(0.0001);
-            genNet.UpdateParameters(learningRate);
+            Generator.UpdateParameters(learningRate);
         }
     }
 
@@ -755,13 +786,13 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
     /// </remarks>
     private Tensor<T> ProcessThroughGenerator(Tensor<T> input)
     {
-        var genNet = Generator ?? throw new InvalidOperationException("Generator has not been initialized.");
-        var expectedShape = genNet.GetInputShape();
+        ThrowIfNativeModeUnavailable();
+        var expectedShape = Generator!.GetInputShape();
 
         // Check if input matches expected shape exactly (no batch dimension)
         if (input.Rank == expectedShape.Length && ShapesMatch(input.Shape, expectedShape))
         {
-            return genNet.Forward(input);
+            return Generator.Forward(input);
         }
 
         // Handle batched input: input has more dimensions than expected
@@ -796,7 +827,7 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
                 var element = new Tensor<T>(spatialShape, new Vector<T>(elementData));
 
                 // Process through generator
-                var output = genNet.Forward(element);
+                var output = Generator.Forward(element);
                 outputs.Add(output);
             }
 
@@ -844,10 +875,10 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
 
             // Reshape the tensor (reuse the data from input)
             var expandedInput = new Tensor<T>(expandedShape, new Vector<T>(input.Data.ToArray()));
-            return genNet.Forward(expandedInput);
+            return Generator.Forward(expandedInput);
         }
 
-        return genNet.Forward(input);
+        return Generator.Forward(input);
     }
 
     /// <summary>
@@ -855,13 +886,13 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
     /// </summary>
     private Tensor<T> ProcessThroughDiscriminator(Tensor<T> input)
     {
-        var discNet = Discriminator ?? throw new InvalidOperationException("Discriminator has not been initialized.");
-        var expectedShape = discNet.GetInputShape();
+        ThrowIfNativeModeUnavailable();
+        var expectedShape = Discriminator!.GetInputShape();
 
         // Check if input matches expected shape exactly (no batch dimension)
         if (input.Rank == expectedShape.Length && ShapesMatch(input.Shape, expectedShape))
         {
-            return discNet.Forward(input);
+            return Discriminator.Forward(input);
         }
 
         // Handle batched input
@@ -890,7 +921,7 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
                 var elementData = new T[elementsPerBatch];
                 Array.Copy(input.Data.ToArray(), b * elementsPerBatch, elementData, 0, elementsPerBatch);
                 var element = new Tensor<T>(spatialShape, new Vector<T>(elementData));
-                var output = discNet.Forward(element);
+                var output = Discriminator.Forward(element);
                 outputs.Add(output);
             }
 
@@ -907,7 +938,7 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
             return new Tensor<T>(outputShape, new Vector<T>(combinedData));
         }
 
-        return discNet.Forward(input);
+        return Discriminator.Forward(input);
     }
 
     /// <summary>
@@ -1001,14 +1032,11 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
     /// <inheritdoc/>
     public override void UpdateParameters(Vector<T> parameters)
     {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Parameter updates are not supported in ONNX mode.");
+        ThrowIfNativeModeUnavailable();
 
         // Split parameters between generator and discriminator
-        var genNet = Generator ?? throw new InvalidOperationException("Generator has not been initialized.");
-        int generatorParams = genNet.GetParameters().Length;
-        var discNet = Discriminator ?? throw new InvalidOperationException("Discriminator has not been initialized.");
-        int discriminatorParams = discNet.GetParameters().Length;
+        int generatorParams = Generator!.GetParameters().Length;
+        int discriminatorParams = Discriminator!.GetParameters().Length;
 
         if (parameters.Length != generatorParams + discriminatorParams)
         {
@@ -1019,8 +1047,8 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
         var genParams = parameters.Slice(0, generatorParams);
         var discParams = parameters.Slice(generatorParams, discriminatorParams);
 
-        genNet.SetParameters(genParams);
-        discNet.SetParameters(discParams);
+        Generator.SetParameters(genParams);
+        Discriminator.SetParameters(discParams);
     }
 
     /// <inheritdoc/>
@@ -1061,8 +1089,7 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
     /// <inheritdoc/>
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Serialization is not supported in ONNX mode.");
+        ThrowIfNativeModeUnavailable();
 
         writer.Write(_scaleFactor);
         writer.Write(_numRRDBBlocks);
@@ -1073,8 +1100,7 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
         writer.Write(_ganLambda);
 
         // Serialize generator parameters
-        var genNet = Generator ?? throw new InvalidOperationException("Generator has not been initialized.");
-        var generatorParams = genNet.GetParameters();
+        var generatorParams = Generator!.GetParameters();
         writer.Write(generatorParams.Length);
         for (int i = 0; i < generatorParams.Length; i++)
         {
@@ -1082,8 +1108,7 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
         }
 
         // Serialize discriminator parameters
-        var discNet = Discriminator ?? throw new InvalidOperationException("Discriminator has not been initialized.");
-        var discriminatorParams = discNet.GetParameters();
+        var discriminatorParams = Discriminator!.GetParameters();
         writer.Write(discriminatorParams.Length);
         for (int i = 0; i < discriminatorParams.Length; i++)
         {
@@ -1094,8 +1119,7 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
     /// <inheritdoc/>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Deserialization is not supported in ONNX mode.");
+        ThrowIfNativeModeUnavailable();
 
         // Read configuration (already set in constructor, just advance reader)
         _ = reader.ReadInt32(); // scaleFactor
@@ -1113,8 +1137,7 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
         {
             generatorParams[i] = NumOps.FromDouble(reader.ReadDouble());
         }
-        var genNet = Generator ?? throw new InvalidOperationException("Generator has not been initialized.");
-        genNet.SetParameters(new Vector<T>(generatorParams));
+        Generator!.SetParameters(new Vector<T>(generatorParams));
 
         // Load discriminator parameters
         int discriminatorParamCount = reader.ReadInt32();
@@ -1123,8 +1146,7 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
         {
             discriminatorParams[i] = NumOps.FromDouble(reader.ReadDouble());
         }
-        var discNet = Discriminator ?? throw new InvalidOperationException("Discriminator has not been initialized.");
-        discNet.SetParameters(new Vector<T>(discriminatorParams));
+        Discriminator!.SetParameters(new Vector<T>(discriminatorParams));
     }
 
     /// <inheritdoc/>

@@ -244,6 +244,20 @@ public class RAFT<T> : OpticalFlowBase<T>
 
     #region Private Methods
 
+    /// <summary>
+    /// Throws if the layer fields have not been initialized via <see cref="InitializeNativeLayers"/>.
+    /// </summary>
+    private void ThrowIfNotInitialized()
+    {
+        if (_correlationConv is null || _gruConvZ is null || _gruConvR is null ||
+            _gruConvH is null || _flowHead is null || _deltaFlowHead is null ||
+            _upsampleConv is null)
+        {
+            throw new InvalidOperationException(
+                $"{nameof(RAFT<T>)} has not been initialized. Ensure the constructor completed successfully.");
+        }
+    }
+
     private void InitializeNativeLayers()
     {
         // Check for user-provided custom layers
@@ -283,6 +297,8 @@ public class RAFT<T> : OpticalFlowBase<T>
 
     private List<Tensor<T>> ForwardIterative(Tensor<T> frame1, Tensor<T> frame2)
     {
+        ThrowIfNotInitialized();
+
         int batchSize = frame1.Shape[0];
         int featHeight = _height / 8;
         int featWidth = _width / 8;
@@ -296,15 +312,10 @@ public class RAFT<T> : OpticalFlowBase<T>
 
         var flowPredictions = new List<Tensor<T>>();
 
-        // Hoist invariant layer guards out of the refinement loop
-        var correlationConv = _correlationConv ?? throw new InvalidOperationException("Correlation convolution has not been initialized.");
-        var flowHead = _flowHead ?? throw new InvalidOperationException("Flow head has not been initialized.");
-        var deltaFlowHead = _deltaFlowHead ?? throw new InvalidOperationException("Delta flow head has not been initialized.");
-
         for (int iter = 0; iter < NumIterations; iter++)
         {
             var correlation = ComputeCorrelation(fmap1, fmap2, flow);
-            var corrFeatures = correlationConv.Forward(correlation);
+            var corrFeatures = _correlationConv!.Forward(correlation);
 
             var gruInput = ConcatenateChannels(
                 ConcatenateChannels(context, corrFeatures),
@@ -312,8 +323,8 @@ public class RAFT<T> : OpticalFlowBase<T>
 
             hiddenState = GRUUpdate(hiddenState, gruInput);
 
-            var flowFeatures = flowHead.Forward(hiddenState);
-            var deltaFlow = deltaFlowHead.Forward(flowFeatures);
+            var flowFeatures = _flowHead!.Forward(hiddenState);
+            var deltaFlow = _deltaFlowHead!.Forward(flowFeatures);
 
             flow = AddTensors(flow, deltaFlow);
 
@@ -399,12 +410,11 @@ public class RAFT<T> : OpticalFlowBase<T>
 
     private Tensor<T> GRUUpdate(Tensor<T> hiddenState, Tensor<T> gruInput)
     {
-        var gruConvZ = _gruConvZ ?? throw new InvalidOperationException("GRU Z convolution has not been initialized.");
-        var gruConvR = _gruConvR ?? throw new InvalidOperationException("GRU R convolution has not been initialized.");
-        var gruConvH = _gruConvH ?? throw new InvalidOperationException("GRU H convolution has not been initialized.");
-        var z = Engine.Sigmoid(gruConvZ.Forward(gruInput));
-        var r = Engine.Sigmoid(gruConvR.Forward(gruInput));
-        var hNew = ApplyTanh(gruConvH.Forward(gruInput));
+        ThrowIfNotInitialized();
+
+        var z = Engine.Sigmoid(_gruConvZ!.Forward(gruInput));
+        var r = Engine.Sigmoid(_gruConvR!.Forward(gruInput));
+        var hNew = ApplyTanh(_gruConvH!.Forward(gruInput));
 
         var ones = Tensor<T>.CreateDefault(z.Shape, NumOps.One);
         var oneMinusZ = Engine.TensorSubtract(ones, z);
@@ -453,66 +463,6 @@ public class RAFT<T> : OpticalFlowBase<T>
         }
 
         return output;
-    }
-
-    /// <summary>
-    /// Backward pass for bilinear flow upsampling. Scatters high-res gradients back to low-res grid.
-    /// </summary>
-    private Tensor<T> UpsampleFlowBackward(Tensor<T> gradOutput, int factor)
-    {
-        int batchSize = gradOutput.Shape[0];
-        int channels = gradOutput.Shape[1];
-        int outHeight = gradOutput.Shape[2];
-        int outWidth = gradOutput.Shape[3];
-
-        int inHeight = outHeight / factor;
-        int inWidth = outWidth / factor;
-
-        var gradInput = new Tensor<T>([batchSize, channels, inHeight, inWidth]);
-        var factorT = NumOps.FromDouble(factor);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int c = 0; c < channels; c++)
-            {
-                for (int h = 0; h < outHeight; h++)
-                {
-                    for (int w = 0; w < outWidth; w++)
-                    {
-                        double srcH = (h + 0.5) / factor - 0.5;
-                        double srcW = (w + 0.5) / factor - 0.5;
-
-                        int h0 = (int)Math.Floor(srcH);
-                        int w0 = (int)Math.Floor(srcW);
-                        int h1 = h0 + 1;
-                        int w1 = w0 + 1;
-
-                        h0 = Math.Max(0, Math.Min(h0, inHeight - 1));
-                        h1 = Math.Max(0, Math.Min(h1, inHeight - 1));
-                        w0 = Math.Max(0, Math.Min(w0, inWidth - 1));
-                        w1 = Math.Max(0, Math.Min(w1, inWidth - 1));
-
-                        double hWeight = srcH - Math.Floor(srcH);
-                        double wWeight = srcW - Math.Floor(srcW);
-
-                        // grad scaled by the factor (from forward's multiply)
-                        var g = NumOps.Multiply(gradOutput[b, c, h, w], factorT);
-
-                        // Scatter to 4 corners with bilinear weights
-                        gradInput[b, c, h0, w0] = NumOps.Add(gradInput[b, c, h0, w0],
-                            NumOps.Multiply(g, NumOps.FromDouble((1 - hWeight) * (1 - wWeight))));
-                        gradInput[b, c, h0, w1] = NumOps.Add(gradInput[b, c, h0, w1],
-                            NumOps.Multiply(g, NumOps.FromDouble((1 - hWeight) * wWeight)));
-                        gradInput[b, c, h1, w0] = NumOps.Add(gradInput[b, c, h1, w0],
-                            NumOps.Multiply(g, NumOps.FromDouble(hWeight * (1 - wWeight))));
-                        gradInput[b, c, h1, w1] = NumOps.Add(gradInput[b, c, h1, w1],
-                            NumOps.Multiply(g, NumOps.FromDouble(hWeight * wWeight)));
-                    }
-                }
-            }
-        }
-
-        return gradInput;
     }
 
     private T BilinearSample(Tensor<T> tensor, int b, int c, double h, double w, int height, int width)
@@ -609,20 +559,15 @@ public class RAFT<T> : OpticalFlowBase<T>
 
     private void BackwardPass(Tensor<T> gradient)
     {
-        var deltaFlowHead = _deltaFlowHead ?? throw new InvalidOperationException("Delta flow head has not been initialized.");
-        var flowHead = _flowHead ?? throw new InvalidOperationException("Flow head has not been initialized.");
-        var gruConvH = _gruConvH ?? throw new InvalidOperationException("GRU H convolution has not been initialized.");
-        var gruConvR = _gruConvR ?? throw new InvalidOperationException("GRU R convolution has not been initialized.");
-        var gruConvZ = _gruConvZ ?? throw new InvalidOperationException("GRU Z convolution has not been initialized.");
-        var correlationConv = _correlationConv ?? throw new InvalidOperationException("Correlation convolution has not been initialized.");
-        // Backward through bilinear upsampling (matches UpsampleFlow in the forward pass)
-        gradient = UpsampleFlowBackward(gradient, 8);
-        gradient = deltaFlowHead.Backward(gradient);
-        gradient = flowHead.Backward(gradient);
-        gradient = gruConvH.Backward(gradient);
-        gradient = gruConvR.Backward(gradient);
-        gradient = gruConvZ.Backward(gradient);
-        gradient = correlationConv.Backward(gradient);
+        ThrowIfNotInitialized();
+
+        gradient = _upsampleConv!.Backward(gradient);
+        gradient = _deltaFlowHead!.Backward(gradient);
+        gradient = _flowHead!.Backward(gradient);
+        gradient = _gruConvH!.Backward(gradient);
+        gradient = _gruConvR!.Backward(gradient);
+        gradient = _gruConvZ!.Backward(gradient);
+        gradient = _correlationConv!.Backward(gradient);
 
         for (int i = _contextEncoder.Count - 1; i >= 0; i--)
         {
