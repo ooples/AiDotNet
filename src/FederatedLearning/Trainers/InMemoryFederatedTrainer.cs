@@ -419,8 +419,6 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
 
                 if (useSecureAggregation)
                 {
-                    // Exactly one of these is always initialized when useSecureAggregation is true
-                    // (see initialization block at line ~298-321).
                     if (thresholdSecureAggregation is not null)
                     {
                         maskedParameters[clientId] = thresholdSecureAggregation.MaskUpdate(clientId, parametersForAggregation, weight);
@@ -428,6 +426,11 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                     else if (secureAggregation is not null)
                     {
                         maskedParameters[clientId] = secureAggregation.MaskUpdate(clientId, parametersForAggregation, weight);
+                    }
+                    else
+                    {
+                        throw new InvalidOperationException(
+                            "Secure aggregation is enabled but neither threshold nor standard secure aggregation was initialized.");
                     }
                 }
                 else
@@ -481,8 +484,8 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                 }
                 else
                 {
-                    // Unreachable: init block guarantees one is created when useSecureAggregation is true.
-                    averagedParameters = globalBeforeParams;
+                    throw new InvalidOperationException(
+                        "Secure aggregation is enabled but neither threshold nor standard secure aggregation was initialized.");
                 }
 
                 newGlobalModel = globalBefore.WithParameters(averagedParameters);

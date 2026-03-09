@@ -78,6 +78,10 @@ public class SymmetricProjector<T> : IProjectorHead<T>
         public T[]? PredBn1Var;
         public Tensor<T>? PredBn1Normalized;
 
+        // Cached intermediate backward results (to avoid recomputation in ComputeParameterGradients)
+        public Tensor<T>? GradBeforeBn2;
+        public Tensor<T>? GradAtH1;
+
         // BatchNorm gradients
         public T[]? ProjBn1GammaGrad;
         public T[]? ProjBn1BetaGrad;
@@ -106,6 +110,9 @@ public class SymmetricProjector<T> : IProjectorHead<T>
             PredBn1Mean = null;
             PredBn1Var = null;
             PredBn1Normalized = null;
+
+            GradBeforeBn2 = null;
+            GradAtH1 = null;
 
             ProjBn1GammaGrad = null;
             ProjBn1BetaGrad = null;
@@ -313,14 +320,24 @@ public class SymmetricProjector<T> : IProjectorHead<T>
 
         var gradAtProjectorOutput = grad;
 
-        grad = BatchNormBackward(grad, _projBn2Gamma, ctx.ProjBn2Var, ctx.ProjBn2Normalized,
+        var bn2Var = ctx.ProjBn2Var ?? throw new InvalidOperationException(
+            "ProjBn2Var not available. Call Project() before Backward().");
+        var bn2Norm = ctx.ProjBn2Normalized ?? throw new InvalidOperationException(
+            "ProjBn2Normalized not available. Call Project() before Backward().");
+        grad = BatchNormBackward(grad, _projBn2Gamma, bn2Var, bn2Norm,
             out ctx.ProjBn2GammaGrad, out ctx.ProjBn2BetaGrad);
+        ctx.GradBeforeBn2 = grad; // Cache for reuse in ComputeParameterGradients
         grad = LinearBackward(grad, _projWeight2, _hiddenDim, _projectionDim);
         var cachedH1Bn = ctx.CachedH1Bn ?? throw new InvalidOperationException(
             "Cached H1 BN not available. Call Project() before Backward().");
         grad = ReLUBackward(grad, cachedH1Bn);
-        grad = BatchNormBackward(grad, _projBn1Gamma, ctx.ProjBn1Var, ctx.ProjBn1Normalized,
+        var bn1Var = ctx.ProjBn1Var ?? throw new InvalidOperationException(
+            "ProjBn1Var not available. Call Project() before Backward().");
+        var bn1Norm = ctx.ProjBn1Normalized ?? throw new InvalidOperationException(
+            "ProjBn1Normalized not available. Call Project() before Backward().");
+        grad = BatchNormBackward(grad, _projBn1Gamma, bn1Var, bn1Norm,
             out ctx.ProjBn1GammaGrad, out ctx.ProjBn1BetaGrad);
+        ctx.GradAtH1 = grad; // Cache for reuse in ComputeParameterGradients
         grad = LinearBackward(grad, _projWeight1, _inputDim, _hiddenDim);
 
         // Compute parameter gradients and accumulate across backward passes
@@ -471,9 +488,9 @@ public class SymmetricProjector<T> : IProjectorHead<T>
         var cachedInput = ctx.CachedInput;
         var cachedH1Relu = ctx.CachedH1Relu;
 
-        // Use gradAtProjectorOutput (grad after predictor backprop) for projector weight gradients
-        var gradBeforeBn2 = BatchNormBackward(gradAtProjectorOutput, _projBn2Gamma, ctx.ProjBn2Var, ctx.ProjBn2Normalized,
-            out _, out _);
+        // Reuse BN2 backward result cached during Backward() to avoid redundant recomputation
+        var gradBeforeBn2 = ctx.GradBeforeBn2 ?? throw new InvalidOperationException(
+            "GradBeforeBn2 not cached. Call Backward() before ComputeParameterGradients().");
 
         // Compute gradients for projWeight2: cachedH1Relu.T @ gradBeforeBn2
         for (int i = 0; i < _hiddenDim; i++)
@@ -502,17 +519,9 @@ public class SymmetricProjector<T> : IProjectorHead<T>
             grads[bias2Offset + j] = NumOps.Multiply(sum, invBatchSize);
         }
 
-        // Backprop through linear2 to get gradients at H1Relu
-        var gradAtH1Relu = LinearBackward(gradBeforeBn2, _projWeight2, _hiddenDim, _projectionDim);
-
-        // Backprop through ReLU
-        var cachedH1Bn = ctx.CachedH1Bn ?? throw new InvalidOperationException(
-            "Cached H1 BN not available. Call Project() before Backward().");
-        var gradAtH1Bn = ReLUBackward(gradAtH1Relu, cachedH1Bn);
-
-        // Backprop through BN1
-        var gradAtH1 = BatchNormBackward(gradAtH1Bn, _projBn1Gamma, ctx.ProjBn1Var, ctx.ProjBn1Normalized,
-            out _, out _);
+        // Reuse BN1 backward result cached during Backward() to avoid redundant recomputation
+        var gradAtH1 = ctx.GradAtH1 ?? throw new InvalidOperationException(
+            "GradAtH1 not cached. Call Backward() before ComputeParameterGradients().");
 
         // Compute gradients for projWeight1: cachedInput.T @ gradAtH1
         for (int i = 0; i < _inputDim; i++)

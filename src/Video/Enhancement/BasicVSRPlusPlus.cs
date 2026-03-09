@@ -445,7 +445,13 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
     /// <inheritdoc/>
     public override Tensor<T> Predict(Tensor<T> input)
     {
-        return EnhanceVideo(input);
+        var result = EnhanceVideo(input);
+
+        // Clear activation caches after inference to avoid retaining large tensors
+        // that are only needed for backward pass during training.
+        ClearActivationCache();
+
+        return result;
     }
 
     /// <inheritdoc/>
@@ -1121,9 +1127,6 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
             {
                 inputGradients.Add(new Tensor<T>(currentGradients[0].Shape));
             }
-
-            var cachedBackwardFeatures = _cachedBackwardPropFeatures ?? throw new InvalidOperationException(
-                "Cached backward propagation features not available. Call Forward() before Backward().");
 
             // Backward propagation went from last to first (i = numFrames-2 to 0)
             // So backward goes from first to last
