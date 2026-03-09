@@ -765,8 +765,11 @@ public class SlowFast<T> : NeuralNetworkBase<T>
             }
             else
             {
-                throw new InvalidOperationException(
-                    $"Serialized optimizer type '{optimizerTypeName}' does not have a constructor that accepts IFullModel<T, Tensor<T>, Tensor<T>>.");
+                // Fall back to Adam if the serialized optimizer type lacks the expected constructor.
+                // This preserves backward compatibility with older serialized models.
+                System.Diagnostics.Debug.WriteLine(
+                    $"Warning: Serialized optimizer type '{optimizerTypeName}' does not have expected constructor. Falling back to Adam.");
+                _optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
             }
         }
         else

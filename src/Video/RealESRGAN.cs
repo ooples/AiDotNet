@@ -247,7 +247,7 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
     /// <summary>
     /// Throws if the native-mode components (Generator, Discriminator, loss) have not been initialized.
     /// </summary>
-    private void ThrowIfNotNativeMode()
+    private void ThrowIfNativeModeUnavailable()
     {
         ThrowIfOnnxMode();
 
@@ -538,7 +538,7 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
     /// </remarks>
     public (T discriminatorLoss, T generatorLoss) TrainStep(Tensor<T> lowResImages, Tensor<T> highResTargets)
     {
-        ThrowIfNotNativeMode();
+        ThrowIfNativeModeUnavailable();
         if (lowResImages is null)
             throw new ArgumentNullException(nameof(lowResImages));
         if (highResTargets is null)
@@ -598,7 +598,7 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
         Tensor<T> realOutput,
         Tensor<T> fakeOutput)
     {
-        ThrowIfNotNativeMode();
+        ThrowIfNativeModeUnavailable();
 
         // Create target labels
         var realLabels = CreateLabelTensor(realOutput.Shape[0], NumOps.One);
@@ -651,7 +651,7 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
         var combinedGradient = CombineGradients(reconstructionGradient, ganGradient);
 
         // Backpropagate through generator
-        ThrowIfNotNativeMode();
+        ThrowIfNativeModeUnavailable();
         Generator!.Backward(combinedGradient);
 
         // Update generator parameters using optimizer or fallback to default learning rate
@@ -786,7 +786,7 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
     /// </remarks>
     private Tensor<T> ProcessThroughGenerator(Tensor<T> input)
     {
-        ThrowIfNotNativeMode();
+        ThrowIfNativeModeUnavailable();
         var expectedShape = Generator!.GetInputShape();
 
         // Check if input matches expected shape exactly (no batch dimension)
@@ -886,7 +886,7 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
     /// </summary>
     private Tensor<T> ProcessThroughDiscriminator(Tensor<T> input)
     {
-        ThrowIfNotNativeMode();
+        ThrowIfNativeModeUnavailable();
         var expectedShape = Discriminator!.GetInputShape();
 
         // Check if input matches expected shape exactly (no batch dimension)
@@ -1032,7 +1032,7 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
     /// <inheritdoc/>
     public override void UpdateParameters(Vector<T> parameters)
     {
-        ThrowIfNotNativeMode();
+        ThrowIfNativeModeUnavailable();
 
         // Split parameters between generator and discriminator
         int generatorParams = Generator!.GetParameters().Length;
@@ -1089,7 +1089,7 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
     /// <inheritdoc/>
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
-        ThrowIfNotNativeMode();
+        ThrowIfNativeModeUnavailable();
 
         writer.Write(_scaleFactor);
         writer.Write(_numRRDBBlocks);
@@ -1119,7 +1119,7 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
     /// <inheritdoc/>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        ThrowIfNotNativeMode();
+        ThrowIfNativeModeUnavailable();
 
         // Read configuration (already set in constructor, just advance reader)
         _ = reader.ReadInt32(); // scaleFactor

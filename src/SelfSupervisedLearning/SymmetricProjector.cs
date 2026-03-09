@@ -63,6 +63,7 @@ public class SymmetricProjector<T> : IProjectorHead<T>
         public Tensor<T>? CachedH1Bn;
         public Tensor<T>? CachedH1Relu;
         public Tensor<T>? CachedProjection;
+        public Tensor<T>? CachedPredictorInput; // The actual input passed to Predict (post-BN2)
         public Tensor<T>? CachedPredH1;
         public Tensor<T>? CachedPredH1Bn;
         public Tensor<T>? CachedPredH1Relu;
@@ -86,6 +87,10 @@ public class SymmetricProjector<T> : IProjectorHead<T>
         public T[]? PredBn1GammaGrad;
         public T[]? PredBn1BetaGrad;
 
+        // Cached intermediate gradients from Backward() to avoid recomputation in ComputeParameterGradients()
+        public Tensor<T>? GradBeforeBn2;
+        public Tensor<T>? GradAtH1;
+
         public void Clear()
         {
             CachedInput = null;
@@ -93,6 +98,7 @@ public class SymmetricProjector<T> : IProjectorHead<T>
             CachedH1Bn = null;
             CachedH1Relu = null;
             CachedProjection = null;
+            CachedPredictorInput = null;
             CachedPredH1 = null;
             CachedPredH1Bn = null;
             CachedPredH1Relu = null;
@@ -111,6 +117,8 @@ public class SymmetricProjector<T> : IProjectorHead<T>
             ProjBn2BetaGrad = null;
             PredBn1GammaGrad = null;
             PredBn1BetaGrad = null;
+            GradBeforeBn2 = null;
+            GradAtH1 = null;
         }
     }
 
@@ -246,16 +254,22 @@ public class SymmetricProjector<T> : IProjectorHead<T>
             if (branchIndex > 1)
             {
                 throw new ArgumentOutOfRangeException(nameof(branchIndex),
-                    "Branch index must be 0 (branch1) or 1 (branch2).");
+                    "Branch index must be -1, 0, or 1.");
             }
             ctx = branchIndex == 0 ? _branch1 : _branch2;
         }
-        else
+        else if (branchIndex == -1)
         {
             // Legacy behavior: use the most recently used branch from Project()
             ctx = _nextBranch == 0 ? _branch2 : _branch1;
         }
+        else
+        {
+            throw new ArgumentOutOfRangeException(nameof(branchIndex),
+                "Branch index must be -1, 0, or 1.");
+        }
 
+        ctx.CachedPredictorInput = projection; // Cache actual predictor input (post-BN2 normalized)
         ctx.CachedPredH1 = Linear(projection, PredWeight1, PredBias1, _projectionDim, _predictorHiddenDim);
         ctx.CachedPredH1Bn = BatchNorm(ctx.CachedPredH1, PredBn1Gamma, PredBn1Beta,
             out ctx.PredBn1Mean, out ctx.PredBn1Var, out ctx.PredBn1Normalized);
@@ -317,12 +331,14 @@ public class SymmetricProjector<T> : IProjectorHead<T>
 
         grad = BatchNormBackward(grad, _projBn2Gamma, ctx.ProjBn2Var, ctx.ProjBn2Normalized,
             out ctx.ProjBn2GammaGrad, out ctx.ProjBn2BetaGrad);
+        ctx.GradBeforeBn2 = grad; // Cache for ComputeParameterGradients
         grad = LinearBackward(grad, _projWeight2, _hiddenDim, _projectionDim);
         var cachedH1Bn = ctx.CachedH1Bn ?? throw new InvalidOperationException(
             "Cached H1 BN not available. Call Project() before Backward().");
         grad = ReLUBackward(grad, cachedH1Bn);
         grad = BatchNormBackward(grad, _projBn1Gamma, ctx.ProjBn1Var, ctx.ProjBn1Normalized,
             out ctx.ProjBn1GammaGrad, out ctx.ProjBn1BetaGrad);
+        ctx.GradAtH1 = grad; // Cache for ComputeParameterGradients
         grad = LinearBackward(grad, _projWeight1, _inputDim, _hiddenDim);
 
         var branchGradients = ComputeParameterGradients(gradAtProjectorOutput, gradOutput, ctx);
@@ -457,9 +473,9 @@ public class SymmetricProjector<T> : IProjectorHead<T>
         var cachedInput = ctx.CachedInput;
         var cachedH1Relu = ctx.CachedH1Relu;
 
-        // Use gradAtProjectorOutput (grad after predictor backprop) for projector weight gradients
-        var gradBeforeBn2 = BatchNormBackward(gradAtProjectorOutput, _projBn2Gamma, ctx.ProjBn2Var, ctx.ProjBn2Normalized,
-            out _, out _);
+        // Reuse BN2 backward result cached during Backward() to avoid redundant computation
+        var gradBeforeBn2 = ctx.GradBeforeBn2 ?? throw new InvalidOperationException(
+            "GradBeforeBn2 not cached. Ensure Backward() was called before ComputeParameterGradients().");
 
         for (int i = 0; i < _hiddenDim; i++)
         {
@@ -486,14 +502,9 @@ public class SymmetricProjector<T> : IProjectorHead<T>
             grads[bias2Offset + j] = NumOps.Multiply(sum, invBatchSize);
         }
 
-        var gradAtH1Relu = LinearBackward(gradBeforeBn2, _projWeight2, _hiddenDim, _projectionDim);
-
-        var cachedH1Bn = ctx.CachedH1Bn ?? throw new InvalidOperationException(
-            "Cached H1 BN not available. Call Project() before Backward().");
-        var gradAtH1Bn = ReLUBackward(gradAtH1Relu, cachedH1Bn);
-
-        var gradAtH1 = BatchNormBackward(gradAtH1Bn, _projBn1Gamma, ctx.ProjBn1Var, ctx.ProjBn1Normalized,
-            out _, out _);
+        // Reuse BN1 backward result cached during Backward() to avoid redundant computation
+        var gradAtH1 = ctx.GradAtH1 ?? throw new InvalidOperationException(
+            "GradAtH1 not cached. Ensure Backward() was called before ComputeParameterGradients().");
 
         for (int i = 0; i < _inputDim; i++)
         {
@@ -578,8 +589,8 @@ public class SymmetricProjector<T> : IProjectorHead<T>
                 }
             }
 
-            // Predictor weight1/bias1 gradients
-            if (ctx.CachedProjection is not null)
+            // Predictor weight1/bias1 gradients (only computed if Predict was called)
+            if (ctx.CachedPredictorInput is not null)
             {
                 var gradBeforePredBn1 = LinearBackward(originalGradOutput, PredWeight2, _predictorHiddenDim, _projectionDim);
                 if (ctx.CachedPredH1Bn is not null)
@@ -596,7 +607,7 @@ public class SymmetricProjector<T> : IProjectorHead<T>
                         T sum = NumOps.Zero;
                         for (int b = 0; b < batchSize; b++)
                         {
-                            sum = NumOps.Add(sum, NumOps.Multiply(ctx.CachedProjection[b, i], gradAtPredH1[b, j]));
+                            sum = NumOps.Add(sum, NumOps.Multiply(ctx.CachedPredictorInput[b, i], gradAtPredH1[b, j]));
                         }
                         grads[predWeight1Offset + i * _predictorHiddenDim + j] = NumOps.Multiply(sum, invBatchSize);
                     }
