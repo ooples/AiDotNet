@@ -40,7 +40,7 @@ jobs:
           rm -rf cs de es fr it ja ko pl pt-BR ru tr zh-Hans zh-Hant
 
       - name: Deploy to Azure App Service
-        uses: azure/webapps-deploy@2e64e04aaaeeec4396edcb982544dbd30f8e9ddf # v3
+        uses: azure/webapps-deploy@84a80cfe7e9889f35148ed88c307e6e93bf02578 # v3
         with:
           app-name: aidotnet-api
           publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
