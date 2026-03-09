@@ -95,7 +95,7 @@ public class ReliefMLC<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         {
             labelSets[i] = new bool[nLabels];
             for (int l = 0; l < nLabels; l++)
-                labelSets[i][l] = NumOps.ToDouble(targets[i, l]) > 0.5;
+                labelSets[i][l] = NumOps.GreaterThan(targets[i, l], NumOps.FromDouble(0.5));
         }
 
         _featureWeights = new double[p];

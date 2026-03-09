@@ -47,7 +47,7 @@ public class AUCPRMetric<T> : IClassificationMetric<T>
         var sorted = new (double prob, int label)[n];
         for (int i = 0; i < n; i++)
         {
-            sorted[i] = (NumOps.ToDouble(predictions[i]), NumOps.ToDouble(actuals[i]) >= 0.5 ? 1 : 0);
+            sorted[i] = (NumOps.ToDouble(predictions[i]), NumOps.Compare(actuals[i], NumOps.One) == 0 ? 1 : 0);
         }
         Array.Sort(sorted, (a, b) => b.prob.CompareTo(a.prob));
 

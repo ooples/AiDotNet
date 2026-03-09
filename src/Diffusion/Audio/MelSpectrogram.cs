@@ -325,7 +325,7 @@ public class MelSpectrogram<T>
             var dbVal = NumOps.Multiply(factor, logVal);
 
             // Clamp to minimum dB
-            if (NumOps.ToDouble(dbVal) < NumOps.ToDouble(minDbT))
+            if (NumOps.LessThan(dbVal, minDbT))
             {
                 dbVal = minDbT;
             }
@@ -491,7 +491,7 @@ public class MelSpectrogram<T>
                 sum = NumOps.Add(sum, filterbank.Data.Span[mel * numFreqs + f]);
             }
 
-            if (NumOps.ToDouble(sum) > 1e-8)
+            if (NumOps.GreaterThan(sum, NumOps.FromDouble(1e-8)))
             {
                 for (int f = 0; f < numFreqs; f++)
                 {

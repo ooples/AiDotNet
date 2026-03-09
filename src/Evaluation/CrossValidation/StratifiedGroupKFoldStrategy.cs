@@ -99,7 +99,7 @@ public class StratifiedGroupKFoldStrategy<T> : ICrossValidationStrategy<T>
 
                 foreach (var idx in samples)
                 {
-                    int cls = NumOps.ToDouble(labelsArray[idx]) >= 0.5 ? 1 : 0;
+                    int cls = NumOps.Compare(labelsArray[idx], NumOps.One) == 0 ? 1 : 0;
                     classVotes[cls] = classVotes.GetValueOrDefault(cls, 0) + 1;
                 }
 

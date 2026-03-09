@@ -903,8 +903,8 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
         }
 
         double totalProb = nucleus.Sum(x => NumOps.ToDouble(x.Prob));
-        // Use thread-safe random instead of creating new Random() per call
-        // (new Random() produces identical sequences when called rapidly)
+        // Use thread-safe random instead of creating RandomHelper.CreateSecureRandom() per call
+        // (RandomHelper.CreateSecureRandom() produces identical sequences when called rapidly)
         double rand = Tensors.Helpers.RandomHelper.ThreadSafeRandom.NextDouble() * totalProb;
 
         double runningSum = 0;

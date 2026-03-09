@@ -794,7 +794,7 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
 
         // Mask non-neighbors with -inf
         var negInf = new Tensor<T>(tiled.Shape);
-        negInf.Fill(NumOps.FromDouble(double.NegativeInfinity));
+        negInf.Fill(NumOps.MinValue);
 
         // Where adj > 0, use tiled values; else use -inf
         var zeroTensor = new Tensor<T>(adjExpanded.Shape);
@@ -828,7 +828,7 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
 
         // Mask non-neighbors with +inf
         var posInf = new Tensor<T>(tiled.Shape);
-        posInf.Fill(NumOps.FromDouble(double.PositiveInfinity));
+        posInf.Fill(NumOps.MaxValue);
 
         var zeroTensor = new Tensor<T>(adjExpanded.Shape);
         zeroTensor.Fill(NumOps.Zero);

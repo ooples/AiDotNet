@@ -151,7 +151,7 @@ public class SHAPExplanation<T>
         foreach (var (index, name, value) in top)
         {
             var featureLabel = name ?? $"Feature {index}";
-            var direction = NumOps.ToDouble(value) >= 0 ? "+" : "";
+            var direction = !NumOps.LessThan(value, NumOps.Zero) ? "+" : "";
             lines.Add($"    {featureLabel}: {direction}{value}");
         }
 

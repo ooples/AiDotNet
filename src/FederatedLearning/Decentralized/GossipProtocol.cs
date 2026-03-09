@@ -43,7 +43,7 @@ public class GossipProtocol : IDecentralizedTopology
     {
         if (totalNodes <= 1) return [];
 
-        var rng = new Random(_seed ^ (nodeId * 7919 + round * 6271));
+        var rng = RandomHelper.CreateSeededRandom(_seed ^ (nodeId * 7919 + round * 6271));
         var peers = new HashSet<int>();
 
         int maxAttempts = _fanout * 10;

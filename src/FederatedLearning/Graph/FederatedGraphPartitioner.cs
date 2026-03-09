@@ -390,7 +390,7 @@ public class FederatedGraphPartitioner<T> : FederatedLearningComponentBase<T>
             for (int j = 0; j < numNodes; j++)
             {
                 int idx = i * numNodes + j;
-                if (idx < adjacency.Shape[0] && NumOps.ToDouble(adjacency[idx]) > 0 && i != j)
+                if (idx < adjacency.Shape[0] && NumOps.GreaterThan(adjacency[idx], NumOps.Zero) && i != j)
                 {
                     neighbors[i].Add(j);
                 }

@@ -59,17 +59,17 @@ public class SuperLearner<T> : NonLinearRegressionBase<T>
     /// <summary>
     /// Cross-validation performance of each base model.
     /// </summary>
-    private Vector<double>? _cvPerformance;
+    private Vector<T>? _cvPerformance;
 
     /// <summary>
     /// Means of base model predictions (for normalization).
     /// </summary>
-    private Vector<double>? _predMeans;
+    private Vector<T>? _predMeans;
 
     /// <summary>
     /// Standard deviations of base model predictions (for normalization).
     /// </summary>
-    private Vector<double>? _predStds;
+    private Vector<T>? _predStds;
 
     /// <summary>
     /// Number of features.
@@ -129,13 +129,8 @@ public class SuperLearner<T> : NonLinearRegressionBase<T>
         var foldIndices = GenerateFoldIndices(n);
 
         // Collect out-of-fold predictions for meta-training
-        var metaFeatures = new Matrix<double>(n, numModels);
-        var yData = new Vector<double>(n);
-        for (int i = 0; i < n; i++)
-        {
-            yData[i] = NumOps.ToDouble(y[i]);
-        }
-        _cvPerformance = new Vector<double>(numModels);
+        var metaFeatures = new Matrix<T>(n, numModels);
+        _cvPerformance = new Vector<T>(numModels);
 
         // Train each fold and collect out-of-fold predictions
         for (int fold = 0; fold < _options.NumFolds; fold++)
@@ -158,24 +153,25 @@ public class SuperLearner<T> : NonLinearRegressionBase<T>
 
                 for (int i = 0; i < valIdx.Length; i++)
                 {
-                    metaFeatures[valIdx[i], m] = NumOps.ToDouble(predictions[i]);
+                    metaFeatures[valIdx[i], m] = predictions[i];
                 }
 
                 // Accumulate CV error for performance weighting
-                double foldMse = 0;
+                T foldMse = NumOps.Zero;
                 for (int i = 0; i < valIdx.Length; i++)
                 {
-                    double diff = yData[valIdx[i]] - NumOps.ToDouble(predictions[i]);
-                    foldMse += diff * diff;
+                    T diff = NumOps.Subtract(y[valIdx[i]], predictions[i]);
+                    foldMse = NumOps.Add(foldMse, NumOps.Multiply(diff, diff));
                 }
-                _cvPerformance[m] += foldMse;
+                _cvPerformance[m] = NumOps.Add(_cvPerformance[m], foldMse);
             }
         }
 
         // Finalize CV performance (lower is better)
+        T nT = NumOps.FromDouble(n);
         for (int m = 0; m < numModels; m++)
         {
-            _cvPerformance[m] /= n;
+            _cvPerformance[m] = NumOps.Divide(_cvPerformance[m], nT);
         }
 
         // Normalize base predictions if requested
@@ -185,7 +181,7 @@ public class SuperLearner<T> : NonLinearRegressionBase<T>
         }
 
         // Train meta-learner
-        TrainMetaLearner(metaFeatures, yData);
+        TrainMetaLearner(metaFeatures, y);
 
         // Retrain base models on full data if requested
         if (_options.RetrainOnFullData)
@@ -217,13 +213,13 @@ public class SuperLearner<T> : NonLinearRegressionBase<T>
         int numModels = _baseModels.Count;
 
         // Get predictions from all base models
-        var basePredictions = new Matrix<double>(n, numModels);
+        var basePredictions = new Matrix<T>(n, numModels);
         for (int m = 0; m < numModels; m++)
         {
             var preds = _baseModels[m].Predict(input);
             for (int i = 0; i < n; i++)
             {
-                basePredictions[i, m] = NumOps.ToDouble(preds[i]);
+                basePredictions[i, m] = preds[i];
             }
         }
 
@@ -237,12 +233,12 @@ public class SuperLearner<T> : NonLinearRegressionBase<T>
         var result = new Vector<T>(n);
         for (int i = 0; i < n; i++)
         {
-            double combined = NumOps.ToDouble(_metaIntercept);
+            T combined = _metaIntercept;
             for (int m = 0; m < numModels; m++)
             {
-                combined += basePredictions[i, m] * NumOps.ToDouble(_metaWeights[m]);
+                combined = NumOps.Add(combined, NumOps.Multiply(basePredictions[i, m], _metaWeights[m]));
             }
-            result[i] = NumOps.FromDouble(combined);
+            result[i] = combined;
         }
 
         return result;
@@ -261,34 +257,35 @@ public class SuperLearner<T> : NonLinearRegressionBase<T>
     /// Gets the cross-validation performance (MSE) of each base model.
     /// </summary>
     /// <returns>Array of MSE values (lower is better).</returns>
-    public Vector<double> GetCVPerformance()
+    public Vector<T> GetCVPerformance()
     {
-        return _cvPerformance ?? new Vector<double>(0);
+        return _cvPerformance ?? new Vector<T>(0);
     }
 
     /// <summary>
     /// Gets the contribution of each base model based on weights.
     /// </summary>
     /// <returns>Array of contribution percentages.</returns>
-    public Vector<double> GetModelContributions()
+    public Vector<T> GetModelContributions()
     {
         if (_metaWeights == null)
         {
-            return new Vector<double>(0);
+            return new Vector<T>(0);
         }
 
-        var absWeights = new Vector<double>(_metaWeights.Length);
-        double sum = 0;
+        var absWeights = new Vector<T>(_metaWeights.Length);
+        T sum = NumOps.Zero;
         for (int i = 0; i < _metaWeights.Length; i++)
         {
-            absWeights[i] = Math.Abs(NumOps.ToDouble(_metaWeights[i]));
-            sum += absWeights[i];
+            absWeights[i] = NumOps.Abs(_metaWeights[i]);
+            sum = NumOps.Add(sum, absWeights[i]);
         }
 
-        var result = new Vector<double>(_metaWeights.Length);
-        if (sum < 1e-10)
+        var result = new Vector<T>(_metaWeights.Length);
+        T epsilon = NumOps.FromDouble(1e-10);
+        if (NumOps.LessThan(sum, epsilon))
         {
-            double equalWeight = 1.0 / _metaWeights.Length;
+            T equalWeight = NumOps.Divide(NumOps.One, NumOps.FromDouble(_metaWeights.Length));
             for (int i = 0; i < _metaWeights.Length; i++)
             {
                 result[i] = equalWeight;
@@ -298,7 +295,7 @@ public class SuperLearner<T> : NonLinearRegressionBase<T>
         {
             for (int i = 0; i < _metaWeights.Length; i++)
             {
-                result[i] = absWeights[i] / sum;
+                result[i] = NumOps.Divide(absWeights[i], sum);
             }
         }
 
@@ -388,7 +385,9 @@ public class SuperLearner<T> : NonLinearRegressionBase<T>
     {
         // Serialize and deserialize to clone
         byte[] data = model.Serialize();
-        var clone = (IFullModel<T, Matrix<T>, Vector<T>>)Activator.CreateInstance(model.GetType())!;
+        var instance = Activator.CreateInstance(model.GetType())
+            ?? throw new InvalidOperationException($"Failed to create instance of {model.GetType().Name}");
+        var clone = (IFullModel<T, Matrix<T>, Vector<T>>)instance;
         clone.Deserialize(data);
         return clone;
     }
@@ -396,35 +395,40 @@ public class SuperLearner<T> : NonLinearRegressionBase<T>
     /// <summary>
     /// Normalizes meta-features (base model predictions).
     /// </summary>
-    private void NormalizeMetaFeatures(Matrix<double> features)
+    private void NormalizeMetaFeatures(Matrix<T> features)
     {
         int n = features.Rows;
         int m = features.Columns;
+        T nT = NumOps.FromDouble(n);
+        T epsilon = NumOps.FromDouble(1e-10);
 
-        _predMeans = new Vector<double>(m);
-        _predStds = new Vector<double>(m);
+        _predMeans = new Vector<T>(m);
+        _predStds = new Vector<T>(m);
 
         for (int j = 0; j < m; j++)
         {
-            double sum = 0;
+            T sum = NumOps.Zero;
             for (int i = 0; i < n; i++)
             {
-                sum += features[i, j];
+                sum = NumOps.Add(sum, features[i, j]);
             }
-            _predMeans[j] = sum / n;
+            _predMeans[j] = NumOps.Divide(sum, nT);
 
-            double sumSq = 0;
+            T sumSq = NumOps.Zero;
             for (int i = 0; i < n; i++)
             {
-                double diff = features[i, j] - _predMeans[j];
-                sumSq += diff * diff;
+                T diff = NumOps.Subtract(features[i, j], _predMeans[j]);
+                sumSq = NumOps.Add(sumSq, NumOps.Multiply(diff, diff));
             }
-            _predStds[j] = Math.Sqrt(sumSq / n);
-            if (_predStds[j] < 1e-10) _predStds[j] = 1;
+            _predStds[j] = NumOps.Sqrt(NumOps.Divide(sumSq, nT));
+            if (NumOps.LessThan(_predStds[j], epsilon))
+            {
+                _predStds[j] = NumOps.One;
+            }
 
             for (int i = 0; i < n; i++)
             {
-                features[i, j] = (features[i, j] - _predMeans[j]) / _predStds[j];
+                features[i, j] = NumOps.Divide(NumOps.Subtract(features[i, j], _predMeans[j]), _predStds[j]);
             }
         }
     }
@@ -432,8 +436,13 @@ public class SuperLearner<T> : NonLinearRegressionBase<T>
     /// <summary>
     /// Normalizes meta-features using stored means/stds.
     /// </summary>
-    private void NormalizeMetaFeaturesForPrediction(Matrix<double> features)
+    private void NormalizeMetaFeaturesForPrediction(Matrix<T> features)
     {
+        if (_predMeans is null || _predStds is null)
+        {
+            throw new InvalidOperationException("Normalization parameters not computed. Model must be trained first.");
+        }
+
         int n = features.Rows;
         int m = features.Columns;
 
@@ -441,7 +450,7 @@ public class SuperLearner<T> : NonLinearRegressionBase<T>
         {
             for (int i = 0; i < n; i++)
             {
-                features[i, j] = (features[i, j] - _predMeans![j]) / _predStds![j];
+                features[i, j] = NumOps.Divide(NumOps.Subtract(features[i, j], _predMeans[j]), _predStds[j]);
             }
         }
     }
@@ -449,7 +458,7 @@ public class SuperLearner<T> : NonLinearRegressionBase<T>
     /// <summary>
     /// Trains the meta-learner.
     /// </summary>
-    private void TrainMetaLearner(Matrix<double> metaFeatures, Vector<double> y)
+    private void TrainMetaLearner(Matrix<T> metaFeatures, Vector<T> y)
     {
         int n = metaFeatures.Rows;
         int m = metaFeatures.Columns;
@@ -492,10 +501,10 @@ public class SuperLearner<T> : NonLinearRegressionBase<T>
     private void TrainSimpleAverage(int numModels)
     {
         _metaWeights = new Vector<T>(numModels);
-        double weight = 1.0 / numModels;
+        T weight = NumOps.Divide(NumOps.One, NumOps.FromDouble(numModels));
         for (int m = 0; m < numModels; m++)
         {
-            _metaWeights[m] = NumOps.FromDouble(weight);
+            _metaWeights[m] = weight;
         }
         _metaIntercept = NumOps.Zero;
     }
@@ -505,20 +514,26 @@ public class SuperLearner<T> : NonLinearRegressionBase<T>
     /// </summary>
     private void TrainPerformanceWeighted(int numModels)
     {
+        if (_cvPerformance is null)
+        {
+            throw new InvalidOperationException("CV performance not computed. Train the model first.");
+        }
+
         _metaWeights = new Vector<T>(numModels);
+        T epsilon = NumOps.FromDouble(1e-10);
 
         // Convert MSE to weights (inverse of performance)
-        var invMse = new Vector<double>(numModels);
-        double sum = 0;
+        var invMse = new Vector<T>(numModels);
+        T sum = NumOps.Zero;
         for (int i = 0; i < numModels; i++)
         {
-            invMse[i] = 1.0 / (_cvPerformance![i] + 1e-10);
-            sum += invMse[i];
+            invMse[i] = NumOps.Divide(NumOps.One, NumOps.Add(_cvPerformance[i], epsilon));
+            sum = NumOps.Add(sum, invMse[i]);
         }
 
         for (int m = 0; m < numModels; m++)
         {
-            _metaWeights[m] = NumOps.FromDouble(invMse[m] / sum);
+            _metaWeights[m] = NumOps.Divide(invMse[m], sum);
         }
         _metaIntercept = NumOps.Zero;
     }
@@ -526,91 +541,108 @@ public class SuperLearner<T> : NonLinearRegressionBase<T>
     /// <summary>
     /// Non-negative least squares.
     /// </summary>
-    private void TrainNNLS(Matrix<double> X, Vector<double> y)
+    private void TrainNNLS(Matrix<T> X, Vector<T> y)
     {
         int n = X.Rows;
         int m = X.Columns;
+        T zero = NumOps.Zero;
+        T two = NumOps.FromDouble(2.0);
+        T learningRate = NumOps.FromDouble(0.01);
+        T nT = NumOps.FromDouble(n);
+        T epsilon = NumOps.FromDouble(1e-10);
+        T tolerance = NumOps.FromDouble(_options.MetaLearnerTolerance);
 
         // Initialize weights
-        var weights = new Vector<double>(m);
+        var weights = new Vector<T>(m);
+        T initWeight = NumOps.Divide(NumOps.One, NumOps.FromDouble(m));
         for (int j = 0; j < m; j++)
         {
-            weights[j] = 1.0 / m;
+            weights[j] = initWeight;
         }
 
         // Active set method for NNLS
         for (int iter = 0; iter < _options.MetaLearnerMaxIterations; iter++)
         {
             // Compute gradient
-            var grad = new Vector<double>(m);
+            var grad = new Vector<T>(m);
             for (int j = 0; j < m; j++)
             {
                 for (int i = 0; i < n; i++)
                 {
-                    double pred = 0;
+                    T pred = zero;
                     for (int k = 0; k < m; k++)
                     {
-                        pred += X[i, k] * weights[k];
+                        pred = NumOps.Add(pred, NumOps.Multiply(X[i, k], weights[k]));
                     }
-                    grad[j] += 2 * X[i, j] * (pred - y[i]) / n;
+                    T residual = NumOps.Subtract(pred, y[i]);
+                    grad[j] = NumOps.Add(grad[j], NumOps.Divide(NumOps.Multiply(NumOps.Multiply(two, X[i, j]), residual), nT));
                 }
             }
 
             // Projected gradient descent
-            double maxChange = 0;
+            T maxChange = zero;
             for (int j = 0; j < m; j++)
             {
-                double newWeight = weights[j] - 0.01 * grad[j];
-                newWeight = Math.Max(0, newWeight);  // Project to non-negative
-                maxChange = Math.Max(maxChange, Math.Abs(newWeight - weights[j]));
+                T newWeight = NumOps.Subtract(weights[j], NumOps.Multiply(learningRate, grad[j]));
+                // Project to non-negative
+                if (NumOps.LessThan(newWeight, zero))
+                {
+                    newWeight = zero;
+                }
+                T change = NumOps.Abs(NumOps.Subtract(newWeight, weights[j]));
+                if (NumOps.GreaterThan(change, maxChange))
+                {
+                    maxChange = change;
+                }
                 weights[j] = newWeight;
             }
 
             // Normalize weights to sum to 1 (optional but often helpful)
-            double sumW = 0;
+            T sumW = zero;
             for (int j = 0; j < m; j++)
             {
-                sumW += weights[j];
+                sumW = NumOps.Add(sumW, weights[j]);
             }
-            if (sumW > 1e-10)
+            if (NumOps.GreaterThan(sumW, epsilon))
             {
                 for (int j = 0; j < m; j++)
                 {
-                    weights[j] /= sumW;
+                    weights[j] = NumOps.Divide(weights[j], sumW);
                 }
             }
 
-            if (maxChange < _options.MetaLearnerTolerance)
+            if (NumOps.LessThan(maxChange, tolerance))
             {
                 break;
             }
         }
 
-        _metaWeights = new Vector<T>(weights.Select(w => NumOps.FromDouble(w)));
+        _metaWeights = new Vector<T>(weights);
         _metaIntercept = NumOps.Zero;
     }
 
     /// <summary>
     /// Ridge regression meta-learner.
     /// </summary>
-    private void TrainRidge(Matrix<double> X, Vector<double> y)
+    private void TrainRidge(Matrix<T> X, Vector<T> y)
     {
         int n = X.Rows;
         int m = X.Columns;
-        double lambda = _options.MetaLearnerRegularization;
+        T lambda = NumOps.FromDouble(_options.MetaLearnerRegularization);
+        T nT = NumOps.FromDouble(n);
 
         // X'X + lambda*I
-        var XtX = new Matrix<double>(m, m);
-        var Xty = new Vector<double>(m);
+        var XtX = new Matrix<T>(m, m);
+        var Xty = new Vector<T>(m);
 
         for (int i = 0; i < n; i++)
         {
             for (int j = 0; j < m; j++)
             {
-                Xty[j] += X[i, j] * y[i];
+                Xty[j] = NumOps.Add(Xty[j], NumOps.Multiply(X[i, j], y[i]));
                 for (int k = 0; k < m; k++)
                 {
-                    XtX[j, k] += X[i, j] * X[i, k];
+                    XtX[j, k] = NumOps.Add(XtX[j, k], NumOps.Multiply(X[i, j], X[i, k]));
                 }
             }
         }
@@ -618,94 +650,101 @@ public class SuperLearner<T> : NonLinearRegressionBase<T>
         // Add regularization
         for (int j = 0; j < m; j++)
         {
-            XtX[j, j] += lambda * n;
+            XtX[j, j] = NumOps.Add(XtX[j, j], NumOps.Multiply(lambda, nT));
         }
 
         // Solve (X'X + lambda*I)^(-1) * X'y
         var XtXinv = InvertMatrix(XtX);
-        var weights = new Vector<double>(m);
+        var weights = new Vector<T>(m);
 
         for (int j = 0; j < m; j++)
         {
             for (int k = 0; k < m; k++)
             {
-                weights[j] += XtXinv[j, k] * Xty[k];
+                weights[j] = NumOps.Add(weights[j], NumOps.Multiply(XtXinv[j, k], Xty[k]));
             }
         }
 
-        _metaWeights = new Vector<T>(weights.Select(w => NumOps.FromDouble(w)));
+        _metaWeights = new Vector<T>(weights);
         _metaIntercept = NumOps.Zero;
     }
 
     /// <summary>
     /// Linear regression meta-learner.
     /// </summary>
-    private void TrainLinearRegression(Matrix<double> X, Vector<double> y)
+    private void TrainLinearRegression(Matrix<T> X, Vector<T> y)
     {
         int n = X.Rows;
         int m = X.Columns;
 
         // X'X
-        var XtX = new Matrix<double>(m, m);
-        var Xty = new Vector<double>(m);
+        var XtX = new Matrix<T>(m, m);
+        var Xty = new Vector<T>(m);
 
         for (int i = 0; i < n; i++)
         {
             for (int j = 0; j < m; j++)
             {
-                Xty[j] += X[i, j] * y[i];
+                Xty[j] = NumOps.Add(Xty[j], NumOps.Multiply(X[i, j], y[i]));
                 for (int k = 0; k < m; k++)
                 {
-                    XtX[j, k] += X[i, j] * X[i, k];
+                    XtX[j, k] = NumOps.Add(XtX[j, k], NumOps.Multiply(X[i, j], X[i, k]));
                 }
             }
         }
 
         // Solve (X'X)^(-1) * X'y with small regularization for stability
+        T stabilityEpsilon = NumOps.FromDouble(1e-6);
         for (int j = 0; j < m; j++)
         {
-            XtX[j, j] += 1e-6;
+            XtX[j, j] = NumOps.Add(XtX[j, j], stabilityEpsilon);
         }
 
         var XtXinv = InvertMatrix(XtX);
-        var weights = new Vector<double>(m);
+        var weights = new Vector<T>(m);
 
         for (int j = 0; j < m; j++)
         {
             for (int k = 0; k < m; k++)
             {
-                weights[j] += XtXinv[j, k] * Xty[k];
+                weights[j] = NumOps.Add(weights[j], NumOps.Multiply(XtXinv[j, k], Xty[k]));
             }
         }
 
-        _metaWeights = new Vector<T>(weights.Select(w => NumOps.FromDouble(w)));
+        _metaWeights = new Vector<T>(weights);
         _metaIntercept = NumOps.Zero;
     }
 
     /// <summary>
     /// Lasso regression meta-learner (coordinate descent).
     /// </summary>
-    private void TrainLasso(Matrix<double> X, Vector<double> y)
+    private void TrainLasso(Matrix<T> X, Vector<T> y)
     {
         int n = X.Rows;
         int m = X.Columns;
-        double lambda = _options.MetaLearnerRegularization;
+        T lambda = NumOps.FromDouble(_options.MetaLearnerRegularization);
+        T nT = NumOps.FromDouble(n);
+        T zero = NumOps.Zero;
+        T tolerance = NumOps.FromDouble(_options.MetaLearnerTolerance);
+        T lambdaN = NumOps.Multiply(lambda, nT);
+        T negLambdaN = NumOps.Negate(lambdaN);
 
-        var weights = new Vector<double>(m);
+        var weights = new Vector<T>(m);
+        T initWeight = NumOps.Divide(NumOps.One, NumOps.FromDouble(m));
         for (int j = 0; j < m; j++)
         {
-            weights[j] = 1.0 / m;
+            weights[j] = initWeight;
         }
 
         // Coordinate descent
         for (int iter = 0; iter < _options.MetaLearnerMaxIterations; iter++)
         {
-            double maxChange = 0;
+            T maxChange = zero;
 
             for (int j = 0; j < m; j++)
             {
                 // Compute partial residual
-                var residual = new Vector<double>(n);
+                var residual = new Vector<T>(n);
                 for (int i = 0; i < n; i++)
                 {
                     residual[i] = y[i];
@@ -713,55 +752,60 @@ public class SuperLearner<T> : NonLinearRegressionBase<T>
                     {
                         if (k != j)
                         {
-                            residual[i] -= X[i, k] * weights[k];
+                            residual[i] = NumOps.Subtract(residual[i], NumOps.Multiply(X[i, k], weights[k]));
                         }
                     }
                 }
 
                 // Soft thresholding
-                double rho = 0;
-                double sumXjSq = 0;
+                T rho = zero;
+                T sumXjSq = zero;
                 for (int i = 0; i < n; i++)
                 {
-                    rho += X[i, j] * residual[i];
-                    sumXjSq += X[i, j] * X[i, j];
+                    rho = NumOps.Add(rho, NumOps.Multiply(X[i, j], residual[i]));
+                    sumXjSq = NumOps.Add(sumXjSq, NumOps.Multiply(X[i, j], X[i, j]));
                 }
 
-                double newWeight;
-                if (rho < -lambda * n)
+                T newWeight;
+                if (NumOps.LessThan(rho, negLambdaN))
                 {
-                    newWeight = (rho + lambda * n) / sumXjSq;
+                    newWeight = NumOps.Divide(NumOps.Add(rho, lambdaN), sumXjSq);
                 }
-                else if (rho > lambda * n)
+                else if (NumOps.GreaterThan(rho, lambdaN))
                 {
-                    newWeight = (rho - lambda * n) / sumXjSq;
+                    newWeight = NumOps.Divide(NumOps.Subtract(rho, lambdaN), sumXjSq);
                 }
                 else
                 {
-                    newWeight = 0;
+                    newWeight = zero;
                 }
 
-                maxChange = Math.Max(maxChange, Math.Abs(newWeight - weights[j]));
+                T change = NumOps.Abs(NumOps.Subtract(newWeight, weights[j]));
+                if (NumOps.GreaterThan(change, maxChange))
+                {
+                    maxChange = change;
+                }
                 weights[j] = newWeight;
             }
 
-            if (maxChange < _options.MetaLearnerTolerance)
+            if (NumOps.LessThan(maxChange, tolerance))
             {
                 break;
             }
         }
 
-        _metaWeights = new Vector<T>(weights.Select(w => NumOps.FromDouble(w)));
+        _metaWeights = new Vector<T>(weights);
         _metaIntercept = NumOps.Zero;
     }
 
     /// <summary>
     /// Simple matrix inversion using Gaussian elimination.
     /// </summary>
-    private Matrix<double> InvertMatrix(Matrix<double> A)
+    private Matrix<T> InvertMatrix(Matrix<T> A)
     {
         int n = A.Rows;
-        var augmented = new Matrix<double>(n, 2 * n);
+        var augmented = new Matrix<T>(n, 2 * n);
+        T epsilon = NumOps.FromDouble(1e-10);
 
         for (int i = 0; i < n; i++)
         {
@@ -769,7 +813,7 @@ public class SuperLearner<T> : NonLinearRegressionBase<T>
             {
                 augmented[i, j] = A[i, j];
             }
-            augmented[i, n + i] = 1;
+            augmented[i, n + i] = NumOps.One;
         }
 
         for (int col = 0; col < n; col++)
@@ -777,7 +821,7 @@ public class SuperLearner<T> : NonLinearRegressionBase<T>
             int maxRow = col;
             for (int row = col + 1; row < n; row++)
             {
-                if (Math.Abs(augmented[row, col]) > Math.Abs(augmented[maxRow, col]))
+                if (NumOps.GreaterThan(NumOps.Abs(augmented[row, col]), NumOps.Abs(augmented[maxRow, col])))
                 {
                     maxRow = row;
                 }
@@ -788,28 +832,31 @@ public class SuperLearner<T> : NonLinearRegressionBase<T>
                 (augmented[col, j], augmented[maxRow, j]) = (augmented[maxRow, j], augmented[col, j]);
             }
 
-            double pivot = augmented[col, col];
-            if (Math.Abs(pivot) < 1e-10) pivot = 1e-10;
+            T pivot = augmented[col, col];
+            if (NumOps.LessThan(NumOps.Abs(pivot), epsilon))
+            {
+                pivot = epsilon;
+            }
 
             for (int j = 0; j < 2 * n; j++)
             {
-                augmented[col, j] /= pivot;
+                augmented[col, j] = NumOps.Divide(augmented[col, j], pivot);
             }
 
             for (int row = 0; row < n; row++)
             {
                 if (row != col)
                 {
-                    double factor = augmented[row, col];
+                    T factor = augmented[row, col];
                     for (int j = 0; j < 2 * n; j++)
                     {
-                        augmented[row, j] -= factor * augmented[col, j];
+                        augmented[row, j] = NumOps.Subtract(augmented[row, j], NumOps.Multiply(factor, augmented[col, j]));
                     }
                 }
             }
         }
 
-        var inverse = new Matrix<double>(n, n);
+        var inverse = new Matrix<T>(n, n);
         for (int i = 0; i < n; i++)
         {
             for (int j = 0; j < n; j++)
@@ -890,15 +937,15 @@ public class SuperLearner<T> : NonLinearRegressionBase<T>
 
         // Normalization params
         writer.Write(_predMeans?.Length ?? 0);
-        if (_predMeans != null)
+        if (_predMeans != null && _predStds != null)
         {
             foreach (var mean in _predMeans)
             {
-                writer.Write(mean);
+                writer.Write(NumOps.ToDouble(mean));
             }
-            foreach (var std in _predStds!)
+            foreach (var std in _predStds)
             {
-                writer.Write(std);
+                writer.Write(NumOps.ToDouble(std));
             }
         }
 
@@ -934,15 +981,15 @@ public class SuperLearner<T> : NonLinearRegressionBase<T>
         int numMeans = reader.ReadInt32();
         if (numMeans > 0)
         {
-            _predMeans = new Vector<double>(numMeans);
-            _predStds = new Vector<double>(numMeans);
+            _predMeans = new Vector<T>(numMeans);
+            _predStds = new Vector<T>(numMeans);
             for (int i = 0; i < numMeans; i++)
             {
-                _predMeans[i] = reader.ReadDouble();
+                _predMeans[i] = NumOps.FromDouble(reader.ReadDouble());
             }
             for (int i = 0; i < numMeans; i++)
             {
-                _predStds[i] = reader.ReadDouble();
+                _predStds[i] = NumOps.FromDouble(reader.ReadDouble());
             }
         }
     }

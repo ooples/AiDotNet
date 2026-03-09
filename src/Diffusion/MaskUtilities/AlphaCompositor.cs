@@ -65,7 +65,7 @@ public class AlphaCompositor<T>
             var oneMinusFgA = NumOps.Subtract(NumOps.One, fgA);
             var outAlpha = NumOps.Add(fgA, NumOps.Multiply(bgA, oneMinusFgA));
 
-            if (NumOps.ToDouble(outAlpha) < 1e-10)
+            if (NumOps.LessThan(outAlpha, NumOps.FromDouble(1e-10)))
             {
                 result[i] = NumOps.Zero;
                 continue;

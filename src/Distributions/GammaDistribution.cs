@@ -105,7 +105,7 @@ internal class GammaDistribution<T> : DistributionBase<T>
     public override T LogPdf(T x)
     {
         if (NumOps.Compare(x, Zero) <= 0)
-            return NumOps.FromDouble(double.NegativeInfinity);
+            return NumOps.MinValue;
 
         double xVal = NumOps.ToDouble(x);
         double alpha = NumOps.ToDouble(_shape);
@@ -136,7 +136,7 @@ internal class GammaDistribution<T> : DistributionBase<T>
             throw new ArgumentOutOfRangeException(nameof(p), "Probability must be in [0, 1].");
 
         if (pVal == 0) return Zero;
-        if (pVal == 1) return NumOps.FromDouble(double.PositiveInfinity);
+        if (pVal == 1) return NumOps.MaxValue;
 
         double alpha = NumOps.ToDouble(_shape);
         double beta = NumOps.ToDouble(_rate);

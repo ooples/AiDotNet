@@ -489,7 +489,7 @@ public abstract class CausalDiscoveryBase<T> : ICausalDiscoveryAlgorithm<T>
                 }
             }
 
-            if (Math.Abs(NumOps.ToDouble(augmented[maxRow, col])) < 1e-12)
+            if (NumOps.LessThan(NumOps.Abs(augmented[maxRow, col]), NumOps.FromDouble(1e-12)))
             {
                 return null; // Singular
             }

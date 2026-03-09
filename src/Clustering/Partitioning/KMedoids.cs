@@ -139,17 +139,17 @@ public class KMedoids<T> : ClusteringBase<T>
 
         // Assign labels and compute inertia
         Labels = new Vector<T>(n);
-        double totalInertia = 0;
+        T totalInertia = NumOps.Zero;
 
         for (int i = 0; i < n; i++)
         {
             int nearestMedoid = 0;
-            double minDist = double.MaxValue;
+            T minDist = NumOps.MaxValue;
 
             for (int m = 0; m < k; m++)
             {
-                double dist = distMatrix[i, medoids[m]];
-                if (dist < minDist)
+                T dist = distMatrix[i, medoids[m]];
+                if (NumOps.LessThan(dist, minDist))
                 {
                     minDist = dist;
                     nearestMedoid = m;
@@ -157,10 +157,10 @@ public class KMedoids<T> : ClusteringBase<T>
             }
 
             Labels[i] = NumOps.FromDouble(nearestMedoid);
-            totalInertia += minDist;
+            totalInertia = NumOps.Add(totalInertia, minDist);
         }
 
-        Inertia = NumOps.FromDouble(totalInertia);
+        Inertia = totalInertia;
 
         // Set cluster centers as medoid points
         ClusterCenters = new Matrix<T>(k, d);
@@ -176,17 +176,18 @@ public class KMedoids<T> : ClusteringBase<T>
         IsTrained = true;
     }
 
-    private double[,] ComputeDistanceMatrix(Matrix<T> x, int n, IDistanceMetric<T> metric)
+    private T[,] ComputeDistanceMatrix(Matrix<T> x, int n, IDistanceMetric<T> metric)
     {
-        var distMatrix = new double[n, n];
+        var distMatrix = new T[n, n];
 
         for (int i = 0; i < n; i++)
         {
+            distMatrix[i, i] = NumOps.Zero;
             var pointI = GetRow(x, i);
             for (int j = i + 1; j < n; j++)
             {
                 var pointJ = GetRow(x, j);
-                double dist = NumOps.ToDouble(metric.Compute(pointI, pointJ));
+                T dist = metric.Compute(pointI, pointJ);
                 distMatrix[i, j] = dist;
                 distMatrix[j, i] = dist;
             }
@@ -205,7 +206,7 @@ public class KMedoids<T> : ClusteringBase<T>
         return indices.ToArray();
     }
 
-    private int[] InitializeKMedoidsPlusPlus(double[,] distMatrix, int n, int k, Random rand)
+    private int[] InitializeKMedoidsPlusPlus(T[,] distMatrix, int n, int k, Random rand)
     {
         var medoids = new List<int>();
 
@@ -215,29 +216,30 @@ public class KMedoids<T> : ClusteringBase<T>
         // Remaining medoids: probabilistic based on distance
         for (int m = 1; m < k; m++)
         {
-            var minDistances = new double[n];
-            double totalDist = 0;
+            var minDistances = new T[n];
+            T totalDist = NumOps.Zero;
 
             for (int i = 0; i < n; i++)
             {
-                double minDist = double.MaxValue;
+                T minDist = NumOps.MaxValue;
                 foreach (int med in medoids)
                 {
-                    minDist = Math.Min(minDist, distMatrix[i, med]);
+                    if (NumOps.LessThan(distMatrix[i, med], minDist))
+                        minDist = distMatrix[i, med];
                 }
-                minDistances[i] = minDist * minDist; // Square for probability
-                totalDist += minDistances[i];
+                minDistances[i] = NumOps.Multiply(minDist, minDist); // Square for probability
+                totalDist = NumOps.Add(totalDist, minDistances[i]);
             }
 
             // Select next medoid proportional to squared distance
-            double target = rand.NextDouble() * totalDist;
+            double target = rand.NextDouble() * NumOps.ToDouble(totalDist);
             double cumulative = 0;
             int selected = 0;
 
             for (int i = 0; i < n; i++)
             {
                 if (medoids.Contains(i)) continue;
-                cumulative += minDistances[i];
+                cumulative += NumOps.ToDouble(minDistances[i]);
                 if (cumulative >= target)
                 {
                     selected = i;
@@ -251,23 +253,23 @@ public class KMedoids<T> : ClusteringBase<T>
         return medoids.ToArray();
     }
 
-    private int[] InitializeBuild(double[,] distMatrix, int n, int k)
+    private int[] InitializeBuild(T[,] distMatrix, int n, int k)
     {
         var medoids = new List<int>();
 
         // First medoid: point with minimum total distance to all others
         int firstMedoid = 0;
-        double minTotalDist = double.MaxValue;
+        T minTotalDist = NumOps.MaxValue;
 
         for (int i = 0; i < n; i++)
         {
-            double totalDist = 0;
+            T totalDist = NumOps.Zero;
             for (int j = 0; j < n; j++)
             {
-                totalDist += distMatrix[i, j];
+                totalDist = NumOps.Add(totalDist, distMatrix[i, j]);
             }
 
-            if (totalDist < minTotalDist)
+            if (NumOps.LessThan(totalDist, minTotalDist))
             {
                 minTotalDist = totalDist;
                 firstMedoid = i;
@@ -280,30 +282,33 @@ public class KMedoids<T> : ClusteringBase<T>
         while (medoids.Count < k)
         {
             int bestCandidate = -1;
-            double bestGain = double.NegativeInfinity;
+            T bestGain = NumOps.MinValue;
 
             for (int i = 0; i < n; i++)
             {
                 if (medoids.Contains(i)) continue;
 
-                double gain = 0;
+                T gain = NumOps.Zero;
                 for (int j = 0; j < n; j++)
                 {
                     // Current nearest medoid distance
-                    double currentDist = double.MaxValue;
+                    T currentDist = NumOps.MaxValue;
                     foreach (int med in medoids)
                     {
-                        currentDist = Math.Min(currentDist, distMatrix[j, med]);
+                        if (NumOps.LessThan(distMatrix[j, med], currentDist))
+                            currentDist = distMatrix[j, med];
                     }
 
                     // Distance to candidate
-                    double candidateDist = distMatrix[j, i];
+                    T candidateDist = distMatrix[j, i];
 
                     // Gain is reduction in distance
-                    gain += Math.Max(0, currentDist - candidateDist);
+                    T reduction = NumOps.Subtract(currentDist, candidateDist);
+                    if (NumOps.GreaterThan(reduction, NumOps.Zero))
+                        gain = NumOps.Add(gain, reduction);
                 }
 
-                if (gain > bestGain)
+                if (NumOps.GreaterThan(gain, bestGain))
                 {
                     bestGain = gain;
                     bestCandidate = i;
@@ -330,10 +335,11 @@ public class KMedoids<T> : ClusteringBase<T>
         return medoids.ToArray();
     }
 
-    private int[] RunPAM(double[,] distMatrix, int[] medoids, int n, int k)
+    private int[] RunPAM(T[,] distMatrix, int[] medoids, int n, int k)
     {
         var currentMedoids = (int[])medoids.Clone();
-        double currentCost = ComputeTotalCost(distMatrix, currentMedoids, n);
+        T currentCost = ComputeTotalCost(distMatrix, currentMedoids, n);
+        T tolerance = NumOps.FromDouble(Options.Tolerance);
 
         for (int iter = 0; iter < Options.MaxIterations; iter++)
         {
@@ -350,9 +356,9 @@ public class KMedoids<T> : ClusteringBase<T>
 
                     // Try swapping medoid m with point i
                     currentMedoids[m] = i;
-                    double newCost = ComputeTotalCost(distMatrix, currentMedoids, n);
+                    T newCost = ComputeTotalCost(distMatrix, currentMedoids, n);
 
-                    if (newCost < currentCost - Options.Tolerance)
+                    if (NumOps.LessThan(newCost, NumOps.Subtract(currentCost, tolerance)))
                     {
                         currentCost = newCost;
                         improved = true;
@@ -370,54 +376,54 @@ public class KMedoids<T> : ClusteringBase<T>
         return currentMedoids;
     }
 
-    private int[] RunFastPAM(double[,] distMatrix, int[] medoids, int n, int k)
+    private int[] RunFastPAM(T[,] distMatrix, int[] medoids, int n, int k)
     {
         var currentMedoids = (int[])medoids.Clone();
 
         // Precompute nearest and second-nearest medoid for each point
         var nearest = new int[n];
-        var nearestDist = new double[n];
-        var secondDist = new double[n];
+        var nearestDist = new T[n];
+        var secondDist = new T[n];
 
         UpdateNearestMedoids(distMatrix, currentMedoids, n, k, nearest, nearestDist, secondDist);
+
+        T tolerance = NumOps.FromDouble(Options.Tolerance);
 
         for (int iter = 0; iter < Options.MaxIterations; iter++)
         {
             int bestM = -1;
             int bestI = -1;
-            double bestDelta = 0;
+            T bestDelta = NumOps.Zero;
 
             // For each medoid
             for (int m = 0; m < k; m++)
             {
-                int oldMedoid = currentMedoids[m];
-
                 // For each non-medoid
                 for (int i = 0; i < n; i++)
                 {
                     if (Array.IndexOf(currentMedoids, i) >= 0) continue;
 
                     // Compute swap cost delta
-                    double delta = 0;
+                    T delta = NumOps.Zero;
 
                     for (int j = 0; j < n; j++)
                     {
-                        double distToNew = distMatrix[j, i];
+                        T distToNew = distMatrix[j, i];
 
                         if (nearest[j] == m)
                         {
                             // Currently assigned to medoid being swapped
-                            double newDist = Math.Min(distToNew, secondDist[j]);
-                            delta += newDist - nearestDist[j];
+                            T newDist = NumOps.LessThan(distToNew, secondDist[j]) ? distToNew : secondDist[j];
+                            delta = NumOps.Add(delta, NumOps.Subtract(newDist, nearestDist[j]));
                         }
-                        else if (distToNew < nearestDist[j])
+                        else if (NumOps.LessThan(distToNew, nearestDist[j]))
                         {
                             // Would be reassigned to new medoid
-                            delta += distToNew - nearestDist[j];
+                            delta = NumOps.Add(delta, NumOps.Subtract(distToNew, nearestDist[j]));
                         }
                     }
 
-                    if (delta < bestDelta)
+                    if (NumOps.LessThan(delta, bestDelta))
                     {
                         bestDelta = delta;
                         bestM = m;
@@ -426,7 +432,7 @@ public class KMedoids<T> : ClusteringBase<T>
                 }
             }
 
-            if (bestM < 0 || bestDelta >= -Options.Tolerance)
+            if (bestM < 0 || !NumOps.LessThan(bestDelta, NumOps.Negate(tolerance)))
             {
                 break;
             }
@@ -439,7 +445,7 @@ public class KMedoids<T> : ClusteringBase<T>
         return currentMedoids;
     }
 
-    private int[] RunAlternate(double[,] distMatrix, int[] medoids, int n, int k)
+    private int[] RunAlternate(T[,] distMatrix, int[] medoids, int n, int k)
     {
         var currentMedoids = (int[])medoids.Clone();
         var labels = new int[n];
@@ -450,22 +456,22 @@ public class KMedoids<T> : ClusteringBase<T>
             bool changed = false;
             for (int i = 0; i < n; i++)
             {
-                int nearest = 0;
-                double minDist = double.MaxValue;
+                int nearestIdx = 0;
+                T minDist = NumOps.MaxValue;
 
                 for (int m = 0; m < k; m++)
                 {
-                    double dist = distMatrix[i, currentMedoids[m]];
-                    if (dist < minDist)
+                    T dist = distMatrix[i, currentMedoids[m]];
+                    if (NumOps.LessThan(dist, minDist))
                     {
                         minDist = dist;
-                        nearest = m;
+                        nearestIdx = m;
                     }
                 }
 
-                if (labels[i] != nearest)
+                if (labels[i] != nearestIdx)
                 {
-                    labels[i] = nearest;
+                    labels[i] = nearestIdx;
                     changed = true;
                 }
             }
@@ -486,17 +492,17 @@ public class KMedoids<T> : ClusteringBase<T>
 
                 // Find point that minimizes sum of distances to others in cluster
                 int bestMedoid = currentMedoids[m];
-                double bestCost = double.MaxValue;
+                T bestCost = NumOps.MaxValue;
 
                 foreach (int candidate in clusterPoints)
                 {
-                    double cost = 0;
+                    T cost = NumOps.Zero;
                     foreach (int other in clusterPoints)
                     {
-                        cost += distMatrix[candidate, other];
+                        cost = NumOps.Add(cost, distMatrix[candidate, other]);
                     }
 
-                    if (cost < bestCost)
+                    if (NumOps.LessThan(cost, bestCost))
                     {
                         bestCost = cost;
                         bestMedoid = candidate;
@@ -516,25 +522,25 @@ public class KMedoids<T> : ClusteringBase<T>
         return currentMedoids;
     }
 
-    private void UpdateNearestMedoids(double[,] distMatrix, int[] medoids, int n, int k,
-        int[] nearest, double[] nearestDist, double[] secondDist)
+    private void UpdateNearestMedoids(T[,] distMatrix, int[] medoids, int n, int k,
+        int[] nearest, T[] nearestDist, T[] secondDist)
     {
         for (int i = 0; i < n; i++)
         {
             nearest[i] = 0;
-            nearestDist[i] = double.MaxValue;
-            secondDist[i] = double.MaxValue;
+            nearestDist[i] = NumOps.MaxValue;
+            secondDist[i] = NumOps.MaxValue;
 
             for (int m = 0; m < k; m++)
             {
-                double dist = distMatrix[i, medoids[m]];
-                if (dist < nearestDist[i])
+                T dist = distMatrix[i, medoids[m]];
+                if (NumOps.LessThan(dist, nearestDist[i]))
                 {
                     secondDist[i] = nearestDist[i];
                     nearestDist[i] = dist;
                     nearest[i] = m;
                 }
-                else if (dist < secondDist[i])
+                else if (NumOps.LessThan(dist, secondDist[i]))
                 {
                     secondDist[i] = dist;
                 }
@@ -542,18 +548,19 @@ public class KMedoids<T> : ClusteringBase<T>
         }
     }
 
-    private double ComputeTotalCost(double[,] distMatrix, int[] medoids, int n)
+    private T ComputeTotalCost(T[,] distMatrix, int[] medoids, int n)
     {
-        double totalCost = 0;
+        T totalCost = NumOps.Zero;
 
         for (int i = 0; i < n; i++)
         {
-            double minDist = double.MaxValue;
+            T minDist = NumOps.MaxValue;
             foreach (int m in medoids)
             {
-                minDist = Math.Min(minDist, distMatrix[i, m]);
+                if (NumOps.LessThan(distMatrix[i, m], minDist))
+                    minDist = distMatrix[i, m];
             }
-            totalCost += minDist;
+            totalCost = NumOps.Add(totalCost, minDist);
         }
 
         return totalCost;
@@ -570,7 +577,7 @@ public class KMedoids<T> : ClusteringBase<T>
         for (int i = 0; i < x.Rows; i++)
         {
             var point = GetRow(x, i);
-            double minDist = double.MaxValue;
+            T minDist = NumOps.MaxValue;
             int nearestCluster = 0;
 
             if (ClusterCenters is not null)
@@ -578,9 +585,9 @@ public class KMedoids<T> : ClusteringBase<T>
                 for (int k = 0; k < NumClusters; k++)
                 {
                     var center = GetRow(ClusterCenters, k);
-                    double dist = NumOps.ToDouble(metric.Compute(point, center));
+                    T dist = metric.Compute(point, center);
 
-                    if (dist < minDist)
+                    if (NumOps.LessThan(dist, minDist))
                     {
                         minDist = dist;
                         nearestCluster = k;

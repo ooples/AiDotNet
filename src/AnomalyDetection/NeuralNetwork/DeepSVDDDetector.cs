@@ -446,7 +446,7 @@ public class DeepSVDDDetector<T> : AnomalyDetectorBase<T>
                     // ReLU derivative for h2
                     for (int i = 0; i < _hiddenDim; i++)
                     {
-                        if (NumOps.ToDouble(h2[i]) <= 0) dH2[i] = NumOps.Zero;
+                        if (!NumOps.GreaterThan(h2[i], NumOps.Zero)) dH2[i] = NumOps.Zero;
                     }
 
                     // Backprop through layer 2
@@ -471,7 +471,7 @@ public class DeepSVDDDetector<T> : AnomalyDetectorBase<T>
                     // ReLU derivative for h1
                     for (int i = 0; i < _hiddenDim; i++)
                     {
-                        if (NumOps.ToDouble(h1[i]) <= 0) dH1[i] = NumOps.Zero;
+                        if (!NumOps.GreaterThan(h1[i], NumOps.Zero)) dH1[i] = NumOps.Zero;
                     }
 
                     // Backprop through layer 1

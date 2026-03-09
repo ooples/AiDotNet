@@ -51,7 +51,7 @@ public class FederatedExperienceReplay<T> : Infrastructure.FederatedLearningComp
         _bufferCapacity = bufferCapacity;
         _replayRatio = replayRatio;
         _buffer = new List<(T[], int)>(_bufferCapacity);
-        _rng = new Random(seed);
+        _rng = RandomHelper.CreateSeededRandom(seed);
     }
 
     /// <summary>

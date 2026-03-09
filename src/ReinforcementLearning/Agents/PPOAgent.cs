@@ -776,7 +776,7 @@ public class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>
         int maxIndex = 0;
         for (int i = 1; i < vector.Length; i++)
         {
-            if (NumOps.ToDouble(vector[i]) > NumOps.ToDouble(vector[maxIndex]))
+            if (NumOps.GreaterThan(vector[i], vector[maxIndex]))
                 maxIndex = i;
         }
         return maxIndex;
@@ -787,7 +787,7 @@ public class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>
         T max = vector[0];
         for (int i = 1; i < vector.Length; i++)
         {
-            if (NumOps.ToDouble(vector[i]) > NumOps.ToDouble(max))
+            if (NumOps.GreaterThan(vector[i], max))
                 max = vector[i];
         }
         return max;

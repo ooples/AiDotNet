@@ -345,7 +345,7 @@ public class VERSAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
                 paramIdx++;
             }
             // ReLU activation
-            current[h] = NumOps.ToDouble(sum) > 0 ? sum : NumOps.Zero;
+            current[h] = NumOps.GreaterThan(sum, NumOps.Zero) ? sum : NumOps.Zero;
         }
 
         // Additional hidden layers
@@ -360,7 +360,7 @@ public class VERSAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
                     sum = NumOps.Add(sum, NumOps.Multiply(current[i], _amortizationParams[paramIdx]));
                     paramIdx++;
                 }
-                next[h] = NumOps.ToDouble(sum) > 0 ? sum : NumOps.Zero;
+                next[h] = NumOps.GreaterThan(sum, NumOps.Zero) ? sum : NumOps.Zero;
             }
             current = next;
         }

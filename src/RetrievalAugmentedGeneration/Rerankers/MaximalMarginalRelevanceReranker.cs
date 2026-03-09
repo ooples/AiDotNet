@@ -153,7 +153,7 @@ public class MaximalMarginalRelevanceReranker<T> : RerankerBase<T>
         while (unselected.Count > 0)
         {
             var bestIdx = -1;
-            var bestScore = NumOps.FromDouble(double.MinValue);
+            var bestScore = NumOps.MinValue;
 
             foreach (var i in unselected)
             {

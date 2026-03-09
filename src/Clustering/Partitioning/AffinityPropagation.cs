@@ -45,7 +45,7 @@ public class AffinityPropagation<T> : ClusteringBase<T>
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
     private int[]? _exemplarIndices;
-    private double[,]? _similarityMatrix;
+    private T[,]? _similarityMatrix;
 
     /// <summary>
     /// Initializes a new AffinityPropagation instance.
@@ -65,7 +65,7 @@ public class AffinityPropagation<T> : ClusteringBase<T>
     /// <summary>
     /// Gets the similarity matrix.
     /// </summary>
-    public double[,]? SimilarityMatrix => _similarityMatrix;
+    public T[,]? SimilarityMatrix => _similarityMatrix;
 
     /// <inheritdoc />
     protected override ModelType GetModelType() => ModelType.Clustering;
@@ -107,28 +107,37 @@ public class AffinityPropagation<T> : ClusteringBase<T>
         _similarityMatrix = ComputeSimilarityMatrix(x, n);
 
         // Set preferences (diagonal of similarity matrix)
-        double preference = _options.Preference ?? ComputeMedianSimilarity(_similarityMatrix, n);
+        T preference = _options.Preference.HasValue
+            ? NumOps.FromDouble(_options.Preference.Value)
+            : ComputeMedianSimilarity(_similarityMatrix, n);
         for (int i = 0; i < n; i++)
         {
             _similarityMatrix[i, i] = preference;
         }
 
         // Initialize messages
-        var responsibility = new double[n, n];
-        var availability = new double[n, n];
+        var responsibility = new T[n, n];
+        var availability = new T[n, n];
+        for (int i = 0; i < n; i++)
+            for (int j = 0; j < n; j++)
+            {
+                responsibility[i, j] = NumOps.Zero;
+                availability[i, j] = NumOps.Zero;
+            }
 
         // Message passing
-        double damping = _options.Damping;
+        T damping = NumOps.FromDouble(_options.Damping);
+        T oneMinusDamping = NumOps.Subtract(NumOps.One, damping);
         int convergenceCount = 0;
         var prevExemplars = new int[n];
 
         for (int iter = 0; iter < _options.MaxIterations; iter++)
         {
             // Update responsibilities
-            UpdateResponsibilities(n, _similarityMatrix, availability, responsibility, damping);
+            UpdateResponsibilities(n, _similarityMatrix, availability, responsibility, damping, oneMinusDamping);
 
             // Update availabilities
-            UpdateAvailabilities(n, responsibility, availability, damping);
+            UpdateAvailabilities(n, responsibility, availability, damping, oneMinusDamping);
 
             // Check for convergence
             var currentExemplars = GetExemplars(n, responsibility, availability);
@@ -174,11 +183,11 @@ public class AffinityPropagation<T> : ClusteringBase<T>
             else
             {
                 // Find nearest exemplar
-                double maxSim = double.NegativeInfinity;
+                T maxSim = NumOps.MinValue;
                 int bestExemplar = uniqueExemplars[0];
                 foreach (int ex in uniqueExemplars)
                 {
-                    if (_similarityMatrix[i, ex] > maxSim)
+                    if (NumOps.GreaterThan(_similarityMatrix[i, ex], maxSim))
                     {
                         maxSim = _similarityMatrix[i, ex];
                         bestExemplar = ex;
@@ -202,9 +211,9 @@ public class AffinityPropagation<T> : ClusteringBase<T>
         IsTrained = true;
     }
 
-    private double[,] ComputeSimilarityMatrix(Matrix<T> x, int n)
+    private T[,] ComputeSimilarityMatrix(Matrix<T> x, int n)
     {
-        var similarity = new double[n, n];
+        var similarity = new T[n, n];
 
         if (_options.AffinityType == AffinityPropagationAffinityType.Precomputed)
         {
@@ -213,7 +222,7 @@ public class AffinityPropagation<T> : ClusteringBase<T>
             {
                 for (int j = 0; j < n; j++)
                 {
-                    similarity[i, j] = NumOps.ToDouble(x[i, j]);
+                    similarity[i, j] = x[i, j];
                 }
             }
         }
@@ -224,12 +233,13 @@ public class AffinityPropagation<T> : ClusteringBase<T>
 
             for (int i = 0; i < n; i++)
             {
+                similarity[i, i] = NumOps.Zero;
                 var pointI = GetRow(x, i);
                 for (int j = i + 1; j < n; j++)
                 {
                     var pointJ = GetRow(x, j);
-                    double dist = NumOps.ToDouble(metric.Compute(pointI, pointJ));
-                    double negDistSq = -dist * dist;
+                    T dist = metric.Compute(pointI, pointJ);
+                    T negDistSq = NumOps.Negate(NumOps.Multiply(dist, dist));
                     similarity[i, j] = negDistSq;
                     similarity[j, i] = negDistSq;
                 }
@@ -239,9 +249,9 @@ public class AffinityPropagation<T> : ClusteringBase<T>
         return similarity;
     }
 
-    private double ComputeMedianSimilarity(double[,] similarity, int n)
+    private T ComputeMedianSimilarity(T[,] similarity, int n)
     {
-        var values = new List<double>();
+        var values = new List<T>();
         for (int i = 0; i < n; i++)
         {
             for (int j = 0; j < n; j++)
@@ -253,70 +263,76 @@ public class AffinityPropagation<T> : ClusteringBase<T>
             }
         }
 
-        values.Sort();
+        values.Sort((a, b) => NumOps.Compare(a, b));
         int mid = values.Count / 2;
         return values.Count % 2 == 0
-            ? (values[mid - 1] + values[mid]) / 2
+            ? NumOps.Divide(NumOps.Add(values[mid - 1], values[mid]), NumOps.FromDouble(2.0))
             : values[mid];
     }
 
-    private void UpdateResponsibilities(int n, double[,] similarity, double[,] availability,
-        double[,] responsibility, double damping)
+    private void UpdateResponsibilities(int n, T[,] similarity, T[,] availability,
+        T[,] responsibility, T damping, T oneMinusDamping)
     {
+        T epsilon = NumOps.FromDouble(1e-10);
+
         for (int i = 0; i < n; i++)
         {
             // Compute max of a(i,k') + s(i,k') for k' != k
-            var asValues = new double[n];
+            var asValues = new T[n];
             for (int k = 0; k < n; k++)
             {
-                asValues[k] = availability[i, k] + similarity[i, k];
+                asValues[k] = NumOps.Add(availability[i, k], similarity[i, k]);
             }
 
             for (int k = 0; k < n; k++)
             {
                 // Find max excluding k
-                double max1 = double.NegativeInfinity;
-                double max2 = double.NegativeInfinity;
+                T max1 = NumOps.MinValue;
+                T max2 = NumOps.MinValue;
 
                 for (int kp = 0; kp < n; kp++)
                 {
-                    if (asValues[kp] > max1)
+                    if (NumOps.GreaterThan(asValues[kp], max1))
                     {
                         max2 = max1;
                         max1 = asValues[kp];
                     }
-                    else if (asValues[kp] > max2)
+                    else if (NumOps.GreaterThan(asValues[kp], max2))
                     {
                         max2 = asValues[kp];
                     }
                 }
 
-                double maxOther = (Math.Abs(asValues[k] - max1) < 1e-10) ? max2 : max1;
-                double newResp = similarity[i, k] - maxOther;
+                T maxOther = NumOps.LessThan(NumOps.Abs(NumOps.Subtract(asValues[k], max1)), epsilon) ? max2 : max1;
+                T newResp = NumOps.Subtract(similarity[i, k], maxOther);
 
                 // Apply damping
-                responsibility[i, k] = damping * responsibility[i, k] + (1 - damping) * newResp;
+                responsibility[i, k] = NumOps.Add(
+                    NumOps.Multiply(damping, responsibility[i, k]),
+                    NumOps.Multiply(oneMinusDamping, newResp));
             }
         }
     }
 
-    private void UpdateAvailabilities(int n, double[,] responsibility, double[,] availability, double damping)
+    private void UpdateAvailabilities(int n, T[,] responsibility, T[,] availability, T damping, T oneMinusDamping)
     {
         for (int i = 0; i < n; i++)
         {
             for (int k = 0; k < n; k++)
             {
-                double newAvail;
+                T newAvail;
 
                 if (i == k)
                 {
                     // Self-availability: sum of positive responsibilities
-                    double sum = 0;
+                    T sum = NumOps.Zero;
                     for (int ip = 0; ip < n; ip++)
                     {
                         if (ip != k)
                         {
-                            sum += Math.Max(0, responsibility[ip, k]);
+                            T resp = responsibility[ip, k];
+                            if (NumOps.GreaterThan(resp, NumOps.Zero))
+                                sum = NumOps.Add(sum, resp);
                         }
                     }
                     newAvail = sum;
@@ -324,36 +340,41 @@ public class AffinityPropagation<T> : ClusteringBase<T>
                 else
                 {
                     // Sum of positive responsibilities from others
-                    double sum = 0;
+                    T sum = NumOps.Zero;
                     for (int ip = 0; ip < n; ip++)
                     {
                         if (ip != i && ip != k)
                         {
-                            sum += Math.Max(0, responsibility[ip, k]);
+                            T resp = responsibility[ip, k];
+                            if (NumOps.GreaterThan(resp, NumOps.Zero))
+                                sum = NumOps.Add(sum, resp);
                         }
                     }
-                    newAvail = Math.Min(0, responsibility[k, k] + sum);
+                    T rkk = NumOps.Add(responsibility[k, k], sum);
+                    newAvail = NumOps.LessThan(rkk, NumOps.Zero) ? rkk : NumOps.Zero;
                 }
 
                 // Apply damping
-                availability[i, k] = damping * availability[i, k] + (1 - damping) * newAvail;
+                availability[i, k] = NumOps.Add(
+                    NumOps.Multiply(damping, availability[i, k]),
+                    NumOps.Multiply(oneMinusDamping, newAvail));
             }
         }
     }
 
-    private int[] GetExemplars(int n, double[,] responsibility, double[,] availability)
+    private int[] GetExemplars(int n, T[,] responsibility, T[,] availability)
     {
         var exemplars = new int[n];
 
         for (int i = 0; i < n; i++)
         {
-            double maxValue = double.NegativeInfinity;
+            T maxValue = NumOps.MinValue;
             int bestExemplar = i;
 
             for (int k = 0; k < n; k++)
             {
-                double value = responsibility[i, k] + availability[i, k];
-                if (value > maxValue)
+                T value = NumOps.Add(responsibility[i, k], availability[i, k]);
+                if (NumOps.GreaterThan(value, maxValue))
                 {
                     maxValue = value;
                     bestExemplar = k;
@@ -387,7 +408,7 @@ public class AffinityPropagation<T> : ClusteringBase<T>
         for (int i = 0; i < x.Rows; i++)
         {
             var point = GetRow(x, i);
-            double minDist = double.MaxValue;
+            T minDist = NumOps.MaxValue;
             int nearestCluster = 0;
 
             if (ClusterCenters is not null)
@@ -395,9 +416,9 @@ public class AffinityPropagation<T> : ClusteringBase<T>
                 for (int k = 0; k < NumClusters; k++)
                 {
                     var center = GetRow(ClusterCenters, k);
-                    double dist = NumOps.ToDouble(metric.Compute(point, center));
+                    T dist = metric.Compute(point, center);
 
-                    if (dist < minDist)
+                    if (NumOps.LessThan(dist, minDist))
                     {
                         minDist = dist;
                         nearestCluster = k;
@@ -415,7 +436,7 @@ public class AffinityPropagation<T> : ClusteringBase<T>
     public override Vector<T> FitPredict(Matrix<T> x)
     {
         Train(x);
-        return Labels ?? throw new InvalidOperationException("Training failed to produce cluster labels.");
+        return Labels ?? new Vector<T>(0);
     }
 
     /// <summary>

@@ -3,6 +3,7 @@ using AiDotNet.Clustering.DistanceMetrics;
 using AiDotNet.Clustering.Interfaces;
 using AiDotNet.Clustering.Options;
 using AiDotNet.Enums;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.Clustering.Hierarchical;
@@ -96,15 +97,16 @@ public class BIRCH<T> : ClusteringBase<T>
         NumFeatures = d;
 
         // Initialize root
-        _root = new CFNode(_options.BranchingFactor, _options.Threshold, true);
+        T threshold = NumOps.FromDouble(_options.Threshold);
+        _root = new CFNode(_options.BranchingFactor, threshold, true);
 
         // Insert each point into the CF-tree
         for (int i = 0; i < n; i++)
         {
-            var point = new double[d];
+            var point = new T[d];
             for (int j = 0; j < d; j++)
             {
-                point[j] = NumOps.ToDouble(x[i, j]);
+                point[j] = x[i, j];
             }
 
             var entry = CFEntry.FromPoint(point);
@@ -132,7 +134,7 @@ public class BIRCH<T> : ClusteringBase<T>
                 var centroid = _leafEntries[k].Centroid;
                 for (int j = 0; j < d; j++)
                 {
-                    ClusterCenters[k, j] = NumOps.FromDouble(centroid[j]);
+                    ClusterCenters[k, j] = centroid[j];
                 }
             }
         }
@@ -152,16 +154,18 @@ public class BIRCH<T> : ClusteringBase<T>
 
     private void InsertEntry(CFNode node, CFEntry entry)
     {
+        T threshold = NumOps.FromDouble(_options.Threshold);
+
         if (node.IsLeaf)
         {
             // Try to find closest entry to merge with
             int closestIdx = -1;
-            double closestDist = double.MaxValue;
+            T closestDist = NumOps.MaxValue;
 
             for (int i = 0; i < node.Entries.Count; i++)
             {
-                double dist = CFEntry.Distance(node.Entries[i], entry);
-                if (dist < closestDist)
+                T dist = CFEntry.Distance(node.Entries[i], entry);
+                if (NumOps.LessThan(dist, closestDist))
                 {
                     closestDist = dist;
                     closestIdx = i;
@@ -172,7 +176,7 @@ public class BIRCH<T> : ClusteringBase<T>
             {
                 // Try to merge
                 var merged = CFEntry.Merge(node.Entries[closestIdx], entry);
-                if (merged.Radius <= _options.Threshold)
+                if (!NumOps.GreaterThan(merged.Radius, threshold))
                 {
                     node.Entries[closestIdx] = merged;
                     return;
@@ -192,13 +196,13 @@ public class BIRCH<T> : ClusteringBase<T>
         {
             // Find closest child
             int closestIdx = 0;
-            double closestDist = double.MaxValue;
+            T closestDist = NumOps.MaxValue;
 
             for (int i = 0; i < node.Children.Count; i++)
             {
                 var childCF = ComputeNodeCF(node.Children[i]);
-                double dist = CFEntry.Distance(childCF, entry);
-                if (dist < closestDist)
+                T dist = CFEntry.Distance(childCF, entry);
+                if (NumOps.LessThan(dist, closestDist))
                 {
                     closestDist = dist;
                     closestIdx = i;
@@ -218,16 +222,18 @@ public class BIRCH<T> : ClusteringBase<T>
 
     private void SplitNode(CFNode node)
     {
+        T threshold = NumOps.FromDouble(_options.Threshold);
+
         // Find two farthest entries as seeds
         int seed1 = 0, seed2 = 1;
-        double maxDist = 0;
+        T maxDist = NumOps.Zero;
 
         for (int i = 0; i < node.Entries.Count; i++)
         {
             for (int j = i + 1; j < node.Entries.Count; j++)
             {
-                double dist = CFEntry.Distance(node.Entries[i], node.Entries[j]);
-                if (dist > maxDist)
+                T dist = CFEntry.Distance(node.Entries[i], node.Entries[j]);
+                if (NumOps.GreaterThan(dist, maxDist))
                 {
                     maxDist = dist;
                     seed1 = i;
@@ -237,16 +243,16 @@ public class BIRCH<T> : ClusteringBase<T>
         }
 
         // Create two new nodes
-        var newNode1 = new CFNode(_options.BranchingFactor, _options.Threshold, node.IsLeaf);
-        var newNode2 = new CFNode(_options.BranchingFactor, _options.Threshold, node.IsLeaf);
+        var newNode1 = new CFNode(_options.BranchingFactor, threshold, node.IsLeaf);
+        var newNode2 = new CFNode(_options.BranchingFactor, threshold, node.IsLeaf);
 
         // Distribute entries
         for (int i = 0; i < node.Entries.Count; i++)
         {
-            double dist1 = CFEntry.Distance(node.Entries[i], node.Entries[seed1]);
-            double dist2 = CFEntry.Distance(node.Entries[i], node.Entries[seed2]);
+            T dist1 = CFEntry.Distance(node.Entries[i], node.Entries[seed1]);
+            T dist2 = CFEntry.Distance(node.Entries[i], node.Entries[seed2]);
 
-            if (dist1 <= dist2)
+            if (!NumOps.GreaterThan(dist1, dist2))
             {
                 newNode1.Entries.Add(node.Entries[i]);
                 if (!node.IsLeaf && i < node.Children.Count)
@@ -274,7 +280,7 @@ public class BIRCH<T> : ClusteringBase<T>
         // If this is root, create new root
         if (node == _root)
         {
-            var oldRoot = new CFNode(_options.BranchingFactor, _options.Threshold, node.IsLeaf);
+            var oldRoot = new CFNode(_options.BranchingFactor, threshold, node.IsLeaf);
             foreach (var e in node.Entries) oldRoot.Entries.Add(e);
             foreach (var c in node.Children) oldRoot.Children.Add(c);
 
@@ -293,7 +299,7 @@ public class BIRCH<T> : ClusteringBase<T>
     {
         if (node.Entries.Count == 0)
         {
-            return new CFEntry(0, Array.Empty<double>(), 0);
+            return new CFEntry(0, Array.Empty<T>(), NumOps.Zero);
         }
 
         var merged = node.Entries[0];
@@ -334,7 +340,7 @@ public class BIRCH<T> : ClusteringBase<T>
         }
 
         // Compute distance matrix
-        var distances = new double[n, n];
+        var distances = new T[n, n];
         for (int i = 0; i < n; i++)
         {
             for (int j = i + 1; j < n; j++)
@@ -349,11 +355,12 @@ public class BIRCH<T> : ClusteringBase<T>
 
         // Track merge history: when cluster B merges into A, record mergedInto[B] = A
         var mergedInto = new Dictionary<int, int>();
+        T two = NumOps.FromDouble(2.0);
 
         while (activeClusters.Count > numClusters)
         {
             // Find closest pair
-            double minDist = double.MaxValue;
+            T minDist = NumOps.MaxValue;
             int merge1 = -1, merge2 = -1;
 
             var activeList = activeClusters.ToList();
@@ -364,7 +371,7 @@ public class BIRCH<T> : ClusteringBase<T>
                     int c1 = activeList[i];
                     int c2 = activeList[j];
 
-                    if (distances[c1, c2] < minDist)
+                    if (NumOps.LessThan(distances[c1, c2], minDist))
                     {
                         minDist = distances[c1, c2];
                         merge1 = c1;
@@ -392,7 +399,7 @@ public class BIRCH<T> : ClusteringBase<T>
             {
                 if (c != merge1 && c != merge2)
                 {
-                    distances[merge1, c] = (distances[merge1, c] + distances[merge2, c]) / 2;
+                    distances[merge1, c] = NumOps.Divide(NumOps.Add(distances[merge1, c], distances[merge2, c]), two);
                     distances[c, merge1] = distances[merge1, c];
                 }
             }
@@ -429,12 +436,13 @@ public class BIRCH<T> : ClusteringBase<T>
         }
 
         // Compute cluster centers from entries
-        var clusterCentroids = new double[numClusters][];
+        var clusterCentroids = new T[numClusters][];
         var clusterCounts = new int[numClusters];
 
         for (int k = 0; k < numClusters; k++)
         {
-            clusterCentroids[k] = new double[d];
+            clusterCentroids[k] = new T[d];
+            for (int j = 0; j < d; j++) clusterCentroids[k][j] = NumOps.Zero;
         }
 
         for (int i = 0; i < n; i++)
@@ -443,13 +451,14 @@ public class BIRCH<T> : ClusteringBase<T>
             if (cluster >= 0 && cluster < numClusters)
             {
                 var centroid = entries[i].Centroid;
-                int weight = entries[i].N;
+                T weight = NumOps.FromDouble(entries[i].N);
 
                 for (int j = 0; j < d; j++)
                 {
-                    clusterCentroids[cluster][j] += centroid[j] * weight;
+                    clusterCentroids[cluster][j] = NumOps.Add(clusterCentroids[cluster][j],
+                        NumOps.Multiply(centroid[j], weight));
                 }
-                clusterCounts[cluster] += weight;
+                clusterCounts[cluster] += entries[i].N;
             }
         }
 
@@ -458,9 +467,10 @@ public class BIRCH<T> : ClusteringBase<T>
         {
             if (clusterCounts[k] > 0)
             {
+                T countT = NumOps.FromDouble(clusterCounts[k]);
                 for (int j = 0; j < d; j++)
                 {
-                    ClusterCenters[k, j] = NumOps.FromDouble(clusterCentroids[k][j] / clusterCounts[k]);
+                    ClusterCenters[k, j] = NumOps.Divide(clusterCentroids[k][j], countT);
                 }
             }
         }
@@ -477,7 +487,7 @@ public class BIRCH<T> : ClusteringBase<T>
         for (int i = 0; i < x.Rows; i++)
         {
             var point = GetRow(x, i);
-            double minDist = double.MaxValue;
+            T minDist = NumOps.MaxValue;
             int nearestCluster = 0;
 
             if (ClusterCenters is not null)
@@ -485,9 +495,9 @@ public class BIRCH<T> : ClusteringBase<T>
                 for (int k = 0; k < NumClusters; k++)
                 {
                     var center = GetRow(ClusterCenters, k);
-                    double dist = NumOps.ToDouble(metric.Compute(point, center));
+                    T dist = metric.Compute(point, center);
 
-                    if (dist < minDist)
+                    if (NumOps.LessThan(dist, minDist))
                     {
                         minDist = dist;
                         nearestCluster = k;
@@ -505,7 +515,7 @@ public class BIRCH<T> : ClusteringBase<T>
     public override Vector<T> FitPredict(Matrix<T> x)
     {
         Train(x);
-        return Labels ?? throw new InvalidOperationException("Training failed to produce cluster labels.");
+        return Labels ?? new Vector<T>(0);
     }
 
     /// <summary>
@@ -513,6 +523,8 @@ public class BIRCH<T> : ClusteringBase<T>
     /// </summary>
     public class CFEntry
     {
+        private static readonly INumericOperations<T> Ops = MathHelper.GetNumericOperations<T>();
+
         /// <summary>
         /// Number of points in the cluster.
         /// </summary>
@@ -521,17 +533,17 @@ public class BIRCH<T> : ClusteringBase<T>
         /// <summary>
         /// Linear sum of points.
         /// </summary>
-        public double[] LS { get; }
+        public T[] LS { get; }
 
         /// <summary>
         /// Sum of squared norms.
         /// </summary>
-        public double SS { get; }
+        public T SS { get; }
 
         /// <summary>
         /// Initializes a new CFEntry.
         /// </summary>
-        public CFEntry(int n, double[] ls, double ss)
+        public CFEntry(int n, T[] ls, T ss)
         {
             N = n;
             LS = ls;
@@ -541,15 +553,15 @@ public class BIRCH<T> : ClusteringBase<T>
         /// <summary>
         /// Creates a CFEntry from a single point.
         /// </summary>
-        public static CFEntry FromPoint(double[] point)
+        public static CFEntry FromPoint(T[] point)
         {
-            double ss = 0;
+            T ss = Ops.Zero;
             for (int i = 0; i < point.Length; i++)
             {
-                ss += point[i] * point[i];
+                ss = Ops.Add(ss, Ops.Multiply(point[i], point[i]));
             }
 
-            return new CFEntry(1, (double[])point.Clone(), ss);
+            return new CFEntry(1, (T[])point.Clone(), ss);
         }
 
         /// <summary>
@@ -558,55 +570,57 @@ public class BIRCH<T> : ClusteringBase<T>
         public static CFEntry Merge(CFEntry a, CFEntry b)
         {
             int d = Math.Max(a.LS.Length, b.LS.Length);
-            var ls = new double[d];
+            var ls = new T[d];
+            for (int i = 0; i < d; i++) ls[i] = Ops.Zero;
 
             for (int i = 0; i < a.LS.Length; i++)
             {
-                ls[i] += a.LS[i];
+                ls[i] = Ops.Add(ls[i], a.LS[i]);
             }
             for (int i = 0; i < b.LS.Length; i++)
             {
-                ls[i] += b.LS[i];
+                ls[i] = Ops.Add(ls[i], b.LS[i]);
             }
 
-            return new CFEntry(a.N + b.N, ls, a.SS + b.SS);
+            return new CFEntry(a.N + b.N, ls, Ops.Add(a.SS, b.SS));
         }
 
         /// <summary>
         /// Computes distance between two CFEntries.
         /// </summary>
-        public static double Distance(CFEntry a, CFEntry b)
+        public static T Distance(CFEntry a, CFEntry b)
         {
             // Use centroid distance
             var ca = a.Centroid;
             var cb = b.Centroid;
 
             int d = Math.Max(ca.Length, cb.Length);
-            double sum = 0;
+            T sum = Ops.Zero;
 
             for (int i = 0; i < d; i++)
             {
-                double va = i < ca.Length ? ca[i] : 0;
-                double vb = i < cb.Length ? cb[i] : 0;
-                double diff = va - vb;
-                sum += diff * diff;
+                T va = i < ca.Length ? ca[i] : Ops.Zero;
+                T vb = i < cb.Length ? cb[i] : Ops.Zero;
+                T diff = Ops.Subtract(va, vb);
+                sum = Ops.Add(sum, Ops.Multiply(diff, diff));
             }
 
-            return Math.Sqrt(sum);
+            return Ops.Sqrt(sum);
         }
 
         /// <summary>
         /// Gets the centroid of this entry.
         /// </summary>
-        public double[] Centroid
+        public T[] Centroid
         {
             get
             {
                 if (N == 0) return LS;
-                var result = new double[LS.Length];
+                T nT = Ops.FromDouble(N);
+                var result = new T[LS.Length];
                 for (int i = 0; i < LS.Length; i++)
                 {
-                    result[i] = LS[i] / N;
+                    result[i] = Ops.Divide(LS[i], nT);
                 }
                 return result;
             }
@@ -615,22 +629,23 @@ public class BIRCH<T> : ClusteringBase<T>
         /// <summary>
         /// Gets the radius of this entry.
         /// </summary>
-        public double Radius
+        public T Radius
         {
             get
             {
-                if (N <= 1) return 0;
+                if (N <= 1) return Ops.Zero;
 
                 // Radius = sqrt((SS/N) - ||LS/N||²)
-                double centroidNormSq = 0;
+                T centroidNormSq = Ops.Zero;
                 var c = Centroid;
                 for (int i = 0; i < c.Length; i++)
                 {
-                    centroidNormSq += c[i] * c[i];
+                    centroidNormSq = Ops.Add(centroidNormSq, Ops.Multiply(c[i], c[i]));
                 }
 
-                double variance = SS / N - centroidNormSq;
-                return variance > 0 ? Math.Sqrt(variance) : 0;
+                T nT = Ops.FromDouble(N);
+                T variance = Ops.Subtract(Ops.Divide(SS, nT), centroidNormSq);
+                return Ops.GreaterThan(variance, Ops.Zero) ? Ops.Sqrt(variance) : Ops.Zero;
             }
         }
     }
@@ -656,12 +671,12 @@ public class BIRCH<T> : ClusteringBase<T>
         public bool IsLeaf { get; set; }
 
         private readonly int _branchingFactor;
-        private readonly double _threshold;
+        private readonly T _threshold;
 
         /// <summary>
         /// Initializes a new CFNode.
         /// </summary>
-        public CFNode(int branchingFactor, double threshold, bool isLeaf)
+        public CFNode(int branchingFactor, T threshold, bool isLeaf)
         {
             _branchingFactor = branchingFactor;
             _threshold = threshold;

@@ -357,7 +357,7 @@ public class VerticalPartyLabelHolder<T> : FederatedLearningComponentBase<T>, IV
     {
         for (int i = 0; i < totalElements; i++)
         {
-            if (NumOps.ToDouble(tensor[i]) < 0.0)
+            if (NumOps.LessThan(tensor[i], NumOps.FromDouble(0.0)))
             {
                 tensor[i] = NumOps.FromDouble(0.0);
             }
@@ -368,7 +368,7 @@ public class VerticalPartyLabelHolder<T> : FederatedLearningComponentBase<T>, IV
     {
         for (int i = 0; i < totalElements; i++)
         {
-            if (NumOps.ToDouble(activation[i]) <= 0.0)
+            if (!NumOps.GreaterThan(activation[i], NumOps.FromDouble(0.0)))
             {
                 grad[i] = NumOps.FromDouble(0.0);
             }

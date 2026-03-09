@@ -185,7 +185,7 @@ public class SITrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TOu
         var computeValidation = _options.ComputeValidationMetrics ?? (validationData != null);
         var learningRate = Configuration.LearningRate ?? NumOps.FromDouble(0.001);
 
-        T bestValidationLoss = NumOps.FromDouble(double.MaxValue);
+        T bestValidationLoss = NumOps.MaxValue;
         int epochsWithoutImprovement = 0;
         long totalGradientUpdates = 0;
 

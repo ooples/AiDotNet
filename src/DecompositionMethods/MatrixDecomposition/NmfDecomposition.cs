@@ -160,7 +160,7 @@ public class NmfDecomposition<T> : MatrixDecompositionBase<T>
         // (multiplicative updates can get trapped in zero-locked states)
         Matrix<T> bestW = new Matrix<T>(0, 0);
         Matrix<T> bestH = new Matrix<T>(0, 0);
-        T bestError = NumOps.FromDouble(double.MaxValue);
+        T bestError = NumOps.MaxValue;
         int nRestarts = 5;
 
         for (int restart = 0; restart < nRestarts; restart++)
@@ -187,7 +187,7 @@ public class NmfDecomposition<T> : MatrixDecompositionBase<T>
         Matrix<T> tempW = InitializeRandomMatrix(m, k, initScale);
         Matrix<T> tempH = InitializeRandomMatrix(k, n, initScale);
 
-        T previousError = NumOps.FromDouble(double.MaxValue);
+        T previousError = NumOps.MaxValue;
         T toleranceT = NumOps.FromDouble(tolerance);
         T epsilon = NumOps.FromDouble(1e-10);
 

@@ -110,7 +110,7 @@ public class MaskRCNN<T> : InstanceSegmenterBase<T>
             var (classId, confidence) = GetPrediction(classLogits);
 
             // Skip background class
-            if (classId == 0 || NumOps.ToDouble(confidence) < NumOps.ToDouble(Options.ConfidenceThreshold))
+            if (classId == 0 || NumOps.LessThan(confidence, Options.ConfidenceThreshold))
                 continue;
 
             // Predict mask for this class

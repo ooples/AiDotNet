@@ -1,5 +1,6 @@
 using AiDotNet.Enums;
 using AiDotNet.Models.Options;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.CausalDiscovery.ContinuousOptimization;
 
@@ -156,7 +157,7 @@ public class DAGMANonlinear<T> : ContinuousOptimizationBase<T>
 
     private void InitializeMLPParameters(int d, int h)
     {
-        var rng = new Random(_seed);
+        var rng = RandomHelper.CreateSeededRandom(_seed);
         double scale = Math.Sqrt(2.0 / d);
 
         _W1 = new Matrix<T>[d]; _b1 = new double[d][];
@@ -396,14 +397,14 @@ public class DAGMANonlinear<T> : ContinuousOptimizationBase<T>
         {
             int maxRow = k;
             for (int i = k + 1; i < d; i++)
-                if (Math.Abs(NumOps.ToDouble(LU[i, k])) > Math.Abs(NumOps.ToDouble(LU[maxRow, k])))
+                if (NumOps.GreaterThan(NumOps.Abs(LU[i, k]), NumOps.Abs(LU[maxRow, k])))
                     maxRow = i;
 
             if (maxRow != k)
                 for (int j = 0; j < d; j++)
                     (LU[k, j], LU[maxRow, j]) = (LU[maxRow, j], LU[k, j]);
 
-            if (Math.Abs(NumOps.ToDouble(LU[k, k])) < 1e-15)
+            if (NumOps.LessThan(NumOps.Abs(LU[k, k]), NumOps.FromDouble(1e-15)))
                 return double.NegativeInfinity;
 
             for (int i = k + 1; i < d; i++)
@@ -433,10 +434,10 @@ public class DAGMANonlinear<T> : ContinuousOptimizationBase<T>
         {
             int maxRow = col;
             for (int row = col + 1; row < d; row++)
-                if (Math.Abs(NumOps.ToDouble(aug[row, col])) > Math.Abs(NumOps.ToDouble(aug[maxRow, col])))
+                if (NumOps.GreaterThan(NumOps.Abs(aug[row, col]), NumOps.Abs(aug[maxRow, col])))
                     maxRow = row;
 
-            if (Math.Abs(NumOps.ToDouble(aug[maxRow, col])) < 1e-12) return null;
+            if (NumOps.LessThan(NumOps.Abs(aug[maxRow, col]), NumOps.FromDouble(1e-12))) return null;
 
             if (maxRow != col)
                 for (int j = 0; j < 2 * d; j++)

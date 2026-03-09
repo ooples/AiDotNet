@@ -41,8 +41,8 @@ public class PositivePredictiveValueMetric<T> : IClassificationMetric<T>
         int tp = 0, fp = 0;
         for (int i = 0; i < predictions.Length; i++)
         {
-            bool pred = NumOps.ToDouble(predictions[i]) >= 0.5;
-            bool actual = NumOps.ToDouble(actuals[i]) >= 0.5;
+            bool pred = NumOps.GreaterThanOrEquals(predictions[i], NumOps.FromDouble(0.5));
+            bool actual = NumOps.GreaterThanOrEquals(actuals[i], NumOps.FromDouble(0.5));
 
             if (pred && actual) tp++;
             else if (pred && !actual) fp++;

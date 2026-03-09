@@ -164,7 +164,7 @@ public class JointMutualInformation<T> : TransformerBase<T, Matrix<T>, Matrix<T>
     {
         var discretized = new int[n];
         for (int i = 0; i < n; i++)
-            discretized[i] = NumOps.ToDouble(target[i]) > 0.5 ? 1 : 0;
+            discretized[i] = NumOps.GreaterThan(target[i], NumOps.FromDouble(0.5)) ? 1 : 0;
         return discretized;
     }
 

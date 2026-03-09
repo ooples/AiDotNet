@@ -316,7 +316,7 @@ public class SpeakerVerifier<T> : SpeakerRecognitionBase<T>, ISpeakerVerifier<T>
         var score = ComputeCosineSimilarity(testEmbedding, referenceEmbedding);
 
         // Make decision (score >= threshold)
-        var isAccepted = NumOps.ToDouble(score) >= NumOps.ToDouble(threshold);
+        var isAccepted = NumOps.GreaterThanOrEquals(score, threshold);
 
         // Compute confidence (distance from threshold)
         var scoreDiff = NumOps.Subtract(score, threshold);

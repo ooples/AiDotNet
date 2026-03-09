@@ -596,7 +596,7 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         var maxScores = new T[numNodes];
         for (int i = 0; i < numNodes; i++)
         {
-            maxScores[i] = NumOps.FromDouble(double.NegativeInfinity);
+            maxScores[i] = NumOps.MinValue;
         }
 
         // First pass: compute raw scores and find max for numerical stability
@@ -608,7 +608,7 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
                 T adjValue = adj2D ? adjacencyMatrix[i, j] : adjacencyMatrix[b, i, j];
                 if (NumOps.Equals(adjValue, NumOps.Zero))
                 {
-                    lastPreSoftmaxScores[b, h, i, j] = NumOps.FromDouble(double.NegativeInfinity);
+                    lastPreSoftmaxScores[b, h, i, j] = NumOps.MinValue;
                     continue;
                 }
 

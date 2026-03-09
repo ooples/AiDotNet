@@ -12,7 +12,8 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Helpers;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
-
+
+
 using AiDotNet.Finance.Base;
 namespace AiDotNet.Finance.Forecasting.Neural;
 
@@ -886,7 +887,7 @@ public class MQCNN<T> : ForecastingModelBase<T>
 
                 // Quantile loss: q * max(error, 0) + (1-q) * max(-error, 0)
                 T loss;
-                if (NumOps.ToDouble(error) >= 0)
+                if (!NumOps.LessThan(error, NumOps.Zero))
                 {
                     loss = NumOps.Multiply(NumOps.FromDouble(quantile), error);
                 }
@@ -1024,8 +1025,8 @@ public class MQCNN<T> : ForecastingModelBase<T>
             T lower = lowerPred[t];
             T upper = upperPred[t];
 
-            if (NumOps.ToDouble(actual) >= NumOps.ToDouble(lower) &&
-                NumOps.ToDouble(actual) <= NumOps.ToDouble(upper))
+            if (NumOps.GreaterThanOrEquals(actual, lower) &&
+                NumOps.LessThanOrEquals(actual, upper))
             {
                 covered++;
             }

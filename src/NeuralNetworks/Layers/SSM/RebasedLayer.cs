@@ -217,7 +217,7 @@ public class RebasedLayer<T> : LayerBase<T>
         {
             T val = headVector[d];
             // ReLU: max(0, x)
-            T reluVal = NumOps.ToDouble(val) > 0.0 ? val : NumOps.Zero;
+            T reluVal = NumOps.GreaterThan(val, NumOps.FromDouble(0.0)) ? val : NumOps.Zero;
             // Square the ReLU output
             T squared = NumOps.Multiply(reluVal, reluVal);
             featureOutput[d] = squared;
@@ -665,8 +665,8 @@ public class RebasedLayer<T> : LayerBase<T>
                         T dU_K = NumOps.Multiply(NumOps.Subtract(dPhiK[d], NumOps.Multiply(phiKd, dotK)), kNormInv);
 
                         // du/dx = 2*ReLU(x) for x > 0, 0 otherwise
-                        T qRelu = NumOps.ToDouble(qVal) > 0.0 ? qVal : NumOps.Zero;
-                        T kRelu = NumOps.ToDouble(kVal) > 0.0 ? kVal : NumOps.Zero;
+                        T qRelu = NumOps.GreaterThan(qVal, NumOps.FromDouble(0.0)) ? qVal : NumOps.Zero;
+                        T kRelu = NumOps.GreaterThan(kVal, NumOps.FromDouble(0.0)) ? kVal : NumOps.Zero;
 
                         T dQ_d = NumOps.Multiply(dU_Q, NumOps.Multiply(NumOps.FromDouble(2.0), qRelu));
                         T dK_d = NumOps.Multiply(dU_K, NumOps.Multiply(NumOps.FromDouble(2.0), kRelu));

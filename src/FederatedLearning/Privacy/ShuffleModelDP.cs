@@ -76,7 +76,7 @@ public class ShuffleModelDP<T> : PrivacyMechanismBase<Dictionary<string, T[]>, T
             throw new ArgumentOutOfRangeException(nameof(delta), "Delta must be in [0, 1).");
         }
 
-        var rng = new Random(_seed + _roundCounter++);
+        var rng = RandomHelper.CreateSeededRandom(_seed + _roundCounter++);
         double effectiveEpsilon = Math.Min(epsilon, _localEpsilon);
 
         // Gaussian mechanism: sigma = sqrt(2 * ln(1.25/delta)) / epsilon.
@@ -151,7 +151,7 @@ public class ShuffleModelDP<T> : PrivacyMechanismBase<Dictionary<string, T[]>, T
         int n = updates.Count;
 
         // Fisher-Yates shuffle for uniform random permutation.
-        var rng = new Random(_seed + _roundCounter);
+        var rng = RandomHelper.CreateSeededRandom(_seed + _roundCounter);
         for (int i = n - 1; i > 0; i--)
         {
             int j = rng.Next(i + 1);

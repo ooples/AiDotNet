@@ -188,25 +188,19 @@ public class OrdinalRegression<T> : ClassifierBase<T>
             var (coeffGradient, threshGradient, logLikelihood) = ComputeGradients(x, y);
 
             // Update coefficients
+            T learningRate = NumOps.FromDouble(_options.LearningRate);
+            T regStrength = NumOps.FromDouble(_options.RegularizationStrength);
             for (int j = 0; j < NumFeatures; j++)
             {
-                double coeff = NumOps.ToDouble(_coefficients[j]);
-                double grad = NumOps.ToDouble(coeffGradient[j]);
-
                 // Add L2 regularization gradient
-                grad -= _options.RegularizationStrength * coeff;
-
-                coeff += _options.LearningRate * grad;
-                _coefficients[j] = NumOps.FromDouble(coeff);
+                T grad = NumOps.Subtract(coeffGradient[j], NumOps.Multiply(regStrength, _coefficients[j]));
+                _coefficients[j] = NumOps.Add(_coefficients[j], NumOps.Multiply(learningRate, grad));
             }
 
             // Update thresholds
             for (int k = 0; k < NumClasses - 1; k++)
             {
-                double thresh = NumOps.ToDouble(_thresholds[k]);
-                double grad = NumOps.ToDouble(threshGradient[k]);
-                thresh += _options.LearningRate * grad;
-                _thresholds[k] = NumOps.FromDouble(thresh);
+                _thresholds[k] = NumOps.Add(_thresholds[k], NumOps.Multiply(learningRate, threshGradient[k]));
             }
 
             // Enforce threshold ordering: α_1 < α_2 < ... < α_{K-1}
@@ -280,13 +274,13 @@ public class OrdinalRegression<T> : ClassifierBase<T>
         for (int k = 0; k < NumClasses - 1; k++) threshGradient[k] = NumOps.Zero;
 
         // Compute linear predictor for all samples: η_i = β^T × x_i
-        var eta = new double[n];
+        var eta = new T[n];
         for (int i = 0; i < n; i++)
         {
-            double sum = 0;
+            T sum = NumOps.Zero;
             for (int j = 0; j < NumFeatures; j++)
             {
-                sum += NumOps.ToDouble(_coefficients![j]) * NumOps.ToDouble(x[i, j]);
+                sum = NumOps.Add(sum, NumOps.Multiply(_coefficients![j], x[i, j]));
             }
             eta[i] = sum;
         }
@@ -301,7 +295,7 @@ public class OrdinalRegression<T> : ClassifierBase<T>
             for (int k = 0; k < NumClasses - 1; k++)
             {
                 double alpha_k = NumOps.ToDouble(_thresholds![k]);
-                cumProbs[k] = ApplyLink(alpha_k - eta[i]);
+                cumProbs[k] = ApplyLink(alpha_k - NumOps.ToDouble(eta[i]));
             }
 
             // Compute class probabilities P(Y = k)
@@ -338,14 +332,11 @@ public class OrdinalRegression<T> : ClassifierBase<T>
 
             // Gradient for coefficients: (1/P(Y=yi)) × dP(Y=yi)/dη × x
             // Note: since dP/dη is negative of dP/d(α-η), and we want dL/dβ = Σ dL/dP × dP/dη × (-x)
-            double coeffFactor = dPdEta / classProbs[yi];
+            T coeffFactor = NumOps.FromDouble(dPdEta / classProbs[yi]);
             for (int j = 0; j < NumFeatures; j++)
             {
-                double xij = NumOps.ToDouble(x[i, j]);
-                double currentGrad = NumOps.ToDouble(coeffGradient[j]);
                 // The sign is negative because ∂η/∂β = x and ∂(α-η)/∂β = -x
-                currentGrad -= coeffFactor * xij;
-                coeffGradient[j] = NumOps.FromDouble(currentGrad);
+                coeffGradient[j] = NumOps.Subtract(coeffGradient[j], NumOps.Multiply(coeffFactor, x[i, j]));
             }
 
             // Gradient for thresholds: (1/P(Y=yi)) × dP(Y=yi)/dα_k
@@ -366,9 +357,7 @@ public class OrdinalRegression<T> : ClassifierBase<T>
                     threshGrad -= cumProbs[k] * (1 - cumProbs[k]);
                 }
 
-                double currentThreshGrad = NumOps.ToDouble(threshGradient[k]);
-                currentThreshGrad += threshGrad / classProbs[yi];
-                threshGradient[k] = NumOps.FromDouble(currentThreshGrad);
+                threshGradient[k] = NumOps.Add(threshGradient[k], NumOps.FromDouble(threshGrad / classProbs[yi]));
             }
         }
 
@@ -464,15 +453,13 @@ public class OrdinalRegression<T> : ClassifierBase<T>
         if (_thresholds == null || _thresholds.Length <= 1) return;
 
         // Simple projection: ensure each threshold is at least slightly larger than the previous
-        double minGap = 0.01;
+        T minGap = NumOps.FromDouble(0.01);
         for (int k = 1; k < _thresholds.Length; k++)
         {
-            double prevThresh = NumOps.ToDouble(_thresholds[k - 1]);
-            double currThresh = NumOps.ToDouble(_thresholds[k]);
-
-            if (currThresh <= prevThresh + minGap)
+            T minAllowed = NumOps.Add(_thresholds[k - 1], minGap);
+            if (!NumOps.GreaterThan(_thresholds[k], minAllowed))
             {
-                _thresholds[k] = NumOps.FromDouble(prevThresh + minGap);
+                _thresholds[k] = minAllowed;
             }
         }
     }
@@ -505,14 +492,14 @@ public class OrdinalRegression<T> : ClassifierBase<T>
         for (int i = 0; i < input.Rows; i++)
         {
             // Compute class probabilities
-            double[] classProbs = ComputeClassProbabilities(input, i);
+            T[] classProbs = ComputeClassProbabilities(input, i);
 
             // Find class with maximum probability
             int maxClass = 0;
-            double maxProb = classProbs[0];
+            T maxProb = classProbs[0];
             for (int k = 1; k < NumClasses; k++)
             {
-                if (classProbs[k] > maxProb)
+                if (NumOps.GreaterThan(classProbs[k], maxProb))
                 {
                     maxProb = classProbs[k];
                     maxClass = k;
@@ -541,16 +528,17 @@ public class OrdinalRegression<T> : ClassifierBase<T>
     /// This computes the probability of being in each category (all probabilities sum to 1).
     /// </para>
     /// </remarks>
-    private double[] ComputeClassProbabilities(Matrix<T> x, int sampleIndex)
+    private T[] ComputeClassProbabilities(Matrix<T> x, int sampleIndex)
     {
         // Compute linear predictor: η = β^T × x
-        double eta = 0;
+        T etaT = NumOps.Zero;
         for (int j = 0; j < NumFeatures; j++)
         {
-            eta += NumOps.ToDouble(_coefficients![j]) * NumOps.ToDouble(x[sampleIndex, j]);
+            etaT = NumOps.Add(etaT, NumOps.Multiply(_coefficients![j], x[sampleIndex, j]));
         }
+        double eta = NumOps.ToDouble(etaT);
 
-        // Compute cumulative probabilities P(Y ≤ k)
+        // Compute cumulative probabilities P(Y ≤ k) — uses special functions (sigmoid, Erf)
         var cumProbs = new double[NumClasses - 1];
         for (int k = 0; k < NumClasses - 1; k++)
         {
@@ -558,19 +546,24 @@ public class OrdinalRegression<T> : ClassifierBase<T>
             cumProbs[k] = ApplyLink(alpha_k - eta);
         }
 
-        // Compute class probabilities
-        var classProbs = new double[NumClasses];
-        classProbs[0] = cumProbs[0];
+        // Compute class probabilities and convert to T
+        var classProbs = new T[NumClasses];
+        classProbs[0] = NumOps.FromDouble(cumProbs[0]);
         for (int k = 1; k < NumClasses - 1; k++)
         {
-            classProbs[k] = cumProbs[k] - cumProbs[k - 1];
+            classProbs[k] = NumOps.FromDouble(cumProbs[k] - cumProbs[k - 1]);
         }
-        classProbs[NumClasses - 1] = 1.0 - cumProbs[NumClasses - 2];
+        classProbs[NumClasses - 1] = NumOps.FromDouble(1.0 - cumProbs[NumClasses - 2]);
 
         // Clamp probabilities
+        T zero = NumOps.Zero;
+        T one = NumOps.One;
         for (int k = 0; k < NumClasses; k++)
         {
-            classProbs[k] = Math.Max(0, Math.Min(1.0, classProbs[k]));
+            if (NumOps.LessThan(classProbs[k], zero))
+                classProbs[k] = zero;
+            else if (NumOps.GreaterThan(classProbs[k], one))
+                classProbs[k] = one;
         }
 
         return classProbs;
@@ -603,10 +596,10 @@ public class OrdinalRegression<T> : ClassifierBase<T>
 
         for (int i = 0; i < input.Rows; i++)
         {
-            double[] classProbs = ComputeClassProbabilities(input, i);
+            T[] classProbs = ComputeClassProbabilities(input, i);
             for (int k = 0; k < NumClasses; k++)
             {
-                probs[i, k] = NumOps.FromDouble(classProbs[k]);
+                probs[i, k] = classProbs[k];
             }
         }
 
@@ -785,22 +778,16 @@ public class OrdinalRegression<T> : ClassifierBase<T>
             throw new InvalidOperationException("Model must be trained before applying gradients.");
         }
 
-        double lr = NumOps.ToDouble(learningRate);
-
         // Update coefficients
         for (int j = 0; j < NumFeatures; j++)
         {
-            double coeff = NumOps.ToDouble(_coefficients[j]);
-            double grad = NumOps.ToDouble(gradients[j]);
-            _coefficients[j] = NumOps.FromDouble(coeff - lr * grad);
+            _coefficients[j] = NumOps.Subtract(_coefficients[j], NumOps.Multiply(learningRate, gradients[j]));
         }
 
         // Update thresholds
         for (int k = 0; k < NumClasses - 1; k++)
         {
-            double thresh = NumOps.ToDouble(_thresholds[k]);
-            double grad = NumOps.ToDouble(gradients[NumFeatures + k]);
-            _thresholds[k] = NumOps.FromDouble(thresh - lr * grad);
+            _thresholds[k] = NumOps.Subtract(_thresholds[k], NumOps.Multiply(learningRate, gradients[NumFeatures + k]));
         }
 
         // Enforce threshold ordering
@@ -831,7 +818,7 @@ public class OrdinalRegression<T> : ClassifierBase<T>
             string name = FeatureNames != null && i < FeatureNames.Length
                 ? FeatureNames[i]
                 : $"Feature_{i}";
-            result[name] = NumOps.FromDouble(Math.Abs(NumOps.ToDouble(_coefficients[i])));
+            result[name] = NumOps.Abs(_coefficients[i]);
         }
 
         return result;

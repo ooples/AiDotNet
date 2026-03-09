@@ -181,7 +181,7 @@ public class VoiceCraft<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         var result = new Tensor<T>([audio.Length]);
         for (int i = 0; i < audio.Length; i++)
         {
-            bool isMasked = i < mask.Length && NumOps.ToDouble(mask[i]) > 0.5;
+            bool isMasked = i < mask.Length && NumOps.GreaterThan(mask[i], NumOps.FromDouble(0.5));
             if (isMasked && i < features.Length)
             {
                 double v = NumOps.ToDouble(features[i]);

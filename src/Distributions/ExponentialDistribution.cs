@@ -94,7 +94,7 @@ internal class ExponentialDistribution<T> : DistributionBase<T>
     public override T LogPdf(T x)
     {
         if (NumOps.Compare(x, Zero) < 0)
-            return NumOps.FromDouble(double.NegativeInfinity);
+            return NumOps.MinValue;
 
         // log(pdf) = log(λ) - λx
         return NumOps.Subtract(NumOps.Log(_rate), NumOps.Multiply(_rate, x));
@@ -119,7 +119,7 @@ internal class ExponentialDistribution<T> : DistributionBase<T>
             throw new ArgumentOutOfRangeException(nameof(p), "Probability must be in [0, 1].");
 
         if (pVal == 0) return Zero;
-        if (pVal == 1) return NumOps.FromDouble(double.PositiveInfinity);
+        if (pVal == 1) return NumOps.MaxValue;
 
         // x = -log(1-p) / λ
         double rate = NumOps.ToDouble(_rate);

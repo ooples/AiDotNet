@@ -409,7 +409,7 @@ public class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
 
         // Mask non-neighbors with -inf
         var negInf = new Tensor<T>(tiled.Shape);
-        negInf.Fill(NumOps.FromDouble(double.NegativeInfinity));
+        negInf.Fill(NumOps.MinValue);
 
         var zeroTensor = new Tensor<T>(adjExpanded.Shape);
         zeroTensor.Fill(NumOps.Zero);

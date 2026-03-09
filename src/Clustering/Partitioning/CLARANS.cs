@@ -4,6 +4,7 @@ using AiDotNet.Clustering.Interfaces;
 using AiDotNet.Clustering.Options;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Clustering.Partitioning;
 
@@ -48,7 +49,7 @@ public class CLARANS<T> : ClusteringBase<T>
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
     private int[]? _medoidIndices;
-    private double _bestCost;
+    private T _bestCost = MathHelper.GetNumericOperations<T>().Zero;
 
     /// <summary>
     /// Initializes a new CLARANS instance.
@@ -69,7 +70,7 @@ public class CLARANS<T> : ClusteringBase<T>
     /// <summary>
     /// Gets the best cost found.
     /// </summary>
-    public double BestCost => _bestCost;
+    public T BestCost => _bestCost;
 
     /// <inheritdoc />
     protected override ModelType GetModelType() => ModelType.Clustering;
@@ -127,7 +128,7 @@ public class CLARANS<T> : ClusteringBase<T>
         // Compute max neighbors to explore
         int maxNeighbor = _options.MaxNeighbor ?? Math.Max(250, (int)(0.0125 * n * k));
 
-        _bestCost = double.MaxValue;
+        _bestCost = NumOps.MaxValue;
         int[]? bestMedoids = null;
 
         // Run numLocal iterations
@@ -135,7 +136,7 @@ public class CLARANS<T> : ClusteringBase<T>
         {
             // Initialize random medoids
             var currentMedoids = SelectRandomMedoids(n, k, rand);
-            double currentCost = ComputeTotalCost(distMatrix, currentMedoids, n);
+            T currentCost = ComputeTotalCost(distMatrix, currentMedoids, n);
 
             // Local search
             int neighborsExplored = 0;
@@ -144,7 +145,6 @@ public class CLARANS<T> : ClusteringBase<T>
             {
                 // Select random medoid to swap
                 int medoidIdx = rand.Next(k);
-                int oldMedoid = currentMedoids[medoidIdx];
 
                 // Select random non-medoid
                 int newMedoid;
@@ -156,9 +156,9 @@ public class CLARANS<T> : ClusteringBase<T>
                 // Compute cost of swap
                 var newMedoids = (int[])currentMedoids.Clone();
                 newMedoids[medoidIdx] = newMedoid;
-                double newCost = ComputeTotalCost(distMatrix, newMedoids, n);
+                T newCost = ComputeTotalCost(distMatrix, newMedoids, n);
 
-                if (newCost < currentCost)
+                if (NumOps.LessThan(newCost, currentCost))
                 {
                     // Accept swap, reset counter
                     currentMedoids = newMedoids;
@@ -172,7 +172,7 @@ public class CLARANS<T> : ClusteringBase<T>
             }
 
             // Update best if improved
-            if (currentCost < _bestCost)
+            if (NumOps.LessThan(currentCost, _bestCost))
             {
                 _bestCost = currentCost;
                 bestMedoids = (int[])currentMedoids.Clone();
@@ -197,12 +197,12 @@ public class CLARANS<T> : ClusteringBase<T>
         for (int i = 0; i < n; i++)
         {
             int nearestMedoid = 0;
-            double minDist = double.MaxValue;
+            T minDist = NumOps.MaxValue;
 
             for (int m = 0; m < k; m++)
             {
-                double dist = distMatrix[i, _medoidIndices[m]];
-                if (dist < minDist)
+                T dist = distMatrix[i, _medoidIndices[m]];
+                if (NumOps.LessThan(dist, minDist))
                 {
                     minDist = dist;
                     nearestMedoid = m;
@@ -215,9 +215,9 @@ public class CLARANS<T> : ClusteringBase<T>
         IsTrained = true;
     }
 
-    private double[,] ComputeDistanceMatrix(Matrix<T> x, int n, IDistanceMetric<T> metric)
+    private T[,] ComputeDistanceMatrix(Matrix<T> x, int n, IDistanceMetric<T> metric)
     {
-        var distMatrix = new double[n, n];
+        var distMatrix = new T[n, n];
 
         for (int i = 0; i < n; i++)
         {
@@ -225,7 +225,7 @@ public class CLARANS<T> : ClusteringBase<T>
             for (int j = i + 1; j < n; j++)
             {
                 var pointJ = GetRow(x, j);
-                double dist = NumOps.ToDouble(metric.Compute(pointI, pointJ));
+                T dist = metric.Compute(pointI, pointJ);
                 distMatrix[i, j] = dist;
                 distMatrix[j, i] = dist;
             }
@@ -244,21 +244,21 @@ public class CLARANS<T> : ClusteringBase<T>
         return indices.ToArray();
     }
 
-    private double ComputeTotalCost(double[,] distMatrix, int[] medoids, int n)
+    private T ComputeTotalCost(T[,] distMatrix, int[] medoids, int n)
     {
-        double totalCost = 0;
+        T totalCost = NumOps.Zero;
 
         for (int i = 0; i < n; i++)
         {
-            double minDist = double.MaxValue;
+            T minDist = NumOps.MaxValue;
             foreach (int m in medoids)
             {
-                if (distMatrix[i, m] < minDist)
+                if (NumOps.LessThan(distMatrix[i, m], minDist))
                 {
                     minDist = distMatrix[i, m];
                 }
             }
-            totalCost += minDist;
+            totalCost = NumOps.Add(totalCost, minDist);
         }
 
         return totalCost;
@@ -275,7 +275,7 @@ public class CLARANS<T> : ClusteringBase<T>
         for (int i = 0; i < x.Rows; i++)
         {
             var point = GetRow(x, i);
-            double minDist = double.MaxValue;
+            T minDist = NumOps.MaxValue;
             int nearestCluster = 0;
 
             if (ClusterCenters is not null)
@@ -283,9 +283,9 @@ public class CLARANS<T> : ClusteringBase<T>
                 for (int k = 0; k < NumClusters; k++)
                 {
                     var center = GetRow(ClusterCenters, k);
-                    double dist = NumOps.ToDouble(metric.Compute(point, center));
+                    T dist = metric.Compute(point, center);
 
-                    if (dist < minDist)
+                    if (NumOps.LessThan(dist, minDist))
                     {
                         minDist = dist;
                         nearestCluster = k;
@@ -303,7 +303,7 @@ public class CLARANS<T> : ClusteringBase<T>
     public override Vector<T> FitPredict(Matrix<T> x)
     {
         Train(x);
-        return Labels ?? throw new InvalidOperationException("Training failed to produce cluster labels.");
+        return Labels ?? new Vector<T>(0);
     }
 
     /// <summary>

@@ -140,26 +140,26 @@ public class TweedieRegression<T> : RegressionBase<T>
         Intercept = NumOps.Zero;
 
         // Calculate mean of positive values for initialization
-        double sumY = 0;
+        T sumY = NumOps.Zero;
         int countPositive = 0;
         for (int i = 0; i < numSamples; i++)
         {
-            double val = NumOps.ToDouble(y[i]);
-            if (val > 0)
+            if (NumOps.GreaterThan(y[i], NumOps.Zero))
             {
-                sumY += val;
+                sumY = NumOps.Add(sumY, y[i]);
                 countPositive++;
             }
         }
-        double meanPositive = countPositive > 0 ? sumY / countPositive : 1.0;
+        T meanPositive = countPositive > 0 ? NumOps.Divide(sumY, NumOps.FromDouble(countPositive)) : NumOps.One;
+        double meanPositiveDouble = NumOps.ToDouble(meanPositive);
 
-        // Set initial intercept based on link function
+        // Set initial intercept based on link function (link functions stay double - special math)
         Intercept = _options.LinkFunction switch
         {
-            TweedieLinkFunction.Log => NumOps.FromDouble(Math.Log(meanPositive)),
-            TweedieLinkFunction.Power => NumOps.FromDouble(ApplyPowerLink(meanPositive)),
-            TweedieLinkFunction.Identity => NumOps.FromDouble(meanPositive),
-            _ => NumOps.FromDouble(Math.Log(meanPositive))
+            TweedieLinkFunction.Log => NumOps.FromDouble(Math.Log(meanPositiveDouble)),
+            TweedieLinkFunction.Power => NumOps.FromDouble(ApplyPowerLink(meanPositiveDouble)),
+            TweedieLinkFunction.Identity => meanPositive,
+            _ => NumOps.FromDouble(Math.Log(meanPositiveDouble))
         };
 
         Matrix<T> xWithIntercept = x.AddColumn(Vector<T>.CreateDefault(x.Rows, NumOps.One));
@@ -367,14 +367,21 @@ public class TweedieRegression<T> : RegressionBase<T>
     private Vector<T> ClampMu(Vector<T> mu)
     {
         var result = new Vector<T>(mu.Length);
-        double minValue = 1e-10;
-        double maxValue = 1e10;
+        T minValue = NumOps.FromDouble(1e-10);
+        T maxValue = NumOps.FromDouble(1e10);
 
         for (int i = 0; i < mu.Length; i++)
         {
-            double value = NumOps.ToDouble(mu[i]);
-            value = Math.Max(minValue, Math.Min(maxValue, value));
-            result[i] = NumOps.FromDouble(value);
+            T value = mu[i];
+            if (NumOps.LessThan(value, minValue))
+            {
+                value = minValue;
+            }
+            else if (NumOps.GreaterThan(value, maxValue))
+            {
+                value = maxValue;
+            }
+            result[i] = value;
         }
 
         return result;
