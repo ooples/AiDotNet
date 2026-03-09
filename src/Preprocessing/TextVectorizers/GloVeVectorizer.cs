@@ -420,12 +420,25 @@ public class GloVeVectorizer<T> : TextVectorizerBase<T>
 
         var similarities = new List<(string Word, double Similarity)>();
 
+        double normA = 0;
+        for (int i = 0; i < targetVector.Length; i++)
+        {
+            normA += targetVector[i] * targetVector[i];
+        }
+        double sqrtNormA = Math.Sqrt(normA);
+
         foreach (var kvp in _wordVectors)
         {
             if (kvp.Key == normalizedWord) continue;
 
-            double similarity = VectorHelper.CosineSimilarity(
-                new Vector<double>(targetVector), new Vector<double>(kvp.Value));
+            double dot = 0, normB = 0;
+            for (int i = 0; i < targetVector.Length; i++)
+            {
+                dot += targetVector[i] * kvp.Value[i];
+                normB += kvp.Value[i] * kvp.Value[i];
+            }
+            double denomSim = sqrtNormA * Math.Sqrt(normB);
+            double similarity = denomSim > 1e-10 ? dot / denomSim : 0;
             similarities.Add((kvp.Key, similarity));
         }
 

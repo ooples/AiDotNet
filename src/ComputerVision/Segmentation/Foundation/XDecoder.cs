@@ -544,7 +544,7 @@ public class XDecoder<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
             {
                 for (int col = 0; col < w; col++)
                 {
-                    if (Math.Abs(NumOps.ToDouble(semanticMap[row, col]) - cls) < 0.5)
+                    if (NumOps.Compare(semanticMap[row, col], NumOps.FromDouble(cls)) == 0)
                     {
                         panopticMap[row, col] = NumOps.FromDouble(segmentId);
                         area++;
@@ -582,7 +582,7 @@ public class XDecoder<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
                 {
                     for (int col = 0; col < w; col++)
                     {
-                        if (Math.Abs(NumOps.ToDouble(labelMap[row, col]) - comp) < 0.5)
+                        if (NumOps.Compare(labelMap[row, col], NumOps.FromDouble(comp)) == 0)
                         {
                             instanceMap[row, col] = NumOps.FromDouble(instId);
                             panopticMap[row, col] = NumOps.FromDouble(segmentId);

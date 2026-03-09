@@ -155,7 +155,7 @@ public class NeuralVaR<T> : RiskModelBase<T>
     {
         // For Beginners: If the calculated risk exceeds the budget, scale down the action.
         T currentRisk = CalculateRisk(action);
-        if (NumOps.ToDouble(currentRisk) > NumOps.ToDouble(riskBudget))
+        if (NumOps.GreaterThan(currentRisk, riskBudget))
         {
             T scale = NumOps.Divide(riskBudget, currentRisk);
             var scaledData = new T[action.Length];

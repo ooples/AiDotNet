@@ -118,7 +118,7 @@ public class SemanticScoreDistillation<T>
         }
 
         var denominator = NumOps.Multiply(NumOps.Sqrt(normRender), NumOps.Sqrt(normText));
-        if (NumOps.ToDouble(denominator) < 1e-8)
+        if (NumOps.LessThan(denominator, NumOps.FromDouble(1e-8)))
             return NumOps.Zero;
 
         return NumOps.Divide(dotProduct, denominator);

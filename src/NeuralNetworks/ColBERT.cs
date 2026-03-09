@@ -229,7 +229,7 @@ namespace AiDotNet.NeuralNetworks
             for (int q = 0; q < queryEmbeddings.Rows; q++)
             {
                 var queryVec = queryEmbeddings.GetRow(q);
-                T maxSim = NumOps.FromDouble(double.MinValue);
+                T maxSim = NumOps.MinValue;
 
                 for (int d = 0; d < docEmbeddings.Rows; d++)
                 {

@@ -125,7 +125,7 @@ public class ExtendedIsolationForest<T> : AnomalyDetectorBase<T>
         // Build trees
         for (int t = 0; t < _numTrees; t++)
         {
-            var random = new Random(_randomSeed + t);
+            var random = RandomHelper.CreateSeededRandom(_randomSeed + t);
 
             // Sample data
             var sampleIndices = SampleIndices(X.Rows, nSamples, random);
@@ -346,7 +346,12 @@ public class ExtendedIsolationForest<T> : AnomalyDetectorBase<T>
 
         private static double DotProduct(double[] a, double[] b)
         {
-            return VectorHelper.DotProduct(new Vector<double>(a), new Vector<double>(b));
+            double sum = 0;
+            for (int i = 0; i < a.Length; i++)
+            {
+                sum += a[i] * b[i];
+            }
+            return sum;
         }
 
         private static double EstimateC(int n)

@@ -113,7 +113,7 @@ public sealed class DEISMultistepScheduler<T> : NoiseSchedulerBase<T>
 
         Vector<T> prevSample;
 
-        if (effectiveOrder == 1 || NumOps.ToDouble(sigmaNext) < 1e-10)
+        if (effectiveOrder == 1 || NumOps.LessThan(sigmaNext, NumOps.FromDouble(1e-10)))
         {
             // First-order: exponential Euler
             // x_{t-1} = (sigma_next/sigma) * x_t + (alpha_next - sigma_next/sigma * alpha_t) * D_0

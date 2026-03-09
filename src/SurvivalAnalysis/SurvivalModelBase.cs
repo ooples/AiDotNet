@@ -132,7 +132,7 @@ public abstract class SurvivalModelBase<T> : ISurvivalModel<T>, IModelShape
         var eventInts = new Vector<int>(events.Length);
         for (int i = 0; i < events.Length; i++)
         {
-            eventInts[i] = NumOps.ToDouble(events[i]) > 0.5 ? 1 : 0;
+            eventInts[i] = NumOps.GreaterThan(events[i], NumOps.FromDouble(0.5)) ? 1 : 0;
         }
 
         // Create dummy features if not provided

@@ -124,7 +124,7 @@ public class XLearner<T> : CausalModelBase<T>
         // Convert treatment to int
         var treatmentInt = new Vector<int>(n);
         for (int i = 0; i < n; i++)
-            treatmentInt[i] = NumOps.ToDouble(treatment[i]) > 0.5 ? 1 : 0;
+            treatmentInt[i] = NumOps.GreaterThan(treatment[i], NumOps.FromDouble(0.5)) ? 1 : 0;
 
         ValidateCausalData(features, treatmentInt, outcome);
 

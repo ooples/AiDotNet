@@ -172,7 +172,7 @@ public class TADAMModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetad
         T maxLogit = logits[0];
         for (int i = 1; i < logits.Length; i++)
         {
-            if (NumOps.ToDouble(logits[i]) > NumOps.ToDouble(maxLogit))
+            if (NumOps.GreaterThan(logits[i], maxLogit))
             {
                 maxLogit = logits[i];
             }
@@ -188,7 +188,7 @@ public class TADAMModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetad
         }
 
         // Normalize
-        if (NumOps.ToDouble(sum) > 0)
+        if (NumOps.GreaterThan(sum, NumOps.Zero))
         {
             for (int i = 0; i < probabilities.Length; i++)
             {
@@ -219,7 +219,7 @@ public class TADAMModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetad
         T maxProb = probabilities[0];
         for (int i = 1; i < probabilities.Length; i++)
         {
-            if (NumOps.ToDouble(probabilities[i]) > NumOps.ToDouble(maxProb))
+            if (NumOps.GreaterThan(probabilities[i], maxProb))
             {
                 maxProb = probabilities[i];
                 predictedClass = i;

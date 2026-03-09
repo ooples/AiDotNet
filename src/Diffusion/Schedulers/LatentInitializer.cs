@@ -1,5 +1,6 @@
 using AiDotNet.Helpers;
 using AiDotNet.Models;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Diffusion.Schedulers;
 
@@ -41,7 +42,7 @@ public class LatentInitializer<T>
     public LatentInitializer(double initNoiseSigma = 1.0, int? seed = null)
     {
         _initNoiseSigma = initNoiseSigma;
-        _random = seed.HasValue ? new Random(seed.Value) : new Random();
+        _random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
     }
 
     /// <summary>

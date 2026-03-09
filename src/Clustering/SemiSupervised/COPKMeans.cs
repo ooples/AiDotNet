@@ -131,7 +131,7 @@ public class COPKMeans<T> : ClusteringBase<T>
             {
                 var point = GetRow(x, i);
                 int bestCluster = -1;
-                double bestDist = double.MaxValue;
+                T bestDist = NumOps.MaxValue;
 
                 // Try each cluster
                 for (int c = 0; c < k; c++)
@@ -144,11 +144,11 @@ public class COPKMeans<T> : ClusteringBase<T>
                     var center = new Vector<T>(d);
                     for (int j = 0; j < d; j++)
                     {
-                        center[j] = NumOps.FromDouble(centers[c][j]);
+                        center[j] = centers[c][j];
                     }
 
-                    double dist = NumOps.ToDouble(metric.Compute(point, center));
-                    if (dist < bestDist)
+                    T dist = metric.Compute(point, center);
+                    if (NumOps.LessThan(dist, bestDist))
                     {
                         bestDist = dist;
                         bestCluster = c;
@@ -164,10 +164,14 @@ public class COPKMeans<T> : ClusteringBase<T>
 
             // Update centers
             var counts = new int[k];
-            var newCenters = new double[k][];
+            var newCenters = new T[k][];
             for (int c = 0; c < k; c++)
             {
-                newCenters[c] = new double[d];
+                newCenters[c] = new T[d];
+                for (int j = 0; j < d; j++)
+                {
+                    newCenters[c][j] = NumOps.Zero;
+                }
             }
 
             for (int i = 0; i < n; i++)
@@ -177,7 +181,7 @@ public class COPKMeans<T> : ClusteringBase<T>
                     counts[labels[i]]++;
                     for (int j = 0; j < d; j++)
                     {
-                        newCenters[labels[i]][j] += NumOps.ToDouble(x[i, j]);
+                        newCenters[labels[i]][j] = NumOps.Add(newCenters[labels[i]][j], x[i, j]);
                     }
                 }
             }
@@ -188,7 +192,7 @@ public class COPKMeans<T> : ClusteringBase<T>
                 {
                     for (int j = 0; j < d; j++)
                     {
-                        centers[c][j] = newCenters[c][j] / counts[c];
+                        centers[c][j] = NumOps.Divide(newCenters[c][j], NumOps.FromDouble(counts[c]));
                     }
                 }
             }
@@ -206,7 +210,7 @@ public class COPKMeans<T> : ClusteringBase<T>
         {
             for (int j = 0; j < d; j++)
             {
-                ClusterCenters[c, j] = NumOps.FromDouble(centers[c][j]);
+                ClusterCenters[c, j] = centers[c][j];
             }
         }
 
@@ -312,7 +316,7 @@ public class COPKMeans<T> : ClusteringBase<T>
     private bool ViolatesConstraints(int pointIdx, int cluster, int[] labels)
     {
         // Check must-link constraints
-        foreach (var (i, j) in (_mustLinkClosure ?? throw new InvalidOperationException("COPKMeans: Must-link closure not initialized.")))
+        foreach (var (i, j) in _mustLinkClosure!)
         {
             if (i == pointIdx || j == pointIdx)
             {
@@ -325,7 +329,7 @@ public class COPKMeans<T> : ClusteringBase<T>
         }
 
         // Check cannot-link constraints
-        foreach (var (i, j) in (_cannotLinkClosure ?? throw new InvalidOperationException("COPKMeans: Cannot-link closure not initialized.")))
+        foreach (var (i, j) in _cannotLinkClosure!)
         {
             if (i == pointIdx || j == pointIdx)
             {
@@ -344,7 +348,7 @@ public class COPKMeans<T> : ClusteringBase<T>
     {
         int violations = 0;
 
-        foreach (var (i, j) in (_mustLinkClosure ?? throw new InvalidOperationException("COPKMeans: Must-link closure not initialized.")))
+        foreach (var (i, j) in _mustLinkClosure!)
         {
             if (labels[i] != labels[j])
             {
@@ -352,7 +356,7 @@ public class COPKMeans<T> : ClusteringBase<T>
             }
         }
 
-        foreach (var (i, j) in (_cannotLinkClosure ?? throw new InvalidOperationException("COPKMeans: Cannot-link closure not initialized.")))
+        foreach (var (i, j) in _cannotLinkClosure!)
         {
             if (labels[i] == labels[j])
             {
@@ -363,18 +367,19 @@ public class COPKMeans<T> : ClusteringBase<T>
         return violations;
     }
 
-    private double[][] InitializeCenters(Matrix<T> x, int k, int n, int d, Random rand, IDistanceMetric<T> metric)
+    private T[][] InitializeCenters(Matrix<T> x, int k, int n, int d, Random rand, IDistanceMetric<T> metric)
     {
-        var centers = new double[k][];
+        var centers = new T[k][];
 
         // K-Means++ initialization
         int firstIdx = rand.Next(n);
-        centers[0] = new double[d];
+        centers[0] = new T[d];
         for (int j = 0; j < d; j++)
         {
-            centers[0][j] = NumOps.ToDouble(x[firstIdx, j]);
+            centers[0][j] = x[firstIdx, j];
         }
 
+        // Keep distances as double at random selection boundary
         var distances = new double[n];
         for (int i = 0; i < n; i++)
         {
@@ -391,7 +396,7 @@ public class COPKMeans<T> : ClusteringBase<T>
                 var center = new Vector<T>(d);
                 for (int j = 0; j < d; j++)
                 {
-                    center[j] = NumOps.FromDouble(centers[c - 1][j]);
+                    center[j] = centers[c - 1][j];
                 }
 
                 double dist = NumOps.ToDouble(metric.Compute(point, center));
@@ -413,10 +418,10 @@ public class COPKMeans<T> : ClusteringBase<T>
                 }
             }
 
-            centers[c] = new double[d];
+            centers[c] = new T[d];
             for (int j = 0; j < d; j++)
             {
-                centers[c][j] = NumOps.ToDouble(x[selected, j]);
+                centers[c][j] = x[selected, j];
             }
         }
 
@@ -434,7 +439,7 @@ public class COPKMeans<T> : ClusteringBase<T>
         for (int i = 0; i < x.Rows; i++)
         {
             var point = GetRow(x, i);
-            double minDist = double.MaxValue;
+            T minDist = NumOps.MaxValue;
             int nearestCluster = 0;
 
             if (ClusterCenters is not null)
@@ -442,9 +447,9 @@ public class COPKMeans<T> : ClusteringBase<T>
                 for (int c = 0; c < NumClusters; c++)
                 {
                     var center = GetRow(ClusterCenters, c);
-                    double dist = NumOps.ToDouble(metric.Compute(point, center));
+                    T dist = metric.Compute(point, center);
 
-                    if (dist < minDist)
+                    if (NumOps.LessThan(dist, minDist))
                     {
                         minDist = dist;
                         nearestCluster = c;
@@ -462,6 +467,6 @@ public class COPKMeans<T> : ClusteringBase<T>
     public override Vector<T> FitPredict(Matrix<T> x)
     {
         Train(x);
-        return Labels ?? throw new InvalidOperationException("Labels have not been computed.");
+        return Labels ?? new Vector<T>(0);
     }
 }

@@ -120,7 +120,7 @@ internal class ALiBiPositionalBiasLayer<T> : LayerBase<T>
         }
 
         var bias = new Tensor<T>([_numHeads, queryLen, keyLen]);
-        T negInf = NumOps.FromDouble(double.NegativeInfinity);
+        T negInf = NumOps.MinValue;
 
         for (int h = 0; h < _numHeads; h++)
         {

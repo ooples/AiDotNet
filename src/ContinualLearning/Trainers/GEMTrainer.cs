@@ -191,7 +191,7 @@ public class GEMTrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TO
         var useAGEM = _options.UseAveragedGEM ?? false;
         var learningRate = Configuration.LearningRate ?? NumOps.FromDouble(0.001);
 
-        T bestValidationLoss = NumOps.FromDouble(double.MaxValue);
+        T bestValidationLoss = NumOps.MaxValue;
         int epochsWithoutImprovement = 0;
         long totalGradientUpdates = 0;
         long totalConstraintViolations = 0;

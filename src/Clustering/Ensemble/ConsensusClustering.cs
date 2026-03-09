@@ -146,7 +146,7 @@ public class ConsensusClustering<T> : ClusteringBase<T>
         });
 
         kmeans.Train(x);
-        var labels = (kmeans.Labels ?? throw new InvalidOperationException("KMeans: Labels not computed."));
+        var labels = kmeans.Labels ?? new Vector<T>(n);
 
         var result = new int[n];
         for (int i = 0; i < n; i++)
@@ -346,7 +346,6 @@ public class ConsensusClustering<T> : ClusteringBase<T>
 
         ClusterCenters = new Matrix<T>(NumClusters, d);
         var counts = new int[NumClusters];
-        var sums = new double[NumClusters, d];
 
         for (int i = 0; i < n; i++)
         {
@@ -356,7 +355,7 @@ public class ConsensusClustering<T> : ClusteringBase<T>
                 counts[label]++;
                 for (int j = 0; j < d; j++)
                 {
-                    sums[label, j] += _numOps.ToDouble(x[i, j]);
+                    ClusterCenters[label, j] = NumOps.Add(ClusterCenters[label, j], x[i, j]);
                 }
             }
         }
@@ -367,7 +366,7 @@ public class ConsensusClustering<T> : ClusteringBase<T>
             {
                 for (int j = 0; j < d; j++)
                 {
-                    ClusterCenters[k, j] = _numOps.FromDouble(sums[k, j] / counts[k]);
+                    ClusterCenters[k, j] = NumOps.Divide(ClusterCenters[k, j], NumOps.FromDouble(counts[k]));
                 }
             }
         }
@@ -383,7 +382,7 @@ public class ConsensusClustering<T> : ClusteringBase<T>
         for (int i = 0; i < x.Rows; i++)
         {
             var point = GetRow(x, i);
-            double minDist = double.MaxValue;
+            T minDist = NumOps.MaxValue;
             int nearestCluster = 0;
 
             if (ClusterCenters is not null)
@@ -391,14 +390,14 @@ public class ConsensusClustering<T> : ClusteringBase<T>
                 for (int k = 0; k < NumClusters; k++)
                 {
                     var center = GetRow(ClusterCenters, k);
-                    double dist = 0;
+                    T dist = NumOps.Zero;
                     for (int j = 0; j < point.Length; j++)
                     {
-                        double diff = _numOps.ToDouble(point[j]) - _numOps.ToDouble(center[j]);
-                        dist += diff * diff;
+                        T diff = NumOps.Subtract(point[j], center[j]);
+                        dist = NumOps.Add(dist, NumOps.Multiply(diff, diff));
                     }
 
-                    if (dist < minDist)
+                    if (NumOps.LessThan(dist, minDist))
                     {
                         minDist = dist;
                         nearestCluster = k;
@@ -406,7 +405,7 @@ public class ConsensusClustering<T> : ClusteringBase<T>
                 }
             }
 
-            labels[i] = _numOps.FromDouble(nearestCluster);
+            labels[i] = NumOps.FromDouble(nearestCluster);
         }
 
         return labels;
@@ -416,6 +415,6 @@ public class ConsensusClustering<T> : ClusteringBase<T>
     public override Vector<T> FitPredict(Matrix<T> x)
     {
         Train(x);
-        return Labels ?? throw new InvalidOperationException("Labels have not been computed.");
+        return Labels ?? new Vector<T>(0);
     }
 }

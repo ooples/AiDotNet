@@ -75,8 +75,8 @@ public class PCMCIPlusAlgorithm<T> : TimeSeriesCausalBase<T>
                 var condVarIndices = new List<int>();
                 for (int k = 0; k < d; k++)
                 {
-                    if (Math.Abs(NumOps.ToDouble(laggedGraph.AdjacencyMatrix[k, i])) > 0 ||
-                        Math.Abs(NumOps.ToDouble(laggedGraph.AdjacencyMatrix[k, j])) > 0)
+                    if (NumOps.GreaterThan(NumOps.Abs(laggedGraph.AdjacencyMatrix[k, i]), NumOps.Zero) ||
+                        NumOps.GreaterThan(NumOps.Abs(laggedGraph.AdjacencyMatrix[k, j]), NumOps.Zero))
                     {
                         condVarIndices.Add(k);
                     }
@@ -103,8 +103,8 @@ public class PCMCIPlusAlgorithm<T> : TimeSeriesCausalBase<T>
                     int parentsOfI = 0, parentsOfJ = 0;
                     for (int k = 0; k < d; k++)
                     {
-                        if (Math.Abs(NumOps.ToDouble(laggedGraph.AdjacencyMatrix[k, i])) > 0) parentsOfI++;
-                        if (Math.Abs(NumOps.ToDouble(laggedGraph.AdjacencyMatrix[k, j])) > 0) parentsOfJ++;
+                        if (NumOps.GreaterThan(NumOps.Abs(laggedGraph.AdjacencyMatrix[k, i]), NumOps.Zero)) parentsOfI++;
+                        if (NumOps.GreaterThan(NumOps.Abs(laggedGraph.AdjacencyMatrix[k, j]), NumOps.Zero)) parentsOfJ++;
                     }
 
                     T strength = NumOps.FromDouble(Math.Abs(partCorr));

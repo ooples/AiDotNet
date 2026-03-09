@@ -170,12 +170,25 @@ public class PrototypicalContributionEvaluator<T> : FederatedLearningComponentBa
 
     private static double CosineSimilarity(double[] a, double[] b)
     {
-        return VectorHelper.CosineSimilarity(new Vector<double>(a), new Vector<double>(b));
+        double dot = 0, normA = 0, normB = 0;
+        for (int i = 0; i < a.Length; i++)
+        {
+            dot += a[i] * b[i];
+            normA += a[i] * a[i];
+            normB += b[i] * b[i];
+        }
+        double denom = Math.Sqrt(normA) * Math.Sqrt(normB);
+        return denom > 1e-10 ? dot / denom : 0;
     }
 
     private static double ComputeMagnitude(double[] prototype)
     {
-        return VectorHelper.L2Norm(new Vector<double>(prototype));
+        double sum = 0;
+        for (int i = 0; i < prototype.Length; i++)
+        {
+            sum += prototype[i] * prototype[i];
+        }
+        return Math.Sqrt(sum);
     }
 
     private static void NormalizeScores(Dictionary<int, double> scores)

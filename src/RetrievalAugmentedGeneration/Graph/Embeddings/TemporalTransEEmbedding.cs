@@ -159,7 +159,7 @@ public class TemporalTransEEmbedding<T> : KGEmbeddingBase<T>
             !_relationIndex.TryGetValue(relationType, out var r) ||
             !_entityIndex.TryGetValue(tailId, out var t))
         {
-            return NumOps.FromDouble(double.MaxValue);
+            return NumOps.MaxValue;
         }
 
         int timeBin = GetTimeBin(timestamp);

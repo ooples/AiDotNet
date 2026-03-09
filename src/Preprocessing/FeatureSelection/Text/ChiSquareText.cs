@@ -86,7 +86,7 @@ public class ChiSquareText<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 {
                     double value = NumOps.ToDouble(data[i, j]);
                     bool termPresent = _binarize ? value > 0 : value > 0.5;
-                    bool isClass = Math.Abs(NumOps.ToDouble(target[i]) - c) < 1e-10;
+                    bool isClass = NumOps.Compare(target[i], NumOps.FromDouble(c)) == 0;
 
                     if (termPresent && isClass) a++;
                     else if (termPresent && !isClass) b++;

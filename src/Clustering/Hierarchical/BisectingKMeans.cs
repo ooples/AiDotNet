@@ -280,19 +280,22 @@ public class BisectingKMeans<T> : ClusteringBase<T>
 
         for (int i = 0; i < x.Rows; i++)
         {
-            double minDist = double.MaxValue;
+            T minDist = NumOps.MaxValue;
             int nearestCluster = 0;
 
-            for (int k = 0; k < NumClusters; k++)
+            if (ClusterCenters is not null)
             {
-                var point = GetRow(x, i);
-                var center = GetRow((ClusterCenters ?? throw new InvalidOperationException("BisectingKMeans: Cluster centers not computed.")), k);
-                double dist = NumOps.ToDouble(_distanceMetric.Compute(point, center));
-
-                if (dist < minDist)
+                for (int k = 0; k < NumClusters; k++)
                 {
-                    minDist = dist;
-                    nearestCluster = k;
+                    var point = GetRow(x, i);
+                    var center = GetRow(ClusterCenters, k);
+                    T dist = _distanceMetric.Compute(point, center);
+
+                    if (NumOps.LessThan(dist, minDist))
+                    {
+                        minDist = dist;
+                        nearestCluster = k;
+                    }
                 }
             }
 
@@ -305,7 +308,7 @@ public class BisectingKMeans<T> : ClusteringBase<T>
     private int SelectClusterToBisect(List<ClusterInfo> clusterInfos)
     {
         int bestIdx = -1;
-        double bestScore = double.MinValue;
+        T bestScore = NumOps.Negate(NumOps.MaxValue);
 
         for (int i = 0; i < clusterInfos.Count; i++)
         {
@@ -315,17 +318,15 @@ public class BisectingKMeans<T> : ClusteringBase<T>
                 continue;
             }
 
-            var inertiaForScore = info.Inertia;
-            double inertiaValue = inertiaForScore is not null ? NumOps.ToDouble(inertiaForScore) : 0;
-            double score = _options.ClusterSelection switch
+            T score = _options.ClusterSelection switch
             {
-                BisectionClusterSelection.Largest => info.Indices.Count,
-                BisectionClusterSelection.HighestInertia => inertiaValue,
+                BisectionClusterSelection.Largest => NumOps.FromDouble(info.Indices.Count),
+                BisectionClusterSelection.HighestInertia => info.Inertia ?? NumOps.Zero,
                 BisectionClusterSelection.LargestDiameter => info.Diameter,
-                _ => info.Indices.Count
+                _ => NumOps.FromDouble(info.Indices.Count)
             };
 
-            if (score > bestScore)
+            if (NumOps.GreaterThan(score, bestScore))
             {
                 bestScore = score;
                 bestIdx = i;
@@ -350,7 +351,7 @@ public class BisectingKMeans<T> : ClusteringBase<T>
         List<int> bestRightIndices = new List<int>();
         Vector<T> bestLeftCenter = new Vector<T>(d);
         Vector<T> bestRightCenter = new Vector<T>(d);
-        double bestInertia = double.MaxValue;
+        T bestInertia = NumOps.MaxValue;
 
         // Try multiple bisection attempts
         for (int trial = 0; trial < _options.NumBisectionTrials; trial++)
@@ -376,7 +377,7 @@ public class BisectingKMeans<T> : ClusteringBase<T>
             var (leftIndices, rightIndices, finalCenter1, finalCenter2, inertia) =
                 RunBinaryKMeans(subData, center1, center2);
 
-            if (inertia < bestInertia && leftIndices.Count > 0 && rightIndices.Count > 0)
+            if (NumOps.LessThan(inertia, bestInertia) && leftIndices.Count > 0 && rightIndices.Count > 0)
             {
                 bestInertia = inertia;
                 bestLeftIndices = leftIndices;
@@ -389,7 +390,7 @@ public class BisectingKMeans<T> : ClusteringBase<T>
         return (bestLeftIndices, bestRightIndices, bestLeftCenter, bestRightCenter);
     }
 
-    private (List<int> LeftIndices, List<int> RightIndices, Vector<T> Center1, Vector<T> Center2, double Inertia)
+    private (List<int> LeftIndices, List<int> RightIndices, Vector<T> Center1, Vector<T> Center2, T Inertia)
         RunBinaryKMeans(Matrix<T> data, Vector<T> center1, Vector<T> center2)
     {
         int n = data.Rows;
@@ -409,10 +410,10 @@ public class BisectingKMeans<T> : ClusteringBase<T>
             for (int i = 0; i < n; i++)
             {
                 var point = GetRow(data, i);
-                double dist1 = NumOps.ToDouble(_distanceMetric.Compute(point, center1));
-                double dist2 = NumOps.ToDouble(_distanceMetric.Compute(point, center2));
+                T dist1 = _distanceMetric.Compute(point, center1);
+                T dist2 = _distanceMetric.Compute(point, center2);
 
-                assignments[i] = dist1 <= dist2 ? 0 : 1;
+                assignments[i] = !NumOps.GreaterThan(dist1, dist2) ? 0 : 1;
 
                 if (assignments[i] != prevAssignments[i])
                 {
@@ -472,7 +473,7 @@ public class BisectingKMeans<T> : ClusteringBase<T>
         // Build result lists
         var leftIndices = new List<int>();
         var rightIndices = new List<int>();
-        double totalInertia = 0;
+        T totalInertia = NumOps.Zero;
 
         for (int i = 0; i < n; i++)
         {
@@ -480,14 +481,14 @@ public class BisectingKMeans<T> : ClusteringBase<T>
             if (assignments[i] == 0)
             {
                 leftIndices.Add(i);
-                double dist = NumOps.ToDouble(_distanceMetric.Compute(point, center1));
-                totalInertia += dist * dist;
+                T dist = _distanceMetric.Compute(point, center1);
+                totalInertia = NumOps.Add(totalInertia, NumOps.Multiply(dist, dist));
             }
             else
             {
                 rightIndices.Add(i);
-                double dist = NumOps.ToDouble(_distanceMetric.Compute(point, center2));
-                totalInertia += dist * dist;
+                T dist = _distanceMetric.Compute(point, center2);
+                totalInertia = NumOps.Add(totalInertia, NumOps.Multiply(dist, dist));
             }
         }
 
@@ -518,26 +519,30 @@ public class BisectingKMeans<T> : ClusteringBase<T>
 
         // Compute inertia and diameter
         T inertia = NumOps.Zero;
-        double diameter = 0;
+        T diameter = NumOps.Zero;
 
         foreach (int idx in indices)
         {
             var point = GetRow(x, idx);
-            double dist = NumOps.ToDouble(_distanceMetric.Compute(point, center));
-            inertia = NumOps.Add(inertia, NumOps.FromDouble(dist * dist));
+            T dist = _distanceMetric.Compute(point, center);
+            inertia = NumOps.Add(inertia, NumOps.Multiply(dist, dist));
         }
 
         // Approximate diameter using center + max distance from center * 2
         if (indices.Count > 1)
         {
-            double maxDist = 0;
+            T maxDist = NumOps.Zero;
             foreach (int idx in indices)
             {
                 var point = GetRow(x, idx);
-                double dist = NumOps.ToDouble(_distanceMetric.Compute(point, center));
-                maxDist = Math.Max(maxDist, dist);
+                T dist = _distanceMetric.Compute(point, center);
+                if (NumOps.GreaterThan(dist, maxDist))
+                {
+                    maxDist = dist;
+                }
             }
-            diameter = maxDist * 2;
+            T two = NumOps.FromDouble(2.0);
+            diameter = NumOps.Multiply(maxDist, two);
         }
 
         return new ClusterInfo
@@ -586,7 +591,7 @@ public class BisectingKMeans<T> : ClusteringBase<T>
         public List<int> Indices { get; set; } = new List<int>();
         public Vector<T>? Center { get; set; }
         public T? Inertia { get; set; }
-        public double Diameter { get; set; }
+        public T Diameter { get; set; } = MathHelper.GetNumericOperations<T>().Zero;
         public bool CanSplit { get; set; } = true;
     }
 }

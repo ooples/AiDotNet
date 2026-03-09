@@ -1295,7 +1295,7 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         T maxMinRatio = NumOps.GreaterThan(minTokens, NumOps.Zero)
             ? NumOps.Divide(maxTokens, minTokens)
-            : NumOps.FromDouble(double.PositiveInfinity);
+            : NumOps.MaxValue;
         diagnostics["max_min_ratio"] = Convert.ToDouble(maxMinRatio).ToString("F4");
 
         diagnostics["num_experts"] = numExperts.ToString();

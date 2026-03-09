@@ -434,7 +434,7 @@ public class REINFORCEAgent<T> : DeepReinforcementLearningAgentBase<T>
         var maxLogit = logits[0];
         for (int i = 1; i < logits.Length; i++)
         {
-            if (NumOps.ToDouble(logits[i]) > NumOps.ToDouble(maxLogit))
+            if (NumOps.GreaterThan(logits[i], maxLogit))
                 maxLogit = logits[i];
         }
 
@@ -475,7 +475,7 @@ public class REINFORCEAgent<T> : DeepReinforcementLearningAgentBase<T>
         int maxIndex = 0;
         for (int i = 1; i < vector.Length; i++)
         {
-            if (NumOps.ToDouble(vector[i]) > NumOps.ToDouble(vector[maxIndex]))
+            if (NumOps.GreaterThan(vector[i], vector[maxIndex]))
                 maxIndex = i;
         }
         return maxIndex;

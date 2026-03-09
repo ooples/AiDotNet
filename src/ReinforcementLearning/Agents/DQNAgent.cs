@@ -422,7 +422,7 @@ public class DQNAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         for (int i = 1; i < vector.Length; i++)
         {
-            if (NumOps.ToDouble(vector[i]) > NumOps.ToDouble(maxValue))
+            if (NumOps.GreaterThan(vector[i], maxValue))
             {
                 maxValue = vector[i];
                 maxIndex = i;
@@ -438,7 +438,7 @@ public class DQNAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         for (int i = 1; i < vector.Length; i++)
         {
-            if (NumOps.ToDouble(vector[i]) > NumOps.ToDouble(maxValue))
+            if (NumOps.GreaterThan(vector[i], maxValue))
             {
                 maxValue = vector[i];
             }

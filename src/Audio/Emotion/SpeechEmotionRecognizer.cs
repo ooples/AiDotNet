@@ -510,7 +510,7 @@ public class SpeechEmotionRecognizer<T> : AudioClassifierBase<T>, IEmotionRecogn
         }
 
         // Only include secondary if significant
-        if (NumOps.ToDouble(secondaryConfidence) < 0.15)
+        if (NumOps.LessThan(secondaryConfidence, NumOps.FromDouble(0.15)))
         {
             secondaryEmotion = null;
         }

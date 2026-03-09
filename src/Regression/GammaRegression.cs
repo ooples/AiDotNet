@@ -38,6 +38,9 @@ namespace AiDotNet.Regression;
 /// </remarks>
 public class GammaRegression<T> : RegressionBase<T>
 {
+    private const double MuFloor = 1e-10;
+    private const double MuCeiling = 1e10;
+
     /// <summary>
     /// Configuration options for the Gamma regression model.
     /// </summary>
@@ -131,20 +134,21 @@ public class GammaRegression<T> : RegressionBase<T>
         Intercept = NumOps.Zero;
 
         // Initialize coefficients using log of mean for log link
-        double meanY = 0;
+        T meanY = NumOps.Zero;
         for (int i = 0; i < numSamples; i++)
         {
-            meanY += NumOps.ToDouble(y[i]);
+            meanY = NumOps.Add(meanY, y[i]);
         }
-        meanY /= numSamples;
+        meanY = NumOps.Divide(meanY, NumOps.FromDouble(numSamples));
 
         // Set initial intercept based on link function
+        double meanYDouble = NumOps.ToDouble(meanY);
         Intercept = _options.LinkFunction switch
         {
-            GammaLinkFunction.Log => NumOps.FromDouble(Math.Log(meanY)),
-            GammaLinkFunction.Inverse => NumOps.FromDouble(1.0 / meanY),
-            GammaLinkFunction.Identity => NumOps.FromDouble(meanY),
-            _ => NumOps.FromDouble(Math.Log(meanY))
+            GammaLinkFunction.Log => NumOps.FromDouble(Math.Log(meanYDouble)),
+            GammaLinkFunction.Inverse => NumOps.Divide(NumOps.One, meanY),
+            GammaLinkFunction.Identity => meanY,
+            _ => NumOps.FromDouble(Math.Log(meanYDouble))
         };
 
         Matrix<T> xWithIntercept = x.AddColumn(Vector<T>.CreateDefault(x.Rows, NumOps.One));
@@ -303,14 +307,17 @@ public class GammaRegression<T> : RegressionBase<T>
     private Vector<T> ClampMu(Vector<T> mu)
     {
         var result = new Vector<T>(mu.Length);
-        double minValue = 1e-10;
-        double maxValue = 1e10;
+        T minValue = NumOps.FromDouble(MuFloor);
+        T maxValue = NumOps.FromDouble(MuCeiling);
 
         for (int i = 0; i < mu.Length; i++)
         {
-            double value = NumOps.ToDouble(mu[i]);
-            value = Math.Max(minValue, Math.Min(maxValue, value));
-            result[i] = NumOps.FromDouble(value);
+            T value = mu[i];
+            if (NumOps.LessThan(value, minValue))
+                value = minValue;
+            else if (NumOps.GreaterThan(value, maxValue))
+                value = maxValue;
+            result[i] = value;
         }
 
         return result;
@@ -345,18 +352,19 @@ public class GammaRegression<T> : RegressionBase<T>
 
         for (int i = 0; i < mu.Length; i++)
         {
-            double muVal = NumOps.ToDouble(mu[i]);
-            double weight = _options.LinkFunction switch
+            T muVal = mu[i];
+            T muSquared = NumOps.Multiply(muVal, muVal);
+            T weight = _options.LinkFunction switch
             {
                 // W = 1 / (V(μ) × (g'(μ))²) = 1 / (μ² × (1/μ)²) = 1
-                GammaLinkFunction.Log => 1.0,
+                GammaLinkFunction.Log => NumOps.One,
                 // W = 1 / (V(μ) × (g'(μ))²) = 1 / (μ² × (1/μ²)²) = μ²
-                GammaLinkFunction.Inverse => muVal * muVal,
+                GammaLinkFunction.Inverse => muSquared,
                 // W = 1 / (V(μ) × (g'(μ))²) = 1 / (μ² × 1) = 1/μ²
-                GammaLinkFunction.Identity => 1.0 / (muVal * muVal),
-                _ => 1.0
+                GammaLinkFunction.Identity => NumOps.Divide(NumOps.One, muSquared),
+                _ => NumOps.One
             };
-            weights[i] = NumOps.FromDouble(weight);
+            weights[i] = weight;
         }
 
         return Matrix<T>.CreateDiagonal(weights);
@@ -392,23 +400,23 @@ public class GammaRegression<T> : RegressionBase<T>
 
         for (int i = 0; i < eta.Length; i++)
         {
-            double etaVal = NumOps.ToDouble(eta[i]);
-            double yVal = NumOps.ToDouble(y[i]);
-            double muVal = NumOps.ToDouble(mu[i]);
-            double diff = yVal - muVal;
+            T etaVal = eta[i];
+            T muVal = mu[i];
+            T diff = NumOps.Subtract(y[i], muVal);
+            T muSquared = NumOps.Multiply(muVal, muVal);
 
-            double zVal = _options.LinkFunction switch
+            T zVal = _options.LinkFunction switch
             {
                 // g'(μ) = 1/μ, so z = η + (y - μ)/μ
-                GammaLinkFunction.Log => etaVal + diff / muVal,
+                GammaLinkFunction.Log => NumOps.Add(etaVal, NumOps.Divide(diff, muVal)),
                 // g'(μ) = -1/μ², so z = η - (y - μ)/μ²
-                GammaLinkFunction.Inverse => etaVal - diff / (muVal * muVal),
+                GammaLinkFunction.Inverse => NumOps.Subtract(etaVal, NumOps.Divide(diff, muSquared)),
                 // g'(μ) = 1, so z = η + (y - μ) = y
-                GammaLinkFunction.Identity => yVal,
-                _ => etaVal + diff / muVal
+                GammaLinkFunction.Identity => y[i],
+                _ => NumOps.Add(etaVal, NumOps.Divide(diff, muVal))
             };
 
-            z[i] = NumOps.FromDouble(zVal);
+            z[i] = zVal;
         }
 
         return z;
@@ -462,18 +470,16 @@ public class GammaRegression<T> : RegressionBase<T>
         int n = y.Length;
         int p = Coefficients.Length + 1; // coefficients + intercept
 
-        double sumPearsonResidualsSq = 0;
+        T sumPearsonResidualsSq = NumOps.Zero;
         for (int i = 0; i < n; i++)
         {
-            double yVal = NumOps.ToDouble(y[i]);
-            double muVal = NumOps.ToDouble(predictions[i]);
-            double pearsonResidual = (yVal - muVal) / muVal;
-            sumPearsonResidualsSq += pearsonResidual * pearsonResidual;
+            T muVal = predictions[i];
+            T pearsonResidual = NumOps.Divide(NumOps.Subtract(y[i], muVal), muVal);
+            sumPearsonResidualsSq = NumOps.Add(sumPearsonResidualsSq, NumOps.Multiply(pearsonResidual, pearsonResidual));
         }
 
         // Estimate dispersion as sum of squared Pearson residuals divided by degrees of freedom
-        double dispersion = sumPearsonResidualsSq / Math.Max(1, n - p);
-        _dispersion = NumOps.FromDouble(dispersion);
+        _dispersion = NumOps.Divide(sumPearsonResidualsSq, NumOps.FromDouble(Math.Max(1, n - p)));
     }
 
     /// <summary>

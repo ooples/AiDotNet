@@ -85,7 +85,7 @@ public class TextFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             int docCount = 0;
             for (int i = 0; i < n; i++)
             {
-                if (NumOps.ToDouble(data[i, j]) > 0)
+                if (NumOps.GreaterThan(data[i, j], NumOps.Zero))
                     docCount++;
             }
             _documentFrequencies[j] = (double)docCount / n;
@@ -158,7 +158,7 @@ public class TextFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             for (int i = 0; i < n; i++)
             {
                 int classLabel = (int)Math.Round(NumOps.ToDouble(target[i]));
-                int featurePresent = NumOps.ToDouble(data[i, j]) > 0 ? 1 : 0;
+                int featurePresent = NumOps.GreaterThan(data[i, j], NumOps.Zero) ? 1 : 0;
 
                 var key = (featurePresent, classLabel);
                 if (!featureClassCounts.ContainsKey(key))
@@ -171,7 +171,7 @@ public class TextFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             int featureCount = 0;
             for (int i = 0; i < n; i++)
             {
-                if (NumOps.ToDouble(data[i, j]) > 0)
+                if (NumOps.GreaterThan(data[i, j], NumOps.Zero))
                     featureCount++;
             }
 

@@ -386,7 +386,7 @@ public class RelationNetworkAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
             T maxScore = scores[q, 0];
             for (int c = 1; c < numClasses; c++)
             {
-                if (NumOps.ToDouble(scores[q, c]) > NumOps.ToDouble(maxScore))
+                if (NumOps.GreaterThan(scores[q, c], maxScore))
                     maxScore = scores[q, c];
             }
 
@@ -601,7 +601,7 @@ public class RelationNetworkAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
                 for (int i = 1; i < numClasses; i++)
                 {
                     var prob = tensor.GetFlat(index * numClasses + i);
-                    if (NumOps.ToDouble(prob) > NumOps.ToDouble(maxProb))
+                    if (NumOps.GreaterThan(prob, maxProb))
                     {
                         maxProb = prob;
                         maxClass = i;
@@ -622,7 +622,7 @@ public class RelationNetworkAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
         T max = values[0];
         foreach (var v in values)
         {
-            if (NumOps.ToDouble(v) > NumOps.ToDouble(max))
+            if (NumOps.GreaterThan(v, max))
                 max = v;
         }
         return max;

@@ -180,11 +180,11 @@ public class AnchorExplainer<T> : ILocalExplainer<T, AnchorExplanation<T>>
             // Check if any candidate meets precision threshold
             foreach (var (features, rules, precision, coverage) in beam)
             {
-                if (NumOps.ToDouble(precision) >= NumOps.ToDouble(_precisionThreshold))
+                if (NumOps.GreaterThanOrEquals(precision, _precisionThreshold))
                 {
                     if (bestAnchor == null ||
-                        NumOps.ToDouble(coverage) > NumOps.ToDouble(bestAnchor.Coverage) ||
-                        (NumOps.ToDouble(coverage) == NumOps.ToDouble(bestAnchor.Coverage) &&
+                        NumOps.GreaterThan(coverage, bestAnchor.Coverage) ||
+                        (NumOps.Compare(coverage, bestAnchor.Coverage) == 0 &&
                          features.Count < bestAnchor.AnchorFeatures.Count))
                     {
                         bestAnchor = CreateExplanation(features, rules, precision, coverage);
@@ -192,7 +192,7 @@ public class AnchorExplainer<T> : ILocalExplainer<T, AnchorExplanation<T>>
                 }
             }
 
-            if (bestAnchor != null && beam.All(b => NumOps.ToDouble(b.precision) >= NumOps.ToDouble(_precisionThreshold)))
+            if (bestAnchor != null && beam.All(b => NumOps.GreaterThanOrEquals(b.precision, _precisionThreshold)))
                 break;
         }
 

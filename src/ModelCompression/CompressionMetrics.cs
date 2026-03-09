@@ -379,8 +379,8 @@ Timing:
         var maxLoss = maxAccuracyLossPercentage;
         var minRatio = minCompressionRatio;
 
-        return NumOps.ToDouble(accuracyLossPercentage) <= NumOps.ToDouble(maxLoss) &&
-               NumOps.ToDouble(CompressionRatio) >= NumOps.ToDouble(minRatio);
+        return NumOps.LessThanOrEquals(accuracyLossPercentage, maxLoss) &&
+               NumOps.GreaterThanOrEquals(CompressionRatio, minRatio);
     }
 
     /// <summary>
@@ -466,6 +466,6 @@ Timing:
         var thisFitness = CalculateCompositeFitness(accuracyWeight, compressionWeight, speedWeight);
         var otherFitness = other.CalculateCompositeFitness(accuracyWeight, compressionWeight, speedWeight);
 
-        return NumOps.ToDouble(thisFitness) > NumOps.ToDouble(otherFitness);
+        return NumOps.GreaterThan(thisFitness, otherFitness);
     }
 }

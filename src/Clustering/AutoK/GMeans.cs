@@ -103,16 +103,16 @@ public class GMeans<T> : ClusteringBase<T>
         var currentLabels = new int[n];
         for (int i = 0; i < n; i++)
         {
-            currentLabels[i] = (int)NumOps.ToDouble((kmeans.Labels ?? throw new InvalidOperationException("KMeans: Labels not computed."))[i]);
+            currentLabels[i] = (int)NumOps.ToDouble(kmeans.Labels![i]);
         }
 
-        var currentCenters = new List<double[]>();
+        var currentCenters = new List<T[]>();
         for (int c = 0; c < currentK; c++)
         {
-            var center = new double[d];
+            var center = new T[d];
             for (int j = 0; j < d; j++)
             {
-                center[j] = NumOps.ToDouble((kmeans.ClusterCenters ?? throw new InvalidOperationException("KMeans: Cluster centers not computed."))[c, j]);
+                center[j] = kmeans.ClusterCenters is not null ? kmeans.ClusterCenters[c, j] : NumOps.Zero;
             }
             currentCenters.Add(center);
         }
@@ -122,7 +122,7 @@ public class GMeans<T> : ClusteringBase<T>
         while (improved && currentCenters.Count < _options.MaxClusters)
         {
             improved = false;
-            var newCenters = new List<double[]>();
+            var newCenters = new List<T[]>();
             var newLabels = new int[n];
             var clusterMapping = new Dictionary<int, int>();
 
@@ -174,10 +174,10 @@ public class GMeans<T> : ClusteringBase<T>
                     // Add both children
                     for (int sc = 0; sc < 2; sc++)
                     {
-                        var center = new double[d];
+                        var center = new T[d];
                         for (int j = 0; j < d; j++)
                         {
-                            center[j] = NumOps.ToDouble((subKMeans.ClusterCenters ?? throw new InvalidOperationException("KMeans: Cluster centers not computed."))[sc, j]);
+                            center[j] = subKMeans.ClusterCenters is not null ? subKMeans.ClusterCenters[sc, j] : NumOps.Zero;
                         }
                         newCenters.Add(center);
                     }
@@ -185,7 +185,7 @@ public class GMeans<T> : ClusteringBase<T>
                     // Update labels for points in this cluster
                     for (int i = 0; i < clusterPoints.Count; i++)
                     {
-                        int subLabel = (int)NumOps.ToDouble((subKMeans.Labels ?? throw new InvalidOperationException("KMeans: Labels not computed."))[i]);
+                        int subLabel = (int)NumOps.ToDouble(subKMeans.Labels![i]);
                         newLabels[clusterPoints[i]] = newCenters.Count - 2 + subLabel;
                     }
 
@@ -217,7 +217,7 @@ public class GMeans<T> : ClusteringBase<T>
         {
             for (int j = 0; j < d; j++)
             {
-                ClusterCenters[c, j] = NumOps.FromDouble(currentCenters[c][j]);
+                ClusterCenters[c, j] = currentCenters[c][j];
             }
         }
 
@@ -411,7 +411,7 @@ public class GMeans<T> : ClusteringBase<T>
         for (int i = 0; i < x.Rows; i++)
         {
             var point = GetRow(x, i);
-            double minDist = double.MaxValue;
+            T minDist = NumOps.MaxValue;
             int nearestCluster = 0;
 
             if (ClusterCenters is not null)
@@ -419,9 +419,9 @@ public class GMeans<T> : ClusteringBase<T>
                 for (int c = 0; c < NumClusters; c++)
                 {
                     var center = GetRow(ClusterCenters, c);
-                    double dist = NumOps.ToDouble(metric.Compute(point, center));
+                    T dist = metric.Compute(point, center);
 
-                    if (dist < minDist)
+                    if (NumOps.LessThan(dist, minDist))
                     {
                         minDist = dist;
                         nearestCluster = c;
@@ -439,6 +439,6 @@ public class GMeans<T> : ClusteringBase<T>
     public override Vector<T> FitPredict(Matrix<T> x)
     {
         Train(x);
-        return Labels ?? throw new InvalidOperationException("Labels have not been computed.");
+        return Labels ?? new Vector<T>(0);
     }
 }

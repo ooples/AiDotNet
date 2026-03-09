@@ -257,7 +257,7 @@ public class MetaOptNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput
             T tempUpdate = NumOps.Multiply(NumOps.FromDouble(_metaOptNetOptions.OuterLearningRate), accumulatedTempGradient);
             _temperature = NumOps.Subtract(_temperature, tempUpdate);
             // Clamp temperature to positive values
-            if (NumOps.ToDouble(_temperature) < 0.01)
+            if (NumOps.LessThan(_temperature, NumOps.FromDouble(0.01)))
             {
                 _temperature = NumOps.FromDouble(0.01);
             }

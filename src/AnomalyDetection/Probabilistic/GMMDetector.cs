@@ -1,5 +1,6 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.AnomalyDetection.Probabilistic;
@@ -146,7 +147,7 @@ public class GMMDetector<T> : AnomalyDetectorBase<T>
     {
         int n = X.Rows;
         int d = X.Columns;
-        var random = new Random(_randomSeed);
+        var random = RandomHelper.CreateSeededRandom(_randomSeed);
 
         // Compute global variance per feature for use as a covariance floor.
         // This prevents components with very few points (e.g., a singleton outlier)

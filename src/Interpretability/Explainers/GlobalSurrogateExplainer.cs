@@ -493,7 +493,7 @@ public class SurrogateExplanation<T>
         foreach (var (index, name, weight) in top)
         {
             var featureLabel = name ?? $"Feature {index}";
-            var direction = NumOps.ToDouble(weight) >= 0 ? "+" : "";
+            var direction = !NumOps.LessThan(weight, NumOps.Zero) ? "+" : "";
             lines.Add($"    {featureLabel}: {direction}{weight}");
         }
 

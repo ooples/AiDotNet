@@ -42,7 +42,7 @@ public class AgglomerativeClustering<T> : ClusteringBase<T>
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
-    private List<(int Cluster1, int Cluster2, double Distance, int Size)>? _dendrogram;
+    private List<(int Cluster1, int Cluster2, T Distance, int Size)>? _dendrogram;
 
     /// <summary>
     /// Initializes a new AgglomerativeClustering instance.
@@ -64,7 +64,7 @@ public class AgglomerativeClustering<T> : ClusteringBase<T>
     /// <summary>
     /// Gets the dendrogram (merge history).
     /// </summary>
-    public List<(int Cluster1, int Cluster2, double Distance, int Size)>? Dendrogram => _dendrogram;
+    public List<(int Cluster1, int Cluster2, T Distance, int Size)>? Dendrogram => _dendrogram;
 
     /// <summary>
     /// Gets the linkage method used.
@@ -130,17 +130,17 @@ public class AgglomerativeClustering<T> : ClusteringBase<T>
         }
 
         // Track cluster centroids for Ward's method
-        var centroids = new double[2 * n - 1, x.Columns];
+        var centroids = new T[2 * n - 1, x.Columns];
         for (int i = 0; i < n; i++)
         {
             for (int j = 0; j < x.Columns; j++)
             {
-                centroids[i, j] = NumOps.ToDouble(x[i, j]);
+                centroids[i, j] = x[i, j];
             }
         }
 
         // Dendrogram storage
-        _dendrogram = new List<(int, int, double, int)>();
+        _dendrogram = new List<(int, int, T, int)>();
 
         // Active clusters (using UnionFind-like structure)
         var active = new HashSet<int>();
@@ -165,7 +165,8 @@ public class AgglomerativeClustering<T> : ClusteringBase<T>
             }
 
             // Check distance threshold
-            if (_options.DistanceThreshold.HasValue && minDist > _options.DistanceThreshold.Value)
+            if (_options.DistanceThreshold.HasValue &&
+                NumOps.GreaterThan(minDist, NumOps.FromDouble(_options.DistanceThreshold.Value)))
             {
                 break;
             }
@@ -175,10 +176,16 @@ public class AgglomerativeClustering<T> : ClusteringBase<T>
             _dendrogram.Add((minI, minJ, minDist, newSize));
 
             // Update centroid
+            T sizeIT = NumOps.FromDouble(clusterSizes[minI]);
+            T sizeJT = NumOps.FromDouble(clusterSizes[minJ]);
+            T newSizeT = NumOps.FromDouble(newSize);
             for (int d = 0; d < x.Columns; d++)
             {
-                centroids[nextClusterId, d] = (centroids[minI, d] * clusterSizes[minI] +
-                                                centroids[minJ, d] * clusterSizes[minJ]) / newSize;
+                centroids[nextClusterId, d] = NumOps.Divide(
+                    NumOps.Add(
+                        NumOps.Multiply(centroids[minI, d], sizeIT),
+                        NumOps.Multiply(centroids[minJ, d], sizeJT)),
+                    newSizeT);
             }
             clusterSizes[nextClusterId] = newSize;
 
@@ -203,26 +210,26 @@ public class AgglomerativeClustering<T> : ClusteringBase<T>
         IsTrained = true;
     }
 
-    private double[,] ComputeDistanceMatrix(Matrix<T> x)
+    private T[,] ComputeDistanceMatrix(Matrix<T> x)
     {
         int n = x.Rows;
-        var distMatrix = new double[2 * n - 1, 2 * n - 1];
+        var distMatrix = new T[2 * n - 1, 2 * n - 1];
         var metric = _options.DistanceMetric ?? new EuclideanDistance<T>();
 
         for (int i = 0; i < n; i++)
         {
             var rowI = GetRow(x, i);
-            distMatrix[i, i] = 0;
+            distMatrix[i, i] = NumOps.Zero;
 
             for (int j = i + 1; j < n; j++)
             {
                 var rowJ = GetRow(x, j);
-                double dist = NumOps.ToDouble(metric.Compute(rowI, rowJ));
+                T dist = metric.Compute(rowI, rowJ);
 
                 // For Ward's method, use squared distance
                 if (_options.Linkage == LinkageMethod.Ward)
                 {
-                    dist = dist * dist;
+                    dist = NumOps.Multiply(dist, dist);
                 }
 
                 distMatrix[i, j] = dist;
@@ -235,23 +242,23 @@ public class AgglomerativeClustering<T> : ClusteringBase<T>
         {
             for (int j = 0; j < 2 * n - 1; j++)
             {
-                distMatrix[i, j] = double.MaxValue;
-                distMatrix[j, i] = double.MaxValue;
+                distMatrix[i, j] = NumOps.MaxValue;
+                distMatrix[j, i] = NumOps.MaxValue;
             }
         }
 
         return distMatrix;
     }
 
-    private (int I, int J, double Dist) FindClosestPair(
-        double[,] distMatrix,
+    private (int I, int J, T Dist) FindClosestPair(
+        T[,] distMatrix,
         HashSet<int> active,
         int[] sizes,
-        double[,] centroids,
+        T[,] centroids,
         int dims)
     {
         int minI = -1, minJ = -1;
-        double minDist = double.MaxValue;
+        T minDist = NumOps.MaxValue;
 
         var activeList = active.ToList();
 
@@ -262,9 +269,9 @@ public class AgglomerativeClustering<T> : ClusteringBase<T>
             {
                 int j = activeList[aj];
 
-                double dist = distMatrix[i, j];
+                T dist = distMatrix[i, j];
 
-                if (dist < minDist)
+                if (NumOps.LessThan(dist, minDist))
                 {
                     minDist = dist;
                     minI = i;
@@ -277,16 +284,15 @@ public class AgglomerativeClustering<T> : ClusteringBase<T>
     }
 
     private void UpdateDistanceMatrix(
-        double[,] distMatrix,
+        T[,] distMatrix,
         HashSet<int> active,
         int mergedI,
         int mergedJ,
         int newCluster,
         int[] sizes)
     {
-        double sizeI = sizes[mergedI];
-        double sizeJ = sizes[mergedJ];
-        double sizeNew = sizes[newCluster];
+        T sizeI = NumOps.FromDouble(sizes[mergedI]);
+        T sizeJ = NumOps.FromDouble(sizes[mergedJ]);
 
         foreach (int k in active)
         {
@@ -295,42 +301,58 @@ public class AgglomerativeClustering<T> : ClusteringBase<T>
                 continue;
             }
 
-            double dIK = distMatrix[mergedI, k];
-            double dJK = distMatrix[mergedJ, k];
-            double dIJ = distMatrix[mergedI, mergedJ];
-            double sizeK = sizes[k];
+            T dIK = distMatrix[mergedI, k];
+            T dJK = distMatrix[mergedJ, k];
+            T dIJ = distMatrix[mergedI, mergedJ];
+            T sizeK = NumOps.FromDouble(sizes[k]);
 
-            double newDist = ComputeLinkageDistance(dIK, dJK, dIJ, sizeI, sizeJ, sizeK);
+            T newDist = ComputeLinkageDistance(dIK, dJK, dIJ, sizeI, sizeJ, sizeK);
 
             distMatrix[newCluster, k] = newDist;
             distMatrix[k, newCluster] = newDist;
         }
     }
 
-    private double ComputeLinkageDistance(
-        double dIK, double dJK, double dIJ,
-        double sizeI, double sizeJ, double sizeK)
+    private T ComputeLinkageDistance(
+        T dIK, T dJK, T dIJ,
+        T sizeI, T sizeJ, T sizeK)
     {
+        T two = NumOps.FromDouble(2.0);
+        T four = NumOps.FromDouble(4.0);
+        T sizeIJ = NumOps.Add(sizeI, sizeJ);
+
         return _options.Linkage switch
         {
-            LinkageMethod.Single => Math.Min(dIK, dJK),
+            LinkageMethod.Single =>
+                NumOps.LessThan(dIK, dJK) ? dIK : dJK,
 
-            LinkageMethod.Complete => Math.Max(dIK, dJK),
+            LinkageMethod.Complete =>
+                NumOps.GreaterThan(dIK, dJK) ? dIK : dJK,
 
-            LinkageMethod.Average => (sizeI * dIK + sizeJ * dJK) / (sizeI + sizeJ),
+            LinkageMethod.Average =>
+                NumOps.Divide(NumOps.Add(NumOps.Multiply(sizeI, dIK), NumOps.Multiply(sizeJ, dJK)), sizeIJ),
 
-            LinkageMethod.Weighted => (dIK + dJK) / 2.0,
+            LinkageMethod.Weighted =>
+                NumOps.Divide(NumOps.Add(dIK, dJK), two),
 
             LinkageMethod.Ward =>
-                ((sizeI + sizeK) * dIK + (sizeJ + sizeK) * dJK - sizeK * dIJ) / (sizeI + sizeJ + sizeK),
+                NumOps.Divide(
+                    NumOps.Subtract(
+                        NumOps.Add(
+                            NumOps.Multiply(NumOps.Add(sizeI, sizeK), dIK),
+                            NumOps.Multiply(NumOps.Add(sizeJ, sizeK), dJK)),
+                        NumOps.Multiply(sizeK, dIJ)),
+                    NumOps.Add(sizeIJ, sizeK)),
 
             LinkageMethod.Centroid =>
-                (sizeI * dIK + sizeJ * dJK) / (sizeI + sizeJ) - (sizeI * sizeJ * dIJ) / ((sizeI + sizeJ) * (sizeI + sizeJ)),
+                NumOps.Subtract(
+                    NumOps.Divide(NumOps.Add(NumOps.Multiply(sizeI, dIK), NumOps.Multiply(sizeJ, dJK)), sizeIJ),
+                    NumOps.Divide(NumOps.Multiply(NumOps.Multiply(sizeI, sizeJ), dIJ), NumOps.Multiply(sizeIJ, sizeIJ))),
 
             LinkageMethod.Median =>
-                (dIK + dJK) / 2.0 - dIJ / 4.0,
+                NumOps.Subtract(NumOps.Divide(NumOps.Add(dIK, dJK), two), NumOps.Divide(dIJ, four)),
 
-            _ => Math.Min(dIK, dJK)
+            _ => NumOps.LessThan(dIK, dJK) ? dIK : dJK
         };
     }
 
@@ -363,7 +385,7 @@ public class AgglomerativeClustering<T> : ClusteringBase<T>
         }
 
         int nextId = n;
-        foreach (var (c1, c2, dist, size) in (_dendrogram ?? throw new InvalidOperationException("AgglomerativeClustering: Dendrogram not computed.")))
+        foreach (var (c1, c2, dist, size) in _dendrogram!)
         {
             parent[c1] = nextId;
             parent[c2] = nextId;
@@ -446,7 +468,7 @@ public class AgglomerativeClustering<T> : ClusteringBase<T>
         for (int i = 0; i < x.Rows; i++)
         {
             var point = GetRow(x, i);
-            double minDist = double.MaxValue;
+            T minDist = NumOps.MaxValue;
             int nearest = 0;
 
             if (ClusterCenters is not null)
@@ -454,9 +476,9 @@ public class AgglomerativeClustering<T> : ClusteringBase<T>
                 for (int k = 0; k < NumClusters; k++)
                 {
                     var center = GetRow(ClusterCenters, k);
-                    double dist = NumOps.ToDouble(metric.Compute(point, center));
+                    T dist = metric.Compute(point, center);
 
-                    if (dist < minDist)
+                    if (NumOps.LessThan(dist, minDist))
                     {
                         minDist = dist;
                         nearest = k;
@@ -474,7 +496,7 @@ public class AgglomerativeClustering<T> : ClusteringBase<T>
     public override Vector<T> FitPredict(Matrix<T> x)
     {
         Train(x);
-        return Labels ?? throw new InvalidOperationException("Labels have not been computed.");
+        return Labels ?? new Vector<T>(0);
     }
 
     /// <summary>

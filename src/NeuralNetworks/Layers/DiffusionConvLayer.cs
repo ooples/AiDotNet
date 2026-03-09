@@ -2025,7 +2025,7 @@ public class DiffusionConvLayer<T> : LayerBase<T>
                 DiffusionTimes[t] = NumOps.Subtract(DiffusionTimes[t], update);
 
                 // Clamp to minimum positive value to ensure valid diffusion
-                if (NumOps.ToDouble(DiffusionTimes[t]) < NumOps.ToDouble(minTime))
+                if (NumOps.LessThan(DiffusionTimes[t], minTime))
                 {
                     DiffusionTimes[t] = minTime;
                 }

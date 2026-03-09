@@ -549,7 +549,7 @@ public class BASEDLayer<T> : LayerBase<T>
                     T maxScore = rawScores[0];
                     for (int wi = 1; wi < windowLen; wi++)
                     {
-                        if (NumOps.ToDouble(rawScores[wi]) > NumOps.ToDouble(maxScore))
+                        if (NumOps.GreaterThan(rawScores[wi], maxScore))
                             maxScore = rawScores[wi];
                     }
 

@@ -43,8 +43,8 @@ public class NegativeLikelihoodRatioMetric<T> : IClassificationMetric<T>
         int tp = 0, tn = 0, fp = 0, fn = 0;
         for (int i = 0; i < predictions.Length; i++)
         {
-            bool pred = NumOps.ToDouble(predictions[i]) >= 0.5;
-            bool actual = NumOps.ToDouble(actuals[i]) >= 0.5;
+            bool pred = NumOps.GreaterThanOrEquals(predictions[i], NumOps.FromDouble(0.5));
+            bool actual = NumOps.GreaterThanOrEquals(actuals[i], NumOps.FromDouble(0.5));
 
             if (pred && actual) tp++;
             else if (!pred && !actual) tn++;
@@ -56,7 +56,7 @@ public class NegativeLikelihoodRatioMetric<T> : IClassificationMetric<T>
         double specificity = (tn + fp) > 0 ? (double)tn / (tn + fp) : 0;
         double fnr = 1 - sensitivity;
 
-        if (specificity < 1e-10) return NumOps.FromDouble(double.MaxValue);
+        if (specificity < 1e-10) return NumOps.MaxValue;
         return NumOps.FromDouble(fnr / specificity);
     }
 
