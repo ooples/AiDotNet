@@ -33156,7 +33156,7 @@ public static class LayerHelper<T>
     /// </summary>
     public static IEnumerable<ILayer<T>> CreateDefaultKairosLayers(
         NeuralNetworkArchitecture<T> architecture,
-        int contextLength = 1024, int forecastHorizon = 96, int[] patchSizes = null!,
+        int contextLength = 1024, int forecastHorizon = 96, int[]? patchSizes = null,
         int hiddenDim = 512, int numLayers = 12, int numHeads = 8,
         int intermediateSize = 2048, double dropout = 0.1)
     {

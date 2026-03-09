@@ -142,8 +142,9 @@ public class GenericUnivariateSelect<T> : TransformerBase<T, Matrix<T>, Matrix<T
 
     private int[] SelectKBest(int p)
     {
+        var scores = _scores ?? throw new InvalidOperationException("_scores has not been initialized.");
         int k = Math.Min((int)_param, p);
-        return _scores!
+        return scores
             .Select((s, idx) => (Score: s, Index: idx))
             .OrderByDescending(x => x.Score)
             .Take(k)
@@ -154,8 +155,9 @@ public class GenericUnivariateSelect<T> : TransformerBase<T, Matrix<T>, Matrix<T
 
     private int[] SelectPercentile(int p)
     {
+        var scores = _scores ?? throw new InvalidOperationException("_scores has not been initialized.");
         int numToSelect = Math.Max(1, (int)Math.Ceiling(p * _param / 100.0));
-        return _scores!
+        return scores
             .Select((s, idx) => (Score: s, Index: idx))
             .OrderByDescending(x => x.Score)
             .Take(numToSelect)

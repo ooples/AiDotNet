@@ -1,0 +1,228 @@
+---
+import AdminLayout from '../../../layouts/AdminLayout.astro';
+---
+
+<AdminLayout title="API Keys Management - AiDotNet Admin" description="View and manage all API keys across the platform." activeTab="api-keys">
+  <div class="space-y-6">
+    <div class="flex items-center justify-between">
+      <div>
+        <h1 class="text-2xl font-bold text-slate-900 dark:text-white">API Keys</h1>
+        <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">View and manage all API keys across the platform</p>
+      </div>
+      <div class="flex items-center gap-4 text-sm text-slate-500 dark:text-slate-400">
+        <span><span id="active-count" class="font-semibold text-green-500">--</span> active</span>
+        <span><span id="revoked-count" class="font-semibold text-red-500">--</span> revoked</span>
+      </div>
+    </div>
+
+    <!-- Search -->
+    <div class="flex flex-col sm:flex-row gap-3">
+      <div class="flex-1">
+        <input
+          id="search-input"
+          type="text"
+          placeholder="Search by key name, prefix, or owner..."
+          class="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/50 text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
+        />
+      </div>
+      <select
+        id="filter-status"
+        class="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/50 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
+      >
+        <option value="">All Status</option>
+        <option value="active">Active</option>
+        <option value="revoked">Revoked</option>
+      </select>
+    </div>
+
+    <!-- Keys table -->
+    <div class="bg-white dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+      <div id="keys-loading" class="p-12 text-center">
+        <p class="text-sm text-slate-500 dark:text-slate-400">Loading API keys...</p>
+      </div>
+      <div class="overflow-x-auto">
+        <table id="keys-table" class="hidden w-full text-sm">
+          <thead>
+            <tr class="border-b border-slate-200 dark:border-slate-700">
+              <th class="text-left py-3 px-4 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Key Name</th>
+              <th class="text-left py-3 px-4 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Prefix</th>
+              <th class="text-left py-3 px-4 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Owner</th>
+              <th class="text-left py-3 px-4 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Scopes</th>
+              <th class="text-left py-3 px-4 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Status</th>
+              <th class="text-left py-3 px-4 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Created</th>
+              <th class="text-left py-3 px-4 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Last Used</th>
+              <th class="text-left py-3 px-4 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="keys-body" class="divide-y divide-slate-100 dark:divide-slate-800">
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    import { supabase } from '../../../lib/supabase';
+
+    interface ApiKey {
+      id: string;
+      user_id: string;
+      key_name: string;
+      key_prefix: string;
+      scopes: string[] | null;
+      is_active: boolean;
+      last_used_at: string | null;
+      created_at: string;
+      ownerName?: string;
+    }
+
+    let allKeys: ApiKey[] = [];
+    let filteredKeys: ApiKey[] = [];
+
+    async function loadKeys() {
+      // Load all profiles for name lookup (paginate to avoid max_rows limit)
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id, full_name')
+        .range(0, 999);
+
+      const nameMap = new Map<string, string>();
+      if (profiles) {
+        for (const p of profiles) {
+          nameMap.set(p.id, p.full_name || 'Unknown');
+        }
+      }
+
+      // Load all API keys (paginate to avoid max_rows limit)
+      const { data: keys, error: keysError } = await supabase
+        .from('user_api_keys')
+        .select('id, user_id, key_name, key_prefix, scopes, is_active, last_used_at, created_at')
+        .order('created_at', { ascending: false })
+        .range(0, 999);
+
+      if (keysError || !keys) {
+        const loading = document.getElementById('keys-loading');
+        if (loading) loading.innerHTML = '<p class="text-sm text-red-500">Failed to load API keys.</p>';
+        console.error('Keys load error:', keysError);
+        return;
+      }
+
+      allKeys = keys.map(k => ({
+        ...k,
+        ownerName: nameMap.get(k.user_id) || 'Unknown',
+      }));
+
+      // Stats
+      const activeCount = allKeys.filter(k => k.is_active).length;
+      const revokedCount = allKeys.filter(k => !k.is_active).length;
+      const activeEl = document.getElementById('active-count');
+      const revokedEl = document.getElementById('revoked-count');
+      if (activeEl) activeEl.textContent = String(activeCount);
+      if (revokedEl) revokedEl.textContent = String(revokedCount);
+
+      applyFilters();
+    }
+
+    function applyFilters() {
+      const search = (document.getElementById('search-input') as HTMLInputElement).value.toLowerCase().trim();
+      const statusFilter = (document.getElementById('filter-status') as HTMLSelectElement).value;
+
+      filteredKeys = allKeys.filter(k => {
+        if (search) {
+          const haystack = `${k.key_name} ${k.key_prefix} ${k.ownerName || ''}`.toLowerCase();
+          if (!haystack.includes(search)) return false;
+        }
+        if (statusFilter === 'active' && !k.is_active) return false;
+        if (statusFilter === 'revoked' && k.is_active) return false;
+        return true;
+      });
+
+      renderTable();
+    }
+
+    function renderTable() {
+      const loading = document.getElementById('keys-loading');
+      const table = document.getElementById('keys-table');
+      const tbody = document.getElementById('keys-body');
+
+      if (loading) loading.classList.add('hidden');
+      if (table) table.classList.remove('hidden');
+
+      if (!tbody) return;
+
+      if (filteredKeys.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="8" class="py-8 text-center text-sm text-slate-500 dark:text-slate-400">No API keys found</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = filteredKeys.map(k => {
+        const statusBadge = k.is_active
+          ? '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">Active</span>'
+          : '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400">Revoked</span>';
+        const lastUsed = k.last_used_at ? new Date(k.last_used_at).toLocaleDateString() : 'Never';
+        const created = new Date(k.created_at).toLocaleDateString();
+        const scopes = (k.scopes || []).join(', ') || '--';
+        const revokeBtn = k.is_active
+          ? `<button class="revoke-btn text-sm font-medium text-red-500 hover:underline" data-id="${k.id}">Revoke</button>`
+          : '<span class="text-xs text-slate-400">--</span>';
+
+        return `<tr>
+          <td class="py-3 px-4 text-slate-900 dark:text-white font-medium">${escapeHtml(k.key_name)}</td>
+          <td class="py-3 px-4 font-mono text-xs text-slate-500 dark:text-slate-400">${escapeHtml(k.key_prefix)}...</td>
+          <td class="py-3 px-4 text-slate-700 dark:text-slate-300">${escapeHtml(k.ownerName || 'Unknown')}</td>
+          <td class="py-3 px-4 text-slate-500 dark:text-slate-400 text-xs">${escapeHtml(scopes)}</td>
+          <td class="py-3 px-4">${statusBadge}</td>
+          <td class="py-3 px-4 text-slate-400 dark:text-slate-500 text-sm">${created}</td>
+          <td class="py-3 px-4 text-slate-400 dark:text-slate-500 text-sm">${lastUsed}</td>
+          <td class="py-3 px-4">${revokeBtn}</td>
+        </tr>`;
+      }).join('');
+
+      // Attach revoke handlers
+      tbody.querySelectorAll('.revoke-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const keyId = (btn as HTMLElement).dataset.id;
+          if (!keyId) return;
+          if (!confirm('Are you sure you want to revoke this API key? This cannot be undone.')) return;
+
+          const { error } = await supabase
+            .from('user_api_keys')
+            .update({ is_active: false })
+            .eq('id', keyId);
+
+          if (error) {
+            console.error('Revoke error:', error);
+            alert('Failed to revoke key. Please try again.');
+            return;
+          }
+
+          // Update local data
+          const key = allKeys.find(k => k.id === keyId);
+          if (key) key.is_active = false;
+
+          // Update stats
+          const activeCount = allKeys.filter(k => k.is_active).length;
+          const revokedCount = allKeys.filter(k => !k.is_active).length;
+          const activeEl = document.getElementById('active-count');
+          const revokedEl = document.getElementById('revoked-count');
+          if (activeEl) activeEl.textContent = String(activeCount);
+          if (revokedEl) revokedEl.textContent = String(revokedCount);
+
+          applyFilters();
+        });
+      });
+    }
+
+    function escapeHtml(str: string): string {
+      const div = document.createElement('div');
+      div.appendChild(document.createTextNode(str));
+      return div.innerHTML;
+    }
+
+    document.getElementById('search-input')?.addEventListener('input', applyFilters);
+    document.getElementById('filter-status')?.addEventListener('change', applyFilters);
+
+    await (window as any).__adminReady;
+    loadKeys();
+  </script>
+</AdminLayout>

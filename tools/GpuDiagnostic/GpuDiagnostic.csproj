@@ -11,6 +11,6 @@
     <Compile Include="GpuDiagnostic.cs" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="AiDotNet.Tensors" Version="0.1.0" />
+    <PackageReference Include="AiDotNet.Tensors" />
   </ItemGroup>
 </Project>

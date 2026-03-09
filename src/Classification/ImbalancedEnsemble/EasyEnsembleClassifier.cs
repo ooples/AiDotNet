@@ -1,7 +1,10 @@
+using System.Text;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors.Helpers;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace AiDotNet.Classification.ImbalancedEnsemble;
 
@@ -696,6 +699,112 @@ public class EasyEnsembleClassifier<T> : ClassifierBase<T>
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Serializes the trained model state including all AdaBoost sub-classifiers.
+    /// </summary>
+    public override byte[] Serialize()
+    {
+        var modelData = new Dictionary<string, object>
+        {
+            { "NumClasses", NumClasses },
+            { "NumFeatures", NumFeatures },
+            { "TaskType", (int)TaskType },
+            { "ClassLabels", ClassLabels?.ToArray() ?? Array.Empty<T>() },
+            { "SubClassifierCount", _subClassifiers.Count }
+        };
+
+        for (int i = 0; i < _subClassifiers.Count; i++)
+        {
+            var sub = _subClassifiers[i];
+            var subDict = new Dictionary<string, object>
+            {
+                { "Alphas", sub.Alphas.ToArray() },
+                { "LearnerCount", sub.WeakLearners.Count }
+            };
+
+            for (int j = 0; j < sub.WeakLearners.Count; j++)
+            {
+                var wl = sub.WeakLearners[j];
+                subDict[$"Learner_{j}"] = new Dictionary<string, object>
+                {
+                    { "FeatureIndex", wl.FeatureIndex },
+                    { "Threshold", wl.Threshold },
+                    { "Polarity", wl.Polarity }
+                };
+            }
+
+            modelData[$"Sub_{i}"] = subDict;
+        }
+
+        var modelMetadata = GetModelMetadata();
+        modelMetadata.ModelData = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelData));
+        return Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelMetadata));
+    }
+
+    /// <summary>
+    /// Deserializes the trained model state including all AdaBoost sub-classifiers.
+    /// </summary>
+    public override void Deserialize(byte[] modelData)
+    {
+        var jsonString = Encoding.UTF8.GetString(modelData);
+        var modelMetadata = JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString);
+        if (modelMetadata?.ModelData is null)
+            throw new InvalidOperationException("Deserialization failed: invalid model data.");
+
+        var dataString = Encoding.UTF8.GetString(modelMetadata.ModelData);
+        var dataObj = JsonConvert.DeserializeObject<JObject>(dataString);
+        if (dataObj is null)
+            throw new InvalidOperationException("Deserialization failed: invalid model data.");
+
+        NumClasses = dataObj["NumClasses"]?.ToObject<int>() ?? 0;
+        NumFeatures = dataObj["NumFeatures"]?.ToObject<int>() ?? 0;
+        TaskType = (ClassificationTaskType)(dataObj["TaskType"]?.ToObject<int>() ?? 0);
+
+        var classLabelsToken = dataObj["ClassLabels"];
+        if (classLabelsToken is not null)
+        {
+            var arr = classLabelsToken.ToObject<double[]>() ?? Array.Empty<double>();
+            if (arr.Length > 0)
+            {
+                ClassLabels = new Vector<T>(arr.Length);
+                for (int i = 0; i < arr.Length; i++)
+                    ClassLabels[i] = NumOps.FromDouble(arr[i]);
+            }
+        }
+
+        _subClassifiers.Clear();
+        int subCount = dataObj["SubClassifierCount"]?.ToObject<int>() ?? 0;
+        for (int i = 0; i < subCount; i++)
+        {
+            if (dataObj[$"Sub_{i}"] is JObject subJObj)
+            {
+                var sub = new AdaBoostSubClassifier();
+
+                var alphasToken = subJObj["Alphas"];
+                if (alphasToken is not null)
+                {
+                    sub.Alphas = alphasToken.ToObject<List<double>>() ?? [];
+                }
+
+                int learnerCount = subJObj["LearnerCount"]?.ToObject<int>() ?? 0;
+                for (int j = 0; j < learnerCount; j++)
+                {
+                    if (subJObj[$"Learner_{j}"] is JObject wlObj)
+                    {
+                        sub.WeakLearners.Add(new WeakLearner
+                        {
+                            FeatureIndex = wlObj["FeatureIndex"]?.ToObject<int>() ?? 0,
+                            Threshold = wlObj["Threshold"]?.ToObject<double>() ?? 0,
+                            Polarity = wlObj["Polarity"]?.ToObject<int>() ?? 1
+                        });
+                    }
+                }
+
+                _subClassifiers.Add(sub);
+            }
+        }
     }
 
     /// <summary>

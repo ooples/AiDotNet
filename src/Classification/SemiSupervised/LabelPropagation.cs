@@ -1,8 +1,11 @@
+using System.Text;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Kernels;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors.Helpers;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace AiDotNet.Classification.SemiSupervised;
 
@@ -771,6 +774,106 @@ public class LabelPropagation<T> : SemiSupervisedClassifierBase<T>
     {
         // Use GaussianKernel with default sigma (which corresponds to gamma in RBF)
         return new Kernels.GaussianKernel<T>(1.0);
+    }
+
+    #endregion
+
+    #region Serialization
+
+    /// <inheritdoc />
+    public override byte[] Serialize()
+    {
+        var modelMetadata = GetModelMetadata();
+        var modelData = new Dictionary<string, object?>
+        {
+            ["NumClasses"] = NumClasses,
+            ["NumFeatures"] = NumFeatures,
+            ["TaskType"] = (int)TaskType,
+            ["NumLabeled"] = _numLabeled
+        };
+
+        if (ClassLabels is not null)
+        {
+            var labels = new double[ClassLabels.Length];
+            for (int i = 0; i < ClassLabels.Length; i++)
+                labels[i] = NumOps.ToDouble(ClassLabels[i]);
+            modelData["ClassLabels"] = labels;
+        }
+
+        if (_allFeatures is not null)
+        {
+            modelData["AllFeatures_Rows"] = _allFeatures.Rows;
+            modelData["AllFeatures_Cols"] = _allFeatures.Columns;
+            var data = new double[_allFeatures.Rows * _allFeatures.Columns];
+            for (int i = 0; i < _allFeatures.Rows; i++)
+                for (int j = 0; j < _allFeatures.Columns; j++)
+                    data[i * _allFeatures.Columns + j] = NumOps.ToDouble(_allFeatures[i, j]);
+            modelData["AllFeatures"] = data;
+        }
+
+        if (_labelDistributions is not null)
+        {
+            modelData["LabelDist_Rows"] = _labelDistributions.Rows;
+            modelData["LabelDist_Cols"] = _labelDistributions.Columns;
+            var data = new double[_labelDistributions.Rows * _labelDistributions.Columns];
+            for (int i = 0; i < _labelDistributions.Rows; i++)
+                for (int j = 0; j < _labelDistributions.Columns; j++)
+                    data[i * _labelDistributions.Columns + j] = NumOps.ToDouble(_labelDistributions[i, j]);
+            modelData["LabelDistributions"] = data;
+        }
+
+        modelMetadata.ModelData = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelData));
+        return Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelMetadata));
+    }
+
+    /// <inheritdoc />
+    public override void Deserialize(byte[] modelData)
+    {
+        var jsonString = Encoding.UTF8.GetString(modelData);
+        var modelMetadata = JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString);
+        if (modelMetadata?.ModelData is null) return;
+
+        var dataString = Encoding.UTF8.GetString(modelMetadata.ModelData);
+        var jObj = JsonConvert.DeserializeObject<JObject>(dataString);
+        if (jObj is null) return;
+
+        NumClasses = jObj["NumClasses"]?.ToObject<int>() ?? 0;
+        NumFeatures = jObj["NumFeatures"]?.ToObject<int>() ?? 0;
+        TaskType = (ClassificationTaskType)(jObj["TaskType"]?.ToObject<int>() ?? 0);
+        _numLabeled = jObj["NumLabeled"]?.ToObject<int>() ?? 0;
+
+        var labelsToken = jObj["ClassLabels"];
+        if (labelsToken is JArray labelsArr)
+        {
+            ClassLabels = new Vector<T>(labelsArr.Count);
+            for (int i = 0; i < labelsArr.Count; i++)
+                ClassLabels[i] = NumOps.FromDouble(labelsArr[i].Value<double>());
+        }
+
+        int afRows = jObj["AllFeatures_Rows"]?.ToObject<int>() ?? 0;
+        int afCols = jObj["AllFeatures_Cols"]?.ToObject<int>() ?? 0;
+        var afToken = jObj["AllFeatures"];
+        if (afToken is JArray afArr && afRows > 0 && afCols > 0)
+        {
+            _allFeatures = new Matrix<T>(afRows, afCols);
+            for (int i = 0; i < afRows; i++)
+                for (int j = 0; j < afCols; j++)
+                    _allFeatures[i, j] = NumOps.FromDouble(afArr[i * afCols + j].Value<double>());
+
+            // Rebuild affinity matrix from restored features
+            _affinityMatrix = BuildAffinityMatrix(_allFeatures);
+        }
+
+        int ldRows = jObj["LabelDist_Rows"]?.ToObject<int>() ?? 0;
+        int ldCols = jObj["LabelDist_Cols"]?.ToObject<int>() ?? 0;
+        var ldToken = jObj["LabelDistributions"];
+        if (ldToken is JArray ldArr && ldRows > 0 && ldCols > 0)
+        {
+            _labelDistributions = new Matrix<T>(ldRows, ldCols);
+            for (int i = 0; i < ldRows; i++)
+                for (int j = 0; j < ldCols; j++)
+                    _labelDistributions[i, j] = NumOps.FromDouble(ldArr[i * ldCols + j].Value<double>());
+        }
     }
 
     #endregion
