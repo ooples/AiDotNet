@@ -515,7 +515,7 @@ public class DeepLIFTExplanation<T>
     public List<(string name, T attribution)> GetPositiveContributions()
     {
         return GetSortedAttributions()
-            .Where(x => NumOps.ToDouble(x.attribution) > 0)
+            .Where(x => NumOps.GreaterThan(x.attribution, NumOps.Zero))
             .ToList();
     }
 
@@ -525,7 +525,7 @@ public class DeepLIFTExplanation<T>
     public List<(string name, T attribution)> GetNegativeContributions()
     {
         return GetSortedAttributions()
-            .Where(x => NumOps.ToDouble(x.attribution) < 0)
+            .Where(x => NumOps.LessThan(x.attribution, NumOps.Zero))
             .OrderBy(x => NumOps.ToDouble(x.attribution))
             .ToList();
     }

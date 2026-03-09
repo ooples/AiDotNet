@@ -198,7 +198,7 @@ public class NTXentLoss<T>
             int positiveIdx = i < batchSize ? i + batchSize : i - batchSize;
 
             // Compute log-softmax for row i
-            T maxVal = NumOps.FromDouble(double.MinValue);
+            T maxVal = NumOps.MinValue;
             for (int j = 0; j < n; j++)
             {
                 if (i != j)
@@ -242,7 +242,7 @@ public class NTXentLoss<T>
             int positiveIdx = i < batchSize ? i + batchSize : i - batchSize;
 
             // Compute softmax probabilities
-            T maxVal = NumOps.FromDouble(double.MinValue);
+            T maxVal = NumOps.MinValue;
             for (int j = 0; j < n; j++)
             {
                 if (i != j)

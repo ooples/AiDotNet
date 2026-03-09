@@ -606,7 +606,7 @@ public class ImageBindNeuralNetwork<T> : NeuralNetworkBase<T>, IImageBindModel<T
 
         var queryEmbedding = GetEmbedding(queryModality, queryData);
 
-        T bestScore = NumOps.FromDouble(double.MinValue);
+        T bestScore = NumOps.MinValue;
         int bestIndex = 0;
 
         for (int i = 0; i < candidateList.Count; i++)
@@ -614,7 +614,7 @@ public class ImageBindNeuralNetwork<T> : NeuralNetworkBase<T>, IImageBindModel<T
             var candidateEmbedding = GetEmbedding(candidateList[i].Modality, candidateList[i].Data);
             var score = ComputeCrossModalSimilarity(queryEmbedding, candidateEmbedding);
 
-            if (NumOps.ToDouble(score) > NumOps.ToDouble(bestScore))
+            if (NumOps.GreaterThan(score, bestScore))
             {
                 bestScore = score;
                 bestIndex = i;

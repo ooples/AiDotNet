@@ -168,7 +168,7 @@ internal class NegativeBinomialDistribution<T> : DistributionBase<T>
             throw new ArgumentOutOfRangeException(nameof(pQuantile), "Probability must be in [0, 1].");
 
         if (pVal == 0) return Zero;
-        if (pVal == 1) return NumOps.FromDouble(double.PositiveInfinity);
+        if (pVal == 1) return NumOps.MaxValue;
 
         double mean = NumOps.ToDouble(Mean);
 

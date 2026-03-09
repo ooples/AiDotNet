@@ -429,7 +429,7 @@ public class NBEATSDetector<T> : AnomalyDetectorBase<T>
                                             dHNext[i] += NumOps.ToDouble(nextWThetaF[i, j]) * NumOps.ToDouble(gradForecast[j]);
                                         }
                                         // Apply ReLU derivative
-                                        if (NumOps.ToDouble(nextHVal[i]) <= 0) dHNext[i] = 0;
+                                        if (!NumOps.GreaterThan(nextHVal[i], NumOps.Zero)) dHNext[i] = 0;
                                     }
 
                                     // Backprop through next block's first FC layer to get dResidual
@@ -477,7 +477,7 @@ public class NBEATSDetector<T> : AnomalyDetectorBase<T>
                         // ReLU derivative for h
                         for (int i = 0; i < _hiddenDim; i++)
                         {
-                            if (NumOps.ToDouble(h[i]) <= 0) dH[i] = NumOps.Zero;
+                            if (!NumOps.GreaterThan(h[i], NumOps.Zero)) dH[i] = NumOps.Zero;
                         }
 
                         // Update W4, B4

@@ -94,7 +94,7 @@ public class FisherExactTest<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             for (int i = 0; i < n; i++)
             {
                 bool lowFeature = values[i] <= median;
-                bool class0Target = Math.Abs(NumOps.ToDouble(target[i]) - class0) < 1e-10;
+                bool class0Target = NumOps.Compare(target[i], NumOps.FromDouble(class0)) == 0;
 
                 if (lowFeature && class0Target) a++;
                 else if (lowFeature && !class0Target) b++;

@@ -85,7 +85,7 @@ public class MultiLabelReliefF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         {
             labelVectors[i] = new bool[numLabels];
             for (int l = 0; l < numLabels; l++)
-                labelVectors[i][l] = NumOps.ToDouble(labels[i, l]) > 0.5;
+                labelVectors[i][l] = NumOps.GreaterThan(labels[i, l], NumOps.FromDouble(0.5));
         }
 
         // Main ReliefF loop

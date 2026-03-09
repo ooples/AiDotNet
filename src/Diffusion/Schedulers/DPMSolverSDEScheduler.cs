@@ -115,7 +115,7 @@ public sealed class DPMSolverSDEScheduler<T> : NoiseSchedulerBase<T>
 
         // SDE: Add stochastic noise proportional to eta and step size
         double etaValue = NumOps.ToDouble(eta);
-        if (etaValue > 0.0 && NumOps.ToDouble(sigmaNext) > 0.0)
+        if (etaValue > 0.0 && NumOps.GreaterThan(sigmaNext, NumOps.Zero))
         {
             double sigmaD = NumOps.ToDouble(sigma);
             double sigmaNd = NumOps.ToDouble(sigmaNext);

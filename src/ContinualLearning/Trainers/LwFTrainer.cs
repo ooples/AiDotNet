@@ -191,7 +191,7 @@ public class LwFTrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TO
         var teacherModel = _lwfStrategy?.TeacherModel;
         var hasTeacher = teacherModel != null && _tasksLearned > 0;
 
-        T bestValidationLoss = NumOps.FromDouble(double.MaxValue);
+        T bestValidationLoss = NumOps.MaxValue;
         int epochsWithoutImprovement = 0;
         long totalGradientUpdates = 0;
 

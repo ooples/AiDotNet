@@ -106,7 +106,7 @@ public class KMeans<T> : ClusteringBase<T>
 
         Matrix<T>? bestCenters = null;
         Vector<T>? bestLabels = null;
-        T bestInertia = NumOps.FromDouble(double.MaxValue);
+        T bestInertia = NumOps.MaxValue;
 
         // Run multiple initializations and keep the best
         int numInits = _options.InitMethod == KMeansInitMethod.Custom ? 1 : _options.NumInitializations;
@@ -115,7 +115,7 @@ public class KMeans<T> : ClusteringBase<T>
         {
             var (centers, labels, inertia, iterations) = FitSingle(x);
 
-            if (NumOps.ToDouble(inertia) < NumOps.ToDouble(bestInertia))
+            if (NumOps.LessThan(inertia, bestInertia))
             {
                 bestCenters = centers;
                 bestLabels = labels;
@@ -136,7 +136,8 @@ public class KMeans<T> : ClusteringBase<T>
         ValidateIsTrained();
         ValidatePredictInput(x);
 
-        return AssignLabels(x, ClusterCenters!);
+        if (ClusterCenters is null) return new Vector<T>(x.Rows);
+        return AssignLabels(x, ClusterCenters);
     }
 
     /// <inheritdoc />
@@ -145,14 +146,15 @@ public class KMeans<T> : ClusteringBase<T>
         ValidateIsTrained();
         ValidatePredictInput(x);
 
-        return ComputeDistancesToCenters(x, ClusterCenters!);
+        if (ClusterCenters is null) return new Matrix<T>(x.Rows, NumClusters);
+        return ComputeDistancesToCenters(x, ClusterCenters);
     }
 
     /// <inheritdoc />
     public override Vector<T> FitPredict(Matrix<T> x)
     {
         Train(x);
-        return Labels!;
+        return Labels ?? new Vector<T>(0);
     }
 
     private (Matrix<T> Centers, Vector<T> Labels, T Inertia, int Iterations) FitSingle(Matrix<T> x)
@@ -295,18 +297,17 @@ public class KMeans<T> : ClusteringBase<T>
         for (int i = 0; i < x.Rows; i++)
         {
             var point = GetRow(x, i);
-            double minDist = double.MaxValue;
+            T minDist = NumOps.MaxValue;
             int nearestCluster = 0;
 
             for (int k = 0; k < _options.NumClusters; k++)
             {
                 var center = GetRow(centers, k);
                 T dist = distanceMetric.Compute(point, center);
-                double distDouble = NumOps.ToDouble(dist);
 
-                if (distDouble < minDist)
+                if (NumOps.LessThan(dist, minDist))
                 {
-                    minDist = distDouble;
+                    minDist = dist;
                     nearestCluster = k;
                 }
             }
@@ -381,7 +382,7 @@ public class KMeans<T> : ClusteringBase<T>
             var newCenter = GetRow(newCenters, k);
             T shift = distanceMetric.Compute(oldCenter, newCenter);
 
-            if (NumOps.ToDouble(shift) > NumOps.ToDouble(maxShift))
+            if (NumOps.GreaterThan(shift, maxShift))
             {
                 maxShift = shift;
             }

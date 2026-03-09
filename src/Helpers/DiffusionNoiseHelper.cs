@@ -257,7 +257,7 @@ public static class DiffusionNoiseHelper<T>
     public static T ComputeSNR(T alphaCumprod)
     {
         var oneMinusAlpha = NumOps.Subtract(NumOps.One, alphaCumprod);
-        if (NumOps.ToDouble(oneMinusAlpha) <= 0)
+        if (!NumOps.GreaterThan(oneMinusAlpha, NumOps.Zero))
         {
             // Avoid division by zero
             return NumOps.FromDouble(1e10);

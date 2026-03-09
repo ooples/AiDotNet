@@ -105,7 +105,7 @@ public class QLambdaAgent<T> : ReinforcementLearningAgentBase<T>
                 _eligibilityTraces[s][a] = NumOps.Multiply(traceValue, decayFactor);
 
                 // Check if trace is still active after decay
-                if (Math.Abs(NumOps.ToDouble(_eligibilityTraces[s][a])) > TraceThreshold)
+                if (NumOps.GreaterThan(NumOps.Abs(_eligibilityTraces[s][a]), NumOps.FromDouble(TraceThreshold)))
                 {
                     hasActiveTrace = true;
                 }

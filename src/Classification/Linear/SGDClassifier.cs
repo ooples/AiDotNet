@@ -83,7 +83,7 @@ public class SGDClassifier<T> : LinearClassifierBase<T>
 
         T learningRate = NumOps.FromDouble(Options.LearningRate);
         T alpha = NumOps.FromDouble(Options.Alpha);
-        T prevLoss = NumOps.FromDouble(double.MaxValue);
+        T prevLoss = NumOps.MaxValue;
         T tolerance = NumOps.FromDouble(Options.Tolerance);
 
         // Training loop

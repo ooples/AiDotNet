@@ -192,8 +192,8 @@ public class TomekLinksAugmenter<T> : TabularAugmenterBase<T>
             if (nearestNeighbors[nn] == i)
             {
                 // Check if they belong to different classes
-                bool iIsMinority = NumOps.ToDouble(labels[i]).Equals(NumOps.ToDouble(minorityLabel));
-                bool nnIsMinority = NumOps.ToDouble(labels[nn]).Equals(NumOps.ToDouble(minorityLabel));
+                bool iIsMinority = NumOps.Compare(labels[i], minorityLabel) == 0;
+                bool nnIsMinority = NumOps.Compare(labels[nn], minorityLabel) == 0;
 
                 if (iIsMinority != nnIsMinority)
                 {
@@ -296,8 +296,8 @@ public class TomekLinksAugmenter<T> : TabularAugmenterBase<T>
             // Check if mutual nearest neighbors
             if (nearestNeighbors[nn] == i && i < nn)  // i < nn to avoid counting twice
             {
-                bool iIsMinority = NumOps.ToDouble(labels[i]).Equals(NumOps.ToDouble(minorityLabel));
-                bool nnIsMinority = NumOps.ToDouble(labels[nn]).Equals(NumOps.ToDouble(minorityLabel));
+                bool iIsMinority = NumOps.Compare(labels[i], minorityLabel) == 0;
+                bool nnIsMinority = NumOps.Compare(labels[nn], minorityLabel) == 0;
 
                 if (iIsMinority != nnIsMinority)
                 {

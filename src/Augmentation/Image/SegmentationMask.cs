@@ -298,7 +298,7 @@ public class SegmentationMask<T>
         {
             for (int x = 0; x < Width; x++)
             {
-                if (NumOps.ToDouble(dense[y, x]) > 0)
+                if (NumOps.GreaterThan(dense[y, x], NumOps.Zero))
                 {
                     count++;
                 }
@@ -320,7 +320,7 @@ public class SegmentationMask<T>
         {
             for (int x = 0; x < Width; x++)
             {
-                if (NumOps.ToDouble(dense[y, x]) > 0)
+                if (NumOps.GreaterThan(dense[y, x], NumOps.Zero))
                 {
                     xMin = Math.Min(xMin, x);
                     yMin = Math.Min(yMin, y);
@@ -360,8 +360,8 @@ public class SegmentationMask<T>
         {
             for (int x = 0; x < Width; x++)
             {
-                bool m1 = NumOps.ToDouble(mask1[y, x]) > 0;
-                bool m2 = NumOps.ToDouble(mask2[y, x]) > 0;
+                bool m1 = NumOps.GreaterThan(mask1[y, x], NumOps.Zero);
+                bool m2 = NumOps.GreaterThan(mask2[y, x], NumOps.Zero);
 
                 if (m1 && m2) intersection++;
                 if (m1 || m2) union++;
@@ -393,8 +393,8 @@ public class SegmentationMask<T>
         {
             for (int x = 0; x < Width; x++)
             {
-                bool m1 = NumOps.ToDouble(mask1[y, x]) > 0;
-                bool m2 = NumOps.ToDouble(mask2[y, x]) > 0;
+                bool m1 = NumOps.GreaterThan(mask1[y, x], NumOps.Zero);
+                bool m2 = NumOps.GreaterThan(mask2[y, x], NumOps.Zero);
 
                 if (m1 && m2) intersection++;
                 if (m1) sum++;
@@ -452,7 +452,7 @@ public class SegmentationMask<T>
         {
             for (int x = 0; x < Width; x++)
             {
-                bool pixelValue = NumOps.ToDouble(dense[y, x]) > 0;
+                bool pixelValue = NumOps.GreaterThan(dense[y, x], NumOps.Zero);
 
                 if (pixelValue == currentValue)
                 {

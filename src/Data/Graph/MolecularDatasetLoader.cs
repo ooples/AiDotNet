@@ -1299,7 +1299,7 @@ public class MolecularDatasetLoader<T> : GraphDataLoaderBase<T>
             int atomType = 0;
             for (int j = 0; j < AtomTypeMap.Count && j < graph.NodeFeatures.Shape[1]; j++)
             {
-                if (NumOps.ToDouble(graph.NodeFeatures[i, j]) > 0.5)
+                if (NumOps.GreaterThan(graph.NodeFeatures[i, j], NumOps.FromDouble(0.5)))
                 {
                     atomType = j;
                     break;

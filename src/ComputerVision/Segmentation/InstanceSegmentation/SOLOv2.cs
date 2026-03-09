@@ -199,7 +199,7 @@ public class SOLOv2<T> : InstanceSegmenterBase<T>
         {
             for (int x = 0; x < width; x++)
             {
-                if (NumOps.ToDouble(mask[y, x]) > 0.5)
+                if (NumOps.GreaterThan(mask[y, x], NumOps.FromDouble(0.5)))
                 {
                     minX = Math.Min(minX, x);
                     minY = Math.Min(minY, y);

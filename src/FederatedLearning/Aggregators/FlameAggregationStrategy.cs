@@ -185,7 +185,7 @@ public class FlameAggregationStrategy<T> : ParameterDictionaryAggregationStrateg
         if (_noiseMultiplier > 0)
         {
             double noiseStd = _noiseMultiplier * clipNorm;
-            var rng = new Random(_seed + _roundCounter++);
+            var rng = RandomHelper.CreateSeededRandom(_seed + _roundCounter++);
 
             foreach (var layerName in layerNames)
             {

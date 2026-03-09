@@ -53,7 +53,7 @@ public class DeLongTest<T> : IStatisticalTest<T>
 
         for (int i = 0; i < n; i++)
         {
-            if (NumOps.ToDouble(actuals[i]) >= 0.5)
+            if (NumOps.Compare(actuals[i], NumOps.One) == 0)
                 posIndices.Add(i);
             else
                 negIndices.Add(i);

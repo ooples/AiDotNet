@@ -51,7 +51,7 @@ public class OnlineKMeans<T> : ClusteringBase<T>
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
-    private double[,]? _centers;
+    private T[,]? _centers;
     private int[]? _clusterCounts;
     private long _totalPointsSeen;
 
@@ -125,10 +125,10 @@ public class OnlineKMeans<T> : ClusteringBase<T>
         // Process each point
         for (int i = 0; i < n; i++)
         {
-            var point = new double[d];
+            var point = new T[d];
             for (int j = 0; j < d; j++)
             {
-                point[j] = NumOps.ToDouble(x[i, j]);
+                point[j] = x[i, j];
             }
 
             // Find nearest center
@@ -159,7 +159,7 @@ public class OnlineKMeans<T> : ClusteringBase<T>
         {
             for (int j = 0; j < d; j++)
             {
-                ClusterCenters[c, j] = NumOps.FromDouble(_centers![c, j]);
+                ClusterCenters[c, j] = _centers![c, j];
             }
         }
 
@@ -173,7 +173,7 @@ public class OnlineKMeans<T> : ClusteringBase<T>
 
     private void InitializeCenters(Matrix<T> x, int k, int d, Random rand)
     {
-        _centers = new double[k, d];
+        _centers = new T[k, d];
         _clusterCounts = new int[k];
 
         // Initialize from random data points
@@ -183,26 +183,26 @@ public class OnlineKMeans<T> : ClusteringBase<T>
             int idx = indices[c];
             for (int j = 0; j < d; j++)
             {
-                _centers[c, j] = NumOps.ToDouble(x[idx, j]);
+                _centers[c, j] = x[idx, j];
             }
         }
     }
 
-    private int FindNearestCenter(double[] point, int d, int k)
+    private int FindNearestCenter(T[] point, int d, int k)
     {
         int nearest = 0;
-        double minDist = double.MaxValue;
+        T minDist = NumOps.MaxValue;
 
         for (int c = 0; c < k; c++)
         {
-            double dist = 0;
+            T dist = NumOps.Zero;
             for (int j = 0; j < d; j++)
             {
-                double diff = point[j] - _centers![c, j];
-                dist += diff * diff;
+                T diff = NumOps.Subtract(point[j], _centers![c, j]);
+                dist = NumOps.Add(dist, NumOps.Multiply(diff, diff));
             }
 
-            if (dist < minDist)
+            if (NumOps.LessThan(dist, minDist))
             {
                 minDist = dist;
                 nearest = c;
@@ -212,11 +212,13 @@ public class OnlineKMeans<T> : ClusteringBase<T>
         return nearest;
     }
 
-    private void UpdateCenter(double[] point, int clusterIdx, int d)
+    private void UpdateCenter(T[] point, int clusterIdx, int d)
     {
+        T lr = NumOps.FromDouble(CurrentLearningRate);
         for (int j = 0; j < d; j++)
         {
-            _centers![clusterIdx, j] += CurrentLearningRate * (point[j] - _centers[clusterIdx, j]);
+            T diff = NumOps.Subtract(point[j], _centers![clusterIdx, j]);
+            _centers[clusterIdx, j] = NumOps.Add(_centers[clusterIdx, j], NumOps.Multiply(lr, diff));
         }
     }
 
@@ -235,10 +237,10 @@ public class OnlineKMeans<T> : ClusteringBase<T>
                 "Call Train with initial data first, or use InitializeWithRandom.");
         }
 
-        var pointArray = new double[d];
+        var pointArray = new T[d];
         for (int j = 0; j < d; j++)
         {
-            pointArray[j] = NumOps.ToDouble(point[j]);
+            pointArray[j] = point[j];
         }
 
         int nearest = FindNearestCenter(pointArray, d, NumClusters);
@@ -264,14 +266,14 @@ public class OnlineKMeans<T> : ClusteringBase<T>
     /// <param name="numFeatures">Number of features in the data.</param>
     /// <param name="minValues">Minimum values for each feature.</param>
     /// <param name="maxValues">Maximum values for each feature.</param>
-    public void InitializeWithRandom(int numFeatures, double[]? minValues = null, double[]? maxValues = null)
+    public void InitializeWithRandom(int numFeatures, T[]? minValues = null, T[]? maxValues = null)
     {
         int k = _options.NumClusters;
         int d = numFeatures;
         NumFeatures = d;
         NumClusters = k;
 
-        _centers = new double[k, d];
+        _centers = new T[k, d];
         _clusterCounts = new int[k];
 
         var rand = Options.Seed.HasValue
@@ -282,9 +284,10 @@ public class OnlineKMeans<T> : ClusteringBase<T>
         {
             for (int j = 0; j < d; j++)
             {
-                double min = minValues?[j] ?? 0;
-                double max = maxValues?[j] ?? 1;
-                _centers[c, j] = min + rand.NextDouble() * (max - min);
+                T min = minValues is not null ? minValues[j] : NumOps.Zero;
+                T max = maxValues is not null ? maxValues[j] : NumOps.One;
+                T range = NumOps.Subtract(max, min);
+                _centers[c, j] = NumOps.Add(min, NumOps.Multiply(NumOps.FromDouble(rand.NextDouble()), range));
             }
         }
 
@@ -303,10 +306,10 @@ public class OnlineKMeans<T> : ClusteringBase<T>
 
         for (int i = 0; i < n; i++)
         {
-            var point = new double[d];
+            var point = new T[d];
             for (int j = 0; j < d; j++)
             {
-                point[j] = NumOps.ToDouble(x[i, j]);
+                point[j] = x[i, j];
             }
 
             int nearest = FindNearestCenter(point, d, k);
@@ -320,6 +323,10 @@ public class OnlineKMeans<T> : ClusteringBase<T>
     public override Vector<T> FitPredict(Matrix<T> x)
     {
         Train(x);
-        return Labels!;
+        if (Labels is null)
+        {
+            throw new InvalidOperationException("Train did not produce labels. This indicates a bug in the training implementation.");
+        }
+        return Labels;
     }
 }

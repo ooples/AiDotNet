@@ -46,11 +46,11 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
-    private double[]? _weights;
-    private double[,]? _means;
-    private double[,,]? _covariances;
-    private double[,]? _responsibilities;
-    private double _lowerBound;
+    private T[]? _weights;
+    private T[,]? _means;
+    private T[,,]? _covariances;
+    private T[,]? _responsibilities;
+    private T _lowerBound = default(T) ?? MathHelper.GetNumericOperations<T>().Zero;
 
     /// <summary>
     /// Initializes a new GaussianMixtureModel instance.
@@ -66,22 +66,22 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
     /// <summary>
     /// Gets the mixture weights.
     /// </summary>
-    public double[]? Weights => _weights;
+    public T[]? Weights => _weights;
 
     /// <summary>
     /// Gets the component means.
     /// </summary>
-    public double[,]? Means => _means;
+    public T[,]? Means => _means;
 
     /// <summary>
     /// Gets the component covariances.
     /// </summary>
-    public double[,,]? Covariances => _covariances;
+    public T[,,]? Covariances => _covariances;
 
     /// <summary>
     /// Gets the lower bound (ELBO) from the last training.
     /// </summary>
-    public double LowerBound => _lowerBound;
+    public T LowerBound => _lowerBound;
 
     /// <inheritdoc />
     protected override ModelType GetModelType() => ModelType.Clustering;
@@ -123,39 +123,37 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
             throw new ArgumentException($"Number of samples ({n}) must be >= number of components ({k}).");
         }
 
-        // Convert data to double for computation
-        var data = ConvertToDouble(x);
-
-        double bestLowerBound = double.NegativeInfinity;
-        double[]? bestWeights = null;
-        double[,]? bestMeans = null;
-        double[,,]? bestCovariances = null;
-        double[,]? bestResponsibilities = null;
+        T bestLowerBound = NumOps.MinValue;
+        T[]? bestWeights = null;
+        T[,]? bestMeans = null;
+        T[,,]? bestCovariances = null;
+        T[,]? bestResponsibilities = null;
 
         // Run multiple initializations
         for (int init = 0; init < _options.NumInitializations; init++)
         {
             // Initialize parameters
-            InitializeParameters(data, n, d, k);
+            InitializeParameters(x, n, d, k);
 
-            double prevLowerBound = double.NegativeInfinity;
+            T prevLowerBound = NumOps.MinValue;
 
             // EM iterations
             for (int iter = 0; iter < _options.MaxIterations; iter++)
             {
                 // E-step: Compute responsibilities
-                EStep(data, n, d, k);
+                EStep(x, n, d, k);
 
                 // M-step: Update parameters
-                MStep(data, n, d, k);
+                MStep(x, n, d, k);
 
                 // Compute lower bound
                 if (_options.ComputeLowerBound)
                 {
-                    _lowerBound = ComputeLowerBound(data, n, d, k);
+                    _lowerBound = ComputeLowerBound(x, n, d, k);
 
                     // Check convergence
-                    if (Math.Abs(_lowerBound - prevLowerBound) < _options.Tolerance)
+                    T diff = NumOps.Abs(NumOps.Subtract(_lowerBound, prevLowerBound));
+                    if (NumOps.LessThan(diff, NumOps.FromDouble(_options.Tolerance)))
                     {
                         break;
                     }
@@ -164,13 +162,13 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
             }
 
             // Keep best result
-            if (_lowerBound > bestLowerBound)
+            if (NumOps.GreaterThan(_lowerBound, bestLowerBound))
             {
                 bestLowerBound = _lowerBound;
-                bestWeights = (double[])_weights!.Clone();
-                bestMeans = (double[,])_means!.Clone();
-                bestCovariances = (double[,,])_covariances!.Clone();
-                bestResponsibilities = (double[,])_responsibilities!.Clone();
+                bestWeights = (T[])_weights!.Clone();
+                bestMeans = (T[,])_means!.Clone();
+                bestCovariances = (T[,,])_covariances!.Clone();
+                bestResponsibilities = (T[,])_responsibilities!.Clone();
             }
         }
 
@@ -186,10 +184,10 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
         for (int i = 0; i < n; i++)
         {
             int bestCluster = 0;
-            double maxResp = _responsibilities![i, 0];
+            T maxResp = _responsibilities![i, 0];
             for (int c = 1; c < k; c++)
             {
-                if (_responsibilities[i, c] > maxResp)
+                if (NumOps.GreaterThan(_responsibilities[i, c], maxResp))
                 {
                     maxResp = _responsibilities[i, c];
                     bestCluster = c;
@@ -204,25 +202,31 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
         {
             for (int j = 0; j < d; j++)
             {
-                ClusterCenters[c, j] = NumOps.FromDouble(_means![c, j]);
+                ClusterCenters[c, j] = _means![c, j];
             }
         }
 
         IsTrained = true;
     }
 
-    private void InitializeParameters(double[,] data, int n, int d, int k)
+    private void InitializeParameters(Matrix<T> data, int n, int d, int k)
     {
-        _weights = new double[k];
-        _means = new double[k, d];
-        _covariances = new double[k, d, d];
-        _responsibilities = new double[n, k];
+        _weights = new T[k];
+        _means = new T[k, d];
+        _covariances = new T[k, d, d];
+        _responsibilities = new T[n, k];
 
         // Initialize weights uniformly
+        T uniformWeight = NumOps.Divide(NumOps.One, NumOps.FromDouble(k));
         for (int c = 0; c < k; c++)
         {
-            _weights[c] = 1.0 / k;
+            _weights[c] = uniformWeight;
         }
+
+        // Initialize responsibilities to zero
+        for (int i = 0; i < n; i++)
+            for (int c = 0; c < k; c++)
+                _responsibilities[i, c] = NumOps.Zero;
 
         // Initialize means based on method
         switch (_options.InitMethod)
@@ -243,25 +247,15 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
         InitializeCovariances(data, n, d, k);
     }
 
-    private void InitializeWithKMeans(double[,] data, int n, int d, int k)
+    private void InitializeWithKMeans(Matrix<T> data, int n, int d, int k)
     {
-        // Convert to Matrix<T> for KMeans
-        var dataMatrix = new Matrix<T>(n, d);
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < d; j++)
-            {
-                dataMatrix[i, j] = NumOps.FromDouble(data[i, j]);
-            }
-        }
-
         var kmeans = new KMeans<T>(new KMeansOptions<T>
         {
             NumClusters = k,
             MaxIterations = 10,
             Seed = _options.Seed
         });
-        kmeans.Train(dataMatrix);
+        kmeans.Train(data);
 
         // Copy means from KMeans
         if (kmeans.ClusterCenters is not null)
@@ -270,13 +264,13 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
             {
                 for (int j = 0; j < d; j++)
                 {
-                    _means![c, j] = NumOps.ToDouble(kmeans.ClusterCenters[c, j]);
+                    _means![c, j] = kmeans.ClusterCenters[c, j];
                 }
             }
         }
     }
 
-    private void InitializeWithKMeansPlusPlus(double[,] data, int n, int d, int k)
+    private void InitializeWithKMeansPlusPlus(Matrix<T> data, int n, int d, int k)
     {
         var rand = Random ?? RandomHelper.CreateSecureRandom();
 
@@ -287,37 +281,40 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
             _means![0, j] = data[firstIdx, j];
         }
 
-        var distances = new double[n];
+        var distances = new T[n];
 
         // Subsequent centers: probability proportional to squared distance
         for (int c = 1; c < k; c++)
         {
-            double totalDist = 0;
+            T totalDist = NumOps.Zero;
 
             for (int i = 0; i < n; i++)
             {
-                double minDist = double.MaxValue;
+                T minDist = NumOps.MaxValue;
                 for (int prev = 0; prev < c; prev++)
                 {
-                    double dist = 0;
+                    T dist = NumOps.Zero;
                     for (int j = 0; j < d; j++)
                     {
-                        double diff = data[i, j] - _means![prev, j];
-                        dist += diff * diff;
+                        T diff = NumOps.Subtract(data[i, j], _means![prev, j]);
+                        dist = NumOps.Add(dist, NumOps.Multiply(diff, diff));
                     }
-                    minDist = Math.Min(minDist, dist);
+                    if (NumOps.LessThan(dist, minDist))
+                    {
+                        minDist = dist;
+                    }
                 }
                 distances[i] = minDist;
-                totalDist += minDist;
+                totalDist = NumOps.Add(totalDist, minDist);
             }
 
-            // Sample next center
-            double target = rand.NextDouble() * totalDist;
+            // Sample next center (random boundary stays double)
+            double target = rand.NextDouble() * NumOps.ToDouble(totalDist);
             double cumulative = 0;
             int nextIdx = n - 1;
             for (int i = 0; i < n; i++)
             {
-                cumulative += distances[i];
+                cumulative += NumOps.ToDouble(distances[i]);
                 if (cumulative >= target)
                 {
                     nextIdx = i;
@@ -332,7 +329,7 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
         }
     }
 
-    private void InitializeRandom(double[,] data, int n, int d, int k)
+    private void InitializeRandom(Matrix<T> data, int n, int d, int k)
     {
         var rand = Random ?? RandomHelper.CreateSecureRandom();
         var selectedIndices = new HashSet<int>();
@@ -353,9 +350,9 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
         }
     }
 
-    private void InitializeCovariances(double[,] data, int n, int d, int k)
+    private void InitializeCovariances(Matrix<T> data, int n, int d, int k)
     {
-        double reg = _options.RegularizationCovariance;
+        T reg = NumOps.FromDouble(_options.RegularizationCovariance);
 
         switch (_options.CovarianceType)
         {
@@ -371,7 +368,7 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
                         {
                             _covariances![c, i, j] = globalCov[i, j];
                         }
-                        _covariances![c, i, i] += reg;
+                        _covariances![c, i, i] = NumOps.Add(_covariances[c, i, i], reg);
                     }
                 }
                 break;
@@ -385,7 +382,7 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
                     {
                         for (int j = 0; j < d; j++)
                         {
-                            _covariances![c, i, j] = (i == j) ? variances[i] + reg : 0;
+                            _covariances![c, i, j] = (i == j) ? NumOps.Add(variances[i], reg) : NumOps.Zero;
                         }
                     }
                 }
@@ -393,14 +390,14 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
 
             case CovarianceType.Spherical:
                 // Initialize with average variance + regularization
-                double avgVar = ComputeAverageVariance(data, n, d) + reg;
+                T avgVar = NumOps.Add(ComputeAverageVariance(data, n, d), reg);
                 for (int c = 0; c < k; c++)
                 {
                     for (int i = 0; i < d; i++)
                     {
                         for (int j = 0; j < d; j++)
                         {
-                            _covariances![c, i, j] = (i == j) ? avgVar : 0;
+                            _covariances![c, i, j] = (i == j) ? avgVar : NumOps.Zero;
                         }
                     }
                 }
@@ -408,82 +405,91 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
         }
     }
 
-    private double[,] ComputeEmpiricalCovariance(double[,] data, int n, int d)
+    private T[,] ComputeEmpiricalCovariance(Matrix<T> data, int n, int d)
     {
-        var mean = new double[d];
+        var mean = new T[d];
+        T nT = NumOps.FromDouble(n);
         for (int j = 0; j < d; j++)
         {
+            mean[j] = NumOps.Zero;
             for (int i = 0; i < n; i++)
             {
-                mean[j] += data[i, j];
+                mean[j] = NumOps.Add(mean[j], data[i, j]);
             }
-            mean[j] /= n;
+            mean[j] = NumOps.Divide(mean[j], nT);
         }
 
-        var cov = new double[d, d];
+        var cov = new T[d, d];
+        T nMinus1 = NumOps.FromDouble(n - 1);
         for (int i = 0; i < d; i++)
         {
             for (int j = 0; j < d; j++)
             {
-                double sum = 0;
+                T sum = NumOps.Zero;
                 for (int s = 0; s < n; s++)
                 {
-                    sum += (data[s, i] - mean[i]) * (data[s, j] - mean[j]);
+                    T diffI = NumOps.Subtract(data[s, i], mean[i]);
+                    T diffJ = NumOps.Subtract(data[s, j], mean[j]);
+                    sum = NumOps.Add(sum, NumOps.Multiply(diffI, diffJ));
                 }
-                cov[i, j] = sum / (n - 1);
+                cov[i, j] = NumOps.Divide(sum, nMinus1);
             }
         }
 
         return cov;
     }
 
-    private double[] ComputeVariances(double[,] data, int n, int d)
+    private T[] ComputeVariances(Matrix<T> data, int n, int d)
     {
-        var variances = new double[d];
+        var variances = new T[d];
+        T nT = NumOps.FromDouble(n);
+        T nMinus1 = NumOps.FromDouble(n - 1);
 
         for (int j = 0; j < d; j++)
         {
-            double mean = 0;
+            T mean = NumOps.Zero;
             for (int i = 0; i < n; i++)
             {
-                mean += data[i, j];
+                mean = NumOps.Add(mean, data[i, j]);
             }
-            mean /= n;
+            mean = NumOps.Divide(mean, nT);
 
-            double sumSq = 0;
+            T sumSq = NumOps.Zero;
             for (int i = 0; i < n; i++)
             {
-                double diff = data[i, j] - mean;
-                sumSq += diff * diff;
+                T diff = NumOps.Subtract(data[i, j], mean);
+                sumSq = NumOps.Add(sumSq, NumOps.Multiply(diff, diff));
             }
-            variances[j] = sumSq / (n - 1);
+            variances[j] = NumOps.Divide(sumSq, nMinus1);
         }
 
         return variances;
     }
 
-    private double ComputeAverageVariance(double[,] data, int n, int d)
+    private T ComputeAverageVariance(Matrix<T> data, int n, int d)
     {
         var variances = ComputeVariances(data, n, d);
-        double sum = 0;
+        T sum = NumOps.Zero;
         for (int j = 0; j < d; j++)
         {
-            sum += variances[j];
+            sum = NumOps.Add(sum, variances[j]);
         }
-        return sum / d;
+        return NumOps.Divide(sum, NumOps.FromDouble(d));
     }
 
-    private void EStep(double[,] data, int n, int d, int k)
+    private void EStep(Matrix<T> data, int n, int d, int k)
     {
         // Compute log probabilities for each sample and component
-        var logProbs = new double[n, k];
+        var logProbs = new T[n, k];
+        T halfT = NumOps.FromDouble(0.5);
+        T log2Pi = NumOps.Log(NumOps.FromDouble(2 * Math.PI));
 
         for (int c = 0; c < k; c++)
         {
-            double logWeight = Math.Log(_weights![c]);
+            T logWeight = NumOps.Log(_weights![c]);
 
             // Get covariance for this component
-            var cov = new double[d, d];
+            var cov = new T[d, d];
             for (int i = 0; i < d; i++)
             {
                 for (int j = 0; j < d; j++)
@@ -495,23 +501,25 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
             // Compute log determinant and inverse
             var (logDet, covInv) = ComputeLogDetAndInverse(cov, d);
 
-            double logNormConst = -0.5 * (d * Math.Log(2 * Math.PI) + logDet);
+            T logNormConst = NumOps.Negate(NumOps.Multiply(halfT,
+                NumOps.Add(NumOps.Multiply(NumOps.FromDouble(d), log2Pi), logDet)));
 
             for (int i = 0; i < n; i++)
             {
                 // Compute Mahalanobis distance
-                double mahal = 0;
+                T mahal = NumOps.Zero;
                 for (int p = 0; p < d; p++)
                 {
-                    double diffP = data[i, p] - _means![c, p];
+                    T diffP = NumOps.Subtract(data[i, p], _means![c, p]);
                     for (int q = 0; q < d; q++)
                     {
-                        double diffQ = data[i, q] - _means![c, q];
-                        mahal += diffP * covInv[p, q] * diffQ;
+                        T diffQ = NumOps.Subtract(data[i, q], _means![c, q]);
+                        mahal = NumOps.Add(mahal, NumOps.Multiply(NumOps.Multiply(diffP, covInv[p, q]), diffQ));
                     }
                 }
 
-                logProbs[i, c] = logWeight + logNormConst - 0.5 * mahal;
+                logProbs[i, c] = NumOps.Add(NumOps.Add(logWeight, logNormConst),
+                    NumOps.Negate(NumOps.Multiply(halfT, mahal)));
             }
         }
 
@@ -519,62 +527,72 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
         for (int i = 0; i < n; i++)
         {
             // Find max for stability
-            double maxLog = logProbs[i, 0];
+            T maxLog = logProbs[i, 0];
             for (int c = 1; c < k; c++)
             {
-                maxLog = Math.Max(maxLog, logProbs[i, c]);
+                if (NumOps.GreaterThan(logProbs[i, c], maxLog))
+                {
+                    maxLog = logProbs[i, c];
+                }
             }
 
             // Compute log-sum-exp
-            double sumExp = 0;
+            T sumExp = NumOps.Zero;
             for (int c = 0; c < k; c++)
             {
-                sumExp += Math.Exp(logProbs[i, c] - maxLog);
+                sumExp = NumOps.Add(sumExp, NumOps.Exp(NumOps.Subtract(logProbs[i, c], maxLog)));
             }
-            double logSumExp = maxLog + Math.Log(sumExp);
+            T logSumExp = NumOps.Add(maxLog, NumOps.Log(sumExp));
 
             // Compute responsibilities
             for (int c = 0; c < k; c++)
             {
-                _responsibilities![i, c] = Math.Exp(logProbs[i, c] - logSumExp);
+                _responsibilities![i, c] = NumOps.Exp(NumOps.Subtract(logProbs[i, c], logSumExp));
             }
         }
     }
 
-    private void MStep(double[,] data, int n, int d, int k)
+    private void MStep(Matrix<T> data, int n, int d, int k)
     {
-        double reg = _options.RegularizationCovariance;
+        T reg = NumOps.FromDouble(_options.RegularizationCovariance);
+        T nT = NumOps.FromDouble(n);
+        T epsilon = NumOps.FromDouble(1e-10);
+        T minWeight = NumOps.FromDouble(_options.MinWeight);
 
         // Compute effective number of points per component
-        var nk = new double[k];
+        var nk = new T[k];
         for (int c = 0; c < k; c++)
         {
+            nk[c] = NumOps.Zero;
             for (int i = 0; i < n; i++)
             {
-                nk[c] += _responsibilities![i, c];
+                nk[c] = NumOps.Add(nk[c], _responsibilities![i, c]);
             }
-            nk[c] = Math.Max(nk[c], 1e-10); // Prevent division by zero
+            if (NumOps.LessThan(nk[c], epsilon))
+            {
+                nk[c] = epsilon;
+            }
         }
 
         // Update weights
         for (int c = 0; c < k; c++)
         {
-            _weights![c] = nk[c] / n;
-            if (!_options.AllowLowWeights && _weights[c] < _options.MinWeight)
+            _weights![c] = NumOps.Divide(nk[c], nT);
+            if (!_options.AllowLowWeights && NumOps.LessThan(_weights[c], minWeight))
             {
-                _weights[c] = _options.MinWeight;
+                _weights[c] = minWeight;
             }
         }
 
         // Normalize weights
-        double sumWeights = 0;
+        T sumWeights = NumOps.Zero;
         for (int c = 0; c < k; c++)
         {
-            sumWeights += _weights![c];
+            sumWeights = NumOps.Add(sumWeights, _weights![c]);
         }
         for (int c = 0; c < k; c++)
         {
-            _weights![c] /= sumWeights;
+            _weights![c] = NumOps.Divide(_weights[c], sumWeights);
         }
 
         // Update means
@@ -582,12 +600,12 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
         {
             for (int j = 0; j < d; j++)
             {
-                double sum = 0;
+                T sum = NumOps.Zero;
                 for (int i = 0; i < n; i++)
                 {
-                    sum += _responsibilities![i, c] * data[i, j];
+                    sum = NumOps.Add(sum, NumOps.Multiply(_responsibilities![i, c], data[i, j]));
                 }
-                _means![c, j] = sum / nk[c];
+                _means![c, j] = NumOps.Divide(sum, nk[c]);
             }
         }
 
@@ -609,7 +627,7 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
         }
     }
 
-    private void UpdateFullCovariance(double[,] data, int n, int d, int k, double[] nk, double reg)
+    private void UpdateFullCovariance(Matrix<T> data, int n, int d, int k, T[] nk, T reg)
     {
         for (int c = 0; c < k; c++)
         {
@@ -617,44 +635,48 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
             {
                 for (int q = 0; q < d; q++)
                 {
-                    double sum = 0;
+                    T sum = NumOps.Zero;
                     for (int i = 0; i < n; i++)
                     {
-                        double diffP = data[i, p] - _means![c, p];
-                        double diffQ = data[i, q] - _means![c, q];
-                        sum += _responsibilities![i, c] * diffP * diffQ;
+                        T diffP = NumOps.Subtract(data[i, p], _means![c, p]);
+                        T diffQ = NumOps.Subtract(data[i, q], _means![c, q]);
+                        sum = NumOps.Add(sum, NumOps.Multiply(NumOps.Multiply(_responsibilities![i, c], diffP), diffQ));
                     }
-                    _covariances![c, p, q] = sum / nk[c];
+                    _covariances![c, p, q] = NumOps.Divide(sum, nk[c]);
                     if (p == q)
                     {
-                        _covariances![c, p, q] += reg;
+                        _covariances![c, p, q] = NumOps.Add(_covariances[c, p, q], reg);
                     }
                 }
             }
         }
     }
 
-    private void UpdateTiedCovariance(double[,] data, int n, int d, int k, double[] nk, double reg)
+    private void UpdateTiedCovariance(Matrix<T> data, int n, int d, int k, T[] nk, T reg)
     {
         // Compute weighted average covariance
-        var sharedCov = new double[d, d];
-        double totalWeight = 0;
+        var sharedCov = new T[d, d];
+        T totalWeight = NumOps.Zero;
+
+        for (int p = 0; p < d; p++)
+            for (int q = 0; q < d; q++)
+                sharedCov[p, q] = NumOps.Zero;
 
         for (int c = 0; c < k; c++)
         {
-            totalWeight += nk[c];
+            totalWeight = NumOps.Add(totalWeight, nk[c]);
             for (int p = 0; p < d; p++)
             {
                 for (int q = 0; q < d; q++)
                 {
-                    double sum = 0;
+                    T sum = NumOps.Zero;
                     for (int i = 0; i < n; i++)
                     {
-                        double diffP = data[i, p] - _means![c, p];
-                        double diffQ = data[i, q] - _means![c, q];
-                        sum += _responsibilities![i, c] * diffP * diffQ;
+                        T diffP = NumOps.Subtract(data[i, p], _means![c, p]);
+                        T diffQ = NumOps.Subtract(data[i, q], _means![c, q]);
+                        sum = NumOps.Add(sum, NumOps.Multiply(NumOps.Multiply(_responsibilities![i, c], diffP), diffQ));
                     }
-                    sharedCov[p, q] += sum;
+                    sharedCov[p, q] = NumOps.Add(sharedCov[p, q], sum);
                 }
             }
         }
@@ -666,123 +688,125 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
             {
                 for (int q = 0; q < d; q++)
                 {
-                    _covariances![c, p, q] = sharedCov[p, q] / totalWeight;
+                    _covariances![c, p, q] = NumOps.Divide(sharedCov[p, q], totalWeight);
                     if (p == q)
                     {
-                        _covariances![c, p, q] += reg;
+                        _covariances![c, p, q] = NumOps.Add(_covariances[c, p, q], reg);
                     }
                 }
             }
         }
     }
 
-    private void UpdateDiagonalCovariance(double[,] data, int n, int d, int k, double[] nk, double reg)
+    private void UpdateDiagonalCovariance(Matrix<T> data, int n, int d, int k, T[] nk, T reg)
     {
         for (int c = 0; c < k; c++)
         {
             for (int p = 0; p < d; p++)
             {
-                double sum = 0;
+                T sum = NumOps.Zero;
                 for (int i = 0; i < n; i++)
                 {
-                    double diff = data[i, p] - _means![c, p];
-                    sum += _responsibilities![i, c] * diff * diff;
+                    T diff = NumOps.Subtract(data[i, p], _means![c, p]);
+                    sum = NumOps.Add(sum, NumOps.Multiply(NumOps.Multiply(_responsibilities![i, c], diff), diff));
                 }
-                _covariances![c, p, p] = sum / nk[c] + reg;
+                _covariances![c, p, p] = NumOps.Add(NumOps.Divide(sum, nk[c]), reg);
 
                 // Zero out off-diagonal elements
                 for (int q = 0; q < d; q++)
                 {
                     if (p != q)
                     {
-                        _covariances![c, p, q] = 0;
+                        _covariances![c, p, q] = NumOps.Zero;
                     }
                 }
             }
         }
     }
 
-    private void UpdateSphericalCovariance(double[,] data, int n, int d, int k, double[] nk, double reg)
+    private void UpdateSphericalCovariance(Matrix<T> data, int n, int d, int k, T[] nk, T reg)
     {
         for (int c = 0; c < k; c++)
         {
-            double totalVar = 0;
+            T totalVar = NumOps.Zero;
             for (int p = 0; p < d; p++)
             {
-                double sum = 0;
+                T sum = NumOps.Zero;
                 for (int i = 0; i < n; i++)
                 {
-                    double diff = data[i, p] - _means![c, p];
-                    sum += _responsibilities![i, c] * diff * diff;
+                    T diff = NumOps.Subtract(data[i, p], _means![c, p]);
+                    sum = NumOps.Add(sum, NumOps.Multiply(NumOps.Multiply(_responsibilities![i, c], diff), diff));
                 }
-                totalVar += sum;
+                totalVar = NumOps.Add(totalVar, sum);
             }
-            double avgVar = totalVar / (nk[c] * d) + reg;
+            T avgVar = NumOps.Add(NumOps.Divide(totalVar, NumOps.Multiply(nk[c], NumOps.FromDouble(d))), reg);
 
             for (int p = 0; p < d; p++)
             {
                 for (int q = 0; q < d; q++)
                 {
-                    _covariances![c, p, q] = (p == q) ? avgVar : 0;
+                    _covariances![c, p, q] = (p == q) ? avgVar : NumOps.Zero;
                 }
             }
         }
     }
 
-    private (double logDet, double[,] inverse) ComputeLogDetAndInverse(double[,] matrix, int n)
+    private (T logDet, T[,] inverse) ComputeLogDetAndInverse(T[,] matrix, int n)
     {
         // Use Cholesky decomposition for positive definite matrices
-        var L = new double[n, n];
+        var L = new T[n, n];
+        T regVal = NumOps.FromDouble(1e-6);
+        T two = NumOps.FromDouble(2.0);
 
         // Cholesky decomposition: matrix = L * L^T
         for (int i = 0; i < n; i++)
         {
             for (int j = 0; j <= i; j++)
             {
-                double sum = matrix[i, j];
+                T sum = matrix[i, j];
                 for (int k = 0; k < j; k++)
                 {
-                    sum -= L[i, k] * L[j, k];
+                    sum = NumOps.Subtract(sum, NumOps.Multiply(L[i, k], L[j, k]));
                 }
                 if (i == j)
                 {
-                    if (sum <= 0)
+                    if (!NumOps.GreaterThan(sum, NumOps.Zero))
                     {
                         // Not positive definite, add regularization
-                        sum = 1e-6;
+                        sum = regVal;
                     }
-                    L[i, j] = Math.Sqrt(sum);
+                    L[i, j] = NumOps.Sqrt(sum);
                 }
                 else
                 {
-                    L[i, j] = sum / L[j, j];
+                    L[i, j] = NumOps.Divide(sum, L[j, j]);
                 }
             }
         }
 
         // Log determinant = 2 * sum(log(diagonal of L))
-        double logDet = 0;
+        T logDet = NumOps.Zero;
         for (int i = 0; i < n; i++)
         {
-            logDet += 2 * Math.Log(L[i, i]);
+            logDet = NumOps.Add(logDet, NumOps.Multiply(two, NumOps.Log(L[i, i])));
         }
 
         // Compute inverse using forward/backward substitution
-        var inverse = new double[n, n];
+        var inverse = new T[n, n];
 
         // Compute L^-1
-        var Linv = new double[n, n];
+        var Linv = new T[n, n];
         for (int i = 0; i < n; i++)
         {
-            Linv[i, i] = 1.0 / L[i, i];
+            Linv[i, i] = NumOps.Divide(NumOps.One, L[i, i]);
             for (int j = 0; j < i; j++)
             {
-                double sum = 0;
+                T sum = NumOps.Zero;
                 for (int k = j; k < i; k++)
                 {
-                    sum -= L[i, k] * Linv[k, j];
+                    sum = NumOps.Subtract(sum, NumOps.Multiply(L[i, k], Linv[k, j]));
                 }
-                Linv[i, j] = sum / L[i, i];
+                Linv[i, j] = NumOps.Divide(sum, L[i, i]);
             }
         }
 
@@ -791,10 +815,10 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
         {
             for (int j = 0; j < n; j++)
             {
-                double sum = 0;
+                T sum = NumOps.Zero;
                 for (int k = Math.Max(i, j); k < n; k++)
                 {
-                    sum += Linv[k, i] * Linv[k, j];
+                    sum = NumOps.Add(sum, NumOps.Multiply(Linv[k, i], Linv[k, j]));
                 }
                 inverse[i, j] = sum;
             }
@@ -803,19 +827,22 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
         return (logDet, inverse);
     }
 
-    private double ComputeLowerBound(double[,] data, int n, int d, int k)
+    private T ComputeLowerBound(Matrix<T> data, int n, int d, int k)
     {
-        double bound = 0;
+        T bound = NumOps.Zero;
+        T halfT = NumOps.FromDouble(0.5);
+        T log2Pi = NumOps.Log(NumOps.FromDouble(2 * Math.PI));
+        T epsilon = NumOps.FromDouble(1e-10);
 
         for (int i = 0; i < n; i++)
         {
-            double sampleBound = 0;
+            T sampleBound = NumOps.Zero;
             for (int c = 0; c < k; c++)
             {
-                if (_responsibilities![i, c] > 1e-10)
+                if (NumOps.GreaterThan(_responsibilities![i, c], epsilon))
                 {
                     // Get covariance for this component
-                    var cov = new double[d, d];
+                    var cov = new T[d, d];
                     for (int p = 0; p < d; p++)
                     {
                         for (int q = 0; q < d; q++)
@@ -827,24 +854,27 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
                     var (logDet, covInv) = ComputeLogDetAndInverse(cov, d);
 
                     // Compute log probability
-                    double mahal = 0;
+                    T mahal = NumOps.Zero;
                     for (int p = 0; p < d; p++)
                     {
-                        double diffP = data[i, p] - _means![c, p];
+                        T diffP = NumOps.Subtract(data[i, p], _means![c, p]);
                         for (int q = 0; q < d; q++)
                         {
-                            double diffQ = data[i, q] - _means![c, q];
-                            mahal += diffP * covInv[p, q] * diffQ;
+                            T diffQ = NumOps.Subtract(data[i, q], _means![c, q]);
+                            mahal = NumOps.Add(mahal, NumOps.Multiply(NumOps.Multiply(diffP, covInv[p, q]), diffQ));
                         }
                     }
 
-                    double logProb = Math.Log(_weights![c]) - 0.5 * (d * Math.Log(2 * Math.PI) + logDet + mahal);
-                    double entropy = -Math.Log(_responsibilities![i, c]);
+                    T logProb = NumOps.Subtract(NumOps.Log(_weights![c]),
+                        NumOps.Multiply(halfT, NumOps.Add(NumOps.Add(
+                            NumOps.Multiply(NumOps.FromDouble(d), log2Pi), logDet), mahal)));
+                    T entropy = NumOps.Negate(NumOps.Log(_responsibilities![i, c]));
 
-                    sampleBound += _responsibilities![i, c] * (logProb + entropy);
+                    sampleBound = NumOps.Add(sampleBound,
+                        NumOps.Multiply(_responsibilities![i, c], NumOps.Add(logProb, entropy)));
                 }
             }
-            bound += sampleBound;
+            bound = NumOps.Add(bound, sampleBound);
         }
 
         return bound;
@@ -856,7 +886,6 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
         ValidateIsTrained();
 
         int n = x.Rows;
-        var data = ConvertToDouble(x);
         var labels = new Vector<T>(n);
 
         // Compute responsibilities for new data
@@ -866,10 +895,10 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
         for (int i = 0; i < n; i++)
         {
             int bestCluster = 0;
-            double maxProb = resp[i, 0];
+            T maxProb = resp[i, 0];
             for (int c = 1; c < NumClusters; c++)
             {
-                if (resp[i, c] > maxProb)
+                if (NumOps.GreaterThan(resp[i, c], maxProb))
                 {
                     maxProb = resp[i, c];
                     bestCluster = c;
@@ -886,24 +915,25 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
     /// </summary>
     /// <param name="x">Input data.</param>
     /// <returns>Matrix of probabilities [samples x components].</returns>
-    public double[,] PredictProba(Matrix<T> x)
+    public T[,] PredictProba(Matrix<T> x)
     {
         ValidateIsTrained();
 
         int n = x.Rows;
         int d = x.Columns;
         int k = NumClusters;
-        var data = ConvertToDouble(x);
-        var resp = new double[n, k];
+        var resp = new T[n, k];
+        T halfT = NumOps.FromDouble(0.5);
+        T log2Pi = NumOps.Log(NumOps.FromDouble(2 * Math.PI));
 
         // Compute log probabilities
-        var logProbs = new double[n, k];
+        var logProbs = new T[n, k];
 
         for (int c = 0; c < k; c++)
         {
-            double logWeight = Math.Log(_weights![c]);
+            T logWeight = NumOps.Log(_weights![c]);
 
-            var cov = new double[d, d];
+            var cov = new T[d, d];
             for (int i = 0; i < d; i++)
             {
                 for (int j = 0; j < d; j++)
@@ -913,44 +943,49 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
             }
 
             var (logDet, covInv) = ComputeLogDetAndInverse(cov, d);
-            double logNormConst = -0.5 * (d * Math.Log(2 * Math.PI) + logDet);
+            T logNormConst = NumOps.Negate(NumOps.Multiply(halfT,
+                NumOps.Add(NumOps.Multiply(NumOps.FromDouble(d), log2Pi), logDet)));
 
             for (int i = 0; i < n; i++)
             {
-                double mahal = 0;
+                T mahal = NumOps.Zero;
                 for (int p = 0; p < d; p++)
                 {
-                    double diffP = data[i, p] - _means![c, p];
+                    T diffP = NumOps.Subtract(x[i, p], _means![c, p]);
                     for (int q = 0; q < d; q++)
                     {
-                        double diffQ = data[i, q] - _means![c, q];
-                        mahal += diffP * covInv[p, q] * diffQ;
+                        T diffQ = NumOps.Subtract(x[i, q], _means![c, q]);
+                        mahal = NumOps.Add(mahal, NumOps.Multiply(NumOps.Multiply(diffP, covInv[p, q]), diffQ));
                     }
                 }
 
-                logProbs[i, c] = logWeight + logNormConst - 0.5 * mahal;
+                logProbs[i, c] = NumOps.Add(NumOps.Add(logWeight, logNormConst),
+                    NumOps.Negate(NumOps.Multiply(halfT, mahal)));
             }
         }
 
         // Normalize using log-sum-exp
         for (int i = 0; i < n; i++)
         {
-            double maxLog = logProbs[i, 0];
+            T maxLog = logProbs[i, 0];
             for (int c = 1; c < k; c++)
             {
-                maxLog = Math.Max(maxLog, logProbs[i, c]);
+                if (NumOps.GreaterThan(logProbs[i, c], maxLog))
+                {
+                    maxLog = logProbs[i, c];
+                }
             }
 
-            double sumExp = 0;
+            T sumExp = NumOps.Zero;
             for (int c = 0; c < k; c++)
             {
-                sumExp += Math.Exp(logProbs[i, c] - maxLog);
+                sumExp = NumOps.Add(sumExp, NumOps.Exp(NumOps.Subtract(logProbs[i, c], maxLog)));
             }
-            double logSumExp = maxLog + Math.Log(sumExp);
+            T logSumExp = NumOps.Add(maxLog, NumOps.Log(sumExp));
 
             for (int c = 0; c < k; c++)
             {
-                resp[i, c] = Math.Exp(logProbs[i, c] - logSumExp);
+                resp[i, c] = NumOps.Exp(NumOps.Subtract(logProbs[i, c], logSumExp));
             }
         }
 
@@ -962,25 +997,26 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
     /// </summary>
     /// <param name="x">Input data.</param>
     /// <returns>Log-likelihood score.</returns>
-    public double Score(Matrix<T> x)
+    public T Score(Matrix<T> x)
     {
         ValidateIsTrained();
 
         int n = x.Rows;
         int d = x.Columns;
         int k = NumClusters;
-        var data = ConvertToDouble(x);
-        double logLikelihood = 0;
+        T logLikelihood = NumOps.Zero;
+        T halfT = NumOps.FromDouble(0.5);
+        T log2Pi = NumOps.Log(NumOps.FromDouble(2 * Math.PI));
 
         for (int i = 0; i < n; i++)
         {
-            var logProbs = new double[k];
+            var logProbs = new T[k];
 
             for (int c = 0; c < k; c++)
             {
-                double logWeight = Math.Log(_weights![c]);
+                T logWeight = NumOps.Log(_weights![c]);
 
-                var cov = new double[d, d];
+                var cov = new T[d, d];
                 for (int p = 0; p < d; p++)
                 {
                     for (int q = 0; q < d; q++)
@@ -990,36 +1026,41 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
                 }
 
                 var (logDet, covInv) = ComputeLogDetAndInverse(cov, d);
-                double logNormConst = -0.5 * (d * Math.Log(2 * Math.PI) + logDet);
+                T logNormConst = NumOps.Negate(NumOps.Multiply(halfT,
+                    NumOps.Add(NumOps.Multiply(NumOps.FromDouble(d), log2Pi), logDet)));
 
-                double mahal = 0;
+                T mahal = NumOps.Zero;
                 for (int p = 0; p < d; p++)
                 {
-                    double diffP = data[i, p] - _means![c, p];
+                    T diffP = NumOps.Subtract(x[i, p], _means![c, p]);
                     for (int q = 0; q < d; q++)
                     {
-                        double diffQ = data[i, q] - _means![c, q];
-                        mahal += diffP * covInv[p, q] * diffQ;
+                        T diffQ = NumOps.Subtract(x[i, q], _means![c, q]);
+                        mahal = NumOps.Add(mahal, NumOps.Multiply(NumOps.Multiply(diffP, covInv[p, q]), diffQ));
                     }
                 }
 
-                logProbs[c] = logWeight + logNormConst - 0.5 * mahal;
+                logProbs[c] = NumOps.Add(NumOps.Add(logWeight, logNormConst),
+                    NumOps.Negate(NumOps.Multiply(halfT, mahal)));
             }
 
             // Log-sum-exp
-            double maxLog = logProbs[0];
+            T maxLog = logProbs[0];
             for (int c = 1; c < k; c++)
             {
-                maxLog = Math.Max(maxLog, logProbs[c]);
+                if (NumOps.GreaterThan(logProbs[c], maxLog))
+                {
+                    maxLog = logProbs[c];
+                }
             }
 
-            double sumExp = 0;
+            T sumExp = NumOps.Zero;
             for (int c = 0; c < k; c++)
             {
-                sumExp += Math.Exp(logProbs[c] - maxLog);
+                sumExp = NumOps.Add(sumExp, NumOps.Exp(NumOps.Subtract(logProbs[c], maxLog)));
             }
 
-            logLikelihood += maxLog + Math.Log(sumExp);
+            logLikelihood = NumOps.Add(logLikelihood, NumOps.Add(maxLog, NumOps.Log(sumExp)));
         }
 
         return logLikelihood;
@@ -1029,7 +1070,7 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
     public override Vector<T> FitPredict(Matrix<T> x)
     {
         Train(x);
-        return Labels!;
+        return Labels ?? new Vector<T>(0);
     }
 
     /// <summary>
@@ -1046,13 +1087,13 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
 
         for (int i = 0; i < numSamples; i++)
         {
-            // Choose component based on weights
+            // Choose component based on weights (random boundary stays double)
             double u = rand.NextDouble();
             double cumulative = 0;
             int component = NumClusters - 1;
             for (int c = 0; c < NumClusters; c++)
             {
-                cumulative += _weights![c];
+                cumulative += NumOps.ToDouble(_weights![c]);
                 if (u < cumulative)
                 {
                     component = c;
@@ -1064,70 +1105,62 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
             var sample = SampleGaussian(component, rand);
             for (int j = 0; j < NumFeatures; j++)
             {
-                samples[i, j] = NumOps.FromDouble(sample[j]);
+                samples[i, j] = sample[j];
             }
         }
 
         return samples;
     }
 
-    private double[] SampleGaussian(int component, Random rand)
+    private T[] SampleGaussian(int component, Random rand)
     {
         int d = NumFeatures;
+        T regVal = NumOps.FromDouble(1e-10);
 
         // Generate standard normal samples
-        var z = new double[d];
+        var z = new T[d];
         for (int i = 0; i < d; i++)
         {
-            z[i] = rand.NextGaussian();
+            z[i] = NumOps.FromDouble(rand.NextGaussian());
         }
 
         // Cholesky decomposition of covariance
-        var L = new double[d, d];
+        var L = new T[d, d];
         for (int i = 0; i < d; i++)
         {
             for (int j = 0; j <= i; j++)
             {
-                double sum = _covariances![component, i, j];
+                T sum = _covariances![component, i, j];
                 for (int k = 0; k < j; k++)
                 {
-                    sum -= L[i, k] * L[j, k];
+                    sum = NumOps.Subtract(sum, NumOps.Multiply(L[i, k], L[j, k]));
                 }
                 if (i == j)
                 {
-                    L[i, j] = Math.Sqrt(Math.Max(sum, 1e-10));
+                    if (!NumOps.GreaterThan(sum, regVal))
+                    {
+                        sum = regVal;
+                    }
+                    L[i, j] = NumOps.Sqrt(sum);
                 }
                 else
                 {
-                    L[i, j] = sum / L[j, j];
+                    L[i, j] = NumOps.Divide(sum, L[j, j]);
                 }
             }
         }
 
         // Transform: sample = mean + L * z
-        var sample = new double[d];
+        var sample = new T[d];
         for (int i = 0; i < d; i++)
         {
             sample[i] = _means![component, i];
             for (int j = 0; j <= i; j++)
             {
-                sample[i] += L[i, j] * z[j];
+                sample[i] = NumOps.Add(sample[i], NumOps.Multiply(L[i, j], z[j]));
             }
         }
 
         return sample;
-    }
-
-    private double[,] ConvertToDouble(Matrix<T> x)
-    {
-        var result = new double[x.Rows, x.Columns];
-        for (int i = 0; i < x.Rows; i++)
-        {
-            for (int j = 0; j < x.Columns; j++)
-            {
-                result[i, j] = NumOps.ToDouble(x[i, j]);
-            }
-        }
-        return result;
     }
 }

@@ -455,7 +455,7 @@ public class TakagiDecomposition<T> : MatrixDecompositionBase<T>
                 var newLambda = v.DotProduct(w);
                 v = w.Divide(w.Norm());
 
-                if (NumOps.LessThan(NumOps.Abs(NumOps.Subtract(newLambda, lambda)), NumOps.FromDouble(1e-10)))
+                if (NumOps.LessThan(NumOps.Abs(NumOps.Subtract(newLambda, lambda)), NumOps.FromDouble(1e-12)))
                 {
                     break;
                 }

@@ -158,7 +158,7 @@ public class TabNetClassifier<T> : TabNetBase<T>
 
         for (int b = 0; b < batchSize; b++)
         {
-            var maxProb = NumOps.FromDouble(double.NegativeInfinity);
+            var maxProb = NumOps.MinValue;
             int maxIdx = 0;
 
             for (int c = 0; c < _numClasses; c++)

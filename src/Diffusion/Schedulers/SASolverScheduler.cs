@@ -49,7 +49,7 @@ public sealed class SASolverScheduler<T> : NoiseSchedulerBase<T>
             var pred = NumOps.Subtract(sample[i], NumOps.Multiply(dtT, modelOutput[i]));
 
             // Add stochastic noise
-            if (noise != null && NumOps.ToDouble(eta) > 0)
+            if (noise != null && NumOps.GreaterThan(eta, NumOps.Zero))
             {
                 double noiseLevel = Math.Sqrt(2.0 * dt) * NumOps.ToDouble(eta);
                 pred = NumOps.Add(pred, NumOps.Multiply(NumOps.FromDouble(noiseLevel), noise[i]));

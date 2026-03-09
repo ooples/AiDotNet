@@ -379,7 +379,11 @@ public class DBSCAN<T> : ClusteringBase<T>
     public override Vector<T> FitPredict(Matrix<T> x)
     {
         Train(x);
-        return Labels!;
+        if (Labels is null)
+        {
+            throw new InvalidOperationException("Train did not produce labels. This indicates a bug in the training implementation.");
+        }
+        return Labels;
     }
 
     /// <inheritdoc />

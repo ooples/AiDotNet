@@ -107,15 +107,15 @@ public class XMeans<T> : ClusteringBase<T>
         });
 
         kmeans.Train(x);
-        var currentLabels = kmeans.Labels!;
-        var currentCenters = kmeans.ClusterCenters!;
+        var currentLabels = kmeans.Labels ?? new Vector<T>(n);
+        var currentCenters = kmeans.ClusterCenters ?? new Matrix<T>(currentK, d);
 
         // Iteratively try to split clusters
         bool improved = true;
         while (improved && currentK < _options.MaxClusters)
         {
             improved = false;
-            var newCenters = new List<double[]>();
+            var newCenters = new List<T[]>();
             var clusterMapping = new Dictionary<int, List<int>>();
 
             // For each cluster, decide whether to split
@@ -134,10 +134,10 @@ public class XMeans<T> : ClusteringBase<T>
                 if (clusterPoints.Count < 4)
                 {
                     // Too few points to split
-                    var center = new double[d];
+                    var center = new T[d];
                     for (int j = 0; j < d; j++)
                     {
-                        center[j] = NumOps.ToDouble(currentCenters[c, j]);
+                        center[j] = currentCenters[c, j];
                     }
                     clusterMapping[newCenters.Count] = clusterPoints;
                     newCenters.Add(center);
@@ -167,24 +167,27 @@ public class XMeans<T> : ClusteringBase<T>
 
                 subKMeans.Train(subMatrix);
 
+                var subLabels = subKMeans.Labels ?? new Vector<T>(clusterPoints.Count);
+                var subCenters = subKMeans.ClusterCenters ?? new Matrix<T>(2, d);
+
                 // Compute BIC for children
-                double childBIC = ComputeSplitBIC(subMatrix, subKMeans.Labels!, subKMeans.ClusterCenters!, d);
+                double childBIC = ComputeSplitBIC(subMatrix, subLabels, subCenters, d);
 
                 if (childBIC < parentBIC && newCenters.Count + 1 < _options.MaxClusters)
                 {
                     // Accept split
                     for (int sc = 0; sc < 2; sc++)
                     {
-                        var center = new double[d];
+                        var center = new T[d];
                         for (int j = 0; j < d; j++)
                         {
-                            center[j] = NumOps.ToDouble((subKMeans.ClusterCenters ?? throw new InvalidOperationException("ClusterCenters has not been initialized."))[sc, j]);
+                            center[j] = subCenters[sc, j];
                         }
 
                         var subClusterPoints = new List<int>();
                         for (int i = 0; i < clusterPoints.Count; i++)
                         {
-                            if ((int)NumOps.ToDouble((subKMeans.Labels ?? throw new InvalidOperationException("Labels has not been initialized."))[i]) == sc)
+                            if ((int)NumOps.ToDouble(subLabels[i]) == sc)
                             {
                                 subClusterPoints.Add(clusterPoints[i]);
                             }
@@ -198,10 +201,10 @@ public class XMeans<T> : ClusteringBase<T>
                 else
                 {
                     // Keep parent cluster
-                    var center = new double[d];
+                    var center = new T[d];
                     for (int j = 0; j < d; j++)
                     {
-                        center[j] = NumOps.ToDouble(currentCenters[c, j]);
+                        center[j] = currentCenters[c, j];
                     }
                     clusterMapping[newCenters.Count] = clusterPoints;
                     newCenters.Add(center);
@@ -217,7 +220,7 @@ public class XMeans<T> : ClusteringBase<T>
             {
                 for (int j = 0; j < d; j++)
                 {
-                    currentCenters[c, j] = NumOps.FromDouble(newCenters[c][j]);
+                    currentCenters[c, j] = newCenters[c][j];
                 }
 
                 foreach (int i in clusterMapping[c])
@@ -376,7 +379,7 @@ public class XMeans<T> : ClusteringBase<T>
         for (int i = 0; i < x.Rows; i++)
         {
             var point = GetRow(x, i);
-            double minDist = double.MaxValue;
+            T minDist = NumOps.MaxValue;
             int nearestCluster = 0;
 
             if (ClusterCenters is not null)
@@ -384,9 +387,9 @@ public class XMeans<T> : ClusteringBase<T>
                 for (int c = 0; c < NumClusters; c++)
                 {
                     var center = GetRow(ClusterCenters, c);
-                    double dist = NumOps.ToDouble(metric.Compute(point, center));
+                    T dist = metric.Compute(point, center);
 
-                    if (dist < minDist)
+                    if (NumOps.LessThan(dist, minDist))
                     {
                         minDist = dist;
                         nearestCluster = c;
@@ -404,6 +407,6 @@ public class XMeans<T> : ClusteringBase<T>
     public override Vector<T> FitPredict(Matrix<T> x)
     {
         Train(x);
-        return Labels!;
+        return Labels ?? new Vector<T>(0);
     }
 }

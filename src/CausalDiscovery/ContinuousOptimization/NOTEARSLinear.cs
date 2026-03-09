@@ -206,7 +206,7 @@ public class NOTEARSLinear<T> : ContinuousOptimizationBase<T>
         bool hasEdges = false;
         for (int i = 0; i < d && !hasEdges; i++)
             for (int j = 0; j < d && !hasEdges; j++)
-                if (i != j && Math.Abs(NumOps.ToDouble(result[i, j])) > 0)
+                if (i != j && NumOps.GreaterThan(NumOps.Abs(result[i, j]), NumOps.Zero))
                     hasEdges = true;
 
         return hasEdges ? result : FallbackCorrelationGraph(data);
@@ -479,7 +479,12 @@ public class NOTEARSLinear<T> : ContinuousOptimizationBase<T>
 
     private static double DotProduct(double[] a, double[] b)
     {
-        return VectorHelper.DotProduct(new Vector<double>(a), new Vector<double>(b));
+        double sum = 0;
+        for (int i = 0; i < a.Length; i++)
+        {
+            sum += a[i] * b[i];
+        }
+        return sum;
     }
 
     private double[] FlattenMatrix(Matrix<T> matrix, int d)

@@ -53,8 +53,8 @@ public class FalsePositiveRateMetric<T> : IClassificationMetric<T>
         int fp = 0, tn = 0;
         for (int i = 0; i < predictions.Length; i++)
         {
-            bool isActualPositive = Math.Abs(NumOps.ToDouble(actuals[i]) - positiveLabelValue) < 1e-10;
-            bool isPredictedPositive = Math.Abs(NumOps.ToDouble(predictions[i]) - positiveLabelValue) < 1e-10;
+            bool isActualPositive = NumOps.Compare(actuals[i], NumOps.FromDouble(positiveLabelValue)) == 0;
+            bool isPredictedPositive = NumOps.Compare(predictions[i], NumOps.FromDouble(positiveLabelValue)) == 0;
 
             if (!isActualPositive)
             {

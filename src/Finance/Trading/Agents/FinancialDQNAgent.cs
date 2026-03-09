@@ -106,7 +106,7 @@ public class FinancialDQNAgent<T> : TradingAgentBase<T>
 
         for (int i = 1; i < TradingOptions.ActionSize; i++)
         {
-            if (NumOps.ToDouble(qValues.Data.Span[i]) > NumOps.ToDouble(maxQ))
+            if (NumOps.GreaterThan(qValues.Data.Span[i], maxQ))
             {
                 maxQ = qValues.Data.Span[i];
                 bestAction = i;
@@ -209,7 +209,7 @@ public class FinancialDQNAgent<T> : TradingAgentBase<T>
         T max = qValues.Data.Span[0];
         for (int i = 1; i < qValues.Length; i++)
         {
-            if (NumOps.ToDouble(qValues.Data.Span[i]) > NumOps.ToDouble(max))
+            if (NumOps.GreaterThan(qValues.Data.Span[i], max))
                 max = qValues.Data.Span[i];
         }
         return max;

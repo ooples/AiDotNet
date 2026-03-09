@@ -88,7 +88,7 @@ internal class PoissonDistribution<T> : DistributionBase<T>
     /// </summary>
     public T LogPmf(int k)
     {
-        if (k < 0) return NumOps.FromDouble(double.NegativeInfinity);
+        if (k < 0) return NumOps.MinValue;
 
         double lambda = NumOps.ToDouble(_lambda);
         return NumOps.FromDouble(k * Math.Log(lambda) - lambda - LogFactorial(k));
@@ -129,7 +129,7 @@ internal class PoissonDistribution<T> : DistributionBase<T>
             throw new ArgumentOutOfRangeException(nameof(p), "Probability must be in [0, 1].");
 
         if (pVal == 0) return Zero;
-        if (pVal == 1) return NumOps.FromDouble(double.PositiveInfinity);
+        if (pVal == 1) return NumOps.MaxValue;
 
         double lambda = NumOps.ToDouble(_lambda);
 

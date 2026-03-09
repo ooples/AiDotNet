@@ -130,18 +130,18 @@ public class SeededKMeans<T> : ClusteringBase<T>
 
                 var point = GetRow(x, i);
                 int bestCluster = 0;
-                double bestDist = double.MaxValue;
+                T bestDist = NumOps.MaxValue;
 
                 for (int c = 0; c < k; c++)
                 {
                     var center = new Vector<T>(d);
                     for (int j = 0; j < d; j++)
                     {
-                        center[j] = NumOps.FromDouble(centers[c][j]);
+                        center[j] = centers[c][j];
                     }
 
-                    double dist = NumOps.ToDouble(metric.Compute(point, center));
-                    if (dist < bestDist)
+                    T dist = metric.Compute(point, center);
+                    if (NumOps.LessThan(dist, bestDist))
                     {
                         bestDist = dist;
                         bestCluster = c;
@@ -157,10 +157,14 @@ public class SeededKMeans<T> : ClusteringBase<T>
 
             // Update centers
             var counts = new int[k];
-            var newCenters = new double[k][];
+            var newCenters = new T[k][];
             for (int c = 0; c < k; c++)
             {
-                newCenters[c] = new double[d];
+                newCenters[c] = new T[d];
+                for (int j = 0; j < d; j++)
+                {
+                    newCenters[c][j] = NumOps.Zero;
+                }
             }
 
             for (int i = 0; i < n; i++)
@@ -169,7 +173,7 @@ public class SeededKMeans<T> : ClusteringBase<T>
                 counts[c]++;
                 for (int j = 0; j < d; j++)
                 {
-                    newCenters[c][j] += NumOps.ToDouble(x[i, j]);
+                    newCenters[c][j] = NumOps.Add(newCenters[c][j], x[i, j]);
                 }
             }
 
@@ -179,7 +183,7 @@ public class SeededKMeans<T> : ClusteringBase<T>
                 {
                     for (int j = 0; j < d; j++)
                     {
-                        centers[c][j] = newCenters[c][j] / counts[c];
+                        centers[c][j] = NumOps.Divide(newCenters[c][j], NumOps.FromDouble(counts[c]));
                     }
                 }
             }
@@ -193,7 +197,7 @@ public class SeededKMeans<T> : ClusteringBase<T>
         {
             for (int j = 0; j < d; j++)
             {
-                ClusterCenters[c, j] = NumOps.FromDouble(centers[c][j]);
+                ClusterCenters[c, j] = centers[c][j];
             }
         }
 
@@ -205,15 +209,19 @@ public class SeededKMeans<T> : ClusteringBase<T>
         IsTrained = true;
     }
 
-    private double[][] InitializeCentersFromSeeds(Matrix<T> x, Dictionary<int, int> seeds, int k, int n, int d)
+    private T[][] InitializeCentersFromSeeds(Matrix<T> x, Dictionary<int, int> seeds, int k, int n, int d)
     {
-        var centers = new double[k][];
+        var centers = new T[k][];
         var counts = new int[k];
 
         // Initialize arrays
         for (int c = 0; c < k; c++)
         {
-            centers[c] = new double[d];
+            centers[c] = new T[d];
+            for (int j = 0; j < d; j++)
+            {
+                centers[c][j] = NumOps.Zero;
+            }
         }
 
         // Compute centers from seeds
@@ -227,7 +235,7 @@ public class SeededKMeans<T> : ClusteringBase<T>
                 counts[clusterLabel]++;
                 for (int j = 0; j < d; j++)
                 {
-                    centers[clusterLabel][j] += NumOps.ToDouble(x[pointIdx, j]);
+                    centers[clusterLabel][j] = NumOps.Add(centers[clusterLabel][j], x[pointIdx, j]);
                 }
             }
         }
@@ -243,7 +251,7 @@ public class SeededKMeans<T> : ClusteringBase<T>
             {
                 for (int j = 0; j < d; j++)
                 {
-                    centers[c][j] /= counts[c];
+                    centers[c][j] = NumOps.Divide(centers[c][j], NumOps.FromDouble(counts[c]));
                 }
             }
             else
@@ -252,7 +260,7 @@ public class SeededKMeans<T> : ClusteringBase<T>
                 int randomIdx = rand.Next(n);
                 for (int j = 0; j < d; j++)
                 {
-                    centers[c][j] = NumOps.ToDouble(x[randomIdx, j]);
+                    centers[c][j] = x[randomIdx, j];
                 }
             }
         }
@@ -271,7 +279,7 @@ public class SeededKMeans<T> : ClusteringBase<T>
         for (int i = 0; i < x.Rows; i++)
         {
             var point = GetRow(x, i);
-            double minDist = double.MaxValue;
+            T minDist = NumOps.MaxValue;
             int nearestCluster = 0;
 
             if (ClusterCenters is not null)
@@ -279,9 +287,9 @@ public class SeededKMeans<T> : ClusteringBase<T>
                 for (int c = 0; c < NumClusters; c++)
                 {
                     var center = GetRow(ClusterCenters, c);
-                    double dist = NumOps.ToDouble(metric.Compute(point, center));
+                    T dist = metric.Compute(point, center);
 
-                    if (dist < minDist)
+                    if (NumOps.LessThan(dist, minDist))
                     {
                         minDist = dist;
                         nearestCluster = c;
@@ -299,6 +307,6 @@ public class SeededKMeans<T> : ClusteringBase<T>
     public override Vector<T> FitPredict(Matrix<T> x)
     {
         Train(x);
-        return Labels!;
+        return Labels ?? new Vector<T>(0);
     }
 }

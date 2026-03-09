@@ -40,7 +40,7 @@ public sealed class VariationalRFScheduler<T> : NoiseSchedulerBase<T>
             var stepped = NumOps.Subtract(sample[i], NumOps.Multiply(dtT, modelOutput[i]));
 
             // Add variational noise scaled by time and eta
-            if (noise != null && NumOps.ToDouble(eta) > 0)
+            if (noise != null && NumOps.GreaterThan(eta, NumOps.Zero))
             {
                 double noiseLevel = _noiseScale * t * NumOps.ToDouble(eta);
                 stepped = NumOps.Add(stepped, NumOps.Multiply(NumOps.FromDouble(noiseLevel), noise[i]));

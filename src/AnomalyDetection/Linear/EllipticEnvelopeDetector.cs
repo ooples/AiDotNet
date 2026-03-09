@@ -1,5 +1,6 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.AnomalyDetection.Linear;
@@ -148,7 +149,7 @@ public class EllipticEnvelopeDetector<T> : AnomalyDetectorBase<T>
     {
         int n = X.Rows;
         int d = X.Columns;
-        var random = new Random(_randomSeed);
+        var random = RandomHelper.CreateSeededRandom(_randomSeed);
 
         int h = (int)(n * _supportFraction);
         h = Math.Max(h, d + 1);
