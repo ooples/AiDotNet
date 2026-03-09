@@ -1,7 +1,10 @@
+using System.Text;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors.Helpers;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace AiDotNet.Classification.TimeSeries;
 
@@ -152,13 +155,13 @@ public class TimeSeriesForestClassifier<T> : ClassifierBase<T>, ITimeSeriesClass
     /// <inheritdoc />
     public override void Train(Matrix<T> x, Vector<T> y)
     {
-        // Convert matrix to tensor for sequence training
-        var tensor = new Tensor<T>(new[] { x.Rows, x.Columns, 1 });
+        // Convert matrix to 2D tensor [samples, sequence_length] for single-channel time series
+        var tensor = new Tensor<T>(new[] { x.Rows, x.Columns });
         for (int i = 0; i < x.Rows; i++)
         {
             for (int j = 0; j < x.Columns; j++)
             {
-                tensor[new[] { i, j, 0 }] = x[i, j];
+                tensor[new[] { i, j }] = x[i, j];
             }
         }
 
@@ -253,12 +256,12 @@ public class TimeSeriesForestClassifier<T> : ClassifierBase<T>, ITimeSeriesClass
     /// <inheritdoc />
     public override Vector<T> Predict(Matrix<T> input)
     {
-        var tensor = new Tensor<T>(new[] { input.Rows, input.Columns, 1 });
+        var tensor = new Tensor<T>(new[] { input.Rows, input.Columns });
         for (int i = 0; i < input.Rows; i++)
         {
             for (int j = 0; j < input.Columns; j++)
             {
-                tensor[new[] { i, j, 0 }] = input[i, j];
+                tensor[new[] { i, j }] = input[i, j];
             }
         }
 
@@ -308,6 +311,155 @@ public class TimeSeriesForestClassifier<T> : ClassifierBase<T>, ITimeSeriesClass
     public override void ApplyGradients(Vector<T> gradients, T learningRate)
     {
         // Tree-based model - no gradient application
+    }
+
+    /// <inheritdoc />
+    public override byte[] Serialize()
+    {
+        var metadata = GetModelMetadata();
+        var modelDict = new Dictionary<string, object?>
+        {
+            ["SequenceLength"] = SequenceLength,
+            ["NumChannels"] = NumChannels,
+            ["IsFitted"] = _isFitted,
+            ["NumClasses"] = NumClasses,
+            ["NumFeatures"] = NumFeatures,
+            ["TaskType"] = (int)TaskType
+        };
+
+        if (ClassLabels is not null)
+        {
+            var labels = new double[ClassLabels.Length];
+            for (int i = 0; i < ClassLabels.Length; i++)
+            {
+                labels[i] = NumOps.ToDouble(ClassLabels[i]);
+            }
+            modelDict["ClassLabels"] = labels;
+        }
+
+        if (_trees is not null)
+        {
+            modelDict["TreeCount"] = _trees.Count;
+            for (int i = 0; i < _trees.Count; i++)
+            {
+                var tree = _trees[i];
+                modelDict[$"Tree_{i}_IntervalStart"] = tree.IntervalStart;
+                modelDict[$"Tree_{i}_IntervalEnd"] = tree.IntervalEnd;
+                modelDict[$"Tree_{i}_ChannelIdx"] = tree.ChannelIdx;
+                if (tree.Root is not null)
+                {
+                    modelDict[$"Tree_{i}_Root"] = SerializeTreeNode(tree.Root);
+                }
+            }
+        }
+
+        metadata.ModelData = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelDict));
+        return Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(metadata));
+    }
+
+    /// <inheritdoc />
+    public override void Deserialize(byte[] modelData)
+    {
+        var jsonString = Encoding.UTF8.GetString(modelData);
+        var metadata = JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString);
+        if (metadata?.ModelData is null) return;
+
+        var dataString = Encoding.UTF8.GetString(metadata.ModelData);
+        var jObj = JsonConvert.DeserializeObject<JObject>(dataString);
+        if (jObj is null) return;
+
+        SequenceLength = jObj["SequenceLength"]?.ToObject<int>() ?? 0;
+        NumChannels = jObj["NumChannels"]?.ToObject<int>() ?? 1;
+        _isFitted = jObj["IsFitted"]?.ToObject<bool>() ?? false;
+        NumClasses = jObj["NumClasses"]?.ToObject<int>() ?? 0;
+        NumFeatures = jObj["NumFeatures"]?.ToObject<int>() ?? 0;
+        TaskType = (ClassificationTaskType)(jObj["TaskType"]?.ToObject<int>() ?? 0);
+
+        var labelsToken = jObj["ClassLabels"];
+        if (labelsToken is JArray labelsArr)
+        {
+            ClassLabels = new Vector<T>(labelsArr.Count);
+            for (int i = 0; i < labelsArr.Count; i++)
+            {
+                ClassLabels[i] = NumOps.FromDouble(labelsArr[i].Value<double>());
+            }
+        }
+
+        int treeCount = jObj["TreeCount"]?.ToObject<int>() ?? 0;
+        if (treeCount > 0)
+        {
+            _trees = new List<IntervalTree>(treeCount);
+            for (int i = 0; i < treeCount; i++)
+            {
+                var tree = new IntervalTree
+                {
+                    IntervalStart = jObj[$"Tree_{i}_IntervalStart"]?.ToObject<int>() ?? 0,
+                    IntervalEnd = jObj[$"Tree_{i}_IntervalEnd"]?.ToObject<int>() ?? 0,
+                    ChannelIdx = jObj[$"Tree_{i}_ChannelIdx"]?.ToObject<int>() ?? 0
+                };
+
+                var rootToken = jObj[$"Tree_{i}_Root"];
+                if (rootToken is JObject rootObj)
+                {
+                    tree.Root = DeserializeTreeNode(rootObj);
+                }
+
+                _trees.Add(tree);
+            }
+        }
+    }
+
+    private Dictionary<string, object?> SerializeTreeNode(DecisionTreeNode node)
+    {
+        var dict = new Dictionary<string, object?>
+        {
+            ["FeatureIndex"] = node.FeatureIndex,
+            ["Threshold"] = node.Threshold,
+            ["IsLeaf"] = node.IsLeaf,
+            ["PredictedClass"] = node.PredictedClass is not null ? NumOps.ToDouble(node.PredictedClass) : (double?)null,
+            ["ClassProbabilities"] = node.ClassProbabilities
+        };
+        if (node.Left is not null)
+            dict["Left"] = SerializeTreeNode(node.Left);
+        if (node.Right is not null)
+            dict["Right"] = SerializeTreeNode(node.Right);
+        return dict;
+    }
+
+    private DecisionTreeNode DeserializeTreeNode(JObject obj)
+    {
+        var node = new DecisionTreeNode
+        {
+            FeatureIndex = obj["FeatureIndex"]?.Value<int>() ?? -1,
+            Threshold = obj["Threshold"]?.Value<double>() ?? 0,
+            IsLeaf = obj["IsLeaf"]?.Value<bool>() ?? false
+        };
+
+        var predClass = obj["PredictedClass"];
+        if (predClass is not null && predClass.Type != JTokenType.Null)
+        {
+            node.PredictedClass = NumOps.FromDouble(predClass.Value<double>());
+        }
+
+        var probs = obj["ClassProbabilities"];
+        if (probs is JArray probsArr)
+        {
+            node.ClassProbabilities = probsArr.Select(p => p.Value<double>()).ToArray();
+        }
+
+        var left = obj["Left"];
+        if (left is JObject leftObj)
+        {
+            node.Left = DeserializeTreeNode(leftObj);
+        }
+
+        var right = obj["Right"];
+        if (right is JObject rightObj)
+        {
+            node.Right = DeserializeTreeNode(rightObj);
+        }
+
+        return node;
     }
 
     private Matrix<T> ExtractIntervalFeatures(Tensor<T> sequences, int start, int end, int channel)

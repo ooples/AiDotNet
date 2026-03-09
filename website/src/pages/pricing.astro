@@ -212,8 +212,8 @@ const base = import.meta.env.BASE_URL;
       // Checkout buttons - redirect to Stripe Payment Links
       const PAYMENT_LINKS: Record<string, Record<string, string>> = {
         pro: {
-          month: import.meta.env.PUBLIC_STRIPE_PRO_MONTHLY_LINK || '',
-          year: import.meta.env.PUBLIC_STRIPE_PRO_YEARLY_LINK || '',
+          month: (import.meta.env.PUBLIC_STRIPE_PRO_MONTHLY_LINK || '').trim(),
+          year: (import.meta.env.PUBLIC_STRIPE_PRO_YEARLY_LINK || '').trim(),
         },
       };
 

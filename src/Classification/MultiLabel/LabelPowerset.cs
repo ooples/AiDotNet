@@ -1,7 +1,10 @@
+using System.Text;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Validation;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace AiDotNet.Classification.MultiLabel;
 
@@ -347,6 +350,91 @@ public class LabelPowerset<T> : MultiLabelClassifierBase<T>
         }
 
         return probabilities;
+    }
+
+    #endregion
+
+    #region Serialization
+
+    /// <inheritdoc/>
+    public override byte[] Serialize()
+    {
+        string? classifierTypeName = null;
+        string? classifierDataStr = null;
+        if (_classifier is not null)
+        {
+            var (typeName, data) = ClassifierRegistry<T>.SerializeClassifier(_classifier);
+            classifierTypeName = typeName;
+            classifierDataStr = data;
+        }
+
+        // Serialize _classToLabels as Dictionary<string, bool[]> (JSON can't use int keys directly)
+        Dictionary<string, bool[]>? classToLabelsStr = null;
+        if (_classToLabels is not null)
+        {
+            classToLabelsStr = new Dictionary<string, bool[]>();
+            foreach (var kvp in _classToLabels)
+            {
+                classToLabelsStr[kvp.Key.ToString()] = kvp.Value;
+            }
+        }
+
+        var modelDict = new Dictionary<string, object?>
+        {
+            { "NumLabels", NumLabels },
+            { "NumFeatures", NumFeatures },
+            { "NumClasses", NumClasses },
+            { "TaskType", (int)TaskType },
+            { "LabelNames", LabelNames },
+            { "NumCombinations", _numCombinations },
+            { "ClassToLabels", classToLabelsStr },
+            { "LabelsToClass", _labelsToClass },
+            { "ClassifierType", classifierTypeName },
+            { "ClassifierData", classifierDataStr }
+        };
+
+        var metadata = GetModelMetadata();
+        metadata.ModelData = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelDict));
+        return Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(metadata));
+    }
+
+    /// <inheritdoc/>
+    public override void Deserialize(byte[] modelData)
+    {
+        var jsonString = Encoding.UTF8.GetString(modelData);
+        var metadata = JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString);
+        if (metadata?.ModelData is null) return;
+
+        var dataString = Encoding.UTF8.GetString(metadata.ModelData);
+        var jObj = JsonConvert.DeserializeObject<JObject>(dataString);
+        if (jObj is null) return;
+
+        NumLabels = jObj["NumLabels"]?.ToObject<int>() ?? 0;
+        NumFeatures = jObj["NumFeatures"]?.ToObject<int>() ?? 0;
+        NumClasses = jObj["NumClasses"]?.ToObject<int>() ?? 2;
+        TaskType = (ClassificationTaskType)(jObj["TaskType"]?.ToObject<int>() ?? 0);
+        LabelNames = jObj["LabelNames"]?.ToObject<string[]>();
+        _numCombinations = jObj["NumCombinations"]?.ToObject<int>() ?? 0;
+
+        // Deserialize _classToLabels from string-keyed dictionary
+        var classToLabelsStr = jObj["ClassToLabels"]?.ToObject<Dictionary<string, bool[]>>();
+        if (classToLabelsStr is not null)
+        {
+            _classToLabels = new Dictionary<int, bool[]>();
+            foreach (var kvp in classToLabelsStr)
+            {
+                _classToLabels[int.Parse(kvp.Key)] = kvp.Value;
+            }
+        }
+
+        _labelsToClass = jObj["LabelsToClass"]?.ToObject<Dictionary<string, int>>();
+
+        var classifierType = jObj["ClassifierType"]?.ToObject<string>();
+        var classifierDataVal = jObj["ClassifierData"]?.ToObject<string>();
+        if (classifierType is not null && classifierDataVal is not null)
+        {
+            _classifier = ClassifierRegistry<T>.DeserializeClassifier(classifierType, classifierDataVal);
+        }
     }
 
     #endregion

@@ -1,7 +1,10 @@
+using System.Text;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors.Helpers;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace AiDotNet.Classification.Ordinal;
 
@@ -686,6 +689,94 @@ public class OrdinalLogisticRegression<T> : OrdinalClassifierBase<T>
             if (NumOps.ToDouble(_thresholds[k]) <= NumOps.ToDouble(_thresholds[k - 1]))
             {
                 _thresholds[k] = NumOps.FromDouble(NumOps.ToDouble(_thresholds[k - 1]) + 0.001);
+            }
+        }
+    }
+
+    /// <inheritdoc/>
+    public override byte[] Serialize()
+    {
+        var modelData = new Dictionary<string, object>
+        {
+            { "NumClasses", NumClasses },
+            { "NumFeatures", NumFeatures },
+            { "TaskType", (int)TaskType },
+            { "ClassLabels", ClassLabels?.ToArray() ?? Array.Empty<T>() }
+        };
+
+        if (_coefficients is not null)
+        {
+            var coefArray = new double[_coefficients.Length];
+            for (int i = 0; i < _coefficients.Length; i++)
+                coefArray[i] = NumOps.ToDouble(_coefficients[i]);
+            modelData["Coefficients"] = coefArray;
+        }
+
+        if (_thresholds is not null)
+        {
+            var threshArray = new double[_thresholds.Length];
+            for (int i = 0; i < _thresholds.Length; i++)
+                threshArray[i] = NumOps.ToDouble(_thresholds[i]);
+            modelData["Thresholds"] = threshArray;
+        }
+
+        var modelMetadata = GetModelMetadata();
+        modelMetadata.ModelData = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelData));
+        return Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelMetadata));
+    }
+
+    /// <inheritdoc/>
+    public override void Deserialize(byte[] modelData)
+    {
+        var jsonString = Encoding.UTF8.GetString(modelData);
+        var modelMetadata = JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString);
+
+        if (modelMetadata == null || modelMetadata.ModelData == null)
+            throw new InvalidOperationException("Deserialization failed: The model data is invalid or corrupted.");
+
+        var modelDataString = Encoding.UTF8.GetString(modelMetadata.ModelData);
+        var modelDataObj = JsonConvert.DeserializeObject<JObject>(modelDataString);
+
+        if (modelDataObj == null)
+            throw new InvalidOperationException("Deserialization failed: The model data is invalid or corrupted.");
+
+        NumClasses = modelDataObj["NumClasses"]?.ToObject<int>() ?? 0;
+        NumFeatures = modelDataObj["NumFeatures"]?.ToObject<int>() ?? 0;
+        TaskType = (ClassificationTaskType)(modelDataObj["TaskType"]?.ToObject<int>() ?? 0);
+
+        var classLabelsToken = modelDataObj["ClassLabels"];
+        if (classLabelsToken is not null)
+        {
+            var classLabelsAsDoubles = classLabelsToken.ToObject<double[]>() ?? Array.Empty<double>();
+            if (classLabelsAsDoubles.Length > 0)
+            {
+                ClassLabels = new Vector<T>(classLabelsAsDoubles.Length);
+                for (int i = 0; i < classLabelsAsDoubles.Length; i++)
+                    ClassLabels[i] = NumOps.FromDouble(classLabelsAsDoubles[i]);
+            }
+        }
+
+        var coefToken = modelDataObj["Coefficients"];
+        if (coefToken is not null)
+        {
+            var coefArray = coefToken.ToObject<double[]>() ?? Array.Empty<double>();
+            if (coefArray.Length > 0)
+            {
+                _coefficients = new Vector<T>(coefArray.Length);
+                for (int i = 0; i < coefArray.Length; i++)
+                    _coefficients[i] = NumOps.FromDouble(coefArray[i]);
+            }
+        }
+
+        var threshToken = modelDataObj["Thresholds"];
+        if (threshToken is not null)
+        {
+            var threshArray = threshToken.ToObject<double[]>() ?? Array.Empty<double>();
+            if (threshArray.Length > 0)
+            {
+                _thresholds = new Vector<T>(threshArray.Length);
+                for (int i = 0; i < threshArray.Length; i++)
+                    _thresholds[i] = NumOps.FromDouble(threshArray[i]);
             }
         }
     }

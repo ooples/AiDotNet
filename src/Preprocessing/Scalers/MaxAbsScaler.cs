@@ -1,5 +1,6 @@
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
+using Newtonsoft.Json;
 
 namespace AiDotNet.Preprocessing.Scalers;
 
@@ -26,11 +27,13 @@ namespace AiDotNet.Preprocessing.Scalers;
 /// <typeparam name="T">The numeric type for calculations (e.g., float, double).</typeparam>
 public class MaxAbsScaler<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 {
+    [JsonProperty]
     private Vector<T>? _maxAbs;
 
     /// <summary>
     /// Gets the maximum absolute value of each feature computed during fitting.
     /// </summary>
+    [JsonIgnore]
     public Vector<T>? MaxAbsolute => _maxAbs;
 
     /// <summary>

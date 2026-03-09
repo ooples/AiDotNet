@@ -499,12 +499,13 @@ internal class PagedAttentionKernel<T>
 
     private static float ToFloat(T value)
     {
+        object boxed = value ?? throw new InvalidOperationException("Unexpected null value in PagedAttention type conversion.");
         if (typeof(T) == typeof(float))
-            return (float)(object)(value ?? throw new InvalidOperationException("Null value in PagedAttention conversion."));
+            return (float)boxed;
         if (typeof(T) == typeof(double))
-            return (float)(double)(object)(value ?? throw new InvalidOperationException("Null value in PagedAttention conversion."));
+            return (float)(double)boxed;
         if (typeof(T) == typeof(Half))
-            return (float)(Half)(object)(value ?? throw new InvalidOperationException("Null value in PagedAttention conversion."));
+            return (float)(Half)boxed;
 
         return Convert.ToSingle(value);
     }

@@ -1,5 +1,6 @@
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
+using Newtonsoft.Json;
 
 namespace AiDotNet.Preprocessing.Scalers;
 
@@ -46,10 +47,13 @@ namespace AiDotNet.Preprocessing.Scalers;
 /// <typeparam name="T">The numeric type for calculations (e.g., float, double).</typeparam>
 public class LpNormScaler<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 {
+    [JsonProperty]
     private readonly double _p;
 
     // Fitted parameters: the Lp-norm of each column
+    [JsonProperty]
     private Vector<T>? _columnNorms;
+    [JsonProperty]
     private int _nColumns;
 
     /// <summary>

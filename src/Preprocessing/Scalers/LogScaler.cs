@@ -1,5 +1,6 @@
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
+using Newtonsoft.Json;
 
 namespace AiDotNet.Preprocessing.Scalers;
 
@@ -22,13 +23,17 @@ namespace AiDotNet.Preprocessing.Scalers;
 /// <typeparam name="T">The numeric type for calculations (e.g., float, double).</typeparam>
 public class LogScaler<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 {
+    [JsonProperty]
     private Vector<T>? _shift;
+    [JsonProperty]
     private Vector<T>? _logMin;
+    [JsonProperty]
     private Vector<T>? _logRange;
 
     /// <summary>
     /// Gets the shift applied to each feature to ensure positive values.
     /// </summary>
+    [JsonIgnore]
     public Vector<T>? Shift => _shift;
 
     /// <summary>

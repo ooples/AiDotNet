@@ -1,8 +1,11 @@
+using System.Text;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors.Helpers;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace AiDotNet.Classification.MultiLabel;
 
@@ -261,6 +264,149 @@ public class MLkNNClassifier<T> : MultiLabelClassifierBase<T>
     public override void SetParameters(Vector<T> parameters)
     {
         // Parameters alone are insufficient - need training data for k-NN
+    }
+
+    /// <inheritdoc/>
+    public override byte[] Serialize()
+    {
+        int k = _options.KNeighbors;
+
+        // Serialize training features as double[][]
+        double[][]? trainFeaturesArr = null;
+        if (_trainFeatures is not null)
+        {
+            trainFeaturesArr = new double[_trainFeatures.Rows][];
+            for (int i = 0; i < _trainFeatures.Rows; i++)
+            {
+                trainFeaturesArr[i] = new double[_trainFeatures.Columns];
+                for (int j = 0; j < _trainFeatures.Columns; j++)
+                {
+                    trainFeaturesArr[i][j] = NumOps.ToDouble(_trainFeatures[i, j]);
+                }
+            }
+        }
+
+        // Serialize training labels as double[][]
+        double[][]? trainLabelsArr = null;
+        if (_trainLabels is not null)
+        {
+            trainLabelsArr = new double[_trainLabels.Rows][];
+            for (int i = 0; i < _trainLabels.Rows; i++)
+            {
+                trainLabelsArr[i] = new double[_trainLabels.Columns];
+                for (int j = 0; j < _trainLabels.Columns; j++)
+                {
+                    trainLabelsArr[i][j] = NumOps.ToDouble(_trainLabels[i, j]);
+                }
+            }
+        }
+
+        // Serialize 2D conditional probability arrays as double[][]
+        double[][]? condProbsPosArr = null;
+        double[][]? condProbsNegArr = null;
+        if (_condProbsPos is not null && _condProbsNeg is not null)
+        {
+            condProbsPosArr = new double[NumLabels][];
+            condProbsNegArr = new double[NumLabels][];
+            for (int l = 0; l < NumLabels; l++)
+            {
+                condProbsPosArr[l] = new double[k + 1];
+                condProbsNegArr[l] = new double[k + 1];
+                for (int j = 0; j <= k; j++)
+                {
+                    condProbsPosArr[l][j] = _condProbsPos[l, j];
+                    condProbsNegArr[l][j] = _condProbsNeg[l, j];
+                }
+            }
+        }
+
+        var modelDict = new Dictionary<string, object?>
+        {
+            { "NumLabels", NumLabels },
+            { "NumFeatures", NumFeatures },
+            { "NumClasses", NumClasses },
+            { "TaskType", (int)TaskType },
+            { "LabelNames", LabelNames },
+            { "KNeighbors", k },
+            { "Smoothing", _options.Smoothing },
+            { "PriorProbs", _priorProbs },
+            { "CondProbsPos", condProbsPosArr },
+            { "CondProbsNeg", condProbsNegArr },
+            { "TrainFeatures", trainFeaturesArr },
+            { "TrainLabels", trainLabelsArr }
+        };
+
+        var metadata = GetModelMetadata();
+        metadata.ModelData = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelDict));
+        return Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(metadata));
+    }
+
+    /// <inheritdoc/>
+    public override void Deserialize(byte[] modelData)
+    {
+        var jsonString = Encoding.UTF8.GetString(modelData);
+        var metadata = JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString);
+        if (metadata?.ModelData is null) return;
+
+        var dataString = Encoding.UTF8.GetString(metadata.ModelData);
+        var jObj = JsonConvert.DeserializeObject<JObject>(dataString);
+        if (jObj is null) return;
+
+        NumLabels = jObj["NumLabels"]?.ToObject<int>() ?? 0;
+        NumFeatures = jObj["NumFeatures"]?.ToObject<int>() ?? 0;
+        NumClasses = jObj["NumClasses"]?.ToObject<int>() ?? 2;
+        TaskType = (ClassificationTaskType)(jObj["TaskType"]?.ToObject<int>() ?? 0);
+        LabelNames = jObj["LabelNames"]?.ToObject<string[]>();
+
+        _priorProbs = jObj["PriorProbs"]?.ToObject<double[]>();
+
+        int k = jObj["KNeighbors"]?.ToObject<int>() ?? _options.KNeighbors;
+
+        var condProbsPosArr = jObj["CondProbsPos"]?.ToObject<double[][]>();
+        var condProbsNegArr = jObj["CondProbsNeg"]?.ToObject<double[][]>();
+        if (condProbsPosArr is not null && condProbsNegArr is not null)
+        {
+            _condProbsPos = new double[NumLabels, k + 1];
+            _condProbsNeg = new double[NumLabels, k + 1];
+            for (int l = 0; l < NumLabels && l < condProbsPosArr.Length; l++)
+            {
+                for (int j = 0; j <= k && j < condProbsPosArr[l].Length; j++)
+                {
+                    _condProbsPos[l, j] = condProbsPosArr[l][j];
+                    _condProbsNeg[l, j] = condProbsNegArr[l][j];
+                }
+            }
+        }
+
+        var trainFeaturesArr = jObj["TrainFeatures"]?.ToObject<double[][]>();
+        if (trainFeaturesArr is not null && trainFeaturesArr.Length > 0)
+        {
+            int rows = trainFeaturesArr.Length;
+            int cols = trainFeaturesArr[0].Length;
+            _trainFeatures = new Matrix<T>(rows, cols);
+            for (int i = 0; i < rows; i++)
+            {
+                for (int j = 0; j < cols; j++)
+                {
+                    _trainFeatures[i, j] = NumOps.FromDouble(trainFeaturesArr[i][j]);
+                }
+            }
+        }
+
+        var trainLabelsArr = jObj["TrainLabels"]?.ToObject<double[][]>();
+        if (trainLabelsArr is not null && trainLabelsArr.Length > 0)
+        {
+            int rows = trainLabelsArr.Length;
+            int cols = trainLabelsArr[0].Length;
+            _trainLabels = new Matrix<T>(rows, cols);
+            for (int i = 0; i < rows; i++)
+            {
+                for (int j = 0; j < cols; j++)
+                {
+                    _trainLabels[i, j] = NumOps.FromDouble(trainLabelsArr[i][j]);
+                }
+            }
+        }
     }
 
     /// <inheritdoc />

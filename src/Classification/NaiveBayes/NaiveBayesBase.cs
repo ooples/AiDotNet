@@ -271,6 +271,14 @@ public abstract class NaiveBayesBase<T> : ProbabilisticClassifierBase<T>
     /// <inheritdoc/>
     public override void SetParameters(Vector<T> parameters)
     {
+        // When the model is untrained (NumClasses == 0), infer NumClasses from the
+        // parameter vector. This is required for the optimizer's InitializeRandomSolution
+        // which creates random parameters before the model has seen any training data.
+        if (NumClasses == 0 && parameters.Length > 0)
+        {
+            NumClasses = parameters.Length;
+        }
+
         if (parameters.Length != NumClasses)
         {
             throw new ArgumentException($"Expected {NumClasses} parameters, got {parameters.Length}");

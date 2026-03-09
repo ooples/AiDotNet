@@ -146,7 +146,7 @@ public class GradientVerification<T>
     /// </para>
     /// </remarks>
     public VerificationResult VerifyOperation(
-        IROp operation,
+        IROp? operation,
         T[][] inputs,
         Func<T[][], T[], T[][]> gradientFunc,
         Func<T[][], T[]> forwardFunc)
@@ -213,7 +213,7 @@ public class GradientVerification<T>
         Func<T[][], T[], T[][]> gradientFunc,
         Func<T[][], T[]> forwardFunc)
     {
-        return VerifyOperation(null!, inputs, gradientFunc, forwardFunc);
+        return VerifyOperation(null, inputs, gradientFunc, forwardFunc);
     }
 
     /// <summary>

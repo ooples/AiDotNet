@@ -692,15 +692,17 @@ public class SlowFast<T> : NeuralNetworkBase<T>
         writer.Write(_imageSize);
 
         // Training component type names for restoration
-        writer.Write(_lossFunction.GetType().AssemblyQualifiedName ?? typeof(CrossEntropyLoss<T>).AssemblyQualifiedName!);
-        writer.Write(_probabilityActivation.GetType().AssemblyQualifiedName ?? typeof(SoftmaxActivation<T>).AssemblyQualifiedName!);
+        writer.Write(_lossFunction.GetType().AssemblyQualifiedName ?? throw new InvalidOperationException(
+            "Cannot resolve AssemblyQualifiedName for loss function type."));
+        writer.Write(_probabilityActivation.GetType().AssemblyQualifiedName ?? throw new InvalidOperationException(
+            "Cannot resolve AssemblyQualifiedName for activation function type."));
 
         // Optimizer type (can be null for ONNX mode or after certain operations)
-        bool hasOptimizer = _optimizer != null;
-        writer.Write(hasOptimizer);
-        if (hasOptimizer)
+        writer.Write(_optimizer is not null);
+        if (_optimizer is { } optimizer)
         {
-            writer.Write((_optimizer ?? throw new InvalidOperationException("_optimizer has not been initialized.")).GetType().AssemblyQualifiedName ?? typeof(AdamOptimizer<T, Tensor<T>, Tensor<T>>).AssemblyQualifiedName!);
+            writer.Write(optimizer.GetType().AssemblyQualifiedName ?? throw new InvalidOperationException(
+                $"Cannot resolve AssemblyQualifiedName for optimizer type '{optimizer.GetType().FullName}'."));
         }
     }
 
@@ -736,6 +738,8 @@ public class SlowFast<T> : NeuralNetworkBase<T>
         }
         else
         {
+            System.Diagnostics.Debug.WriteLine(
+                $"Warning: Serialized loss function type '{lossFunctionTypeName}' could not be resolved. Falling back to CrossEntropyLoss.");
             _lossFunction = new CrossEntropyLoss<T>();
         }
 
@@ -747,6 +751,8 @@ public class SlowFast<T> : NeuralNetworkBase<T>
         }
         else
         {
+            System.Diagnostics.Debug.WriteLine(
+                $"Warning: Serialized activation type '{probabilityActivationTypeName}' could not be resolved. Falling back to SoftmaxActivation.");
             _probabilityActivation = new SoftmaxActivation<T>();
         }
 
@@ -768,12 +774,15 @@ public class SlowFast<T> : NeuralNetworkBase<T>
                 }
                 else
                 {
-                    // Fall back to default Adam optimizer
+                    System.Diagnostics.Debug.WriteLine(
+                        $"Warning: Serialized optimizer type '{optimizerTypeName}' does not have expected constructor. Falling back to Adam.");
                     _optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
                 }
             }
             else
             {
+                System.Diagnostics.Debug.WriteLine(
+                    $"Warning: Serialized optimizer type '{optimizerTypeName}' could not be resolved. Falling back to Adam.");
                 _optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
             }
         }
