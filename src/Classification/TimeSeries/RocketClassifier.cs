@@ -546,12 +546,14 @@ public class RocketClassifier<T> : ClassifierBase<T>, ITimeSeriesClassifier<T>
     public override void Deserialize(byte[] modelData)
     {
         var jsonString = Encoding.UTF8.GetString(modelData);
-        var metadata = JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString);
-        if (metadata?.ModelData is null) return;
+        var metadata = JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString)
+            ?? throw new InvalidOperationException("Failed to deserialize RocketClassifier: invalid metadata.");
+        if (metadata.ModelData is null)
+            throw new InvalidOperationException("Failed to deserialize RocketClassifier: missing model data.");
 
         var dataString = Encoding.UTF8.GetString(metadata.ModelData);
-        var jObj = JsonConvert.DeserializeObject<JObject>(dataString);
-        if (jObj is null) return;
+        var jObj = JsonConvert.DeserializeObject<JObject>(dataString)
+            ?? throw new InvalidOperationException("Failed to deserialize RocketClassifier: invalid model payload.");
 
         SequenceLength = jObj["SequenceLength"]?.ToObject<int>() ?? 0;
         NumChannels = jObj["NumChannels"]?.ToObject<int>() ?? 1;

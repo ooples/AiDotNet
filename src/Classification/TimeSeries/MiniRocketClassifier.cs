@@ -340,12 +340,21 @@ public class MiniRocketClassifier<T> : ClassifierBase<T>, ITimeSeriesClassifier<
     public override void Deserialize(byte[] modelData)
     {
         var jsonString = Encoding.UTF8.GetString(modelData);
-        var metadata = JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString);
-        if (metadata?.ModelData is null) return;
+        var metadata = JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString)
+            ?? throw new InvalidOperationException("Failed to deserialize MiniRocketClassifier: invalid metadata.");
+        if (metadata.ModelData is null)
+            throw new InvalidOperationException("Failed to deserialize MiniRocketClassifier: missing model data.");
 
         var dataString = Encoding.UTF8.GetString(metadata.ModelData);
-        var jObj = JsonConvert.DeserializeObject<JObject>(dataString);
-        if (jObj is null) return;
+        var jObj = JsonConvert.DeserializeObject<JObject>(dataString)
+            ?? throw new InvalidOperationException("Failed to deserialize MiniRocketClassifier: invalid model payload.");
+
+        // Clear prior state before rehydrating
+        ClassLabels = null;
+        _weights = null;
+        _kernels = null;
+        _dilations = null;
+        _biases = null;
 
         SequenceLength = jObj["SequenceLength"]?.ToObject<int>() ?? 0;
         NumChannels = jObj["NumChannels"]?.ToObject<int>() ?? 1;
