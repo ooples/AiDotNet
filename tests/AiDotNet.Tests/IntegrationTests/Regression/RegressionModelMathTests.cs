@@ -297,7 +297,8 @@ public class RegressionModelMathTests
     [Fact]
     public void LassoRegression_ThroughBuilder_ProducesAccuratePredictions()
     {
-        var (x, y) = CreateLinearData(60, new[] { 2.0, -1.0, 3.0, 0.0 }, intercept: 1.0, noise: 0.5, seed: 42);
+        var coefficients = new[] { 2.0, -1.0, 3.0, 0.0 };
+        var (x, y) = CreateLinearData(60, coefficients, intercept: 1.0, noise: 0.5, seed: 42);
         var loader = DataLoaders.FromMatrixVector(x, y);
 
         var result = new AiModelBuilder<double, Matrix<double>, Vector<double>>()
@@ -307,24 +308,30 @@ public class RegressionModelMathTests
             .GetAwaiter()
             .GetResult();
 
-        var testX = CreateRandomMatrix(10, 4, seed: 100);
+        // Generate test data with known targets for R² computation
+        var (testX, testY) = CreateLinearData(20, coefficients, intercept: 1.0, noise: 0.5, seed: 999);
         var predictions = result.Predict(testX);
 
         Assert.NotNull(predictions);
-        Assert.Equal(10, predictions.Length);
+        Assert.Equal(20, predictions.Length);
+
+        // Verify R² > 0 (better than mean baseline) on known linear data
+        double r2 = ComputeR2(testY, predictions);
+        Assert.True(r2 > 0.0,
+            $"Lasso through builder: R²={r2:F4} should be > 0 on linear data");
+
         for (int i = 0; i < predictions.Length; i++)
         {
             Assert.False(double.IsNaN(predictions[i]), $"Prediction {i} is NaN");
             Assert.False(double.IsInfinity(predictions[i]), $"Prediction {i} is Infinity");
-            // Predictions should be in a reasonable range given the data distribution
-            Assert.InRange(predictions[i], -100.0, 100.0);
         }
     }
 
     [Fact]
     public void ElasticNet_ThroughBuilder_ProducesAccuratePredictions()
     {
-        var (x, y) = CreateLinearData(60, new[] { 2.0, -1.0, 3.0 }, intercept: 1.0, noise: 0.5, seed: 42);
+        var coefficients = new[] { 2.0, -1.0, 3.0 };
+        var (x, y) = CreateLinearData(60, coefficients, intercept: 1.0, noise: 0.5, seed: 42);
         var loader = DataLoaders.FromMatrixVector(x, y);
 
         var result = new AiModelBuilder<double, Matrix<double>, Vector<double>>()
@@ -334,26 +341,34 @@ public class RegressionModelMathTests
             .GetAwaiter()
             .GetResult();
 
-        var testX = CreateRandomMatrix(10, 3, seed: 200);
+        // Generate test data with known targets for R² computation
+        var (testX, testY) = CreateLinearData(20, coefficients, intercept: 1.0, noise: 0.5, seed: 888);
         var predictions = result.Predict(testX);
 
         Assert.NotNull(predictions);
-        Assert.Equal(10, predictions.Length);
+        Assert.Equal(20, predictions.Length);
+
+        // Verify R² > 0 (better than mean baseline) on known linear data
+        double r2 = ComputeR2(testY, predictions);
+        Assert.True(r2 > 0.0,
+            $"ElasticNet through builder: R²={r2:F4} should be > 0 on linear data");
+
         for (int i = 0; i < predictions.Length; i++)
         {
             Assert.False(double.IsNaN(predictions[i]), $"Prediction {i} is NaN");
-            Assert.InRange(predictions[i], -100.0, 100.0);
+            Assert.False(double.IsInfinity(predictions[i]), $"Prediction {i} is Infinity");
         }
     }
 
     [Fact]
     public void PolynomialRegression_ThroughBuilder_ProducesAccuratePredictions()
     {
-        // Quadratic data
-        var x = new Matrix<double>(60, 1);
-        var y = new Vector<double>(60);
+        // Quadratic data: y = 2x² - 3x + 1 + noise
         var random = new Random(42);
-        for (int i = 0; i < 60; i++)
+        int trainSamples = 60;
+        var x = new Matrix<double>(trainSamples, 1);
+        var y = new Vector<double>(trainSamples);
+        for (int i = 0; i < trainSamples; i++)
         {
             double xi = random.NextDouble() * 6 - 3;
             x[i, 0] = xi;
@@ -370,11 +385,28 @@ public class RegressionModelMathTests
             .GetAwaiter()
             .GetResult();
 
-        var testX = CreateRandomMatrix(10, 1, seed: 300);
+        // Generate test data with known quadratic targets
+        var testRandom = new Random(300);
+        int testSamples = 10;
+        var testX = new Matrix<double>(testSamples, 1);
+        var testY = new Vector<double>(testSamples);
+        for (int i = 0; i < testSamples; i++)
+        {
+            double xi = testRandom.NextDouble() * 6 - 3;
+            testX[i, 0] = xi;
+            testY[i] = 2.0 * xi * xi - 3.0 * xi + 1.0 + testRandom.NextDouble() * 0.5;
+        }
+
         var predictions = result.Predict(testX);
 
         Assert.NotNull(predictions);
-        Assert.Equal(10, predictions.Length);
+        Assert.Equal(testSamples, predictions.Length);
+
+        // Verify R² > 0 (polynomial model should fit quadratic data)
+        double r2 = ComputeR2(testY, predictions);
+        Assert.True(r2 > 0.0,
+            $"Polynomial through builder: R²={r2:F4} should be > 0 on quadratic data");
+
         for (int i = 0; i < predictions.Length; i++)
         {
             Assert.False(double.IsNaN(predictions[i]), $"Prediction {i} is NaN");

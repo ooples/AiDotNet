@@ -107,12 +107,13 @@ public class AiModelBuilderPreprocessingPredictTests
         Assert.Equal(1, predictions.Length);
 
         // The prediction should be in original scale (around 23), NOT in standardized scale (around 0)
-        // Allow generous tolerance since regression has noise and may not perfectly recover coefficients
-        Assert.InRange(predictions[0], 10.0, 40.0);
-        // A prediction near 0.0 would indicate inverse transform was NOT applied
+        // y = 2*10 + 3 = 23. With feature selection the builder may select or drop features,
+        // but the prediction must be in the original Y scale, not near 0 (standardized scale).
         Assert.True(Math.Abs(predictions[0]) > 5.0,
-            $"Prediction {predictions[0]} is too close to 0 — inverse transform may not have been applied. " +
+            $"Prediction {predictions[0]:F2} is too close to 0 — inverse transform may not have been applied. " +
             "Expected ~23 (original scale), got standardized-scale value.");
+        // Also verify it's in a reasonable range for y = 2*x + 3 with x = 10
+        Assert.InRange(predictions[0], 5.0, 50.0);
     }
 
     [Fact]
@@ -152,22 +153,25 @@ public class AiModelBuilderPreprocessingPredictTests
             .GetAwaiter()
             .GetResult();
 
-        // Test: predict with clean data (no NaN)
+        // Test: predict with data containing NaN to exercise the imputer
         var testData = new Matrix<double>(3, 3);
         var testRng = new Random(200);
         for (int i = 0; i < 3; i++)
             for (int j = 0; j < 3; j++)
                 testData[i, j] = testRng.NextDouble() * 10;
 
+        // Inject NaN into test data to verify imputer runs during prediction
+        testData[1, 0] = double.NaN;
+
         var predictions = result.Predict(testData);
 
-        // Assert: All predictions must be finite and in a reasonable range
+        // Assert: All predictions must be finite (imputer must handle the NaN)
         // y = x1 + 2*x2 + 3*x3, with xi in [0,10] -> y in [0, 60]
         Assert.Equal(3, predictions.Length);
         for (int i = 0; i < predictions.Length; i++)
         {
             Assert.False(double.IsNaN(predictions[i]),
-                $"Prediction {i} is NaN — imputer or scaler may not have been applied");
+                $"Prediction {i} is NaN — imputer may not have been applied during Predict()");
             Assert.False(double.IsInfinity(predictions[i]),
                 $"Prediction {i} is Infinity — imputer or scaler may not have been applied");
             Assert.InRange(predictions[i], -100.0, 200.0);
@@ -191,9 +195,9 @@ public class AiModelBuilderPreprocessingPredictTests
 
         // Assert: PreprocessingInfo should be null or not fitted
         var preprocessingInfo = result.PreprocessingInfo;
-        bool hasPreprocessing = preprocessingInfo?.IsFitted ?? false;
-        Assert.False(hasPreprocessing,
-            "Without ConfigurePreprocessing(), PreprocessingInfo should not be fitted");
+        Assert.True(
+            preprocessingInfo is null || !preprocessingInfo.IsFitted,
+            "Without ConfigurePreprocessing(), PreprocessingInfo must be null or not fitted");
 
         // Predict should still work (no transform step)
         var testData = CreateTestData(rows: 3, cols: 3, seed: 300);
@@ -201,7 +205,10 @@ public class AiModelBuilderPreprocessingPredictTests
         Assert.Equal(3, predictions.Length);
         for (int i = 0; i < predictions.Length; i++)
         {
-            Assert.False(double.IsNaN(predictions[i]));
+            Assert.False(double.IsNaN(predictions[i]),
+                $"Prediction {i} is NaN even without preprocessing");
+            Assert.False(double.IsInfinity(predictions[i]),
+                $"Prediction {i} is Infinity even without preprocessing");
         }
     }
 
