@@ -250,7 +250,8 @@ internal class PagedKVCache<T> : IDisposable
         if (_blockManager.GetReferenceCount(blockId) > 1)
         {
             _blockTableManager.CopyOnWrite(sequenceId, tokenPosition / _config.BlockSize, CopyBlockData);
-            table = _blockTableManager.GetBlockTable(sequenceId)!;
+            table = _blockTableManager.GetBlockTable(sequenceId)
+                ?? throw new InvalidOperationException($"Block table missing after copy-on-write for sequence {sequenceId}");
             (blockId, offset) = table.GetBlockAndOffset(tokenPosition);
         }
 
@@ -280,7 +281,8 @@ internal class PagedKVCache<T> : IDisposable
         if (_blockManager.GetReferenceCount(blockId) > 1)
         {
             _blockTableManager.CopyOnWrite(sequenceId, tokenPosition / _config.BlockSize, CopyBlockData);
-            table = _blockTableManager.GetBlockTable(sequenceId)!;
+            table = _blockTableManager.GetBlockTable(sequenceId)
+                ?? throw new InvalidOperationException($"Block table missing after copy-on-write for sequence {sequenceId}");
             (blockId, offset) = table.GetBlockAndOffset(tokenPosition);
         }
 

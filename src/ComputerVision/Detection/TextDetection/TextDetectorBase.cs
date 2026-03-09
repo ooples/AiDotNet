@@ -214,6 +214,14 @@ public abstract class TextDetectorBase<T>
     protected BackboneBase<T>? Backbone;
 
     /// <summary>
+    /// Gets the backbone network, throwing if not initialized.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">Thrown when backbone has not been initialized.</exception>
+    protected BackboneBase<T> EnsureBackbone =>
+        Backbone ?? throw new InvalidOperationException(
+            $"{GetType().Name}: Backbone not initialized. Ensure the model is properly constructed.");
+
+    /// <summary>
     /// Name of this text detector.
     /// </summary>
     public abstract string Name { get; }

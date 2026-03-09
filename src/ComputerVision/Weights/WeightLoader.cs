@@ -1158,7 +1158,12 @@ internal class PickleParser
     {
         if (_metaStack.Count > 0)
         {
-            int markPos = (int)_metaStack.Pop()!;
+            var popped = _metaStack.Pop();
+            if (popped is not int markPos)
+            {
+                throw new InvalidOperationException("Expected integer mark position on meta stack.");
+            }
+
             while (_stack.Count > markPos)
             {
                 _stack.Pop();
@@ -1170,7 +1175,11 @@ internal class PickleParser
     {
         if (_metaStack.Count == 0) return Array.Empty<object>();
 
-        int markPos = (int)_metaStack.Pop()!;
+        var popped = _metaStack.Pop();
+        if (popped is not int markPos)
+        {
+            throw new InvalidOperationException("Expected integer mark position on meta stack.");
+        }
         int count = _stack.Count - markPos;
         var items = new object?[count];
 

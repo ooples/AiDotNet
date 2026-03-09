@@ -101,10 +101,10 @@ public class YOLOv8<T> : ObjectDetectorBase<T>
     protected override List<Tensor<T>> Forward(Tensor<T> input)
     {
         // Extract features through backbone
-        var backboneFeatures = Backbone!.ExtractFeatures(input);
+        var backboneFeatures = EnsureBackbone.ExtractFeatures(input);
 
         // Fuse features through neck
-        var neckFeatures = Neck!.Forward(backboneFeatures);
+        var neckFeatures = EnsureNeck.Forward(backboneFeatures);
 
         // Get detection outputs from head
         var (clsOutputs, regOutputs) = _head.Forward(neckFeatures);
@@ -207,10 +207,10 @@ public class YOLOv8<T> : ObjectDetectorBase<T>
         }
 
         // Read backbone parameters
-        Backbone!.ReadParameters(reader);
+        EnsureBackbone.ReadParameters(reader);
 
         // Read neck parameters
-        Neck!.ReadParameters(reader);
+        EnsureNeck.ReadParameters(reader);
 
         // Read head parameters
         _head.ReadParameters(reader);
@@ -232,10 +232,10 @@ public class YOLOv8<T> : ObjectDetectorBase<T>
         writer.Write(Name);
 
         // Write backbone parameters
-        Backbone!.WriteParameters(writer);
+        EnsureBackbone.WriteParameters(writer);
 
         // Write neck parameters
-        Neck!.WriteParameters(writer);
+        EnsureNeck.WriteParameters(writer);
 
         // Write head parameters
         _head.WriteParameters(writer);

@@ -85,6 +85,12 @@ const links = [
               <p id="nav-user-name" class="text-sm font-medium text-slate-900 dark:text-white truncate"></p>
               <p id="nav-user-email" class="text-xs text-slate-500 dark:text-slate-400 truncate"></p>
             </div>
+            <a id="nav-admin-link" href={`${base}admin/`} class="hidden px-4 py-2 text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/10 flex items-center gap-2">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" />
+              </svg>
+              Admin Panel
+            </a>
             <a href={`${base}account/`} class="block px-4 py-2 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/5">Dashboard</a>
             <a href={`${base}account/api-keys/`} class="block px-4 py-2 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/5">API Keys</a>
             <a href={`${base}account/usage/`} class="block px-4 py-2 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/5">Usage</a>
@@ -145,6 +151,12 @@ const links = [
         </div>
         <!-- Mobile: Logged in -->
         <div id="mobile-logged-in" class="hidden space-y-1">
+          <a id="mobile-admin-link" href={`${base}admin/`} class="hidden px-3 py-2 text-base font-medium text-red-600 dark:text-red-400 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/10 flex items-center gap-2">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" />
+            </svg>
+            Admin Panel
+          </a>
           <a href={`${base}account/`} class="block px-3 py-2 text-base font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white rounded-lg hover:bg-slate-100 dark:hover:bg-white/5">Dashboard</a>
           <a href={`${base}account/api-keys/`} class="block px-3 py-2 text-base font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white rounded-lg hover:bg-slate-100 dark:hover:bg-white/5">API Keys</a>
           <a href={`${base}account/settings/`} class="block px-3 py-2 text-base font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white rounded-lg hover:bg-slate-100 dark:hover:bg-white/5">Settings</a>
@@ -196,6 +208,24 @@ const links = [
           const initial = (user.user_metadata?.full_name || user.email || '?')[0].toUpperCase();
           avatarEl.textContent = initial;
         }
+      }
+
+      // Check if user is admin and show admin links — fail silently on error
+      try {
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', user.id)
+          .single();
+
+        if (!profileError && profile && profile.role === 'admin') {
+          const adminLink = document.getElementById('nav-admin-link');
+          const mobileAdminLink = document.getElementById('mobile-admin-link');
+          if (adminLink) adminLink.classList.remove('hidden');
+          if (mobileAdminLink) mobileAdminLink.classList.remove('hidden');
+        }
+      } catch {
+        // Admin link stays hidden on error — safe default
       }
     }
 

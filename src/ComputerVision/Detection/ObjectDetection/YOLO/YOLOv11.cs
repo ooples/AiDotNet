@@ -105,14 +105,14 @@ public class YOLOv11<T> : ObjectDetectorBase<T>
     protected override List<Tensor<T>> Forward(Tensor<T> input)
     {
         // Backbone feature extraction
-        var backboneFeatures = Backbone!.ExtractFeatures(input);
+        var backboneFeatures = EnsureBackbone.ExtractFeatures(input);
 
         // Apply SPPF to deepest feature level
         var enhancedFeatures = new List<Tensor<T>>(backboneFeatures);
         enhancedFeatures[^1] = _sppf.Forward(enhancedFeatures[^1]);
 
         // Neck feature fusion
-        var neckFeatures = Neck!.Forward(enhancedFeatures);
+        var neckFeatures = EnsureNeck.Forward(enhancedFeatures);
 
         // Apply attention to each feature level
         var attentionFeatures = new List<Tensor<T>>();
@@ -281,13 +281,13 @@ public class YOLOv11<T> : ObjectDetectorBase<T>
         writer.Write(Name);
 
         // Write backbone parameters
-        Backbone!.WriteParameters(writer);
+        EnsureBackbone.WriteParameters(writer);
 
         // Write SPPF parameters
         _sppf.WriteParameters(writer);
 
         // Write neck parameters
-        Neck!.WriteParameters(writer);
+        EnsureNeck.WriteParameters(writer);
 
         // Write attention block parameters
         writer.Write(_attentionBlocks.Count);

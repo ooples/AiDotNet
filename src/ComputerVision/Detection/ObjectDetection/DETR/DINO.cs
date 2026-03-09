@@ -101,10 +101,10 @@ public class DINO<T> : ObjectDetectorBase<T>
     protected override List<Tensor<T>> Forward(Tensor<T> input)
     {
         // Extract multi-scale features from backbone
-        var backboneFeatures = Backbone!.ExtractFeatures(input);
+        var backboneFeatures = EnsureBackbone.ExtractFeatures(input);
 
         // Apply FPN
-        var fpnFeatures = Neck!.Forward(backboneFeatures);
+        var fpnFeatures = EnsureNeck.Forward(backboneFeatures);
 
         // Flatten and concatenate multi-scale features
         var (flattenedFeatures, levelStarts, spatialShapes) = FlattenMultiScale(fpnFeatures);
@@ -213,10 +213,10 @@ public class DINO<T> : ObjectDetectorBase<T>
         }
 
         // Read backbone parameters
-        Backbone!.ReadParameters(reader);
+        EnsureBackbone.ReadParameters(reader);
 
         // Read neck parameters
-        Neck!.ReadParameters(reader);
+        EnsureNeck.ReadParameters(reader);
 
         // Read input projection
         _inputProj.ReadParameters(reader);
@@ -244,10 +244,10 @@ public class DINO<T> : ObjectDetectorBase<T>
         writer.Write(Name);
 
         // Write backbone parameters
-        Backbone!.WriteParameters(writer);
+        EnsureBackbone.WriteParameters(writer);
 
         // Write neck parameters
-        Neck!.WriteParameters(writer);
+        EnsureNeck.WriteParameters(writer);
 
         // Write input projection
         _inputProj.WriteParameters(writer);

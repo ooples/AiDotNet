@@ -467,7 +467,7 @@ public class MaskDINO<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
     {
         return _useNativeMode
             ? new MaskDINO<T>(Architecture, _optimizer, LossFunction, _numClasses, _numQueries, _modelSize, _dropRate, _options)
-            : new MaskDINO<T>(Architecture, _onnxModelPath!, _numClasses, _numQueries, _modelSize, _options);
+            : new MaskDINO<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _numQueries, _modelSize, _options);
     }
 
     /// <summary>

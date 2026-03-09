@@ -1,0 +1,322 @@
+---
+import AdminLayout from '../../layouts/AdminLayout.astro';
+---
+
+<AdminLayout title="Admin Overview - AiDotNet" description="Admin dashboard overview with platform statistics." activeTab="overview">
+  <div class="space-y-8">
+    <div>
+      <h1 class="text-2xl font-bold text-slate-900 dark:text-white">Admin Overview</h1>
+      <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">Platform statistics and recent activity</p>
+    </div>
+
+    <!-- Stats grid -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div class="gsap-fade-up bg-white dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 p-6">
+        <div class="flex items-center gap-3 mb-3">
+          <div class="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center">
+            <svg class="w-5 h-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z" />
+            </svg>
+          </div>
+          <span class="text-sm font-medium text-slate-500 dark:text-slate-400">Total Users</span>
+        </div>
+        <p id="stat-total-users" class="text-3xl font-bold text-slate-900 dark:text-white">--</p>
+      </div>
+
+      <div class="gsap-fade-up bg-white dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 p-6">
+        <div class="flex items-center gap-3 mb-3">
+          <div class="w-10 h-10 rounded-xl bg-purple-50 dark:bg-purple-900/20 flex items-center justify-center">
+            <svg class="w-5 h-5 text-purple-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456ZM16.894 20.567 16.5 21.75l-.394-1.183a2.25 2.25 0 0 0-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 0 0 1.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 0 0 1.423 1.423l1.183.394-1.183.394a2.25 2.25 0 0 0-1.423 1.423Z" />
+            </svg>
+          </div>
+          <span class="text-sm font-medium text-slate-500 dark:text-slate-400">Pro Subscribers</span>
+        </div>
+        <p id="stat-pro-users" class="text-3xl font-bold text-slate-900 dark:text-white">--</p>
+      </div>
+
+      <div class="gsap-fade-up bg-white dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 p-6">
+        <div class="flex items-center gap-3 mb-3">
+          <div class="w-10 h-10 rounded-xl bg-amber-50 dark:bg-amber-900/20 flex items-center justify-center">
+            <svg class="w-5 h-5 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21M6.75 6.75h.75m-.75 3h.75m-.75 3h.75m3-6h.75m-.75 3h.75m-.75 3h.75M6.75 21v-3.375c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21M3 3h12m-.75 4.5H21m-3.75 3H21m-3.75 3H21" />
+            </svg>
+          </div>
+          <span class="text-sm font-medium text-slate-500 dark:text-slate-400">Enterprise</span>
+        </div>
+        <p id="stat-enterprise-users" class="text-3xl font-bold text-slate-900 dark:text-white">--</p>
+      </div>
+
+      <div class="gsap-fade-up bg-white dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 p-6">
+        <div class="flex items-center gap-3 mb-3">
+          <div class="w-10 h-10 rounded-xl bg-green-50 dark:bg-green-900/20 flex items-center justify-center">
+            <svg class="w-5 h-5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z" />
+            </svg>
+          </div>
+          <span class="text-sm font-medium text-slate-500 dark:text-slate-400">API Calls (30d)</span>
+        </div>
+        <p id="stat-api-calls" class="text-3xl font-bold text-slate-900 dark:text-white">--</p>
+      </div>
+
+      <div class="gsap-fade-up bg-white dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 p-6">
+        <div class="flex items-center gap-3 mb-3">
+          <div class="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-900/20 flex items-center justify-center">
+            <svg class="w-5 h-5 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25a3 3 0 0 1 3 3m3 0a6 6 0 0 1-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1 1 21.75 8.25Z" />
+            </svg>
+          </div>
+          <span class="text-sm font-medium text-slate-500 dark:text-slate-400">Active API Keys</span>
+        </div>
+        <p id="stat-active-keys" class="text-3xl font-bold text-slate-900 dark:text-white">--</p>
+      </div>
+
+      <div class="gsap-fade-up bg-white dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 p-6">
+        <div class="flex items-center gap-3 mb-3">
+          <div class="w-10 h-10 rounded-xl bg-rose-50 dark:bg-rose-900/20 flex items-center justify-center">
+            <svg class="w-5 h-5 text-rose-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+            </svg>
+          </div>
+          <span class="text-sm font-medium text-slate-500 dark:text-slate-400">Avg Latency (30d)</span>
+        </div>
+        <p id="stat-avg-latency" class="text-3xl font-bold text-slate-900 dark:text-white">--</p>
+      </div>
+    </div>
+
+    <!-- Recent signups -->
+    <div class="gsap-fade-up">
+      <h2 class="text-lg font-semibold text-slate-900 dark:text-white mb-4">Recent Signups</h2>
+      <div class="bg-white dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+        <div id="signups-empty" class="p-12 text-center">
+          <p class="text-sm text-slate-500 dark:text-slate-400">Loading...</p>
+        </div>
+        <table id="signups-table" class="hidden w-full text-sm">
+          <thead>
+            <tr class="border-b border-slate-200 dark:border-slate-700">
+              <th class="text-left py-3 px-4 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">User</th>
+              <th class="text-left py-3 px-4 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Role</th>
+              <th class="text-left py-3 px-4 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Tier</th>
+              <th class="text-left py-3 px-4 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Status</th>
+              <th class="text-left py-3 px-4 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Joined</th>
+            </tr>
+          </thead>
+          <tbody id="signups-body" class="divide-y divide-slate-100 dark:divide-slate-800">
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Recent API activity -->
+    <div class="gsap-fade-up">
+      <h2 class="text-lg font-semibold text-slate-900 dark:text-white mb-4">Recent API Activity</h2>
+      <div class="bg-white dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+        <div id="activity-empty" class="p-12 text-center">
+          <p class="text-sm text-slate-500 dark:text-slate-400">Loading...</p>
+        </div>
+        <table id="activity-table" class="hidden w-full text-sm">
+          <thead>
+            <tr class="border-b border-slate-200 dark:border-slate-700">
+              <th class="text-left py-3 px-4 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">User</th>
+              <th class="text-left py-3 px-4 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Endpoint</th>
+              <th class="text-left py-3 px-4 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Model</th>
+              <th class="text-left py-3 px-4 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Status</th>
+              <th class="text-left py-3 px-4 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Latency</th>
+              <th class="text-left py-3 px-4 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Time</th>
+            </tr>
+          </thead>
+          <tbody id="activity-body" class="divide-y divide-slate-100 dark:divide-slate-800">
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    import { supabase } from '../../lib/supabase';
+
+    async function loadAdminOverview() {
+      const setEl = (id: string, val: string) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = val;
+      };
+
+      // Use server-side count queries instead of fetching all profiles
+      const { count: totalUsers, error: totalError } = await supabase
+        .from('profiles')
+        .select('*', { count: 'exact', head: true });
+
+      if (totalError) {
+        showError('signups-empty', 'Failed to load profiles.');
+        showError('activity-empty', 'Failed to load activity.');
+        console.error('Profiles count error:', totalError);
+        return;
+      }
+
+      const { count: proUsers } = await supabase
+        .from('profiles')
+        .select('*', { count: 'exact', head: true })
+        .eq('subscription_tier', 'pro');
+
+      const { count: enterpriseUsers } = await supabase
+        .from('profiles')
+        .select('*', { count: 'exact', head: true })
+        .eq('subscription_tier', 'enterprise');
+
+      setEl('stat-total-users', (totalUsers || 0).toLocaleString());
+      setEl('stat-pro-users', (proUsers || 0).toLocaleString());
+      setEl('stat-enterprise-users', (enterpriseUsers || 0).toLocaleString());
+
+      // Fetch only recent signups for the table (not all profiles)
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id, full_name, role, subscription_tier, subscription_status, created_at')
+        .order('created_at', { ascending: false })
+        .limit(10);
+
+      // Active API keys count
+      const { count: keyCount } = await supabase
+        .from('user_api_keys')
+        .select('*', { count: 'exact', head: true })
+        .eq('is_active', true);
+
+      setEl('stat-active-keys', String(keyCount || 0));
+
+      // API usage stats (last 30 days) — use count + avg via limited fetch
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+      const { count: usageCount } = await supabase
+        .from('api_usage')
+        .select('*', { count: 'exact', head: true })
+        .gte('created_at', thirtyDaysAgo.toISOString());
+
+      const { data: usageData } = await supabase
+        .from('api_usage')
+        .select('latency_ms')
+        .gte('created_at', thirtyDaysAgo.toISOString())
+        .limit(10000);
+
+      setEl('stat-api-calls', (usageCount || 0).toLocaleString());
+      const validLatencies = (usageData || []).filter(u => u.latency_ms != null);
+      if (validLatencies.length > 0) {
+        const avgLatency = Math.round(
+          validLatencies.reduce((sum, u) => sum + (u.latency_ms ?? 0), 0) / validLatencies.length
+        );
+        setEl('stat-avg-latency', `${avgLatency}ms`);
+      } else {
+        setEl('stat-avg-latency', '--');
+      }
+
+      // Recent signups table (already limited to 10 by query)
+      const recentSignups = profiles || [];
+      const emptyEl = document.getElementById('signups-empty');
+      const tableEl = document.getElementById('signups-table');
+      const tbody = document.getElementById('signups-body');
+
+      if (recentSignups.length > 0 && emptyEl && tableEl && tbody) {
+        emptyEl.classList.add('hidden');
+        tableEl.classList.remove('hidden');
+
+        tbody.innerHTML = recentSignups.map(p => {
+          const tierColors: Record<string, string> = {
+            free: 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300',
+            pro: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400',
+            enterprise: 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400',
+          };
+          const roleColors: Record<string, string> = {
+            admin: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400',
+            user: 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300',
+          };
+          const statusColors: Record<string, string> = {
+            active: 'text-green-500',
+            cancelled: 'text-yellow-500',
+            past_due: 'text-red-500',
+          };
+          const tier = p.subscription_tier || 'free';
+          const role = p.role || 'user';
+          const status = p.subscription_status || 'active';
+          const date = new Date(p.created_at).toLocaleDateString();
+          return `<tr>
+            <td class="py-3 px-4">
+              <p class="font-medium text-slate-900 dark:text-white">${escapeHtml(p.full_name || 'Unnamed')}</p>
+            </td>
+            <td class="py-3 px-4">
+              <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${roleColors[role] || roleColors['user']}">${escapeHtml(role)}</span>
+            </td>
+            <td class="py-3 px-4">
+              <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${tierColors[tier] || tierColors['free']}">${escapeHtml(tier)}</span>
+            </td>
+            <td class="py-3 px-4 text-sm ${statusColors[status] || 'text-slate-500'} font-medium">${escapeHtml(status)}</td>
+            <td class="py-3 px-4 text-sm text-slate-400 dark:text-slate-500">${date}</td>
+          </tr>`;
+        }).join('');
+      }
+
+      // Recent API activity
+      const { data: recentActivity } = await supabase
+        .from('api_usage')
+        .select('user_id, endpoint, model_id, status_code, latency_ms, created_at')
+        .order('created_at', { ascending: false })
+        .limit(10);
+
+      const activityEmpty = document.getElementById('activity-empty');
+      const activityTable = document.getElementById('activity-table');
+      const activityBody = document.getElementById('activity-body');
+
+      if (recentActivity && recentActivity.length > 0 && activityEmpty && activityTable && activityBody) {
+        activityEmpty.classList.add('hidden');
+        activityTable.classList.remove('hidden');
+
+        // Build user lookup — fetch names for users in recent activity
+        const activityUserIds = [...new Set(recentActivity.map(a => a.user_id))];
+        const { data: activityProfiles } = await supabase
+          .from('profiles')
+          .select('id, full_name')
+          .in('id', activityUserIds);
+        const userMap = new Map((activityProfiles || []).map(p => [p.id, p.full_name || 'Unknown']));
+
+        activityBody.innerHTML = recentActivity.map(a => {
+          const statusColor = a.status_code < 400 ? 'text-green-500' : 'text-red-500';
+          const userName = userMap.get(a.user_id) || 'Unknown';
+          const timeAgo = getTimeAgo(new Date(a.created_at));
+          return `<tr>
+            <td class="py-3 px-4 text-slate-700 dark:text-slate-300 text-sm">${escapeHtml(userName)}</td>
+            <td class="py-3 px-4 text-slate-700 dark:text-slate-300 font-mono text-xs">${escapeHtml(a.endpoint || '--')}</td>
+            <td class="py-3 px-4 text-slate-500 dark:text-slate-400 text-sm">${escapeHtml(a.model_id || '--')}</td>
+            <td class="py-3 px-4 ${statusColor} font-medium text-sm">${escapeHtml(String(a.status_code))}</td>
+            <td class="py-3 px-4 text-slate-500 dark:text-slate-400 text-sm">${a.latency_ms != null ? escapeHtml(String(a.latency_ms)) + 'ms' : '--'}</td>
+            <td class="py-3 px-4 text-slate-400 dark:text-slate-500 text-xs">${timeAgo}</td>
+          </tr>`;
+        }).join('');
+      } else if (activityEmpty) {
+        activityEmpty.innerHTML = '<p class="text-sm text-slate-500 dark:text-slate-400">No API activity yet</p>';
+      }
+    }
+
+    function showError(elementId: string, message: string) {
+      const el = document.getElementById(elementId);
+      if (el) el.innerHTML = `<p class="text-sm text-red-500">${escapeHtml(message)}</p>`;
+    }
+
+    function escapeHtml(str: string): string {
+      const div = document.createElement('div');
+      div.appendChild(document.createTextNode(str));
+      return div.innerHTML;
+    }
+
+    function getTimeAgo(date: Date): string {
+      const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
+      if (seconds < 60) return `${seconds}s ago`;
+      const minutes = Math.floor(seconds / 60);
+      if (minutes < 60) return `${minutes}m ago`;
+      const hours = Math.floor(minutes / 60);
+      if (hours < 24) return `${hours}h ago`;
+      const days = Math.floor(hours / 24);
+      return `${days}d ago`;
+    }
+
+    await (window as any).__adminReady;
+    loadAdminOverview();
+  </script>
+</AdminLayout>
