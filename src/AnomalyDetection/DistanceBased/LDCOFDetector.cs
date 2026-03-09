@@ -293,7 +293,8 @@ public class LDCOFDetector<T> : AnomalyDetectorBase<T>
             }
 
             // Compute local density (k-distance to training points)
-            var distances = _trainingData!
+            var scoringTrainingData = _trainingData ?? throw new InvalidOperationException("_trainingData has not been initialized.");
+            var distances = scoringTrainingData
                 .Select(p => EuclideanDistance(point, p))
                 .OrderBy(d => d)
                 .ToArray();

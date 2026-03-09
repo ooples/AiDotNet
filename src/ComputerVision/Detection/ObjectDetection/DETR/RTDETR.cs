@@ -99,10 +99,10 @@ public class RTDETR<T> : ObjectDetectorBase<T>
     protected override List<Tensor<T>> Forward(Tensor<T> input)
     {
         // Extract multi-scale features
-        var backboneFeatures = Backbone!.ExtractFeatures(input);
+        var backboneFeatures = EnsureBackbone.ExtractFeatures(input);
 
         // Apply PANet for feature fusion
-        var neckFeatures = Neck!.Forward(backboneFeatures);
+        var neckFeatures = EnsureNeck.Forward(backboneFeatures);
 
         // Flatten multi-scale features
         var (flattenedFeatures, levelStarts, spatialShapes) = FlattenMultiScale(neckFeatures);

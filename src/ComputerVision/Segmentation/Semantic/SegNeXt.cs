@@ -733,7 +733,7 @@ public class SegNeXt<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
         }
         else
         {
-            return new SegNeXt<T>(Architecture, _onnxModelPath!, _numClasses, _modelSize, _options);
+            return new SegNeXt<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _modelSize, _options);
         }
     }
 

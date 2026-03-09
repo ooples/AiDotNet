@@ -51,6 +51,22 @@ public abstract class ObjectDetectorBase<T>
     protected NeckBase<T>? Neck { get; set; }
 
     /// <summary>
+    /// Gets the backbone network, throwing if not initialized.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">Thrown when backbone has not been initialized.</exception>
+    protected BackboneBase<T> EnsureBackbone =>
+        Backbone ?? throw new InvalidOperationException(
+            $"{GetType().Name}: Backbone not initialized. Ensure the model is properly constructed.");
+
+    /// <summary>
+    /// Gets the neck module, throwing if not initialized.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">Thrown when neck has not been initialized.</exception>
+    protected NeckBase<T> EnsureNeck =>
+        Neck ?? throw new InvalidOperationException(
+            $"{GetType().Name}: Neck not initialized. Ensure the model is properly constructed.");
+
+    /// <summary>
     /// NMS algorithm for removing duplicate detections.
     /// </summary>
     protected readonly NMS<T> Nms;

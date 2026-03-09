@@ -290,7 +290,9 @@ public class AdaptiveRandomForestClassifier<T> : ClassifierBase<T>, IOnlineClass
     {
         if (!IsWarm || _ensemble.Count == 0 || _knownClasses.Count == 0)
         {
-            return _knownClasses.Count > 0 ? _knownClasses[0] : default!;
+            if (_knownClasses.Count == 0)
+                throw new InvalidOperationException("No known classes available. The classifier must be trained first.");
+            return _knownClasses[0];
         }
 
         // Weighted voting
@@ -298,8 +300,10 @@ public class AdaptiveRandomForestClassifier<T> : ClassifierBase<T>, IOnlineClass
 
         foreach (var member in _ensemble)
         {
-            var selectedFeatures = ExtractSelectedFeatures(features, member.SelectedFeatures!);
-            var treePrediction = member.Tree!.Predict(ConvertToMatrix(selectedFeatures));
+            var memberFeatures = member.SelectedFeatures ?? throw new InvalidOperationException("SelectedFeatures has not been initialized.");
+            var memberTree = member.Tree ?? throw new InvalidOperationException("Tree has not been initialized.");
+            var selectedFeatures = ExtractSelectedFeatures(features, memberFeatures);
+            var treePrediction = memberTree.Predict(ConvertToMatrix(selectedFeatures));
 
             int classIdx = GetClassIndex(treePrediction[0]);
             if (classIdx >= 0)

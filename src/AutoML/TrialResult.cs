@@ -110,10 +110,6 @@ public sealed class TrialResult
 
     private static object DeepCopyValue(object value)
     {
-        if (value is null)
-        {
-            return null!;
-        }
 
         if (value is Dictionary<string, object> dictionary)
         {

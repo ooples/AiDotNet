@@ -88,8 +88,8 @@ public class ValidationCurveEngine<T>
 
         foreach (var paramValue in parameterValues)
         {
-            var trainScores = new List<double>();
-            var valScores = new List<double>();
+            var trainScores = new List<T>();
+            var valScores = new List<T>();
 
             // Run CV at this parameter value
             for (int fold = 0; fold < cvFolds; fold++)
@@ -126,7 +126,7 @@ public class ValidationCurveEngine<T>
                     : _metricEngine.ComputeRegressionMetrics(trainPreds, trainTargets);
                 var trainMetric = trainMetrics[metricName];
                 if (trainMetric != null)
-                    trainScores.Add(NumOps.ToDouble(trainMetric.Value));
+                    trainScores.Add(trainMetric.Value);
 
                 // Evaluate on validation set
                 var valPreds = predictFunc(model, valFeatures);
@@ -135,13 +135,13 @@ public class ValidationCurveEngine<T>
                     : _metricEngine.ComputeRegressionMetrics(valPreds, valTargets);
                 var valMetric = valMetrics[metricName];
                 if (valMetric != null)
-                    valScores.Add(NumOps.ToDouble(valMetric.Value));
+                    valScores.Add(valMetric.Value);
             }
 
             result.ParameterValues.Add(paramValue);
-            result.TrainScoreMeans.Add(trainScores.Average());
+            result.TrainScoreMeans.Add(Mean(trainScores));
             result.TrainScoreStds.Add(StandardDeviation(trainScores));
-            result.ValidationScoreMeans.Add(valScores.Average());
+            result.ValidationScoreMeans.Add(Mean(valScores));
             result.ValidationScoreStds.Add(StandardDeviation(valScores));
         }
 
@@ -155,13 +155,13 @@ public class ValidationCurveEngine<T>
 
         // Find parameter with best validation score (respecting metric direction)
         int bestIdx = 0;
-        double bestScore = curve.ValidationScoreMeans[0];
+        T bestScore = curve.ValidationScoreMeans[0];
 
         for (int i = 1; i < curve.ValidationScoreMeans.Count; i++)
         {
             bool isBetter = higherIsBetter
-                ? curve.ValidationScoreMeans[i] > bestScore
-                : curve.ValidationScoreMeans[i] < bestScore;
+                ? NumOps.GreaterThan(curve.ValidationScoreMeans[i], bestScore)
+                : NumOps.LessThan(curve.ValidationScoreMeans[i], bestScore);
 
             if (isBetter)
             {
@@ -173,12 +173,30 @@ public class ValidationCurveEngine<T>
         return curve.ParameterValues[bestIdx];
     }
 
-    private static double StandardDeviation(List<double> values)
+    private static T Mean(List<T> values)
     {
-        if (values.Count <= 1) return 0;
-        double mean = values.Average();
-        double variance = values.Sum(v => (v - mean) * (v - mean)) / (values.Count - 1);
-        return Math.Sqrt(variance);
+        if (values.Count == 0)
+            throw new InvalidOperationException("Cannot compute mean of an empty sequence. No fold scores were recorded for this parameter value.");
+        T sum = NumOps.Zero;
+        foreach (var v in values)
+        {
+            sum = NumOps.Add(sum, v);
+        }
+        return NumOps.Divide(sum, NumOps.FromDouble(values.Count));
+    }
+
+    private static T StandardDeviation(List<T> values)
+    {
+        if (values.Count <= 1) return NumOps.Zero;
+        T mean = Mean(values);
+        T variance = NumOps.Zero;
+        foreach (var v in values)
+        {
+            T diff = NumOps.Subtract(v, mean);
+            variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
+        }
+        variance = NumOps.Divide(variance, NumOps.FromDouble(values.Count - 1));
+        return NumOps.Sqrt(variance);
     }
 
     private static T[,] ExtractRows(T[,] matrix, int[] indices)
@@ -228,22 +246,22 @@ public class ValidationCurveResult<T>
     /// <summary>
     /// Mean training scores at each parameter value.
     /// </summary>
-    public List<double> TrainScoreMeans { get; init; } = new();
+    public List<T> TrainScoreMeans { get; init; } = new();
 
     /// <summary>
     /// Standard deviation of training scores.
     /// </summary>
-    public List<double> TrainScoreStds { get; init; } = new();
+    public List<T> TrainScoreStds { get; init; } = new();
 
     /// <summary>
     /// Mean validation scores at each parameter value.
     /// </summary>
-    public List<double> ValidationScoreMeans { get; init; } = new();
+    public List<T> ValidationScoreMeans { get; init; } = new();
 
     /// <summary>
     /// Standard deviation of validation scores.
     /// </summary>
-    public List<double> ValidationScoreStds { get; init; } = new();
+    public List<T> ValidationScoreStds { get; init; } = new();
 
     /// <summary>
     /// Optimal parameter value based on validation score.

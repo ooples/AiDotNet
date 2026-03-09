@@ -103,7 +103,7 @@ public class DETR<T> : ObjectDetectorBase<T>
     protected override List<Tensor<T>> Forward(Tensor<T> input)
     {
         // Extract backbone features (use the last feature map)
-        var backboneFeatures = Backbone!.ExtractFeatures(input);
+        var backboneFeatures = EnsureBackbone.ExtractFeatures(input);
         var features = backboneFeatures[^1]; // C5 features
 
         // Project to hidden dimension
@@ -263,7 +263,7 @@ public class DETR<T> : ObjectDetectorBase<T>
         writer.Write(Name);
 
         // Write backbone parameters
-        Backbone!.WriteParameters(writer);
+        EnsureBackbone.WriteParameters(writer);
 
         // Write input projection
         _inputProj.WriteParameters(writer);
