@@ -418,7 +418,7 @@ public class ClassifierChainClassifier<T> : MultiLabelClassifierBase<T>
                 for (int i = 0; i < input.Rows; i++)
                 {
                     // Use 0.5 threshold for values in [0,1] range
-                    T prob = NumOps.Compare(predictions[i], NumOps.One) == 0 ? NumOps.One : NumOps.Zero;
+                    T prob = NumOps.GreaterThanOrEquals(predictions[i], NumOps.FromDouble(0.5)) ? NumOps.One : NumOps.Zero;
                     probabilities[i, labelIndex] = prob;
                     chainPredictions[i, chainPosition] = prob;
                 }

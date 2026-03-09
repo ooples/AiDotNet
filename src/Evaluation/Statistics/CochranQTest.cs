@@ -57,10 +57,10 @@ public class CochranQTest<T> : IClassifierComparisonTest<T>
         var X = new int[n, k];
         for (int i = 0; i < n; i++)
         {
-            bool actualPositive = NumOps.Compare(actuals[i], NumOps.One) == 0;
+            bool actualPositive = NumOps.GreaterThanOrEquals(actuals[i], NumOps.FromDouble(0.5));
             for (int j = 0; j < k; j++)
             {
-                bool predPositive = NumOps.Compare(predictions[j][i], NumOps.One) == 0;
+                bool predPositive = NumOps.GreaterThanOrEquals(predictions[j][i], NumOps.FromDouble(0.5));
                 X[i, j] = (predPositive == actualPositive) ? 1 : 0;
             }
         }

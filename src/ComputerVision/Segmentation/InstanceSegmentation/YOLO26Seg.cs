@@ -390,9 +390,10 @@ public class YOLO26Seg<T> : NeuralNetworkBase<T>, IInstanceSegmentation<T>
                 int area = 0;
                 double sumConf = 0;
                 int minX = w, minY = h, maxX = 0, maxY = 0;
+                T compT = NumOps.FromDouble(comp);
                 for (int row = 0; row < h; row++)
                     for (int col = 0; col < w; col++)
-                        if (NumOps.Compare(labelMap[row, col], NumOps.FromDouble(comp)) == 0)
+                        if (NumOps.Compare(labelMap[row, col], compT) == 0)
                         {
                             mask[row, col] = NumOps.FromDouble(1.0);
                             area++;

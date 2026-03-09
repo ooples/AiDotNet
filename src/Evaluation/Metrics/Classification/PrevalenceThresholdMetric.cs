@@ -40,8 +40,8 @@ public class PrevalenceThresholdMetric<T> : IClassificationMetric<T>
         int tp = 0, tn = 0, fp = 0, fn = 0;
         for (int i = 0; i < predictions.Length; i++)
         {
-            bool pred = NumOps.Compare(predictions[i], NumOps.One) == 0;
-            bool actual = NumOps.Compare(actuals[i], NumOps.One) == 0;
+            bool pred = NumOps.GreaterThanOrEquals(predictions[i], NumOps.FromDouble(0.5));
+            bool actual = NumOps.GreaterThanOrEquals(actuals[i], NumOps.FromDouble(0.5));
 
             if (pred && actual) tp++;
             else if (!pred && !actual) tn++;

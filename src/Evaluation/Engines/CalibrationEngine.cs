@@ -69,7 +69,7 @@ public class CalibrationEngine<T>
                 if (prob >= binStart && (prob < binEnd || (i == numBins - 1 && prob <= binEnd)))
                 {
                     binProbs.Add(prob);
-                    binActuals.Add(NumOps.Compare(actuals[j], NumOps.One) == 0 ? 1 : 0);
+                    binActuals.Add(NumOps.GreaterThanOrEquals(actuals[j], NumOps.FromDouble(0.5)) ? 1 : 0);
                 }
             }
 
