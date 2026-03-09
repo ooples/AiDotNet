@@ -527,8 +527,8 @@ public class StackingClassifier<T> : MetaClassifierBase<T>
         NumClasses = jObj["NumClasses"]?.ToObject<int>() ?? 0;
         NumFeatures = jObj["NumFeatures"]?.ToObject<int>() ?? 0;
         TaskType = (ClassificationTaskType)(jObj["TaskType"]?.ToObject<int>() ?? 0);
-        Options.CrossValidationFolds = jObj["CrossValidationFolds"]?.ToObject<int>() ?? 5;
-        Options.UseProbabilities = jObj["UseProbabilities"]?.ToObject<bool>() ?? true;
+        Options.CrossValidationFolds = jObj["CrossValidationFolds"]?.ToObject<int>() ?? Options.CrossValidationFolds;
+        Options.UseProbabilities = jObj["UseProbabilities"]?.ToObject<bool>() ?? Options.UseProbabilities;
 
         var types = jObj["EstimatorTypes"]?.ToObject<string[]>();
         var data = jObj["EstimatorData"]?.ToObject<string[]>();

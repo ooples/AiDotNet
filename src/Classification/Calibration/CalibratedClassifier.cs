@@ -923,6 +923,11 @@ public class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>
                 .Select(m => (m[0], m[1]))
                 .ToArray();
         }
+        else
+        {
+            // Clear stale isotonic calibration state when not present in the payload
+            _isotonicMapping = null;
+        }
 
         // Restore wrapped base classifier
         var baseType = jObj["BaseClassifierType"]?.ToObject<string>();

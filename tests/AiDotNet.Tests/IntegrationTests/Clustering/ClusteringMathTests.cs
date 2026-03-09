@@ -70,10 +70,10 @@ public class ClusteringMathTests
             spread: 1.0,
             seed: 42);
 
-        var kmeans1 = new KMeans<double>(new KMeansOptions<double> { NumClusters = 2 });
+        var kmeans1 = new KMeans<double>(new KMeansOptions<double> { NumClusters = 2, Seed = 123 });
         kmeans1.Train(data1, new Vector<double>(data1.Rows));
 
-        var kmeans2 = new KMeans<double>(new KMeansOptions<double> { NumClusters = 2 });
+        var kmeans2 = new KMeans<double>(new KMeansOptions<double> { NumClusters = 2, Seed = 123 });
         kmeans2.Train(data2, new Vector<double>(data2.Rows));
 
         var pred1 = kmeans1.Predict(data1);

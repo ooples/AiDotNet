@@ -419,8 +419,8 @@ public class RAkELClassifier<T> : MultiLabelClassifierBase<T>
         NumClasses = jObj["NumClasses"]?.ToObject<int>() ?? 2;
         TaskType = (ClassificationTaskType)(jObj["TaskType"]?.ToObject<int>() ?? 0);
         LabelNames = jObj["LabelNames"]?.ToObject<string[]>();
-        LabelsetSize = jObj["LabelsetSize"]?.ToObject<int>() ?? 3;
-        NumLabelsets = jObj["NumLabelsets"]?.ToObject<int>() ?? 0;
+        LabelsetSize = jObj["LabelsetSize"]?.ToObject<int>() ?? LabelsetSize;
+        NumLabelsets = jObj["NumLabelsets"]?.ToObject<int>() ?? NumLabelsets;
 
         // Deserialize labelsets
         var labelsetsArr = jObj["Labelsets"]?.ToObject<List<int[]>>();

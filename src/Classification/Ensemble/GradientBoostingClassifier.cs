@@ -2,6 +2,7 @@ using System.Text;
 using AiDotNet.Classification;
 using AiDotNet.Classification.Trees;
 using AiDotNet.Models.Options;
+using AiDotNet.Regularization;
 using AiDotNet.Tensors.Helpers;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -515,6 +516,15 @@ public class GradientBoostingClassifier<T> : EnsembleClassifierBase<T>, ITreeBas
             { "InitPrediction", NumOps.ToDouble(_initPrediction) }
         };
 
+        // Serialize regularization configuration
+        if (Regularization is not null)
+        {
+            var regOptions = Regularization.GetOptions();
+            modelData["RegularizationType"] = (int)regOptions.Type;
+            modelData["RegularizationStrength"] = regOptions.Strength;
+            modelData["RegularizationL1Ratio"] = regOptions.L1Ratio;
+        }
+
         // Serialize FeatureImportances
         if (FeatureImportances is not null)
         {
@@ -629,6 +639,25 @@ public class GradientBoostingClassifier<T> : EnsembleClassifierBase<T>, ITreeBas
             var tree = new DecisionTreeClassifier<T>();
             tree.Deserialize(estBytes);
             Estimators.Add(tree);
+        }
+
+        // Restore regularization configuration
+        var regType = modelDataObj["RegularizationType"]?.ToObject<int>();
+        if (regType.HasValue)
+        {
+            var regOptions = new RegularizationOptions
+            {
+                Type = (RegularizationType)regType.Value,
+                Strength = modelDataObj["RegularizationStrength"]?.ToObject<double>() ?? 0.0,
+                L1Ratio = modelDataObj["RegularizationL1Ratio"]?.ToObject<double>() ?? 0.5
+            };
+
+            Regularization = (RegularizationType)regType.Value switch
+            {
+                RegularizationType.L1 => new L1Regularization<T, Matrix<T>, Vector<T>>(regOptions),
+                RegularizationType.L2 => new L2Regularization<T, Matrix<T>, Vector<T>>(regOptions),
+                _ => null
+            };
         }
     }
 }

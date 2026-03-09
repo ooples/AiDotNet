@@ -73,7 +73,7 @@ public abstract class ClassifierBase<T> : IClassifier<T>, IConfigurableModel<T>,
     /// <value>
     /// An object that implements regularization for the classifier model.
     /// </value>
-    protected IRegularization<T, Matrix<T>, Vector<T>> Regularization { get; private set; }
+    protected IRegularization<T, Matrix<T>, Vector<T>> Regularization { get; set; }
 
     /// <summary>
     /// Gets the default loss function for this classifier.

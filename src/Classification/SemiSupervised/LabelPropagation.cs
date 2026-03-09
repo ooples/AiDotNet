@@ -776,11 +776,31 @@ public class LabelPropagation<T> : SemiSupervisedClassifierBase<T>
         return new Kernels.GaussianKernel<T>(1.0);
     }
 
-    private static IKernelFunction<T>? CreateKernelByName(string kernelTypeName)
+    private static Dictionary<string, double> ExtractKernelParams(IKernelFunction<T> kernel)
     {
+        var parameters = new Dictionary<string, double>();
+        var type = kernel.GetType();
+
+        foreach (var field in type.GetFields(System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance))
+        {
+            if (field.FieldType == typeof(double))
+            {
+                var val = field.GetValue(kernel);
+                if (val is double d)
+                    parameters[field.Name] = d;
+            }
+        }
+
+        return parameters;
+    }
+
+    private static IKernelFunction<T>? CreateKernelByName(string kernelTypeName, Dictionary<string, double>? kernelParams = null)
+    {
+        double sigma = kernelParams is not null && kernelParams.TryGetValue("_sigma", out var s) ? s : 1.0;
+
         return kernelTypeName switch
         {
-            "GaussianKernel`1" or "GaussianKernel" => new Kernels.GaussianKernel<T>(1.0),
+            "GaussianKernel`1" or "GaussianKernel" => new Kernels.GaussianKernel<T>(sigma),
             "LaplacianKernel`1" or "LaplacianKernel" => new Kernels.LaplacianKernel<T>(),
             "LinearKernel`1" or "LinearKernel" => new Kernels.LinearKernel<T>(),
             "PolynomialKernel`1" or "PolynomialKernel" => new Kernels.PolynomialKernel<T>(),
@@ -803,6 +823,7 @@ public class LabelPropagation<T> : SemiSupervisedClassifierBase<T>
             ["TaskType"] = (int)TaskType,
             ["NumLabeled"] = _numLabeled,
             ["KernelType"] = _kernel.GetType().Name,
+            ["KernelParams"] = ExtractKernelParams(_kernel),
             ["MaxIterations"] = _maxIterations,
             ["Tolerance"] = NumOps.ToDouble(_tolerance)
         };
@@ -862,21 +883,26 @@ public class LabelPropagation<T> : SemiSupervisedClassifierBase<T>
             ?? throw new InvalidOperationException("Failed to deserialize LabelPropagation: missing TaskType."));
         _numLabeled = jObj["NumLabeled"]?.ToObject<int>()
             ?? throw new InvalidOperationException("Failed to deserialize LabelPropagation: missing NumLabeled.");
-        _maxIterations = jObj["MaxIterations"]?.ToObject<int>() ?? _maxIterations;
+        _maxIterations = jObj["MaxIterations"]?.ToObject<int>()
+            ?? throw new InvalidOperationException("Failed to deserialize LabelPropagation: missing MaxIterations.");
 
         var kernelType = jObj["KernelType"]?.ToObject<string>();
-        if (kernelType is not null && kernelType != _kernel.GetType().Name)
+        var kernelParams = jObj["KernelParams"]?.ToObject<Dictionary<string, double>>();
+        if (kernelType is not null)
         {
-            _kernel = CreateKernelByName(kernelType) ?? CreateDefaultKernel();
+            _kernel = CreateKernelByName(kernelType, kernelParams) ?? CreateDefaultKernel();
         }
 
-        var toleranceVal = jObj["Tolerance"]?.ToObject<double>();
-        if (toleranceVal.HasValue)
-            _tolerance = NumOps.FromDouble(toleranceVal.Value);
+        _tolerance = NumOps.FromDouble(jObj["Tolerance"]?.ToObject<double>()
+            ?? throw new InvalidOperationException("Failed to deserialize LabelPropagation: missing Tolerance."));
 
         var labelsToken = jObj["ClassLabels"];
         if (labelsToken is JArray labelsArr)
         {
+            if (labelsArr.Count != NumClasses)
+                throw new InvalidOperationException(
+                    $"Failed to deserialize LabelPropagation: ClassLabels length ({labelsArr.Count}) does not match NumClasses ({NumClasses}).");
+
             ClassLabels = new Vector<T>(labelsArr.Count);
             for (int i = 0; i < labelsArr.Count; i++)
                 ClassLabels[i] = NumOps.FromDouble(labelsArr[i].Value<double>());
@@ -914,6 +940,20 @@ public class LabelPropagation<T> : SemiSupervisedClassifierBase<T>
                 for (int j = 0; j < ldCols; j++)
                     _labelDistributions[i, j] = NumOps.FromDouble(ldArr[i * ldCols + j].Value<double>());
         }
+
+        // Cross-field consistency checks
+        if (_allFeatures is not null && afCols != NumFeatures)
+            throw new InvalidOperationException(
+                $"Failed to deserialize LabelPropagation: AllFeatures columns ({afCols}) does not match NumFeatures ({NumFeatures}).");
+        if (_labelDistributions is not null && ldCols != NumClasses)
+            throw new InvalidOperationException(
+                $"Failed to deserialize LabelPropagation: LabelDistributions columns ({ldCols}) does not match NumClasses ({NumClasses}).");
+        if (_allFeatures is not null && _labelDistributions is not null && _allFeatures.Rows != _labelDistributions.Rows)
+            throw new InvalidOperationException(
+                $"Failed to deserialize LabelPropagation: AllFeatures rows ({_allFeatures.Rows}) does not match LabelDistributions rows ({_labelDistributions.Rows}).");
+        if (_allFeatures is not null && _numLabeled > _allFeatures.Rows)
+            throw new InvalidOperationException(
+                $"Failed to deserialize LabelPropagation: NumLabeled ({_numLabeled}) exceeds AllFeatures rows ({_allFeatures.Rows}).");
     }
 
     #endregion
